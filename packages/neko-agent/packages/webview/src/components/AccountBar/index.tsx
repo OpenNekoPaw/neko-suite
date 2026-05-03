@@ -9,7 +9,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { SsoSession, ConfiguredProvider } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
-import { postMessage } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { ChevronDownIcon } from '@neko/shared/icons';
 
 interface AccountBarProps {
@@ -94,7 +94,7 @@ export function AccountBar({
               <button
                 onClick={() => {
                   setOpen(false);
-                  postMessage({ type: 'ssoLogout' });
+                  VSCodeMessages.ssoLogout();
                 }}
                 className="vscode-list-item w-full px-3 py-1.5 text-left text-[11px]"
               >
@@ -114,7 +114,7 @@ export function AccountBar({
               <button
                 onClick={() => {
                   setOpen(false);
-                  postMessage({ type: 'openConfigFile' });
+                  VSCodeMessages.openConfigFile();
                 }}
                 className="vscode-list-item w-full px-3 py-1.5 text-left text-[11px]"
               >

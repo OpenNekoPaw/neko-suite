@@ -3,7 +3,6 @@
  */
 
 // Re-export MessageAttachment from shared
-import type { AttachmentType } from '@neko/shared';
 export type { MessageAttachment, AttachmentType } from '@neko/shared';
 
 // Command source type
@@ -104,11 +103,3 @@ export interface MentionItem {
   /** For canvas-node / character / scene: payload for AgentContextChip */
   contextPayload?: import('@neko/shared').AgentContextPayload;
 }
-
-// File type icons
-export const FILE_TYPE_ICONS: Record<AttachmentType, string> = {
-  file: '📄',
-  image: '🖼️',
-  video: '🎥',
-  audio: '🎵',
-};

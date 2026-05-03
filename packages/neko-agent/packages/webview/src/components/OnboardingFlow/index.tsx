@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from '@/i18n/I18nContext';
-import { postMessage } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/components/hooks/useVSCode';
 
 type Step = 'choose' | 'fileOpened';
 
@@ -22,12 +22,12 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [step, setStep] = useState<Step>('choose');
 
   const handleSsoLogin = () => {
-    postMessage({ type: 'ssoLogin' });
+    VSCodeMessages.ssoLogin();
     // Flow closes when extension sends back 'ssoSessionChanged'
   };
 
   const handleOpenConfigFile = () => {
-    postMessage({ type: 'openUserConfigFile' });
+    VSCodeMessages.openUserConfigFile();
     setStep('fileOpened');
   };
 

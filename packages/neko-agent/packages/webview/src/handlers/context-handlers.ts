@@ -4,12 +4,18 @@
  * Handles: contextTokenCount, compressionResult, compressionError
  */
 
+import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration } from './types';
 import type {
   ContextTokenCountMessage,
   CompressionResultMessage,
   CompressionErrorMessage,
 } from './messages';
+import {
+  projectCompressionError,
+  projectCompressionResult,
+  projectContextTokenCount,
+} from '../presenters/context-state-presenter';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ContextHandlers');
@@ -17,48 +23,70 @@ const logger = getLogger('ContextHandlers');
 /**
  * Handle 'contextTokenCount' - Token count update for a conversation
  */
-const handleContextTokenCount: MessageHandler = (message: ContextTokenCountMessage, context) => {
-  if (message.conversationId) {
-    context.conversationTokenCountRef.current.set(message.conversationId, message.tokenCount || 0);
-    // Trigger re-render if it's the current conversation
-    if (message.conversationId === context.activeConversationIdRef.current) {
-      context.forceUpdate();
-    }
-  }
+const handleContextTokenCount: MessageHandler<'contextTokenCount'> = (
+  message: ContextTokenCountMessage,
+  context,
+) => {
+  if (!message.conversationId) return;
+
+  const projection = projectContextTokenCount({
+    tokenCounts: context.conversationTokenCountRef.current,
+    activeConversationId: context.activeConversationIdRef.current,
+    conversationId: message.conversationId,
+    tokenCount: message.tokenCount,
+  });
+
+  context.conversationTokenCountRef.current = projection.tokenCounts;
+  if (projection.shouldForceUpdate) context.forceUpdate();
 };
 
 /**
  * Handle 'compressionResult' - Compression completed for a conversation
  */
-const handleCompressionResult: MessageHandler = (message: CompressionResultMessage, context) => {
-  if (message.conversationId) {
-    context.conversationCompressingRef.current.set(message.conversationId, false);
-    context.conversationTokenCountRef.current.set(
-      message.conversationId,
-      message.compressedTokens || 0,
-    );
-    // Trigger re-render if it's the current conversation
-    if (message.conversationId === context.activeConversationIdRef.current) {
-      context.forceUpdate();
-    }
-  }
+const handleCompressionResult: MessageHandler<'compressionResult'> = (
+  message: CompressionResultMessage,
+  context,
+) => {
+  if (!message.conversationId) return;
+
+  const projection = projectCompressionResult({
+    tokenCounts: context.conversationTokenCountRef.current,
+    compressing: context.conversationCompressingRef.current,
+    activeConversationId: context.activeConversationIdRef.current,
+    conversationId: message.conversationId,
+    compressedTokens: message.compressedTokens,
+  });
+
+  context.conversationTokenCountRef.current = projection.tokenCounts;
+  context.conversationCompressingRef.current = projection.compressing;
+  if (projection.shouldForceUpdate) context.forceUpdate();
 };
 
 /**
  * Handle 'compressionError' - Compression failed for a conversation
  */
-const handleCompressionError: MessageHandler = (message: CompressionErrorMessage, context) => {
-  if (message.conversationId) {
-    context.conversationCompressingRef.current.set(message.conversationId, false);
-    if (message.conversationId === context.activeConversationIdRef.current) {
-      context.forceUpdate();
-    }
+const handleCompressionError: MessageHandler<'compressionError'> = (
+  message: CompressionErrorMessage,
+  context,
+) => {
+  if (!message.conversationId) {
+    logger.error('Compression failed:', message.error);
+    return;
   }
+
+  const projection = projectCompressionError({
+    compressing: context.conversationCompressingRef.current,
+    activeConversationId: context.activeConversationIdRef.current,
+    conversationId: message.conversationId,
+  });
+
+  context.conversationCompressingRef.current = projection.compressing;
+  if (projection.shouldForceUpdate) context.forceUpdate();
   logger.error('Compression failed:', message.error);
 };
 
 export const contextHandlers: HandlerRegistration[] = [
-  { type: 'contextTokenCount', handler: handleContextTokenCount },
-  { type: 'compressionResult', handler: handleCompressionResult },
-  { type: 'compressionError', handler: handleCompressionError },
+  defineHandler('contextTokenCount', handleContextTokenCount),
+  defineHandler('compressionResult', handleCompressionResult),
+  defineHandler('compressionError', handleCompressionError),
 ];

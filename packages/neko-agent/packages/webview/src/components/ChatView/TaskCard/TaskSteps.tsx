@@ -4,7 +4,8 @@
 
 import { useState, useCallback } from 'react';
 import type { TaskStep } from '@/components/TaskListView';
-import { formatDuration, getStepStatusIcon, getStepStatusColor } from './task-utils';
+import { projectAgentWorkItemSteps } from '@/presenters/work-item-presenter';
+import { formatDuration, getStepIcon, getToneColor } from './task-utils';
 import { ChevronRightIcon as ChevronIcon } from '@neko/shared/icons';
 
 interface TaskStepsProps {
@@ -21,8 +22,7 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
 
   if (!steps || steps.length === 0) return null;
 
-  const currentStepIndex = steps.findIndex((s) => s.id === currentStepId);
-  const completedSteps = steps.filter((s) => s.status === 'completed').length;
+  const projection = projectAgentWorkItemSteps(steps, currentStepId);
 
   return (
     <div className="mb-2">
@@ -33,47 +33,47 @@ export function TaskSteps({ steps, currentStepId }: TaskStepsProps) {
       >
         <ChevronIcon className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
         <span>
-          Steps: {completedSteps}/{steps.length}
+          Steps: {projection.completedSteps}/{steps.length}
         </span>
-        {currentStepId && currentStepIndex >= 0 && (
-          <span className="text-[var(--agent-fg)]">- {steps[currentStepIndex]!.name}</span>
+        {projection.currentStepName && (
+          <span className="text-[var(--agent-fg)]">- {projection.currentStepName}</span>
         )}
       </button>
 
       {/* Steps list (expanded) */}
       {isExpanded && (
         <div className="mt-2 space-y-1 border-l-2 border-[var(--agent-divider)] pl-2">
-          {steps.map((step, index) => (
+          {projection.rows.map((row) => (
             <div
-              key={step.id}
+              key={row.step.id}
               className={`flex items-start gap-2 text-[10px] ${
-                step.id === currentStepId
-                  ? 'text-[var(--agent-fg)]'
-                  : 'text-[var(--agent-fg-secondary)]'
+                row.isCurrent ? 'text-[var(--agent-fg)]' : 'text-[var(--agent-fg-secondary)]'
               }`}
             >
               {/* Status icon */}
               <span
-                className={`flex-shrink-0 ${step.status === 'running' ? 'animate-pulse' : ''}`}
-                style={{ color: getStepStatusColor(step.status) }}
+                className={`flex-shrink-0 ${row.animate ? 'animate-pulse' : ''}`}
+                style={{ color: getToneColor(row.tone) }}
               >
-                {getStepStatusIcon(step.status)}
+                {getStepIcon(row.iconKind)}
               </span>
 
               {/* Step info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">
-                    {index + 1}. {step.name}
+                    {row.index + 1}. {row.step.name}
                   </span>
-                  {step.startTime && step.endTime && (
+                  {row.showDuration && row.durationSeconds !== null && (
                     <span className="text-[var(--agent-fg-secondary)]">
-                      ({formatDuration(Math.round((step.endTime - step.startTime) / 1000))})
+                      ({formatDuration(row.durationSeconds)})
                     </span>
                   )}
                 </div>
-                {step.message && (
-                  <div className="truncate text-[var(--agent-fg-secondary)]">{step.message}</div>
+                {row.showMessage && (
+                  <div className="truncate text-[var(--agent-fg-secondary)]">
+                    {row.step.message}
+                  </div>
                 )}
               </div>
             </div>

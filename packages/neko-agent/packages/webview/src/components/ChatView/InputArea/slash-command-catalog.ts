@@ -2,23 +2,32 @@ import {
   listBuiltinSlashCommands,
   type BuiltinSlashCommandDefinition,
   type BuiltinSlashCommandName,
+  type RegisteredPluginSlashCommand,
 } from '@neko-agent/types';
-import type { PluginSlashCommandDef, SkillSummary, SlashCommand } from './types';
+import type { SkillSummary } from './types';
 
-type SlashCommandDescriptionKind = 'i18n' | 'literal';
+export type SlashCommandSource = 'builtin' | 'skill' | 'plugin';
+export type SlashCommandDescriptionKind = 'i18n' | 'literal';
 
-export interface SlashCommandCatalogItem extends SlashCommand {
-  readonly source: NonNullable<SlashCommand['source']>;
-  readonly descriptionKind: SlashCommandDescriptionKind;
+export interface SlashCommandCatalogItem {
+  id: string;
+  commandId?: string;
+  name: string;
+  descriptionKey: string;
+  icon: string;
+  source: SlashCommandSource;
+  skillId?: string;
+  extensionId?: string;
+  descriptionKind: SlashCommandDescriptionKind;
 }
 
 export interface SlashCommandCatalogSection {
-  readonly source: SlashCommandCatalogItem['source'];
+  readonly source: SlashCommandSource;
   readonly title: string;
   readonly commands: readonly SlashCommandCatalogItem[];
 }
 
-type TranslateFn = (key: string) => string;
+export type SlashCommandTranslateFn = (key: string) => string;
 
 const BUILTIN_COMMAND_ICONS: Record<BuiltinSlashCommandName, string> = {
   help: '❓',
@@ -41,86 +50,31 @@ const BUILTIN_COMMAND_ICONS: Record<BuiltinSlashCommandName, string> = {
   mcp: '🔌',
 };
 
-const BUILTIN_SLASH_COMMANDS: readonly SlashCommandCatalogItem[] =
-  listBuiltinSlashCommands('extension').map(toBuiltinCommand);
+const BUILTIN_SLASH_COMMANDS: readonly SlashCommandCatalogItem[] = listBuiltinSlashCommands(
+  'extension',
+).map(projectBuiltinSlashCommand);
 
-const SLASH_COMMAND_SECTION_ORDER: readonly SlashCommandCatalogItem['source'][] = [
-  'builtin',
-  'skill',
-  'plugin',
-];
+const SLASH_COMMAND_SECTION_ORDER: readonly SlashCommandSource[] = ['builtin', 'skill', 'plugin'];
 
-const SLASH_COMMAND_SECTION_TITLES: Record<SlashCommandCatalogItem['source'], string> = {
+const SLASH_COMMAND_SECTION_TITLES: Record<SlashCommandSource, string> = {
   builtin: '**Available Commands:**',
   skill: '**Skill Commands:**',
   plugin: '**Plugin Commands:**',
 };
 
-const SLASH_COMMAND_SOURCE_LABELS: Record<SlashCommandCatalogItem['source'], string | null> = {
+const SLASH_COMMAND_SOURCE_LABELS: Record<SlashCommandSource, string | null> = {
   builtin: null,
   skill: 'skill',
   plugin: 'plugin',
 };
 
-function toSkillCommand(skill: SkillSummary): SlashCommandCatalogItem | null {
-  if (!skill.slashCommand || !skill.enabled) {
-    return null;
-  }
-
-  return {
-    id: skill.id,
-    commandId: skill.slashCommand,
-    name: `/${skill.slashCommand}`,
-    descriptionKey: skill.description,
-    icon: skill.icon || '🔧',
-    source: 'skill',
-    skillId: skill.id,
-    descriptionKind: 'literal',
-  };
-}
-
-function toPluginCommand(def: PluginSlashCommandDef): SlashCommandCatalogItem {
-  return {
-    id: `plugin:${def.extensionId}:${def.id}`,
-    commandId: def.id,
-    name: def.name.startsWith('/') ? def.name : `/${def.name}`,
-    descriptionKey: def.description,
-    icon: def.icon || '🔌',
-    source: 'plugin',
-    extensionId: def.extensionId,
-    descriptionKind: 'literal',
-  };
-}
-
-function toBuiltinCommand(def: BuiltinSlashCommandDefinition): SlashCommandCatalogItem {
-  return {
-    id: def.name,
-    commandId: def.name,
-    name: `/${def.name}`,
-    descriptionKey: `chat.commands.${def.name}`,
-    icon: BUILTIN_COMMAND_ICONS[def.name],
-    source: 'builtin',
-    descriptionKind: 'i18n',
-  };
-}
-
 export function normalizeSlashCommandName(name: string): string {
   return name.trim().replace(/^\//, '').toLowerCase();
 }
 
-function registerCommand(
-  commands: Map<string, SlashCommandCatalogItem>,
-  command: SlashCommandCatalogItem,
-): void {
-  const key = normalizeSlashCommandName(command.name);
-  if (!commands.has(key)) {
-    commands.set(key, command);
-  }
-}
-
 export function createSlashCommandCatalog(
   skills: readonly SkillSummary[] = [],
-  pluginCommands: readonly PluginSlashCommandDef[] = [],
+  pluginCommands: readonly RegisteredPluginSlashCommand[] = [],
 ): SlashCommandCatalogItem[] {
   const commands = new Map<string, SlashCommandCatalogItem>();
 
@@ -129,14 +83,14 @@ export function createSlashCommandCatalog(
   }
 
   for (const skill of skills) {
-    const command = toSkillCommand(skill);
+    const command = projectSkillSlashCommand(skill);
     if (command) {
       registerCommand(commands, command);
     }
   }
 
   for (const pluginCommand of pluginCommands) {
-    registerCommand(commands, toPluginCommand(pluginCommand));
+    registerCommand(commands, projectPluginSlashCommand(pluginCommand));
   }
 
   return Array.from(commands.values());
@@ -163,7 +117,7 @@ export function createSlashCommandCatalogSections(
 
 export function resolveSlashCommandDescription(
   command: Pick<SlashCommandCatalogItem, 'descriptionKey' | 'descriptionKind'>,
-  translate: TranslateFn,
+  translate: SlashCommandTranslateFn,
 ): string {
   return command.descriptionKind === 'i18n'
     ? translate(command.descriptionKey)
@@ -178,7 +132,7 @@ export function resolveSlashCommandSourceLabel(
 
 export function formatSlashCommandHelpCatalog(
   commands: readonly SlashCommandCatalogItem[],
-  translate: TranslateFn,
+  translate: SlashCommandTranslateFn,
 ): string {
   return createSlashCommandCatalogSections(commands)
     .map((section) =>
@@ -195,7 +149,7 @@ export function formatSlashCommandHelpCatalog(
 export function filterSlashCommands(
   commands: readonly SlashCommandCatalogItem[],
   filter: string,
-  translate: TranslateFn,
+  translate: SlashCommandTranslateFn,
 ): SlashCommandCatalogItem[] {
   const normalizedFilter = normalizeSlashCommandName(filter);
   if (!normalizedFilter) {
@@ -238,4 +192,56 @@ export function extractSlashCommandArgs(
 
   const args = withoutPrefix.slice(separatorIndex + 1).trim();
   return args.length > 0 ? args : undefined;
+}
+
+function projectSkillSlashCommand(skill: SkillSummary): SlashCommandCatalogItem | null {
+  if (!skill.slashCommand || !skill.enabled) {
+    return null;
+  }
+
+  return {
+    id: skill.id,
+    commandId: skill.slashCommand,
+    name: `/${skill.slashCommand}`,
+    descriptionKey: skill.description,
+    icon: skill.icon || '🔧',
+    source: 'skill',
+    skillId: skill.id,
+    descriptionKind: 'literal',
+  };
+}
+
+function projectPluginSlashCommand(def: RegisteredPluginSlashCommand): SlashCommandCatalogItem {
+  return {
+    id: `plugin:${def.extensionId}:${def.id}`,
+    commandId: def.id,
+    name: def.name.startsWith('/') ? def.name : `/${def.name}`,
+    descriptionKey: def.description,
+    icon: def.icon || '🔌',
+    source: 'plugin',
+    extensionId: def.extensionId,
+    descriptionKind: 'literal',
+  };
+}
+
+function projectBuiltinSlashCommand(def: BuiltinSlashCommandDefinition): SlashCommandCatalogItem {
+  return {
+    id: def.name,
+    commandId: def.name,
+    name: `/${def.name}`,
+    descriptionKey: `chat.commands.${def.name}`,
+    icon: BUILTIN_COMMAND_ICONS[def.name],
+    source: 'builtin',
+    descriptionKind: 'i18n',
+  };
+}
+
+function registerCommand(
+  commands: Map<string, SlashCommandCatalogItem>,
+  command: SlashCommandCatalogItem,
+): void {
+  const key = normalizeSlashCommandName(command.name);
+  if (!commands.has(key)) {
+    commands.set(key, command);
+  }
 }

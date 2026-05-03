@@ -12,21 +12,10 @@ import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { TaskCard } from '@/components/ChatView/TaskCard/TaskCard';
+import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
+import { getTaskWorkItemById, selectRelatedSubAgentWorkItems } from '@/components/AgentWorkItem';
+import { projectToolCallDisplayState } from '@/presenters/tool-call-presenter';
 import { getLogger } from '../../../utils/logger';
-import {
-  extractFilePath,
-  extractImageUrls,
-  extractVideoUrls,
-  extractAudioUrls,
-  extractLocalPaths,
-} from './media-extractors';
-import {
-  IMAGE_GENERATION_TOOLS,
-  VIDEO_GENERATION_TOOLS,
-  AUDIO_GENERATION_TOOLS,
-  FILE_TOOLS,
-  getToolSummary,
-} from './tool-constants';
 import {
   FileIcon,
   ChevronIcon,
@@ -41,11 +30,13 @@ const logger = getLogger('ToolCallDisplay');
 interface ToolCallDisplayProps {
   toolCall: ToolCall;
   conversationId: string | null;
+  workItemIds?: string[];
 }
 
-function ToolCallDisplayComponent({ toolCall, conversationId }: ToolCallDisplayProps) {
+function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: ToolCallDisplayProps) {
   const { t } = useTranslation();
-  const { backgroundTasks, onCancelTask, onViewTaskResult } = useMessageActions();
+  const { workItems, pluginsAvailable, onCancelTask, onRetryTask, onViewTaskResult } =
+    useMessageActions();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleExpand = useCallback(() => {
@@ -73,60 +64,38 @@ function ToolCallDisplayComponent({ toolCall, conversationId }: ToolCallDisplayP
     [toolCall.id, toolCall.name, conversationId],
   );
 
-  // Serialized data
-  const argsJson = JSON.stringify(toolCall.arguments, null, 2);
-  const resultJson =
-    toolCall.result?.data !== undefined ? JSON.stringify(toolCall.result.data, null, 2) : null;
-
-  const hasExpandableContent =
-    Object.keys(toolCall.arguments).length > 0 || (resultJson !== null && resultJson.length > 0);
-
-  // Background task mode detection
-  const resultData = toolCall.result?.data as Record<string, unknown> | undefined;
-  const isBackgroundMode = resultData?.backgroundMode === true;
-  const backgroundTaskStatus = resultData?.status as string | undefined;
-  const isBackgroundTaskCompleted = isBackgroundMode && backgroundTaskStatus === 'completed';
-  const shouldShowMediaPreview = !isBackgroundMode || isBackgroundTaskCompleted;
-
-  // Look up live task for inline TaskCard progress
-  const backgroundTaskId = isBackgroundMode
-    ? (resultData?.taskId as string | undefined)
-    : undefined;
+  const projection = projectToolCallDisplayState(toolCall);
+  const {
+    argsJson,
+    resultJson,
+    hasExpandableContent,
+    isBackgroundMode,
+    backgroundTaskId,
+    isImageTool,
+    imageUrls,
+    isVideoTool,
+    videoUrls,
+    isAudioTool,
+    audioUrls,
+    localPaths,
+    isFileTool,
+    filePath,
+    summary,
+    isPending,
+    isSuccess,
+    isFailed,
+    needsConfirmation,
+  } = projection;
   const liveTask = backgroundTaskId
-    ? backgroundTasks?.find((t) => t.id === backgroundTaskId)
+    ? getTaskWorkItemById(workItems, backgroundTaskId)?.task
     : undefined;
+  const relatedSubAgents = selectRelatedSubAgentWorkItems({
+    toolCallId: toolCall.id,
+    toolResultData: toolCall.result?.data,
+    workItems,
+    workItemIds,
+  });
 
-  // Media extraction
-  const isImageTool = IMAGE_GENERATION_TOOLS.includes(toolCall.name);
-  const imageUrls =
-    toolCall.result?.success && shouldShowMediaPreview
-      ? extractImageUrls(toolCall.result.data)
-      : [];
-
-  const isVideoTool = VIDEO_GENERATION_TOOLS.includes(toolCall.name);
-  const videoUrls =
-    toolCall.result?.success && shouldShowMediaPreview
-      ? extractVideoUrls(toolCall.result.data)
-      : [];
-
-  const isAudioTool = AUDIO_GENERATION_TOOLS.includes(toolCall.name);
-  const audioUrls =
-    toolCall.result?.success && shouldShowMediaPreview
-      ? extractAudioUrls(toolCall.result.data)
-      : [];
-
-  const localPaths = toolCall.result?.success ? extractLocalPaths(toolCall.result.data) : [];
-
-  // File tool detection
-  const isFileTool = FILE_TOOLS.includes(toolCall.name);
-  const filePath = extractFilePath(toolCall.arguments) || extractFilePath(toolCall.result?.data);
-
-  // Summary and status
-  const summary = getToolSummary(toolCall.name, toolCall.arguments);
-  const isPending = !toolCall.result;
-  const isSuccess = toolCall.result?.success === true;
-  const isFailed = toolCall.result?.success === false;
-  const needsConfirmation = toolCall.pendingConfirmation === true;
   const toneClass = isFailed ? 'is-danger' : isSuccess ? 'is-success' : isPending ? 'is-info' : '';
   const compactActionClass =
     'inline-flex items-center gap-1 rounded-md border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--agent-fg)] transition-colors hover:bg-[var(--agent-hover)]';
@@ -297,8 +266,17 @@ function ToolCallDisplayComponent({ toolCall, conversationId }: ToolCallDisplayP
 
       {/* Inline task progress card for background media tasks */}
       {isBackgroundMode && liveTask && (
-        <TaskCard task={liveTask} onCancel={onCancelTask} onViewResult={onViewTaskResult} />
+        <TaskCard
+          task={liveTask}
+          onCancel={onCancelTask}
+          onRetry={onRetryTask}
+          onViewResult={onViewTaskResult}
+          plugins={pluginsAvailable}
+        />
       )}
+      {relatedSubAgents.map((item) => (
+        <SubAgentCard key={item.id} item={item} />
+      ))}
 
       {/* Media previews — registry-driven rendering (ADR-6 §6.2) */}
       {isImageTool && imageUrls.length > 0 && (

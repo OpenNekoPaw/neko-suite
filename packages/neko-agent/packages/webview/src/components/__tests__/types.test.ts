@@ -73,15 +73,15 @@ describe('types validation', () => {
       expect(message.attachments?.[0].type).toBe('image');
     });
 
-    it('should accept message with background task IDs', () => {
+    it('should accept message with unified work item IDs', () => {
       const message: Message = {
         id: '101',
         role: 'assistant',
         content: 'Task started',
         timestamp: Date.now(),
-        backgroundTaskIds: ['task-1', 'task-2'],
+        workItemIds: ['task-1', 'task-2'],
       };
-      expect(message.backgroundTaskIds?.length).toBe(2);
+      expect(message.workItemIds?.length).toBe(2);
     });
   });
 

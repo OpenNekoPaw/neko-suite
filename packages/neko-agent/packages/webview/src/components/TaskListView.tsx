@@ -6,47 +6,21 @@
  * Only the type definitions are still used (by TaskCard, handlers, hooks).
  */
 
-import type { WebviewGeneratedAsset } from '@neko/shared';
+import type {
+  AgentBackgroundTask,
+  AgentWorkItemTaskStatus,
+  AgentWorkItemTaskStep,
+  AgentWorkItemTaskStepStatus,
+  AgentWorkItemTaskType,
+} from '@neko-agent/types';
 
-export type TaskStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
-export type TaskType = 'image' | 'video' | 'audio';
+export type TaskStatus = AgentWorkItemTaskStatus;
+export type TaskType = AgentWorkItemTaskType;
 
 /** Task step status for detailed progress tracking */
-export type TaskStepStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type TaskStepStatus = AgentWorkItemTaskStepStatus;
 
 /** Individual step in a task workflow */
-export interface TaskStep {
-  id: string;
-  name: string;
-  status: TaskStepStatus;
-  startTime?: number;
-  endTime?: number;
-  message?: string;
-}
+export type TaskStep = AgentWorkItemTaskStep;
 
-export interface BackgroundTask {
-  id: string;
-  type: TaskType;
-  name: string;
-  prompt: string;
-  providerId: string;
-  providerName: string;
-  status: TaskStatus;
-  progress: number;
-  createdAt: string;
-  updatedAt: string;
-  result?: {
-    urls: string[];
-    localPaths?: string[];
-    thumbnailUrl?: string;
-    width?: number;
-    height?: number;
-    duration?: number;
-    /** GeneratedAsset references with webview-safe URIs (ADR-4) */
-    assets?: WebviewGeneratedAsset[];
-  };
-  error?: string;
-  steps?: TaskStep[];
-  currentStepId?: string;
-  eta?: number;
-}
+export type BackgroundTask = AgentBackgroundTask;

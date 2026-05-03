@@ -61,11 +61,6 @@ export interface InputAreaContextValue {
   onRemoveContextChip: (id: string) => void;
   /** Ambient canvas selection — auto-injected from canvas, non-removable. */
   ambientNodes?: Array<{ nodeId: string; type: string; summary: string }>;
-  /** Send a message string directly (bypasses inputValue closure) — used when chips modify message */
-  onTriggerSend?: (
-    message: string,
-    attachments?: import('./InputArea/types').MessageAttachment[],
-  ) => void;
   // Generation params (shown in top bar, fed into tool calls)
   genCategory: GenCategory;
   genParams: GenerationParams;
@@ -106,7 +101,6 @@ export function InputAreaProvider({
       contextChips: value.contextChips,
       onRemoveContextChip: value.onRemoveContextChip,
       ambientNodes: value.ambientNodes,
-      onTriggerSend: value.onTriggerSend,
       genCategory: value.genCategory,
       genParams: value.genParams,
       onGenCategoryChange: value.onGenCategoryChange,
@@ -138,7 +132,6 @@ export function InputAreaProvider({
       value.contextChips,
       value.onRemoveContextChip,
       value.ambientNodes,
-      value.onTriggerSend,
       value.genCategory,
       value.genParams,
       value.onGenCategoryChange,

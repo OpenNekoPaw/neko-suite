@@ -30,7 +30,12 @@ export function AppShell() {
     updateSettings,
   } = config;
 
-  const { backgroundTasks, setBackgroundTasks } = resource;
+  const {
+    workItemsByConversation,
+    setWorkItemsByConversation,
+    pluginsAvailable,
+    setPluginsAvailable,
+  } = resource;
 
   // Onboarding overlay state
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -63,8 +68,10 @@ export function AppShell() {
         pluginCommands={pluginCommands}
         setPluginCommands={setPluginCommands}
         updateSettings={updateSettings}
-        backgroundTasks={backgroundTasks}
-        setBackgroundTasks={setBackgroundTasks}
+        workItemsByConversation={workItemsByConversation}
+        setWorkItemsByConversation={setWorkItemsByConversation}
+        pluginsAvailable={pluginsAvailable}
+        setPluginsAvailable={setPluginsAvailable}
         setShowOnboarding={setShowOnboarding}
         renderHeader={(headerProps) => (
           <Header

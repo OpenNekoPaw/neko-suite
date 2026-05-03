@@ -5,20 +5,23 @@
  */
 
 import { useState } from 'react';
-import type { BackgroundTask } from '@/components/TaskListView';
+import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 /**
  * Resource state shape
  */
 export interface ResourceState {
-  backgroundTasks: BackgroundTask[];
+  workItemsByConversation: AgentWorkItemStore;
+  pluginsAvailable: PluginsAvailable;
 }
 
 /**
  * Resource state actions
  */
 export interface ResourceStateActions {
-  setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
+  setWorkItemsByConversation: React.Dispatch<React.SetStateAction<AgentWorkItemStore>>;
+  setPluginsAvailable: React.Dispatch<React.SetStateAction<PluginsAvailable>>;
 }
 
 /**
@@ -30,11 +33,15 @@ export interface UseResourceStateReturn extends ResourceState, ResourceStateActi
  * Hook for managing resource state
  */
 export function useResourceState(): UseResourceStateReturn {
-  // Background tasks
-  const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
+  const [workItemsByConversation, setWorkItemsByConversation] = useState<AgentWorkItemStore>(
+    () => new Map(),
+  );
+  const [pluginsAvailable, setPluginsAvailable] = useState<PluginsAvailable>({});
 
   return {
-    backgroundTasks,
-    setBackgroundTasks,
+    workItemsByConversation,
+    setWorkItemsByConversation,
+    pluginsAvailable,
+    setPluginsAvailable,
   };
 }

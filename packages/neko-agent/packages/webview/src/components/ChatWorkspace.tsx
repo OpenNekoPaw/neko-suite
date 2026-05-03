@@ -24,7 +24,8 @@ import type {
   MentionItem,
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
-import type { BackgroundTask } from '@/components/TaskListView';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from '@/handlers';
 import {
   useUIState,
@@ -35,6 +36,10 @@ import {
   useSlashCommands,
 } from '@/hooks';
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
+import {
+  projectChatWorkspaceModelState,
+  projectMediaModelSelectionForSessionModeChange,
+} from '@/presenters/config-message-presenter';
 
 // =============================================================================
 // Props
@@ -66,7 +71,8 @@ export interface ChatWorkspaceProps {
   mentionItems: MentionItem[];
   pluginCommands: PluginSlashCommandDef[];
   // Resources
-  backgroundTasks: BackgroundTask[];
+  workItems: AgentWorkItem[];
+  pluginsAvailable: PluginsAvailable;
   // Session
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
   // Conversation session refs (for useConversationSession)
@@ -90,11 +96,11 @@ export interface ChatWorkspaceProps {
   ambientNodes: Array<{ nodeId: string; type: string; summary: string }>;
   onAddContextChip: (payload: AgentContextPayload) => void;
   onRemoveContextChip: (id: string) => void;
+  onInjectContextChip: (payload: AgentContextPayload, conversationId?: string | null) => void;
   // Agent state
   agentState: AgentState | null;
   // Message handler (for pre-intercept)
   handleMessage: (event: MessageEvent) => void;
-  setContextChips: React.Dispatch<React.SetStateAction<AgentContextPayload[]>>;
   setAmbientNodes: React.Dispatch<
     React.SetStateAction<Array<{ nodeId: string; type: string; summary: string }>>
   >;
@@ -130,7 +136,8 @@ export function ChatWorkspace({
   setMediaModelSelection,
   mentionItems,
   pluginCommands,
-  backgroundTasks,
+  workItems,
+  pluginsAvailable,
   setActiveTab,
   conversationMessagesRef,
   conversationStreamingRef,
@@ -149,9 +156,9 @@ export function ChatWorkspace({
   ambientNodes,
   onAddContextChip,
   onRemoveContextChip,
+  onInjectContextChip,
   agentState,
   handleMessage,
-  setContextChips,
   setAmbientNodes,
   onNewChat,
   sessionCleanupRef,
@@ -191,46 +198,12 @@ export function ChatWorkspace({
   );
 
   // ---- Model lists ----
-  const allModels =
-    settings.chatModelOptions.length > 0
-      ? settings.chatModelOptions
-      : [{ id: 'auto', label: 'Auto', providerId: '', modelId: '' }];
-
-  const MEDIA_CATEGORIES = new Set(['image', 'video', 'audio']);
-  const availableModels = allModels.filter(
-    (m) => m.id === 'auto' || !m.category || !MEDIA_CATEGORIES.has(m.category),
-  );
-  const availableMediaModels = allModels.filter(
-    (m) => m.category && MEDIA_CATEGORIES.has(m.category),
-  );
-
-  const activeMediaModel =
-    sessionMode !== 'agent'
-      ? availableMediaModels.find(
-          (m) => m.id === mediaModelSelection[sessionMode as 'image' | 'video' | 'audio'],
-        )
-      : undefined;
-
-  const agentMediaModels =
-    sessionMode === 'agent'
-      ? (() => {
-          const resolve = (cat: 'image' | 'video' | 'audio') => {
-            const id = mediaModelSelection[cat];
-            if (!id || id === 'none') return undefined;
-            const m = availableMediaModels.find((m) => m.id === id);
-            if (!m?.modelId) return undefined;
-            return { providerId: m.providerId || undefined, modelId: m.modelId };
-          };
-          const result: import('@/hooks/useChatActions').AgentMediaModels = {};
-          const img = resolve('image');
-          if (img) result.image = img;
-          const vid = resolve('video');
-          if (vid) result.video = vid;
-          const aud = resolve('audio');
-          if (aud) result.audio = aud;
-          return Object.keys(result).length > 0 ? result : undefined;
-        })()
-      : undefined;
+  const { availableModels, availableMediaModels, activeMediaModel, agentMediaModels } =
+    projectChatWorkspaceModelState({
+      chatModelOptions: settings.chatModelOptions,
+      sessionMode,
+      mediaModelSelection,
+    });
 
   // ---- Behavior hooks ----
   const { handleSend, triggerSend, handleCancelMessage, copyLastResponse } = useChatActions({
@@ -261,6 +234,7 @@ export function ChatWorkspace({
         type?: string;
         message?: string;
         payload?: AgentContextPayload;
+        conversationId?: string | null;
         nodes?: Array<{ nodeId: string; type: string; summary: string }>;
       };
       if (!msg?.type) return handleMessage(event);
@@ -280,23 +254,34 @@ export function ChatWorkspace({
         case 'injectContext':
           if (msg.payload) {
             setActiveTab('chat');
-            setContextChips((prev) => {
-              const exists = prev.some((c) => c.id === msg.payload!.id);
-              return exists ? prev : [...prev, msg.payload!];
-            });
-            if (msg.payload.intent) {
+            const targetConversationId = msg.conversationId ?? activeConversationIdRef.current;
+            onInjectContextChip(msg.payload, targetConversationId);
+            const shouldPrefillActiveInput =
+              !targetConversationId || targetConversationId === activeConversationIdRef.current;
+            if (shouldPrefillActiveInput && msg.payload.intent) {
               setInputValue(msg.payload.intent);
             }
           }
           break;
         case 'ambientCanvasUpdate':
+          if (msg.conversationId && msg.conversationId !== activeConversationIdRef.current) {
+            break;
+          }
           setAmbientNodes(msg.nodes ?? []);
           break;
         default:
           handleMessage(event);
       }
     },
-    [handleMessage, triggerSend, setInputValue, setActiveTab, setContextChips, setAmbientNodes],
+    [
+      handleMessage,
+      triggerSend,
+      setInputValue,
+      setActiveTab,
+      onInjectContextChip,
+      setAmbientNodes,
+      activeConversationIdRef,
+    ],
   );
 
   // Listen for messages from extension
@@ -323,7 +308,8 @@ export function ChatWorkspace({
         textarea?.focus();
       }),
       COMMON_SHORTCUTS.clearConversation(() => {
-        VSCodeMessages.clearHistory();
+        if (!activeConversationId) return;
+        VSCodeMessages.clearHistory(activeConversationId);
         clearMessages();
         clearInput();
       }),
@@ -341,6 +327,7 @@ export function ChatWorkspace({
     skills,
     pluginCommands,
     inputValue,
+    activeConversationId,
     setMessages,
     clearInput,
   });
@@ -362,8 +349,9 @@ export function ChatWorkspace({
   };
 
   const handlePromptModeChange = (mode: PromptMode) => {
+    if (!activeConversationId) return;
     updateSettings({ promptMode: mode });
-    VSCodeMessages.setPromptMode(mode);
+    VSCodeMessages.setPromptMode(mode, activeConversationId);
   };
 
   const handleMediaModelSelect = useCallback(
@@ -376,14 +364,16 @@ export function ChatWorkspace({
   const handleSessionModeChange = useCallback(
     (mode: SessionMode) => {
       setSessionMode(mode);
-      if (mode !== 'agent') {
-        const first = allModels.find((m) => m.category === mode);
-        if (first) {
-          setMediaModelSelection((prev) => ({ ...prev, [mode]: first.id }));
-        }
-      }
+      setMediaModelSelection((prev) => {
+        const projection = projectMediaModelSelectionForSessionModeChange({
+          sessionMode: mode,
+          mediaModelSelection: prev,
+          chatModelOptions: settings.chatModelOptions,
+        });
+        return projection.updated ? projection.mediaModelSelection : prev;
+      });
     },
-    [allModels, setMediaModelSelection],
+    [settings.chatModelOptions, setMediaModelSelection],
   );
 
   return (
@@ -407,13 +397,16 @@ export function ChatWorkspace({
       skills={skills}
       pluginCommands={pluginCommands}
       onSlashCommand={handleSlashCommand}
-      onRequestFiles={(filter) => VSCodeMessages.searchProjectFiles(filter)}
+      onRequestFiles={(filter) => {
+        if (activeConversationId) {
+          VSCodeMessages.searchProjectFiles(filter, activeConversationId);
+        }
+      }}
       mentionItems={mentionItems}
       onAddContextChip={onAddContextChip}
       contextChips={contextChips}
       onRemoveContextChip={onRemoveContextChip}
       ambientNodes={ambientNodes}
-      onTriggerSend={triggerSend}
       genCategory={genCategory}
       genParams={genParams}
       onGenCategoryChange={setGenCategory}
@@ -433,9 +426,23 @@ export function ChatWorkspace({
         onConfirmSkill={skillActions.handleConfirmSkill}
         onDeclineSkill={skillActions.handleDeclineSkill}
         onClearActiveSkill={skillActions.handleClearActiveSkill}
-        backgroundTasks={backgroundTasks}
-        onCancelTask={(taskId) => VSCodeMessages.cancelTask(taskId)}
-        onViewTaskResult={(taskId) => VSCodeMessages.viewTaskResult(taskId)}
+        workItems={workItems}
+        pluginsAvailable={pluginsAvailable}
+        onCancelTask={(taskId) => {
+          if (activeConversationId) {
+            VSCodeMessages.cancelTask(taskId, activeConversationId);
+          }
+        }}
+        onRetryTask={(taskId) => {
+          if (activeConversationId) {
+            VSCodeMessages.retryTask(taskId, activeConversationId);
+          }
+        }}
+        onViewTaskResult={(taskId) => {
+          if (activeConversationId) {
+            VSCodeMessages.viewTaskResult(taskId, activeConversationId);
+          }
+        }}
         onInputChange={setInputValue}
         onSend={handleSend}
         onCancel={handleCancelMessage}

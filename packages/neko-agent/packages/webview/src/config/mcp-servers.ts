@@ -48,7 +48,3 @@ export function getMCPCategoryIcon(category: MCPServerCategory): string {
   };
   return icons[category];
 }
-
-// Legacy type aliases for backward compatibility
-export type MCPTool = MCPToolInfo;
-export type MCPServerPreset = MCPServerConfig;

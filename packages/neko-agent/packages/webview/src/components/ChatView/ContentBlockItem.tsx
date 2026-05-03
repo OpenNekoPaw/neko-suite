@@ -12,6 +12,12 @@ import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
+import {
+  projectContentBlockUi,
+  type ContentBlockHeaderIconKind,
+  type ContentBlockHeaderTone,
+  type ContentBlockUiProjection,
+} from '@/presenters/content-block-presenter';
 
 interface ContentBlockItemProps {
   /** The content block to render */
@@ -24,6 +30,8 @@ interface ContentBlockItemProps {
   isStreaming: boolean;
   /** Current conversation for scoped UI actions */
   conversationId: string | null;
+  /** Work items linked to the parent message */
+  workItemIds?: string[];
 }
 
 // Assistant avatar component - compact size (20px)
@@ -37,52 +45,31 @@ function AssistantAvatar() {
   );
 }
 
-// Block type icons and labels
-const blockTypeConfig: Record<
-  ContentBlock['type'],
-  { icon: string; label: string; color: string }
-> = {
-  thinking: {
-    icon: '💭',
-    label: 'Thinking',
-    color: 'text-[var(--vscode-charts-purple)]',
-  },
-  text: {
-    icon: '💬',
-    label: 'Response',
-    color: 'text-[var(--vscode-charts-green)]',
-  },
-  tool_call: {
-    icon: '🔧',
-    label: 'Tool',
-    color: 'text-[var(--vscode-charts-blue)]',
-  },
-  code_diff: {
-    icon: '📝',
-    label: 'Edit',
-    color: 'text-[var(--vscode-charts-orange)]',
-  },
-  plan: {
-    icon: '📋',
-    label: 'Plan',
-    color: 'text-[var(--vscode-charts-yellow)]',
-  },
+const blockHeaderIconByKind: Record<ContentBlockHeaderIconKind, string> = {
+  thinking: '💭',
+  response: '💬',
+  tool: '🔧',
+  edit: '📝',
+  plan: '📋',
 };
 
-// Format timestamp
-function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
+const blockHeaderToneClassByTone: Record<ContentBlockHeaderTone, string> = {
+  purple: 'text-[var(--vscode-charts-purple)]',
+  green: 'text-[var(--vscode-charts-green)]',
+  blue: 'text-[var(--vscode-charts-blue)]',
+  orange: 'text-[var(--vscode-charts-orange)]',
+  yellow: 'text-[var(--vscode-charts-yellow)]',
+};
 
 export const ContentBlockItem = memo(function ContentBlockItem({
   block,
   isFirst,
   isStreaming,
   conversationId,
+  workItemIds,
 }: ContentBlockItemProps) {
-  const config = blockTypeConfig[block.type];
   const actions = useMessageActions();
+  const projection = projectContentBlockUi({ block, parentIsStreaming: isStreaming });
 
   return (
     <div className="group hover:bg-[var(--vscode-list-hoverBackground)] transition-colors">
@@ -96,21 +83,23 @@ export const ContentBlockItem = memo(function ContentBlockItem({
         <div className="flex-1 min-w-0 max-w-[85%]">
           {/* Header: Block type + timestamp */}
           <div className="flex items-center gap-2 mb-0.5">
-            <span className={`text-[11px] font-medium ${config.color}`}>
-              {config.icon} {config.label}
+            <span
+              className={`text-[11px] font-medium ${blockHeaderToneClassByTone[projection.header.tone]}`}
+            >
+              {blockHeaderIconByKind[projection.header.iconKind]} {projection.header.label}
             </span>
             <span className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-0 group-hover:opacity-100 transition-opacity">
-              {formatTime(block.timestamp)}
+              {projection.header.timestampLabel}
             </span>
-            {block.isStreaming && (
+            {projection.header.showStreamingBadge && (
               <span className="text-[10px] text-[var(--vscode-charts-green)] animate-pulse">
-                streaming...
+                {projection.header.streamingLabel}
               </span>
             )}
           </div>
 
           {/* Block content */}
-          {renderBlockContent(block, isStreaming, conversationId, actions)}
+          {renderBlockContent(projection, conversationId, actions, workItemIds)}
         </div>
       </div>
     </div>
@@ -121,8 +110,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
  * Render the content of a block based on its type
  */
 function renderBlockContent(
-  block: ContentBlock,
-  isStreaming: boolean,
+  projection: ContentBlockUiProjection,
   conversationId: string | null,
   callbacks: Pick<
     import('@/components/ChatView/MessageActionsContext').MessageActionsContextValue,
@@ -134,36 +122,37 @@ function renderBlockContent(
     | 'onApproveAllPlanSteps'
     | 'onRejectAllPlanSteps'
   >,
+  workItemIds?: string[],
 ) {
-  switch (block.type) {
+  switch (projection.renderKind) {
     case 'thinking':
-      return <ThinkingBlock content={block.thinking || ''} isComplete={block.isThinkingComplete} />;
+      return (
+        <ThinkingBlock content={projection.thinking} isComplete={projection.isThinkingComplete} />
+      );
 
-    case 'text':
-      if (!block.content) return null;
+    case 'markdown':
       return (
         <div className="inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)] rounded-tl-sm">
-          <MarkdownRenderer
-            content={block.content}
-            isStreaming={block.isStreaming || isStreaming}
+          <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
+        </div>
+      );
+
+    case 'tool':
+      return (
+        <div className="w-full">
+          <ToolCallDisplay
+            toolCall={projection.toolCall}
+            conversationId={conversationId}
+            workItemIds={workItemIds}
           />
         </div>
       );
 
-    case 'tool_call':
-      if (!block.toolCall) return null;
-      return (
-        <div className="w-full">
-          <ToolCallDisplay toolCall={block.toolCall} conversationId={conversationId} />
-        </div>
-      );
-
-    case 'code_diff':
-      if (!block.codeDiff) return null;
+    case 'diff':
       return (
         <div className="w-full">
           <DiffBlock
-            diff={block.codeDiff}
+            diff={projection.codeDiff}
             onAccept={callbacks.onAcceptDiff}
             onReject={callbacks.onRejectDiff}
           />
@@ -171,41 +160,40 @@ function renderBlockContent(
       );
 
     case 'plan':
-      if (!block.plan) return null;
       return (
         <div className="w-full">
           <PlanReview
-            plan={block.plan}
+            plan={projection.plan}
             onApproveStep={
               callbacks.onApprovePlanStep
-                ? (stepId) => callbacks.onApprovePlanStep!(block.plan!.id, stepId)
+                ? (stepId) => callbacks.onApprovePlanStep!(projection.plan.id, stepId)
                 : undefined
             }
             onRejectStep={
               callbacks.onRejectPlanStep
-                ? (stepId) => callbacks.onRejectPlanStep!(block.plan!.id, stepId)
+                ? (stepId) => callbacks.onRejectPlanStep!(projection.plan.id, stepId)
                 : undefined
             }
             onModifyStep={
               callbacks.onModifyPlanStep
-                ? (stepId, desc) => callbacks.onModifyPlanStep!(block.plan!.id, stepId, desc)
+                ? (stepId, desc) => callbacks.onModifyPlanStep!(projection.plan.id, stepId, desc)
                 : undefined
             }
             onApproveAll={
               callbacks.onApproveAllPlanSteps
-                ? () => callbacks.onApproveAllPlanSteps!(block.plan!.id)
+                ? () => callbacks.onApproveAllPlanSteps!(projection.plan.id)
                 : undefined
             }
             onRejectAll={
               callbacks.onRejectAllPlanSteps
-                ? () => callbacks.onRejectAllPlanSteps!(block.plan!.id)
+                ? () => callbacks.onRejectAllPlanSteps!(projection.plan.id)
                 : undefined
             }
           />
         </div>
       );
 
-    default:
+    case 'empty':
       return null;
   }
 }

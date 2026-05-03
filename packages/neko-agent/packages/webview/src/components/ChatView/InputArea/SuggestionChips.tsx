@@ -17,16 +17,15 @@ interface Suggestion {
   text: string;
 }
 
-/** Derive context-aware suggestions from the attached chip types. */
+/** Derive context-aware UI suggestions from the attached chip types. */
 function getSuggestions(chips: AgentContextPayload[]): Suggestion[] {
   const types = new Set(chips.map((c) => c.type));
 
   if (types.has('canvas-node')) {
-    // Check if any chip data indicates a shot node
     const hasShotNode = chips.some(
       (c) =>
         c.type === 'canvas-node' &&
-        (c.label.startsWith('#') || c.summary?.toLowerCase().includes('shot')),
+        (c.label.startsWith('#') || c.summary.toLowerCase().includes('shot')),
     );
     if (hasShotNode) {
       return [

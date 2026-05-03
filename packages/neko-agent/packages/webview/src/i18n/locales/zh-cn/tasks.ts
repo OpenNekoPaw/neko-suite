@@ -16,6 +16,7 @@ export const tasks = {
 
   'tasks.viewResult': '查看结果',
   'tasks.cancel': '取消',
+  'tasks.retry': '重试',
   'tasks.remove': '移除',
   'tasks.batchProgress': '已完成 {completed}/{total}',
   'tasks.videoGeneration': '视频生成',
@@ -30,5 +31,6 @@ export const tasks = {
   'tasks.tasks': '{count} 个任务',
   'tasks.batchVideoGeneration': '批量视频生成',
   'tasks.batchImageGeneration': '批量图片生成',
+  'tasks.batchAudioGeneration': '批量音频生成',
   'tasks.overallProgress': '总进度',
 } as const satisfies MessageBundle;

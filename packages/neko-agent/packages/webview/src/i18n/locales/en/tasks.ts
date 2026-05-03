@@ -16,6 +16,7 @@ export const tasks = {
 
   'tasks.viewResult': 'View Result',
   'tasks.cancel': 'Cancel',
+  'tasks.retry': 'Retry',
   'tasks.remove': 'Remove',
   'tasks.batchProgress': '{completed}/{total} completed',
   'tasks.videoGeneration': 'Video Generation',
@@ -30,5 +31,6 @@ export const tasks = {
   'tasks.tasks': '{count} tasks',
   'tasks.batchVideoGeneration': 'Batch Video Generation',
   'tasks.batchImageGeneration': 'Batch Image Generation',
+  'tasks.batchAudioGeneration': 'Batch Audio Generation',
   'tasks.overallProgress': 'Overall Progress',
 } as const satisfies MessageBundle;

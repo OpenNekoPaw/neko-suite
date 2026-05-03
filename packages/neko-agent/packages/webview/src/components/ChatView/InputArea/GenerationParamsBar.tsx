@@ -11,7 +11,7 @@
  *   - Shows params for that category (model is shown in left area by InputArea).
  */
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import { ChevronDownIcon } from './DropdownMenu';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useDropdownDirection, dropdownPositionClass } from './useDropdownDirection';
@@ -20,6 +20,7 @@ import type { GenCategory, GenerationParams } from './types';
 import { SESSION_MODE_COLORS } from './SessionModeSelector';
 import type { ChatModelOption } from '@neko/shared';
 import { getCategoryColor, ModelDot } from './ModelIcon';
+import { projectGenerationParamsBarState } from '@/presenters/media-model-presenter';
 
 // ─── small reusable param chip ─────────────────────────────────────────────
 
@@ -398,27 +399,22 @@ export function GenerationParamsBar() {
     contextChips,
   } = useInputAreaContext();
 
-  // Auto-expand when canvas/cut context is present
-  const hasGenContext =
-    ambientNodes.length > 0 ||
-    contextChips.some((c) => c.type === 'canvas-node' || c.type === 'cut-clip');
-
   const [manuallyExpanded, setManuallyExpanded] = useState(false);
 
-  // In non-agent modes, always show (category implied by sessionMode)
-  const isAgentMode = sessionMode === 'agent';
-  const effectiveCategory: GenCategory = isAgentMode ? genCategory : (sessionMode as GenCategory);
+  const projection = projectGenerationParamsBarState({
+    sessionMode,
+    generationCategory: genCategory,
+    mediaModelSelection,
+    availableMediaModels,
+    ambientNodeCount: ambientNodes.length,
+    contextChips,
+    manuallyExpanded,
+  });
+  const { category: effectiveCategory } = projection;
 
-  const isExpanded = !isAgentMode || hasGenContext || manuallyExpanded;
   const color = SESSION_MODE_COLORS[effectiveCategory];
 
-  // Filter media models for current category (agent mode)
-  const categoryModels = useMemo(
-    () => availableMediaModels.filter((m) => m.category === effectiveCategory),
-    [availableMediaModels, effectiveCategory],
-  );
-
-  if (!isExpanded) {
+  if (!projection.isExpanded) {
     return (
       <button
         type="button"
@@ -436,14 +432,16 @@ export function GenerationParamsBar() {
   return (
     <div className="flex items-center gap-0.5">
       {/* Category selector — only in agent mode */}
-      {isAgentMode && <CategorySelector category={genCategory} onChange={onGenCategoryChange} />}
+      {projection.showCategorySelector && (
+        <CategorySelector category={genCategory} onChange={onGenCategoryChange} />
+      )}
 
       {/* Inline media model selector — agent mode only (non-agent uses InputArea left side) */}
-      {isAgentMode && (
+      {projection.showInlineMediaModelPicker && (
         <InlineMediaModelChip
           category={effectiveCategory}
-          selectedId={mediaModelSelection[effectiveCategory]}
-          models={categoryModels}
+          selectedId={projection.selectedId}
+          models={projection.models}
           onSelect={(modelId) => onMediaModelSelect(effectiveCategory, modelId)}
         />
       )}
@@ -457,7 +455,7 @@ export function GenerationParamsBar() {
       />
 
       {/* Manual collapse button — only when manually expanded (no auto-context) */}
-      {isAgentMode && manuallyExpanded && !hasGenContext && (
+      {projection.showManualCollapse && (
         <button
           type="button"
           onClick={() => setManuallyExpanded(false)}

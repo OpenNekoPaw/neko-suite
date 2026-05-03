@@ -13,13 +13,14 @@
  * Extracted from the former 589-line AIAssistant component (ADR P0.1).
  */
 
-import { type ReactNode, useEffect, useCallback, useState, useRef } from 'react';
+import { type ReactNode, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import type { AgentContextPayload } from '@neko/shared';
 import type {
   SettingsState,
   AgentState,
   ConversationSummary,
   OpenTab,
+  PromptMode,
   TabType,
 } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
@@ -28,7 +29,12 @@ import type {
   MentionItem,
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
-import type { BackgroundTask } from '@/components/TaskListView';
+import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
+import {
+  getWorkItemsForConversation,
+  removeConversationWorkItems,
+} from '@/components/AgentWorkItem';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import { useConversationState, useTabManager } from '@/hooks';
@@ -67,8 +73,10 @@ export interface ConversationControllerProps {
   pluginCommands: PluginSlashCommandDef[];
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
   updateSettings: (partial: Partial<SettingsState>) => void;
-  backgroundTasks: BackgroundTask[];
-  setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
+  workItemsByConversation: AgentWorkItemStore;
+  setWorkItemsByConversation: React.Dispatch<React.SetStateAction<AgentWorkItemStore>>;
+  pluginsAvailable: PluginsAvailable;
+  setPluginsAvailable: React.Dispatch<React.SetStateAction<PluginsAvailable>>;
   setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
   renderHeader: (props: HeaderRenderProps) => ReactNode;
 }
@@ -86,8 +94,10 @@ export function ConversationController({
   pluginCommands,
   setPluginCommands,
   updateSettings,
-  backgroundTasks,
-  setBackgroundTasks,
+  workItemsByConversation,
+  setWorkItemsByConversation,
+  pluginsAvailable,
+  setPluginsAvailable,
   setShowOnboarding,
   renderHeader,
 }: ConversationControllerProps) {
@@ -126,6 +136,7 @@ export function ConversationController({
     video: 'none',
     audio: 'none',
   });
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   // ---- Per-conversation ref Maps ----
   const conversationTokenCountRef = useRef<Map<string, number>>(new Map());
@@ -133,12 +144,50 @@ export function ConversationController({
   const conversationMediaCallCountRef = useRef<Map<string, number>>(new Map());
   const [, forceUpdate] = useState(0);
 
+  // Prompt mode is session state, not global settings: each tab/conversation can plan independently.
+  const [promptModeByConversation, setPromptModeByConversation] = useState<Map<string, PromptMode>>(
+    () => new Map(),
+  );
+  const setPromptModeForConversation = useCallback((conversationId: string, mode: PromptMode) => {
+    setPromptModeByConversation((prev) => {
+      const next = new Map(prev);
+      next.set(conversationId, mode);
+      return next;
+    });
+  }, []);
+
   // ---- Skills state ----
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [pendingSkillConfirm, setPendingSkillConfirm] = useState<BoundSkillConfirmRequest | null>(
     null,
   );
-  const [activeSkill, setActiveSkill] = useState<BoundActiveSkillIndicator | null>(null);
+  const [activeSkillByConversation, setActiveSkillByConversation] = useState<
+    Map<string, BoundActiveSkillIndicator>
+  >(() => new Map());
+  const activeSkill = activeConversationId
+    ? (activeSkillByConversation.get(activeConversationId) ?? null)
+    : null;
+  const setActiveSkill = useCallback<
+    React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>
+  >(
+    (value) => {
+      setActiveSkillByConversation((prev) => {
+        const currentValue = activeConversationId ? (prev.get(activeConversationId) ?? null) : null;
+        const nextValue = typeof value === 'function' ? value(currentValue) : value;
+        const targetConversationId = nextValue?.conversationId ?? activeConversationId;
+        if (!targetConversationId) return prev;
+
+        const next = new Map(prev);
+        if (nextValue) {
+          next.set(targetConversationId, nextValue);
+        } else {
+          next.delete(targetConversationId);
+        }
+        return next;
+      });
+    },
+    [activeConversationId],
+  );
 
   // ---- Agent state ----
   const [agentState, setAgentState] = useState<AgentState | null>(null);
@@ -146,19 +195,66 @@ export function ConversationController({
   const forceAgentStateUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
 
   // ---- Context chips & ambient nodes ----
-  const [contextChips, setContextChips] = useState<AgentContextPayload[]>([]);
+  const [contextChipsByConversation, setContextChipsByConversation] = useState<
+    Map<string, AgentContextPayload[]>
+  >(() => new Map());
   const [ambientNodes, setAmbientNodes] = useState<
     Array<{ nodeId: string; type: string; summary: string }>
   >([]);
-  const handleRemoveContextChip = useCallback((id: string) => {
-    setContextChips((prev) => prev.filter((c) => c.id !== id));
-  }, []);
-  const handleAddContextChip = useCallback((payload: AgentContextPayload) => {
-    setContextChips((prev) => {
-      if (prev.some((c) => c.id === payload.id)) return prev;
-      return [...prev, payload];
-    });
-  }, []);
+
+  const setContextChipsForConversation = useCallback(
+    (
+      conversationId: string,
+      value: AgentContextPayload[] | ((current: AgentContextPayload[]) => AgentContextPayload[]),
+    ) => {
+      setContextChipsByConversation((prev) => {
+        const current = prev.get(conversationId) ?? [];
+        const nextValue = typeof value === 'function' ? value(current) : value;
+        const next = new Map(prev);
+        if (nextValue.length === 0) {
+          next.delete(conversationId);
+        } else {
+          next.set(conversationId, nextValue);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+  const handleRemoveContextChip = useCallback(
+    (id: string) => {
+      if (!activeConversationId) return;
+      setContextChipsForConversation(activeConversationId, (prev) =>
+        prev.filter((c) => c.id !== id),
+      );
+    },
+    [activeConversationId, setContextChipsForConversation],
+  );
+  const handleAddContextChip = useCallback(
+    (payload: AgentContextPayload) => {
+      if (!activeConversationId) return;
+      setContextChipsForConversation(activeConversationId, (prev) => {
+        if (prev.some((c) => c.id === payload.id)) return prev;
+        return [...prev, payload];
+      });
+    },
+    [activeConversationId, setContextChipsForConversation],
+  );
+  const handleInjectContextChip = useCallback(
+    (payload: AgentContextPayload, conversationId?: string | null) => {
+      const targetConversationId = conversationId ?? activeConversationId;
+      if (!targetConversationId) return;
+      setContextChipsForConversation(targetConversationId, (prev) => {
+        if (prev.some((c) => c.id === payload.id)) return prev;
+        return [...prev, payload];
+      });
+    },
+    [activeConversationId, setContextChipsForConversation],
+  );
+
+  const contextChips = activeConversationId
+    ? (contextChipsByConversation.get(activeConversationId) ?? [])
+    : [];
 
   // Session-bound cleanup ref — ChatWorkspace registers its useConversationSession cleanup
   // callbacks here so ConversationController can invoke them when deleting conversations.
@@ -167,17 +263,43 @@ export function ConversationController({
     cleanupAllConversations: () => void;
   } | null>(null);
 
-  const cleanupConversation = useCallback((conversationId: string) => {
-    // Delegate to ChatWorkspace's useConversationSession (cleans input/attachment caches)
-    sessionCleanupRef.current?.cleanupConversation(conversationId);
-    // Also clean shared refs not covered by useConversationSession
-    conversationMediaCallCountRef.current.delete(conversationId);
-  }, []);
+  const cleanupConversation = useCallback(
+    (conversationId: string) => {
+      // Delegate to ChatWorkspace's useConversationSession (cleans input/attachment caches)
+      sessionCleanupRef.current?.cleanupConversation(conversationId);
+      // Also clean shared refs not covered by useConversationSession
+      conversationMediaCallCountRef.current.delete(conversationId);
+      setWorkItemsByConversation((prev) => removeConversationWorkItems(prev, conversationId));
+      setContextChipsByConversation((prev) => {
+        if (!prev.has(conversationId)) return prev;
+        const next = new Map(prev);
+        next.delete(conversationId);
+        return next;
+      });
+      setActiveSkillByConversation((prev) => {
+        if (!prev.has(conversationId)) return prev;
+        const next = new Map(prev);
+        next.delete(conversationId);
+        return next;
+      });
+      setPromptModeByConversation((prev) => {
+        if (!prev.has(conversationId)) return prev;
+        const next = new Map(prev);
+        next.delete(conversationId);
+        return next;
+      });
+    },
+    [setWorkItemsByConversation],
+  );
 
   const cleanupAllConversations = useCallback(() => {
     sessionCleanupRef.current?.cleanupAllConversations();
     conversationMediaCallCountRef.current.clear();
-  }, []);
+    setWorkItemsByConversation(() => new Map());
+    setContextChipsByConversation(() => new Map());
+    setActiveSkillByConversation(() => new Map());
+    setPromptModeByConversation(() => new Map());
+  }, [setWorkItemsByConversation]);
 
   // ---- Derived state for current conversation ----
   const contextTokenCount = activeConversationId
@@ -189,6 +311,26 @@ export function ConversationController({
   const mediaModelCallCount = activeConversationId
     ? (conversationMediaCallCountRef.current.get(activeConversationId) ?? 0)
     : 0;
+  const workItems = getWorkItemsForConversation(workItemsByConversation, activeConversationId);
+  const activePromptMode = activeConversationId
+    ? (promptModeByConversation.get(activeConversationId) ?? 'default')
+    : settings.promptMode;
+  const activeSettings = useMemo<SettingsState>(
+    () => ({ ...settings, promptMode: activePromptMode }),
+    [settings, activePromptMode],
+  );
+  const updateActiveSettings = useCallback(
+    (partial: Partial<SettingsState>) => {
+      const { promptMode, ...globalSettings } = partial;
+      if (promptMode && activeConversationId) {
+        setPromptModeForConversation(activeConversationId, promptMode);
+      }
+      if (Object.keys(globalSettings).length > 0) {
+        updateSettings(globalSettings);
+      }
+    },
+    [activeConversationId, setPromptModeForConversation, updateSettings],
+  );
   const activeTabConversationId = activeTabId
     ? (openTabs.find((tab) => tab.id === activeTabId)?.conversationId ?? null)
     : null;
@@ -215,7 +357,8 @@ export function ConversationController({
     setSettings,
     setSelectedModel,
     setMediaModelSelection,
-    setBackgroundTasks,
+    setWorkItemsByConversation,
+    setPluginsAvailable,
     setProjectFiles,
     setMentionItems,
     setPluginCommands,
@@ -226,18 +369,25 @@ export function ConversationController({
     setPendingSkillConfirm,
     setActiveSkill,
     updateSettings,
+    setPromptModeForConversation,
     setShowOnboarding,
+    setGlobalError,
     conversationTokenCountRef,
     conversationCompressingRef,
     forceContextUpdate: triggerForceUpdate,
   });
+
+  useEffect(() => {
+    if (!globalError) return;
+    const timer = window.setTimeout(() => setGlobalError(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [globalError]);
 
   // ---- Request data on mount ----
   useEffect(() => {
     VSCodeMessages.getConversations();
     VSCodeMessages.getActiveConversation();
     VSCodeMessages.getSettings();
-    VSCodeMessages.getTasks();
     VSCodeMessages.getAgentStates();
     VSCodeMessages.getConfig();
     VSCodeMessages.getTabState();
@@ -247,6 +397,8 @@ export function ConversationController({
   useEffect(() => {
     if (activeConversationId) {
       VSCodeMessages.getContextTokenCount(activeConversationId);
+      VSCodeMessages.getTasks(activeConversationId);
+      VSCodeMessages.getPromptMode(activeConversationId);
     }
   }, [activeConversationId]);
 
@@ -340,8 +492,8 @@ export function ConversationController({
           activeTabConversationId={activeTabConversationId}
           clearMessages={clearMessages}
           // Config
-          settings={settings}
-          updateSettings={updateSettings}
+          settings={activeSettings}
+          updateSettings={updateActiveSettings}
           // Model selection (owned here for settingsData hydration)
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
@@ -350,7 +502,8 @@ export function ConversationController({
           mentionItems={mentionItems}
           pluginCommands={pluginCommands}
           // Resources
-          backgroundTasks={backgroundTasks}
+          workItems={workItems}
+          pluginsAvailable={pluginsAvailable}
           // Session
           setActiveTab={setActiveTab}
           conversationMessagesRef={conversationMessagesRef}
@@ -373,16 +526,23 @@ export function ConversationController({
           ambientNodes={ambientNodes}
           onAddContextChip={handleAddContextChip}
           onRemoveContextChip={handleRemoveContextChip}
+          onInjectContextChip={handleInjectContextChip}
           // Agent state
           agentState={agentState}
           // Message handler (for pre-intercept)
           handleMessage={handleMessage}
-          setContextChips={setContextChips}
           setAmbientNodes={setAmbientNodes}
           onNewChat={handleNewChat}
           // Session cleanup registration
           sessionCleanupRef={sessionCleanupRef}
         />
+      ) : null}
+
+      {globalError ? (
+        <div className="fixed right-4 top-12 z-50 max-w-[360px] rounded-lg border border-[var(--vscode-inputValidation-errorBorder,var(--agent-border))] bg-[var(--vscode-inputValidation-errorBackground,var(--agent-elevated))] px-3 py-2 text-sm text-[var(--vscode-inputValidation-errorForeground,var(--agent-fg))] shadow-lg animate-slide-in">
+          <div className="font-medium">全局错误</div>
+          <div className="mt-1 opacity-90">{globalError}</div>
+        </div>
       ) : null}
     </>
   );

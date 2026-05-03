@@ -12,22 +12,21 @@ import {
   type SetStateAction,
   type MutableRefObject,
 } from 'react';
-import { Message, type TabType } from '@/components/types';
+import { Message, type SessionMode, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { MessageAttachment } from '@/components/ChatView/InputArea';
+import type { AgentMediaModelSelections } from '@neko-agent/types';
+import { projectMessageModelSelection } from '../presenters/config-message-presenter';
+import type { AgentContextPayload } from '@neko/shared';
 
 /** Per-category resolved media model for agent mode */
-export interface AgentMediaModels {
-  image?: { providerId?: string; modelId: string };
-  video?: { providerId?: string; modelId: string };
-  audio?: { providerId?: string; modelId: string };
-}
+export type AgentMediaModels = AgentMediaModelSelections;
 
 export interface UseChatActionsProps {
   inputValue: string;
   isThinking: boolean;
   selectedModel: string;
-  sessionMode?: string;
+  sessionMode?: SessionMode;
   mediaProviderId?: string;
   mediaModelId?: string;
   /** Per-category media models for agent mode (overrides mediaModelId when set) */
@@ -47,21 +46,14 @@ export interface UseChatActionsProps {
 }
 
 export interface UseChatActionsReturn {
-  handleSend: (attachments?: MessageAttachment[]) => void;
+  handleSend: (input?: {
+    messageText?: string;
+    attachments?: MessageAttachment[];
+    contextPayloads?: AgentContextPayload[];
+  }) => void;
   triggerSend: (messageText: string) => void;
   handleCancelMessage: () => void;
   copyLastResponse: () => void;
-}
-
-/**
- * Parse selectedModel into providerId and modelId
- */
-function parseModelSelection(selectedModel: string): { providerId?: string; modelId?: string } {
-  if (selectedModel !== 'auto' && selectedModel.includes(':')) {
-    const parts = selectedModel.split(':');
-    return { providerId: parts[0], modelId: parts.slice(1).join(':') };
-  }
-  return {};
 }
 
 export function useChatActions({
@@ -98,14 +90,28 @@ export function useChatActions({
   // Send a user message — always send directly to Extension.
   // AgentRunner handles queueing if the agent is already running.
   const handleSend = useCallback(
-    (attachments?: MessageAttachment[]) => {
+    (input?: {
+      messageText?: string;
+      attachments?: MessageAttachment[];
+      contextPayloads?: AgentContextPayload[];
+    }) => {
       if (isConversationSwitching) return;
 
-      const trimmed = inputValue.trim();
-      if (!trimmed && (!attachments || attachments.length === 0)) return;
+      const messageText = input?.messageText ?? inputValue;
+      const attachments = input?.attachments;
+      const contextPayloads = input?.contextPayloads;
+      const trimmed = messageText.trim();
+      const hasAttachments = (attachments?.length ?? 0) > 0;
+      const hasContextPayloads = (contextPayloads?.length ?? 0) > 0;
+      if (!trimmed && !hasAttachments && !hasContextPayloads) return;
+
+      const conversationId = activeConversationId;
+      if (!conversationId) return;
 
       // Dedup guard: prevent accidental double-click
-      if (isDuplicate(trimmed)) return;
+      if (isDuplicate(`${trimmed}:${attachments?.length ?? 0}:${contextPayloads?.length ?? 0}`)) {
+        return;
+      }
 
       // Clear streaming state from previous turn
       setStreamingMessageId(null);
@@ -116,7 +122,7 @@ export function useChatActions({
         role: 'user',
         content: trimmed,
         timestamp: Date.now(),
-        attachments: attachments,
+        ...(attachments ? { attachments } : {}),
       };
 
       setMessages((prev) => [...prev, userMessage]);
@@ -124,20 +130,22 @@ export function useChatActions({
       setAttachedFiles([]);
       setIsThinking(true);
 
-      const { providerId, modelId } = parseModelSelection(selectedModel);
-      VSCodeMessages.sendMessage(
-        trimmed,
-        providerId,
-        modelId,
-        attachments,
-        undefined,
-        activeConversationId || undefined,
-        undefined,
-        sessionMode,
+      const effectiveSessionMode = sessionMode ?? 'agent';
+      const modelProjection = projectMessageModelSelection({
+        selectedModel,
+        sessionMode: effectiveSessionMode,
         mediaProviderId,
         mediaModelId,
         agentMediaModels,
-      );
+      });
+      VSCodeMessages.sendMessage({
+        conversationId,
+        message: trimmed,
+        sessionMode: effectiveSessionMode,
+        ...modelProjection,
+        ...(attachments ? { attachments } : {}),
+        ...(contextPayloads ? { contextPayloads } : {}),
+      });
     },
     [
       inputValue,
@@ -164,6 +172,9 @@ export function useChatActions({
       if (isConversationSwitching) return;
       if (isThinking) return;
 
+      const conversationId = activeConversationIdRef.current;
+      if (!conversationId) return;
+
       setStreamingMessageId(null);
       streamingMessageIdRef.current = null;
 
@@ -178,15 +189,16 @@ export function useChatActions({
       setIsThinking(true);
       setActiveTab('chat');
 
-      const { providerId, modelId } = parseModelSelection(selectedModel);
-      VSCodeMessages.sendMessage(
-        messageText,
-        providerId,
-        modelId,
-        undefined,
-        undefined,
-        activeConversationIdRef.current || undefined,
-      );
+      const modelProjection = projectMessageModelSelection({
+        selectedModel,
+        sessionMode: 'agent',
+      });
+      VSCodeMessages.sendMessage({
+        conversationId,
+        message: messageText,
+        sessionMode: 'agent',
+        ...modelProjection,
+      });
     },
     [
       isThinking,

@@ -42,6 +42,10 @@ export function updateConversation(
   conversationId: string | undefined,
   updater: ConversationUpdater,
 ): void {
+  if (!conversationId) {
+    return;
+  }
+
   if (context.isCurrentConversation(conversationId)) {
     let result: ConversationUpdateResult | undefined;
     context.setMessages((prev) => {

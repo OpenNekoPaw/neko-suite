@@ -87,13 +87,6 @@ function SceneGroup({
     }
   }, []);
 
-  const handleSendToCanvas = useCallback(() => {
-    const firstShot = scene.shots[0];
-    if (firstShot?.localPath) {
-      VSCodeMessages.sendToPlugin('canvas', firstShot.localPath, 'image');
-    }
-  }, [scene.shots]);
-
   // Determine grid columns based on shot count
   const cols = scene.shots.length <= 2 ? scene.shots.length : 3;
 
@@ -158,18 +151,6 @@ function SceneGroup({
                   transition-colors"
               >
                 ↻ Regenerate
-              </button>
-            )}
-            {plugins?.canvas && (
-              <button
-                onClick={handleSendToCanvas}
-                className="px-1.5 py-0.5 rounded text-[10px]
-                  bg-[var(--vscode-button-secondaryBackground)]
-                  hover:bg-[var(--vscode-button-secondaryHoverBackground)]
-                  text-[var(--vscode-button-secondaryForeground)]
-                  transition-colors"
-              >
-                Edit in Canvas ↗
               </button>
             )}
             <span className="flex-1" />

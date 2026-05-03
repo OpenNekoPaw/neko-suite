@@ -5,9 +5,18 @@
  */
 
 import { useState, memo } from 'react';
-import { Plan, PlanStep } from '@/components/types';
+import { Plan } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { ChevronRightIcon, CheckIcon, CloseIcon, EditIcon } from '@neko/shared/icons';
+import {
+  projectPlanReviewUiState,
+  type PlanReviewBadgeTone,
+  type PlanReviewStepProjection,
+  type PlanStepContainerTone,
+  type PlanStepContentTone,
+  type PlanStepIconKind,
+  type PlanStepIconTone,
+} from '@/presenters/plan-review-presenter';
 
 interface PlanReviewProps {
   plan: Plan;
@@ -21,36 +30,26 @@ interface PlanReviewProps {
 /**
  * Status icon component
  */
-function StatusIcon({ status }: { status: PlanStep['status'] }) {
-  switch (status) {
-    case 'approved':
-      return <span className="text-[var(--agent-success)]">✓</span>;
-    case 'rejected':
-      return <span className="text-[var(--agent-danger)]">✗</span>;
-    case 'modified':
-      return <span className="text-[var(--agent-warning-fg)]">✎</span>;
-    default:
-      return <span className="text-[var(--agent-fg-secondary)]">○</span>;
-  }
+function StatusIcon({ kind, tone }: { kind: PlanStepIconKind; tone: PlanStepIconTone }) {
+  return <span className={planStepIconToneClass(tone)}>{planStepIconGlyph(kind)}</span>;
 }
 
 /**
  * Individual plan step component
  */
 function PlanStepItem({
-  step,
-  index,
+  projection,
   onApprove,
   onReject,
   onModify,
 }: {
-  step: PlanStep;
-  index: number;
+  projection: PlanReviewStepProjection;
   onApprove?: () => void;
   onReject?: () => void;
   onModify?: (newDescription: string) => void;
 }) {
   const { t } = useTranslation();
+  const { step, index } = projection;
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(step.description);
 
@@ -74,14 +73,14 @@ function PlanStepItem({
 
   return (
     <div
-      className={`flex items-start gap-2 border-b border-[var(--agent-divider)] py-1.5 last:border-b-0 ${
-        step.status === 'rejected' ? 'opacity-50' : ''
-      }`}
+      className={`flex items-start gap-2 border-b border-[var(--agent-divider)] py-1.5 last:border-b-0 ${planStepContainerToneClass(
+        projection.containerTone,
+      )}`}
     >
       {/* Step number and status */}
       <div className="flex items-center gap-1 flex-shrink-0 w-10">
         <span className="text-[11px] text-[var(--agent-fg-secondary)]">{index + 1}.</span>
-        <StatusIcon status={step.status} />
+        <StatusIcon kind={projection.icon.kind} tone={projection.icon.tone} />
       </div>
 
       {/* Step content */}
@@ -99,15 +98,13 @@ function PlanStepItem({
         ) : (
           <>
             <p
-              className={`text-[12px] leading-relaxed ${
-                step.status === 'modified'
-                  ? 'text-[var(--agent-warning-fg)]'
-                  : 'text-[var(--agent-fg)]'
-              }`}
+              className={`text-[12px] leading-relaxed ${planStepContentToneClass(
+                projection.contentTone,
+              )}`}
             >
               {step.description}
             </p>
-            {step.status === 'modified' && step.originalDescription && (
+            {projection.showOriginalDescription && (
               <p className="mt-0.5 text-[11px] text-[var(--agent-fg-secondary)] line-through">
                 {step.originalDescription}
               </p>
@@ -117,7 +114,7 @@ function PlanStepItem({
       </div>
 
       {/* Action buttons */}
-      {step.status === 'pending' && !isEditing && (
+      {projection.isPending && !isEditing && (
         <div className="flex items-center gap-0.5 flex-shrink-0">
           {/* Edit button */}
           <button
@@ -159,27 +156,11 @@ function PlanReviewComponent({
 }: PlanReviewProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(true);
-
-  // Calculate stats
-  const pendingCount = plan.steps.filter((s) => s.status === 'pending').length;
-  const approvedCount = plan.steps.filter(
-    (s) => s.status === 'approved' || s.status === 'modified',
-  ).length;
-  const rejectedCount = plan.steps.filter((s) => s.status === 'rejected').length;
-
-  // Determine overall status display
-  const getStatusBadge = () => {
-    if (plan.status === 'approved' || (pendingCount === 0 && rejectedCount === 0)) {
-      return <span className="agent-badge is-success text-[9px]">{t('chat.plan.approved')}</span>;
-    }
-    if (plan.status === 'rejected' || (pendingCount === 0 && approvedCount === 0)) {
-      return <span className="agent-badge is-danger text-[9px]">{t('chat.plan.rejected')}</span>;
-    }
-    if (pendingCount === 0 && approvedCount > 0 && rejectedCount > 0) {
-      return <span className="agent-badge is-warning text-[9px]">{t('chat.plan.partial')}</span>;
-    }
-    return null;
-  };
+  const projection = projectPlanReviewUiState({
+    plan,
+    canApproveAll: Boolean(onApproveAll),
+    canRejectAll: Boolean(onRejectAll),
+  });
 
   return (
     <div className="agent-inline-card my-1">
@@ -201,31 +182,36 @@ function PlanReviewComponent({
 
         {/* Stats */}
         <span className="text-[10px] text-[var(--agent-fg-secondary)]">
-          {plan.steps.length} {t('chat.plan.steps')}
+          {projection.stats.total} {t('chat.plan.steps')}
         </span>
 
         {/* Status badge */}
-        {getStatusBadge()}
+        {projection.badge && (
+          <span
+            className={`agent-badge ${planReviewBadgeToneClass(projection.badge.tone)} text-[9px]`}
+          >
+            {t(projection.badge.labelKey)}
+          </span>
+        )}
       </div>
 
       {/* Steps list */}
       {isExpanded && (
         <>
           <div className="max-h-[300px] overflow-y-auto px-2 py-1">
-            {plan.steps.map((step, index) => (
+            {projection.steps.map((stepProjection) => (
               <PlanStepItem
-                key={step.id}
-                step={step}
-                index={index}
-                onApprove={() => onApproveStep?.(step.id)}
-                onReject={() => onRejectStep?.(step.id)}
-                onModify={(desc) => onModifyStep?.(step.id, desc)}
+                key={stepProjection.step.id}
+                projection={stepProjection}
+                onApprove={() => onApproveStep?.(stepProjection.step.id)}
+                onReject={() => onRejectStep?.(stepProjection.step.id)}
+                onModify={(desc) => onModifyStep?.(stepProjection.step.id, desc)}
               />
             ))}
           </div>
 
           {/* Footer with bulk actions */}
-          {pendingCount > 0 && (onApproveAll || onRejectAll) && (
+          {projection.showBulkActions && (
             <div className="flex items-center gap-2 border-t border-[var(--agent-divider)] px-2 py-1.5">
               {onApproveAll && (
                 <button
@@ -247,7 +233,7 @@ function PlanReviewComponent({
               )}
               <span className="flex-1" />
               <span className="text-[10px] text-[var(--agent-fg-secondary)]">
-                {pendingCount} {t('chat.plan.pending')}
+                {projection.stats.pending} {t('chat.plan.pending')}
               </span>
             </div>
           )}
@@ -258,6 +244,51 @@ function PlanReviewComponent({
 }
 
 export const PlanReview = memo(PlanReviewComponent);
+
+function planReviewBadgeToneClass(tone: PlanReviewBadgeTone): string {
+  switch (tone) {
+    case 'success':
+      return 'is-success';
+    case 'danger':
+      return 'is-danger';
+    case 'warning':
+      return 'is-warning';
+  }
+}
+
+function planStepIconToneClass(tone: PlanStepIconTone): string {
+  switch (tone) {
+    case 'success':
+      return 'text-[var(--agent-success)]';
+    case 'danger':
+      return 'text-[var(--agent-danger)]';
+    case 'warning':
+      return 'text-[var(--agent-warning-fg)]';
+    case 'secondary':
+      return 'text-[var(--agent-fg-secondary)]';
+  }
+}
+
+function planStepIconGlyph(kind: PlanStepIconKind): string {
+  switch (kind) {
+    case 'approved':
+      return '✓';
+    case 'rejected':
+      return '✗';
+    case 'modified':
+      return '✎';
+    case 'default':
+      return '○';
+  }
+}
+
+function planStepContainerToneClass(tone: PlanStepContainerTone): string {
+  return tone === 'muted' ? 'opacity-50' : '';
+}
+
+function planStepContentToneClass(tone: PlanStepContentTone): string {
+  return tone === 'warning' ? 'text-[var(--agent-warning-fg)]' : 'text-[var(--agent-fg)]';
+}
 
 // Icons
 const ChevronIcon = ChevronRightIcon;

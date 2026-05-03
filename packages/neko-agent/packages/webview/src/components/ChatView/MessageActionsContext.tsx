@@ -6,13 +6,17 @@
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { BackgroundTask } from '@/components/TaskListView';
+import type { AgentWorkItem } from '@/components/AgentWorkItem';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export interface MessageActionsContextValue {
-  // Background tasks (for inline TaskCard rendering in ToolCallDisplay)
-  backgroundTasks?: BackgroundTask[];
+  activeConversationId?: string | null;
+  // Unified work items (media tasks, tool background tasks, subagents)
+  workItems?: AgentWorkItem[];
+  pluginsAvailable?: PluginsAvailable;
   // Task actions
   onCancelTask?: (taskId: string) => void;
+  onRetryTask?: (taskId: string) => void;
   onViewTaskResult?: (taskId: string) => void;
   // Diff actions
   onAcceptDiff?: (filePath: string) => void;
@@ -33,8 +37,11 @@ export function MessageActionsProvider({
 }: MessageActionsContextValue & { children: ReactNode }) {
   const value = useMemo<MessageActionsContextValue>(
     () => ({
-      backgroundTasks: actions.backgroundTasks,
+      activeConversationId: actions.activeConversationId,
+      workItems: actions.workItems,
+      pluginsAvailable: actions.pluginsAvailable,
       onCancelTask: actions.onCancelTask,
+      onRetryTask: actions.onRetryTask,
       onViewTaskResult: actions.onViewTaskResult,
       onAcceptDiff: actions.onAcceptDiff,
       onRejectDiff: actions.onRejectDiff,
@@ -45,8 +52,11 @@ export function MessageActionsProvider({
       onRejectAllPlanSteps: actions.onRejectAllPlanSteps,
     }),
     [
-      actions.backgroundTasks,
+      actions.activeConversationId,
+      actions.workItems,
+      actions.pluginsAvailable,
       actions.onCancelTask,
+      actions.onRetryTask,
       actions.onViewTaskResult,
       actions.onAcceptDiff,
       actions.onRejectDiff,

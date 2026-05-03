@@ -1,0 +1,118 @@
+import type {
+  ActiveConversationProjection,
+  ActiveConversationProjectionInput,
+  ConversationErrorProjectionInput,
+  ConversationMessagesProjection,
+  ConversationStreamingState,
+  OpenTab,
+} from '@neko-agent/types';
+import type { AgentWorkItem } from '@neko-agent/types';
+import { projectConversationWorkItemsFromMessages } from './work-item-message-presenter';
+
+const DEFAULT_ERROR_MESSAGE = 'An error occurred';
+const DEFAULT_CONVERSATION_TITLE = 'New Chat';
+
+export function projectConversationError(
+  input: ConversationErrorProjectionInput,
+): ConversationMessagesProjection {
+  const now = input.now?.() ?? Date.now();
+  return {
+    messages: [
+      ...input.messages,
+      {
+        id: input.generateId?.() ?? String(now),
+        role: 'assistant',
+        content: input.errorMessage || DEFAULT_ERROR_MESSAGE,
+        timestamp: now,
+        isError: true,
+      },
+    ],
+    streaming: idleStreamingState(),
+  };
+}
+
+export function projectHistoryClearedConversation(): ConversationMessagesProjection {
+  return {
+    messages: [],
+    streaming: idleStreamingState(),
+  };
+}
+
+export function projectActiveConversation(
+  input: ActiveConversationProjectionInput,
+): ActiveConversationProjection {
+  const conversation = input.conversation;
+  if (!conversation) {
+    return {
+      activeConversationId: null,
+      messages: [],
+      streaming: idleStreamingState(),
+      openTabs: [...input.openTabs],
+      activeTabId: null,
+      activeTab: 'chat',
+      workItems: [],
+      restoredFromCache: false,
+    };
+  }
+
+  const cachedMessages = input.cachedMessages;
+  const hasCachedMessages = Boolean(cachedMessages && cachedMessages.length > 0);
+  const projection = hasCachedMessages
+    ? {
+        messages: [...cachedMessages!],
+        workItems: [] as AgentWorkItem[],
+      }
+    : projectConversationWorkItemsFromMessages({
+        conversationId: conversation.id,
+        messages: conversation.messages ?? [],
+        now: input.now,
+      });
+
+  const tabProjection = projectConversationTab({
+    conversationId: conversation.id,
+    title: conversation.title || DEFAULT_CONVERSATION_TITLE,
+    openTabs: input.openTabs,
+    now: input.now,
+    generateTabId: input.generateTabId,
+  });
+
+  return {
+    activeConversationId: conversation.id,
+    messages: projection.messages,
+    streaming: hasCachedMessages
+      ? (input.cachedStreaming ?? idleStreamingState())
+      : idleStreamingState(),
+    openTabs: tabProjection.openTabs,
+    activeTabId: tabProjection.activeTabId,
+    activeTab: 'chat',
+    workItems: projection.workItems,
+    restoredFromCache: hasCachedMessages,
+  };
+}
+
+function projectConversationTab(input: {
+  conversationId: string;
+  title: string;
+  openTabs: readonly OpenTab[];
+  now?: () => number;
+  generateTabId?: () => string;
+}): { openTabs: OpenTab[]; activeTabId: string } {
+  const existingTab = input.openTabs.find((tab) => tab.conversationId === input.conversationId);
+  if (existingTab) {
+    return { openTabs: [...input.openTabs], activeTabId: existingTab.id };
+  }
+
+  const newTab: OpenTab = {
+    id: input.generateTabId?.() ?? `tab-${input.now?.() ?? Date.now()}`,
+    title: input.title,
+    conversationId: input.conversationId,
+  };
+  return {
+    openTabs: [...input.openTabs, newTab],
+    activeTabId: newTab.id,
+  };
+}
+
+function idleStreamingState(): ConversationStreamingState {
+  return { streamingMessageId: null, isThinking: false };
+}

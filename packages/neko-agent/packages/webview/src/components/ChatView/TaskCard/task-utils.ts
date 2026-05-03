@@ -2,23 +2,83 @@
  * Shared utility functions for TaskCard components
  */
 
-import type { TaskStatus, TaskStepStatus } from '@/components/TaskListView';
+import type {
+  AgentWorkItemStatusTone,
+  AgentWorkItemStepRowProjection,
+  BackgroundTaskBatchBadgeProjection,
+  BackgroundTaskBatchBadgeTone,
+} from '@/presenters/work-item-presenter';
 
-export function getStatusColor(status: TaskStatus): string {
-  switch (status) {
-    case 'queued':
-      return 'var(--agent-warning-fg, var(--vscode-charts-yellow, #cca700))';
-    case 'processing':
-      return 'var(--agent-info, var(--vscode-charts-blue, #3794ff))';
-    case 'completed':
+export function getToneColor(tone: AgentWorkItemStatusTone): string {
+  switch (tone) {
+    case 'success':
       return 'var(--agent-success, var(--vscode-charts-green, #89d185))';
-    case 'failed':
+    case 'info':
+      return 'var(--agent-info, var(--vscode-charts-blue, #3794ff))';
+    case 'danger':
       return 'var(--agent-danger, var(--vscode-charts-red, #f14c4c))';
-    case 'cancelled':
+    case 'neutral':
       return 'var(--agent-fg-secondary, var(--vscode-descriptionForeground))';
-    default:
-      return 'var(--agent-fg, var(--vscode-foreground))';
   }
+  return 'var(--agent-fg-secondary, var(--vscode-descriptionForeground))';
+}
+
+export function getBatchBadgeToneColor(tone: BackgroundTaskBatchBadgeTone): string {
+  switch (tone) {
+    case 'success':
+      return 'var(--vscode-charts-green, #89d185)';
+    case 'info':
+      return 'var(--vscode-charts-blue, #3794ff)';
+    case 'warning':
+      return 'var(--vscode-charts-yellow, #cca700)';
+    case 'danger':
+      return 'var(--vscode-charts-red, #f14c4c)';
+  }
+  return 'var(--vscode-descriptionForeground)';
+}
+
+export function getBatchHeaderBackground(tone: AgentWorkItemStatusTone): string {
+  switch (tone) {
+    case 'success':
+      return 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-green, #89d185) 15%, transparent), transparent)';
+    case 'danger':
+      return 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-red, #f14c4c) 15%, transparent), transparent)';
+    case 'info':
+      return 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-charts-blue, #3794ff) 15%, transparent), transparent)';
+    case 'neutral':
+      return 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-descriptionForeground) 12%, transparent), transparent)';
+  }
+  return 'linear-gradient(90deg, color-mix(in srgb, var(--vscode-descriptionForeground) 12%, transparent), transparent)';
+}
+
+export function getBatchBadgeIcon(
+  iconKind: BackgroundTaskBatchBadgeProjection['iconKind'],
+): string {
+  switch (iconKind) {
+    case 'completed':
+      return '\u2713';
+    case 'processing':
+      return '\u23F3';
+    case 'queued':
+      return '\u23F8';
+    case 'failed':
+      return '\u2717';
+  }
+  return '';
+}
+
+export function getStepIcon(iconKind: AgentWorkItemStepRowProjection['iconKind']): string {
+  switch (iconKind) {
+    case 'completed':
+      return '\u2713';
+    case 'running':
+      return '\u25CF';
+    case 'failed':
+      return '\u2717';
+    case 'pending':
+      return '\u25CB';
+  }
+  return '\u25CB';
 }
 
 export function getTypeIcon(type: string): string {
@@ -40,30 +100,4 @@ export function formatETA(seconds?: number): string {
   if (seconds < 60) return `~${Math.ceil(seconds)}s`;
   const mins = Math.ceil(seconds / 60);
   return `~${mins}m`;
-}
-
-export function getStepStatusIcon(status: TaskStepStatus): string {
-  switch (status) {
-    case 'completed':
-      return '\u2713';
-    case 'running':
-      return '\u25CF';
-    case 'failed':
-      return '\u2717';
-    default:
-      return '\u25CB';
-  }
-}
-
-export function getStepStatusColor(status: TaskStepStatus): string {
-  switch (status) {
-    case 'completed':
-      return 'var(--agent-success, var(--vscode-charts-green, #89d185))';
-    case 'running':
-      return 'var(--agent-info, var(--vscode-charts-blue, #3794ff))';
-    case 'failed':
-      return 'var(--agent-danger, var(--vscode-charts-red, #f14c4c))';
-    default:
-      return 'var(--agent-fg-secondary, var(--vscode-descriptionForeground))';
-  }
 }

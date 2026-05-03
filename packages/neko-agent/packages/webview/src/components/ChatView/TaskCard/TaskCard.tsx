@@ -12,16 +12,22 @@ import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import {
+  type AgentWorkItemStatusTone,
+  projectBackgroundTaskCard,
+  projectBackgroundTaskResultContent,
+} from '@/presenters/work-item-presenter';
+import {
   SuccessIcon,
   ErrorIcon,
   ToolLoadingSpinner as LoadingSpinner,
 } from '@/components/ChatView/ToolCallDisplay';
 import { TaskSteps, ChevronIcon } from './TaskSteps';
-import { getStatusColor, getTypeIcon, formatDuration, formatETA } from './task-utils';
+import { getToneColor, getTypeIcon, formatDuration, formatETA } from './task-utils';
 
 interface TaskCardProps {
   task: BackgroundTask;
   onCancel?: (taskId: string) => void;
+  onRetry?: (taskId: string) => void;
   onViewResult?: (taskId: string) => void;
   /** Available neko-suite plugins for "Send to" buttons (ADR-5) */
   plugins?: PluginsAvailable;
@@ -30,18 +36,16 @@ interface TaskCardProps {
 const compactActionClass =
   'inline-flex items-center gap-1 rounded-md border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--agent-fg)] transition-colors hover:bg-[var(--agent-hover)]';
 
-export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProps) {
+export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: TaskCardProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const isActive = task.status === 'queued' || task.status === 'processing';
-  const isCompleted = task.status === 'completed';
-  const isFailed = task.status === 'failed' || task.status === 'cancelled';
+  const projection = projectBackgroundTaskCard(task);
 
   const toggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
-  const toneClass = isCompleted ? 'is-success' : isFailed ? 'is-danger' : isActive ? 'is-info' : '';
+  const toneClass = toInlineToneClass(projection.tone);
 
   return (
     <div className="my-1">
@@ -52,34 +56,38 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
           onClick={toggleExpand}
         >
           {/* Status indicator */}
-          {isActive && <LoadingSpinner className="h-3 w-3 shrink-0 text-[var(--agent-info)]" />}
-          {isCompleted && <SuccessIcon className="h-3 w-3 shrink-0 text-[var(--agent-success)]" />}
-          {isFailed && <ErrorIcon className="h-3 w-3 shrink-0 text-[var(--agent-danger)]" />}
+          {projection.status.isActive && (
+            <LoadingSpinner className="h-3 w-3 shrink-0 text-[var(--agent-info)]" />
+          )}
+          {projection.status.isCompleted && (
+            <SuccessIcon className="h-3 w-3 shrink-0 text-[var(--agent-success)]" />
+          )}
+          {projection.status.isFailed && (
+            <ErrorIcon className="h-3 w-3 shrink-0 text-[var(--agent-danger)]" />
+          )}
 
           {/* Task type icon + name */}
-          <span className="shrink-0">{getTypeIcon(task.type)}</span>
+          <span className="shrink-0">{getTypeIcon(projection.taskType)}</span>
           <span className="truncate font-medium text-[var(--agent-fg)]">
-            {task.type === 'video'
-              ? t('tasks.videoGeneration')
-              : task.type === 'audio'
-                ? t('tasks.audioGeneration')
-                : t('tasks.imageGeneration')}
+            {t(projection.titleKey)}
           </span>
 
           {/* Progress or status */}
-          {isActive && task.progress > 0 && (
-            <span className="shrink-0 text-[var(--agent-fg-secondary)]">{task.progress}%</span>
+          {projection.progressLabel && (
+            <span className="shrink-0 text-[var(--agent-fg-secondary)]">
+              {projection.progressLabel}
+            </span>
           )}
 
           <span className="flex-1" />
 
           {/* Provider badge */}
           <span className="agent-badge hidden shrink-0 text-[10px] sm:inline-flex">
-            {task.providerName}
+            {projection.providerName}
           </span>
 
           {/* Action buttons */}
-          {isActive && onCancel && (
+          {projection.showCancel && onCancel && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -92,11 +100,11 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
             </button>
           )}
 
-          {isFailed && (
+          {projection.showRetry && onRetry && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                VSCodeMessages.retryTask(task.id);
+                onRetry(task.id);
               }}
               className={compactActionClass}
               title={t('tasks.retry')}
@@ -105,7 +113,7 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
             </button>
           )}
 
-          {isCompleted && onViewResult && (
+          {projection.showViewResult && onViewResult && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -124,7 +132,7 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
         </div>
 
         {/* Error message (always show if failed) */}
-        {isFailed && task.error && !isExpanded && (
+        {projection.showCollapsedError && task.error && !isExpanded && (
           <div className="border-t border-[color-mix(in_srgb,var(--agent-danger)_24%,transparent)] bg-[color-mix(in_srgb,var(--agent-danger)_12%,transparent)] px-2 py-1 text-[10px] text-[var(--agent-danger)]">
             {task.error}
           </div>
@@ -137,33 +145,35 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
             <div className="mb-2 line-clamp-2 text-[var(--agent-fg-secondary)]">{task.prompt}</div>
 
             {/* Progress Bar (for active tasks) */}
-            {isActive && (
+            {projection.showProgressBar && (
               <div className="mb-2">
-                {task.progress > 0 && (
+                {projection.showProgressLabel && (
                   <div className="mb-1 flex items-center justify-between text-[var(--agent-fg-secondary)]">
                     <span>{t('tasks.progress')}</span>
                     <div className="flex items-center gap-2">
-                      <span>{task.progress}%</span>
-                      {task.eta && task.eta > 0 && (
-                        <span className="text-[var(--agent-info)]">ETA: {formatETA(task.eta)}</span>
+                      <span>{projection.progressLabel}</span>
+                      {projection.showEta && projection.etaSeconds !== null && (
+                        <span className="text-[var(--agent-info)]">
+                          ETA: {formatETA(projection.etaSeconds)}
+                        </span>
                       )}
                     </div>
                   </div>
                 )}
                 <div className="h-1.5 overflow-hidden rounded-full bg-[var(--agent-input-bg)]">
-                  {task.progress > 0 ? (
+                  {!projection.useIndeterminateProgress ? (
                     <div
                       className="h-full rounded-full transition-all duration-500 ease-out"
                       style={{
-                        width: `${task.progress}%`,
-                        backgroundColor: getStatusColor(task.status),
+                        width: `${projection.progressBarPercent}%`,
+                        backgroundColor: getToneColor(projection.tone),
                       }}
                     />
                   ) : (
                     // Indeterminate animation for models without progress reporting
                     <div
                       className="h-full w-1/3 animate-[indeterminate_1.5s_ease-in-out_infinite] rounded-full"
-                      style={{ backgroundColor: getStatusColor(task.status) }}
+                      style={{ backgroundColor: getToneColor(projection.tone) }}
                     />
                   )}
                 </div>
@@ -171,19 +181,19 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
             )}
 
             {/* Task Steps */}
-            {task.steps && task.steps.length > 0 && (
+            {projection.showSteps && task.steps && (
               <TaskSteps steps={task.steps} currentStepId={task.currentStepId} />
             )}
 
             {/* Error message */}
-            {isFailed && task.error && (
+            {projection.showExpandedError && task.error && (
               <div className="mb-2 rounded-md bg-[color-mix(in_srgb,var(--agent-danger)_12%,transparent)] px-2 py-1.5 text-[var(--agent-danger)]">
                 ⚠️ {task.error}
               </div>
             )}
 
             {/* Result preview (for completed tasks) — ADR-3 enhanced */}
-            {isCompleted && task.result && <ResultPreview task={task} plugins={plugins} />}
+            {projection.showResultPreview && <ResultPreview task={task} plugins={plugins} />}
 
             {/* Provider info */}
             <div className="border-t border-[var(--agent-divider)] pt-1 text-[var(--agent-fg-secondary)]">
@@ -196,45 +206,33 @@ export function TaskCard({ task, onCancel, onViewResult, plugins }: TaskCardProp
   );
 }
 
+function toInlineToneClass(tone: AgentWorkItemStatusTone): string {
+  if (tone === 'success') return 'is-success';
+  if (tone === 'danger') return 'is-danger';
+  if (tone === 'info') return 'is-info';
+  return '';
+}
+
 // ---------------------------------------------------------------------------
 // ResultPreview - Completed task result display (ADR-3/4 enhanced)
 //
 // When `result.assets` (GeneratedAsset[]) is available, uses asset metadata
 // (webviewUri, width, height, duration, path) as the authoritative source.
-// Falls back to legacy `result.urls / localPaths` for backward compatibility.
+// Otherwise uses protocol-level `result.urls / localPaths`.
 // ---------------------------------------------------------------------------
 
 function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: PluginsAvailable }) {
   const { t } = useTranslation();
-  const result = task.result!;
-  const assets = result.assets;
-
-  // Derive display data: prefer assets, fall back to legacy fields
-  const displayUrls = assets && assets.length > 0 ? assets.map((a) => a.webviewUri) : result.urls;
-  const displayLocalPaths =
-    assets && assets.length > 0 ? assets.map((a) => a.path) : result.localPaths;
-  const firstLocalPath = displayLocalPaths?.[0];
-
-  // Extract dimension/duration from first asset if available
-  const firstAsset = assets?.[0];
-  const displayWidth =
-    firstAsset && 'width' in firstAsset ? (firstAsset as { width: number }).width : result.width;
-  const displayHeight =
-    firstAsset && 'height' in firstAsset
-      ? (firstAsset as { height: number }).height
-      : result.height;
-  const displayDuration =
-    firstAsset && 'duration' in firstAsset
-      ? (firstAsset as { duration: number }).duration
-      : result.duration;
-
-  // Derive RichContent kind + data from task type and display URLs (ADR-6 §6.2)
-  const { contentKind, contentData } = deriveRichContent(
-    task,
-    displayUrls,
-    displayLocalPaths,
-    result.thumbnailUrl,
-  );
+  const projection = projectBackgroundTaskResultContent(task);
+  const {
+    contentKind,
+    contentData,
+    displayWidth,
+    displayHeight,
+    displayDuration,
+    firstLocalPath,
+    mediaType,
+  } = projection;
 
   return (
     <div className="mb-2">
@@ -282,66 +280,13 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
       {firstLocalPath && plugins && (
         <SendToMenu
           assetPath={firstLocalPath}
-          mediaType={task.type === 'video' ? 'video' : task.type === 'audio' ? 'audio' : 'image'}
+          mediaType={mediaType}
           plugins={plugins}
           className="mt-1.5"
         />
       )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helper: derive RichContent kind + data payload from BackgroundTask
-// ---------------------------------------------------------------------------
-
-function deriveRichContent(
-  task: BackgroundTask,
-  displayUrls: string[] | undefined,
-  displayLocalPaths: string[] | undefined,
-  thumbnailUrl: string | undefined,
-): { contentKind: string | null; contentData: Record<string, unknown> | null } {
-  const firstUrl = displayUrls?.[0];
-  const firstLocalPath = displayLocalPaths?.[0];
-
-  switch (task.type) {
-    case 'video':
-      if (!firstUrl) return { contentKind: null, contentData: null };
-      return {
-        contentKind: 'video',
-        contentData: {
-          src: firstUrl,
-          poster: thumbnailUrl,
-          title: task.name,
-          localPath: firstLocalPath,
-        },
-      };
-
-    case 'audio':
-      if (!firstUrl) return { contentKind: null, contentData: null };
-      return {
-        contentKind: 'audio',
-        contentData: { src: firstUrl, title: task.name, localPath: firstLocalPath },
-      };
-
-    case 'image': {
-      if (displayUrls && displayUrls.length > 1) {
-        return {
-          contentKind: 'image-grid',
-          contentData: { urls: displayUrls, localPaths: displayLocalPaths, name: task.name },
-        };
-      }
-      const imgSrc = thumbnailUrl || firstUrl;
-      if (!imgSrc) return { contentKind: null, contentData: null };
-      return {
-        contentKind: 'image',
-        contentData: { src: imgSrc, name: task.name, localPath: firstLocalPath },
-      };
-    }
-
-    default:
-      return { contentKind: null, contentData: null };
-  }
 }
 
 function DownloadIcon({ className }: { className?: string }) {

@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { VSCodeMessages } from '@/messages';
+import { useMessageActions } from '../MessageActionsContext';
 import { getLogger } from '../../../utils/logger';
 import {
   MermaidIcon,
@@ -171,6 +172,7 @@ function getErrorHints(error: string, code: string): string[] {
 }
 
 function MermaidBlockComponent({ code }: MermaidBlockProps) {
+  const { activeConversationId } = useMessageActions();
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -249,7 +251,7 @@ function MermaidBlockComponent({ code }: MermaidBlockProps) {
 
   // Send feedback to LLM about the error
   const handleReportError = useCallback(() => {
-    if (!error || feedbackSent) return;
+    if (!error || feedbackSent || !activeConversationId) return;
 
     const hints = getErrorHints(error, code);
     const feedbackMessage = `The Mermaid diagram you generated has a syntax error and failed to render.
@@ -266,10 +268,10 @@ Please fix the Mermaid syntax. Common issues:
 2. Escape special characters in node labels
 3. Ensure all brackets and quotes are properly matched`;
 
-    VSCodeMessages.mermaidError(error, code, feedbackMessage);
+    VSCodeMessages.mermaidError(error, code, feedbackMessage, activeConversationId);
 
     setFeedbackSent(true);
-  }, [error, code, feedbackSent]);
+  }, [error, code, feedbackSent, activeConversationId]);
 
   const toggleSource = useCallback(() => {
     setShowSource((prev) => !prev);

@@ -60,25 +60,41 @@ describe('useVSCode', () => {
   describe('VSCodeMessages', () => {
     describe('sendMessage()', () => {
       it('should post sendMessage with basic params', () => {
-        VSCodeMessages.sendMessage('Hello AI');
+        VSCodeMessages.sendMessage({
+          conversationId: 'conv-1',
+          message: 'Hello AI',
+          sessionMode: 'agent',
+        });
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'sendMessage',
+          conversationId: 'conv-1',
           message: 'Hello AI',
-          providerId: undefined,
-          modelId: undefined,
-          attachments: undefined,
-          promptId: undefined,
+          sessionMode: 'agent',
         });
       });
 
       it('should post sendMessage with all params', () => {
         const attachments = [{ id: '1', name: 'test.txt', type: 'file' as const }];
-        VSCodeMessages.sendMessage('Hello', 'openai', 'gpt-4', attachments, 'prompt-1');
+        VSCodeMessages.sendMessage({
+          conversationId: 'conv-1',
+          message: 'Hello',
+          sessionMode: 'agent',
+          chatModel: { providerId: 'openai', modelId: 'gpt-4', category: 'llm' },
+          mediaModels: {
+            image: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+          },
+          attachments,
+          promptId: 'prompt-1',
+        });
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'sendMessage',
+          conversationId: 'conv-1',
           message: 'Hello',
-          providerId: 'openai',
-          modelId: 'gpt-4',
+          sessionMode: 'agent',
+          chatModel: { providerId: 'openai', modelId: 'gpt-4', category: 'llm' },
+          mediaModels: {
+            image: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+          },
           attachments,
           promptId: 'prompt-1',
         });
@@ -133,15 +149,21 @@ describe('useVSCode', () => {
       });
 
       it('should post clearHistory', () => {
-        VSCodeMessages.clearHistory();
-        expect(mockPostMessage).toHaveBeenCalledWith({ type: 'clearHistory' });
+        VSCodeMessages.clearHistory('conv-1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'clearHistory',
+          conversationId: 'conv-1',
+        });
       });
     });
 
     describe('task management', () => {
       it('should post getTasks', () => {
-        VSCodeMessages.getTasks();
-        expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getTasks' });
+        VSCodeMessages.getTasks('conv-1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'getTasks',
+          conversationId: 'conv-1',
+        });
       });
 
       it('should post getAgentStates', () => {
@@ -150,32 +172,47 @@ describe('useVSCode', () => {
       });
 
       it('should post cancelTask', () => {
-        VSCodeMessages.cancelTask('task-123');
+        VSCodeMessages.cancelTask('task-123', 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'cancelTask',
           taskId: 'task-123',
+          conversationId: 'conv-1',
         });
       });
 
       it('should post removeTask', () => {
-        VSCodeMessages.removeTask('task-123');
+        VSCodeMessages.removeTask('task-123', 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'removeTask',
           taskId: 'task-123',
+          conversationId: 'conv-1',
         });
       });
 
       it('should post viewTaskResult', () => {
-        VSCodeMessages.viewTaskResult('task-123');
+        VSCodeMessages.viewTaskResult('task-123', 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'viewTaskResult',
           taskId: 'task-123',
+          conversationId: 'conv-1',
         });
       });
 
       it('should post clearCompletedTasks', () => {
-        VSCodeMessages.clearCompletedTasks();
-        expect(mockPostMessage).toHaveBeenCalledWith({ type: 'clearCompletedTasks' });
+        VSCodeMessages.clearCompletedTasks('conv-1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'clearCompletedTasks',
+          conversationId: 'conv-1',
+        });
+      });
+
+      it('should post retryTask', () => {
+        VSCodeMessages.retryTask('task-123', 'conv-1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'retryTask',
+          taskId: 'task-123',
+          conversationId: 'conv-1',
+        });
       });
     });
 
@@ -186,10 +223,11 @@ describe('useVSCode', () => {
       });
 
       it('should post searchProjectFiles', () => {
-        VSCodeMessages.searchProjectFiles('*.ts');
+        VSCodeMessages.searchProjectFiles('*.ts', 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'searchProjectFiles',
           filter: '*.ts',
+          conversationId: 'conv-1',
         });
       });
 
@@ -208,6 +246,17 @@ describe('useVSCode', () => {
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'cancelMessage',
           conversationId: 'conv-1',
+        });
+      });
+
+      it('should post invokePluginSlashCommand with conversationId', () => {
+        VSCodeMessages.invokePluginSlashCommand('neko.canvas', 'batch', 'conv-1', 'scene 1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'invokePluginSlashCommand',
+          extensionId: 'neko.canvas',
+          commandId: 'batch',
+          conversationId: 'conv-1',
+          args: 'scene 1',
         });
       });
     });

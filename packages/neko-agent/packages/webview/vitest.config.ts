@@ -14,6 +14,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
+      '@neko-agent/types': resolve(__dirname, '../agent-types/src'),
       '@neko/shared/vscode': resolve(__dirname, '../../../neko-types/src/vscode'),
       '@neko/shared': resolve(__dirname, '../../../neko-types/src'),
     },

@@ -5,7 +5,14 @@
  */
 
 import type { ExtensionToWebviewMessage } from './messages';
-import type { MessageHandler, MessageHandlerContext, HandlerRegistration } from './types';
+import type {
+  HandlerRegistration,
+  MessageHandler,
+  MessageHandlerContext,
+  ProtocolMessageDispatcher,
+  WebviewMessageType,
+} from './types';
+import { defineHandler } from './types';
 
 /**
  * Message handler registry
@@ -13,13 +20,14 @@ import type { MessageHandler, MessageHandlerContext, HandlerRegistration } from 
  * Dispatches typed ExtensionToWebviewMessage to registered handlers.
  */
 export class MessageHandlerRegistry {
-  private handlers: Map<string, MessageHandler> = new Map();
+  private handlers: Map<WebviewMessageType, ProtocolMessageDispatcher> = new Map();
 
   /**
    * Register a handler for a message type
    */
-  register(type: string, handler: MessageHandler): void {
-    this.handlers.set(type, handler);
+  register<T extends WebviewMessageType>(type: T, handler: MessageHandler<T>): void {
+    const registration = defineHandler(type, handler);
+    this.handlers.set(registration.type, registration.handler);
   }
 
   /**
@@ -27,7 +35,7 @@ export class MessageHandlerRegistry {
    */
   registerAll(registrations: HandlerRegistration[]): void {
     for (const { type, handler } of registrations) {
-      this.register(type, handler);
+      this.handlers.set(type, handler);
     }
   }
 
@@ -47,7 +55,7 @@ export class MessageHandlerRegistry {
   /**
    * Check if a handler exists for a message type
    */
-  has(type: string): boolean {
+  has(type: WebviewMessageType): boolean {
     return this.handlers.has(type);
   }
 

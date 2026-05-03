@@ -5,7 +5,9 @@ import { MessageActionsProvider } from '@/components/ChatView/MessageActionsCont
 import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';
 import { EmptyState } from '@/components/ChatView/EmptyState';
 import { DropZone } from '@/components/ChatView/DropZone';
-import { BackgroundTask } from '@/components/TaskListView';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import type { AgentWorkItem } from '@/components/AgentWorkItem';
+import type { AgentContextPayload } from '@neko/shared';
 import {
   SkillConfirmBanner,
   SkillIndicator,
@@ -28,9 +30,11 @@ interface ChatViewProps {
   onConfirmSkill?: () => void;
   onDeclineSkill?: () => void;
   onClearActiveSkill?: () => void;
-  // Background tasks
-  backgroundTasks?: BackgroundTask[];
+  // Unified work items
+  workItems?: AgentWorkItem[];
+  pluginsAvailable?: PluginsAvailable;
   onCancelTask?: (taskId: string) => void;
+  onRetryTask?: (taskId: string) => void;
   onViewTaskResult?: (taskId: string) => void;
   // Code diff actions
   onAcceptDiff?: (filePath: string) => void;
@@ -43,7 +47,11 @@ interface ChatViewProps {
   onRejectAllPlanSteps?: (planId: string) => void;
   // Input callbacks
   onInputChange: (value: string) => void;
-  onSend: (attachments?: MessageAttachment[]) => void;
+  onSend: (input?: {
+    messageText?: string;
+    attachments?: MessageAttachment[];
+    contextPayloads?: AgentContextPayload[];
+  }) => void;
   onCancel?: () => void;
   /** Session-bound attached files (managed by parent) */
   attachedFiles?: MessageAttachment[];
@@ -65,8 +73,10 @@ export function ChatView({
   onConfirmSkill,
   onDeclineSkill,
   onClearActiveSkill,
-  backgroundTasks,
+  workItems,
+  pluginsAvailable,
   onCancelTask,
+  onRetryTask,
   onViewTaskResult,
   onAcceptDiff,
   onRejectDiff,
@@ -126,8 +136,11 @@ export function ChatView({
           </div>
         ) : (
           <MessageActionsProvider
-            backgroundTasks={backgroundTasks}
+            activeConversationId={activeConversationId}
+            workItems={workItems}
+            pluginsAvailable={pluginsAvailable}
             onCancelTask={onCancelTask}
+            onRetryTask={onRetryTask}
             onViewTaskResult={onViewTaskResult}
             onAcceptDiff={onAcceptDiff}
             onRejectDiff={onRejectDiff}
@@ -142,7 +155,6 @@ export function ChatView({
               isThinking={isThinking}
               streamingMessageId={streamingMessageId}
               activeConversationId={activeConversationId}
-              backgroundTasks={backgroundTasks}
             />
           </MessageActionsProvider>
         )}

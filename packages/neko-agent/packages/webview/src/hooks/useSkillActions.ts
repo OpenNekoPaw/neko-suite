@@ -5,7 +5,7 @@
  */
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
-import { VSCodeMessages, postMessage } from '@/components/hooks/useVSCode';
+import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from '@/handlers';
 
 export interface UseSkillActionsProps {
@@ -54,7 +54,7 @@ export function useSkillActions({
   const handleClearActiveSkill = useCallback(() => {
     if (activeSkill && activeSkill.conversationId === activeConversationId) {
       setActiveSkill(null);
-      postMessage({ type: 'clearActiveSkill', conversationId: activeConversationId });
+      VSCodeMessages.clearActiveSkill(activeConversationId);
     }
   }, [activeSkill, activeConversationId, setActiveSkill]);
 

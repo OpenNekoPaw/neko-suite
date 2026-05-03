@@ -20,6 +20,7 @@ import { commandHandlers } from './command-handlers';
 import { skillHandlers } from './skill-handlers';
 import { contextHandlers } from './context-handlers';
 import { mediaHandlers } from './media-handlers';
+import { subAgentHandlers } from './subagent-handlers';
 
 /**
  * Create a fully configured message handler registry
@@ -38,6 +39,7 @@ export function createConfiguredRegistry(): MessageHandlerRegistry {
   registry.registerAll(skillHandlers);
   registry.registerAll(contextHandlers);
   registry.registerAll(mediaHandlers);
+  registry.registerAll(subAgentHandlers);
 
   return registry;
 }

@@ -1,20 +1,30 @@
 import { memo } from 'react';
-import { Message, MessageAttachment, ContentBlock } from '@/components/types';
+import type { Message } from '@/components/types';
 import { ToolCallDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
+import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
 import { MessageActions } from '@/components/ChatView/MessageActions';
-import { BackgroundTask } from '@/components/TaskListView';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { ImagePreview, AudioCard, VideoCard } from '@/components/ChatView/MediaPreview';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
+import {
+  selectMessageLevelSubAgentWorkItems,
+  selectMessageTaskWorkItems,
+} from '@/components/AgentWorkItem';
+import {
+  projectContentBlocksUi,
+  type ContentBlockUiProjection,
+} from '@/presenters/content-block-presenter';
+import {
+  projectMessageAttachments,
+  type MessageAttachmentProjection,
+} from '@/presenters/message-attachment-presenter';
 
 interface MessageItemProps {
   message: Message;
   conversationId: string | null;
-  // Background tasks for inline task cards
-  backgroundTasks?: BackgroundTask[];
   // P2: Message operations
   onEditMessage?: (messageId: string) => void;
   onResendFrom?: (messageId: string) => void;
@@ -56,59 +66,38 @@ function AssistantAvatar() {
   );
 }
 
-// Format file size
-function formatFileSize(bytes?: number): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 // Attachment preview component
-function AttachmentDisplay({ attachment }: { attachment: MessageAttachment }) {
-  // Image preview with fullscreen modal
-  if (attachment.type === 'image' && attachment.preview) {
-    return <ImagePreview src={attachment.preview} alt={attachment.name} className="mt-1" />;
+function AttachmentDisplay({ projection }: { projection: MessageAttachmentProjection }) {
+  if (projection.previewKind === 'image' && projection.previewSrc) {
+    return <ImagePreview src={projection.previewSrc} alt={projection.name} className="mt-1" />;
   }
 
-  // Audio player
-  if (attachment.type === 'audio' && attachment.preview) {
+  if (projection.previewKind === 'audio' && projection.previewSrc) {
     return (
       <AudioCard
-        src={attachment.preview}
-        title={attachment.name}
+        src={projection.previewSrc}
+        title={projection.name}
         className="mt-1 w-full max-w-[400px]"
       />
     );
   }
 
-  // Video player
-  if (attachment.type === 'video' && attachment.preview) {
+  if (projection.previewKind === 'video' && projection.previewSrc) {
     return (
       <VideoCard
-        src={attachment.preview}
-        title={attachment.name}
+        src={projection.previewSrc}
+        title={projection.name}
         className="mt-1 w-full max-w-[500px]"
       />
     );
   }
 
-  // File attachment badge
-  const icons: Record<string, string> = {
-    file: '📄',
-    image: '🖼️',
-    video: '🎥',
-    audio: '🎵',
-  };
-
   return (
     <div className="mt-1 inline-flex items-center gap-1 px-2 py-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded text-[11px]">
-      <span>{icons[attachment.type] || '📎'}</span>
-      <span className="truncate max-w-[150px]">{attachment.name}</span>
-      {attachment.size && (
-        <span className="text-[var(--vscode-descriptionForeground)]">
-          ({formatFileSize(attachment.size)})
-        </span>
+      <span>{projection.icon}</span>
+      <span className="truncate max-w-[150px]">{projection.name}</span>
+      {projection.showSize && projection.sizeLabel && (
+        <span className="text-[var(--vscode-descriptionForeground)]">({projection.sizeLabel})</span>
       )}
     </div>
   );
@@ -118,9 +107,9 @@ function AttachmentDisplay({ attachment }: { attachment: MessageAttachment }) {
  * Render a single content block
  */
 function ContentBlockRenderer({
-  block,
-  isStreaming,
+  projection,
   conversationId,
+  workItemIds,
   onAcceptDiff,
   onRejectDiff,
   onApprovePlanStep,
@@ -129,9 +118,9 @@ function ContentBlockRenderer({
   onApproveAllPlanSteps,
   onRejectAllPlanSteps,
 }: {
-  block: ContentBlock;
-  isStreaming?: boolean;
+  projection: ContentBlockUiProjection;
   conversationId: string | null;
+  workItemIds?: string[];
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
   onApprovePlanStep?: (planId: string, stepId: string) => void;
@@ -140,69 +129,70 @@ function ContentBlockRenderer({
   onApproveAllPlanSteps?: (planId: string) => void;
   onRejectAllPlanSteps?: (planId: string) => void;
 }) {
-  switch (block.type) {
+  switch (projection.renderKind) {
     case 'thinking':
       return (
         <div className="mb-2">
-          <ThinkingBlock content={block.thinking || ''} isComplete={block.isThinkingComplete} />
+          <ThinkingBlock content={projection.thinking} isComplete={projection.isThinkingComplete} />
         </div>
       );
 
-    case 'text':
-      if (!block.content) return null;
+    case 'markdown':
       return (
         <div className="inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]/60 rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
-          <MarkdownRenderer
-            content={block.content}
-            isStreaming={block.isStreaming || isStreaming}
+          <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
+        </div>
+      );
+
+    case 'tool':
+      return (
+        <div className="w-full">
+          <ToolCallDisplay
+            toolCall={projection.toolCall}
+            conversationId={conversationId}
+            workItemIds={workItemIds}
           />
         </div>
       );
 
-    case 'tool_call':
-      if (!block.toolCall) return null;
+    case 'diff':
       return (
         <div className="w-full">
-          <ToolCallDisplay toolCall={block.toolCall} conversationId={conversationId} />
-        </div>
-      );
-
-    case 'code_diff':
-      if (!block.codeDiff) return null;
-      return (
-        <div className="w-full">
-          <DiffBlock diff={block.codeDiff} onAccept={onAcceptDiff} onReject={onRejectDiff} />
+          <DiffBlock diff={projection.codeDiff} onAccept={onAcceptDiff} onReject={onRejectDiff} />
         </div>
       );
 
     case 'plan':
-      if (!block.plan) return null;
       return (
         <div className="w-full">
           <PlanReview
-            plan={block.plan}
+            plan={projection.plan}
             onApproveStep={
-              onApprovePlanStep ? (stepId) => onApprovePlanStep(block.plan!.id, stepId) : undefined
+              onApprovePlanStep
+                ? (stepId) => onApprovePlanStep(projection.plan.id, stepId)
+                : undefined
             }
             onRejectStep={
-              onRejectPlanStep ? (stepId) => onRejectPlanStep(block.plan!.id, stepId) : undefined
+              onRejectPlanStep
+                ? (stepId) => onRejectPlanStep(projection.plan.id, stepId)
+                : undefined
             }
             onModifyStep={
               onModifyPlanStep
-                ? (stepId, desc) => onModifyPlanStep(block.plan!.id, stepId, desc)
+                ? (stepId, desc) => onModifyPlanStep(projection.plan.id, stepId, desc)
                 : undefined
             }
             onApproveAll={
-              onApproveAllPlanSteps ? () => onApproveAllPlanSteps(block.plan!.id) : undefined
+              onApproveAllPlanSteps ? () => onApproveAllPlanSteps(projection.plan.id) : undefined
             }
             onRejectAll={
-              onRejectAllPlanSteps ? () => onRejectAllPlanSteps(block.plan!.id) : undefined
+              onRejectAllPlanSteps ? () => onRejectAllPlanSteps(projection.plan.id) : undefined
             }
           />
         </div>
       );
 
-    default:
+    case 'empty':
       return null;
   }
 }
@@ -235,14 +225,16 @@ function AssistantContentBlocks({
 }) {
   // If contentBlocks available, render them in order
   if (message.contentBlocks && message.contentBlocks.length > 0) {
+    const projections = projectContentBlocksUi(message.contentBlocks, isStreaming);
+
     return (
       <div className="space-y-2">
-        {message.contentBlocks.map((block) => (
+        {projections.map((projection) => (
           <ContentBlockRenderer
-            key={block.id}
-            block={block}
-            isStreaming={isStreaming}
+            key={projection.id}
+            projection={projection}
             conversationId={conversationId}
+            workItemIds={message.workItemIds}
             onAcceptDiff={onAcceptDiff}
             onRejectDiff={onRejectDiff}
             onApprovePlanStep={onApprovePlanStep}
@@ -256,37 +248,7 @@ function AssistantContentBlocks({
     );
   }
 
-  // Legacy fallback: render in fixed order (thinking → content → toolCalls)
-  return (
-    <>
-      {/* Thinking block */}
-      {message.thinking && (
-        <div className="mb-2">
-          <ThinkingBlock content={message.thinking} isComplete={message.isThinkingComplete} />
-        </div>
-      )}
-
-      {/* Message bubble - compact */}
-      {message.content && (
-        <div className="inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]/60 rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
-          <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
-        </div>
-      )}
-
-      {/* Tool calls */}
-      {message.toolCalls && message.toolCalls.length > 0 && (
-        <div className="mt-2 space-y-2 w-full">
-          {message.toolCalls.map((toolCall) => (
-            <ToolCallDisplay
-              key={toolCall.id}
-              toolCall={toolCall}
-              conversationId={conversationId}
-            />
-          ))}
-        </div>
-      )}
-    </>
-  );
+  return null;
 }
 
 // Error message card — prominent red styling for API errors, timeouts, etc.
@@ -315,7 +277,6 @@ function ErrorMessageCard({ content }: { content: string }) {
 export const MessageItem = memo(function MessageItem({
   message,
   conversationId,
-  backgroundTasks,
   onEditMessage,
   onResendFrom,
   onFeedback,
@@ -324,6 +285,7 @@ export const MessageItem = memo(function MessageItem({
 }: MessageItemProps) {
   const {
     onCancelTask,
+    onRetryTask,
     onViewTaskResult,
     onAcceptDiff,
     onRejectDiff,
@@ -332,15 +294,17 @@ export const MessageItem = memo(function MessageItem({
     onModifyPlanStep,
     onApproveAllPlanSteps,
     onRejectAllPlanSteps,
+    pluginsAvailable,
+    workItems,
   } = useMessageActions();
-  // 找出与这条消息关联的任务
-  const relatedTasks = message.backgroundTaskIds
-    ? backgroundTasks?.filter((t) => message.backgroundTaskIds!.includes(t.id)) || []
-    : [];
+  // 找出与这条消息关联的工作项
+  const relatedTasks = selectMessageTaskWorkItems({ message, workItems }).map((item) => item.task);
+  const relatedSubAgents = selectMessageLevelSubAgentWorkItems({ message, workItems });
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const isStreaming = message.isStreaming;
+  const attachments = projectMessageAttachments(message.attachments);
 
   // System messages (e.g., queued notifications) - centered, subtle styling
   if (isSystem) {
@@ -403,10 +367,13 @@ export const MessageItem = memo(function MessageItem({
               className={`inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] via-[var(--vscode-button-background)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] rounded-tr-sm shadow-[0_2px_8px_rgba(0,0,0,0.2)]`}
             >
               {/* Attachments for user messages */}
-              {message.attachments && message.attachments.length > 0 && (
+              {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-1">
-                  {message.attachments.map((attachment) => (
-                    <AttachmentDisplay key={attachment.id} attachment={attachment} />
+                  {attachments.map((attachmentProjection) => (
+                    <AttachmentDisplay
+                      key={attachmentProjection.attachment.id}
+                      projection={attachmentProjection}
+                    />
                   ))}
                 </div>
               )}
@@ -438,7 +405,9 @@ export const MessageItem = memo(function MessageItem({
               <TaskCard
                 task={relatedTasks[0]}
                 onCancel={onCancelTask}
+                onRetry={onRetryTask}
                 onViewResult={onViewTaskResult}
+                plugins={pluginsAvailable}
               />
             </div>
           )}
@@ -452,6 +421,11 @@ export const MessageItem = memo(function MessageItem({
               />
             </div>
           )}
+          {relatedSubAgents.map((item) => (
+            <div key={item.id} className="mt-2 w-full">
+              <SubAgentCard item={item} />
+            </div>
+          ))}
 
           {/* Message actions */}
           {!isStreaming && (

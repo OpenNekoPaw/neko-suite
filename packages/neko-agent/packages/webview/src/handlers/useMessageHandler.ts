@@ -12,17 +12,17 @@ import {
   type NonCurrentConversationUpdater,
 } from '@/handlers';
 import { getLogger } from '../utils/logger';
-
-const logger = getLogger('MessageHandler');
 import type {
   Message,
   ConversationSummary,
   OpenTab,
+  PromptMode,
   TabType,
   SettingsState,
   AgentState,
 } from '@/components/types';
-import type { BackgroundTask } from '@/components/TaskListView';
+import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type {
   SkillSummary,
@@ -31,6 +31,9 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from './types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
+import type { ExtensionToWebviewMessage } from './messages';
+
+const logger = getLogger('MessageHandler');
 
 /**
  * Props for useMessageHandler hook
@@ -66,13 +69,14 @@ export interface UseMessageHandlerProps {
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
   setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
 
-  // State setters - Tasks
-  setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
+  // State setters - Work items
+  setWorkItemsByConversation: React.Dispatch<React.SetStateAction<AgentWorkItemStore>>;
 
   // State setters - Project
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
+  setPluginsAvailable: React.Dispatch<React.SetStateAction<PluginsAvailable>>;
 
   // State setters - Agent state
   setAgentState: React.Dispatch<React.SetStateAction<AgentState | null>>;
@@ -87,7 +91,9 @@ export interface UseMessageHandlerProps {
 
   // State setters - SSO/Onboarding
   updateSettings: (partial: Partial<SettingsState>) => void;
+  setPromptModeForConversation: (conversationId: string, mode: PromptMode) => void;
   setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
+  setGlobalError: React.Dispatch<React.SetStateAction<string | null>>;
 
   // Refs - Context management
   conversationTokenCountRef: MutableRefObject<Map<string, number>>;
@@ -99,8 +105,7 @@ export interface UseMessageHandlerProps {
  * Hook return type
  */
 export interface UseMessageHandlerReturn {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handleMessage: (event: MessageEvent<any>) => void;
+  handleMessage: (event: MessageEvent<ExtensionToWebviewMessage>) => void;
 }
 
 /**
@@ -126,11 +131,12 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setSettings,
     setSelectedModel,
     setMediaModelSelection,
-    setBackgroundTasks,
+    setWorkItemsByConversation,
 
     setProjectFiles,
     setMentionItems,
     setPluginCommands,
+    setPluginsAvailable,
     setAgentState,
     conversationAgentStateRef,
     forceAgentStateUpdate,
@@ -138,7 +144,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setPendingSkillConfirm,
     setActiveSkill,
     updateSettings,
+    setPromptModeForConversation,
     setShowOnboarding,
+    setGlobalError,
     conversationTokenCountRef,
     conversationCompressingRef,
     forceContextUpdate,
@@ -150,7 +158,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
   // Helper: check if message is for current conversation
   const isCurrentConversation = useCallback(
     (conversationId?: string): boolean => {
-      if (!conversationId) return true;
+      if (!conversationId) return false;
       return conversationId === activeConversationIdRef.current;
     },
     [activeConversationIdRef],
@@ -192,11 +200,12 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setSettings,
       setSelectedModel,
       setMediaModelSelection,
-      setBackgroundTasks,
+      setWorkItemsByConversation,
 
       setProjectFiles,
       setMentionItems,
       setPluginCommands,
+      setPluginsAvailable,
       setAgentState,
       conversationAgentStateRef,
       forceAgentStateUpdate,
@@ -204,7 +213,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setPendingSkillConfirm,
       setActiveSkill,
       updateSettings,
+      setPromptModeForConversation,
       setShowOnboarding,
+      setGlobalError,
       conversationTokenCountRef,
       conversationCompressingRef,
       forceUpdate: forceContextUpdate,
@@ -230,11 +241,12 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setSettings,
       setSelectedModel,
       setMediaModelSelection,
-      setBackgroundTasks,
+      setWorkItemsByConversation,
 
       setProjectFiles,
       setMentionItems,
       setPluginCommands,
+      setPluginsAvailable,
       setAgentState,
       conversationAgentStateRef,
       forceAgentStateUpdate,
@@ -242,7 +254,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setPendingSkillConfirm,
       setActiveSkill,
       updateSettings,
+      setPromptModeForConversation,
       setShowOnboarding,
+      setGlobalError,
       conversationTokenCountRef,
       conversationCompressingRef,
       forceContextUpdate,
@@ -253,8 +267,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
 
   // Message handler function
   const handleMessage = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (event: MessageEvent<any>): void => {
+    (event: MessageEvent<ExtensionToWebviewMessage>): void => {
       const message = event.data;
       if (!message || !message.type) return;
 

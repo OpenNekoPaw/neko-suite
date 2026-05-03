@@ -22,41 +22,44 @@ export interface UsePlanActionsReturn {
 export function usePlanActions({
   activeConversationId,
 }: UsePlanActionsProps): UsePlanActionsReturn {
-  const convId = activeConversationId || undefined;
-
   const handleApprovePlanStep = useCallback(
     (planId: string, stepId: string) => {
-      VSCodeMessages.approvePlanStep(planId, stepId, convId);
+      if (!activeConversationId) return;
+      VSCodeMessages.approvePlanStep(planId, stepId, activeConversationId);
     },
-    [convId],
+    [activeConversationId],
   );
 
   const handleRejectPlanStep = useCallback(
     (planId: string, stepId: string) => {
-      VSCodeMessages.rejectPlanStep(planId, stepId, convId);
+      if (!activeConversationId) return;
+      VSCodeMessages.rejectPlanStep(planId, stepId, activeConversationId);
     },
-    [convId],
+    [activeConversationId],
   );
 
   const handleModifyPlanStep = useCallback(
     (planId: string, stepId: string, newDescription: string) => {
-      VSCodeMessages.modifyPlanStep(planId, stepId, newDescription, convId);
+      if (!activeConversationId) return;
+      VSCodeMessages.modifyPlanStep(planId, stepId, newDescription, activeConversationId);
     },
-    [convId],
+    [activeConversationId],
   );
 
   const handleApproveAllPlanSteps = useCallback(
     (planId: string) => {
-      VSCodeMessages.approveAllPlanSteps(planId, convId);
+      if (!activeConversationId) return;
+      VSCodeMessages.approveAllPlanSteps(planId, activeConversationId);
     },
-    [convId],
+    [activeConversationId],
   );
 
   const handleRejectAllPlanSteps = useCallback(
     (planId: string) => {
-      VSCodeMessages.rejectAllPlanSteps(planId, convId);
+      if (!activeConversationId) return;
+      VSCodeMessages.rejectAllPlanSteps(planId, activeConversationId);
     },
-    [convId],
+    [activeConversationId],
   );
 
   return {

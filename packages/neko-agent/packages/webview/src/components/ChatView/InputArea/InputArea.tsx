@@ -22,6 +22,9 @@ import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
+import { projectInputAreaUi } from '@/presenters/input-area-presenter';
+import { projectSessionMediaModelPickerState } from '@/presenters/media-model-presenter';
+import type { AgentContextPayload } from '@neko/shared';
 
 interface InputAreaProps {
   inputValue: string;
@@ -29,7 +32,11 @@ interface InputAreaProps {
   droppedFiles?: MessageAttachment[];
   onDroppedFilesProcessed?: () => void;
   onInputChange: (value: string) => void;
-  onSend: (attachments?: MessageAttachment[]) => void;
+  onSend: (input?: {
+    messageText?: string;
+    attachments?: MessageAttachment[];
+    contextPayloads?: AgentContextPayload[];
+  }) => void;
   onCancel?: () => void;
   disabled?: boolean;
   /** Session-bound attached files (managed by parent for conversation isolation) */
@@ -75,7 +82,6 @@ export function InputArea({
     contextChips,
     onRemoveContextChip,
     ambientNodes = [],
-    onTriggerSend,
   } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -344,35 +350,10 @@ export function InputArea({
       addToHistory(inputValue);
     }
     const files = attachedFiles.length > 0 ? attachedFiles : undefined;
-    // When context chips are present, prepend their summaries to the message and
-    // use onTriggerSend to bypass the inputValue closure in useChatActions.
-    if (contextChips.length > 0 && onTriggerSend) {
-      const contextBlock = contextChips
-        .map((c) => {
-          const d = c.data as Record<string, unknown> | undefined;
-          // Content-level: inject text and/or image reference
-          const text = (d?.text ?? d?.selectedText) as string | undefined;
-          const imageData = d?.imageData as string | undefined;
-          if (text && imageData) {
-            return `[Content: ${c.label}]\n${text}\n[Image attached]`;
-          }
-          if (text) return `[Content: ${c.label}]\n${text}`;
-          if (imageData) return `[Image: ${c.label}]\n[Image attached]`;
-          // File-level: inject file path for agent to read on demand
-          const fp = (d?.filePath ?? d?.path) as string | undefined;
-          if (fp) return `[File: ${c.label}]\n${fp}`;
-          // Other (canvas-node, etc.): keep original behavior
-          return `[Context: ${c.label}]\n${c.summary}`;
-        })
-        .join('\n\n');
-      const combined = contextBlock + '\n\n' + inputValue.trim();
-      contextChips.forEach((c) => onRemoveContextChip(c.id));
-      onInputChange('');
-      onTriggerSend(combined, files);
-      updateAttachedFiles([]);
-      return;
-    }
-    onSend(files);
+    const contextPayloads = contextChips.length > 0 ? contextChips : undefined;
+    onSend({ messageText: inputValue, attachments: files, contextPayloads });
+    contextChips.forEach((c) => onRemoveContextChip(c.id));
+    onInputChange('');
     updateAttachedFiles([]);
   };
 
@@ -470,13 +451,26 @@ export function InputArea({
     textareaRef.current?.focus();
   };
 
-  const canSend =
-    !disabled && (inputValue.trim() || attachedFiles.length > 0 || contextChips.length > 0);
+  const inputAreaProjection = projectInputAreaUi({
+    inputValue,
+    attachedFileCount: attachedFiles.length,
+    contextChipCount: contextChips.length,
+    ambientNodeCount: ambientNodes.length,
+    mediaModelCallCount,
+    isThinking,
+    disabled,
+    sessionMode,
+  });
+  const sessionMediaPicker = projectSessionMediaModelPickerState({
+    sessionMode,
+    mediaModelSelection,
+    availableMediaModels,
+  });
 
   return (
     <div className="flex-shrink-0">
       {/* ── Suggestion chips — float above border-t, at bottom of message list ── */}
-      {contextChips.length > 0 && (
+      {inputAreaProjection.showSuggestionChips && (
         <div className="px-3 pb-1">
           <SuggestionChips contextChips={contextChips} onSuggest={onInputChange} />
         </div>
@@ -489,22 +483,23 @@ export function InputArea({
           <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
 
           {/* Model selector — contextual based on session mode */}
-          {sessionMode === 'agent' ? (
+          {inputAreaProjection.showChatModelSelector ? (
             <ModelSelector
               selectedModel={selectedModel}
               models={availableModels}
               onSelect={onModelSelect}
             />
           ) : (
-            <CategoryChip
-              category={sessionMode as 'image' | 'video' | 'audio'}
-              Icon={MEDIA_CATEGORY_ICONS[sessionMode as 'image' | 'video' | 'audio']}
-              selectedId={mediaModelSelection[sessionMode as 'image' | 'video' | 'audio']}
-              models={availableMediaModels.filter((m) => m.category === sessionMode)}
-              onSelect={(modelId) =>
-                onMediaModelSelect(sessionMode as 'image' | 'video' | 'audio', modelId)
-              }
-            />
+            inputAreaProjection.showSessionMediaModelSelector &&
+            sessionMediaPicker && (
+              <CategoryChip
+                category={sessionMediaPicker.category}
+                Icon={MEDIA_CATEGORY_ICONS[sessionMediaPicker.category]}
+                selectedId={sessionMediaPicker.selectedId}
+                models={sessionMediaPicker.models}
+                onSelect={(modelId) => onMediaModelSelect(sessionMediaPicker.category, modelId)}
+              />
+            )
           )}
 
           <div className="flex-1" />
@@ -550,7 +545,7 @@ export function InputArea({
           />
 
           {/* Ambient canvas chips — auto-injected from canvas selection, non-removable */}
-          {ambientNodes.length > 0 && (
+          {inputAreaProjection.showAmbientNodes && (
             <div className="flex flex-wrap gap-1 px-3 pt-2">
               {ambientNodes.map((n) => (
                 <AgentContextChip
@@ -568,7 +563,7 @@ export function InputArea({
           )}
 
           {/* Agent context chips — shown above textarea when context is attached */}
-          {contextChips.length > 0 && (
+          {inputAreaProjection.showContextChips && (
             <div className="flex flex-wrap gap-1 px-3 pt-2">
               {contextChips.map((chip) => (
                 <AgentContextChip key={chip.id} payload={chip} onRemove={onRemoveContextChip} />
@@ -588,9 +583,7 @@ export function InputArea({
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               disabled={disabled}
-              placeholder={
-                isThinking ? t('chat.input.thinkingPlaceholder') : t('chat.input.placeholder')
-              }
+              placeholder={t(inputAreaProjection.inputPlaceholderKey)}
               className="flex-1 px-2 py-1.5 bg-transparent text-[var(--vscode-foreground)] resize-none outline-none text-[13px] min-h-[32px] max-h-[120px] placeholder:text-[var(--vscode-descriptionForeground)]"
               rows={1}
             />
@@ -632,7 +625,7 @@ export function InputArea({
             />
 
             {/* Media call count */}
-            {mediaModelCallCount > 0 && (
+            {inputAreaProjection.showMediaCallCount && (
               <div
                 className="flex items-center gap-0.5 px-1 text-[10px] text-[var(--vscode-descriptionForeground)]"
                 title={`Media model calls: ${mediaModelCallCount}`}
@@ -645,7 +638,7 @@ export function InputArea({
             <div className="flex-1" />
 
             {/* Execution mode — only relevant in agent mode */}
-            {sessionMode === 'agent' && (
+            {inputAreaProjection.showExecutionModeSelector && (
               <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
             )}
 
@@ -655,7 +648,9 @@ export function InputArea({
                 onClick={onCancel}
                 disabled={disabled}
                 className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-[var(--vscode-errorForeground)] text-white transition-opacity ${
-                  disabled ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                  !inputAreaProjection.canCancel
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'hover:opacity-90'
                 }`}
                 title={t('chat.input.cancel')}
               >
@@ -664,9 +659,9 @@ export function InputArea({
             ) : (
               <button
                 onClick={handleSend}
-                disabled={!canSend}
+                disabled={!inputAreaProjection.canSend}
                 className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-all ${
-                  canSend
+                  inputAreaProjection.canSend
                     ? 'bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] hover:opacity-90 shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
                     : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
                 }`}

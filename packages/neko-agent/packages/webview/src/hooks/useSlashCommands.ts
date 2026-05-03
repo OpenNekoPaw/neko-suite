@@ -23,6 +23,7 @@ export interface UseSlashCommandsProps {
   skills: SkillSummary[];
   pluginCommands: PluginSlashCommandDef[];
   inputValue: string;
+  activeConversationId: string | null;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   clearInput: () => void;
 }
@@ -35,6 +36,7 @@ export function useSlashCommands({
   skills,
   pluginCommands,
   inputValue,
+  activeConversationId,
   setMessages,
   clearInput,
 }: UseSlashCommandsProps): UseSlashCommandsReturn {
@@ -46,10 +48,14 @@ export function useSlashCommands({
 
       // Handle plugin commands (registered by external extensions)
       if (command.source === 'plugin' && command.extensionId) {
+        if (!activeConversationId) {
+          return;
+        }
         clearInput();
         VSCodeMessages.invokePluginSlashCommand(
           command.extensionId,
           command.commandId ?? command.id,
+          activeConversationId,
           args,
         );
         return;
@@ -80,10 +86,18 @@ export function useSlashCommands({
         return;
       }
 
+      if (!activeConversationId) {
+        return;
+      }
+
       clearInput();
-      VSCodeMessages.invokeSlashCommand(command.commandId ?? command.id, args);
+      VSCodeMessages.invokeSlashCommand(
+        command.commandId ?? command.id,
+        args,
+        activeConversationId,
+      );
     },
-    [clearInput, inputValue, pluginCommands, setMessages, skills, t],
+    [activeConversationId, clearInput, inputValue, pluginCommands, setMessages, skills, t],
   );
 
   return { handleSlashCommand };

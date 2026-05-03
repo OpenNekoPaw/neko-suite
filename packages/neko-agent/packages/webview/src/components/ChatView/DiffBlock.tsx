@@ -5,60 +5,22 @@
  */
 
 import { useState, useMemo, memo } from 'react';
-import { computeDiff } from '@neko/shared/utils';
+import { computeDiff, computeDiffStats } from '@neko/shared/utils';
 import { CodeDiff } from '@/components/types';
 import { useTranslation } from '@/i18n/I18nContext';
+import {
+  projectDiffLinesUi,
+  projectDiffBlockUiState,
+  type DiffBadgeTone,
+  type DiffBlockOpacity,
+  type DiffBlockTone,
+  type DiffLineTone,
+} from '@/presenters/diff-presenter';
 
 interface DiffBlockProps {
   diff: CodeDiff;
   onAccept?: (filePath: string) => void;
   onReject?: (filePath: string) => void;
-}
-
-/**
- * Get file extension for language detection
- */
-function getLanguageFromPath(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase() || '';
-  const langMap: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescript',
-    js: 'javascript',
-    jsx: 'javascript',
-    py: 'python',
-    rb: 'ruby',
-    go: 'go',
-    rs: 'rust',
-    java: 'java',
-    kt: 'kotlin',
-    swift: 'swift',
-    c: 'c',
-    cpp: 'cpp',
-    h: 'c',
-    hpp: 'cpp',
-    cs: 'csharp',
-    php: 'php',
-    json: 'json',
-    yaml: 'yaml',
-    yml: 'yaml',
-    md: 'markdown',
-    css: 'css',
-    scss: 'scss',
-    html: 'html',
-    xml: 'xml',
-    sql: 'sql',
-    sh: 'bash',
-    bash: 'bash',
-    zsh: 'bash',
-  };
-  return langMap[ext] || 'text';
-}
-
-/**
- * Get file name from path
- */
-function getFileName(filePath: string): string {
-  return filePath.split('/').pop() || filePath;
 }
 
 function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
@@ -70,22 +32,21 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
     () => computeDiff(diff.oldContent, diff.newContent),
     [diff.oldContent, diff.newContent],
   );
+  const diffLineProjections = useMemo(() => projectDiffLinesUi(diffLines), [diffLines]);
 
-  // Stats
-  const additions = diffLines.filter((l) => l.type === 'add').length;
-  const deletions = diffLines.filter((l) => l.type === 'remove').length;
-
-  // Language for syntax highlighting hint (future use)
-  const _language = diff.language || getLanguageFromPath(diff.filePath);
-  void _language; // Reserved for future syntax highlighting
-
-  // Status styling
-  const toneClass =
-    diff.status === 'accepted' ? 'is-success' : diff.status === 'rejected' ? 'is-danger' : '';
+  const projection = projectDiffBlockUiState({
+    diff,
+    stats: computeDiffStats(diffLines),
+    canAccept: Boolean(onAccept),
+    canReject: Boolean(onReject),
+  });
+  void projection.language; // Reserved for future syntax highlighting
 
   return (
     <div
-      className={`agent-inline-card my-1 ${toneClass} ${diff.status === 'rejected' ? 'opacity-70' : ''}`}
+      className={`agent-inline-card my-1 ${diffBlockToneClass(
+        projection.tone,
+      )} ${diffBlockOpacityClass(projection.opacity)}`}
     >
       {/* Header */}
       <div
@@ -100,23 +61,21 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
 
         {/* File name */}
         <span className="flex-1 truncate font-mono text-[11px] text-[var(--agent-fg)]">
-          {getFileName(diff.filePath)}
+          {projection.fileName}
         </span>
 
         {/* Stats */}
         <span className="text-[10px] text-[var(--vscode-gitDecoration-addedResourceForeground)]">
-          +{additions}
+          +{projection.stats.added}
         </span>
         <span className="text-[10px] text-[var(--vscode-gitDecoration-deletedResourceForeground)]">
-          -{deletions}
+          -{projection.stats.removed}
         </span>
 
         {/* Status badge */}
-        {diff.status !== 'pending' && (
-          <span
-            className={`agent-badge ${diff.status === 'accepted' ? 'is-success' : 'is-danger'} text-[9px]`}
-          >
-            {diff.status === 'accepted' ? t('chat.diff.accepted') : t('chat.diff.rejected')}
+        {projection.badge && (
+          <span className={`agent-badge ${diffBadgeToneClass(projection.badge.tone)} text-[9px]`}>
+            {t(projection.badge.labelKey)}
           </span>
         )}
       </div>
@@ -126,49 +85,32 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
         <>
           <div className="max-h-[300px] overflow-auto w-full">
             <pre className="text-[11px] font-mono leading-tight w-full min-w-0">
-              {diffLines.map((line, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${
-                    line.type === 'add'
-                      ? 'bg-[var(--vscode-diffEditor-insertedLineBackground)]'
-                      : line.type === 'remove'
-                        ? 'bg-[var(--vscode-diffEditor-removedLineBackground)]'
-                        : ''
-                  }`}
-                >
+              {diffLineProjections.map((lineProjection, idx) => (
+                <div key={idx} className={`flex ${diffLineBackgroundClass(lineProjection.tone)}`}>
                   {/* Line numbers */}
                   <span className="w-8 select-none border-r border-[var(--agent-divider)] px-1 text-right text-[10px] text-[var(--agent-fg-secondary)]">
-                    {line.oldLineNum || ''}
+                    {lineProjection.showOldLineNumber ? lineProjection.line.oldLineNum : ''}
                   </span>
                   <span className="w-8 select-none border-r border-[var(--agent-divider)] px-1 text-right text-[10px] text-[var(--agent-fg-secondary)]">
-                    {line.newLineNum || ''}
+                    {lineProjection.showNewLineNumber ? lineProjection.line.newLineNum : ''}
                   </span>
 
                   {/* Diff marker */}
                   <span
-                    className={`w-4 text-center select-none ${
-                      line.type === 'add'
-                        ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
-                        : line.type === 'remove'
-                          ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
-                          : 'text-[var(--agent-fg-secondary)]'
-                    }`}
+                    className={`w-4 text-center select-none ${diffLineMarkerClass(
+                      lineProjection.tone,
+                    )}`}
                   >
-                    {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
+                    {lineProjection.marker}
                   </span>
 
                   {/* Content */}
                   <span
-                    className={`flex-1 px-1 whitespace-pre overflow-x-auto ${
-                      line.type === 'add'
-                        ? 'text-[var(--vscode-gitDecoration-addedResourceForeground)]'
-                        : line.type === 'remove'
-                          ? 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]'
-                          : 'text-[var(--agent-fg)]'
-                    }`}
+                    className={`flex-1 px-1 whitespace-pre overflow-x-auto ${diffLineTextClass(
+                      lineProjection.tone,
+                    )}`}
                   >
-                    {line.content}
+                    {lineProjection.line.content}
                   </span>
                 </div>
               ))}
@@ -176,7 +118,7 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
           </div>
 
           {/* Action buttons (only for pending status) */}
-          {diff.status === 'pending' && (onAccept || onReject) && (
+          {projection.showActions && (
             <div className="flex items-center gap-2 border-t border-[var(--agent-divider)] px-2 py-1.5">
               {onAccept && (
                 <button
@@ -207,6 +149,62 @@ function DiffBlockComponent({ diff, onAccept, onReject }: DiffBlockProps) {
 }
 
 export const DiffBlock = memo(DiffBlockComponent);
+
+function diffBlockToneClass(tone: DiffBlockTone): string {
+  switch (tone) {
+    case 'success':
+      return 'is-success';
+    case 'danger':
+      return 'is-danger';
+    case 'default':
+      return '';
+  }
+}
+
+function diffBlockOpacityClass(opacity: DiffBlockOpacity): string {
+  return opacity === 'muted' ? 'opacity-70' : '';
+}
+
+function diffLineBackgroundClass(tone: DiffLineTone): string {
+  switch (tone) {
+    case 'add':
+      return 'bg-[var(--vscode-diffEditor-insertedLineBackground)]';
+    case 'remove':
+      return 'bg-[var(--vscode-diffEditor-removedLineBackground)]';
+    case 'context':
+      return '';
+  }
+}
+
+function diffLineTextClass(tone: DiffLineTone): string {
+  switch (tone) {
+    case 'add':
+      return 'text-[var(--vscode-gitDecoration-addedResourceForeground)]';
+    case 'remove':
+      return 'text-[var(--vscode-gitDecoration-deletedResourceForeground)]';
+    case 'context':
+      return 'text-[var(--agent-fg)]';
+  }
+}
+
+function diffLineMarkerClass(tone: DiffLineTone): string {
+  switch (tone) {
+    case 'add':
+    case 'remove':
+      return diffLineTextClass(tone);
+    case 'context':
+      return 'text-[var(--agent-fg-secondary)]';
+  }
+}
+
+function diffBadgeToneClass(tone: DiffBadgeTone): string {
+  switch (tone) {
+    case 'success':
+      return 'is-success';
+    case 'danger':
+      return 'is-danger';
+  }
+}
 
 // Icons
 function ChevronIcon({ className }: { className?: string }) {

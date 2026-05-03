@@ -4,54 +4,75 @@
  * Handles: settingsData, projectFiles, configState, configChanged, mcpServerTestResult
  */
 
+import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration } from './types';
 import type {
   SettingsDataMessage,
   ProjectFilesMessage,
   ConfigStateMessage,
+  ConfigStateWithStatusMessage,
   ConfigChangedMessage,
+  ConnectionStateChangedMessage,
+  ConnectionStatesMessage,
+  GenerationProgressMessage,
+  HooksDataMessage,
+  MarketErrorMessage,
+  MarketFeaturedMessage,
+  MarketInstalledListMessage,
+  MarketInstallProgressMessage,
+  MarketInstallResultMessage,
+  MarketSearchResultMessage,
+  MarketUninstallResultMessage,
+  MarketUpdatesMessage,
   McpServerTestResultMessage,
   PluginCommandsMessage,
+  PluginsAvailableMessage,
+  ProviderMutationResultMessage,
+  SettingsUpdatedMessage,
+  SkillsDataMessage,
+  SsoErrorMessage,
+  SsoSessionChangedMessage,
+  ToolSkillsChangedMessage,
+  ToolSkillsDataMessage,
 } from './messages';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import {
+  projectConfigStateMessage,
+  projectMarketplaceError,
+  projectMediaModelSelectionDefaults,
+  projectPluginCommandsMessage,
+  projectPluginsAvailableMessage,
+  projectProjectFilesMessage,
+  projectSettingsDataMessage,
+  projectSettingsMutationError,
+  projectSsoErrorMessage,
+  projectSsoSessionChangedMessage,
+} from '../presenters/config-message-presenter';
 
 /**
  * Handle 'settingsData' message - Settings from extension
  */
-const handleSettingsData: MessageHandler = (message: SettingsDataMessage, context) => {
-  // NOTE: Do NOT set configuredProviders here.
-  // The complete providers list comes from 'configState' message via handleConfigState.
-  // settingsData.configuredProviders only contains providers with apiKey configured,
-  // which would overwrite the complete list if this message arrives after configState.
+const handleSettingsData: MessageHandler<'settingsData'> = (
+  message: SettingsDataMessage,
+  context,
+) => {
+  const projection = projectSettingsDataMessage(message);
   context.setSettings((prev) => ({
     ...prev,
-    providers: message.providers || [],
-    // configuredProviders: intentionally NOT set here - see handleConfigState
-    selectedProviderId: message.selectedProviderId || null,
-    selectedModelId: message.selectedModelId || null,
-    systemPrompt: message.systemPrompt || '',
-    autoExecuteTools: message.autoExecuteTools ?? true,
-    streamResponses: message.streamResponses ?? true,
-    showToolCalls: message.showToolCalls ?? true,
-    temperature: message.temperature ?? 0.7,
-    maxTokens: message.maxTokens ?? 4096,
-    executionMode: message.executionMode ?? 'ask',
-    // Chat model options from Platform ConfigManager
-    chatModelOptions: message.chatModelOptions || [],
+    ...projection.settingsPatch,
   }));
-  if (message.selectedProviderId && message.selectedModelId) {
-    // Use the correct format: 'providerId:modelId' to match chatModelOptions
-    context.setSelectedModel(`${message.selectedProviderId}:${message.selectedModelId}`);
+
+  if (projection.selectedModel) {
+    context.setSelectedModel(projection.selectedModel);
   }
-  // Apply defaultMediaModels from config for categories still set to 'none'
-  const defaults = message.defaultMediaModels as Record<string, string> | undefined;
-  if (defaults) {
+
+  if (Object.keys(projection.defaultMediaModels).length > 0) {
     context.setMediaModelSelection((prev) => {
-      const next = { ...prev };
-      for (const cat of ['image', 'video', 'audio'] as const) {
-        if (next[cat] === 'none' && defaults[cat]) next[cat] = defaults[cat]!;
-      }
-      return next;
+      const defaultProjection = projectMediaModelSelectionDefaults({
+        selection: prev,
+        defaults: projection.defaultMediaModels,
+      });
+      return defaultProjection.updated ? defaultProjection.selection : prev;
     });
   }
 };
@@ -59,64 +80,47 @@ const handleSettingsData: MessageHandler = (message: SettingsDataMessage, contex
 /**
  * Handle 'projectFiles' message - Project file list + optional canvas/story mention extras
  */
-const handleProjectFiles: MessageHandler = (message: ProjectFilesMessage, context) => {
-  const files: Array<{ path: string; name: string; type: 'file' | 'folder'; icon?: string }> =
-    message.files || [];
-  context.setProjectFiles(files);
+const handleProjectFiles: MessageHandler<'projectFiles'> = (
+  message: ProjectFilesMessage,
+  context,
+) => {
+  if (!context.isCurrentConversation(message.conversationId)) {
+    return;
+  }
 
-  // Build unified MentionItem list: files first, then canvas nodes / characters
-  const fileMentions = files.map((f) => ({
-    id: `file:${f.path}`,
-    kind: 'file' as const,
-    label: f.name,
-    description: f.path,
-    filePath: f.path,
-  }));
-
-  const extras: Array<{
-    type: 'canvas-node' | 'character' | 'scene';
-    id: string;
-    label: string;
-    summary: string;
-  }> = message.mentionExtras || [];
-
-  const extraMentions = extras.map((e) => ({
-    id: `${e.type}:${e.id}`,
-    kind: e.type as import('@/components/ChatView/InputArea/types').MentionItemKind,
-    label: e.label,
-    description: e.type === 'canvas-node' ? 'Canvas node' : e.type,
-    contextPayload: {
-      type: e.type,
-      id: e.id,
-      label: e.label,
-      summary: e.summary,
-    } as import('@neko/shared').AgentContextPayload,
-  }));
-
-  context.setMentionItems([...fileMentions, ...extraMentions]);
+  const projection = projectProjectFilesMessage(message);
+  context.setProjectFiles(projection.projectFiles);
+  context.setMentionItems(projection.mentionItems);
 };
 
 /**
  * Handle 'configState' message - Configuration from Platform
- * Only extracts providers (used by AccountBar for isAiConfigured check)
+ * Uses platform-projected provider state for account/configuration UI.
  */
-const handleConfigState: MessageHandler = (message: ConfigStateMessage, context) => {
-  if (message.config) {
-    const mappedProviders = (message.config.providers || []).map(
-      (p: import('@neko/shared').ProviderConfig) => ({
-        id: p.id,
-        type: p.type,
-        name: p.displayName || p.name,
-        apiKey: p.apiKey,
-        baseUrl: p.apiUrl,
-        enabled: p.enabled,
-        builtin: p.builtin,
-      }),
-    );
-
+const handleConfigState: MessageHandler<'configState'> = (message: ConfigStateMessage, context) => {
+  const settingsPatch = projectConfigStateMessage(message);
+  if (settingsPatch) {
     context.setSettings((prev) => ({
       ...prev,
-      configuredProviders: mappedProviders,
+      ...settingsPatch,
+    }));
+  }
+};
+
+/**
+ * Handle 'configStateWithStatus' message - Configuration plus connection state.
+ * Connection state has no dedicated UI surface yet, so only provider state is
+ * projected into settings here.
+ */
+const handleConfigStateWithStatus: MessageHandler<'configStateWithStatus'> = (
+  message: ConfigStateWithStatusMessage,
+  context,
+) => {
+  const settingsPatch = projectConfigStateMessage(message);
+  if (settingsPatch) {
+    context.setSettings((prev) => ({
+      ...prev,
+      ...settingsPatch,
     }));
   }
 };
@@ -124,7 +128,10 @@ const handleConfigState: MessageHandler = (message: ConfigStateMessage, context)
 /**
  * Handle 'configChanged' message - Configuration changed
  */
-const handleConfigChanged: MessageHandler = (_message: ConfigChangedMessage, _context) => {
+const handleConfigChanged: MessageHandler<'configChanged'> = (
+  _message: ConfigChangedMessage,
+  _context,
+) => {
   // Refresh both config AND settings when configuration changes
   // getConfig() updates configuredProviders, models, etc.
   // getSettings() updates chatModelOptions (model selector dropdown)
@@ -137,7 +144,7 @@ const handleConfigChanged: MessageHandler = (_message: ConfigChangedMessage, _co
  * Note: Actual handling is done via addEventListener in index.tsx
  * This handler just marks the message as handled for the registry
  */
-const handleMCPServerTestResult: MessageHandler = (
+const handleMCPServerTestResult: MessageHandler<'mcpServerTestResult'> = (
   _message: McpServerTestResultMessage,
   _context,
 ) => {
@@ -147,15 +154,108 @@ const handleMCPServerTestResult: MessageHandler = (
 /**
  * Handle 'pluginCommands' message - Plugin slash commands from external extensions
  */
-const handlePluginCommands: MessageHandler = (message: PluginCommandsMessage, context) => {
-  const commands: Array<{
-    id: string;
-    name: string;
-    description: string;
-    icon?: string;
-    extensionId: string;
-  }> = message.commands || [];
-  context.setPluginCommands(commands);
+const handlePluginCommands: MessageHandler<'pluginCommands'> = (
+  message: PluginCommandsMessage,
+  context,
+) => {
+  context.setPluginCommands(projectPluginCommandsMessage(message));
+};
+
+/**
+ * Handle 'pluginsAvailable' message - installed neko-suite plugins for send-to actions
+ */
+const handlePluginsAvailable: MessageHandler<'pluginsAvailable'> = (
+  message: PluginsAvailableMessage,
+  context,
+) => {
+  context.setPluginsAvailable(projectPluginsAvailableMessage(message));
+};
+
+/**
+ * Handle 'ssoSessionChanged' message - Account state from neko-auth bridge.
+ */
+const handleSsoSessionChanged: MessageHandler<'ssoSessionChanged'> = (
+  message: SsoSessionChangedMessage,
+  context,
+) => {
+  const projection = projectSsoSessionChangedMessage(message);
+  context.updateSettings(projection.settingsPatch);
+  if (projection.showOnboarding !== undefined) {
+    context.setShowOnboarding(projection.showOnboarding);
+  }
+};
+
+/**
+ * Handle global SSO errors from the bridge.
+ */
+const handleSsoError: MessageHandler<'ssoError'> = (message: SsoErrorMessage, context) => {
+  const projection = projectSsoErrorMessage(message);
+  context.setGlobalError(projection.globalError);
+  context.setShowOnboarding(projection.showOnboarding);
+};
+
+/**
+ * Handle mutation acknowledgements that are already reflected by settings/config refreshes.
+ */
+const handleSettingsMutationAck: MessageHandler<
+  'settingsUpdated' | 'modelAdded' | 'modelRemoved'
+> = (message: SettingsUpdatedMessage | ProviderMutationResultMessage, context) => {
+  const error = projectSettingsMutationError(message);
+  if (error) context.setGlobalError(error);
+};
+
+/**
+ * Consume bridge data that is extension-managed or has no UI surface yet.
+ */
+const handleBridgeStateOnlyMessage: MessageHandler<
+  | 'connectionStates'
+  | 'connectionStateChanged'
+  | 'skillsData'
+  | 'hooksData'
+  | 'toolSkillsData'
+  | 'toolSkillsChanged'
+  | 'generationProgress'
+> = (
+  _message:
+    | ConnectionStatesMessage
+    | ConnectionStateChangedMessage
+    | SkillsDataMessage
+    | HooksDataMessage
+    | ToolSkillsDataMessage
+    | ToolSkillsChangedMessage
+    | GenerationProgressMessage,
+  _context,
+) => {
+  // Intentionally consumed to keep the protocol explicit and avoid unknown-message noise.
+};
+
+/**
+ * Consume marketplace result messages. The in-chat marketplace UI is not mounted
+ * today; errors still surface globally.
+ */
+const handleMarketplaceMessage: MessageHandler<
+  | 'market:searchResult'
+  | 'market:installProgress'
+  | 'market:installResult'
+  | 'market:uninstallResult'
+  | 'market:installedList'
+  | 'market:updates'
+  | 'market:featured'
+  | 'market:error'
+> = (
+  message:
+    | MarketSearchResultMessage
+    | MarketInstallProgressMessage
+    | MarketInstallResultMessage
+    | MarketUninstallResultMessage
+    | MarketInstalledListMessage
+    | MarketUpdatesMessage
+    | MarketFeaturedMessage
+    | MarketErrorMessage,
+  context,
+) => {
+  const error = projectMarketplaceError(message);
+  if (error) context.setGlobalError(error);
 };
 
 /**
@@ -167,10 +267,32 @@ const handlePluginCommands: MessageHandler = (message: PluginCommandsMessage, co
  * All config handler registrations
  */
 export const configHandlers: HandlerRegistration[] = [
-  { type: 'settingsData', handler: handleSettingsData },
-  { type: 'projectFiles', handler: handleProjectFiles },
-  { type: 'configState', handler: handleConfigState },
-  { type: 'configChanged', handler: handleConfigChanged },
-  { type: 'mcpServerTestResult', handler: handleMCPServerTestResult },
-  { type: 'pluginCommands', handler: handlePluginCommands },
+  defineHandler('settingsData', handleSettingsData),
+  defineHandler('projectFiles', handleProjectFiles),
+  defineHandler('configState', handleConfigState),
+  defineHandler('configStateWithStatus', handleConfigStateWithStatus),
+  defineHandler('configChanged', handleConfigChanged),
+  defineHandler('settingsUpdated', handleSettingsMutationAck),
+  defineHandler('modelAdded', handleSettingsMutationAck),
+  defineHandler('modelRemoved', handleSettingsMutationAck),
+  defineHandler('mcpServerTestResult', handleMCPServerTestResult),
+  defineHandler('pluginCommands', handlePluginCommands),
+  defineHandler('pluginsAvailable', handlePluginsAvailable),
+  defineHandler('ssoSessionChanged', handleSsoSessionChanged),
+  defineHandler('ssoError', handleSsoError),
+  defineHandler('connectionStates', handleBridgeStateOnlyMessage),
+  defineHandler('connectionStateChanged', handleBridgeStateOnlyMessage),
+  defineHandler('skillsData', handleBridgeStateOnlyMessage),
+  defineHandler('hooksData', handleBridgeStateOnlyMessage),
+  defineHandler('toolSkillsData', handleBridgeStateOnlyMessage),
+  defineHandler('toolSkillsChanged', handleBridgeStateOnlyMessage),
+  defineHandler('generationProgress', handleBridgeStateOnlyMessage),
+  defineHandler('market:searchResult', handleMarketplaceMessage),
+  defineHandler('market:installProgress', handleMarketplaceMessage),
+  defineHandler('market:installResult', handleMarketplaceMessage),
+  defineHandler('market:uninstallResult', handleMarketplaceMessage),
+  defineHandler('market:installedList', handleMarketplaceMessage),
+  defineHandler('market:updates', handleMarketplaceMessage),
+  defineHandler('market:featured', handleMarketplaceMessage),
+  defineHandler('market:error', handleMarketplaceMessage),
 ];

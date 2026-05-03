@@ -10,12 +10,14 @@ import type {
   Message,
   ConversationSummary,
   OpenTab,
+  PromptMode,
   TabType,
   SettingsState,
   AgentState,
 } from '@/components/types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
-import type { BackgroundTask } from '@/components/TaskListView';
+import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type {
   SkillSummary,
@@ -88,6 +90,7 @@ export interface SettingsContext {
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
   setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
   updateSettings: (partial: Partial<SettingsState>) => void;
+  setPromptModeForConversation: (conversationId: string, mode: PromptMode) => void;
 }
 
 /** Per-conversation agent execution state */
@@ -102,6 +105,11 @@ export interface SkillContext {
   setSkills: React.Dispatch<React.SetStateAction<SkillSummary[]>>;
   setPendingSkillConfirm: React.Dispatch<React.SetStateAction<BoundSkillConfirmRequest | null>>;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
+}
+
+/** Global, non-conversation-scoped UI notifications */
+export interface GlobalNotificationContext {
+  setGlobalError: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 /** Context window token tracking and compression */
@@ -138,32 +146,42 @@ export interface MessageHandlerContext
     SettingsContext,
     AgentStateContext,
     SkillContext,
+    GlobalNotificationContext,
     ContextManagementContext,
     HelperContext {
   // Conversation list management
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
   setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
-  // Background tasks
-  setBackgroundTasks: React.Dispatch<React.SetStateAction<BackgroundTask[]>>;
+  // Observable work items
+  setWorkItemsByConversation: React.Dispatch<React.SetStateAction<AgentWorkItemStore>>;
   // Project files
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
   // Unified @mention items (files + canvas nodes + characters)
   setMentionItems: React.Dispatch<React.SetStateAction<MentionItem[]>>;
   // Plugin slash commands registered by external extensions
   setPluginCommands: React.Dispatch<React.SetStateAction<PluginSlashCommandDef[]>>;
+  setPluginsAvailable: React.Dispatch<React.SetStateAction<PluginsAvailable>>;
   // SSO/Onboarding
   setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
+export type WebviewMessageType = ExtensionToWebviewMessage['type'];
+
 /**
- * Message handler function signature.
- *
- * @deprecated Prefer TypedMessageHandler for new handlers.
- * Retained for backward compatibility during incremental migration.
+ * Type guard that keeps the runtime dispatch boundary aligned with the protocol union.
  */
-export type MessageHandler = (
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  message: any,
+export function isMessageOfType<T extends WebviewMessageType>(
+  message: ExtensionToWebviewMessage,
+  type: T,
+): message is MessageOfType<T> {
+  return message.type === type;
+}
+
+/**
+ * Message handler function signature bound to a concrete protocol message type.
+ */
+export type MessageHandler<T extends WebviewMessageType = WebviewMessageType> = (
+  message: MessageOfType<T>,
   context: MessageHandlerContext,
 ) => void;
 
@@ -173,15 +191,38 @@ export type MessageHandler = (
  * Usage: `const handler: TypedMessageHandler<'streamText'> = (message, ctx) => { ... }`
  * The `message` parameter is automatically narrowed to `StreamTextMessage`.
  */
-export type TypedMessageHandler<T extends ExtensionToWebviewMessage['type']> = (
+export type TypedMessageHandler<T extends WebviewMessageType> = (
   message: MessageOfType<T>,
+  context: MessageHandlerContext,
+) => void;
+
+/**
+ * Erased dispatcher stored by the registry after defineHandler() validates the
+ * concrete type/handler pairing at the module boundary.
+ */
+export type ProtocolMessageDispatcher = (
+  message: ExtensionToWebviewMessage,
   context: MessageHandlerContext,
 ) => void;
 
 /**
  * Message handler registration
  */
-export interface HandlerRegistration {
-  type: string;
-  handler: MessageHandler;
+export interface HandlerRegistration<T extends WebviewMessageType = WebviewMessageType> {
+  type: T;
+  handler: ProtocolMessageDispatcher;
+}
+
+export function defineHandler<T extends WebviewMessageType>(
+  type: T,
+  handler: MessageHandler<T>,
+): HandlerRegistration<T> {
+  return {
+    type,
+    handler: (message, context) => {
+      if (isMessageOfType(message, type)) {
+        handler(message, context);
+      }
+    },
+  };
 }
