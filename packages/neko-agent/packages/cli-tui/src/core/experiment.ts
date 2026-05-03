@@ -12,7 +12,6 @@ import {
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
-  buildAgentSessionConfigWithRuntime,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   createCoreTools,
@@ -26,6 +25,7 @@ import {
   type IExperimentSession,
   type ISessionFactory,
 } from '@neko/agent';
+import { buildAgentSessionConfigWithRuntime } from '@neko/agent/runtime';
 import type { IService } from '@neko/shared';
 import type { IRuntimeTaskManager } from '@neko/agent';
 import type { CLIConfig } from './types';

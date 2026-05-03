@@ -50,7 +50,6 @@ describe('handleSlashCommand', () => {
         entrySignal: 'prompt-chain-skill',
         taskShape: 'multi-step',
         runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
-        workflowId: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
       },
     });
   });

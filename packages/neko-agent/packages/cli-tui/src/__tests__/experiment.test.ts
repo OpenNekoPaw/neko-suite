@@ -22,6 +22,11 @@ const loadProjectMemory = vi.fn(async () => undefined);
 const createCLIPlatform = vi.fn(() => ({ service: makeService() }));
 const createCLITaskManager = vi.fn(() => ({ id: 'task-manager' }));
 
+vi.mock('@neko/agent/runtime', () => ({
+  buildAgentSessionConfigWithRuntime,
+  createNodeArtifactStore: vi.fn(() => ({ id: 'artifact-store' })),
+}));
+
 vi.mock('@neko/agent', () => ({
   AgentSession: class AgentSession {},
   ExperimentRunner: class ExperimentRunner {
@@ -46,7 +51,6 @@ vi.mock('@neko/agent', () => ({
   ToolRegistry: class ToolRegistry {
     registerMany = registerMany;
   },
-  buildAgentSessionConfigWithRuntime,
   createSystemPromptBuilder: vi.fn(() => ({
     loadAgentsFile,
     build: vi.fn(() => 'system prompt'),
@@ -54,7 +58,6 @@ vi.mock('@neko/agent', () => ({
   getDefaultPersonalPath: vi.fn(() => '/home/user/.neko/AGENTS.md'),
   createCoreTools,
   createFileProjectMemoryManager: vi.fn(() => ({ load: loadProjectMemory })),
-  createNodeArtifactStore: vi.fn(() => ({ id: 'artifact-store' })),
   ToolGroupRegistry: class ToolGroupRegistry {},
   registerBuiltinToolGroups,
   createConversationId,

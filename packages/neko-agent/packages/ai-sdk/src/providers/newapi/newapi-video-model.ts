@@ -186,7 +186,7 @@ export class NewAPIVideoModel implements VideoModelV3 {
 
           const videoBuffer = await videoResponse.arrayBuffer();
           return {
-            type: 'file' as const,
+            type: 'binary' as const,
             data: new Uint8Array(videoBuffer),
             mediaType: 'video/mp4',
           };

@@ -15,7 +15,6 @@ import {
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
-  createAgentSessionWithRuntime,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   createInputProcessor,
@@ -27,6 +26,7 @@ import {
   type SkillService,
   type IRuntimeTaskManager,
 } from '@neko/agent';
+import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
 import { type Platform } from '@neko/platform';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';

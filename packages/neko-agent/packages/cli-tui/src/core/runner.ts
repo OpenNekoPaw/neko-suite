@@ -16,7 +16,6 @@ import {
   createNodeSkillLoader,
   ToolRegistry,
   AgentSession,
-  createAgentSessionWithRuntime,
   SystemPromptBuilder,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
@@ -30,6 +29,7 @@ import {
   createConversationId,
   type FileConversationStorage,
 } from '@neko/agent';
+import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
 import { toSharedService, type Platform } from '@neko/platform';
 
 type ExecutionMode = 'plan' | 'ask' | 'auto';
