@@ -5,17 +5,6 @@ import type {
   AgentMediaModelSelections,
   MediaModelCategory,
   ModelRef,
-  MarketInstallWebviewMessage,
-  MarketErrorMessage,
-  MarketFeaturedMessage,
-  MarketInstalledListMessage,
-  MarketInstallProgressMessage,
-  MarketInstallResultMessage,
-  MarketSearchWebviewMessage,
-  MarketSearchResultMessage,
-  MarketUninstallWebviewMessage,
-  MarketUninstallResultMessage,
-  MarketUpdatesMessage,
   ProjectFileMentionInfo,
   SsoSessionChangedMessage,
 } from './webview-protocol';
@@ -104,50 +93,3 @@ export interface PluginSlashCommandProjection {
   icon?: string;
   extensionId: string;
 }
-
-export type MarketplaceProjectionMessage =
-  | MarketSearchResultMessage
-  | MarketInstallProgressMessage
-  | MarketInstallResultMessage
-  | MarketUninstallResultMessage
-  | MarketInstalledListMessage
-  | MarketUpdatesMessage
-  | MarketFeaturedMessage
-  | MarketErrorMessage;
-
-export type MarketplaceRequestProjection =
-  | { readonly kind: 'search'; readonly query: MarketSearchWebviewMessage['query'] }
-  | {
-      readonly kind: 'install';
-      readonly packageId: MarketInstallWebviewMessage['packageId'];
-      readonly version: MarketInstallWebviewMessage['version'];
-    }
-  | { readonly kind: 'uninstall'; readonly packageId: MarketUninstallWebviewMessage['packageId'] }
-  | { readonly kind: 'listInstalled' }
-  | { readonly kind: 'checkUpdates' }
-  | { readonly kind: 'getFeatured' };
-
-export type MarketplaceExecutionEventProjection =
-  | { readonly kind: 'searchResult'; readonly data: NonNullable<MarketSearchResultMessage['data']> }
-  | {
-      readonly kind: 'installProgress';
-      readonly data: NonNullable<MarketInstallProgressMessage['data']>;
-    }
-  | {
-      readonly kind: 'installResult';
-      readonly data: NonNullable<MarketInstallResultMessage['data']>;
-    }
-  | {
-      readonly kind: 'uninstallResult';
-      readonly data: NonNullable<MarketUninstallResultMessage['data']>;
-    }
-  | {
-      readonly kind: 'installedList';
-      readonly data: readonly NonNullable<MarketInstalledListMessage['data']>[number][];
-    }
-  | {
-      readonly kind: 'updates';
-      readonly data: readonly NonNullable<MarketUpdatesMessage['data']>[number][];
-    }
-  | { readonly kind: 'featured'; readonly data: NonNullable<MarketFeaturedMessage['data']> }
-  | { readonly kind: 'error'; readonly error: MarketErrorMessage['error'] };

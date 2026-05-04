@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   projectChatWorkspaceModelState,
   projectConfigStateMessage,
-  projectMarketplaceError,
   projectMediaModelSelectionDefaults,
   projectMediaModelSelectionForSessionModeChange,
   projectMessageModelSelection,
@@ -405,9 +404,6 @@ describe('config message presenter', () => {
 
     expect(projectSettingsMutationError({ type: 'settingsUpdated', success: false })).toBe(
       'Settings update failed.',
-    );
-    expect(projectMarketplaceError({ type: 'market:error', error: 'Market failed' })).toBe(
-      'Market failed',
     );
   });
 

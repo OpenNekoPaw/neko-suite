@@ -357,40 +357,6 @@ export const VSCodeMessages = {
     });
   },
 
-  // ===========================================================================
-  // Skill Marketplace
-  // ===========================================================================
-
-  /** Search marketplace skills */
-  marketSearch: (query: { text?: string; tags?: string[]; page?: number }) => {
-    postWebviewMessage({ type: 'market:search', query: { ...query, types: ['skill'] } });
-  },
-
-  /** Install a skill from marketplace */
-  marketInstall: (packageId: string, version: string) => {
-    postWebviewMessage({ type: 'market:install', packageId, version });
-  },
-
-  /** Uninstall a marketplace skill */
-  marketUninstall: (packageId: string) => {
-    postWebviewMessage({ type: 'market:uninstall', packageId });
-  },
-
-  /** Get list of installed marketplace skills */
-  marketListInstalled: () => {
-    postWebviewMessage({ type: 'market:listInstalled' });
-  },
-
-  /** Check for updates */
-  marketCheckUpdates: () => {
-    postWebviewMessage({ type: 'market:checkUpdates' });
-  },
-
-  /** Get featured skills */
-  marketGetFeatured: () => {
-    postWebviewMessage({ type: 'market:getFeatured' });
-  },
-
   /** Open the full Neko Marketplace panel (neko-market extension) */
   openMarketplace: () => {
     postWebviewMessage({ type: 'openMarketplace' });

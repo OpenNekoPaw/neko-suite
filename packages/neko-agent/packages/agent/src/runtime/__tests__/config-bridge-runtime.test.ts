@@ -10,7 +10,6 @@ import {
   TOOL_SKILL_ENABLED_STATE_STORAGE_KEY,
   buildConfigBridgeConnectionStateChangedMessage,
   buildConfigBridgeGlobalErrorMessage,
-  buildConfigBridgeMarketplaceExecutionMessage,
   buildConfigBridgeSsoSessionChangedMessage,
   buildConfigChangedRuntimeMessage,
   buildHookConfigDataMessage,
@@ -20,7 +19,6 @@ import {
   createHookConfigSyncRuntime,
   createSkillConfigSyncRuntime,
   createToolSkillConfigSyncRuntime,
-  projectConfigBridgeMarketplaceRequest,
   runConfigBridgeQueryRuntime,
   runConfigBridgeSsoLoginRuntime,
   runConfigBridgeSsoLogoutRuntime,
@@ -227,22 +225,6 @@ describe('config-bridge-runtime', () => {
     ).toEqual({
       type: 'globalError',
       message: 'Failed to getConfig: bad',
-    });
-    expect(
-      projectConfigBridgeMarketplaceRequest({
-        type: 'market:install',
-        packageId: '@pub/camera',
-        version: '1.0.0',
-      }),
-    ).toEqual({ kind: 'install', packageId: '@pub/camera', version: '1.0.0' });
-    expect(
-      buildConfigBridgeMarketplaceExecutionMessage({
-        kind: 'installProgress',
-        data: { packageId: '@pub/camera', phase: 'download', percent: 50 },
-      }),
-    ).toEqual({
-      type: 'market:installProgress',
-      data: { packageId: '@pub/camera', phase: 'download', percent: 50 },
     });
   });
 

@@ -16,13 +16,6 @@ import type {
   ModelType,
   SkillSummary,
 } from '@neko/shared';
-import type {
-  InstallProgress,
-  InstallResult,
-  InstalledPackage,
-  MarketSearchResult,
-  UpdateInfo,
-} from '@neko/shared';
 import type { AgentPhase } from './phase';
 import type { Message } from './message';
 import type { Plan } from './plan';
@@ -120,10 +113,7 @@ export interface EmptyWebviewMessage {
     | 'ssoLogout'
     | 'openConfigFile'
     | 'getTabState'
-    | 'openMarketplace'
-    | 'market:listInstalled'
-    | 'market:checkUpdates'
-    | 'market:getFeatured';
+    | 'openMarketplace';
 }
 
 export interface PlanActionWebviewMessage {
@@ -233,22 +223,6 @@ export interface SsoLoginWebviewMessage {
   force?: boolean;
 }
 
-export interface MarketSearchWebviewMessage {
-  type: 'market:search';
-  query: { text?: string; tags?: string[]; page?: number; types?: string[] };
-}
-
-export interface MarketInstallWebviewMessage {
-  type: 'market:install';
-  packageId: string;
-  version: string;
-}
-
-export interface MarketUninstallWebviewMessage {
-  type: 'market:uninstall';
-  packageId: string;
-}
-
 export type WebviewToExtensionMessage =
   | SendMessageWebviewMessage
   | SearchProjectFilesWebviewMessage
@@ -271,10 +245,7 @@ export type WebviewToExtensionMessage =
   | ExecuteSkillWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
-  | SsoLoginWebviewMessage
-  | MarketSearchWebviewMessage
-  | MarketInstallWebviewMessage
-  | MarketUninstallWebviewMessage;
+  | SsoLoginWebviewMessage;
 
 export interface ProjectFileMentionInfo {
   path: string;
@@ -708,46 +679,6 @@ export interface GenerationProgressMessage {
   progress?: GenerationProgressPayload;
 }
 
-export interface MarketSearchResultMessage {
-  type: 'market:searchResult';
-  data?: MarketSearchResult;
-}
-
-export interface MarketInstallProgressMessage {
-  type: 'market:installProgress';
-  data?: InstallProgress;
-}
-
-export interface MarketInstallResultMessage {
-  type: 'market:installResult';
-  data?: InstallResult;
-}
-
-export interface MarketUninstallResultMessage {
-  type: 'market:uninstallResult';
-  data?: { packageId: string; success: boolean };
-}
-
-export interface MarketInstalledListMessage {
-  type: 'market:installedList';
-  data?: InstalledPackage[];
-}
-
-export interface MarketUpdatesMessage {
-  type: 'market:updates';
-  data?: UpdateInfo[];
-}
-
-export interface MarketFeaturedMessage {
-  type: 'market:featured';
-  data?: MarketSearchResult;
-}
-
-export interface MarketErrorMessage {
-  type: 'market:error';
-  error: string;
-}
-
 export type ExtensionToWebviewMessage =
   | ThinkingMessage
   | StreamTextMessage
@@ -805,15 +736,7 @@ export type ExtensionToWebviewMessage =
   | PrefillInputMessage
   | InjectContextMessage
   | AmbientCanvasUpdateMessage
-  | GenerationProgressMessage
-  | MarketSearchResultMessage
-  | MarketInstallProgressMessage
-  | MarketInstallResultMessage
-  | MarketUninstallResultMessage
-  | MarketInstalledListMessage
-  | MarketUpdatesMessage
-  | MarketFeaturedMessage
-  | MarketErrorMessage;
+  | GenerationProgressMessage;
 
 export type MessageOfType<T extends ExtensionToWebviewMessage['type']> = Extract<
   ExtensionToWebviewMessage,
@@ -857,9 +780,6 @@ const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'openConfigFile',
   'getTabState',
   'openMarketplace',
-  'market:listInstalled',
-  'market:checkUpdates',
-  'market:getFeatured',
 ];
 const PLAN_ACTION_MESSAGE_TYPES: readonly PlanActionWebviewMessage['type'][] = [
   'planApprove',
@@ -899,9 +819,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'invokeSlashCommand',
   'invokePluginSlashCommand',
   'ssoLogin',
-  'market:search',
-  'market:install',
-  'market:uninstall',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 const PROMPT_MODES: readonly SetPromptModeWebviewMessage['mode'][] = ['default', 'plan'];
@@ -1242,12 +1159,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokePluginSlashCommandMessage(raw);
     case 'ssoLogin':
       return parseSsoLoginMessage(raw);
-    case 'market:search':
-      return parseMarketSearchMessage(raw);
-    case 'market:install':
-      return parseMarketInstallMessage(raw);
-    case 'market:uninstall':
-      return parseMarketUninstallMessage(raw);
     default:
       return null;
   }
@@ -1576,26 +1487,6 @@ function parseSsoLoginMessage(raw: Record<string, unknown>): SsoLoginWebviewMess
   return { type: 'ssoLogin', force };
 }
 
-function parseMarketSearchMessage(raw: Record<string, unknown>): MarketSearchWebviewMessage | null {
-  const query = parseMarketSearchQuery(raw.query);
-  return query ? { type: 'market:search', query } : null;
-}
-
-function parseMarketInstallMessage(
-  raw: Record<string, unknown>,
-): MarketInstallWebviewMessage | null {
-  const packageId = requiredString(raw.packageId);
-  const version = requiredString(raw.version);
-  return packageId && version ? { type: 'market:install', packageId, version } : null;
-}
-
-function parseMarketUninstallMessage(
-  raw: Record<string, unknown>,
-): MarketUninstallWebviewMessage | null {
-  const packageId = requiredString(raw.packageId);
-  return packageId ? { type: 'market:uninstall', packageId } : null;
-}
-
 function parseAgentMediaModelSelections(value: unknown): AgentMediaModelSelections | null {
   if (!isRecord(value)) return null;
 
@@ -1649,27 +1540,6 @@ function parseOpenTabs(value: unknown): OpenTab[] | null {
   return tabs;
 }
 
-function parseStringArray(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
-  const values: string[] = [];
-  for (const item of value) {
-    if (typeof item !== 'string') return null;
-    values.push(item);
-  }
-  return values;
-}
-
-function parseStringRecord(value: unknown): Record<string, string> | null {
-  if (!isRecord(value)) return null;
-
-  const result: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (typeof entry !== 'string') return null;
-    result[key] = entry;
-  }
-  return result;
-}
-
 function parseOpenFileOptions(value: unknown): OpenFileWebviewMessage['options'] | null {
   if (!isRecord(value)) return null;
   const options: NonNullable<OpenFileWebviewMessage['options']> = {};
@@ -1686,30 +1556,6 @@ function parseOpenFileOptions(value: unknown): OpenFileWebviewMessage['options']
     options.column = value.column;
   }
   return options;
-}
-
-function parseMarketSearchQuery(value: unknown): MarketSearchWebviewMessage['query'] | null {
-  if (!isRecord(value)) return null;
-
-  const text = optionalStringStrict(value.text);
-  const tags = value.tags === undefined ? undefined : parseStringArray(value.tags);
-  const types = value.types === undefined ? undefined : parseStringArray(value.types);
-  const page = value.page;
-  if (
-    text === null ||
-    tags === null ||
-    types === null ||
-    (page !== undefined && !isFiniteNumber(page))
-  ) {
-    return null;
-  }
-
-  return {
-    ...(text !== undefined ? { text } : {}),
-    ...(tags !== undefined ? { tags } : {}),
-    ...(isFiniteNumber(page) ? { page } : {}),
-    ...(types !== undefined ? { types } : {}),
-  };
 }
 
 function isConversationOnlyMessageType(

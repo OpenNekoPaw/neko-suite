@@ -16,9 +16,6 @@ import {
   type ConnectionStatesMessage,
   type GlobalErrorMessage,
   type HooksDataMessage,
-  type MarketplaceExecutionEventProjection,
-  type MarketplaceProjectionMessage,
-  type MarketplaceRequestProjection,
   type ProtocolConnectionStateMap,
   type ProtocolConnectionStatus,
   type SsoErrorMessage,
@@ -26,7 +23,6 @@ import {
   type SsoSessionMessagePayload,
   type SkillsDataMessage,
   type ToolSkillsDataMessage,
-  type WebviewToExtensionMessage,
 } from '@neko-agent/types';
 import type {
   ConfiguredHook,
@@ -141,18 +137,6 @@ export function buildConfigBridgeGlobalErrorMessage(input: {
   return buildGlobalErrorMessage(`Failed to ${input.action}: ${message}`);
 }
 
-export function projectConfigBridgeMarketplaceRequest(
-  message: WebviewToExtensionMessage,
-): MarketplaceRequestProjection | null {
-  return projectMarketplaceRequestMessage(message);
-}
-
-export function buildConfigBridgeMarketplaceExecutionMessage(
-  event: MarketplaceExecutionEventProjection,
-): MarketplaceProjectionMessage {
-  return buildMarketplaceExecutionMessage(event);
-}
-
 export function runConfigBridgeSsoLoginRuntime(
   input: { force?: boolean },
   effects: SsoRuntimeEffects,
@@ -227,50 +211,6 @@ function buildSsoErrorMessage(error: unknown): SsoErrorMessage {
     type: 'ssoError',
     error: error instanceof Error ? error.message : String(error),
   };
-}
-
-function projectMarketplaceRequestMessage(
-  message: WebviewToExtensionMessage,
-): MarketplaceRequestProjection | null {
-  switch (message.type) {
-    case 'market:search':
-      return { kind: 'search', query: message.query };
-    case 'market:install':
-      return { kind: 'install', packageId: message.packageId, version: message.version };
-    case 'market:uninstall':
-      return { kind: 'uninstall', packageId: message.packageId };
-    case 'market:listInstalled':
-      return { kind: 'listInstalled' };
-    case 'market:checkUpdates':
-      return { kind: 'checkUpdates' };
-    case 'market:getFeatured':
-      return { kind: 'getFeatured' };
-    default:
-      return null;
-  }
-}
-
-function buildMarketplaceExecutionMessage(
-  event: MarketplaceExecutionEventProjection,
-): MarketplaceProjectionMessage {
-  switch (event.kind) {
-    case 'searchResult':
-      return { type: 'market:searchResult', data: event.data };
-    case 'installProgress':
-      return { type: 'market:installProgress', data: event.data };
-    case 'installResult':
-      return { type: 'market:installResult', data: event.data };
-    case 'uninstallResult':
-      return { type: 'market:uninstallResult', data: event.data };
-    case 'installedList':
-      return { type: 'market:installedList', data: [...event.data] };
-    case 'updates':
-      return { type: 'market:updates', data: [...event.data] };
-    case 'featured':
-      return { type: 'market:featured', data: event.data };
-    case 'error':
-      return { type: 'market:error', error: event.error };
-  }
 }
 
 export interface EnabledStateRuntimeStorage {

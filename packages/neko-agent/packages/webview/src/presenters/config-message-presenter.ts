@@ -12,7 +12,6 @@ import type {
   MediaModelSelectionState,
   MessageModelProjection,
   MessageModelProjectionInput,
-  MarketplaceProjectionMessage,
   ModelRef,
   PluginCommandsMessage,
   PluginSlashCommandProjection,
@@ -257,10 +256,6 @@ export function projectSettingsMutationError(
   message: SettingsUpdatedMessage | ProviderMutationResultMessage,
 ): string | null {
   return message.success === false ? message.error || 'Settings update failed.' : null;
-}
-
-export function projectMarketplaceError(message: MarketplaceProjectionMessage): string | null {
-  return message.type === 'market:error' ? message.error : null;
 }
 
 function readProviderViews(value: unknown): SettingsState['providers'] {

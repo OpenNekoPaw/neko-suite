@@ -16,14 +16,6 @@ import type {
   ConnectionStatesMessage,
   GenerationProgressMessage,
   HooksDataMessage,
-  MarketErrorMessage,
-  MarketFeaturedMessage,
-  MarketInstalledListMessage,
-  MarketInstallProgressMessage,
-  MarketInstallResultMessage,
-  MarketSearchResultMessage,
-  MarketUninstallResultMessage,
-  MarketUpdatesMessage,
   McpServerTestResultMessage,
   PluginCommandsMessage,
   PluginsAvailableMessage,
@@ -38,7 +30,6 @@ import type {
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import {
   projectConfigStateMessage,
-  projectMarketplaceError,
   projectMediaModelSelectionDefaults,
   projectPluginCommandsMessage,
   projectPluginsAvailableMessage,
@@ -230,35 +221,6 @@ const handleBridgeStateOnlyMessage: MessageHandler<
 };
 
 /**
- * Consume marketplace result messages. The in-chat marketplace UI is not mounted
- * today; errors still surface globally.
- */
-const handleMarketplaceMessage: MessageHandler<
-  | 'market:searchResult'
-  | 'market:installProgress'
-  | 'market:installResult'
-  | 'market:uninstallResult'
-  | 'market:installedList'
-  | 'market:updates'
-  | 'market:featured'
-  | 'market:error'
-> = (
-  message:
-    | MarketSearchResultMessage
-    | MarketInstallProgressMessage
-    | MarketInstallResultMessage
-    | MarketUninstallResultMessage
-    | MarketInstalledListMessage
-    | MarketUpdatesMessage
-    | MarketFeaturedMessage
-    | MarketErrorMessage,
-  context,
-) => {
-  const error = projectMarketplaceError(message);
-  if (error) context.setGlobalError(error);
-};
-
-/**
  * Skills/hooks data handlers removed — webview does not consume this data.
  * Skills and hooks are managed internally by Extension (ConfigBridge accessors).
  */
@@ -287,12 +249,4 @@ export const configHandlers: HandlerRegistration[] = [
   defineHandler('toolSkillsData', handleBridgeStateOnlyMessage),
   defineHandler('toolSkillsChanged', handleBridgeStateOnlyMessage),
   defineHandler('generationProgress', handleBridgeStateOnlyMessage),
-  defineHandler('market:searchResult', handleMarketplaceMessage),
-  defineHandler('market:installProgress', handleMarketplaceMessage),
-  defineHandler('market:installResult', handleMarketplaceMessage),
-  defineHandler('market:uninstallResult', handleMarketplaceMessage),
-  defineHandler('market:installedList', handleMarketplaceMessage),
-  defineHandler('market:updates', handleMarketplaceMessage),
-  defineHandler('market:featured', handleMarketplaceMessage),
-  defineHandler('market:error', handleMarketplaceMessage),
 ];

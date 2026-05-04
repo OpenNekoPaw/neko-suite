@@ -10,18 +10,12 @@
  */
 
 import * as vscode from 'vscode';
-import {
-  executeSkillMarketRequest,
-  type Platform,
-  type SkillMarketExecutionRequest,
-} from '@neko/platform';
+import { type Platform } from '@neko/platform';
 import {
   buildConfigBridgeConnectionStateChangedMessage,
   buildConfigBridgeGlobalErrorMessage,
-  buildConfigBridgeMarketplaceExecutionMessage,
   buildConfigBridgeSsoSessionChangedMessage,
   NEKO_AUTH_EXTENSION_ID,
-  projectConfigBridgeMarketplaceRequest,
   runConfigBridgeQueryRuntime,
   runConfigBridgeSsoLoginRuntime,
   runConfigBridgeSsoLogoutRuntime,
@@ -53,7 +47,6 @@ import { SkillSyncHandler } from './skillSyncHandler';
 import { HookSyncHandler } from './hookSyncHandler';
 import { ToolSkillHandler } from './toolSkillHandler';
 import { ConfigFileHandler } from './configFileHandler';
-import { resolveNekoMarketRuntime } from '../marketBridge';
 
 export type { PostMessageFn } from './types';
 export type { ConfigStateWithStatus } from './types';
@@ -65,12 +58,6 @@ export const CONFIG_BRIDGE_MESSAGE_TYPES = [
   'openUserConfigFile',
   'ssoLogin',
   'ssoLogout',
-  'market:search',
-  'market:install',
-  'market:uninstall',
-  'market:listInstalled',
-  'market:checkUpdates',
-  'market:getFeatured',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 // ---------------------------------------------------------------------------
@@ -170,12 +157,6 @@ export class ConfigBridge implements vscode.Disposable {
     postMessage: PostMessageFn,
   ): Promise<boolean> {
     try {
-      const marketRequest = projectConfigBridgeMarketplaceRequest(message);
-      if (marketRequest) {
-        await this.handleSkillMarketRequest(postMessage, marketRequest);
-        return true;
-      }
-
       switch (message.type) {
         case 'getConfig':
           await this.postConfigBridgeQuery({ type: 'getConfig' }, postMessage);
@@ -252,21 +233,6 @@ export class ConfigBridge implements vscode.Disposable {
         ...(event.error !== undefined ? { error: event.error } : {}),
       }),
     );
-  }
-
-  private async handleSkillMarketRequest(
-    postMessage: PostMessageFn,
-    request: SkillMarketExecutionRequest,
-  ): Promise<void> {
-    const market = (await resolveNekoMarketRuntime()) ?? this.platform.skillMarket;
-    await executeSkillMarketRequest({
-      market,
-      request,
-      onEvent: (event) => {
-        postMessage(buildConfigBridgeMarketplaceExecutionMessage(event));
-      },
-      logger,
-    });
   }
 
   private async postConfigBridgeQuery(
