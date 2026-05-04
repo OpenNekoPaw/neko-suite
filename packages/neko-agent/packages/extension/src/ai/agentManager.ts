@@ -9,23 +9,13 @@
  */
 
 import * as vscode from 'vscode';
-import { createServiceId, getLogger } from '../base';
+import { getLogger } from '../base';
 
 const logger = getLogger('AgentManager');
 import type { ChatMessage } from '@neko/shared';
 import { createAgentRuntimeManager, type AgentRuntimeManager } from '@neko/agent/runtime';
 import { type AgentHistoryWithToolContextMessage, type SkillInjection } from '@neko/agent';
 import { AgentRunner, IAgentRunner } from './agentRunner';
-
-// =============================================================================
-// Service Identifier
-// =============================================================================
-
-export const IAgentManager = createServiceId<IAgentManager>('agentManager');
-
-// =============================================================================
-// Interface
-// =============================================================================
 
 /**
  * Agent Manager 接口

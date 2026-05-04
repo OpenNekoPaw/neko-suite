@@ -11,4 +11,5 @@ export {
   AgentEventType,
   ExecutionMode,
 } from './agentRunner';
-export { IAgentManager, AgentManager } from './agentManager';
+export { AgentManager } from './agentManager';
+export type { IAgentManager } from './agentManager';
