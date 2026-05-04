@@ -7,6 +7,7 @@ import type {
   Message,
   ModelRef,
   ToolConfirmationMessage,
+  AgentWorkflowIdentity,
 } from '@neko-agent/types';
 import {
   buildAgentPhaseMessage,
@@ -32,7 +33,10 @@ import {
   type ProviderExpressionTargetConfig,
 } from './message-runtime';
 import type { AgentBase64ImageAttachment } from './attachment-projection';
-import { createCanvasSelectionContextPacket } from './multimodal-context-packet';
+import {
+  buildTurnMultimodalContextPacket,
+  createCanvasSelectionContextPacket,
+} from './multimodal-context-packet';
 
 export interface AgentTurnDisposable {
   dispose(): void;
@@ -198,6 +202,7 @@ export interface ExecuteAgentTurnInput<
   readonly generateMessageId: () => string;
   readonly now?: () => number;
   readonly taskManager?: IRuntimeTaskManager;
+  readonly workflow?: AgentWorkflowIdentity;
 }
 
 export type AgentTurnForWebviewRuntimeMessage =
@@ -404,12 +409,23 @@ export async function executeAgentTurn<
           userAnnotation: input.message,
         })
       : null;
+  const multimodalContextPacket = buildTurnMultimodalContextPacket({
+    conversationId: input.conversationId,
+    message: input.message,
+    imageAttachments: input.imageAttachments,
+    timelineContextPacket: isMultimodalContextPacket(timelineContextPacket)
+      ? timelineContextPacket
+      : null,
+    canvasContextPacket,
+    ...(input.workflow ? { workflow: input.workflow } : {}),
+  });
 
   const contextPatch = buildAgentTurnContextPatch({
     imageAttachments: input.imageAttachments,
     timelineContextPacket,
     canvasNodes: ambientCanvas,
     canvasContextPacket,
+    multimodalContextPacket,
     executionMetadata: turnConfig.executionMetadata,
   });
   applyAgentTurnContextPatch(context, contextPatch, input.applyContextPatch);
@@ -459,6 +475,17 @@ export async function executeAgentTurn<
   } finally {
     confirmationDisposable?.dispose();
   }
+}
+
+function isMultimodalContextPacket(
+  value: unknown,
+): value is import('@neko/shared').MultimodalContextPacket {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    Array.isArray((value as { readonly perceptionInputs?: unknown }).perceptionInputs) &&
+    Array.isArray((value as { readonly selection?: unknown }).selection),
+  );
 }
 
 function hydrateAgentHistoryIfNeeded<

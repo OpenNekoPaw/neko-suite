@@ -10,12 +10,14 @@ import {
   type ManagedAgentRuntime,
 } from './agent-runtime-pool';
 import { SubAgentRuntimeCoordinator } from './subagent-runtime';
+import type {
+  AgentRunnerEventSource,
+  AgentRunnerPortEvent,
+  DisposableLike,
+} from './agent-runner-port';
 
-export interface AgentRuntimeManagerDisposable {
-  dispose(): void;
-}
-
-export type AgentRuntimeManagerEvent = (listener: () => void) => AgentRuntimeManagerDisposable;
+export type AgentRuntimeManagerDisposable = DisposableLike;
+export type AgentRuntimeManagerEvent = AgentRunnerEventSource<void>;
 
 export interface AgentRuntimeCompressionResult {
   readonly originalTokens: number;
@@ -36,6 +38,7 @@ export interface AgentRuntimeManagerAgent extends ManagedAgentRuntime {
   isToolAllowed(toolName: string): boolean;
   setSkillProvider(provider: ISkillProvider): void;
   refreshCapabilityRuntime(): void;
+  readonly onDidRunnerEvent?: AgentRunnerEventSource<AgentRunnerPortEvent>;
   readonly onDidStart?: AgentRuntimeManagerEvent;
   readonly onDidStop?: AgentRuntimeManagerEvent;
 }
@@ -259,6 +262,22 @@ class DefaultAgentRuntimeManager<
     agent: TAgent,
   ): AgentRuntimeManagerDisposable[] {
     const disposables: AgentRuntimeManagerDisposable[] = [];
+    if (agent.onDidRunnerEvent) {
+      disposables.push(
+        agent.onDidRunnerEvent((event) => {
+          if (event.type === 'start') {
+            this.options.onAgentStart?.({ conversationId });
+            return;
+          }
+          if (event.type === 'stop') {
+            this.options.onAgentStop?.({ conversationId });
+          }
+        }),
+      );
+      return disposables;
+    }
+
+    // TODO(P1): Remove individual event fallback after all hosts expose AgentRunnerPort.
     if (agent.onDidStart && this.options.onAgentStart) {
       disposables.push(agent.onDidStart(() => this.options.onAgentStart?.({ conversationId })));
     }

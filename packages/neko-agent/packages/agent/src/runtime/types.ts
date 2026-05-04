@@ -7,7 +7,7 @@ import type {
   IOperationToolAdapterRegistry,
   PromptFragment,
 } from '@neko/shared';
-import type { IdcStage } from '@neko-agent/types';
+import type { AgentWorkflowIdentity, IdcStage } from '@neko-agent/types';
 import type { IArtifactWatcher } from '../artifact';
 import type { IEventBus } from '../events';
 import type { SkillService } from '../skill/skill-service';
@@ -54,6 +54,9 @@ export interface IRuntimeWorkspaceFsOps {
  * session/runtime stack without duplicating configuration glue.
  */
 export interface IWorkflowRuntime {
+  readonly workflow?: {
+    readonly active?: AgentWorkflowIdentity;
+  };
   readonly stageTracking?: {
     readonly skillRegistry?: ISkillRegistry;
     readonly skillService?: SkillService;

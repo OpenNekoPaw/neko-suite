@@ -10,3 +10,7 @@ export type { ProviderConfig, ResolvedProvider } from './types';
 export type { LegacyMediaAdapter, LegacyAdapterResult, LegacyMediaOutput } from './types';
 export { createNewAPIProvider } from './providers/newapi';
 export { createLegacyBridgeProvider } from './bridge';
+export {
+  projectMultimodalPacketToChatMessage,
+  type MultimodalMessageProjectionOptions,
+} from './multimodal-message-projection';

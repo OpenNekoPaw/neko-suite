@@ -6,6 +6,7 @@ import {
   type AgentRuntimeManagerAgent,
   type AgentRuntimeManagerEvent,
 } from '../agent-runtime-manager';
+import type { AgentRunnerEventSource, AgentRunnerPortEvent } from '../agent-runner-port';
 
 class MockAgent implements AgentRuntimeManagerAgent {
   readonly onDidStart: AgentRuntimeManagerEvent = (listener) => {
@@ -59,6 +60,24 @@ class MockAgent implements AgentRuntimeManagerAgent {
   }
 }
 
+class MockPortEventAgent extends MockAgent {
+  readonly onDidRunnerEvent: AgentRunnerEventSource<AgentRunnerPortEvent> = (listener) => {
+    this.runnerEventListeners.push(listener);
+    return { dispose: () => this.removeRunnerEventListener(listener) };
+  };
+
+  private readonly runnerEventListeners: Array<(event: AgentRunnerPortEvent) => void> = [];
+
+  fireRunnerEvent(event: AgentRunnerPortEvent): void {
+    for (const listener of this.runnerEventListeners) listener(event);
+  }
+
+  private removeRunnerEventListener(listener: (event: AgentRunnerPortEvent) => void): void {
+    const index = this.runnerEventListeners.indexOf(listener);
+    if (index >= 0) this.runnerEventListeners.splice(index, 1);
+  }
+}
+
 function makeMessage(content: string): ChatMessage {
   return { role: 'user', content };
 }
@@ -83,6 +102,25 @@ describe('AgentRuntimeManager', () => {
     expect(stops).toEqual(['conversation-1']);
     expect(agent.cancel).toHaveBeenCalledOnce();
     expect(agent.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('prefers host-agnostic runner port events over compatibility start/stop events', () => {
+    const starts: string[] = [];
+    const stops: string[] = [];
+    const manager = createAgentRuntimeManager({
+      createAgent: () => new MockPortEventAgent(),
+      onAgentStart: ({ conversationId }) => starts.push(conversationId),
+      onAgentStop: ({ conversationId }) => stops.push(conversationId),
+    });
+
+    const agent = manager.getOrCreate('conversation-1') as MockPortEventAgent;
+    agent.fireRunnerEvent({ type: 'start' });
+    agent.fireRunnerEvent({ type: 'stop' });
+    agent.fireStart();
+    agent.fireStop();
+
+    expect(starts).toEqual(['conversation-1']);
+    expect(stops).toEqual(['conversation-1']);
   });
 
   it('hydrates tool result context before loading history', () => {

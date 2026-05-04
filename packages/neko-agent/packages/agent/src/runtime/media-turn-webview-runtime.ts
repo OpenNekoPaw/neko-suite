@@ -9,6 +9,7 @@ import {
   type MediaTaskCreatedMessage,
   type MediaTaskProgressMessage,
   type ModelRef,
+  type AgentWorkflowIdentity,
 } from '@neko-agent/types';
 
 export type AgentMediaTurnRuntimeMessage =
@@ -69,6 +70,7 @@ export interface RunAgentMediaTurnForWebviewInput<
   readonly conversationId: string;
   readonly prompt: string;
   readonly mediaModel: ModelRef<MediaModelCategory>;
+  readonly workflow?: AgentWorkflowIdentity;
   readonly executeMediaTurn?: (
     input: AgentMediaTurnExecutionInput<TTaskView, TSourceTask>,
   ) => Promise<unknown>;
@@ -125,6 +127,7 @@ export async function runAgentMediaTurnForWebview<
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,
+              workflow: input.workflow,
             }),
           }),
         );
@@ -144,6 +147,7 @@ export async function runAgentMediaTurnForWebview<
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,
+              workflow: input.workflow,
             }),
           }),
         );

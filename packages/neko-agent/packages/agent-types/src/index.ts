@@ -95,6 +95,56 @@ export type {
   SubAgentWorkItemEventType,
   TaskWorkItem,
 } from './work-item';
+export type {
+  AgentWorkflowDefinition,
+  AgentWorkflowIdentity,
+  AgentWorkflowNode,
+  AgentWorkflowNodeKind,
+  AgentWorkflowProjection,
+  AgentWorkflowRun,
+  AgentWorkflowStageProfile,
+  AgentWorkflowStatus,
+  AgentWorkflowTransition,
+} from './workflow';
+export type {
+  AgentCapabilityContribution,
+  AgentCapabilityContributionIdentity,
+  AgentCapabilityContributionKind,
+  AgentCapabilityDiagnostic,
+  AgentCapabilityDiagnosticPhase,
+  AgentCapabilityInjectionContext,
+  AgentCapabilityPermissionMode,
+  AgentCapabilityPermissionRequirement,
+  AgentCapabilityRegistryProjection,
+  AgentCapabilitySlashCommandContribution,
+  AgentCapabilitySource,
+  AgentCapabilityWorkflowNodeRequirement,
+  AgentCapabilityWorkflowFragmentContribution,
+  AgentInjectedCapabilitySet,
+} from './capability';
+export type {
+  GeneratedPromptBundle,
+  GeneratedPromptSection,
+  GeneratedSchemaBundle,
+  GeneratedSchemaPurpose,
+  GeneratedStructuredSchema,
+  PromptGenerationContext,
+  PromptGenerationProviderCapabilities,
+  PromptGenerationWorkflowContext,
+  PromptSchemaProviderToolMode,
+  PromptSchemaStructuredOutputMode,
+} from './prompt-schema';
+export type {
+  AgentGeneratedArtifactProjection,
+  AgentMediaMetadata,
+  AgentMediaModality,
+  AgentMediaPayload,
+  AgentMediaPayloadRequest,
+  AgentMultimodalEvidenceRef,
+  AgentMultimodalHostAdapter,
+  AgentMultimodalPacketLinkage,
+  AgentToolModalityDeclaration,
+} from './multimodal-tooling';
 export {
   backgroundTaskToWorkItem,
   isSubAgentWorkItem,
@@ -207,6 +257,7 @@ export type {
   UpdateSettingsWebviewMessage,
   UpdateTabStateWebviewMessage,
   WebviewToExtensionMessage,
+  WorkflowProjectionMessage,
 } from './webview-protocol';
 export {
   buildAmbientCanvasUpdateMessage,
@@ -233,6 +284,7 @@ export {
   buildTasksUpdatedMessage,
   buildThinkingMessage,
   buildToolConfirmationMessage,
+  buildWorkflowProjectionMessage,
   isSessionMode,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,

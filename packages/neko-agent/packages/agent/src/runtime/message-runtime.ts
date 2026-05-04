@@ -285,6 +285,7 @@ export interface AgentTurnContextPatchInput {
   readonly timelineContextPacket?: unknown;
   readonly canvasNodes?: readonly AgentAmbientCanvasNode[];
   readonly canvasContextPacket?: unknown;
+  readonly multimodalContextPacket?: unknown;
   readonly executionMetadata?: Record<string, unknown>;
 }
 
@@ -735,11 +736,13 @@ export function buildAgentTurnContextPatch(
     ...(input.canvasNodes && input.canvasNodes.length > 0
       ? { canvasContext: { selectedNodes: [...input.canvasNodes] } }
       : {}),
-    ...(input.canvasContextPacket !== undefined && input.canvasContextPacket !== null
-      ? { multimodalContextPacket: input.canvasContextPacket }
-      : input.timelineContextPacket !== undefined && input.timelineContextPacket !== null
-        ? { multimodalContextPacket: input.timelineContextPacket }
-        : {}),
+    ...(input.multimodalContextPacket !== undefined && input.multimodalContextPacket !== null
+      ? { multimodalContextPacket: input.multimodalContextPacket }
+      : input.canvasContextPacket !== undefined && input.canvasContextPacket !== null
+        ? { multimodalContextPacket: input.canvasContextPacket }
+        : input.timelineContextPacket !== undefined && input.timelineContextPacket !== null
+          ? { multimodalContextPacket: input.timelineContextPacket }
+          : {}),
     ...(input.executionMetadata ? { metadata: input.executionMetadata } : {}),
   };
 

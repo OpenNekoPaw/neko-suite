@@ -376,12 +376,14 @@ function toIterator(iterable: AsyncIterable<AgentEvent>) {
 describe('AgentRunner', () => {
   let runner: AgentRunner;
   let mockPlatform: Platform;
+  let subAgentRuntime: SubAgentRuntimeCoordinator;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    subAgentRuntime = new SubAgentRuntimeCoordinator();
     runner = new AgentRunner({
       createRuntimeController: createMockRuntimeController,
-      subAgentRuntime: new SubAgentRuntimeCoordinator(),
+      subAgentRuntime,
     });
     mockPlatform = createMockPlatform();
     capabilityRuntimeMock.skillRegistry = undefined;
@@ -872,6 +874,97 @@ describe('AgentRunner', () => {
 
       expect(listener).toHaveBeenCalled();
     });
+
+    it('应该通过统一 runner port 事件投影 start/stop', async () => {
+      await runner.configure({ platform: mockPlatform, maxIterations: 1 });
+
+      const listener = vi.fn();
+      runner.onDidRunnerEvent(listener);
+
+      await collectEvents(runner.execute('test', {}));
+
+      expect(listener).toHaveBeenCalledWith({ type: 'start' });
+      expect(listener).toHaveBeenCalledWith({ type: 'stop' });
+    });
+
+    it('应该通过统一 runner port 事件投影工具确认请求', async () => {
+      await runner.configure({ platform: mockPlatform, maxIterations: 1 });
+      const listener = vi.fn();
+      runner.onDidRunnerEvent(listener);
+      const config = latestCreateSessionConfig as {
+        onConfirmTool?: (request: {
+          toolCall: { id: string; name: string; arguments: Record<string, unknown> };
+          action: string;
+          description: string;
+          details: Record<string, unknown>;
+        }) => Promise<boolean>;
+      };
+
+      void config.onConfirmTool?.({
+        toolCall: { id: 'call-1', name: 'write_file', arguments: {} },
+        action: 'write',
+        description: 'Write file',
+        details: { path: 'README.md' },
+      });
+
+      expect(listener).toHaveBeenCalledWith({
+        type: 'confirmation',
+        request: {
+          toolCallId: 'call-1',
+          toolName: 'write_file',
+          action: 'write',
+          description: 'Write file',
+          details: { path: 'README.md' },
+        },
+      });
+      runner.confirmTool('call-1', false);
+    });
+
+    it('应该通过统一 runner port 事件投影 SubAgent 事件', async () => {
+      await runner.configure({
+        platform: mockPlatform,
+        conversationId: 'conv-1',
+        maxIterations: 1,
+      });
+      subAgentRuntime.ensureSystem({
+        createService: () => mockPlatform.createService() as never,
+        toolRegistry: mockPlatform.tools,
+      });
+      subAgentRuntime.registerRuntime({
+        conversationId: 'conv-1',
+        createService: () => mockPlatform.createService() as never,
+        toolRegistry: mockPlatform.tools,
+        modelId: 'mock-model',
+      });
+      const listener = vi.fn();
+      runner.onDidRunnerEvent(listener);
+      const taskTool = mockPlatform.tools.get('task');
+
+      await taskTool?.execute(
+        {
+          description: 'review',
+          prompt: 'Review the current scene',
+          run_in_background: true,
+        },
+        {
+          metadata: {
+            conversationId: 'conv-1',
+            parentAgentId: 'agent-conv-1',
+          },
+        },
+      );
+
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'subagent',
+          event: expect.objectContaining({
+            type: 'spawned',
+            parentAgentId: 'agent-conv-1',
+            conversationId: 'conv-1',
+          }),
+        }),
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -949,6 +1042,16 @@ describe('AgentRunner', () => {
 
       expect(history1).not.toBe(history2);
       expect(history1).toEqual(history2);
+    });
+
+    it('loadHistory 应该通过统一 runner port 事件投影', async () => {
+      await runner.configure({ platform: mockPlatform });
+      const listener = vi.fn();
+      runner.onDidRunnerEvent(listener);
+
+      runner.loadHistory([{ role: 'user', content: 'existing' }]);
+
+      expect(listener).toHaveBeenCalledWith({ type: 'historyLoaded', messageCount: 1 });
     });
   });
 
@@ -1132,6 +1235,31 @@ describe('AgentRunner', () => {
       const result = await runner.compressContext();
       expect(result.originalTokens).toBe(100);
       expect(result.compressedTokens).toBe(50);
+    });
+
+    it('compressContext 应该通过统一 runner port 事件投影', async () => {
+      await runner.configure({ platform: mockPlatform });
+      const listener = vi.fn();
+      runner.onDidRunnerEvent(listener);
+
+      await runner.compressContext();
+
+      expect(listener).toHaveBeenCalledWith({
+        type: 'contextCompressed',
+        result: { originalTokens: 100, compressedTokens: 50, ratio: 0.5 },
+      });
+    });
+  });
+
+  describe('统一 runner port 事件', () => {
+    it('cancel 应该通过统一 runner port 事件投影', async () => {
+      await runner.configure({ platform: mockPlatform });
+      const listener = vi.fn();
+      runner.onDidRunnerEvent(listener);
+
+      runner.cancel();
+
+      expect(listener).toHaveBeenCalledWith({ type: 'cancel' });
     });
   });
 

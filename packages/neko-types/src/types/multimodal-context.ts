@@ -138,6 +138,7 @@ export interface MultimodalContextPacket {
   readonly perceptionInputs: readonly PerceptionInputRef[];
   readonly uiContext: UIContextSnapshot;
   readonly createdAt: number;
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 export interface UIContextProvider {

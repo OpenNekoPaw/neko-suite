@@ -15,12 +15,11 @@ import type {
   ModelRef,
 } from '@neko-agent/types';
 import {
-  createAgentTurnContext,
+  buildAgentTurnForWebviewRuntimeInput,
   createTimelineContextRuntime,
   runAgentTurnForWebviewRuntime,
   type AgentMessageExecutionOverrides,
   type AgentTurnAgentManager,
-  type AgentTurnConversationStore,
   type TimelineContextRuntime,
 } from '@neko/agent/runtime';
 import type {
@@ -101,67 +100,62 @@ export class AgentTurnBridge {
             this.deps.agentManager!.loadHistoryWithContext(id, history),
         }
       : undefined;
-    const conversationStore: AgentTurnConversationStore<AgentHistoryWithToolContextMessage> = {
-      getConversationMessageCount: (id) => this.deps.conversations.get(id)?.messages.length ?? 0,
-      getFullHistory: (id) => this.deps.conversations.toAgentHistory(id),
-      addAssistantMessage: (id, assistantMessage) =>
-        this.deps.conversations.addMessageToConversation(id, assistantMessage),
-    };
 
-    await runAgentTurnForWebviewRuntime({
-      conversationId: input.conversationId,
-      message: input.message,
-      platform: this.deps.platform,
-      chatModel: input.chatModel,
-      mediaModel: input.mediaModel,
-      mediaModels: input.mediaModels,
-      imageAttachments: input.imageAttachments,
-      executionOverrides: input.executionOverrides,
-      activeSkill: this.deps.getActiveSkillState?.(input.conversationId),
-      settings: {
-        customSystemPrompt: this.deps.settings.customSystemPrompt,
-        executionMode: this.deps.settings.executionMode,
-        autoExecuteTools: this.deps.settings.autoExecuteTools,
-        temperature: this.deps.settings.temperature,
-        maxTokens: this.deps.settings.maxTokens,
-        thinkingBudget: this.deps.settings.thinkingBudget,
-      },
-      providerSource: {
-        requestedProviderId: input.chatModel?.providerId,
-        selectedProviderId: this.deps.settings.selectedProviderId,
-        getProvider: (providerId) => this.deps.providers.getProvider(providerId),
-        getDefaultProvider: () => this.deps.providers.getDefaultProvider(),
-      },
-      agentManager: agentManagerBridge,
-      conversations: conversationStore,
-      getBaseSystemPrompt: this.deps.getSystemPrompt,
-      isPlanMode: this.deps.isPlanMode,
-      getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
-      getAmbientCanvas: (id) => getCanvasSelection(id),
-      createContext: ({ workspaceRoot }) =>
-        createAgentTurnContext({
-          activeEditor: this.deps.editorRegistry?.getActiveEditor(),
-          workspaceRoot,
-        }),
-      buildTimelineContextPacket: ({ context, message, workspaceRoot }) =>
-        this.timelineContextRuntime.build({
-          activeEditor: context.activeEditor,
-          message,
-          workspaceRoot,
-        }),
-      processStream: ({ conversationId, events, onPhaseChange }) =>
-        this.deps.streamProcessor.processStream(input.webview, conversationId, events, {
-          onPhaseChange,
-        }),
-      ensureSubAgentEventSubscription: ({ conversationId, agentRunner }) =>
-        this.deps.ensureSubAgentEventSubscription(input.webview, conversationId, agentRunner),
-      postMessage: (message) => {
-        void input.webview.postMessage(message);
-      },
-      onPhaseChange: this.deps.onPhaseChange,
-      generateMessageId: this.deps.generateMessageId,
-      now: () => Date.now(),
-      ...(this.deps.taskManager ? { taskManager: this.deps.taskManager } : {}),
-    });
+    await runAgentTurnForWebviewRuntime(
+      buildAgentTurnForWebviewRuntimeInput({
+        conversationId: input.conversationId,
+        message: input.message,
+        platform: this.deps.platform,
+        chatModel: input.chatModel,
+        mediaModel: input.mediaModel,
+        mediaModels: input.mediaModels,
+        imageAttachments: input.imageAttachments,
+        executionOverrides: input.executionOverrides,
+        settings: {
+          selectedProviderId: this.deps.settings.selectedProviderId,
+          customSystemPrompt: this.deps.settings.customSystemPrompt,
+          executionMode: this.deps.settings.executionMode,
+          autoExecuteTools: this.deps.settings.autoExecuteTools,
+          temperature: this.deps.settings.temperature,
+          maxTokens: this.deps.settings.maxTokens,
+          thinkingBudget: this.deps.settings.thinkingBudget,
+        },
+        providers: {
+          getProvider: (providerId) => this.deps.providers.getProvider(providerId),
+          getDefaultProvider: () => this.deps.providers.getDefaultProvider(),
+        },
+        runtime: {
+          conversations: {
+            getMessageCount: (id) => this.deps.conversations.get(id)?.messages.length ?? 0,
+            getFullHistory: (id) => this.deps.conversations.toAgentHistory(id),
+            addAssistantMessage: (id, assistantMessage) =>
+              this.deps.conversations.addMessageToConversation(id, assistantMessage),
+          },
+          getBaseSystemPrompt: this.deps.getSystemPrompt,
+          isPlanMode: this.deps.isPlanMode,
+          getActiveSkillState: this.deps.getActiveSkillState,
+          ...(this.deps.taskManager ? { taskManager: this.deps.taskManager } : {}),
+        },
+        host: {
+          agentManager: agentManagerBridge,
+          getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          getActiveEditor: () => this.deps.editorRegistry?.getActiveEditor(),
+          getAmbientCanvas: (id) => getCanvasSelection(id),
+          timelineContextRuntime: this.timelineContextRuntime,
+          processStream: ({ conversationId, events, onPhaseChange }) =>
+            this.deps.streamProcessor.processStream(input.webview, conversationId, events, {
+              onPhaseChange,
+            }),
+          ensureSubAgentEventSubscription: ({ conversationId, agentRunner }) =>
+            this.deps.ensureSubAgentEventSubscription(input.webview, conversationId, agentRunner),
+          postMessage: (message) => {
+            void input.webview.postMessage(message);
+          },
+          onPhaseChange: this.deps.onPhaseChange,
+          generateMessageId: this.deps.generateMessageId,
+          now: () => Date.now(),
+        },
+      }),
+    );
   }
 }

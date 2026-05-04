@@ -99,7 +99,7 @@ export class NewAPIChatImageModel implements ImageModelV3 {
       (options.providerOptions?.['neko'] as Record<string, unknown> | undefined) ?? {};
 
     // ── Text: prompt + edit/negative/style/control semantics ────────────────
-    const textPieces: string[] = [options.prompt];
+    const textPieces: string[] = [options.prompt ?? ''];
     const editInstruction = nekoExtras['editInstruction'] as string | undefined;
     const negativePrompt = nekoExtras['negativePrompt'] as string | undefined;
     const style = nekoExtras['style'] as string | undefined;

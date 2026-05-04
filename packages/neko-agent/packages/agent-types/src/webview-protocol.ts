@@ -32,6 +32,7 @@ import type {
   SubAgentWorkItemEvent,
   TaskWorkItem,
 } from './work-item';
+import type { AgentWorkflowRun } from './workflow';
 
 export type ProtocolModelCategory = ModelType;
 export type MediaModelCategory = Exclude<ProtocolModelCategory, 'llm'>;
@@ -559,6 +560,12 @@ export interface MediaTaskProgressMessage {
   workItem: TaskWorkItem;
 }
 
+export interface WorkflowProjectionMessage {
+  type: 'workflowProjection';
+  conversationId: string;
+  run: AgentWorkflowRun;
+}
+
 export interface ExternalMessage {
   type: 'externalMessage';
   message?: string;
@@ -625,6 +632,7 @@ export type ExtensionToWebviewMessage =
   | CompressionErrorMessage
   | MediaTaskCreatedMessage
   | MediaTaskProgressMessage
+  | WorkflowProjectionMessage
   | ExternalMessage
   | PrefillInputMessage
   | InjectContextMessage
@@ -915,6 +923,17 @@ export function buildMediaTaskProgressMessage(input: {
     type: 'mediaTaskProgress',
     conversationId: input.conversationId,
     workItem: input.workItem,
+  };
+}
+
+export function buildWorkflowProjectionMessage(input: {
+  readonly conversationId: string;
+  readonly run: AgentWorkflowRun;
+}): WorkflowProjectionMessage {
+  return {
+    type: 'workflowProjection',
+    conversationId: input.conversationId,
+    run: input.run,
   };
 }
 

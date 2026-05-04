@@ -1,0 +1,304 @@
+import type {
+  AgentWorkflowDefinition,
+  AgentWorkflowIdentity,
+  AgentWorkflowNode,
+  AgentWorkflowProjection,
+  AgentWorkflowRun,
+  AgentWorkflowStatus,
+  AgentWorkflowTransition,
+  IdcStage,
+  StageTaskShape,
+} from '@neko-agent/types';
+
+export interface AgentWorkflowRuntimeOptions {
+  readonly now?: () => number;
+  readonly generateRunId?: (definition: AgentWorkflowDefinition, conversationId: string) => string;
+  readonly onProjection?: (projection: AgentWorkflowProjection) => void;
+}
+
+export interface CreateAgentWorkflowRunInput {
+  readonly definition: AgentWorkflowDefinition;
+  readonly conversationId: string;
+  readonly initialNodeId?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface AgentWorkflowRuntime {
+  createRun(input: CreateAgentWorkflowRunInput): AgentWorkflowRun;
+  getRun(runId: string): AgentWorkflowRun | undefined;
+  activateNode(runId: string, nodeId: string, reason?: string): AgentWorkflowRun;
+  transition(input: {
+    readonly runId: string;
+    readonly toNodeId: string;
+    readonly fromNodeId?: string;
+    readonly reason?: string;
+  }): AgentWorkflowRun;
+  cancel(runId: string, reason?: string): AgentWorkflowRun;
+  complete(runId: string): AgentWorkflowRun;
+  fail(runId: string, error: { readonly code: string; readonly message: string }): AgentWorkflowRun;
+  toIdentity(runId: string, nodeId?: string): AgentWorkflowIdentity | undefined;
+  listRuns(conversationId?: string): AgentWorkflowRun[];
+}
+
+export const IDC_WORKFLOW_DEFINITION_ID = 'neko.workflow.idc.v1';
+
+export function createAgentWorkflowRuntime(
+  options: AgentWorkflowRuntimeOptions = {},
+): AgentWorkflowRuntime {
+  return new DefaultAgentWorkflowRuntime(options);
+}
+
+export function createIdcWorkflowDefinition(): AgentWorkflowDefinition {
+  return {
+    id: IDC_WORKFLOW_DEFINITION_ID,
+    version: '1.0.0',
+    title: 'IDC Creation',
+    description: 'Draft, Plan, and Apply creative workflow profile.',
+    nodes: [
+      createIdcWorkflowNode('draft', 'Draft'),
+      createIdcWorkflowNode('plan', 'Plan'),
+      createIdcWorkflowNode('apply', 'Apply'),
+    ],
+    transitions: [
+      { toNodeId: 'draft', reason: 'start', createdAt: 0 },
+      { fromNodeId: 'draft', toNodeId: 'plan', reason: 'draft-complete', createdAt: 0 },
+      { fromNodeId: 'plan', toNodeId: 'apply', reason: 'plan-complete', createdAt: 0 },
+    ],
+  };
+}
+
+export function selectIdcWorkflowEntryNode(input: {
+  readonly planMode: boolean;
+  readonly autoMode?: boolean;
+  readonly taskShape?: StageTaskShape;
+  readonly hasExistingDraft?: boolean;
+  readonly hasExistingPlan?: boolean;
+  readonly requestedStage?: IdcStage;
+}): IdcStage {
+  if (input.requestedStage) {
+    return input.requestedStage;
+  }
+  if (input.planMode) {
+    return 'draft';
+  }
+  if (
+    input.hasExistingPlan ||
+    input.taskShape === 'single-write' ||
+    input.taskShape === 'single-read'
+  ) {
+    return 'apply';
+  }
+  if (
+    input.hasExistingDraft ||
+    input.taskShape === 'multi-step' ||
+    input.taskShape === 'plan-only'
+  ) {
+    return 'plan';
+  }
+  return input.autoMode ? 'draft' : 'apply';
+}
+
+export function buildWorkflowIdentity(input: {
+  readonly definitionId: string;
+  readonly runId: string;
+  readonly nodeId?: string;
+}): AgentWorkflowIdentity {
+  return {
+    workflowDefinitionId: input.definitionId,
+    workflowRunId: input.runId,
+    ...(input.nodeId ? { workflowNodeId: input.nodeId } : {}),
+  };
+}
+
+class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
+  private readonly runs = new Map<string, AgentWorkflowRun>();
+
+  constructor(private readonly options: AgentWorkflowRuntimeOptions) {}
+
+  createRun(input: CreateAgentWorkflowRunInput): AgentWorkflowRun {
+    const now = this.now();
+    const initialNodeId = input.initialNodeId ?? input.definition.nodes[0]?.id;
+    const runId =
+      this.options.generateRunId?.(input.definition, input.conversationId) ??
+      `${input.definition.id}:${input.conversationId}:${now}`;
+    const run: AgentWorkflowRun = {
+      id: runId,
+      definitionId: input.definition.id,
+      conversationId: input.conversationId,
+      status: initialNodeId ? 'running' : 'pending',
+      ...(initialNodeId ? { activeNodeId: initialNodeId } : {}),
+      nodes: input.definition.nodes.map((node) =>
+        node.id === initialNodeId
+          ? withNodeStatus(node, 'running')
+          : withNodeStatus(node, 'pending'),
+      ),
+      transitions: [],
+      createdAt: now,
+      updatedAt: now,
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+    };
+    this.runs.set(run.id, run);
+    this.emit(run);
+    return run;
+  }
+
+  getRun(runId: string): AgentWorkflowRun | undefined {
+    return this.runs.get(runId);
+  }
+
+  activateNode(runId: string, nodeId: string, reason = 'activate-node'): AgentWorkflowRun {
+    const current = this.requireRun(runId);
+    return this.transition({
+      runId,
+      fromNodeId: current.activeNodeId,
+      toNodeId: nodeId,
+      reason,
+    });
+  }
+
+  transition(input: {
+    readonly runId: string;
+    readonly toNodeId: string;
+    readonly fromNodeId?: string;
+    readonly reason?: string;
+  }): AgentWorkflowRun {
+    const current = this.requireRun(input.runId);
+    assertNodeExists(current, input.toNodeId);
+    const transition: AgentWorkflowTransition = {
+      ...(input.fromNodeId ? { fromNodeId: input.fromNodeId } : {}),
+      toNodeId: input.toNodeId,
+      reason: input.reason ?? 'transition',
+      createdAt: this.now(),
+    };
+    const next = this.updateRun({
+      ...current,
+      status: 'running',
+      activeNodeId: input.toNodeId,
+      nodes: current.nodes.map((node) => {
+        if (node.id === input.toNodeId) return withNodeStatus(node, 'running');
+        if (node.id === input.fromNodeId && node.status === 'running') {
+          return withNodeStatus(node, 'completed');
+        }
+        return node;
+      }),
+      transitions: [...current.transitions, transition],
+      updatedAt: transition.createdAt,
+    });
+    return next;
+  }
+
+  cancel(runId: string, reason = 'cancelled'): AgentWorkflowRun {
+    const current = this.requireRun(runId);
+    const now = this.now();
+    return this.updateRun({
+      ...current,
+      status: 'cancelled',
+      nodes: current.nodes.map((node) =>
+        node.status === 'running' ? withNodeStatus(node, 'cancelled') : node,
+      ),
+      transitions: current.activeNodeId
+        ? [
+            ...current.transitions,
+            {
+              fromNodeId: current.activeNodeId,
+              toNodeId: current.activeNodeId,
+              reason,
+              createdAt: now,
+            },
+          ]
+        : current.transitions,
+      cancelledAt: now,
+      updatedAt: now,
+    });
+  }
+
+  complete(runId: string): AgentWorkflowRun {
+    const current = this.requireRun(runId);
+    const now = this.now();
+    return this.updateRun({
+      ...current,
+      status: 'completed',
+      nodes: current.nodes.map((node) =>
+        node.status === 'running' ? withNodeStatus(node, 'completed') : node,
+      ),
+      completedAt: now,
+      updatedAt: now,
+    });
+  }
+
+  fail(
+    runId: string,
+    error: { readonly code: string; readonly message: string },
+  ): AgentWorkflowRun {
+    const current = this.requireRun(runId);
+    const now = this.now();
+    return this.updateRun({
+      ...current,
+      status: 'failed',
+      nodes: current.nodes.map((node) =>
+        node.status === 'running' ? withNodeStatus(node, 'failed') : node,
+      ),
+      error,
+      updatedAt: now,
+    });
+  }
+
+  toIdentity(runId: string, nodeId?: string): AgentWorkflowIdentity | undefined {
+    const run = this.runs.get(runId);
+    if (!run) return undefined;
+    return buildWorkflowIdentity({
+      definitionId: run.definitionId,
+      runId: run.id,
+      nodeId: nodeId ?? run.activeNodeId,
+    });
+  }
+
+  listRuns(conversationId?: string): AgentWorkflowRun[] {
+    return Array.from(this.runs.values()).filter(
+      (run) => !conversationId || run.conversationId === conversationId,
+    );
+  }
+
+  private updateRun(run: AgentWorkflowRun): AgentWorkflowRun {
+    this.runs.set(run.id, run);
+    this.emit(run);
+    return run;
+  }
+
+  private requireRun(runId: string): AgentWorkflowRun {
+    const run = this.runs.get(runId);
+    if (!run) {
+      throw new Error(`Workflow run not found: ${runId}`);
+    }
+    return run;
+  }
+
+  private emit(run: AgentWorkflowRun): void {
+    this.options.onProjection?.({ conversationId: run.conversationId, run });
+  }
+
+  private now(): number {
+    return this.options.now?.() ?? Date.now();
+  }
+}
+
+function createIdcWorkflowNode(stage: IdcStage, title: string): AgentWorkflowNode {
+  return {
+    id: stage,
+    kind: 'idc-stage',
+    title,
+    status: 'pending',
+    stage,
+    profile: stage === 'draft' ? 'idc-draft' : stage === 'plan' ? 'idc-plan' : 'idc-apply',
+  };
+}
+
+function withNodeStatus(node: AgentWorkflowNode, status: AgentWorkflowStatus): AgentWorkflowNode {
+  return { ...node, status };
+}
+
+function assertNodeExists(run: AgentWorkflowRun, nodeId: string): void {
+  if (!run.nodes.some((node) => node.id === nodeId)) {
+    throw new Error(`Workflow node not found: ${nodeId}`);
+  }
+}

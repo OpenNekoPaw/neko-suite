@@ -1,0 +1,247 @@
+import type {
+  AgentMediaModelSelections,
+  AgentPhase,
+  AgentWorkflowIdentity,
+  MediaModelCategory,
+  Message,
+  ModelRef,
+} from '@neko-agent/types';
+import type { Skill, SkillInjection } from '@neko/shared';
+import type { AgentEvent } from '../session/types';
+import type { IRuntimeTaskManager } from '../task';
+import {
+  createAgentTurnContext,
+  type AgentTurnActiveEditorLike,
+  type AgentTurnContext,
+} from './agent-turn-context';
+import type { AgentBase64ImageAttachment } from './attachment-projection';
+import type {
+  AgentAmbientCanvasNode,
+  AgentMessageExecutionOverrides,
+  AgentProviderCandidate,
+  AgentStreamPersistenceSnapshot,
+} from './message-runtime';
+import type {
+  AgentTurnAgentManager,
+  AgentTurnForWebviewRuntimeMessage,
+  AgentTurnRunner,
+  AgentTurnTimelineContextInput,
+  RunAgentTurnForWebviewRuntimeInput,
+} from './agent-turn-runtime';
+import type { TimelineContextEditorLike, TimelineContextRuntime } from './timeline-context-runtime';
+
+export interface AgentTurnSettingsSource {
+  readonly selectedProviderId?: string | null;
+  readonly customSystemPrompt?: string | null;
+  readonly executionMode: 'auto' | 'ask' | 'plan';
+  readonly autoExecuteTools?: boolean;
+  readonly temperature?: number;
+  readonly maxTokens?: number;
+  readonly thinkingBudget?: number;
+}
+
+export interface AgentTurnProviderHost<TProvider extends AgentProviderCandidate> {
+  getProvider(providerId: string): TProvider | undefined;
+  getDefaultProvider(): TProvider | undefined;
+}
+
+export interface AgentTurnConversationHost<THistoryMessage> {
+  getMessageCount(conversationId: string): number;
+  getFullHistory(conversationId: string): readonly THistoryMessage[];
+  addAssistantMessage(conversationId: string, assistantMessage: Message): void;
+}
+
+export interface AgentTurnRuntimeServices<THistoryMessage> {
+  readonly conversations: AgentTurnConversationHost<THistoryMessage>;
+  readonly getBaseSystemPrompt: (conversationId: string) => string;
+  readonly isPlanMode: (conversationId: string) => boolean;
+  readonly getActiveSkillState?: (conversationId: string) => AgentTurnActiveSkillState | undefined;
+  readonly taskManager?: IRuntimeTaskManager;
+  readonly workflow?: AgentWorkflowIdentity;
+}
+
+export interface AgentTurnActiveSkillState {
+  readonly skill: Skill;
+  readonly injection: SkillInjection;
+}
+
+export interface AgentTurnContextHostOptions<TActiveEditor extends AgentTurnActiveEditorLike> {
+  readonly getWorkspaceRoot?: () => string | undefined;
+  readonly getActiveEditor?: () => TActiveEditor | undefined;
+  readonly getAmbientCanvas?: (conversationId: string) => readonly AgentAmbientCanvasNode[];
+  readonly timelineContextRuntime?: TimelineContextRuntime;
+}
+
+export interface AgentTurnContextHostAdapters<TActiveEditor extends AgentTurnActiveEditorLike> {
+  readonly getWorkspaceRoot?: () => string | undefined;
+  readonly getAmbientCanvas?: (conversationId: string) => readonly AgentAmbientCanvasNode[];
+  readonly createContext: (input: {
+    readonly conversationId: string;
+    readonly message: string;
+    readonly workspaceRoot?: string;
+  }) => AgentTurnContext<TActiveEditor>;
+  readonly buildTimelineContextPacket?: (
+    input: AgentTurnTimelineContextInput<AgentTurnContext<TActiveEditor>>,
+  ) => unknown | Promise<unknown>;
+}
+
+export interface AgentTurnHostAdapters<
+  TPlatform,
+  TActiveEditor extends AgentTurnActiveEditorLike,
+  THistoryMessage,
+  TRunner extends AgentTurnRunner<TPlatform, AgentTurnContext<TActiveEditor>>,
+> extends AgentTurnContextHostOptions<TActiveEditor> {
+  readonly agentManager?:
+    | AgentTurnAgentManager<TPlatform, AgentTurnContext<TActiveEditor>, THistoryMessage, TRunner>
+    | undefined;
+  readonly processStream: (input: {
+    readonly conversationId: string;
+    readonly events: AsyncIterable<AgentEvent>;
+    readonly onPhaseChange: (phase: AgentPhase, toolName?: string) => void;
+  }) => Promise<AgentStreamPersistenceSnapshot>;
+  readonly ensureSubAgentEventSubscription?: (input: {
+    readonly conversationId: string;
+    readonly agentRunner: TRunner;
+  }) => void;
+  readonly postMessage: (message: AgentTurnForWebviewRuntimeMessage) => void | Promise<void>;
+  readonly onPhaseChange?: (event: {
+    readonly conversationId: string;
+    readonly phase: AgentPhase;
+    readonly toolName?: string;
+    readonly timestamp: number;
+  }) => void;
+  readonly generateMessageId: () => string;
+  readonly now?: () => number;
+}
+
+export interface AgentTurnAssemblyInput<
+  TPlatform,
+  TActiveEditor extends AgentTurnActiveEditorLike,
+  THistoryMessage,
+  TProvider extends AgentProviderCandidate,
+  TRunner extends AgentTurnRunner<TPlatform, AgentTurnContext<TActiveEditor>>,
+> {
+  readonly conversationId: string;
+  readonly message: string;
+  readonly platform?: TPlatform | null;
+  readonly chatModel?: ModelRef<'llm'>;
+  readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
+  readonly mediaModel?: ModelRef<MediaModelCategory>;
+  readonly mediaModels?: AgentMediaModelSelections;
+  readonly executionOverrides?: AgentMessageExecutionOverrides;
+  readonly settings: AgentTurnSettingsSource;
+  readonly providers: AgentTurnProviderHost<TProvider>;
+  readonly runtime: AgentTurnRuntimeServices<THistoryMessage>;
+  readonly host: AgentTurnHostAdapters<TPlatform, TActiveEditor, THistoryMessage, TRunner>;
+}
+
+export function createAgentTurnHostContextAdapters<TActiveEditor extends AgentTurnActiveEditorLike>(
+  options: AgentTurnContextHostOptions<TActiveEditor>,
+): AgentTurnContextHostAdapters<TActiveEditor> {
+  return {
+    ...(options.getWorkspaceRoot ? { getWorkspaceRoot: options.getWorkspaceRoot } : {}),
+    ...(options.getAmbientCanvas ? { getAmbientCanvas: options.getAmbientCanvas } : {}),
+    createContext: ({ workspaceRoot }) =>
+      createAgentTurnContext({
+        activeEditor: options.getActiveEditor?.(),
+        workspaceRoot,
+      }),
+    buildTimelineContextPacket: ({ context, message, workspaceRoot }) => {
+      const activeEditor = context.activeEditor;
+      if (!options.timelineContextRuntime || !isTimelineContextEditorLike(activeEditor)) {
+        return null;
+      }
+      return options.timelineContextRuntime.build({
+        activeEditor,
+        message,
+        workspaceRoot,
+      });
+    },
+  };
+}
+
+export function buildAgentTurnForWebviewRuntimeInput<
+  TPlatform,
+  TActiveEditor extends AgentTurnActiveEditorLike,
+  THistoryMessage,
+  TProvider extends AgentProviderCandidate,
+  TRunner extends AgentTurnRunner<TPlatform, AgentTurnContext<TActiveEditor>>,
+>(
+  input: AgentTurnAssemblyInput<TPlatform, TActiveEditor, THistoryMessage, TProvider, TRunner>,
+): RunAgentTurnForWebviewRuntimeInput<
+  TPlatform,
+  AgentTurnContext<TActiveEditor>,
+  THistoryMessage,
+  TProvider,
+  TRunner
+> {
+  const contextAdapters = createAgentTurnHostContextAdapters(input.host);
+  const activeSkill = input.runtime.getActiveSkillState?.(input.conversationId);
+
+  return {
+    conversationId: input.conversationId,
+    message: input.message,
+    platform: input.platform,
+    chatModel: input.chatModel,
+    mediaModel: input.mediaModel,
+    mediaModels: input.mediaModels,
+    imageAttachments: input.imageAttachments,
+    executionOverrides: input.executionOverrides,
+    activeSkill,
+    settings: {
+      customSystemPrompt: input.settings.customSystemPrompt,
+      executionMode: input.settings.executionMode,
+      autoExecuteTools: input.settings.autoExecuteTools,
+      temperature: input.settings.temperature,
+      maxTokens: input.settings.maxTokens,
+      thinkingBudget: input.settings.thinkingBudget,
+    },
+    providerSource: {
+      requestedProviderId: input.chatModel?.providerId,
+      selectedProviderId: input.settings.selectedProviderId,
+      getProvider: (providerId) => input.providers.getProvider(providerId),
+      getDefaultProvider: () => input.providers.getDefaultProvider(),
+    },
+    agentManager: input.host.agentManager,
+    conversations: {
+      getConversationMessageCount: (conversationId) =>
+        input.runtime.conversations.getMessageCount(conversationId),
+      getFullHistory: (conversationId) =>
+        input.runtime.conversations.getFullHistory(conversationId),
+      addAssistantMessage: (conversationId, assistantMessage) => {
+        input.runtime.conversations.addAssistantMessage(conversationId, assistantMessage);
+      },
+    },
+    getBaseSystemPrompt: input.runtime.getBaseSystemPrompt,
+    isPlanMode: input.runtime.isPlanMode,
+    ...contextAdapters,
+    processStream: input.host.processStream,
+    ensureSubAgentEventSubscription: input.host.ensureSubAgentEventSubscription,
+    postMessage: input.host.postMessage,
+    onPhaseChange: input.host.onPhaseChange,
+    generateMessageId: input.host.generateMessageId,
+    now: input.host.now,
+    ...(input.runtime.taskManager ? { taskManager: input.runtime.taskManager } : {}),
+    ...(input.runtime.workflow ? { workflow: input.runtime.workflow } : {}),
+  };
+}
+
+function isTimelineContextEditorLike(value: unknown): value is TimelineContextEditorLike {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as {
+    readonly capabilities?: { readonly hasTimeline?: unknown };
+    readonly getSelection?: unknown;
+    readonly getState?: unknown;
+    readonly getContent?: unknown;
+  };
+
+  return (
+    typeof candidate.capabilities?.hasTimeline === 'boolean' &&
+    typeof candidate.getSelection === 'function' &&
+    typeof candidate.getState === 'function' &&
+    typeof candidate.getContent === 'function'
+  );
+}

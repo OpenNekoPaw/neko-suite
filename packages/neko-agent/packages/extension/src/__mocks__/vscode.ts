@@ -24,6 +24,9 @@ export const Uri = {
 
 // commands mock
 export const commands = {
+  registerCommand: vi.fn((_command: string, _callback: (...args: unknown[]) => unknown) => ({
+    dispose: vi.fn(),
+  })),
   executeCommand: vi.fn().mockResolvedValue(undefined),
 };
 

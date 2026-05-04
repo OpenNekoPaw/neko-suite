@@ -10,6 +10,7 @@ import type {
   SubAgentWorkItemEvent,
   TaskWorkItem,
 } from './work-item';
+import type { AgentWorkflowIdentity } from './workflow';
 
 export interface ProjectBackgroundTaskWorkItemInput {
   conversationId: string;
@@ -17,6 +18,7 @@ export interface ProjectBackgroundTaskWorkItemInput {
   kind?: TaskWorkItem['kind'];
   parentMessageId?: string | null;
   parentToolCallId?: string | null;
+  workflow?: AgentWorkflowIdentity;
 }
 
 export interface ProjectBackgroundTasksWorkItemsInput {
@@ -30,6 +32,7 @@ export interface ProjectMediaTaskWorkItemInput {
   task: AgentMediaTaskView;
   parentMessageId?: string | null;
   parentToolCallId?: string | null;
+  workflow?: AgentWorkflowIdentity;
 }
 
 export function backgroundTaskToWorkItem(
@@ -37,10 +40,12 @@ export function backgroundTaskToWorkItem(
   conversationId: string,
   kind: TaskWorkItem['kind'],
   links: Partial<Pick<AgentWorkItemBase, 'parentMessageId' | 'parentToolCallId'>> = {},
+  workflow?: AgentWorkflowIdentity,
 ): TaskWorkItem {
   return {
     id: task.id,
     conversationId,
+    ...(workflow ? { workflow } : {}),
     kind,
     parentMessageId: links.parentMessageId ?? null,
     parentToolCallId: links.parentToolCallId ?? null,
@@ -112,6 +117,7 @@ export function projectBackgroundTaskToWorkItem(
       parentMessageId: input.parentMessageId,
       parentToolCallId: input.parentToolCallId,
     },
+    input.workflow,
   );
 }
 
@@ -134,10 +140,14 @@ export function projectMediaTaskToWorkItem(input: ProjectMediaTaskWorkItemInput)
     kind: 'media-task',
     parentMessageId: input.parentMessageId,
     parentToolCallId: input.parentToolCallId,
+    workflow: input.workflow,
   });
 }
 
-export function projectSubAgentEventToWorkItem(event: SubAgentWorkItemEvent): SubAgentWorkItem {
+export function projectSubAgentEventToWorkItem(
+  event: SubAgentWorkItemEvent,
+  workflow?: AgentWorkflowIdentity,
+): SubAgentWorkItem {
   const status = toSubAgentWorkItemStatus(event.data?.status ?? event.type);
   const progress = toSubAgentProgress(event.type, event.data?.progress);
   const result = event.data?.result;
@@ -148,6 +158,7 @@ export function projectSubAgentEventToWorkItem(event: SubAgentWorkItemEvent): Su
   return {
     id: event.subAgentId,
     conversationId: event.conversationId,
+    ...(workflow ? { workflow } : {}),
     kind: 'subagent',
     parentMessageId: event.data?.parentMessageId ?? null,
     parentToolCallId: event.data?.parentToolCallId ?? null,

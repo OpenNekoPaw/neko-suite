@@ -1,0 +1,673 @@
+import type {
+  AgentCapabilityContribution,
+  AgentCapabilityDiagnostic,
+  AgentCapabilityInjectionContext,
+  AgentCapabilityPermissionRequirement,
+  AgentCapabilityRegistryProjection,
+  AgentCapabilitySlashCommandContribution,
+  AgentCapabilitySource,
+  AgentCapabilityWorkflowNodeRequirement,
+  AgentCapabilityWorkflowFragmentContribution,
+  AgentInjectedCapabilitySet,
+} from '@neko-agent/types';
+import type {
+  AgentCapabilityHostRequirement,
+  AgentCapabilityManifest,
+  AgentCapabilityTrustLevel,
+  PromptFragment,
+  Skill,
+  SkillSource,
+} from '@neko/shared';
+
+export interface NormalizeSkillCapabilityInput {
+  readonly skill: Skill;
+  readonly source: AgentCapabilitySource;
+  readonly sourceId?: string;
+  readonly trustLevel?: AgentCapabilityTrustLevel;
+  readonly version?: string;
+  readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
+  readonly permissionRequirements?: readonly AgentCapabilityPermissionRequirement[];
+  readonly workflowNodeRequirements?: readonly AgentCapabilityWorkflowNodeRequirement[];
+}
+
+export interface NormalizeSkillScanGroupInput {
+  readonly skills?: readonly Skill[];
+  readonly source: AgentCapabilitySource;
+  readonly trustLevel?: AgentCapabilityTrustLevel;
+}
+
+export interface NormalizeSkillScanInput {
+  readonly builtin?: readonly Skill[];
+  readonly market?: readonly Skill[];
+  readonly local?: readonly Skill[];
+  readonly plugin?: readonly Skill[];
+  readonly mcp?: readonly Skill[];
+}
+
+export interface AgentCapabilityInjectionRuntime {
+  register(contribution: AgentCapabilityContribution): AgentCapabilityRegistryProjection;
+  registerMany(
+    contributions: readonly AgentCapabilityContribution[],
+  ): AgentCapabilityRegistryProjection;
+  listRegistered(): readonly AgentCapabilityContribution[];
+  getDiagnostics(phase?: 'registration' | 'injection'): readonly AgentCapabilityDiagnostic[];
+  inject(context: AgentCapabilityInjectionContext): AgentInjectedCapabilitySet;
+  projectSlashCommandCatalog(
+    context: AgentCapabilityInjectionContext,
+  ): readonly AgentCapabilitySlashCommandContribution[];
+}
+
+export function createAgentCapabilityInjectionRuntime(): AgentCapabilityInjectionRuntime {
+  return new DefaultAgentCapabilityInjectionRuntime();
+}
+
+export function normalizeSkillCapability(
+  input: NormalizeSkillCapabilityInput,
+): AgentCapabilityContribution {
+  const skill = input.skill;
+  const sourceId = input.sourceId ?? skill.name;
+  const promptFragment: PromptFragment = {
+    id: `skill:${skill.name}:prompt`,
+    content: skill.content,
+    priority: 75,
+  };
+  return {
+    identity: {
+      id: `skill:${skill.name}`,
+      source: input.source,
+      sourceId,
+      trustLevel: input.trustLevel ?? defaultTrustForSource(input.source),
+      ...(input.version ? { version: input.version } : {}),
+    },
+    displayName: skill.name,
+    description: skill.description,
+    ...(input.hostRequirements ? { hostRequirements: input.hostRequirements } : {}),
+    ...(input.permissionRequirements
+      ? { permissionRequirements: input.permissionRequirements }
+      : {}),
+    ...(input.workflowNodeRequirements
+      ? { workflowNodeRequirements: input.workflowNodeRequirements }
+      : {}),
+    promptFragments: skill.content ? [promptFragment] : [],
+    allowedTools: skill.allowedTools ?? [],
+    slashCommands: [
+      {
+        id: `skill:${skill.name}:command`,
+        name: skill.name,
+        description: skill.description,
+        skillId: `skill:${skill.name}`,
+      },
+    ],
+    metadata: {
+      skillSource: skill.source,
+      ...(skill.version ? { version: skill.version } : {}),
+      ...(skill.model ? { model: skill.model } : {}),
+      ...(skill.domain ? { domain: skill.domain } : {}),
+      ...(skill.command ? { command: skill.command } : {}),
+      ...(skill.directoryPath ? { directoryPath: skill.directoryPath } : {}),
+    },
+  };
+}
+
+export function normalizeSkillScanCapabilities(
+  input: NormalizeSkillScanInput,
+): readonly AgentCapabilityContribution[] {
+  return [
+    ...normalizeSkillScanGroup({ skills: input.builtin, source: 'builtin', trustLevel: 'core' }),
+    ...normalizeSkillScanGroup({ skills: input.market, source: 'market' }),
+    ...normalizeSkillScanGroup({ skills: input.local, source: 'local' }),
+    ...normalizeSkillScanGroup({ skills: input.plugin, source: 'plugin' }),
+    ...normalizeSkillScanGroup({ skills: input.mcp, source: 'mcp', trustLevel: 'untrusted' }),
+  ];
+}
+
+export function normalizeManifestCapability(
+  manifest: AgentCapabilityManifest,
+): AgentCapabilityContribution {
+  return {
+    identity: {
+      id: `provider:${manifest.id}`,
+      source: 'provider',
+      sourceId: manifest.id,
+      version: manifest.version,
+      trustLevel: manifest.trustLevel ?? 'core',
+    },
+    displayName: manifest.displayName,
+    hostRequirements: manifest.hostRequirements,
+    toolNames: manifest.capabilities
+      .filter((capability) => capability.type === 'tool')
+      .map((capability) => capability.name),
+    toolGroupNames: manifest.capabilities
+      .filter((capability) => capability.type === 'toolGroup')
+      .map((capability) => capability.name),
+    metadata: {
+      declarations: manifest.capabilities,
+    },
+  };
+}
+
+export function validateCapabilityContribution(
+  contribution: AgentCapabilityContribution,
+): readonly AgentCapabilityDiagnostic[] {
+  const diagnostics: AgentCapabilityDiagnostic[] = [];
+  const contributionId = contribution.identity.id;
+
+  pushMissingStringDiagnostic(diagnostics, contributionId, contribution.identity.id, 'identity.id');
+  pushMissingStringDiagnostic(
+    diagnostics,
+    contributionId,
+    contribution.identity.sourceId,
+    'identity.sourceId',
+  );
+
+  if (!isCapabilitySource(contribution.identity.source)) {
+    diagnostics.push(validationDiagnostic(contributionId, 'invalid-source', 'identity.source'));
+  }
+  if (!isTrustLevel(contribution.identity.trustLevel)) {
+    diagnostics.push(
+      validationDiagnostic(contributionId, 'invalid-trust-level', 'identity.trustLevel'),
+    );
+  }
+  if (
+    contribution.identity.version !== undefined &&
+    contribution.identity.version.trim().length === 0
+  ) {
+    diagnostics.push(validationDiagnostic(contributionId, 'invalid-version', 'identity.version'));
+  }
+
+  for (const fragment of contribution.promptFragments ?? []) {
+    pushMissingStringDiagnostic(diagnostics, contributionId, fragment.id, 'promptFragments.id');
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contributionId,
+      fragment.content,
+      'promptFragments.content',
+    );
+  }
+  for (const toolName of [
+    ...(contribution.allowedTools ?? []),
+    ...(contribution.toolNames ?? []),
+  ]) {
+    pushMissingStringDiagnostic(diagnostics, contributionId, toolName, 'toolName');
+  }
+  for (const command of contribution.slashCommands ?? []) {
+    pushMissingStringDiagnostic(diagnostics, contributionId, command.id, 'slashCommands.id');
+    pushMissingStringDiagnostic(diagnostics, contributionId, command.name, 'slashCommands.name');
+  }
+  for (const fragment of contribution.workflowFragments ?? []) {
+    pushMissingStringDiagnostic(diagnostics, contributionId, fragment.id, 'workflowFragments.id');
+  }
+  for (const requirement of contribution.hostRequirements ?? []) {
+    if (!isHost(requirement.host)) {
+      diagnostics.push(
+        validationDiagnostic(contributionId, 'invalid-host-requirement', 'hostRequirements.host'),
+      );
+    }
+  }
+  for (const requirement of contribution.permissionRequirements ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contributionId,
+      requirement.scope,
+      'permissionRequirements.scope',
+    );
+  }
+  for (const requirement of contribution.workflowNodeRequirements ?? []) {
+    if (
+      (requirement.nodeIds?.length ?? 0) === 0 &&
+      (requirement.nodeKinds?.length ?? 0) === 0 &&
+      (requirement.stages?.length ?? 0) === 0
+    ) {
+      diagnostics.push(
+        validationDiagnostic(
+          contributionId,
+          'empty-workflow-node-requirement',
+          'workflowNodeRequirements',
+        ),
+      );
+    }
+  }
+
+  return diagnostics;
+}
+
+class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjectionRuntime {
+  private readonly contributions = new Map<string, AgentCapabilityContribution>();
+  private readonly diagnostics: AgentCapabilityDiagnostic[] = [];
+
+  register(contribution: AgentCapabilityContribution): AgentCapabilityRegistryProjection {
+    this.registerOne(contribution);
+    return this.projectRegistry();
+  }
+
+  registerMany(
+    contributions: readonly AgentCapabilityContribution[],
+  ): AgentCapabilityRegistryProjection {
+    for (const contribution of contributions) {
+      this.registerOne(contribution);
+    }
+    return this.projectRegistry();
+  }
+
+  listRegistered(): readonly AgentCapabilityContribution[] {
+    return Array.from(this.contributions.values());
+  }
+
+  getDiagnostics(phase?: 'registration' | 'injection'): readonly AgentCapabilityDiagnostic[] {
+    return phase
+      ? this.diagnostics.filter((diagnostic) => diagnostic.phase === phase)
+      : [...this.diagnostics];
+  }
+
+  inject(context: AgentCapabilityInjectionContext): AgentInjectedCapabilitySet {
+    const injected = buildInjectedCapabilitySet(this.contributions.values(), context);
+    const diagnostics = [...injected.diagnostics];
+    this.diagnostics.push(...diagnostics);
+    return injected;
+  }
+
+  projectSlashCommandCatalog(
+    context: AgentCapabilityInjectionContext,
+  ): readonly AgentCapabilitySlashCommandContribution[] {
+    return buildInjectedCapabilitySet(this.contributions.values(), {
+      ...context,
+      ablation: {
+        ...context.ablation,
+        disablePromptFragments: true,
+        disableToolInjection: true,
+      },
+    }).slashCommands;
+  }
+
+  private registerOne(contribution: AgentCapabilityContribution): void {
+    const existing = this.contributions.get(contribution.identity.id);
+    for (const diagnostic of validateCapabilityContribution(contribution)) {
+      this.diagnostics.push(diagnostic);
+    }
+
+    if (existing) {
+      this.diagnostics.push({
+        phase: 'registration',
+        code: 'agent.capability.registration.id-collision',
+        contributionId: contribution.identity.id,
+        reason: 'id-collision',
+        message: 'Replacing an existing capability contribution with the same id.',
+        metadata: {
+          previousSource: existing.identity.source,
+          nextSource: contribution.identity.source,
+        },
+      });
+    }
+
+    for (const collision of findRegistrationCollisions(contribution, this.contributions.values())) {
+      this.diagnostics.push(collision);
+    }
+    this.contributions.set(contribution.identity.id, contribution);
+  }
+
+  private projectRegistry(): AgentCapabilityRegistryProjection {
+    return {
+      contributions: this.listRegistered(),
+      diagnostics: this.getDiagnostics('registration'),
+    };
+  }
+}
+
+function getInjectionSkipReason(
+  contribution: AgentCapabilityContribution,
+  context: AgentCapabilityInjectionContext,
+  disabledIds: ReadonlySet<string>,
+  trust: ReadonlySet<AgentCapabilityTrustLevel>,
+): { readonly reason: string; readonly message: string } | null {
+  if (disabledIds.has(contribution.identity.id)) {
+    return { reason: 'disabled', message: 'Capability contribution is disabled for this turn.' };
+  }
+  if (!trust.has(contribution.identity.trustLevel)) {
+    return {
+      reason: 'trust-policy',
+      message: 'Capability contribution is blocked by trust policy.',
+    };
+  }
+  if (!isHostSupported(contribution.hostRequirements, context.host)) {
+    return {
+      reason: 'host-requirement',
+      message: 'Capability contribution does not support the current host.',
+    };
+  }
+  if (!isWorkflowNodeSupported(contribution.workflowNodeRequirements, context)) {
+    return {
+      reason: 'workflow-node-requirement',
+      message: 'Capability contribution does not support the current workflow node.',
+    };
+  }
+  if (!isPermissionAllowed(contribution, context)) {
+    return {
+      reason: 'permission-policy',
+      message: 'Capability contribution is blocked by permission policy.',
+    };
+  }
+  if (context.activeSkillId && contribution.identity.id !== context.activeSkillId) {
+    const commandSkillIds = new Set(
+      (contribution.slashCommands ?? []).map((command) => command.skillId),
+    );
+    if (!commandSkillIds.has(context.activeSkillId)) {
+      return {
+        reason: 'active-skill',
+        message: 'Capability contribution is not selected by the active skill.',
+      };
+    }
+  }
+  return null;
+}
+
+function buildInjectedCapabilitySet(
+  registeredContributions: Iterable<AgentCapabilityContribution>,
+  context: AgentCapabilityInjectionContext,
+): AgentInjectedCapabilitySet {
+  const diagnostics: AgentCapabilityDiagnostic[] = [];
+  const promptFragments: PromptFragment[] = [];
+  const allowedTools: string[] = [];
+  const slashCommands: AgentCapabilitySlashCommandContribution[] = [];
+  const workflowFragments: AgentCapabilityWorkflowFragmentContribution[] = [];
+  const contributions: AgentCapabilityContribution[] = [];
+  const contributionList = Array.from(registeredContributions);
+
+  if (context.ablation?.disableCapabilityInjection) {
+    for (const contribution of contributionList) {
+      diagnostics.push(
+        skipDiagnostic(
+          contribution,
+          'ablation-disabled',
+          'Capability injection is disabled by ablation.',
+        ),
+      );
+    }
+    return {
+      contributions,
+      promptFragments,
+      allowedTools,
+      slashCommands,
+      workflowFragments,
+      diagnostics,
+    };
+  }
+
+  const disabledIds = new Set(context.disabledContributionIds ?? []);
+  const trust = new Set<AgentCapabilityTrustLevel>(
+    context.allowedTrustLevels ?? ['core', 'community'],
+  );
+  let remainingToolBudget = context.toolBudget ?? Number.POSITIVE_INFINITY;
+
+  for (const contribution of contributionList) {
+    const skipReason = getInjectionSkipReason(contribution, context, disabledIds, trust);
+    if (skipReason) {
+      diagnostics.push(skipDiagnostic(contribution, skipReason.reason, skipReason.message));
+      continue;
+    }
+
+    contributions.push(contribution);
+    if (!context.ablation?.disablePromptFragments) {
+      promptFragments.push(...(contribution.promptFragments ?? []));
+    }
+    if (!context.ablation?.disableSkillInjection) {
+      slashCommands.push(...(contribution.slashCommands ?? []));
+      workflowFragments.push(...(contribution.workflowFragments ?? []));
+    }
+    if (!context.ablation?.disableToolInjection && remainingToolBudget > 0) {
+      for (const toolName of contribution.allowedTools ?? contribution.toolNames ?? []) {
+        if (remainingToolBudget <= 0) break;
+        if (!allowedTools.includes(toolName)) {
+          allowedTools.push(toolName);
+          remainingToolBudget--;
+        }
+      }
+    }
+  }
+
+  if (remainingToolBudget <= 0) {
+    diagnostics.push({
+      phase: 'injection',
+      code: 'agent.capability.injection.tool-budget-exhausted',
+      reason: 'tool-budget',
+      message: 'Capability tool injection stopped because the tool budget was exhausted.',
+    });
+  }
+
+  return {
+    contributions,
+    promptFragments,
+    allowedTools,
+    slashCommands,
+    workflowFragments,
+    diagnostics,
+  };
+}
+
+function normalizeSkillScanGroup(
+  input: NormalizeSkillScanGroupInput,
+): readonly AgentCapabilityContribution[] {
+  return (input.skills ?? []).map((skill) =>
+    normalizeSkillCapability({
+      skill: normalizeSkillSource(skill, input.source),
+      source: input.source,
+      sourceId: resolveSkillSourceId(skill, input.source),
+      trustLevel: input.trustLevel,
+      version: skill.version,
+    }),
+  );
+}
+
+function normalizeSkillSource(skill: Skill, source: AgentCapabilitySource): Skill {
+  const skillSource = toSkillSource(source) ?? skill.source;
+  return skill.source === skillSource ? skill : { ...skill, source: skillSource };
+}
+
+function resolveSkillSourceId(skill: Skill, source: AgentCapabilitySource): string {
+  return skill.directoryPath ?? skill.name;
+}
+
+function findRegistrationCollisions(
+  contribution: AgentCapabilityContribution,
+  existingContributions: Iterable<AgentCapabilityContribution>,
+): AgentCapabilityDiagnostic[] {
+  const diagnostics: AgentCapabilityDiagnostic[] = [];
+  for (const existing of existingContributions) {
+    pushNameCollisions(diagnostics, contribution, existing, 'slash-command', getSlashCommandNames);
+    pushNameCollisions(
+      diagnostics,
+      contribution,
+      existing,
+      'tool',
+      (item) => item.toolNames ?? item.allowedTools ?? [],
+    );
+    pushNameCollisions(diagnostics, contribution, existing, 'prompt-fragment', (item) =>
+      (item.promptFragments ?? []).map((fragment) => fragment.id),
+    );
+    pushNameCollisions(diagnostics, contribution, existing, 'workflow-fragment', (item) =>
+      (item.workflowFragments ?? []).map((fragment) => fragment.id),
+    );
+  }
+  return diagnostics;
+}
+
+function pushNameCollisions(
+  diagnostics: AgentCapabilityDiagnostic[],
+  contribution: AgentCapabilityContribution,
+  existing: AgentCapabilityContribution,
+  kind: string,
+  getNames: (contribution: AgentCapabilityContribution) => readonly string[],
+): void {
+  const existingNames = new Set(getNames(existing));
+  for (const name of getNames(contribution)) {
+    if (!existingNames.has(name)) continue;
+    diagnostics.push({
+      phase: 'registration',
+      code: `agent.capability.registration.${kind}-collision`,
+      contributionId: contribution.identity.id,
+      reason: `${kind}-collision`,
+      message: 'Capability registration detected a deterministic name collision.',
+      metadata: {
+        name,
+        existingContributionId: existing.identity.id,
+        existingSource: existing.identity.source,
+        nextSource: contribution.identity.source,
+        winner: selectCollisionWinner(existing, contribution).identity.id,
+      },
+    });
+  }
+}
+
+function getSlashCommandNames(contribution: AgentCapabilityContribution): readonly string[] {
+  return (contribution.slashCommands ?? []).map((command) => command.name);
+}
+
+function selectCollisionWinner(
+  left: AgentCapabilityContribution,
+  right: AgentCapabilityContribution,
+): AgentCapabilityContribution {
+  return sourcePriority(left.identity.source) >= sourcePriority(right.identity.source)
+    ? left
+    : right;
+}
+
+function sourcePriority(source: AgentCapabilitySource): number {
+  switch (source) {
+    case 'builtin':
+      return 50;
+    case 'provider':
+    case 'market':
+      return 40;
+    case 'plugin':
+    case 'local':
+      return 30;
+    case 'mcp':
+      return 20;
+    default:
+      return 0;
+  }
+}
+
+function isHostSupported(
+  requirements: readonly AgentCapabilityHostRequirement[] | undefined,
+  host: AgentCapabilityInjectionContext['host'],
+): boolean {
+  if (!requirements || requirements.length === 0) return true;
+  return requirements.some((requirement) => requirement.host === host || requirement.optional);
+}
+
+function isWorkflowNodeSupported(
+  requirements: readonly AgentCapabilityWorkflowNodeRequirement[] | undefined,
+  context: AgentCapabilityInjectionContext,
+): boolean {
+  if (!requirements || requirements.length === 0) return true;
+  return requirements.some(
+    (requirement) =>
+      includesWhenPresent(requirement.nodeIds, context.workflowNodeId) &&
+      includesWhenPresent(requirement.nodeKinds, context.workflowNodeKind) &&
+      includesWhenPresent(requirement.stages, context.workflowStage),
+  );
+}
+
+function includesWhenPresent(
+  values: readonly string[] | undefined,
+  value: string | undefined,
+): boolean {
+  return !values || values.length === 0 || (value !== undefined && values.includes(value));
+}
+
+function isPermissionAllowed(
+  contribution: AgentCapabilityContribution,
+  context: AgentCapabilityInjectionContext,
+): boolean {
+  const requirements = contribution.permissionRequirements ?? [];
+  if (requirements.length === 0) return true;
+
+  const approvedContributionIds = new Set(context.permissionPolicy?.approvedContributionIds ?? []);
+  if (approvedContributionIds.has(contribution.identity.id)) return true;
+
+  const allowedScopes = new Set(context.permissionPolicy?.allowedScopes ?? []);
+  for (const requirement of requirements) {
+    if (
+      requirement.mode === 'irreversible' &&
+      context.permissionPolicy?.allowIrreversible !== true
+    ) {
+      return false;
+    }
+    if (requirement.approvalRequired) {
+      return false;
+    }
+    if (allowedScopes.size > 0 && !allowedScopes.has(requirement.scope)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function skipDiagnostic(
+  contribution: AgentCapabilityContribution,
+  reason: string,
+  message: string,
+): AgentCapabilityDiagnostic {
+  return {
+    phase: 'injection',
+    code: `agent.capability.injection.${reason}`,
+    contributionId: contribution.identity.id,
+    reason,
+    message,
+  };
+}
+
+function defaultTrustForSource(source: AgentCapabilitySource): AgentCapabilityTrustLevel {
+  return source === 'builtin' || source === 'provider' ? 'core' : 'community';
+}
+
+function pushMissingStringDiagnostic(
+  diagnostics: AgentCapabilityDiagnostic[],
+  contributionId: string,
+  value: string | undefined,
+  field: string,
+): void {
+  if (value && value.trim().length > 0) return;
+  diagnostics.push(validationDiagnostic(contributionId, 'missing-required-field', field));
+}
+
+function validationDiagnostic(
+  contributionId: string,
+  reason: string,
+  field: string,
+): AgentCapabilityDiagnostic {
+  return {
+    phase: 'registration',
+    code: `agent.capability.registration.${reason}`,
+    contributionId,
+    reason,
+    message: 'Capability contribution failed manifest/frontmatter validation.',
+    metadata: { field },
+  };
+}
+
+function isCapabilitySource(source: string): source is AgentCapabilitySource {
+  return ['builtin', 'market', 'local', 'plugin', 'mcp', 'provider'].includes(source);
+}
+
+function isTrustLevel(trustLevel: string): trustLevel is AgentCapabilityTrustLevel {
+  return ['core', 'community', 'untrusted'].includes(trustLevel);
+}
+
+function isHost(host: string): host is AgentCapabilityInjectionContext['host'] {
+  return ['vscode', 'cli', 'tui'].includes(host);
+}
+
+function toSkillSource(source: AgentCapabilitySource): SkillSource | null {
+  switch (source) {
+    case 'builtin':
+      return 'builtin';
+    case 'market':
+      return 'market';
+    case 'local':
+      return 'project';
+    default:
+      return null;
+  }
+}

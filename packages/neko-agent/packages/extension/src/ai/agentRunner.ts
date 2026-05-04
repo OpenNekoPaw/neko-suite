@@ -19,7 +19,12 @@ import { toSharedService } from '@neko/platform';
 import {
   buildAgentSessionExecutionContext,
   createAgentRuntimeSessionController,
+  createAgentRunnerEventEmitter,
   createAgentSessionRunner,
+  type AgentRunnerEventEmitter,
+  type AgentRunnerConfirmationRequest,
+  type AgentRunnerPort,
+  type AgentRunnerPortEvent,
   type AgentRuntimeSessionController,
   type AgentRuntimeSessionControllerTarget,
   type AgentRuntimeSessionAssemblyInput,
@@ -166,7 +171,7 @@ export interface IAgentConfig {
 /**
  * Agent Runner interface
  */
-export interface IAgentRunner extends vscode.Disposable {
+export interface IAgentRunner extends AgentRunnerPort<IAgentConfig, IAgentContext> {
   // -------------------------------------------------------------------------
   // Configuration
   // -------------------------------------------------------------------------
@@ -299,16 +304,18 @@ export interface IAgentRunner extends vscode.Disposable {
   readonly onDidStop: vscode.Event<void>;
 
   /** Tool confirmation event */
-  readonly onDidRequestConfirmation: vscode.Event<{
-    toolCallId: string;
-    toolName: string;
-    action: string;
-    description: string;
-    details: Record<string, unknown>;
-  }>;
+  readonly onDidRequestConfirmation: vscode.Event<AgentRunnerConfirmationRequest>;
 
   /** SubAgent lifecycle event */
   readonly onDidSubAgentEvent: vscode.Event<SubAgentEvent>;
+
+  /**
+   * Host-agnostic runner event stream.
+   *
+   * TODO(P1): Move Extension consumers from individual VSCode events to this
+   * port event where possible, keeping VSCode Event only as adapter surface.
+   */
+  readonly onDidRunnerEvent: vscode.Event<AgentRunnerPortEvent>;
 
   // -------------------------------------------------------------------------
   // ToolGroup Management
@@ -395,19 +402,16 @@ export class AgentRunner implements IAgentRunner {
   // VSCode event emitters
   private readonly _onDidStart = new vscode.EventEmitter<void>();
   private readonly _onDidStop = new vscode.EventEmitter<void>();
-  private readonly _onDidRequestConfirmation = new vscode.EventEmitter<{
-    toolCallId: string;
-    toolName: string;
-    action: string;
-    description: string;
-    details: Record<string, unknown>;
-  }>();
+  private readonly _onDidRequestConfirmation =
+    new vscode.EventEmitter<AgentRunnerConfirmationRequest>();
   private readonly _onDidSubAgentEvent = new vscode.EventEmitter<SubAgentEvent>();
+  private readonly _runnerEvents: AgentRunnerEventEmitter<AgentRunnerPortEvent> =
+    createAgentRunnerEventEmitter();
   private readonly _sessionRunner = createAgentSessionRunner<IAgentContext>({
     buildExecutionContext: (context) => this._buildExecutionContext(context),
-    onDidStart: () => this._onDidStart.fire(),
-    onDidStop: () => this._onDidStop.fire(),
-    onDidRequestConfirmation: (request) => this._onDidRequestConfirmation.fire(request),
+    onDidStart: () => this._emitStart(),
+    onDidStop: () => this._emitStop(),
+    onDidRequestConfirmation: (request) => this._emitConfirmation(request),
     onMissingConfirmation: (toolCallId) =>
       logger.warn('No pending confirmation found for toolCallId:', toolCallId),
     onConfirmationTimeout: (request) =>
@@ -440,18 +444,16 @@ export class AgentRunner implements IAgentRunner {
     return this._onDidStop.event;
   }
 
-  get onDidRequestConfirmation(): vscode.Event<{
-    toolCallId: string;
-    toolName: string;
-    action: string;
-    description: string;
-    details: Record<string, unknown>;
-  }> {
+  get onDidRequestConfirmation(): vscode.Event<AgentRunnerConfirmationRequest> {
     return this._onDidRequestConfirmation.event;
   }
 
   get onDidSubAgentEvent(): vscode.Event<SubAgentEvent> {
     return this._onDidSubAgentEvent.event;
+  }
+
+  get onDidRunnerEvent(): vscode.Event<AgentRunnerPortEvent> {
+    return this._runnerEvents.event;
   }
 
   // -------------------------------------------------------------------------
@@ -524,6 +526,7 @@ export class AgentRunner implements IAgentRunner {
 
   cancel(): void {
     this._sessionRunner.cancel();
+    this._runnerEvents.fire({ type: 'cancel' });
   }
 
   isRunning(): boolean {
@@ -555,7 +558,9 @@ export class AgentRunner implements IAgentRunner {
     compressedTokens: number;
     ratio: number;
   }> {
-    return this._sessionRunner.compressContext();
+    const result = await this._sessionRunner.compressContext();
+    this._runnerEvents.fire({ type: 'contextCompressed', result });
+    return result;
   }
 
   // -------------------------------------------------------------------------
@@ -594,6 +599,7 @@ export class AgentRunner implements IAgentRunner {
 
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
     this._sessionRunner.loadHistory(messages, messageEventIds);
+    this._runnerEvents.fire({ type: 'historyLoaded', messageCount: messages.length });
   }
 
   // -------------------------------------------------------------------------
@@ -663,7 +669,30 @@ export class AgentRunner implements IAgentRunner {
     }
     this._subAgentEventBridge = this._subAgentRuntime.onEvent((event) => {
       this._onDidSubAgentEvent.fire(event);
+      this._runnerEvents.fire({ type: 'subagent', event });
     });
+  }
+
+  private _emitStart(): void {
+    this._onDidStart.fire();
+    this._runnerEvents.fire({ type: 'start' });
+  }
+
+  private _emitStop(): void {
+    this._onDidStop.fire();
+    this._runnerEvents.fire({ type: 'stop' });
+  }
+
+  private _emitConfirmation(request: AgentRunnerConfirmationRequest): void {
+    const projected = {
+      toolCallId: request.toolCallId,
+      toolName: request.toolName,
+      action: request.action,
+      description: request.description,
+      details: request.details,
+    };
+    this._onDidRequestConfirmation.fire(projected);
+    this._runnerEvents.fire({ type: 'confirmation', request: projected });
   }
 
   // -------------------------------------------------------------------------
@@ -679,5 +708,6 @@ export class AgentRunner implements IAgentRunner {
     this._onDidStop.dispose();
     this._onDidRequestConfirmation.dispose();
     this._onDidSubAgentEvent.dispose();
+    this._runnerEvents.dispose();
   }
 }

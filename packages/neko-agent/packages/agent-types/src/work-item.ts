@@ -1,4 +1,5 @@
 import type { WebviewGeneratedAsset } from '@neko/shared';
+import type { AgentWorkflowIdentity } from './workflow';
 export type AgentWorkItemTaskStatus =
   | 'queued'
   | 'processing'
@@ -50,6 +51,7 @@ export type AgentWorkItemKind = 'media-task' | 'tool-background-task' | 'subagen
 export interface AgentWorkItemBase {
   id: string;
   conversationId: string;
+  workflow?: AgentWorkflowIdentity;
   kind: AgentWorkItemKind;
   parentMessageId: string | null;
   parentToolCallId: string | null;

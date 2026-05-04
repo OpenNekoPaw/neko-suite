@@ -84,6 +84,16 @@ export {
 } from './agent-runtime-manager';
 
 export {
+  createAgentRunnerEventEmitter,
+  type AgentRunnerEventEmitter,
+  type AgentRunnerConfirmationRequest,
+  type AgentRunnerEventSource,
+  type AgentRunnerPort,
+  type AgentRunnerPortEvent,
+  type DisposableLike,
+} from './agent-runner-port';
+
+export {
   AgentSessionRunner,
   DEFAULT_AGENT_SESSION_CONFIRMATION_TIMEOUT_MS,
   createAgentSessionRunner,
@@ -107,9 +117,37 @@ export {
 } from './agent-runtime-session-controller';
 
 export {
+  IDC_WORKFLOW_DEFINITION_ID,
+  buildWorkflowIdentity,
+  createAgentWorkflowRuntime,
+  createIdcWorkflowDefinition,
+  selectIdcWorkflowEntryNode,
+  type AgentWorkflowRuntime,
+  type AgentWorkflowRuntimeOptions,
+  type CreateAgentWorkflowRunInput,
+} from './agent-workflow-runtime';
+
+export {
   createAgentCapabilityRuntimeRegistries,
   type AgentCapabilityRuntimeRegistries,
 } from './capability-runtime-registries';
+
+export {
+  createAgentCapabilityInjectionRuntime,
+  normalizeManifestCapability,
+  normalizeSkillScanCapabilities,
+  normalizeSkillCapability,
+  validateCapabilityContribution,
+  type AgentCapabilityInjectionRuntime,
+  type NormalizeSkillScanGroupInput,
+  type NormalizeSkillScanInput,
+  type NormalizeSkillCapabilityInput,
+} from './agent-capability-injection-runtime';
+
+export {
+  createAgentPromptSchemaGenerator,
+  type AgentPromptSchemaGenerator,
+} from './agent-prompt-schema-generator';
 
 export {
   createCapabilityRuntimeBindingStore,
@@ -196,6 +234,20 @@ export {
   type TimelineContextRuntime,
   type TimelineContextRuntimeOptions,
 } from './timeline-context-runtime';
+
+export {
+  buildAgentTurnForWebviewRuntimeInput,
+  createAgentTurnHostContextAdapters,
+  type AgentTurnActiveSkillState,
+  type AgentTurnAssemblyInput,
+  type AgentTurnContextHostAdapters,
+  type AgentTurnContextHostOptions,
+  type AgentTurnConversationHost,
+  type AgentTurnHostAdapters,
+  type AgentTurnProviderHost,
+  type AgentTurnRuntimeServices,
+  type AgentTurnSettingsSource,
+} from './agent-turn-assembly';
 
 export {
   AGENT_TURN_FALLBACK_MESSAGE,
@@ -478,11 +530,22 @@ export {
 } from './attachment-projection';
 
 export {
+  buildTurnMultimodalContextPacket,
+  combineMultimodalContextPackets,
   createCanvasSelectionContextPacket,
+  createMediaAttachmentContextPacket,
+  createTextContextPacket,
   createTimelineContextPacketFromEditor,
   createTimelineSelectionContextPacket,
+  filterToolsByModalityAvailability,
+  loadPacketMediaPayloads,
+  projectGeneratedArtifactReference,
+  type BuildTurnMultimodalContextPacketInput,
   type CanvasSelectionContextNode,
   type CanvasSelectionContextOptions,
+  type CombineMultimodalContextPacketsOptions,
+  type MediaAttachmentContextInput,
+  type TextContextInput,
   type TimelineEditorContextInput,
   type TimelineSelectionContextElement,
   type TimelineSelectionContextOptions,
