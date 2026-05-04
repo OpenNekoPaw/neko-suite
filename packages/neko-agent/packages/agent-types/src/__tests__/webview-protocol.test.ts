@@ -399,11 +399,7 @@ describe('webview protocol projectors', () => {
         type: 'togglePlanMode',
         conversationId: 'conv-1',
       }),
-    ).toEqual({
-      type: 'togglePlanMode',
-      conversationId: 'conv-1',
-    });
-
+    ).toBeNull();
     expect(parseWebviewToExtensionMessage({ type: 'getPromptMode' })).toBeNull();
     expect(parseWebviewToExtensionMessage({ type: 'setPromptMode', mode: 'plan' })).toBeNull();
   });
