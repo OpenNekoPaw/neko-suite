@@ -42,6 +42,10 @@ export interface MediaQualitySceneInput {
 
 export interface MediaQualityCheckInput {
   scenes?: MediaQualitySceneInput[];
+  /**
+   * Explicit repair attempts for failed non-audio scenes. Defaults to 0 so
+   * read-only QualityCheck stays analysis-only.
+   */
   maxRetries?: number;
   minScore?: number;
   style?: string;
@@ -653,7 +657,7 @@ export class MediaQualityRuntime {
 
   async evaluate(input: MediaQualityCheckInput): Promise<MediaQualityCheckResult> {
     const scenes = input.scenes ?? [];
-    const maxRetries = input.maxRetries ?? 2;
+    const maxRetries = Math.max(0, Math.floor(input.maxRetries ?? 0));
     const minScore = input.minScore ?? 60;
 
     if (scenes.length === 0) {

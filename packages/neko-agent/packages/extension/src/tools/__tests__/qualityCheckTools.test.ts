@@ -181,6 +181,24 @@ describe('QualityCheck Tool', () => {
   });
 
   describe('all scenes pass', () => {
+    it('keeps file bytes behind the VSCode host adapter while quality policy runs in agent validation', async () => {
+      const mockService = createMockService(createPassingEvaluation());
+      const tools = createQualityCheckTools({
+        createService: () => mockService,
+        mediaGenerator: createMockGenerator(),
+      });
+
+      const tool = tools.find((t) => t.name === 'QualityCheck')!;
+      await tool.execute({
+        scenes: [{ index: 0, mediaPath: '${WORKSPACE}/scene.png', prompt: 'Scene' }],
+      });
+
+      expect(mockReadFile).toHaveBeenCalledWith(
+        expect.objectContaining({ fsPath: '${WORKSPACE}/scene.png' }),
+      );
+      expect(mockService.chat).toHaveBeenCalled();
+    });
+
     it('should evaluate all scenes and return pass results with dimensions', async () => {
       const mockService = createMockService(createPassingEvaluation());
       const mockGenerator = createMockGenerator();
@@ -320,7 +338,7 @@ describe('QualityCheck Tool', () => {
         mediaGenerator: mockGenerator,
       });
 
-      const tool = tools.find((t) => t.name === 'QualityCheck')!;
+      const tool = tools.find((t) => t.name === 'QualityRepairCheck')!;
       const result = (await tool.execute({
         scenes: [createScenes(1)[0]],
         maxRetries: 2,
@@ -360,7 +378,7 @@ describe('QualityCheck Tool', () => {
         mediaGenerator: mockGenerator,
       });
 
-      const tool = tools.find((t) => t.name === 'QualityCheck')!;
+      const tool = tools.find((t) => t.name === 'QualityRepairCheck')!;
       const result = (await tool.execute({
         scenes: [createScenes(1)[0]],
         maxRetries: 2,
@@ -1029,7 +1047,7 @@ describe('QualityCheck Tool', () => {
         frameExtractor: mockExtractor,
       });
 
-      const tool = tools.find((t) => t.name === 'QualityCheck')!;
+      const tool = tools.find((t) => t.name === 'QualityRepairCheck')!;
       const result = (await tool.execute({
         scenes: createVideoScenes(1),
         maxRetries: 2,

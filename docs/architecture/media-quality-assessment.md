@@ -2,6 +2,11 @@
 
 > neko-agent 生成素材质量评估系统：现状分析、模型能力调研与开发方案
 
+**状态**: Implementation Notes / Requires Reconciliation
+**最近核对**: 2026-05-04
+
+> 2026-05-04 现状校正：本文件混合了历史开发方案与已迁移实现。当前代码中，QA runtime 主要位于 `packages/neko-agent/packages/agent/src/validation/media-quality-runtime.ts` 与 `quality-check-tools.ts`，VSCode extension 侧 `qualityCheckTools.ts` 只是 wrapper。`QualityReview` 已可包装为 `PerceptionEvidence`，供 Agent-first Journal / rationale 引用，并通过 `quality-evidence-normalizer.ts` 富化为 `normalizedIssues`、`sourceIssues`、`normalizationDiagnostics` 与可选 `continuityEdgeCandidates`。未在当前工作树中发现 `agent/src/pipeline/stages/quality-gate.ts`；后续若恢复 pipeline gate，应保持“只产出 evidence / recommendation，不替代 Agent 判断”的边界。
+
 ---
 
 ## 1. 现状分析
@@ -10,33 +15,34 @@
 
 | 能力维度 | 当前状态 | 实现位置 |
 |---------|---------|---------|
-| 图片质量评估 | ✅ 完整（Vision LLM 多维评分 + 结构化诊断 + 重试循环） | `qualityCheckTools.ts` — VisionEvaluator |
-| 结构化问题分类 | ✅ 12 种 `QualityIssueCategory`，`QualityIssue[]` 替代 `string[]` | `qa-types.ts` + `qualityCheckTools.ts` |
-| 多维度评估 | ✅ `MediaEvaluation` 四维分数（技术/Prompt/剧本/美学） | `qa-types.ts` + `qualityCheckTools.ts` |
+| 图片质量评估 | ✅ Vision LLM 多维评分 + 结构化诊断；`QualityCheck` 默认只读、`maxRetries = 0`，再生成走 `QualityRepairCheck` | `agent/src/validation/media-quality-runtime.ts` — `VisionEvaluator` |
+| 结构化问题分类 | ✅ 15 种 `QualityIssueCategory`，`QualityIssue[]` 替代 `string[]` | `agent/src/validation/qa-types.ts` |
+| 多维度评估 | ✅ `MediaEvaluation` 四维基础分数 + audio/video 扩展维度 | `agent/src/validation/qa-types.ts` + `media-quality-runtime.ts` |
 | 确定性修复映射 | ✅ `RemediationPlanner`：issue → ToolSet 工具调用 | `remediation-planner.ts` |
-| 剧本 ↔ 素材符合度 | ✅ `sceneDialogue` + `globalStyle` 参数传入评估 prompt | `qualityCheckTools.ts` |
-| 视频质量评估 | ✅ VideoFrameEvaluator（多帧采样 + Vision LLM 评估，含 videoQuality 维度） | `qualityCheckTools.ts` — VideoFrameEvaluator |
-| 音频质量评估 | ✅ AudioEvaluator（Engine LUFS/TruePeak/静音 → 确定性阈值检测，零 LLM 成本） | `qualityCheckTools.ts` — AudioEvaluator |
+| 剧本 ↔ 素材符合度 | ✅ `sceneDialogue` + `globalStyle` 参数传入评估 prompt | `media-quality-runtime.ts` |
+| 视频质量评估 | ✅ VideoFrameEvaluator（多帧采样 + Vision LLM 评估，含 videoQuality 维度）；⚠️ 相邻 SSIM/PSNR 仍未填充 | `media-quality-runtime.ts` — `VideoFrameEvaluator` |
+| 音频质量评估 | ✅ AudioEvaluator（Engine LUFS/TruePeak/静音 → 确定性阈值检测，零 LLM 成本） | `media-quality-runtime.ts` — `AudioEvaluator` |
 | 人物/物品/场景一致性 | ✅ ConsistencyEvaluator（角色一致性追踪 + LLM 参考对比） | `consistency-evaluator.ts` |
 | 风格一致性检测 | ✅ ConsistencyEvaluator（CLIP 快筛 + Vision LLM 精评双层） | `consistency-evaluator.ts` |
 | 视频帧级问题检测 | ✅ 3 种视频 category（jitter/tearing/stuttering）+ RemediationPlanner 映射 | `qa-types.ts` + `remediation-planner.ts` |
 | 长视频分段评估 | TODO 无分片机制 | — |
-| 跨素材一致性 | ✅ QualityCheckConsistency 工具 + qualityGate 管线阶段 | `consistencyCheckTools.ts` + `quality-gate.ts` |
+| 跨素材一致性 | ✅ QualityCheckConsistency 工具；⚠️ 未发现 pipeline `quality-gate.ts` stage | `agent/src/validation/quality-check-tools.ts` + `consistency-evaluator.ts` |
+| QualityReview evidence | ✅ QualityCheck / QualityCheckConsistency 结果可包装为 `PerceptionEvidence`，并可附加归一化编辑证据 | `agent/src/feedback/quality-review-evidence.ts` + `agent/src/validation/quality-evidence-normalizer.ts` |
 | SSIM/PSNR 对比 | ✅ 完整（图片+视频+音频 diff） | `neko-engine` Rust 层 |
 | CLIP 评分 | ✅ EngineClient.clipScore() | `neko-client` |
 | 响度分析 | ✅ ITU-R BS.1770-4 LUFS | `neko-engine` loudness.rs |
 | IP-Adapter 参考图 | ✅ 类型+3 适配器（fal/DashScope/Kling） | `platform/media/types.ts` |
 | 音频技术指标类型 | ✅ `AudioTechnicalMetrics`（LUFS/TruePeak/LRA/静音率/削波检测） | `qa-types.ts` |
-| 媒体类型路由 | ✅ `detectMediaType()` 自动路由 image/video/audio 到对应 Evaluator | `qualityCheckTools.ts` |
+| 媒体类型路由 | ✅ `detectQualityMediaType()` 自动路由 image/video/audio 到对应 Evaluator | `media-quality-runtime.ts` |
 | 质量评估 Skill | ✅ `qualityAssessmentSkill` + `/quality-check` 斜杠命令 | `quality-assessment.ts` |
-| 质量评估 ToolSet | ✅ `mediaQAToolSet`（QualityCheck + QualityCheckConsistency + 按需激活） | `tool-skills.ts` |
+| 质量评估 ToolSet | ✅ `mediaQAToolSet`（QualityCheck + QualityRepairCheck + QualityCheckConsistency + 按需激活） | `tool-skills.ts` |
 | quality-checker SubAgent | ✅ 专用质量评估 SubAgent 预设（QualityCheck + QualityCheckConsistency） | `creative-presets.ts` |
-| Pipeline qualityGate | ✅ 可选质量门禁（opt-in，batchGenerate 后、arrangeOnTimeline 前） | `quality-gate.ts` |
+| Pipeline qualityGate | ⚠️ 文档历史项；当前未见 pipeline stage，仅见 quality gate approval adapter / feedback evidence | `approval/adapters/quality-gate-approval-adapter.ts` + `feedback/quality-review-evidence.ts` |
 
 ### 1.2 现有架构
 
 ```
-VisionEvaluator (qualityCheckTools.ts) — 图片评估
+VisionEvaluator (agent/src/validation/media-quality-runtime.ts) — 图片评估
 ├── evaluate(): 单图片 → base64 → Vision LLM → MediaEvaluation JSON
 │   └── 4 维度评分: technicalQuality / promptAdherence / scriptAdherence / aesthetics
 │   └── 上下文: prompt + description + globalStyle + dialogue[]
@@ -46,15 +52,15 @@ VisionEvaluator (qualityCheckTools.ts) — 图片评估
 └── 重试循环: overallScore < minScore → optimize → regenerate → re-evaluate
     └── 跟踪每次尝试的最佳分数/维度/issues，最终返回最优结果
 
-VideoFrameEvaluator (qualityCheckTools.ts) — 视频评估
+VideoFrameEvaluator (agent/src/validation/media-quality-runtime.ts) — 视频评估
 ├── evaluate(): 视频 → probe 元数据 → 均匀采样 N 帧 → 多帧 image part → Vision LLM → MediaEvaluation
 │   └── 5 维度评分: technicalQuality / promptAdherence / scriptAdherence / aesthetics / videoQuality
 │   └── 帧间一致性: jitter / tearing / stuttering 检测
 ├── IFrameExtractor 接口: extractFrame(source, time) + probe(source)
 ├── 采样策略: 排除首尾 5%，均匀 4 帧（可配置 maxFrames）
-└── 视频保留 retry（区别于 audio skip retry）
+└── 视频可通过 QualityRepairCheck 显式 retry（区别于 QualityCheck 只读评估）
 
-AudioEvaluator (qualityCheckTools.ts) — 音频评估（零 LLM 成本）
+AudioEvaluator (agent/src/validation/media-quality-runtime.ts) — 音频评估（零 LLM 成本）
 ├── evaluate(): 音频 → Engine LUFS/TruePeak/LRA/静音 → 确定性阈值 → MediaEvaluation
 ├── IAudioAnalyzer 接口: analyzeLoudness() + detectSilence()
 └── 音频不进入 retry 循环（技术问题通过 RemediationPlanner 确定性修复）
@@ -67,10 +73,17 @@ ConsistencyEvaluator (consistency-evaluator.ts) — 跨场景一致性评估
 ├── 视频支持: IFrameExtractor 提取中间帧作为代表图
 └── QualityCheckConsistency Tool (consistencyCheckTools.ts) 封装为 Agent 可调用工具
 
-QualityGate Stage (quality-gate.ts) — 管线质量门禁（opt-in）
-├── 位置: batchGenerate 之后、arrangeOnTimeline 之前
-├── 默认禁用: stageParams.qualityGate.enabled = false 时 passthrough
-└── 启用时: 调用 ConsistencyEvaluator → ctx.qualityReport
+QualityReviewEvidence (feedback/quality-review-evidence.ts) — Agent-first evidence 桥接
+├── QualityCheck / QualityCheckConsistency tool result → PerceptionEvidence
+├── evidence.data.kind = 'quality-review'
+├── 可附加 normalizedIssueIds / normalizedIssues / sourceIssues / normalizationDiagnostics
+├── QualityCheckConsistency 仅在相邻 scene/segment range 可用时附加 continuityEdgeCandidates
+└── 供 AgentObservation / DecisionRationale / Journal 引用，不直接替代 Agent 判断
+
+QualityGate Stage (历史规划项，当前未见 pipeline/stages/quality-gate.ts)
+├── 若恢复，应只做 opt-in reviewer / evidence provider
+├── 不应在 Pipeline 内执行内容判断或修复决策
+└── 不应替代 AgentObservation / DecisionRationale
 
 RemediationPlanner (remediation-planner.ts)
 ├── plan(): QualityIssue → RemediationAction（确定性映射，零 LLM）
@@ -98,11 +111,18 @@ QualityCheck Tool 返回:
   }
 
 执行策略: Path A (Agent ReAct 工具调用)
-  - NOT pipeline stage — QualityCheck 作为独立 tool
+  - NOT pipeline stage — QualityCheck 作为独立 read-only tool
   - Agent 在 ReAct 循环中自主决定是否调用
-  - 评估→结构化诊断→确定性修复映射闭环在工具内部完成
-  - Agent 可根据 remediations 自主执行 ToolSet 修复
+  - 评估→结构化诊断→确定性修复映射在工具内部完成
+  - 评估结果可转换为 QualityReviewEvidence / PerceptionEvidence
+  - Agent 必须基于 observation / rationale 决定是否执行 ToolSet 修复；再生成 repair 使用 QualityRepairCheck 并需确认
 ```
+
+边界说明：
+
+- `MediaEvaluation.overallScore` 与 `minScore` 是 QA 工具的内部评分信号，不是自动修改项目状态的授权。
+- `QualityCheck` 当前保持 read-only：runtime 默认 `maxRetries = 0`，工具执行时忽略 `maxRetries` 并不调用 `mediaGenerator.generate()`。显式 retry / regeneration 已拆到 `QualityRepairCheck`，该工具为非 read-only 且 `requiresConfirmation = true`。
+- 对接 [Agent 视频内容理解与自动后期分析分层](./video-content-understanding-for-editing.md) 时，`QualityIssue` 必须先通过 `normalizeQualityReviewPayload()` 映射为带时间码、metrics 与 `evidenceIds` 的 `BasicQualityIssue`，不能直接作为 `VideoContentIndex` 的长期模型。
 
 **Phase 1 已解决的局限** ~~(Phase 1 前)~~：
 1. ~~**无结构化问题分类**~~ → ✅ `QualityIssue[]`（12 种 category × 4 种 severity）
@@ -144,7 +164,7 @@ RemediationAction { type, description, toolName?, toolParams?, optimizedPrompt?,
 MediaEvaluation { overallScore, dimensions: { technicalQuality, promptAdherence, scriptAdherence?, aesthetics }, issues, passed }
 ```
 
-**P2 未实现（跨场景一致性）**:
+**跨场景一致性（当前已实现基础报告）**:
 
 ```typescript
 StyleDriftPair       // 相邻场景风格漂移评分（driftScore 0-100）
@@ -163,7 +183,7 @@ Pipeline 和 ToolSet 中存在大量可用于"修复"的工具。Phase 1 已通�
 | `audioEditingToolSet` | SetAudioProperties | 音量归一化、降噪 | ✅ | ✅ `audio-noise/clipping/loudness→SetAudioProperties` |
 | `elementEditingToolSet` | TrimElement, SplitElement | 裁剪问题片段 | ✅ | TODO 未映射到 RemediationPlanner |
 | `animationKeyframesToolSet` | AddKeyframe | 平滑过渡修复 | ✅ | TODO 未映射到 RemediationPlanner |
-| `mediaQAToolSet` | QualityCheck, QualityCheckConsistency | 质量检测 + 一致性 | ✅ 按需激活 | — |
+| `mediaQAToolSet` | QualityCheck, QualityRepairCheck, QualityCheckConsistency | 质量检测 + 显式修复 + 一致性 | ✅ 按需激活 | — |
 
 ### 1.5 底层已有能力（neko-engine Rust 层）
 
@@ -418,10 +438,10 @@ ReAct 局限:
 | 进度追踪 | ✅ PipelineEvent | 需手动 | Pipeline 辅助 |
 
 **最终方案**：
-- **单素材评估**：Agent ReAct 直接调用 `QualityAssess` tool
+- **单素材评估**：Agent ReAct 直接调用 `QualityCheck` tool
 - **批量评估**：Agent 启动 Coordinator，N 个 `quality-checker` SubAgent 并行评估
 - **修复决策**：Agent ReAct 看到评估结果后自主选择修复工具
-- **Pipeline 集成**：opt-in 的 `qualityGate` 阶段（仅门控展示报告，不做判断）
+- **Pipeline 集成**：当前以 `QualityReviewEvidence` / approval adapter 为准；`qualityGate` stage 是可恢复目标形态，待代码核实
 
 **不应该做的**：
 - 不要把判断逻辑塞进 Pipeline ReactiveStage（丢失 LLM 推理能力）
@@ -614,23 +634,23 @@ interface ConsistencyContext {
 │  L3: Agent ReAct (决策层)                                            │
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │ Agent 自主决策:                                                 │  │
-│  │  · 单素材 → 直接调用 QualityAssess tool                        │  │
+│  │  · 单素材 → 直接调用 QualityCheck tool                         │  │
 │  │  · 批量评估 → 启动 Coordinator (N 个 quality-checker SubAgent) │  │
 │  │  · 看到结果 → 自主选择修复工具 / 重新生成 / 请求用户确认        │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │                                                                      │
 │  L2: 编排层                                                          │
 │  ┌─────────────────────┐  ┌────────────────────────────────────┐    │
-│  │ Pipeline (opt-in)   │  │ Coordinator (批量评估)              │    │
-│  │ qualityGate 阶段    │  │ quality-checker SubAgent × N       │    │
-│  │ 仅门控展示报告       │  │ 并行评估 + 结果聚合               │    │
-│  │ 不做判断            │  │                                    │    │
+│  │ Pipeline (historical│  │ Coordinator (批量评估)              │    │
+│  │ qualityGate target) │  │ quality-checker SubAgent × N       │    │
+│  │ 当前以 evidence     │  │ 并行评估 + 结果聚合               │    │
+│  │ bridge 为准         │  │                                    │    │
 │  └─────────────────────┘  └────────────────────────────────────┘    │
 │                                                                      │
 │  L1: 评估服务层                                                       │
 │  ┌──────────────────────────────────────────────────────────────┐    │
-│  │                 QualityAssessmentService                      │    │
-│  │  (orchestrator: 选择评估器、聚合结果)                          │    │
+│  │                 MediaQualityRuntime                           │    │
+│  │  (orchestrator: 选择评估器、聚合结果；当前代码实现)             │    │
 │  ├──────────────────────────────────────────────────────────────┤    │
 │  │                                                              │    │
 │  │  ┌───────────────┐  ┌──────────────┐  ┌───────────────────┐ │    │
@@ -658,7 +678,7 @@ interface ConsistencyContext {
 执行路径:
 
   路径 A — 单素材评估 (ReAct 直接):
-    Agent → QualityAssess tool → QualityAssessmentService → IMediaEvaluator[]
+    Agent → QualityCheck tool → MediaQualityRuntime → evaluator[]
     Agent 看结果 → RemediationPlanner → 执行 ToolSet 修复
 
   路径 B — 批量评估 (ReAct + Coordinator):
@@ -666,9 +686,10 @@ interface ConsistencyContext {
     Coordinator → N 个 SubAgent 并行评估 → 聚合结果回 Agent
     Agent 看聚合结果 → 自主决定逐个修复 / 批量重生成
 
-  路径 C — Pipeline 内嵌 (opt-in):
-    ... → batchGenerate → qualityGate[展示报告] → Agent 接管修复决策
-    qualityGate 仅做评估 + 门控展示，不做修复判断
+  路径 C — Pipeline / Approval 辅助:
+    当前: QualityCheck result → QualityReviewEvidence → AgentObservation / DecisionRationale
+    历史目标: ... → batchGenerate → qualityGate[展示报告] → Agent 接管修复决策
+    约束: gate 仅做评估 + 门控展示，不做修复判断
 ```
 
 ### 4.4 分阶段实施计划
@@ -978,10 +999,10 @@ enableClipScreen: {
 - 实际评估仍走帧提取路径（多帧 image part），`VideoPart` 为原生视频理解预留
 - 不硬编码任何模型 — 通过 `createService()` + `ModelSelector` + `capabilities: ['vision']` 选择
 
-**QualityCheck tool 路由**：
+**QualityCheck / QualityRepairCheck tool 路由**：
 - `detectMediaType()` 返回 `'video'` → VideoFrameEvaluator
-- 视频保留 retry 能力（区别于音频 skip retry）
-- retry 时重新评估也使用 VideoFrameEvaluator
+- `QualityCheck` 保持只读，默认 `maxRetries = 0`，不执行再生成
+- `QualityRepairCheck` 是非只读、需确认的显式 repair path；视频 retry 时重新评估也使用 VideoFrameEvaluator
 
 **SSIM/PSNR 相邻帧指标**（optional，待扩展）：
 - `VideoTechnicalMetrics.meanAdjacentSsim/minAdjacentSsim/meanAdjacentPsnr` 为 optional 字段
@@ -994,7 +1015,7 @@ enableClipScreen: {
 |------|------|--------|
 | `agent/src/pipeline/qa-types.ts` | 扩展 | +3 视频 category，+`VideoTechnicalMetrics`，+`videoQuality` 维度，+`videoMetrics` 字段 |
 | `agent/src/pipeline/index.ts` | 扩展 | re-export `VideoTechnicalMetrics` |
-| `extension/src/tools/qualityCheckTools.ts` | 扩展 | +`IFrameExtractor`/`VideoFrameEvaluator` ~180 行，+video 路由，+retry video 评估 |
+| `extension/src/tools/qualityCheckTools.ts` | 扩展 | +`IFrameExtractor`/`VideoFrameEvaluator` ~180 行，+video 路由，+显式 `QualityRepairCheck` retry video 评估 |
 | `agent/src/validation/remediation-planner.ts` | 扩展 | +3 视频 category 映射（jitter/tearing/stuttering） |
 | `platform/src/types/adapter.ts` | 扩展 | +`VideoPart` 类型，`ContentPart` 三联合 |
 | `platform/src/llm/adapter/ai-sdk-adapter.ts` | 扩展 | +`video` → `file` part 转换 |
@@ -1048,9 +1069,11 @@ enableClipScreen: {
 
 ---
 
-#### Phase 4: 跨素材一致性 + 批量评估（P2）✅ 已完成 2026-04-02
+#### Phase 4: 跨素材一致性 + 批量评估（P2）✅ 部分完成 / pipeline gate 待核实
 
-**实现内容**：`ConsistencyReport` 完整实现，双层评估架构（CLIP 快筛 + Vision LLM 精评），角色一致性追踪，quality-checker SubAgent，Pipeline qualityGate
+**实现内容**：`ConsistencyReport` 基础实现，双层评估架构（CLIP 快筛 + Vision LLM 精评），角色一致性追踪，quality-checker SubAgent。Pipeline `qualityGate` stage 是历史目标项，当前需重新核实。
+
+**2026-05-04 inline reconciliation**：当前工作树未见 `agent/src/pipeline/stages/quality-gate.ts`；该 stage 不作为当前实现入口。历史能力在 `approval/adapters/quality-gate-approval-adapter.ts` 与 `feedback/quality-review-evidence.ts` 中以不同形态保留，且仍需遵守“QA 产出 evidence / recommendation，不替代 Agent 判断”的边界。
 
 ##### 4a. ConsistencyEvaluator（已实现）
 
@@ -1097,9 +1120,11 @@ ConsistencyEvaluator
 - `CreativeAgentType` 新增 `'quality-checker'`
 - CREATIVE_PRESETS 新增条目：allowedTools `['QualityCheck', 'QualityCheckConsistency']`，tier `'balanced'`，maxIterations `10`
 
-##### 4d. Pipeline qualityGate（已实现，opt-in）
+##### 4d. Pipeline qualityGate（历史目标 / 待核实）
 
-**文件**: `agent/src/pipeline/stages/quality-gate.ts`（~85 行）
+**2026-05-04 现状校正**：这是历史实施目标描述。当前工作树未发现 `agent/src/pipeline/stages/quality-gate.ts`；已存在的是 quality gate approval adapter 与 `QualityReviewEvidence` 桥接。若后续恢复 Pipeline stage，本节仍可作为目标形态，但必须遵守 Agent-first 边界：stage 只产出 report / evidence / recommendation，不直接替代 Agent 判断或修复决策。
+
+**目标文件**: `agent/src/pipeline/stages/quality-gate.ts`（历史规划）
 
 ```
 qualityGate stage
@@ -1120,10 +1145,10 @@ qualityGate stage
 | `extension/src/tools/__tests__/consistencyCheckTools.test.ts` | **新增** | ~130 行 (5 tests) |
 | `agent/src/subagent/creative-presets.ts` | 扩展 | +22 行 |
 | `agent/src/subagent/types.ts` | 扩展 | +1 行 |
-| `agent/src/pipeline/stages/quality-gate.ts` | **新增** | ~85 行 |
-| `agent/src/pipeline/pipeline-registry.ts` | 扩展 | +6 行 |
-| `agent/src/pipeline/index.ts` | 扩展 | +3 行 |
-| `extension/src/pipeline/pipeline-bootstrap.ts` | 扩展 | +25 行 |
+| `agent/src/pipeline/stages/quality-gate.ts` | 历史目标 / 待核实 | 当前未见该文件 |
+| `agent/src/pipeline/pipeline-registry.ts` | 历史目标 / 待核实 | 当前需重新核对 |
+| `agent/src/pipeline/index.ts` | 历史目标 / 待核实 | 当前需重新核对 |
+| `extension/src/pipeline/pipeline-bootstrap.ts` | 历史目标 / 待核实 | 当前需重新核对 |
 | `agent/src/skill/builtins/tool-skills.ts` | 扩展 | +1 行 |
 
 ---
@@ -1234,10 +1259,11 @@ Phase 3 (P1) — ✅ 已完成 (2026-04-02)
   改动: qa-types.ts (+AudioTechnicalMetrics), pipeline/index.ts, qualityCheckTools.ts (+AudioEvaluator +detectMediaType)
   测试: qualityCheckTools.test.ts (+8 audio tests, 35 total)
 
-Phase 4 (P2) — ✅ 已完成 (2026-04-02)
+Phase 4 (P2) — ✅ 部分完成 / pipeline gate 待核实 (2026-05-04)
   改动: creative-presets.ts, types.ts, pipeline-registry.ts, pipeline/index.ts,
         validation/index.ts, pipeline-bootstrap.ts, tool-skills.ts
-  新增: consistency-evaluator.ts, consistencyCheckTools.ts, quality-gate.ts
+  新增: consistency-evaluator.ts, consistencyCheckTools.ts
+  历史目标但当前未见: quality-gate.ts
   测试: consistency-evaluator.test.ts (11 tests), consistencyCheckTools.test.ts (5 tests)
 
 Phase 5 (P2) — ✅ 已完成 (2026-04-02)
@@ -1273,7 +1299,7 @@ Phase 1 ✅ (类型 + 图片评估 + 修复映射) — 已完成
 | 修复执行 | 复用已有 ToolSet | 零新工具开发 |
 | 执行模式 | 混合分层（§3） | ReAct 做判断 + Coordinator 做并行 + Pipeline opt-in 门控 |
 | 批量评估 | Coordinator + quality-checker SubAgent | 并行评估 N 场景，结果聚合回 Agent |
-| Pipeline 集成 | opt-in qualityGate（仅展示报告） | 不在 Pipeline 内做修复判断，保持 Agent 决策权 |
+| Pipeline 集成 | 当前以 QualityReviewEvidence / approval adapter 为准；qualityGate stage 待核实 | 不在 Pipeline 内做修复判断，保持 Agent 决策权 |
 | VMAF 集成 | 暂不集成，SSIM/PSNR 已足够 | 减少复杂度，已有能力已够用 |
 
 ### 4.8 外部依赖
@@ -1282,7 +1308,7 @@ Phase 1 ✅ (类型 + 图片评估 + 修复映射) — 已完成
 Phase 1 → ✅ 已完成 (2026-04-01)
 Phase 2 → ✅ 已完成 (2026-04-02)（VideoFrameEvaluator + VideoPart + 3 video categories + RemediationPlanner 映射）
 Phase 3 → ✅ 已完成 (2026-04-02)（AudioEvaluator + AudioTechnicalMetrics + IAudioAnalyzer）
-Phase 4 → ✅ 已完成 (2026-04-02)（ConsistencyEvaluator + QualityCheckConsistency + qualityGate + quality-checker SubAgent）
+Phase 4 → ✅ 部分完成 / pipeline gate 待核实 (2026-05-04)（ConsistencyEvaluator + QualityCheckConsistency + quality-checker SubAgent；qualityGate stage 未见）
 Phase 5 → ✅ 已完成 (2026-04-02)（Skill + ToolSet + quality-check slash command）
 ```
 
@@ -1300,3 +1326,6 @@ Phase 5 → ✅ 已完成 (2026-04-02)（Skill + ToolSet + quality-check slash c
 | Rust 侧 FFT/onset 开发周期 | Phase 3 工期 | 先纯 LLM 语义评估上线，技术指标渐进增强 |
 | Coordinator SubAgent 上下文隔离导致跨场景判断缺失 | Phase 4 一致性评估 | 聚合结果回 Agent ReAct 层做跨场景判断，SubAgent 仅做单素材评估 |
 | 三种模式交互复杂度 | 全阶段 | 严格分层：ReAct 决策 / Coordinator 并行 / Pipeline 门控，不互相侵入 |
+| `QualityCheck` read-only 声明与默认 retry 生成行为不一致 | 工具权限 / 用户预期 | ✅ 已拆分：`QualityCheck` 只读且默认 `maxRetries = 0`；`QualityRepairCheck` 非只读、需确认 |
+| QA category 与编辑理解 category 分叉 | 自动后期计划错误 | 增加 `QualityIssue → BasicQualityIssue / ContinuityEdge` 显式映射层，并要求 timeRange / metrics / evidenceIds |
+| 历史 `qualityGate` stage 描述与当前代码不一致 | 文档误导 / 集成失败 | 将 pipeline gate 标为待核实；优先使用 `QualityReviewEvidence` 作为 Agent-first evidence |

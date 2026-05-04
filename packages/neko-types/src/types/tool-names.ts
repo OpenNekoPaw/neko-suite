@@ -89,6 +89,7 @@ export const TOOL_NAMES_MEDIA = {
 
 export const TOOL_NAMES_QUALITY = {
   QUALITY_CHECK: 'QualityCheck',
+  QUALITY_REPAIR_CHECK: 'QualityRepairCheck',
   QUALITY_CHECK_CONSISTENCY: 'QualityCheckConsistency',
 } as const;
 

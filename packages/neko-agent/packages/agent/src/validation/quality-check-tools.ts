@@ -1,4 +1,4 @@
-import { createTool, type Tool, type ToolResult } from '@neko/shared';
+import { createTool, type Tool, type ToolParameterProperty, type ToolResult } from '@neko/shared';
 import {
   createConsistencyEvaluator,
   type CharacterRef,
@@ -43,6 +43,7 @@ export interface ConsistencyCheckToolsDeps extends ConsistencyEvaluatorDeps {
 
 export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
   const runtime = createMediaQualityRuntime(deps);
+  const sharedParameters = createQualityCheckParameterSchema();
 
   return [
     createTool({
@@ -51,58 +52,44 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
         'Evaluate AI-generated media quality using multimodal LLM vision analysis. ' +
         'Returns structured issues with categories (artifact, prompt-mismatch, style-drift, etc.) ' +
         'and remediation actions mapped to existing tools (AddEffect, SetColorCorrection, etc.). ' +
-        'Automatically retries low-scoring scenes with optimized prompts. ' +
+        'This read-only tool never regenerates media; retry and repair are handled by QualityRepairCheck. ' +
         'IMPORTANT: Only use when the user explicitly requests quality checking - ' +
         'each evaluation costs a vision LLM call. Do NOT call automatically after generation.',
       category: 'analysis',
       isReadOnly: true,
       isConcurrencySafe: false,
-      parameters: {
-        type: 'object',
-        properties: {
-          scenes: {
-            type: 'array',
-            description:
-              'Array of scenes to evaluate. Each scene has: index (number), ' +
-              'mediaPath (file path), prompt (generation prompt), description (optional scene description)',
-            items: {
-              type: 'object',
-              properties: {
-                index: { type: 'number', description: 'Scene index' },
-                mediaPath: { type: 'string', description: 'Path to generated media file' },
-                prompt: { type: 'string', description: 'Prompt used for generation' },
-                description: { type: 'string', description: 'Scene description for context' },
-              },
-              required: ['index', 'mediaPath', 'prompt'],
-            },
-          },
-          maxRetries: {
-            type: 'number',
-            description: 'Maximum retries per failed scene (default: 2)',
-          },
-          minScore: {
-            type: 'number',
-            description: 'Minimum passing score 0-100 (default: 60)',
-          },
-          style: {
-            type: 'string',
-            description:
-              'Global visual style for regeneration and consistency context (e.g., "anime", "cinematic")',
-          },
-          sceneDialogue: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Scene dialogue lines for script adherence evaluation',
-          },
-        },
-        required: ['scenes'],
-      },
+      parameters: sharedParameters.analysis,
       execute: async (args) => {
         const scenes = readQualityScenes(args['scenes']);
 
         const data = await runtime.evaluate({
           scenes,
-          maxRetries: typeof args['maxRetries'] === 'number' ? args['maxRetries'] : undefined,
+          maxRetries: 0,
+          minScore: typeof args['minScore'] === 'number' ? args['minScore'] : undefined,
+          style: typeof args['style'] === 'string' ? args['style'] : undefined,
+          sceneDialogue: readStringArray(args['sceneDialogue']),
+        });
+
+        return { success: true, data };
+      },
+    }),
+    createTool({
+      name: 'QualityRepairCheck',
+      description:
+        'Evaluate AI-generated media quality and explicitly attempt repair by regenerating failed image/video scenes. ' +
+        'Use only after the user or Agent policy approves repair; generated media is reported as a repair attempt, not read-only analysis.',
+      category: 'generation',
+      requiresConfirmation: true,
+      isReadOnly: false,
+      isConcurrencySafe: false,
+      parameters: sharedParameters.repair,
+      execute: async (args) => {
+        const scenes = readQualityScenes(args['scenes']);
+        const maxRetries = readNonNegativeInteger(args['maxRetries']) ?? 1;
+
+        const data = await runtime.evaluate({
+          scenes,
+          maxRetries,
           minScore: typeof args['minScore'] === 'number' ? args['minScore'] : undefined,
           style: typeof args['style'] === 'string' ? args['style'] : undefined,
           sceneDialogue: readStringArray(args['sceneDialogue']),
@@ -112,6 +99,66 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
       },
     }),
   ];
+}
+
+function createQualityCheckParameterSchema(): {
+  readonly analysis: Tool['parameters'];
+  readonly repair: Tool['parameters'];
+} {
+  const sceneArray: ToolParameterProperty = {
+    type: 'array',
+    description:
+      'Array of scenes to evaluate. Each scene has: index (number), ' +
+      'mediaPath (file path), prompt (generation prompt), description (optional scene description)',
+    items: {
+      type: 'object',
+      properties: {
+        index: { type: 'number', description: 'Scene index' },
+        mediaPath: { type: 'string', description: 'Path to generated media file' },
+        prompt: { type: 'string', description: 'Prompt used for generation' },
+        description: { type: 'string', description: 'Scene description for context' },
+      },
+      required: ['index', 'mediaPath', 'prompt'],
+    },
+  };
+  const common: Record<string, ToolParameterProperty> = {
+    scenes: sceneArray,
+    minScore: {
+      type: 'number',
+      description: 'Minimum passing score 0-100 (default: 60)',
+    },
+    style: {
+      type: 'string',
+      description: 'Global visual style for evaluation context (e.g., "anime", "cinematic")',
+    },
+    sceneDialogue: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Scene dialogue lines for script adherence evaluation',
+    },
+  };
+
+  return {
+    analysis: {
+      type: 'object',
+      properties: {
+        ...common,
+      },
+      required: ['scenes'],
+    },
+    repair: {
+      type: 'object',
+      properties: {
+        ...common,
+        maxRetries: {
+          type: 'number',
+          description:
+            'Explicit repair retry count for failed image/video scenes (default: 1). Audio never regenerates.',
+        },
+      },
+      required: ['scenes'],
+    },
+  };
 }
 
 export function createConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): Tool[] {
@@ -240,6 +287,11 @@ function readStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const strings = value.filter((item): item is string => typeof item === 'string');
   return strings.length > 0 ? strings : undefined;
+}
+
+function readNonNegativeInteger(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.floor(value));
 }
 
 function isMediaQualitySceneInput(value: unknown): value is MediaQualitySceneInput {

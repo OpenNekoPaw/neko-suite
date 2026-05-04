@@ -413,9 +413,23 @@ export {
   type ValidationResultWithBlocks,
   type ConsistencyCheckToolsDeps,
   type QualityCheckToolsDeps,
+  type BasicQualityIssue,
+  type BasicQualityIssueCategory,
+  type NormalizedQualityConsistencyEvidence,
+  type NormalizedQualityEvidence,
+  type QualityContinuityEdgeCandidate,
+  type QualityEvidenceSceneTimeRange,
+  type QualityEvidenceSource,
+  type QualityEvidenceTimeRange,
+  type QualityEvidenceValidationResult,
+  type VideoContentIndex,
+  type VideoContentIndexInput,
+  type VideoContentIndexValidationResult,
+  type VideoContentSourceKind,
   // Constants
   DEFAULT_IMAGE_CONSTRAINTS,
   DEFAULT_OUTPUT_CONSTRAINTS,
+  VIDEO_CONTENT_ANALYZER_PLACEHOLDERS,
   // Image Validator
   ImageValidator,
   ImageValidationError,
@@ -444,6 +458,18 @@ export {
   // Quality / consistency tool factories
   createConsistencyCheckTools,
   createQualityCheckTools,
+  // Quality evidence normalization
+  createContinuityEdgeId,
+  createNormalizedQualityIssueId,
+  mapQualityIssueCategory,
+  normalizeQualityConsistencyPayload,
+  normalizeQualityReviewPayload,
+  validateBasicQualityIssue,
+  // VideoContentIndex foundation
+  buildVideoContentIndex,
+  createVideoContentIndexId,
+  createVideoSegmentId,
+  validateVideoContentIndex,
 } from './validation';
 
 // Export permission

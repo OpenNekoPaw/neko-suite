@@ -1,5 +1,5 @@
 /**
- * Quality Assessment Skill — Evaluate AI-generated media and auto-fix issues
+ * Quality Assessment Skill — Evaluate AI-generated media and propose fixes
  *
  * Triggered by semantic matching (quality check, evaluate media, 质量检查, etc.)
  * or slash command: /quality-check
@@ -21,7 +21,7 @@ export const qualityAssessmentSkill: Skill = {
     '检查画面, 有没有问题.',
   content: `# Media Quality Assessment Assistant
 
-You help users evaluate the quality of AI-generated media and fix detected issues.
+You help users evaluate the quality of AI-generated media and fix detected issues after approval.
 
 ## Workflow
 
@@ -31,7 +31,7 @@ Call **QualityCheck** with the scenes to evaluate.
 Parameters:
 - \`scenes\`: Array of \`{ index, mediaPath, prompt, description? }\`
 - \`minScore\`: Minimum passing score (default 60, range 0-100)
-- \`maxRetries\`: Auto-retry count for failed image scenes (default 2; audio skips retry)
+- \`maxRetries\`: Ignored by read-only QualityCheck. Use QualityRepairCheck for retry/regeneration.
 - \`style\`: Global style context (e.g., "anime", "cinematic")
 - \`sceneDialogue\`: Dialogue lines for script adherence check
 
@@ -60,7 +60,7 @@ The tool returns structured evaluation results:
 - **remediations[]**: Suggested fixes with tool names and parameters
 
 ### Step 3: Apply Fixes
-Based on remediations, use the corresponding tools:
+QualityCheck is read-only evidence. Based on remediations, ask for approval or use an approved repair path before modifying media or timeline state:
 
 | Remediation Type | Tool | Example |
 |------------------|------|---------|
@@ -70,6 +70,8 @@ Based on remediations, use the corresponding tools:
 | \`regenerate\` | **GenerateImage** / **GenerateVideo** | Re-generate with improved prompt |
 | \`regenerate-ref\` | **GenerateImage** | Re-generate with IP-Adapter reference |
 | \`manual-review\` | — | Flag for user review, no auto-fix |
+
+For regeneration repair attempts, use **QualityRepairCheck** only after explicit approval or policy opt-in. It may regenerate failed image/video scenes and reports those outputs as repair attempts.
 
 ### Step 4: Report
 Summarize results in a clear table:
@@ -98,13 +100,14 @@ Summarize results in a clear table:
 ## Important
 - Only evaluate when user explicitly requests — each **image** evaluation costs a vision LLM call
 - **Audio evaluation is free** — uses Engine technical metrics (LUFS, true peak, silence), no LLM
-- Image scenes that fail will auto-retry with optimized prompts (up to maxRetries)
-- Audio scenes never retry — issues are fixed deterministically via ToolSet tools
+- QualityCheck never regenerates media; failed scenes remain evidence for Agent rationale
+- Audio scenes never retry — issues are fixed deterministically via ToolSet tools after approval
 - Show concrete scores, issue categories, and specific remediation steps — don't be vague
 `,
   allowedTools: [
     // Quality evaluation
     TOOL_NAMES_QUALITY.QUALITY_CHECK,
+    TOOL_NAMES_QUALITY.QUALITY_REPAIR_CHECK,
     // Remediation: regeneration
     TOOL_NAMES_MEDIA.GENERATE_IMAGE,
     TOOL_NAMES_MEDIA.GENERATE_VIDEO,

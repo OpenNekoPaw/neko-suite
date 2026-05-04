@@ -309,7 +309,7 @@ export const mediaQAToolSet: ToolGroup = {
     'Image evaluation uses multimodal LLM vision analysis. ' +
     'Audio evaluation uses Engine technical metrics (LUFS, true peak, silence) — zero LLM cost. ' +
     'Activate when user explicitly requests quality checking of generated media.',
-  tools: ['QualityCheck', 'QualityCheckConsistency'],
+  tools: ['QualityCheck', 'QualityRepairCheck', 'QualityCheckConsistency'],
   alwaysActive: false,
   priority: 70,
   loadingTier: 'lazy',

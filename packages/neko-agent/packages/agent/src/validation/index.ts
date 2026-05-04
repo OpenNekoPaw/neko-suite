@@ -147,3 +147,66 @@ export type {
 // Quality / consistency tool factories
 export { createConsistencyCheckTools, createQualityCheckTools } from './quality-check-tools';
 export type { ConsistencyCheckToolsDeps, QualityCheckToolsDeps } from './quality-check-tools';
+
+// Quality evidence normalization
+export {
+  createContinuityEdgeId,
+  createNormalizedQualityIssueId,
+  mapQualityIssueCategory,
+  normalizeQualityConsistencyPayload,
+  normalizeQualityIssue,
+  normalizeQualityReviewPayload,
+  stableHashString,
+  stableStringify,
+  validateBasicQualityIssue,
+} from './quality-evidence-normalizer';
+export type {
+  BasicQualityIssue,
+  BasicQualityIssueCategory,
+  NormalizedQualityConsistencyEvidence,
+  NormalizedQualityEvidence,
+  NormalizedQualitySourceIssue,
+  QualityConsistencyNormalizationInput,
+  QualityConsistencyReportForNormalization,
+  QualityContinuityEdgeCandidate,
+  QualityEvaluationForNormalization,
+  QualityEvidenceLocation,
+  QualityEvidenceRegion,
+  QualityEvidenceSceneTimeRange,
+  QualityEvidenceSource,
+  QualityEvidenceTimeRange,
+  QualityEvidenceValidationError,
+  QualityEvidenceValidationResult,
+  QualityIssueNormalizationDiagnostic,
+  QualityReviewNormalizationInput,
+  QualityReviewPayloadForNormalization,
+  QualityStyleDriftForNormalization,
+} from './quality-evidence-normalizer';
+
+// VideoContentIndex foundation
+export {
+  VIDEO_CONTENT_ANALYZER_PLACEHOLDERS,
+  buildVideoContentIndex,
+  createVideoContentIndexId,
+  createVideoSegmentId,
+  validateVideoContentIndex,
+} from './video-content-index';
+export type {
+  AestheticEmotionProfile,
+  ConfidenceLevel,
+  ContinuityEdge,
+  ContinuityEdgeInput,
+  ContinuityIssue,
+  TemporalProfile,
+  VideoContentAnalyzerPlaceholder,
+  VideoContentIndex,
+  VideoContentIndexBuildResult,
+  VideoContentIndexInput,
+  VideoContentIndexValidationError,
+  VideoContentIndexValidationResult,
+  VideoContentSourceKind,
+  VideoSegment,
+  VideoSegmentBasis,
+  VideoSegmentInput,
+  VideoTimeRange,
+} from './video-content-index';

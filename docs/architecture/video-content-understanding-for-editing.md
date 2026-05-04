@@ -36,6 +36,27 @@ Agent 自动剪辑与后期不能只依赖「单帧视觉描述」或「LLM 主�
 - **neko-agent**：负责理解用户目标、综合证据、解释变化、生成可审查计划；不直接修改 Webview Store，不直接信任单一模型判断。
 - **neko-types / neko-proto**：承载跨层契约，所有时间码以 seconds 为主，与 timeline/proto 保持一致。
 
+### 1.1 与 Quality Assessment / PerceptionEvidence 的关系
+
+本文件描述的是**时间线级内容理解与自动后期决策**；[Media Quality Assessment System](./media-quality-assessment.md) 描述的是**素材级质量评估与一致性检测**。两者应串联，而不是互相替代：
+
+```text
+QualityCheck / QualityCheckConsistency
+→ QualityReviewEvidence / PerceptionEvidence
+→ AgentObservation
+→ VideoContentIndex
+→ DecisionRationale
+→ AutoEditPlan / PostProductionPlan
+```
+
+约束：
+
+- `QualityIssue` / `MediaEvaluation` 是素材级 QA 输出，不是 `VideoContentIndex` 的长期存储模型。
+- `VideoContentIndex` 只消费归一化后的时间码证据，例如 `BasicQualityIssue`、`ContinuityEdge`、`TemporalProfile` 与 `AestheticEmotionProfile`。
+- `QualityCheck` 分数与 `minScore` 不能单独作为自动剪辑阈值；它们只能作为 `PerceptionEvidence`，由 Agent 在目标语境下形成 `AgentObservation` 与 `DecisionRationale`。
+- `QualityIssueCategory` 与本文件的编辑问题分类必须通过显式映射层转换，避免 `stuttering` / `stutter`、`jitter` / `flicker`、`color-distortion` / `color-shift` 等词表漂移直接进入编辑决策。
+- 2026-05-04 P0 实现位置：归一化契约与 `VideoContentIndex` foundation 暂放在 `packages/neko-agent/packages/agent/src/validation/quality-evidence-normalizer.ts` 与 `video-content-index.ts`。当前消费者仍是 Agent feedback / validation；当 `neko-cut` 或其他包直接消费这些类型时，再提升到 `@neko/shared` 或 `neko-proto`。
+
 ---
 
 ## 2. 问题分层
@@ -57,30 +78,67 @@ Agent 自动剪辑与后期不能只依赖「单帧视觉描述」或「LLM 主�
 | 音频技术 | 削波、响度不稳、静音过长、噪声 | LUFS、True Peak、LRA、silence regions、waveform | 归一化、ducking、降噪、剪静音 |
 | 字幕/文本 | 字幕错位、缺失、遮挡、可读性差 | ASR segment、OCR/字幕轨、屏幕安全区 | 对齐、重排、样式调整 |
 
-L0 的输出不应是「好/不好」，而应是带时间码的问题：
+L0 的输出不应是「好/不好」，而应是带时间码的问题。若输入来自 `QualityCheck` 或 `QualityCheckConsistency`，必须先归一化为此类时间码问题，再进入 `VideoContentIndex`：
 
 ```ts
+type BasicQualityIssueCategory =
+  | 'tearing'
+  | 'flicker'
+  | 'stutter'
+  | 'blur'
+  | 'compression'
+  | 'exposure'
+  | 'color-shift'
+  | 'audio-clipping'
+  | 'loudness-off'
+  | 'subtitle-misaligned';
+
 interface BasicQualityIssue {
   id: string;
   start: number;
   end: number;
-  category:
-    | 'tearing'
-    | 'flicker'
-    | 'stutter'
-    | 'blur'
-    | 'compression'
-    | 'exposure'
-    | 'color-shift'
-    | 'audio-clipping'
-    | 'loudness-off'
-    | 'subtitle-misaligned';
+  category: BasicQualityIssueCategory;
   severity: 'critical' | 'major' | 'minor' | 'info';
   metrics: Record<string, number>;
+  source: {
+    toolName: 'QualityCheck' | 'QualityCheckConsistency' | string;
+    sourceCategory?: string;
+    sceneIndex?: number;
+    sourceIssueId?: string;
+    sourceTimeRange?: { start: number; end: number };
+    toolCallId?: string;
+    runId?: string;
+  };
+  location?: {
+    sceneIndex?: number;
+    timeRange?: { start: number; end: number };
+    frameRange?: { start: number; end: number };
+    region?: { x: number; y: number; width: number; height: number };
+  };
   evidenceIds: string[];
   suggestedFixes: string[];
 }
 ```
+
+归一化建议：
+
+| QA category | 编辑理解 category | 条件 |
+| --- | --- | --- |
+| `tearing` | `tearing` | 带有帧内结构错位、扫描线不连续或局部 diff 证据 |
+| `jitter` | `flicker` | 主要表现为亮度、色彩或纹理高频跳变 |
+| `stuttering` | `stutter` | 主要表现为重复帧、PTS gap、冻结区间或运动曲线异常 |
+| `artifact` | `blur` / `compression` | 需要 Laplacian、edge、blockiness、SSIM/PSNR 等指标拆分 |
+| `color-distortion` | `exposure` / `color-shift` | 需要亮度直方图、clip ratio、色温或色彩时间线指标拆分 |
+| `audio-clipping` | `audio-clipping` | 需要 True Peak / waveform 证据 |
+| `loudness-off` | `loudness-off` | 需要 LUFS / LRA / silence region 证据 |
+
+`prompt-mismatch`、`script-mismatch`、`style-drift`、`character-inconsistency`、`composition-poor`、`motion-unnatural` 默认不是 L0 基础质量问题。它们应进入 L1 / L2 的连续性、审美、表演或叙事解释，除非已有明确时间码和可验证指标。
+
+当前 P0 helper 名称：
+
+- `normalizeQualityReviewPayload()`：将 `QualityCheck` evaluation summaries 归一化为 `BasicQualityIssue[]`、`sourceIssues` 与 `normalizationDiagnostics`。
+- `normalizeQualityConsistencyPayload()`：仅在相邻 scene 且两侧时间范围存在时，将 `QualityCheckConsistency` style drift 归一化为 `continuityEdgeCandidates`；否则只保留 diagnostics，不凭空创建 edge。
+- `createNormalizedQualityIssueId()` / `createContinuityEdgeId()` / `createVideoContentIndexId()`：基于 tool metadata、scene/time range、category 与 evidence ids 生成确定性 id。
 
 ### 2.2 L1 连续性与一致性问题
 
@@ -185,6 +243,7 @@ interface VideoContentIndex {
   id: string;
   source: string;
   sourceKind: 'asset' | 'timeline-render' | 'clip-range';
+  range?: { start: number; end: number };
   duration: number;
   segments: VideoSegment[];
   temporalProfiles: TemporalProfile[];
@@ -300,9 +359,10 @@ Agent 使用规则：
 
 1. 先理解目标，再分析视频；没有目标时只报告事实，不做创作倾向判断。
 2. 所有问题必须带时间码、证据、置信度。
-3. L0 可自动修复；L1 需要判断是否符合目标；L2 通常需要用户确认或可撤销计划。
+3. L0 可建议自动修复，但仍需通过 `DecisionRationale` 记录依据；L1 需要判断是否符合目标；L2 通常需要用户确认或可撤销计划。
 4. 输出计划前先说明「为什么这里要剪/调/保留」。
 5. 落地时由 `neko-cut` 生成 `EditOperation batch`，Agent 不直接写 `ProjectData`。
+6. `QualityCheck` / `QualityCheckConsistency` 只能补充 evidence，不能替代 `AgentObservation`。
 
 ---
 
@@ -656,9 +716,11 @@ XR 的关键规则：
 
 ### P0: 基础质量与时间码证据
 
-- 封装 probe、frame sample、waveform、loudness、silence、diff。
-- 产出 `BasicQualityIssue[]` 与 `PerceptionEvidence`。
+- 已建立 Agent-local `VideoContentIndex` P0 schema / builder / validator；Engine-backed analyzer 仍以后续 facade 填充。
+- 已通过 `QualityReviewEvidence` 产出 `BasicQualityIssue[]` 归一化数据与 `PerceptionEvidence`。
 - 支持撕裂、闪烁、卡顿、响度、静音、模糊的最小检测。
+- 将 `QualityIssue` / `ConsistencyReport` 显式归一化为带时间码的 `BasicQualityIssue` 或 `ContinuityEdge`。
+- 当前 `QualityCheck` 只读且不再默认 retry；显式再生成修复走 `QualityRepairCheck`。
 
 ### P1: 连续性分析
 
@@ -684,6 +746,7 @@ XR 的关键规则：
 
 - 不让 Agent 直接调用底层媒体 API 作为主路径。
 - 不把 LLM 的单次视觉描述当作质量结论。
+- 不把 `QualityCheck` 分数或 `minScore` 当作自动剪辑的唯一质量门槛。
 - 不用人脸情绪分类替代整体情绪判断。
 - 不通过 Webview postMessage 承担核心分析或计划应用。
 - 不在 `neko-agent` 内重复实现 Rust/Engine 已有的媒体计算能力。

@@ -1,10 +1,26 @@
 import type { PerceptionEvidence } from '@neko/shared';
+import type {
+  AudioTechnicalMetrics,
+  QualityIssue,
+  VideoTechnicalMetrics,
+} from '../validation/qa-types';
+import {
+  normalizeQualityConsistencyPayload,
+  normalizeQualityReviewPayload,
+  type QualityConsistencyReportForNormalization,
+  type QualityEvidenceSceneTimeRange,
+  type QualityEvidenceTimeRange,
+} from '../validation/quality-evidence-normalizer';
 
 export interface QualityReviewEvaluationSummary {
   readonly index: number;
   readonly passed: boolean;
   readonly finalScore: number;
+  readonly issues?: readonly QualityIssue[];
   readonly remediations?: readonly unknown[];
+  readonly timeRange?: QualityEvidenceTimeRange;
+  readonly audioMetrics?: AudioTechnicalMetrics;
+  readonly videoMetrics?: VideoTechnicalMetrics;
 }
 
 export interface QualityReviewRecommendation {
@@ -27,6 +43,8 @@ export interface QualityReviewEvidenceInput {
   readonly observedAt: number;
   readonly runId?: string;
   readonly observationId?: string;
+  readonly sceneTimeRanges?: readonly QualityEvidenceSceneTimeRange[];
+  readonly consistencyReport?: QualityConsistencyReportForNormalization;
 }
 
 export interface QualityReviewEvidenceSummary {
@@ -46,11 +64,31 @@ export interface QualityReviewEvidenceResult {
 export function createQualityReviewEvidence(
   input: QualityReviewEvidenceInput,
 ): QualityReviewEvidenceResult {
+  const evidenceId = createQualityReviewEvidenceId(input);
   const failingSceneIndexes = input.payload.evaluations
     .filter((evaluation) => !evaluation.passed)
     .map((evaluation) => evaluation.index);
   const recommendations = input.payload.evaluations.flatMap(toQualityReviewRecommendations);
   const remediationCount = recommendations.length;
+  const normalizedReview = normalizeQualityReviewPayload({
+    payload: input.payload,
+    evidenceId,
+    toolName: input.toolName,
+    toolCallId: input.toolCallId,
+    ...(input.runId ? { runId: input.runId } : {}),
+    ...(input.sceneTimeRanges ? { sceneTimeRanges: input.sceneTimeRanges } : {}),
+  });
+  const normalizedConsistency =
+    input.consistencyReport !== undefined
+      ? normalizeQualityConsistencyPayload({
+          report: input.consistencyReport,
+          evidenceId,
+          toolName: input.toolName,
+          toolCallId: input.toolCallId,
+          ...(input.runId ? { runId: input.runId } : {}),
+          ...(input.sceneTimeRanges ? { sceneTimeRanges: input.sceneTimeRanges } : {}),
+        })
+      : null;
   const summary: QualityReviewEvidenceSummary = {
     totalScenes: input.payload.totalScenes,
     passed: input.payload.passed,
@@ -63,7 +101,7 @@ export function createQualityReviewEvidence(
   return {
     summary,
     evidence: {
-      id: createQualityReviewEvidenceId(input),
+      id: evidenceId,
       source: 'tool',
       summary: formatQualityReviewEvidenceSummary(summary),
       confidence: calculateQualityReviewConfidence(summary),
@@ -79,11 +117,40 @@ export function createQualityReviewEvidence(
         failingSceneIndexes: summary.failingSceneIndexes,
         remediationCount: summary.remediationCount,
         recommendations: summary.recommendations,
+        ...createNormalizedQualityEvidenceData(normalizedReview, normalizedConsistency),
       },
       createdAt: input.observedAt,
       status: 'active',
     },
   };
+}
+
+function createNormalizedQualityEvidenceData(
+  review: ReturnType<typeof normalizeQualityReviewPayload>,
+  consistency: ReturnType<typeof normalizeQualityConsistencyPayload> | null,
+): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+  if (review.issues.length > 0) {
+    data['normalizedIssueIds'] = review.issues.map((issue) => issue.id);
+    data['normalizedIssues'] = review.issues;
+  }
+  if (review.sourceIssues.length > 0) {
+    data['sourceIssues'] = review.sourceIssues;
+  }
+
+  const diagnostics = [...review.diagnostics, ...(consistency?.diagnostics ?? [])];
+  if (diagnostics.length > 0) {
+    data['normalizationDiagnostics'] = diagnostics;
+  }
+
+  if (consistency && consistency.continuityEdgeCandidates.length > 0) {
+    data['continuityEdgeCandidateIds'] = consistency.continuityEdgeCandidates.map(
+      (edge) => edge.id,
+    );
+    data['continuityEdgeCandidates'] = consistency.continuityEdgeCandidates;
+  }
+
+  return data;
 }
 
 function toQualityReviewRecommendations(
