@@ -181,10 +181,10 @@ LLM 适配和媒体生成服务。62 个源文件。
 | 模块 | 职责 |
 |------|------|
 | `bootstrap/` | 服务初始化 + ServiceCollection 组装 |
-| `chat/` | ChatViewProvider + MessageHandler + 10 个专用 Handler（task/skill/plan/provider/settings/context/conversation/file/integration/slashCommand） |
-| `chat/message/` | AgentStreamProcessor（AgentEvent → postMessage）+ AttachmentProcessor |
-| `ai/` | AgentRunner（薄包装 AgentSession）+ AgentManager（LRU 多会话池，max=10）+ HookManager（esbuild 编译）+ AgentContext |
-| `services/` | ConfigBridge（配置消息路由）+ SkillFileService/PromptFileService/HookFileService（文件监听）+ ConnectionStateManager |
+| `chat/` | ChatViewProvider + Webview 消息 Router + 专用桥接 Handler（task/skill/plan/settings/context/conversation/file/integration/slashCommand） |
+| `chat/message/` | AgentMessageTurnHandler（消息回合桥接）+ AgentTurnBridge + AgentStreamProcessor（AgentEvent → postMessage）+ AttachmentProcessor |
+| `ai/` | AgentRunner（薄包装 AgentSessionRunner）+ AgentManager（多会话池委托 @neko/agent/runtime）+ HookManager（VSCode hook 文件适配）+ AgentContext |
+| `services/` | ConfigBridge（配置消息路由）+ SkillFileService/HookFileService（文件监听）+ ConnectionStateManager |
 | `editor/` | EditorModel + EditorRegistry（活动编辑器抽象） |
 | `tools/` | 扩展工具注册（NekoCut/NekoCanvas/NekoStory API 桥接） |
 | `pipeline/` | Pipeline 编排层：7 stages（readDocument → parseStoryboard → importStoryboardToCanvas → generatePrompts → generatePilot → batchGenerate → arrangeOnTimeline）+ pipeline-adapters（IStructuredStoryPlanner / IStoryboardCanvasSink 等桥接器）+ pipeline-progress-bridge（事件转发 + 回写） |
@@ -263,14 +263,16 @@ Webview → Extension:
   sendMessage, confirmTool, stopAgent,
   newConversation, switchConversation, deleteConversation,
   getSettings, updateSettings, invokeSlashCommand,
-  executeSkill, cancelSkill, planApprove/Reject,
+  executeSkill, planApprove/Reject,
   searchProjectFiles, getTasks, cancelTask
 
 Extension → Webview:
   thinking, streamText, streamThinking,
   toolCall, toolResult, toolConfirmation,
   streamComplete, agentPhase, error,
-  taskCreated, taskUpdated, contextTokenCount,
+  taskCreated, taskUpdated, tasksUpdated,
+  mediaTaskCreated, mediaTaskProgress, subagentEvent,
+  contextTokenCount,
   conversations, activeConversation, settings, tabState
 ```
 
@@ -280,12 +282,16 @@ Extension → Webview:
 用户输入
   │
   ▼
-MessageHandler（Extension — 消息编排）
+AgentMessageTurnHandler（Extension — Host 资源桥接）
+  ├─ runAgentMessageTurnRuntime（@neko/agent/runtime — 消息回合规则）
   ├─ InputProcessor 解析 @ 文件引用
   ├─ AttachmentProcessor 处理附件
   │
   ▼
-AgentRunner → AgentSession → AgentExecutor（ReAct 循环）
+AgentRunner（Extension — VSCode 事件适配）
+  │
+  ▼
+AgentSessionRunner → AgentSession → AgentExecutor（ReAct 循环）
   │
   ├─ LLM 调用 → IService → @neko/platform → Claude/OpenAI/Google API（流式）
   │

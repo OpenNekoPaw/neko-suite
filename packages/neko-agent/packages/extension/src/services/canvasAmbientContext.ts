@@ -99,7 +99,7 @@ export function recordCanvasChange(summary: CanvasChangeSummary, scopeId = activ
 
 /**
  * Return all pending canvas/asset changes and clear the buffer.
- * Called by messageHandler to inject change context before an agent response.
+ * Called by the agent-message turn bridge to inject change context before a response.
  */
 export function drainPendingCanvasChanges(scopeId = activeScopeId): CanvasChangeSummary[] {
   return runtime.drainPendingCanvasChanges(scopeId);

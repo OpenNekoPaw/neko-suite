@@ -73,10 +73,10 @@ packages/
 │   └── core/         BaseRegistry + HttpClient + ConcurrencyPool
 ├── extension/  # @neko-agent/extension — VSCode 扩展宿主（纯胶水层）
 │   ├── bootstrap/    服务初始化 + ServiceCollection
-│   ├── chat/         ChatViewProvider + MessageHandler + 10 个专用 Handler
-│   ├── chat/message/ AgentStreamProcessor（事件流 → postMessage）+ AttachmentProcessor
-│   ├── ai/           AgentRunner（薄包装）+ AgentManager（LRU 多会话）+ HookManager
-│   ├── services/     ConfigBridge + SkillFileService + PromptFileService + HookFileService
+│   ├── chat/         ChatViewProvider + Webview 消息 Router + 专用桥接 Handler
+│   ├── chat/message/ AgentMessageTurnHandler + AgentTurnBridge + AgentStreamProcessor
+│   ├── ai/           AgentRunner（薄包装）+ AgentManager（runtime 多会话池）+ HookManager
+│   ├── services/     ConfigBridge + SkillFileService + HookFileService
 │   ├── editor/       EditorModel + EditorRegistry
 │   └── tools/        扩展工具注册（NekoCut/NekoCanvas 桥接）
 ├── webview/    # @neko-agent/webview — React 对话 UI
