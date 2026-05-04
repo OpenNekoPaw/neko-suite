@@ -11,6 +11,8 @@
 
 > Closure 更新（2026-05-04）：`harden-neko-agent-runtime-workflow-closure` 补齐 runtime closure 护栏：boundary compatibility exception 带 owner/tracking/expiry，Extension `AgentRunner` 拆为 runtime port adapter + VSCode event bridge + compatibility surface，多模态工具结果可回灌为 evidence refs，evaluation harness 支持 deterministic evaluator 与 mock judge adapter，legacy workflow adapter 有 sunset telemetry，capability manifest 字段利用率进入独立 telemetry。
 
+> 接入状态（2026-05-04）：上述 runtime 中，已进入 production 主路径的是 boundary guard、`AgentTurnBridge` runtime turn assembly、`AgentRunnerPort` adapter split。`AgentWorkflowRuntime`、`AgentCapabilityInjectionRuntime`、`AgentPromptSchemaGenerator`、AI SDK `projectMultimodalPacketToChatMessage` 与 evaluation harness 当前是已实现、已导出、已测试的 contract-ready 层，还未切入 `AgentTurnRuntime` / `AgentSession` / provider message assembly 的产品流量。下一步应单独以 product wiring / traffic cutover 提案推进。
+
 ## 落地进度快照（2026-04-23）
 
 ### 已完成（按 ADR 章节计）
@@ -86,6 +88,17 @@
 | AI SDK | model 调用 adapter、tool schema / structured output bridge、provider-specific multimodal message projection | `packages/neko-agent/packages/ai-sdk/src/multimodal-message-projection.ts` |
 
 架构 guard 通过 `pnpm check:agent-boundaries` 固化硬边界：Webview 不得导入 `vscode`、`@neko/agent`、`@neko/platform`、`@neko/ai-sdk`；Extension 不得导入 React/Webview 实现；`agent` / `platform` / `ai-sdk` / `agent-types` 不得导入 VSCode、React、Webview 或 Extension 实现。当前仍存在的 `AgentTurnBridge`、`AgentRunner`、`SkillFileService` 是显式记录的 compatibility adapter，不再被视为 agent 业务归属点。
+
+### Production Wiring 状态
+
+2026-05-04 的两轮变更分成两类结果：
+
+| 状态 | 已覆盖内容 | 说明 |
+|------|------------|------|
+| 已在 production 生效 | boundary guard、`AgentTurnBridge` runtime assembly 输入契约、`AgentRunnerPort` / VSCode event bridge split | 合入后会改变实际 Extension/runner 边界和 guard 行为。 |
+| 已实现但未接入主路径 | `createAgentWorkflowRuntime`、`createAgentCapabilityInjectionRuntime`、`createAgentPromptSchemaGenerator`、`projectMultimodalPacketToChatMessage`、workflow evaluation harness | 目前主要由 runtime exports 与 targeted tests 消费；普通 turn/provider 流水线尚未调用这些 factory / projection。 |
+
+因此，本文后续小节描述的是目标职责归属与 contract-ready 实现，不代表全部能力已经进入用户主路径。真正的行为切换应在后续 product wiring change 中完成：把 workflow identity 写入 turn/session/task projection，把 capability injection runtime 接到 skill/slash catalog 与 per-turn tool allowlist，把 prompt/schema generator 接到 `AgentSession` 和 provider structured output，把 multimodal packet projection 接到 provider message assembly，并为每一步保留 feature flag / baseline 对照。
 
 ### Boundary Exception 与 Runner Adapter Closure
 

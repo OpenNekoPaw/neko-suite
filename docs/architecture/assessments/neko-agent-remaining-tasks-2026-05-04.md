@@ -16,9 +16,11 @@
 
 结论：当前主方向已经基本正确，没有发现新的 P0 阻断问题。前几轮清理后，market、connection state、generation progress、MCP test result 等无效 bridge 没有反弹；异步任务、media task、subagent 也已经按 `conversationId` 进入协议与 Webview 状态隔离链路。
 
-2026-05-04 的 `unify-neko-agent-runtime-workflow-boundaries` 变更已经完成 P1 主体迁移：Extension 侧 `AgentTurnBridge` 降为 host adapter，`AgentRunner` 对齐 `AgentRunnerPort`，IDC / workflow / capability injection / prompt-schema / multimodal packet / eval harness 均有 runtime contract 与 targeted tests。
+2026-05-04 的 `unify-neko-agent-runtime-workflow-boundaries` 变更已经完成 P1 主体迁移的边界部分：Extension 侧 `AgentTurnBridge` 降为 host adapter，`AgentRunner` 对齐 `AgentRunnerPort`，IDC / workflow / capability injection / prompt-schema / multimodal packet / eval harness 均有 runtime contract 与 targeted tests。
 
-同日的 `harden-neko-agent-runtime-workflow-closure` 继续关闭上一轮评估中 R1-R6 风险：boundary exception 有 sunset 元数据和过期失败策略，runner adapter 拆为 runtime adapter / VSCode event bridge / compatibility surface，多模态工具产物可作为 evidence feedback 进入后续 turn，evaluation harness 支持 deterministic evaluator 与 mock LLM judge，legacy workflow adapter 有 deprecation telemetry 与 sunset gate，capability manifest 字段利用率进入独立 telemetry。剩余工作主要是 P2/P3 深水区接入、barrel 导出收敛、旧兼容窗口到期清理、`AgentSession` 更深层接入 prompt/schema facade，以及全量 `@neko/agent` 类型债的后续清理。
+同日的 `harden-neko-agent-runtime-workflow-closure` 继续关闭上一轮评估中 R1-R6 风险：boundary exception 有 sunset 元数据和过期失败策略，runner adapter 拆为 runtime adapter / VSCode event bridge / compatibility surface，多模态工具产物的 evidence feedback contract 已闭合，evaluation harness 支持 deterministic evaluator 与 mock LLM judge，legacy workflow adapter 有 deprecation telemetry 与 sunset gate，capability manifest 字段利用率进入独立 telemetry。
+
+但本次复查确认了一个必须单列的事实：workflow runtime、capability injection runtime、prompt/schema generator、多模态 message projection 与 eval harness 当前仍是 contract-ready 层，尚未切入 `AgentTurnRuntime` / `AgentSession` / provider message assembly 的产品主路径。合入后真实改变运行时行为的是 boundary guard、`AgentTurnBridge` 瘦身与 `AgentRunnerPort` adapter split；其他 runtime 需要后续 product wiring / traffic cutover change 才会影响普通用户 turn。剩余工作因此应把“把新 runtime 接入主路径”列为 P1，而不是只作为 P2/P3 深水区接入描述。
 
 ---
 
@@ -32,6 +34,20 @@
 | R4 Evaluator 是比较器不是裁判 | ✅ 已关闭 harness 层风险。新增 evaluator runner、deterministic compliance evaluator、mock LLM judge adapter、quality delta、correction hint、recovery signal。 | 生产 LLM judge provider 选择与成本策略保持实验路径，不进入普通 IDC stage。 |
 | R5 workflow 与旧 pipeline 共存无窗口 | ✅ 已关闭治理风险。legacy adapter 有 deprecation metadata、usage telemetry、node mapping、sunset gate；新增流程必须 workflow-native。 | sunset milestone 到期后删除或续期具体旧 adapter。 |
 | R6 Skill manifest 未注入字段缺 telemetry | ✅ 已关闭。capability telemetry 区分 used / unknown-field / unsupported-field / withheld-field / policy-skipped / ablation-skipped，且不存 raw prompt / payload。 | 后续可接 UI/telemetry dashboard，但不影响 runtime contract。 |
+
+### 重大接入发现：contract-ready 不等于 product-wired
+
+production 搜索确认下列入口目前只被导出或测试消费，未被普通 turn 主路径调用：
+
+| Runtime / Projection | 当前状态 | 下一步接入点 |
+|----------------------|----------|--------------|
+| `createAgentWorkflowRuntime` | 已实现 IDC definition、run/node/transition、legacy sunset telemetry；未成为普通 turn/session 的 workflow owner。 | 接入 `AgentTurnRuntime` / task projection / media task / subagent projection，确保每个可用路径写入 `workflowDefinitionId`、`workflowRunId`、`workflowNodeId`。 |
+| `createAgentCapabilityInjectionRuntime` | 已实现 registration vs injection、conflict/policy/budget/ablation diagnostics、bounded telemetry；未替代现有 skill/slash/tool allowlist 主路径。 | 接入 skill refresh、slash command catalog、per-turn active skill、tool allowlist 和 permission policy。 |
+| `createAgentPromptSchemaGenerator` | 已实现 prompt bundle、schema bundle、provider/tool 模式、snapshot/ablation；未替代 `AgentSession` 历史 prompt composer/module 写入路径。 | 接入 `AgentSession`、workflow node execution、provider structured output 和 prompt snapshot 记录。 |
+| `projectMultimodalPacketToChatMessage` | 已实现 text/image/video 与 audio summary fallback 的 AI SDK projection；未进入 provider message assembly。 | 接入 provider-neutral `MultimodalContextPacket` 到 AI SDK message assembly，并覆盖工具 evidence feedback 的下一轮回灌。 |
+| workflow evaluation harness | 已实现 baseline、deterministic evaluator、mock judge、correction hints、recovery signals；未接普通 IDC stage。 | 保持研发/实验路径，后续只在 explicit evaluation workflow 或 CI harness 中接真实 provider judge。 |
+
+这不是边界违背，而是分阶段重构的切流量窗口。后续 PR 应显式声明行为切换范围、feature flag / fallback、baseline 对照和 targeted tests，避免把 Extension 或 Webview 重新变成策略归属点。
 
 ### 验证记录
 
@@ -169,7 +185,7 @@ Agent Webview / Extension 内嵌 marketplace bridge 已删除。Skill 安装目�
 - `packages/neko-agent/packages/agent/src/runtime/__tests__/agent-runner-port.test.ts`
 - `packages/neko-agent/packages/extension/src/ai/agentRunner.test.ts`
 
-### 8. IDC / workflow / skill / prompt / multimodal / eval 已形成统一 runtime 基线
+### 8. IDC / workflow / skill / prompt / multimodal / eval 已形成 contract-ready runtime 基线
 
 新增或收敛的核心运行时能力：
 
@@ -180,6 +196,8 @@ Agent Webview / Extension 内嵌 marketplace bridge 已删除。Skill 安装目�
 - 多模态：`MultimodalContextPacket` 统一 text/image/audio/video/canvas/timeline/editor/file/artifact/evidence；tool 使用 `AgentToolModalityDeclaration` 声明输入/输出媒体能力；AI SDK/platform adapter 负责 provider-specific projection。
 - subagent / multi-agent：runtime coordinator 负责 spawn/cancel/budget/depth/event projection/linkage，Extension 只桥接事件。
 - 消融实验与动态演化：workflow evaluation harness 记录 workflow metrics、prompt/schema hash、capability evolution events，并能在 mock host adapter / no Webview 环境运行。
+
+注意：上述条目是 contract-ready / tested baseline，不等同于全部接入 production 主路径。当前真实主路径已生效的是 `AgentTurnBridge` assembly contract 和 `AgentRunnerPort` adapter split；workflow/capability/prompt-schema/multimodal/eval 仍需后续 product wiring。
 
 关键位置：
 
@@ -198,6 +216,18 @@ Agent Webview / Extension 内嵌 marketplace bridge 已删除。Skill 安装目�
 ---
 
 ## 剩余 P1 兼容风险
+
+### P1-0：新 runtime 接入产品主路径
+
+四个核心 runtime factory 与 AI SDK 多模态投影已经实现并导出，但尚未被普通 turn/session/provider 流水线调用。下一批行为变更应优先完成 product wiring：
+
+- workflow：让 `AgentTurnRuntime` / `AgentSession` 创建或恢复 `AgentWorkflowRun`，并把 workflow identity 写入 task、media task、subagent、artifact projection。
+- capability：让 market/local/builtin/plugin/MCP/provider contribution 统一进入 `AgentCapabilityInjectionRuntime`，由它产出 slash catalog、active skill injection、tool allowlist 与 diagnostics。
+- prompt/schema：让 `AgentPromptSchemaGenerator` 成为 per-turn prompt/schema facade，逐步替代历史 prompt composer/module 的分散写入点。
+- multimodal：让 provider message assembly 消费 `MultimodalContextPacket` 并调用 `projectMultimodalPacketToChatMessage`，覆盖用户输入与工具 evidence feedback 的下一轮上下文。
+- eval：继续保持非普通 stage，只在 explicit evaluation workflow / CI harness 中接真实 judge adapter。
+
+验收标准应是 production 搜索能看到上述 factory/projection 的非测试调用点，并且对应 targeted tests 覆盖 feature flag、fallback、ablation 与 rollback。
 
 ### P1-1：`AgentRunner` VSCode event 兼容面继续收口
 
@@ -275,11 +305,12 @@ targeted runtime / agent-types / ai-sdk tests 已能覆盖本轮新增契约，�
 
 ## 建议处理顺序
 
-1. 先把 Extension 内部 consumer 从单独 VSCode event 迁到 `AgentRunnerPortEvent`。
-2. 再把 `AgentPromptSchemaGenerator` 深接入 `AgentSession` / workflow node 执行路径。
-3. 然后处理 P2-1/P2-2：barrel cleanup 和 watcher adapter 进一步瘦身。
-4. 并行补 `@neko/agent` 全量 typecheck 类型债与 ai-sdk vitest include。
-5. 最后继续 P2/P3 dead-code scan，优先确认真实 UI/跨扩展调用后再删。
+1. 先设计 product wiring change，把 workflow / capability / prompt-schema / multimodal projection 分批切入普通 turn 主路径。
+2. 并行收口 Extension 内部 consumer，从单独 VSCode event 迁到 `AgentRunnerPortEvent`。
+3. 再把 `AgentPromptSchemaGenerator` 深接入 `AgentSession` / workflow node 执行路径。
+4. 然后处理 P2-1/P2-2：barrel cleanup 和 watcher adapter 进一步瘦身。
+5. 并行补 `@neko/agent` 全量 typecheck 类型债与 ai-sdk vitest include。
+6. 最后继续 P2/P3 dead-code scan，优先确认真实 UI/跨扩展调用后再删。
 
 ---
 

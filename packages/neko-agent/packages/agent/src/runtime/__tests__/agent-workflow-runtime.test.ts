@@ -253,7 +253,7 @@ describe('AgentWorkflowRuntime', () => {
     ).toEqual([]);
   });
 
-  it('reports malformed legacy workflow sunset dates before treating them as expired', () => {
+  it('reports malformed legacy workflow sunset dates without upgrading them to expired', () => {
     const recorder = createLegacyWorkflowUsageRecorder();
     const malformed = {
       adapterId: 'malformed-adapter',
@@ -270,7 +270,6 @@ describe('AgentWorkflowRuntime', () => {
 
     expect(recorder.validate({ deprecation: malformed })).toEqual([
       expect.objectContaining({ code: 'invalid-deprecation-date' }),
-      expect.objectContaining({ code: 'legacy-adapter-expired' }),
     ]);
   });
 

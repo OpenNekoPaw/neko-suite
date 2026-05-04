@@ -242,6 +242,8 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
       nodes: current.nodes.map((node) =>
         node.status === 'running' ? withNodeStatus(node, 'cancelled') : node,
       ),
+      // Cancellation is a terminal audit event, not a definition DAG transition.
+      // The self-loop preserves active node identity within the current transition shape.
       transitions: current.activeNodeId
         ? [
             ...current.transitions,
@@ -484,7 +486,7 @@ function isLegacyWorkflowAdapterExpired(
 ): boolean {
   const expiresAt = Date.parse(`${deprecation.allowedCompatibilityWindow.expiresAt}T00:00:00.000Z`);
   if (Number.isNaN(expiresAt)) {
-    return true;
+    return false;
   }
   const today = new Date(now);
   const validationDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
