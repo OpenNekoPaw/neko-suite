@@ -4,17 +4,14 @@ import type {
   ConfiguredSkill,
   ConfiguredSlashCommand,
   ConfiguredToolGroup,
+  IAuthSession,
 } from '@neko/shared';
 import {
   SKILL_ENABLED_STATE_STORAGE_KEY,
   TOOL_SKILL_ENABLED_STATE_STORAGE_KEY,
-  buildConfigBridgeConnectionStateChangedMessage,
   buildConfigBridgeGlobalErrorMessage,
   buildConfigBridgeSsoSessionChangedMessage,
   buildConfigChangedRuntimeMessage,
-  buildHookConfigDataMessage,
-  buildSkillConfigDataMessage,
-  buildToolSkillConfigDataMessage,
   createEnabledStateRuntimeStore,
   createHookConfigSyncRuntime,
   createSkillConfigSyncRuntime,
@@ -119,11 +116,8 @@ describe('config-bridge-runtime', () => {
   });
 
   it('projects config bridge query requests into webview messages', async () => {
-    const waitForSkillsInit = vi.fn(async () => undefined);
     const deps = {
       getConfigState: () => ({ providers: [{ id: 'openai', name: 'OpenAI', type: 'openai' }] }),
-      getConnectionStates: () => ({ openai: { status: 'connected' as const } }),
-      waitForSkillsInit,
       getSkills: () => [makeSkill('review')],
       getCommands: () => [makeCommand('commit')],
       getHooks: () => [makeHook('post-tool')],
@@ -137,88 +131,21 @@ describe('config-bridge-runtime', () => {
         config: { providers: [{ id: 'openai', name: 'OpenAI', type: 'openai' }] },
       },
     });
-    await expect(
-      runConfigBridgeQueryRuntime({ type: 'getConfigWithStatus' }, deps),
-    ).resolves.toEqual({
-      handled: true,
-      message: {
-        type: 'configStateWithStatus',
-        config: {
-          providers: [{ id: 'openai', name: 'OpenAI', type: 'openai' }],
-          connectionStates: { openai: { status: 'connected' } },
-        },
-      },
-    });
-    await expect(runConfigBridgeQueryRuntime({ type: 'getSkills' }, deps)).resolves.toEqual({
-      handled: true,
-      message: {
-        type: 'skillsData',
-        skills: [makeSkill('review')],
-        commands: [makeCommand('commit')],
-      },
-    });
-    await expect(runConfigBridgeQueryRuntime({ type: 'getHooks' }, deps)).resolves.toEqual({
-      handled: true,
-      message: { type: 'hooksData', hooks: [makeHook('post-tool')] },
-    });
-    await expect(
-      runConfigBridgeQueryRuntime({ type: 'getConnectionStates' }, deps),
-    ).resolves.toEqual({
-      handled: true,
-      message: { type: 'connectionStates', states: { openai: { status: 'connected' } } },
-    });
-    await expect(runConfigBridgeQueryRuntime({ type: 'getToolSkills' }, deps)).resolves.toEqual({
-      handled: true,
-      message: { type: 'toolSkillsData', toolSkills: [makeToolSkill('media')] },
-    });
-    expect(waitForSkillsInit).toHaveBeenCalledTimes(1);
   });
 
   it('projects config sync broadcasts through runtime helpers', () => {
-    expect(
-      buildSkillConfigDataMessage({
-        skills: [makeSkill('review')],
-        commands: [makeCommand('commit')],
-      }),
-    ).toEqual({
-      type: 'skillsData',
-      skills: [makeSkill('review')],
-      commands: [makeCommand('commit')],
-    });
-    expect(buildHookConfigDataMessage([makeHook('post-tool')])).toEqual({
-      type: 'hooksData',
-      hooks: [makeHook('post-tool')],
-    });
-    expect(buildToolSkillConfigDataMessage([makeToolSkill('media')])).toEqual({
-      type: 'toolSkillsData',
-      toolSkills: [makeToolSkill('media')],
-    });
     expect(buildConfigChangedRuntimeMessage()).toEqual({ type: 'configChanged' });
   });
 
   it('projects bridge host events without extension-owned protocol builders', () => {
-    const session = {
-      user: { id: 'user-1', email: 'user@example.test', name: 'User' },
+    const session = makeAuthSession({
+      user: 'user@example.test',
       plan: 'pro',
-    };
+    });
 
     expect(buildConfigBridgeSsoSessionChangedMessage(session)).toEqual({
       type: 'ssoSessionChanged',
-      session,
-    });
-    expect(
-      buildConfigBridgeConnectionStateChangedMessage({
-        id: 'mcp-1',
-        serviceType: 'mcp',
-        status: 'error',
-        error: 'denied',
-      }),
-    ).toEqual({
-      type: 'connectionStateChanged',
-      id: 'mcp-1',
-      serviceType: 'mcp',
-      status: 'error',
-      error: 'denied',
+      session: { user: 'user@example.test', plan: 'pro' },
     });
     expect(
       buildConfigBridgeGlobalErrorMessage({ action: 'getConfig', error: new Error('bad') }),
@@ -229,7 +156,7 @@ describe('config-bridge-runtime', () => {
   });
 
   it('delegates SSO login/logout through config bridge runtime wrappers', async () => {
-    const session = { user: { id: 'user-1', email: 'user@example.test' } };
+    const session = makeAuthSession({ user: 'user@example.test' });
     const posted: unknown[] = [];
     const auth = {
       login: vi.fn(async () => session),
@@ -241,17 +168,21 @@ describe('config-bridge-runtime', () => {
         { force: true },
         {
           getAuth: async () => auth,
-          postMessage: (message) => posted.push(message),
+          postMessage: (message) => {
+            posted.push(message);
+          },
         },
       ),
     ).resolves.toEqual({
       status: 'authenticated',
-      message: { type: 'ssoSessionChanged', session },
+      message: { type: 'ssoSessionChanged', session: { user: 'user@example.test' } },
     });
     await expect(
       runConfigBridgeSsoLogoutRuntime({
         getAuth: async () => auth,
-        postMessage: (message) => posted.push(message),
+        postMessage: (message) => {
+          posted.push(message);
+        },
       }),
     ).resolves.toEqual({
       status: 'cleared',
@@ -261,11 +192,22 @@ describe('config-bridge-runtime', () => {
     expect(auth.login).toHaveBeenCalledWith({ force: true });
     expect(auth.logout).toHaveBeenCalled();
     expect(posted).toEqual([
-      { type: 'ssoSessionChanged', session },
+      { type: 'ssoSessionChanged', session: { user: 'user@example.test' } },
       { type: 'ssoSessionChanged', session: null },
     ]);
   });
 });
+
+function makeAuthSession(input: Pick<IAuthSession, 'user'> & Partial<IAuthSession>): IAuthSession {
+  return {
+    user: input.user,
+    accessToken: input.accessToken ?? 'access-token',
+    expiresAt: input.expiresAt ?? 1777392000000,
+    ...(input.plan !== undefined ? { plan: input.plan } : {}),
+    ...(input.usage !== undefined ? { usage: input.usage } : {}),
+    ...(input.refreshToken !== undefined ? { refreshToken: input.refreshToken } : {}),
+  };
+}
 
 interface TestStorage extends EnabledStateRuntimeStorage {
   saved: Record<string, boolean> | null;

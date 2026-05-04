@@ -10,22 +10,15 @@ import type {
   SettingsDataMessage,
   ProjectFilesMessage,
   ConfigStateMessage,
-  ConfigStateWithStatusMessage,
   ConfigChangedMessage,
-  ConnectionStateChangedMessage,
-  ConnectionStatesMessage,
   GenerationProgressMessage,
-  HooksDataMessage,
   McpServerTestResultMessage,
   PluginCommandsMessage,
   PluginsAvailableMessage,
   ProviderMutationResultMessage,
   SettingsUpdatedMessage,
-  SkillsDataMessage,
   SsoErrorMessage,
   SsoSessionChangedMessage,
-  ToolSkillsChangedMessage,
-  ToolSkillsDataMessage,
 } from './messages';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import {
@@ -89,24 +82,6 @@ const handleProjectFiles: MessageHandler<'projectFiles'> = (
  * Uses platform-projected provider state for account/configuration UI.
  */
 const handleConfigState: MessageHandler<'configState'> = (message: ConfigStateMessage, context) => {
-  const settingsPatch = projectConfigStateMessage(message);
-  if (settingsPatch) {
-    context.setSettings((prev) => ({
-      ...prev,
-      ...settingsPatch,
-    }));
-  }
-};
-
-/**
- * Handle 'configStateWithStatus' message - Configuration plus connection state.
- * Connection state has no dedicated UI surface yet, so only provider state is
- * projected into settings here.
- */
-const handleConfigStateWithStatus: MessageHandler<'configStateWithStatus'> = (
-  message: ConfigStateWithStatusMessage,
-  context,
-) => {
   const settingsPatch = projectConfigStateMessage(message);
   if (settingsPatch) {
     context.setSettings((prev) => ({
@@ -198,32 +173,12 @@ const handleSettingsMutationAck: MessageHandler<
 /**
  * Consume bridge data that is extension-managed or has no UI surface yet.
  */
-const handleBridgeStateOnlyMessage: MessageHandler<
-  | 'connectionStates'
-  | 'connectionStateChanged'
-  | 'skillsData'
-  | 'hooksData'
-  | 'toolSkillsData'
-  | 'toolSkillsChanged'
-  | 'generationProgress'
-> = (
-  _message:
-    | ConnectionStatesMessage
-    | ConnectionStateChangedMessage
-    | SkillsDataMessage
-    | HooksDataMessage
-    | ToolSkillsDataMessage
-    | ToolSkillsChangedMessage
-    | GenerationProgressMessage,
+const handleBridgeStateOnlyMessage: MessageHandler<'generationProgress'> = (
+  _message: GenerationProgressMessage,
   _context,
 ) => {
   // Intentionally consumed to keep the protocol explicit and avoid unknown-message noise.
 };
-
-/**
- * Skills/hooks data handlers removed — webview does not consume this data.
- * Skills and hooks are managed internally by Extension (ConfigBridge accessors).
- */
 
 /**
  * All config handler registrations
@@ -232,7 +187,6 @@ export const configHandlers: HandlerRegistration[] = [
   defineHandler('settingsData', handleSettingsData),
   defineHandler('projectFiles', handleProjectFiles),
   defineHandler('configState', handleConfigState),
-  defineHandler('configStateWithStatus', handleConfigStateWithStatus),
   defineHandler('configChanged', handleConfigChanged),
   defineHandler('settingsUpdated', handleSettingsMutationAck),
   defineHandler('modelAdded', handleSettingsMutationAck),
@@ -242,11 +196,5 @@ export const configHandlers: HandlerRegistration[] = [
   defineHandler('pluginsAvailable', handlePluginsAvailable),
   defineHandler('ssoSessionChanged', handleSsoSessionChanged),
   defineHandler('ssoError', handleSsoError),
-  defineHandler('connectionStates', handleBridgeStateOnlyMessage),
-  defineHandler('connectionStateChanged', handleBridgeStateOnlyMessage),
-  defineHandler('skillsData', handleBridgeStateOnlyMessage),
-  defineHandler('hooksData', handleBridgeStateOnlyMessage),
-  defineHandler('toolSkillsData', handleBridgeStateOnlyMessage),
-  defineHandler('toolSkillsChanged', handleBridgeStateOnlyMessage),
   defineHandler('generationProgress', handleBridgeStateOnlyMessage),
 ];

@@ -1,28 +1,14 @@
 import type { EnabledStateRecord } from '@neko-agent/types';
 import {
   buildConfigStateMessage,
-  buildConfigStateWithStatusMessage,
-  buildConnectionStatesMessage,
-  buildConnectionStateChangedMessage,
   buildConfigChangedMessage,
   buildGlobalErrorMessage,
-  buildHooksDataMessage,
-  buildSkillsDataMessage,
-  buildToolSkillsDataMessage,
-  type ConnectionStateChangedMessage,
   type ConfigChangedMessage,
   type ConfigStateMessage,
-  type ConfigStateWithStatusMessage,
-  type ConnectionStatesMessage,
   type GlobalErrorMessage,
-  type HooksDataMessage,
-  type ProtocolConnectionStateMap,
-  type ProtocolConnectionStatus,
   type SsoErrorMessage,
   type SsoSessionChangedMessage,
   type SsoSessionMessagePayload,
-  type SkillsDataMessage,
-  type ToolSkillsDataMessage,
 } from '@neko-agent/types';
 import type {
   ConfiguredHook,
@@ -61,21 +47,9 @@ export type SsoLogoutRuntimeResult =
   | { status: 'cleared'; message: SsoSessionChangedMessage }
   | { status: 'failed'; message: SsoErrorMessage };
 
-export type ConfigBridgeQueryMessage =
-  | ConfigStateMessage
-  | ConfigStateWithStatusMessage
-  | SkillsDataMessage
-  | HooksDataMessage
-  | ConnectionStatesMessage
-  | ToolSkillsDataMessage;
+export type ConfigBridgeQueryMessage = ConfigStateMessage;
 
-export type ConfigBridgeQueryRequest =
-  | { type: 'getConfig' }
-  | { type: 'getConfigWithStatus' }
-  | { type: 'getSkills' }
-  | { type: 'getHooks' }
-  | { type: 'getConnectionStates' }
-  | { type: 'getToolSkills' };
+export type ConfigBridgeQueryRequest = { type: 'getConfig' };
 
 export type ConfigBridgeQueryConfigState = NonNullable<ConfigStateMessage['config']>;
 
@@ -83,7 +57,6 @@ export interface ConfigBridgeQueryRuntimeDeps<
   TConfigState extends ConfigBridgeQueryConfigState = ConfigBridgeQueryConfigState,
 > {
   getConfigState(): TConfigState;
-  getConnectionStates(): ProtocolConnectionStateMap;
   waitForSkillsInit?(): Promise<void>;
   getSkills(): readonly ConfiguredSkill[];
   getCommands(): readonly ConfiguredSlashCommand[];
@@ -96,20 +69,6 @@ export interface ConfigBridgeQueryRuntimeResult {
   message?: ConfigBridgeQueryMessage;
 }
 
-export function buildSkillConfigDataMessage(input: SkillConfigSyncState): SkillsDataMessage {
-  return buildSkillsDataMessage(input);
-}
-
-export function buildHookConfigDataMessage(hooks: readonly ConfiguredHook[]): HooksDataMessage {
-  return buildHooksDataMessage(hooks);
-}
-
-export function buildToolSkillConfigDataMessage(
-  toolSkills: readonly ConfiguredToolGroup[],
-): ToolSkillsDataMessage {
-  return buildToolSkillsDataMessage(toolSkills);
-}
-
 export function buildConfigChangedRuntimeMessage(): ConfigChangedMessage {
   return buildConfigChangedMessage();
 }
@@ -118,15 +77,6 @@ export function buildConfigBridgeSsoSessionChangedMessage(
   session: IAuthSession | null,
 ): SsoSessionChangedMessage {
   return buildSsoSessionChangedMessage(session);
-}
-
-export function buildConfigBridgeConnectionStateChangedMessage(input: {
-  readonly id: string;
-  readonly serviceType: ConnectionStateChangedMessage['serviceType'];
-  readonly status: ProtocolConnectionStatus;
-  readonly error?: string;
-}): ConnectionStateChangedMessage {
-  return buildConnectionStateChangedMessage(input);
 }
 
 export function buildConfigBridgeGlobalErrorMessage(input: {
@@ -341,38 +291,6 @@ export async function runConfigBridgeQueryRuntime<
       return {
         handled: true,
         message: buildConfigStateMessage(deps.getConfigState()),
-      };
-    case 'getConfigWithStatus':
-      return {
-        handled: true,
-        message: buildConfigStateWithStatusMessage({
-          ...deps.getConfigState(),
-          connectionStates: deps.getConnectionStates(),
-        }),
-      };
-    case 'getSkills':
-      await deps.waitForSkillsInit?.();
-      return {
-        handled: true,
-        message: buildSkillsDataMessage({
-          skills: deps.getSkills(),
-          commands: deps.getCommands(),
-        }),
-      };
-    case 'getHooks':
-      return {
-        handled: true,
-        message: buildHooksDataMessage(deps.getHooks()),
-      };
-    case 'getConnectionStates':
-      return {
-        handled: true,
-        message: buildConnectionStatesMessage(deps.getConnectionStates()),
-      };
-    case 'getToolSkills':
-      return {
-        handled: true,
-        message: buildToolSkillsDataMessage(deps.getToolSkills()),
       };
   }
 }

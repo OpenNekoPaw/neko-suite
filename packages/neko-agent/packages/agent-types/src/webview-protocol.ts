@@ -8,10 +8,6 @@
 import type {
   AgentContextPayload,
   ChatModelOption,
-  ConfiguredHook,
-  ConfiguredSkill,
-  ConfiguredSlashCommand,
-  ConfiguredToolGroup,
   MessageAttachment,
   ModelType,
   SkillSummary,
@@ -383,24 +379,6 @@ export interface ConfigStateMessage {
   };
 }
 
-export type ProtocolConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
-
-export interface ProtocolConnectionState {
-  status: ProtocolConnectionStatus;
-  error?: string;
-}
-
-export type ProtocolConnectionStateMap = Record<string, ProtocolConnectionState>;
-
-export interface ConfigStateWithStatusMessage {
-  type: 'configStateWithStatus';
-  config?: {
-    providers?: ConfiguredProvider[];
-    configuredProviders?: ConfiguredProvider[];
-    connectionStates?: ProtocolConnectionStateMap;
-  };
-}
-
 export interface ConfigChangedMessage {
   type: 'configChanged';
 }
@@ -442,19 +420,6 @@ export interface PluginsAvailableMessage {
   plugins?: PluginsAvailable;
 }
 
-export interface ConnectionStatesMessage {
-  type: 'connectionStates';
-  states?: ProtocolConnectionStateMap;
-}
-
-export interface ConnectionStateChangedMessage {
-  type: 'connectionStateChanged';
-  id: string;
-  serviceType: 'mcp';
-  status: ProtocolConnectionStatus;
-  error?: string;
-}
-
 export interface SsoSessionChangedMessage {
   type: 'ssoSessionChanged';
   session: SsoSession | null;
@@ -463,27 +428,6 @@ export interface SsoSessionChangedMessage {
 export interface SsoErrorMessage {
   type: 'ssoError';
   error: string;
-}
-
-export interface SkillsDataMessage {
-  type: 'skillsData';
-  skills?: ConfiguredSkill[];
-  commands?: ConfiguredSlashCommand[];
-}
-
-export interface HooksDataMessage {
-  type: 'hooksData';
-  hooks?: ConfiguredHook[];
-}
-
-export interface ToolSkillsDataMessage {
-  type: 'toolSkillsData';
-  toolSkills?: ConfiguredToolGroup[];
-}
-
-export interface ToolSkillsChangedMessage {
-  type: 'toolSkillsChanged';
-  toolSkills?: ConfiguredToolGroup[];
 }
 
 export interface ToolCallMessage {
@@ -687,21 +631,14 @@ export type ExtensionToWebviewMessage =
   | SettingsDataMessage
   | ProjectFilesMessage
   | ConfigStateMessage
-  | ConfigStateWithStatusMessage
   | ConfigChangedMessage
   | SettingsUpdatedMessage
   | ProviderMutationResultMessage
   | McpServerTestResultMessage
   | PluginCommandsMessage
   | PluginsAvailableMessage
-  | ConnectionStatesMessage
-  | ConnectionStateChangedMessage
   | SsoSessionChangedMessage
   | SsoErrorMessage
-  | SkillsDataMessage
-  | HooksDataMessage
-  | ToolSkillsDataMessage
-  | ToolSkillsChangedMessage
   | ToolCallMessage
   | ToolResultMessage
   | ToolConfirmationMessage
@@ -944,35 +881,8 @@ export function buildConfigStateMessage(config: ConfigStateMessage['config']): C
   return { type: 'configState', config };
 }
 
-export function buildConfigStateWithStatusMessage(
-  config: ConfigStateWithStatusMessage['config'],
-): ConfigStateWithStatusMessage {
-  return { type: 'configStateWithStatus', config };
-}
-
 export function buildConfigChangedMessage(): ConfigChangedMessage {
   return { type: 'configChanged' };
-}
-
-export function buildSkillsDataMessage(input: {
-  readonly skills: readonly ConfiguredSkill[];
-  readonly commands: readonly ConfiguredSlashCommand[];
-}): SkillsDataMessage {
-  return {
-    type: 'skillsData',
-    skills: [...input.skills],
-    commands: [...input.commands],
-  };
-}
-
-export function buildHooksDataMessage(hooks: readonly ConfiguredHook[]): HooksDataMessage {
-  return { type: 'hooksData', hooks: [...hooks] };
-}
-
-export function buildToolSkillsDataMessage(
-  toolSkills: readonly ConfiguredToolGroup[],
-): ToolSkillsDataMessage {
-  return { type: 'toolSkillsData', toolSkills: [...toolSkills] };
 }
 
 export function buildTabStateMessage(tabState: TabState): TabStateMessage {
@@ -982,27 +892,6 @@ export function buildTabStateMessage(tabState: TabState): TabStateMessage {
       openTabs: tabState.openTabs.map((tab) => ({ ...tab })),
       activeTabId: tabState.activeTabId,
     },
-  };
-}
-
-export function buildConnectionStatesMessage(
-  states: ProtocolConnectionStateMap,
-): ConnectionStatesMessage {
-  return { type: 'connectionStates', states };
-}
-
-export function buildConnectionStateChangedMessage(input: {
-  readonly id: string;
-  readonly serviceType: ConnectionStateChangedMessage['serviceType'];
-  readonly status: ProtocolConnectionStatus;
-  readonly error?: string;
-}): ConnectionStateChangedMessage {
-  return {
-    type: 'connectionStateChanged',
-    id: input.id,
-    serviceType: input.serviceType,
-    status: input.status,
-    ...(input.error !== undefined ? { error: input.error } : {}),
   };
 }
 

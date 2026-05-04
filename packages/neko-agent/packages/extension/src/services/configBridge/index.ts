@@ -12,7 +12,6 @@
 import * as vscode from 'vscode';
 import { type Platform } from '@neko/platform';
 import {
-  buildConfigBridgeConnectionStateChangedMessage,
   buildConfigBridgeGlobalErrorMessage,
   buildConfigBridgeSsoSessionChangedMessage,
   NEKO_AUTH_EXTENSION_ID,
@@ -39,7 +38,6 @@ interface NekoAuthAPI {
 }
 import { getSkillFileService } from '../SkillFileService';
 import { getHookFileService } from '../HookFileService';
-import type { ConnectionStateManager, ConnectionStateChangeEvent } from '../connectionStateManager';
 
 import type { PostMessageFn, WebviewConfigState } from './types';
 import { broadcastToWebviews } from './broadcastHelper';
@@ -49,7 +47,6 @@ import { ToolSkillHandler } from './toolSkillHandler';
 import { ConfigFileHandler } from './configFileHandler';
 
 export type { PostMessageFn } from './types';
-export type { ConfigStateWithStatus } from './types';
 
 const logger = getLogger('ConfigBridge');
 
@@ -86,25 +83,18 @@ export class ConfigBridge implements vscode.Disposable {
 
   constructor(
     private readonly platform: Platform,
-    private readonly connectionStateManager?: ConnectionStateManager,
+    _connectionStateManager?: unknown,
     context?: vscode.ExtensionContext,
   ) {
     // Initialize domain handlers
-    this.skillSync = new SkillSyncHandler(getSkillFileService(), this.activeWebviews, context);
-    this.hookSync = new HookSyncHandler(getHookFileService(), this.activeWebviews);
-    this.toolSkill = new ToolSkillHandler(this.activeWebviews, context);
+    void _connectionStateManager;
+    this.skillSync = new SkillSyncHandler(getSkillFileService(), context);
+    this.hookSync = new HookSyncHandler(getHookFileService());
+    this.toolSkill = new ToolSkillHandler(context);
     this.configFile = new ConfigFileHandler(platform, this.activeWebviews);
 
     // Register disposable sub-handlers
     this.disposables.push(this.skillSync, this.hookSync, this.configFile);
-
-    // Listen for connection state changes
-    if (connectionStateManager) {
-      const listener = connectionStateManager.addListener((event) => {
-        this.broadcastConnectionStateChange(event);
-      });
-      this.disposables.push(listener);
-    }
 
     // Initialize all handlers
     this.skillSync.init();
@@ -137,9 +127,6 @@ export class ConfigBridge implements vscode.Disposable {
 
   registerWebview(postMessage: PostMessageFn): vscode.Disposable {
     this.activeWebviews.add(postMessage);
-
-    // Send current connection states immediately.
-    void this.postConfigBridgeQuery({ type: 'getConnectionStates' }, postMessage);
 
     return {
       dispose: () => {
@@ -223,25 +210,12 @@ export class ConfigBridge implements vscode.Disposable {
     return this.platform.config.getAssistantConfigState();
   }
 
-  private broadcastConnectionStateChange(event: ConnectionStateChangeEvent): void {
-    broadcastToWebviews(
-      this.activeWebviews,
-      buildConfigBridgeConnectionStateChangedMessage({
-        id: event.id,
-        serviceType: event.type,
-        status: event.newStatus,
-        ...(event.error !== undefined ? { error: event.error } : {}),
-      }),
-    );
-  }
-
   private async postConfigBridgeQuery(
     request: ConfigBridgeQueryRequest,
     postMessage: PostMessageFn,
   ): Promise<void> {
     const result = await runConfigBridgeQueryRuntime(request, {
       getConfigState: () => this.buildConfigState(),
-      getConnectionStates: () => this.connectionStateManager?.getStatesMap() || {},
       waitForSkillsInit: () => this.skillSync.waitForInit(),
       getSkills: () => this.skillSync.getSkills(),
       getCommands: () => this.skillSync.getCommands(),

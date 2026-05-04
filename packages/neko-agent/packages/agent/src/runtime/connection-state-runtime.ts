@@ -5,7 +5,13 @@ import type {
   ConnectionStateListener,
   ConnectionStatus,
 } from '@neko-agent/types';
-import type { ProtocolConnectionState, ProtocolConnectionStateMap } from '@neko-agent/types';
+
+export interface RuntimeConnectionStateProjection {
+  status: ConnectionStatus;
+  error?: string;
+}
+
+export type RuntimeConnectionStateMap = Record<string, RuntimeConnectionStateProjection>;
 
 export interface RuntimeConnectionStateStoreOptions {
   readonly now?: () => number;
@@ -25,7 +31,7 @@ export interface RuntimeConnectionStateStore {
   getState(id: string, type: ConnectionServiceType): ConnectionState | undefined;
   getStatesByType(type: ConnectionServiceType): ConnectionState[];
   getAllStates(): ConnectionState[];
-  getStatesMap(): ProtocolConnectionStateMap;
+  getStatesMap(): RuntimeConnectionStateMap;
   addListener(listener: ConnectionStateListener): () => void;
   removeState(id: string, type: ConnectionServiceType): void;
   clear(): void;
@@ -93,10 +99,10 @@ class DefaultRuntimeConnectionStateStore implements RuntimeConnectionStateStore 
     return Array.from(this.states.values()).map((state) => ({ ...state }));
   }
 
-  getStatesMap(): ProtocolConnectionStateMap {
-    const result: ProtocolConnectionStateMap = {};
+  getStatesMap(): RuntimeConnectionStateMap {
+    const result: RuntimeConnectionStateMap = {};
     for (const state of this.states.values()) {
-      const projected: ProtocolConnectionState = {
+      const projected: RuntimeConnectionStateProjection = {
         status: state.status,
         ...(state.error !== undefined ? { error: state.error } : {}),
       };

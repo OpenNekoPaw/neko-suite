@@ -4,15 +4,9 @@
 
 import type * as vscode from 'vscode';
 import type { ConfiguredHook } from '@neko/shared';
-import {
-  buildHookConfigDataMessage,
-  createHookConfigSyncRuntime,
-  type HookConfigSyncRuntime,
-} from '@neko/agent/runtime';
+import { createHookConfigSyncRuntime, type HookConfigSyncRuntime } from '@neko/agent/runtime';
 import { getLogger } from '../../base';
 import type { HookFileService, HookScanResult } from '../HookFileService';
-import type { PostMessageFn } from './types';
-import { broadcastToWebviews } from './broadcastHelper';
 
 const logger = getLogger('HookSyncHandler');
 
@@ -20,10 +14,7 @@ export class HookSyncHandler implements vscode.Disposable {
   private readonly runtime: HookConfigSyncRuntime<HookScanResult>;
   private disposables: vscode.Disposable[] = [];
 
-  constructor(
-    private readonly hookFileService: HookFileService,
-    private readonly activeWebviews: Set<PostMessageFn>,
-  ) {
+  constructor(private readonly hookFileService: HookFileService) {
     this.runtime = createHookConfigSyncRuntime({
       scanHooks: () => this.hookFileService.scanHooks(),
       toConfigured: (scanResult) => this.hookFileService.toConfigured(scanResult),
@@ -47,9 +38,7 @@ export class HookSyncHandler implements vscode.Disposable {
   }
 
   private handleChanged(result: HookScanResult): void {
-    const hooks = this.runtime.handleChanged(result);
-
-    broadcastToWebviews(this.activeWebviews, buildHookConfigDataMessage(hooks));
+    this.runtime.handleChanged(result);
   }
 
   dispose(): void {

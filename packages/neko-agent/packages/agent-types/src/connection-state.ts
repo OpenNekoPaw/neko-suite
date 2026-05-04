@@ -1,7 +1,5 @@
-import type { ProtocolConnectionStatus } from './webview-protocol';
-
 export type ConnectionServiceType = 'mcp';
-export type ConnectionStatus = ProtocolConnectionStatus;
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface ConnectionState {
   id: string;

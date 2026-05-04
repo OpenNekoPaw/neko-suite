@@ -4,8 +4,6 @@ import {
   buildAgentPhaseMessage,
   buildAgentStateSnapshotMessage,
   buildAgentStoppedMessage,
-  buildConnectionStateChangedMessage,
-  buildConnectionStatesMessage,
   buildErrorMessage,
   buildExternalInputMessage,
   buildHistoryClearedMessage,
@@ -435,34 +433,6 @@ describe('webview protocol projectors', () => {
 
     expect(parseWebviewToExtensionMessage({ type: 'getPromptMode' })).toBeNull();
     expect(parseWebviewToExtensionMessage({ type: 'setPromptMode', mode: 'plan' })).toBeNull();
-  });
-
-  it('builds connection state protocol messages', () => {
-    expect(
-      buildConnectionStatesMessage({
-        'mcp:server-1': { status: 'connected' },
-      }),
-    ).toEqual({
-      type: 'connectionStates',
-      states: {
-        'mcp:server-1': { status: 'connected' },
-      },
-    });
-
-    expect(
-      buildConnectionStateChangedMessage({
-        id: 'server-1',
-        serviceType: 'mcp',
-        status: 'error',
-        error: 'failed',
-      }),
-    ).toEqual({
-      type: 'connectionStateChanged',
-      id: 'server-1',
-      serviceType: 'mcp',
-      status: 'error',
-      error: 'failed',
-    });
   });
 
   it('builds task, media task, and subagent messages with conversation scope', () => {

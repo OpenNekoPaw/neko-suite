@@ -5,7 +5,6 @@ import type {
   ChatWorkspaceModelStateInput,
   ChatWorkspaceModelStateProjection,
   ConfigStateMessage,
-  ConfigStateWithStatusMessage,
   MediaModelCategory,
   MediaModelDefaults,
   MediaModelSelectionDefaultsProjection,
@@ -218,7 +217,7 @@ export function projectProjectFilesMessage(message: ProjectFilesMessage): Projec
 }
 
 export function projectConfigStateMessage(
-  message: ConfigStateMessage | ConfigStateWithStatusMessage,
+  message: ConfigStateMessage,
 ): Partial<SettingsState> | null {
   if (!message.config) return null;
   return {

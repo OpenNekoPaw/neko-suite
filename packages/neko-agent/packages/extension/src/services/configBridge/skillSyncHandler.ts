@@ -6,16 +6,13 @@ import type * as vscode from 'vscode';
 import type { ConfiguredSkill, ConfiguredSlashCommand } from '@neko/shared';
 import {
   SKILL_ENABLED_STATE_STORAGE_KEY,
-  buildSkillConfigDataMessage,
   createEnabledStateRuntimeStore,
   createSkillConfigSyncRuntime,
   type SkillConfigSyncRuntime,
 } from '@neko/agent/runtime';
 import { getLogger } from '../../base';
 import type { SkillFileService, SkillScanResult } from '../SkillFileService';
-import type { PostMessageFn } from './types';
 import { createVSCodeEnabledStateStorage } from './enabledStateStore';
-import { broadcastToWebviews } from './broadcastHelper';
 
 const logger = getLogger('SkillSyncHandler');
 
@@ -25,7 +22,6 @@ export class SkillSyncHandler implements vscode.Disposable {
 
   constructor(
     private readonly skillFileService: SkillFileService,
-    private readonly activeWebviews: Set<PostMessageFn>,
     context?: vscode.ExtensionContext,
   ) {
     this.runtime = createSkillConfigSyncRuntime({
@@ -70,22 +66,14 @@ export class SkillSyncHandler implements vscode.Disposable {
   }
 
   private handleChanged(result: SkillScanResult): void {
-    const state = this.runtime.handleChanged(result);
-
-    broadcastToWebviews(this.activeWebviews, buildSkillConfigDataMessage(state));
+    this.runtime.handleChanged(result);
   }
 
   /**
    * Broadcast current skills state to all webviews
    */
   broadcast(): void {
-    broadcastToWebviews(
-      this.activeWebviews,
-      buildSkillConfigDataMessage({
-        skills: this.runtime.getSkills(),
-        commands: this.runtime.getCommands(),
-      }),
-    );
+    // Skill state is read through ConfigBridge accessors; webview has no direct skillsData UI.
   }
 
   dispose(): void {

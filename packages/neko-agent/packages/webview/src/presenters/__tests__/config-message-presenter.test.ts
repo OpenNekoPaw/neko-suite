@@ -13,13 +13,7 @@ import {
   projectSsoErrorMessage,
   projectSsoSessionChangedMessage,
 } from '../config-message-presenter';
-import {
-  buildConfigChangedMessage,
-  buildConfigStateMessage,
-  buildHooksDataMessage,
-  buildSkillsDataMessage,
-  buildToolSkillsDataMessage,
-} from '@neko-agent/types';
+import { buildConfigChangedMessage, buildConfigStateMessage } from '@neko-agent/types';
 
 describe('config message presenter', () => {
   it('projects settings data without overwriting configured providers', () => {
@@ -356,16 +350,6 @@ describe('config message presenter', () => {
       config: { configuredProviders },
     });
     expect(buildConfigChangedMessage()).toEqual({ type: 'configChanged' });
-    expect(buildSkillsDataMessage({ skills: [], commands: [] })).toEqual({
-      type: 'skillsData',
-      skills: [],
-      commands: [],
-    });
-    expect(buildHooksDataMessage([])).toEqual({ type: 'hooksData', hooks: [] });
-    expect(buildToolSkillsDataMessage([])).toEqual({
-      type: 'toolSkillsData',
-      toolSkills: [],
-    });
 
     expect(
       projectConfigStateMessage({
