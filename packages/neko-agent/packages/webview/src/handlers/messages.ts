@@ -20,7 +20,6 @@ export type {
   ErrorMessage,
   ExtensionToWebviewMessage,
   ExternalMessage,
-  GenerationProgressMessage,
   GlobalErrorMessage,
   HistoryClearedMessage,
   InjectContextMessage,

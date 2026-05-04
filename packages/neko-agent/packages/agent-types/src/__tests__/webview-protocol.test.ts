@@ -23,7 +23,6 @@ import {
   buildToolConfirmationMessage,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
-  projectGenerationProgressMessage,
 } from '../webview-protocol';
 
 describe('webview protocol parser', () => {
@@ -185,27 +184,6 @@ describe('webview protocol parser', () => {
 });
 
 describe('webview protocol projectors', () => {
-  it('projects generation progress using the shared protocol payload', () => {
-    expect(
-      projectGenerationProgressMessage({
-        nodeId: 'node-1',
-        taskId: 'task-1',
-        status: 'generating',
-        count: 1,
-        total: 3,
-      }),
-    ).toEqual({
-      type: 'generationProgress',
-      progress: {
-        nodeId: 'node-1',
-        taskId: 'task-1',
-        status: 'generating',
-        count: 1,
-        total: 3,
-      },
-    });
-  });
-
   it('builds common extension-to-webview bridge messages', () => {
     expect(buildThinkingMessage('conv-1')).toEqual({
       type: 'thinking',

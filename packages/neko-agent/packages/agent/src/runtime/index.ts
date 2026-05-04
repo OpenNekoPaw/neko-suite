@@ -520,7 +520,6 @@ export {
 
 export {
   CanvasGenerationRuntime,
-  buildCanvasGenerationProgressMessage,
   buildCanvasMediaOutputDataUrl,
   buildCanvasGenerationPrompt,
   buildCanvasImageGenerationRequest,

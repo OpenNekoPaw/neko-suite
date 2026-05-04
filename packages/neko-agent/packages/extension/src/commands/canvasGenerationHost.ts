@@ -3,7 +3,6 @@ import * as vscode from 'vscode';
 import type { NekoCanvasAPI } from '@neko/shared';
 import {
   CanvasGenerationRuntime,
-  buildCanvasGenerationProgressMessage,
   buildCanvasMediaOutputDataUrl,
   planCanvasImageSource,
   type CanvasMediaOutput,
@@ -12,7 +11,6 @@ import {
 import { NEKO_PLUGIN_EXTENSION_IDS } from '@neko-agent/types';
 import { getRootLogger, ServiceCollection } from '../base';
 import { IPlatform } from '../bootstrap';
-import type { ChatViewProvider } from '../chat';
 
 /**
  * Resolve an image reference (data URL / file path / http URL) to a
@@ -63,12 +61,11 @@ async function fetchOutputAsDataUrl(output: CanvasMediaOutput): Promise<string |
  * Build the canvas generation runtime with VSCode/platform bridge adapters.
  *
  * Extension owns only host access here: VSCode command APIs, cross-extension
- * Canvas lookup, network/file bytes and webview posting. Prompt construction,
+ * Canvas lookup and network/file bytes. Prompt construction,
  * reference selection and media request assembly stay inside @neko/agent.
  */
 export function createCanvasGenerationRuntime(
   services: ServiceCollection,
-  chatViewProvider: ChatViewProvider,
 ): CanvasGenerationRuntime {
   const platform = services.get(IPlatform);
 
@@ -107,9 +104,6 @@ export function createCanvasGenerationRuntime(
     },
     resolveImageSource: resolveImageToBase64,
     fetchOutputAsDataUrl,
-    onProgress: (progress) => {
-      chatViewProvider.postMessage(buildCanvasGenerationProgressMessage(progress));
-    },
     logger: getRootLogger(),
   });
 }

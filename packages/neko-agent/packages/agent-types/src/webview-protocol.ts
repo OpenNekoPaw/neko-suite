@@ -588,23 +588,6 @@ export interface AmbientCanvasUpdateMessage {
   nodes?: Array<{ nodeId: string; type: string; summary: string }>;
 }
 
-export type GenerationProgressStatus = 'pending' | 'generating' | 'done' | 'error';
-
-export interface GenerationProgressPayload {
-  nodeId: string;
-  taskId: string;
-  cellId?: string;
-  status: GenerationProgressStatus;
-  count?: number;
-  total?: number;
-  error?: string;
-}
-
-export interface GenerationProgressMessage {
-  type: 'generationProgress';
-  progress?: GenerationProgressPayload;
-}
-
 export type ExtensionToWebviewMessage =
   | ThinkingMessage
   | StreamTextMessage
@@ -653,8 +636,7 @@ export type ExtensionToWebviewMessage =
   | ExternalMessage
   | PrefillInputMessage
   | InjectContextMessage
-  | AmbientCanvasUpdateMessage
-  | GenerationProgressMessage;
+  | AmbientCanvasUpdateMessage;
 
 export type MessageOfType<T extends ExtensionToWebviewMessage['type']> = Extract<
   ExtensionToWebviewMessage,
@@ -744,12 +726,6 @@ const DRAG_MEDIA_TYPES: ReadonlyArray<DragStartWebviewMessage['asset']['mediaTyp
 
 export function isSessionMode(value: unknown): value is SessionMode {
   return typeof value === 'string' && SESSION_MODES.includes(value as SessionMode);
-}
-
-export function projectGenerationProgressMessage(
-  progress: GenerationProgressPayload,
-): GenerationProgressMessage {
-  return { type: 'generationProgress', progress };
 }
 
 export function buildGlobalErrorMessage(message: string): GlobalErrorMessage {

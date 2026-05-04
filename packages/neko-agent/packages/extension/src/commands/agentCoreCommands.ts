@@ -7,10 +7,8 @@ import {
   NEKO_AI_ASSISTANT_FOCUS_COMMAND,
 } from '@neko-agent/types';
 import {
-  buildCanvasGenerationProgressMessage,
   buildAgentPromptCommandMessage,
   buildAgentScriptCommandMessage,
-  type CanvasGenerationProgress,
   type CanvasGenerationInput,
   type CanvasShotPromptData,
 } from '@neko/agent/runtime';
@@ -90,8 +88,8 @@ export function registerAgentCoreCommands(
   );
 
   registerScriptCommands(context, chatViewProvider);
-  registerServiceCommands(context, chatViewProvider, services);
-  registerCanvasCommands(context, chatViewProvider, services);
+  registerServiceCommands(context, services);
+  registerCanvasCommands(context, services);
   registerPluginCommands(context, chatViewProvider);
   registerDragAndDropCommands(context, chatViewProvider);
   registerInternalApiCommands(context, services);
@@ -152,7 +150,6 @@ function registerScriptCommands(
 
 function registerServiceCommands(
   context: vscode.ExtensionContext,
-  chatViewProvider: ChatViewProvider,
   services: ServiceCollection,
 ): void {
   context.subscriptions.push(
@@ -177,20 +174,10 @@ function registerServiceCommands(
       getRootLogger().info(`Ollama model refresh: +${result.added} new model(s)`);
     }),
   );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'neko.agent.reportGenerationProgress',
-      (progress: CanvasGenerationProgress) => {
-        chatViewProvider.postMessage(buildCanvasGenerationProgressMessage(progress));
-      },
-    ),
-  );
 }
 
 function registerCanvasCommands(
   context: vscode.ExtensionContext,
-  chatViewProvider: ChatViewProvider,
   services: ServiceCollection,
 ): void {
   context.subscriptions.push(
@@ -198,9 +185,7 @@ function registerCanvasCommands(
       'neko.agent.buildPrompt',
       async (shotData: CanvasShotPromptData): Promise<string> => {
         try {
-          return await createCanvasGenerationRuntime(services, chatViewProvider).buildPrompt(
-            shotData,
-          );
+          return await createCanvasGenerationRuntime(services).buildPrompt(shotData);
         } catch (err) {
           getRootLogger().warn('neko.agent.buildPrompt failed', { error: err });
           return '';
@@ -214,9 +199,7 @@ function registerCanvasCommands(
       'neko.agent.generateForNode',
       async (input: CanvasGenerationInput): Promise<{ dataUrl: string } | undefined> => {
         try {
-          return await createCanvasGenerationRuntime(services, chatViewProvider).generateForNode(
-            input,
-          );
+          return await createCanvasGenerationRuntime(services).generateForNode(input);
         } catch (err) {
           getRootLogger().warn('neko.agent.generateForNode failed', { error: err });
           return undefined;

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CanvasGenerationRuntime,
-  buildCanvasGenerationProgressMessage,
   buildCanvasMediaOutputDataUrl,
   buildCanvasImageGenerationRequest,
   buildCanvasShotPromptMessages,
@@ -142,29 +141,6 @@ describe('canvas generation runtime', () => {
       controlMode: 'depth',
       controlStrength: 0.7,
       ipAdapterRefs: [{ imageBase64: 'ref', mimeType: 'image/png', strength: 0.6, mode: 'both' }],
-    });
-  });
-
-  it('projects canvas generation progress to a webview message', () => {
-    expect(
-      buildCanvasGenerationProgressMessage({
-        nodeId: 'shot-1',
-        taskId: 'task-1',
-        cellId: 'cell-1',
-        status: 'generating',
-        count: 1,
-        total: 3,
-      }),
-    ).toEqual({
-      type: 'generationProgress',
-      progress: {
-        nodeId: 'shot-1',
-        taskId: 'task-1',
-        cellId: 'cell-1',
-        status: 'generating',
-        count: 1,
-        total: 3,
-      },
     });
   });
 

@@ -1,8 +1,3 @@
-import {
-  projectGenerationProgressMessage,
-  type GenerationProgressMessage,
-} from '@neko-agent/types';
-
 export type CanvasPromptRole = 'system' | 'user' | 'assistant';
 
 export interface CanvasPromptMessage {
@@ -85,12 +80,6 @@ export interface CanvasGenerationProgress {
   readonly status: CanvasGenerationStatus;
   readonly count?: number;
   readonly total?: number;
-}
-
-export function buildCanvasGenerationProgressMessage(
-  progress: CanvasGenerationProgress,
-): GenerationProgressMessage {
-  return projectGenerationProgressMessage({ ...progress });
 }
 
 export interface CanvasImageGenerationRequest {

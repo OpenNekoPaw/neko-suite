@@ -11,7 +11,6 @@ import type {
   ProjectFilesMessage,
   ConfigStateMessage,
   ConfigChangedMessage,
-  GenerationProgressMessage,
   PluginCommandsMessage,
   PluginsAvailableMessage,
   ProviderMutationResultMessage,
@@ -158,16 +157,6 @@ const handleSettingsMutationAck: MessageHandler<
 };
 
 /**
- * Consume bridge data that is extension-managed or has no UI surface yet.
- */
-const handleBridgeStateOnlyMessage: MessageHandler<'generationProgress'> = (
-  _message: GenerationProgressMessage,
-  _context,
-) => {
-  // Intentionally consumed to keep the protocol explicit and avoid unknown-message noise.
-};
-
-/**
  * All config handler registrations
  */
 export const configHandlers: HandlerRegistration[] = [
@@ -182,5 +171,4 @@ export const configHandlers: HandlerRegistration[] = [
   defineHandler('pluginsAvailable', handlePluginsAvailable),
   defineHandler('ssoSessionChanged', handleSsoSessionChanged),
   defineHandler('ssoError', handleSsoError),
-  defineHandler('generationProgress', handleBridgeStateOnlyMessage),
 ];

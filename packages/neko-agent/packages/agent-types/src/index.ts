@@ -149,9 +149,6 @@ export type {
   ExternalMessage,
   FilePathWebviewMessage,
   GlobalErrorMessage,
-  GenerationProgressMessage,
-  GenerationProgressPayload,
-  GenerationProgressStatus,
   HistoryClearedMessage,
   InjectContextMessage,
   InvokePluginSlashCommandWebviewMessage,
@@ -242,7 +239,6 @@ export {
   isSessionMode,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
-  projectGenerationProgressMessage,
   WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
 } from './webview-protocol';
 
