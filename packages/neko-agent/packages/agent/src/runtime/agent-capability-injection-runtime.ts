@@ -68,8 +68,24 @@ export interface AgentCapabilityInjectionRuntime {
   ): AgentCapabilityTelemetryEvent;
 }
 
-export function createAgentCapabilityInjectionRuntime(): AgentCapabilityInjectionRuntime {
-  return new DefaultAgentCapabilityInjectionRuntime();
+export interface AgentCapabilityInjectionRuntimeRetentionOptions {
+  readonly maxRegistrationDiagnostics?: number;
+  readonly maxInjectionDiagnostics?: number;
+  readonly maxTelemetryEvents?: number;
+}
+
+export interface AgentCapabilityInjectionRuntimeOptions {
+  readonly retention?: AgentCapabilityInjectionRuntimeRetentionOptions;
+}
+
+const DEFAULT_MAX_REGISTRATION_DIAGNOSTICS = 500;
+const DEFAULT_MAX_INJECTION_DIAGNOSTICS = 500;
+const DEFAULT_MAX_TELEMETRY_EVENTS = 1_000;
+
+export function createAgentCapabilityInjectionRuntime(
+  options: AgentCapabilityInjectionRuntimeOptions = {},
+): AgentCapabilityInjectionRuntime {
+  return new DefaultAgentCapabilityInjectionRuntime(options);
 }
 
 export function normalizeSkillCapability(
@@ -244,8 +260,28 @@ export function validateCapabilityContribution(
 
 class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjectionRuntime {
   private readonly contributions = new Map<string, AgentCapabilityContribution>();
-  private readonly diagnostics: AgentCapabilityDiagnostic[] = [];
+  private readonly registrationDiagnostics: AgentCapabilityDiagnostic[] = [];
+  private readonly injectionDiagnostics: AgentCapabilityDiagnostic[] = [];
   private readonly telemetryEvents: AgentCapabilityTelemetryEvent[] = [];
+  private readonly maxRegistrationDiagnostics: number;
+  private readonly maxInjectionDiagnostics: number;
+  private readonly maxTelemetryEvents: number;
+  private telemetryEventSequence = 0;
+
+  constructor(options: AgentCapabilityInjectionRuntimeOptions = {}) {
+    this.maxRegistrationDiagnostics = normalizeRetentionLimit(
+      options.retention?.maxRegistrationDiagnostics,
+      DEFAULT_MAX_REGISTRATION_DIAGNOSTICS,
+    );
+    this.maxInjectionDiagnostics = normalizeRetentionLimit(
+      options.retention?.maxInjectionDiagnostics,
+      DEFAULT_MAX_INJECTION_DIAGNOSTICS,
+    );
+    this.maxTelemetryEvents = normalizeRetentionLimit(
+      options.retention?.maxTelemetryEvents,
+      DEFAULT_MAX_TELEMETRY_EVENTS,
+    );
+  }
 
   register(contribution: AgentCapabilityContribution): AgentCapabilityRegistryProjection {
     this.registerOne(contribution);
@@ -266,15 +302,15 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
   }
 
   getDiagnostics(phase?: 'registration' | 'injection'): readonly AgentCapabilityDiagnostic[] {
-    return phase
-      ? this.diagnostics.filter((diagnostic) => diagnostic.phase === phase)
-      : [...this.diagnostics];
+    if (phase === 'registration') return [...this.registrationDiagnostics];
+    if (phase === 'injection') return [...this.injectionDiagnostics];
+    return [...this.registrationDiagnostics, ...this.injectionDiagnostics];
   }
 
   inject(context: AgentCapabilityInjectionContext): AgentInjectedCapabilitySet {
     const injected = buildInjectedCapabilitySet(this.contributions.values(), context);
     const diagnostics = [...injected.diagnostics];
-    this.diagnostics.push(...diagnostics);
+    this.recordInjectionDiagnostics(diagnostics);
     this.recordInjectionTelemetry(injected, diagnostics);
     return injected;
   }
@@ -282,39 +318,32 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
   projectSlashCommandCatalog(
     context: AgentCapabilityInjectionContext,
   ): readonly AgentCapabilitySlashCommandContribution[] {
-    return buildInjectedCapabilitySet(this.contributions.values(), {
-      ...context,
-      ablation: {
-        ...context.ablation,
-        disablePromptFragments: true,
-        disableToolInjection: true,
-      },
-    }).slashCommands;
+    return projectSlashCommandCatalog(this.contributions.values(), context);
   }
 
   private registerOne(contribution: AgentCapabilityContribution): void {
     const existing = this.contributions.get(contribution.identity.id);
-    for (const diagnostic of validateCapabilityContribution(contribution)) {
-      this.diagnostics.push(diagnostic);
-    }
+    this.recordRegistrationDiagnostics(validateCapabilityContribution(contribution));
 
     if (existing) {
-      this.diagnostics.push({
-        phase: 'registration',
-        code: 'agent.capability.registration.id-collision',
-        contributionId: contribution.identity.id,
-        reason: 'id-collision',
-        message: 'Replacing an existing capability contribution with the same id.',
-        metadata: {
-          previousSource: existing.identity.source,
-          nextSource: contribution.identity.source,
+      this.recordRegistrationDiagnostics([
+        {
+          phase: 'registration',
+          code: 'agent.capability.registration.id-collision',
+          contributionId: contribution.identity.id,
+          reason: 'id-collision',
+          message: 'Replacing an existing capability contribution with the same id.',
+          metadata: {
+            previousSource: existing.identity.source,
+            nextSource: contribution.identity.source,
+          },
         },
-      });
+      ]);
     }
 
-    for (const collision of findRegistrationCollisions(contribution, this.contributions.values())) {
-      this.diagnostics.push(collision);
-    }
+    this.recordRegistrationDiagnostics(
+      findRegistrationCollisions(contribution, this.contributions.values()),
+    );
     this.contributions.set(contribution.identity.id, contribution);
     this.recordRegistrationTelemetry(contribution);
   }
@@ -344,10 +373,9 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
       readonly createdAt?: number;
     },
   ): AgentCapabilityTelemetryEvent {
+    const sequence = this.nextTelemetryEventSequence();
     const recorded: AgentCapabilityTelemetryEvent = {
-      id:
-        event.id ??
-        `${event.kind}:${event.contributionId}:${event.field ?? 'event'}:${this.telemetryEvents.length + 1}`,
+      id: event.id ?? `${event.kind}:${event.contributionId}:${event.field ?? 'event'}:${sequence}`,
       kind: event.kind,
       contributionId: event.contributionId,
       source: event.source,
@@ -359,8 +387,21 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
       createdAt: event.createdAt ?? Date.now(),
       ...(event.metadata ? { metadata: sanitizeTelemetryMetadata(event.metadata) } : {}),
     };
-    this.telemetryEvents.push(recorded);
+    pushBounded(this.telemetryEvents, [recorded], this.maxTelemetryEvents);
     return recorded;
+  }
+
+  private recordRegistrationDiagnostics(diagnostics: readonly AgentCapabilityDiagnostic[]): void {
+    pushBounded(this.registrationDiagnostics, diagnostics, this.maxRegistrationDiagnostics);
+  }
+
+  private recordInjectionDiagnostics(diagnostics: readonly AgentCapabilityDiagnostic[]): void {
+    pushBounded(this.injectionDiagnostics, diagnostics, this.maxInjectionDiagnostics);
+  }
+
+  private nextTelemetryEventSequence(): number {
+    this.telemetryEventSequence += 1;
+    return this.telemetryEventSequence;
   }
 
   private recordRegistrationTelemetry(contribution: AgentCapabilityContribution): void {
@@ -572,6 +613,44 @@ function buildInjectedCapabilitySet(
     workflowFragments,
     diagnostics,
   };
+}
+
+function projectSlashCommandCatalog(
+  registeredContributions: Iterable<AgentCapabilityContribution>,
+  context: AgentCapabilityInjectionContext,
+): readonly AgentCapabilitySlashCommandContribution[] {
+  const disabledIds = new Set(context.disabledContributionIds ?? []);
+  const trust = new Set<AgentCapabilityTrustLevel>(
+    context.allowedTrustLevels ?? ['core', 'community'],
+  );
+  const slashCommands: AgentCapabilitySlashCommandContribution[] = [];
+
+  if (context.ablation?.disableCapabilityInjection || context.ablation?.disableSkillInjection) {
+    return slashCommands;
+  }
+
+  for (const contribution of registeredContributions) {
+    if (getInjectionSkipReason(contribution, context, disabledIds, trust)) {
+      continue;
+    }
+    slashCommands.push(...(contribution.slashCommands ?? []));
+  }
+
+  return slashCommands;
+}
+
+function normalizeRetentionLimit(value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isFinite(value) || value < 0) return fallback;
+  return Math.floor(value);
+}
+
+function pushBounded<T>(target: T[], items: readonly T[], maxItems: number): void {
+  if (items.length === 0 || maxItems === 0) return;
+  target.push(...items);
+  if (target.length > maxItems) {
+    target.splice(0, target.length - maxItems);
+  }
 }
 
 function normalizeSkillScanGroup(

@@ -329,6 +329,64 @@ describe('agent-capability-injection-runtime', () => {
     expect(runtime.getDiagnostics('injection')).toEqual([]);
   });
 
+  it('keeps slash command catalog projection side-effect free', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+    runtime.registerMany([
+      normalizeSkillCapability({ skill: skill('storyboard'), source: 'market' }),
+      {
+        identity: {
+          id: 'skill:blocked',
+          source: 'market',
+          sourceId: '@neko/blocked',
+          trustLevel: 'community',
+        },
+        permissionRequirements: [{ scope: 'workspace.write', approvalRequired: true }],
+        slashCommands: [{ id: 'cmd-blocked', name: 'blocked' }],
+      },
+    ]);
+    const beforeTelemetry = runtime.getTelemetrySnapshot().events.length;
+
+    for (let index = 0; index < 5; index += 1) {
+      expect(
+        runtime.projectSlashCommandCatalog({ host: 'vscode' }).map((item) => item.name),
+      ).toEqual(['storyboard']);
+    }
+
+    expect(runtime.getDiagnostics('injection')).toEqual([]);
+    expect(runtime.getTelemetrySnapshot().events).toHaveLength(beforeTelemetry);
+  });
+
+  it('bounds retained injection diagnostics and telemetry for long sessions', () => {
+    const runtime = createAgentCapabilityInjectionRuntime({
+      retention: {
+        maxInjectionDiagnostics: 3,
+        maxTelemetryEvents: 5,
+      },
+    });
+    runtime.register(
+      normalizeSkillCapability({
+        skill: skill('blocked', { allowedTools: ['write_file'] }),
+        source: 'market',
+      }),
+    );
+
+    for (let index = 0; index < 10; index += 1) {
+      runtime.inject({
+        host: 'vscode',
+        disabledContributionIds: ['skill:blocked'],
+      });
+    }
+
+    expect(runtime.getDiagnostics('injection')).toHaveLength(3);
+    expect(runtime.getDiagnostics('injection').map((item) => item.reason)).toEqual([
+      'disabled',
+      'disabled',
+      'disabled',
+    ]);
+    expect(runtime.getTelemetrySnapshot().events).toHaveLength(5);
+    expect(new Set(runtime.getTelemetrySnapshot().events.map((event) => event.id)).size).toBe(5);
+  });
+
   it('records capability telemetry separately from registration and injection diagnostics', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
     runtime.register({

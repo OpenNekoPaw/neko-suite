@@ -143,6 +143,8 @@ export {
   normalizeSkillCapability,
   validateCapabilityContribution,
   type AgentCapabilityInjectionRuntime,
+  type AgentCapabilityInjectionRuntimeOptions,
+  type AgentCapabilityInjectionRuntimeRetentionOptions,
   type NormalizeSkillScanGroupInput,
   type NormalizeSkillScanInput,
   type NormalizeSkillCapabilityInput,
