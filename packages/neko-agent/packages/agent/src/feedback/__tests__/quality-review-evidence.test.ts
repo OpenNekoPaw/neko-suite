@@ -325,6 +325,7 @@ describe('createQualityReviewEvidence', () => {
 function createLegacyQualityReviewData(): Record<string, unknown> {
   return {
     kind: 'quality-review',
+    mode: 'analysis',
     toolCallId: 'call-qc',
     runId: 'run-quality',
     totalScenes: 3,

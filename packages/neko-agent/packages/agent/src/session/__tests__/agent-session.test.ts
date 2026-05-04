@@ -1412,7 +1412,28 @@ describe('AgentSession', () => {
         {
           type: 'act',
           content: 'Executed 1 tool(s)',
-          toolCalls: [{ id: 'call-qc', name: 'QualityCheck', arguments: {} }],
+          toolCalls: [
+            {
+              id: 'call-qc',
+              name: 'QualityCheck',
+              arguments: {
+                scenes: [
+                  {
+                    index: 1,
+                    mediaPath: '/tmp/scene-1.png',
+                    prompt: 'ok',
+                    timeRange: { start: 0, end: 4 },
+                  },
+                  {
+                    index: 2,
+                    mediaPath: '/tmp/scene-2.mp4',
+                    prompt: 'bad',
+                    timeRange: { start: 4, end: 9 },
+                  },
+                ],
+              },
+            },
+          ],
           toolResults: [
             {
               callId: 'call-qc',
@@ -1427,6 +1448,13 @@ describe('AgentSession', () => {
                     index: 2,
                     passed: false,
                     finalScore: 41,
+                    issues: [
+                      {
+                        category: 'stuttering',
+                        severity: 'major',
+                        description: 'frame drops',
+                      },
+                    ],
                     remediations: [{ action: 'regen' }],
                   },
                 ],
@@ -1449,6 +1477,7 @@ describe('AgentSession', () => {
               observedAt: 200,
               toolCallId: 'call-qc',
               toolName: 'QualityCheck',
+              mode: 'analysis',
               totalScenes: 2,
               passed: 1,
               failed: 1,
@@ -1460,6 +1489,18 @@ describe('AgentSession', () => {
                 toolName: 'QualityCheck',
                 summary:
                   'QualityReview failed 1/2 scene(s): scene(s) 2; 1 remediation hint(s) available.',
+                data: expect.objectContaining({
+                  normalizedIssues: [
+                    expect.objectContaining({
+                      category: 'stutter',
+                      start: 4,
+                      end: 9,
+                      source: expect.objectContaining({
+                        sourceTimeRange: { start: 4, end: 9 },
+                      }),
+                    }),
+                  ],
+                }),
               }),
             },
           ],
@@ -1469,6 +1510,7 @@ describe('AgentSession', () => {
               signalKind: 'quality-check',
               toolCallId: 'call-qc',
               toolName: 'QualityCheck',
+              mode: 'analysis',
               totalScenes: 2,
               failed: 1,
               failingSceneIndexes: [2],
@@ -1486,6 +1528,341 @@ describe('AgentSession', () => {
           ],
         }),
       ]);
+    });
+
+    it('captures QualityRepairCheck attempts as auditable repair evidence', async () => {
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(createConfig({ journalWriter }));
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [
+            {
+              id: 'call-repair',
+              name: 'QualityRepairCheck',
+              arguments: {
+                scenes: [
+                  {
+                    index: 2,
+                    mediaPath: '/tmp/scene-2.mp4',
+                    prompt: 'bad',
+                    timeRange: { start: 4, end: 9 },
+                  },
+                ],
+                maxRetries: 1,
+              },
+            },
+          ],
+          toolResults: [
+            {
+              callId: 'call-repair',
+              success: true,
+              data: {
+                totalScenes: 1,
+                passed: 0,
+                failed: 1,
+                evaluations: [
+                  {
+                    index: 2,
+                    passed: false,
+                    finalScore: 42,
+                    attempts: 2,
+                    finalPath: '/tmp/scene-2-repair.mp4',
+                    issues: [
+                      {
+                        category: 'tearing',
+                        severity: 'major',
+                        description: 'visible tearing remains',
+                      },
+                    ],
+                    remediations: [{ description: 'manual review required' }],
+                  },
+                ],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 220,
+        },
+      ]);
+
+      await collectEvents(
+        session.execute('repair scene quality', {
+          metadata: {
+            multimodalContextPacket: {
+              id: 'ctx-quality-repair',
+              selection: [],
+              artifactRefs: [],
+              projectRefs: [],
+              perceptionInputs: [],
+              uiContext: { activePanel: 'canvas', selectionIds: [] },
+              createdAt: 220,
+            },
+          },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+        expect.objectContaining({
+          kind: 'quality-check',
+          toolName: 'QualityRepairCheck',
+          mode: 'repair',
+          evidence: expect.objectContaining({
+            summary:
+              'QualityRepairReview repair attempt failed 1/1 scene(s): scene(s) 2; 1 remediation hint(s) available.',
+            data: expect.objectContaining({
+              mode: 'repair',
+              normalizedIssues: [
+                expect.objectContaining({
+                  category: 'tearing',
+                  source: expect.objectContaining({
+                    mediaPath: '/tmp/scene-2-repair.mp4',
+                    attempts: 2,
+                  }),
+                }),
+              ],
+            }),
+          }),
+        }),
+      );
+      expect(journalWriter.appendEvent).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          type: 'agent.evidence.attached',
+          agentEvidence: expect.objectContaining({
+            id: 'quality-review:runless:call-repair',
+            toolName: 'QualityRepairCheck',
+            contextPacketId: 'ctx-quality-repair',
+          }),
+        }),
+      );
+    });
+
+    it('captures QualityCheckConsistency output as continuity evidence', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [
+            {
+              id: 'call-consistency',
+              name: 'QualityCheckConsistency',
+              arguments: {
+                scenes: [
+                  {
+                    sceneIndex: 1,
+                    mediaPath: '/tmp/scene-1.png',
+                    prompt: 'a',
+                    timeRange: { start: 0, end: 4 },
+                  },
+                  {
+                    sceneIndex: 2,
+                    mediaPath: '/tmp/scene-2.png',
+                    prompt: 'b',
+                    timeRange: { start: 4, end: 8 },
+                  },
+                ],
+              },
+            },
+          ],
+          toolResults: [
+            {
+              callId: 'call-consistency',
+              success: true,
+              data: {
+                overallConsistency: 58,
+                styleDrift: [
+                  { fromScene: 1, toScene: 2, driftScore: 60, description: 'strong luminance pop' },
+                ],
+                characterConsistency: [],
+                aestheticScore: 70,
+                recommendations: ['Apply color correction across the cut'],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 240,
+        },
+      ]);
+
+      await collectEvents(session.execute('check consistency'));
+
+      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+        expect.objectContaining({
+          kind: 'quality-check',
+          toolName: 'QualityCheckConsistency',
+          mode: 'consistency',
+          evidence: expect.objectContaining({
+            summary:
+              'QualityConsistencyReview failed 2/2 scene(s): scene(s) 1, 2; 2 remediation hint(s) available.',
+            data: expect.objectContaining({
+              mode: 'consistency',
+              continuityEdgeCandidates: [
+                expect.objectContaining({
+                  fromSceneIndex: 1,
+                  toSceneIndex: 2,
+                  fromTime: 4,
+                  toTime: 4,
+                  issue: 'color-pop',
+                }),
+              ],
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('keeps QualityCheckConsistency threshold aligned with normalized color-pop edges', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [
+            {
+              id: 'call-consistency-threshold',
+              name: 'QualityCheckConsistency',
+              arguments: {
+                scenes: [
+                  {
+                    sceneIndex: 1,
+                    mediaPath: '/tmp/scene-1.png',
+                    prompt: 'a',
+                    timeRange: { start: 0, end: 4 },
+                  },
+                  {
+                    sceneIndex: 2,
+                    mediaPath: '/tmp/scene-2.png',
+                    prompt: 'b',
+                    timeRange: { start: 4, end: 8 },
+                  },
+                  {
+                    sceneIndex: 3,
+                    mediaPath: '/tmp/scene-3.png',
+                    prompt: 'c',
+                    timeRange: { start: 8, end: 12 },
+                  },
+                ],
+              },
+            },
+          ],
+          toolResults: [
+            {
+              callId: 'call-consistency-threshold',
+              success: true,
+              data: {
+                overallConsistency: 60,
+                styleDrift: [
+                  { fromScene: 1, toScene: 2, driftScore: 40, description: 'at threshold' },
+                  { fromScene: 2, toScene: 3, driftScore: 41, description: 'above threshold' },
+                ],
+                characterConsistency: [],
+                aestheticScore: 70,
+                recommendations: ['Review the transition'],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 245,
+        },
+      ]);
+
+      await collectEvents(session.execute('check consistency threshold'));
+
+      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+        expect.objectContaining({
+          failed: 2,
+          failingSceneIndexes: [2, 3],
+          evidence: expect.objectContaining({
+            data: expect.objectContaining({
+              continuityEdgeCandidates: [
+                expect.objectContaining({
+                  fromSceneIndex: 1,
+                  toSceneIndex: 2,
+                }),
+                expect.objectContaining({
+                  fromSceneIndex: 2,
+                  toSceneIndex: 3,
+                  issue: 'color-pop',
+                }),
+              ],
+            }),
+          }),
+        }),
+      );
+      const edgeCandidates = (
+        session.getFeedbackCycles()[0]?.signals[0] as {
+          evidence?: { data?: { continuityEdgeCandidates?: Array<{ issue?: string }> } };
+        }
+      ).evidence?.data?.continuityEdgeCandidates;
+      expect(edgeCandidates?.[0]).not.toHaveProperty('issue');
+    });
+
+    it('keeps partial QualityCheckConsistency reports as evidence with adapter diagnostics', async () => {
+      const session = new AgentSession(config);
+      injectMockExecutor(session, [
+        {
+          type: 'act',
+          content: 'Executed 1 tool(s)',
+          toolCalls: [
+            {
+              id: 'call-consistency-partial',
+              name: 'QualityCheckConsistency',
+              arguments: {
+                scenes: [
+                  {
+                    sceneIndex: 1,
+                    mediaPath: '/tmp/scene-1.png',
+                    prompt: 'a',
+                    timeRange: { start: 0, end: 4 },
+                  },
+                  {
+                    sceneIndex: 2,
+                    mediaPath: '/tmp/scene-2.png',
+                    prompt: 'b',
+                    timeRange: { start: 4, end: 8 },
+                  },
+                ],
+              },
+            },
+          ],
+          toolResults: [
+            {
+              callId: 'call-consistency-partial',
+              success: true,
+              data: {
+                overallConsistency: 58,
+                styleDrift: [
+                  { fromScene: 1, toScene: 2, driftScore: 60, description: 'strong style drift' },
+                ],
+              },
+            } as ToolResultWithMeta,
+          ],
+          timestamp: 250,
+        },
+      ]);
+
+      await collectEvents(session.execute('check partial consistency'));
+
+      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+        expect.objectContaining({
+          toolName: 'QualityCheckConsistency',
+          evidence: expect.objectContaining({
+            data: expect.objectContaining({
+              adapterDiagnostics: [
+                'missing-characterConsistency',
+                'missing-aestheticScore',
+                'missing-recommendations',
+              ],
+              continuityEdgeCandidates: [
+                expect.objectContaining({
+                  issue: 'color-pop',
+                }),
+              ],
+            }),
+          }),
+        }),
+      );
     });
 
     it('records QualityReview evidence into the Agent-first journal graph', async () => {

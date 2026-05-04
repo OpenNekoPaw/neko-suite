@@ -63,6 +63,7 @@ export interface MediaQualityCheckResult {
     attempts: number;
     issues: QualityIssue[];
     finalPath: string;
+    timeRange?: { start: number; end: number };
     dimensions?: MediaEvaluation['dimensions'];
     remediations?: RemediationAction[];
     audioMetrics?: AudioTechnicalMetrics;
@@ -136,7 +137,10 @@ Return ONLY valid JSON matching this exact schema:
     {
       "category": "<category>",
       "severity": "<critical|major|minor|info>",
-      "description": "<concise description>"
+      "description": "<concise description>",
+      "location": {
+        "timeRange": { "start": <seconds>, "end": <seconds> }
+      }
     }
   ]
 }
@@ -151,7 +155,8 @@ Issue categories:
 - character-inconsistency: character appearance differs from reference
 - composition-poor: poor framing, balance, or visual flow
 
-Only report actual issues. Empty issues array is valid for a good image.`;
+Only report actual issues. Empty issues array is valid for a good image.
+For images, omit location unless there is an explicit temporal range in context.`;
 
 const PROMPT_OPTIMIZATION_SYSTEM_PROMPT = `You are an AI image/video generation prompt engineer.
 Given the original prompt and quality issues found, produce an improved prompt.
@@ -176,7 +181,10 @@ Return ONLY valid JSON matching this exact schema:
     {
       "category": "<category>",
       "severity": "<critical|major|minor|info>",
-      "description": "<concise description>"
+      "description": "<concise description>",
+      "location": {
+        "timeRange": { "start": <seconds>, "end": <seconds> }
+      }
     }
   ]
 }
@@ -195,6 +203,8 @@ Issue categories (in addition to standard image categories):
 - composition-poor: poor framing or visual flow
 - motion-unnatural: physically impossible or unnatural movement
 
+For video issues, include location.timeRange in seconds when the sampled frames or prompt context
+make the affected range identifiable. If the issue spans the full clip, use the full video range.
 Pay special attention to temporal issues: consistency of lighting, color, character appearance,
 and object positions across frames. Only report actual issues found.`;
 
@@ -240,7 +250,7 @@ export function detectQualityMediaType(filePath: string): EvalMediaType {
 
 function isValidIssue(
   raw: unknown,
-): raw is { category: string; severity?: string; description?: string } {
+): raw is { category: string; severity?: string; description?: string; location?: unknown } {
   if (typeof raw !== 'object' || raw === null) return false;
   const obj = raw as Record<string, unknown>;
   return typeof obj['category'] === 'string' && VALID_CATEGORIES.has(obj['category']);
@@ -250,14 +260,81 @@ function normalizeIssue(raw: {
   category: string;
   severity?: string;
   description?: string;
+  location?: unknown;
 }): QualityIssue {
+  const location = normalizeIssueLocation(raw.location);
   return {
     category: raw.category as QualityIssueCategory,
     severity: (typeof raw.severity === 'string' && VALID_SEVERITIES.has(raw.severity)
       ? raw.severity
       : 'major') as IssueSeverity,
     description: typeof raw.description === 'string' ? raw.description : raw.category,
+    ...(location ? { location } : {}),
   };
+}
+
+function normalizeIssueLocation(value: unknown): QualityIssue['location'] | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const location: NonNullable<QualityIssue['location']> = {};
+
+  if (typeof record['sceneIndex'] === 'number' && Number.isFinite(record['sceneIndex'])) {
+    location.sceneIndex = Math.floor(record['sceneIndex']);
+  }
+
+  const timeRange = readIssueTimeRange(record['timeRange']);
+  if (timeRange) {
+    location.timeRange = timeRange;
+  }
+
+  const region = readIssueRegion(record['region']);
+  if (region) {
+    location.region = region;
+  }
+
+  return Object.keys(location).length > 0 ? location : undefined;
+}
+
+function readIssueTimeRange(value: unknown): { start: number; end: number } | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const start = record['start'];
+  const end = record['end'];
+  if (
+    typeof start !== 'number' ||
+    typeof end !== 'number' ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start
+  ) {
+    return undefined;
+  }
+  return { start, end };
+}
+
+function readIssueRegion(
+  value: unknown,
+): { x: number; y: number; w: number; h: number } | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const x = record['x'];
+  const y = record['y'];
+  const w = record['w'];
+  const h = record['h'];
+  if (
+    typeof x !== 'number' ||
+    typeof y !== 'number' ||
+    typeof w !== 'number' ||
+    typeof h !== 'number' ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(w) ||
+    !Number.isFinite(h)
+  ) {
+    return undefined;
+  }
+  return { x, y, w, h };
 }
 
 function parseEvaluationJson(text: string, fallbackMessage: string): MediaEvaluation {
@@ -782,6 +859,9 @@ export class MediaQualityRuntime {
         attempts: 1,
         issues: evalResult.issues,
         finalPath: scene.mediaPath,
+        ...(evalResult.videoMetrics
+          ? { timeRange: { start: 0, end: evalResult.videoMetrics.duration } }
+          : {}),
         dimensions: evalResult.dimensions,
         remediations: remediations.length > 0 ? remediations : undefined,
         audioMetrics: evalResult.audioMetrics,
@@ -814,6 +894,7 @@ export class MediaQualityRuntime {
       let bestPath = currentPath;
       let bestIssues = evaluation.issues;
       let bestDimensions = evaluation.dimensions;
+      let bestAudioMetrics = evaluation.audioMetrics;
       let bestVideoMetrics = evaluation.videoMetrics;
       let attempts = 1;
 
@@ -853,6 +934,7 @@ export class MediaQualityRuntime {
             bestPath = currentPath;
             bestIssues = reEval.issues;
             bestDimensions = reEval.dimensions;
+            bestAudioMetrics = reEval.audioMetrics;
             bestVideoMetrics = reEval.videoMetrics;
           }
 
@@ -877,8 +959,10 @@ export class MediaQualityRuntime {
         attempts,
         issues: bestIssues,
         finalPath: bestPath,
+        ...(bestVideoMetrics ? { timeRange: { start: 0, end: bestVideoMetrics.duration } } : {}),
         dimensions: bestDimensions,
         remediations: remediations.length > 0 ? remediations : undefined,
+        audioMetrics: bestAudioMetrics,
         videoMetrics: bestVideoMetrics,
       });
     }

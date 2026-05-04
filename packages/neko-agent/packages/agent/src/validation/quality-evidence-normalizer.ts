@@ -11,7 +11,8 @@ import type {
 // current consumers are Agent feedback and validation paths. Promote to
 // @neko/shared only when neko-cut or another package consumes them directly.
 
-const STYLE_DRIFT_COLOR_POP_THRESHOLD = 40;
+export const STYLE_DRIFT_COLOR_POP_THRESHOLD = 40;
+export const CHARACTER_INCONSISTENCY_FAIL_SCORE = 70;
 
 export type BasicQualityIssueCategory =
   | 'tearing'
@@ -50,6 +51,8 @@ export interface QualityEvidenceSource {
   readonly sceneIndex?: number;
   readonly sourceIssueId?: string;
   readonly sourceTimeRange?: QualityEvidenceTimeRange;
+  readonly mediaPath?: string;
+  readonly attempts?: number;
   readonly toolCallId?: string;
   readonly runId?: string;
 }
@@ -116,6 +119,8 @@ export interface QualityEvaluationForNormalization {
   readonly issues?: readonly QualityIssue[];
   readonly remediations?: readonly RemediationAction[] | readonly unknown[];
   readonly timeRange?: QualityEvidenceTimeRange;
+  readonly finalPath?: string;
+  readonly attempts?: number;
   readonly audioMetrics?: AudioTechnicalMetrics;
   readonly videoMetrics?: VideoTechnicalMetrics;
 }
@@ -276,6 +281,8 @@ export function normalizeQualityIssue(input: {
     sceneIndex: input.evaluation.index,
     sourceIssueId,
     sourceTimeRange: timeRange,
+    ...(input.evaluation.finalPath ? { mediaPath: input.evaluation.finalPath } : {}),
+    ...(input.evaluation.attempts !== undefined ? { attempts: input.evaluation.attempts } : {}),
     ...(input.toolCallId ? { toolCallId: input.toolCallId } : {}),
     ...(input.runId ? { runId: input.runId } : {}),
   };

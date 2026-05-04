@@ -136,8 +136,8 @@ interface BasicQualityIssue {
 
 当前 P0 helper 名称：
 
-- `normalizeQualityReviewPayload()`：将 `QualityCheck` evaluation summaries 归一化为 `BasicQualityIssue[]`、`sourceIssues` 与 `normalizationDiagnostics`。
-- `normalizeQualityConsistencyPayload()`：仅在相邻 scene 且两侧时间范围存在时，将 `QualityCheckConsistency` style drift 归一化为 `continuityEdgeCandidates`；否则只保留 diagnostics，不凭空创建 edge。
+- `normalizeQualityReviewPayload()`：将 `QualityCheck` / `QualityRepairCheck` evaluation summaries 归一化为 `BasicQualityIssue[]`、`sourceIssues` 与 `normalizationDiagnostics`；生产路径由 session feedback bridge 传入 tool call scene ranges，视频评估可用整段 duration fallback。
+- `normalizeQualityConsistencyPayload()`：`QualityCheckConsistency` 的 `ConsistencyReport` 先由 session feedback bridge 适配为 consistency-mode evidence；仅在相邻 scene 且两侧时间范围存在时，将 style drift 归一化为 `continuityEdgeCandidates`；否则只保留 diagnostics，不凭空创建 edge。
 - `createNormalizedQualityIssueId()` / `createContinuityEdgeId()` / `createVideoContentIndexId()`：基于 tool metadata、scene/time range、category 与 evidence ids 生成确定性 id。
 
 ### 2.2 L1 连续性与一致性问题

@@ -117,6 +117,12 @@ import {
   createQualityReviewEvidence,
   type IFeedbackCoordinator,
 } from '../feedback';
+import {
+  CHARACTER_INCONSISTENCY_FAIL_SCORE,
+  STYLE_DRIFT_COLOR_POP_THRESHOLD,
+  type QualityEvidenceSceneTimeRange,
+  type QualityEvidenceTimeRange,
+} from '../validation/quality-evidence-normalizer';
 import { createDefaultControlPlane, type StageTransitionGuidance } from '../control-plane';
 import { projectPersistedEventsToWorkingMemory, type PersistedAgentEvent } from './working-memory';
 import { getLogger } from '../utils/logger';
@@ -2107,6 +2113,7 @@ export class AgentSession implements IAgentSession {
 
       const qualityCheckSignal = toQualityCheckFeedbackSignal({
         result,
+        toolArguments: toolCall?.arguments,
         toolCallId,
         toolName,
         observedAt: step.timestamp,
@@ -2952,34 +2959,82 @@ type QualityCheckEvaluationSummary = import('../feedback').QualityReviewEvaluati
 
 type QualityCheckFeedbackPayload = import('../feedback').QualityReviewFeedbackPayload;
 
+type QualityConsistencyReport = import('../validation/qa-types').ConsistencyReport;
+
 function resolveObservedToolName(result: ObservedToolResult, fallbackName?: string): string {
   return result.name ?? fallbackName ?? 'unknown-tool';
 }
 
 function toQualityCheckFeedbackSignal(input: {
   readonly result: ObservedToolResult;
+  readonly toolArguments?: Record<string, unknown>;
   readonly toolCallId: string;
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
 }): import('../feedback').FeedbackSignal | null {
-  if (input.toolName !== 'QualityCheck' || !isQualityCheckFeedbackPayload(input.result.data)) {
+  const sceneTimeRanges = readSceneTimeRangesFromToolArguments(input.toolArguments);
+
+  if (input.toolName === 'QualityCheck' || input.toolName === 'QualityRepairCheck') {
+    if (!isQualityCheckFeedbackPayload(input.result.data)) {
+      return null;
+    }
+
+    const mode = input.toolName === 'QualityRepairCheck' ? 'repair' : 'analysis';
+    const qualityReview = createQualityReviewEvidence({
+      payload: input.result.data,
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      mode,
+      observedAt: input.observedAt,
+      ...(input.runId ? { runId: input.runId } : {}),
+      ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
+    });
+
+    return {
+      kind: 'quality-check',
+      observedAt: input.observedAt,
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      mode,
+      totalScenes: qualityReview.summary.totalScenes,
+      passed: qualityReview.summary.passed,
+      failed: qualityReview.summary.failed,
+      failingSceneIndexes: qualityReview.summary.failingSceneIndexes,
+      remediationCount: qualityReview.summary.remediationCount,
+      ...(input.runId ? { runId: input.runId } : {}),
+      evidence: qualityReview.evidence,
+    };
+  }
+
+  if (input.toolName !== 'QualityCheckConsistency' || !isConsistencyReportLike(input.result.data)) {
     return null;
   }
 
+  const { report: consistencyReport, diagnostics: adapterDiagnostics } =
+    normalizeConsistencyReportForFeedback(input.result.data);
+  const payload = createQualityReviewPayloadFromConsistencyReport(
+    consistencyReport,
+    input.toolArguments,
+  );
   const qualityReview = createQualityReviewEvidence({
-    payload: input.result.data,
+    payload,
+    consistencyReport,
     toolCallId: input.toolCallId,
-    toolName: 'QualityCheck',
+    toolName: 'QualityCheckConsistency',
+    mode: 'consistency',
     observedAt: input.observedAt,
     ...(input.runId ? { runId: input.runId } : {}),
+    ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
+    ...(adapterDiagnostics.length > 0 ? { adapterDiagnostics } : {}),
   });
 
   return {
     kind: 'quality-check',
     observedAt: input.observedAt,
     toolCallId: input.toolCallId,
-    toolName: 'QualityCheck',
+    toolName: 'QualityCheckConsistency',
+    mode: 'consistency',
     totalScenes: qualityReview.summary.totalScenes,
     passed: qualityReview.summary.passed,
     failed: qualityReview.summary.failed,
@@ -3142,6 +3197,171 @@ function isQualityCheckEvaluationSummary(value: unknown): value is QualityCheckE
     isFiniteNumber(candidate['finalScore']) &&
     (candidate['remediations'] === undefined || Array.isArray(candidate['remediations']))
   );
+}
+
+function isConsistencyReportLike(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  return isFiniteNumber(value['overallConsistency']) && Array.isArray(value['styleDrift']);
+}
+
+function normalizeConsistencyReportForFeedback(value: Record<string, unknown>): {
+  readonly report: QualityConsistencyReport;
+  readonly diagnostics: readonly string[];
+} {
+  const diagnostics: string[] = [];
+  const overallConsistency =
+    typeof value['overallConsistency'] === 'number' ? value['overallConsistency'] : 0;
+  const characterConsistency = Array.isArray(value['characterConsistency'])
+    ? value['characterConsistency']
+    : [];
+  if (!Array.isArray(value['characterConsistency'])) {
+    diagnostics.push('missing-characterConsistency');
+  }
+
+  const aestheticScore = isFiniteNumber(value['aestheticScore']) ? value['aestheticScore'] : 0;
+  if (!isFiniteNumber(value['aestheticScore'])) {
+    diagnostics.push('missing-aestheticScore');
+  }
+
+  const recommendations = Array.isArray(value['recommendations'])
+    ? value['recommendations'].filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  if (!Array.isArray(value['recommendations'])) {
+    diagnostics.push('missing-recommendations');
+  }
+
+  return {
+    report: {
+      overallConsistency,
+      styleDrift: value['styleDrift'] as QualityConsistencyReport['styleDrift'],
+      characterConsistency:
+        characterConsistency as QualityConsistencyReport['characterConsistency'],
+      aestheticScore,
+      recommendations,
+    },
+    diagnostics,
+  };
+}
+
+function createQualityReviewPayloadFromConsistencyReport(
+  report: QualityConsistencyReport,
+  toolArguments: Record<string, unknown> | undefined,
+): QualityCheckFeedbackPayload {
+  const sceneIndexes = readSceneIndexesFromToolArguments(toolArguments);
+  const failedSceneIndexes = new Set<number>();
+  for (const drift of report.styleDrift) {
+    if (drift.driftScore > STYLE_DRIFT_COLOR_POP_THRESHOLD) {
+      failedSceneIndexes.add(drift.fromScene);
+      failedSceneIndexes.add(drift.toScene);
+    }
+  }
+  for (const character of report.characterConsistency ?? []) {
+    for (const appearance of character.appearances) {
+      if (appearance.score < CHARACTER_INCONSISTENCY_FAIL_SCORE) {
+        failedSceneIndexes.add(appearance.sceneIndex);
+      }
+    }
+  }
+
+  const indexes =
+    sceneIndexes.length > 0
+      ? sceneIndexes
+      : [...failedSceneIndexes].sort((left, right) => left - right);
+  const evaluations = indexes.map((index) => ({
+    index,
+    passed: !failedSceneIndexes.has(index),
+    finalScore: report.overallConsistency,
+    remediations:
+      failedSceneIndexes.has(index) && report.recommendations.length > 0
+        ? report.recommendations
+        : undefined,
+  }));
+
+  const failed = evaluations.filter((evaluation) => !evaluation.passed).length;
+  return {
+    totalScenes: evaluations.length,
+    passed: evaluations.length - failed,
+    failed,
+    evaluations,
+  };
+}
+
+function readSceneTimeRangesFromToolArguments(
+  toolArguments: Record<string, unknown> | undefined,
+): import('../validation/quality-evidence-normalizer').QualityEvidenceSceneTimeRange[] {
+  if (!toolArguments) return [];
+  const scenes = toolArguments['scenes'];
+  if (!Array.isArray(scenes)) return [];
+
+  const ranges: import('../validation/quality-evidence-normalizer').QualityEvidenceSceneTimeRange[] =
+    [];
+  for (let index = 0; index < scenes.length; index++) {
+    const scene = scenes[index];
+    if (!isRecord(scene)) continue;
+    const sceneIndex = readSceneIndex(scene, index);
+    const timeRange = readToolArgumentTimeRange(scene);
+    if (sceneIndex !== null && timeRange) {
+      ranges.push({ sceneIndex, timeRange });
+    }
+  }
+  return ranges;
+}
+
+function readSceneIndexesFromToolArguments(
+  toolArguments: Record<string, unknown> | undefined,
+): number[] {
+  if (!toolArguments) return [];
+  const scenes = toolArguments['scenes'];
+  if (!Array.isArray(scenes)) return [];
+  return scenes
+    .map((scene, index) => (isRecord(scene) ? readSceneIndex(scene, index) : null))
+    .filter((sceneIndex): sceneIndex is number => sceneIndex !== null);
+}
+
+function readSceneIndex(scene: Record<string, unknown>, fallback: number): number | null {
+  const explicit = scene['index'] ?? scene['sceneIndex'];
+  if (typeof explicit === 'number' && Number.isFinite(explicit)) return Math.floor(explicit);
+  return fallback;
+}
+
+function readToolArgumentTimeRange(
+  scene: Record<string, unknown>,
+): import('../validation/quality-evidence-normalizer').QualityEvidenceTimeRange | null {
+  const direct = readTimeRangeLike(scene['timeRange']);
+  if (direct) return direct;
+  const start = scene['start'] ?? scene['startTime'];
+  const end = scene['end'] ?? scene['endTime'];
+  const fromScalar = readTimeRangeScalars(start, end);
+  if (fromScalar) return fromScalar;
+  const duration = scene['duration'];
+  if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
+    return { start: 0, end: duration };
+  }
+  return null;
+}
+
+function readTimeRangeLike(
+  value: unknown,
+): import('../validation/quality-evidence-normalizer').QualityEvidenceTimeRange | null {
+  if (!isRecord(value)) return null;
+  return readTimeRangeScalars(value['start'], value['end']);
+}
+
+function readTimeRangeScalars(
+  start: unknown,
+  end: unknown,
+): import('../validation/quality-evidence-normalizer').QualityEvidenceTimeRange | null {
+  if (
+    typeof start !== 'number' ||
+    typeof end !== 'number' ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start
+  ) {
+    return null;
+  }
+  return { start, end };
 }
 
 function isFiniteNumber(value: unknown): value is number {

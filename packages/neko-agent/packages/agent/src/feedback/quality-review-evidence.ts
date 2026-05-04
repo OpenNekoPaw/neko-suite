@@ -19,6 +19,8 @@ export interface QualityReviewEvaluationSummary {
   readonly issues?: readonly QualityIssue[];
   readonly remediations?: readonly unknown[];
   readonly timeRange?: QualityEvidenceTimeRange;
+  readonly finalPath?: string;
+  readonly attempts?: number;
   readonly audioMetrics?: AudioTechnicalMetrics;
   readonly videoMetrics?: VideoTechnicalMetrics;
 }
@@ -39,12 +41,14 @@ export interface QualityReviewFeedbackPayload {
 export interface QualityReviewEvidenceInput {
   readonly payload: QualityReviewFeedbackPayload;
   readonly toolCallId: string;
-  readonly toolName: 'QualityCheck' | 'QualityCheckConsistency';
+  readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
+  readonly mode?: 'analysis' | 'repair' | 'consistency';
   readonly observedAt: number;
   readonly runId?: string;
   readonly observationId?: string;
   readonly sceneTimeRanges?: readonly QualityEvidenceSceneTimeRange[];
   readonly consistencyReport?: QualityConsistencyReportForNormalization;
+  readonly adapterDiagnostics?: readonly string[];
 }
 
 export interface QualityReviewEvidenceSummary {
@@ -103,12 +107,13 @@ export function createQualityReviewEvidence(
     evidence: {
       id: evidenceId,
       source: 'tool',
-      summary: formatQualityReviewEvidenceSummary(summary),
+      summary: formatQualityReviewEvidenceSummary(summary, input.mode ?? 'analysis'),
       confidence: calculateQualityReviewConfidence(summary),
       toolName: input.toolName,
       ...(input.observationId ? { observationId: input.observationId } : {}),
       data: {
         kind: 'quality-review',
+        mode: input.mode ?? 'analysis',
         toolCallId: input.toolCallId,
         runId: input.runId,
         totalScenes: summary.totalScenes,
@@ -117,6 +122,9 @@ export function createQualityReviewEvidence(
         failingSceneIndexes: summary.failingSceneIndexes,
         remediationCount: summary.remediationCount,
         recommendations: summary.recommendations,
+        ...(input.adapterDiagnostics && input.adapterDiagnostics.length > 0
+          ? { adapterDiagnostics: input.adapterDiagnostics }
+          : {}),
         ...createNormalizedQualityEvidenceData(normalizedReview, normalizedConsistency),
       },
       createdAt: input.observedAt,
@@ -191,13 +199,22 @@ function createQualityReviewEvidenceId(input: QualityReviewEvidenceInput): strin
   return `quality-review:${input.runId ?? 'runless'}:${input.toolCallId}`;
 }
 
-function formatQualityReviewEvidenceSummary(summary: QualityReviewEvidenceSummary): string {
+function formatQualityReviewEvidenceSummary(
+  summary: QualityReviewEvidenceSummary,
+  mode: 'analysis' | 'repair' | 'consistency',
+): string {
+  const label =
+    mode === 'repair'
+      ? 'QualityRepairReview repair attempt'
+      : mode === 'consistency'
+        ? 'QualityConsistencyReview'
+        : 'QualityReview';
   if (summary.failed === 0) {
-    return `QualityReview passed ${summary.passed}/${summary.totalScenes} scene(s).`;
+    return `${label} passed ${summary.passed}/${summary.totalScenes} scene(s).`;
   }
 
   return (
-    `QualityReview failed ${summary.failed}/${summary.totalScenes} scene(s): ` +
+    `${label} failed ${summary.failed}/${summary.totalScenes} scene(s): ` +
     `scene(s) ${summary.failingSceneIndexes.join(', ')}; ` +
     `${summary.remediationCount} remediation hint(s) available.`
   );

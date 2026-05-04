@@ -126,7 +126,8 @@ export type FeedbackSignal =
       readonly kind: 'quality-check';
       readonly observedAt: number;
       readonly toolCallId: string;
-      readonly toolName: 'QualityCheck';
+      readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
+      readonly mode?: 'analysis' | 'repair' | 'consistency';
       readonly totalScenes: number;
       readonly passed: number;
       readonly failed: number;
@@ -199,7 +200,8 @@ export type FeedbackDecision =
       readonly action: 'repair';
       readonly signalKind: 'quality-check';
       readonly toolCallId: string;
-      readonly toolName: 'QualityCheck';
+      readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
+      readonly mode?: 'analysis' | 'repair' | 'consistency';
       readonly totalScenes: number;
       readonly failed: number;
       readonly failingSceneIndexes: readonly number[];
@@ -211,7 +213,8 @@ export type FeedbackDecision =
       readonly action: 'continue';
       readonly signalKind: 'quality-check';
       readonly toolCallId: string;
-      readonly toolName: 'QualityCheck';
+      readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
+      readonly mode?: 'analysis' | 'repair' | 'consistency';
       readonly totalScenes: number;
       readonly passed: number;
     }
@@ -677,6 +680,7 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
                 signalKind: signal.kind,
                 toolCallId: signal.toolCallId,
                 toolName: signal.toolName,
+                ...(signal.mode ? { mode: signal.mode } : {}),
                 totalScenes: signal.totalScenes,
                 failed: signal.failed,
                 failingSceneIndexes: [...signal.failingSceneIndexes],
@@ -691,6 +695,7 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
               signalKind: signal.kind,
               toolCallId: signal.toolCallId,
               toolName: signal.toolName,
+              ...(signal.mode ? { mode: signal.mode } : {}),
               totalScenes: signal.totalScenes,
               passed: signal.passed,
             });
@@ -838,6 +843,7 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
               observedAt: 0,
               toolCallId: decision.toolCallId,
               toolName: decision.toolName,
+              ...(decision.mode ? { mode: decision.mode } : {}),
               totalScenes: decision.totalScenes,
               passed: Math.max(decision.totalScenes - decision.failed, 0),
               failed: decision.failed,
@@ -860,11 +866,19 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
             }
 
             guidanceKinds.add(decision.signalKind);
-            guidanceBlocks.push(
-              `Repair the failing quality-check result. ` +
-                `Focus on scene(s) ${decision.failingSceneIndexes.join(', ')} and apply ` +
-                `${decision.remediationCount} suggested remediation step(s) as needed.`,
-            );
+            if (decision.mode === 'repair') {
+              guidanceBlocks.push(
+                `Review the quality repair attempt from ${decision.toolName}. ` +
+                  `Focus on scene(s) ${decision.failingSceneIndexes.join(', ')} and verify ` +
+                  `${decision.remediationCount} suggested remediation step(s) before any further repair.`,
+              );
+            } else {
+              guidanceBlocks.push(
+                `Repair the failing quality-check result. ` +
+                  `Focus on scene(s) ${decision.failingSceneIndexes.join(', ')} and apply ` +
+                  `${decision.remediationCount} suggested remediation step(s) as needed.`,
+              );
+            }
             break;
           }
           case 'self-evaluate':

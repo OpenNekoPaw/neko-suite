@@ -184,6 +184,7 @@ export interface QualityIssue {
   /** Spatial/temporal location (optional) */
   location?: {
     sceneIndex?: number;
+    timeRange?: { start: number; end: number };
     region?: { x: number; y: number; w: number; h: number };
   };
   /** Associated remediation action (populated by RemediationPlanner) */

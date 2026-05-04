@@ -74,10 +74,13 @@ ConsistencyEvaluator (consistency-evaluator.ts) — 跨场景一致性评估
 └── QualityCheckConsistency Tool (consistencyCheckTools.ts) 封装为 Agent 可调用工具
 
 QualityReviewEvidence (feedback/quality-review-evidence.ts) — Agent-first evidence 桥接
-├── QualityCheck / QualityCheckConsistency tool result → PerceptionEvidence
+├── QualityCheck / QualityRepairCheck / QualityCheckConsistency tool result → PerceptionEvidence
 ├── evidence.data.kind = 'quality-review'
+├── evidence.data.mode = 'analysis' | 'repair' | 'consistency'
 ├── 可附加 normalizedIssueIds / normalizedIssues / sourceIssues / normalizationDiagnostics
-├── QualityCheckConsistency 仅在相邻 scene/segment range 可用时附加 continuityEdgeCandidates
+├── QualityCheck / QualityRepairCheck 从 tool call scene arguments 或 video duration 获取 fallback ranges
+├── QualityRepairCheck repair attempt 会进入 Journal evidence，而不是只留下工具成功记录
+├── QualityCheckConsistency 通过 session adapter 进入 evidence，且仅在相邻 scene/segment range 可用时附加 continuityEdgeCandidates
 └── 供 AgentObservation / DecisionRationale / Journal 引用，不直接替代 Agent 判断
 
 QualityGate Stage (历史规划项，当前未见 pipeline/stages/quality-gate.ts)

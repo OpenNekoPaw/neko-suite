@@ -29,6 +29,11 @@ describe('quality check tool factories', () => {
     expect(tool.isReadOnly).toBe(true);
     expect(tool.parameters.required).toContain('scenes');
     expect(tool.parameters.properties).not.toHaveProperty('maxRetries');
+    const sceneProperties = tool.parameters.properties['scenes']?.items?.properties;
+    expect(sceneProperties).toHaveProperty('timeRange');
+    expect(sceneProperties).toHaveProperty('start');
+    expect(sceneProperties).toHaveProperty('end');
+    expect(sceneProperties).toHaveProperty('duration');
   });
 
   it('creates QualityRepairCheck as an explicit non-read-only repair tool', () => {
@@ -175,6 +180,43 @@ describe('quality check tool factories', () => {
       evaluations: [{ attempts: 2, finalPath: '/tmp/regenerated.png' }],
     });
     expect(generator.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves issue locations returned by quality evaluators', async () => {
+    const service = createService({
+      overallScore: 30,
+      dimensions: { technicalQuality: 30, promptAdherence: 40, aesthetics: 30 },
+      issues: [
+        {
+          category: 'tearing',
+          severity: 'major',
+          description: 'tear in the middle of the clip',
+          location: { timeRange: { start: 1, end: 2 } },
+        },
+      ],
+    });
+    const tool = createQualityCheckTools({
+      createService: () => service,
+      mediaGenerator: createGenerator(),
+      readFileAsBase64: vi.fn().mockResolvedValue('image-base64'),
+    }).find((candidate) => candidate.name === 'QualityCheck')!;
+
+    const result = await tool.execute({
+      scenes: [{ index: 0, mediaPath: '/tmp/scene.png', prompt: 'cinematic scene' }],
+      minScore: 60,
+    });
+
+    expect(result.data).toMatchObject({
+      evaluations: [
+        {
+          issues: [
+            {
+              location: { timeRange: { start: 1, end: 2 } },
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it('filters invalid QualityCheck scene arguments before runtime execution', async () => {

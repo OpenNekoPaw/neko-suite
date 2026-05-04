@@ -117,6 +117,28 @@ function createQualityCheckParameterSchema(): {
         mediaPath: { type: 'string', description: 'Path to generated media file' },
         prompt: { type: 'string', description: 'Prompt used for generation' },
         description: { type: 'string', description: 'Scene description for context' },
+        timeRange: {
+          type: 'object',
+          description: 'Optional timeline range in seconds used to localize quality evidence.',
+          properties: {
+            start: { type: 'number', description: 'Range start in seconds' },
+            end: { type: 'number', description: 'Range end in seconds' },
+          },
+          required: ['start', 'end'],
+        },
+        start: {
+          type: 'number',
+          description: 'Optional timeline start in seconds when timeRange is not provided.',
+        },
+        end: {
+          type: 'number',
+          description: 'Optional timeline end in seconds when timeRange is not provided.',
+        },
+        duration: {
+          type: 'number',
+          description:
+            'Optional asset-local duration in seconds. Without start/end, evidence uses a 0-based asset range.',
+        },
       },
       required: ['index', 'mediaPath', 'prompt'],
     },
