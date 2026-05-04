@@ -167,7 +167,6 @@ export type {
   MediaTaskCreatedMessage,
   MediaTaskProgressMessage,
   MermaidErrorWebviewMessage,
-  McpServerTestResultMessage,
   MessageCancelledMessage,
   MessageQueuedMessage,
   MessageOfType,

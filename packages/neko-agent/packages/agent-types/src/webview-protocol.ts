@@ -396,14 +396,6 @@ export interface ProviderMutationResultMessage {
   error?: string;
 }
 
-export interface McpServerTestResultMessage {
-  type: 'mcpServerTestResult';
-  requestId: string;
-  serverId?: string;
-  success: boolean;
-  error?: string;
-}
-
 export interface PluginCommandsMessage {
   type: 'pluginCommands';
   commands?: Array<{
@@ -634,7 +626,6 @@ export type ExtensionToWebviewMessage =
   | ConfigChangedMessage
   | SettingsUpdatedMessage
   | ProviderMutationResultMessage
-  | McpServerTestResultMessage
   | PluginCommandsMessage
   | PluginsAvailableMessage
   | SsoSessionChangedMessage

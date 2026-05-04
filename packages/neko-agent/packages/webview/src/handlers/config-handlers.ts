@@ -1,7 +1,7 @@
 /**
  * Config Message Handlers
  *
- * Handles: settingsData, projectFiles, configState, configChanged, mcpServerTestResult
+ * Handles: settingsData, projectFiles, configState, configChanged
  */
 
 import { defineHandler } from './types';
@@ -12,7 +12,6 @@ import type {
   ConfigStateMessage,
   ConfigChangedMessage,
   GenerationProgressMessage,
-  McpServerTestResultMessage,
   PluginCommandsMessage,
   PluginsAvailableMessage,
   ProviderMutationResultMessage,
@@ -106,18 +105,6 @@ const handleConfigChanged: MessageHandler<'configChanged'> = (
 };
 
 /**
- * Handle 'mcpServerTestResult' message - MCP server test result
- * Note: Actual handling is done via addEventListener in index.tsx
- * This handler just marks the message as handled for the registry
- */
-const handleMCPServerTestResult: MessageHandler<'mcpServerTestResult'> = (
-  _message: McpServerTestResultMessage,
-  _context,
-) => {
-  // Handled by dedicated listener in index.tsx
-};
-
-/**
  * Handle 'pluginCommands' message - Plugin slash commands from external extensions
  */
 const handlePluginCommands: MessageHandler<'pluginCommands'> = (
@@ -191,7 +178,6 @@ export const configHandlers: HandlerRegistration[] = [
   defineHandler('settingsUpdated', handleSettingsMutationAck),
   defineHandler('modelAdded', handleSettingsMutationAck),
   defineHandler('modelRemoved', handleSettingsMutationAck),
-  defineHandler('mcpServerTestResult', handleMCPServerTestResult),
   defineHandler('pluginCommands', handlePluginCommands),
   defineHandler('pluginsAvailable', handlePluginsAvailable),
   defineHandler('ssoSessionChanged', handleSsoSessionChanged),

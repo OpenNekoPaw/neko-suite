@@ -26,7 +26,6 @@ export type {
   InjectContextMessage,
   MediaTaskCreatedMessage,
   MediaTaskProgressMessage,
-  McpServerTestResultMessage,
   MessageCancelledMessage,
   MessageQueuedMessage,
   MessageOfType,
