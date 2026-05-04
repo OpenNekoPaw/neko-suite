@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { ExperimentMetrics } from '../types';
 import {
+  IDC_CREATION_FIXTURE,
   MULTIMODAL_TOOL_CALL_FIXTURE,
   SKILL_INJECTION_FIXTURE,
   SUBAGENT_TASK_FIXTURE,
   createCapabilityEvolutionEvent,
+  createDeterministicAssetComplianceEvaluator,
+  createJudgeEvaluatorRunner,
+  createMockLlmJudgeAdapter,
   createPromptSchemaSnapshotRef,
   createUnifiedWorkflowEvaluationFixtures,
   createWorkflowMetricSnapshot,
   runWorkflowEvaluationHarness,
+  runWorkflowEvaluationHarnessWithEvaluators,
 } from '../workflow-evaluation-harness';
 
 function metrics(overrides: Partial<ExperimentMetrics> = {}): ExperimentMetrics {
@@ -175,5 +180,121 @@ describe('workflow-evaluation-harness', () => {
         ],
       }).comparisons[0]?.omittedCapabilities,
     ).toEqual(['multimodalContext']);
+  });
+
+  it('runs deterministic evaluator fixtures and reports pass/fail recovery output', async () => {
+    const evaluator = createDeterministicAssetComplianceEvaluator({
+      requiredArtifactTypes: ['image'],
+      minGeneratedArtifacts: 1,
+    });
+    const baselineEvaluation = await Promise.resolve(
+      evaluator.evaluate({
+        fixture: MULTIMODAL_TOOL_CALL_FIXTURE,
+        variant: {
+          variantName: 'baseline',
+          toggles: {},
+          metrics: metrics({
+            toolSummary: { totalCalls: 1, successCount: 1, failureCount: 0, byTool: {} },
+          }),
+        },
+        artifacts: [{ id: 'image-1', type: 'image' }],
+      }),
+    );
+    const variantEvaluation = await Promise.resolve(
+      evaluator.evaluate({
+        fixture: MULTIMODAL_TOOL_CALL_FIXTURE,
+        variant: {
+          variantName: 'missing-image',
+          toggles: { multimodalContext: false as const },
+          metrics: metrics({
+            toolSummary: { totalCalls: 1, successCount: 0, failureCount: 1, byTool: {} },
+          }),
+        },
+        artifacts: [],
+      }),
+    );
+    const baseline = {
+      variantName: 'baseline',
+      toggles: {},
+      metrics: metrics({
+        toolSummary: { totalCalls: 1, successCount: 1, failureCount: 0, byTool: {} },
+      }),
+      evaluatorResults: [baselineEvaluation],
+    };
+
+    const variant = {
+      variantName: 'missing-image',
+      toggles: { multimodalContext: false as const },
+      metrics: metrics({
+        toolSummary: { totalCalls: 1, successCount: 0, failureCount: 1, byTool: {} },
+      }),
+      evaluatorResults: [variantEvaluation],
+    };
+
+    const result = runWorkflowEvaluationHarness({
+      fixture: MULTIMODAL_TOOL_CALL_FIXTURE,
+      baseline,
+      variants: [variant],
+    });
+
+    expect(result.comparisons[0]).toMatchObject({
+      variantName: 'missing-image',
+      qualityDelta: -0.6,
+      recoverySignals: [expect.objectContaining({ action: 'retry-node' })],
+    });
+    expect(result.evaluatorResults.map((item) => item.passed)).toEqual([true, false]);
+  });
+
+  it('runs a mock LLM judge adapter without network and captures provider identity', async () => {
+    const judge = createJudgeEvaluatorRunner(
+      createMockLlmJudgeAdapter({
+        provider: {
+          providerId: 'mock-openai',
+          modelId: 'judge-mini',
+          variantId: 'baseline',
+        },
+        score: 0.91,
+      }),
+    );
+
+    const result = await runWorkflowEvaluationHarnessWithEvaluators({
+      fixture: SKILL_INJECTION_FIXTURE,
+      baseline: {
+        variantName: 'baseline',
+        toggles: {},
+        metrics: metrics(),
+        promptSnapshot: createPromptSchemaSnapshotRef({
+          variantName: 'baseline',
+          promptHash: 'prompt-a',
+          schemaHash: 'schema-a',
+        }),
+      },
+      variants: [],
+      evaluators: [judge],
+    });
+
+    expect(result.evaluatorResults[0]).toMatchObject({
+      kind: 'llm-judge',
+      provider: {
+        providerId: 'mock-openai',
+        modelId: 'judge-mini',
+        variantId: 'baseline',
+      },
+      promptSnapshot: {
+        promptHash: 'prompt-a',
+        schemaHash: 'schema-a',
+      },
+    });
+  });
+
+  it('keeps normal IDC PlanMode fixture free of evaluator stages by default', () => {
+    const fixtures = createUnifiedWorkflowEvaluationFixtures();
+    expect(IDC_CREATION_FIXTURE.expectedCapabilities).toEqual([
+      'idcWorkflow',
+      'promptSchemaGenerator',
+    ]);
+    expect(fixtures.find((fixture) => fixture.name === 'idc-creation')?.workflowNodeId).toBe(
+      'draft',
+    );
   });
 });

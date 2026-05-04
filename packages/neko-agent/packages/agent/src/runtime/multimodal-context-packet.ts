@@ -2,7 +2,10 @@ import type {
   AgentGeneratedArtifactProjection,
   AgentMediaMetadata,
   AgentMediaModality,
+  AgentMediaPayload,
   AgentMultimodalEvidenceRef,
+  AgentMultimodalEvidenceFeedback,
+  AgentMultimodalEvidenceFeedbackPolicy,
   AgentMultimodalHostAdapter,
   AgentMultimodalPacketLinkage,
   AgentToolModalityDeclaration,
@@ -82,7 +85,22 @@ export interface BuildTurnMultimodalContextPacketInput extends AgentMultimodalPa
   readonly timelineContextPacket?: MultimodalContextPacket | null | undefined;
   readonly canvasContextPacket?: MultimodalContextPacket | null | undefined;
   readonly evidenceRefs?: readonly AgentMultimodalEvidenceRef[];
+  readonly evidenceFeedback?: readonly AgentMultimodalEvidenceFeedback[];
+  readonly evidencePolicy?: AgentMultimodalEvidenceFeedbackPolicy;
   readonly includeEvidence?: boolean;
+  readonly createdAt?: number;
+}
+
+export interface ToolProducedMultimodalEvidenceInput extends AgentMultimodalPacketLinkage {
+  readonly toolCallId: string;
+  readonly toolName?: string;
+  readonly taskId?: string;
+  readonly resultData?: unknown;
+  readonly attachments?: readonly {
+    readonly type: 'image' | 'audio' | 'video';
+    readonly path: string;
+    readonly mimeType?: string;
+  }[];
   readonly createdAt?: number;
 }
 
@@ -300,7 +318,12 @@ export function createMediaAttachmentContextPacket(
       {
         id: inputId,
         kind: toAttachmentPerceptionInputKind(attachment.modality),
-        modality: attachment.modality === 'data' ? 'data' : attachment.modality,
+        modality:
+          attachment.modality === 'document'
+            ? 'data'
+            : attachment.modality === 'data'
+              ? 'data'
+              : attachment.modality,
         sourceSelectionId: selectionId,
         artifactId,
         projectObjectId,
@@ -394,10 +417,20 @@ export function buildTurnMultimodalContextPacket(
       createdAt: attachment.createdAt ?? createdAt,
     }),
   );
+  const feedbackEvidenceRefs = applyEvidenceFeedbackPolicy(
+    input.evidenceFeedback ?? [],
+    input.evidencePolicy ?? {
+      includeEvidence: input.includeEvidence,
+    },
+  );
   const evidenceRefs =
     input.includeEvidence === false
-      ? (input.evidenceRefs ?? []).map((evidence) => ({ ...evidence, withheld: true }))
-      : input.evidenceRefs;
+      ? [...(input.evidenceRefs ?? []), ...feedbackEvidenceRefs].map((evidence) => ({
+          ...evidence,
+          withheld: true,
+          withheldReason: evidence.withheldReason ?? 'policy',
+        }))
+      : [...(input.evidenceRefs ?? []), ...feedbackEvidenceRefs];
 
   return combineMultimodalContextPackets(
     [
@@ -406,6 +439,7 @@ export function buildTurnMultimodalContextPacket(
       ...mediaPackets,
       input.timelineContextPacket,
       input.canvasContextPacket,
+      ...projectEvidenceFeedbackPackets(input.evidenceFeedback ?? [], createdAt),
     ],
     {
       conversationId: input.conversationId,
@@ -415,6 +449,68 @@ export function buildTurnMultimodalContextPacket(
       createdAt,
     },
   );
+}
+
+export function createToolProducedMultimodalEvidenceFeedback(
+  input: ToolProducedMultimodalEvidenceInput,
+): readonly AgentMultimodalEvidenceFeedback[] {
+  const attachmentFeedback = (input.attachments ?? []).map((attachment, index) =>
+    createFeedbackFromAttachment(input, attachment, index),
+  );
+  const structuredFeedback = extractFeedbackFromResultData(input);
+  return [...attachmentFeedback, ...structuredFeedback];
+}
+
+export function applyEvidenceFeedbackPolicy(
+  feedback: readonly AgentMultimodalEvidenceFeedback[],
+  policy: AgentMultimodalEvidenceFeedbackPolicy = {},
+): readonly AgentMultimodalEvidenceRef[] {
+  const includeEvidence = policy.includeEvidence ?? !policy.ablationDisabled;
+  const allowedModalities = policy.allowedModalities ? new Set(policy.allowedModalities) : null;
+
+  return feedback.map(({ evidence, artifact }) => {
+    const modalityAllowed = !allowedModalities || allowedModalities.has(evidence.modality);
+    const byteSize = readArtifactByteSize(artifact);
+    const exceedsPayloadLimit =
+      policy.maxPayloadBytes !== undefined &&
+      byteSize !== undefined &&
+      byteSize > policy.maxPayloadBytes;
+    const withheldReason = !includeEvidence
+      ? policy.ablationDisabled
+        ? 'ablation'
+        : 'policy'
+      : !modalityAllowed
+        ? 'unsupported-modality'
+        : exceedsPayloadLimit
+          ? 'payload-too-large'
+          : undefined;
+
+    return {
+      ...evidence,
+      ...(withheldReason ? { withheld: true, withheldReason } : {}),
+    };
+  });
+}
+
+export function summarizeEvidenceFeedback(
+  evidenceRefs: readonly AgentMultimodalEvidenceRef[],
+): string {
+  const included = evidenceRefs.filter((evidence) => !evidence.withheld);
+  const withheld = evidenceRefs.filter((evidence) => evidence.withheld);
+  const includedText =
+    included.length > 0
+      ? included.map((evidence) => `${evidence.id}:${evidence.modality}`).join(', ')
+      : 'none';
+  const withheldText =
+    withheld.length > 0
+      ? withheld
+          .map(
+            (evidence) =>
+              `${evidence.id}:${evidence.modality}:${evidence.withheldReason ?? 'policy'}`,
+          )
+          .join(', ')
+      : 'none';
+  return `Feedback evidence included: ${includedText}. Feedback evidence withheld: ${withheldText}.`;
 }
 
 export function filterToolsByModalityAvailability(
@@ -470,16 +566,21 @@ export function projectGeneratedArtifactReference(
 export async function loadPacketMediaPayloads(
   packet: MultimodalContextPacket,
   adapter: AgentMultimodalHostAdapter,
+  options: { readonly maxBytes?: number } = {},
 ): Promise<readonly Awaited<ReturnType<AgentMultimodalHostAdapter['loadMediaPayload']>>[]> {
-  return Promise.all(
+  const payloads = await Promise.all(
     packet.artifactRefs.map((artifact) =>
       adapter.loadMediaPayload({
         artifactId: artifact.id,
         uri: artifact.uri,
         modality: toArtifactModality(artifact.kind),
         preferredEncoding: 'base64',
+        ...(options.maxBytes !== undefined ? { maxBytes: options.maxBytes } : {}),
       }),
     ),
+  );
+  return payloads.map((payload, index) =>
+    enforcePayloadLimit(payload, packet.artifactRefs[index]?.id, options.maxBytes),
   );
 }
 
@@ -540,6 +641,219 @@ function readEvidenceRefs(packet: MultimodalContextPacket): readonly AgentMultim
   return Array.isArray(evidenceRefs) ? evidenceRefs.filter(isAgentMultimodalEvidenceRef) : [];
 }
 
+function projectEvidenceFeedbackPackets(
+  feedback: readonly AgentMultimodalEvidenceFeedback[],
+  createdAt: number,
+): readonly MultimodalContextPacket[] {
+  return feedback.map(({ artifact, evidence }) => {
+    const projected = projectGeneratedArtifactReference(artifact);
+    return {
+      id: createContextPacketId('attachment'),
+      selection: [
+        {
+          id: `sel-feedback-${stableIdPart(evidence.id)}`,
+          kind: 'asset',
+          panel: 'asset-browser',
+          artifactId: projected.artifactRefs[0]?.id,
+          metadata: {
+            evidenceId: evidence.id,
+            modality: evidence.modality,
+            ...(evidence.summary ? { summary: evidence.summary } : {}),
+          },
+        },
+      ],
+      artifactRefs: projected.artifactRefs,
+      projectRefs: projected.projectRefs,
+      perceptionInputs: [
+        {
+          id: evidence.perceptionInputId ?? `input-feedback-${stableIdPart(evidence.id)}`,
+          kind: toAttachmentPerceptionInputKind(evidence.modality),
+          modality: evidence.modality === 'document' ? 'data' : evidence.modality,
+          sourceSelectionId: `sel-feedback-${stableIdPart(evidence.id)}`,
+          artifactId: projected.artifactRefs[0]?.id,
+          uri: artifact.uri,
+          metadata: {
+            evidenceId: evidence.id,
+            source: evidence.source,
+            ...(evidence.summary ? { summary: evidence.summary } : {}),
+            ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
+            ...(artifact.metadata ?? {}),
+          },
+        },
+      ],
+      uiContext: {
+        activePanel: 'asset-browser',
+        selectionIds: [`sel-feedback-${stableIdPart(evidence.id)}`],
+        ...(evidence.summary ? { userAnnotation: evidence.summary } : {}),
+      },
+      createdAt,
+      metadata: {
+        evidenceRefs: [evidence],
+      },
+    };
+  });
+}
+
+function createFeedbackFromAttachment(
+  input: ToolProducedMultimodalEvidenceInput,
+  attachment: NonNullable<ToolProducedMultimodalEvidenceInput['attachments']>[number],
+  index: number,
+): AgentMultimodalEvidenceFeedback {
+  const artifactId = `tool-${stableIdPart(input.toolCallId)}-${index + 1}`;
+  const modality = attachment.type;
+  const artifact: AgentGeneratedArtifactProjection = {
+    id: artifactId,
+    type: modality,
+    uri: attachment.path,
+    ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    ...(input.workflow ? { workflow: input.workflow } : {}),
+    ...(input.taskId ? { taskId: input.taskId } : {}),
+    toolCallId: input.toolCallId,
+    metadata: {
+      uriPolicy: 'workspace-uri',
+      toolName: input.toolName,
+    },
+  };
+  const projected = projectGeneratedArtifactReference(artifact);
+  const projectedArtifactId = projected.artifactRefs[0]?.id ?? artifact.id;
+  return {
+    artifact,
+    evidence: {
+      id: `evidence-${artifactId}`,
+      source: 'tool',
+      modality,
+      summary: `${input.toolName ?? 'tool'} produced ${modality} artifact ${attachment.path}`,
+      artifactId: projectedArtifactId,
+      sourceArtifactId: artifact.id,
+      perceptionInputId: `input-feedback-evidence-${artifactId}`,
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+      ...(input.workflow ? { workflow: input.workflow } : {}),
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      toolCallId: input.toolCallId,
+      metadata: {
+        path: attachment.path,
+        ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+      },
+    },
+  };
+}
+
+function extractFeedbackFromResultData(
+  input: ToolProducedMultimodalEvidenceInput,
+): readonly AgentMultimodalEvidenceFeedback[] {
+  if (!isRecord(input.resultData)) {
+    return [];
+  }
+
+  const explicitArtifacts = readArray(input.resultData['artifacts']);
+  const explicitEvidence = readArray(input.resultData['evidence']);
+  if (explicitArtifacts.length === 0 && explicitEvidence.length === 0) {
+    return [];
+  }
+
+  return explicitArtifacts.flatMap((candidate, index) => {
+    const artifact = normalizeArtifactCandidate(candidate, input, index);
+    if (!artifact) {
+      return [];
+    }
+    const projected = projectGeneratedArtifactReference(artifact);
+    const evidenceCandidate = explicitEvidence[index];
+    const evidence = normalizeEvidenceCandidate(
+      evidenceCandidate,
+      artifact,
+      projected,
+      input,
+      index,
+    );
+    return [{ artifact, evidence }];
+  });
+}
+
+function normalizeArtifactCandidate(
+  candidate: unknown,
+  input: ToolProducedMultimodalEvidenceInput,
+  index: number,
+): AgentGeneratedArtifactProjection | null {
+  if (!isRecord(candidate)) {
+    return null;
+  }
+  const uri =
+    readString(candidate['uri']) ?? readString(candidate['path']) ?? readString(candidate['url']);
+  if (!uri) {
+    return null;
+  }
+  const modality = normalizeArtifactType(
+    readString(candidate['type']) ?? readString(candidate['modality']),
+  );
+  return {
+    id: readString(candidate['id']) ?? `tool-data-${stableIdPart(input.toolCallId)}-${index + 1}`,
+    type: modality,
+    uri,
+    ...(readString(candidate['mimeType']) ? { mimeType: readString(candidate['mimeType']) } : {}),
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    ...(input.workflow ? { workflow: input.workflow } : {}),
+    ...(input.taskId ? { taskId: input.taskId } : {}),
+    toolCallId: input.toolCallId,
+    metadata: {
+      ...readMetadata(candidate['metadata']),
+      toolName: input.toolName,
+    },
+  };
+}
+
+function normalizeEvidenceCandidate(
+  candidate: unknown,
+  artifact: AgentGeneratedArtifactProjection,
+  projected: Pick<MultimodalContextPacket, 'artifactRefs' | 'projectRefs'>,
+  input: ToolProducedMultimodalEvidenceInput,
+  index: number,
+): AgentMultimodalEvidenceRef {
+  const record = isRecord(candidate) ? candidate : {};
+  const modality = normalizeEvidenceModality(readString(record['modality']), artifact.type);
+  return {
+    id: readString(record['id']) ?? `evidence-${stableIdPart(artifact.id)}-${index + 1}`,
+    source: normalizeEvidenceSource(readString(record['source'])),
+    modality,
+    ...(readString(record['summary']) ? { summary: readString(record['summary']) } : {}),
+    artifactId: projected.artifactRefs[0]?.id ?? artifact.id,
+    sourceArtifactId: artifact.id,
+    perceptionInputId:
+      readString(record['perceptionInputId']) ?? `input-feedback-${stableIdPart(artifact.id)}`,
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    ...(input.workflow ? { workflow: input.workflow } : {}),
+    ...(input.taskId ? { taskId: input.taskId } : {}),
+    toolCallId: input.toolCallId,
+    metadata: readMetadata(record['metadata']),
+  };
+}
+
+function enforcePayloadLimit(
+  payload: AgentMediaPayload,
+  artifactId: string | undefined,
+  maxBytes: number | undefined,
+): AgentMediaPayload {
+  if (maxBytes === undefined) {
+    return payload;
+  }
+  const byteSize =
+    payload.encoding === 'bytes'
+      ? payload.data.byteLength
+      : payload.encoding === 'base64'
+        ? estimateBase64ByteSize(payload.data)
+        : undefined;
+  if (byteSize !== undefined && byteSize > maxBytes) {
+    throw new Error(
+      `Media payload${artifactId ? ` ${artifactId}` : ''} exceeds maxBytes (${byteSize} > ${maxBytes})`,
+    );
+  }
+  return payload;
+}
+
+function readArtifactByteSize(artifact: AgentGeneratedArtifactProjection): number | undefined {
+  return typeof artifact.metadata?.byteSize === 'number' ? artifact.metadata.byteSize : undefined;
+}
+
 function isAgentMultimodalEvidenceRef(value: unknown): value is AgentMultimodalEvidenceRef {
   return Boolean(
     value &&
@@ -594,6 +908,70 @@ function toArtifactModality(kind: ArtifactKind): AgentMediaModality {
     default:
       return 'data';
   }
+}
+
+function normalizeArtifactType(
+  value: string | undefined,
+): AgentGeneratedArtifactProjection['type'] {
+  switch (value) {
+    case 'image':
+    case 'video':
+    case 'audio':
+    case 'document':
+    case 'data':
+      return value;
+    default:
+      return 'unknown';
+  }
+}
+
+function normalizeEvidenceModality(
+  value: string | undefined,
+  fallback: AgentGeneratedArtifactProjection['type'],
+): AgentMediaModality {
+  const candidate = value ?? fallback;
+  switch (candidate) {
+    case 'text':
+    case 'image':
+    case 'video':
+    case 'audio':
+    case 'document':
+    case 'data':
+    case 'mixed':
+      return candidate;
+    default:
+      return 'data';
+  }
+}
+
+function normalizeEvidenceSource(value: string | undefined): AgentMultimodalEvidenceRef['source'] {
+  switch (value) {
+    case 'agent':
+    case 'tool':
+    case 'user':
+    case 'memory':
+    case 'engine':
+    case 'subagent':
+      return value;
+    default:
+      return 'tool';
+  }
+}
+
+function readArray(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function readMetadata(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function toCanvasSelectionRef(node: CanvasSelectionContextNode): SelectionRef {

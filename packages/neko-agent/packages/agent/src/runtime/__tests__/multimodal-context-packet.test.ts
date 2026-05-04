@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  applyEvidenceFeedbackPolicy,
   buildTurnMultimodalContextPacket,
+  createToolProducedMultimodalEvidenceFeedback,
   createCanvasSelectionContextPacket,
   createMediaAttachmentContextPacket,
   createTimelineSelectionContextPacket,
   filterToolsByModalityAvailability,
   loadPacketMediaPayloads,
   projectGeneratedArtifactReference,
+  summarizeEvidenceFeedback,
 } from '../multimodal-context-packet';
 
 describe('multimodal-context-packet runtime', () => {
@@ -125,6 +128,7 @@ describe('multimodal-context-packet runtime', () => {
         modality: 'video',
         summary: 'Motion evidence',
         withheld: true,
+        withheldReason: 'policy',
       },
     ]);
   });
@@ -224,5 +228,128 @@ describe('multimodal-context-packet runtime', () => {
         },
       ],
     });
+  });
+
+  it('converts image tool attachments into artifact and next-turn evidence refs', () => {
+    const feedback = createToolProducedMultimodalEvidenceFeedback({
+      conversationId: 'conv-1',
+      workflow: {
+        workflowDefinitionId: 'neko.workflow.idc.v1',
+        workflowRunId: 'run-1',
+        workflowNodeId: 'apply',
+      },
+      taskId: 'task-1',
+      toolCallId: 'tool-1',
+      toolName: 'generate_image',
+      attachments: [{ type: 'image', path: '${WORKSPACE}/out.png', mimeType: 'image/png' }],
+    });
+
+    const packet = buildTurnMultimodalContextPacket({
+      message: 'use previous render',
+      evidenceFeedback: feedback,
+      createdAt: 1,
+    });
+
+    expect(packet?.artifactRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'image',
+          uri: '${WORKSPACE}/out.png',
+          metadata: expect.objectContaining({
+            conversationId: 'conv-1',
+            taskId: 'task-1',
+            toolCallId: 'tool-1',
+          }),
+        }),
+      ]),
+    );
+    expect(packet?.metadata?.['evidenceRefs']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'tool',
+          modality: 'image',
+          toolCallId: 'tool-1',
+        }),
+      ]),
+    );
+  });
+
+  it('preserves video perception evidence provenance from structured tool data', () => {
+    const feedback = createToolProducedMultimodalEvidenceFeedback({
+      conversationId: 'conv-1',
+      toolCallId: 'perception-1',
+      toolName: 'detect_shots',
+      resultData: {
+        artifacts: [
+          {
+            id: 'clip-1',
+            type: 'video',
+            uri: '${WORKSPACE}/clip.mp4',
+            mimeType: 'video/mp4',
+            metadata: { durationMs: 2400 },
+          },
+        ],
+        evidence: [
+          {
+            id: 'shot-boundary-1',
+            source: 'engine',
+            modality: 'video',
+            summary: 'Hard cut at 1.2s',
+            perceptionInputId: 'input-shot-1',
+          },
+        ],
+      },
+    });
+
+    expect(feedback[0]?.evidence).toMatchObject({
+      id: 'shot-boundary-1',
+      source: 'engine',
+      modality: 'video',
+      summary: 'Hard cut at 1.2s',
+      sourceArtifactId: 'clip-1',
+      perceptionInputId: 'input-shot-1',
+      conversationId: 'conv-1',
+      toolCallId: 'perception-1',
+    });
+  });
+
+  it('supports summary-only injection and evidence feedback ablation', () => {
+    const feedback = createToolProducedMultimodalEvidenceFeedback({
+      toolCallId: 'tool-1',
+      attachments: [{ type: 'video', path: '${WORKSPACE}/clip.mp4', mimeType: 'video/mp4' }],
+    });
+    const included = applyEvidenceFeedbackPolicy(feedback, { includeEvidence: true });
+    const withheld = applyEvidenceFeedbackPolicy(feedback, {
+      includeEvidence: false,
+      ablationDisabled: true,
+    });
+
+    expect(summarizeEvidenceFeedback(included)).toContain('Feedback evidence included');
+    expect(withheld[0]).toMatchObject({
+      withheld: true,
+      withheldReason: 'ablation',
+    });
+  });
+
+  it('enforces bounded host-adapter payload loading', async () => {
+    const packet = createMediaAttachmentContextPacket({
+      id: 'image',
+      uri: '${WORKSPACE}/image.png',
+      modality: 'image',
+      metadata: { mimeType: 'image/png' },
+      createdAt: 1,
+    });
+    const adapter = {
+      loadMediaPayload: vi.fn(async () => ({
+        encoding: 'base64' as const,
+        data: 'YWJjZA==',
+        mimeType: 'image/png',
+      })),
+    };
+
+    await expect(loadPacketMediaPayloads(packet, adapter, { maxBytes: 3 })).rejects.toThrow(
+      /exceeds maxBytes/,
+    );
+    expect(adapter.loadMediaPayload).toHaveBeenCalledWith(expect.objectContaining({ maxBytes: 3 }));
   });
 });

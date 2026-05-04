@@ -1,5 +1,6 @@
 import type {
   AgentCapabilityDiagnostic,
+  AgentMultimodalEvidenceRef,
   GeneratedPromptBundle,
   GeneratedPromptSection,
   GeneratedSchemaPurpose,
@@ -163,6 +164,28 @@ function buildPromptSections(
       content: context.memoryContextSummary,
       priority: 70,
     });
+  }
+
+  const evidenceFeedbackSummary = renderEvidenceFeedbackSummary(context.multimodalEvidenceRefs);
+  if (evidenceFeedbackSummary) {
+    if (
+      context.ablation?.disableMultimodalContext ||
+      context.ablation?.disableMultimodalEvidenceFeedback
+    ) {
+      diagnostics.push(
+        promptSchemaDiagnostic(
+          'multimodal-evidence-feedback-skipped',
+          'Multimodal feedback evidence was withheld by ablation.',
+        ),
+      );
+    } else {
+      sections.push({
+        id: 'ephemeral:multimodal-evidence-feedback',
+        layer: 'ephemeral',
+        content: evidenceFeedbackSummary,
+        priority: 76,
+      });
+    }
   }
 
   if (context.multimodalContextSummary?.trim()) {
@@ -384,6 +407,44 @@ function renderWorkflowSection(context: PromptGenerationContext): string | null 
   }
 
   return lines.join('\n');
+}
+
+function renderEvidenceFeedbackSummary(
+  evidenceRefs: readonly AgentMultimodalEvidenceRef[] | undefined,
+): string | null {
+  if (!evidenceRefs || evidenceRefs.length === 0) return null;
+
+  const included = evidenceRefs.filter((evidence) => !evidence.withheld);
+  const withheld = evidenceRefs.filter((evidence) => evidence.withheld);
+  const lines = ['## Feedback Evidence'];
+  lines.push(
+    `- Included: ${
+      included.length > 0
+        ? included.map((evidence) => formatEvidenceSummary(evidence)).join('; ')
+        : 'none'
+    }`,
+  );
+  lines.push(
+    `- Withheld: ${
+      withheld.length > 0
+        ? withheld
+            .map(
+              (evidence) =>
+                `${formatEvidenceSummary(evidence)} (${evidence.withheldReason ?? 'policy'})`,
+            )
+            .join('; ')
+        : 'none'
+    }`,
+  );
+  return lines.join('\n');
+}
+
+function formatEvidenceSummary(evidence: AgentMultimodalEvidenceRef): string {
+  const source = evidence.toolCallId
+    ? `${evidence.source}/${evidence.toolCallId}`
+    : evidence.source;
+  const summary = evidence.summary ? `: ${evidence.summary}` : '';
+  return `${evidence.id} [${evidence.modality}, ${source}]${summary}`;
 }
 
 function renderStructuredSchemaHint(context: PromptGenerationContext): string | null {

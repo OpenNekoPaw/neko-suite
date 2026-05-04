@@ -1,6 +1,13 @@
 import type { AgentWorkflowIdentity } from './workflow';
 
-export type AgentMediaModality = 'text' | 'image' | 'video' | 'audio' | 'data' | 'mixed';
+export type AgentMediaModality =
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'document'
+  | 'data'
+  | 'mixed';
 
 export interface AgentMediaMetadata {
   readonly mimeType?: string;
@@ -21,8 +28,22 @@ export interface AgentMultimodalEvidenceRef {
   readonly summary?: string;
   readonly artifactId?: string;
   readonly perceptionInputId?: string;
+  readonly conversationId?: string;
+  readonly workflow?: AgentWorkflowIdentity;
+  readonly taskId?: string;
+  readonly toolCallId?: string;
+  readonly sourceArtifactId?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
   readonly withheld?: boolean;
+  readonly withheldReason?: AgentMultimodalEvidenceWithheldReason;
 }
+
+export type AgentMultimodalEvidenceWithheldReason =
+  | 'policy'
+  | 'ablation'
+  | 'payload-too-large'
+  | 'unsupported-modality'
+  | 'missing-payload';
 
 export interface AgentMultimodalPacketLinkage {
   readonly conversationId?: string;
@@ -50,11 +71,25 @@ export interface AgentGeneratedArtifactProjection {
   readonly toolCallId?: string;
 }
 
+export interface AgentMultimodalEvidenceFeedback {
+  readonly artifact: AgentGeneratedArtifactProjection;
+  readonly evidence: AgentMultimodalEvidenceRef;
+}
+
+export interface AgentMultimodalEvidenceFeedbackPolicy {
+  readonly includeEvidence?: boolean;
+  readonly includePayloads?: boolean;
+  readonly allowedModalities?: readonly AgentMediaModality[];
+  readonly maxPayloadBytes?: number;
+  readonly ablationDisabled?: boolean;
+}
+
 export interface AgentMediaPayloadRequest {
   readonly artifactId?: string;
   readonly uri: string;
   readonly modality: AgentMediaModality;
   readonly preferredEncoding?: 'base64' | 'bytes' | 'url';
+  readonly maxBytes?: number;
 }
 
 export type AgentMediaPayload =

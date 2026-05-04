@@ -121,9 +121,13 @@ export {
   buildWorkflowIdentity,
   createAgentWorkflowRuntime,
   createIdcWorkflowDefinition,
+  createLegacyWorkflowUsageRecorder,
   selectIdcWorkflowEntryNode,
   type AgentWorkflowRuntime,
   type AgentWorkflowRuntimeOptions,
+  type AgentLegacyWorkflowAdapterUsageInput,
+  type AgentLegacyWorkflowSunsetPolicy,
+  type AgentLegacyWorkflowUsageRecorder,
   type CreateAgentWorkflowRunInput,
 } from './agent-workflow-runtime';
 
@@ -532,14 +536,17 @@ export {
 export {
   buildTurnMultimodalContextPacket,
   combineMultimodalContextPackets,
+  applyEvidenceFeedbackPolicy,
   createCanvasSelectionContextPacket,
   createMediaAttachmentContextPacket,
   createTextContextPacket,
   createTimelineContextPacketFromEditor,
   createTimelineSelectionContextPacket,
+  createToolProducedMultimodalEvidenceFeedback,
   filterToolsByModalityAvailability,
   loadPacketMediaPayloads,
   projectGeneratedArtifactReference,
+  summarizeEvidenceFeedback,
   type BuildTurnMultimodalContextPacketInput,
   type CanvasSelectionContextNode,
   type CanvasSelectionContextOptions,
@@ -549,6 +556,7 @@ export {
   type TimelineEditorContextInput,
   type TimelineSelectionContextElement,
   type TimelineSelectionContextOptions,
+  type ToolProducedMultimodalEvidenceInput,
 } from './multimodal-context-packet';
 
 export {

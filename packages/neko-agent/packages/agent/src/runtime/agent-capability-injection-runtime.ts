@@ -6,6 +6,10 @@ import type {
   AgentCapabilityRegistryProjection,
   AgentCapabilitySlashCommandContribution,
   AgentCapabilitySource,
+  AgentCapabilityTelemetryEvent,
+  AgentCapabilityTelemetryEventKind,
+  AgentCapabilityTelemetryReason,
+  AgentCapabilityTelemetrySnapshot,
   AgentCapabilityWorkflowNodeRequirement,
   AgentCapabilityWorkflowFragmentContribution,
   AgentInjectedCapabilitySet,
@@ -55,6 +59,13 @@ export interface AgentCapabilityInjectionRuntime {
   projectSlashCommandCatalog(
     context: AgentCapabilityInjectionContext,
   ): readonly AgentCapabilitySlashCommandContribution[];
+  getTelemetrySnapshot(): AgentCapabilityTelemetrySnapshot;
+  recordTelemetryEvent(
+    event: Omit<AgentCapabilityTelemetryEvent, 'id' | 'createdAt'> & {
+      readonly id?: string;
+      readonly createdAt?: number;
+    },
+  ): AgentCapabilityTelemetryEvent;
 }
 
 export function createAgentCapabilityInjectionRuntime(): AgentCapabilityInjectionRuntime {
@@ -234,6 +245,7 @@ export function validateCapabilityContribution(
 class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjectionRuntime {
   private readonly contributions = new Map<string, AgentCapabilityContribution>();
   private readonly diagnostics: AgentCapabilityDiagnostic[] = [];
+  private readonly telemetryEvents: AgentCapabilityTelemetryEvent[] = [];
 
   register(contribution: AgentCapabilityContribution): AgentCapabilityRegistryProjection {
     this.registerOne(contribution);
@@ -263,6 +275,7 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
     const injected = buildInjectedCapabilitySet(this.contributions.values(), context);
     const diagnostics = [...injected.diagnostics];
     this.diagnostics.push(...diagnostics);
+    this.recordInjectionTelemetry(injected, diagnostics);
     return injected;
   }
 
@@ -303,6 +316,7 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
       this.diagnostics.push(collision);
     }
     this.contributions.set(contribution.identity.id, contribution);
+    this.recordRegistrationTelemetry(contribution);
   }
 
   private projectRegistry(): AgentCapabilityRegistryProjection {
@@ -310,6 +324,123 @@ class DefaultAgentCapabilityInjectionRuntime implements AgentCapabilityInjection
       contributions: this.listRegistered(),
       diagnostics: this.getDiagnostics('registration'),
     };
+  }
+
+  getTelemetrySnapshot(): AgentCapabilityTelemetrySnapshot {
+    const fieldCounts = createTelemetryReasonCounts();
+    for (const event of this.telemetryEvents) {
+      fieldCounts[event.reason] += 1;
+    }
+    return {
+      events: [...this.telemetryEvents],
+      fieldCounts,
+      updatedAt: this.telemetryEvents.at(-1)?.createdAt ?? Date.now(),
+    };
+  }
+
+  recordTelemetryEvent(
+    event: Omit<AgentCapabilityTelemetryEvent, 'id' | 'createdAt'> & {
+      readonly id?: string;
+      readonly createdAt?: number;
+    },
+  ): AgentCapabilityTelemetryEvent {
+    const recorded: AgentCapabilityTelemetryEvent = {
+      id:
+        event.id ??
+        `${event.kind}:${event.contributionId}:${event.field ?? 'event'}:${this.telemetryEvents.length + 1}`,
+      kind: event.kind,
+      contributionId: event.contributionId,
+      source: event.source,
+      sourceId: event.sourceId,
+      ...(event.version ? { version: event.version } : {}),
+      ...(event.field ? { field: event.field } : {}),
+      reason: event.reason,
+      ...(event.hash ? { hash: event.hash } : {}),
+      createdAt: event.createdAt ?? Date.now(),
+      ...(event.metadata ? { metadata: sanitizeTelemetryMetadata(event.metadata) } : {}),
+    };
+    this.telemetryEvents.push(recorded);
+    return recorded;
+  }
+
+  private recordRegistrationTelemetry(contribution: AgentCapabilityContribution): void {
+    for (const field of readContributionUsedFields(contribution)) {
+      this.recordTelemetryEvent({
+        kind: 'field-utilization',
+        contributionId: contribution.identity.id,
+        source: contribution.identity.source,
+        sourceId: contribution.identity.sourceId,
+        version: contribution.identity.version,
+        field,
+        reason: 'used',
+        hash: hashTelemetryValue(readContributionFieldValue(contribution, field)),
+      });
+    }
+
+    for (const field of readMetadataStringArray(contribution.metadata, 'unknownFields')) {
+      this.recordTelemetryEvent({
+        kind: 'field-utilization',
+        contributionId: contribution.identity.id,
+        source: contribution.identity.source,
+        sourceId: contribution.identity.sourceId,
+        version: contribution.identity.version,
+        field,
+        reason: 'unknown-field',
+      });
+    }
+
+    for (const field of readMetadataStringArray(contribution.metadata, 'unsupportedFields')) {
+      this.recordTelemetryEvent({
+        kind: 'field-utilization',
+        contributionId: contribution.identity.id,
+        source: contribution.identity.source,
+        sourceId: contribution.identity.sourceId,
+        version: contribution.identity.version,
+        field,
+        reason: 'unsupported-field',
+      });
+    }
+  }
+
+  private recordInjectionTelemetry(
+    injected: AgentInjectedCapabilitySet,
+    diagnostics: readonly AgentCapabilityDiagnostic[],
+  ): void {
+    for (const contribution of injected.contributions) {
+      for (const fragment of contribution.promptFragments ?? []) {
+        this.recordTelemetryEvent({
+          kind: 'field-utilization',
+          contributionId: contribution.identity.id,
+          source: contribution.identity.source,
+          sourceId: contribution.identity.sourceId,
+          version: contribution.identity.version,
+          field: `promptFragments:${fragment.id}`,
+          reason: 'used',
+          hash: hashTelemetryValue(fragment.content),
+        });
+      }
+    }
+
+    for (const diagnostic of diagnostics) {
+      const contribution = diagnostic.contributionId
+        ? this.contributions.get(diagnostic.contributionId)
+        : undefined;
+      if (!contribution) {
+        continue;
+      }
+      this.recordTelemetryEvent({
+        kind: 'field-utilization',
+        contributionId: contribution.identity.id,
+        source: contribution.identity.source,
+        sourceId: contribution.identity.sourceId,
+        version: contribution.identity.version,
+        field: diagnostic.metadata?.['field'] as string | undefined,
+        reason: toTelemetryReason(diagnostic.reason),
+        metadata: {
+          diagnosticReason: diagnostic.reason,
+        },
+      });
+    }
   }
 }
 
@@ -615,7 +746,132 @@ function skipDiagnostic(
     contributionId: contribution.identity.id,
     reason,
     message,
+    metadata: {
+      field: selectSkippedField(contribution, reason),
+    },
   };
+}
+
+function selectSkippedField(contribution: AgentCapabilityContribution, reason: string): string {
+  if (reason === 'ablation-disabled') return 'contribution';
+  if ((contribution.promptFragments?.length ?? 0) > 0) return 'promptFragments';
+  if ((contribution.allowedTools?.length ?? 0) > 0 || (contribution.toolNames?.length ?? 0) > 0) {
+    return 'tools';
+  }
+  if ((contribution.workflowFragments?.length ?? 0) > 0) return 'workflowFragments';
+  return 'contribution';
+}
+
+function readContributionUsedFields(contribution: AgentCapabilityContribution): readonly string[] {
+  const fields = ['identity'];
+  if (contribution.displayName) fields.push('displayName');
+  if (contribution.description) fields.push('description');
+  if (contribution.hostRequirements?.length) fields.push('hostRequirements');
+  if (contribution.permissionRequirements?.length) fields.push('permissionRequirements');
+  if (contribution.workflowNodeRequirements?.length) fields.push('workflowNodeRequirements');
+  if (contribution.promptFragments?.length) fields.push('promptFragments');
+  if (contribution.allowedTools?.length) fields.push('allowedTools');
+  if (contribution.slashCommands?.length) fields.push('slashCommands');
+  if (contribution.workflowFragments?.length) fields.push('workflowFragments');
+  if (contribution.toolNames?.length) fields.push('toolNames');
+  if (contribution.toolGroupNames?.length) fields.push('toolGroupNames');
+  return fields;
+}
+
+function readContributionFieldValue(
+  contribution: AgentCapabilityContribution,
+  field: string,
+): unknown {
+  switch (field) {
+    case 'promptFragments':
+      return (contribution.promptFragments ?? []).map((fragment) => ({
+        id: fragment.id,
+        hash: hashTelemetryValue(fragment.content),
+      }));
+    case 'identity':
+      return contribution.identity;
+    default:
+      return (contribution as unknown as Record<string, unknown>)[field];
+  }
+}
+
+function readMetadataStringArray(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): readonly string[] {
+  const value = metadata?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function toTelemetryReason(reason: string): AgentCapabilityTelemetryReason {
+  switch (reason) {
+    case 'ablation-disabled':
+      return 'ablation-skipped';
+    case 'host-requirement':
+    case 'trust-policy':
+    case 'workflow-node-requirement':
+    case 'permission-policy':
+    case 'active-skill':
+    case 'disabled':
+      return 'policy-skipped';
+    case 'tool-budget':
+      return 'withheld-field';
+    default:
+      return 'withheld-field';
+  }
+}
+
+function createTelemetryReasonCounts(): Record<AgentCapabilityTelemetryReason, number> {
+  return {
+    used: 0,
+    'unknown-field': 0,
+    'unsupported-field': 0,
+    'withheld-field': 0,
+    'policy-skipped': 0,
+    'ablation-skipped': 0,
+  };
+}
+
+function sanitizeTelemetryMetadata(
+  metadata: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      value === null
+    ) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+function hashTelemetryValue(value: unknown): string {
+  const text = stableStringify(value);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${stableStringify(child)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function defaultTrustForSource(source: AgentCapabilitySource): AgentCapabilityTrustLevel {

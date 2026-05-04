@@ -1,4 +1,5 @@
 import type { ChatMessage, ContentPart, MultimodalContextPacket } from '@neko/shared';
+import type { AgentMultimodalEvidenceRef } from '@neko-agent/types';
 
 export interface MultimodalMessageProjectionOptions {
   readonly includeTextInputs?: boolean;
@@ -35,6 +36,11 @@ export function projectMultimodalPacketToChatMessage(
     }
   }
 
+  const evidenceSummary = summarizeEvidenceRefs(readEvidenceRefs(packet));
+  if (evidenceSummary) {
+    parts.push({ type: 'text', text: evidenceSummary });
+  }
+
   if (parts.length === 0) {
     return { role: 'user', content: summarizePacket(packet) };
   }
@@ -44,10 +50,54 @@ export function projectMultimodalPacketToChatMessage(
 
 function summarizePacket(packet: MultimodalContextPacket): string {
   const modalities = Array.from(new Set(packet.perceptionInputs.map((input) => input.modality)));
-  return `Multimodal context packet ${packet.id}: ${modalities.join(', ') || 'no inputs'}`;
+  const evidenceSummary = summarizeEvidenceRefs(readEvidenceRefs(packet));
+  return [
+    `Multimodal context packet ${packet.id}: ${modalities.join(', ') || 'no inputs'}`,
+    evidenceSummary,
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function readMimeType(metadata: Readonly<Record<string, unknown>> | undefined): string | undefined {
   const value = metadata?.['mimeType'];
   return typeof value === 'string' ? value : undefined;
+}
+
+function readEvidenceRefs(packet: MultimodalContextPacket): readonly AgentMultimodalEvidenceRef[] {
+  const value = packet.metadata?.['evidenceRefs'];
+  return Array.isArray(value)
+    ? value.filter((item): item is AgentMultimodalEvidenceRef => isEvidenceRef(item))
+    : [];
+}
+
+function isEvidenceRef(value: unknown): value is AgentMultimodalEvidenceRef {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { readonly id?: unknown }).id === 'string' &&
+    typeof (value as { readonly modality?: unknown }).modality === 'string',
+  );
+}
+
+function summarizeEvidenceRefs(evidenceRefs: readonly AgentMultimodalEvidenceRef[]): string {
+  if (evidenceRefs.length === 0) return '';
+  const included = evidenceRefs.filter((evidence) => !evidence.withheld);
+  const withheld = evidenceRefs.filter((evidence) => evidence.withheld);
+  return [
+    included.length > 0
+      ? `Included feedback evidence: ${included.map(formatEvidenceRef).join('; ')}`
+      : 'Included feedback evidence: none',
+    withheld.length > 0
+      ? `Withheld feedback evidence: ${withheld
+          .map(
+            (evidence) => `${formatEvidenceRef(evidence)} (${evidence.withheldReason ?? 'policy'})`,
+          )
+          .join('; ')}`
+      : 'Withheld feedback evidence: none',
+  ].join('\n');
+}
+
+function formatEvidenceRef(evidence: AgentMultimodalEvidenceRef): string {
+  return `${evidence.id} [${evidence.modality}]${evidence.summary ? ` ${evidence.summary}` : ''}`;
 }

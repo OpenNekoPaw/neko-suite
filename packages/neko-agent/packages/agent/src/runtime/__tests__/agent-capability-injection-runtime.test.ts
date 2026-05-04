@@ -328,4 +328,130 @@ describe('agent-capability-injection-runtime', () => {
     );
     expect(runtime.getDiagnostics('injection')).toEqual([]);
   });
+
+  it('records capability telemetry separately from registration and injection diagnostics', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+    runtime.register({
+      identity: {
+        id: 'skill:telemetry',
+        source: 'market',
+        sourceId: '@neko/telemetry',
+        version: '1.0.0',
+        trustLevel: 'community',
+      },
+      promptFragments: [{ id: 'prompt', content: 'Sensitive prompt text' }],
+      allowedTools: ['write_file'],
+      permissionRequirements: [{ scope: 'workspace.write', mode: 'write', approvalRequired: true }],
+      metadata: {
+        unknownFields: ['futurePrompt'],
+        unsupportedFields: ['workflowFragments.experimental'],
+      },
+    });
+
+    runtime.inject({
+      host: 'vscode',
+      permissionPolicy: { allowedScopes: [] },
+    });
+    runtime.inject({
+      host: 'vscode',
+      ablation: { disableCapabilityInjection: true },
+    });
+
+    const snapshot = runtime.getTelemetrySnapshot();
+    expect(snapshot.fieldCounts).toMatchObject({
+      used: expect.any(Number),
+      'unknown-field': 1,
+      'unsupported-field': 1,
+      'policy-skipped': 1,
+      'ablation-skipped': 1,
+    });
+    expect(snapshot.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'futurePrompt', reason: 'unknown-field' }),
+        expect.objectContaining({
+          field: 'workflowFragments.experimental',
+          reason: 'unsupported-field',
+        }),
+        expect.objectContaining({ reason: 'policy-skipped' }),
+        expect.objectContaining({ reason: 'ablation-skipped' }),
+        expect.objectContaining({ field: 'promptFragments', hash: expect.any(String) }),
+      ]),
+    );
+    expect(JSON.stringify(snapshot.events)).not.toContain('Sensitive prompt text');
+  });
+
+  it('records market skill lifecycle and provider/schema/workflow evolution telemetry', () => {
+    const runtime = createAgentCapabilityInjectionRuntime();
+    const installed = normalizeSkillCapability({
+      skill: skill('market-storyboard', { source: 'market', version: '1.0.0' }),
+      source: 'market',
+      sourceId: '@neko/market-storyboard',
+      version: '1.0.0',
+    });
+    runtime.register(installed);
+
+    runtime.recordTelemetryEvent({
+      kind: 'skill-install',
+      contributionId: installed.identity.id,
+      source: installed.identity.source,
+      sourceId: installed.identity.sourceId,
+      version: installed.identity.version,
+      reason: 'used',
+    });
+    runtime.recordTelemetryEvent({
+      kind: 'skill-update',
+      contributionId: installed.identity.id,
+      source: installed.identity.source,
+      sourceId: installed.identity.sourceId,
+      version: '1.1.0',
+      reason: 'unsupported-field',
+      field: 'providerCard.experimental',
+    });
+    runtime.recordTelemetryEvent({
+      kind: 'schema-change',
+      contributionId: installed.identity.id,
+      source: installed.identity.source,
+      sourceId: installed.identity.sourceId,
+      version: '1.1.0',
+      reason: 'used',
+      hash: 'schema-hash',
+    });
+    runtime.recordTelemetryEvent({
+      kind: 'workflow-fragment-change',
+      contributionId: installed.identity.id,
+      source: installed.identity.source,
+      sourceId: installed.identity.sourceId,
+      version: '1.1.0',
+      reason: 'used',
+      hash: 'workflow-hash',
+    });
+    runtime.recordTelemetryEvent({
+      kind: 'provider-card-change',
+      contributionId: installed.identity.id,
+      source: installed.identity.source,
+      sourceId: installed.identity.sourceId,
+      version: '1.1.0',
+      reason: 'used',
+      hash: 'provider-hash',
+    });
+    runtime.recordTelemetryEvent({
+      kind: 'skill-remove',
+      contributionId: installed.identity.id,
+      source: installed.identity.source,
+      sourceId: installed.identity.sourceId,
+      version: '1.1.0',
+      reason: 'used',
+    });
+
+    expect(runtime.getTelemetrySnapshot().events.map((event) => event.kind)).toEqual(
+      expect.arrayContaining([
+        'skill-install',
+        'skill-update',
+        'schema-change',
+        'workflow-fragment-change',
+        'provider-card-change',
+        'skill-remove',
+      ]),
+    );
+  });
 });

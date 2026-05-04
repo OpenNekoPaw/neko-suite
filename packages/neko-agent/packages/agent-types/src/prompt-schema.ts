@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '@neko/shared';
 import type { AgentCapabilityDiagnostic, AgentInjectedCapabilitySet } from './capability';
+import type { AgentMultimodalEvidenceRef } from './multimodal-tooling';
 import type { AgentWorkflowIdentity } from './workflow';
 
 export type PromptSchemaProviderToolMode = 'native' | 'prompt-only' | 'none';
@@ -45,6 +46,7 @@ export interface PromptGenerationContext {
   }[];
   readonly memoryContextSummary?: string;
   readonly multimodalContextSummary?: string;
+  readonly multimodalEvidenceRefs?: readonly AgentMultimodalEvidenceRef[];
   readonly toolSchemas?: readonly ToolDefinition[];
   readonly requestedSchemaPurposes?: readonly GeneratedSchemaPurpose[];
   readonly ablation?: {
@@ -53,6 +55,7 @@ export interface PromptGenerationContext {
     readonly disableDynamicToolSchemas?: boolean;
     readonly disableStructuredOutputSchemas?: boolean;
     readonly disableMultimodalContext?: boolean;
+    readonly disableMultimodalEvidenceFeedback?: boolean;
   };
 }
 

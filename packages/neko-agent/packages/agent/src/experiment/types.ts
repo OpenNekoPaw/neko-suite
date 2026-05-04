@@ -6,6 +6,8 @@
  */
 
 import type { AgentResult } from '@neko/shared';
+import type { AgentMultimodalEvidenceRef } from '@neko-agent/types';
+import type { AgentWorkflowIdentity } from '@neko-agent/types';
 import type { PermissionMode } from '../permission/types';
 import type { AgentSessionConfig, ExecutionContext } from '../session/types';
 
@@ -204,6 +206,84 @@ export interface EvaluationResult {
   details?: Record<string, unknown>;
 }
 
+export type WorkflowEvaluatorKind = 'deterministic' | 'llm-judge';
+
+export type WorkflowRecoverySignalAction =
+  | 'retry-node'
+  | 'regress-stage'
+  | 'restart-run'
+  | 'escalate-user';
+
+export interface WorkflowEvaluatorCorrectionHint {
+  id: string;
+  message: string;
+  targetNodeId?: string;
+  evidenceRefIds?: readonly string[];
+  severity?: 'info' | 'warning' | 'blocking';
+}
+
+export interface WorkflowRecoverySignal {
+  id: string;
+  action: WorkflowRecoverySignalAction;
+  reason: string;
+  workflow?: AgentWorkflowIdentity;
+  targetNodeId?: string;
+  correctionHintIds?: readonly string[];
+}
+
+export interface WorkflowEvaluatorProviderIdentity {
+  providerId?: string;
+  modelId?: string;
+  variantId?: string;
+}
+
+export interface WorkflowEvaluatorPromptSchemaSnapshot {
+  promptHash?: string;
+  schemaHash?: string;
+  snapshotRef?: string;
+}
+
+export interface WorkflowEvaluatorResult extends EvaluationResult {
+  id: string;
+  evaluatorId: string;
+  kind: WorkflowEvaluatorKind;
+  score: number;
+  passed: boolean;
+  reasons: readonly string[];
+  evidenceRefs: readonly AgentMultimodalEvidenceRef[];
+  metrics: Record<string, number | boolean | string>;
+  correctionHints: readonly WorkflowEvaluatorCorrectionHint[];
+  recoverySignals: readonly WorkflowRecoverySignal[];
+  workflow?: AgentWorkflowIdentity;
+  provider?: WorkflowEvaluatorProviderIdentity;
+  promptSnapshot?: WorkflowEvaluatorPromptSchemaSnapshot;
+}
+
+export interface WorkflowEvaluatorInput {
+  fixture: WorkflowEvaluationFixture;
+  variant: WorkflowEvaluationVariantInput;
+  artifacts?: readonly {
+    id: string;
+    type: string;
+    uri?: string;
+    metadata?: Readonly<Record<string, unknown>>;
+  }[];
+  evidenceRefs?: readonly AgentMultimodalEvidenceRef[];
+  promptSnapshot?: PromptSchemaSnapshotRef;
+}
+
+export interface WorkflowEvaluatorRunner {
+  readonly id: string;
+  evaluate(
+    input: WorkflowEvaluatorInput,
+  ): Promise<WorkflowEvaluatorResult> | WorkflowEvaluatorResult;
+}
+
+export interface WorkflowJudgeAdapter {
+  readonly id: string;
+  judge(input: WorkflowEvaluatorInput): Promise<WorkflowEvaluatorResult> | WorkflowEvaluatorResult;
+}
+
 export interface ExperimentEvaluator {
   evaluate(result: AgentResult, descriptor: ExperimentRunDescriptor): Promise<EvaluationResult>;
 }
@@ -317,12 +397,14 @@ export interface WorkflowEvaluationVariantInput {
   metrics: ExperimentMetrics;
   promptSnapshot?: PromptSchemaSnapshotRef;
   evolutionEvents?: readonly CapabilityEvolutionEvent[];
+  evaluatorResults?: readonly WorkflowEvaluatorResult[];
 }
 
 export interface WorkflowEvaluationHarnessInput {
   fixture: WorkflowEvaluationFixture;
   baseline: WorkflowEvaluationVariantInput;
   variants: readonly WorkflowEvaluationVariantInput[];
+  evaluators?: readonly WorkflowEvaluatorRunner[];
 }
 
 export interface WorkflowEvaluationComparison {
@@ -332,6 +414,9 @@ export interface WorkflowEvaluationComparison {
   toolCallDelta: number;
   promptHashChanged: boolean;
   omittedCapabilities: readonly string[];
+  qualityDelta?: number;
+  correctionHints?: readonly WorkflowEvaluatorCorrectionHint[];
+  recoverySignals?: readonly WorkflowRecoverySignal[];
 }
 
 export interface WorkflowEvaluationHarnessResult {
@@ -340,6 +425,7 @@ export interface WorkflowEvaluationHarnessResult {
   variants: readonly WorkflowEvaluationVariantInput[];
   comparisons: readonly WorkflowEvaluationComparison[];
   evolutionEvents: readonly CapabilityEvolutionEvent[];
+  evaluatorResults: readonly WorkflowEvaluatorResult[];
 }
 
 // =============================================================================

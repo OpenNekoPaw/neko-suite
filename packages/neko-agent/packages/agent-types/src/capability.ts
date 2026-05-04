@@ -112,3 +112,41 @@ export interface AgentCapabilityRegistryProjection {
   readonly contributions: readonly AgentCapabilityContribution[];
   readonly diagnostics: readonly AgentCapabilityDiagnostic[];
 }
+
+export type AgentCapabilityTelemetryReason =
+  | 'used'
+  | 'unknown-field'
+  | 'unsupported-field'
+  | 'withheld-field'
+  | 'policy-skipped'
+  | 'ablation-skipped';
+
+export type AgentCapabilityTelemetryEventKind =
+  | 'field-utilization'
+  | 'skill-install'
+  | 'skill-update'
+  | 'skill-remove'
+  | 'prompt-fragment-change'
+  | 'schema-change'
+  | 'workflow-fragment-change'
+  | 'provider-card-change';
+
+export interface AgentCapabilityTelemetryEvent {
+  readonly id: string;
+  readonly kind: AgentCapabilityTelemetryEventKind;
+  readonly contributionId: string;
+  readonly source: AgentCapabilitySource;
+  readonly sourceId: string;
+  readonly version?: string;
+  readonly field?: string;
+  readonly reason: AgentCapabilityTelemetryReason;
+  readonly hash?: string;
+  readonly createdAt: number;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface AgentCapabilityTelemetrySnapshot {
+  readonly events: readonly AgentCapabilityTelemetryEvent[];
+  readonly fieldCounts: Readonly<Record<AgentCapabilityTelemetryReason, number>>;
+  readonly updatedAt: number;
+}

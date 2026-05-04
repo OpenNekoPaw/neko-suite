@@ -61,10 +61,14 @@ export {
   SKILL_INJECTION_FIXTURE,
   SUBAGENT_TASK_FIXTURE,
   createCapabilityEvolutionEvent,
+  createDeterministicAssetComplianceEvaluator,
+  createJudgeEvaluatorRunner,
+  createMockLlmJudgeAdapter,
   createPromptSchemaSnapshotRef,
   createUnifiedWorkflowEvaluationFixtures,
   createWorkflowMetricSnapshot,
   runWorkflowEvaluationHarness,
+  runWorkflowEvaluationHarnessWithEvaluators,
 } from './workflow-evaluation-harness';
 
 // Analysis

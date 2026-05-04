@@ -8,6 +8,11 @@ import type {
   WorkflowEvaluationHarnessInput,
   WorkflowEvaluationHarnessResult,
   WorkflowEvaluationVariantInput,
+  WorkflowEvaluatorInput,
+  WorkflowEvaluatorProviderIdentity,
+  WorkflowEvaluatorResult,
+  WorkflowEvaluatorRunner,
+  WorkflowJudgeAdapter,
   WorkflowMetricSnapshot,
 } from './types';
 
@@ -115,6 +120,10 @@ export function createCapabilityEvolutionEvent(
 export function runWorkflowEvaluationHarness(
   input: WorkflowEvaluationHarnessInput,
 ): WorkflowEvaluationHarnessResult {
+  const baselineEvaluatorResults = input.baseline.evaluatorResults ?? [];
+  const variantEvaluatorResults = input.variants.flatMap(
+    (variant) => variant.evaluatorResults ?? [],
+  );
   const comparisons = input.variants.map((variant) =>
     compareVariant(input.fixture, input.baseline, variant),
   );
@@ -127,6 +136,124 @@ export function runWorkflowEvaluationHarness(
       ...(input.baseline.evolutionEvents ?? []),
       ...input.variants.flatMap((variant) => variant.evolutionEvents ?? []),
     ],
+    evaluatorResults: [...baselineEvaluatorResults, ...variantEvaluatorResults],
+  };
+}
+
+export async function runWorkflowEvaluationHarnessWithEvaluators(
+  input: WorkflowEvaluationHarnessInput,
+): Promise<WorkflowEvaluationHarnessResult> {
+  const baselineEvaluatorResults = await runEvaluatorsForVariant(input, input.baseline);
+  const variants = await Promise.all(
+    input.variants.map(async (variant) => ({
+      ...variant,
+      evaluatorResults: [
+        ...(variant.evaluatorResults ?? []),
+        ...(await runEvaluatorsForVariant(input, variant)),
+      ],
+    })),
+  );
+  return runWorkflowEvaluationHarness({
+    ...input,
+    baseline: {
+      ...input.baseline,
+      evaluatorResults: [...(input.baseline.evaluatorResults ?? []), ...baselineEvaluatorResults],
+    },
+    variants,
+  });
+}
+
+export function createDeterministicAssetComplianceEvaluator(
+  options: {
+    readonly id?: string;
+    readonly requiredArtifactTypes?: readonly string[];
+    readonly minGeneratedArtifacts?: number;
+    readonly minScore?: number;
+  } = {},
+): WorkflowEvaluatorRunner {
+  const evaluatorId = options.id ?? 'deterministic-asset-compliance';
+  return {
+    id: evaluatorId,
+    evaluate(input) {
+      const requiredArtifactTypes =
+        options.requiredArtifactTypes && options.requiredArtifactTypes.length > 0
+          ? options.requiredArtifactTypes
+          : (input.fixture.expectedModalities ?? []);
+      const generatedArtifacts = input.variant.metrics.toolSummary.successCount;
+      const missingTypes = requiredArtifactTypes.filter(
+        (type) => !input.artifacts?.some((artifact) => artifact.type === type),
+      );
+      const hasEnoughArtifacts = generatedArtifacts >= (options.minGeneratedArtifacts ?? 1);
+      const passed = missingTypes.length === 0 && hasEnoughArtifacts;
+      const score = passed ? 1 : missingTypes.length > 0 ? 0.4 : 0.7;
+      return createWorkflowEvaluatorResult({
+        id: `${evaluatorId}:${input.variant.variantName}`,
+        evaluatorId,
+        kind: 'deterministic',
+        score,
+        passed: score >= (options.minScore ?? 0.8) && passed,
+        reasons: [
+          missingTypes.length > 0
+            ? `Missing artifact types: ${missingTypes.join(', ')}`
+            : 'Required artifact types present.',
+          hasEnoughArtifacts
+            ? 'Generated artifact count satisfies fixture expectation.'
+            : 'Generated artifact count is below fixture expectation.',
+        ],
+        evidenceRefs: input.evidenceRefs ?? [],
+        metrics: {
+          generatedArtifacts,
+          missingTypeCount: missingTypes.length,
+        },
+        workflowRunId: input.fixture.workflowRunId,
+        workflowNodeId: input.fixture.workflowNodeId,
+        promptSnapshot: input.promptSnapshot,
+      });
+    },
+  };
+}
+
+export function createMockLlmJudgeAdapter(
+  options: {
+    readonly id?: string;
+    readonly provider?: WorkflowEvaluatorProviderIdentity;
+    readonly score?: number;
+    readonly passed?: boolean;
+    readonly reason?: string;
+  } = {},
+): WorkflowJudgeAdapter {
+  const adapterId = options.id ?? 'mock-llm-judge';
+  return {
+    id: adapterId,
+    judge(input) {
+      const score = options.score ?? 0.86;
+      const passed = options.passed ?? score >= 0.8;
+      return createWorkflowEvaluatorResult({
+        id: `${adapterId}:${input.variant.variantName}`,
+        evaluatorId: adapterId,
+        kind: 'llm-judge',
+        score,
+        passed,
+        reasons: [options.reason ?? 'Mock judge result from schema-bound adapter.'],
+        evidenceRefs: input.evidenceRefs ?? [],
+        metrics: { score },
+        provider: options.provider ?? {
+          providerId: 'mock-provider',
+          modelId: 'mock-judge-model',
+          variantId: input.variant.variantName,
+        },
+        workflowRunId: input.fixture.workflowRunId,
+        workflowNodeId: input.fixture.workflowNodeId,
+        promptSnapshot: input.promptSnapshot,
+      });
+    },
+  };
+}
+
+export function createJudgeEvaluatorRunner(adapter: WorkflowJudgeAdapter): WorkflowEvaluatorRunner {
+  return {
+    id: adapter.id,
+    evaluate: (input) => adapter.judge(input),
   };
 }
 
@@ -135,6 +262,18 @@ function compareVariant(
   baseline: WorkflowEvaluationVariantInput,
   variant: WorkflowEvaluationVariantInput,
 ): WorkflowEvaluationComparison {
+  const baselineQuality = averageEvaluatorScore(baseline.evaluatorResults);
+  const variantQuality = averageEvaluatorScore(variant.evaluatorResults);
+  const qualityDelta =
+    baselineQuality !== undefined && variantQuality !== undefined
+      ? roundMetric(variantQuality - baselineQuality)
+      : undefined;
+  const correctionHints = (variant.evaluatorResults ?? []).flatMap(
+    (result) => result.correctionHints,
+  );
+  const recoverySignals = (variant.evaluatorResults ?? []).flatMap(
+    (result) => result.recoverySignals,
+  );
   return {
     variantName: variant.variantName,
     tokenDelta: variant.metrics.totalTokens.totalTokens - baseline.metrics.totalTokens.totalTokens,
@@ -144,7 +283,113 @@ function compareVariant(
       Boolean(variant.promptSnapshot?.promptHash) &&
       variant.promptSnapshot?.promptHash !== baseline.promptSnapshot?.promptHash,
     omittedCapabilities: readOmittedCapabilities(fixture, variant.toggles),
+    ...(qualityDelta !== undefined ? { qualityDelta } : {}),
+    ...(correctionHints.length > 0 ? { correctionHints } : {}),
+    ...(recoverySignals.length > 0 ? { recoverySignals } : {}),
   };
+}
+
+async function runEvaluatorsForVariant(
+  input: WorkflowEvaluationHarnessInput,
+  variant: WorkflowEvaluationVariantInput,
+): Promise<readonly WorkflowEvaluatorResult[]> {
+  if (!input.evaluators || input.evaluators.length === 0) {
+    return [];
+  }
+  const evaluatorInput: WorkflowEvaluatorInput = {
+    fixture: input.fixture,
+    variant,
+    promptSnapshot: variant.promptSnapshot,
+  };
+  return Promise.all(input.evaluators.map((evaluator) => evaluator.evaluate(evaluatorInput)));
+}
+
+function createWorkflowEvaluatorResult(input: {
+  readonly id: string;
+  readonly evaluatorId: string;
+  readonly kind: WorkflowEvaluatorResult['kind'];
+  readonly score: number;
+  readonly passed: boolean;
+  readonly reasons: readonly string[];
+  readonly evidenceRefs: WorkflowEvaluatorResult['evidenceRefs'];
+  readonly metrics: WorkflowEvaluatorResult['metrics'];
+  readonly workflowRunId?: string;
+  readonly workflowNodeId?: string;
+  readonly provider?: WorkflowEvaluatorProviderIdentity;
+  readonly promptSnapshot?: WorkflowEvaluatorInput['promptSnapshot'];
+}): WorkflowEvaluatorResult {
+  const correctionHints = input.passed
+    ? []
+    : [
+        {
+          id: `${input.id}:hint`,
+          message: input.reasons[0] ?? 'Evaluator reported a quality issue.',
+          ...(input.workflowNodeId ? { targetNodeId: input.workflowNodeId } : {}),
+          severity: 'warning' as const,
+        },
+      ];
+  const recoverySignals = input.passed
+    ? []
+    : [
+        {
+          id: `${input.id}:recovery`,
+          action: 'retry-node' as const,
+          reason: correctionHints[0]?.message ?? 'Retry node after evaluator failure.',
+          ...(input.workflowNodeId ? { targetNodeId: input.workflowNodeId } : {}),
+          correctionHintIds: correctionHints.map((hint) => hint.id),
+          workflow: {
+            workflowDefinitionId: 'evaluation',
+            workflowRunId: input.workflowRunId ?? 'unknown-run',
+            workflowNodeId: input.workflowNodeId ?? 'unknown-node',
+          },
+        },
+      ];
+
+  return {
+    id: input.id,
+    evaluatorId: input.evaluatorId,
+    kind: input.kind,
+    score: input.score,
+    passed: input.passed,
+    reason: input.reasons.join(' '),
+    reasons: input.reasons,
+    evidenceRefs: input.evidenceRefs,
+    metrics: input.metrics,
+    correctionHints,
+    recoverySignals,
+    ...(input.workflowRunId || input.workflowNodeId
+      ? {
+          workflow: {
+            workflowDefinitionId: 'evaluation',
+            workflowRunId: input.workflowRunId ?? 'unknown-run',
+            workflowNodeId: input.workflowNodeId ?? 'unknown-node',
+          },
+        }
+      : {}),
+    ...(input.provider ? { provider: input.provider } : {}),
+    ...(input.promptSnapshot
+      ? {
+          promptSnapshot: {
+            promptHash: input.promptSnapshot.promptHash,
+            schemaHash: input.promptSnapshot.schemaHash,
+            snapshotRef: input.promptSnapshot.snapshotRef,
+          },
+        }
+      : {}),
+  };
+}
+
+function averageEvaluatorScore(
+  results: readonly WorkflowEvaluatorResult[] | undefined,
+): number | undefined {
+  if (!results || results.length === 0) {
+    return undefined;
+  }
+  return results.reduce((sum, result) => sum + result.score, 0) / results.length;
+}
+
+function roundMetric(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 function readOmittedCapabilities(

@@ -3,6 +3,7 @@ import {
   buildWorkflowIdentity,
   createAgentWorkflowRuntime,
   createIdcWorkflowDefinition,
+  createLegacyWorkflowUsageRecorder,
   selectIdcWorkflowEntryNode,
 } from '../agent-workflow-runtime';
 import { runAgentMediaTurnForWebview } from '../media-turn-webview-runtime';
@@ -146,5 +147,90 @@ describe('AgentWorkflowRuntime', () => {
         },
       })?.workItem.workflow,
     ).toEqual(workflow);
+  });
+
+  it('records legacy workflow telemetry during the compatibility window', () => {
+    const recorder = createLegacyWorkflowUsageRecorder();
+    const telemetry = recorder.record({
+      deprecation: {
+        adapterId: 'legacy-prompt-chain-adapter',
+        owner: 'neko-agent-runtime',
+        introducedAt: '2026-05-04',
+        sunsetMilestone: 'workflow-native-v1',
+        workflowNativeReplacement: 'AgentWorkflowDefinition',
+        allowedCompatibilityWindow: {
+          startsAt: '2026-05-04',
+          expiresAt: '2026-06-04',
+        },
+        severityAfterSunset: 'failure',
+      },
+      workflowDefinitionCandidate: createIdcWorkflowDefinition(),
+      nodeMapping: [
+        { legacyStepId: 'draft', workflowNodeId: 'draft' },
+        { legacyStepId: 'legacy-review', missingMigrationReason: 'No evaluator node yet' },
+      ],
+      usedAt: 100,
+    });
+
+    expect(telemetry).toMatchObject({
+      adapterId: 'legacy-prompt-chain-adapter',
+      usageCount: 1,
+      lastUsedAt: 100,
+      unmappedStepIds: ['legacy-review'],
+      missingMigrationReasons: ['No evaluator node yet'],
+    });
+    expect(recorder.get('legacy-prompt-chain-adapter')?.usageCount).toBe(1);
+  });
+
+  it('validates legacy workflow sunset metadata and approval policy', () => {
+    const recorder = createLegacyWorkflowUsageRecorder();
+    const expired = {
+      adapterId: 'expired-adapter',
+      owner: 'neko-agent-runtime',
+      introducedAt: '2026-05-04',
+      sunsetMilestone: 'workflow-native-v1',
+      workflowNativeReplacement: 'AgentWorkflowDefinition',
+      allowedCompatibilityWindow: {
+        startsAt: '2026-05-04',
+        expiresAt: '2026-05-05',
+      },
+      severityAfterSunset: 'failure' as const,
+    };
+
+    expect(recorder.validate({})).toEqual([
+      expect.objectContaining({ code: 'missing-deprecation-metadata', severity: 'failure' }),
+    ]);
+    expect(
+      recorder.validate({ deprecation: expired }, { now: Date.parse('2026-05-06T00:00:00.000Z') }),
+    ).toEqual([expect.objectContaining({ code: 'legacy-adapter-expired' })]);
+    expect(
+      recorder.validate(
+        { deprecation: expired },
+        {
+          now: Date.parse('2026-05-06T00:00:00.000Z'),
+          compatibilityApprovalIds: ['expired-adapter'],
+        },
+      ),
+    ).toEqual([]);
+  });
+
+  it('rejects new pipeline-only workflows after the sunset gate', () => {
+    const recorder = createLegacyWorkflowUsageRecorder();
+    const deprecation = {
+      adapterId: 'pipeline-only',
+      owner: 'neko-agent-runtime',
+      introducedAt: '2026-05-04',
+      sunsetMilestone: 'workflow-native-v1',
+      workflowNativeReplacement: 'AgentWorkflowDefinition',
+      allowedCompatibilityWindow: {
+        startsAt: '2026-05-04',
+        expiresAt: '2026-06-04',
+      },
+      severityAfterSunset: 'failure' as const,
+    };
+
+    expect(
+      recorder.validate({ deprecation }, { sunsetGateEnabled: true, isNewWorkflow: true }),
+    ).toEqual([expect.objectContaining({ code: 'new-pipeline-only-workflow' })]);
   });
 });

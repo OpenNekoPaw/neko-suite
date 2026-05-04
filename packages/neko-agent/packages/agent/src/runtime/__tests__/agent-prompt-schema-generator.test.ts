@@ -61,6 +61,23 @@ describe('agent-prompt-schema-generator', () => {
       providerPromptFragments: [{ id: 'provider:card', content: 'PROVIDER CARD', priority: 68 }],
       memoryContextSummary: 'Memory summary',
       multimodalContextSummary: 'Image + timeline evidence',
+      multimodalEvidenceRefs: [
+        {
+          id: 'evidence-image',
+          source: 'tool',
+          modality: 'image',
+          summary: 'Generated style frame',
+          toolCallId: 'tool-1',
+        },
+        {
+          id: 'evidence-video',
+          source: 'engine',
+          modality: 'video',
+          summary: 'Motion score',
+          withheld: true,
+          withheldReason: 'policy',
+        },
+      ],
       toolSchemas: [toolSchema],
       provider: {
         providerId: 'mock',
@@ -78,6 +95,7 @@ describe('agent-prompt-schema-generator', () => {
       'environment:agents-md',
       'provider:provider:card',
       'environment:settings',
+      'ephemeral:multimodal-evidence-feedback',
       'ephemeral:multimodal-context',
       'ephemeral:memory',
     ]);
@@ -119,6 +137,12 @@ describe('agent-prompt-schema-generator', () => {
 
       ---
 
+      ## Feedback Evidence
+      - Included: evidence-image [image, tool/tool-1]: Generated style frame
+      - Withheld: evidence-video [video, engine]: Motion score (policy)
+
+      ---
+
       Image + timeline evidence
 
       ---
@@ -130,7 +154,7 @@ describe('agent-prompt-schema-generator', () => {
     expect(bundle.schemaBundle.structuredOutputSchemas.map((schema) => schema.purpose)).toEqual([
       'idc-plan',
     ]);
-    expect(bundle.snapshot).toEqual({ promptHash: '02020438', schemaHash: '19b94944' });
+    expect(bundle.snapshot).toEqual({ promptHash: 'af4d7556', schemaHash: '19b94944' });
   });
 
   it('projects prompt-only tool instructions for providers without native tool calls', () => {
@@ -162,7 +186,10 @@ describe('agent-prompt-schema-generator', () => {
       providerPromptFragments: [{ id: 'empty-provider', content: '' }],
       provider: { toolMode: 'none', structuredOutputMode: 'unsupported' },
       requestedSchemaPurposes: ['evaluator-output'],
-      ablation: { disableMultimodalContext: true },
+      multimodalEvidenceRefs: [
+        { id: 'evidence-1', source: 'tool', modality: 'image', summary: 'Preview' },
+      ],
+      ablation: { disableMultimodalContext: true, disableMultimodalEvidenceFeedback: true },
     });
 
     expect(bundle.schemaBundle.toolSchemas).toEqual([]);
@@ -170,6 +197,7 @@ describe('agent-prompt-schema-generator', () => {
     expect(bundle.diagnostics.map((diagnostic) => diagnostic.reason)).toEqual([
       'prompt-fragment-skipped',
       'provider-fragment-skipped',
+      'multimodal-evidence-feedback-skipped',
       'multimodal-context-skipped',
       'provider-incompatible-tool-schemas',
       'provider-incompatible-structured-output',

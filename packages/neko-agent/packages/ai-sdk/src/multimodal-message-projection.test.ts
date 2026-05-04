@@ -43,4 +43,47 @@ describe('multimodal-message-projection', () => {
       ],
     });
   });
+
+  it('projects compact feedback evidence summaries without raw payloads', () => {
+    const packet: MultimodalContextPacket = {
+      id: 'packet-1',
+      selection: [],
+      artifactRefs: [],
+      projectRefs: [],
+      perceptionInputs: [],
+      uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+      createdAt: 1,
+      metadata: {
+        evidenceRefs: [
+          {
+            id: 'evidence-image',
+            source: 'tool',
+            modality: 'image',
+            summary: 'Generated style frame',
+            artifactId: 'generated-image',
+          },
+          {
+            id: 'evidence-video',
+            source: 'engine',
+            modality: 'video',
+            summary: 'Motion score',
+            withheld: true,
+            withheldReason: 'ablation',
+          },
+        ],
+      },
+    };
+
+    expect(projectMultimodalPacketToChatMessage(packet)).toEqual({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text:
+            'Included feedback evidence: evidence-image [image] Generated style frame\n' +
+            'Withheld feedback evidence: evidence-video [video] Motion score (ablation)',
+        },
+      ],
+    });
+  });
 });
