@@ -44,6 +44,7 @@ export type {
   PluginSlashCommandInvocation,
   RegisteredPluginSlashCommand,
 } from './plugin-slash-command';
+export { normalizeSlashCommandName } from './slash-command-utils';
 export type {
   MarketplaceProjectionMessage,
   ChatWorkspaceModelStateInput,
@@ -107,6 +108,35 @@ export type {
   SubAgentWorkItemEventType,
   TaskWorkItem,
 } from './work-item';
+export {
+  backgroundTaskToWorkItem,
+  isSubAgentWorkItem,
+  isTaskWorkItem,
+  projectBackgroundTaskToWorkItem,
+  projectBackgroundTasksToWorkItems,
+  projectMediaTaskToBackgroundTask,
+  projectMediaTaskToWorkItem,
+  projectSubAgentEventToWorkItem,
+  toSubAgentWorkItemStatus,
+  type ProjectBackgroundTaskWorkItemInput,
+  type ProjectBackgroundTasksWorkItemsInput,
+  type ProjectMediaTaskWorkItemInput,
+} from './work-item-projector';
+export {
+  AUDIO_GENERATION_TOOLS,
+  FILE_TOOLS,
+  IMAGE_GENERATION_TOOLS,
+  SEARCH_TOOLS,
+  SHELL_TOOLS,
+  VIDEO_GENERATION_TOOLS,
+  getToolSummary,
+} from './tool-summary';
+export {
+  updatePlanStatusInMessages,
+  updatePlanStepInMessages,
+  type PlanMessageUpdateResult,
+  type PlanStepMessageUpdate,
+} from './plan-message-updater';
 export type {
   AgentMediaModelCategory,
   AgentMediaModelSelections,
@@ -197,7 +227,6 @@ export type {
   SetPromptModeWebviewMessage,
   SettingsDataMessage,
   SettingsUpdatedMessage,
-  SkillConfirmResponseWebviewMessage,
   SkillInjectionMessage,
   SkillsDataMessage,
   SkillsListMessage,
@@ -266,6 +295,7 @@ export {
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
   projectGenerationProgressMessage,
+  WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
 } from './webview-protocol';
 
 // Builtin slash command metadata shared across runtime + UI surfaces

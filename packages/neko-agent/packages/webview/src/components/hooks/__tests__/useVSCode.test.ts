@@ -222,6 +222,11 @@ describe('useVSCode', () => {
         expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getConfig' });
       });
 
+      it('should post getSkills', () => {
+        VSCodeMessages.getSkills();
+        expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getSkills' });
+      });
+
       it('should post searchProjectFiles', () => {
         VSCodeMessages.searchProjectFiles('*.ts', 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({

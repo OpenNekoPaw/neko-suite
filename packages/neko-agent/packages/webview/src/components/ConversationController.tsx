@@ -38,11 +38,7 @@ import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import { useConversationState, useTabManager } from '@/hooks';
-import {
-  useMessageHandler,
-  type BoundSkillConfirmRequest,
-  type BoundActiveSkillIndicator,
-} from '@/handlers';
+import { useMessageHandler, type BoundActiveSkillIndicator } from '@/handlers';
 import { ChatWorkspace } from './ChatWorkspace';
 
 // =============================================================================
@@ -158,9 +154,6 @@ export function ConversationController({
 
   // ---- Skills state ----
   const [skills, setSkills] = useState<SkillSummary[]>([]);
-  const [pendingSkillConfirm, setPendingSkillConfirm] = useState<BoundSkillConfirmRequest | null>(
-    null,
-  );
   const [activeSkillByConversation, setActiveSkillByConversation] = useState<
     Map<string, BoundActiveSkillIndicator>
   >(() => new Map());
@@ -366,7 +359,6 @@ export function ConversationController({
     conversationAgentStateRef,
     forceAgentStateUpdate,
     setSkills,
-    setPendingSkillConfirm,
     setActiveSkill,
     updateSettings,
     setPromptModeForConversation,
@@ -390,6 +382,7 @@ export function ConversationController({
     VSCodeMessages.getSettings();
     VSCodeMessages.getAgentStates();
     VSCodeMessages.getConfig();
+    VSCodeMessages.getSkills();
     VSCodeMessages.getTabState();
   }, []);
 
@@ -517,9 +510,7 @@ export function ConversationController({
           mediaModelCallCount={mediaModelCallCount}
           // Skills
           skills={skills}
-          pendingSkillConfirm={pendingSkillConfirm}
           activeSkill={activeSkill}
-          setPendingSkillConfirm={setPendingSkillConfirm}
           setActiveSkill={setActiveSkill}
           // Context chips
           contextChips={contextChips}

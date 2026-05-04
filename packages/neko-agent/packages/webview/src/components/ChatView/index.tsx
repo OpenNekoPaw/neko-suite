@@ -8,12 +8,7 @@ import { DropZone } from '@/components/ChatView/DropZone';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { AgentContextPayload } from '@neko/shared';
-import {
-  SkillConfirmBanner,
-  SkillIndicator,
-  type SkillConfirmRequest,
-  type ActiveSkillIndicator,
-} from '@/components/ChatView/SkillConfirmBanner';
+import { SkillIndicator, type ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import { AgentStateIndicatorCompact } from '@/components/ChatView/AgentStateIndicator';
 interface ChatViewProps {
   messages: Message[];
@@ -22,13 +17,8 @@ interface ChatViewProps {
   streamingMessageId: string | null;
   activeConversationId: string | null;
   isConversationSwitching?: boolean;
-  /** Pending skill confirmation request */
-  pendingSkillConfirm?: SkillConfirmRequest | null;
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
-  /** Skill confirmation handlers */
-  onConfirmSkill?: () => void;
-  onDeclineSkill?: () => void;
   onClearActiveSkill?: () => void;
   // Unified work items
   workItems?: AgentWorkItem[];
@@ -68,10 +58,7 @@ export function ChatView({
   streamingMessageId,
   activeConversationId,
   isConversationSwitching = false,
-  pendingSkillConfirm,
   activeSkill,
-  onConfirmSkill,
-  onDeclineSkill,
   onClearActiveSkill,
   workItems,
   pluginsAvailable,
@@ -108,15 +95,6 @@ export function ChatView({
   return (
     <DropZone onFilesDropped={handleFilesDropped} disabled={isThinking}>
       <div className="flex-1 flex flex-col overflow-hidden relative h-full">
-        {/* Skill Confirmation Banner */}
-        {pendingSkillConfirm && onConfirmSkill && onDeclineSkill && (
-          <SkillConfirmBanner
-            request={pendingSkillConfirm}
-            onConfirm={onConfirmSkill}
-            onDecline={onDeclineSkill}
-          />
-        )}
-
         {/* Active Skill Indicator */}
         {activeSkill && onClearActiveSkill && (
           <SkillIndicator skill={activeSkill} onClear={onClearActiveSkill} />

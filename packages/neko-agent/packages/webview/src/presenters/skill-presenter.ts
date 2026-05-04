@@ -1,5 +1,5 @@
 import type { SkillSummary } from '@/components/ChatView/InputArea/types';
-import type { BoundActiveSkillIndicator, BoundSkillConfirmRequest } from '@/handlers/types';
+import type { BoundActiveSkillIndicator } from '@/handlers/types';
 
 export interface ProtocolSkillSummaryForUi {
   name: string;
@@ -10,9 +10,8 @@ export interface ProtocolSkillSummaryForUi {
   enabled: boolean;
 }
 
-export interface SkillInjectionProjection<TPending extends { conversationId: string } | null> {
+export interface SkillInjectionProjection {
   activeSkill: BoundActiveSkillIndicator;
-  pendingSkillConfirm: TPending | null;
 }
 
 export function projectSkillsList<TSkill>(skills: readonly TSkill[] | undefined): TSkill[] {
@@ -38,24 +37,17 @@ export function projectInputSkillSummary(skill: ProtocolSkillSummaryForUi): Skil
   };
 }
 
-export function projectSkillInjectionState<
-  TPending extends BoundSkillConfirmRequest | null,
->(input: {
+export function projectSkillInjectionState(input: {
   conversationId: string;
   skillName: string;
   allowedTools?: readonly string[];
-  pendingSkillConfirm: TPending;
-}): SkillInjectionProjection<TPending> {
+}): SkillInjectionProjection {
   return {
     activeSkill: {
       skillName: input.skillName,
       allowedTools: input.allowedTools ? [...input.allowedTools] : undefined,
       conversationId: input.conversationId,
     },
-    pendingSkillConfirm:
-      input.pendingSkillConfirm?.conversationId === input.conversationId
-        ? null
-        : input.pendingSkillConfirm,
   };
 }
 

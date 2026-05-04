@@ -24,15 +24,7 @@ import type {
   MentionItem,
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
-import type {
-  SkillConfirmRequest,
-  ActiveSkillIndicator,
-} from '@/components/ChatView/SkillConfirmBanner';
-
-/** Skill confirm request bound to a specific conversation */
-export interface BoundSkillConfirmRequest extends SkillConfirmRequest {
-  conversationId: string;
-}
+import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 
 /** Active skill indicator bound to a specific conversation */
 export interface BoundActiveSkillIndicator extends ActiveSkillIndicator {
@@ -100,10 +92,9 @@ export interface AgentStateContext {
   forceAgentStateUpdate: () => void;
 }
 
-/** Skill management: available skills, confirmation, active indicator */
+/** Skill management: available skills and active indicator */
 export interface SkillContext {
   setSkills: React.Dispatch<React.SetStateAction<SkillSummary[]>>;
-  setPendingSkillConfirm: React.Dispatch<React.SetStateAction<BoundSkillConfirmRequest | null>>;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
 }
 

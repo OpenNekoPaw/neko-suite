@@ -1,10 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import {
+  CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES,
   handleChatWebviewMessage,
   type ChatWebviewMessageRouterDeps,
 } from '../chatWebviewMessageRouter';
-import type { WebviewToExtensionMessage } from '@neko-agent/types';
+import {
+  WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
+  type WebviewToExtensionMessage,
+} from '@neko-agent/types';
+import { CONFIG_BRIDGE_MESSAGE_TYPES } from '../../services/configBridge';
+
+type RoutedWebviewMessageType =
+  | (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number]
+  | (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number];
+type UnroutedWebviewMessageType = Exclude<
+  WebviewToExtensionMessage['type'],
+  RoutedWebviewMessageType
+>;
+type DuplicateBridgeMessageType = Extract<
+  (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number],
+  (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number]
+>;
+type AssertNever<T extends never> = T;
+type _AllWebviewMessagesRouted = AssertNever<UnroutedWebviewMessageType>;
+type _NoBridgeMessageOverlap = AssertNever<DuplicateBridgeMessageType>;
 
 function createDeps(): ChatWebviewMessageRouterDeps {
   return {
@@ -25,6 +45,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       sendSkillsList: vi.fn(),
       handleExecuteSkill: vi.fn(),
       handleCancelSkill: vi.fn(),
+      clearActiveSkill: vi.fn(),
     } as any,
     fileOperationHandler: {
       handleOpenFile: vi.fn(),
@@ -91,6 +112,19 @@ function createDeps(): ChatWebviewMessageRouterDeps {
 }
 
 describe('handleChatWebviewMessage', () => {
+  it('keeps every webview-to-extension message assigned to exactly one bridge', () => {
+    const chatTypes = new Set<string>(CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES);
+    const configTypes = new Set<string>(CONFIG_BRIDGE_MESSAGE_TYPES);
+    const duplicated = [...chatTypes].filter((type) => configTypes.has(type));
+    const covered = new Set([...chatTypes, ...configTypes]);
+    const missing = WEBVIEW_TO_EXTENSION_MESSAGE_TYPES.filter((type) => !covered.has(type));
+
+    expect(duplicated).toEqual([]);
+    expect(missing).toEqual([]);
+    expect(configTypes.has('getSkills')).toBe(false);
+    expect(chatTypes.has('getSkills')).toBe(true);
+  });
+
   it('routes sendMessage to the message handler with explicit conversation state', () => {
     const deps = createDeps();
 
@@ -200,5 +234,21 @@ describe('handleChatWebviewMessage', () => {
       type: 'globalError',
       message: 'Cannot invoke plugin slash command without an explicit conversationId.',
     });
+  });
+
+  it('routes getSkills to the chat skill handler', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage({ type: 'getSkills' }, deps);
+
+    expect(deps.skillHandler.sendSkillsList).toHaveBeenCalledWith(deps.webview);
+  });
+
+  it('routes clearActiveSkill with explicit conversation context', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage({ type: 'clearActiveSkill', conversationId: 'conv-1' }, deps);
+
+    expect(deps.skillHandler.clearActiveSkill).toHaveBeenCalledWith('conv-1');
   });
 });

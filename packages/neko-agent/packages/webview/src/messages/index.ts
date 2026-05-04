@@ -161,6 +161,11 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'getConfig' });
   },
 
+  /** Request skills used by the input slash-command catalog */
+  getSkills: () => {
+    postWebviewMessage({ type: 'getSkills' });
+  },
+
   /** Open raw user config in VSCode */
   openUserConfigFile: () => {
     postWebviewMessage({ type: 'openUserConfigFile' });
@@ -182,16 +187,6 @@ export const VSCodeMessages = {
    */
   executeSkill: (skillId: string, conversationId: string, input: Record<string, unknown> = {}) => {
     postWebviewMessage({ type: 'executeSkill', skillId, input, conversationId });
-  },
-
-  /**
-   * Respond to a skill confirmation request
-   * @param skillName - The skill name
-   * @param confirmed - Whether the user confirmed
-   * @param conversationId - The conversation this confirmation belongs to
-   */
-  confirmSkill: (skillName: string, confirmed: boolean, conversationId: string) => {
-    postWebviewMessage({ type: 'skillConfirmResponse', skillName, confirmed, conversationId });
   },
 
   /** Clear active skill for the current conversation */

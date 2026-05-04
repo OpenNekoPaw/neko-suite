@@ -32,6 +32,13 @@ export function tryHandleSkillContextRoute(
       return true;
     }
 
+    case 'clearActiveSkill': {
+      const conversationId = resolveRequiredConversationId(webview, message, 'clear active skill');
+      if (!conversationId) return true;
+      deps.skillHandler.clearActiveSkill(conversationId);
+      return true;
+    }
+
     case 'invokeSlashCommand': {
       const conversationId = resolveRequiredConversationId(
         webview,

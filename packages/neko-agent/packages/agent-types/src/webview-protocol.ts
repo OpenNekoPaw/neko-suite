@@ -297,13 +297,6 @@ export interface CancelSkillWebviewMessage {
   conversationId: string;
 }
 
-export interface SkillConfirmResponseWebviewMessage {
-  type: 'skillConfirmResponse';
-  skillName: string;
-  confirmed: boolean;
-  conversationId: string;
-}
-
 export interface InvokeSlashCommandWebviewMessage {
   type: 'invokeSlashCommand';
   command: string;
@@ -371,7 +364,6 @@ export type WebviewToExtensionMessage =
   | DownloadSvgWebviewMessage
   | ExecuteSkillWebviewMessage
   | CancelSkillWebviewMessage
-  | SkillConfirmResponseWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
   | SsoLoginWebviewMessage
@@ -984,6 +976,45 @@ const TASK_ACTION_MESSAGE_TYPES: readonly TaskActionWebviewMessage['type'][] = [
   'removeTask',
   'viewTaskResult',
 ];
+export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
+  'sendMessage',
+  'searchProjectFiles',
+  'confirmTool',
+  ...CONVERSATION_ONLY_MESSAGE_TYPES,
+  ...EMPTY_MESSAGE_TYPES,
+  ...PLAN_ACTION_MESSAGE_TYPES,
+  ...PLAN_STEP_ACTION_MESSAGE_TYPES,
+  'updateSettings',
+  'updateTabState',
+  'addModel',
+  'removeModel',
+  'toggleProvider',
+  'toggleModel',
+  'testMCPServer',
+  ...TASK_ACTION_MESSAGE_TYPES,
+  'openFile',
+  'revealFile',
+  'openPromptConfig',
+  'openAgentsFile',
+  'openSettingsFile',
+  'openSkillFile',
+  'openCommandFile',
+  'openUrl',
+  'setPromptMode',
+  'sendToPlugin',
+  'dnd:start',
+  'mermaidError',
+  'downloadSvg',
+  'executeSkill',
+  'cancelSkill',
+  'invokeSlashCommand',
+  'invokePluginSlashCommand',
+  'ssoLogin',
+  'market:search',
+  'market:install',
+  'market:uninstall',
+] as const satisfies readonly WebviewToExtensionMessage['type'][];
+
 const SOURCE_TYPES: ReadonlyArray<OpenPromptConfigWebviewMessage['source']> = [
   'personal',
   'project',
@@ -1352,8 +1383,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseExecuteSkillMessage(raw);
     case 'cancelSkill':
       return parseCancelSkillMessage(raw);
-    case 'skillConfirmResponse':
-      return parseSkillConfirmResponseMessage(raw);
     case 'invokeSlashCommand':
       return parseInvokeSlashCommandMessage(raw);
     case 'invokePluginSlashCommand':
@@ -1748,15 +1777,6 @@ function parseCancelSkillMessage(raw: Record<string, unknown>): CancelSkillWebvi
   const skillId = requiredString(raw.skillId);
   const conversationId = requiredString(raw.conversationId);
   return skillId && conversationId ? { type: 'cancelSkill', skillId, conversationId } : null;
-}
-
-function parseSkillConfirmResponseMessage(
-  raw: Record<string, unknown>,
-): SkillConfirmResponseWebviewMessage | null {
-  const skillName = requiredString(raw.skillName);
-  const conversationId = requiredString(raw.conversationId);
-  if (!skillName || !conversationId || typeof raw.confirmed !== 'boolean') return null;
-  return { type: 'skillConfirmResponse', skillName, confirmed: raw.confirmed, conversationId };
 }
 
 function parseInvokeSlashCommandMessage(

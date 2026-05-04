@@ -29,7 +29,7 @@ import type {
   MentionItem,
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
-import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from './types';
+import type { BoundActiveSkillIndicator } from './types';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ExtensionToWebviewMessage } from './messages';
 
@@ -86,7 +86,6 @@ export interface UseMessageHandlerProps {
 
   // State setters - Skills
   setSkills: React.Dispatch<React.SetStateAction<SkillSummary[]>>;
-  setPendingSkillConfirm: React.Dispatch<React.SetStateAction<BoundSkillConfirmRequest | null>>;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
 
   // State setters - SSO/Onboarding
@@ -141,7 +140,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     conversationAgentStateRef,
     forceAgentStateUpdate,
     setSkills,
-    setPendingSkillConfirm,
     setActiveSkill,
     updateSettings,
     setPromptModeForConversation,
@@ -210,7 +208,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationAgentStateRef,
       forceAgentStateUpdate,
       setSkills,
-      setPendingSkillConfirm,
       setActiveSkill,
       updateSettings,
       setPromptModeForConversation,
@@ -251,7 +248,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationAgentStateRef,
       forceAgentStateUpdate,
       setSkills,
-      setPendingSkillConfirm,
       setActiveSkill,
       updateSettings,
       setPromptModeForConversation,

@@ -60,6 +60,23 @@ export type { ConfigStateWithStatus } from './types';
 
 const logger = getLogger('ConfigBridge');
 
+export const CONFIG_BRIDGE_MESSAGE_TYPES = [
+  'getConfig',
+  'getConfigWithStatus',
+  'getHooks',
+  'getConnectionStates',
+  'getToolSkills',
+  'openUserConfigFile',
+  'ssoLogin',
+  'ssoLogout',
+  'market:search',
+  'market:install',
+  'market:uninstall',
+  'market:listInstalled',
+  'market:checkUpdates',
+  'market:getFeatured',
+] as const satisfies readonly WebviewToExtensionMessage['type'][];
+
 // ---------------------------------------------------------------------------
 // neko-auth inter-extension helper
 // ---------------------------------------------------------------------------
@@ -170,10 +187,6 @@ export class ConfigBridge implements vscode.Disposable {
 
         case 'getConfigWithStatus':
           await this.postConfigBridgeQuery({ type: 'getConfigWithStatus' }, postMessage);
-          return true;
-
-        case 'getSkills':
-          await this.postConfigBridgeQuery({ type: 'getSkills' }, postMessage);
           return true;
 
         case 'getHooks':

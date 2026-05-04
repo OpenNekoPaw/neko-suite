@@ -26,7 +26,7 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
-import type { BoundSkillConfirmRequest, BoundActiveSkillIndicator } from '@/handlers';
+import type { BoundActiveSkillIndicator } from '@/handlers';
 import {
   useUIState,
   useConversationSession,
@@ -87,9 +87,7 @@ export interface ChatWorkspaceProps {
   mediaModelCallCount: number;
   // Skills
   skills: SkillSummary[];
-  pendingSkillConfirm: BoundSkillConfirmRequest | null;
   activeSkill: BoundActiveSkillIndicator | null;
-  setPendingSkillConfirm: React.Dispatch<React.SetStateAction<BoundSkillConfirmRequest | null>>;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
   // Context chips
   contextChips: AgentContextPayload[];
@@ -148,9 +146,7 @@ export function ChatWorkspace({
   isCompressing,
   mediaModelCallCount,
   skills,
-  pendingSkillConfirm,
   activeSkill,
-  setPendingSkillConfirm,
   setActiveSkill,
   contextChips,
   ambientNodes,
@@ -294,9 +290,7 @@ export function ChatWorkspace({
 
   const skillActions = useSkillActions({
     activeConversationId,
-    pendingSkillConfirm,
     activeSkill,
-    setPendingSkillConfirm,
     setActiveSkill,
   });
 
@@ -419,12 +413,7 @@ export function ChatWorkspace({
         streamingMessageId={streamingMessageId}
         activeConversationId={activeConversationId}
         isConversationSwitching={isConversationSwitching}
-        pendingSkillConfirm={
-          pendingSkillConfirm?.conversationId === activeConversationId ? pendingSkillConfirm : null
-        }
         activeSkill={activeSkill?.conversationId === activeConversationId ? activeSkill : null}
-        onConfirmSkill={skillActions.handleConfirmSkill}
-        onDeclineSkill={skillActions.handleDeclineSkill}
         onClearActiveSkill={skillActions.handleClearActiveSkill}
         workItems={workItems}
         pluginsAvailable={pluginsAvailable}

@@ -39,18 +39,8 @@ const handleSkillInjection: MessageHandler<'skillInjection'> = (
     conversationId,
     skillName: message.skillName,
     allowedTools: message.allowedTools,
-    pendingSkillConfirm: null,
   });
   context.setActiveSkill(activeSkillProjection.activeSkill);
-
-  context.setPendingSkillConfirm((prev) => {
-    return projectSkillInjectionState({
-      conversationId,
-      skillName: message.skillName,
-      allowedTools: message.allowedTools,
-      pendingSkillConfirm: prev,
-    }).pendingSkillConfirm;
-  });
 };
 
 export const skillHandlers: HandlerRegistration[] = [
