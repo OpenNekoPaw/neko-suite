@@ -37,13 +37,10 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       sendTasks: vi.fn(),
       handleCancelTask: vi.fn(),
       handleRetryTask: vi.fn(),
-      handleRemoveTask: vi.fn(),
       handleViewTaskResult: vi.fn(),
-      handleClearCompletedTasks: vi.fn(),
     } as any,
     skillHandler: {
       sendSkillsList: vi.fn(),
-      handleExecuteSkill: vi.fn(),
       clearActiveSkill: vi.fn(),
     } as any,
     fileOperationHandler: {

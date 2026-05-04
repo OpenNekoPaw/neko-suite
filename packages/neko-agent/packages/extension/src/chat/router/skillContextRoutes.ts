@@ -13,18 +13,6 @@ export function tryHandleSkillContextRoute(
       deps.skillHandler.sendSkillsList(webview);
       return true;
 
-    case 'executeSkill': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'execute skill');
-      if (!conversationId) return true;
-      deps.skillHandler.handleExecuteSkill(
-        webview,
-        message.skillId,
-        conversationId,
-        message.input ?? {},
-      );
-      return true;
-    }
-
     case 'clearActiveSkill': {
       const conversationId = resolveRequiredConversationId(webview, message, 'clear active skill');
       if (!conversationId) return true;

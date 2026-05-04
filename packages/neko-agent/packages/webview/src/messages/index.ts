@@ -136,24 +136,11 @@ export const VSCodeMessages = {
   },
 
   /**
-   * Remove a task from the list
-   * @param taskId - The task ID to remove
-   */
-  removeTask: (taskId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'removeTask', taskId, conversationId });
-  },
-
-  /**
    * View a task's result
    * @param taskId - The task ID
    */
   viewTaskResult: (taskId: string, conversationId: string) => {
     postWebviewMessage({ type: 'viewTaskResult', taskId, conversationId });
-  },
-
-  /** Clear all completed tasks */
-  clearCompletedTasks: (conversationId: string) => {
-    postWebviewMessage({ type: 'clearCompletedTasks', conversationId });
   },
 
   /** Request full configuration from extension */
@@ -179,15 +166,6 @@ export const VSCodeMessages = {
   // ==========================================================================
   // Skill Operations
   // ==========================================================================
-
-  /**
-   * Execute a skill by ID
-   * @param skillId - The skill ID to execute
-   * @param input - Input parameters for the skill
-   */
-  executeSkill: (skillId: string, conversationId: string, input: Record<string, unknown> = {}) => {
-    postWebviewMessage({ type: 'executeSkill', skillId, input, conversationId });
-  },
 
   /** Clear active skill for the current conversation */
   clearActiveSkill: (conversationId: string) => {

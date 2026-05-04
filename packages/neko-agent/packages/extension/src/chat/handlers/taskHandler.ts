@@ -11,8 +11,6 @@
 import * as vscode from 'vscode';
 import {
   runCancelTaskRuntime,
-  runClearCompletedTasksRuntime,
-  runRemoveTaskRuntime,
   runRetryTaskRuntime,
   runSendTasksRuntime,
   runViewTaskResultRuntime,
@@ -99,23 +97,6 @@ export class TaskHandler {
   }
 
   /**
-   * Handle task removal
-   */
-  async handleRemoveTask(
-    webview: vscode.Webview,
-    taskId: string,
-    conversationId: string,
-  ): Promise<void> {
-    await this._runTaskRuntime(() =>
-      runRemoveTaskRuntime(
-        { taskId, conversationId },
-        this._createTaskRuntimeDeps(),
-        this._createTaskRuntimeEffects(webview),
-      ),
-    );
-  }
-
-  /**
    * Handle viewing task result
    */
   async handleViewTaskResult(taskId: string, conversationId: string): Promise<void> {
@@ -124,19 +105,6 @@ export class TaskHandler {
         { taskId, conversationId },
         this._createTaskRuntimeDeps(),
         this._createTaskRuntimeEffects(),
-      ),
-    );
-  }
-
-  /**
-   * Handle clearing completed tasks
-   */
-  async handleClearCompletedTasks(webview: vscode.Webview, conversationId: string): Promise<void> {
-    await this._runTaskRuntime(() =>
-      runClearCompletedTasksRuntime(
-        { conversationId },
-        this._createTaskRuntimeDeps(),
-        this._createTaskRuntimeEffects(webview),
       ),
     );
   }

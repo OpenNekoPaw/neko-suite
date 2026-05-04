@@ -30,24 +30,10 @@ export function tryHandleTaskRoute(
       return true;
     }
 
-    case 'removeTask': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'removeTask');
-      if (!conversationId) return true;
-      deps.taskHandler.handleRemoveTask(webview, message.taskId, conversationId);
-      return true;
-    }
-
     case 'viewTaskResult': {
       const conversationId = resolveRequiredConversationId(webview, message, 'viewTaskResult');
       if (!conversationId) return true;
       deps.taskHandler.handleViewTaskResult(message.taskId, conversationId);
-      return true;
-    }
-
-    case 'clearCompletedTasks': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'clearCompletedTasks');
-      if (!conversationId) return true;
-      deps.taskHandler.handleClearCompletedTasks(webview, conversationId);
       return true;
     }
 

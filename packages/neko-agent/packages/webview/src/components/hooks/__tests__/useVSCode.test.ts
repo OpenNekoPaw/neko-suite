@@ -180,28 +180,11 @@ describe('useVSCode', () => {
         });
       });
 
-      it('should post removeTask', () => {
-        VSCodeMessages.removeTask('task-123', 'conv-1');
-        expect(mockPostMessage).toHaveBeenCalledWith({
-          type: 'removeTask',
-          taskId: 'task-123',
-          conversationId: 'conv-1',
-        });
-      });
-
       it('should post viewTaskResult', () => {
         VSCodeMessages.viewTaskResult('task-123', 'conv-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'viewTaskResult',
           taskId: 'task-123',
-          conversationId: 'conv-1',
-        });
-      });
-
-      it('should post clearCompletedTasks', () => {
-        VSCodeMessages.clearCompletedTasks('conv-1');
-        expect(mockPostMessage).toHaveBeenCalledWith({
-          type: 'clearCompletedTasks',
           conversationId: 'conv-1',
         });
       });

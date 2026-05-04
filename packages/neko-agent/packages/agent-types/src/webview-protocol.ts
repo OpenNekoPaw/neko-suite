@@ -90,7 +90,6 @@ export interface ConversationOnlyWebviewMessage {
     | 'cancelMessage'
     | 'stopAgent'
     | 'getTasks'
-    | 'clearCompletedTasks'
     | 'getContextTokenCount'
     | 'compressContext'
     | 'clearActiveSkill'
@@ -142,7 +141,7 @@ export interface UpdateTabStateWebviewMessage {
 }
 
 export interface TaskActionWebviewMessage {
-  type: 'cancelTask' | 'retryTask' | 'removeTask' | 'viewTaskResult';
+  type: 'cancelTask' | 'retryTask' | 'viewTaskResult';
   taskId: string;
   conversationId: string;
 }
@@ -195,13 +194,6 @@ export interface DownloadSvgWebviewMessage {
   filename: string;
 }
 
-export interface ExecuteSkillWebviewMessage {
-  type: 'executeSkill';
-  skillId: string;
-  conversationId: string;
-  input?: Record<string, unknown>;
-}
-
 export interface InvokeSlashCommandWebviewMessage {
   type: 'invokeSlashCommand';
   command: string;
@@ -241,7 +233,6 @@ export type WebviewToExtensionMessage =
   | DragStartWebviewMessage
   | MermaidErrorWebviewMessage
   | DownloadSvgWebviewMessage
-  | ExecuteSkillWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
   | SsoLoginWebviewMessage;
@@ -758,7 +749,6 @@ const CONVERSATION_ONLY_MESSAGE_TYPES: readonly ConversationOnlyWebviewMessage['
   'cancelMessage',
   'stopAgent',
   'getTasks',
-  'clearCompletedTasks',
   'getContextTokenCount',
   'compressContext',
   'clearActiveSkill',
@@ -791,7 +781,6 @@ const PLAN_STEP_ACTION_MESSAGE_TYPES: readonly PlanStepActionWebviewMessage['typ
 const TASK_ACTION_MESSAGE_TYPES: readonly TaskActionWebviewMessage['type'][] = [
   'cancelTask',
   'retryTask',
-  'removeTask',
   'viewTaskResult',
 ];
 export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
@@ -813,7 +802,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'dnd:start',
   'mermaidError',
   'downloadSvg',
-  'executeSkill',
   'invokeSlashCommand',
   'invokePluginSlashCommand',
   'ssoLogin',
@@ -1149,8 +1137,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseMermaidErrorMessage(raw);
     case 'downloadSvg':
       return parseDownloadSvgMessage(raw);
-    case 'executeSkill':
-      return parseExecuteSkillMessage(raw);
     case 'invokeSlashCommand':
       return parseInvokeSlashCommandMessage(raw);
     case 'invokePluginSlashCommand':
@@ -1420,19 +1406,6 @@ function parseDownloadSvgMessage(raw: Record<string, unknown>): DownloadSvgWebvi
   const filename = requiredString(raw.filename);
   if (!filename || typeof raw.svg !== 'string') return null;
   return { type: 'downloadSvg', svg: raw.svg, filename };
-}
-
-function parseExecuteSkillMessage(raw: Record<string, unknown>): ExecuteSkillWebviewMessage | null {
-  const skillId = requiredString(raw.skillId);
-  const conversationId = requiredString(raw.conversationId);
-  const input = raw.input === undefined ? undefined : isRecord(raw.input) ? raw.input : null;
-  if (!skillId || !conversationId || input === null) return null;
-  return {
-    type: 'executeSkill',
-    skillId,
-    conversationId,
-    ...(input !== undefined ? { input } : {}),
-  };
 }
 
 function parseInvokeSlashCommandMessage(

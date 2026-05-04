@@ -227,72 +227,16 @@ describe('SkillHandler', () => {
     });
   });
 
-  describe('handleExecuteSkill', () => {
-    it('should return error when no skillService', async () => {
-      handler = new SkillHandler();
-      const result = await handler.handleExecuteSkill(webview as any, 'commit', 'conv-1');
-
-      expect(result).toEqual({ applied: false, error: 'SkillService not initialized' });
-    });
-
-    it('should return error for unknown skill', async () => {
-      skillService.registry.getSkill.mockReturnValue(null);
-      handler = new SkillHandler({ skillService: skillService as any });
-
-      const result = await handler.handleExecuteSkill(webview as any, 'unknown', 'conv-1');
-
-      expect(result).toEqual({ applied: false, error: 'Unknown skill: unknown' });
-    });
-
-    it('should apply skill, set active state, and send injection', async () => {
-      const mockSkill = { name: 'review', description: 'Review code', toolDefinitions: [] };
-      skillService.registry.getSkill.mockReturnValue(mockSkill);
-
-      handler = new SkillHandler({ skillService: skillService as any });
-      const result = await handler.handleExecuteSkill(webview as any, 'review', 'conv-1', {
-        pr: '123',
-      });
-
-      expect(skillService.apply).toHaveBeenCalledWith(mockSkill);
-      expect(result).toEqual(expect.objectContaining({ applied: true }));
-      expect(handler.getActiveSkill('conv-1')).toBeDefined();
-      expect(handler.getActiveSkill('conv-1')!.skill.name).toBe('review');
-    });
-
-    it('should isolate executed skills by active conversation', async () => {
-      const reviewSkill = { name: 'review', description: 'Review code', toolDefinitions: [] };
-      const commitSkill = { name: 'commit', description: 'Create commit', toolDefinitions: [] };
-      skillService.registry.getSkill.mockImplementation((skillId: string) =>
-        skillId === 'review' ? reviewSkill : commitSkill,
-      );
-      skillService.apply.mockImplementation((skill: { name: string }) => ({
-        name: skill.name,
-        systemPrompt: `Prompt for ${skill.name}`,
-        allowedTools: [],
-      }));
-
-      handler = new SkillHandler({
-        skillService: skillService as any,
-      });
-
-      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
-      await handler.handleExecuteSkill(webview as any, 'commit', 'conv-2');
-
-      expect(handler.getActiveSkill('conv-1')?.skill).toBe(reviewSkill);
-      expect(handler.getActiveSkill('conv-2')?.skill).toBe(commitSkill);
-    });
-  });
-
   describe('clearActiveSkill', () => {
     it('should clear active skill and delegate to agentManager', async () => {
-      const mockSkill = { name: 'review', description: 'Review code' };
-      skillService.registry.getSkill.mockReturnValue(mockSkill);
+      const mockSkill = { name: 'review', description: 'Review code', command: 'review' };
+      skillService.registry.getSkillByCommand.mockReturnValue(mockSkill);
       const mockAgentManager = { clearActiveSkill: vi.fn(), applySkillInjection: vi.fn() } as any;
       handler = new SkillHandler({
         skillService: skillService as any,
         agentManager: mockAgentManager,
       });
-      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
+      await handler.handleSlashCommand(webview as any, 'review', 'conv-1');
 
       handler.clearActiveSkill('conv-1');
 

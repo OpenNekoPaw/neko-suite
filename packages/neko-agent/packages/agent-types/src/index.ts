@@ -155,7 +155,6 @@ export type {
   DragStartWebviewMessage,
   EmptyWebviewMessage,
   ErrorMessage,
-  ExecuteSkillWebviewMessage,
   ExtensionToWebviewMessage,
   ExternalMessage,
   FilePathWebviewMessage,

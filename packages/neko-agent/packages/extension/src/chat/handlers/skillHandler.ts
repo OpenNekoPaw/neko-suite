@@ -144,33 +144,6 @@ export class SkillHandler {
   }
 
   // ===========================================================================
-  // Skill Execution (for workflow-based skills)
-  // ===========================================================================
-
-  /**
-   * Handle skill execution request from webview
-   * Used for skills that require input before execution
-   *
-   * @param webview Webview to send messages to
-   * @param skillId Skill ID to execute
-   * @param conversationId Conversation that owns the skill state
-   * @param input Input data for the skill
-   */
-  async handleExecuteSkill(
-    webview: vscode.Webview,
-    skillId: string,
-    conversationId: string,
-    input: Record<string, unknown> = {},
-  ): Promise<SkillApplicationResult | null> {
-    void input;
-    const result = await this._runtime.executeSkill({ skillId, conversationId });
-    if (result?.applied) {
-      this._sendSkillInjection(webview, result, conversationId);
-    }
-    return result;
-  }
-
-  // ===========================================================================
   // Private Helpers
   // ===========================================================================
 

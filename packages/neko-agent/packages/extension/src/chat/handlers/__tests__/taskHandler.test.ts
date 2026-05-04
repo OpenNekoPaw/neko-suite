@@ -221,32 +221,6 @@ describe('TaskHandler', () => {
     });
   });
 
-  describe('handleRemoveTask', () => {
-    it('should delete from platform and notify webview', async () => {
-      taskManager.get.mockResolvedValue({
-        id: 'task-1',
-        input: { payload: { conversationId } },
-      });
-      handler = new TaskHandler({ platform: platform as any, taskManager: taskManager as any });
-      await handler.handleRemoveTask(webview as any, 'task-1', conversationId);
-
-      expect(platform.media.deleteTask).toHaveBeenCalledWith('task-1');
-      expect(taskManager.delete).toHaveBeenCalledWith('task-1');
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'taskRemoved',
-        conversationId,
-        taskId: 'task-1',
-      });
-    });
-
-    it('should ignore removal when task storage is unavailable', async () => {
-      handler = new TaskHandler({});
-      await handler.handleRemoveTask(webview as any, 'task-1', conversationId);
-
-      expect(webview.postMessage).not.toHaveBeenCalled();
-    });
-  });
-
   describe('handleRetryTask', () => {
     it('should retry failed task-manager tasks and refresh list', async () => {
       const taskInput = { type: 'image_generation', payload: { conversationId } };
@@ -301,39 +275,6 @@ describe('TaskHandler', () => {
           }),
         }),
       );
-    });
-  });
-
-  describe('handleClearCompletedTasks', () => {
-    it('should send empty tasks when taskManager is unavailable', async () => {
-      handler = new TaskHandler({});
-      await handler.handleClearCompletedTasks(webview as any, conversationId);
-
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'tasksUpdated',
-        conversationId,
-        workItems: [],
-      });
-    });
-
-    it('should delete completed, failed, and cancelled tasks', async () => {
-      const completedTask = { id: 'c1', input: { payload: { conversationId } } };
-      const failedTask = { id: 'f1', input: { payload: { conversationId } } };
-      const cancelledTask = { id: 'x1', input: { payload: { conversationId } } };
-
-      taskManager.list
-        .mockResolvedValueOnce([completedTask]) // completed
-        .mockResolvedValueOnce([failedTask]) // failed
-        .mockResolvedValueOnce([cancelledTask]) // cancelled
-        .mockResolvedValue([]); // refresh
-
-      handler = new TaskHandler({ taskManager: taskManager as any, platform: platform as any });
-      await handler.handleClearCompletedTasks(webview as any, conversationId);
-
-      expect(taskManager.delete).toHaveBeenCalledWith('c1');
-      expect(taskManager.delete).toHaveBeenCalledWith('f1');
-      expect(taskManager.delete).toHaveBeenCalledWith('x1');
-      expect(platform.media.deleteTask).toHaveBeenCalledTimes(3);
     });
   });
 });
