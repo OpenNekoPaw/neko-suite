@@ -115,11 +115,7 @@ export interface EmptyWebviewMessage {
     | 'getAgentStates'
     | 'getSettings'
     | 'getConfig'
-    | 'getConfigWithStatus'
     | 'getSkills'
-    | 'getHooks'
-    | 'getConnectionStates'
-    | 'getToolSkills'
     | 'openUserConfigFile'
     | 'ssoLogout'
     | 'openConfigFile'
@@ -855,11 +851,7 @@ const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'getAgentStates',
   'getSettings',
   'getConfig',
-  'getConfigWithStatus',
   'getSkills',
-  'getHooks',
-  'getConnectionStates',
-  'getToolSkills',
   'openUserConfigFile',
   'ssoLogout',
   'openConfigFile',

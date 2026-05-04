@@ -62,10 +62,6 @@ const logger = getLogger('ConfigBridge');
 
 export const CONFIG_BRIDGE_MESSAGE_TYPES = [
   'getConfig',
-  'getConfigWithStatus',
-  'getHooks',
-  'getConnectionStates',
-  'getToolSkills',
   'openUserConfigFile',
   'ssoLogin',
   'ssoLogout',
@@ -183,22 +179,6 @@ export class ConfigBridge implements vscode.Disposable {
       switch (message.type) {
         case 'getConfig':
           await this.postConfigBridgeQuery({ type: 'getConfig' }, postMessage);
-          return true;
-
-        case 'getConfigWithStatus':
-          await this.postConfigBridgeQuery({ type: 'getConfigWithStatus' }, postMessage);
-          return true;
-
-        case 'getHooks':
-          await this.postConfigBridgeQuery({ type: 'getHooks' }, postMessage);
-          return true;
-
-        case 'getConnectionStates':
-          await this.postConfigBridgeQuery({ type: 'getConnectionStates' }, postMessage);
-          return true;
-
-        case 'getToolSkills':
-          await this.postConfigBridgeQuery({ type: 'getToolSkills' }, postMessage);
           return true;
 
         case 'openUserConfigFile':
