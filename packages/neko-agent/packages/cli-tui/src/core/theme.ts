@@ -34,20 +34,20 @@ export const theme = {
   toolError: (s: string) => chalk.red(s),
 } as const;
 
-export const TODO_ICONS = {
+export const CLI_TODO_ICONS = {
   pending: theme.todoPending('[ ]'),
   inProgress: theme.todoInProgress('[•]'),
   completed: theme.todoCompleted('[✓]'),
   failed: theme.todoFailed('[✗]'),
 } as const;
 
-export const TOOL_ICONS = {
+export const CLI_TOOL_ICONS = {
   pending: theme.toolPending('◐'),
   success: theme.toolSuccess('✓'),
   error: theme.toolError('✗'),
 } as const;
 
-export const BRAILLE_SPINNER = {
+export const CLI_BRAILLE_SPINNER = {
   frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
   interval: 80,
 };

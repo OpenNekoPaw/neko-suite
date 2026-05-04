@@ -6,7 +6,8 @@
  */
 
 import { computeDiff, computeDiffStats } from '@neko/shared';
-import { theme, TODO_ICONS, TOOL_ICONS } from './theme';
+import { getToolSummary } from '@neko-agent/types';
+import { CLI_TODO_ICONS, CLI_TOOL_ICONS, theme } from './theme';
 import type { CLIResult } from './types';
 import type { AgentStep, ToolResult } from '@neko/agent';
 
@@ -135,7 +136,7 @@ export function formatStep(step: AgentStep, verbose = false): string {
  * Render a tool result line.
  */
 function formatToolResult(tr: ToolResult, verbose: boolean): string {
-  const icon = tr.success ? TOOL_ICONS.success : TOOL_ICONS.error;
+  const icon = tr.success ? CLI_TOOL_ICONS.success : CLI_TOOL_ICONS.error;
   const label = tr.success ? theme.muted('ok') : theme.error(tr.error ?? 'error');
   if (verbose && tr.data !== undefined) {
     const data = typeof tr.data === 'string' ? tr.data : JSON.stringify(tr.data, null, 2);
@@ -154,7 +155,7 @@ export function formatToolCall(
   status: 'pending' | 'success' | 'error' = 'pending',
   verbose = false,
 ): string {
-  const icon = TOOL_ICONS[status];
+  const icon = CLI_TOOL_ICONS[status];
   const summary = theme.muted(getToolSummary(name, args));
   const nameFmt = theme.bold(name);
 
@@ -164,68 +165,6 @@ export function formatToolCall(
 
   const argsJson = JSON.stringify(args, null, 2).replace(/\n/g, '\n    ');
   return `${line}\n    ${theme.muted('args:')} ${argsJson}`;
-}
-
-// ─── Tool summary ───────────────────────────────────────────────────────────────
-
-const FILE_TOOLS = new Set([
-  'read_file',
-  'write_file',
-  'edit_file',
-  'create_file',
-  'delete_file',
-  'view_file',
-  'open_file',
-  'str_replace_editor',
-  'str_replace_based_edit_tool',
-]);
-const SHELL_TOOLS = new Set(['bash', 'execute_command', 'run_command', 'shell', 'terminal']);
-const SEARCH_TOOLS = new Set([
-  'grep',
-  'search_files',
-  'search',
-  'web_search',
-  'find_files',
-  'glob',
-]);
-
-/**
- * Extract a short human-readable summary from a tool call (max 40 chars).
- * Aligned with webview ToolCallDisplay summary logic.
- */
-function getToolSummary(name: string, args: Record<string, unknown>, maxLen = 40): string {
-  const n = name.toLowerCase();
-  if (FILE_TOOLS.has(n))
-    return truncate(getString(args, ['path', 'file_path', 'filePath', 'file']) ?? name, maxLen);
-  if (SHELL_TOOLS.has(n))
-    return truncate(getString(args, ['command', 'cmd', 'script']) ?? name, maxLen);
-  if (SEARCH_TOOLS.has(n)) {
-    const p = getString(args, ['pattern', 'query', 'q', 'keyword']);
-    const d = getString(args, ['path', 'directory', 'dir']);
-    if (p && d) return truncate(`"${p}" in ${d}`, maxLen);
-    if (p) return truncate(`"${p}"`, maxLen);
-    return truncate(name, maxLen);
-  }
-  return truncate(firstStringValue(args) ?? name, maxLen);
-}
-
-function getString(obj: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const k of keys) {
-    const v = obj[k];
-    if (typeof v === 'string' && v.length > 0) return v;
-  }
-  return undefined;
-}
-
-function firstStringValue(obj: Record<string, unknown>): string | undefined {
-  for (const v of Object.values(obj)) {
-    if (typeof v === 'string' && v.length > 0) return v;
-  }
-  return undefined;
-}
-
-function truncate(s: string, max: number): string {
-  return s.length <= max ? s : s.slice(0, max - 1) + '…';
 }
 
 // ─── Diff rendering ─────────────────────────────────────────────────────────────
@@ -271,5 +210,5 @@ export interface TodoItem {
  * Icon encoding aligned with opencode TUI: [ ] [•] [✓] [✗]
  */
 export function formatTodoList(todos: TodoItem[]): string {
-  return todos.map((t) => `${TODO_ICONS[t.status]} ${t.content}`).join('\n');
+  return todos.map((t) => `${CLI_TODO_ICONS[t.status]} ${t.content}`).join('\n');
 }

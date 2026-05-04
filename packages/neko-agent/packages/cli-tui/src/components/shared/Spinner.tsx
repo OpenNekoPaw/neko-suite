@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Text } from 'ink';
-import { BRAILLE_SPINNER } from '../../theme/tokens';
+import { INK_BRAILLE_SPINNER } from '../../theme/tokens';
 import { tokens } from '../../theme/tokens';
 
 interface SpinnerProps {
@@ -20,12 +20,12 @@ export function Spinner({ label }: SpinnerProps): React.JSX.Element {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setFrame((prev) => (prev + 1) % BRAILLE_SPINNER.frames.length);
-    }, BRAILLE_SPINNER.interval);
+      setFrame((prev) => (prev + 1) % INK_BRAILLE_SPINNER.frames.length);
+    }, INK_BRAILLE_SPINNER.interval);
     return () => clearInterval(timer);
   }, []);
 
-  const char = BRAILLE_SPINNER.frames[frame] ?? BRAILLE_SPINNER.frames[0]!;
+  const char = INK_BRAILLE_SPINNER.frames[frame] ?? INK_BRAILLE_SPINNER.frames[0]!;
 
   return (
     <Text>

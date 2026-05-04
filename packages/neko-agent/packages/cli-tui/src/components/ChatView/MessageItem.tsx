@@ -10,7 +10,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { Message } from '../../types/state';
-import { tokens, TOOL_ICONS } from '../../theme/tokens';
+import { INK_TOOL_ICONS, tokens } from '../../theme/tokens';
 import { StreamingText } from './StreamingText';
 import { ThinkingBlock } from './ThinkingBlock';
 import { TodoList } from './TodoList';
@@ -98,7 +98,7 @@ function ToolCallLine({
   readonly args: Record<string, unknown>;
   readonly status: string;
 }): React.JSX.Element {
-  const icon = TOOL_ICONS[status as keyof typeof TOOL_ICONS] ?? TOOL_ICONS.pending;
+  const icon = INK_TOOL_ICONS[status as keyof typeof INK_TOOL_ICONS] ?? INK_TOOL_ICONS.pending;
   const statusColor =
     status === 'success'
       ? tokens.toolSuccess

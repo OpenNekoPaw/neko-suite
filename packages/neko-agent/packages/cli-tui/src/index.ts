@@ -86,7 +86,7 @@ export { useConfigStore } from './stores/config-store';
 export { useUIStore } from './stores/ui-store';
 
 // Theme
-export { tokens, TODO_ICONS, TOOL_ICONS, BRAILLE_SPINNER } from './theme';
+export { INK_BRAILLE_SPINNER, INK_TODO_ICONS, INK_TOOL_ICONS, tokens } from './theme';
 
 // Adapters
 export { createEventAdapter, type IEventAdapter } from './adapters/event-adapter';

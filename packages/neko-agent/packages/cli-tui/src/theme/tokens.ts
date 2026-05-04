@@ -52,7 +52,7 @@ export const tokens: ThemeTokens = {
 /**
  * Todo status icons — aligned with CLI and opencode TUI
  */
-export const TODO_ICONS = {
+export const INK_TODO_ICONS = {
   pending: '[ ]',
   in_progress: '[•]',
   completed: '[✓]',
@@ -62,7 +62,7 @@ export const TODO_ICONS = {
 /**
  * Tool call status icons
  */
-export const TOOL_ICONS = {
+export const INK_TOOL_ICONS = {
   pending: '◐',
   running: '◐',
   success: '✓',
@@ -72,7 +72,7 @@ export const TOOL_ICONS = {
 /**
  * Braille spinner frames — aligned with opencode TUI
  */
-export const BRAILLE_SPINNER = {
+export const INK_BRAILLE_SPINNER = {
   frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const,
   interval: 80,
 } as const;

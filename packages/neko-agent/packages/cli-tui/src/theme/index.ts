@@ -2,4 +2,4 @@
  * Theme — public re-exports
  */
 
-export { tokens, TODO_ICONS, TOOL_ICONS, BRAILLE_SPINNER } from './tokens';
+export { INK_BRAILLE_SPINNER, INK_TODO_ICONS, INK_TOOL_ICONS, tokens } from './tokens';

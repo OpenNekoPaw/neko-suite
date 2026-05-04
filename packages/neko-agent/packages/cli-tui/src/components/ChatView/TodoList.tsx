@@ -8,7 +8,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { TodoItem } from '../../types/state';
-import { tokens, TODO_ICONS } from '../../theme/tokens';
+import { INK_TODO_ICONS, tokens } from '../../theme/tokens';
 import { Spinner } from '../shared/Spinner';
 
 interface TodoListProps {
@@ -30,7 +30,7 @@ export function TodoList({ todos }: TodoListProps): React.JSX.Element {
 function TodoItemView({ todo }: { readonly todo: TodoItem }): React.JSX.Element {
   const colorKey = `todo${capitalize(normalizeStatus(todo.status))}` as keyof typeof tokens;
   const color = (tokens[colorKey] as string | undefined) ?? tokens.muted;
-  const icon = TODO_ICONS[todo.status] ?? TODO_ICONS.pending;
+  const icon = INK_TODO_ICONS[todo.status] ?? INK_TODO_ICONS.pending;
 
   return (
     <Box>
