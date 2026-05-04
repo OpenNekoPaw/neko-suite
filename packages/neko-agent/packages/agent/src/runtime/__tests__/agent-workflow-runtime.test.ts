@@ -50,6 +50,45 @@ describe('AgentWorkflowRuntime', () => {
     expect(projections).toHaveLength(4);
   });
 
+  it('validates workflow transitions and closes the active source node by default', () => {
+    const runtime = createAgentWorkflowRuntime({
+      now: () => 100,
+      generateRunId: () => 'run-1',
+    });
+    const run = runtime.createRun({
+      definition: createIdcWorkflowDefinition(),
+      conversationId: 'conv-1',
+      initialNodeId: 'draft',
+    });
+
+    expect(() => runtime.transition({ runId: run.id, toNodeId: 'apply' })).toThrow(
+      'Workflow transition is not allowed: draft -> apply',
+    );
+
+    const planned = runtime.transition({
+      runId: run.id,
+      toNodeId: 'plan',
+      reason: 'draft-complete',
+    });
+
+    expect(planned.nodes.map((node) => [node.id, node.status])).toEqual([
+      ['draft', 'completed'],
+      ['plan', 'running'],
+      ['apply', 'pending'],
+    ]);
+    expect(() => runtime.transition({ runId: run.id, toNodeId: 'plan' })).toThrow(
+      'Workflow transition target is already active: plan',
+    );
+    expect(() =>
+      runtime.transition({
+        runId: run.id,
+        fromNodeId: 'draft',
+        toNodeId: 'apply',
+      }),
+    ).toThrow('Workflow transition source is not active: draft');
+    expect(() => runtime.transition({ runId: run.id, toNodeId: 'apply' })).not.toThrow();
+  });
+
   it('selects IDC entry stages from PlanMode and AutoMode signals', () => {
     expect(selectIdcWorkflowEntryNode({ planMode: true, taskShape: 'single-write' })).toBe('draft');
     expect(
@@ -212,6 +251,27 @@ describe('AgentWorkflowRuntime', () => {
         },
       ),
     ).toEqual([]);
+  });
+
+  it('reports malformed legacy workflow sunset dates before treating them as expired', () => {
+    const recorder = createLegacyWorkflowUsageRecorder();
+    const malformed = {
+      adapterId: 'malformed-adapter',
+      owner: 'neko-agent-runtime',
+      introducedAt: '2026-05-04',
+      sunsetMilestone: 'workflow-native-v1',
+      workflowNativeReplacement: 'AgentWorkflowDefinition',
+      allowedCompatibilityWindow: {
+        startsAt: '2026-05-04',
+        expiresAt: 'not-a-date',
+      },
+      severityAfterSunset: 'failure' as const,
+    };
+
+    expect(recorder.validate({ deprecation: malformed })).toEqual([
+      expect.objectContaining({ code: 'invalid-deprecation-date' }),
+      expect.objectContaining({ code: 'legacy-adapter-expired' }),
+    ]);
   });
 
   it('rejects new pipeline-only workflows after the sunset gate', () => {

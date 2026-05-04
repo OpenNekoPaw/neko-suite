@@ -109,6 +109,9 @@ export function selectIdcWorkflowEntryNode(input: {
   if (input.planMode) {
     return 'draft';
   }
+  // Keep this mapping aligned with StageTaskShape in
+  // docs/architecture/agent-unified-workflow.md §3.2 and
+  // packages/neko-agent/packages/agent-types/src/stage.ts.
   if (
     input.hasExistingPlan ||
     input.taskShape === 'single-write' ||
@@ -144,12 +147,14 @@ export function createLegacyWorkflowUsageRecorder(): AgentLegacyWorkflowUsageRec
 
 class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
   private readonly runs = new Map<string, AgentWorkflowRun>();
+  private readonly definitionsByRunId = new Map<string, AgentWorkflowDefinition>();
 
   constructor(private readonly options: AgentWorkflowRuntimeOptions) {}
 
   createRun(input: CreateAgentWorkflowRunInput): AgentWorkflowRun {
     const now = this.now();
     const initialNodeId = input.initialNodeId ?? input.definition.nodes[0]?.id;
+    assertNodeInDefinition(input.definition, initialNodeId);
     const runId =
       this.options.generateRunId?.(input.definition, input.conversationId) ??
       `${input.definition.id}:${input.conversationId}:${now}`;
@@ -169,6 +174,7 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
       updatedAt: now,
       ...(input.metadata ? { metadata: input.metadata } : {}),
     };
+    this.definitionsByRunId.set(run.id, input.definition);
     this.runs.set(run.id, run);
     this.emit(run);
     return run;
@@ -196,8 +202,16 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
   }): AgentWorkflowRun {
     const current = this.requireRun(input.runId);
     assertNodeExists(current, input.toNodeId);
+    const fromNodeId = input.fromNodeId ?? current.activeNodeId;
+    if (fromNodeId && current.activeNodeId && fromNodeId !== current.activeNodeId) {
+      throw new Error(`Workflow transition source is not active: ${fromNodeId}`);
+    }
+    if (fromNodeId === input.toNodeId) {
+      throw new Error(`Workflow transition target is already active: ${input.toNodeId}`);
+    }
+    this.assertValidTransition(current.id, fromNodeId, input.toNodeId);
     const transition: AgentWorkflowTransition = {
-      ...(input.fromNodeId ? { fromNodeId: input.fromNodeId } : {}),
+      ...(fromNodeId ? { fromNodeId } : {}),
       toNodeId: input.toNodeId,
       reason: input.reason ?? 'transition',
       createdAt: this.now(),
@@ -208,7 +222,7 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
       activeNodeId: input.toNodeId,
       nodes: current.nodes.map((node) => {
         if (node.id === input.toNodeId) return withNodeStatus(node, 'running');
-        if (node.id === input.fromNodeId && node.status === 'running') {
+        if (node.id === fromNodeId && node.status === 'running') {
           return withNodeStatus(node, 'completed');
         }
         return node;
@@ -309,6 +323,16 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
     this.options.onProjection?.({ conversationId: run.conversationId, run });
   }
 
+  private assertValidTransition(
+    runId: string,
+    fromNodeId: string | undefined,
+    toNodeId: string,
+  ): void {
+    const definition = this.definitionsByRunId.get(runId);
+    if (!definition) return;
+    assertValidWorkflowTransition(definition, fromNodeId, toNodeId);
+  }
+
   private now(): number {
     return this.options.now?.() ?? Date.now();
   }
@@ -329,9 +353,35 @@ function withNodeStatus(node: AgentWorkflowNode, status: AgentWorkflowStatus): A
   return { ...node, status };
 }
 
+function assertNodeInDefinition(
+  definition: AgentWorkflowDefinition,
+  nodeId: string | undefined,
+): void {
+  if (!nodeId) return;
+  if (!definition.nodes.some((node) => node.id === nodeId)) {
+    throw new Error(`Workflow node not found: ${nodeId}`);
+  }
+}
+
 function assertNodeExists(run: AgentWorkflowRun, nodeId: string): void {
   if (!run.nodes.some((node) => node.id === nodeId)) {
     throw new Error(`Workflow node not found: ${nodeId}`);
+  }
+}
+
+function assertValidWorkflowTransition(
+  definition: AgentWorkflowDefinition,
+  fromNodeId: string | undefined,
+  toNodeId: string,
+): void {
+  const transitions = definition.transitions ?? [];
+  if (transitions.length === 0) return;
+  const isAllowed = transitions.some(
+    (transition) => transition.fromNodeId === fromNodeId && transition.toNodeId === toNodeId,
+  );
+  if (!isAllowed) {
+    const fromLabel = fromNodeId ?? '<start>';
+    throw new Error(`Workflow transition is not allowed: ${fromLabel} -> ${toNodeId}`);
   }
 }
 
@@ -401,7 +451,8 @@ class DefaultLegacyWorkflowUsageRecorder implements AgentLegacyWorkflowUsageReco
       ];
     }
 
-    const diagnostics: AgentLegacyWorkflowValidationDiagnostic[] = [];
+    const diagnostics: AgentLegacyWorkflowValidationDiagnostic[] =
+      validateLegacyWorkflowDeprecationDates(deprecation);
     const expired = isLegacyWorkflowAdapterExpired(deprecation, policy.now ?? Date.now());
     const approved = policy.compatibilityApprovalIds?.includes(deprecation.adapterId) ?? false;
     if (expired && !approved) {
@@ -438,4 +489,24 @@ function isLegacyWorkflowAdapterExpired(
   const today = new Date(now);
   const validationDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
   return expiresAt < validationDay;
+}
+
+function validateLegacyWorkflowDeprecationDates(
+  deprecation: AgentLegacyWorkflowAdapterDeprecation,
+): AgentLegacyWorkflowValidationDiagnostic[] {
+  const diagnostics: AgentLegacyWorkflowValidationDiagnostic[] = [];
+  for (const [field, value] of [
+    ['allowedCompatibilityWindow.startsAt', deprecation.allowedCompatibilityWindow.startsAt],
+    ['allowedCompatibilityWindow.expiresAt', deprecation.allowedCompatibilityWindow.expiresAt],
+  ] as const) {
+    if (Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))) {
+      diagnostics.push({
+        code: 'invalid-deprecation-date',
+        severity: 'failure',
+        adapterId: deprecation.adapterId,
+        message: `Legacy workflow adapter ${deprecation.adapterId} has invalid ${field}.`,
+      });
+    }
+  }
+  return diagnostics;
 }

@@ -182,7 +182,7 @@ describe('agent-capability-injection-runtime', () => {
     });
   });
 
-  it('skips injection by host requirement, trust policy, active skill, and ablation', () => {
+  it('skips skill-scoped injection by active skill without blocking provider tools', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
     runtime.registerMany([
       {
@@ -204,6 +204,15 @@ describe('agent-capability-injection-runtime', () => {
       },
       normalizeSkillCapability({ skill: skill('selected'), source: 'market' }),
       normalizeSkillCapability({ skill: skill('other'), source: 'market' }),
+      {
+        identity: {
+          id: 'provider:timeline',
+          source: 'provider',
+          sourceId: 'timeline',
+          trustLevel: 'core',
+        },
+        toolNames: ['timeline_read'],
+      },
     ]);
 
     const injected = runtime.inject({
@@ -213,7 +222,11 @@ describe('agent-capability-injection-runtime', () => {
       disabledContributionIds: ['skill:other'],
     });
 
-    expect(injected.contributions.map((item) => item.identity.id)).toEqual(['skill:selected']);
+    expect(injected.contributions.map((item) => item.identity.id)).toEqual([
+      'skill:selected',
+      'provider:timeline',
+    ]);
+    expect(injected.allowedTools).toEqual(['timeline_read']);
     expect(injected.diagnostics.map((item) => item.reason)).toEqual([
       'host-requirement',
       'trust-policy',

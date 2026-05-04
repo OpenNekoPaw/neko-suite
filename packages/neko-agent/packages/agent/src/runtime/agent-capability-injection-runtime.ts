@@ -518,11 +518,8 @@ function getInjectionSkipReason(
       message: 'Capability contribution is blocked by permission policy.',
     };
   }
-  if (context.activeSkillId && contribution.identity.id !== context.activeSkillId) {
-    const commandSkillIds = new Set(
-      (contribution.slashCommands ?? []).map((command) => command.skillId),
-    );
-    if (!commandSkillIds.has(context.activeSkillId)) {
+  if (context.activeSkillId && isSkillScopedContribution(contribution)) {
+    if (!matchesActiveSkill(contribution, context.activeSkillId)) {
       return {
         reason: 'active-skill',
         message: 'Capability contribution is not selected by the active skill.',
@@ -660,7 +657,7 @@ function normalizeSkillScanGroup(
     normalizeSkillCapability({
       skill: normalizeSkillSource(skill, input.source),
       source: input.source,
-      sourceId: resolveSkillSourceId(skill, input.source),
+      sourceId: resolveSkillSourceId(skill),
       trustLevel: input.trustLevel,
       version: skill.version,
     }),
@@ -672,8 +669,23 @@ function normalizeSkillSource(skill: Skill, source: AgentCapabilitySource): Skil
   return skill.source === skillSource ? skill : { ...skill, source: skillSource };
 }
 
-function resolveSkillSourceId(skill: Skill, source: AgentCapabilitySource): string {
+function resolveSkillSourceId(skill: Skill): string {
   return skill.directoryPath ?? skill.name;
+}
+
+function isSkillScopedContribution(contribution: AgentCapabilityContribution): boolean {
+  return (
+    contribution.identity.id.startsWith('skill:') ||
+    (contribution.slashCommands ?? []).some((command) => typeof command.skillId === 'string')
+  );
+}
+
+function matchesActiveSkill(
+  contribution: AgentCapabilityContribution,
+  activeSkillId: string,
+): boolean {
+  if (contribution.identity.id === activeSkillId) return true;
+  return (contribution.slashCommands ?? []).some((command) => command.skillId === activeSkillId);
 }
 
 function findRegistrationCollisions(

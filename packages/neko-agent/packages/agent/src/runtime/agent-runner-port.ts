@@ -97,7 +97,7 @@ class DefaultAgentRunnerEventEmitter<TEvent> implements AgentRunnerEventEmitter<
   };
 
   fire(event: TEvent): void {
-    for (const listener of this.listeners) {
+    for (const listener of [...this.listeners]) {
       listener(event);
     }
   }

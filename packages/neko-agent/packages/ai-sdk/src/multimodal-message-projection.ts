@@ -33,6 +33,11 @@ export function projectMultimodalPacketToChatMessage(
         videoUrl: input.uri,
         ...(readMimeType(input.metadata) ? { mimeType: readMimeType(input.metadata) } : {}),
       });
+      continue;
+    }
+
+    if (input.modality === 'audio') {
+      parts.push({ type: 'text', text: summarizeAudioInput(input) });
     }
   }
 
@@ -62,6 +67,28 @@ function summarizePacket(packet: MultimodalContextPacket): string {
 function readMimeType(metadata: Readonly<Record<string, unknown>> | undefined): string | undefined {
   const value = metadata?.['mimeType'];
   return typeof value === 'string' ? value : undefined;
+}
+
+function summarizeAudioInput(input: {
+  readonly id: string;
+  readonly uri?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}): string {
+  return [
+    `Audio context: ${input.id}`,
+    input.uri ? `uri=${input.uri}` : undefined,
+    readMimeType(input.metadata) ? `mimeType=${readMimeType(input.metadata)}` : undefined,
+    readDurationMs(input.metadata) ? `durationMs=${readDurationMs(input.metadata)}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function readDurationMs(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): number | undefined {
+  const value = metadata?.['durationMs'];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function readEvidenceRefs(packet: MultimodalContextPacket): readonly AgentMultimodalEvidenceRef[] {

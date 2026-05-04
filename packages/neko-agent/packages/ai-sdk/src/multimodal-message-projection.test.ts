@@ -29,6 +29,13 @@ describe('multimodal-message-projection', () => {
           uri: '${WORKSPACE}/clip.mp4',
           metadata: { mimeType: 'video/mp4' },
         },
+        {
+          id: 'input-audio',
+          kind: 'audio-segment',
+          modality: 'audio',
+          uri: '${WORKSPACE}/voice.wav',
+          metadata: { mimeType: 'audio/wav', durationMs: 1200 },
+        },
       ],
       uiContext: { activePanel: 'asset-browser', selectionIds: [] },
       createdAt: 1,
@@ -40,6 +47,10 @@ describe('multimodal-message-projection', () => {
         { type: 'text', text: 'describe this' },
         { type: 'image', imageUrl: 'data:image/png;base64,abc', detail: 'high' },
         { type: 'video', videoUrl: '${WORKSPACE}/clip.mp4', mimeType: 'video/mp4' },
+        {
+          type: 'text',
+          text: 'Audio context: input-audio uri=${WORKSPACE}/voice.wav mimeType=audio/wav durationMs=1200',
+        },
       ],
     });
   });

@@ -115,6 +115,7 @@ export interface AgentLegacyWorkflowTelemetry {
 export interface AgentLegacyWorkflowValidationDiagnostic {
   readonly code:
     | 'missing-deprecation-metadata'
+    | 'invalid-deprecation-date'
     | 'legacy-adapter-expired'
     | 'new-pipeline-only-workflow';
   readonly severity: 'failure' | 'warning';

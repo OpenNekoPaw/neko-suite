@@ -19,6 +19,9 @@ export function createAgentPromptSchemaGenerator(): AgentPromptSchemaGenerator {
   return new DefaultAgentPromptSchemaGenerator();
 }
 
+const DEFAULT_CAPABILITY_FRAGMENT_PRIORITY = 70;
+const DEFAULT_PROVIDER_FRAGMENT_PRIORITY = 68;
+
 class DefaultAgentPromptSchemaGenerator implements AgentPromptSchemaGenerator {
   generate(context: PromptGenerationContext): GeneratedPromptBundle {
     if (context.ablation?.disablePromptSchemaGenerator) {
@@ -114,7 +117,7 @@ function buildPromptSections(
         id: `capability:${fragment.id}`,
         layer: context.activeSkillId ? 'skill' : 'environment',
         content: fragment.content,
-        priority: fragment.priority ?? 70,
+        priority: fragment.priority ?? DEFAULT_CAPABILITY_FRAGMENT_PRIORITY,
       });
     }
 
@@ -133,7 +136,7 @@ function buildPromptSections(
         id: `provider:${fragment.id}`,
         layer: 'environment',
         content: fragment.content,
-        priority: fragment.priority ?? 68,
+        priority: fragment.priority ?? DEFAULT_PROVIDER_FRAGMENT_PRIORITY,
       });
     }
   }

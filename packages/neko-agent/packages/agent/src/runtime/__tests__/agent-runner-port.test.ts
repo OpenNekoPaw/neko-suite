@@ -15,6 +15,22 @@ describe('AgentRunnerPort', () => {
     expect(listener).toHaveBeenCalledWith({ type: 'start' });
   });
 
+  it('fires against a listener snapshot', () => {
+    const emitter = createAgentRunnerEventEmitter<{ readonly type: 'start' | 'stop' }>();
+    const lateListener = vi.fn();
+    const firstListener = vi.fn(() => {
+      emitter.event(lateListener);
+    });
+
+    emitter.event(firstListener);
+    emitter.fire({ type: 'start' });
+    emitter.fire({ type: 'stop' });
+
+    expect(firstListener).toHaveBeenCalledTimes(2);
+    expect(lateListener).toHaveBeenCalledTimes(1);
+    expect(lateListener).toHaveBeenCalledWith({ type: 'stop' });
+  });
+
   it('can describe a runner contract without VSCode event or disposable types', () => {
     const runner = {
       configure: vi.fn(async () => undefined),
