@@ -131,7 +131,7 @@ export async function createAgentRuntimeSession(
     config.toolCategoryRegistry ?? config.capabilityRuntime?.toolCategoryRegistry;
   syncToolCategories(config, toolCategoryRegistry);
 
-  const promptFragments = resolvePromptFragments(config);
+  const promptFragments = resolveAgentRuntimePromptFragments(config);
   const effectiveSystemPrompt = resolveSystemPrompt(promptBuilder, config.systemPrompt);
   const agentsOverride = promptBuilder.buildAgentsOverlay() ?? undefined;
   const feedbackLoop = buildFeedbackLoop(config.feedbackLoop, projectMemoryManager);
@@ -185,7 +185,7 @@ export function updateAgentRuntimeSession(
     config.toolCategoryRegistry ?? config.capabilityRuntime?.toolCategoryRegistry;
   syncToolCategories(config, toolCategoryRegistry);
 
-  const promptFragments = resolvePromptFragments(config);
+  const promptFragments = resolveAgentRuntimePromptFragments(config);
   const feedbackLoop = buildFeedbackLoop(config.feedbackLoop, handle.projectMemoryManager);
   registerSubAgentRuntime(config, promptFragments, toolCategoryRegistry, feedbackLoop);
 
@@ -274,7 +274,7 @@ function syncToolCategories(
   }
 }
 
-function resolvePromptFragments(
+export function resolveAgentRuntimePromptFragments(
   config: Pick<
     AgentRuntimeSessionFactoryConfig,
     'capabilityPromptFragments' | 'capabilityRuntime' | 'providerExpressionTargets'

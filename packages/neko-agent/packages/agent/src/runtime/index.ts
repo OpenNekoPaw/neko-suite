@@ -167,6 +167,7 @@ export {
 
 export {
   createAgentRuntimeSession,
+  resolveAgentRuntimePromptFragments,
   unregisterAgentRuntimeSession,
   updateAgentRuntimeSession,
   type AgentRuntimeSessionFactoryConfig,

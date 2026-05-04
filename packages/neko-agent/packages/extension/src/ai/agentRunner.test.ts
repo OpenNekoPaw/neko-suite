@@ -7,23 +7,18 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Platform, Service } from '@neko/platform';
-import type { PromptFragment, ProviderCard } from '@neko/shared';
+import type { PromptFragment } from '@neko/shared';
 import { NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND } from '@neko-agent/types';
 import {
   buildAgentRuntimeSessionFactoryConfig,
   createAgentSessionWithRuntime,
+  resolveAgentRuntimePromptFragments,
   SubAgentRuntimeCoordinator,
   type AgentRuntimeSessionAssemblyInput,
   type AgentRuntimeSessionController,
   type AgentRuntimeSessionControllerTarget,
 } from '@neko/agent/runtime';
-import {
-  TaskManager,
-  ToolCategoryRegistry,
-  ToolGroupRegistry,
-  ToolRegistry,
-  createProviderExpressionPromptFragments,
-} from '@neko/agent';
+import { TaskManager, ToolCategoryRegistry, ToolGroupRegistry, ToolRegistry } from '@neko/agent';
 import { AgentRunner, type AgentEvent, type IAgentConfig } from './agentRunner';
 import { EngineClient } from '@neko/neko-client/EngineClient';
 
@@ -217,7 +212,7 @@ function createMockRuntimeController(
     async configure(input: AgentRuntimeSessionAssemblyInput) {
       const factoryConfig = buildFactoryConfig(input, handle?.operationToolAdapterRegistry);
       syncToolCategories(factoryConfig);
-      const promptFragments = resolvePromptFragments(factoryConfig);
+      const promptFragments = resolveAgentRuntimePromptFragments(factoryConfig);
       const sessionConfig = buildMockSessionConfig(factoryConfig, promptFragments);
       const session = createAgentSessionWithRuntime(sessionConfig as never) as ReturnType<
         typeof createMockSession
@@ -244,7 +239,7 @@ function createMockRuntimeController(
       if (!handle || !target.getSession()) return null;
       const factoryConfig = buildFactoryConfig(input, handle.operationToolAdapterRegistry);
       syncToolCategories(factoryConfig);
-      const promptFragments = resolvePromptFragments(factoryConfig);
+      const promptFragments = resolveAgentRuntimePromptFragments(factoryConfig);
       target.setPromptFragments(promptFragments);
       handle.promptFragments = promptFragments;
       return {
@@ -295,7 +290,7 @@ function syncToolCategories(
 
 function buildMockSessionConfig(
   config: ReturnType<typeof buildAgentRuntimeSessionFactoryConfig>,
-  promptFragments: PromptFragment[] | undefined,
+  promptFragments: readonly PromptFragment[] | undefined,
 ) {
   const capabilityRuntime = config.capabilityRuntime;
   return {
@@ -355,37 +350,6 @@ function buildMockSessionConfig(
       },
     },
   };
-}
-
-function resolvePromptFragments(
-  config: ReturnType<typeof buildAgentRuntimeSessionFactoryConfig>,
-): PromptFragment[] | undefined {
-  const capabilityFragments = [...(config.capabilityPromptFragments ?? [])];
-  const providerCards = listProviderCards(config.capabilityRuntime?.providerCardRegistry);
-  const selectedTargets =
-    config.providerExpressionTargets?.filter((target) => target.providerId || target.modelId) ?? [];
-  const providerFragments =
-    selectedTargets.length === 0
-      ? createProviderExpressionPromptFragments({ cards: providerCards, mode: 'candidates' })
-      : selectedTargets.flatMap((target) =>
-          createProviderExpressionPromptFragments({
-            cards: providerCards,
-            mode: 'selected',
-            capability: target.capability,
-            ...(target.providerId ? { providerId: target.providerId } : {}),
-            ...(target.modelId ? { modelId: target.modelId } : {}),
-            fragmentId: `provider:expression-context:${target.capability}`,
-          }),
-        );
-  const fragments = [...capabilityFragments, ...providerFragments];
-  return fragments.length > 0 ? fragments : undefined;
-}
-
-function listProviderCards(providerCardRegistry: unknown): ProviderCard[] {
-  if (!providerCardRegistry || typeof providerCardRegistry !== 'object') return [];
-  const list = (providerCardRegistry as { list?: unknown }).list;
-  const cards = typeof list === 'function' ? list.call(providerCardRegistry) : [];
-  return Array.isArray(cards) ? (cards as ProviderCard[]) : [];
 }
 
 // =============================================================================
@@ -470,7 +434,7 @@ describe('AgentRunner', () => {
       const skillRegistry = { kind: 'skill-registry' };
       const skillService = { kind: 'skill-service' };
       const toolCategoryRegistry = new ToolCategoryRegistry();
-      const providerCardRegistry = { kind: 'provider-card-registry' };
+      const providerCardRegistry = { list: vi.fn(() => []) };
       capabilityRuntimeMock.skillRegistry = skillRegistry;
       capabilityRuntimeMock.skillService = skillService;
       capabilityRuntimeMock.toolGroupRegistry = toolGroupRegistry;
