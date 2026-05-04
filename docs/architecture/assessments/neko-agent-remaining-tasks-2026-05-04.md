@@ -1,6 +1,6 @@
 # neko-agent 剩余任务分析
 
-**状态**: P0 未发现新增阻断项 | P1/P2 待收敛 | P1-3 已处理  
+**状态**: P0 未发现新增阻断项 | P1 运行时边界已收敛 | P2/P3 保留兼容清理与验证债
 **日期**: 2026-05-04  
 **范围**: `packages/neko-agent`
 
@@ -16,7 +16,7 @@
 
 结论：当前主方向已经基本正确，没有发现新的 P0 阻断问题。前几轮清理后，market、connection state、generation progress、MCP test result 等无效 bridge 没有反弹；异步任务、media task、subagent 也已经按 `conversationId` 进入协议与 Webview 状态隔离链路。
 
-剩余工作主要是 P1/P2 级别的架构收敛：继续压薄 Extension 的 turn 组装层、抽象 VSCode Event 形态、收敛 barrel 导出和少量命名/注释漂移。
+2026-05-04 的 `unify-neko-agent-runtime-workflow-boundaries` 变更已经完成 P1 主体迁移：Extension 侧 `AgentTurnBridge` 降为 host adapter，`AgentRunner` 对齐 `AgentRunnerPort`，IDC / workflow / capability injection / prompt-schema / multimodal packet / eval harness 均有 runtime contract 与 targeted tests。剩余工作主要是 P2/P3 兼容清理、barrel 导出收敛、`AgentSession` 更深层接入 prompt/schema facade，以及全量 `@neko/agent` 类型债的后续清理。
 
 ---
 
@@ -115,75 +115,75 @@ Agent Webview / Extension 内嵌 marketplace bridge 已删除。Skill 安装目�
 - `packages/neko-agent/packages/agent/src/session/conversation-control-runtime.ts`
 - `packages/neko-canvas/packages/extension/src/services/batchGenerationScheduler.ts`
 
----
+### 7. P1 runtime boundary 已完成主体迁移
 
-## 剩余 P1 任务
-
-### P1-1：继续压薄 `AgentTurnBridge`
-
-`AgentTurnBridge` 仍然是当前最厚的 Extension 桥接点。它同时装配：
-
-- `conversationId`
-- chat model / media model / media model selections
-- provider source
-- settings snapshot
-- base system prompt
-- plan mode
-- active skill
-- workspace root
-- ambient canvas
-- timeline context packet
-- stream processor
-- subagent event subscription
-- task manager
+`AgentTurnBridge` 不再拥有 turn assembly 策略。Extension 现在负责收集 VSCode/Webview host 输入并创建 adapter，runtime 通过 `AgentTurnHostAdapters`、`AgentTurnAssemblyInput`、`AgentTurnRuntimeServices` 统一组装 provider/settings/prompt/context/timeline/task/subagent 输入。
 
 关键位置：
 
-- `packages/neko-agent/packages/extension/src/chat/message/agentTurnBridge.ts`
+- `packages/neko-agent/packages/agent/src/runtime/agent-turn-assembly.ts`
 - `packages/neko-agent/packages/agent/src/runtime/agent-turn-runtime.ts`
-- `packages/neko-agent/packages/agent/src/runtime/agent-turn-context.ts`
-- `packages/neko-agent/packages/agent/src/runtime/timeline-context-runtime.ts`
+- `packages/neko-agent/packages/extension/src/chat/message/agentTurnBridge.ts`
+- `packages/neko-agent/packages/agent/src/runtime/__tests__/agent-turn-runtime.test.ts`
 
-建议方向：
+`AgentRunner` 已对齐 host-agnostic runner port。核心 contract 使用 `AgentRunnerPort`、`AgentRunnerPortEvent`、`DisposableLike`，Extension 侧保留 VSCode `EventEmitter` 作为 adapter surface，用于兼容现有 VSCode consumers。
 
-1. 在 `@neko/agent/runtime` 定义更明确的 `AgentTurnHostAdapters` / `AgentTurnAssemblyInput`。
-2. 将 provider/settings/prompt/context/timeline 的组装规则进一步下沉到 runtime。
-3. Extension 只提供 `getWorkspaceRoot`、`postMessage`、`getActiveEditor`、`processStream` 等 Host adapter。
+关键位置：
 
-目标边界：
+- `packages/neko-agent/packages/agent/src/runtime/agent-runner-port.ts`
+- `packages/neko-agent/packages/agent/src/runtime/agent-runtime-manager.ts`
+- `packages/neko-agent/packages/extension/src/ai/agentRunner.ts`
+- `packages/neko-agent/packages/agent/src/runtime/__tests__/agent-runner-port.test.ts`
+- `packages/neko-agent/packages/extension/src/ai/agentRunner.test.ts`
 
-```text
-Webview
-  -> postMessage schema
-Extension
-  -> VSCode host adapters + dependency injection
-Agent runtime
-  -> turn assembly / prompt / model / context / stream rule
-Platform
-  -> provider / media / config / task concrete capabilities
-```
+### 8. IDC / workflow / skill / prompt / multimodal / eval 已形成统一 runtime 基线
 
-### P1-2：抽象 `AgentRunner` 的 VSCode Event 接口
+新增或收敛的核心运行时能力：
 
-`AgentRunner` 当前已经基本是 VSCode wrapper，但接口仍直接继承 `vscode.Disposable` 并暴露 `vscode.Event`。这会让 extension 外的消费者难以复用同一 runner contract。
+- IDC Draft / Plan / Apply：通过 `AgentWorkflowDefinition`、`AgentWorkflowRun`、`AgentWorkflowNode`、`AgentWorkflowTransition` 表达，PlanMode / AutoMode 由 runtime 选择 workflow profile，而不是 Webview 只切 UI 状态。
+- market/local/builtin/plugin/MCP/provider capability：统一为 `AgentCapabilityContribution`，registration 与 injection 分离，trust、host requirement、permission、workflow node、tool budget、ablation toggle 均在 runtime 注入前判定。
+- slash command catalog：由 runtime-normalized capability projection 生成，Webview 只展示和发送 typed invocation。
+- prompt/schema：`AgentPromptSchemaGenerator` 基于 base、locale、settings、AGENTS.md overlay、IDC stage、PlanMode、active skill、workflow node、capability fragments、provider fragments、memory/multimodal summary、tool schemas 生成 per-turn prompt 与 structured schemas。
+- 多模态：`MultimodalContextPacket` 统一 text/image/audio/video/canvas/timeline/editor/file/artifact/evidence；tool 使用 `AgentToolModalityDeclaration` 声明输入/输出媒体能力；AI SDK/platform adapter 负责 provider-specific projection。
+- subagent / multi-agent：runtime coordinator 负责 spawn/cancel/budget/depth/event projection/linkage，Extension 只桥接事件。
+- 消融实验与动态演化：workflow evaluation harness 记录 workflow metrics、prompt/schema hash、capability evolution events，并能在 mock host adapter / no Webview 环境运行。
+
+关键位置：
+
+- `packages/neko-agent/packages/agent-types/src/workflow.ts`
+- `packages/neko-agent/packages/agent-types/src/capability.ts`
+- `packages/neko-agent/packages/agent-types/src/prompt-schema.ts`
+- `packages/neko-agent/packages/agent-types/src/multimodal-tooling.ts`
+- `packages/neko-types/src/types/multimodal-context.ts`
+- `packages/neko-agent/packages/agent/src/runtime/agent-workflow-runtime.ts`
+- `packages/neko-agent/packages/agent/src/runtime/agent-capability-injection-runtime.ts`
+- `packages/neko-agent/packages/agent/src/runtime/agent-prompt-schema-generator.ts`
+- `packages/neko-agent/packages/agent/src/runtime/multimodal-context-packet.ts`
+- `packages/neko-agent/packages/ai-sdk/src/multimodal-message-projection.ts`
+- `packages/neko-agent/packages/agent/src/experiment/workflow-evaluation-harness.ts`
+
+---
+
+## 剩余 P1 兼容风险
+
+### P1-1：`AgentRunner` VSCode event 兼容面继续收口
+
+核心 port 已经存在，但 Extension `IAgentRunner` 为兼容现有 consumers 仍暴露 `vscode.Event` 形态的 `onDidStart`、`onDidStop`、`onDidRequestConfirmation`、`onDidSubAgentEvent`。`onDidRunnerEvent` 已作为统一 port event 增加，后续应逐步让 Extension 内部 consumer 依赖 `AgentRunnerPortEvent`，最终把单独 VSCode event 视为纯 adapter 表面。
 
 关键位置：
 
 - `packages/neko-agent/packages/extension/src/ai/agentRunner.ts`
-- `packages/neko-agent/packages/agent/src/runtime/agent-session-runner.ts`
-- `packages/neko-agent/packages/agent/src/runtime/agent-runtime-session-controller.ts`
+- `packages/neko-agent/packages/agent/src/runtime/agent-runtime-manager.ts`
 
-建议方向：
+### P1-2：prompt/schema facade 继续接入 `AgentSession` 深水区
 
-1. 在 `@neko/agent/runtime` 定义 host-agnostic 的 `AgentRunnerPort`。
-2. Extension 侧保留 `VSCodeAgentRunnerAdapter`，负责把 runtime event 转为 `vscode.EventEmitter`。
-3. `AgentManager` 后续依赖 port，而不是直接依赖 VSCode 形态。
+`AgentPromptSchemaGenerator` 已形成 runtime service，但 `AgentSession` 历史路径中仍有部分 prompt composer / module 写入点。当前不构成 Webview/Extension 违背设计的问题，但后续应把 per-turn prompt/schema facade 更深接入 `AgentSession`，让 IDC workflow node、capability fragments、provider expression card、多模态 summary 和 structured output schema 都从同一 facade 进入。
 
-收益：
+关键位置：
 
-- CLI / TUI / 测试环境可以复用同一 contract。
-- Extension 的职责更明确：只适配 VSCode lifecycle 和事件机制。
-- subagent、context、skill、tool confirmation 的接口能统一到 runtime contract。
+- `packages/neko-agent/packages/agent/src/runtime/agent-prompt-schema-generator.ts`
+- `packages/neko-agent/packages/agent/src/session/agent-session.ts`
+- `packages/neko-agent/packages/agent/src/prompt/`
 
 ## 剩余 P2 任务
 
@@ -230,14 +230,23 @@ Platform
 - `neko.agent.generateForNode`：跨插件命令入口。
 - `neko.agent.buildPrompt`：跨插件 prompt 构建入口。
 
+### P2-4：`@neko/agent` 全量 typecheck 仍有既有类型债
+
+targeted runtime / agent-types / ai-sdk tests 已能覆盖本轮新增契约，但 `packages/neko-agent/packages/agent` 的全量 `tsc --noEmit` 仍会暴露较大范围历史类型债。后续不应把这些问题绕回 Extension 或 Webview，而应在 runtime/session/prompt/validation 子域内按契约逐步清理。
+
+### P2-5：ai-sdk Vitest include 未覆盖包内测试
+
+`packages/neko-agent/packages/ai-sdk/src/multimodal-message-projection.test.ts` 当前由 `tsc` 覆盖类型，但 root vitest 默认 include 没有拾取该测试。后续可为 `ai-sdk` 增加轻量 vitest config 或把包级测试纳入统一 test include。
+
 ---
 
 ## 建议处理顺序
 
-1. 先处理 P1-1：围绕 `AgentTurnBridge` 抽 runtime assembly contract，分批迁移 settings/provider/prompt/context 组装。
-2. 再处理 P1-2：抽 `AgentRunnerPort`，Extension 保留 VSCode adapter。
+1. 先把 Extension 内部 consumer 从单独 VSCode event 迁到 `AgentRunnerPortEvent`。
+2. 再把 `AgentPromptSchemaGenerator` 深接入 `AgentSession` / workflow node 执行路径。
 3. 然后处理 P2-1/P2-2：barrel cleanup 和 watcher adapter 进一步瘦身。
-4. 最后继续 P2/P3 dead-code scan，优先确认真实 UI/跨扩展调用后再删。
+4. 并行补 `@neko/agent` 全量 typecheck 类型债与 ai-sdk vitest include。
+5. 最后继续 P2/P3 dead-code scan，优先确认真实 UI/跨扩展调用后再删。
 
 ---
 
@@ -264,4 +273,17 @@ pnpm --filter @neko-agent/webview exec vitest run src/presenters/__tests__/work-
 ```bash
 pnpm --filter @neko/agent exec vitest run src/runtime/__tests__/agent-turn-runtime.test.ts
 pnpm --filter @neko/agent exec vitest run src/runtime/__tests__/message-runtime.test.ts
+```
+
+涉及统一 workflow / capability / prompt-schema / multimodal / eval 时追加：
+
+```bash
+pnpm --dir packages/neko-agent exec vitest run \
+  packages/agent/src/runtime/__tests__/agent-workflow-runtime.test.ts \
+  packages/agent/src/runtime/__tests__/agent-capability-injection-runtime.test.ts \
+  packages/agent/src/runtime/__tests__/agent-prompt-schema-generator.test.ts \
+  packages/agent/src/runtime/__tests__/multimodal-context-packet.test.ts \
+  packages/agent/src/experiment/__tests__/workflow-evaluation-harness.test.ts
+pnpm check:agent-boundaries
+openspec validate unify-neko-agent-runtime-workflow-boundaries --strict
 ```

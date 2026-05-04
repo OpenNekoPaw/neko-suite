@@ -7,6 +7,8 @@
 
 > 状态更新（2026-04-24）：本文中若提到 `CreativeMemoryHooks` / `SessionMemory`，应理解为历史实现阶段的命名。当前 memory 主链已迁移到 `AgentSession` 驱动的 project-only recall / extraction，以及 `journal + conversations-index.json` 的统一恢复模型。
 
+> 状态更新（2026-05-04）：`unify-neko-agent-runtime-workflow-boundaries` 已把 IDC / workflow / capability / prompt-schema / multimodal / eval 的运行时边界落到可测试契约。Webview 继续只做 UI 与投影；Extension 继续只做 VSCode/Webview/file/command host adapter；`@neko/agent/runtime`、`@neko/platform`、`@neko/ai-sdk` 承担 agent 业务、provider/tool 绑定与 provider-specific message projection。
+
 ## 落地进度快照（2026-04-23）
 
 ### 已完成（按 ADR 章节计）
@@ -66,6 +68,67 @@
 - [marketplace.md](./marketplace.md) - neko-market 分发基础
 
 **取代说明**：本 ADR 在吸收 dual-flow 与 capability-registration 两份探索文档的有效洞察后，整合为更精简的四层架构 + 二分格式原则。前两份文档保留作为设计探索记录。
+
+## 2026-05-04 Runtime Workflow 实现说明
+
+本节记录 `unify-neko-agent-runtime-workflow-boundaries` 的实现边界，作为本文 §2、§3、§4、§5、§11.6 的代码落地补充。它回答一个具体问题：当 Webview 处理 UI、Extension 处理桥接时，IDC 创作流程、market skill 动态注入、prompt/schema 动态生成、多模态工具链、subagent、多 agent、消融实验和动态演化能力分别归谁所有。
+
+### 职责与依赖边界
+
+| 层 | 职责 | 主要契约 / 代码 |
+|----|------|----------------|
+| Webview | UI 渲染、用户交互、slash command catalog 展示、workflow/task/subagent/artifact 投影 | `packages/neko-agent/packages/webview`，只消费 `@neko-agent/types` / `@neko/shared` projection |
+| Extension | VSCode command 注册、Webview `postMessage`、workspace/file/URI 访问、跨扩展 API、host adapter 注入、生命周期释放 | `AgentTurnBridge`、`AgentRunner`、command/tool bridges 均为 adapter 或 compatibility wrapper |
+| Agent runtime | turn assembly、IDC/workflow、PlanMode/AutoMode、skill/capability injection、prompt/schema、task/subagent 编排、eval/ablation harness | `AgentTurnHostAdapters`、`AgentTurnAssemblyInput`、`AgentRunnerPort`、`AgentWorkflowRuntime`、`AgentPromptSchemaGenerator` |
+| Platform | provider/tool/capability 具体绑定、market skill 安装目标 alias、media/perception provider 路由 | `packages/neko-agent/packages/platform` |
+| AI SDK | model 调用 adapter、tool schema / structured output bridge、provider-specific multimodal message projection | `packages/neko-agent/packages/ai-sdk/src/multimodal-message-projection.ts` |
+
+架构 guard 通过 `pnpm check:agent-boundaries` 固化硬边界：Webview 不得导入 `vscode`、`@neko/agent`、`@neko/platform`、`@neko/ai-sdk`；Extension 不得导入 React/Webview 实现；`agent` / `platform` / `ai-sdk` / `agent-types` 不得导入 VSCode、React、Webview 或 Extension 实现。当前仍存在的 `AgentTurnBridge`、`AgentRunner`、`SkillFileService` 是显式记录的 compatibility adapter，不再被视为 agent 业务归属点。
+
+### IDC 与统一 Workflow
+
+IDC 三阶段已经映射到 host-agnostic `AgentWorkflowDefinition` / `AgentWorkflowRun` / `AgentWorkflowNode` / `AgentWorkflowTransition`。`createIdcWorkflowDefinition()` 将 Draft、Plan、Apply 建模为 `idc-stage` nodes；workflow runtime 支持 run 创建、节点激活、transition、cancel、projection hook。
+
+PlanMode 不再只是 UI toggle：Webview 只发送用户意图或 slash command，runtime 根据 PlanMode / AutoMode signal 选择完整 workflow profile。AutoMode 可根据已有 draft/plan/task、workflow command、原子操作、多步任务或模糊创作意图进入对应 IDC 阶段。异步 task、media task、subagent event projection 均带 `conversationId`，在可用时附带 `workflowDefinitionId`、`workflowRunId`、`workflowNodeId`，使 UI 只投影状态，不生成下一步策略。
+
+Subagent 与未来多 agent 行为通过 runtime coordinator 统一，runtime 负责 budget、depth、cancel、父子 linkage、event projection 和 result merge policy；Extension 只转发 VSCode/Webview 事件。
+
+### Capability 注册与动态注入
+
+Capability 采用两阶段：Registration 发现并校验能力，Injection 按 turn 或 workflow node 决定是否进入 LLM context。market 安装 skill、workspace local skill、builtin、plugin、MCP/provider contribution 会归一化为 `AgentCapabilityContribution`，包含 identity、source、trust level、manifest version、prompt fragments、allowed tools、slash commands、workflow fragments、host requirements、permission requirements、workflow node requirements 等字段。
+
+Registration 与 injection diagnostics 分离。注册后的能力可被 Webview catalog 和调试面查询，但不会自动注入。注入前 runtime 会执行确定性规则：
+
+- core / builtin 优先级高于 community，community 高于 untrusted；同优先级冲突需要 namespace 或 alias。
+- slash command、tool name、skill id、prompt fragment id、workflow fragment id 冲突均生成明确 diagnostic。
+- trust level、host requirement、permission policy、workflow node requirement、active skill、tool budget、ablation toggle 都必须通过。
+- untrusted 或 irreversible capability 需要显式 approval policy，不能默认自动执行。
+
+Webview slash command catalog 是 runtime-normalized projection。Webview 可以过滤、展示和发送 typed invocation message，但不能拥有 command semantics、skill injection policy 或 tool execution policy。
+
+### Prompt / Schema 动态生成
+
+`AgentPromptSchemaGenerator` 是 Prompt 平面与 Schema 平面的 runtime service，输入 `PromptGenerationContext`，输出 `GeneratedPromptBundle`。生成层次与 §11.6 对齐：
+
+- `base`：基础系统约束。
+- `schema`：IDC artifact、workflow node output、tool arguments、evaluator output、recovery decision 的结构化 schema hint。
+- `skill`：active skill 与 capability prompt fragments。
+- `environment`：locale、settings、AGENTS.md overlay、provider expression fragments、memory/context summary。
+- `ephemeral`：workflow node、PlanMode/AutoMode、multimodal context summary、per-turn tool allowlist。
+
+每个 turn / workflow node 的 tool allowlist 和 tool schema 由 runtime 根据 injected capabilities、workflow node、provider capability、permission mode、host availability、trust policy、dynamic tool sets 和 ablation toggles 生成。Provider 支持 native tool calling 时投影 native schema；不支持时走 prompt-only projection 或给出 typed diagnostic。Prompt/schema snapshot 使用稳定 hash，覆盖 baseline、PlanMode、active skill、capability fragment、provider expression fragment、多模态 context 等组合，防止 accidental drift。
+
+### 多模态上下文与工具调用
+
+文本、图片、音频、视频、canvas selection、timeline context、editor selection、file/url、generated artifact、engine perception evidence 进入统一 `MultimodalContextPacket`。packet 保留 provenance、media type、URI/path policy、size/duration metadata、conversation/workflow linkage。Extension host adapter 负责本地文件读取、base64/bytes/url payload、VSCode URI、workspace path resolution；runtime 只通过 typed adapter 请求 payload，不导入 VSCode，也不保存绝对路径策略。
+
+工具通过 `AgentToolModalityDeclaration` 声明 `acceptedModalities`、`producedModalities`、`requiredEvidence`、`outputArtifactTypes` 和 provider constraints。runtime 在 tool injection、workflow planning、prompt/schema generation、validation 中读取这些声明；AI SDK/platform adapter 再把 provider-neutral packet 转成具体 provider message。多模态工具结果投影为 compact artifact reference 和 metadata，Webview 不接收无界二进制 payload。
+
+### 消融实验、效果验证与动态演化
+
+Evaluation / ablation 不属于普通用户 IDC stage。它作为研发验证 harness 读取 workflow run、task results、tool metrics、prompt/schema snapshot、capability evolution events 和 artifact evidence，对比 baseline 与 variant。新增 toggles 覆盖 IDC workflow、PlanMode profile、capability protocol、prompt/schema generator、subagent orchestration、multimodal context、evaluator hints 等能力。
+
+实验输出记录 node completion、task completion、latency、token usage、tool calls、retries、approvals、generated artifacts、evaluator outcomes、prompt/schema hash、capability install/update/remove、prompt/schema/workflow/provider card 变化。这样可以验证 skill 注入、prompt-chain workflow、subagent、多模态 evidence、dynamic schema 的效果，而不是只停留在架构图中。
 
 ---
 
