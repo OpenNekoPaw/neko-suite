@@ -1,5 +1,6 @@
 import {
   listBuiltinSlashCommands,
+  normalizeSlashCommandName,
   type BuiltinSlashCommandDefinition,
   type BuiltinSlashCommandName,
   type RegisteredPluginSlashCommand,
@@ -68,9 +69,7 @@ const SLASH_COMMAND_SOURCE_LABELS: Record<SlashCommandSource, string | null> = {
   plugin: 'plugin',
 };
 
-export function normalizeSlashCommandName(name: string): string {
-  return name.trim().replace(/^\//, '').toLowerCase();
-}
+export { normalizeSlashCommandName } from '@neko-agent/types';
 
 export function createSlashCommandCatalog(
   skills: readonly SkillSummary[] = [],
