@@ -122,7 +122,6 @@ export interface EmptyWebviewMessage {
     | 'getToolSkills'
     | 'openUserConfigFile'
     | 'ssoLogout'
-    | 'addMCPServer'
     | 'openConfigFile'
     | 'getTabState'
     | 'openMarketplace'
@@ -155,37 +154,6 @@ export interface UpdateTabStateWebviewMessage {
   type: 'updateTabState';
   openTabs: OpenTab[];
   activeTabId: string | null;
-}
-
-export interface WebviewProviderConfig {
-  type: string;
-  name?: string;
-  apiKey?: string;
-  baseUrl?: string;
-  models?: Array<{ id: string; enabled: boolean }>;
-}
-
-export interface AddModelWebviewMessage {
-  type: 'addModel';
-  model: WebviewProviderConfig;
-}
-
-export interface RemoveModelWebviewMessage {
-  type: 'removeModel';
-  modelType: string;
-}
-
-export interface ToggleProviderWebviewMessage {
-  type: 'toggleProvider';
-  providerType: string;
-  enabled: boolean;
-}
-
-export interface ToggleModelWebviewMessage {
-  type: 'toggleModel';
-  providerType: string;
-  modelId: string;
-  enabled: boolean;
 }
 
 export interface TestMcpServerWebviewMessage {
@@ -291,12 +259,6 @@ export interface ExecuteSkillWebviewMessage {
   input?: Record<string, unknown>;
 }
 
-export interface CancelSkillWebviewMessage {
-  type: 'cancelSkill';
-  skillId: string;
-  conversationId: string;
-}
-
 export interface InvokeSlashCommandWebviewMessage {
   type: 'invokeSlashCommand';
   command: string;
@@ -343,10 +305,6 @@ export type WebviewToExtensionMessage =
   | PlanStepActionWebviewMessage
   | UpdateSettingsWebviewMessage
   | UpdateTabStateWebviewMessage
-  | AddModelWebviewMessage
-  | RemoveModelWebviewMessage
-  | ToggleProviderWebviewMessage
-  | ToggleModelWebviewMessage
   | TestMcpServerWebviewMessage
   | TaskActionWebviewMessage
   | OpenFileWebviewMessage
@@ -363,7 +321,6 @@ export type WebviewToExtensionMessage =
   | MermaidErrorWebviewMessage
   | DownloadSvgWebviewMessage
   | ExecuteSkillWebviewMessage
-  | CancelSkillWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
   | SsoLoginWebviewMessage
@@ -953,7 +910,6 @@ const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'getToolSkills',
   'openUserConfigFile',
   'ssoLogout',
-  'addMCPServer',
   'openConfigFile',
   'getTabState',
   'openMarketplace',
@@ -986,10 +942,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   ...PLAN_STEP_ACTION_MESSAGE_TYPES,
   'updateSettings',
   'updateTabState',
-  'addModel',
-  'removeModel',
-  'toggleProvider',
-  'toggleModel',
   'testMCPServer',
   ...TASK_ACTION_MESSAGE_TYPES,
   'openFile',
@@ -1006,7 +958,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'mermaidError',
   'downloadSvg',
   'executeSkill',
-  'cancelSkill',
   'invokeSlashCommand',
   'invokePluginSlashCommand',
   'ssoLogin',
@@ -1343,14 +1294,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseUpdateSettingsMessage(raw);
     case 'updateTabState':
       return parseUpdateTabStateMessage(raw);
-    case 'addModel':
-      return parseAddModelMessage(raw);
-    case 'removeModel':
-      return parseRemoveModelMessage(raw);
-    case 'toggleProvider':
-      return parseToggleProviderMessage(raw);
-    case 'toggleModel':
-      return parseToggleModelMessage(raw);
     case 'testMCPServer':
       return parseTestMcpServerMessage(raw);
     case 'openFile':
@@ -1381,8 +1324,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseDownloadSvgMessage(raw);
     case 'executeSkill':
       return parseExecuteSkillMessage(raw);
-    case 'cancelSkill':
-      return parseCancelSkillMessage(raw);
     case 'invokeSlashCommand':
       return parseInvokeSlashCommandMessage(raw);
     case 'invokePluginSlashCommand':
@@ -1576,31 +1517,6 @@ function parseUpdateTabStateMessage(
   return { type: 'updateTabState', openTabs, activeTabId: raw.activeTabId };
 }
 
-function parseAddModelMessage(raw: Record<string, unknown>): AddModelWebviewMessage | null {
-  const model = parseWebviewProviderConfig(raw.model);
-  return model ? { type: 'addModel', model } : null;
-}
-
-function parseRemoveModelMessage(raw: Record<string, unknown>): RemoveModelWebviewMessage | null {
-  const modelType = requiredString(raw.modelType);
-  return modelType ? { type: 'removeModel', modelType } : null;
-}
-
-function parseToggleProviderMessage(
-  raw: Record<string, unknown>,
-): ToggleProviderWebviewMessage | null {
-  const providerType = requiredString(raw.providerType);
-  if (!providerType || typeof raw.enabled !== 'boolean') return null;
-  return { type: 'toggleProvider', providerType, enabled: raw.enabled };
-}
-
-function parseToggleModelMessage(raw: Record<string, unknown>): ToggleModelWebviewMessage | null {
-  const providerType = requiredString(raw.providerType);
-  const modelId = requiredString(raw.modelId);
-  if (!providerType || !modelId || typeof raw.enabled !== 'boolean') return null;
-  return { type: 'toggleModel', providerType, modelId, enabled: raw.enabled };
-}
-
 function parseTestMcpServerMessage(
   raw: Record<string, unknown>,
 ): TestMcpServerWebviewMessage | null {
@@ -1773,12 +1689,6 @@ function parseExecuteSkillMessage(raw: Record<string, unknown>): ExecuteSkillWeb
   };
 }
 
-function parseCancelSkillMessage(raw: Record<string, unknown>): CancelSkillWebviewMessage | null {
-  const skillId = requiredString(raw.skillId);
-  const conversationId = requiredString(raw.conversationId);
-  return skillId && conversationId ? { type: 'cancelSkill', skillId, conversationId } : null;
-}
-
 function parseInvokeSlashCommandMessage(
   raw: Record<string, unknown>,
 ): InvokeSlashCommandWebviewMessage | null {
@@ -1900,38 +1810,6 @@ function parseOpenTabs(value: unknown): OpenTab[] | null {
     tabs.push({ id, title, conversationId });
   }
   return tabs;
-}
-
-function parseWebviewProviderConfig(value: unknown): WebviewProviderConfig | null {
-  if (!isRecord(value)) return null;
-  const type = requiredString(value.type);
-  const name = optionalStringStrict(value.name);
-  const apiKey = optionalStringStrict(value.apiKey);
-  const baseUrl = optionalStringStrict(value.baseUrl);
-  const models = value.models === undefined ? undefined : parseProviderModels(value.models);
-  if (!type || name === null || apiKey === null || baseUrl === null || models === null) {
-    return null;
-  }
-  return {
-    type,
-    ...(name !== undefined ? { name } : {}),
-    ...(apiKey !== undefined ? { apiKey } : {}),
-    ...(baseUrl !== undefined ? { baseUrl } : {}),
-    ...(models !== undefined ? { models } : {}),
-  };
-}
-
-function parseProviderModels(value: unknown): WebviewProviderConfig['models'] | null {
-  if (!Array.isArray(value)) return null;
-
-  const models: Array<{ id: string; enabled: boolean }> = [];
-  for (const item of value) {
-    if (!isRecord(item)) return null;
-    const id = requiredString(item.id);
-    if (!id || typeof item.enabled !== 'boolean') return null;
-    models.push({ id, enabled: item.enabled });
-  }
-  return models;
 }
 
 function parseStringArray(value: unknown): string[] | null {

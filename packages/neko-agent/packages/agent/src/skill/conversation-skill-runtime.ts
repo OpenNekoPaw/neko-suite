@@ -149,13 +149,6 @@ export class ConversationSkillRuntime {
     this._deps.agentBridge?.clearActiveSkill(conversationId);
   }
 
-  cancelSkill(skillId: string, conversationId: string): void {
-    const activeSkill = this.getActiveSkill(conversationId);
-    if (activeSkill?.skill.name === skillId) {
-      this.clearActiveSkill(conversationId);
-    }
-  }
-
   buildSkillInjectionMessage(
     result: SkillApplicationResult,
     conversationId: string,

@@ -33,7 +33,6 @@ import {
   SkillHandler,
   FileOperationHandler,
   PlanModeHandler,
-  ProviderHandler,
   IntegrationHandler,
   SettingsHandler,
   ContextHandler,
@@ -102,7 +101,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly _skillHandler: SkillHandler;
   private readonly _fileOperationHandler: FileOperationHandler;
   private readonly _planModeHandler: PlanModeHandler;
-  private readonly _providerHandler: ProviderHandler;
   private readonly _integrationHandler: IntegrationHandler;
   private readonly _settingsHandler: SettingsHandler;
   private readonly _contextHandler: ContextHandler;
@@ -154,21 +152,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       systemPrompt: this._systemPrompt,
       conversations: this._conversations,
     });
-    this._providerHandler = new ProviderHandler({
-      sendSettings: () => {
-        if (this._view?.webview) {
-          this._settingsHandler.sendSettings(this._view.webview);
-        }
-      },
-      getWebview: () => this._view?.webview,
-    });
-    this._integrationHandler = new IntegrationHandler({
-      sendSettings: () => {
-        if (this._view?.webview) {
-          this._settingsHandler.sendSettings(this._view.webview);
-        }
-      },
-    });
+    this._integrationHandler = new IntegrationHandler();
     this._settingsHandler = new SettingsHandler({});
     this._contextHandler = new ContextHandler({
       conversations: this._conversations,
@@ -319,8 +303,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         this._planModeHandler.updateDeps({
           messages: this._messages,
         });
-        this._providerHandler.updateDeps({ platform: this._platform });
-        this._integrationHandler.updateDeps({ platform: this._platform });
         this._settingsHandler.updateDeps({
           platform: this._platform,
         });
@@ -503,7 +485,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           skillHandler: this._skillHandler,
           fileOperationHandler: this._fileOperationHandler,
           planModeHandler: this._planModeHandler,
-          providerHandler: this._providerHandler,
           integrationHandler: this._integrationHandler,
           settingsHandler: this._settingsHandler,
           contextHandler: this._contextHandler,

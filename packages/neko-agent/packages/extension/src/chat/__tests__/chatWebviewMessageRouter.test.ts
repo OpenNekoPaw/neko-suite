@@ -44,7 +44,6 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     skillHandler: {
       sendSkillsList: vi.fn(),
       handleExecuteSkill: vi.fn(),
-      handleCancelSkill: vi.fn(),
       clearActiveSkill: vi.fn(),
     } as any,
     fileOperationHandler: {
@@ -68,14 +67,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleTogglePlanMode: vi.fn(),
       sendPromptMode: vi.fn(),
     } as any,
-    providerHandler: {
-      handleAddModel: vi.fn(),
-      handleRemoveModel: vi.fn(),
-      handleToggleProvider: vi.fn(),
-      handleToggleModel: vi.fn(),
-    } as any,
     integrationHandler: {
-      addMCPServer: vi.fn(),
       handleTestMCPServer: vi.fn(),
     } as any,
     settingsHandler: {

@@ -170,15 +170,6 @@ export class SkillHandler {
     return result;
   }
 
-  /**
-   * Handle skill cancellation request
-   *
-   * @param skillId Skill ID to cancel
-   */
-  handleCancelSkill(skillId: string, conversationId: string): void {
-    this._runtime.cancelSkill(skillId, conversationId);
-  }
-
   // ===========================================================================
   // Private Helpers
   // ===========================================================================

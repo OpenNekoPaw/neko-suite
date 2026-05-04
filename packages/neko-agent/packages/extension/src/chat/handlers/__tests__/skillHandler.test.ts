@@ -283,30 +283,6 @@ describe('SkillHandler', () => {
     });
   });
 
-  describe('handleCancelSkill', () => {
-    it('should clear active skill when matching', async () => {
-      const mockSkill = { name: 'review', description: 'Review code' };
-      skillService.registry.getSkill.mockReturnValue(mockSkill);
-      handler = new SkillHandler({ skillService: skillService as any });
-      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
-
-      expect(handler.getActiveSkill('conv-1')).toBeDefined();
-
-      handler.handleCancelSkill('review', 'conv-1');
-      expect(handler.getActiveSkill('conv-1')).toBeUndefined();
-    });
-
-    it('should not clear active skill for different name', async () => {
-      const mockSkill = { name: 'review', description: 'Review code' };
-      skillService.registry.getSkill.mockReturnValue(mockSkill);
-      handler = new SkillHandler({ skillService: skillService as any });
-      await handler.handleExecuteSkill(webview as any, 'review', 'conv-1');
-
-      handler.handleCancelSkill('commit', 'conv-1');
-      expect(handler.getActiveSkill('conv-1')).toBeDefined();
-    });
-  });
-
   describe('clearActiveSkill', () => {
     it('should clear active skill and delegate to agentManager', async () => {
       const mockSkill = { name: 'review', description: 'Review code' };
