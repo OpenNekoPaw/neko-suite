@@ -3,7 +3,7 @@
  *
  * Responsible for:
  * - Conversation CRUD (new, switch, delete, clear, list)
- * - Agent control (confirmTool, cancelMessage, stopAgent)
+ * - Agent control (confirmTool, cancelMessage)
  * - Agent state snapshots
  */
 
@@ -16,7 +16,6 @@ import {
   runConfirmToolRuntime,
   runDeleteConversationRuntime,
   runNewConversationRuntime,
-  runStopAgentRuntime,
   runSwitchConversationRuntime,
   type ConversationControlRuntimeEffects,
   type ConversationControlRuntimeMessage,
@@ -100,12 +99,6 @@ export class ConversationMessageHandler {
   handleCancelMessage(webview: vscode.Webview, conversationId: string): Promise<void> {
     return this._runConversationRuntime(() =>
       runCancelMessageRuntime({ conversationId }, this._createConversationRuntimeEffects(webview)),
-    );
-  }
-
-  handleStopAgent(webview: vscode.Webview, conversationId: string): Promise<void> {
-    return this._runConversationRuntime(() =>
-      runStopAgentRuntime({ conversationId }, this._createConversationRuntimeEffects(webview)),
     );
   }
 

@@ -878,7 +878,6 @@ export {
   runConfirmToolRuntime,
   runDeleteConversationRuntime,
   runNewConversationRuntime,
-  runStopAgentRuntime,
   runSwitchConversationRuntime,
   type ConfirmToolRuntimeInput,
   type ConversationControlAction,

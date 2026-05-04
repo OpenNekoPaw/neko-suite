@@ -59,7 +59,6 @@ export type {
   AgentStateStoreProjection,
   ProjectAgentPhaseInput,
   ProjectAgentStateSnapshotInput,
-  ProjectAgentStoppedInput,
 } from './agent-state-contract';
 export type {
   ActiveConversationPayload,
@@ -129,7 +128,6 @@ export type {
   AgentMediaModelCategory,
   AgentMediaModelSelections,
   ActiveConversationMessage,
-  AgentStoppedMessage,
   AgentPhaseMessage,
   AgentStateSnapshotMessage,
   AmbientCanvasUpdateMessage,
@@ -215,7 +213,6 @@ export {
   buildAgentPhaseMessage,
   buildAgentStateSnapshotMessage,
   buildConfigChangedMessage,
-  buildAgentStoppedMessage,
   buildConfigStateMessage,
   buildErrorMessage,
   buildExternalInputMessage,

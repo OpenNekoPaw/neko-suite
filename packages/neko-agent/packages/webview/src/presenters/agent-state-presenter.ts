@@ -3,7 +3,6 @@ import type {
   AgentStateStoreProjection,
   ProjectAgentPhaseInput,
   ProjectAgentStateSnapshotInput,
-  ProjectAgentStoppedInput,
 } from '@neko-agent/types';
 
 export function projectAgentPhaseToStateStore(
@@ -20,18 +19,6 @@ export function projectAgentPhaseToStateStore(
       startedAt: input.timestamp ?? input.now?.() ?? Date.now(),
     });
   }
-
-  return {
-    states: next,
-    activeAgentState: getActiveAgentState(next, input.activeConversationId),
-  };
-}
-
-export function projectAgentStoppedToStateStore(
-  input: ProjectAgentStoppedInput,
-): AgentStateStoreProjection {
-  const next = new Map(input.states);
-  next.delete(input.conversationId);
 
   return {
     states: next,

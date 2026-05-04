@@ -24,13 +24,6 @@ export function tryHandleConversationRoute(
       return true;
     }
 
-    case 'stopAgent': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'stop agent');
-      if (!conversationId) return true;
-      deps.conversationMessageHandler.handleStopAgent(webview, conversationId);
-      return true;
-    }
-
     case 'newConversation':
       deps.conversationMessageHandler.handleNewConversation();
       deps.syncCanvasAmbientScopeFromActiveConversation();

@@ -6,7 +6,6 @@ import {
   runClearHistoryRuntime,
   runDeleteConversationRuntime,
   runNewConversationRuntime,
-  runStopAgentRuntime,
   type ConversationControlRuntimeEffects,
 } from '../conversation-control-runtime';
 
@@ -142,23 +141,6 @@ describe('conversation control runtime', () => {
     expect(postMessage).toHaveBeenCalledWith({
       type: 'messageCancelled',
       conversationId: 'conv-1',
-    });
-  });
-
-  it('stops an agent and projects idle phase with the injected clock', async () => {
-    await runStopAgentRuntime({ conversationId: 'conv-1' }, effects);
-
-    expect(cancelAgent).toHaveBeenCalledWith('conv-1');
-    expect(clearAgentState).toHaveBeenCalledWith('conv-1');
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'agentStopped',
-      conversationId: 'conv-1',
-    });
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'agentPhase',
-      conversationId: 'conv-1',
-      phase: 'idle',
-      timestamp: 1234,
     });
   });
 });

@@ -16,7 +16,6 @@ import type {
   StreamThinkingMessage,
   MessageCancelledMessage,
   MessageQueuedMessage,
-  AgentStoppedMessage,
   AgentPhaseMessage,
   AgentStateSnapshotMessage,
 } from './messages';
@@ -33,7 +32,6 @@ import {
 import {
   projectAgentPhaseToStateStore,
   projectAgentStateSnapshot,
-  projectAgentStoppedToStateStore,
 } from '../presenters/agent-state-presenter';
 
 /**
@@ -151,23 +149,6 @@ const handleMessageCancelled: MessageHandler<'messageCancelled'> = (
 };
 
 /**
- * Handle 'agentStopped' message - Stop acknowledgement before the idle phase update.
- */
-const handleAgentStopped: MessageHandler<'agentStopped'> = (
-  message: AgentStoppedMessage,
-  context,
-) => {
-  applyAgentStateProjection(
-    context,
-    projectAgentStoppedToStateStore({
-      states: context.conversationAgentStateRef.current,
-      activeConversationId: context.activeConversationIdRef.current,
-      conversationId: message.conversationId,
-    }),
-  );
-};
-
-/**
  * Handle 'agentPhase' message - Agent execution phase change
  */
 const handleAgentPhase: MessageHandler<'agentPhase'> = (message: AgentPhaseMessage, context) => {
@@ -220,7 +201,6 @@ export const streamingHandlers: HandlerRegistration[] = [
   defineHandler('streamThinking', handleStreamThinking),
   defineHandler('messageCancelled', handleMessageCancelled),
   defineHandler('messageQueued', handleMessageQueued),
-  defineHandler('agentStopped', handleAgentStopped),
   defineHandler('agentPhase', handleAgentPhase),
   defineHandler('agentStateSnapshot', handleAgentStateSnapshot),
 ];

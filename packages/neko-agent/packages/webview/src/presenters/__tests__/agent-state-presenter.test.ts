@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentState } from '@neko-agent/types';
-import {
-  projectAgentPhaseToStateStore,
-  projectAgentStateSnapshot,
-  projectAgentStoppedToStateStore,
-} from '../agent-state-presenter';
+import { projectAgentPhaseToStateStore, projectAgentStateSnapshot } from '../agent-state-presenter';
 
 describe('agent state presenter', () => {
   it('projects phase updates by conversation and returns active state', () => {
@@ -32,7 +28,7 @@ describe('agent state presenter', () => {
     expect(states.size).toBe(0);
   });
 
-  it('removes idle or stopped conversations without affecting other states', () => {
+  it('removes idle conversations without affecting other states', () => {
     const states = new Map<string, AgentState>([
       ['conv-1', { phase: 'thinking', startedAt: 1000 }],
       ['conv-2', { phase: 'streaming', startedAt: 2000 }],
@@ -48,15 +44,6 @@ describe('agent state presenter', () => {
     expect(idle.states.has('conv-1')).toBe(false);
     expect(idle.states.get('conv-2')).toEqual({ phase: 'streaming', startedAt: 2000 });
     expect(idle.activeAgentState).toBeNull();
-
-    const stopped = projectAgentStoppedToStateStore({
-      states: idle.states,
-      activeConversationId: 'conv-2',
-      conversationId: 'conv-2',
-    });
-
-    expect(stopped.states.size).toBe(0);
-    expect(stopped.activeAgentState).toBeNull();
   });
 
   it('projects snapshots defensively and ignores idle or malformed entries', () => {

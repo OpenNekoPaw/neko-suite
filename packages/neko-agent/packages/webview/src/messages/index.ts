@@ -296,10 +296,6 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'setPromptMode', mode, conversationId });
   },
 
-  togglePlanMode: (conversationId: string) => {
-    postWebviewMessage({ type: 'togglePlanMode', conversationId });
-  },
-
   getPromptMode: (conversationId: string) => {
     postWebviewMessage({ type: 'getPromptMode', conversationId });
   },

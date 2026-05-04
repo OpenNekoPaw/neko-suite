@@ -1,11 +1,8 @@
 import {
   buildAgentPhaseMessage,
-  buildAgentStoppedMessage,
   buildHistoryClearedMessage,
   buildMessageCancelledMessage,
-  type AgentPhase,
   type AgentPhaseMessage,
-  type AgentStoppedMessage,
   type HistoryClearedMessage,
   type MessageCancelledMessage,
 } from '@neko-agent/types';
@@ -13,7 +10,6 @@ import {
 export type ConversationControlRuntimeMessage =
   | HistoryClearedMessage
   | MessageCancelledMessage
-  | AgentStoppedMessage
   | AgentPhaseMessage;
 
 export interface ConversationControlDisposable {
@@ -63,8 +59,7 @@ export type ConversationControlAction =
   | 'clear-history'
   | 'clear-all-conversations'
   | 'confirm-tool'
-  | 'cancel-message'
-  | 'stop-agent';
+  | 'cancel-message';
 
 export interface ConversationControlRuntimeResult {
   action: ConversationControlAction;
@@ -242,40 +237,6 @@ export async function runCancelMessageRuntime(
 
   return {
     action: 'cancel-message',
-    handled: true,
-    conversationId: input.conversationId,
-  };
-}
-
-export async function runStopAgentRuntime(
-  input: ConversationControlConversationInput,
-  effects: ConversationControlRuntimeEffects,
-): Promise<ConversationControlRuntimeResult> {
-  if (!requireConversationId('stop-agent', input.conversationId, effects)) {
-    return { action: 'stop-agent', handled: false };
-  }
-  if (!effects.cancelAgent) {
-    effects.onWarning?.({
-      code: 'missing-agent-manager',
-      action: 'stop-agent',
-      conversationId: input.conversationId,
-    });
-    return { action: 'stop-agent', handled: false, conversationId: input.conversationId };
-  }
-
-  effects.cancelAgent(input.conversationId);
-  effects.clearAgentState?.(input.conversationId);
-  await effects.postMessage?.(buildAgentStoppedMessage(input.conversationId));
-  await effects.postMessage?.(
-    buildAgentPhaseMessage({
-      conversationId: input.conversationId,
-      phase: 'idle' satisfies AgentPhase,
-      timestamp: effects.now?.() ?? Date.now(),
-    }),
-  );
-
-  return {
-    action: 'stop-agent',
     handled: true,
     conversationId: input.conversationId,
   };

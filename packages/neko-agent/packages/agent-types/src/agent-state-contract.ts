@@ -22,12 +22,6 @@ export interface ProjectAgentPhaseInput {
   now?: () => number;
 }
 
-export interface ProjectAgentStoppedInput {
-  states: ReadonlyMap<string, AgentState>;
-  activeConversationId: string | null;
-  conversationId: string;
-}
-
 export interface ProjectAgentStateSnapshotInput {
   agentStates: readonly (AgentStateEntry | null | undefined)[];
   activeConversationId: string | null;

@@ -71,10 +71,6 @@ export function tryHandlePlanRoute(
       deps.planModeHandler.handleSetPromptMode(webview, message.conversationId, message.mode);
       return true;
 
-    case 'togglePlanMode':
-      deps.planModeHandler.handleTogglePlanMode(webview, message.conversationId);
-      return true;
-
     case 'getPromptMode':
       deps.planModeHandler.sendPromptMode(webview, message.conversationId);
       return true;

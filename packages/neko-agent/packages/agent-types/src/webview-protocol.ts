@@ -84,12 +84,10 @@ export interface ConversationOnlyWebviewMessage {
     | 'deleteConversation'
     | 'clearHistory'
     | 'cancelMessage'
-    | 'stopAgent'
     | 'getTasks'
     | 'getContextTokenCount'
     | 'compressContext'
     | 'clearActiveSkill'
-    | 'togglePlanMode'
     | 'getPromptMode';
   conversationId: string;
 }
@@ -295,11 +293,6 @@ export interface MessageCancelledMessage {
 export interface MessageQueuedMessage {
   type: 'messageQueued';
   content?: string;
-  conversationId: string;
-}
-
-export interface AgentStoppedMessage {
-  type: 'agentStopped';
   conversationId: string;
 }
 
@@ -595,7 +588,6 @@ export type ExtensionToWebviewMessage =
   | StreamThinkingMessage
   | MessageCancelledMessage
   | MessageQueuedMessage
-  | AgentStoppedMessage
   | AgentPhaseMessage
   | AgentStateSnapshotMessage
   | ErrorMessage
@@ -657,12 +649,10 @@ const CONVERSATION_ONLY_MESSAGE_TYPES: readonly ConversationOnlyWebviewMessage['
   'deleteConversation',
   'clearHistory',
   'cancelMessage',
-  'stopAgent',
   'getTasks',
   'getContextTokenCount',
   'compressContext',
   'clearActiveSkill',
-  'togglePlanMode',
   'getPromptMode',
 ];
 const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
@@ -753,10 +743,6 @@ export function buildHistoryClearedMessage(conversationId: string): HistoryClear
 
 export function buildMessageCancelledMessage(conversationId: string): MessageCancelledMessage {
   return { type: 'messageCancelled', conversationId };
-}
-
-export function buildAgentStoppedMessage(conversationId: string): AgentStoppedMessage {
-  return { type: 'agentStopped', conversationId };
 }
 
 export function buildAgentPhaseMessage(input: {

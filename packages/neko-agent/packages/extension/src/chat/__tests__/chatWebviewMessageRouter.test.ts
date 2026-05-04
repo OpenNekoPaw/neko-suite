@@ -73,7 +73,6 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     conversationMessageHandler: {
       handleConfirmTool: vi.fn(),
       handleCancelMessage: vi.fn(),
-      handleStopAgent: vi.fn(),
       handleNewConversation: vi.fn(),
       handleSwitchConversation: vi.fn(),
       handleDeleteConversation: vi.fn(),

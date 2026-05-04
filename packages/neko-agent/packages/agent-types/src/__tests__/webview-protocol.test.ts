@@ -3,7 +3,6 @@ import {
   buildAmbientCanvasUpdateMessage,
   buildAgentPhaseMessage,
   buildAgentStateSnapshotMessage,
-  buildAgentStoppedMessage,
   buildErrorMessage,
   buildExternalInputMessage,
   buildHistoryClearedMessage,
@@ -200,10 +199,6 @@ describe('webview protocol projectors', () => {
     });
     expect(buildMessageCancelledMessage('conv-1')).toEqual({
       type: 'messageCancelled',
-      conversationId: 'conv-1',
-    });
-    expect(buildAgentStoppedMessage('conv-1')).toEqual({
-      type: 'agentStopped',
       conversationId: 'conv-1',
     });
     expect(

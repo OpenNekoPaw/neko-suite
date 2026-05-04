@@ -9,7 +9,6 @@ export type {
   ActiveConversationMessage,
   AgentPhaseMessage,
   AgentStateSnapshotMessage,
-  AgentStoppedMessage,
   AmbientCanvasUpdateMessage,
   CompressionErrorMessage,
   CompressionResultMessage,

@@ -260,10 +260,10 @@ host bootstrap
 
 ```
 Webview → Extension:
-  sendMessage, confirmTool, stopAgent,
+  sendMessage, confirmTool, cancelMessage,
   newConversation, switchConversation, deleteConversation,
   getSettings, updateSettings, invokeSlashCommand,
-  executeSkill, planApprove/Reject,
+  clearActiveSkill, planApprove/Reject,
   searchProjectFiles, getTasks, cancelTask
 
 Extension → Webview:

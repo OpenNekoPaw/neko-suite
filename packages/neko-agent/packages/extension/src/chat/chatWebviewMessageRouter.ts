@@ -7,6 +7,7 @@ import { tryHandleSettingsRoute } from './router/settingsRoutes';
 import { tryHandleSkillContextRoute } from './router/skillContextRoutes';
 import { tryHandleTaskRoute } from './router/taskRoutes';
 import type { ChatWebviewMessageRouterDeps } from './router/types';
+import type { CONFIG_BRIDGE_MESSAGE_TYPES } from '../services/configBridge';
 
 export type { ChatWebviewMessageRouterDeps } from './router/types';
 
@@ -16,7 +17,6 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'mermaidError',
   'confirmTool',
   'cancelMessage',
-  'stopAgent',
   'newConversation',
   'switchConversation',
   'deleteConversation',
@@ -31,7 +31,6 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'planStepReject',
   'planStepModify',
   'setPromptMode',
-  'togglePlanMode',
   'getPromptMode',
   'getSettings',
   'updateSettings',
@@ -55,6 +54,21 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'getContextTokenCount',
   'compressContext',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
+
+type RoutedWebviewMessageType =
+  | (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number]
+  | (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number];
+type UnroutedWebviewMessageType = Exclude<
+  WebviewToExtensionMessage['type'],
+  RoutedWebviewMessageType
+>;
+type DuplicateBridgeMessageType = Extract<
+  (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number],
+  (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number]
+>;
+type AssertNever<T extends never> = T;
+type _AllWebviewMessagesRouted = AssertNever<UnroutedWebviewMessageType>;
+type _NoBridgeMessageOverlap = AssertNever<DuplicateBridgeMessageType>;
 
 const routeHandlers = [
   tryHandleMessageRoute,

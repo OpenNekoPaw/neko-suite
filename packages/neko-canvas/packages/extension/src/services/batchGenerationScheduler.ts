@@ -174,7 +174,6 @@ export class BatchGenerationScheduler implements vscode.Disposable {
     const { abortController } = task;
 
     task.onProgress('generating');
-    this.reportToAgent(task, 'generating');
 
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
@@ -187,7 +186,6 @@ export class BatchGenerationScheduler implements vscode.Disposable {
         const dataUrl = await this.callAgent(task, abortController.signal);
         if (abortController.signal.aborted) break;
         task.onProgress('done', dataUrl);
-        this.reportToAgent(task, 'done');
         this.running.delete(task.id);
         void this.pump();
         return;
@@ -203,28 +201,9 @@ export class BatchGenerationScheduler implements vscode.Disposable {
 
     if (!abortController.signal.aborted) {
       task.onProgress('error');
-      this.reportToAgent(task, 'error');
     }
     this.running.delete(task.id);
     void this.pump();
-  }
-
-  /**
-   * Fire-and-forget VSCode command that lets neko-agent forward the progress
-   * event to its chat webview. Silently no-ops when neko-agent is not installed.
-   */
-  private reportToAgent(task: GenerationTask, status: GenerationStatus): void {
-    vscode.commands
-      .executeCommand('neko.agent.reportGenerationProgress', {
-        nodeId: task.nodeId,
-        taskId: task.id,
-        cellId: task.cellId,
-        status,
-        total: this.queue.length + this.running.size,
-      })
-      .then(undefined, () => {
-        // neko-agent not installed — ignore
-      });
   }
 
   private async callAgent(task: GenerationTask, signal: AbortSignal): Promise<string> {

@@ -186,31 +186,4 @@ describe('ConversationMessageHandler', () => {
       conversationId: 'conv-b',
     });
   });
-
-  it('stops agent and clears transient UI state', async () => {
-    const messages = { clearAgentState: vi.fn() };
-    handler = new ConversationMessageHandler({
-      conversations: conversations as any,
-      agentManager: agentManager as any,
-      messages: messages as any,
-      promptModeCleanup,
-      getWebview: () => webview as any,
-    });
-
-    await handler.handleStopAgent(webview as any, 'conv-a');
-
-    expect(agentManager.cancel).toHaveBeenCalledWith('conv-a');
-    expect(messages.clearAgentState).toHaveBeenCalledWith('conv-a');
-    expect(webview.postMessage).toHaveBeenCalledWith({
-      type: 'agentStopped',
-      conversationId: 'conv-a',
-    });
-    expect(webview.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'agentPhase',
-        conversationId: 'conv-a',
-        phase: 'idle',
-      }),
-    );
-  });
 });
