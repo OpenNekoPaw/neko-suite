@@ -18,8 +18,6 @@ export {
   type MCPRuntimeBootstrapResult,
   type MCPRuntimeConnectionFailure,
   type MCPRuntimeManager,
-  type MCPRuntimeConnectionStateSink,
-  type MCPRuntimeConnectionStatus,
   type MCPRuntimeToolRegistry,
 } from './mcp-runtime-bootstrap';
 export {

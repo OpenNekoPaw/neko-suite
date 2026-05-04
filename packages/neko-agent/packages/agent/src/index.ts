@@ -389,8 +389,6 @@ export {
   type MCPRuntimeBootstrapResult,
   type MCPRuntimeConnectionFailure,
   type MCPRuntimeManager,
-  type MCPRuntimeConnectionStateSink,
-  type MCPRuntimeConnectionStatus,
   type MCPRuntimeToolRegistry,
   type MCPTestConfig,
   type MCPTestResult,

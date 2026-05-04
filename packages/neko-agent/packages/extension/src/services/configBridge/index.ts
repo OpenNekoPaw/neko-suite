@@ -83,11 +83,9 @@ export class ConfigBridge implements vscode.Disposable {
 
   constructor(
     private readonly platform: Platform,
-    _connectionStateManager?: unknown,
     context?: vscode.ExtensionContext,
   ) {
     // Initialize domain handlers
-    void _connectionStateManager;
     this.skillSync = new SkillSyncHandler(getSkillFileService(), context);
     this.hookSync = new HookSyncHandler(getHookFileService());
     this.toolSkill = new ToolSkillHandler(context);

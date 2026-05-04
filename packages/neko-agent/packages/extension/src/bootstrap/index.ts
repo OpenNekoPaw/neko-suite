@@ -11,8 +11,6 @@ export {
   IMCPManager,
   ITaskManager,
   IAgentManager,
-  IConnectionStateManager,
   IEditorRegistry,
   type IServiceBootstrapResult,
-  type IConnectionStateManager as ConnectionStateManagerType,
 } from './serviceBootstrap';

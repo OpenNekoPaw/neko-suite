@@ -2,18 +2,6 @@ import type { MCPServerConfig, Tool } from '@neko/shared';
 import { createAllMCPTools } from './mcp-tool';
 import type { MCPToolDiscoveryManager } from './mcp-tool';
 
-export type MCPRuntimeConnectionStatus = 'connected' | 'error';
-
-export interface MCPRuntimeConnectionStateSink {
-  updateState(
-    id: string,
-    name: string,
-    type: 'mcp',
-    status: MCPRuntimeConnectionStatus,
-    error?: string,
-  ): void;
-}
-
 export interface MCPRuntimeToolRegistry {
   register(tool: Tool): void;
 }
@@ -31,7 +19,6 @@ export interface MCPRuntimeBootstrapLogger {
 export interface MCPRuntimeBootstrapOptions {
   readonly mcpManager: MCPRuntimeManager;
   readonly toolRegistry: MCPRuntimeToolRegistry;
-  readonly connectionState: MCPRuntimeConnectionStateSink;
   readonly logger?: MCPRuntimeBootstrapLogger;
   readonly createTools?: (mcpManager: MCPRuntimeManager) => Promise<readonly Tool[]>;
 }
@@ -59,7 +46,6 @@ export async function connectMCPServersRuntime(
     try {
       await options.mcpManager.connect(server.id);
       connectedServerIds.push(server.id);
-      options.connectionState.updateState(server.id, server.name, 'mcp', 'connected');
       options.logger?.info(`Connected to MCP server: ${server.name}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -68,7 +54,6 @@ export async function connectMCPServersRuntime(
         name: server.name,
         error: errorMessage,
       });
-      options.connectionState.updateState(server.id, server.name, 'mcp', 'error', errorMessage);
       options.logger?.error(`Failed to connect to MCP server ${server.name}:`, error);
     }
   }

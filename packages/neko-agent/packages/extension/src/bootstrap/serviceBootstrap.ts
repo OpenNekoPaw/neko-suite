@@ -38,23 +38,6 @@ export const IAgentManager = createServiceId<IAgentManagerInterface>('agentManag
 // Re-export IEditorRegistry
 export { IEditorRegistry };
 
-// Import and re-export ConnectionStateManager from services
-import {
-  ConnectionStateManager,
-  IConnectionStateManager,
-  type ConnectionStatus,
-  type ConnectionState,
-  type ConnectionStateChangeEvent,
-} from '../services/connectionStateManager';
-
-export {
-  ConnectionStateManager,
-  IConnectionStateManager,
-  type ConnectionStatus,
-  type ConnectionState,
-  type ConnectionStateChangeEvent,
-};
-
 // =============================================================================
 // Service Bootstrap Result
 // =============================================================================
@@ -65,7 +48,6 @@ export interface IServiceBootstrapResult {
   mcpManager: MCPManager;
   taskManager: IRuntimeTaskManager;
   agentManager: AgentManager;
-  connectionStateManager: ConnectionStateManager;
   editorRegistry: EditorRegistry;
 }
 
@@ -118,13 +100,7 @@ export async function bootstrapCoreServices(
   services.set(IPlatform, platform);
 
   // ==========================================================================
-  // 4. Connection State Manager
-  // ==========================================================================
-  const connectionStateManager = new ConnectionStateManager();
-  services.set(IConnectionStateManager, connectionStateManager);
-
-  // ==========================================================================
-  // 5. MCP Manager
+  // 4. MCP Manager
   // ==========================================================================
   const mcpManager = new MCPManager();
 
@@ -140,20 +116,19 @@ export async function bootstrapCoreServices(
   connectMCPServersRuntime({
     mcpManager,
     toolRegistry,
-    connectionState: connectionStateManager,
     logger,
   }).catch((error) => {
     logger.error('Failed to connect MCP servers:', error);
   });
 
   // ==========================================================================
-  // 6. Agent Manager
+  // 5. Agent Manager
   // ==========================================================================
   const agentManager = new AgentManager();
   services.set(IAgentManager, agentManager);
 
   // ==========================================================================
-  // 7. Editor Registry
+  // 6. Editor Registry
   // ==========================================================================
   const editorRegistry = new EditorRegistry();
   services.set(IEditorRegistry, editorRegistry);
@@ -164,7 +139,6 @@ export async function bootstrapCoreServices(
     mcpManager,
     taskManager,
     agentManager,
-    connectionStateManager,
     editorRegistry,
   };
 }

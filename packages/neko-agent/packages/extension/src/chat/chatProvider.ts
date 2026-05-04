@@ -18,7 +18,6 @@ import {
   IPlatform,
   ITaskManager,
   IToolRegistry,
-  IConnectionStateManager,
   IAgentManager as IAgentManagerId,
 } from '../bootstrap';
 import { SettingsManager } from './settingsManager';
@@ -194,15 +193,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           logger.error('Failed to load AGENTS.md:', err);
         });
 
-        // Get ConnectionStateManager for state sync
-        const connectionStateManager = getService(IConnectionStateManager);
-
         // Initialize ConfigBridge for unified config message handling
-        this._configBridge = new ConfigBridge(
-          this._platform,
-          connectionStateManager,
-          this._context,
-        );
+        this._configBridge = new ConfigBridge(this._platform, this._context);
 
         this._capabilityRefreshRuntime = createCapabilityRuntimeRefreshRuntime({
           getBindings: () => getCapabilityRuntimeBindings(),

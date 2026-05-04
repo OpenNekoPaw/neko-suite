@@ -432,19 +432,6 @@ export {
 } from './conversation-route-runtime';
 
 export {
-  createRuntimeConnectionStateStore,
-  getRuntimeConnectionStateKey,
-  type ConnectionServiceType,
-  type ConnectionState,
-  type ConnectionStateChangeEvent,
-  type ConnectionStateListener,
-  type ConnectionStatus,
-  type RuntimeConnectionStateStore,
-  type RuntimeConnectionStateStoreOptions,
-  type RuntimeConnectionStateUpdate,
-} from './connection-state-runtime';
-
-export {
   buildCompressionErrorMessage,
   buildCompressionResultMessage,
   buildContextTokenCountMessage,

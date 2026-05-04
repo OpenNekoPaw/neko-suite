@@ -45,7 +45,34 @@ function createTool(name: string): Tool {
 }
 
 describe('connectMCPServersRuntime', () => {
-  it('connects registered servers, updates state, and registers MCP tools', async () => {
+  it('connects registered servers and registers MCP tools without requiring a state observer', async () => {
+    const mcpManager = new MCPManager();
+    mcpManager.register(createServer({ id: 'server-a', name: 'Server A' }));
+
+    const connect = vi
+      .spyOn(mcpManager, 'connect')
+      .mockImplementation(async (serverId) => createConnectedClient(serverId));
+    const tool = createTool('mcp__server-a__search');
+    const toolRegistry = { register: vi.fn() };
+    const createTools = vi.fn(async () => [tool]);
+
+    const result = await connectMCPServersRuntime({
+      mcpManager,
+      toolRegistry,
+      createTools,
+    });
+
+    expect(connect).toHaveBeenCalledWith('server-a');
+    expect(createTools).toHaveBeenCalledWith(mcpManager);
+    expect(toolRegistry.register).toHaveBeenCalledWith(tool);
+    expect(result).toEqual({
+      connectedServerIds: ['server-a'],
+      failedServers: [],
+      registeredToolCount: 1,
+    });
+  });
+
+  it('connects multiple registered servers and registers MCP tools', async () => {
     const mcpManager = new MCPManager();
     mcpManager.register(createServer({ id: 'server-a', name: 'Server A' }));
     mcpManager.register(createServer({ id: 'server-b', name: 'Server B' }));
@@ -54,32 +81,18 @@ describe('connectMCPServersRuntime', () => {
       .spyOn(mcpManager, 'connect')
       .mockImplementation(async (serverId) => createConnectedClient(serverId));
     const tool = createTool('mcp__server-a__search');
-    const connectionState = { updateState: vi.fn() };
     const toolRegistry = { register: vi.fn() };
     const createTools = vi.fn(async () => [tool]);
 
     const result = await connectMCPServersRuntime({
       mcpManager,
       toolRegistry,
-      connectionState,
       createTools,
     });
 
     expect(connect).toHaveBeenCalledTimes(2);
     expect(connect).toHaveBeenNthCalledWith(1, 'server-a');
     expect(connect).toHaveBeenNthCalledWith(2, 'server-b');
-    expect(connectionState.updateState).toHaveBeenCalledWith(
-      'server-a',
-      'Server A',
-      'mcp',
-      'connected',
-    );
-    expect(connectionState.updateState).toHaveBeenCalledWith(
-      'server-b',
-      'Server B',
-      'mcp',
-      'connected',
-    );
     expect(createTools).toHaveBeenCalledWith(mcpManager);
     expect(toolRegistry.register).toHaveBeenCalledWith(tool);
     expect(result).toEqual({
@@ -103,7 +116,6 @@ describe('connectMCPServersRuntime', () => {
       return createConnectedClient(serverId);
     });
 
-    const connectionState = { updateState: vi.fn() };
     const toolRegistry = { register: vi.fn() };
     const createTools = vi.fn(async () => {
       events.push('createTools');
@@ -113,24 +125,10 @@ describe('connectMCPServersRuntime', () => {
     const result = await connectMCPServersRuntime({
       mcpManager,
       toolRegistry,
-      connectionState,
       createTools,
     });
 
     expect(events).toEqual(['connect:server-a', 'connect:server-b', 'createTools']);
-    expect(connectionState.updateState).toHaveBeenCalledWith(
-      'server-a',
-      'Server A',
-      'mcp',
-      'connected',
-    );
-    expect(connectionState.updateState).toHaveBeenCalledWith(
-      'server-b',
-      'Server B',
-      'mcp',
-      'error',
-      'connection refused',
-    );
     expect(toolRegistry.register).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       connectedServerIds: ['server-a'],

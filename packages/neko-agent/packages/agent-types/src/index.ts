@@ -13,13 +13,6 @@ export type {
   SlashCommandResultProjection,
   SlashCommandResultProjectionOptions,
 } from './command-result-contract';
-export type {
-  ConnectionServiceType,
-  ConnectionState,
-  ConnectionStateChangeEvent,
-  ConnectionStateListener,
-  ConnectionStatus,
-} from './connection-state';
 export {
   NEKO_AGENT_LLM_GENERATE_COMMAND,
   NEKO_AGENT_REGISTER_CAPABILITIES_COMMAND,
