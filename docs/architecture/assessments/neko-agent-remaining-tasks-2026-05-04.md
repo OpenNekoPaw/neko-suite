@@ -103,11 +103,13 @@ Agent Webview / Extension 内嵌 marketplace bridge 已删除。Skill 安装目�
 
 - `stopAgent` 的 Webview→Extension message、Extension route、handler、runtime `runStopAgentRuntime`、`agentStopped` Extension→Webview 投影链路均已删除。
 - Webview→Extension `togglePlanMode` message 已删除；`/plan` slash command 仍通过 `PlanModeHandler.handleTogglePlanMode` 与 prompt runtime 走内部链路。
+- `parseWebviewToExtensionMessage({ type: 'togglePlanMode' })` 测试已同步为返回 `null`，避免协议删除后测试仍期望旧消息可解析。
 - `neko-canvas` 对已删除命令 `neko.agent.reportGenerationProgress` 的 fire-and-forget 调用已删除，保留 canvas 自己的 `generationProgress` Webview 进度链路。
 
 关键位置：
 
 - `packages/neko-agent/packages/agent-types/src/webview-protocol.ts`
+- `packages/neko-agent/packages/agent-types/src/__tests__/webview-protocol.test.ts`
 - `packages/neko-agent/packages/extension/src/chat/router/conversationRoutes.ts`
 - `packages/neko-agent/packages/extension/src/chat/router/planRoutes.ts`
 - `packages/neko-agent/packages/agent/src/session/conversation-control-runtime.ts`
