@@ -33,7 +33,6 @@ import {
   SkillHandler,
   FileOperationHandler,
   PlanModeHandler,
-  IntegrationHandler,
   SettingsHandler,
   ContextHandler,
   SlashCommandHandler,
@@ -101,7 +100,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly _skillHandler: SkillHandler;
   private readonly _fileOperationHandler: FileOperationHandler;
   private readonly _planModeHandler: PlanModeHandler;
-  private readonly _integrationHandler: IntegrationHandler;
   private readonly _settingsHandler: SettingsHandler;
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
@@ -152,7 +150,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       systemPrompt: this._systemPrompt,
       conversations: this._conversations,
     });
-    this._integrationHandler = new IntegrationHandler();
     this._settingsHandler = new SettingsHandler({});
     this._contextHandler = new ContextHandler({
       conversations: this._conversations,
@@ -485,7 +482,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           skillHandler: this._skillHandler,
           fileOperationHandler: this._fileOperationHandler,
           planModeHandler: this._planModeHandler,
-          integrationHandler: this._integrationHandler,
           settingsHandler: this._settingsHandler,
           contextHandler: this._contextHandler,
           slashCommandHandler: this._slashCommandHandler,

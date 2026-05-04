@@ -25,31 +25,6 @@ export function tryHandleFileAndPluginRoute(
       deps.fileOperationHandler.handleOpenConfigFile();
       return true;
 
-    case 'openPromptConfig':
-      deps.fileOperationHandler.handleOpenPromptConfig(message.source, message.promptId);
-      return true;
-
-    case 'openAgentsFile':
-      deps.fileOperationHandler.handleOpenAgentsFile(message.source);
-      return true;
-
-    case 'openSettingsFile':
-      deps.fileOperationHandler.handleOpenSettingsFile(message.source);
-      return true;
-
-    case 'openSkillFile':
-      deps.fileOperationHandler.handleOpenSkillFile(
-        message.skillName,
-        message.source,
-        message.fileType,
-        message.filePath,
-      );
-      return true;
-
-    case 'openCommandFile':
-      deps.fileOperationHandler.handleOpenCommandFile(message.commandName, message.source);
-      return true;
-
     case 'openUrl':
       deps.fileOperationHandler.handleOpenUrl(message.url);
       return true;

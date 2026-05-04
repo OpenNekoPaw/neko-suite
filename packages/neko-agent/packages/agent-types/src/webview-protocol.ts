@@ -156,18 +156,6 @@ export interface UpdateTabStateWebviewMessage {
   activeTabId: string | null;
 }
 
-export interface TestMcpServerWebviewMessage {
-  type: 'testMCPServer';
-  server: {
-    id: string;
-    name: string;
-    command: string;
-    args?: string[];
-    env?: Record<string, string>;
-    requestId?: string;
-  };
-}
-
 export interface TaskActionWebviewMessage {
   type: 'cancelTask' | 'retryTask' | 'removeTask' | 'viewTaskResult';
   taskId: string;
@@ -183,36 +171,6 @@ export interface OpenFileWebviewMessage {
 export interface FilePathWebviewMessage {
   type: 'revealFile';
   filePath: string;
-}
-
-export interface OpenPromptConfigWebviewMessage {
-  type: 'openPromptConfig';
-  source: 'personal' | 'project';
-  promptId?: string;
-}
-
-export interface SourceFileWebviewMessage {
-  type: 'openAgentsFile';
-  source: 'personal' | 'project';
-}
-
-export interface OpenSettingsFileWebviewMessage {
-  type: 'openSettingsFile';
-  source: 'personal' | 'project' | 'local';
-}
-
-export interface OpenSkillFileWebviewMessage {
-  type: 'openSkillFile';
-  skillName: string;
-  source: 'personal' | 'project';
-  fileType: 'skill' | 'reference' | 'script';
-  filePath?: string;
-}
-
-export interface OpenCommandFileWebviewMessage {
-  type: 'openCommandFile';
-  commandName: string;
-  source: 'personal' | 'project';
 }
 
 export interface OpenUrlWebviewMessage {
@@ -305,15 +263,9 @@ export type WebviewToExtensionMessage =
   | PlanStepActionWebviewMessage
   | UpdateSettingsWebviewMessage
   | UpdateTabStateWebviewMessage
-  | TestMcpServerWebviewMessage
   | TaskActionWebviewMessage
   | OpenFileWebviewMessage
   | FilePathWebviewMessage
-  | OpenPromptConfigWebviewMessage
-  | SourceFileWebviewMessage
-  | OpenSettingsFileWebviewMessage
-  | OpenSkillFileWebviewMessage
-  | OpenCommandFileWebviewMessage
   | OpenUrlWebviewMessage
   | SetPromptModeWebviewMessage
   | SendToPluginWebviewMessage
@@ -942,15 +894,9 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   ...PLAN_STEP_ACTION_MESSAGE_TYPES,
   'updateSettings',
   'updateTabState',
-  'testMCPServer',
   ...TASK_ACTION_MESSAGE_TYPES,
   'openFile',
   'revealFile',
-  'openPromptConfig',
-  'openAgentsFile',
-  'openSettingsFile',
-  'openSkillFile',
-  'openCommandFile',
   'openUrl',
   'setPromptMode',
   'sendToPlugin',
@@ -966,20 +912,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'market:uninstall',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
-const SOURCE_TYPES: ReadonlyArray<OpenPromptConfigWebviewMessage['source']> = [
-  'personal',
-  'project',
-];
-const SETTINGS_SOURCE_TYPES: ReadonlyArray<OpenSettingsFileWebviewMessage['source']> = [
-  'personal',
-  'project',
-  'local',
-];
-const SKILL_FILE_TYPES: ReadonlyArray<OpenSkillFileWebviewMessage['fileType']> = [
-  'skill',
-  'reference',
-  'script',
-];
 const PROMPT_MODES: readonly SetPromptModeWebviewMessage['mode'][] = ['default', 'plan'];
 const DRAG_MEDIA_TYPES: ReadonlyArray<DragStartWebviewMessage['asset']['mediaType']> = [
   'image',
@@ -1294,22 +1226,10 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseUpdateSettingsMessage(raw);
     case 'updateTabState':
       return parseUpdateTabStateMessage(raw);
-    case 'testMCPServer':
-      return parseTestMcpServerMessage(raw);
     case 'openFile':
       return parseOpenFileMessage(raw);
     case 'revealFile':
       return parseFilePathMessage('revealFile', raw);
-    case 'openPromptConfig':
-      return parseOpenPromptConfigMessage(raw);
-    case 'openAgentsFile':
-      return parseSourceFileMessage(raw);
-    case 'openSettingsFile':
-      return parseOpenSettingsFileMessage(raw);
-    case 'openSkillFile':
-      return parseOpenSkillFileMessage(raw);
-    case 'openCommandFile':
-      return parseOpenCommandFileMessage(raw);
     case 'openUrl':
       return parseOpenUrlMessage(raw);
     case 'setPromptMode':
@@ -1517,31 +1437,6 @@ function parseUpdateTabStateMessage(
   return { type: 'updateTabState', openTabs, activeTabId: raw.activeTabId };
 }
 
-function parseTestMcpServerMessage(
-  raw: Record<string, unknown>,
-): TestMcpServerWebviewMessage | null {
-  if (!isRecord(raw.server)) return null;
-  const id = requiredString(raw.server.id);
-  const name = requiredString(raw.server.name);
-  const command = requiredString(raw.server.command);
-  const args = raw.server.args === undefined ? undefined : parseStringArray(raw.server.args);
-  const env = raw.server.env === undefined ? undefined : parseStringRecord(raw.server.env);
-  const requestId = optionalStringStrict(raw.server.requestId);
-  if (!id || !name || !command || args === null || env === null || requestId === null) return null;
-
-  return {
-    type: 'testMCPServer',
-    server: {
-      id,
-      name,
-      command,
-      ...(args !== undefined ? { args } : {}),
-      ...(env !== undefined ? { env } : {}),
-      ...(requestId !== undefined ? { requestId } : {}),
-    },
-  };
-}
-
 function parseTaskActionMessage(
   type: TaskActionWebviewMessage['type'],
   raw: Record<string, unknown>,
@@ -1564,56 +1459,6 @@ function parseFilePathMessage(
 ): FilePathWebviewMessage | null {
   const filePath = requiredString(raw.filePath);
   return filePath ? { type, filePath } : null;
-}
-
-function parseOpenPromptConfigMessage(
-  raw: Record<string, unknown>,
-): OpenPromptConfigWebviewMessage | null {
-  if (!isSource(raw.source)) return null;
-  const promptId = optionalStringStrict(raw.promptId);
-  if (promptId === null) return null;
-  return {
-    type: 'openPromptConfig',
-    source: raw.source,
-    ...(promptId !== undefined ? { promptId } : {}),
-  };
-}
-
-function parseSourceFileMessage(raw: Record<string, unknown>): SourceFileWebviewMessage | null {
-  if (!isSource(raw.source)) return null;
-  return { type: 'openAgentsFile', source: raw.source };
-}
-
-function parseOpenSettingsFileMessage(
-  raw: Record<string, unknown>,
-): OpenSettingsFileWebviewMessage | null {
-  if (!isSettingsSource(raw.source)) return null;
-  return { type: 'openSettingsFile', source: raw.source };
-}
-
-function parseOpenSkillFileMessage(
-  raw: Record<string, unknown>,
-): OpenSkillFileWebviewMessage | null {
-  const skillName = requiredString(raw.skillName);
-  const filePath = optionalStringStrict(raw.filePath);
-  if (!skillName || !isSource(raw.source) || !isSkillFileType(raw.fileType) || filePath === null) {
-    return null;
-  }
-  return {
-    type: 'openSkillFile',
-    skillName,
-    source: raw.source,
-    fileType: raw.fileType,
-    ...(filePath !== undefined ? { filePath } : {}),
-  };
-}
-
-function parseOpenCommandFileMessage(
-  raw: Record<string, unknown>,
-): OpenCommandFileWebviewMessage | null {
-  const commandName = requiredString(raw.commandName);
-  if (!commandName || !isSource(raw.source)) return null;
-  return { type: 'openCommandFile', commandName, source: raw.source };
 }
 
 function parseOpenUrlMessage(raw: Record<string, unknown>): OpenUrlWebviewMessage | null {
@@ -1895,18 +1740,6 @@ function isPlanStepActionMessageType(value: string): value is PlanStepActionWebv
 
 function isTaskActionMessageType(value: string): value is TaskActionWebviewMessage['type'] {
   return includesString(TASK_ACTION_MESSAGE_TYPES, value);
-}
-
-function isSource(value: unknown): value is OpenPromptConfigWebviewMessage['source'] {
-  return typeof value === 'string' && includesString(SOURCE_TYPES, value);
-}
-
-function isSettingsSource(value: unknown): value is OpenSettingsFileWebviewMessage['source'] {
-  return typeof value === 'string' && includesString(SETTINGS_SOURCE_TYPES, value);
-}
-
-function isSkillFileType(value: unknown): value is OpenSkillFileWebviewMessage['fileType'] {
-  return typeof value === 'string' && includesString(SKILL_FILE_TYPES, value);
 }
 
 function isPromptMode(value: unknown): value is SetPromptModeWebviewMessage['mode'] {

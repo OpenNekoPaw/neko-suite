@@ -5,15 +5,13 @@ export function tryHandleSettingsRoute(
   message: WebviewToExtensionMessage,
   deps: ChatWebviewMessageRouterDeps,
 ): boolean {
-  const { webview } = deps;
-
   switch (message.type) {
     case 'getSettings':
-      deps.settingsHandler.sendSettings(webview);
+      deps.settingsHandler.sendSettings(deps.webview);
       return true;
 
     case 'updateSettings':
-      void deps.settingsHandler.handleUpdateSettings(webview, message.settings);
+      void deps.settingsHandler.handleUpdateSettings(deps.webview, message.settings);
       return true;
 
     case 'getTabState':
@@ -22,10 +20,6 @@ export function tryHandleSettingsRoute(
 
     case 'updateTabState':
       deps.updateTabState(message.openTabs, message.activeTabId);
-      return true;
-
-    case 'testMCPServer':
-      deps.integrationHandler.handleTestMCPServer(webview, message.server);
       return true;
 
     default:

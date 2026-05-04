@@ -50,11 +50,6 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleOpenFile: vi.fn(),
       handleRevealFile: vi.fn(),
       handleOpenConfigFile: vi.fn(),
-      handleOpenPromptConfig: vi.fn(),
-      handleOpenAgentsFile: vi.fn(),
-      handleOpenSettingsFile: vi.fn(),
-      handleOpenSkillFile: vi.fn(),
-      handleOpenCommandFile: vi.fn(),
       handleOpenUrl: vi.fn(),
       handleDownloadSvg: vi.fn(),
     } as any,
@@ -66,9 +61,6 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleSetPromptMode: vi.fn(),
       handleTogglePlanMode: vi.fn(),
       sendPromptMode: vi.fn(),
-    } as any,
-    integrationHandler: {
-      handleTestMCPServer: vi.fn(),
     } as any,
     settingsHandler: {
       sendSettings: vi.fn(),
