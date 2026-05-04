@@ -101,6 +101,23 @@ export interface AblationToggles {
   /** Agent-first multimodal observation/evidence/recovery toggles. */
   agentFirst?: AgentFirstAblationToggles;
 
+  // --- Unified workflow runtime ---
+
+  /** IDC workflow envelope. false = run without IDC workflow runtime hints. */
+  idcWorkflow?: false;
+  /** PlanMode workflow profile. false = keep chat execution but remove PlanMode profile hints. */
+  planModeProfile?: false;
+  /** Capability protocol enforcement. false = discover capabilities without strict enforcement. */
+  capabilityProtocol?: false;
+  /** Runtime prompt/schema generator. false = fallback to base prompt and static schemas. */
+  promptSchemaGenerator?: false;
+  /** Subagent orchestration. false = use non-subagent fallback or record unavailable. */
+  subagentOrchestration?: false;
+  /** Multimodal context injection. false = record evidence existence but withhold it. */
+  multimodalContext?: false;
+  /** Evaluator prompt/schema hints. false = evaluator metrics may still run without hints. */
+  evaluatorHints?: false;
+
   // --- LLM parameters ---
 
   /** Thinking budget override (0 = disable extended thinking) */
@@ -241,6 +258,88 @@ export interface ExperimentMetrics {
     byTool: Record<string, { calls: number; successes: number; failures: number }>;
   };
   custom: Record<string, unknown>;
+}
+
+export interface WorkflowMetricSnapshot {
+  workflowRunId?: string;
+  workflowNodeId?: string;
+  nodeCompletions: number;
+  taskCompletions: number;
+  approvalInterruptions: number;
+  generatedArtifacts: number;
+  retries: number;
+  latencyMs: number;
+  toolCalls: number;
+  evaluatorOutcomes: readonly EvaluationResult[];
+}
+
+export interface PromptSchemaSnapshotRef {
+  workflowRunId?: string;
+  workflowNodeId?: string;
+  providerId?: string;
+  modelId?: string;
+  variantName: string;
+  promptHash?: string;
+  schemaHash?: string;
+  snapshotRef?: string;
+}
+
+export type CapabilityEvolutionEventKind =
+  | 'skill-install'
+  | 'skill-update'
+  | 'skill-remove'
+  | 'prompt-fragment-change'
+  | 'schema-change'
+  | 'workflow-definition-change'
+  | 'provider-card-change';
+
+export interface CapabilityEvolutionEvent {
+  id: string;
+  kind: CapabilityEvolutionEventKind;
+  capabilityId?: string;
+  version?: string;
+  summary: string;
+  createdAt: number;
+}
+
+export interface WorkflowEvaluationFixture {
+  name: string;
+  prompt: string;
+  workflowRunId?: string;
+  workflowNodeId?: string;
+  expectedCapabilities?: readonly string[];
+  expectedModalities?: readonly string[];
+}
+
+export interface WorkflowEvaluationVariantInput {
+  variantName: string;
+  toggles: AblationToggles;
+  metrics: ExperimentMetrics;
+  promptSnapshot?: PromptSchemaSnapshotRef;
+  evolutionEvents?: readonly CapabilityEvolutionEvent[];
+}
+
+export interface WorkflowEvaluationHarnessInput {
+  fixture: WorkflowEvaluationFixture;
+  baseline: WorkflowEvaluationVariantInput;
+  variants: readonly WorkflowEvaluationVariantInput[];
+}
+
+export interface WorkflowEvaluationComparison {
+  variantName: string;
+  tokenDelta: number;
+  latencyDeltaMs: number;
+  toolCallDelta: number;
+  promptHashChanged: boolean;
+  omittedCapabilities: readonly string[];
+}
+
+export interface WorkflowEvaluationHarnessResult {
+  fixture: WorkflowEvaluationFixture;
+  baseline: WorkflowEvaluationVariantInput;
+  variants: readonly WorkflowEvaluationVariantInput[];
+  comparisons: readonly WorkflowEvaluationComparison[];
+  evolutionEvents: readonly CapabilityEvolutionEvent[];
 }
 
 // =============================================================================

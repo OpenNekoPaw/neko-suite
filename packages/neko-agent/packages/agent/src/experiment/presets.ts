@@ -112,6 +112,48 @@ export const NO_THINKING: ExperimentVariant = {
   toggles: { thinkingBudget: 0 },
 };
 
+export const NO_IDC_WORKFLOW: ExperimentVariant = {
+  name: 'no-idc-workflow',
+  description: 'Unified IDC workflow envelope disabled',
+  toggles: { idcWorkflow: false },
+};
+
+export const NO_PLAN_MODE_PROFILE: ExperimentVariant = {
+  name: 'no-plan-mode-profile',
+  description: 'PlanMode workflow profile hints disabled',
+  toggles: { planModeProfile: false },
+};
+
+export const NO_CAPABILITY_PROTOCOL: ExperimentVariant = {
+  name: 'no-capability-protocol',
+  description: 'Capability protocol enforcement disabled',
+  toggles: { capabilityProtocol: false },
+};
+
+export const NO_PROMPT_SCHEMA_GENERATOR: ExperimentVariant = {
+  name: 'no-dynamic-schema',
+  description: 'Runtime prompt/schema generator disabled',
+  toggles: { promptSchemaGenerator: false },
+};
+
+export const NO_SUBAGENT_ORCHESTRATION: ExperimentVariant = {
+  name: 'no-subagent',
+  description: 'Subagent orchestration disabled',
+  toggles: { subagentOrchestration: false },
+};
+
+export const NO_MULTIMODAL_CONTEXT: ExperimentVariant = {
+  name: 'no-multimodal-context',
+  description: 'Multimodal context injection disabled',
+  toggles: { multimodalContext: false },
+};
+
+export const NO_EVALUATOR_HINTS: ExperimentVariant = {
+  name: 'no-evaluator-hints',
+  description: 'Evaluator prompt/schema hints disabled',
+  toggles: { evaluatorHints: false },
+};
+
 // =============================================================================
 // Parameter Override Variants
 // =============================================================================
@@ -215,6 +257,13 @@ export function createStandardAblationSuite(): ExperimentVariant[] {
     NO_MEMORY_RECALL,
     NO_TRAITS,
     NO_THINKING,
+    NO_IDC_WORKFLOW,
+    NO_PLAN_MODE_PROFILE,
+    NO_CAPABILITY_PROTOCOL,
+    NO_PROMPT_SCHEMA_GENERATOR,
+    NO_SUBAGENT_ORCHESTRATION,
+    NO_MULTIMODAL_CONTEXT,
+    NO_EVALUATOR_HINTS,
   ];
 }
 

@@ -55,6 +55,13 @@ export interface AblationMarkerHook extends ExecutorHooks {
   disableAgentFirstRecoveryGuidance: boolean;
   /** Agent-first tool-evidence guidance mode override. */
   agentFirstToolEvidenceMode?: AgentFirstToolEvidenceMode;
+  disableIdcWorkflow: boolean;
+  disablePlanModeProfile: boolean;
+  disableCapabilityProtocol: boolean;
+  disablePromptSchemaGenerator: boolean;
+  disableSubagentOrchestration: boolean;
+  disableMultimodalContext: boolean;
+  disableEvaluatorHints: boolean;
 }
 
 function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook {
@@ -80,6 +87,13 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
     ...(toggles.toolInjection !== undefined && {
       toolInjectionMode: toggles.toolInjection,
     }),
+    disableIdcWorkflow: toggles.idcWorkflow === false,
+    disablePlanModeProfile: toggles.planModeProfile === false,
+    disableCapabilityProtocol: toggles.capabilityProtocol === false,
+    disablePromptSchemaGenerator: toggles.promptSchemaGenerator === false,
+    disableSubagentOrchestration: toggles.subagentOrchestration === false,
+    disableMultimodalContext: toggles.multimodalContext === false,
+    disableEvaluatorHints: toggles.evaluatorHints === false,
   };
 }
 
