@@ -185,10 +185,12 @@ function createMockConversations() {
 
 /** Minimal IAgentRunner — returned by agentManager.getOrCreate */
 function createMockAgentRunner() {
-  let subAgentEventListener: ((event: SubAgentEvent) => void) | undefined;
+  let runnerEventListener:
+    | ((event: { type: 'subagent'; event: SubAgentEvent } | { type: 'stop' }) => void)
+    | undefined;
   const subAgentEventDisposable = {
     dispose: vi.fn(() => {
-      subAgentEventListener = undefined;
+      runnerEventListener = undefined;
     }),
   };
 
@@ -198,11 +200,12 @@ function createMockAgentRunner() {
     execute: vi.fn().mockReturnValue((async function* () {})()),
     abort: vi.fn(),
     onDidRequestConfirmation: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-    onDidSubAgentEvent: vi.fn().mockImplementation((listener: (event: SubAgentEvent) => void) => {
-      subAgentEventListener = listener;
+    onDidSubAgentEvent: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+    onDidRunnerEvent: vi.fn().mockImplementation((listener: typeof runnerEventListener) => {
+      runnerEventListener = listener;
       return subAgentEventDisposable;
     }),
-    emitSubAgentEvent: (event: SubAgentEvent) => subAgentEventListener?.(event),
+    emitSubAgentEvent: (event: SubAgentEvent) => runnerEventListener?.({ type: 'subagent', event }),
     subAgentEventDisposable,
   };
 }

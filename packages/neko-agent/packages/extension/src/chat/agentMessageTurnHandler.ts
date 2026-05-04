@@ -236,10 +236,13 @@ export class AgentMessageTurnHandler {
       return;
     }
 
-    const disposable = agentRunner.onDidSubAgentEvent((event) => {
+    const disposable = agentRunner.onDidRunnerEvent((runnerEvent) => {
+      if (runnerEvent.type !== 'subagent') {
+        return;
+      }
       const message = this._subAgentEventRuntime.projectForConversation({
         conversationId,
-        event,
+        event: runnerEvent.event,
       });
       if (!message) {
         return;

@@ -159,7 +159,11 @@ export class ConversationMessageHandler {
       isAgentRunning: (conversationId) =>
         this.deps.agentManager?.get(conversationId)?.isRunning() ?? false,
       onAgentStopped: (conversationId, listener) =>
-        this.deps.agentManager?.get(conversationId)?.onDidStop(listener),
+        this.deps.agentManager?.get(conversationId)?.onDidRunnerEvent((event) => {
+          if (event.type === 'stop') {
+            listener();
+          }
+        }),
       postMessage: async (message: ConversationControlRuntimeMessage): Promise<void> => {
         await webview?.postMessage(message);
       },
