@@ -1,5 +1,4 @@
-import type { PlanStatus } from '@neko-agent/types';
-import type { PlanStepMessageUpdate } from './plan-message-updater';
+import type { PlanStatus, PlanStepMessageUpdate } from '@neko-agent/types';
 import { buildPlanRejectionFeedbackMessage } from './plan-review-messages';
 
 export type PlanPromptMode = 'default' | 'plan';

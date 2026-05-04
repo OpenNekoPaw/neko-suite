@@ -1,4 +1,9 @@
-import type { Message } from '@neko-agent/types';
+import {
+  type Message,
+  type PlanStepMessageUpdate,
+  updatePlanStatusInMessages,
+  updatePlanStepInMessages,
+} from '@neko-agent/types';
 import {
   buildPlanApprovalDispatchPlan,
   buildPlanApprovalExecutionDispatch,
@@ -15,11 +20,6 @@ import {
   type PlanStepReviewAction,
   type PlanStepStatusUpdateMessage,
 } from './plan-review-presenter';
-import {
-  updatePlanStatusInMessages,
-  updatePlanStepInMessages,
-  type PlanStepMessageUpdate,
-} from './plan-message-updater';
 
 export type PlanReviewRuntimeMessage =
   | PlanStatusUpdateMessage

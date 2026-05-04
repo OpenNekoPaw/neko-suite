@@ -4,7 +4,11 @@ import type {
   TaskCreatedMessage,
   TaskUpdatedMessage,
 } from '@neko-agent/types';
-import { buildTaskCreatedMessage, buildTaskUpdatedMessage } from '@neko-agent/types';
+import {
+  buildTaskCreatedMessage,
+  buildTaskUpdatedMessage,
+  projectBackgroundTaskToWorkItem,
+} from '@neko-agent/types';
 import type { AgentEvent } from '../session/types';
 import {
   createBackgroundTaskViewFromToolResultData,
@@ -13,7 +17,6 @@ import {
   type BackgroundTaskView,
 } from '../task/task-view-projector';
 import { updateBackgroundTaskToolResultUrls } from './message-resource-projector';
-import { projectBackgroundTaskToWorkItem } from './work-item-projector';
 
 export interface AgentStreamBackgroundTaskStartInput {
   readonly conversationId: string;

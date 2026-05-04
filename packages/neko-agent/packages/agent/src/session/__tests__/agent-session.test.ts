@@ -4,7 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
-import { AgentSession, PLAN_MODE_SYSTEM_REMINDER } from '../agent-session';
+import { AgentSession } from '../agent-session';
+import { PLAN_MODE_SYSTEM_REMINDER } from '../../permission/types';
 import { ToolRegistry } from '../../tools';
 import type { AgentSessionConfig, AgentEvent } from '../types';
 import { TOOL_NAMES_PERCEPTION, createSubagentReviewEvidence } from '@neko/shared';

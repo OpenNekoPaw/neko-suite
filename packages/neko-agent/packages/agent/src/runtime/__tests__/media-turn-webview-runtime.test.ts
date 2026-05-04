@@ -3,7 +3,7 @@ import {
   runAgentMediaTurnForWebview,
   type AgentMediaTurnExecutionInput,
 } from '../media-turn-webview-runtime';
-import { projectMediaTaskToWorkItem } from '../work-item-projector';
+import { projectMediaTaskToWorkItem } from '@neko-agent/types';
 
 const mediaModel = {
   providerId: 'openai',

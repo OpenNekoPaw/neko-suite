@@ -107,18 +107,6 @@ export {
 } from './agent-runtime-session-controller';
 
 export {
-  backgroundTaskToWorkItem,
-  isSubAgentWorkItem,
-  isTaskWorkItem,
-  projectBackgroundTaskToWorkItem,
-  projectBackgroundTasksToWorkItems,
-  projectMediaTaskToBackgroundTask,
-  projectMediaTaskToWorkItem,
-  projectSubAgentEventToWorkItem,
-  toSubAgentWorkItemStatus,
-} from './work-item-projector';
-
-export {
   createAgentCapabilityRuntimeRegistries,
   type AgentCapabilityRuntimeRegistries,
 } from './capability-runtime-registries';

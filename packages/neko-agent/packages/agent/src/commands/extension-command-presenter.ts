@@ -1,4 +1,5 @@
 import type { CommandResult } from './types';
+export { normalizeSlashCommandName } from '@neko-agent/types';
 
 export interface ExtensionCommandConversationSummary {
   id: string;
@@ -75,10 +76,6 @@ const OUTPUT_SUPPRESSED_ACTIONS = new Set([
   'resumeConversation',
   'initProject',
 ]);
-
-export function normalizeSlashCommandName(command: string): string {
-  return command.startsWith('/') ? command.slice(1) : command;
-}
 
 export function parseBuiltinCommandArgs(rawArgs?: string): string[] {
   if (!rawArgs) return [];

@@ -3,17 +3,15 @@ import {
   buildTaskRemovedMessage,
   buildTasksUpdatedMessage,
   buildTaskUpdatedMessage,
+  projectBackgroundTaskToWorkItem,
+  projectBackgroundTasksToWorkItems,
+  projectMediaTaskToWorkItem,
   type AgentMediaTaskView,
   type MediaTaskProgressMessage,
   type TaskRemovedMessage,
   type TasksUpdatedMessage,
   type TaskUpdatedMessage,
 } from '@neko-agent/types';
-import {
-  projectBackgroundTaskToWorkItem,
-  projectBackgroundTasksToWorkItems,
-  projectMediaTaskToWorkItem,
-} from '../runtime/work-item-projector';
 import type { Task, TaskInput, TaskStatus } from '@neko/shared';
 import {
   buildCancelTaskActionPlan,

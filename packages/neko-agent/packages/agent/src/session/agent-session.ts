@@ -80,6 +80,7 @@ import type {
 } from './types';
 
 import type { ToolConfirmationRequest } from '../permission/types';
+import { PLAN_MODE_SYSTEM_REMINDER } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
 import { type ConversationCompressor } from '../context';
@@ -146,13 +147,6 @@ const logger = getLogger('AgentSession');
 // =============================================================================
 // Constants
 // =============================================================================
-
-/** Plan mode system reminder injected into user input */
-export const PLAN_MODE_SYSTEM_REMINDER = `
-[PLAN MODE ACTIVE]
-You are in planning mode. Generate a detailed implementation plan but DO NOT execute any tools.
-Describe what tools you would use and in what order, but do not call them.
-`;
 
 const MAX_PERSISTED_STAGE_TRANSITIONS = 32;
 const MAX_FEEDBACK_CYCLES = 32;

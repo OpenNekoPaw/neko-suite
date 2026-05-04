@@ -7,7 +7,7 @@ import {
   projectMediaTaskToBackgroundTask,
   projectMediaTaskToWorkItem,
   projectSubAgentEventToWorkItem,
-} from '../work-item-projector';
+} from '@neko-agent/types';
 
 describe('work-item-projector', () => {
   it('projects media tasks to background task views', () => {

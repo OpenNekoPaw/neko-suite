@@ -2,6 +2,7 @@ import {
   buildErrorMessage,
   buildMediaTaskCreatedMessage,
   buildMediaTaskProgressMessage,
+  projectMediaTaskToWorkItem,
   type AgentMediaTaskView,
   type ErrorMessage,
   type MediaModelCategory,
@@ -9,7 +10,6 @@ import {
   type MediaTaskProgressMessage,
   type ModelRef,
 } from '@neko-agent/types';
-import { projectMediaTaskToWorkItem } from './work-item-projector';
 
 export type AgentMediaTurnRuntimeMessage =
   | ErrorMessage

@@ -53,9 +53,3 @@ export {
   type PlanToolResultProjection,
   type PlanToolResultProjectionOptions,
 } from './plan-tool-result-projector';
-export {
-  updatePlanStatusInMessages,
-  updatePlanStepInMessages,
-  type PlanMessageUpdateResult,
-  type PlanStepMessageUpdate,
-} from './plan-message-updater';

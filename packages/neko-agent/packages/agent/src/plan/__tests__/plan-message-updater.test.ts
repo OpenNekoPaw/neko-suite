@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Message } from '@neko-agent/types';
-import { updatePlanStatusInMessages, updatePlanStepInMessages } from '../plan-message-updater';
+import {
+  type Message,
+  updatePlanStatusInMessages,
+  updatePlanStepInMessages,
+} from '@neko-agent/types';
 
 describe('plan message updater', () => {
   it('updates plan status inside message content blocks', () => {
