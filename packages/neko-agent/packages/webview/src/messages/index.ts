@@ -357,11 +357,6 @@ export const VSCodeMessages = {
     });
   },
 
-  /** Open the full Neko Marketplace panel (neko-market extension) */
-  openMarketplace: () => {
-    postWebviewMessage({ type: 'openMarketplace' });
-  },
-
   // -------------------------------------------------------------------------
   // Outbound actions previously sent via direct vscode.postMessage
   // -------------------------------------------------------------------------

@@ -112,8 +112,7 @@ export interface EmptyWebviewMessage {
     | 'openUserConfigFile'
     | 'ssoLogout'
     | 'openConfigFile'
-    | 'getTabState'
-    | 'openMarketplace';
+    | 'getTabState';
 }
 
 export interface PlanActionWebviewMessage {
@@ -779,7 +778,6 @@ const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'ssoLogout',
   'openConfigFile',
   'getTabState',
-  'openMarketplace',
 ];
 const PLAN_ACTION_MESSAGE_TYPES: readonly PlanActionWebviewMessage['type'][] = [
   'planApprove',

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { NEKO_MARKET_OPEN_SKILLS_COMMAND, type WebviewToExtensionMessage } from '@neko-agent/types';
+import { type WebviewToExtensionMessage } from '@neko-agent/types';
 import { buildRuntimePluginSlashCommandDispatch } from '@neko/agent/runtime';
 import { getLogger } from '../../base';
 import { sendGeneratedAssetToPlugin } from '../../services/pluginTransferBridge';
@@ -53,12 +53,6 @@ export function tryHandleFileAndPluginRoute(
             error: err,
           });
         });
-      return true;
-
-    case 'openMarketplace':
-      vscode.commands.executeCommand(NEKO_MARKET_OPEN_SKILLS_COMMAND).then(undefined, () => {
-        // neko-market extension not installed; no user-facing action is needed.
-      });
       return true;
 
     default:
