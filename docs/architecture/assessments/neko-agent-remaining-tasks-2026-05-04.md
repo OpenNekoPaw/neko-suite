@@ -1,6 +1,6 @@
 # neko-agent 剩余任务分析
 
-**状态**: P0 未发现新增阻断项 | P1 运行时边界已收敛 | P2/P3 保留兼容清理与验证债
+**状态**: P0 未发现新增阻断项 | P1 runtime closure 已收敛 | P2/P3 保留深水区接入、旧兼容窗口与验证债
 **日期**: 2026-05-04  
 **范围**: `packages/neko-agent`
 
@@ -16,7 +16,40 @@
 
 结论：当前主方向已经基本正确，没有发现新的 P0 阻断问题。前几轮清理后，market、connection state、generation progress、MCP test result 等无效 bridge 没有反弹；异步任务、media task、subagent 也已经按 `conversationId` 进入协议与 Webview 状态隔离链路。
 
-2026-05-04 的 `unify-neko-agent-runtime-workflow-boundaries` 变更已经完成 P1 主体迁移：Extension 侧 `AgentTurnBridge` 降为 host adapter，`AgentRunner` 对齐 `AgentRunnerPort`，IDC / workflow / capability injection / prompt-schema / multimodal packet / eval harness 均有 runtime contract 与 targeted tests。剩余工作主要是 P2/P3 兼容清理、barrel 导出收敛、`AgentSession` 更深层接入 prompt/schema facade，以及全量 `@neko/agent` 类型债的后续清理。
+2026-05-04 的 `unify-neko-agent-runtime-workflow-boundaries` 变更已经完成 P1 主体迁移：Extension 侧 `AgentTurnBridge` 降为 host adapter，`AgentRunner` 对齐 `AgentRunnerPort`，IDC / workflow / capability injection / prompt-schema / multimodal packet / eval harness 均有 runtime contract 与 targeted tests。
+
+同日的 `harden-neko-agent-runtime-workflow-closure` 继续关闭上一轮评估中 R1-R6 风险：boundary exception 有 sunset 元数据和过期失败策略，runner adapter 拆为 runtime adapter / VSCode event bridge / compatibility surface，多模态工具产物可作为 evidence feedback 进入后续 turn，evaluation harness 支持 deterministic evaluator 与 mock LLM judge，legacy workflow adapter 有 deprecation telemetry 与 sunset gate，capability manifest 字段利用率进入独立 telemetry。剩余工作主要是 P2/P3 深水区接入、barrel 导出收敛、旧兼容窗口到期清理、`AgentSession` 更深层接入 prompt/schema facade，以及全量 `@neko/agent` 类型债的后续清理。
+
+---
+
+## 2026-05-04 Runtime Closure 状态
+
+| 原风险 | Closure 状态 | 后续归属 |
+|------|-------------|---------|
+| R1 compatibility exceptions 没有 sunset | ✅ 已关闭。`check-neko-agent-boundaries` 现在要求 owner、tracking、introducedAt、expiresAt/sunsetMilestone、replacement、severityAfterExpiry；过期 failure 例外会阻断 guard。 | 到期前按 guard JSON 输出清理或带 rationale 续期。 |
+| R2 `AgentRunner` 711 行偏厚 | ✅ 已关闭主体风险。Extension runner 已拆为 runtime port adapter、VSCode event bridge、compatibility surface；新 consumer 直连单独 VSCode events 会被 guard 报告。 | public compatibility events 保留到 sunset 窗口，窗口结束后再删旧 surface。 |
+| R3 多模态闭环只有协议和输入 | ✅ 已关闭运行时闭环。工具产物可变成 `AgentGeneratedArtifactProjection` / `AgentMultimodalEvidenceRef`，后续 packet 支持 summary-only feedback 与 host-adapter bounded payload loading。 | 具体 perception extractor / 生产工具接入按工具域分批推进。 |
+| R4 Evaluator 是比较器不是裁判 | ✅ 已关闭 harness 层风险。新增 evaluator runner、deterministic compliance evaluator、mock LLM judge adapter、quality delta、correction hint、recovery signal。 | 生产 LLM judge provider 选择与成本策略保持实验路径，不进入普通 IDC stage。 |
+| R5 workflow 与旧 pipeline 共存无窗口 | ✅ 已关闭治理风险。legacy adapter 有 deprecation metadata、usage telemetry、node mapping、sunset gate；新增流程必须 workflow-native。 | sunset milestone 到期后删除或续期具体旧 adapter。 |
+| R6 Skill manifest 未注入字段缺 telemetry | ✅ 已关闭。capability telemetry 区分 used / unknown-field / unsupported-field / withheld-field / policy-skipped / ablation-skipped，且不存 raw prompt / payload。 | 后续可接 UI/telemetry dashboard，但不影响 runtime contract。 |
+
+### 验证记录
+
+本轮 closure targeted 验证结果：
+
+| 验证项 | 结果 | 说明 |
+|------|------|------|
+| `pnpm --filter @neko-agent/types exec tsc --noEmit` | 通过 | shared contracts 可编译 |
+| `pnpm --filter @neko-agent/extension exec tsc --noEmit` | 通过 | runner adapter split 后 Extension 可编译 |
+| `pnpm --filter @neko-agent/webview exec tsc --noEmit` | 通过 | Webview 投影层未引入 agent/platform 依赖 |
+| `pnpm --filter @neko/ai-sdk exec tsc --noEmit` | 通过 | multimodal message projection 可编译 |
+| `pnpm --filter @neko/platform exec tsc --noEmit` | 未通过，既有债 | 失败集中在 test mock / historical contract drift，例如 `ToolResult.success`、generic mock、AI SDK stream mock、media service mock；未命中本轮 closure 关键文件 |
+| `pnpm --filter @neko/agent exec tsc --noEmit` | 未通过，既有债 | 失败集中在 test mock / historical contract drift，例如 prompt composer mock、command result sync/async union、tool registry mock、task runtime mock；未命中本轮 closure 关键文件 |
+| targeted runtime / ai-sdk / extension Vitest | 通过 | 9 个文件，103 个测试，覆盖 workflow runtime、capability telemetry、multimodal evidence、prompt schema、evaluation harness、runner adapter |
+| targeted Webview projection Vitest | 通过 | 2 个文件，13 个测试；需用 `@neko-agent/webview` 包内 Vitest 入口解析 `@/` alias |
+| `node scripts/check-neko-agent-boundaries.mjs --self-test` | 通过 | 12 个 guard self-test case |
+| `pnpm check:agent-boundaries` | 通过 | 1049 files scanned，0 findings，7 个 active compatibility exceptions 均带 lifecycle metadata |
+| `openspec validate harden-neko-agent-runtime-workflow-closure --strict` | 通过 | OpenSpec strict validation passed |
 
 ---
 

@@ -9,6 +9,8 @@
 
 > 状态更新（2026-05-04）：`unify-neko-agent-runtime-workflow-boundaries` 已把 IDC / workflow / capability / prompt-schema / multimodal / eval 的运行时边界落到可测试契约。Webview 继续只做 UI 与投影；Extension 继续只做 VSCode/Webview/file/command host adapter；`@neko/agent/runtime`、`@neko/platform`、`@neko/ai-sdk` 承担 agent 业务、provider/tool 绑定与 provider-specific message projection。
 
+> Closure 更新（2026-05-04）：`harden-neko-agent-runtime-workflow-closure` 补齐 runtime closure 护栏：boundary compatibility exception 带 owner/tracking/expiry，Extension `AgentRunner` 拆为 runtime port adapter + VSCode event bridge + compatibility surface，多模态工具结果可回灌为 evidence refs，evaluation harness 支持 deterministic evaluator 与 mock judge adapter，legacy workflow adapter 有 sunset telemetry，capability manifest 字段利用率进入独立 telemetry。
+
 ## 落地进度快照（2026-04-23）
 
 ### 已完成（按 ADR 章节计）
@@ -85,6 +87,12 @@
 
 架构 guard 通过 `pnpm check:agent-boundaries` 固化硬边界：Webview 不得导入 `vscode`、`@neko/agent`、`@neko/platform`、`@neko/ai-sdk`；Extension 不得导入 React/Webview 实现；`agent` / `platform` / `ai-sdk` / `agent-types` 不得导入 VSCode、React、Webview 或 Extension 实现。当前仍存在的 `AgentTurnBridge`、`AgentRunner`、`SkillFileService` 是显式记录的 compatibility adapter，不再被视为 agent 业务归属点。
 
+### Boundary Exception 与 Runner Adapter Closure
+
+`harden-neko-agent-runtime-workflow-closure` 把 guard 例外从普通 allowlist 升级为带生命周期的兼容契约。每个 exception 必须有 `id`、`file`、`reason`、`owner`、`tracking`、`introducedAt`、`expiresAt` 或 `sunsetMilestone`、`replacement` 与 `severityAfterExpiry`。未过期例外会出现在 JSON 输出中；过期且严重级别为 failure 的例外会阻断 `pnpm check:agent-boundaries`。续期必须留下 tracking 或 renewal rationale，避免 compatibility surface 永久化。
+
+Extension `AgentRunner` 的职责也被拆薄：`agentRunnerRuntimeAdapter.ts` 只适配 host-agnostic `AgentRunnerPort`，不导入 VSCode；`agentRunnerVscodeEventBridge.ts` 只负责把统一 port event 投影为 VSCode `Event`；`agentRunner.ts` 保留旧 `IAgentRunner` compatibility surface。新增 guard 规则会拦截 Extension 内部新 consumer 直接订阅 `onDidStart` / `onDidStop` / `onDidRequestConfirmation` / `onDidSubAgentEvent`，新路径必须优先使用 `onDidRunnerEvent`。
+
 ### IDC 与统一 Workflow
 
 IDC 三阶段已经映射到 host-agnostic `AgentWorkflowDefinition` / `AgentWorkflowRun` / `AgentWorkflowNode` / `AgentWorkflowTransition`。`createIdcWorkflowDefinition()` 将 Draft、Plan、Apply 建模为 `idc-stage` nodes；workflow runtime 支持 run 创建、节点激活、transition、cancel、projection hook。
@@ -106,6 +114,8 @@ Registration 与 injection diagnostics 分离。注册后的能力可被 Webview
 
 Webview slash command catalog 是 runtime-normalized projection。Webview 可以过滤、展示和发送 typed invocation message，但不能拥有 command semantics、skill injection policy 或 tool execution policy。
 
+Capability telemetry 作为 registration diagnostics 与 injection diagnostics 之外的第三视角存在。它记录 market / local / builtin / plugin / MCP / provider contribution 的字段利用率，区分 `used`、`unknown-field`、`unsupported-field`、`withheld-field`、`policy-skipped`、`ablation-skipped`。telemetry 只保存 contribution id、source、version、字段名、hash 与 reason code，不保存 prompt fragment 全文、大 schema、文件 payload 或用户内容。
+
 ### Prompt / Schema 动态生成
 
 `AgentPromptSchemaGenerator` 是 Prompt 平面与 Schema 平面的 runtime service，输入 `PromptGenerationContext`，输出 `GeneratedPromptBundle`。生成层次与 §11.6 对齐：
@@ -123,6 +133,22 @@ Webview slash command catalog 是 runtime-normalized projection。Webview 可以
 文本、图片、音频、视频、canvas selection、timeline context、editor selection、file/url、generated artifact、engine perception evidence 进入统一 `MultimodalContextPacket`。packet 保留 provenance、media type、URI/path policy、size/duration metadata、conversation/workflow linkage。Extension host adapter 负责本地文件读取、base64/bytes/url payload、VSCode URI、workspace path resolution；runtime 只通过 typed adapter 请求 payload，不导入 VSCode，也不保存绝对路径策略。
 
 工具通过 `AgentToolModalityDeclaration` 声明 `acceptedModalities`、`producedModalities`、`requiredEvidence`、`outputArtifactTypes` 和 provider constraints。runtime 在 tool injection、workflow planning、prompt/schema generation、validation 中读取这些声明；AI SDK/platform adapter 再把 provider-neutral packet 转成具体 provider message。多模态工具结果投影为 compact artifact reference 和 metadata，Webview 不接收无界二进制 payload。
+
+工具产出的 image / video / audio / document / data artifact 会被转换为 `AgentGeneratedArtifactProjection` 与 `AgentMultimodalEvidenceRef`，保留 conversation、workflow、task、tool call、source artifact、媒体 metadata 与 provenance。后续 turn 或 workflow node 可按 policy 注入 summary-only evidence refs；需要二进制 payload 时只能通过 `AgentMultimodalHostAdapter` bounded loader 请求。ablation 禁用 evidence feedback 时，runtime 仍记录 evidence 存在，但在 packet 与 prompt/schema context 中标记 withheld。
+
+### Legacy Workflow Sunset
+
+旧 pipeline / prompt-chain compatibility adapter 不再作为新流程入口扩展。运行时用 `AgentLegacyWorkflowAdapterDeprecation` 标记兼容路径，字段包括 `adapterId`、`owner`、`introducedAt`、`sunsetMilestone`、`workflowNativeReplacement`、兼容窗口和过期严重级别。
+
+每次 legacy path 被使用时，`createLegacyWorkflowUsageRecorder()` 记录 telemetry：workflow definition candidate、legacy step 到 workflow node 的 mapping、unmapped step id、missing migration reason、usage count、last-used timestamp。sunset gate 启用后，新建 multi-step agent workflow 必须提供 `AgentWorkflowDefinition` 或 workflow node profile；pipeline-only 新流程会产生 blocking diagnostic。过期 adapter 需要 explicit compatibility approval，否则按 `severityAfterSunset` 阻断或告警。
+
+这条策略是迁移护栏，不是恢复旧 DSL。旧流程在兼容窗口内可以继续运行并产生日志，新增流程必须 workflow-native。
+
+### Evaluator Judge Loop
+
+Evaluator 仍不是普通 IDC stage。普通 PlanMode 保持 Draft / Plan / Apply 三阶段，不自动插入 evaluator 或 ablation node。研发评估路径通过 evaluator runner contract 执行 deterministic evaluator 或可插拔 LLM-as-judge adapter，统一输出 schema-bound evaluator result：score、pass/fail、reason、metrics、evidence refs、correction hints、recovery signals、provider/model identity 与 prompt/schema snapshot hash。
+
+deterministic evaluator 适合资产规格、格式、分辨率、时长、结构化 evidence compliance；LLM-as-judge 只通过 Platform / AI SDK adapter 接入，测试路径使用 mock judge，不依赖网络或 VSCode Webview。失败结果可以给 explicit evaluation workflow 产生 retry node、regress stage、restart run 或 escalate user 等 recovery signal，但不会污染普通创作主路径。
 
 ### 消融实验、效果验证与动态演化
 
