@@ -60,9 +60,9 @@
     "knip": "^5.88.1",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
-    "protobufjs": "^8.0.1",
-    "turbo": "^2.9.6",
-    "typescript-eslint": "^8.59.0",
+    "protobufjs": "^8.0.3",
+    "turbo": "^2.9.9",
+    "typescript-eslint": "^8.59.2",
     "vite": "6.4.2",
     "vitest": "4.1.2"
   },
