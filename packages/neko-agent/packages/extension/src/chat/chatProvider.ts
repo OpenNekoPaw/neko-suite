@@ -331,6 +331,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
     this._setupMessageHandlers(webviewView.webview);
 
+    // Reconcile the active conversation against the persisted tab state before the
+    // webview's getActiveConversation/getTabState requests arrive. Without this,
+    // a cold-start mismatch (e.g. persisted tab points to "conv-X" but the
+    // ConversationManager has no active id yet) leaves activeTabConversationId !==
+    // activeConversationId, which the input area treats as a "switching" window
+    // and disables typing indefinitely.
+    this._syncActiveConversationFromTabState();
+
+    // Final guarantee: by the time the webview asks for the active conversation,
+    // there must be one. Otherwise activeConversationId stays null in the webview,
+    // and useChatActions.handleSend short-circuits on `if (!conversationId) return`,
+    // making the Send button silently no-op even after the input is enabled.
+    this._ensureActiveConversationAndTab();
+
     // Notify webview which neko-suite plugins are installed (ADR-5)
     postPluginsAvailable(webviewView.webview);
 
@@ -547,9 +561,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   // ============================================================================
 
   private _loadTabState(): void {
-    this._tabState = normalizeTabState(
+    const restored = normalizeTabState(
       this._context.workspaceState.get<unknown>(ChatViewProvider.TAB_STATE_KEY),
     );
+
+    // Drop tabs whose conversation no longer exists (e.g. user cleared all
+    // conversations while the panel was closed). Otherwise the webview would
+    // see activeTabConversationId pointing at a phantom conversation while
+    // activeConversationId is null, locking the input area into the
+    // "switching" state forever.
+    const liveTabs = restored.openTabs.filter((tab) =>
+      Boolean(this._conversations.get(tab.conversationId)),
+    );
+    const liveActiveTabId =
+      restored.activeTabId && liveTabs.some((tab) => tab.id === restored.activeTabId)
+        ? restored.activeTabId
+        : (liveTabs[0]?.id ?? null);
+
+    this._tabState = { openTabs: liveTabs, activeTabId: liveActiveTabId };
+
+    if (liveTabs.length !== restored.openTabs.length || liveActiveTabId !== restored.activeTabId) {
+      this._saveTabState();
+    }
   }
 
   private _syncActiveConversationFromTabState(): void {
@@ -563,6 +596,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
       },
     );
+  }
+
+  private _ensureActiveConversationAndTab(): void {
+    // Make sure ConversationManager has at least one conversation and an active id.
+    // ensureActive() creates a fresh conversation if none exists, then returns the
+    // active id (creating or reusing).
+    const activeId = this._conversations.ensureActive();
+
+    // Make sure _tabState has a tab pointing at the active conversation.
+    const hasTabForActive = this._tabState.openTabs.some((tab) => tab.conversationId === activeId);
+
+    if (!hasTabForActive) {
+      const conversation = this._conversations.get(activeId);
+      const newTab: OpenTab = {
+        id: `tab-${Date.now()}`,
+        title: conversation?.title || 'New Chat',
+        conversationId: activeId,
+      };
+      this._tabState = {
+        openTabs: [...this._tabState.openTabs, newTab],
+        activeTabId: newTab.id,
+      };
+      this._saveTabState();
+      return;
+    }
+
+    // Tab exists for the active conversation — make sure it's the active tab.
+    const tabForActive = this._tabState.openTabs.find((tab) => tab.conversationId === activeId);
+    if (tabForActive && this._tabState.activeTabId !== tabForActive.id) {
+      this._tabState = {
+        openTabs: this._tabState.openTabs,
+        activeTabId: tabForActive.id,
+      };
+      this._saveTabState();
+    }
   }
 
   private _syncCanvasAmbientScopeFromActiveConversation(): void {
