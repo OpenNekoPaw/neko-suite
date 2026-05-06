@@ -21,7 +21,7 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
-  const { installProgress } = useMarketplaceStore();
+  const { installProgress, setSelectedPackage } = useMarketplaceStore();
   const { t } = useTranslation();
   const progress = installProgress.get(item.id);
   const isInstalling = progress !== undefined;
@@ -64,7 +64,12 @@ export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
       {/* Content */}
       <div className="asset-card__content">
         <div className="asset-card__header">
-          <span className="asset-card__name">{item.name}</span>
+          <button
+            className="asset-card__name asset-card__name-btn"
+            onClick={() => setSelectedPackage(item)}
+          >
+            {item.name}
+          </button>
           <span className="asset-card__version">v{item.version}</span>
         </div>
 

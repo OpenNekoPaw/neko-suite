@@ -1,42 +1,14 @@
 /**
- * SearchBar — Search input with asset type filter chips.
+ * SearchBar — Search input for Browse.
  */
 
 import React, { useCallback, useRef } from 'react';
-import { useMarketplaceStore, type AssetTypeFilter } from '../stores/marketplaceStore';
+import { useMarketplaceStore } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
 
-const TYPE_FILTER_KEYS: { key: AssetTypeFilter; i18nKey: string }[] = [
-  { key: 'all', i18nKey: 'marketplace.filter.all' },
-  { key: 'skill', i18nKey: 'marketplace.filter.skill' },
-  { key: 'shader', i18nKey: 'marketplace.filter.shader' },
-  { key: 'model', i18nKey: 'marketplace.filter.model' },
-  { key: 'preset', i18nKey: 'marketplace.filter.preset' },
-  { key: 'provider-card', i18nKey: 'marketplace.filter.providerCard' },
-];
-
-/** Map UI filter labels to backend AssetType values */
-function filterToAssetTypes(filter: AssetTypeFilter): string[] | undefined {
-  switch (filter) {
-    case 'all':
-      return undefined;
-    case 'skill':
-      return ['skill', 'plugin'];
-    case 'shader':
-      return ['shader', 'shader-preset'];
-    case 'model':
-      return ['ai-model', 'lora', 'embedding', '3d-model'];
-    case 'preset':
-      return ['preset', 'template', 'lut'];
-    case 'provider-card':
-      return ['provider-card'];
-  }
-}
-
 export const SearchBar: React.FC = () => {
-  const { searchText, assetTypeFilter, setSearchText, setSearching, setAssetTypeFilter } =
-    useMarketplaceStore();
+  const { searchText, buildBrowseQuery, setSearchText, setSearching } = useMarketplaceStore();
   const { t } = useTranslation();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,25 +21,10 @@ export const SearchBar: React.FC = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         setSearching(true);
-        MarketMessages.search({
-          text: text || undefined,
-          types: filterToAssetTypes(assetTypeFilter),
-        });
+        MarketMessages.search(buildBrowseQuery());
       }, 300);
     },
-    [assetTypeFilter, setSearchText, setSearching],
-  );
-
-  const handleTypeChange = useCallback(
-    (filter: AssetTypeFilter) => {
-      setAssetTypeFilter(filter);
-      setSearching(true);
-      MarketMessages.search({
-        text: searchText || undefined,
-        types: filterToAssetTypes(filter),
-      });
-    },
-    [searchText, setAssetTypeFilter, setSearching],
+    [buildBrowseQuery, setSearchText, setSearching],
   );
 
   return (
@@ -86,24 +43,13 @@ export const SearchBar: React.FC = () => {
             className="search-clear"
             onClick={() => {
               setSearchText('');
-              MarketMessages.getFeatured(assetTypeFilter !== 'all' ? assetTypeFilter : undefined);
+              setSearching(true);
+              MarketMessages.search(buildBrowseQuery());
             }}
           >
             <span className="codicon codicon-close" />
           </button>
         )}
-      </div>
-
-      <div className="type-filters">
-        {TYPE_FILTER_KEYS.map(({ key, i18nKey }) => (
-          <button
-            key={key}
-            className={`type-chip ${assetTypeFilter === key ? 'type-chip--active' : ''}`}
-            onClick={() => handleTypeChange(key)}
-          >
-            {t(i18nKey)}
-          </button>
-        ))}
       </div>
     </div>
   );

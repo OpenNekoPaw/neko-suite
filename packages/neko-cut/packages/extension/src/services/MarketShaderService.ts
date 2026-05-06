@@ -14,7 +14,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs/promises';
-import type { ILogger } from '@neko/shared';
+import type { ILogger, InstalledPackageStatus, MarketPackageEvent } from '@neko/shared';
 
 // =============================================================================
 // Types
@@ -22,20 +22,27 @@ import type { ILogger } from '@neko/shared';
 
 /** Minimal NekoMarketAPI interface (defined locally to avoid cross-extension dependency). */
 interface NekoMarketAPI {
+  onDidMarketPackageEvent?: vscode.Event<MarketPackageEvent>;
   onDidInstall: vscode.Event<MarketAssetEvent>;
   onDidUninstall: vscode.Event<MarketAssetEvent>;
   onDidEnable: vscode.Event<MarketAssetEvent>;
   onDidDisable: vscode.Event<MarketAssetEvent>;
-  getInstalled(options?: {
-    types?: string[];
-    enabledOnly?: boolean;
-  }): Promise<Array<{ packageId: string; installedPath: string; enabled: boolean }>>;
+  getInstalled(options?: { types?: string[]; enabledOnly?: boolean }): Promise<
+    Array<{
+      packageId: string;
+      installedPath: string;
+      enabled: boolean;
+      status?: InstalledPackageStatus;
+      manifest?: { typeMetadata?: { type: string; data?: { presetKind?: string } } };
+    }>
+  >;
 }
 
 interface MarketAssetEvent {
   packageId: string;
   type: string;
   installedPath: string;
+  manifest?: { typeMetadata?: { type: string; data?: { presetKind?: string } } };
 }
 
 /** Info about a marketplace-installed shader available for use */
@@ -49,11 +56,9 @@ export interface MarketShaderInfo {
   installedPath: string;
 }
 
-/** Shader types that this service handles */
-const SHADER_TYPES = new Set(['shader', 'shader-preset']);
-
-/** Base directory for marketplace-installed shaders */
-const MARKET_SHADERS_BASE = path.join(os.homedir(), '.neko', 'shaders');
+/** v4 market routes that can feed cut shader/LUT projections. */
+const SHADER_TYPES = new Set(['shader', 'preset']);
+const BLOCKING_MARKET_STATUSES = new Set<InstalledPackageStatus>(['expired', 'incompatible']);
 
 const MARKET_EXTENSION_ID = 'neko.neko-market';
 
@@ -91,7 +96,7 @@ export class MarketShaderService implements vscode.Disposable {
   /** Force rescan ~/.neko/shaders/ and rebuild the shader list */
   async rescan(): Promise<void> {
     try {
-      const shaders = await scanShaderDirectory(MARKET_SHADERS_BASE, this._logger);
+      const shaders = await scanShaderDirectory(getMarketShadersBase(), this._logger);
       this._shaders = shaders;
       this._logger.info(`Market shaders: found ${shaders.length} shader(s)`);
       this._onDidChange.fire();
@@ -117,27 +122,39 @@ export class MarketShaderService implements vscode.Disposable {
     }
 
     const subscribe = (api: NekoMarketAPI): void => {
+      if (api.onDidMarketPackageEvent) {
+        this._disposables.push(
+          api.onDidMarketPackageEvent((event) => {
+            if (shouldRescanForMarketShaderEvent(event)) {
+              this._logger.info(`Market shader projection changed: ${event.packageId}, rescanning`);
+              this.rescan();
+            }
+          }),
+        );
+        return;
+      }
+
       this._disposables.push(
         api.onDidInstall((e) => {
-          if (SHADER_TYPES.has(e.type)) {
+          if (isShaderProjectionEvent(e)) {
             this._logger.info(`Shader installed: ${e.packageId}, rescanning`);
             this.rescan();
           }
         }),
         api.onDidUninstall((e) => {
-          if (SHADER_TYPES.has(e.type)) {
+          if (isShaderProjectionEvent(e)) {
             this._logger.info(`Shader uninstalled: ${e.packageId}, rescanning`);
             this.rescan();
           }
         }),
         api.onDidEnable((e) => {
-          if (SHADER_TYPES.has(e.type)) {
+          if (isShaderProjectionEvent(e)) {
             this._logger.info(`Shader enabled: ${e.packageId}, rescanning`);
             this.rescan();
           }
         }),
         api.onDidDisable((e) => {
-          if (SHADER_TYPES.has(e.type)) {
+          if (isShaderProjectionEvent(e)) {
             this._logger.info(`Shader disabled: ${e.packageId}, rescanning`);
             this.rescan();
           }
@@ -155,6 +172,10 @@ export class MarketShaderService implements vscode.Disposable {
       );
     }
   }
+}
+
+function getMarketShadersBase(): string {
+  return path.join(os.homedir(), '.neko', 'shaders');
 }
 
 // =============================================================================
@@ -184,48 +205,83 @@ async function scanShaderDirectory(baseDir: string, logger: ILogger): Promise<Ma
   // Get enabled package paths from market API (if available)
   const enabledPaths = await getEnabledShaderPaths(logger);
 
-  // Scan {publisher}/{name}/ structure
-  const publishers = await safeReaddir(baseDir);
-  for (const publisher of publishers) {
-    const publisherDir = path.join(baseDir, publisher);
-    const stat = await safeStat(publisherDir);
-    if (!stat?.isDirectory()) continue;
-
-    const packages = await safeReaddir(publisherDir);
-    for (const pkgName of packages) {
-      const pkgDir = path.join(publisherDir, pkgName);
-      const pkgStat = await safeStat(pkgDir);
-      if (!pkgStat?.isDirectory()) continue;
-
-      // Check if this package is enabled (if we have market info)
-      if (enabledPaths !== null && !enabledPaths.has(pkgDir)) {
-        continue;
-      }
-
-      // Find .wgsl file(s) in the package directory
-      const files = await safeReaddir(pkgDir);
-      const wgslFiles = files.filter((f) => f.endsWith('.wgsl'));
-      if (wgslFiles.length === 0) continue;
-
-      // Read optional manifest
-      const manifest = await readManifest(path.join(pkgDir, 'manifest.json'));
-
-      wgslFiles.forEach((wgslFile) => {
-        const shaderId = `market:${publisher}/${pkgName}/${path.basename(wgslFile, '.wgsl')}`;
-        shaders.push({
-          packageId: `@${publisher}/${pkgName}`,
-          name: manifest?.name ?? pkgName,
-          shaderId,
-          description: manifest?.description,
-          category: manifest?.category ?? 'market',
-          wgslPath: path.join(pkgDir, wgslFile),
-          installedPath: pkgDir,
-        });
-      });
+  for (const pkgDir of await findShaderPackageDirs(baseDir)) {
+    if (enabledPaths !== null && !enabledPaths.has(pkgDir)) {
+      continue;
     }
+
+    const files = await safeReaddir(pkgDir);
+    const wgslFiles = files.filter((f) => f.endsWith('.wgsl'));
+    if (wgslFiles.length === 0) continue;
+
+    const manifest = await readManifest(path.join(pkgDir, 'manifest.json'));
+    const relativeParts = path.relative(baseDir, pkgDir).split(path.sep);
+    const { publisher, packageName } = parseShaderPackageRoute(relativeParts);
+
+    wgslFiles.forEach((wgslFile) => {
+      const shaderId = `market:${publisher}/${packageName}/${path.basename(wgslFile, '.wgsl')}`;
+      shaders.push({
+        packageId: `@${publisher}/${packageName}`,
+        name: manifest?.name ?? packageName,
+        shaderId,
+        description: manifest?.description,
+        category: manifest?.category ?? 'market',
+        wgslPath: path.join(pkgDir, wgslFile),
+        installedPath: pkgDir,
+      });
+    });
   }
 
   return shaders;
+}
+
+async function findShaderPackageDirs(baseDir: string): Promise<string[]> {
+  const packageDirs: string[] = [];
+  const firstSegments = await safeReaddir(baseDir);
+
+  for (const first of firstSegments) {
+    const firstDir = path.join(baseDir, first);
+    const firstStat = await safeStat(firstDir);
+    if (!firstStat?.isDirectory()) continue;
+
+    const secondSegments = await safeReaddir(firstDir);
+    for (const second of secondSegments) {
+      const secondDir = path.join(firstDir, second);
+      const secondStat = await safeStat(secondDir);
+      if (!secondStat?.isDirectory()) continue;
+
+      if (await containsWgslFile(secondDir)) {
+        packageDirs.push(secondDir);
+        continue;
+      }
+
+      const thirdSegments = await safeReaddir(secondDir);
+      for (const third of thirdSegments) {
+        const thirdDir = path.join(secondDir, third);
+        const thirdStat = await safeStat(thirdDir);
+        if (thirdStat?.isDirectory() && (await containsWgslFile(thirdDir))) {
+          packageDirs.push(thirdDir);
+        }
+      }
+    }
+  }
+
+  return packageDirs;
+}
+
+async function containsWgslFile(dir: string): Promise<boolean> {
+  const files = await safeReaddir(dir);
+  return files.some((file) => file.endsWith('.wgsl'));
+}
+
+function parseShaderPackageRoute(parts: readonly string[]): {
+  publisher: string;
+  packageName: string;
+} {
+  if (parts.length >= 3) {
+    return { publisher: parts[1] ?? 'unknown', packageName: parts[2] ?? 'unknown' };
+  }
+  return { publisher: parts[0] ?? 'unknown', packageName: parts[1] ?? 'unknown' };
 }
 
 /** Get the set of enabled shader install paths from the market API, or null if not available */
@@ -235,14 +291,50 @@ async function getEnabledShaderPaths(logger: ILogger): Promise<Set<string> | nul
 
   try {
     const installed = await ext.exports.getInstalled({
-      types: ['shader', 'shader-preset'],
+      types: ['shader', 'preset'],
       enabledOnly: true,
     });
-    return new Set(installed.map((p) => p.installedPath));
+    return new Set(
+      installed.filter((pkg) => isUsableShaderInstall(pkg)).map((pkg) => pkg.installedPath),
+    );
   } catch (err) {
     logger.debug('Failed to get enabled shaders from market', err);
     return null;
   }
+}
+
+function shouldRescanForMarketShaderEvent(event: MarketPackageEvent): boolean {
+  if (!event.type || !SHADER_TYPES.has(event.type)) return false;
+  if (event.type === 'preset' && !isLutPreset(event.manifest)) return false;
+  return (
+    event.kind === 'install' ||
+    event.kind === 'uninstall' ||
+    event.kind === 'enable' ||
+    event.kind === 'disable' ||
+    event.kind === 'status-change'
+  );
+}
+
+function isShaderProjectionEvent(event: MarketAssetEvent): boolean {
+  if (!SHADER_TYPES.has(event.type)) return false;
+  return event.type !== 'preset' || isLutPreset(event.manifest);
+}
+
+function isUsableShaderInstall(
+  pkg: Awaited<ReturnType<NekoMarketAPI['getInstalled']>>[number],
+): boolean {
+  if (!pkg.enabled) return false;
+  if (pkg.status && BLOCKING_MARKET_STATUSES.has(pkg.status)) return false;
+  const type = pkg.manifest?.typeMetadata?.type;
+  if (type === 'preset') return pkg.manifest?.typeMetadata?.data?.presetKind === 'lut';
+  return true;
+}
+
+function isLutPreset(
+  manifest: MarketPackageEvent['manifest'] | MarketAssetEvent['manifest'],
+): boolean {
+  const metadata = manifest?.typeMetadata;
+  return metadata?.type === 'preset' && metadata.data?.presetKind === 'lut';
 }
 
 async function safeReaddir(dir: string): Promise<string[]> {

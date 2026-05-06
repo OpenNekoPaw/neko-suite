@@ -31,9 +31,18 @@
   "extensionDependencies": [
     "neko.neko-engine"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onInstallKind:media.puppet-motion"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "neko.installTargets": [
+      {
+        "type": "media",
+        "kind": "puppet-motion",
+        "activationEvent": "onInstallKind:media.puppet-motion"
+      }
+    ],
     "customEditors": [
       {
         "viewType": "neko.puppetEditor",

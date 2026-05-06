@@ -12,6 +12,7 @@ import { setRootLogger, getRootLogger } from './utils/logger';
 import { setErrorHandler } from './utils/errorHandler';
 import { registerCommands } from './commands';
 import { createNekoPuppetCapabilityProvider } from './agentCapabilityProvider';
+import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 
 /**
  * Activate the extension
@@ -57,6 +58,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
   } catch {
     // neko-agent not installed — silently skip
   }
+
+  await registerMarketInstallTargets(context);
 
   return api;
 }

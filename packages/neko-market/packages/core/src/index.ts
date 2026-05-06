@@ -28,6 +28,10 @@ export { downloadFile } from './install/download-service';
 export type { DownloadOptions } from './install/download-service';
 export { computeHash, verifyIntegrity } from './install/integrity-checker';
 export type { HashAlgorithm, SRIHash } from './install/integrity-checker';
+export { EffectsActivator, EffectsInverter } from './install/effects-inverter';
+export type { EffectsRegistryAdapter } from './install/effects-inverter';
+export { PresenceSignatureVerifier } from './install/signature-verifier';
+export type { ManifestSignatureVerifier } from './install/signature-verifier';
 
 // Cache
 export { CacheManager } from './cache/cache-manager';

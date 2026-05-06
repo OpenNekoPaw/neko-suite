@@ -1,122 +1,284 @@
 /**
- * Market Types — Unified marketplace platform types
+ * Market types and Layer 0 interfaces.
  *
- * Core types for the neko-market system:
- * - Search/browsing layer (UI consumption)
- * - Install/management layer (market-core consumption)
- * - License layer (Phase 6.5.4)
+ * These contracts are shared by the neko-market HTTP client, install runtime,
+ * VSCode extension adapter, webview message projection, and consumer packages.
  *
  * @see docs/architecture/marketplace.md
+ * @see docs/architecture/registry-server-contract.md
  */
 
-import type { AssetManifest, AssetType, AssetCompatibility } from './manifest';
+import type {
+  AssetCategory,
+  AssetCompatibility,
+  AssetDeprecation,
+  AssetManifest,
+  AssetType,
+  DistributionKind,
+  ModelVariant,
+  ProxyVariant,
+  SparseItem,
+} from './manifest';
 
-// AssetCompatibility and AssetPricing are defined in manifest.ts
-// and re-exported here for convenience
-export type { AssetCompatibility, AssetPricing } from './manifest';
-
-// SkillMarketMetadata is defined in manifest.ts (co-located with AssetTypeMetadata)
-// and re-exported here for convenience
-export type { SkillMarketMetadata } from './manifest';
+export type {
+  AssetCategory,
+  AssetCompatibility,
+  AssetDistribution,
+  AssetPricing,
+  DistributionKind,
+  EffectsManifest,
+  LargeAssetStrategy,
+  ModelVariant,
+  PackageEmbeddings,
+  ProxyVariant,
+  SkillMarketMetadata,
+  SparseItem,
+} from './manifest';
 
 // =============================================================================
 // Search / Browsing
 // =============================================================================
 
-/** Sort options for market search */
-export type MarketSortField = 'relevance' | 'downloads' | 'rating' | 'updated';
+export type MarketSortField = 'featured' | 'trending' | 'created' | 'downloads' | 'rating';
+export type MarketSortOrder = 'asc' | 'desc';
+export type MarketPricingFilter = 'free' | 'paid' | 'all';
+export type MarketVisibility = 'public' | 'private' | 'shared' | 'paid';
 
-/** Search query for marketplace */
-export interface MarketSearchQuery {
-  /** Full-text search */
-  text?: string;
-  /** Filter by asset types */
-  types?: AssetType[];
-  /** Filter by tags */
-  tags?: string[];
-  /** Filter by visibility */
-  visibility?: ('public' | 'free' | 'paid')[];
-  /** Sort field */
-  sort?: MarketSortField;
-  /** Page number (1-based) */
-  page?: number;
-  /** Results per page */
-  pageSize?: number;
+export type MarketFacetValue = string | number | boolean | readonly (string | number | boolean)[];
+
+export interface MarketRangeFacet {
+  min?: number;
+  max?: number;
 }
 
-/** Paginated search result */
+export interface MarketSearchQuery {
+  text?: string;
+  types?: AssetType[];
+  category?: AssetCategory;
+  tags?: string[];
+  visibility?: MarketVisibility[];
+  pricing?: MarketPricingFilter;
+  publisher?: string;
+  sort?: MarketSortField;
+  order?: MarketSortOrder;
+  semantic?: Record<string, MarketFacetValue | MarketRangeFacet>;
+  intent?: {
+    useCases?: string[];
+    /** @deprecated Use useCases. Removal target: marketplace contract v1.1 / next minor after 2026-05-05 migration window. */
+    useCase?: string[];
+    audience?: string | string[];
+    workflowStage?: string | string[];
+    domain?: string | string[];
+    notFor?: string | string[];
+    [field: string]: string | string[] | undefined;
+  };
+  embedding?: {
+    modelId: string;
+    query: string;
+  };
+  limit?: number;
+  offset?: number;
+  cursor?: string;
+}
+
 export interface MarketSearchResult {
   items: MarketPackage[];
   total: number;
   hasMore: boolean;
+  nextCursor?: string;
 }
 
-/** Install state of a market package */
-export type MarketInstallState = 'not-installed' | 'installed' | 'update-available';
+export type MarketInstallState = 'not-installed' | 'installed' | 'update-available' | 'installing';
 
-/** Market package — wraps AssetManifest with marketplace metadata */
 export interface MarketPackage {
-  /** Package identifier (@publisher/name) */
   id: string;
-  /** Asset manifest with distribution info */
   manifest: AssetManifest;
-  /** Current install state */
   installState: MarketInstallState;
-  /** Installed version (if installed) */
   installedVersion?: string;
-  /** Total download count */
   downloadCount?: number;
 }
 
-/** Version entry for a market package */
 export interface MarketPackageVersion {
-  /** Semantic version */
   version: string;
-  /** Release timestamp (ms) */
   releasedAt: number;
-  /** Changelog text */
   changelog?: string;
-  /** Compatibility requirements */
   compatibility?: AssetCompatibility;
-  /** Download size in bytes */
   downloadSize: number;
-  /** SRI integrity hash */
+  integrity?: string;
+  deprecated?: boolean;
+}
+
+// =============================================================================
+// Registry API Descriptors
+// =============================================================================
+
+export interface MarketServerInfo {
+  version: string;
+  capabilities: string[];
+}
+
+export interface DownloadDescriptor {
+  url: string;
+  expiresAt: number;
+  size: number;
   integrity: string;
+  resumable: boolean;
+}
+
+export interface DeltaDownloadDescriptor {
+  url: string;
+  size: number;
+  integrity: string;
+  patchFormat: 'bsdiff' | 'xdelta3' | 'rsync';
+  fallbackUrl?: string;
+}
+
+export interface SparseManifestResult {
+  items: SparseItem[];
+  totalSize: number;
+}
+
+export interface Entitlement {
+  packageId: string;
+  grantedAt: number;
+  expiresAt?: number | null;
+  source: 'free' | 'purchase' | 'subscription' | 'team' | 'gift';
+  reason?: string;
+}
+
+export interface EntitlementListResult {
+  entitlements: Entitlement[];
+  etag: string;
+}
+
+export interface EntitlementChangesResult {
+  added: Entitlement[];
+  removed: string[];
+  updated: Entitlement[];
+  etag: string;
+}
+
+export interface EntitlementCheck {
+  allowed: boolean;
+  reason?: 'free' | 'purchased' | 'subscription' | 'private-access' | 'expired' | 'not-purchased';
+  expiresAt?: number;
+}
+
+export interface CheckoutUrlResult {
+  url: string;
+  sessionId?: string;
+  expiresAt: number;
+}
+
+export interface FacetSchema {
+  fields: Array<{
+    name: string;
+    kind: 'enum' | 'range' | 'set' | 'string';
+    values?: string[];
+    min?: number;
+    max?: number;
+    description?: string;
+  }>;
+}
+
+export interface SemanticOntologyResult {
+  schemas: Record<string, FacetSchema>;
+}
+
+export interface IntentOntologyResult {
+  useCases: string[];
+  workflowStage: string[];
+  goals: string[];
+  audience: string[];
+  domain: string[];
+  notFor: string[];
+}
+
+export interface DeprecationResult {
+  deprecation?: AssetDeprecation;
+}
+
+export interface ProblemDetails {
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  instance?: string;
+  [extension: string]: unknown;
 }
 
 // =============================================================================
 // Install / Management
 // =============================================================================
 
-/** Install lifecycle phase */
 export type InstallPhase =
-  | 'downloading'
-  | 'verifying'
-  | 'validating'
-  | 'installing'
+  | 'discover'
+  | 'resolve'
+  | 'preflight'
+  | 'fetch'
+  | 'verify'
+  | 'stage'
+  | 'activate'
+  | 'record'
+  | 'rollback'
   | 'done'
   | 'error';
 
-/** Progress callback payload */
 export interface InstallProgress {
   packageId: string;
   phase: InstallPhase;
-  /** 0-100 */
   percent: number;
   bytesDownloaded?: number;
   bytesTotal?: number;
   error?: string;
 }
 
-/** Install operation result */
 export interface InstallResult {
   success: boolean;
   installedPath?: string;
   manifest?: AssetManifest;
   error?: string;
+  missingContributor?: MissingInstallTargetContributor;
 }
 
-/** Record of an installed package */
+export interface MissingInstallTargetContributor {
+  type: AssetType;
+  kind?: string;
+  extensionId?: string;
+  reason: 'not-declared' | 'not-installed' | 'activation-failed' | 'not-registered';
+  message: string;
+}
+
+export type InstalledPackageStatus =
+  | 'active'
+  | 'expiring-soon'
+  | 'expired'
+  | 'incompatible'
+  | 'deprecated';
+
+export type LargeAssetInstallState =
+  | 'not-owned'
+  | 'owned'
+  | 'manifest-only'
+  | 'proxy'
+  | 'partial'
+  | 'full';
+
+export interface InstalledLargeAssetState {
+  state: LargeAssetInstallState;
+  selectedItems?: string[];
+  downloadedItems?: string[];
+  selectedVariantId?: string;
+  proxyQuality?: ProxyVariant['qualityTag'];
+  totalSize?: number;
+  downloadedSize?: number;
+}
+
+export interface InstalledPackageRefState {
+  refCount: number;
+  owners: string[];
+}
+
 export interface InstalledPackage {
   packageId: string;
   version: string;
@@ -124,160 +286,182 @@ export interface InstalledPackage {
   installedAt: number;
   installedPath: string;
   manifest: AssetManifest;
-  /** Whether this package is enabled (default: true). Disabled packages remain on disk but are not loaded by consumers. */
   enabled: boolean;
+  /** True when the user explicitly installed this package outside a bundle/dependency flow. */
+  requested?: boolean;
+  status?: InstalledPackageStatus;
+  expiresAt?: number;
+  graceEndsAt?: number;
+  lastUsedAt?: number;
+  compatibilityIssue?: { detectedAt: number; reason: string; suggestedAction?: string };
+  largeAsset?: InstalledLargeAssetState;
+  refs?: Record<string, InstalledPackageRefState>;
 }
 
-/** Update availability info */
 export interface UpdateInfo {
   packageId: string;
   currentVersion: string;
   latestVersion: string;
   changelog?: string;
+  compatibility?: AssetCompatibility;
+  blocked?: boolean;
+  reason?: string;
 }
 
-// =============================================================================
-// Progress Callback
-// =============================================================================
+export interface InstallState {
+  packageId: string;
+  version: string;
+  manifest?: AssetManifest;
+  distributionKind?: DistributionKind;
+  completedPhases: InstallPhase[];
+  downloaded?: DownloadDescriptor;
+  stagedPath?: string;
+  installedPath?: string;
+  selectedItems?: string[];
+  selectedVariant?: ModelVariant;
+  resolvedGraph?: ResolvedInstallGraph;
+}
 
-/** Callback for install progress reporting */
 export type InstallProgressCallback = (progress: InstallProgress) => void;
+
+export type ResolvedInstallRelation = 'dependency' | 'bundle-content';
+
+export interface ResolvedInstallReference {
+  packageId: string;
+  requestedRange: string;
+  resolvedVersion?: string;
+  relation: ResolvedInstallRelation;
+  optional: boolean;
+  reusedInstalled: boolean;
+  skipped?: boolean;
+  skipReason?: string;
+  manifest?: AssetManifest;
+}
+
+export interface ResolvedInstallGraph {
+  dependencies: ResolvedInstallReference[];
+  bundleContents: ResolvedInstallReference[];
+}
 
 // =============================================================================
 // Core Interfaces
 // =============================================================================
 
-/**
- * IMarketClient — HTTP API client for marketplace backend.
- *
- * Handles search, package details, version listing, and download URL retrieval.
- * Zero vscode dependency (Layer 0).
- */
 export interface IMarketClient {
-  /** Search marketplace packages */
   search(query: MarketSearchQuery): Promise<MarketSearchResult>;
-
-  /** Get a single package by ID */
   getPackage(packageId: string): Promise<MarketPackage | undefined>;
-
-  /** Get available versions for a package */
   getVersions(packageId: string): Promise<MarketPackageVersion[]>;
-
-  /** Get download URL for a specific version */
+  getDownloadDescriptor(packageId: string, version: string): Promise<DownloadDescriptor>;
+  /** @deprecated Use getDownloadDescriptor. */
   getDownloadUrl(packageId: string, version: string): Promise<string>;
-
-  /** Get featured/recommended packages */
   getFeatured(type?: AssetType): Promise<MarketPackage[]>;
+  setAuthToken(token: string | null): void;
+  setRegistryUrl?(registryUrl: string | null | undefined): void;
+  getServerInfo(): Promise<MarketServerInfo>;
+  getSparseManifest(packageId: string): Promise<SparseManifestResult>;
+  reportSparseSelection(packageId: string, version: string, selectedItems: string[]): Promise<void>;
+  getVariantDownloadDescriptor(packageId: string, variantId: string): Promise<DownloadDescriptor>;
+  getProxyVariantDownloadDescriptor(
+    packageId: string,
+    qualityTag: ProxyVariant['qualityTag'],
+  ): Promise<DownloadDescriptor>;
+  getDeltaDownloadDescriptor(
+    packageId: string,
+    fromVersion: string,
+    toVersion: string,
+  ): Promise<DeltaDownloadDescriptor>;
+  listEntitlements(): Promise<EntitlementListResult>;
+  getEntitlementChanges(etag: string): Promise<EntitlementChangesResult | undefined>;
+  refreshEntitlements(): Promise<EntitlementListResult>;
+  checkEntitlement(packageId: string, version: string): Promise<EntitlementCheck>;
+  getCheckoutUrl(packageId: string, returnTo?: string, locale?: string): Promise<CheckoutUrlResult>;
+  getSemanticOntology(type?: AssetType, kind?: string): Promise<SemanticOntologyResult>;
+  getIntentOntology(): Promise<IntentOntologyResult>;
+  getDeprecation(packageId: string): Promise<DeprecationResult>;
 }
 
-/**
- * IInstallManager — Orchestrates download, verify, and install lifecycle.
- *
- * Progress is reported via callback (not vscode.Event) to maintain Layer 0 constraint.
- */
 export interface IInstallManager {
-  /** Install a package */
   install(
     packageId: string,
     version: string,
     onProgress?: InstallProgressCallback,
   ): Promise<InstallResult>;
-
-  /** Uninstall a package */
   uninstall(packageId: string): Promise<void>;
-
-  /** Update a package to a target version */
   update(
     packageId: string,
     version: string,
     onProgress?: InstallProgressCallback,
   ): Promise<InstallResult>;
-
-  /** List all installed packages */
+  enable(packageId: string): Promise<void>;
+  disable(packageId: string): Promise<void>;
   listInstalled(): Promise<InstalledPackage[]>;
-
-  /** Check for available updates */
   checkUpdates(): Promise<UpdateInfo[]>;
+  ensureFull?(packageId: string, itemId?: string): Promise<InstallResult>;
+  cancelInstall?(packageId: string): boolean;
 }
 
-/**
- * IInstallTarget — Type-specific install path strategy.
- *
- * Each asset type provides a target that computes the install location
- * and executes post-install/pre-uninstall hooks.
- */
 export interface IInstallTarget<T extends AssetType = AssetType> {
   readonly type: T;
-
-  /** Compute the install path from manifest */
   getInstallPath(manifest: AssetManifest): string;
-
-  /** Validate manifest before extraction/install. Throw to reject install. */
   validateManifest?(manifest: AssetManifest): void | Promise<void>;
-
-  /** Post-install hook (e.g., trigger runtime registration) */
+  onPreInstall?(manifest: AssetManifest): Promise<void>;
+  writeRegistration?(manifest: AssetManifest, installedPath: string): Promise<void>;
   onPostInstall?(manifest: AssetManifest, installedPath: string): Promise<void>;
-
-  /** Pre-uninstall hook (e.g., cleanup runtime registration) */
   onPreUninstall?(manifest: AssetManifest, installedPath: string): Promise<void>;
+  onRollback?(manifest: AssetManifest, partial: Partial<InstallState>): Promise<void>;
 }
 
-/**
- * ICacheManager — Local download cache management.
- *
- * Manages `.neko/market-cache/` directory with LRU eviction.
- */
 export interface ICacheManager {
-  /** Get cached file path (undefined if not cached) */
   getCachedPath(packageId: string, version: string): Promise<string | undefined>;
-
-  /** Store a file in cache, returns cache path */
   cacheFile(packageId: string, version: string, sourcePath: string): Promise<string>;
-
-  /** Evict cached entries for a package */
   evict(packageId: string, version?: string): Promise<void>;
-
-  /** Get total cache size in bytes */
   getSize(): Promise<number>;
-
-  /** Prune cache to max size using LRU policy */
   prune(maxSizeBytes: number): Promise<void>;
 }
 
-/**
- * IVersionResolver — Semver version resolution utilities.
- */
 export interface IVersionResolver {
-  /** Check if version satisfies a semver range */
   satisfies(version: string, range: string): boolean;
-
-  /** Find the highest version satisfying a range */
   maxSatisfying(versions: string[], range: string): string | undefined;
-
-  /** Compare two versions: -1 (a<b), 0 (a=b), 1 (a>b) */
   compare(a: string, b: string): -1 | 0 | 1;
-
-  /** Check compatibility with current Neko Suite version */
   isCompatible(compatibility: AssetCompatibility | undefined, currentVersion: string): boolean;
 }
 
-/**
- * ILicenseManager — Asset license verification.
- *
- * Phase 1: Stub that passes all free/shared assets.
- * Phase 6.5.4: Full JWT + online verification.
- */
 export interface ILicenseManager {
-  /** Verify whether the user is entitled to use this asset */
-  verify(manifest: AssetManifest): Promise<{ allowed: boolean; reason?: string }>;
+  verify(
+    manifest: AssetManifest,
+  ): Promise<{ allowed: boolean; reason?: string; expiresAt?: number }>;
+  listEntitlements?(forceRefresh?: boolean): Promise<Entitlement[]>;
+  buildCheckoutUrl?(packageId: string, returnTo?: string): Promise<string>;
 }
 
 // =============================================================================
-// Installed Registry Persistence
+// Market Events and Persistence
 // =============================================================================
 
-/** Persisted installed packages index (stored in ~/.neko/market-installed.json) */
+export type MarketPackageEventKind =
+  | 'install'
+  | 'uninstall'
+  | 'update'
+  | 'enable'
+  | 'disable'
+  | 'status-change'
+  | 'large-asset-state-change';
+
+export interface MarketPackageEvent {
+  kind: MarketPackageEventKind;
+  packageId: string;
+  manifest?: AssetManifest;
+  installedPath?: string;
+  type?: AssetType;
+  enabled?: boolean;
+  status?: InstalledPackageStatus;
+  previousStatus?: InstalledPackageStatus;
+  largeAsset?: InstalledLargeAssetState;
+  reason?: string;
+}
+
 export interface InstalledRegistryData {
   version: number;
   packages: Record<string, InstalledPackage>;
+  refs?: Record<string, InstalledPackageRefState>;
 }

@@ -9,16 +9,21 @@ import {
   useMarketplaceStore,
   type MarketItem,
   type InstalledItem,
+  type OwnedItem,
   type UpdateItem,
   type TabType,
 } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
+import type { MarketServerInfo } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
 import { getLogger } from '../utils/logger';
 import { SearchBar } from './SearchBar';
 import { BrowseView } from './BrowseView';
 import { InstalledView } from './InstalledView';
+import { OwnedView } from './OwnedView';
 import { UpdatesView } from './UpdatesView';
+import { PackageDetailView } from './PackageDetailView';
+import { LargeAssetPicker } from './LargeAssetPicker';
 
 const logger = getLogger('MarketplaceApp');
 
@@ -43,6 +48,7 @@ export const MarketplaceApp: React.FC = () => {
   const TABS: { key: TabType; labelKey: string; icon: string }[] = [
     { key: 'browse', labelKey: 'marketplace.tab.browse', icon: 'codicon-search' },
     { key: 'installed', labelKey: 'marketplace.tab.installed', icon: 'codicon-package' },
+    { key: 'owned', labelKey: 'marketplace.tab.owned', icon: 'codicon-account' },
     { key: 'updates', labelKey: 'marketplace.tab.updates', icon: 'codicon-cloud-download' },
   ];
 
@@ -64,8 +70,27 @@ export const MarketplaceApp: React.FC = () => {
           store.setFeatured((data as MarketItem[]) ?? []);
           break;
 
+        case 'market:packageResult':
+          store.setSelectedPackage((data as MarketItem | undefined) ?? null);
+          break;
+
+        case 'market:serverInfoResult':
+          store.setServerInfo((data as MarketServerInfo | undefined) ?? null);
+          break;
+
         case 'market:installedResult':
           store.setInstalled((data as InstalledItem[]) ?? []);
+          break;
+
+        case 'market:entitlementsResult': {
+          const result = data as { items?: OwnedItem[]; etag?: string };
+          store.setEntitlements(result.items ?? [], result.etag);
+          break;
+        }
+
+        case 'market:entitlementsRefreshed':
+          store.setEntitlementsRefreshing(false);
+          MarketMessages.listEntitlements();
           break;
 
         case 'market:updatesResult':
@@ -81,9 +106,21 @@ export const MarketplaceApp: React.FC = () => {
           if (result.success) {
             logger.info('Install succeeded, refreshing lists');
             MarketMessages.listInstalled();
+            MarketMessages.listEntitlements();
             MarketMessages.checkUpdates();
           } else if (result.error) {
             logger.warn('Install failed', result.error);
+            store.setError({ i18nKey: 'marketplace.error.installFailed', message: result.error });
+          }
+          break;
+        }
+
+        case 'market:updateResult': {
+          const result = data as { success: boolean; error?: string };
+          if (result.success) {
+            MarketMessages.listInstalled();
+            MarketMessages.checkUpdates();
+          } else if (result.error) {
             store.setError({ i18nKey: 'marketplace.error.installFailed', message: result.error });
           }
           break;
@@ -124,8 +161,10 @@ export const MarketplaceApp: React.FC = () => {
     MarketMessages.ready();
 
     // Initial data load
+    MarketMessages.getServerInfo();
     MarketMessages.getFeatured();
     MarketMessages.listInstalled();
+    MarketMessages.listEntitlements();
     MarketMessages.checkUpdates();
 
     return () => window.removeEventListener('message', handleMessage);
@@ -194,8 +233,11 @@ export const MarketplaceApp: React.FC = () => {
       <div className="marketplace-content">
         {activeTab === 'browse' && <BrowseView />}
         {activeTab === 'installed' && <InstalledView />}
+        {activeTab === 'owned' && <OwnedView />}
         {activeTab === 'updates' && <UpdatesView />}
       </div>
+      <PackageDetailView />
+      <LargeAssetPicker />
     </div>
   );
 };

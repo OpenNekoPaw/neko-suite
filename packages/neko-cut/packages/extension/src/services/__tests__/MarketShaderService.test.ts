@@ -32,13 +32,13 @@ vi.mock('vscode', () => ({
 }));
 
 // Mock os.homedir to point to a temp dir
-let tempHome: string;
+const mockHome = vi.hoisted(() => ({ tempHome: '' }));
 
 vi.mock('os', async (importOriginal) => {
   const original = await importOriginal<typeof import('os')>();
   return {
     ...original,
-    homedir: () => tempHome,
+    homedir: () => mockHome.tempHome,
   };
 });
 
@@ -63,13 +63,13 @@ describe('MarketShaderService', () => {
   let shadersDir: string;
 
   beforeEach(async () => {
-    tempHome = await mkdtemp(join(tmpdir(), 'neko-market-shader-test-'));
-    shadersDir = join(tempHome, '.neko', 'shaders');
+    mockHome.tempHome = await mkdtemp(join(tmpdir(), 'neko-market-shader-test-'));
+    shadersDir = join(mockHome.tempHome, '.neko', 'shaders');
     logger = createMockLogger();
   });
 
   afterEach(async () => {
-    await rm(tempHome, { recursive: true, force: true });
+    await rm(mockHome.tempHome, { recursive: true, force: true });
   });
 
   it('initializes with empty list when no shaders directory', async () => {
@@ -96,6 +96,20 @@ describe('MarketShaderService', () => {
     expect(service.marketShaders).toHaveLength(1);
     expect(service.marketShaders[0]!.name).toBe('Blur Shader');
     expect(service.marketShaders[0]!.category).toBe('blur');
+    expect(service.marketShaders[0]!.shaderId).toBe('market:test-publisher/blur-shader/blur');
+    service.dispose();
+  });
+
+  it('discovers shaders in kind/publisher/name/ structure', async () => {
+    const shaderDir = join(shadersDir, 'preset', 'test-publisher', 'blur-shader');
+    await mkdir(shaderDir, { recursive: true });
+    await writeFile(join(shaderDir, 'blur.wgsl'), '// WGSL blur shader');
+
+    const service = new MarketShaderService(logger);
+    await service.initialize();
+
+    expect(service.marketShaders).toHaveLength(1);
+    expect(service.marketShaders[0]!.packageId).toBe('@test-publisher/blur-shader');
     expect(service.marketShaders[0]!.shaderId).toBe('market:test-publisher/blur-shader/blur');
     service.dispose();
   });
@@ -160,6 +174,100 @@ describe('MarketShaderService', () => {
 
     // Should not throw, just log debug message
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('neko-market not available'));
+    service.dispose();
+  });
+
+  it('filters enabled v4 shader and LUT preset installs by market status', async () => {
+    const vscode = await import('vscode');
+    const activeShaderDir = join(shadersDir, 'pub', 'active-shader');
+    const lutPresetDir = join(shadersDir, 'pub', 'film-lut');
+    const expiredShaderDir = join(shadersDir, 'pub', 'expired-shader');
+    const nonLutPresetDir = join(shadersDir, 'pub', 'theme-preset');
+    for (const dir of [activeShaderDir, lutPresetDir, expiredShaderDir, nonLutPresetDir]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'effect.wgsl'), '// effect');
+    }
+
+    const getInstalled = vi.fn().mockResolvedValue([
+      {
+        packageId: '@pub/active-shader',
+        installedPath: activeShaderDir,
+        enabled: true,
+        status: 'active',
+      },
+      {
+        packageId: '@pub/film-lut',
+        installedPath: lutPresetDir,
+        enabled: true,
+        status: 'deprecated',
+        manifest: { typeMetadata: { type: 'preset', data: { presetKind: 'lut' } } },
+      },
+      {
+        packageId: '@pub/expired-shader',
+        installedPath: expiredShaderDir,
+        enabled: true,
+        status: 'expired',
+      },
+      {
+        packageId: '@pub/theme-preset',
+        installedPath: nonLutPresetDir,
+        enabled: true,
+        status: 'active',
+        manifest: { typeMetadata: { type: 'preset', data: { presetKind: 'theme' } } },
+      },
+    ]);
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      isActive: true,
+      exports: {
+        getInstalled,
+        onDidInstall: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        onDidUninstall: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        onDidEnable: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        onDidDisable: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      },
+    } as never);
+
+    const service = new MarketShaderService(logger);
+    await service.initialize();
+
+    expect(getInstalled).toHaveBeenCalledWith({ types: ['shader', 'preset'], enabledOnly: true });
+    expect(service.marketShaders.map((shader) => shader.packageId).sort()).toEqual([
+      '@pub/active-shader',
+      '@pub/film-lut',
+    ]);
+    service.dispose();
+  });
+
+  it('rescans when typed market events remove a LUT preset projection', async () => {
+    const vscode = await import('vscode');
+    const onDidMarketPackageEvent = vi.fn().mockReturnValue({ dispose: vi.fn() });
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      isActive: true,
+      exports: {
+        getInstalled: vi.fn().mockResolvedValue([]),
+        onDidMarketPackageEvent,
+        onDidInstall: vi.fn(),
+        onDidUninstall: vi.fn(),
+        onDidEnable: vi.fn(),
+        onDidDisable: vi.fn(),
+      },
+    } as never);
+
+    const service = new MarketShaderService(logger);
+    const rescan = vi.spyOn(service, 'rescan').mockResolvedValue(undefined);
+    await service.initialize();
+    const listener = onDidMarketPackageEvent.mock.calls[0]?.[0] as
+      | ((event: unknown) => void)
+      | undefined;
+
+    listener?.({
+      kind: 'uninstall',
+      packageId: '@pub/film-lut',
+      type: 'preset',
+      manifest: { typeMetadata: { type: 'preset', data: { presetKind: 'lut' } } },
+    });
+
+    expect(rescan).toHaveBeenCalledTimes(2);
     service.dispose();
   });
 });

@@ -1,49 +1,86 @@
 /**
- * Asset Manifest Types
+ * AssetManifest v4 contract.
  *
- * 统一资产注册表的类型基础。
- * 覆盖媒体素材、Shader、AI 模型、插件、预设等所有资产类型。
+ * This file is the shared client/server schema surface for neko-market.
+ * Registry server remains authoritative for producing, validating, signing,
+ * and curating marketplace manifests; clients consume this contract.
+ *
+ * @see docs/architecture/manifest-schema-spec.md
+ * @see docs/architecture/registry-server-contract.md
  */
 
 // =============================================================================
 // Asset Type
 // =============================================================================
 
-/** 统一资产类型 */
+/** Asset implementation type used for install routing. */
 export type AssetType =
-  // 媒体素材
+  | 'media'
+  | 'starter'
+  | 'identity'
+  | 'model'
+  | 'endpoint'
+  | 'provider'
+  | 'skill'
+  | 'plugin'
+  | 'shader'
+  | 'preset'
+  | 'bundle';
+
+/** UI category. This is not an install routing key. */
+export type AssetCategory = 'media' | 'ai' | 'tooling' | 'bundle';
+
+export const CATEGORY_MAP: Record<AssetType, AssetCategory> = {
+  media: 'media',
+  starter: 'media',
+  identity: 'media',
+  model: 'ai',
+  endpoint: 'ai',
+  provider: 'ai',
+  skill: 'tooling',
+  plugin: 'tooling',
+  shader: 'tooling',
+  preset: 'tooling',
+  bundle: 'bundle',
+};
+
+export const ASSET_TYPES: readonly AssetType[] = [
+  'media',
+  'starter',
+  'identity',
+  'model',
+  'endpoint',
+  'provider',
+  'skill',
+  'plugin',
+  'shader',
+  'preset',
+  'bundle',
+] as const;
+
+export type LegacyAssetType =
   | 'video'
   | 'audio'
   | 'image'
   | 'sequence'
-  // Shader
-  | 'shader'
-  | 'shader-preset'
-  // AI 模型
+  | '3d-model'
+  | 'puppet-motion'
+  | 'document'
+  | 'project-template'
+  | 'identity-pack'
   | 'ai-model'
   | 'lora'
   | 'embedding'
-  // 插件 / Agent Skill
-  | 'plugin'
-  | 'skill'
-  // 预设 / 模板 / LUT
-  | 'preset'
+  | 'service-endpoint'
+  | 'provider-card'
+  | 'shader-preset'
   | 'template'
-  | 'lut'
-  // 3D 模型
-  | '3d-model'
-  // 2D Puppet 动作 / 表情预设
-  | 'puppet-motion'
-  // 文档
-  | 'document'
-  // ProviderCard expression context
-  | 'provider-card';
+  | 'lut';
 
 // =============================================================================
-// Asset Source
+// Source
 // =============================================================================
 
-/** 资产来源 */
 export type AssetManifestSource =
   | { kind: 'local'; path: string }
   | { kind: 'git-lfs'; oid: string; path: string }
@@ -52,32 +89,69 @@ export type AssetManifestSource =
   | { kind: 'remote'; uri: string; checksum?: string };
 
 // =============================================================================
+// Distribution Shape
+// =============================================================================
+
+export type DistributionKind = 'archive' | 'orchestration' | 'registration';
+
+export const DISTRIBUTION_KINDS: readonly DistributionKind[] = [
+  'archive',
+  'orchestration',
+  'registration',
+] as const;
+
+// =============================================================================
 // Type-Specific Metadata
 // =============================================================================
 
-/** Shader 元数据 */
-export interface ShaderMetadata {
-  language: 'wgsl' | 'glsl';
-  stage: 'vertex' | 'fragment' | 'compute';
-  inputs: ShaderInput[];
-  preview?: string;
-  compatibleWith: string[];
+export type MediaKind =
+  | 'video'
+  | 'audio'
+  | 'image'
+  | 'sequence'
+  | '3d-model'
+  | 'puppet-motion'
+  | 'document';
+
+export interface MediaMetadata {
+  mediaKind: MediaKind;
+  fileSize: number;
+  video?: { duration: number; fps: number; codec: string; resolution: [number, number] };
+  audio?: { duration: number; sampleRate: number; channels: number };
+  image?: { resolution: [number, number]; hasAlpha?: boolean };
+  sequence?: { frameCount: number; fps: number; resolution: [number, number] };
+  '3d-model'?: {
+    format: 'glb' | 'gltf' | 'fbx' | 'obj' | 'vrm' | 'mmd';
+    vertexCount?: number;
+  };
+  'puppet-motion'?: { format: 'inp' | 'live2d' | 'nkpup'; duration: number };
+  document?: {
+    subtype: 'markdown' | 'pdf' | 'word' | 'pptx' | 'xlsx' | 'epub' | 'cbz' | 'fdx';
+    pageCount?: number;
+    wordCount?: number;
+    language?: string;
+    textExtractable: boolean;
+  };
 }
 
-export interface ShaderInput {
-  name: string;
-  type: 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'sampler';
-  default?: number | number[];
-  min?: number;
-  max?: number;
-  label?: string;
+export interface StarterMetadata {
+  targetEditor: 'cut' | 'canvas' | 'model' | 'sketch' | 'puppet' | 'story';
+  requires?: AssetType[];
 }
 
-/** AI model metadata for marketplace distribution and runtime deployment */
+export interface IdentityMetadata {
+  identityKind: 'character' | 'location' | 'object' | 'style';
+  identityId: string;
+  forms: Array<{
+    role: '3d-rigged' | '2d-puppet' | 'portrait' | 'voice' | 'bio' | 'reference';
+    packageRef: string;
+    relPath?: string;
+  }>;
+}
+
 export interface ModelMetadata {
-  /** Model weight format */
+  modelKind: 'base' | 'lora' | 'embedding';
   framework: 'onnx' | 'pytorch' | 'safetensors' | 'gguf';
-  /** Primary task this model performs */
   task:
     | 'image-gen'
     | 'tts'
@@ -91,19 +165,66 @@ export interface ModelMetadata {
     | 'embedding'
     | 'vision'
     | string;
-  /** Model file size in bytes */
   size: number;
-  /** Quantization level (e.g., 'q4_k_m', 'fp16', 'int8') */
   quantization?: string;
-  /** Minimum VRAM required in MB */
   minVram?: number;
-  /** Architecture name (e.g., 'realesrgan', 'whisper', 'llama', 'sdxl') */
   architecture?: string;
-  /** Base model ID for LoRA / embedding / adapter */
   baseModel?: string;
 }
 
-/** 插件元数据 */
+export interface EndpointMetadata {
+  provider: 'openai' | 'anthropic' | 'google' | 'azure' | 'ollama' | 'comfyui' | 'custom';
+  capabilities: ('chat' | 'image' | 'video' | 'audio' | 'embedding' | 'vision' | string)[];
+  endpointTemplate: string;
+  credentialSchema: {
+    fields: Array<{
+      name: string;
+      label: string;
+      kind: 'apiKey' | 'orgId' | 'baseUrl' | 'custom';
+      required?: boolean;
+      placeholder?: string;
+    }>;
+  };
+  modelIds?: string[];
+}
+
+export type AssetProviderTrustLevel = 'core' | 'community' | 'untrusted';
+export type ProviderCardMarketTrustLevel = AssetProviderTrustLevel;
+
+export interface ProviderSignature {
+  readonly algorithm: 'sha256' | 'sha512' | 'ed25519';
+  readonly value: string;
+  readonly signedBy?: string;
+  readonly publicKeyId?: string;
+}
+
+export type ProviderCardSignature = ProviderSignature;
+
+export interface ProviderMetadata {
+  providerId: string;
+  capabilities: ('image.generate' | 'video.generate' | 'audio.generate' | string)[];
+  modelIds?: string[];
+  cardSchemaVersion?: string;
+  trustLevel?: AssetProviderTrustLevel;
+  signature?: ProviderSignature;
+}
+
+/** Backward-compatible name for provider marketplace metadata. */
+export type ProviderCardMarketMetadata = ProviderMetadata;
+
+export interface SkillMetadata {
+  domain: string[];
+  toolSets?: string[];
+  mcpServers?: string[];
+  llmRequirements?: {
+    capabilities: ('vision' | 'function-calling' | 'streaming')[];
+    minContextWindow?: number;
+  };
+}
+
+/** Backward-compatible name for skill marketplace metadata. */
+export type SkillMarketMetadata = SkillMetadata;
+
 export interface PluginMetadata {
   entryPoint: string;
   apiVersion: string;
@@ -111,77 +232,64 @@ export interface PluginMetadata {
   configSchema?: Record<string, unknown>;
 }
 
-/** 预设元数据 */
+export interface ShaderInput {
+  name: string;
+  type: 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'sampler';
+  default?: number | number[];
+  min?: number;
+  max?: number;
+  label?: string;
+}
+
+export interface ShaderMetadata {
+  shaderKind: 'standalone' | 'preset';
+  language: 'wgsl' | 'glsl';
+  stage: 'vertex' | 'fragment' | 'compute';
+  inputs: ShaderInput[];
+  preview?: string;
+  compatibleWith?: string[];
+}
+
 export interface PresetMetadata {
-  presetType: 'export' | 'color' | 'transition' | 'effect' | 'lut' | 'template';
+  presetKind:
+    | 'lut'
+    | 'transition'
+    | 'effect'
+    | 'export'
+    | 'color'
+    | 'memory'
+    | 'theme'
+    | 'keybinding'
+    | 'convention'
+    | string;
   targetApp?: string;
   parameters?: Record<string, unknown>;
 }
 
-/** Skill-specific marketplace metadata */
-export interface SkillMarketMetadata {
-  /** Skill domain tags */
-  domain: string[];
-  /** Associated ToolSet names */
-  toolSets?: string[];
-  /** Required MCP server names */
-  mcpServers?: string[];
-  /** LLM requirements */
-  llmRequirements?: {
-    capabilities: ('vision' | 'function-calling' | 'streaming')[];
-    minContextWindow?: number;
-  };
+export type BundleInstallPolicy = 'all' | 'pick';
+
+export interface BundleMetadata {
+  installPolicy: BundleInstallPolicy;
+  recommended?: string[];
 }
 
-export type ProviderCardMarketTrustLevel = 'core' | 'community' | 'untrusted';
-
-export interface ProviderCardSignature {
-  readonly algorithm: 'sha256' | 'sha512' | 'ed25519';
-  readonly value: string;
-  readonly signedBy?: string;
-}
-
-/** Provider expression card marketplace metadata */
-export interface ProviderCardMarketMetadata {
-  /** Provider ID declared by the card frontmatter */
-  providerId: string;
-  /** Generation capabilities covered by this card */
-  capabilities: ('image.generate' | 'video.generate' | 'audio.generate')[];
-  /** Optional model ids this semantic profile applies to */
-  modelIds?: string[];
-  /** Provider card schema version */
-  cardSchemaVersion?: string;
-  /** Capability-protocol trust tier assigned by marketplace review */
-  trustLevel?: ProviderCardMarketTrustLevel;
-  /** Optional package/card signature metadata for reviewed marketplace packages */
-  signature?: ProviderCardSignature;
-}
-
-/** Document metadata */
-export interface DocumentMetadata {
-  subtype: 'markdown' | 'pdf' | 'word' | 'pptx' | 'xlsx' | 'epub' | 'cbz' | 'fdx';
-  pageCount?: number;
-  wordCount?: number;
-  language?: string;
-  /** Whether text content can be extracted for AI analysis */
-  textExtractable: boolean;
-}
-
-/** 类型特化元数据联合 */
 export type AssetTypeMetadata =
-  | { type: 'shader'; data: ShaderMetadata }
+  | { type: 'media'; data: MediaMetadata }
+  | { type: 'starter'; data: StarterMetadata }
+  | { type: 'identity'; data: IdentityMetadata }
   | { type: 'model'; data: ModelMetadata }
+  | { type: 'endpoint'; data: EndpointMetadata }
+  | { type: 'provider'; data: ProviderMetadata }
+  | { type: 'skill'; data: SkillMetadata }
   | { type: 'plugin'; data: PluginMetadata }
+  | { type: 'shader'; data: ShaderMetadata }
   | { type: 'preset'; data: PresetMetadata }
-  | { type: 'skill'; data: SkillMarketMetadata }
-  | { type: 'document'; data: DocumentMetadata }
-  | { type: 'provider-card'; data: ProviderCardMarketMetadata };
+  | { type: 'bundle'; data: BundleMetadata };
 
 // =============================================================================
 // Distribution Info
 // =============================================================================
 
-/** 分发信息 */
 export interface AssetDistribution {
   license: string;
   author: string;
@@ -190,81 +298,743 @@ export interface AssetDistribution {
   homepage?: string;
   downloads?: number;
   checksum: string;
-
-  // === Marketplace extensions ===
-
-  /** Visibility level */
   visibility?: 'public' | 'private' | 'shared' | 'paid';
-  /** Publisher unique identifier */
   publisherId?: string;
-  /** Publisher display name */
   publisherName?: string;
-  /** Whether the publisher is verified */
   verified?: boolean;
-  /** Pricing info */
   pricing?: AssetPricing;
-  /** Rating stats */
   rating?: { average: number; count: number };
-  /** Screenshot URLs */
   screenshots?: string[];
-  /** Compatibility requirements */
   compatibility?: AssetCompatibility;
+  trustLevel?: AssetProviderTrustLevel;
+  signature?: ProviderSignature;
+  embeddingHash?: string;
 }
 
-/** Pricing model for marketplace assets */
 export interface AssetPricing {
   model: 'free' | 'paid' | 'freemium';
   price?: number;
   currency?: string;
 }
 
-/** Version compatibility requirements */
 export interface AssetCompatibility {
-  /** Neko Suite version range (semver) */
   nekoSuiteVersion?: string;
-  /** VSCode version range */
   vscodeVersion?: string;
-  /** Engine version range */
   engineVersion?: string;
+  knownIncompatible?: { reason: string; range: string }[];
+  upgradeTo?: { packageId: string; version: string };
 }
 
 // =============================================================================
-// Asset Dependency
+// Effects, Dependencies, and Large Assets
 // =============================================================================
 
-/** 资产依赖 */
+export interface EffectsManifest {
+  files?: { writes?: string[]; reads?: string[] };
+  resources?: {
+    vramMB?: number;
+    diskMB?: number;
+    ports?: number[];
+  };
+  registrations?: {
+    tools?: string[];
+    providers?: string[];
+    runtimes?: ('ollama' | 'comfyui' | 'engine-onnx' | 'python' | string)[];
+    effects?: string[];
+    commands?: string[];
+  };
+  conflicts?: string[];
+  network?: { hosts: string[] };
+}
+
 export interface AssetDependency {
   id: string;
   version: string;
   optional?: boolean;
 }
 
+export interface BundleContent {
+  packageId: string;
+  version: string;
+  optional?: boolean;
+  role?: string;
+}
+
+export type DistributionMode = 'eager' | 'sparse' | 'proxy' | 'delta' | 'variant';
+
+export const DISTRIBUTION_MODES: readonly DistributionMode[] = [
+  'eager',
+  'sparse',
+  'proxy',
+  'delta',
+  'variant',
+] as const;
+
+export interface LargeAssetStrategy {
+  modes: DistributionMode[];
+  sparseItems?: SparseItem[];
+  proxyVariants?: ProxyVariant[];
+  variants?: ModelVariant[];
+  deltaBase?: { version: string; deltaUrl: string; deltaSize: number };
+  totalSize: number;
+}
+
+export interface SparseItem {
+  itemId: string;
+  name: string;
+  size: number;
+  thumbnail?: string;
+  defaultSelected?: boolean;
+}
+
+export interface ProxyVariant {
+  qualityTag: 'low' | 'medium' | 'high' | 'original';
+  size: number;
+  resolution?: [number, number];
+  bitrate?: number;
+  default?: boolean;
+}
+
+export interface ModelVariant {
+  variantId: string;
+  size: number;
+  minVram?: number;
+  qualityScore?: number;
+  recommended?: boolean;
+}
+
 // =============================================================================
-// Asset Manifest
+// Semantics, Intent, Embeddings, and Curation
 // =============================================================================
 
-/** 统一资产清单 */
+export type AssetSemantics =
+  | { type: 'preset'; presetKind: 'lut'; data: LutSemantics }
+  | { type: 'preset'; presetKind: 'transition'; data: TransitionSemantics }
+  | { type: 'preset'; presetKind: 'effect'; data: EffectSemantics }
+  | { type: 'preset'; presetKind: 'memory'; data: MemorySemantics }
+  | { type: 'media'; mediaKind: 'audio'; data: AudioSemantics }
+  | { type: 'media'; mediaKind: 'image'; data: ImageSemantics }
+  | { type: 'media'; mediaKind: 'video'; data: VideoSemantics }
+  | { type: 'media'; mediaKind: '3d-model'; data: ModelMediaSemantics }
+  | { type: 'media'; mediaKind: 'puppet-motion'; data: PuppetMotionSemantics }
+  | { type: 'identity'; data: IdentitySemantics }
+  | { type: 'skill'; data: SkillSemantics }
+  | { type: 'model'; data: ModelSemantics }
+  | { type: 'shader'; data: ShaderSemantics }
+  | { type: 'plugin'; data: { domain: string[]; useCase: string } }
+  | { type: 'endpoint'; data: { latencyTier: 'low' | 'medium' | 'high'; rateLimit?: string } }
+  | { type: 'provider'; data: { syntaxStyle: string[]; conceptCoverage: string[] } }
+  | { type: 'starter'; data: { complexity: 1 | 2 | 3 | 4 | 5; scenario: string } }
+  | { type: 'bundle'; data: { theme: string[]; collectionSize: number } };
+
+export interface LutSemantics {
+  warmth: number;
+  contrast: number;
+  saturation: number;
+  mood: string[];
+  timeOfDay?: 'golden-hour' | 'blue-hour' | 'daylight' | 'night';
+  filmStock?: string;
+}
+
+export interface TransitionSemantics {
+  speed: 'slow' | 'medium' | 'fast';
+  style: ('cut' | 'fade' | 'slide' | 'zoom' | 'glitch' | 'morph')[];
+  mood: string[];
+}
+
+export interface AudioSemantics {
+  genre: string[];
+  mood: string[];
+  bpm?: number;
+  key?: string;
+  energy: number;
+  loopable: boolean;
+}
+
+export interface ImageSemantics {
+  artStyle: string[];
+  era?: string;
+  composition: ('portrait' | 'landscape' | 'closeup' | 'wide-shot')[];
+  dominantColors: string[];
+  hasAlpha: boolean;
+}
+
+export interface VideoSemantics {
+  scene: string[];
+  style: string[];
+  pace: 'slow' | 'medium' | 'fast';
+  duration: number;
+  fps: number;
+}
+
+export interface IdentitySemantics {
+  archetype: string[];
+  ageGroup: 'child' | 'teen' | 'young-adult' | 'adult' | 'elder';
+  personality: string[];
+  artStyle: string[];
+}
+
+export interface SkillSemantics {
+  domain: string[];
+  useCase: string;
+  outputKind: ('text' | 'image' | 'audio' | 'video' | 'plan')[];
+}
+
+export interface ModelSemantics {
+  task: string[];
+  architecture: string;
+  trainingDomain: string[];
+  language?: string[];
+}
+
+export interface ShaderSemantics {
+  effectCategory: ('color' | 'distort' | 'blur' | 'sharpen' | 'stylize' | 'composite')[];
+  intensity?: 'subtle' | 'moderate' | 'intense';
+}
+
+export interface EffectSemantics {
+  effectKind: string[];
+  intensity: number;
+}
+
+export interface MemorySemantics {
+  writingStyle: string[];
+  domain: string[];
+}
+
+export interface ModelMediaSemantics {
+  category: 'character' | 'prop' | 'environment' | 'vehicle';
+  style: string[];
+  polyCount?: 'low' | 'medium' | 'high';
+  rigged: boolean;
+}
+
+export interface PuppetMotionSemantics {
+  emotion: string[];
+  actionType: ('idle' | 'walk' | 'run' | 'gesture' | 'reaction')[];
+  loopable: boolean;
+}
+
+export interface AssetIntent {
+  useCases: string[];
+  workflowStage?: (
+    | 'pre-production'
+    | 'rough-cut'
+    | 'fine-cut'
+    | 'color-grading'
+    | 'sound-design'
+    | 'finishing'
+    | 'export'
+    | 'storyboarding'
+    | 'pre-vis'
+  )[];
+  goals?: (
+    | 'mood-setting'
+    | 'pacing'
+    | 'realism'
+    | 'stylization'
+    | 'continuity'
+    | 'transition'
+    | 'emphasis'
+    | 'world-building'
+    | 'character-development'
+  )[];
+  audience?: ('beginner' | 'intermediate' | 'professional' | 'enterprise')[];
+  domain?: (
+    | 'film'
+    | 'youtube'
+    | 'tiktok'
+    | 'animation'
+    | 'game-dev'
+    | 'broadcast'
+    | 'streaming'
+    | 'corporate'
+    | 'education'
+  )[];
+  notFor?: ('commercial' | 'NSFW' | 'minor-targeted' | 'broadcast' | 'cinema' | string)[];
+  description?: string;
+  inspiredBy?: string[];
+}
+
+export interface SkillIntent extends AssetIntent {
+  triggers: string[];
+  prerequisites?: string[];
+  expectedOutput: ('plan' | 'execution' | 'suggestion' | 'analysis')[];
+}
+
+export interface LutIntent extends AssetIntent {
+  lookReference?: string[];
+  targetGenre?: string[];
+}
+
+export interface ModelIntent extends AssetIntent {
+  bestFor: string[];
+  knownLimitations?: string[];
+}
+
+export interface MediaIntent extends AssetIntent {
+  shotRole?: ('b-roll' | 'hero-shot' | 'establishing' | 'transition' | 'close-up' | 'wide')[];
+  audioRole?: ('background' | 'foreground' | 'sfx' | 'ambient' | 'foley' | 'dialogue')[];
+}
+
+export interface StarterIntent extends AssetIntent {
+  scenario: string;
+  complexity: 1 | 2 | 3 | 4 | 5;
+  estimatedDuration?: string;
+}
+
+export interface PackageEmbeddings {
+  modelId: string;
+  modelVersion: string;
+  dimension: number;
+  files: { path: string; vector: string }[];
+}
+
+export interface AssetDeprecation {
+  since: number;
+  replacedBy?: string;
+  reason?: string;
+  delistAt?: number;
+}
+
+// =============================================================================
+// Manifest
+// =============================================================================
+
 export interface AssetManifest {
-  /** 唯一标识 */
   id: string;
-  /** 显示名称 */
   name: string;
-  /** 语义化版本 */
   version: string;
-  /** 资产类型 */
   type: AssetType;
-  /** 来源 */
   source: AssetManifestSource;
-  /** 类型特化元数据 */
+  distributionKind: DistributionKind;
   typeMetadata?: AssetTypeMetadata;
-  /** 分发信息（社区资产） */
   distribution?: AssetDistribution;
-  /** 依赖列表 */
+  effects?: EffectsManifest;
   dependencies?: AssetDependency[];
-  /** 缩略图/预览图路径 */
+  contents?: BundleContent[];
+  largeAsset?: LargeAssetStrategy;
+  semantics?: AssetSemantics;
+  intent?: AssetIntent;
+  embeddings?: PackageEmbeddings;
+  deprecation?: AssetDeprecation;
   thumbnail?: string;
-  /** 创建时间 */
   createdAt: number;
-  /** 更新时间 */
   updatedAt: number;
+}
+
+// =============================================================================
+// Runtime Validation Helpers
+// =============================================================================
+
+export interface AssetManifestValidationIssue {
+  field: string;
+  message: string;
+}
+
+export interface AssetManifestValidationResult {
+  valid: boolean;
+  issues: AssetManifestValidationIssue[];
+}
+
+export interface LegacyMetadataPatch {
+  type: AssetType;
+  data?: Record<string, unknown>;
+}
+
+export interface LegacyAssetTypeMigration {
+  legacyType: LegacyAssetType;
+  type: AssetType;
+  metadataPatch: LegacyMetadataPatch;
+}
+
+const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
+const DISTRIBUTION_KIND_SET = new Set<string>(DISTRIBUTION_KINDS);
+const DISTRIBUTION_MODE_SET = new Set<string>(DISTRIBUTION_MODES);
+
+const LEGACY_TYPE_MIGRATIONS: Record<LegacyAssetType, LegacyAssetTypeMigration> = {
+  video: { legacyType: 'video', type: 'media', metadataPatch: mediaPatch('video') },
+  audio: { legacyType: 'audio', type: 'media', metadataPatch: mediaPatch('audio') },
+  image: { legacyType: 'image', type: 'media', metadataPatch: mediaPatch('image') },
+  sequence: { legacyType: 'sequence', type: 'media', metadataPatch: mediaPatch('sequence') },
+  '3d-model': { legacyType: '3d-model', type: 'media', metadataPatch: mediaPatch('3d-model') },
+  'puppet-motion': {
+    legacyType: 'puppet-motion',
+    type: 'media',
+    metadataPatch: mediaPatch('puppet-motion'),
+  },
+  document: { legacyType: 'document', type: 'media', metadataPatch: mediaPatch('document') },
+  'project-template': {
+    legacyType: 'project-template',
+    type: 'starter',
+    metadataPatch: { type: 'starter' },
+  },
+  'identity-pack': {
+    legacyType: 'identity-pack',
+    type: 'identity',
+    metadataPatch: { type: 'identity' },
+  },
+  'ai-model': { legacyType: 'ai-model', type: 'model', metadataPatch: modelPatch('base') },
+  lora: { legacyType: 'lora', type: 'model', metadataPatch: modelPatch('lora') },
+  embedding: { legacyType: 'embedding', type: 'model', metadataPatch: modelPatch('embedding') },
+  'service-endpoint': {
+    legacyType: 'service-endpoint',
+    type: 'endpoint',
+    metadataPatch: { type: 'endpoint' },
+  },
+  'provider-card': {
+    legacyType: 'provider-card',
+    type: 'provider',
+    metadataPatch: { type: 'provider' },
+  },
+  'shader-preset': {
+    legacyType: 'shader-preset',
+    type: 'shader',
+    metadataPatch: { type: 'shader', data: { shaderKind: 'preset' } },
+  },
+  template: {
+    legacyType: 'template',
+    type: 'preset',
+    metadataPatch: { type: 'preset', data: { presetKind: 'theme' } },
+  },
+  lut: {
+    legacyType: 'lut',
+    type: 'preset',
+    metadataPatch: { type: 'preset', data: { presetKind: 'lut' } },
+  },
+};
+
+export function isAssetType(value: unknown): value is AssetType {
+  return typeof value === 'string' && ASSET_TYPE_SET.has(value);
+}
+
+export function isDistributionKind(value: unknown): value is DistributionKind {
+  return typeof value === 'string' && DISTRIBUTION_KIND_SET.has(value);
+}
+
+export function getAssetCategory(type: AssetType): AssetCategory {
+  return CATEGORY_MAP[type];
+}
+
+export function isLegacyAssetType(value: unknown): value is LegacyAssetType {
+  return typeof value === 'string' && value in LEGACY_TYPE_MIGRATIONS;
+}
+
+export function getLegacyAssetTypeMigration(value: unknown): LegacyAssetTypeMigration | undefined {
+  if (!isLegacyAssetType(value)) return undefined;
+  return LEGACY_TYPE_MIGRATIONS[value];
+}
+
+export function validateAssetManifest(manifest: unknown): AssetManifestValidationResult {
+  const issues: AssetManifestValidationIssue[] = [];
+
+  if (!isRecord(manifest)) {
+    return { valid: false, issues: [{ field: '$', message: 'manifest must be an object' }] };
+  }
+
+  requireString(manifest, 'id', issues);
+  requireString(manifest, 'name', issues);
+  requireString(manifest, 'version', issues);
+  requireNumber(manifest, 'createdAt', issues);
+  requireNumber(manifest, 'updatedAt', issues);
+
+  if (!isAssetType(manifest['type'])) {
+    issues.push({ field: 'type', message: 'must be one of AssetType v4 values' });
+  }
+
+  if (!isDistributionKind(manifest['distributionKind'])) {
+    issues.push({
+      field: 'distributionKind',
+      message: 'must be one of archive, orchestration, registration',
+    });
+  }
+
+  if (!isRecord(manifest['source'])) {
+    issues.push({ field: 'source', message: 'must be a source descriptor' });
+  } else if (
+    manifest['source']['kind'] === 'registry' &&
+    !isNonEmptyString(manifest['source']['integrity'])
+  ) {
+    issues.push({ field: 'source.integrity', message: 'registry source must include integrity' });
+  }
+
+  if (
+    isRecord(manifest['typeMetadata']) &&
+    isAssetType(manifest['type']) &&
+    manifest['typeMetadata']['type'] !== manifest['type']
+  ) {
+    issues.push({ field: 'typeMetadata.type', message: 'must match manifest type' });
+  }
+
+  if (manifest['type'] === 'bundle' && !Array.isArray(manifest['contents'])) {
+    issues.push({ field: 'contents', message: 'bundle manifests must include contents' });
+  }
+
+  if (manifest['type'] === 'bundle' && manifest['distributionKind'] !== 'orchestration') {
+    issues.push({ field: 'distributionKind', message: 'bundle must use orchestration' });
+  }
+
+  if (manifest['type'] === 'endpoint' && manifest['distributionKind'] !== 'registration') {
+    issues.push({ field: 'distributionKind', message: 'endpoint must use registration' });
+  }
+
+  validateTypeMetadata(manifest, issues);
+  validateIntent(manifest, issues);
+  validateLargeAssetStrategy(manifest['largeAsset'], issues);
+
+  return { valid: issues.length === 0, issues };
+}
+
+export function parseAssetManifest(manifest: unknown): AssetManifest {
+  const result = validateAssetManifest(manifest);
+  if (!result.valid) {
+    const message = result.issues.map((issue) => `${issue.field}: ${issue.message}`).join('; ');
+    throw new Error(`Invalid AssetManifest: ${message}`);
+  }
+  return manifest as AssetManifest;
+}
+
+function mediaPatch(mediaKind: MediaKind): LegacyMetadataPatch {
+  return { type: 'media', data: { mediaKind } };
+}
+
+function modelPatch(modelKind: ModelMetadata['modelKind']): LegacyMetadataPatch {
+  return { type: 'model', data: { modelKind } };
+}
+
+function validateLargeAssetStrategy(
+  largeAsset: unknown,
+  issues: AssetManifestValidationIssue[],
+): void {
+  if (largeAsset === undefined) return;
+  if (!isRecord(largeAsset)) {
+    issues.push({ field: 'largeAsset', message: 'must be an object' });
+    return;
+  }
+  if (!Array.isArray(largeAsset['modes']) || largeAsset['modes'].length === 0) {
+    issues.push({ field: 'largeAsset.modes', message: 'must include at least one mode' });
+  }
+  if (typeof largeAsset['totalSize'] !== 'number') {
+    issues.push({ field: 'largeAsset.totalSize', message: 'must be a number' });
+  }
+  const modes = Array.isArray(largeAsset['modes']) ? largeAsset['modes'] : [];
+  modes.forEach((mode, index) => {
+    if (!isDistributionMode(mode)) {
+      issues.push({
+        field: `largeAsset.modes.${index}`,
+        message: 'must be one of eager, sparse, proxy, delta, variant',
+      });
+    }
+  });
+  if (modes.includes('sparse') && !Array.isArray(largeAsset['sparseItems'])) {
+    issues.push({ field: 'largeAsset.sparseItems', message: 'required for sparse mode' });
+  }
+  if (modes.includes('sparse') && Array.isArray(largeAsset['sparseItems'])) {
+    largeAsset['sparseItems'].forEach((item, index) => {
+      if (!isRecord(item)) {
+        issues.push({ field: `largeAsset.sparseItems.${index}`, message: 'must be an object' });
+        return;
+      }
+      requireString(item, `largeAsset.sparseItems.${index}.itemId`, issues, 'itemId');
+      requireString(item, `largeAsset.sparseItems.${index}.name`, issues, 'name');
+      requireNumber(item, `largeAsset.sparseItems.${index}.size`, issues, 'size');
+    });
+  }
+  if (modes.includes('proxy') && !Array.isArray(largeAsset['proxyVariants'])) {
+    issues.push({ field: 'largeAsset.proxyVariants', message: 'required for proxy mode' });
+  }
+  if (modes.includes('proxy') && Array.isArray(largeAsset['proxyVariants'])) {
+    const defaultCount = largeAsset['proxyVariants'].filter(
+      (variant) => isRecord(variant) && variant['default'] === true,
+    ).length;
+    if (defaultCount !== 1) {
+      issues.push({
+        field: 'largeAsset.proxyVariants',
+        message: 'proxy mode requires exactly one default variant',
+      });
+    }
+  }
+  if (modes.includes('variant') && !Array.isArray(largeAsset['variants'])) {
+    issues.push({ field: 'largeAsset.variants', message: 'required for variant mode' });
+  }
+  if (modes.includes('variant') && Array.isArray(largeAsset['variants'])) {
+    const recommendedCount = largeAsset['variants'].filter(
+      (variant) => isRecord(variant) && variant['recommended'] === true,
+    ).length;
+    if (recommendedCount !== 1) {
+      issues.push({
+        field: 'largeAsset.variants',
+        message: 'variant mode requires exactly one recommended variant',
+      });
+    }
+  }
+  if (modes.includes('delta') && !isRecord(largeAsset['deltaBase'])) {
+    issues.push({ field: 'largeAsset.deltaBase', message: 'required for delta mode' });
+  }
+  if (modes.includes('delta') && isRecord(largeAsset['deltaBase'])) {
+    requireString(largeAsset['deltaBase'], 'largeAsset.deltaBase.version', issues, 'version');
+    requireString(largeAsset['deltaBase'], 'largeAsset.deltaBase.deltaUrl', issues, 'deltaUrl');
+    requireNumber(largeAsset['deltaBase'], 'largeAsset.deltaBase.deltaSize', issues, 'deltaSize');
+  }
+}
+
+function validateTypeMetadata(
+  manifest: Record<string, unknown>,
+  issues: AssetManifestValidationIssue[],
+): void {
+  if (!isAssetType(manifest['type'])) return;
+  if (!isRecord(manifest['typeMetadata'])) {
+    issues.push({ field: 'typeMetadata', message: `required for ${manifest['type']} manifests` });
+    return;
+  }
+  if (!isRecord(manifest['typeMetadata']['data'])) {
+    issues.push({ field: 'typeMetadata.data', message: 'must be an object' });
+    return;
+  }
+
+  const data = manifest['typeMetadata']['data'];
+  switch (manifest['type']) {
+    case 'media':
+      requireString(data, 'typeMetadata.data.mediaKind', issues, 'mediaKind');
+      requireNumber(data, 'typeMetadata.data.fileSize', issues, 'fileSize');
+      break;
+    case 'starter':
+      requireString(data, 'typeMetadata.data.targetEditor', issues, 'targetEditor');
+      break;
+    case 'identity':
+      requireString(data, 'typeMetadata.data.identityKind', issues, 'identityKind');
+      requireString(data, 'typeMetadata.data.identityId', issues, 'identityId');
+      requireNonEmptyArray(data, 'typeMetadata.data.forms', issues, 'forms');
+      break;
+    case 'model':
+      requireString(data, 'typeMetadata.data.modelKind', issues, 'modelKind');
+      requireString(data, 'typeMetadata.data.framework', issues, 'framework');
+      requireString(data, 'typeMetadata.data.task', issues, 'task');
+      requireNumber(data, 'typeMetadata.data.size', issues, 'size');
+      break;
+    case 'endpoint':
+      requireString(data, 'typeMetadata.data.provider', issues, 'provider');
+      requireNonEmptyArray(data, 'typeMetadata.data.capabilities', issues, 'capabilities');
+      requireString(data, 'typeMetadata.data.endpointTemplate', issues, 'endpointTemplate');
+      if (!isRecord(data['credentialSchema'])) {
+        issues.push({ field: 'typeMetadata.data.credentialSchema', message: 'must be an object' });
+      } else if (!Array.isArray(data['credentialSchema']['fields'])) {
+        issues.push({
+          field: 'typeMetadata.data.credentialSchema.fields',
+          message: 'must be an array',
+        });
+      }
+      break;
+    case 'provider':
+      requireString(data, 'typeMetadata.data.providerId', issues, 'providerId');
+      requireNonEmptyArray(data, 'typeMetadata.data.capabilities', issues, 'capabilities');
+      break;
+    case 'skill':
+      requireNonEmptyArray(data, 'typeMetadata.data.domain', issues, 'domain');
+      break;
+    case 'plugin':
+      requireString(data, 'typeMetadata.data.entryPoint', issues, 'entryPoint');
+      requireString(data, 'typeMetadata.data.apiVersion', issues, 'apiVersion');
+      requireArray(data, 'typeMetadata.data.permissions', issues, 'permissions');
+      break;
+    case 'shader':
+      requireString(data, 'typeMetadata.data.shaderKind', issues, 'shaderKind');
+      requireString(data, 'typeMetadata.data.language', issues, 'language');
+      requireString(data, 'typeMetadata.data.stage', issues, 'stage');
+      requireArray(data, 'typeMetadata.data.inputs', issues, 'inputs');
+      break;
+    case 'preset':
+      requireString(data, 'typeMetadata.data.presetKind', issues, 'presetKind');
+      break;
+    case 'bundle':
+      requireString(data, 'typeMetadata.data.installPolicy', issues, 'installPolicy');
+      break;
+  }
+}
+
+function validateIntent(
+  manifest: Record<string, unknown>,
+  issues: AssetManifestValidationIssue[],
+): void {
+  if (!isRecord(manifest['intent'])) {
+    issues.push({ field: 'intent', message: 'must include useCases' });
+    return;
+  }
+
+  requireNonEmptyArray(manifest['intent'], 'intent.useCases', issues, 'useCases');
+
+  const pricing =
+    isRecord(manifest['distribution']) && isRecord(manifest['distribution']['pricing'])
+      ? manifest['distribution']['pricing']
+      : undefined;
+  const model = pricing?.['model'];
+  if (
+    (model === 'paid' || model === 'freemium') &&
+    !isNonEmptyArray(manifest['intent']['notFor'])
+  ) {
+    issues.push({
+      field: 'intent.notFor',
+      message: 'paid packages must include at least one notFor value',
+    });
+  }
+}
+
+function isDistributionMode(value: unknown): value is DistributionMode {
+  return typeof value === 'string' && DISTRIBUTION_MODE_SET.has(value);
+}
+
+function requireString(
+  record: Record<string, unknown>,
+  field: string,
+  issues: AssetManifestValidationIssue[],
+  key = field,
+): void {
+  if (!isNonEmptyString(record[key])) {
+    issues.push({ field, message: 'must be a non-empty string' });
+  }
+}
+
+function requireNumber(
+  record: Record<string, unknown>,
+  field: string,
+  issues: AssetManifestValidationIssue[],
+  key = field,
+): void {
+  if (typeof record[key] !== 'number') {
+    issues.push({ field, message: 'must be a number' });
+  }
+}
+
+function requireArray(
+  record: Record<string, unknown>,
+  field: string,
+  issues: AssetManifestValidationIssue[],
+  key = field,
+): void {
+  if (!Array.isArray(record[key])) {
+    issues.push({ field, message: 'must be an array' });
+  }
+}
+
+function requireNonEmptyArray(
+  record: Record<string, unknown>,
+  field: string,
+  issues: AssetManifestValidationIssue[],
+  key = field,
+): void {
+  if (!isNonEmptyArray(record[key])) {
+    issues.push({ field, message: 'must include at least one item' });
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isNonEmptyArray(value: unknown): value is unknown[] {
+  return Array.isArray(value) && value.length > 0;
 }

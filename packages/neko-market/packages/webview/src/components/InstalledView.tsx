@@ -3,7 +3,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { useMarketplaceStore } from '../stores/marketplaceStore';
+import { useMarketplaceStore, type InstalledItem } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
 
@@ -31,44 +31,94 @@ export const InstalledView: React.FC = () => {
 
   return (
     <div className="installed-view">
-      <div className="installed-list">
-        {installed.map((item) => (
-          <div
-            key={item.packageId}
-            className={`installed-item${!item.enabled ? ' installed-item--disabled' : ''}`}
-          >
-            <div className="installed-item__info">
-              <span className="installed-item__id">{item.packageId}</span>
-              <span className="installed-item__version">v{item.version}</span>
-              <span className="installed-item__type">{item.type}</span>
-              {!item.enabled && (
-                <span className="installed-item__badge installed-item__badge--disabled">
-                  {t('marketplace.installed.disabled')}
-                </span>
-              )}
-            </div>
-            <div className="installed-item__actions">
-              <button
-                className="asset-action-btn asset-action-btn--ghost"
-                onClick={() => handleToggleEnabled(item.packageId, item.enabled)}
-                title={
-                  item.enabled ? t('marketplace.action.disable') : t('marketplace.action.enable')
-                }
+      {groupInstalled(installed).map(([category, items]) => (
+        <section key={category} className="installed-group">
+          <h3 className="section-title">
+            {t(`marketplace.category.${category}`)} ({items.length})
+          </h3>
+          <div className="installed-list">
+            {items.map((item) => (
+              <div
+                key={item.packageId}
+                className={`installed-item${!item.enabled ? ' installed-item--disabled' : ''}`}
               >
-                <span
-                  className={`codicon ${item.enabled ? 'codicon-eye' : 'codicon-eye-closed'}`}
-                />
-              </button>
-              <button
-                className="asset-action-btn asset-action-btn--secondary"
-                onClick={() => MarketMessages.uninstall(item.packageId)}
-              >
-                {t('marketplace.action.uninstall')}
-              </button>
-            </div>
+                <div className="installed-item__info">
+                  <span className="installed-item__id">{item.packageId}</span>
+                  <span className="installed-item__version">v{item.version}</span>
+                  <span className="installed-item__type">
+                    {item.type}
+                    {item.kind ? ` · ${item.kind}` : ''}
+                  </span>
+                  <div className="status-row">
+                    {!item.enabled && (
+                      <span className="status-badge">{t('marketplace.installed.disabled')}</span>
+                    )}
+                    <span className={statusClass(item.status ?? 'active')}>
+                      {t(`marketplace.status.${item.status ?? 'active'}`)}
+                    </span>
+                    {item.largeAsset && (
+                      <span className="status-badge">
+                        {t(`marketplace.largeAsset.state.${item.largeAsset.state}`)}
+                      </span>
+                    )}
+                  </div>
+                  {item.refs && Object.keys(item.refs).length > 0 && (
+                    <span className="installed-item__dependency">
+                      {t('marketplace.installed.dependencies', {
+                        count: String(Object.keys(item.refs).length),
+                      })}
+                    </span>
+                  )}
+                </div>
+                <div className="installed-item__actions">
+                  <button
+                    className="asset-action-btn asset-action-btn--ghost"
+                    onClick={() => handleToggleEnabled(item.packageId, item.enabled)}
+                    title={
+                      item.enabled
+                        ? t('marketplace.action.disable')
+                        : t('marketplace.action.enable')
+                    }
+                  >
+                    <span
+                      className={`codicon ${item.enabled ? 'codicon-eye' : 'codicon-eye-closed'}`}
+                    />
+                  </button>
+                  <button
+                    className="asset-action-btn asset-action-btn--secondary"
+                    onClick={() => MarketMessages.getPackage(item.packageId)}
+                  >
+                    {t('marketplace.action.detail')}
+                  </button>
+                  <button
+                    className="asset-action-btn asset-action-btn--secondary"
+                    onClick={() => MarketMessages.uninstall(item.packageId)}
+                  >
+                    {t('marketplace.action.uninstall')}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </section>
+      ))}
     </div>
   );
 };
+
+function groupInstalled(items: InstalledItem[]): Array<[string, InstalledItem[]]> {
+  const groups = new Map<string, InstalledItem[]>();
+  for (const item of items) {
+    const category = item.category ?? 'tooling';
+    groups.set(category, [...(groups.get(category) ?? []), item]);
+  }
+  return Array.from(groups.entries());
+}
+
+function statusClass(status: NonNullable<InstalledItem['status']>): string {
+  if (status === 'expired' || status === 'incompatible')
+    return 'status-badge status-badge--blocked';
+  if (status === 'expiring-soon' || status === 'deprecated')
+    return 'status-badge status-badge--warning';
+  return 'status-badge status-badge--active';
+}

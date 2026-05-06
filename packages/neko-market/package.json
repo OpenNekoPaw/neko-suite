@@ -16,7 +16,9 @@
   "categories": ["Other"],
   "keywords": ["marketplace", "skills", "assets", "neko"],
   "extensionKind": ["workspace"],
-  "activationEvents": [],
+  "activationEvents": [
+    "onUri"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -56,6 +58,26 @@
       {
         "command": "neko.market.openSkills",
         "title": "%neko.market.openSkills.title%",
+        "category": "Neko Market"
+      },
+      {
+        "command": "neko.market.checkout",
+        "title": "Checkout",
+        "category": "Neko Market"
+      },
+      {
+        "command": "neko.market.renew",
+        "title": "Renew",
+        "category": "Neko Market"
+      },
+      {
+        "command": "neko.market.invoice",
+        "title": "Open Invoice",
+        "category": "Neko Market"
+      },
+      {
+        "command": "neko.market.support",
+        "title": "Open Support",
         "category": "Neko Market"
       }
     ]

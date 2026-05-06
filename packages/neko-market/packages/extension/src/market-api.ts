@@ -10,11 +10,14 @@
 import * as vscode from 'vscode';
 import type { AssetManifest, AssetType } from '@neko/shared/types/asset/manifest';
 import type {
+  IInstallTarget,
   InstallProgressCallback,
   InstallResult,
   InstalledPackage,
+  MarketPackageEvent,
   MarketSearchQuery,
   MarketSearchResult,
+  MissingInstallTargetContributor,
   UpdateInfo,
 } from '@neko/shared/types/asset/market';
 import type { MarketplaceService } from './MarketplaceService';
@@ -30,6 +33,9 @@ export interface MarketAssetEvent {
   installedPath: string;
   manifest: AssetManifest;
 }
+
+/** @deprecated Use MarketPackageEvent from @neko/shared/types/asset/market. */
+export type { MarketPackageEvent };
 
 // =============================================================================
 // Public API Interface
@@ -54,6 +60,8 @@ export interface NekoMarketAPI {
   onDidEnable: vscode.Event<MarketAssetEvent>;
   /** Fires when a package is disabled */
   onDidDisable: vscode.Event<MarketAssetEvent>;
+  /** Stable typed market event stream for install, uninstall, update, enable, disable, status, and large asset changes. */
+  onDidMarketPackageEvent: vscode.Event<MarketPackageEvent>;
   /** Get installed packages with optional filtering */
   getInstalled(options?: GetInstalledOptions): Promise<InstalledPackage[]>;
   /** Search marketplace packages */
@@ -66,12 +74,30 @@ export interface NekoMarketAPI {
     version: string,
     onProgress?: InstallProgressCallback,
   ): Promise<InstallResult>;
+  /** Update an installed marketplace package */
+  update(
+    packageId: string,
+    version: string,
+    onProgress?: InstallProgressCallback,
+  ): Promise<InstallResult>;
   /** Uninstall a marketplace package */
   uninstall(packageId: string): Promise<void>;
   /** Check available marketplace package updates */
   checkUpdates(): Promise<UpdateInfo[]>;
   /** Check if a specific package is installed (regardless of enabled state) */
   isInstalled(packageId: string): boolean;
+  /** Ensure a large/proxy/sparse asset has full-quality bytes before final render/export. */
+  ensureFull(packageId: string, itemId?: string): Promise<InstallResult>;
+  /** Cancel an in-flight package or large-asset download. */
+  cancelInstall(packageId: string): boolean;
+  /** Register a contributed Y-class install target. Returns a Disposable registration. */
+  registerInstallTarget(target: IInstallTarget, kind?: string): vscode.Disposable;
+  /** Inspect live install target routes for diagnostics and tests. */
+  getRegisteredInstallTargetTypes(): AssetType[];
+  /** Return missing-contributor state for a manifest, if no live target can handle it. */
+  getMissingInstallTargetContributor(
+    manifest: AssetManifest,
+  ): MissingInstallTargetContributor | undefined;
 }
 
 // =============================================================================
@@ -85,12 +111,14 @@ export class NekoMarketAPIImpl implements NekoMarketAPI, vscode.Disposable {
   readonly onDidUninstall: vscode.Event<MarketAssetEvent>;
   readonly onDidEnable: vscode.Event<MarketAssetEvent>;
   readonly onDidDisable: vscode.Event<MarketAssetEvent>;
+  readonly onDidMarketPackageEvent: vscode.Event<MarketPackageEvent>;
 
   constructor(private readonly service: MarketplaceService) {
     this.onDidInstall = service.onDidInstall;
     this.onDidUninstall = service.onDidUninstall;
     this.onDidEnable = service.onDidEnable;
     this.onDidDisable = service.onDidDisable;
+    this.onDidMarketPackageEvent = service.onDidMarketPackageEvent;
   }
 
   async getInstalled(options?: GetInstalledOptions): Promise<InstalledPackage[]> {
@@ -125,6 +153,14 @@ export class NekoMarketAPIImpl implements NekoMarketAPI, vscode.Disposable {
     return this.service.install(packageId, version, onProgress);
   }
 
+  update(
+    packageId: string,
+    version: string,
+    onProgress?: InstallProgressCallback,
+  ): Promise<InstallResult> {
+    return this.service.update(packageId, version, onProgress);
+  }
+
   uninstall(packageId: string): Promise<void> {
     return this.service.uninstall(packageId);
   }
@@ -135,6 +171,28 @@ export class NekoMarketAPIImpl implements NekoMarketAPI, vscode.Disposable {
 
   isInstalled(packageId: string): boolean {
     return this.service.isInstalled(packageId);
+  }
+
+  ensureFull(packageId: string, itemId?: string): Promise<InstallResult> {
+    return this.service.ensureFull(packageId, itemId);
+  }
+
+  cancelInstall(packageId: string): boolean {
+    return this.service.cancelInstall(packageId);
+  }
+
+  registerInstallTarget(target: IInstallTarget, kind?: string): vscode.Disposable {
+    return this.service.registerInstallTarget(target, undefined, kind);
+  }
+
+  getRegisteredInstallTargetTypes(): AssetType[] {
+    return this.service.getRegisteredInstallTargetTypes();
+  }
+
+  getMissingInstallTargetContributor(
+    manifest: AssetManifest,
+  ): MissingInstallTargetContributor | undefined {
+    return this.service.getMissingInstallTargetContributor(manifest);
   }
 
   dispose(): void {

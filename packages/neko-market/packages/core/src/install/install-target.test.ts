@@ -16,10 +16,10 @@ const mockShaderTarget: IInstallTarget<'shader'> = {
   },
 };
 
-const mockProviderCardTarget: IInstallTarget<'provider-card'> = {
-  type: 'provider-card',
+const mockProviderTarget: IInstallTarget<'provider'> = {
+  type: 'provider',
   validateManifest(manifest: AssetManifest): void {
-    if (manifest.type !== 'provider-card') throw new Error('invalid provider-card manifest');
+    if (manifest.type !== 'provider') throw new Error('invalid provider manifest');
   },
   getInstallPath(manifest: AssetManifest): string {
     return `/home/user/.neko/providers/${manifest.name}`;
@@ -52,19 +52,57 @@ describe('InstallTargetRegistry', () => {
     expect(types).toHaveLength(2);
   });
 
+  it('should prefer kind route when resolving a manifest', () => {
+    const registry = new InstallTargetRegistry();
+    const genericShaderTarget: IInstallTarget<'shader'> = {
+      type: 'shader',
+      getInstallPath: () => '/generic',
+    };
+    const presetShaderTarget: IInstallTarget<'shader'> = {
+      type: 'shader',
+      getInstallPath: () => '/preset',
+    };
+    registry.register(genericShaderTarget);
+    registry.register(presetShaderTarget, 'preset');
+
+    const target = registry.getForManifest({
+      id: '@test/shader',
+      name: 'shader',
+      version: '1.0.0',
+      type: 'shader',
+      source: { kind: 'local', path: '/tmp/shader' },
+      distributionKind: 'archive',
+      typeMetadata: {
+        type: 'shader',
+        data: {
+          shaderKind: 'preset',
+          language: 'wgsl',
+          stage: 'fragment',
+          inputs: [],
+        },
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    expect(target).toBe(presetShaderTarget);
+    expect(registry.registeredTypes()).toEqual(['shader']);
+  });
+
   it('should preserve optional target manifest validators', () => {
     const registry = new InstallTargetRegistry();
-    registry.register(mockProviderCardTarget);
+    registry.register(mockProviderTarget);
 
-    const target = registry.get('provider-card');
-    expect(target?.validateManifest).toBe(mockProviderCardTarget.validateManifest);
+    const target = registry.get('provider');
+    expect(target?.validateManifest).toBe(mockProviderTarget.validateManifest);
     expect(() =>
       target?.validateManifest?.({
-        id: 'provider-card.sdxl',
+        id: '@test/sdxl-provider',
         name: 'sdxl-card',
         version: '1.0.0',
-        type: 'provider-card',
+        type: 'provider',
         source: { kind: 'remote', uri: 'https://example.invalid/sdxl-card.tgz' },
+        distributionKind: 'archive',
         createdAt: 1,
         updatedAt: 1,
       }),

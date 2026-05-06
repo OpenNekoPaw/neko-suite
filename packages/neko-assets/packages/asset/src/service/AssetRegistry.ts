@@ -16,11 +16,12 @@ import type {
   AssetManifest,
   AssetType,
   AssetChangeEvent,
-  AssetChangeKind,
   AssetRegistryQuery,
   IAssetRegistry,
   IAssetHandler,
   AssetEntity,
+  AssetMediaType,
+  MediaKind,
 } from '@neko/shared';
 import type { IAssetStorage } from '../storage/IAssetStorage';
 import { AssetLibrary, type AssetLibraryConfig } from './AssetLibrary';
@@ -32,11 +33,8 @@ import { AssetLibrary, type AssetLibraryConfig } from './AssetLibrary';
 /** Listener for asset change events */
 export type AssetChangeListener = (event: AssetChangeEvent) => void;
 
-/** Media asset types handled by AssetLibrary */
-const MEDIA_TYPES: ReadonlySet<AssetType> = new Set(['video', 'audio', 'image', 'sequence']);
-
 function isMediaType(type: AssetType): boolean {
-  return MEDIA_TYPES.has(type);
+  return type === 'media';
 }
 
 // =============================================================================
@@ -286,21 +284,30 @@ export class AssetRegistry implements IAssetRegistry {
     const primaryFile = entity.variants[0]?.files[0];
     const mediaType = primaryFile?.mediaType ?? 'image';
 
-    // Map AssetMediaType to AssetType
-    const type: AssetType = mediaType === 'sequence' ? 'sequence' : (mediaType as AssetType);
-
     return {
       id: entity.id,
       name: entity.name,
       version: '1.0.0',
-      type,
+      type: 'media',
       source: {
         kind: 'local',
         path: primaryFile?.path ?? '',
+      },
+      distributionKind: 'archive',
+      typeMetadata: {
+        type: 'media',
+        data: {
+          mediaKind: toMediaKind(mediaType),
+          fileSize: primaryFile?.metadata.fileSize ?? 0,
+        },
       },
       thumbnail: entity.variants[0]?.thumbnailPath,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     };
   }
+}
+
+function toMediaKind(mediaType: AssetMediaType): MediaKind {
+  return mediaType === 'text' ? 'document' : mediaType;
 }

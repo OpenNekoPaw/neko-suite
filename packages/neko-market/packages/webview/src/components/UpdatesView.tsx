@@ -32,7 +32,9 @@ export const UpdatesView: React.FC = () => {
         <button
           className="asset-action-btn asset-action-btn--primary"
           onClick={() => {
-            updates.forEach((u) => MarketMessages.install(u.packageId, u.latestVersion));
+            updates.forEach((u) => {
+              if (!u.blocked) MarketMessages.update(u.packageId, u.latestVersion);
+            });
           }}
         >
           {t('marketplace.updates.updateAll')}
@@ -43,6 +45,8 @@ export const UpdatesView: React.FC = () => {
         {updates.map((update) => {
           const progress = installProgress.get(update.packageId);
           const isUpdating = progress !== undefined;
+          const isBlocked = update.blocked === true;
+          const compatibilityReasons = getCompatibilityReasons(update.compatibility);
 
           return (
             <div key={update.packageId} className="update-item">
@@ -51,7 +55,21 @@ export const UpdatesView: React.FC = () => {
                 <span className="update-item__versions">
                   {update.currentVersion} → {update.latestVersion}
                 </span>
+                {isBlocked && (
+                  <span className="status-badge status-badge--blocked">
+                    {update.reason ?? t('marketplace.updates.blocked')}
+                  </span>
+                )}
                 {update.changelog && <p className="update-item__changelog">{update.changelog}</p>}
+                {compatibilityReasons.length > 0 && (
+                  <div className="update-item__compatibility">
+                    {compatibilityReasons.map((reason) => (
+                      <span key={reason} className="status-badge status-badge--warning">
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {isUpdating ? (
@@ -65,7 +83,8 @@ export const UpdatesView: React.FC = () => {
               ) : (
                 <button
                   className="asset-action-btn asset-action-btn--primary"
-                  onClick={() => MarketMessages.install(update.packageId, update.latestVersion)}
+                  disabled={isBlocked}
+                  onClick={() => MarketMessages.update(update.packageId, update.latestVersion)}
                 >
                   {t('marketplace.action.update')}
                 </button>
@@ -77,3 +96,26 @@ export const UpdatesView: React.FC = () => {
     </div>
   );
 };
+
+function getCompatibilityReasons(updateCompatibility: unknown): string[] {
+  if (!isRecord(updateCompatibility)) return [];
+  const reasons: string[] = [];
+  if (typeof updateCompatibility['nekoSuiteVersion'] === 'string') {
+    reasons.push(`Neko ${updateCompatibility['nekoSuiteVersion']}`);
+  }
+  if (typeof updateCompatibility['vscodeVersion'] === 'string') {
+    reasons.push(`VSCode ${updateCompatibility['vscodeVersion']}`);
+  }
+  if (Array.isArray(updateCompatibility['knownIncompatible'])) {
+    for (const item of updateCompatibility['knownIncompatible']) {
+      if (isRecord(item) && typeof item['reason'] === 'string') {
+        reasons.push(item['reason']);
+      }
+    }
+  }
+  return reasons;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

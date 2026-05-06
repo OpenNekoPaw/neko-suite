@@ -574,7 +574,7 @@ export class AssetLibrary {
     const parts = filePath.split(/[/\\]/);
     const fileName = parts[parts.length - 1] ?? filePath;
     const match = fileName.match(/\.([^.]+)$/);
-    return match ? match[1].toLowerCase() : '';
+    return match?.[1]?.toLowerCase() ?? '';
   }
 
   /**

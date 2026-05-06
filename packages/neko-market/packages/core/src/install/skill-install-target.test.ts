@@ -67,7 +67,14 @@ function createSkillManifest(): AssetManifest {
     name: 'camera-shot',
     version: '1.0.0',
     type: 'skill',
-    source: { kind: 'registry', registry: 'test', package: '@pub/camera-shot', version: '1.0.0' },
+    source: {
+      kind: 'registry',
+      registry: 'test',
+      package: '@pub/camera-shot',
+      version: '1.0.0',
+      integrity: 'sha256-test',
+    },
+    distributionKind: 'archive',
     distribution: {
       license: 'MIT',
       author: 'pub',

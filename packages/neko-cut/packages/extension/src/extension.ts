@@ -22,6 +22,7 @@ import type { NekoCutAPI, ISkillProvider, SkillDef } from '@neko/shared';
 import { createNekoCutCapabilityProvider } from './agentCapabilityProvider';
 import { TimelineToolExecutor } from './services/TimelineToolExecutor';
 import { TimelineToolBridge } from './services/timelineToolBridge';
+import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 
 /**
  * Activate the extension
@@ -178,6 +179,8 @@ export async function activate(
   } catch {
     // neko-agent not installed — capability registration silently skipped
   }
+
+  await registerMarketInstallTargets(context);
 
   return api;
 }

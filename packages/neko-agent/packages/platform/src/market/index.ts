@@ -18,3 +18,9 @@ export {
   type SkillMarketExecutionRequest,
   type SkillMarketRuntime,
 } from './skill-market-request';
+export {
+  applyAgentMarketEventProjection,
+  projectAgentMarketEvent,
+  type AgentMarketProjection,
+  type AgentMarketProjectionKind,
+} from './market-event-projector';

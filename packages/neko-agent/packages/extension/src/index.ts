@@ -31,6 +31,7 @@ import {
 import { createAgentCapabilityRuntimeRegistries } from '@neko/agent/runtime';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { createStatusBar } from './statusBar';
+import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 
 /**
  * Activate the extension
@@ -118,6 +119,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Status bar — shows active LLM model, click to open chat
   context.subscriptions.push(createStatusBar(bootstrapResult.platform));
+
+  await registerMarketInstallTargets(context);
 
   getRootLogger().info('Extension activated');
 }

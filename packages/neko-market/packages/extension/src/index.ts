@@ -5,7 +5,7 @@
 import * as vscode from 'vscode';
 import { createVSCodeLogger } from '@neko/shared/vscode/extension';
 import { LogLevel } from '@neko/shared';
-import { MarketplaceService } from './MarketplaceService';
+import { createVSCodeMarketplaceServiceOptions, MarketplaceService } from './MarketplaceService';
 import { MarketplaceProvider } from './MarketplaceProvider';
 import { NekoMarketAPIImpl } from './market-api';
 import type { NekoMarketAPI, MarketAssetEvent } from './market-api';
@@ -17,7 +17,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoMa
 
   logger.info('Neko Marketplace activating');
 
-  const service = new MarketplaceService(logger);
+  const service = new MarketplaceService(logger, createVSCodeMarketplaceServiceOptions(context));
   const provider = new MarketplaceProvider(context.extensionUri, service, logger);
   const api = new NekoMarketAPIImpl(service);
 
@@ -34,6 +34,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoMa
     vscode.commands.registerCommand('neko.market.openSkills', () => {
       vscode.commands.executeCommand(`${MarketplaceProvider.viewType}.focus`);
       provider.sendMessage({ type: 'market:filterByType', assetType: 'skill' });
+    }),
+
+    vscode.commands.registerCommand('neko.market.checkout', (packageId: string) =>
+      service.openCheckout(packageId),
+    ),
+    vscode.commands.registerCommand('neko.market.renew', (packageId: string) =>
+      service.openRenewal(packageId),
+    ),
+    vscode.commands.registerCommand('neko.market.invoice', (orderId: string) =>
+      service.openInvoice(orderId),
+    ),
+    vscode.commands.registerCommand('neko.market.support', (orderId: string) =>
+      service.openSupport(orderId),
+    ),
+    vscode.window.registerUriHandler({
+      handleUri: async (uri) => {
+        if (uri.path !== '/refresh') return;
+        const packageId = new URLSearchParams(uri.query).get('packageId') ?? undefined;
+        await service.refreshEntitlements(packageId);
+        provider.sendMessage({ type: 'market:entitlementsRefreshed', data: { packageId } });
+      },
     }),
 
     service,

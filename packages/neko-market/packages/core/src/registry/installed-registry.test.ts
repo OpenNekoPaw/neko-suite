@@ -13,7 +13,14 @@ const mockManifest: AssetManifest = {
   name: 'test-skill',
   version: '1.0.0',
   type: 'skill',
-  source: { kind: 'registry', registry: 'official', package: '@test/skill-1', version: '1.0.0' },
+  source: {
+    kind: 'registry',
+    registry: 'official',
+    package: '@test/skill-1',
+    version: '1.0.0',
+    integrity: 'sha256-test',
+  },
+  distributionKind: 'archive',
   createdAt: Date.now(),
   updatedAt: Date.now(),
 };
@@ -60,7 +67,11 @@ describe('InstalledRegistry', () => {
 
     const registry2 = new InstalledRegistry(registryFile);
     await registry2.load();
-    expect(registry2.get('@test/skill-1')).toEqual(mockPackage);
+    expect(registry2.get('@test/skill-1')).toMatchObject({
+      ...mockPackage,
+      requested: true,
+      status: 'active',
+    });
   });
 
   it('should remove a package', async () => {
@@ -160,6 +171,134 @@ describe('InstalledRegistry', () => {
       await registry.load();
       const pkg = registry.get('@test/old-pkg');
       expect(pkg?.enabled).toBe(true);
+    });
+  });
+
+  describe('version migration', () => {
+    it('migrates legacy records without version into v1 shape', async () => {
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(
+        registryFile,
+        JSON.stringify({
+          packages: {
+            '@test/legacy': {
+              version: '1.0.0',
+              type: 'skill',
+              installedAt: Date.now(),
+              installedPath: '/legacy/path',
+              manifest: mockManifest,
+            },
+          },
+        }),
+        'utf-8',
+      );
+
+      const registry = new InstalledRegistry(registryFile);
+      await registry.load();
+
+      expect(registry.get('@test/legacy')).toMatchObject({
+        packageId: '@test/legacy',
+        enabled: true,
+        requested: true,
+        status: 'active',
+      });
+    });
+
+    it('rejects future registry versions instead of overwriting user data', async () => {
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(
+        registryFile,
+        JSON.stringify({
+          version: 999,
+          packages: {},
+          refs: {},
+        }),
+        'utf-8',
+      );
+
+      const registry = new InstalledRegistry(registryFile);
+
+      await expect(registry.load()).rejects.toThrow('Unsupported installed registry version');
+    });
+
+    it.each([
+      ['video', 'media', { type: 'media', data: { mediaKind: 'video' } }],
+      ['audio', 'media', { type: 'media', data: { mediaKind: 'audio' } }],
+      ['ai-model', 'model', { type: 'model', data: { modelKind: 'base' } }],
+      ['lora', 'model', { type: 'model', data: { modelKind: 'lora' } }],
+      ['template', 'preset', { type: 'preset', data: { presetKind: 'theme' } }],
+      ['provider-card', 'provider', { type: 'provider', data: {} }],
+    ])(
+      'migrates legacy installed AssetType %s to v4 %s',
+      async (legacyType, expectedType, expectedMetadata) => {
+        const { writeFile } = await import('node:fs/promises');
+        await writeFile(
+          registryFile,
+          JSON.stringify({
+            packages: {
+              '@test/legacy': {
+                packageId: '@test/legacy',
+                version: '1.0.0',
+                type: legacyType,
+                installedAt: Date.now(),
+                installedPath: '/legacy/path',
+                manifest: {
+                  ...mockManifest,
+                  id: '@test/legacy',
+                  type: legacyType,
+                  typeMetadata: undefined,
+                },
+              },
+            },
+          }),
+          'utf-8',
+        );
+
+        const registry = new InstalledRegistry(registryFile);
+        await registry.load();
+
+        const pkg = registry.get('@test/legacy');
+        expect(pkg?.type).toBe(expectedType);
+        expect(pkg?.manifest.type).toBe(expectedType);
+        expect(pkg?.manifest.typeMetadata).toMatchObject(expectedMetadata);
+      },
+    );
+  });
+
+  describe('bundle references', () => {
+    it('should add and persist references once per owner', async () => {
+      const registry = new InstalledRegistry(registryFile);
+      await registry.load();
+
+      await registry.addReference('@test/content', '@test/bundle-a');
+      await registry.addReference('@test/content', '@test/bundle-a');
+      await registry.addReference('@test/content', '@test/bundle-b');
+
+      expect(registry.getReference('@test/content')).toEqual({
+        refCount: 2,
+        owners: ['@test/bundle-a', '@test/bundle-b'],
+      });
+
+      const reloaded = new InstalledRegistry(registryFile);
+      await reloaded.load();
+      expect(reloaded.getReference('@test/content')?.refCount).toBe(2);
+    });
+
+    it('should remove references and delete empty ref records', async () => {
+      const registry = new InstalledRegistry(registryFile);
+      await registry.load();
+
+      await registry.addReference('@test/content', '@test/bundle-a');
+      await registry.addReference('@test/content', '@test/bundle-b');
+      await registry.removeReference('@test/content', '@test/bundle-a');
+
+      expect(registry.getReference('@test/content')).toEqual({
+        refCount: 1,
+        owners: ['@test/bundle-b'],
+      });
+
+      await registry.removeReference('@test/content', '@test/bundle-b');
+      expect(registry.getReference('@test/content')).toBeUndefined();
     });
   });
 });

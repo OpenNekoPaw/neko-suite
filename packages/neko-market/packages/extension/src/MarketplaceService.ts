@@ -6,8 +6,6 @@
  */
 
 import * as vscode from 'vscode';
-// os import removed — paths resolved via resolveGlobalStorageLayout()
-import * as path from 'path';
 import {
   MarketClient,
   InstallManager,
@@ -16,54 +14,116 @@ import {
   LicenseManager,
   InstalledRegistry,
   InstallTargetRegistry,
-  SkillInstallTarget,
 } from '@neko/market-core';
 import type {
+  CheckoutUrlResult,
+  EntitlementListResult,
+  IInstallTarget,
   MarketSearchQuery,
   MarketSearchResult,
   MarketPackage,
+  MarketServerInfo,
   InstallResult,
   InstallProgressCallback,
   InstallProgress,
   InstalledPackage,
+  MarketPackageEvent,
+  MissingInstallTargetContributor,
   UpdateInfo,
 } from '@neko/shared/types/asset/market';
-import type { AssetType } from '@neko/shared/types/asset/manifest';
+import type { AssetManifest, AssetType } from '@neko/shared/types/asset/manifest';
 import type { IAuthSession, ILogger } from '@neko/shared';
 import { toBaseError } from '@neko/shared';
 
 import type { MarketAssetEvent } from './market-api';
-import { ShaderInstallTarget } from './ShaderInstallTarget';
-import { ModelInstallTarget } from './ModelInstallTarget';
-import { PresetInstallTarget } from './PresetInstallTarget';
-import { PuppetMotionInstallTarget } from './PuppetMotionInstallTarget';
-import { ProviderCardInstallTarget } from './ProviderCardInstallTarget';
+import { createBuiltinInstallTargets } from './BuiltinInstallTargets';
+import {
+  InstallTargetContributionRegistry,
+  type InstallTargetDiagnostic,
+  type InstallTargetContributorExtension,
+} from './install-target-contributions';
 
 /** Minimal NekoAuthAPI interface (defined locally to avoid cross-extension imports). */
-interface NekoAuthAPI {
+export interface NekoAuthAPI {
   getSession(): Promise<IAuthSession | null>;
   onDidChangeSession: (listener: (session: IAuthSession | null) => void) => { dispose(): void };
 }
 
-async function getNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
+export interface MarketplaceServiceStoragePaths {
+  readonly cacheDir: string;
+  readonly installedFile: string;
+}
+
+export interface MarketplaceServiceHostAdapters {
+  getRegistryUrl(): string | undefined;
+  onDidChangeRegistryUrl(listener: (registryUrl: string | undefined) => void): vscode.Disposable;
+  getAuthApi(): Promise<NekoAuthAPI | undefined>;
+  getExtension(extensionId: string): InstallTargetContributorExtension | undefined;
+  listExtensions(): readonly InstallTargetContributorExtension[];
+  getExtensionVersion(extensionId: string): string | undefined;
+  openExternal(url: string): Promise<boolean>;
+  getLocale(): string;
+  getRefreshUri(packageId?: string): string;
+}
+
+export interface MarketplaceServiceOptions {
+  readonly storage: MarketplaceServiceStoragePaths;
+  readonly host: MarketplaceServiceHostAdapters;
+}
+
+export function createVSCodeMarketplaceServiceOptions(
+  context: vscode.ExtensionContext,
+): MarketplaceServiceOptions {
+  return {
+    storage: {
+      cacheDir: vscode.Uri.joinPath(context.globalStorageUri, 'market-cache').fsPath,
+      installedFile: vscode.Uri.joinPath(context.globalStorageUri, 'market-installed.json').fsPath,
+    },
+    host: {
+      getRegistryUrl: readRegistryUrlSetting,
+      onDidChangeRegistryUrl: (listener) =>
+        vscode.workspace.onDidChangeConfiguration((event) => {
+          if (event.affectsConfiguration('neko.market.registryUrl')) {
+            listener(readRegistryUrlSetting());
+          }
+        }),
+      getAuthApi: getVSCodeNekoAuthAPI,
+      getExtension: (extensionId) =>
+        vscode.extensions.getExtension(extensionId) as
+          | InstallTargetContributorExtension
+          | undefined,
+      listExtensions: () => vscode.extensions.all as readonly InstallTargetContributorExtension[],
+      getExtensionVersion: (extensionId) => {
+        const extension = vscode.extensions.getExtension(extensionId);
+        const packageJson = extension?.packageJSON as { version?: unknown } | undefined;
+        return typeof packageJson?.version === 'string' ? packageJson.version : undefined;
+      },
+      openExternal: (url) => Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(url))),
+      getLocale: () => vscode.env.language,
+      getRefreshUri: (packageId) => {
+        const query = packageId ? `?packageId=${encodeURIComponent(packageId)}` : '';
+        return `vscode://neko.market/refresh${query}`;
+      },
+    },
+  };
+}
+
+async function getVSCodeNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
   const ext = vscode.extensions.getExtension<NekoAuthAPI>('neko.neko-auth');
   if (!ext) return undefined;
   if (!ext.isActive) await ext.activate();
   return ext.exports;
 }
 
-/** Neko home directory paths — resolved via global storage layout */
-import * as os from 'os';
-import { resolveGlobalStorageLayout } from '@neko/shared';
-const _globalLayout = resolveGlobalStorageLayout(os.homedir());
-const NEKO_HOME = _globalLayout.root;
-const CACHE_DIR = _globalLayout.marketCache;
-const INSTALLED_FILE = _globalLayout.marketInstalled;
+function readRegistryUrlSetting(): string | undefined {
+  return vscode.workspace.getConfiguration('neko.market').get<string>('registryUrl') || undefined;
+}
 
 export class MarketplaceService implements vscode.Disposable {
   private readonly _client: MarketClient;
   private readonly _installManager: InstallManager;
   private readonly _installedRegistry: InstalledRegistry;
+  private readonly _targetContributions: InstallTargetContributionRegistry;
   private readonly _disposables: vscode.Disposable[] = [];
 
   // Progress events (webview consumption)
@@ -83,29 +143,26 @@ export class MarketplaceService implements vscode.Disposable {
   private readonly _onDidDisable = new vscode.EventEmitter<MarketAssetEvent>();
   readonly onDidDisable = this._onDidDisable.event;
 
-  constructor(private readonly _logger: ILogger) {
-    // Read registry URL from config: VSCode settings > config.json > default
-    const registryUrl =
-      vscode.workspace.getConfiguration('neko.market').get<string>('registryUrl') || undefined;
+  private readonly _onDidMarketPackageEvent = new vscode.EventEmitter<MarketPackageEvent>();
+  readonly onDidMarketPackageEvent = this._onDidMarketPackageEvent.event;
+
+  constructor(
+    private readonly _logger: ILogger,
+    private readonly _options: MarketplaceServiceOptions,
+  ) {
+    const registryUrl = this._options.host.getRegistryUrl();
     this._client = new MarketClient(registryUrl ? { registryUrl } : undefined);
-    const cache = new CacheManager(CACHE_DIR);
+    const cache = new CacheManager(this._options.storage.cacheDir);
     const versionResolver = new VersionResolver();
     const license = new LicenseManager();
-    this._installedRegistry = new InstalledRegistry(INSTALLED_FILE);
+    this._installedRegistry = new InstalledRegistry(this._options.storage.installedFile);
 
     // Register install targets for all supported asset types
     const targets = new InstallTargetRegistry();
-    targets.register(new SkillInstallTarget());
-    targets.register(new ShaderInstallTarget('shader'));
-    targets.register(new ShaderInstallTarget('shader-preset'));
-    targets.register(new ModelInstallTarget('ai-model'));
-    targets.register(new ModelInstallTarget('lora'));
-    targets.register(new ModelInstallTarget('embedding'));
-    targets.register(new PresetInstallTarget('preset'));
-    targets.register(new PresetInstallTarget('template'));
-    targets.register(new PresetInstallTarget('lut'));
-    targets.register(new PuppetMotionInstallTarget());
-    targets.register(new ProviderCardInstallTarget());
+    this._targetContributions = new InstallTargetContributionRegistry(targets);
+    for (const target of createBuiltinInstallTargets()) {
+      this._targetContributions.registerBuiltin(target);
+    }
 
     this._installManager = new InstallManager(
       this._client,
@@ -115,8 +172,7 @@ export class MarketplaceService implements vscode.Disposable {
       targets,
       this._installedRegistry,
       {
-        nekoSuiteVersion:
-          vscode.extensions.getExtension('neko.neko-market')?.packageJSON?.version ?? '0.0.0',
+        nekoSuiteVersion: this._options.host.getExtensionVersion('neko.neko-market') ?? '0.0.0',
       },
     );
 
@@ -130,15 +186,30 @@ export class MarketplaceService implements vscode.Disposable {
       this._onDidUninstall,
       this._onDidEnable,
       this._onDidDisable,
+      this._onDidMarketPackageEvent,
+      this._targetContributions,
+      this._options.host.onDidChangeRegistryUrl((nextRegistryUrl) => {
+        this._client.setRegistryUrl(nextRegistryUrl);
+        this._logger.info('Marketplace registry URL updated', {
+          registryUrl: this._client.getRegistryUrl(),
+        });
+        this.refreshEntitlements().catch((err) => {
+          this._logger.warn(
+            'Entitlement refresh after registry URL change failed',
+            toBaseError(err),
+          );
+        });
+      }),
     );
     this.initAuth().catch((err) => {
       this._logger.warn('Auth initialization failed', toBaseError(err));
     });
+    this.discoverInstallTargetContributions();
   }
 
   /** Subscribe to neko-auth session changes and inject Bearer token into MarketClient. */
   private async initAuth(): Promise<void> {
-    const auth = await getNekoAuthAPI();
+    const auth = await this._options.host.getAuthApi();
     if (!auth) {
       this._logger.debug('neko-auth not available, proceeding unauthenticated');
       return;
@@ -176,6 +247,38 @@ export class MarketplaceService implements vscode.Disposable {
     return this._client.getPackage(packageId);
   }
 
+  async getServerInfo(): Promise<MarketServerInfo> {
+    return this._client.getServerInfo();
+  }
+
+  registerInstallTarget(
+    target: IInstallTarget,
+    extensionId?: string,
+    kind?: string,
+  ): vscode.Disposable {
+    const disposable = this._targetContributions.registerInstallTarget(target, extensionId, kind);
+    this._disposables.push(disposable);
+    return disposable;
+  }
+
+  resolveInstallTarget(manifest: AssetManifest): IInstallTarget | undefined {
+    return this._targetContributions.resolveTarget(manifest);
+  }
+
+  getInstallTargetDiagnostics(): InstallTargetDiagnostic[] {
+    return this._targetContributions.getDiagnostics();
+  }
+
+  getRegisteredInstallTargetTypes(): AssetType[] {
+    return this._targetContributions.getRegisteredTypes();
+  }
+
+  getMissingInstallTargetContributor(
+    manifest: AssetManifest,
+  ): MissingInstallTargetContributor | undefined {
+    return this._targetContributions.getMissingContributor(manifest);
+  }
+
   // ===========================================================================
   // Install / Uninstall
   // ===========================================================================
@@ -186,6 +289,18 @@ export class MarketplaceService implements vscode.Disposable {
     onProgress?: InstallProgressCallback,
   ): Promise<InstallResult> {
     this._logger.info(`Installing ${packageId}@${version}`);
+    const pkg = await this._client.getPackage(packageId);
+    if (pkg?.manifest) {
+      try {
+        await this._targetContributions.ensureTarget(pkg.manifest, (extensionId) =>
+          this._options.host.getExtension(extensionId),
+        );
+      } catch (error) {
+        const missingContributor = this._targetContributions.getMissingContributor(pkg.manifest);
+        const message = error instanceof Error ? error.message : String(error);
+        return { success: false, error: message, manifest: pkg.manifest, missingContributor };
+      }
+    }
     const result = await this._installManager.install(packageId, version, (progress) => {
       this._onInstallProgress.fire(progress);
       onProgress?.(progress);
@@ -199,6 +314,14 @@ export class MarketplaceService implements vscode.Disposable {
         type: result.manifest.type,
         installedPath: result.installedPath,
         manifest: result.manifest,
+      });
+      this.fireMarketEvent({
+        kind: 'install',
+        packageId,
+        type: result.manifest.type,
+        installedPath: result.installedPath,
+        manifest: result.manifest,
+        enabled: true,
       });
 
       // Notify neko-agent to rescan skills if command is available (optional, graceful degradation)
@@ -228,6 +351,14 @@ export class MarketplaceService implements vscode.Disposable {
         installedPath: record.installedPath,
         manifest: record.manifest,
       });
+      this.fireMarketEvent({
+        kind: 'uninstall',
+        packageId,
+        type: record.type,
+        installedPath: record.installedPath,
+        manifest: record.manifest,
+        enabled: false,
+      });
     }
 
     vscode.commands.executeCommand('neko.agent.rescanSkills').then(undefined, () => {
@@ -255,6 +386,14 @@ export class MarketplaceService implements vscode.Disposable {
       installedPath: record.installedPath,
       manifest: record.manifest,
     });
+    this.fireMarketEvent({
+      kind: 'enable',
+      packageId,
+      type: record.type,
+      installedPath: record.installedPath,
+      manifest: record.manifest,
+      enabled: true,
+    });
   }
 
   async disable(packageId: string): Promise<void> {
@@ -272,6 +411,14 @@ export class MarketplaceService implements vscode.Disposable {
       type: record.type,
       installedPath: record.installedPath,
       manifest: record.manifest,
+    });
+    this.fireMarketEvent({
+      kind: 'disable',
+      packageId,
+      type: record.type,
+      installedPath: record.installedPath,
+      manifest: record.manifest,
+      enabled: false,
     });
   }
 
@@ -292,11 +439,137 @@ export class MarketplaceService implements vscode.Disposable {
     return this._installManager.checkUpdates();
   }
 
+  async update(
+    packageId: string,
+    version: string,
+    onProgress?: InstallProgressCallback,
+  ): Promise<InstallResult> {
+    const previous = this._installedRegistry.get(packageId);
+    const result = await this._installManager.update(packageId, version, (progress) => {
+      this._onInstallProgress.fire(progress);
+      onProgress?.(progress);
+    });
+
+    if (result.success && result.manifest && result.installedPath) {
+      const current = this._installedRegistry.get(packageId);
+      this.fireMarketEvent({
+        kind: 'update',
+        packageId,
+        type: result.manifest.type,
+        installedPath: result.installedPath,
+        manifest: result.manifest,
+        enabled: current?.enabled,
+        status: current?.status,
+        previousStatus: previous?.status,
+      });
+      if (previous?.status !== current?.status) {
+        this.fireMarketEvent({
+          kind: 'status-change',
+          packageId,
+          type: result.manifest.type,
+          installedPath: result.installedPath,
+          manifest: result.manifest,
+          enabled: current?.enabled,
+          status: current?.status,
+          previousStatus: previous?.status,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  async ensureFull(packageId: string, itemId?: string): Promise<InstallResult> {
+    const result = await this._installManager.ensureFull(packageId, itemId);
+    if (result.success && result.manifest && result.installedPath) {
+      const record = this._installedRegistry.get(packageId);
+      this.fireMarketEvent({
+        kind: 'large-asset-state-change',
+        packageId,
+        type: result.manifest.type,
+        installedPath: result.installedPath,
+        manifest: result.manifest,
+        enabled: record?.enabled,
+        status: record?.status,
+        largeAsset: record?.largeAsset,
+      });
+    }
+    return result;
+  }
+
+  cancelInstall(packageId: string): boolean {
+    const cancelled = this._installManager.cancelInstall(packageId);
+    if (cancelled) {
+      this._onInstallProgress.fire({
+        packageId,
+        phase: 'error',
+        percent: 0,
+        error: 'cancelled',
+      });
+    }
+    return cancelled;
+  }
+
+  async listEntitlements(): Promise<EntitlementListResult> {
+    return this._client.listEntitlements();
+  }
+
+  async refreshEntitlements(packageId?: string): Promise<EntitlementListResult> {
+    const result = await this._client.refreshEntitlements();
+    if (packageId) {
+      await this._client.getPackage(packageId).catch((err) => {
+        this._logger.warn(
+          `Package detail refresh failed after entitlement refresh: ${packageId}`,
+          toBaseError(err),
+        );
+      });
+    }
+    return result;
+  }
+
+  async openCheckout(packageId: string): Promise<CheckoutUrlResult> {
+    const checkout = await this._client.getCheckoutUrl(
+      packageId,
+      this._options.host.getRefreshUri(packageId),
+      this._options.host.getLocale(),
+    );
+    await this._options.host.openExternal(checkout.url);
+    return checkout;
+  }
+
+  async openRenewal(packageId: string): Promise<CheckoutUrlResult> {
+    return this.openCheckout(packageId);
+  }
+
+  async openInvoice(orderId: string): Promise<void> {
+    await this._options.host.openExternal(this.buildServerDeepLink('billing/invoices', orderId));
+  }
+
+  async openSupport(orderId: string): Promise<void> {
+    await this._options.host.openExternal(this.buildServerDeepLink('support/orders', orderId));
+  }
+
   // ===========================================================================
   // Disposable
   // ===========================================================================
 
   dispose(): void {
     this._disposables.forEach((d) => d.dispose());
+  }
+
+  private discoverInstallTargetContributions(): void {
+    this._targetContributions.discover(this._options.host.listExtensions());
+  }
+
+  private fireMarketEvent(event: MarketPackageEvent): void {
+    this._onDidMarketPackageEvent.fire(event);
+  }
+
+  private buildServerDeepLink(path: string, id: string): string {
+    const baseUrl = this._client
+      .getRegistryUrl()
+      .replace(/\/api\/v1\/?$/, '')
+      .replace(/\/$/, '');
+    return `${baseUrl}/${path}/${encodeURIComponent(id)}`;
   }
 }

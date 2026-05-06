@@ -6,6 +6,7 @@ import React from 'react';
 import { useMarketplaceStore } from '../stores/marketplaceStore';
 import { useTranslation } from '../i18n/I18nContext';
 import { AssetCard } from './AssetCard';
+import { BrowseFilters } from './BrowseFilters';
 
 export const BrowseView: React.FC = () => {
   const { searchText, featured, searchResults, searchTotal, isSearching } = useMarketplaceStore();
@@ -16,6 +17,8 @@ export const BrowseView: React.FC = () => {
 
   return (
     <div className="browse-view">
+      <BrowseFilters />
+
       {/* Loading spinner */}
       {isSearching && (
         <div className="loading-state">

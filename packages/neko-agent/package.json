@@ -32,9 +32,32 @@
     "neko.neko-tools",
     "neko.neko-preview"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onInstallType:skill",
+    "onInstallType:endpoint",
+    "onInstallType:provider",
+    "onInstallType:model"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "neko.installTargets": [
+      {
+        "type": "skill",
+        "activationEvent": "onInstallType:skill"
+      },
+      {
+        "type": "endpoint",
+        "activationEvent": "onInstallType:endpoint"
+      },
+      {
+        "type": "provider",
+        "activationEvent": "onInstallType:provider"
+      },
+      {
+        "type": "model",
+        "activationEvent": "onInstallType:model"
+      }
+    ],
     "viewsContainers": {
       "panel": [
         {

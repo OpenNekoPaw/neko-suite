@@ -31,9 +31,17 @@
     "neko.neko-tools",
     "neko.neko-preview"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onInstallType:shader"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "neko.installTargets": [
+      {
+        "type": "shader",
+        "activationEvent": "onInstallType:shader"
+      }
+    ],
     "submenus": [
       {
         "id": "neko.explorer.newProject",

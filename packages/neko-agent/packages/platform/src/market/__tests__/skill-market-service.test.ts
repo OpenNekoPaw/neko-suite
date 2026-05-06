@@ -91,8 +91,25 @@ function createMarketClientMock() {
     search: vi.fn<IMarketClient['search']>(),
     getPackage: vi.fn<IMarketClient['getPackage']>(),
     getVersions: vi.fn<IMarketClient['getVersions']>(),
+    getDownloadDescriptor: vi.fn<IMarketClient['getDownloadDescriptor']>(),
     getDownloadUrl: vi.fn<IMarketClient['getDownloadUrl']>(),
     getFeatured: vi.fn<IMarketClient['getFeatured']>(),
+    setAuthToken: vi.fn<IMarketClient['setAuthToken']>(),
+    setRegistryUrl: vi.fn<NonNullable<IMarketClient['setRegistryUrl']>>(),
+    getServerInfo: vi.fn<IMarketClient['getServerInfo']>(),
+    getSparseManifest: vi.fn<IMarketClient['getSparseManifest']>(),
+    reportSparseSelection: vi.fn<IMarketClient['reportSparseSelection']>(),
+    getVariantDownloadDescriptor: vi.fn<IMarketClient['getVariantDownloadDescriptor']>(),
+    getProxyVariantDownloadDescriptor: vi.fn<IMarketClient['getProxyVariantDownloadDescriptor']>(),
+    getDeltaDownloadDescriptor: vi.fn<IMarketClient['getDeltaDownloadDescriptor']>(),
+    listEntitlements: vi.fn<IMarketClient['listEntitlements']>(),
+    getEntitlementChanges: vi.fn<IMarketClient['getEntitlementChanges']>(),
+    refreshEntitlements: vi.fn<IMarketClient['refreshEntitlements']>(),
+    checkEntitlement: vi.fn<IMarketClient['checkEntitlement']>(),
+    getCheckoutUrl: vi.fn<IMarketClient['getCheckoutUrl']>(),
+    getSemanticOntology: vi.fn<IMarketClient['getSemanticOntology']>(),
+    getIntentOntology: vi.fn<IMarketClient['getIntentOntology']>(),
+    getDeprecation: vi.fn<IMarketClient['getDeprecation']>(),
   } satisfies IMarketClient;
 }
 
@@ -101,8 +118,11 @@ function createInstallManagerMock() {
     install: vi.fn<IInstallManager['install']>(),
     uninstall: vi.fn<IInstallManager['uninstall']>().mockResolvedValue(undefined),
     update: vi.fn<IInstallManager['update']>(),
+    enable: vi.fn<IInstallManager['enable']>(),
+    disable: vi.fn<IInstallManager['disable']>(),
     listInstalled: vi.fn<IInstallManager['listInstalled']>().mockResolvedValue([]),
     checkUpdates: vi.fn<IInstallManager['checkUpdates']>().mockResolvedValue([]),
+    ensureFull: vi.fn<NonNullable<IInstallManager['ensureFull']>>(),
   } satisfies IInstallManager;
 }
 
@@ -113,6 +133,7 @@ function createSkillManifest(): AssetManifest {
     version: '1.0.0',
     type: 'skill',
     source: { kind: 'registry', registry: 'test', package: '@pub/camera-shot', version: '1.0.0' },
+    distributionKind: 'archive',
     distribution: {
       license: 'MIT',
       author: 'pub',

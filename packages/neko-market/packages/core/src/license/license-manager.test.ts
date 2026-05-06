@@ -9,6 +9,7 @@ function makeManifest(visibility?: string): AssetManifest {
     version: '1.0.0',
     type: 'skill',
     source: { kind: 'local', path: '/tmp/test' },
+    distributionKind: 'archive',
     distribution: visibility
       ? {
           license: 'MIT',

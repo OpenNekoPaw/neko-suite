@@ -24,6 +24,8 @@ export interface DownloadOptions {
   onProgress?: InstallProgressCallback;
   /** Package ID for progress reporting */
   packageId?: string;
+  /** Abort an in-flight download and retry delay. */
+  signal?: AbortSignal;
 }
 
 // =============================================================================
@@ -34,7 +36,7 @@ export interface DownloadOptions {
  * Download a file from URL to disk with optional resume support.
  */
 export async function downloadFile(url: string, options: DownloadOptions): Promise<void> {
-  const { destPath, resume = false, maxRetries = 3, onProgress, packageId = '' } = options;
+  const { destPath, resume = false, maxRetries = 3, onProgress, packageId = '', signal } = options;
 
   let startByte = 0;
 
@@ -52,12 +54,13 @@ export async function downloadFile(url: string, options: DownloadOptions): Promi
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      throwIfAborted(signal);
       const headers: Record<string, string> = {};
       if (startByte > 0) {
         headers['Range'] = `bytes=${startByte}-`;
       }
 
-      const response = await fetch(url, { headers });
+      const response = await fetch(url, { headers, signal });
 
       if (!response.ok && response.status !== 206) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -80,6 +83,7 @@ export async function downloadFile(url: string, options: DownloadOptions): Promi
 
       try {
         for (;;) {
+          throwIfAborted(signal);
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -89,7 +93,7 @@ export async function downloadFile(url: string, options: DownloadOptions): Promi
           if (onProgress) {
             onProgress({
               packageId,
-              phase: 'downloading',
+              phase: 'fetch',
               percent: totalBytes ? Math.round((downloadedBytes / totalBytes) * 100) : 0,
               bytesDownloaded: downloadedBytes,
               bytesTotal: totalBytes,
@@ -106,12 +110,15 @@ export async function downloadFile(url: string, options: DownloadOptions): Promi
 
       return; // Success
     } catch (error) {
+      if (isAbortError(error, signal)) {
+        throw new Error(`Download cancelled: ${packageId || url}`);
+      }
       lastError = error instanceof Error ? error : new Error(String(error));
 
       if (attempt < maxRetries) {
         // Exponential backoff: 1s, 2s, 4s
         const delay = Math.pow(2, attempt) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await sleep(delay, signal);
 
         // Update startByte for resume on retry
         try {
@@ -125,4 +132,32 @@ export async function downloadFile(url: string, options: DownloadOptions): Promi
   }
 
   throw lastError ?? new Error('Download failed');
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new DOMException('Download aborted', 'AbortError');
+  }
+}
+
+function isAbortError(error: unknown, signal: AbortSignal | undefined): boolean {
+  if (signal?.aborted) return true;
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timeout);
+        reject(new DOMException('Download aborted', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
 }

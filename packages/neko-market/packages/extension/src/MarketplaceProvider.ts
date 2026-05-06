@@ -81,9 +81,9 @@ export class MarketplaceProvider implements vscode.WebviewViewProvider {
     const postMessage = (msg: unknown) => webview.postMessage(msg);
 
     webview.onDidReceiveMessage(
-      async (message: { type: string; [key: string]: unknown }) => {
+      async (message: unknown) => {
         // Handle webview ready signal — flush pending messages
-        if (message.type === 'market:ready') {
+        if (isWebviewMessage(message) && message.type === 'market:ready') {
           this._webviewReady = true;
           for (const pending of this._pendingMessages) {
             webview.postMessage(pending);
@@ -137,4 +137,13 @@ function getNonce(): string {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return text;
+}
+
+function isWebviewMessage(value: unknown): value is { type: string; [key: string]: unknown } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { type?: unknown }).type === 'string'
+  );
 }
