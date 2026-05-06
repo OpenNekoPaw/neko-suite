@@ -52,6 +52,12 @@ pub struct GpuMaterial {
     pub bind_group: wgpu::BindGroup,
 }
 
+/// Long-lived fallback texture used by material bind groups for missing slots.
+struct PlaceholderTexture {
+    view: wgpu::TextureView,
+    _texture: wgpu::Texture,
+}
+
 /// Cache key: (file_uri, sub_index)
 type MeshKey = (String, usize);
 type MaterialKey = (String, usize);
@@ -63,6 +69,7 @@ pub struct AssetCache {
     ctx: Arc<GpuContext>,
     material_bind_group_layout: wgpu::BindGroupLayout,
     default_sampler: wgpu::Sampler,
+    placeholder_texture: PlaceholderTexture,
 }
 
 impl AssetCache {
@@ -77,6 +84,7 @@ impl AssetCache {
             mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
+        let placeholder_texture = Self::create_placeholder_texture(ctx.as_ref());
 
         Self {
             meshes: HashMap::new(),
@@ -84,6 +92,7 @@ impl AssetCache {
             ctx,
             material_bind_group_layout,
             default_sampler,
+            placeholder_texture,
         }
     }
 
@@ -639,9 +648,9 @@ impl AssetCache {
         Some((gpu_texture, view))
     }
 
-    /// Create a 1x1 white placeholder texture (for missing texture slots)
-    fn placeholder_texture_view(&self) -> wgpu::TextureView {
-        let tex = self.ctx.device().create_texture(&wgpu::TextureDescriptor {
+    /// Create a 1x1 white placeholder texture for missing material texture slots.
+    fn create_placeholder_texture(ctx: &GpuContext) -> PlaceholderTexture {
+        let tex = ctx.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("pbr_placeholder_1x1"),
             size: wgpu::Extent3d {
                 width: 1,
@@ -655,7 +664,7 @@ impl AssetCache {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        self.ctx.queue().write_texture(
+        ctx.queue().write_texture(
             wgpu::ImageCopyTexture {
                 texture: &tex,
                 mip_level: 0,
@@ -674,7 +683,11 @@ impl AssetCache {
                 depth_or_array_layers: 1,
             },
         );
-        tex.create_view(&wgpu::TextureViewDescriptor::default())
+        let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+        PlaceholderTexture {
+            view,
+            _texture: tex,
+        }
     }
 
     /// Create material bind group with optional textures
@@ -687,12 +700,11 @@ impl AssetCache {
         emissive_view: Option<&wgpu::TextureView>,
         occlusion_view: Option<&wgpu::TextureView>,
     ) -> wgpu::BindGroup {
-        let placeholder = self.placeholder_texture_view();
-        let bc_view = base_color_view.unwrap_or(&placeholder);
-        let mr_view = metallic_roughness_view.unwrap_or(&placeholder);
-        let nm_view = normal_view.unwrap_or(&placeholder);
-        let em_view = emissive_view.unwrap_or(&placeholder);
-        let ao_view = occlusion_view.unwrap_or(&placeholder);
+        let bc_view = base_color_view.unwrap_or(&self.placeholder_texture.view);
+        let mr_view = metallic_roughness_view.unwrap_or(&self.placeholder_texture.view);
+        let nm_view = normal_view.unwrap_or(&self.placeholder_texture.view);
+        let em_view = emissive_view.unwrap_or(&self.placeholder_texture.view);
+        let ao_view = occlusion_view.unwrap_or(&self.placeholder_texture.view);
 
         self.ctx
             .device()

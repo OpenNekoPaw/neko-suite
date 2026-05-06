@@ -1,9 +1,9 @@
-# neko-engine Native Plugin Governance
+# neko-engine Native Plugin & Local Asset Governance
 
-> **范围**：本文档是 `plugin` AssetType（neko-engine 原生 cdylib 扩展）和相关 `shader` 形态的**治理与保护权威定义**。
+> **范围**：本文档是 `plugin` AssetType（neko-engine 原生 cdylib 扩展）和相关 `shader` 形态的**治理与保护权威定义**；§十九同时作为所有 AssetType 的本地安装（sideload）治理定义。
 > **关联**：[marketplace.md](./marketplace.md) · [manifest-schema-spec.md](./manifest-schema-spec.md) · [registry-server-contract.md](./registry-server-contract.md) · [adr-capability-protocol.md](./adr-capability-protocol.md) · [adr-asset-federation.md](./adr-asset-federation.md)
 
-> **修订**：2026-05-05 · 抽出自 marketplace.md 的 plugin 安全 / trust / 防盗版讨论，扩为完整治理文档；明确决策"不支持 WASM"。
+> **修订**：2026-05-06 · 对齐 native-only plugin 语义、verified publisher 字段、Workspace Trust 判定和 host-api audit 边界；明确 §十九为 sideload 全局治理。
 
 ---
 
@@ -59,7 +59,7 @@ plugin     Rust cdylib
 差异      shader 跑 GPU（沙箱在 driver）；plugin 跑 CPU（无沙箱）
 ```
 
-本文同时覆盖 plugin 与 shader 的治理。其它 AssetType（media / model / preset 等）不在本文范围。
+本文主体覆盖 plugin 与 shader 的治理。其它 AssetType（media / model / preset 等）的运行治理不在本文主体范围；但本地安装（sideload）作为 market 系统级能力，由 §十九统一定义。
 
 ### 1.4 关键术语
 
@@ -170,12 +170,12 @@ plugin 一旦被加载，可以：
 
 ```
 T1 Core       ↔ trustLevel: 'core'
-T2 Verified   ↔ trustLevel: 'community' + verified flag
+T2 Verified   ↔ trustLevel: 'community' + distribution.publisher.verified === true
 T3 Community  ↔ trustLevel: 'community'  (但 plugin 拒收)
 T4 Sideload   ↔ trustLevel: 'untrusted'  (仅 dev-mode 例外)
 ```
 
-不是新发明，是把 plugin 这一类的 trust 细化到 native-only 现实。
+不是新发明，是把 plugin 这一类的 trust 细化到 native-only 现实。`trustLevel` 仍由 server 评定；verified 状态归属 publisher profile，并由 server 投影到 manifest 的 `distribution.publisher` 字段，client 只读显示与拦闸，不重算。
 
 ### 3.3 社区贡献的真实通道
 
@@ -412,13 +412,24 @@ Server review 阶段：
 
 ### 5.4 Engine 审计
 
-加载 plugin 后，engine 通过 syscall hook / dlopen 拦截监控：
+加载 plugin 后，engine 只能可靠审计 **plugin 通过 host-api 调用的行为**。Native cdylib 若直接调用系统 API（例如 libc syscall、系统网络库、子进程 API），在 in-process 加载模型下无法跨平台可靠拦截。
+
+因此 audit 边界是：
+
+```
+✓ 可审计     plugin 调 engine host-api / PluginContext / AssetFederationRegistry
+✓ 可审计     engine 自己发起的 fs / network / gpu / event-bus 操作
+✗ 不承诺     native code 直接 syscall / libc / Win32 / CoreFoundation 调用
+✗ 不承诺     通过第三方 native library 绕过 host-api 的行为
+```
+
+如果未来要做到 syscall 级监控，必须改成 out-of-process plugin host + OS sandbox / seccomp / AppContainer / seatbelt 等平台能力，不属于当前 in-process PluginManager 范围。
 
 ```rust
 // neko-engine/host-api/src/plugin_audit.rs
 
 impl PluginAuditor {
-  fn record_call(&self, plugin_id: &PackageId, action: &str) {
+  fn record_host_api_call(&self, plugin_id: &PackageId, action: &str) {
     let permission = action_to_permission(action);
     let declared = self.manifest.permissions.contains(&permission);
 
@@ -431,7 +442,7 @@ impl PluginAuditor {
     });
 
     if !declared {
-      // 上报 server，但不阻止（无法阻止 native code）
+      // 上报 server，但不承诺阻止 native direct syscall
       self.telemetry.send(PermissionViolation {
         plugin_id: plugin_id.clone(),
         permission,
@@ -442,7 +453,7 @@ impl PluginAuditor {
 }
 ```
 
-**重要**：审计是**事后追溯**机制，不是事前阻止。Native code 已经能跑起来，engine 只能记录 + 上报。这就是为什么 publisher 身份必须可追溯（KYC）——出事能追责。
+**重要**：审计是**host-api 侧事后追溯**机制，不是运行时沙箱。Native code 已经能跑起来，engine 只能记录通过自身 API 的行为并上报；绕过 host-api 的直接系统调用仍依赖 KYC、签名、license、用户授权和事后处置。这就是为什么 publisher 身份必须可追溯（KYC）——出事能追责。
 
 ### 5.5 高敏感权限的额外约束
 
@@ -637,14 +648,22 @@ limited (untrusted source 加载的工程)
 打开工程 .nkcut / .nkc / 等
   ↓
 检查 .neko/workspace-trust.json：
-  · 已 trust 过 → trusted
-  · 不在记录 → restricted（首次打开）
-  · 来自 untrusted source（download from internet）→ limited
+  · 已记录 trustLevel → 使用记录值
+  · 已记录 demoted / blocked → restricted 或 limited
+  · 无记录 → 进入来源判定
+  ↓
+来源判定：
+  · 当前机器由 Neko 创建的新工程 → trusted
+  · 从本地普通路径首次打开的既有工程 → restricted
+  · market starter / shared link / collaboration checkout → restricted
+  · 带 download quarantine / untrusted source 标记 → limited
   ↓
 按 trust 等级决定哪些 plugin 加载
   ↓
 如 restricted → 顶部条 "此工程未 trust，[Trust Workspace] / [Edit in restricted mode]"
 ```
+
+`trusted` 的默认只适用于“当前用户在当前机器主动创建的新工程”。“首次打开”不是天然 trusted；必须结合来源判定，防止陌生工程自动获得 native plugin 加载权限。
 
 ### 7.3 状态持久化
 
@@ -667,16 +686,17 @@ limited (untrusted source 加载的工程)
 ```
 工程类型              默认 workspace trust
 ────────────────────────────────────────
-neko-cut (.nkcut)     trusted (用户自己剪辑)
-neko-canvas (.nkc)    trusted
-neko-model (.nkm)     trusted
-neko-sketch (.nks)    trusted
-neko-puppet (.nkpup)  trusted
-neko-story (.nkst)    trusted
+neko-cut (.nkcut)     created locally → trusted；opened existing → restricted
+neko-canvas (.nkc)    created locally → trusted；opened existing → restricted
+neko-model (.nkm)     created locally → trusted；opened existing → restricted
+neko-sketch (.nks)    created locally → trusted；opened existing → restricted
+neko-puppet (.nkpup)  created locally → trusted；opened existing → restricted
+neko-story (.nkst)    created locally → trusted；opened existing → restricted
 
 market starter        restricted (从 market 下载的模板)
 shared link           restricted (URL share)
 collaboration         restricted (团队 git 拉来的)
+quarantined download   limited (系统或 Neko 标记为不可信来源)
 ```
 
 每个子包扩展通过 `WorkspaceTrustProvider` API 给 engine 报告本工程的初始 trust：
@@ -990,7 +1010,7 @@ pub extern "C" fn plugin_init(ctx: *mut Context) {
 
 ### 10.5 Server API
 
-详见 [registry-server-contract.md](./registry-server-contract.md)（待补 §三.7）：
+详见 [registry-server-contract.md](./registry-server-contract.md) §3.4a：
 
 ```
 POST /api/v1/plugins/:id/build
@@ -1356,7 +1376,37 @@ T4 Sideload     仅 dev-mode         ✓ 直接接受
 
 ## 十五、Server 契约扩展
 
-引入到 [registry-server-contract.md](./registry-server-contract.md)（待补 §三.7）：
+以下契约应同步引入 [registry-server-contract.md](./registry-server-contract.md) 的 Plugin Governance 小节。本文保留摘要，server contract 为 HTTP 字段与不变量的权威位置。
+
+### 15.0 Verified Publisher 投影
+
+T2 Verified 不新增第四个 `trustLevel`。Server 仍使用 Capability Protocol 的三级 trust：
+
+```typescript
+type TrustLevel = 'core' | 'community' | 'untrusted';
+
+interface AssetDistribution {
+  trustLevel: TrustLevel;
+  publisher: {
+    id: string;
+    displayName: string;
+    verified: boolean;
+    verificationTier?: 'core' | 'verified';
+    verifiedAt?: number;
+  };
+}
+```
+
+Plugin 发布规则：
+
+```
+trustLevel === 'core'                         → T1 Core plugin 可发布
+trustLevel === 'community' && publisher.verified === true
+                                                → T2 Verified plugin 可发布
+trustLevel === 'community' && publisher.verified !== true
+                                                → plugin 拒收；其它开放 type 可继续发布
+trustLevel === 'untrusted'                    → 仅 sideload / dev-mode 本地状态，不进入 market
+```
 
 ### 15.1 Plugin Build API
 
@@ -1574,7 +1624,7 @@ Phase 6.5.9   Y 类 InstallTarget 迁移到子包（PluginInstallTarget → neko
 ```
 P1.a  三档 trust tier 实现
       ├── server 端 publisher KYC 流水
-      ├── manifest.distribution.trustLevel + verified flag
+      ├── manifest.distribution.trustLevel + distribution.publisher.verified
       ├── client 安装对话框（按 tier 不同）
       └── PluginManager 加载时 trust 闸门
 
@@ -1582,8 +1632,9 @@ P1.b  Permission 声明模型 + audit
       ├── PluginPermission 12 种枚举落到 schema
       ├── manifest.permissions 必填校验
       ├── KYC review 时 publisher 解释每项权限
-      ├── Engine 端 audit log（dlopen + syscall hook）
-      └── 违反声明 → server 上报 + publisher 信誉降级
+      ├── Engine 端 host-api audit log
+      ├── 明确 native direct syscall 不可由 in-process PluginManager 可靠拦截
+      └── host-api 违反声明 → server 上报 + publisher 信誉降级
 
 P1.c  Workspace trust 持久化
       ├── .neko/workspace-trust.json
@@ -1633,7 +1684,7 @@ P2.e  Server API 实现
       ├── POST /plugins/:id/build
       ├── GET /plugins/:id/build-status
       ├── GET /plugins/:id/build-result
-      └── 与 [registry-server-contract.md §三.7] 对齐
+      └── 与 [registry-server-contract.md](./registry-server-contract.md) §3.4a 对齐
 ```
 
 ### 18.3 Phase 6.5.6k — Engine Plugin Loading（P1，与 §九.7 协作）
@@ -1678,7 +1729,380 @@ P2.b  方案 Z 引导社区走其它 type
 
 ---
 
+## 十九、Sideload Across AssetTypes（跨类型本地安装）
+
+§六 仅讨论了 plugin 的 T4 sideload（dev-mode 唯一通道）。但 sideload 是系统级概念，**所有 AssetType 都有本地安装场景**：自创资产、私有/企业内部工具、github 下载、未发布的 dev 版本、朋友分享等。
+
+本节描述 sideload 在 11 种 AssetType 上的统一治理。
+
+### 19.1 两种本地化方式不要混
+
+```
+模式 1  导入素材 (Import)
+        用户拖入自己拍的视频 / 自己画的图
+        进入 neko-assets AssetLibrary 流程
+        这是创作工作流，不是"安装"
+        已有现成机制（neko-cut import / neko-canvas import...）
+
+模式 2  Sideload 资产 (Local Install)
+        用户从非 market 渠道获取 "可重用资产"：
+          · 自己制作的 LUT 包
+          · github 下载的 skill 集合
+          · 朋友分享的 shader 文件
+          · 私有 / 企业内部工具
+          · 自己开发期的 plugin（dev test）
+        模仿"安装"语义但不经 market
+        必须让 market 知道，否则 Market.Installed 看不到、卸载流程混乱
+```
+
+本节专注 **模式 2 sideload**。模式 1 与本治理无关。
+
+### 19.2 Per-Type Sideload 行为表
+
+11 种 AssetType 都有 sideload 场景，但风险与默认行为不同：
+
+| Type | 典型 sideload 场景 | 风险 | 默认行为 |
+|---|---|---|---|
+| `preset` (lut/transition/...) | 自制 LUT / 朋友分享调色 | 极低 | **直接接受** |
+| `skill` | 写自己的 prompt-chain | 低 | **直接接受** |
+| `shader` (源码) | 写自己的 WGSL 滤镜 | 低（GPU 沙箱） | **直接接受** |
+| `shader` (binary) | github 下载 SPIR-V | 低 | **接受 + warning** |
+| `media` | （走 import 通道，非 sideload） | — | — |
+| `starter` | 自己的工程模板 | 低 | **直接接受**（受 workspace trust 制约） |
+| `identity` | 自创角色身份包 | 低 | **接受 + ULID 唯一性校验** |
+| `model` (LoRA / embedding) | 自训 / 下载社区 LoRA | 中 | **接受 + 来源 warning** |
+| `model` (base) | 自部署 GGUF / safetensors | 中 | **接受 + 来源 warning** |
+| `endpoint` | 私有 / 自建 API | 低 | **接受 + 用户填凭证** |
+| `provider` | 自定义 ProviderCard | 低 | **接受** |
+| `plugin` | dev 测试 cdylib | **高** | **一律拒，仅 dev-mode 例外**（详见 §六.3） |
+| `bundle` | 自定义聚合 | — | **不可 sideload**（结构假定 publisherId） |
+
+**纪律**：
+
+```
+✓ 大部分 type 直接接受（preset / skill / shader / starter / identity / model / endpoint / provider）
+✗ Native plugin 一律拒（仅 dev-mode 14 天）
+✗ Bundle 不可 sideload（其结构假定所有 contents 都有 publisherId）
+```
+
+### 19.3 目录结构
+
+```
+~/.neko/                                Neko home
+├── (market-installed)
+│   ├── skills/{publisher}/{name}/
+│   ├── shaders/{kind}/{publisher}/{name}/
+│   ├── models/{framework}/{name}/
+│   ├── ...
+│   └── market-installed.json           Market 持久化
+│
+└── local/                              Sideload 根（与 market 隔离）
+    ├── plugins/                        仅 dev-mode（native）
+    ├── shaders/
+    ├── presets/{kind}/                 lut / transition / effect / ...
+    ├── skills/
+    ├── starters/{editor}/              cut / canvas / model / sketch / puppet / story
+    ├── identities/                     用户自创角色
+    ├── models/{framework}/             用户自部署模型
+    ├── endpoints/                      私有 endpoint 配置
+    ├── providers/                      自定义 provider card
+    └── local-installed.json            Sideload 注册表（独立于 market-installed.json）
+```
+
+**为什么物理隔离**：
+
+```
+✓ 卸载 market 包不会误删用户自己的东西
+✓ Market 升级 / 迁移脚本不影响 sideload
+✓ 备份策略可以分开（local 独立保护，market 重新装即可）
+✓ trustLevel='untrusted' 默认仅作用于 ~/.neko/local/
+```
+
+### 19.4 自动推断 Type
+
+Sideloaded 资产没有 server 颁发的 manifest，按文件路径 / 扩展名自动推断 type：
+
+```typescript
+function inferAssetType(filepath: string): { type: AssetType; kind?: string } | null {
+  const ext = path.extname(filepath).toLowerCase();
+  const name = path.basename(filepath).toLowerCase();
+
+  // Preset
+  if (ext === '.cube' || ext === '.3dl') return { type: 'preset', kind: 'lut' };
+  if (name.endsWith('.transition.json')) return { type: 'preset', kind: 'transition' };
+  if (name.endsWith('.effect.json')) return { type: 'preset', kind: 'effect' };
+  if (name === 'memory.md' || name.endsWith('.memory.md')) return { type: 'preset', kind: 'memory' };
+
+  // Shader
+  if (ext === '.wgsl') return { type: 'shader', kind: 'wgsl-source' };
+  if (ext === '.glsl' || ext === '.frag' || ext === '.vert') return { type: 'shader', kind: 'glsl-source' };
+  if (ext === '.spv') return { type: 'shader', kind: 'spirv-binary' };
+
+  // Skill
+  if (name === 'skill.md' || name.endsWith('.skill.md')) return { type: 'skill' };
+
+  // Plugin (仅 dev-mode 才允许加载)
+  if (ext === '.so' || ext === '.dylib' || ext === '.dll') return { type: 'plugin' };
+
+  // Model
+  if (ext === '.gguf') return { type: 'model', kind: 'gguf' };
+  if (ext === '.onnx') return { type: 'model', kind: 'onnx' };
+  if (ext === '.safetensors') return { type: 'model', kind: 'safetensors' };
+
+  // Identity / Starter (folders)
+  if (fs.statSync(filepath).isDirectory()) {
+    if (fs.existsSync(path.join(filepath, 'identity.json'))) return { type: 'identity' };
+    if (fs.existsSync(path.join(filepath, 'project.nkcut'))) return { type: 'starter', kind: 'cut' };
+    if (fs.existsSync(path.join(filepath, 'project.nkc'))) return { type: 'starter', kind: 'canvas' };
+    // ... etc
+  }
+
+  return null;
+}
+```
+
+### 19.5 Manifest 生成（最小化用户填写）
+
+Sideloaded 资产需要本地生成 manifest。两步流程：
+
+```
+1. 自动推断 + 草稿生成
+   path → inferAssetType → 最小 manifest 草稿
+
+2. 用户编辑（可选）
+   弹窗 review，编辑 name / version / description
+   落到 ~/.neko/local/local-installed.json
+```
+
+最小 manifest 示例：
+
+```json
+{
+  "id": "@local/my-warm-lut",
+  "name": "My Warm LUT",
+  "version": "1.0.0",
+  "type": "preset",
+  "source": { "kind": "local", "path": "/Users/me/luts/warm.cube" },
+  "distributionKind": "archive",
+  "typeMetadata": {
+    "type": "preset",
+    "data": { "presetKind": "lut", "targetApp": "cut" }
+  },
+  "createdAt": 1234567890,
+  "updatedAt": 1234567890
+}
+```
+
+注意：sideload manifest 无 `distribution` 字段（无 license / signature / publisher / trustLevel）。这是与 market 安装包的关键区别。
+
+### 19.6 Market.Installed UI 统一展示
+
+Sideload 项与 market 安装项在 Market.Installed Tab 一起显示，用 badge 区分：
+
+```
+Market.Installed Tab
+  · 显示所有已安装资产，含 sideload
+  · sideload 项加 [Local] 徽章
+  · 按 type / category 分组同样适用
+
+每条目 metadata：
+  · source: 'market' | 'local' | 'ai-generated'
+  · 卸载行为：
+      market source → 走 §九 8 阶段反演（需 entitlement）
+      local source → 删 ~/.neko/local/<type>/<file>（无 license 概念）
+  · 启停 / 信息查看 等操作一致
+```
+
+UI 入口：
+
+```
+Market.Installed Tab 顶部按钮：[+ Install Local...]
+        ↓
+文件选择器（支持文件 / 目录）
+        ↓
+自动推断 type → 弹窗预览 + 用户确认
+        ↓
+落 ~/.neko/local/<type>/ + local-installed.json + 触发 onDidInstall
+```
+
+或命令面板：`neko: Install Local Asset...`
+
+### 19.7 Trust 闸门（与 §三 三档对齐）
+
+Sideloaded 资产的 trustLevel 默认 `'untrusted'`，加载时按 type 不同：
+
+```
+preset / skill / shader-source / starter / identity / provider / endpoint
+  → 接受加载（这些 type 本就低风险）
+
+shader-binary (SPIR-V)
+  → 接受加载 + UI warning（来自非市场源）
+
+model (LoRA / embedding / GGUF / safetensors)
+  → 接受加载 + UI warning（自训模型可能含恶意 hidden trigger）
+
+plugin (native cdylib)
+  → 一律拒，仅 dev-mode 例外（§六.3-6.5）
+
+bundle
+  → 不可 sideload
+```
+
+### 19.8 Workspace Trust 仍然生效
+
+[§七 Workspace Trust](#七workspace-trust) 仍作用于 sideload：
+
+```
+工程 trust 等级           sideload 行为
+─────────────────────────────────────────────────────
+trusted (用户工程)        全部 sideload 资产可加载
+restricted (新工程)       sideload 一律不加载
+limited (untrusted 来源)   sideload 一律不加载
+```
+
+即使 dev-mode 启用，restricted workspace 中仍不加载 sideload plugin。
+
+### 19.9 CLI 工具
+
+为非 webview 用户提供命令行：
+
+```bash
+# 安装本地资产
+neko-market local install <path> [--type <t>] [--name <n>]
+
+# 列出所有 sideload
+neko-market local list [--type <t>]
+
+# 卸载
+neko-market local uninstall <id>
+
+# 生成 manifest 草稿
+neko-market local generate-manifest <path> > manifest.json
+
+# 准备发布（生成上传给 server 的包）
+neko-market publish-prep <path> --output dist/
+
+# Developer mode 切换
+neko-market dev-mode on / off / status
+```
+
+### 19.10 Sideload 不允许的边界
+
+```
+✗ Sideload 资产不能上传到 market
+   必须经过 publisher 流水（KYC + 审核）
+
+✗ Sideload 资产不能被 license 引用
+   sideload 无 entitlement 概念
+   付费包不能依赖 sideload contents
+
+✗ Sideload native plugin 在非 dev-mode 一律拒
+   即使用户"理解风险"也不放行
+   保护用户即使是用户自己想做傻事
+
+✗ Sideload 资产无更新追踪
+   用户自己管版本
+   不会出现在 Market.Updates Tab
+
+✗ Sideload 资产无 watermark / signature
+   无追溯能力（用户自己负责）
+
+✗ Sideload 资产不参与 market 推荐 / 搜索
+   仅本地可见，不上 server
+
+✗ Bundle 不能 sideload
+   bundle.contents 假定 publisherId 存在
+   想做"本地集合"用 starter 或自己组织目录
+
+✗ Sideload 不应跨工程"自动启用"
+   每个工程的 workspace trust 独立判定
+   防止恶意工程自动激活
+```
+
+### 19.11 与 §六 T4 Plugin Sideload 的关系
+
+```
+§六.3-6.5    专门讨论 plugin (native cdylib) 的 sideload
+              · 一律拒（除非 dev-mode 14 天）
+              · 这是高风险 type 的特殊待遇
+
+§十九         讨论所有 type 的 sideload 通用模型
+              · plugin 部分引用 §六.3-6.5
+              · 其它 type 大多直接接受
+              · bundle 一律拒
+              · 提供统一目录 / manifest 生成 / CLI / UI
+```
+
+简单说：**plugin sideload 走严，其它 type sideload 走宽**。这是因为 native code = 进程级权限，其它 type 多是数据 / 配置 / 文本 / GPU sandbox 资源。
+
+### 19.12 反模式（追加）
+
+```
+MK-P16  Sideload native plugin 用户 override
+        现象：弹"理解风险"对话框允许 native sideload（绕过 dev-mode）
+        代价：用户被钓鱼即沦陷
+        修法：必须 dev-mode + 14 天自动关闭，无次级 override
+
+MK-P17  Sideload 跨工程自动启用
+        现象：在 A 工程启用的 sideload 在 B 工程也自动加载
+        代价：恶意工程假装是 A 自动激活
+        修法：每个工程独立 workspace trust 判定
+
+MK-P18  Sideload 资产能上 market
+        现象：用户能直接把 sideload 推到 server
+        代价：绕过 KYC / 无审核
+        修法：sideload 仅本地，发布走 publisher KYC 流水
+              (与 MK-P14 重叠，本条强调 sideload 视角)
+
+MK-P19  Bundle 包含 sideload
+        现象：bundle.contents 引用 sideload 资产
+        代价：bundle 假定 publisher namespace 存在 → 解析失败
+        修法：禁止 bundle 引用 sideload，必须先 publish
+
+MK-P20  把"导入素材"误当 sideload
+        现象：用户拖入视频 / 图片，市场 UI 弹"安装本地资产"流程
+        代价：流程混乱 / UX 灾难
+        修法：清晰区分两种本地化（§十九.1），sideload 仅针对"可重用资产"
+              非自己拍的视频 / 自己画的图（这些走 neko-assets import）
+```
+
+---
+
 ## 附录 A：变更日志
+
+### v1.2（2026-05-06 修订）
+
+```
++ 本轮一致性修订
+  · 标题 / 范围明确 §十九为 sideload 全局治理
+  · T2 Verified 映射到 distribution.publisher.verified
+  · Workspace Trust 默认判定拆成 created locally / opened existing / quarantined source
+  · Engine audit 边界从 syscall hook 改为 host-api audit
+  · §十五明确 server contract 是 HTTP 字段与不变量权威位置
+
++ §十九 Sideload Across AssetTypes（新增）
+  · 跨 11 种 AssetType 的统一 sideload 治理
+  · 两种本地化方式区分（import vs sideload）
+  · Per-type sideload 行为表
+  · 物理隔离目录 ~/.neko/local/
+  · 自动推断 type + 最小 manifest 生成
+  · Market.Installed UI 统一展示（[Local] badge）
+  · Trust 闸门按 type 差异化（plugin 严，其它宽）
+  · CLI 工具
+  · Sideload 不允许的边界
+  · 与 §六 T4 Plugin Sideload 的关系明确
+
++ 反模式 +5（MK-P16 ~ MK-P20）
+  · MK-P16 Sideload native plugin 用户 override
+  · MK-P17 Sideload 跨工程自动启用
+  · MK-P18 Sideload 资产能上 market
+  · MK-P19 Bundle 包含 sideload
+  · MK-P20 把"导入素材"误当 sideload
+
+不变：
+  · §一 ~ §十八 全部内容
+  · v1.1 关于"不支持 WASM"的所有决策
+```
 
 ### v1.1（2026-05-05 修订）
 
@@ -1693,10 +2117,10 @@ P2.b  方案 Z 引导社区走其它 type
         社区贡献通过其它 10 种 AssetType（§三.3）
 
 ± Permission 模型重写
-        从"WASM 沙箱强制 enforce"改为"声明性 + 审核 + audit"
+        从旧的强制沙箱表述改为"声明性 + 审核 + host-api audit"
         Native plugin 没有运行时沙箱
-        Permission 用于：用户告知 / KYC 审核 / engine audit / publisher 信誉
-        超出声明范围靠 server 累积上报触发处分（§五）
+        Permission 用于：用户告知 / KYC 审核 / engine host-api audit / publisher 信誉
+        host-api 超出声明范围靠 server 累积上报触发处分（§五）
 
 ± 反模式 +2
         MK-P10 把 permission 当沙箱（明确 native 无沙箱）

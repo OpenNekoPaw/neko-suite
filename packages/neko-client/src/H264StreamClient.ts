@@ -163,6 +163,14 @@ type NormalizedH264StreamClientConfig = H264StreamClientConfig & {
   onStreamEnd: () => void;
 };
 
+type H264AvcBitstreamFormat = 'annexb' | 'avc';
+
+type H264VideoDecoderConfig = VideoDecoderConfig & {
+  avc?: {
+    format: H264AvcBitstreamFormat;
+  };
+};
+
 // =============================================================================
 // H264StreamClient
 // =============================================================================
@@ -525,12 +533,18 @@ export class H264StreamClient {
     this.config.onFrame(frame);
   }
 
-  private decoderConfig(): VideoDecoderConfig {
-    return {
+  private decoderConfig(): H264VideoDecoderConfig {
+    const config: H264VideoDecoderConfig = {
       codec: this.codecString,
       hardwareAcceleration: 'prefer-hardware',
       description: this.decoderDescription,
     };
+    if (this.descriptor) {
+      config.avc = {
+        format: this.descriptor.container === 'h264-annexb' ? 'annexb' : 'avc',
+      };
+    }
+    return config;
   }
 
   private createFrameMeta(packet: ParsedH264Packet): RenderFrameMeta | null {

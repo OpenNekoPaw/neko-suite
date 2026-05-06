@@ -19,6 +19,13 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/<R3FDevelopmentFallback\b/);
   });
 
+  it('mounts Route A video viewport for engine scene snapshots without a direct model URL', () => {
+    const app = readSource('App.tsx');
+
+    expect(app).toMatch(/const hasEngineScene = sceneNodes\.length > 0 \|\| sceneRevision > 0;/);
+    expect(app).toMatch(/enginePort !== null && \(modelUrl \|\| hasEngineScene\)/);
+  });
+
   it('keeps VideoViewport as Engine frame canvas plus overlay and interaction layers', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
 

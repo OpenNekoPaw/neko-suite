@@ -563,6 +563,7 @@ export function App(): React.JSX.Element {
     [sendSceneCommand],
   );
 
+  const hasEngineScene = sceneNodes.length > 0 || sceneRevision > 0;
   const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
   const panelCommandDisabled = sceneControlStatus !== 'ready';
 
@@ -588,7 +589,7 @@ export function App(): React.JSX.Element {
                 draggable={false}
               />
             </div>
-          ) : modelUrl && enginePort !== null ? (
+          ) : enginePort !== null && (modelUrl || hasEngineScene) ? (
             <VideoViewport
               enginePort={enginePort}
               sceneId={sceneId}

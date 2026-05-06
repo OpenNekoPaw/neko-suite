@@ -477,6 +477,160 @@ WebSocket 实时推送 entitlement 变化（替代轮询）。
 
 服务端实现可选；client 优先订阅 WS，失败回退到 5 分钟轮询。
 
+### 3.4a Plugin Governance（native cdylib 专用）
+
+> 治理决策见 [marketplace-plugin-governance.md](./marketplace-plugin-governance.md)。本节只定义 client / engine 需要调用或消费的 HTTP 契约。
+
+#### Distribution publisher 投影
+
+Server 在最终 manifest 中投影 publisher verification 状态：
+
+```typescript
+interface AssetDistribution {
+  trustLevel?: 'core' | 'community' | 'untrusted';
+  publisher?: {
+    id: string;
+    displayName: string;
+    verified: boolean;
+    verificationTier?: 'core' | 'verified';
+    verifiedAt?: number;
+  };
+}
+```
+
+Plugin market 发布判定：
+
+```
+trustLevel === 'core'                         → 允许发布 plugin（T1 Core）
+trustLevel === 'community' && publisher.verified === true
+                                                → 允许发布 plugin（T2 Verified）
+trustLevel === 'community' && publisher.verified !== true
+                                                → 422 拒收 plugin；其它开放 type 不受影响
+trustLevel === 'untrusted'                    → 不允许进入 market；仅表示本地 sideload / dev-mode 状态
+```
+
+#### POST /api/v1/plugins/:id/build
+
+触发 Tier A/S commercial plugin 的 per-user build。免费 / 开源 plugin 可继续走普通 download 端点。
+
+**Body**：
+
+```typescript
+{
+  version: string;
+  targetTriple: string;    // x86_64-apple-darwin / aarch64-apple-darwin / ...
+  sessionId: string;
+}
+```
+
+**Response**：
+
+```typescript
+// cached or fast path
+{
+  url: string;
+  expiresAt: number;
+  integrity: string;
+  watermarkInfo: { purchaserId: string; sessionId: string };
+}
+
+// async path
+{
+  buildId: string;
+  status: 'queued';
+  estimatedDuration: number;
+}
+```
+
+#### GET /api/v1/plugins/:id/build-status
+
+**Query**：`buildId`
+
+**Response**：
+
+```typescript
+{
+  status: 'queued' | 'building' | 'done' | 'failed';
+  progress?: number;
+  eta?: number;
+  reason?: string;
+}
+```
+
+#### GET /api/v1/plugins/:id/build-result
+
+**Query**：`buildId`
+
+**Response**：
+
+```typescript
+{
+  url: string;
+  expiresAt: number;
+  integrity: string;
+}
+```
+
+仅 `build-status.status === 'done'` 后可用；否则返回 `409 Conflict`。
+
+#### POST /api/v1/publishers/verify
+
+提交 publisher KYC / verified 申请。客户端只打开 Publisher Portal 或调用该端点；审核、证件存储和风控在 server / portal 侧完成。
+
+**Body**：
+
+```typescript
+{
+  legalName: string;
+  country: string;
+  documentType: 'passport' | 'business-license' | 'tax-id';
+  documentRef: string;
+  contactEmail: string;
+  publicKeyPem: string;
+}
+```
+
+**Response**：
+
+```typescript
+{
+  applicationId: string;
+  status: 'submitted';
+  expectedReviewDays: number;
+}
+```
+
+#### GET /api/v1/publishers/:id/verification-status
+
+**Response**：
+
+```typescript
+{
+  status: 'pending' | 'approved' | 'rejected';
+  reason?: string;
+  badgeIssuedAt?: number;
+}
+```
+
+#### POST /api/v1/audit/permission-violation
+
+Engine 上报 host-api audit 中发现的 permission 声明违规。该端点只覆盖 engine 可观测的 host-api 调用，不代表 native direct syscall 已被拦截。
+
+**Body**：
+
+```typescript
+{
+  pluginId: string;
+  purchaserId?: string;
+  sessionId?: string;
+  permission: PluginPermission;
+  declared: false;
+  timestamp: number;
+}
+```
+
+**Response**：`204 No Content`
+
 ### 3.5 Curation & Ontology
 
 #### GET /api/v1/packages/:id/deprecation
@@ -576,6 +730,27 @@ Client 用此响应渲染 Browse Tab 的 facet UI。
    bundle.contents 的 totalSize 累加必等于 bundle.totalSize
 ```
 
+### v3.5 新增（Plugin Governance）
+
+```
+⑭ engine native plugin 必由 core 或 verified publisher 发布
+   trustLevel=community 但 publisher.verified!=true → type=plugin 422 拒收
+
+⑮ plugin manifest 必带 targetTriple，client / engine 只下载匹配平台产物
+   不匹配 → 404 或 422（取决于是查询不存在还是 manifest 非法）
+
+⑯ Tier A/S plugin 的下载 URL 必为 per-user build 产物，不许跨 user 共用
+   server build cache key 至少包含 userId / pluginId / version / targetTriple
+
+⑰ Native cdylib 上传和 server-side build 必经 verified publisher 流水
+   未 KYC 或公钥未登记 → 422 拒收
+
+⑱ Workspace trust 状态由 client / engine 本地持有，server 不接收、不存储、不推断
+
+⑲ Permission violation 上报必须落 server 审计记录；连续违规触发 publisher 风险处分
+   注意：该上报仅覆盖 engine host-api audit，不代表 native direct syscall 可被可靠拦截
+```
+
 ---
 
 ## 五、Manifest 权威性规则
@@ -599,7 +774,7 @@ Client 安装时直接使用，绝不修改 / 二次拼装
 | `id / name / version / type` | publisher 声明 + server 校验 | ✓ |
 | `source` | server 生成（含 integrity） | ✓ |
 | `distribution.signature` | server 签名 | ✓（client 验证） |
-| `distribution.author / publisherId` | server 验证（实名认证） | ✓ |
+| `distribution.author / publisherId / publisher` | server 验证（实名认证 / verified 状态投影） | ✓ |
 | `distribution.trustLevel` | server 评定 | ✓（client 拦闸） |
 | `effects` | publisher 声明 + server 审核 | ✓（client 反演卸载） |
 | `dependencies / contents` | publisher 声明 + server 校验（无环 / 存在） | ✓ |
@@ -844,7 +1019,8 @@ client 不缓存 451 响应
 ```
 + 抽出自 marketplace.md §十一
 + 完整描述 5 大端点组（Discovery / Sort & Search / Download / Entitlement / Curation）
-+ 13 条 Server 不变量
++ 补充 Plugin Governance 端点组（Build / Publisher KYC / Permission Audit）
++ 19 条 Server 不变量
 + Manifest 权威性规则 + 字段权威性矩阵
 + 签名机制分阶段（P0 presence / P1 hash / P2 crypto）
 + 长操作 / 限流 / 缓存策略

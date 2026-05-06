@@ -1994,7 +1994,7 @@ export interface ILicenseManager {
 ## 九、安装目标实现（v4：11 种 type，11 个 InstallTarget）
 
 > **plugin / shader 治理权威文档**：[marketplace-plugin-governance.md](./marketplace-plugin-governance.md)
-> 包含四档 trust tier / WASM 沙箱 / 防盗版 8 战术 / Workspace Trust / server-side compilation pipeline / Engine 内 license 闸门等完整治理。
+> 包含 native-only plugin trust tier、声明性 permission、host-api audit、防盗版 8 战术、Workspace Trust、server-side compilation pipeline、Engine 内 license 闸门和 sideload 治理等完整定义。
 > 本节仅给出 InstallTarget 概览，治理细节以独立文档为准。
 
 ### 9.1 InstallTarget 全集
@@ -2008,7 +2008,7 @@ export interface ILicenseManager {
 | `EndpointInstallTarget` | `endpoint` | `registration` | `~/.neko/endpoints/{provider}/{name}.json` | 写注册条目 + 弹凭证表单 | 注册到 LLM Router / Endpoint Registry |
 | `ProviderInstallTarget` | `provider` | `archive` | `~/.neko/providers/{providerId}/` | 解包 ProviderCard | 注册到 ProviderRouter |
 | `SkillInstallTarget` | `skill` | `archive` | `~/.neko/skills/{publisher}/{name}/` | 解包 SKILL.md + 资源 | 触发 SkillService 热加载 |
-| `PluginInstallTarget` | `plugin` | `archive` | `~/.neko/plugins/{publisher}/{name}/` | 解包代码包 | PluginHost 动态 require |
+| `PluginInstallTarget` | `plugin` | `archive` | `~/.neko/plugins/{publisher}/{name}/` | 解包 cdylib + manifest，校验 targetTriple | 交给 neko-engine PluginManager 执行完整性 / 签名 / license / trust / workspace 闸门后 dlopen |
 | `ShaderInstallTarget` | `shader` | `archive` | `~/.neko/shaders/{shaderKind}/{publisher}/{name}/` | 解包 WGSL/GLSL | 注册到 EffectDispatcher |
 | `PresetInstallTarget` | `preset` | `archive` | `~/.neko/presets/{presetKind}/{publisher}/{name}/` | 解包配置文件 | 通知对应消费扩展（LUT 面板 / 转场选择器 / Memory Router / ...） |
 | `BundleInstallTarget` | `bundle` | `orchestration` | `~/.neko/bundles/{publisher}/{name}/` (仅 manifest) | 解析 contents | 递归 install 子包，引用计数 +1 |
@@ -3488,9 +3488,9 @@ MK-40  "bundle 安装事件风暴刷 UI"
           · T3 Community 在 plugin 这一类不存在通道
 
         Permission 模型重写
-          · 从"WASM 沙箱强制 enforce"改为"声明性 + 审核 + audit"
+          · 从旧的强制沙箱表述改为"声明性 + 审核 + host-api audit"
           · Native plugin 没有运行时沙箱（事实声明）
-          · Permission 用于：用户告知 / KYC 审核 / engine audit log / publisher 信誉
+          · Permission 用于：用户告知 / KYC 审核 / engine host-api audit log / publisher 信誉
           · 超出声明范围靠 server 累积上报触发处分
 
         反模式新增 +2 (MK-P10 / MK-P15)
@@ -3498,7 +3498,7 @@ MK-40  "bundle 安装事件风暴刷 UI"
           · MK-P15 强行让 plugin 承载社区贡献
 
 ± §四.1 plugin 描述更新
-        从 "neko-engine 原生扩展（cdylib + WASM...）"
+        从旧的 native/WASM 混合表述
         改为 "neko-engine 原生 cdylib 扩展（KYC publisher 必需，无 WASM 通道）"
         加注 "社区贡献请用 skill / preset / shader / identity 等其它 type"
 
@@ -3510,12 +3510,9 @@ MK-40  "bundle 安装事件风暴刷 UI"
   · 40 条反模式（plugin-governance 反模式独立编号 MK-P1~P15）
 
 仍待修订（建议 Phase 6.5.6i 实施时同步落地）：
-  · manifest-schema-spec.md §五.8 PluginMetadata 重写
-    - 移除 host 字段（无 WASM 选项）
-    - 加 permissions 联合枚举（声明性，非沙箱）
-    - 加 networkHosts 字段
-    - 删除所有 WASM 相关字段
-  · registry-server-contract.md §三.7 加 Plugin Build / KYC API + 不变量 ㉒-㉗
+  · 代码实现侧落地 PluginMetadata / PluginPermission 校验
+  · 代码实现侧落地 Plugin Build / KYC API client binding
+  · 代码实现侧落地 Engine PluginManager license / trust / workspace 闸门
 ```
 
 ### v3.5 → v3.6 主要变化（2026-05-05）
@@ -3524,10 +3521,10 @@ MK-40  "bundle 安装事件风暴刷 UI"
 + 抽出独立文档 docs/architecture/marketplace-plugin-governance.md
         plugin / shader 治理权威定义
         覆盖：
-          · 范围澄清：plugin = neko-engine 原生扩展（cdylib + WASM），不是 VSCode 扩展
-          · 四档 Trust Tier (T1 Core / T2 Verified / T3 Community / T4 Sideload)
-          · Native vs WASM 二分（权限模型 + 性能权衡）
-          · PluginPermission 12 种枚举 + Engine runtime 强制
+          · 范围澄清：plugin = neko-engine 原生 cdylib 扩展，不是 VSCode 扩展
+          · 三档 Trust Tier (T1 Core / T2 Verified / T4 Sideload；T3 Community 无 plugin 通道)
+          · 决策：不支持 WASM runtime
+          · PluginPermission 声明模型 + host-api audit（非沙箱）
           · 用户安装流程（按 tier 不同对话框）
           · Workspace Trust（trusted / restricted / limited）
           · 不加密防盗用 8 战术（编译 / watermark / heartbeat / hardware binding /
@@ -3544,7 +3541,7 @@ MK-40  "bundle 安装事件风暴刷 UI"
 
 修订主文档：
 ± §四.1 AssetType 终态清单
-        plugin 描述从 "VSCode 扩展代码包" 改为 "neko-engine 原生扩展（cdylib + WASM）"
+        plugin 描述从 "VSCode 扩展代码包" 改为 "neko-engine 原生 cdylib 扩展"
 
 ± §九 顶部加 link out 提示
         plugin / shader 治理细节以 plugin-governance.md 为准
@@ -3558,12 +3555,11 @@ MK-40  "bundle 安装事件风暴刷 UI"
   · Server 契约 13 条不变量
   · 40 条反模式清单（plugin-governance 加 13 条独立编号 MK-P1~P13）
 
-仍待修订（不在本轮范围）：
+本轮已同步：
   · manifest-schema-spec.md §三 + §五.8 plugin 描述纠正
   · manifest-schema-spec.md 加 PluginPermission 联合枚举
-  · registry-server-contract.md §三.7 加 Plugin Build API + Publisher KYC API
-  · registry-server-contract.md 加不变量 ㉒-㉗
-  · 这些变更建议在 Phase 6.5.6i 实施时与代码同步落地
+  · registry-server-contract.md 加 Plugin Governance 端点组（Build / Publisher KYC / Permission Audit）
+  · registry-server-contract.md 加 Plugin Governance server 不变量
 ```
 
 ### v3.4 → v3.5 主要变化（2026-05-05）

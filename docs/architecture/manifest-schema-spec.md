@@ -108,7 +108,7 @@ export type AssetType =
 
   // === Tooling（4 种）===
   | 'skill'         // Agent Skill（prompt-chain）
-  | 'plugin'        // VSCode 扩展代码包
+  | 'plugin'        // neko-engine 原生 cdylib 扩展（KYC publisher 必需，无 WASM 通道）
   | 'shader'        // GPU 着色器：metadata.shaderKind 区分（standalone/preset）
   | 'preset'        // 配置预设：metadata.presetKind 区分（lut/transition/effect/...）
 
@@ -338,11 +338,36 @@ export interface SkillMetadata {
 
 ```typescript
 export interface PluginMetadata {
+  /** cdylib exported symbol, e.g. plugin_init */
   entryPoint: string;
+  /** neko-engine host-api version */
   apiVersion: string;
-  permissions: string[];
+  /** Declared permissions only; native plugin permissions are audit/review metadata, not a sandbox. */
+  permissions: PluginPermission[];
+  /** Required when permissions includes network:host-list. */
+  networkHosts?: string[];
+  engineRequirements: {
+    minVersion: string;
+    targetTriple: string;
+    runtimeArtifacts: ['cdylib'];
+  };
   configSchema?: Record<string, unknown>;
 }
+
+export type PluginPermission =
+  | 'fs-read:project'
+  | 'fs-read:asset-library'
+  | 'fs-read:plugin-data'
+  | 'fs-write:project'
+  | 'fs-write:plugin-data'
+  | 'network:host-list'
+  | 'network:any'
+  | 'gpu:render'
+  | 'gpu:compute'
+  | 'engine:event-bus'
+  | 'engine:asset-federation'
+  | 'process-spawn'
+  | 'system-info';
 ```
 
 ### 5.9 ShaderMetadata
@@ -432,7 +457,15 @@ export interface AssetDistribution {
   visibility?: 'public' | 'private' | 'shared' | 'paid';
   publisherId?: string;
   publisherName?: string;
+  /** Deprecated compatibility field; new manifests use publisher.verified. */
   verified?: boolean;
+  publisher?: {
+    id: string;
+    displayName: string;
+    verified: boolean;
+    verificationTier?: 'core' | 'verified';
+    verifiedAt?: number;
+  };
   pricing?: AssetPricing;
   rating?: { average: number; count: number };
   screenshots?: string[];
