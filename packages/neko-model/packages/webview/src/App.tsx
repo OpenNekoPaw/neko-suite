@@ -563,7 +563,11 @@ export function App(): React.JSX.Element {
     [sendSceneCommand],
   );
 
-  const hasEngineScene = sceneNodes.length > 0 || sceneRevision > 0;
+  // Only treat the engine scene as render-ready when it actually has nodes.
+  // A revision-only snapshot (revision>0, nodes=[]) is published for empty .nkm
+  // documents and would otherwise spin up an H264 stream against an empty
+  // RenderWorld, which trips wgpu validation in the PBR RenderGraph.
+  const hasEngineScene = sceneNodes.length > 0;
   const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
   const panelCommandDisabled = sceneControlStatus !== 'ready';
 
@@ -612,7 +616,10 @@ export function App(): React.JSX.Element {
               isPlaying={playbackState === 'playing'}
             />
           ) : (
-            <ModelEmptyState />
+            // sceneRevision > 0 means engine has acknowledged the document but
+            // the scene has no nodes yet — surface a precise hint instead of
+            // falling back to the generic drop hint.
+            <ModelEmptyState reason={sceneRevision > 0 ? 'emptyScene' : 'noDocument'} />
           )}
 
           {/* Animation Player (bottom overlay) */}
@@ -701,7 +708,7 @@ export function App(): React.JSX.Element {
 }
 
 /** Empty state UI — import, template, or drag-drop */
-function ModelEmptyState() {
+function ModelEmptyState({ reason = 'noDocument' }: { reason?: 'noDocument' | 'emptyScene' }) {
   const { t } = useTranslation();
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -753,7 +760,7 @@ function ModelEmptyState() {
       }`}
     >
       <div className="max-w-sm text-center text-[var(--model-fg-secondary)]">
-        {t('empty.dropHint')}
+        {t(reason === 'emptyScene' ? 'empty.emptyScene' : 'empty.dropHint')}
       </div>
 
       <div className="flex gap-3">

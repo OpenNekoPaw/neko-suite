@@ -22,7 +22,11 @@ describe('Route A webview boundaries', () => {
   it('mounts Route A video viewport for engine scene snapshots without a direct model URL', () => {
     const app = readSource('App.tsx');
 
-    expect(app).toMatch(/const hasEngineScene = sceneNodes\.length > 0 \|\| sceneRevision > 0;/);
+    // hasEngineScene must hinge on real scene content, not on revision alone.
+    // An empty .nkm publishes revision>0 with nodes=[]; gating on nodes prevents
+    // a stream against an empty RenderWorld from crashing the PBR pipeline.
+    expect(app).toMatch(/const hasEngineScene = sceneNodes\.length > 0;/);
+    expect(app).not.toMatch(/hasEngineScene = .*sceneRevision\b/);
     expect(app).toMatch(/enginePort !== null && \(modelUrl \|\| hasEngineScene\)/);
   });
 

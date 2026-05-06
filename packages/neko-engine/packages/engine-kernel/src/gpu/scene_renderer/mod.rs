@@ -132,8 +132,8 @@ pub struct CameraParams {
 impl Default for CameraParams {
     fn default() -> Self {
         Self {
-            position: glam::Vec3::new(0.0, 1.5, 3.0),
-            target: glam::Vec3::ZERO,
+            position: glam::Vec3::new(0.0, 1.0, 3.0),
+            target: glam::Vec3::new(0.0, 0.9, 0.0),
             up: glam::Vec3::Y,
             fov_y: 45.0_f32.to_radians(),
             near: 0.1,

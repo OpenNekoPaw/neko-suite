@@ -3,8 +3,8 @@
 //! Parses glTF files and spawns ECS entities with appropriate components.
 
 use crate::asset_database::{
-    AssetDatabase, AssetDescriptor, AssetHandle, AssetKind, AssetMetadata, ImageDescriptor,
-    MaterialDescriptor, MeshDescriptor, TextureColorSpace, TextureDescriptor,
+    composite_primitive_id, AssetDatabase, AssetDescriptor, AssetHandle, AssetKind, AssetMetadata,
+    ImageDescriptor, MaterialDescriptor, MeshDescriptor, TextureColorSpace, TextureDescriptor,
     TextureSamplerDescriptor,
 };
 use crate::components::*;
@@ -149,12 +149,16 @@ fn build_asset_database(
     }
 
     for mesh in document.meshes() {
+        let mesh_index = mesh.index();
         for primitive in mesh.primitives() {
-            let handle = AssetHandle::for_mesh(uri, primitive.index());
+            // gltf::Primitive::index() is local to the parent mesh; compose
+            // with mesh_index so two meshes don't both register at slot 0.
+            let composite_id = composite_primitive_id(mesh_index, primitive.index());
+            let handle = AssetHandle::for_mesh(uri, composite_id);
             database.insert_descriptor(AssetDescriptor::Mesh(MeshDescriptor {
                 handle: handle.clone(),
                 uri: uri.to_string(),
-                primitive_index: primitive.index(),
+                primitive_index: composite_id,
                 topology_version: 1,
             }));
 
@@ -386,13 +390,24 @@ fn spawn_node(
 
     node_map.insert(node.index(), entity);
 
-    // Add mesh reference
+    // Add mesh reference.
+    //
+    // gltf::Primitive::index() returns an index local to its parent Mesh
+    // (e.g. 0 for the first primitive of every mesh), NOT a document-wide
+    // identifier. Composing with mesh_index produces a globally unique key,
+    // which is what the GPU asset cache stores and lookups against.
+    //
+    // Without composition, every node's MeshRef collapses to slot 0 and 12
+    // humanoid bones all reference whichever mesh happened to land last in
+    // the cache (visible as a single floating capsule in the viewport).
     if let Some(mesh) = node.mesh() {
-        for (i, primitive) in mesh.primitives().enumerate() {
+        let mesh_index = mesh.index();
+        for primitive in mesh.primitives() {
+            let composite_id = composite_primitive_id(mesh_index, primitive.index());
             world.entity_mut(entity).insert(MeshRef {
-                asset: AssetHandle::for_mesh(uri, i),
+                asset: AssetHandle::for_mesh(uri, composite_id),
                 uri: uri.to_string(),
-                primitive_index: i,
+                primitive_index: composite_id,
             });
 
             if let Some(material) = primitive.material().index() {

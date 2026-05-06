@@ -69,17 +69,36 @@ impl GpuContext {
             adapter_info.backend
         );
 
-        // Request device with default limits
+        // Request device with limits scaled to what the adapter actually
+        // supports, then ensure max_bind_groups is at least 5 so the skinned
+        // PBR pipeline (camera / model / material / light / joint) can bind
+        // its joint-matrices group. wgpu's downlevel default caps this at 4,
+        // which is below every native backend's true capability (Metal: 8,
+        // Vulkan: typically 8-32, DX12: 8). Without lifting it,
+        // create_pipeline_layout fails at startup with TooManyGroups and the
+        // skinned pipeline is left invalid for the rest of the session.
+        let adapter_limits = adapter.limits();
+        let mut limits = wgpu::Limits::default().using_resolution(adapter_limits.clone());
+        limits.max_bind_groups = limits.max_bind_groups.max(5);
+        tracing::info!(
+            "GPU limits: adapter max_bind_groups={}, requesting={}",
+            adapter_limits.max_bind_groups,
+            limits.max_bind_groups
+        );
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("MediaProcessor Device"),
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
+                    required_limits: limits,
                 },
                 None,
             )
             .await?;
+        tracing::info!(
+            "GPU device created with max_bind_groups={}",
+            device.limits().max_bind_groups
+        );
 
         // Set up error handler
         device.on_uncaptured_error(Box::new(|error| {

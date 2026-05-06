@@ -24,6 +24,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
   private engineClient: EngineClient | undefined;
+  private activeStreamId: string | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -63,6 +64,13 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     webviewPanel.onDidDispose(() => {
       if (this.activeWebviewPanel === webviewPanel) {
         this.activeWebviewPanel = undefined;
+      }
+      const streamId = this.activeStreamId;
+      if (streamId && this.engineClient) {
+        this.activeStreamId = undefined;
+        this.engineClient
+          .controlStream('streams', streamId, 'destroy')
+          .catch((err) => this.logError('dispose:destroyStream', err));
       }
     });
 
@@ -143,6 +151,18 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             type: 'enginePort',
             port: client.port,
           });
+        }
+        break;
+      }
+
+      case 'streamStarted': {
+        this.activeStreamId = message.streamId as string;
+        break;
+      }
+
+      case 'streamDestroyed': {
+        if (this.activeStreamId === (message.streamId as string)) {
+          this.activeStreamId = undefined;
         }
         break;
       }

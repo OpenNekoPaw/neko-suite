@@ -330,6 +330,7 @@ impl SceneWorld for BevySceneWorld {
     fn load_model(&mut self, path: &Path) -> Result<LoadResult, LoadError> {
         let result = loader::load_gltf(&mut self.world, path)?;
         rebuild_node_index(&mut self.world);
+        systems::transform_propagation(&mut self.world);
         advance_scene_revision(&mut self.world);
         Ok(result)
     }

@@ -12,11 +12,38 @@ pub struct AssetHandle {
     pub guid: String,
 }
 
+/// Maximum primitives per gltf mesh that the composite-id scheme can encode
+/// without aliasing. glTF spec puts no formal cap; in practice we have never
+/// seen more than a handful of primitives per mesh, so 256 is comfortably safe.
+pub const MAX_PRIMITIVES_PER_MESH: usize = 256;
+
+/// Build a globally-unique primitive identifier from a glTF document.
+///
+/// `gltf::Primitive::index()` returns the primitive's index *within its parent
+/// Mesh* (e.g. 0..N for that mesh), NOT a document-wide index. Two distinct
+/// meshes therefore both report `primitive_index == 0` for their first
+/// primitive, and any cache keyed on `(uri, primitive_index)` collapses every
+/// mesh in the file into a single slot. Composing the mesh index into the
+/// upper byte gives a true document-wide identifier while keeping the existing
+/// `primitive_index: usize` field shape across the codebase.
+#[inline]
+pub fn composite_primitive_id(mesh_index: usize, primitive_in_mesh: usize) -> usize {
+    debug_assert!(
+        primitive_in_mesh < MAX_PRIMITIVES_PER_MESH,
+        "primitive index {} exceeds MAX_PRIMITIVES_PER_MESH",
+        primitive_in_mesh,
+    );
+    mesh_index * MAX_PRIMITIVES_PER_MESH + primitive_in_mesh
+}
+
 impl AssetHandle {
     pub fn new(guid: impl Into<String>) -> Self {
         Self { guid: guid.into() }
     }
 
+    /// `primitive_index` here MUST be a globally-unique id (see
+    /// `composite_primitive_id`). Passing the raw `gltf::Primitive::index()`
+    /// silently aliases meshes that share local index 0.
     pub fn for_mesh(uri: &str, primitive_index: usize) -> Self {
         Self::new(format!("mesh:{}#primitive:{}", uri, primitive_index))
     }

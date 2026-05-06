@@ -14,7 +14,7 @@
     "@neko-engine/host-napi#build:native": {
       "dependsOn": [],
       "outputs": ["neko-engine.*.node"],
-      "cache": true
+      "cache": false
     },
     "@neko-engine/host-cli#build:native": {
       "dependsOn": [],

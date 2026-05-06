@@ -125,8 +125,32 @@ struct LightGpu {
 struct LightUniformsGpu {
     lights: [LightGpu; MAX_LIGHTS],
     count: u32,
-    _padding: [u32; 3],
+    // WGSL uniform layout aligns vec3<u32> on a 16-byte boundary, so the
+    // shader-side `_padding: vec3<u32>` does NOT pack tightly after `count`.
+    // It lives at offset 1040 (count + 12 bytes), occupies 12 bytes, and the
+    // struct rounds up to a 16-byte multiple — total 1056 bytes.
+    //
+    // The Rust struct must mirror that exact size or wgpu reports
+    // LateMinBufferBindingSizeMismatch (shader_size 1056, bound_size 1040)
+    // and the encoder is invalidated mid-pass. We use 7 u32s of trailing
+    // padding (28 bytes after `count`) so 16*64 + 4 + 28 = 1056.
+    _padding: [u32; 7],
 }
+
+// Compile-time guards: keep the Rust uniform layouts in lockstep with the
+// WGSL struct sizes the shaders bind to. WGSL uniform layout aligns vec3 on
+// 16-byte boundaries and rounds the outer struct to a 16-byte multiple, so
+// these numbers are NOT just `sizeof(field) summed`.
+const _: () = {
+    // Camera: mat4 (64) + mat4 (64) + vec3 padded to vec4 (16) = 144
+    assert!(std::mem::size_of::<CameraUniformsGpu>() == 144);
+    // Model: mat4 (64) + 3 vec4 (48) = 112
+    assert!(std::mem::size_of::<ModelUniformsGpu>() == 112);
+    // Light: vec3+u32 + vec3+f32 + vec3+f32 + 3*f32 + vec2 = 4*16 = 64
+    assert!(std::mem::size_of::<LightGpu>() == 64);
+    // LightUniforms: 16 lights (1024) + count (4) + vec3 alignment+padding (28) = 1056
+    assert!(std::mem::size_of::<LightUniformsGpu>() == 1056);
+};
 
 impl PbrRenderer {
     /// Create a new PBR renderer.
@@ -606,46 +630,54 @@ impl PbrRenderer {
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Camera uniforms
-        let aspect = width as f32 / height as f32;
-        let camera_uniforms = CameraUniformsGpu {
-            view: camera_params.view_matrix().to_cols_array_2d(),
-            projection: camera_params.projection_matrix(aspect).to_cols_array_2d(),
-            camera_position: camera_params.position.to_array(),
-            _padding: 0.0,
-        };
-        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("pbr_camera_buffer"),
-            contents: bytemuck::bytes_of(&camera_uniforms),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("pbr_camera_bg"),
-            layout: &self.camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        });
-
-        // Collect lights from the revision-stable Render World.
-        let light_uniforms = self.collect_lights(render_world);
-        let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("pbr_light_buffer"),
-            contents: bytemuck::bytes_of(&light_uniforms),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let light_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("pbr_light_bg"),
-            layout: &self.light_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: light_buffer.as_entire_binding(),
-            }],
-        });
-
-        // Pre-collect draw data (buffers + bind groups must outlive render pass)
+        // Pre-collect draw data (buffers + bind groups must outlive render pass).
+        // We do this before allocating camera/light buffers so the empty case
+        // can skip those uploads entirely.
         let draw_calls = self.collect_draw_calls(render_world, asset_cache, device);
+
+        // Camera + light uniforms only matter when at least one draw call will
+        // actually consume them. The clear-only fast path below skips this work.
+        let aspect = width as f32 / height as f32;
+        let bindings = if draw_calls.is_empty() {
+            None
+        } else {
+            let camera_uniforms = CameraUniformsGpu {
+                view: camera_params.view_matrix().to_cols_array_2d(),
+                projection: camera_params.projection_matrix(aspect).to_cols_array_2d(),
+                camera_position: camera_params.position.to_array(),
+                _padding: 0.0,
+            };
+            let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("pbr_camera_buffer"),
+                contents: bytemuck::bytes_of(&camera_uniforms),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("pbr_camera_bg"),
+                layout: &self.camera_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }],
+            });
+
+            let light_uniforms = self.collect_lights(render_world);
+            let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("pbr_light_buffer"),
+                contents: bytemuck::bytes_of(&light_uniforms),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            let light_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("pbr_light_bg"),
+                layout: &self.light_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: light_buffer.as_entire_binding(),
+                }],
+            });
+            // Buffers must outlive the render pass; bind groups borrow them.
+            Some((camera_buffer, camera_bind_group, light_buffer, light_bind_group))
+        };
 
         // Begin render pass
         let bg = background_color.unwrap_or([0.0, 0.0, 0.0, 0.0]);
@@ -677,38 +709,50 @@ impl PbrRenderer {
                 occlusion_query_set: None,
             });
 
-            render_pass.set_bind_group(0, &camera_bind_group, &[]);
-            render_pass.set_bind_group(3, &light_bind_group, &[]);
+            // Clear-only fast path. When there is nothing to draw (empty scene,
+            // or a scene whose meshes have not finished uploading to the asset
+            // cache yet), do NOT bind a pipeline or any bind groups: wgpu
+            // performs pipeline-vs-bind-group layout validation lazily, and on
+            // the Metal backend any partially-bound state without a draw call
+            // marks the encoder as invalid, cascading into copy_texture_to_texture
+            // and finish() failures. Letting the LoadOp::Clear settle on its own
+            // is sufficient and produces a valid (background-colored) frame.
+            if let Some((_camera_buffer, camera_bind_group, _light_buffer, light_bind_group)) =
+                &bindings
+            {
+                render_pass.set_bind_group(0, camera_bind_group, &[]);
+                render_pass.set_bind_group(3, light_bind_group, &[]);
 
-            // Issue draw calls, switching pipeline for skinned vs non-skinned meshes
-            let mut current_skinned = false;
-            render_pass.set_pipeline(&self.render_pipeline);
+                // Issue draw calls, switching pipeline for skinned vs non-skinned meshes
+                let mut current_skinned = false;
+                render_pass.set_pipeline(&self.render_pipeline);
 
-            for call in &draw_calls {
-                if call.is_skinned != current_skinned {
+                for call in &draw_calls {
+                    if call.is_skinned != current_skinned {
+                        if call.is_skinned {
+                            render_pass.set_pipeline(&self.skinned_render_pipeline);
+                        } else {
+                            render_pass.set_pipeline(&self.render_pipeline);
+                        }
+                        current_skinned = call.is_skinned;
+                        // Re-bind shared groups after pipeline switch
+                        render_pass.set_bind_group(0, camera_bind_group, &[]);
+                        render_pass.set_bind_group(3, light_bind_group, &[]);
+                    }
+
+                    render_pass.set_bind_group(1, &call.model_bind_group, &[]);
+                    render_pass.set_bind_group(2, call.material_bind_group, &[]);
+
                     if call.is_skinned {
-                        render_pass.set_pipeline(&self.skinned_render_pipeline);
-                    } else {
-                        render_pass.set_pipeline(&self.render_pipeline);
+                        if let Some(ref jbg) = call.joint_bind_group {
+                            render_pass.set_bind_group(4, jbg, &[]);
+                        }
                     }
-                    current_skinned = call.is_skinned;
-                    // Re-bind shared groups after pipeline switch
-                    render_pass.set_bind_group(0, &camera_bind_group, &[]);
-                    render_pass.set_bind_group(3, &light_bind_group, &[]);
+
+                    render_pass.set_vertex_buffer(0, call.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(call.index_buffer.slice(..), call.index_format);
+                    render_pass.draw_indexed(0..call.index_count, 0, 0..1);
                 }
-
-                render_pass.set_bind_group(1, &call.model_bind_group, &[]);
-                render_pass.set_bind_group(2, call.material_bind_group, &[]);
-
-                if call.is_skinned {
-                    if let Some(ref jbg) = call.joint_bind_group {
-                        render_pass.set_bind_group(4, jbg, &[]);
-                    }
-                }
-
-                render_pass.set_vertex_buffer(0, call.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(call.index_buffer.slice(..), call.index_format);
-                render_pass.draw_indexed(0..call.index_count, 0, 0..1);
             }
         }
 
@@ -727,7 +771,7 @@ impl PbrRenderer {
         let mut uniforms = LightUniformsGpu {
             lights: [LightGpu::zeroed(); MAX_LIGHTS],
             count: 0,
-            _padding: [0; 3],
+            _padding: [0; 7],
         };
 
         let mut idx = 0usize;

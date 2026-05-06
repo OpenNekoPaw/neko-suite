@@ -20,6 +20,7 @@ export const en = {
   // Empty state
   'empty.hint': 'Open a .gltf, .glb, or .vrm file to view',
   'empty.dropHint': 'Drop .gltf, .glb, or .vrm file here, or choose an option below',
+  'empty.emptyScene': 'This scene is empty. Add a template or import a model to start.',
   'empty.import': 'Import File',
   'empty.templateBlank': 'Blank Scene',
   'empty.templateHumanoid': 'Simple Humanoid',

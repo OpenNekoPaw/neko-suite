@@ -11,6 +11,7 @@
 
 use super::vertex::{PbrVertex, SkinnedPbrVertex};
 use crate::gpu::GpuContext;
+use neko_runtime_scene::asset_database::composite_primitive_id;
 use neko_runtime_scene::MeshDirtyRegion;
 use std::collections::HashMap;
 use std::path::Path;
@@ -107,7 +108,7 @@ impl AssetCache {
         // Load meshes
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
-                let key = (uri.clone(), primitive.index());
+                let key = (uri.clone(), composite_primitive_id(mesh.index(), primitive.index()));
                 if self.meshes.contains_key(&key) {
                     continue;
                 }

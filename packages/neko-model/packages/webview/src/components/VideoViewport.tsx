@@ -4,6 +4,7 @@ import { EngineClient, H264StreamClient, type SceneControlSocket } from '@neko/n
 import type { LocalPredictionSnapshot } from '../scene/LocalPredictionLayer';
 import { InteractionLayer } from './InteractionLayer';
 import { OverlayCanvas } from './OverlayCanvas';
+import { postMessage } from '@neko/shared/vscode';
 import { useModelStore } from '../stores/modelStore';
 
 export interface VideoViewportProps {
@@ -60,6 +61,11 @@ export function VideoViewport({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamClientRef = useRef<H264StreamClient | null>(null);
   const streamIdRef = useRef<string | null>(null);
+  // Serialise stream lifecycle across rerenders. Without this, a rapid
+  // sceneId change would dispose stream A and start stream B in parallel,
+  // letting two RenderGraph submissions race for the same wgpu device queue
+  // (observed as duplicate `pbr_render_graph_encoder` validation errors).
+  const pendingDestroyRef = useRef<Promise<void>>(Promise.resolve());
   const [frameMeta, setFrameMeta] = useState<RenderFrameMeta | null>(null);
   const [hasEngineFrame, setHasEngineFrame] = useState(false);
   const [routeAUnavailable, setRouteAUnavailable] = useState(false);
@@ -81,6 +87,18 @@ export function VideoViewport({
         return;
       }
 
+      // Wait for the previous lifecycle's destroy to drain on the engine side
+      // before opening a new stream. Cheap when there is no prior stream
+      // (resolved promise) and avoids overlapping RenderGraph submissions.
+      try {
+        await pendingDestroyRef.current;
+      } catch {
+        // Previous destroy errors are not fatal for the new start.
+      }
+      if (disposed) {
+        return;
+      }
+
       try {
         const stream = await engineClient.startSceneRenderStream(createViewportDescriptor(sceneId));
         if (disposed) {
@@ -89,12 +107,17 @@ export function VideoViewport({
         }
 
         streamIdRef.current = stream.descriptor.streamId;
+        postMessage({ type: 'streamStarted', streamId: stream.descriptor.streamId });
         const h264 = new H264StreamClient({
           websocketUrl: stream.wsUrl,
           descriptor: stream.descriptor,
           width: stream.descriptor.width,
           height: stream.descriptor.height,
           onFrameMeta: (meta) => {
+            // After dispose, callbacks from in-flight WS messages may still
+            // fire; ignore them so we don't pollute the store with frames
+            // belonging to a torn-down stream.
+            if (disposed) return;
             setFrameMeta(meta);
             useModelStore.getState().recordRenderFrameMeta(meta);
             if (meta.appliedSeq > 0) {
@@ -103,6 +126,10 @@ export function VideoViewport({
             }
           },
           onFrame: (frame) => {
+            if (disposed) {
+              frame.close();
+              return;
+            }
             const canvas = canvasRef.current;
             if (!canvas) {
               frame.close();
@@ -124,6 +151,7 @@ export function VideoViewport({
             frame.close();
           },
           onError: () => {
+            if (disposed) return;
             setRouteAUnavailable(true);
             setRouteAUnavailableReason('Engine stream disconnected');
           },
@@ -147,7 +175,11 @@ export function VideoViewport({
       const streamId = streamIdRef.current;
       streamIdRef.current = null;
       if (streamId) {
-        void engineClient.controlStream('streams', streamId, 'destroy');
+        postMessage({ type: 'streamDestroyed', streamId });
+        pendingDestroyRef.current = engineClient.controlStream('streams', streamId, 'destroy').then(
+          () => undefined,
+          () => undefined,
+        );
       }
     };
   }, [enginePort, retryToken, sceneId]);
