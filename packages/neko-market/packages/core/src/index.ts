@@ -18,6 +18,11 @@ export type { MarketClientConfig } from './client/market-client';
 // Install
 export { InstallManager } from './install/install-manager';
 export type { InstallManagerConfig } from './install/install-manager';
+export { LocalInstallService } from './install/local-install-service';
+export type {
+  LocalInstallRequest,
+  LocalInstallServiceOptions,
+} from './install/local-install-service';
 export { InstallTargetRegistry } from './install/install-target';
 export { SkillInstallTarget, injectMarketFrontmatter } from './install/skill-install-target';
 export type {
@@ -44,3 +49,10 @@ export { LicenseManager } from './license/license-manager';
 
 // Registry
 export { InstalledRegistry } from './registry/installed-registry';
+export { WorkspaceTrustStore } from './trust/workspace-trust-store';
+export type {
+  WorkspaceTrustHint,
+  WorkspaceTrustMigrationImportRequest,
+  WorkspaceTrustMigrationCandidate,
+  WorkspaceTrustRecord,
+} from './trust/workspace-trust-store';

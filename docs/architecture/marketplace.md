@@ -1994,7 +1994,7 @@ export interface ILicenseManager {
 ## 九、安装目标实现（v4：11 种 type，11 个 InstallTarget）
 
 > **plugin / shader 治理权威文档**：[marketplace-plugin-governance.md](./marketplace-plugin-governance.md)
-> 包含 native-only plugin trust tier、声明性 permission、host-api audit、防盗版 8 战术、Workspace Trust、server-side compilation pipeline、Engine 内 license 闸门和 sideload 治理等完整定义。
+> 包含 native-only plugin trust tier、声明性 permission、host-api audit、防盗版 8 战术、Workspace Trust 本机权威 store、server-side compilation pipeline、Engine 内 license 闸门和 sideload 治理等完整定义。
 > 本节仅给出 InstallTarget 概览，治理细节以独立文档为准。
 
 ### 9.1 InstallTarget 全集
@@ -2407,6 +2407,9 @@ trustLevel: 'community'   任何分类；endpoint 需 publisher 实名
 trustLevel: 'untrusted'   仅 media 分类（纯数据，含 starter / identity 中的纯素材部分）
                           禁止 tooling / ai (endpoint 除外，凭证由用户手填) / bundle
                           每次激活提示用户确认
+                          sideload 特例由 plugin-governance §十九按 type 控制：
+                          copy-managed 本地资产位于 ${NEKO_HOME}/local，
+                          native plugin 仍必须 dev-mode + trusted workspace
 ```
 
 理由：tooling 会执行代码、ai 会消耗 GPU/付费 API、bundle 会拉级联，三者都不能给 untrusted 通道。
@@ -3008,9 +3011,10 @@ core         官方维护、已审核、已签名 → 任意分类，无限制
 community    社区发布、签名验证通过   → 任意分类
                                        endpoint 需 publisher 实名
                                        provider 不可贡献全局默认
-untrusted    本地手动放置 / 未签名     → 仅限 media 分类
+untrusted    本地手动放置 / 未签名     → registry 安装仅限 media 分类
                                        禁止 tooling / ai / bundle
                                        每次激活提示用户确认
+                                       sideload 走 ${NEKO_HOME}/local 隔离与 type-specific 校验
 ```
 
 ### 14.2 签名验证现状

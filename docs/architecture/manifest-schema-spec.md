@@ -158,8 +158,11 @@ export const CATEGORY_MAP: Record<AssetType, AssetCategory> = {
 
 ```typescript
 export type AssetManifestSource =
-  /** 本地文件（开发期） */
-  | { kind: 'local'; path: string }
+  /** 本地 copy-managed 文件；path 必须使用 ${NEKO_HOME}/local/... 等 PathResolver 变量形式 */
+  | { kind: 'local'; path: string; storageMode?: 'copy-managed' }
+
+  /** 显式外部本地引用；path 必须使用 ${WORKSPACE}/... 或 ${VAR}/...，卸载只删除记录 */
+  | { kind: 'local-link'; path: string; storageMode: 'local-link' }
 
   /** Git LFS 引用 */
   | { kind: 'git-lfs'; oid: string; path: string }
@@ -179,7 +182,9 @@ export type AssetManifestSource =
 ```
 ✓ 'registry' 必带 integrity（SRI hash，server 不变量 ②）
 ✓ 'remote' 推荐带 checksum（client 校验完整性）
-✓ 'local' / 'ai-generated' 不上传 server，仅本地 manifest
+✓ 'local' / 'local-link' / 'ai-generated' 不上传 server，仅本地 manifest
+✓ 'local' 默认表示 copy-managed sideload，路径指向 ${NEKO_HOME}/local/...，不保存用户原始绝对路径
+✓ 'local-link' 必须显式选择，路径走 PathResolver 变量形式；卸载不得删除外部目标文件
 ```
 
 ---
@@ -370,6 +375,8 @@ export type PluginPermission =
   | 'system-info';
 ```
 
+`PluginMetadata` 仅表示 neko-engine 原生 `cdylib` 扩展；不得用于 VSCode 扩展或 WASM 模块。Native plugin permissions are declarative governance metadata for disclosure, review, and host-api audit; they are not a runtime sandbox.
+
 ### 5.9 ShaderMetadata
 
 ```typescript
@@ -457,7 +464,7 @@ export interface AssetDistribution {
   visibility?: 'public' | 'private' | 'shared' | 'paid';
   publisherId?: string;
   publisherName?: string;
-  /** Deprecated compatibility field; new manifests use publisher.verified. */
+  /** Deprecated compatibility field; new manifests and plugin governance use publisher.verified. */
   verified?: boolean;
   publisher?: {
     id: string;

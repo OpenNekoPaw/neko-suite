@@ -87,6 +87,44 @@ describe('MarketMessages', () => {
     expect(postMessage).toHaveBeenCalledWith({ type: 'market:getServerInfo' });
   });
 
+  it('posts governance and local install management messages', async () => {
+    const { MarketMessages, postMessage } = await loadMessages();
+
+    MarketMessages.getGovernanceState();
+    MarketMessages.setDeveloperMode({ enabled: true, riskAccepted: true, durationMs: 1000 });
+    MarketMessages.promoteWorkspaceTrust();
+    MarketMessages.requestLocalInstall('local-link');
+    MarketMessages.confirmLocalInstall({ draftId: 'draft-1', storageMode: 'copy-managed' });
+    MarketMessages.cancelLocalInstall('draft-1');
+    MarketMessages.revealLocal('@local/plugin');
+
+    expect(postMessage).toHaveBeenNthCalledWith(1, { type: 'market:getGovernanceState' });
+    expect(postMessage).toHaveBeenNthCalledWith(2, {
+      type: 'market:setDeveloperMode',
+      enabled: true,
+      riskAccepted: true,
+      durationMs: 1000,
+    });
+    expect(postMessage).toHaveBeenNthCalledWith(3, { type: 'market:promoteWorkspaceTrust' });
+    expect(postMessage).toHaveBeenNthCalledWith(4, {
+      type: 'market:requestLocalInstall',
+      storageMode: 'local-link',
+    });
+    expect(postMessage).toHaveBeenNthCalledWith(5, {
+      type: 'market:confirmLocalInstall',
+      draftId: 'draft-1',
+      storageMode: 'copy-managed',
+    });
+    expect(postMessage).toHaveBeenNthCalledWith(6, {
+      type: 'market:cancelLocalInstall',
+      draftId: 'draft-1',
+    });
+    expect(postMessage).toHaveBeenNthCalledWith(7, {
+      type: 'market:revealLocal',
+      packageId: '@local/plugin',
+    });
+  });
+
   it('posts cancel install messages for active downloads', async () => {
     const { MarketMessages, postMessage } = await loadMessages();
 

@@ -523,6 +523,8 @@ trustLevel === 'untrusted'                    → 不允许进入 market；仅�
 }
 ```
 
+用户身份由 `Authorization: Bearer <token>` 推导；client 请求体不得携带可作为授权依据的 `userId`。
+
 **Response**：
 
 ```typescript
@@ -740,7 +742,8 @@ Client 用此响应渲染 Browse Tab 的 facet UI。
    不匹配 → 404 或 422（取决于是查询不存在还是 manifest 非法）
 
 ⑯ Tier A/S plugin 的下载 URL 必为 per-user build 产物，不许跨 user 共用
-   server build cache key 至少包含 userId / pluginId / version / targetTriple
+   server build cache key 至少包含 authenticated userId / pluginId / version / targetTriple
+   authenticated userId 必须由 Bearer auth / server session 推导，不能信任请求体
 
 ⑰ Native cdylib 上传和 server-side build 必经 verified publisher 流水
    未 KYC 或公钥未登记 → 422 拒收

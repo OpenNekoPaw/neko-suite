@@ -32,6 +32,8 @@ export type AssetType =
 export type MarketSort = 'featured' | 'created' | 'downloads' | 'rating' | 'trending';
 export type MarketPricing = 'free' | 'paid' | 'all';
 export type CheckoutKind = 'checkout' | 'renew';
+export type WorkspaceTrustLevel = 'trusted' | 'restricted' | 'limited';
+export type LocalAssetStorageMode = 'copy-managed' | 'local-link';
 
 export interface MarketSearchQuery {
   text?: string;
@@ -53,6 +55,17 @@ export interface MarketServerInfo {
   capabilities: string[];
 }
 
+export interface DeveloperModeSettingsRequest {
+  enabled: boolean;
+  riskAccepted: boolean;
+  durationMs?: number;
+}
+
+export interface LocalInstallConfirmRequest {
+  draftId: string;
+  storageMode: LocalAssetStorageMode;
+}
+
 export const MarketMessages = {
   /** Signal that webview is ready to receive messages */
   ready: () => postMessage({ type: 'market:ready' }),
@@ -65,6 +78,9 @@ export const MarketMessages = {
 
   /** Probe server version and optional endpoint/filter capabilities */
   getServerInfo: () => postMessage({ type: 'market:getServerInfo' }),
+
+  /** Read Developer Mode, Workspace Trust, and sideload management state */
+  getGovernanceState: () => postMessage({ type: 'market:getGovernanceState' }),
 
   /** Get a single package by ID */
   getPackage: (packageId: string) => postMessage({ type: 'market:getPackage', packageId }),
@@ -99,6 +115,28 @@ export const MarketMessages = {
 
   /** Disable a package */
   disable: (packageId: string) => postMessage({ type: 'market:disable', packageId }),
+
+  /** Reveal a local package in the host file manager */
+  revealLocal: (packageId: string) => postMessage({ type: 'market:revealLocal', packageId }),
+
+  /** Request extension-owned local install file selection */
+  requestLocalInstall: (storageMode: LocalAssetStorageMode = 'copy-managed') =>
+    postMessage({ type: 'market:requestLocalInstall', storageMode }),
+
+  /** Confirm a previously prepared local install draft */
+  confirmLocalInstall: (request: LocalInstallConfirmRequest) =>
+    postMessage({ type: 'market:confirmLocalInstall', ...request }),
+
+  /** Cancel a local install draft */
+  cancelLocalInstall: (draftId: string) =>
+    postMessage({ type: 'market:cancelLocalInstall', draftId }),
+
+  /** Enable or disable expiring native plugin Developer Mode */
+  setDeveloperMode: (request: DeveloperModeSettingsRequest) =>
+    postMessage({ type: 'market:setDeveloperMode', ...request }),
+
+  /** Promote current workspace through extension-owned trust flow */
+  promoteWorkspaceTrust: () => postMessage({ type: 'market:promoteWorkspaceTrust' }),
 
   /** Open server-owned checkout or renewal flow externally */
   checkout: (packageId: string, kind: CheckoutKind = 'checkout') =>

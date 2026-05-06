@@ -6,6 +6,7 @@ import {
   isAssetType,
   isDistributionKind,
   parseAssetManifest,
+  validatePluginPermissionDeclarations,
   validateAssetManifest,
   type AssetManifest,
 } from '../manifest';
@@ -205,6 +206,193 @@ describe('AssetManifest v4 contract', () => {
         { field: 'typeMetadata.data.size', message: 'must be a number' },
       ]),
     );
+  });
+
+  it('validates plugin metadata as native cdylib metadata', () => {
+    const result = validateAssetManifest(
+      validManifest({
+        type: 'plugin',
+        typeMetadata: {
+          type: 'plugin',
+          data: {
+            entryPoint: 'plugin_init',
+            apiVersion: '1.0',
+            permissions: ['network:host-list'],
+            networkHosts: ['api.example.com'],
+            engineRequirements: {
+              minVersion: '1.0',
+              targetTriple: 'x86_64-apple-darwin',
+              runtimeArtifacts: ['cdylib'],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects plugin metadata without cdylib engine requirements', () => {
+    const result = validateAssetManifest(
+      validManifest({
+        type: 'plugin',
+        typeMetadata: {
+          type: 'plugin',
+          data: {
+            entryPoint: 'plugin_init',
+            apiVersion: '1.0',
+            permissions: ['network:host-list'],
+          } as never,
+        },
+      }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        {
+          field: 'typeMetadata.data.networkHosts',
+          message: 'required when permissions includes network:host-list',
+        },
+        { field: 'typeMetadata.data.engineRequirements', message: 'must be an object' },
+      ]),
+    );
+  });
+
+  it('supports publisher verified projection in distribution metadata', () => {
+    const manifest = validManifest({
+      distribution: {
+        license: 'Commercial',
+        author: 'Studio',
+        tags: ['plugin'],
+        checksum: 'sha256-abc',
+        trustLevel: 'community',
+        verified: false,
+        publisher: {
+          id: 'abc-studio',
+          displayName: 'ABC Studio',
+          verified: true,
+          verificationTier: 'verified',
+          verifiedAt: 1_700_000_000_000,
+        },
+        signature: {
+          algorithm: 'sha256',
+          value: 'manifest-sha',
+        },
+      },
+    });
+
+    expect(manifest.distribution?.publisher?.verified).toBe(true);
+    expect(manifest.distribution?.verified).toBe(false);
+    expect(validateAssetManifest(manifest).valid).toBe(true);
+  });
+
+  it('requires local sources to use variable paths and copy-managed root', () => {
+    const absolute = validateAssetManifest(
+      validManifest({
+        source: { kind: 'local', path: '/Users/me/luts/warm.cube', storageMode: 'copy-managed' },
+      }),
+    );
+    const local = validateAssetManifest(
+      validManifest({
+        source: {
+          kind: 'local',
+          path: '${NEKO_HOME}/local/presets/lut/warm/warm.cube',
+          storageMode: 'copy-managed',
+        },
+      }),
+    );
+    const linked = validateAssetManifest(
+      validManifest({
+        source: {
+          kind: 'local-link',
+          path: '${WORKSPACE}/luts/warm.cube',
+          storageMode: 'local-link',
+        },
+      }),
+    );
+
+    expect(absolute.valid).toBe(false);
+    expect(absolute.issues).toEqual(
+      expect.arrayContaining([
+        {
+          field: 'source.path',
+          message:
+            'must use PathResolver variable form such as ${NEKO_HOME}/... or ${WORKSPACE}/...',
+        },
+      ]),
+    );
+    expect(local.valid).toBe(true);
+    expect(linked.valid).toBe(true);
+  });
+
+  it('reports high-sensitive plugin permission diagnostics', () => {
+    const diagnostics = validatePluginPermissionDeclarations({
+      permissions: ['network:host-list', 'network:any', 'process-spawn'],
+    });
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        {
+          field: 'networkHosts',
+          severity: 'error',
+          permission: 'network:host-list',
+          message: 'required when permissions includes network:host-list',
+        },
+        expect.objectContaining({
+          severity: 'warning',
+          permission: 'network:any',
+        }),
+        expect.objectContaining({
+          severity: 'warning',
+          permission: 'process-spawn',
+        }),
+      ]),
+    );
+  });
+
+  it('accepts shader and model local validation metadata', () => {
+    const shader = validateAssetManifest(
+      validManifest({
+        type: 'shader',
+        typeMetadata: {
+          type: 'shader',
+          data: {
+            shaderKind: 'standalone',
+            language: 'wgsl',
+            stage: 'fragment',
+            inputs: [],
+            artifactForm: 'spirv-binary',
+            localValidation: {
+              validator: 'spirv-val',
+              sourceWarning: true,
+              resourceLimits: { maxCompileTimeMs: 1_000 },
+            },
+          },
+        },
+      }),
+    );
+    const model = validateAssetManifest(
+      validManifest({
+        type: 'model',
+        typeMetadata: {
+          type: 'model',
+          data: {
+            modelKind: 'base',
+            framework: 'gguf',
+            task: 'chat',
+            size: 1024,
+            localValidation: {
+              sourceWarning: true,
+              resourcePolicy: { maxRamMB: 4096, allowTrustedWorkspaceOverride: true },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(shader.valid).toBe(true);
+    expect(model.valid).toBe(true);
   });
 
   it('validates large asset mode-specific invariants', () => {

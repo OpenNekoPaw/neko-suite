@@ -6,10 +6,17 @@
 //! - Track plugin state (enabled / disabled)
 //! - Provide query API for the PluginsController
 
-use super::manifest::{EnginePluginManifest, PluginCapability, PluginKind};
+use super::audit::{PluginAuditContext, PluginAuditor, PluginPermissionAuditEvent};
+use super::governance::{
+    now_unix_millis, DefaultPluginLoadAuthority, PluginLicenseDecision, PluginLoadAuthority,
+    PluginLoadError, PluginLoadGate, PluginLoadRecord, PluginLoadResult, PluginTrustTier,
+    WorkspaceTrustLevel,
+};
+use super::manifest::{EnginePluginManifest, PluginCapability, PluginKind, PluginSourceKind};
+use super::system_info::{coarse_system_info, PluginSystemInfo};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Callback for plugin activation/deactivation events.
 ///
@@ -59,6 +66,8 @@ pub struct PluginManager {
     install_dirs: Vec<PathBuf>,
     engine_version: String,
     activation_handler: Option<Box<dyn PluginActivationHandler>>,
+    load_authority: Box<dyn PluginLoadAuthority>,
+    auditor: Arc<PluginAuditor>,
 }
 
 impl PluginManager {
@@ -72,12 +81,26 @@ impl PluginManager {
             install_dirs,
             engine_version: engine_version.to_string(),
             activation_handler: None,
+            load_authority: Box::new(DefaultPluginLoadAuthority),
+            auditor: Arc::new(PluginAuditor::new()),
         }
     }
 
     /// Set the activation handler for plugin enable/disable lifecycle callbacks.
     pub fn with_activation_handler(mut self, handler: Box<dyn PluginActivationHandler>) -> Self {
         self.activation_handler = Some(handler);
+        self
+    }
+
+    /// Set the Rust-side authority for license, trust, signature, and load gates.
+    pub fn with_load_authority(mut self, authority: Box<dyn PluginLoadAuthority>) -> Self {
+        self.load_authority = authority;
+        self
+    }
+
+    /// Set the host-api auditor for plugin permission declarations.
+    pub fn with_auditor(mut self, auditor: Arc<PluginAuditor>) -> Self {
+        self.auditor = auditor;
         self
     }
 
@@ -169,7 +192,7 @@ impl PluginManager {
 
     /// Enable a plugin. Invokes the activation handler if set.
     pub fn enable(&self, id: &str) -> Result<(), String> {
-        let (kind, capabilities, install_path) = {
+        let (manifest, install_path) = {
             let mut plugins = self.plugins.lock().map_err(|e| e.to_string())?;
             let plugin = plugins
                 .get_mut(id)
@@ -182,17 +205,23 @@ impl PluginManager {
                 ));
             }
 
-            let kind = plugin.manifest.kind;
-            let capabilities = plugin.manifest.capabilities.clone();
+            let manifest = plugin.manifest.clone();
             let install_path = plugin.install_path.clone();
 
-            plugin.state = PluginState::Enabled;
-            (kind, capabilities, install_path)
+            (manifest, install_path)
+        };
+
+        let license = if manifest.is_native_cdylib() {
+            Some(self.run_load_gates(&manifest, &install_path)?)
+        } else {
+            None
         };
 
         // Invoke activation handler outside the lock
         if let Some(handler) = &self.activation_handler {
-            if let Err(e) = handler.on_activate(id, kind, &capabilities, &install_path) {
+            if let Err(e) =
+                handler.on_activate(id, manifest.kind, &manifest.capabilities, &install_path)
+            {
                 tracing::warn!(plugin = %id, error = %e, "Activation handler failed");
                 // Revert state
                 if let Ok(mut plugins) = self.plugins.lock() {
@@ -205,8 +234,76 @@ impl PluginManager {
             }
         }
 
+        {
+            let mut plugins = self.plugins.lock().map_err(|e| e.to_string())?;
+            let plugin = plugins
+                .get_mut(id)
+                .ok_or_else(|| format!("Plugin not found after load gates: {id}"))?;
+            plugin.state = PluginState::Enabled;
+            plugin.error = None;
+        }
+
+        if let Some(license) = license {
+            self.load_authority.record_load(PluginLoadRecord {
+                plugin_id: manifest.id.clone(),
+                entitlement_id: license.entitlement_id,
+                purchaser_id: license.purchaser_id,
+                session_id: license.session_id,
+                watermark_id: license.watermark_id,
+                timestamp: now_unix_millis(),
+            });
+        }
+
         tracing::info!(plugin = %id, "Plugin enabled");
         Ok(())
+    }
+
+    /// Record a host-api action made on behalf of a plugin.
+    ///
+    /// Audit is traceability for engine host-api usage only; it is not a native
+    /// syscall sandbox. Direct libc/Win32/CoreFoundation calls remain outside
+    /// the in-process PluginManager boundary.
+    pub fn record_host_api_call(
+        &self,
+        plugin_id: &str,
+        action: impl Into<String>,
+        permission: impl Into<String>,
+        context: Option<PluginAuditContext>,
+    ) -> Result<PluginPermissionAuditEvent, String> {
+        let manifest = {
+            let plugins = self.plugins.lock().map_err(|e| e.to_string())?;
+            plugins
+                .get(plugin_id)
+                .ok_or_else(|| format!("Plugin not found: {plugin_id}"))?
+                .manifest
+                .clone()
+        };
+
+        Ok(self
+            .auditor
+            .record_host_api_call(&manifest, action, permission, context))
+    }
+
+    /// Return coarse-grained system information to plugin callers.
+    pub fn plugin_system_info(
+        &self,
+        plugin_id: &str,
+        context: Option<PluginAuditContext>,
+    ) -> Result<PluginSystemInfo, String> {
+        let event = self.record_host_api_call(plugin_id, "system-info", "system-info", context)?;
+        if !event.declared {
+            tracing::warn!(
+                plugin = %plugin_id,
+                permission = %event.permission,
+                "Plugin used undeclared host-api permission"
+            );
+        }
+        Ok(coarse_system_info())
+    }
+
+    /// List recorded host-api audit events.
+    pub fn audit_events(&self) -> Vec<PluginPermissionAuditEvent> {
+        self.auditor.events()
     }
 
     /// Disable a plugin. Invokes the deactivation handler if set.
@@ -301,6 +398,168 @@ impl PluginManager {
             PluginState::Error
         }
     }
+
+    fn run_load_gates(
+        &self,
+        manifest: &EnginePluginManifest,
+        install_path: &Path,
+    ) -> Result<PluginLicenseDecision, String> {
+        self.load_authority
+            .verify_integrity(manifest, install_path)
+            .map_err(Self::load_error_to_string)?;
+
+        self.load_authority
+            .verify_signature(manifest, install_path)
+            .map_err(Self::load_error_to_string)?;
+
+        let license = self
+            .load_authority
+            .check_license(manifest, install_path)
+            .map_err(Self::load_error_to_string)?;
+        if !license.allowed {
+            return Err(Self::load_error_to_string(PluginLoadError::new(
+                PluginLoadGate::License,
+                &manifest.id,
+                "engine license authority denied this plugin",
+            )));
+        }
+
+        self.check_trust_tier(manifest)?;
+        self.check_workspace_trust(manifest)?;
+        self.check_target_triple(manifest)?;
+        self.check_machine_binding(manifest, &license)?;
+
+        Ok(license)
+    }
+
+    fn check_trust_tier(&self, manifest: &EnginePluginManifest) -> Result<(), String> {
+        match manifest.trust_tier {
+            PluginTrustTier::Core | PluginTrustTier::Verified => Ok(()),
+            PluginTrustTier::Community => {
+                if manifest.source == PluginSourceKind::Local
+                    && self.load_authority.developer_mode_active()
+                {
+                    Ok(())
+                } else {
+                    Err(Self::load_error_to_string(PluginLoadError::new(
+                        PluginLoadGate::TrustTier,
+                        &manifest.id,
+                        "community native plugins require Developer Mode local activation or verified publisher trust",
+                    )))
+                }
+            }
+            PluginTrustTier::Untrusted => {
+                if manifest.source == PluginSourceKind::Local
+                    && self.load_authority.developer_mode_active()
+                {
+                    Ok(())
+                } else {
+                    Err(Self::load_error_to_string(PluginLoadError::new(
+                        PluginLoadGate::TrustTier,
+                        &manifest.id,
+                        "untrusted native plugin is blocked before activation",
+                    )))
+                }
+            }
+        }
+    }
+
+    fn check_workspace_trust(&self, manifest: &EnginePluginManifest) -> Result<(), String> {
+        let trust = self.load_authority.workspace_trust_level(manifest);
+        if manifest.source == PluginSourceKind::Local && trust != WorkspaceTrustLevel::Trusted {
+            return Err(Self::load_error_to_string(PluginLoadError::new(
+                PluginLoadGate::WorkspaceTrust,
+                &manifest.id,
+                "sideload native plugin requires trusted workspace",
+            )));
+        }
+
+        match trust {
+            WorkspaceTrustLevel::Trusted | WorkspaceTrustLevel::Restricted => Ok(()),
+            WorkspaceTrustLevel::Limited if manifest.trust_tier == PluginTrustTier::Core => Ok(()),
+            WorkspaceTrustLevel::Limited => Err(Self::load_error_to_string(PluginLoadError::new(
+                PluginLoadGate::WorkspaceTrust,
+                &manifest.id,
+                "limited workspace allows only core native plugins",
+            ))),
+        }
+    }
+
+    fn check_target_triple(&self, manifest: &EnginePluginManifest) -> Result<(), String> {
+        let Some(target_triple) = manifest.target_triple.as_deref() else {
+            return Err(Self::load_error_to_string(PluginLoadError::new(
+                PluginLoadGate::TargetTriple,
+                &manifest.id,
+                "native plugin target triple is missing",
+            )));
+        };
+
+        let current = self.load_authority.current_target_triple();
+        if target_triple == current {
+            Ok(())
+        } else {
+            Err(Self::load_error_to_string(PluginLoadError::new(
+                PluginLoadGate::TargetTriple,
+                &manifest.id,
+                format!("plugin target triple {target_triple} is incompatible with {current}"),
+            )))
+        }
+    }
+
+    fn check_machine_binding(
+        &self,
+        manifest: &EnginePluginManifest,
+        license: &PluginLicenseDecision,
+    ) -> Result<(), String> {
+        let required = license.machine_binding_required
+            || manifest
+                .machine_binding
+                .as_ref()
+                .map(|binding| binding.required)
+                .unwrap_or(false);
+        if !required {
+            return Ok(());
+        }
+
+        let expected = license
+            .bound_machine
+            .as_deref()
+            .or_else(|| {
+                manifest
+                    .machine_binding
+                    .as_ref()
+                    .and_then(|binding| binding.machine_id.as_deref())
+            })
+            .ok_or_else(|| {
+                Self::load_error_to_string(PluginLoadError::new(
+                    PluginLoadGate::MachineBinding,
+                    &manifest.id,
+                    "machine binding is required but no bound machine was provided",
+                ))
+            })?;
+
+        let current = self.load_authority.current_machine_id().ok_or_else(|| {
+            Self::load_error_to_string(PluginLoadError::new(
+                PluginLoadGate::MachineBinding,
+                &manifest.id,
+                "machine binding is required but current machine id is unavailable",
+            ))
+        })?;
+
+        if current == expected {
+            Ok(())
+        } else {
+            Err(Self::load_error_to_string(PluginLoadError::new(
+                PluginLoadGate::MachineBinding,
+                &manifest.id,
+                "native plugin is bound to a different machine",
+            )))
+        }
+    }
+
+    fn load_error_to_string(error: PluginLoadError) -> String {
+        error.to_string()
+    }
 }
 
 // =============================================================================
@@ -310,7 +569,9 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plugin::PluginAuditReporter;
     use std::fs;
+    use std::sync::{Arc, Mutex};
 
     fn create_test_plugin(dir: &Path, id: &str, kind: &str) {
         let plugin_dir = dir.join(id);
@@ -324,6 +585,183 @@ mod tests {
             "platforms": ["darwin-arm64"],
             "capabilities": [],
             "permissions": []
+        });
+        fs::write(
+            plugin_dir.join("plugin.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[derive(Clone)]
+    struct RecordingAuthority {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+        license_allowed: bool,
+        workspace_trust: WorkspaceTrustLevel,
+        current_target: String,
+        developer_mode: bool,
+        machine_id: Option<String>,
+    }
+
+    impl RecordingAuthority {
+        fn new(calls: Arc<Mutex<Vec<&'static str>>>, current_target: impl Into<String>) -> Self {
+            Self {
+                calls,
+                license_allowed: true,
+                workspace_trust: WorkspaceTrustLevel::Trusted,
+                current_target: current_target.into(),
+                developer_mode: false,
+                machine_id: None,
+            }
+        }
+
+        fn with_license_allowed(mut self, allowed: bool) -> Self {
+            self.license_allowed = allowed;
+            self
+        }
+
+        fn with_workspace_trust(mut self, trust: WorkspaceTrustLevel) -> Self {
+            self.workspace_trust = trust;
+            self
+        }
+
+        fn with_machine_id(mut self, machine_id: impl Into<String>) -> Self {
+            self.machine_id = Some(machine_id.into());
+            self
+        }
+
+        fn push(&self, call: &'static str) {
+            self.calls.lock().unwrap().push(call);
+        }
+    }
+
+    impl PluginLoadAuthority for RecordingAuthority {
+        fn verify_integrity(
+            &self,
+            _manifest: &EnginePluginManifest,
+            _install_path: &Path,
+        ) -> PluginLoadResult<()> {
+            self.push("integrity");
+            Ok(())
+        }
+
+        fn verify_signature(
+            &self,
+            _manifest: &EnginePluginManifest,
+            _install_path: &Path,
+        ) -> PluginLoadResult<()> {
+            self.push("signature");
+            Ok(())
+        }
+
+        fn check_license(
+            &self,
+            manifest: &EnginePluginManifest,
+            _install_path: &Path,
+        ) -> PluginLoadResult<PluginLicenseDecision> {
+            self.push("license");
+            Ok(PluginLicenseDecision {
+                allowed: self.license_allowed,
+                entitlement_id: Some(format!("entitlement-{}", manifest.id)),
+                purchaser_id: Some("purchaser-1".to_string()),
+                session_id: Some("session-1".to_string()),
+                watermark_id: Some("watermark-1".to_string()),
+                expires_at: None,
+                machine_binding_required: false,
+                bound_machine: None,
+            })
+        }
+
+        fn workspace_trust_level(&self, _manifest: &EnginePluginManifest) -> WorkspaceTrustLevel {
+            self.push("workspace");
+            self.workspace_trust
+        }
+
+        fn developer_mode_active(&self) -> bool {
+            self.developer_mode
+        }
+
+        fn current_target_triple(&self) -> String {
+            self.push("target");
+            self.current_target.clone()
+        }
+
+        fn current_machine_id(&self) -> Option<String> {
+            self.push("machine");
+            self.machine_id.clone()
+        }
+
+        fn record_load(&self, _record: PluginLoadRecord) {
+            self.push("record-load");
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct RecordingActivationHandler {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl PluginActivationHandler for RecordingActivationHandler {
+        fn on_activate(
+            &self,
+            _plugin_id: &str,
+            _kind: PluginKind,
+            _capabilities: &[PluginCapability],
+            _install_path: &Path,
+        ) -> std::result::Result<(), String> {
+            self.calls.lock().unwrap().push("activate");
+            Ok(())
+        }
+
+        fn on_deactivate(
+            &self,
+            _plugin_id: &str,
+            _kind: PluginKind,
+        ) -> std::result::Result<(), String> {
+            self.calls.lock().unwrap().push("deactivate");
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingReporter {
+        events: Arc<Mutex<Vec<PluginPermissionAuditEvent>>>,
+    }
+
+    impl PluginAuditReporter for RecordingReporter {
+        fn report_permission_violation(&self, event: &PluginPermissionAuditEvent) {
+            self.events.lock().unwrap().push(event.clone());
+        }
+    }
+
+    fn create_native_plugin(dir: &Path, id: &str, target_triple: &str) {
+        let plugin_dir = dir.join(id);
+        fs::create_dir_all(&plugin_dir).unwrap();
+        let manifest = serde_json::json!({
+            "id": id,
+            "name": format!("Native {}", id),
+            "version": "1.0.0",
+            "kind": "connector",
+            "engineVersion": "^0.1.0",
+            "platforms": [target_triple],
+            "capabilities": [],
+            "permissions": [],
+            "runtimeArtifacts": ["cdylib"],
+            "entryPoint": "neko_plugin_entry",
+            "apiVersion": "0.1.0",
+            "targetTriple": target_triple,
+            "source": "registry",
+            "trustTier": "verified",
+            "integrity": {
+                "algorithm": "sha256",
+                "value": "abc123"
+            },
+            "signature": {
+                "algorithm": "ed25519",
+                "value": "sig123",
+                "signedBy": "publisher",
+                "publicKeyId": "key-1"
+            }
         });
         fs::write(
             plugin_dir.join("plugin.json"),
@@ -372,6 +810,232 @@ mod tests {
         mgr.disable("com.test.p1").unwrap();
         let p = mgr.get("com.test.p1").unwrap();
         assert_eq!(p.state, PluginState::Disabled);
+    }
+
+    #[test]
+    fn native_load_gates_run_before_activation() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.native", "test-target");
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let authority = RecordingAuthority::new(calls.clone(), "test-target");
+        let handler = RecordingActivationHandler {
+            calls: calls.clone(),
+        };
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_load_authority(Box::new(authority))
+            .with_activation_handler(Box::new(handler));
+        mgr.scan();
+
+        mgr.enable("com.test.native").unwrap();
+
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &[
+                "integrity",
+                "signature",
+                "license",
+                "workspace",
+                "target",
+                "activate",
+                "record-load"
+            ]
+        );
+        assert_eq!(
+            mgr.get("com.test.native").unwrap().state,
+            PluginState::Enabled
+        );
+    }
+
+    #[test]
+    fn native_load_rejects_target_triple_mismatch_before_activation() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.native", "plugin-target");
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let authority = RecordingAuthority::new(calls.clone(), "engine-target");
+        let handler = RecordingActivationHandler {
+            calls: calls.clone(),
+        };
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_load_authority(Box::new(authority))
+            .with_activation_handler(Box::new(handler));
+        mgr.scan();
+
+        let error = mgr.enable("com.test.native").unwrap_err();
+
+        assert!(error.contains("TargetTriple"));
+        assert!(error.contains("plugin-target"));
+        assert!(error.contains("engine-target"));
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &["integrity", "signature", "license", "workspace", "target"]
+        );
+        assert_eq!(
+            mgr.get("com.test.native").unwrap().state,
+            PluginState::Disabled
+        );
+    }
+
+    #[test]
+    fn native_load_rejects_license_denial_before_activation() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.native", "test-target");
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let authority =
+            RecordingAuthority::new(calls.clone(), "test-target").with_license_allowed(false);
+        let handler = RecordingActivationHandler {
+            calls: calls.clone(),
+        };
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_load_authority(Box::new(authority))
+            .with_activation_handler(Box::new(handler));
+        mgr.scan();
+
+        let error = mgr.enable("com.test.native").unwrap_err();
+
+        assert!(error.contains("License"));
+        assert!(error.contains("engine license authority denied"));
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &["integrity", "signature", "license"]
+        );
+        assert_eq!(
+            mgr.get("com.test.native").unwrap().state,
+            PluginState::Disabled
+        );
+    }
+
+    #[test]
+    fn native_load_rejects_machine_binding_mismatch() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.native", "test-target");
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let authority =
+            RecordingAuthority::new(calls.clone(), "test-target").with_machine_id("machine-b");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_load_authority(Box::new(authority));
+        mgr.scan();
+
+        {
+            let mut plugins = mgr.plugins.lock().unwrap();
+            let plugin = plugins.get_mut("com.test.native").unwrap();
+            plugin.manifest.machine_binding = Some(crate::plugin::PluginMachineBinding {
+                required: true,
+                machine_id: Some("machine-a".to_string()),
+            });
+        }
+
+        let error = mgr.enable("com.test.native").unwrap_err();
+
+        assert!(error.contains("MachineBinding"));
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &[
+                "integrity",
+                "signature",
+                "license",
+                "workspace",
+                "target",
+                "machine"
+            ]
+        );
+    }
+
+    #[test]
+    fn restricted_workspace_allows_verified_registry_native_plugin() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.native", "test-target");
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let authority = RecordingAuthority::new(calls.clone(), "test-target")
+            .with_workspace_trust(WorkspaceTrustLevel::Restricted);
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_load_authority(Box::new(authority));
+        mgr.scan();
+
+        mgr.enable("com.test.native").unwrap();
+
+        assert_eq!(
+            mgr.get("com.test.native").unwrap().state,
+            PluginState::Enabled
+        );
+    }
+
+    #[test]
+    fn limited_workspace_rejects_verified_third_party_native_plugin() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.native", "test-target");
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let authority = RecordingAuthority::new(calls.clone(), "test-target")
+            .with_workspace_trust(WorkspaceTrustLevel::Limited);
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_load_authority(Box::new(authority));
+        mgr.scan();
+
+        let error = mgr.enable("com.test.native").unwrap_err();
+
+        assert!(error.contains("WorkspaceTrust"));
+        assert!(error.contains("limited workspace allows only core"));
+    }
+
+    #[test]
+    fn host_api_audit_reports_undeclared_permission_with_context() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_plugin(tmp.path(), "com.test.audit", "connector");
+
+        let reported = Arc::new(Mutex::new(Vec::new()));
+        let reporter = RecordingReporter {
+            events: reported.clone(),
+        };
+        let auditor = Arc::new(PluginAuditor::with_reporter(Box::new(reporter)));
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0").with_auditor(auditor);
+        mgr.scan();
+
+        let event = mgr
+            .record_host_api_call(
+                "com.test.audit",
+                "system-info",
+                "system-info",
+                Some(PluginAuditContext {
+                    purchaser_id: Some("purchaser-1".to_string()),
+                    session_id: Some("session-1".to_string()),
+                    watermark_id: Some("watermark-1".to_string()),
+                }),
+            )
+            .unwrap();
+
+        assert_eq!(event.plugin_id, "com.test.audit");
+        assert_eq!(event.permission, "system-info");
+        assert!(!event.declared);
+        assert_eq!(event.purchaser_id.as_deref(), Some("purchaser-1"));
+        assert_eq!(event.session_id.as_deref(), Some("session-1"));
+        assert_eq!(event.watermark_id.as_deref(), Some("watermark-1"));
+        assert!(event.timestamp > 0);
+        assert!(event.boundary_note.contains("Host-api audit only records"));
+        assert_eq!(reported.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn plugin_system_info_returns_coarse_values_and_records_audit() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_plugin(tmp.path(), "com.test.info", "connector");
+
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0");
+        mgr.scan();
+
+        let info = mgr.plugin_system_info("com.test.info", None).unwrap();
+        let serialized = serde_json::to_value(&info).unwrap();
+
+        assert!(serialized.get("osFamily").is_some());
+        assert!(serialized.get("archFamily").is_some());
+        assert!(serialized.get("cpuFamily").is_some());
+        assert!(serialized.get("hostname").is_none());
+        assert!(serialized.get("machineId").is_none());
+        assert_eq!(mgr.audit_events().len(), 1);
     }
 
     #[test]

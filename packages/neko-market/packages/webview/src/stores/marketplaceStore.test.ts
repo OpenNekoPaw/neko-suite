@@ -8,6 +8,10 @@ describe('marketplaceStore', () => {
       assetTypeFilter: 'all',
       browseFilters: { category: 'all', type: 'all', pricing: 'all', sort: 'featured' },
       serverInfo: null,
+      governance: {
+        developerMode: { enabled: false, active: false },
+        workspaceTrust: { level: 'restricted', canPromote: true },
+      },
       searchText: '',
       featured: [],
       searchResults: [],
@@ -15,6 +19,7 @@ describe('marketplaceStore', () => {
       searchTotal: 0,
       isSearching: false,
       installed: [],
+      localInstallDraft: null,
       entitlements: { items: [], isRefreshing: false },
       updates: [],
       largeAssetPicker: null,
@@ -145,6 +150,65 @@ describe('marketplaceStore', () => {
     });
 
     expect(useMarketplaceStore.getState().serverInfo?.capabilities).toEqual(['search.pricing']);
+  });
+
+  it('stores Developer Mode, Workspace Trust, and local install draft state', () => {
+    useMarketplaceStore.getState().setGovernance({
+      developerMode: {
+        enabled: true,
+        active: true,
+        expiresAt: 123,
+        riskAcceptedAt: 1,
+      },
+      workspaceTrust: {
+        level: 'trusted',
+        canPromote: false,
+      },
+    });
+    useMarketplaceStore.getState().setLocalInstallDraft({
+      draftId: 'draft-1',
+      assetType: 'plugin',
+      assetName: 'Local Plugin',
+      sourcePathLabel: '${WORKSPACE}/plugin.dylib',
+      storageMode: 'local-link',
+      warnings: [{ code: 'native-plugin', severity: 'warning' }],
+    });
+
+    expect(useMarketplaceStore.getState().governance.developerMode.active).toBe(true);
+    expect(useMarketplaceStore.getState().governance.workspaceTrust.level).toBe('trusted');
+    expect(useMarketplaceStore.getState().localInstallDraft).toMatchObject({
+      draftId: 'draft-1',
+      storageMode: 'local-link',
+    });
+  });
+
+  it('tracks local installed source metadata and governance warnings', () => {
+    useMarketplaceStore.getState().setInstalled([
+      {
+        packageId: '@local/plugin',
+        name: 'Plugin',
+        version: '1.0.0',
+        type: 'plugin',
+        installedAt: '2026-05-05T00:00:00.000Z',
+        installedPath: '${NEKO_HOME}/local/plugin/local-plugin/1.0.0',
+        enabled: false,
+        sourceKind: 'local',
+        storageMode: 'copy-managed',
+        governanceWarnings: [
+          { code: 'local-source', severity: 'info' },
+          { code: 'developer-mode', severity: 'blocked' },
+        ],
+      },
+    ]);
+
+    expect(useMarketplaceStore.getState().installed[0]).toMatchObject({
+      sourceKind: 'local',
+      storageMode: 'copy-managed',
+      governanceWarnings: [
+        { code: 'local-source', severity: 'info' },
+        { code: 'developer-mode', severity: 'blocked' },
+      ],
+    });
   });
 
   it('keeps active progress while clearing terminal install phases', () => {

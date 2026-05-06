@@ -273,6 +273,8 @@ neko-engine Host
 - 插件失败不能拖垮 Kernel 主循环
 - Host 必须区分“插件不可用”和“内核不可用”
 
+补充：若后续通过 marketplace governance 显式启用 `runtimeArtifacts: ["cdylib"]` 的 native 插件，`PluginManager` 必须在 native load / activation 前执行 integrity、signature、engine-side license、trust tier、Workspace Trust、target triple 与 machine binding 门禁。host-api audit 只记录插件通过 Engine host API 发起的行为，不能表述为 syscall 沙箱；in-process native 代码直接调用 libc、Win32、CoreFoundation 或第三方 native library 时，不属于当前 PluginManager 可跨平台拦截的边界。
+
 ---
 
 ## 八、API 设计建议

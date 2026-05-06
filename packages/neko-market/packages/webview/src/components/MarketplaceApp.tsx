@@ -9,6 +9,8 @@ import {
   useMarketplaceStore,
   type MarketItem,
   type InstalledItem,
+  type GovernanceState,
+  type LocalInstallDraft,
   type OwnedItem,
   type UpdateItem,
   type TabType,
@@ -78,6 +80,20 @@ export const MarketplaceApp: React.FC = () => {
           store.setServerInfo((data as MarketServerInfo | undefined) ?? null);
           break;
 
+        case 'market:governanceState':
+          store.setGovernance((data as GovernanceState | undefined) ?? defaultGovernanceState());
+          break;
+
+        case 'market:localInstallDraft':
+          store.setLocalInstallDraft((data as LocalInstallDraft | undefined) ?? null);
+          break;
+
+        case 'market:localInstallResult':
+          store.setLocalInstallDraft(null);
+          MarketMessages.listInstalled();
+          MarketMessages.getGovernanceState();
+          break;
+
         case 'market:installedResult':
           store.setInstalled((data as InstalledItem[]) ?? []);
           break;
@@ -91,6 +107,11 @@ export const MarketplaceApp: React.FC = () => {
         case 'market:entitlementsRefreshed':
           store.setEntitlementsRefreshing(false);
           MarketMessages.listEntitlements();
+          break;
+
+        case 'market:developerModeResult':
+        case 'market:workspaceTrustResult':
+          MarketMessages.getGovernanceState();
           break;
 
         case 'market:updatesResult':
@@ -162,6 +183,7 @@ export const MarketplaceApp: React.FC = () => {
 
     // Initial data load
     MarketMessages.getServerInfo();
+    MarketMessages.getGovernanceState();
     MarketMessages.getFeatured();
     MarketMessages.listInstalled();
     MarketMessages.listEntitlements();
@@ -241,3 +263,10 @@ export const MarketplaceApp: React.FC = () => {
     </div>
   );
 };
+
+function defaultGovernanceState(): GovernanceState {
+  return {
+    developerMode: { enabled: false, active: false },
+    workspaceTrust: { level: 'restricted', canPromote: true },
+  };
+}

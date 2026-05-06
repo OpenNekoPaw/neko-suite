@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::governance::PluginTrustTier;
+
 /// Top-level plugin manifest.
 ///
 /// Corresponds to the RFC manifest schema (engine-plugin-rfc.md §6).
@@ -39,6 +41,38 @@ pub struct EnginePluginManifest {
     #[serde(default)]
     pub permissions: Vec<String>,
 
+    /// Native runtime artifacts. Marketplace plugin governance only permits cdylib.
+    #[serde(default)]
+    pub runtime_artifacts: Vec<PluginRuntimeArtifact>,
+
+    /// Native entry point symbol or relative artifact entry.
+    #[serde(default)]
+    pub entry_point: Option<String>,
+
+    /// Engine host-api version expected by this plugin.
+    #[serde(default)]
+    pub api_version: Option<String>,
+
+    /// Target triple for the native artifact (e.g. "aarch64-apple-darwin").
+    #[serde(default)]
+    pub target_triple: Option<String>,
+
+    /// Registry, core, or local development source marker.
+    #[serde(default)]
+    pub source: PluginSourceKind,
+
+    /// Trust tier projected by signed server manifest or local development flow.
+    #[serde(default)]
+    pub trust_tier: PluginTrustTier,
+
+    /// Publisher signature metadata used before native activation.
+    #[serde(default)]
+    pub signature: Option<PluginSignatureInfo>,
+
+    /// Machine binding metadata for per-user commercial native artifacts.
+    #[serde(default)]
+    pub machine_binding: Option<PluginMachineBinding>,
+
     /// Content integrity (hash for verification)
     pub integrity: Option<IntegrityInfo>,
 
@@ -50,6 +84,18 @@ pub struct EnginePluginManifest {
 
     /// Optional license identifier (SPDX)
     pub license: Option<String>,
+}
+
+impl EnginePluginManifest {
+    pub fn is_native_cdylib(&self) -> bool {
+        self.runtime_artifacts
+            .iter()
+            .any(|artifact| *artifact == PluginRuntimeArtifact::Cdylib)
+    }
+
+    pub fn is_registry_native_plugin(&self) -> bool {
+        self.source == PluginSourceKind::Registry && self.is_native_cdylib()
+    }
 }
 
 /// Plugin kind — maps to a fixed capability group.
@@ -72,6 +118,42 @@ pub enum PluginKind {
     Exporter,
     /// External runtime connector (sidecar / remote service)
     Connector,
+}
+
+/// Native runtime artifact shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginRuntimeArtifact {
+    Cdylib,
+}
+
+/// Plugin source kind relevant to engine-side load governance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum PluginSourceKind {
+    #[default]
+    Registry,
+    Core,
+    Local,
+}
+
+/// Publisher signature metadata. The default PluginManager checks presence and
+/// shape; real cryptographic verification is delegated to the injected authority.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSignatureInfo {
+    pub algorithm: String,
+    pub value: String,
+    pub signed_by: Option<String>,
+    pub public_key_id: Option<String>,
+}
+
+/// Optional machine binding declared by server-owned entitlement/build output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginMachineBinding {
+    pub required: bool,
+    pub machine_id: Option<String>,
 }
 
 /// A single capability entry in the manifest.

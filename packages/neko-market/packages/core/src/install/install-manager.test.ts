@@ -591,6 +591,259 @@ describe('InstallManager lifecycle', () => {
     expect(result.error).toContain('Untrusted package');
   });
 
+  it('blocks unverified native plugins before download or staging', async () => {
+    const getDownloadDescriptor = vi.fn();
+    const target = createTarget({ type: 'plugin' });
+    const manager = createManager({
+      target,
+      manifest: createPluginManifest({
+        distribution: createPluginDistribution({
+          publisher: {
+            id: 'community-publisher',
+            displayName: 'Community Publisher',
+            verified: false,
+          },
+        }),
+      }),
+      getDownloadDescriptor,
+    });
+
+    const result = await manager.install('@test/plugin', '1.0.0');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('verified publisher');
+    expect(getDownloadDescriptor).not.toHaveBeenCalled();
+    expect(target.onPreInstall).not.toHaveBeenCalled();
+  });
+
+  it('rejects incompatible plugin target triples before download', async () => {
+    const getDownloadDescriptor = vi.fn();
+    const target = createTarget({ type: 'plugin' });
+    const manager = createManager({
+      target,
+      manifest: createPluginManifest(),
+      getDownloadDescriptor,
+      config: { currentTargetTriple: 'x86_64-unknown-linux-gnu' },
+    });
+
+    const result = await manager.install('@test/plugin', '1.0.0');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('incompatible');
+    expect(getDownloadDescriptor).not.toHaveBeenCalled();
+    expect(target.onPreInstall).not.toHaveBeenCalled();
+  });
+
+  it('blocks verified third-party plugins in limited workspaces', async () => {
+    const getDownloadDescriptor = vi.fn();
+    const manager = createManager({
+      target: createTarget({ type: 'plugin' }),
+      manifest: createPluginManifest(),
+      getDownloadDescriptor,
+      config: { workspaceTrustLevel: 'limited' },
+    });
+
+    const result = await manager.install('@test/plugin', '1.0.0');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Limited workspace');
+    expect(getDownloadDescriptor).not.toHaveBeenCalled();
+  });
+
+  it('requires active Developer Mode for local native plugins', async () => {
+    const archive = await createPayloadDir();
+    const getDownloadDescriptor = vi.fn();
+    const manager = createManager({
+      archive,
+      target: createTarget({ type: 'plugin' }),
+      manifest: createLocalPluginManifest(),
+      getDownloadDescriptor,
+      config: { workspaceTrustLevel: 'trusted' },
+    });
+
+    const result = await manager.install('@test/plugin', '1.0.0');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Developer Mode');
+    expect(getDownloadDescriptor).not.toHaveBeenCalled();
+  });
+
+  it('blocks local native plugins in restricted workspaces despite Developer Mode', async () => {
+    const archive = await createPayloadDir();
+    const manager = createManager({
+      archive,
+      target: createTarget({ type: 'plugin' }),
+      manifest: createLocalPluginManifest(),
+      config: {
+        workspaceTrustLevel: 'restricted',
+        developerMode: { active: true, expiresAt: Date.now() + 60_000 },
+      },
+    });
+
+    const result = await manager.install('@test/plugin', '1.0.0');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('trusted workspace');
+  });
+
+  it('rejects expired Developer Mode for local native plugins', async () => {
+    const archive = await createPayloadDir();
+    const manager = createManager({
+      archive,
+      target: createTarget({ type: 'plugin' }),
+      manifest: createLocalPluginManifest(),
+      config: {
+        workspaceTrustLevel: 'trusted',
+        developerMode: { active: true, expiresAt: Date.now() - 1 },
+      },
+    });
+
+    const result = await manager.install('@test/plugin', '1.0.0');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('expired');
+  });
+
+  it('rejects bundle contents that resolve to sideload assets', async () => {
+    const archive = await createPayloadDir();
+    const contentManifest = createMediaManifest({
+      id: '@test/local-content',
+      name: 'local-content',
+      source: {
+        kind: 'local',
+        path: '${NEKO_HOME}/local/media/local-content/1.0.0',
+        storageMode: 'copy-managed',
+      },
+    });
+    const manager = createManager({
+      archive,
+      manifest: createBundleManifest('@test/bundle', ['@test/local-content']),
+      packages: { '@test/local-content': contentManifest },
+      target: createTarget({ type: 'bundle' }),
+    });
+
+    const result = await manager.install('@test/bundle', '1.0.0');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('sideload asset');
+  });
+
+  it('skips sideload assets during market update checks', async () => {
+    const installed = await createInstalledRegistry();
+    const localInstalledManifest = createMediaManifest({
+      id: '@test/local-media',
+      name: 'local-media',
+      version: '1.0.0',
+      source: {
+        kind: 'local',
+        path: '${NEKO_HOME}/local/media/local-media/1.0.0',
+        storageMode: 'copy-managed',
+      },
+    });
+    const marketInstalledManifest = createMediaManifest({
+      id: '@test/market-media',
+      name: 'market-media',
+      version: '1.0.0',
+    });
+    const marketLatestManifest = createMediaManifest({
+      id: '@test/market-media',
+      name: 'market-media',
+      version: '2.0.0',
+      source: {
+        kind: 'registry',
+        registry: 'test',
+        package: '@test/market-media',
+        version: '2.0.0',
+        integrity: 'sha256-test',
+      },
+    });
+
+    await installed.add(
+      createInstalledPackage({
+        packageId: '@test/local-media',
+        version: '1.0.0',
+        type: 'media',
+        manifest: localInstalledManifest,
+      }),
+    );
+    await installed.add(
+      createInstalledPackage({
+        packageId: '@test/market-media',
+        version: '1.0.0',
+        type: 'media',
+        manifest: marketInstalledManifest,
+      }),
+    );
+
+    const manager = createManager({
+      installed,
+      target: createTarget({ type: 'media' }),
+      manifest: marketLatestManifest,
+      packages: {
+        '@test/local-media': createMediaManifest({
+          id: '@test/local-media',
+          name: 'local-media',
+          version: '2.0.0',
+        }),
+      },
+    });
+
+    const updates = await manager.checkUpdates();
+
+    expect(updates).toEqual([
+      expect.objectContaining({
+        packageId: '@test/market-media',
+        currentVersion: '1.0.0',
+        latestVersion: '2.0.0',
+      }),
+    ]);
+  });
+
+  it('blocks local shaders and models when validators report diagnostics', async () => {
+    const archive = await createPayloadDir();
+    const shaderValidator = vi
+      .fn()
+      .mockReturnValue([
+        { field: 'typeMetadata.data.localValidation', message: 'SPIR-V validator failed' },
+      ]);
+    const shaderManager = createManager({
+      archive,
+      target: createTarget({ type: 'shader' }),
+      manifest: createLocalShaderManifest(),
+      config: {
+        workspaceTrustLevel: 'trusted',
+        localAssetValidator: { validateShader: shaderValidator },
+      },
+    });
+
+    const shaderResult = await shaderManager.install('@test/shader', '1.0.0');
+
+    expect(shaderResult.success).toBe(false);
+    expect(shaderResult.error).toContain('SPIR-V validator failed');
+    expect(shaderValidator).toHaveBeenCalledTimes(1);
+
+    const modelValidator = vi
+      .fn()
+      .mockReturnValue([
+        { field: 'typeMetadata.data.localValidation', message: 'VRAM limit exceeded' },
+      ]);
+    const modelManager = createManager({
+      archive,
+      target: createTarget({ type: 'model' }),
+      manifest: createLocalModelManifest(),
+      config: {
+        workspaceTrustLevel: 'trusted',
+        localAssetValidator: { validateModel: modelValidator },
+      },
+    });
+
+    const modelResult = await modelManager.install('@test/model', '1.0.0');
+
+    expect(modelResult.success).toBe(false);
+    expect(modelResult.error).toContain('VRAM limit exceeded');
+    expect(modelValidator).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks resource quota and unsupported optional server capabilities', async () => {
     const archive = await createPayloadDir();
     const quotaManager = createManager({
@@ -999,6 +1252,12 @@ function createManager(options: {
     refreshEntitlements: vi.fn(),
     checkEntitlement: vi.fn().mockResolvedValue(options.entitlementResult),
     getCheckoutUrl: vi.fn(),
+    requestPluginBuild: vi.fn(),
+    getPluginBuildStatus: vi.fn(),
+    getPluginBuildResult: vi.fn(),
+    submitPublisherVerification: vi.fn(),
+    getPublisherVerificationStatus: vi.fn(),
+    reportPermissionViolation: vi.fn(),
     getSemanticOntology: vi.fn(),
     getIntentOntology: vi.fn(),
     getDeprecation: vi.fn(),
@@ -1103,6 +1362,68 @@ function createManifest(overrides: Partial<AssetManifest> = {}): AssetManifest {
   };
 }
 
+function createPluginDistribution(
+  overrides: Partial<NonNullable<AssetManifest['distribution']>> = {},
+): NonNullable<AssetManifest['distribution']> {
+  return {
+    license: 'MIT',
+    author: 'plugin-publisher',
+    tags: ['plugin'],
+    checksum: 'sha256-test',
+    trustLevel: 'community',
+    publisher: {
+      id: 'verified-publisher',
+      displayName: 'Verified Publisher',
+      verified: true,
+      verificationTier: 'verified',
+    },
+    signature: { algorithm: 'sha256', value: 'manifest' },
+    ...overrides,
+  };
+}
+
+function createPluginManifest(overrides: Partial<AssetManifest> = {}): AssetManifest {
+  return createManifest({
+    id: '@test/plugin',
+    name: 'plugin',
+    type: 'plugin',
+    source: {
+      kind: 'registry',
+      registry: 'test',
+      package: '@test/plugin',
+      version: '1.0.0',
+      integrity: 'sha256-test',
+    },
+    typeMetadata: {
+      type: 'plugin',
+      data: {
+        entryPoint: 'neko_plugin_init',
+        apiVersion: '1',
+        permissions: [],
+        engineRequirements: {
+          minVersion: '1.0.0',
+          targetTriple: 'aarch64-apple-darwin',
+          runtimeArtifacts: ['cdylib'],
+        },
+      },
+    },
+    distribution: createPluginDistribution(),
+    ...overrides,
+  });
+}
+
+function createLocalPluginManifest(overrides: Partial<AssetManifest> = {}): AssetManifest {
+  return createPluginManifest({
+    source: {
+      kind: 'local',
+      path: '${NEKO_HOME}/local/plugin/test-plugin/1.0.0',
+      storageMode: 'copy-managed',
+    },
+    distribution: undefined,
+    ...overrides,
+  });
+}
+
 function createMediaManifest(overrides: Partial<AssetManifest> = {}): AssetManifest {
   return createManifest({
     id: '@test/media',
@@ -1130,6 +1451,70 @@ function createMediaManifest(overrides: Partial<AssetManifest> = {}): AssetManif
       checksum: 'sha256-test',
       signature: { algorithm: 'sha256', value: 'manifest' },
     },
+    ...overrides,
+  });
+}
+
+function createLocalShaderManifest(overrides: Partial<AssetManifest> = {}): AssetManifest {
+  return createManifest({
+    id: '@test/shader',
+    name: 'shader',
+    type: 'shader',
+    source: {
+      kind: 'local',
+      path: '${NEKO_HOME}/local/shader/test-shader/1.0.0',
+      storageMode: 'copy-managed',
+    },
+    typeMetadata: {
+      type: 'shader',
+      data: {
+        shaderKind: 'standalone',
+        language: 'wgsl',
+        stage: 'fragment',
+        inputs: [],
+        artifactForm: 'spirv-binary',
+        localValidation: {
+          validator: 'spirv-val',
+          sourceWarning: true,
+        },
+      },
+    },
+    distribution: undefined,
+    ...overrides,
+  });
+}
+
+function createLocalModelManifest(overrides: Partial<AssetManifest> = {}): AssetManifest {
+  return createManifest({
+    id: '@test/model',
+    name: 'model',
+    type: 'model',
+    source: {
+      kind: 'local',
+      path: '${NEKO_HOME}/local/model/test-model/1.0.0',
+      storageMode: 'copy-managed',
+    },
+    typeMetadata: {
+      type: 'model',
+      data: {
+        modelKind: 'base',
+        framework: 'onnx',
+        task: 'vision',
+        size: 1,
+        localValidation: {
+          sourceWarning: true,
+          formatProbe: {
+            detectedFramework: 'onnx',
+            fileSize: 1,
+          },
+          resourcePolicy: {
+            maxRamMB: 1024,
+            maxVramMB: 1024,
+          },
+        },
+      },
+    },
+    distribution: undefined,
     ...overrides,
   });
 }

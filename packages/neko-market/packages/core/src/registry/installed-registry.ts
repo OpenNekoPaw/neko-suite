@@ -16,6 +16,7 @@ import type {
   MediaMetadata,
   ModelMetadata,
   PluginMetadata,
+  PluginPermission,
   PresetMetadata,
   ProviderMetadata,
   ShaderMetadata,
@@ -25,7 +26,7 @@ import type {
   InstalledPackageRefState,
   InstalledRegistryData,
 } from '@neko/shared';
-import { getLegacyAssetTypeMigration, isAssetType } from '@neko/shared';
+import { getLegacyAssetTypeMigration, isAssetType, isPluginPermission } from '@neko/shared';
 
 export interface RemovedReferenceState {
   packageId: string;
@@ -296,8 +297,35 @@ function backfillV1RecordDefaults(data: InstalledRegistryData): InstalledRegistr
     pkg.enabled ??= true;
     pkg.requested ??= true;
     pkg.status ??= 'active';
+    pkg.source ??= inferInstalledPackageSource(pkg);
   }
   return data;
+}
+
+function inferInstalledPackageSource(pkg: InstalledPackage): InstalledPackage['source'] {
+  const source = pkg.manifest.source;
+  if (source.kind === 'registry') {
+    return { kind: 'market', path: pkg.installedPath };
+  }
+  if (source.kind === 'local') {
+    return {
+      kind: 'local',
+      storageMode: source.storageMode ?? 'copy-managed',
+      path: source.path,
+    };
+  }
+  if (source.kind === 'local-link') {
+    return {
+      kind: 'local-link',
+      storageMode: 'local-link',
+      path: source.path,
+      originalPath: source.path,
+    };
+  }
+  if (source.kind === 'ai-generated') {
+    return { kind: 'ai-generated', path: pkg.installedPath };
+  }
+  return { kind: 'market', path: pkg.installedPath };
 }
 
 function migrateLegacyPackageType(pkg: InstalledPackage): void {
@@ -436,7 +464,23 @@ function buildMigratedTypeMetadata(
         data: {
           entryPoint: readString(data['entryPoint'], ''),
           apiVersion: readString(data['apiVersion'], '1'),
-          permissions: readStringArray(data['permissions']),
+          permissions: readPluginPermissions(data['permissions']),
+          networkHosts: readStringArray(data['networkHosts']),
+          engineRequirements: {
+            minVersion: readString(
+              isRecord(data['engineRequirements'])
+                ? data['engineRequirements']['minVersion']
+                : undefined,
+              '1.0',
+            ),
+            targetTriple: readString(
+              isRecord(data['engineRequirements'])
+                ? data['engineRequirements']['targetTriple']
+                : undefined,
+              'unknown-unknown-unknown',
+            ),
+            runtimeArtifacts: ['cdylib'],
+          },
         } satisfies PluginMetadata,
       };
     case 'shader':
@@ -490,6 +534,10 @@ function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === 'string')
     : [];
+}
+
+function readPluginPermissions(value: unknown): PluginPermission[] {
+  return Array.isArray(value) ? value.filter(isPluginPermission) : [];
 }
 
 function readEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {

@@ -6,10 +6,12 @@ import { create } from 'zustand';
 import type {
   AssetCategory,
   AssetType,
+  LocalAssetStorageMode,
   MarketPricing,
   MarketSearchQuery,
   MarketServerInfo,
   MarketSort,
+  WorkspaceTrustLevel,
 } from '../messages';
 
 // =============================================================================
@@ -37,6 +39,9 @@ export interface MarketItem {
   entitlementState?: OwnedItem['state'];
   status?: InstalledStatus;
   largeAsset?: MarketLargeAssetStrategy;
+  sourceKind?: InstalledSourceKind;
+  storageMode?: LocalAssetStorageMode;
+  governanceWarnings?: GovernanceWarning[];
 }
 
 export type InstalledStatus =
@@ -61,6 +66,25 @@ export interface InstalledItem {
   expiresAt?: number;
   refs?: Record<string, { refCount: number; owners: string[] }>;
   largeAsset?: LargeAssetState;
+  sourceKind?: InstalledSourceKind;
+  storageMode?: LocalAssetStorageMode;
+  localPath?: string;
+  localOriginalPath?: string;
+  governanceWarnings?: GovernanceWarning[];
+}
+
+export type InstalledSourceKind = 'market' | 'local' | 'local-link' | 'ai-generated';
+
+export interface GovernanceWarning {
+  code:
+    | 'native-plugin'
+    | 'shader-validation'
+    | 'model-resource'
+    | 'local-source'
+    | 'workspace-trust'
+    | 'developer-mode';
+  severity: 'info' | 'warning' | 'blocked';
+  message?: string;
 }
 
 export interface UpdateItem {
@@ -140,6 +164,34 @@ export interface LargeAssetPickerState {
   isOpen: boolean;
 }
 
+export interface DeveloperModeState {
+  enabled: boolean;
+  active: boolean;
+  expiresAt?: number;
+  riskAcceptedAt?: number;
+}
+
+export interface WorkspaceTrustState {
+  level: WorkspaceTrustLevel;
+  canPromote: boolean;
+  hasProjectHint?: boolean;
+  blockedReason?: string;
+}
+
+export interface LocalInstallDraft {
+  draftId: string;
+  assetType: AssetType;
+  assetName: string;
+  sourcePathLabel: string;
+  storageMode: LocalAssetStorageMode;
+  warnings: GovernanceWarning[];
+}
+
+export interface GovernanceState {
+  developerMode: DeveloperModeState;
+  workspaceTrust: WorkspaceTrustState;
+}
+
 // =============================================================================
 // Store
 // =============================================================================
@@ -161,6 +213,7 @@ interface MarketplaceState {
   assetTypeFilter: AssetTypeFilter;
   browseFilters: BrowseFilters;
   serverInfo: MarketServerInfo | null;
+  governance: GovernanceState;
 
   // Browse
   searchText: string;
@@ -172,6 +225,7 @@ interface MarketplaceState {
 
   // Installed
   installed: InstalledItem[];
+  localInstallDraft: LocalInstallDraft | null;
 
   // Owned
   entitlements: EntitlementCacheState;
@@ -193,6 +247,7 @@ interface MarketplaceState {
   setAssetTypeFilter: (filter: AssetTypeFilter) => void;
   setBrowseFilters: (filters: Partial<BrowseFilters>) => void;
   setServerInfo: (info: MarketServerInfo | null) => void;
+  setGovernance: (state: GovernanceState) => void;
 
   // Actions — browse
   setSearchText: (text: string) => void;
@@ -203,6 +258,7 @@ interface MarketplaceState {
 
   // Actions — installed
   setInstalled: (items: InstalledItem[]) => void;
+  setLocalInstallDraft: (draft: LocalInstallDraft | null) => void;
 
   // Actions — owned
   setEntitlements: (items: OwnedItem[], etag?: string) => void;
@@ -264,6 +320,10 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
     sort: 'featured',
   },
   serverInfo: null,
+  governance: {
+    developerMode: { enabled: false, active: false },
+    workspaceTrust: { level: 'restricted', canPromote: true },
+  },
 
   // Browse
   searchText: '',
@@ -275,6 +335,7 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   // Installed
   installed: [],
+  localInstallDraft: null,
 
   // Owned
   entitlements: {
@@ -311,6 +372,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
 
   setServerInfo: (info) => set({ serverInfo: info }),
 
+  setGovernance: (governance) => set({ governance }),
+
   setSearchText: (text) => set({ searchText: text }),
 
   setSearching: (loading) => set({ isSearching: loading }),
@@ -323,6 +386,8 @@ export const useMarketplaceStore = create<MarketplaceState>((set, get) => ({
   setSelectedPackage: (item) => set({ selectedPackage: item }),
 
   setInstalled: (items) => set({ installed: items }),
+
+  setLocalInstallDraft: (draft) => set({ localInstallDraft: draft }),
 
   setEntitlements: (items, etag) =>
     set({

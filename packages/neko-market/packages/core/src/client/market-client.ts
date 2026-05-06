@@ -21,7 +21,16 @@ import type {
   MarketPackage,
   MarketPackageVersion,
   MarketServerInfo,
+  PermissionViolationAuditPayload,
+  PermissionViolationAuditReportResult,
+  PluginBuildRequest,
+  PluginBuildResponse,
+  PluginBuildResult,
+  PluginBuildStatusResult,
   ProblemDetails,
+  PublisherVerificationStatus,
+  PublisherVerificationSubmission,
+  PublisherVerificationSubmissionResult,
   ProxyVariant,
   SemanticOntologyResult,
   SparseManifestResult,
@@ -42,6 +51,15 @@ export interface MarketClientConfig {
   maxRetries?: number;
   /** Override delay for tests or host-specific scheduling. */
   sleep?: (ms: number) => Promise<void>;
+  /** Optional local retention hook for retryable plugin audit payloads. */
+  auditRetention?: PermissionViolationAuditRetention;
+}
+
+export interface PermissionViolationAuditRetention {
+  record(
+    payload: PermissionViolationAuditPayload,
+    reason: PermissionViolationAuditReportResult['reason'],
+  ): Promise<void> | void;
 }
 
 /** Default official registry URL */
@@ -57,6 +75,7 @@ export class MarketClient implements IMarketClient {
   private readonly headers: Record<string, string>;
   private readonly maxRetries: number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly auditRetention: PermissionViolationAuditRetention | undefined;
   private serverInfo?: MarketServerInfo;
 
   constructor(config?: Partial<MarketClientConfig>) {
@@ -64,6 +83,7 @@ export class MarketClient implements IMarketClient {
     this.timeout = config?.timeout ?? 30000;
     this.maxRetries = config?.maxRetries ?? 2;
     this.sleep = config?.sleep ?? defaultSleep;
+    this.auditRetention = config?.auditRetention;
     this.headers = {
       Accept: 'application/json, application/problem+json',
       'Content-Type': 'application/json',
@@ -253,6 +273,82 @@ export class MarketClient implements IMarketClient {
     return this.get<CheckoutUrlResult>(`/billing/checkout-url?${params.toString()}`);
   }
 
+  async requestPluginBuild(
+    packageId: string,
+    request: PluginBuildRequest,
+  ): Promise<PluginBuildResponse> {
+    const entitlement = await this.checkEntitlement(packageId, request.version);
+    if (!entitlement.allowed) {
+      throw new MarketApiError(403, 'Entitlement Denied', '', {
+        type: 'urn:neko:market:entitlement-denied',
+        title: 'Plugin entitlement denied',
+        status: 403,
+        detail: entitlement.reason ?? 'Plugin entitlement is not allowed',
+        packageId,
+      });
+    }
+
+    return this.post<PluginBuildResponse>(
+      `/plugins/${encodeURIComponent(packageId)}/build`,
+      request,
+    );
+  }
+
+  async getPluginBuildStatus(packageId: string, buildId: string): Promise<PluginBuildStatusResult> {
+    const params = new URLSearchParams({ buildId });
+    return this.get<PluginBuildStatusResult>(
+      `/plugins/${encodeURIComponent(packageId)}/build-status?${params.toString()}`,
+    );
+  }
+
+  async getPluginBuildResult(packageId: string, buildId: string): Promise<PluginBuildResult> {
+    const params = new URLSearchParams({ buildId });
+    return this.get<PluginBuildResult>(
+      `/plugins/${encodeURIComponent(packageId)}/build-result?${params.toString()}`,
+    );
+  }
+
+  async submitPublisherVerification(
+    submission: PublisherVerificationSubmission,
+  ): Promise<PublisherVerificationSubmissionResult> {
+    return this.post<PublisherVerificationSubmissionResult>('/publishers/verify', submission);
+  }
+
+  async getPublisherVerificationStatus(publisherId: string): Promise<PublisherVerificationStatus> {
+    return this.get<PublisherVerificationStatus>(
+      `/publishers/${encodeURIComponent(publisherId)}/verification-status`,
+    );
+  }
+
+  async reportPermissionViolation(
+    payload: PermissionViolationAuditPayload,
+  ): Promise<PermissionViolationAuditReportResult> {
+    const capability = 'plugin-audit';
+    if (!(await this.hasCapability(capability))) {
+      await this.retainPermissionViolation(payload, 'unsupported-capability');
+      return {
+        delivered: false,
+        retained: this.auditRetention !== undefined,
+        reason: 'unsupported-capability',
+      };
+    }
+
+    try {
+      await this.post<void>('/audit/permission-violation', payload);
+      return { delivered: true, retained: false };
+    } catch (error) {
+      if (isTransientAuditFailure(error)) {
+        await this.retainPermissionViolation(payload, 'transient-failure');
+        return {
+          delivered: false,
+          retained: this.auditRetention !== undefined,
+          reason: 'transient-failure',
+        };
+      }
+      throw error;
+    }
+  }
+
   async getSemanticOntology(type?: AssetType, kind?: string): Promise<SemanticOntologyResult> {
     await this.requireCapability('ontology');
     const params = new URLSearchParams();
@@ -370,6 +466,18 @@ export class MarketClient implements IMarketClient {
     });
   }
 
+  private async hasCapability(capability: string): Promise<boolean> {
+    const info = await this.getServerInfo();
+    return info.capabilities.includes(capability);
+  }
+
+  private async retainPermissionViolation(
+    payload: PermissionViolationAuditPayload,
+    reason: PermissionViolationAuditReportResult['reason'],
+  ): Promise<void> {
+    await this.auditRetention?.record(payload, reason);
+  }
+
   private getRetryDelayMs(error: MarketApiError, attempt: number): number {
     const retryAfterMs = error.retryAfterMs;
     if (retryAfterMs !== undefined) return retryAfterMs;
@@ -442,6 +550,13 @@ function parseProblemDetails(body: string, fallbackStatus: number): ProblemDetai
   } catch {
     return undefined;
   }
+}
+
+function isTransientAuditFailure(error: unknown): boolean {
+  if (!(error instanceof MarketApiError)) return true;
+  return (
+    error.status === 408 || error.status === 409 || error.status === 429 || error.status >= 500
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

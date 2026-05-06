@@ -224,5 +224,13 @@ pub mod actions {
 
     pub const DOCUMENTS: &[&str] = &["probe"];
 
-    pub const PLUGINS: &[&str] = &["list", "inspect", "enable", "disable", "reload"];
+    pub const PLUGINS: &[&str] = &[
+        "list",
+        "inspect",
+        "enable",
+        "disable",
+        "reload",
+        "system-info",
+        "audit-events",
+    ];
 }

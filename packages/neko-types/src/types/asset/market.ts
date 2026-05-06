@@ -15,7 +15,9 @@ import type {
   AssetManifest,
   AssetType,
   DistributionKind,
+  LocalAssetStorageMode,
   ModelVariant,
+  PluginPermission,
   ProxyVariant,
   SparseItem,
 } from './manifest';
@@ -24,10 +26,12 @@ export type {
   AssetCategory,
   AssetCompatibility,
   AssetDistribution,
+  AssetManifestSource,
   AssetPricing,
   DistributionKind,
   EffectsManifest,
   LargeAssetStrategy,
+  LocalAssetStorageMode,
   ModelVariant,
   PackageEmbeddings,
   ProxyVariant,
@@ -170,6 +174,81 @@ export interface CheckoutUrlResult {
   expiresAt: number;
 }
 
+export interface PluginBuildRequest {
+  version: string;
+  targetTriple: string;
+  sessionId: string;
+}
+
+export interface PluginBuildWatermarkInfo {
+  purchaserId: string;
+  sessionId: string;
+}
+
+export interface PluginBuildReadyResult {
+  url: string;
+  expiresAt: number;
+  integrity: string;
+  watermarkInfo?: PluginBuildWatermarkInfo;
+}
+
+export interface PluginBuildQueuedResult {
+  buildId: string;
+  status: 'queued';
+  estimatedDuration: number;
+}
+
+export type PluginBuildResponse = PluginBuildReadyResult | PluginBuildQueuedResult;
+
+export interface PluginBuildStatusResult {
+  status: 'queued' | 'building' | 'done' | 'failed';
+  progress?: number;
+  eta?: number;
+  reason?: string;
+}
+
+export interface PluginBuildResult {
+  url: string;
+  expiresAt: number;
+  integrity: string;
+}
+
+export interface PublisherVerificationSubmission {
+  legalName: string;
+  country: string;
+  documentType: 'passport' | 'business-license' | 'tax-id';
+  documentRef: string;
+  contactEmail: string;
+  publicKeyPem: string;
+}
+
+export interface PublisherVerificationSubmissionResult {
+  applicationId: string;
+  status: 'submitted';
+  expectedReviewDays: number;
+}
+
+export interface PublisherVerificationStatus {
+  status: 'pending' | 'approved' | 'rejected';
+  reason?: string;
+  badgeIssuedAt?: number;
+}
+
+export interface PermissionViolationAuditPayload {
+  pluginId: string;
+  purchaserId?: string;
+  sessionId?: string;
+  permission: PluginPermission;
+  declared: false;
+  timestamp: number;
+}
+
+export interface PermissionViolationAuditReportResult {
+  delivered: boolean;
+  retained: boolean;
+  reason?: 'unsupported-capability' | 'transient-failure';
+}
+
 export interface FacetSchema {
   fields: Array<{
     name: string;
@@ -279,6 +358,19 @@ export interface InstalledPackageRefState {
   owners: string[];
 }
 
+export type WorkspaceTrustLevel = 'trusted' | 'restricted' | 'limited';
+
+export type InstalledPackageSourceKind = 'market' | 'local' | 'local-link' | 'ai-generated';
+
+export interface InstalledPackageSource {
+  kind: InstalledPackageSourceKind;
+  storageMode?: LocalAssetStorageMode;
+  /** PathResolver variable path to the managed copy or external linked target. */
+  path?: string;
+  /** Original path is only allowed for explicit local-link flows and MUST use variable form. */
+  originalPath?: string;
+}
+
 export interface InstalledPackage {
   packageId: string;
   version: string;
@@ -286,6 +378,7 @@ export interface InstalledPackage {
   installedAt: number;
   installedPath: string;
   manifest: AssetManifest;
+  source?: InstalledPackageSource;
   enabled: boolean;
   /** True when the user explicitly installed this package outside a bundle/dependency flow. */
   requested?: boolean;
@@ -375,6 +468,16 @@ export interface IMarketClient {
   refreshEntitlements(): Promise<EntitlementListResult>;
   checkEntitlement(packageId: string, version: string): Promise<EntitlementCheck>;
   getCheckoutUrl(packageId: string, returnTo?: string, locale?: string): Promise<CheckoutUrlResult>;
+  requestPluginBuild(packageId: string, request: PluginBuildRequest): Promise<PluginBuildResponse>;
+  getPluginBuildStatus(packageId: string, buildId: string): Promise<PluginBuildStatusResult>;
+  getPluginBuildResult(packageId: string, buildId: string): Promise<PluginBuildResult>;
+  submitPublisherVerification(
+    submission: PublisherVerificationSubmission,
+  ): Promise<PublisherVerificationSubmissionResult>;
+  getPublisherVerificationStatus(publisherId: string): Promise<PublisherVerificationStatus>;
+  reportPermissionViolation(
+    payload: PermissionViolationAuditPayload,
+  ): Promise<PermissionViolationAuditReportResult>;
   getSemanticOntology(type?: AssetType, kind?: string): Promise<SemanticOntologyResult>;
   getIntentOntology(): Promise<IntentOntologyResult>;
   getDeprecation(packageId: string): Promise<DeprecationResult>;
@@ -464,4 +567,9 @@ export interface InstalledRegistryData {
   version: number;
   packages: Record<string, InstalledPackage>;
   refs?: Record<string, InstalledPackageRefState>;
+}
+
+export interface LocalInstalledRegistryData {
+  version: number;
+  packages: Record<string, InstalledPackage>;
 }

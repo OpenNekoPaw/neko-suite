@@ -18,6 +18,7 @@ import {
   CATEGORY_MAP,
   type AssetManifest,
   type AssetType,
+  type LocalAssetStorageMode,
 } from '@neko/shared/types/asset/manifest';
 
 export interface WebviewMessage {
@@ -79,7 +80,28 @@ function toInstalledItem(pkg: InstalledPackage): Record<string, unknown> {
     expiresAt: pkg.expiresAt,
     refs: pkg.refs,
     largeAsset: pkg.largeAsset,
+    sourceKind: pkg.source?.kind,
+    storageMode: pkg.source?.storageMode,
+    localPath: pkg.source?.path,
+    localOriginalPath: pkg.source?.originalPath,
+    governanceWarnings: buildGovernanceWarnings(pkg),
   };
+}
+
+function buildGovernanceWarnings(pkg: InstalledPackage): Array<Record<string, unknown>> {
+  if (pkg.source?.kind !== 'local' && pkg.source?.kind !== 'local-link') return [];
+
+  const warnings: Array<Record<string, unknown>> = [{ code: 'local-source', severity: 'info' }];
+  if (pkg.type === 'plugin') {
+    warnings.push({ code: 'native-plugin', severity: 'warning' });
+  }
+  if (pkg.type === 'shader') {
+    warnings.push({ code: 'shader-validation', severity: 'warning' });
+  }
+  if (pkg.type === 'model') {
+    warnings.push({ code: 'model-resource', severity: 'warning' });
+  }
+  return warnings;
 }
 
 /** Project registry entitlements into webview Owned rows. */
@@ -149,6 +171,9 @@ export class MarketplaceHandler {
       case 'market:getServerInfo':
         return this._handleGetServerInfo(postMessage);
 
+      case 'market:getGovernanceState':
+        return this._handleGetGovernanceState(postMessage);
+
       case 'market:install': {
         const packageId = parseRequiredString(message['packageId'], 'packageId');
         const version = parseRequiredString(message['version'], 'version');
@@ -197,6 +222,41 @@ export class MarketplaceHandler {
         if (!parsed.ok) return this._rejectInvalidMessage(parsed.error, postMessage);
         return this._handleDisable(parsed.value, postMessage);
       }
+
+      case 'market:revealLocal': {
+        const parsed = parseRequiredString(message['packageId'], 'packageId');
+        if (!parsed.ok) return this._rejectInvalidMessage(parsed.error, postMessage);
+        return this._handleRevealLocal(parsed.value, postMessage);
+      }
+
+      case 'market:requestLocalInstall': {
+        const parsed = parseLocalAssetStorageMode(message['storageMode']);
+        if (!parsed.ok) return this._rejectInvalidMessage(parsed.error, postMessage);
+        return this._handleRequestLocalInstall(parsed.value, postMessage);
+      }
+
+      case 'market:confirmLocalInstall': {
+        const draftId = parseRequiredString(message['draftId'], 'draftId');
+        const storageMode = parseLocalAssetStorageMode(message['storageMode']);
+        if (!draftId.ok) return this._rejectInvalidMessage(draftId.error, postMessage);
+        if (!storageMode.ok) return this._rejectInvalidMessage(storageMode.error, postMessage);
+        return this._handleConfirmLocalInstall(draftId.value, storageMode.value, postMessage);
+      }
+
+      case 'market:cancelLocalInstall': {
+        const parsed = parseRequiredString(message['draftId'], 'draftId');
+        if (!parsed.ok) return this._rejectInvalidMessage(parsed.error, postMessage);
+        return this._handleCancelLocalInstall(parsed.value, postMessage);
+      }
+
+      case 'market:setDeveloperMode': {
+        const parsed = parseDeveloperModeRequest(message);
+        if (!parsed.ok) return this._rejectInvalidMessage(parsed.error, postMessage);
+        return this._handleSetDeveloperMode(parsed.value, postMessage);
+      }
+
+      case 'market:promoteWorkspaceTrust':
+        return this._handlePromoteWorkspaceTrust(postMessage);
 
       case 'market:checkout': {
         const parsed = parseRequiredString(message['packageId'], 'packageId');
@@ -294,6 +354,17 @@ export class MarketplaceHandler {
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error('getServerInfo failed', e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleGetGovernanceState(postMessage: PostMessageFn): Promise<boolean> {
+    try {
+      postMessage({ type: 'market:governanceState', data: this._service.getGovernanceState() });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error('getGovernanceState failed', e);
       postMessage({ type: 'market:error', error: e.message });
     }
     return true;
@@ -459,6 +530,99 @@ export class MarketplaceHandler {
     } catch (err) {
       const e = toBaseError(err);
       this._logger.error(`Disable failed: ${packageId}`, e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleRevealLocal(
+    packageId: string,
+    postMessage: PostMessageFn,
+  ): Promise<boolean> {
+    try {
+      await this._service.revealLocalPackage(packageId);
+      postMessage({ type: 'market:revealLocalResult', data: { packageId, success: true } });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error(`Reveal local package failed: ${packageId}`, e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleRequestLocalInstall(
+    storageMode: LocalAssetStorageMode,
+    postMessage: PostMessageFn,
+  ): Promise<boolean> {
+    try {
+      const draft = await this._service.prepareLocalInstallDraft(storageMode);
+      postMessage({ type: 'market:localInstallDraft', data: draft });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error('Prepare local install failed', e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleConfirmLocalInstall(
+    draftId: string,
+    storageMode: LocalAssetStorageMode,
+    postMessage: PostMessageFn,
+  ): Promise<boolean> {
+    try {
+      const record = await this._service.confirmLocalInstallDraft(draftId, storageMode);
+      postMessage({
+        type: 'market:localInstallResult',
+        data: { draftId, packageId: record?.packageId, success: true },
+      });
+      const installed = await this._service.listInstalled();
+      postMessage({ type: 'market:installedResult', data: installed.map(toInstalledItem) });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error(`Confirm local install failed: ${draftId}`, e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleCancelLocalInstall(
+    draftId: string,
+    postMessage: PostMessageFn,
+  ): Promise<boolean> {
+    try {
+      await this._service.cancelLocalInstallDraft(draftId);
+      postMessage({ type: 'market:localInstallDraft', data: undefined });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error(`Cancel local install failed: ${draftId}`, e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handleSetDeveloperMode(
+    request: { enabled: boolean; riskAccepted: boolean; durationMs?: number },
+    postMessage: PostMessageFn,
+  ): Promise<boolean> {
+    try {
+      const state = await this._service.setDeveloperMode(request);
+      postMessage({ type: 'market:developerModeResult', data: state });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error('Set Developer Mode failed', e);
+      postMessage({ type: 'market:error', error: e.message });
+    }
+    return true;
+  }
+
+  private async _handlePromoteWorkspaceTrust(postMessage: PostMessageFn): Promise<boolean> {
+    try {
+      const state = await this._service.promoteWorkspaceTrust();
+      postMessage({ type: 'market:workspaceTrustResult', data: state });
+    } catch (err) {
+      const e = toBaseError(err);
+      this._logger.error('Promote Workspace Trust failed', e);
       postMessage({ type: 'market:error', error: e.message });
     }
     return true;
@@ -684,6 +848,39 @@ function parseAssetTypeFilter(value: unknown): ValidationResult<AssetType | 'all
   if (value === 'all') return { ok: true, value: 'all' };
   if (!isAssetType(value)) return { ok: false, error: 'assetType must be all or a v4 asset type' };
   return { ok: true, value };
+}
+
+function parseLocalAssetStorageMode(value: unknown): ValidationResult<LocalAssetStorageMode> {
+  if (value === undefined || value === 'copy-managed') {
+    return { ok: true, value: 'copy-managed' };
+  }
+  if (value === 'local-link') return { ok: true, value: 'local-link' };
+  return { ok: false, error: 'storageMode must be copy-managed or local-link' };
+}
+
+function parseDeveloperModeRequest(
+  value: Record<string, unknown>,
+): ValidationResult<{ enabled: boolean; riskAccepted: boolean; durationMs?: number }> {
+  if (typeof value['enabled'] !== 'boolean') {
+    return { ok: false, error: 'enabled must be boolean' };
+  }
+  if (typeof value['riskAccepted'] !== 'boolean') {
+    return { ok: false, error: 'riskAccepted must be boolean' };
+  }
+  if (
+    value['durationMs'] !== undefined &&
+    (typeof value['durationMs'] !== 'number' || !Number.isFinite(value['durationMs']))
+  ) {
+    return { ok: false, error: 'durationMs must be a finite number' };
+  }
+  return {
+    ok: true,
+    value: {
+      enabled: value['enabled'],
+      riskAccepted: value['riskAccepted'],
+      durationMs: value['durationMs'] as number | undefined,
+    },
+  };
 }
 
 function invalidField(field: string): ValidationResult<never> {

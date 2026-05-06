@@ -35,8 +35,9 @@ import type {
   ResolvedInstallReference,
   SparseItem,
   UpdateInfo,
+  WorkspaceTrustLevel,
 } from '@neko/shared';
-import { getAssetCategory, parseAssetManifest } from '@neko/shared';
+import { getAssetCategory, isPluginTargetTripleCompatible, parseAssetManifest } from '@neko/shared';
 
 import { verifyIntegrity } from './integrity-checker';
 import { downloadFile } from './download-service';
@@ -60,6 +61,29 @@ export interface InstallManagerConfig {
   signatureVerifier?: ManifestSignatureVerifier;
   effectsActivator?: EffectsActivator;
   effectsInverter?: EffectsInverter;
+  currentTargetTriple?: string;
+  workspaceTrustLevel?: WorkspaceTrustLevel;
+  developerMode?: DeveloperModeState;
+  localAssetValidator?: LocalAssetValidator;
+}
+
+export interface DeveloperModeState {
+  active: boolean;
+  expiresAt?: number;
+}
+
+export interface LocalAssetValidationIssue {
+  field: string;
+  message: string;
+}
+
+export interface LocalAssetValidator {
+  validateShader?(
+    manifest: AssetManifest,
+  ): Promise<LocalAssetValidationIssue[]> | LocalAssetValidationIssue[];
+  validateModel?(
+    manifest: AssetManifest,
+  ): Promise<LocalAssetValidationIssue[]> | LocalAssetValidationIssue[];
 }
 
 interface InstallExecutionOptions {
@@ -359,6 +383,9 @@ export class InstallManager implements IInstallManager {
 
       const installed = this.installed.get(packageId);
       if (installed && this.versionResolver.satisfies(installed.version, ref.version)) {
+        if (relation === 'bundle-content' && this.isLocalManifest(installed.manifest)) {
+          throw new Error(`Bundle content cannot reference sideload asset: ${packageId}`);
+        }
         await this.assertResolvedChildIsAcyclic(installed.manifest, stack);
         resolved.push({
           packageId,
@@ -413,6 +440,9 @@ export class InstallManager implements IInstallManager {
       }
 
       const childManifest = parseAssetManifest(pkg.manifest);
+      if (relation === 'bundle-content' && this.isLocalManifest(childManifest)) {
+        throw new Error(`Bundle content cannot reference sideload asset: ${packageId}`);
+      }
       if (!this.versionResolver.satisfies(childManifest.version, ref.version)) {
         if (optional) {
           resolved.push({
@@ -575,6 +605,7 @@ export class InstallManager implements IInstallManager {
     const packages = this.installed.list();
 
     for (const pkg of packages) {
+      if (this.isLocalManifest(pkg.manifest)) continue;
       try {
         const versions = await this.client.getVersions(pkg.packageId);
         if (versions.length === 0) continue;
@@ -709,9 +740,12 @@ export class InstallManager implements IInstallManager {
 
     this.checkInstalledStatus(manifest);
     this.checkTrust(manifest);
+    this.checkWorkspaceTrust(manifest);
+    this.checkPluginGovernance(manifest);
     this.checkConflicts(manifest);
     this.checkResourceEstimates(manifest);
     this.checkCapabilities(manifest);
+    await this.checkLocalAssetValidation(manifest);
 
     return { expiresAt: entitlement.expiresAt };
   }
@@ -757,6 +791,94 @@ export class InstallManager implements IInstallManager {
     if (category !== 'media') {
       throw new Error(`Untrusted package cannot install ${manifest.type} assets`);
     }
+  }
+
+  private checkWorkspaceTrust(manifest: AssetManifest): void {
+    const trust = this.getWorkspaceTrustLevel();
+    if (!this.isLocalManifest(manifest)) {
+      if (manifest.type === 'plugin' && trust === 'limited' && !this.isCorePublisher(manifest)) {
+        throw new Error(
+          `Limited workspace cannot load verified third-party plugin: ${manifest.id}`,
+        );
+      }
+      return;
+    }
+
+    if (trust !== 'trusted') {
+      throw new Error(`Sideload asset requires trusted workspace: ${manifest.id}`);
+    }
+  }
+
+  private checkPluginGovernance(manifest: AssetManifest): void {
+    if (manifest.type !== 'plugin') return;
+
+    const metadata =
+      manifest.typeMetadata?.type === 'plugin' ? manifest.typeMetadata.data : undefined;
+    if (!metadata) {
+      throw new Error(`Plugin manifest is missing native plugin metadata: ${manifest.id}`);
+    }
+
+    if (this.isLocalManifest(manifest)) {
+      this.checkDeveloperModeForLocalPlugin(manifest);
+    } else if (!this.isVerifiedPluginPublisher(manifest)) {
+      throw new Error(`Native plugin requires core or verified publisher: ${manifest.id}`);
+    }
+
+    if (
+      this.config.currentTargetTriple &&
+      !isPluginTargetTripleCompatible(
+        metadata.engineRequirements.targetTriple,
+        this.config.currentTargetTriple,
+      )
+    ) {
+      throw new Error(
+        `Plugin target triple ${metadata.engineRequirements.targetTriple} is incompatible with ${this.config.currentTargetTriple}`,
+      );
+    }
+  }
+
+  private checkDeveloperModeForLocalPlugin(manifest: AssetManifest): void {
+    const developerMode = this.config.developerMode;
+    if (!developerMode?.active) {
+      throw new Error(`Local native plugin requires Developer Mode: ${manifest.id}`);
+    }
+    if (developerMode.expiresAt !== undefined && developerMode.expiresAt <= Date.now()) {
+      throw new Error(`Developer Mode has expired for local native plugin: ${manifest.id}`);
+    }
+  }
+
+  private async checkLocalAssetValidation(manifest: AssetManifest): Promise<void> {
+    if (!this.isLocalManifest(manifest)) return;
+    const validator = this.config.localAssetValidator;
+    const issues =
+      manifest.type === 'shader'
+        ? await validator?.validateShader?.(manifest)
+        : manifest.type === 'model'
+          ? await validator?.validateModel?.(manifest)
+          : undefined;
+    if (!issues || issues.length === 0) return;
+    throw new Error(
+      `Local ${manifest.type} validation failed: ${issues.map((issue) => `${issue.field}: ${issue.message}`).join('; ')}`,
+    );
+  }
+
+  private getWorkspaceTrustLevel(): WorkspaceTrustLevel {
+    return this.config.workspaceTrustLevel ?? 'trusted';
+  }
+
+  private isVerifiedPluginPublisher(manifest: AssetManifest): boolean {
+    return this.isCorePublisher(manifest) || manifest.distribution?.publisher?.verified === true;
+  }
+
+  private isCorePublisher(manifest: AssetManifest): boolean {
+    return manifest.distribution?.trustLevel === 'core';
+  }
+
+  private isLocalManifest(manifest: AssetManifest): boolean {
+    return (
+      manifest.source.kind === 'local-link' ||
+      (manifest.source.kind === 'local' && manifest.source.storageMode === 'copy-managed')
+    );
   }
 
   private checkConflicts(manifest: AssetManifest): void {

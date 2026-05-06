@@ -30,7 +30,9 @@ import type {
   MarketPackageEvent,
   MissingInstallTargetContributor,
   UpdateInfo,
+  WorkspaceTrustLevel,
 } from '@neko/shared/types/asset/market';
+import type { LocalAssetStorageMode } from '@neko/shared/types/asset/manifest';
 import type { AssetManifest, AssetType } from '@neko/shared/types/asset/manifest';
 import type { IAuthSession, ILogger } from '@neko/shared';
 import { toBaseError } from '@neko/shared';
@@ -62,8 +64,23 @@ export interface MarketplaceServiceHostAdapters {
   listExtensions(): readonly InstallTargetContributorExtension[];
   getExtensionVersion(extensionId: string): string | undefined;
   openExternal(url: string): Promise<boolean>;
+  revealLocalPath?(path: string): Promise<void>;
   getLocale(): string;
   getRefreshUri(packageId?: string): string;
+  getDeveloperModeState?(): MarketplaceDeveloperModeState;
+  setDeveloperModeState?(
+    request: MarketplaceDeveloperModeRequest,
+  ): Promise<MarketplaceDeveloperModeState>;
+  getWorkspaceTrustState?(): MarketplaceWorkspaceTrustState;
+  promoteWorkspaceTrust?(): Promise<MarketplaceWorkspaceTrustState>;
+  prepareLocalInstallDraft?(
+    storageMode: LocalAssetStorageMode,
+  ): Promise<MarketplaceLocalInstallDraft | undefined>;
+  confirmLocalInstallDraft?(
+    draftId: string,
+    storageMode: LocalAssetStorageMode,
+  ): Promise<InstalledPackage | undefined>;
+  cancelLocalInstallDraft?(draftId: string): Promise<void>;
 }
 
 export interface MarketplaceServiceOptions {
@@ -99,6 +116,10 @@ export function createVSCodeMarketplaceServiceOptions(
         return typeof packageJson?.version === 'string' ? packageJson.version : undefined;
       },
       openExternal: (url) => Promise.resolve(vscode.env.openExternal(vscode.Uri.parse(url))),
+      revealLocalPath: (path) =>
+        Promise.resolve(
+          vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(path)),
+        ).then(() => undefined),
       getLocale: () => vscode.env.language,
       getRefreshUri: (packageId) => {
         const query = packageId ? `?packageId=${encodeURIComponent(packageId)}` : '';
@@ -106,6 +127,50 @@ export function createVSCodeMarketplaceServiceOptions(
       },
     },
   };
+}
+
+export interface MarketplaceDeveloperModeState {
+  enabled: boolean;
+  active: boolean;
+  expiresAt?: number;
+  riskAcceptedAt?: number;
+}
+
+export interface MarketplaceDeveloperModeRequest {
+  enabled: boolean;
+  riskAccepted: boolean;
+  durationMs?: number;
+}
+
+export interface MarketplaceWorkspaceTrustState {
+  level: WorkspaceTrustLevel;
+  canPromote: boolean;
+  hasProjectHint?: boolean;
+  blockedReason?: string;
+}
+
+export interface MarketplaceGovernanceState {
+  developerMode: MarketplaceDeveloperModeState;
+  workspaceTrust: MarketplaceWorkspaceTrustState;
+}
+
+export interface MarketplaceLocalInstallDraft {
+  draftId: string;
+  assetType: AssetType;
+  assetName: string;
+  sourcePathLabel: string;
+  storageMode: LocalAssetStorageMode;
+  warnings: Array<{
+    code:
+      | 'native-plugin'
+      | 'shader-validation'
+      | 'model-resource'
+      | 'local-source'
+      | 'workspace-trust'
+      | 'developer-mode';
+    severity: 'info' | 'warning' | 'blocked';
+    message?: string;
+  }>;
 }
 
 async function getVSCodeNekoAuthAPI(): Promise<NekoAuthAPI | undefined> {
@@ -437,6 +502,78 @@ export class MarketplaceService implements vscode.Disposable {
 
   async checkUpdates(): Promise<UpdateInfo[]> {
     return this._installManager.checkUpdates();
+  }
+
+  getGovernanceState(): MarketplaceGovernanceState {
+    return {
+      developerMode: this._options.host.getDeveloperModeState?.() ?? {
+        enabled: false,
+        active: false,
+      },
+      workspaceTrust: this._options.host.getWorkspaceTrustState?.() ?? {
+        level: 'restricted',
+        canPromote: true,
+      },
+    };
+  }
+
+  async setDeveloperMode(
+    request: MarketplaceDeveloperModeRequest,
+  ): Promise<MarketplaceDeveloperModeState> {
+    if (!request.enabled) {
+      return (
+        (await this._options.host.setDeveloperModeState?.(request)) ?? {
+          enabled: false,
+          active: false,
+        }
+      );
+    }
+    if (!request.riskAccepted) {
+      throw new Error('Developer Mode requires risk acknowledgement');
+    }
+    return (
+      (await this._options.host.setDeveloperModeState?.(request)) ?? {
+        enabled: true,
+        active: true,
+        expiresAt: Date.now() + (request.durationMs ?? 14 * 24 * 60 * 60 * 1000),
+        riskAcceptedAt: Date.now(),
+      }
+    );
+  }
+
+  async promoteWorkspaceTrust(): Promise<MarketplaceWorkspaceTrustState> {
+    return (
+      (await this._options.host.promoteWorkspaceTrust?.()) ?? {
+        level: 'trusted',
+        canPromote: false,
+      }
+    );
+  }
+
+  async prepareLocalInstallDraft(
+    storageMode: LocalAssetStorageMode,
+  ): Promise<MarketplaceLocalInstallDraft | undefined> {
+    return this._options.host.prepareLocalInstallDraft?.(storageMode);
+  }
+
+  async confirmLocalInstallDraft(
+    draftId: string,
+    storageMode: LocalAssetStorageMode,
+  ): Promise<InstalledPackage | undefined> {
+    return this._options.host.confirmLocalInstallDraft?.(draftId, storageMode);
+  }
+
+  async cancelLocalInstallDraft(draftId: string): Promise<void> {
+    await this._options.host.cancelLocalInstallDraft?.(draftId);
+  }
+
+  async revealLocalPackage(packageId: string): Promise<void> {
+    const record = this._installedRegistry.get(packageId);
+    if (!record) throw new Error(`Package is not installed: ${packageId}`);
+    if (record.source?.kind !== 'local' && record.source?.kind !== 'local-link') {
+      throw new Error(`Package is not a local install: ${packageId}`);
+    }
+    await this._options.host.revealLocalPath?.(record.installedPath);
   }
 
   async update(

@@ -327,6 +327,50 @@ body {
 .status-badge--active { background: var(--marketplace-btn-primary); }
 .status-badge--warning { background: var(--vscode-inputValidation-warningBackground, #4d3800); }
 .status-badge--blocked { background: var(--vscode-inputValidation-errorBackground, #5a1d1d); }
+.status-badge--local { background: var(--vscode-badge-background, #4d4d4d); }
+
+.management-strip,
+.local-install-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--marketplace-border);
+  border-radius: 4px;
+}
+
+.management-strip {
+  flex-wrap: wrap;
+}
+
+.management-strip__group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.management-strip__group--end {
+  margin-left: auto;
+}
+
+.management-strip__meta {
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+.local-install-confirm {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.local-install-confirm__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
 /* =========================================================================
    Empty / Loading States

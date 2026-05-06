@@ -81,8 +81,11 @@ export type LegacyAssetType =
 // Source
 // =============================================================================
 
+export type LocalAssetStorageMode = 'copy-managed' | 'local-link';
+
 export type AssetManifestSource =
-  | { kind: 'local'; path: string }
+  | { kind: 'local'; path: string; storageMode?: 'copy-managed' }
+  | { kind: 'local-link'; path: string; storageMode: 'local-link' }
   | { kind: 'git-lfs'; oid: string; path: string }
   | { kind: 'registry'; registry: string; package: string; version: string; integrity?: string }
   | { kind: 'ai-generated'; taskId: string; model: string }
@@ -170,6 +173,22 @@ export interface ModelMetadata {
   minVram?: number;
   architecture?: string;
   baseModel?: string;
+  localValidation?: ModelLocalValidationMetadata;
+}
+
+export interface ModelLocalValidationMetadata {
+  sourceWarning?: boolean;
+  formatProbe?: {
+    detectedFramework: ModelMetadata['framework'] | string;
+    fileSize: number;
+    parameterCount?: number;
+    quantization?: string;
+  };
+  resourcePolicy?: {
+    maxRamMB?: number;
+    maxVramMB?: number;
+    allowTrustedWorkspaceOverride?: boolean;
+  };
 }
 
 export interface EndpointMetadata {
@@ -225,10 +244,62 @@ export interface SkillMetadata {
 /** Backward-compatible name for skill marketplace metadata. */
 export type SkillMarketMetadata = SkillMetadata;
 
+export type PluginPermission =
+  | 'fs-read:project'
+  | 'fs-read:asset-library'
+  | 'fs-read:plugin-data'
+  | 'fs-write:project'
+  | 'fs-write:plugin-data'
+  | 'network:host-list'
+  | 'network:any'
+  | 'gpu:render'
+  | 'gpu:compute'
+  | 'engine:event-bus'
+  | 'engine:asset-federation'
+  | 'process-spawn'
+  | 'system-info';
+
+export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
+  'fs-read:project',
+  'fs-read:asset-library',
+  'fs-read:plugin-data',
+  'fs-write:project',
+  'fs-write:plugin-data',
+  'network:host-list',
+  'network:any',
+  'gpu:render',
+  'gpu:compute',
+  'engine:event-bus',
+  'engine:asset-federation',
+  'process-spawn',
+  'system-info',
+] as const;
+
+export type PluginHighSensitivePermission =
+  | 'fs-write:project'
+  | 'network:any'
+  | 'process-spawn'
+  | 'system-info';
+
+export const PLUGIN_HIGH_SENSITIVE_PERMISSIONS: readonly PluginHighSensitivePermission[] = [
+  'fs-write:project',
+  'network:any',
+  'process-spawn',
+  'system-info',
+] as const;
+
+export interface PluginEngineRequirements {
+  minVersion: string;
+  targetTriple: string;
+  runtimeArtifacts: ['cdylib'];
+}
+
 export interface PluginMetadata {
   entryPoint: string;
   apiVersion: string;
-  permissions: string[];
+  permissions: PluginPermission[];
+  networkHosts?: string[];
+  engineRequirements: PluginEngineRequirements;
   configSchema?: Record<string, unknown>;
 }
 
@@ -246,8 +317,21 @@ export interface ShaderMetadata {
   language: 'wgsl' | 'glsl';
   stage: 'vertex' | 'fragment' | 'compute';
   inputs: ShaderInput[];
+  artifactForm?: 'wgsl-source' | 'glsl-source' | 'spirv-binary' | 'msl-binary' | 'dxil-binary';
+  localValidation?: ShaderLocalValidationMetadata;
   preview?: string;
   compatibleWith?: string[];
+}
+
+export interface ShaderLocalValidationMetadata {
+  validator?: 'naga' | 'spirv-val' | 'metal' | 'dxil' | 'driver';
+  sourceWarning?: boolean;
+  resourceLimits?: {
+    maxWorkgroupSize?: number;
+    maxStorageBuffers?: number;
+    maxTextureBindings?: number;
+    maxCompileTimeMs?: number;
+  };
 }
 
 export interface PresetMetadata {
@@ -301,7 +385,15 @@ export interface AssetDistribution {
   visibility?: 'public' | 'private' | 'shared' | 'paid';
   publisherId?: string;
   publisherName?: string;
+  /** Deprecated compatibility field; new manifests and plugin governance use publisher.verified. */
   verified?: boolean;
+  publisher?: {
+    id: string;
+    displayName: string;
+    verified: boolean;
+    verificationTier?: 'core' | 'verified';
+    verifiedAt?: number;
+  };
   pricing?: AssetPricing;
   rating?: { average: number; count: number };
   screenshots?: string[];
@@ -651,6 +743,8 @@ export interface LegacyAssetTypeMigration {
 const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
 const DISTRIBUTION_KIND_SET = new Set<string>(DISTRIBUTION_KINDS);
 const DISTRIBUTION_MODE_SET = new Set<string>(DISTRIBUTION_MODES);
+const PLUGIN_PERMISSION_SET = new Set<string>(PLUGIN_PERMISSIONS);
+const PLUGIN_HIGH_SENSITIVE_PERMISSION_SET = new Set<string>(PLUGIN_HIGH_SENSITIVE_PERMISSIONS);
 
 const LEGACY_TYPE_MIGRATIONS: Record<LegacyAssetType, LegacyAssetTypeMigration> = {
   video: { legacyType: 'video', type: 'media', metadataPatch: mediaPatch('video') },
@@ -712,6 +806,69 @@ export function isDistributionKind(value: unknown): value is DistributionKind {
   return typeof value === 'string' && DISTRIBUTION_KIND_SET.has(value);
 }
 
+export function isPluginPermission(value: unknown): value is PluginPermission {
+  return typeof value === 'string' && PLUGIN_PERMISSION_SET.has(value);
+}
+
+export function isHighSensitivePluginPermission(
+  value: unknown,
+): value is PluginHighSensitivePermission {
+  return typeof value === 'string' && PLUGIN_HIGH_SENSITIVE_PERMISSION_SET.has(value);
+}
+
+export interface PluginPermissionDiagnostic {
+  field: string;
+  severity: 'error' | 'warning';
+  message: string;
+  permission?: PluginPermission;
+}
+
+export function validatePluginPermissionDeclarations(
+  metadata: Pick<PluginMetadata, 'permissions' | 'networkHosts'>,
+): PluginPermissionDiagnostic[] {
+  const diagnostics: PluginPermissionDiagnostic[] = [];
+
+  metadata.permissions.forEach((permission, index) => {
+    if (!isPluginPermission(permission)) {
+      diagnostics.push({
+        field: `permissions.${index}`,
+        severity: 'error',
+        message: 'must be a known PluginPermission',
+      });
+      return;
+    }
+    if (isHighSensitivePluginPermission(permission)) {
+      diagnostics.push({
+        field: `permissions.${index}`,
+        severity: 'warning',
+        permission,
+        message: highSensitivePermissionMessage(permission),
+      });
+    }
+  });
+
+  if (
+    metadata.permissions.includes('network:host-list') &&
+    !isNonEmptyArray(metadata.networkHosts)
+  ) {
+    diagnostics.push({
+      field: 'networkHosts',
+      severity: 'error',
+      permission: 'network:host-list',
+      message: 'required when permissions includes network:host-list',
+    });
+  }
+
+  return diagnostics;
+}
+
+export function isPluginTargetTripleCompatible(
+  targetTriple: string,
+  currentTriple: string,
+): boolean {
+  return targetTriple === currentTriple;
+}
+
 export function getAssetCategory(type: AssetType): AssetCategory {
   return CATEGORY_MAP[type];
 }
@@ -751,11 +908,8 @@ export function validateAssetManifest(manifest: unknown): AssetManifestValidatio
 
   if (!isRecord(manifest['source'])) {
     issues.push({ field: 'source', message: 'must be a source descriptor' });
-  } else if (
-    manifest['source']['kind'] === 'registry' &&
-    !isNonEmptyString(manifest['source']['integrity'])
-  ) {
-    issues.push({ field: 'source.integrity', message: 'registry source must include integrity' });
+  } else {
+    validateSource(manifest['source'], issues);
   }
 
   if (
@@ -800,6 +954,152 @@ function mediaPatch(mediaKind: MediaKind): LegacyMetadataPatch {
 
 function modelPatch(modelKind: ModelMetadata['modelKind']): LegacyMetadataPatch {
   return { type: 'model', data: { modelKind } };
+}
+
+function validateSource(
+  source: Record<string, unknown>,
+  issues: AssetManifestValidationIssue[],
+): void {
+  const kind = source['kind'];
+  if (!isNonEmptyString(kind)) {
+    issues.push({ field: 'source.kind', message: 'must be a non-empty string' });
+    return;
+  }
+
+  if (kind === 'registry') {
+    if (!isNonEmptyString(source['integrity'])) {
+      issues.push({ field: 'source.integrity', message: 'registry source must include integrity' });
+    }
+    return;
+  }
+
+  if (kind === 'local') {
+    validateLocalSourcePath(source, issues);
+    if (source['storageMode'] !== undefined && source['storageMode'] !== 'copy-managed') {
+      issues.push({
+        field: 'source.storageMode',
+        message: 'local source storageMode must be copy-managed',
+      });
+    }
+    return;
+  }
+
+  if (kind === 'local-link') {
+    validateVariablePath(source, issues);
+    if (source['storageMode'] !== 'local-link') {
+      issues.push({
+        field: 'source.storageMode',
+        message: 'local-link source storageMode must be local-link',
+      });
+    }
+  }
+}
+
+function validateLocalSourcePath(
+  source: Record<string, unknown>,
+  issues: AssetManifestValidationIssue[],
+): void {
+  if (!isNonEmptyString(source['path'])) {
+    issues.push({ field: 'source.path', message: 'must be a non-empty string' });
+    return;
+  }
+  if (source['storageMode'] === undefined) {
+    return;
+  }
+  validateVariablePath(source, issues);
+  if (!source['path'].startsWith('${NEKO_HOME}/local/')) {
+    issues.push({
+      field: 'source.path',
+      message: 'copy-managed local source must point under ${NEKO_HOME}/local/',
+    });
+  }
+}
+
+function validateVariablePath(
+  source: Record<string, unknown>,
+  issues: AssetManifestValidationIssue[],
+): void {
+  if (!isNonEmptyString(source['path'])) {
+    issues.push({ field: 'source.path', message: 'must be a non-empty string' });
+    return;
+  }
+  if (isAbsolutePath(source['path']) || !source['path'].startsWith('${')) {
+    issues.push({
+      field: 'source.path',
+      message: 'must use PathResolver variable form such as ${NEKO_HOME}/... or ${WORKSPACE}/...',
+    });
+  }
+}
+
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
+}
+
+function validatePluginMetadataData(
+  data: Record<string, unknown>,
+  issues: AssetManifestValidationIssue[],
+): void {
+  if (!Array.isArray(data['permissions'])) return;
+
+  data['permissions'].forEach((permission, index) => {
+    if (!isPluginPermission(permission)) {
+      issues.push({
+        field: `typeMetadata.data.permissions.${index}`,
+        message: 'must be a known PluginPermission',
+      });
+    }
+  });
+
+  if (data['permissions'].includes('network:host-list') && !isNonEmptyArray(data['networkHosts'])) {
+    issues.push({
+      field: 'typeMetadata.data.networkHosts',
+      message: 'required when permissions includes network:host-list',
+    });
+  }
+
+  const engineRequirements = data['engineRequirements'];
+  if (!isRecord(engineRequirements)) {
+    issues.push({ field: 'typeMetadata.data.engineRequirements', message: 'must be an object' });
+    return;
+  }
+
+  requireString(
+    engineRequirements,
+    'typeMetadata.data.engineRequirements.minVersion',
+    issues,
+    'minVersion',
+  );
+  requireString(
+    engineRequirements,
+    'typeMetadata.data.engineRequirements.targetTriple',
+    issues,
+    'targetTriple',
+  );
+
+  const runtimeArtifacts = engineRequirements['runtimeArtifacts'];
+  if (
+    !Array.isArray(runtimeArtifacts) ||
+    runtimeArtifacts.length !== 1 ||
+    runtimeArtifacts[0] !== 'cdylib'
+  ) {
+    issues.push({
+      field: 'typeMetadata.data.engineRequirements.runtimeArtifacts',
+      message: 'must contain only cdylib',
+    });
+  }
+}
+
+function highSensitivePermissionMessage(permission: PluginHighSensitivePermission): string {
+  switch (permission) {
+    case 'fs-write:project':
+      return 'requires prominent project modification disclosure';
+    case 'network:any':
+      return 'requires explicit review and prominent network warning';
+    case 'process-spawn':
+      return 'requires T1 publisher or documented T2 security exception';
+    case 'system-info':
+      return 'host API must return coarse-grained system information only';
+  }
 }
 
 function validateLargeAssetStrategy(
@@ -936,6 +1236,7 @@ function validateTypeMetadata(
       requireString(data, 'typeMetadata.data.entryPoint', issues, 'entryPoint');
       requireString(data, 'typeMetadata.data.apiVersion', issues, 'apiVersion');
       requireArray(data, 'typeMetadata.data.permissions', issues, 'permissions');
+      validatePluginMetadataData(data, issues);
       break;
     case 'shader':
       requireString(data, 'typeMetadata.data.shaderKind', issues, 'shaderKind');

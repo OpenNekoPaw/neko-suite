@@ -458,9 +458,10 @@ impl PluginAuditor {
 ### 5.5 高敏感权限的额外约束
 
 ```
-process-spawn        仅 T1 Core 可申请
-                     T2 Verified 申请 → 进入额外人审
-                     纯 publish-and-forget 通过率低
+process-spawn        T1 Core 可申请
+                     T2 Verified 默认拒绝；仅在签署额外安全协议、
+                     提交命令白名单与人工安全例外 reviewCaseId 后可豁免
+                     纯 publish-and-forget 一律不通过
 
 network:any          T2 Verified 必须解释用途，强烈建议改 network:host-list
                      manifest 含 network:any 的 plugin → 安装时显著 warning
@@ -569,7 +570,7 @@ fs-write:project    安装时必须告知"此插件会写入工程文件"
 ┌──────────────────────────────────────────────┐
 │ Install Local Plugin: my-test.dylib            │
 │                                                │
-│ Path: /Users/me/dev/my-plugin/target/release/ │
+│ Path: ${WORKSPACE}/target/release/my-test.dylib │
 │ Size: 4.2 MB                                   │
 │ Target: x86_64-apple-darwin                    │
 │                                                │
@@ -647,10 +648,20 @@ limited (untrusted source 加载的工程)
 ```
 打开工程 .nkcut / .nkc / 等
   ↓
-检查 .neko/workspace-trust.json：
-  · 已记录 trustLevel → 使用记录值
+计算 workspace fingerprint：
+  · canonical workspace URI + project marker + created-by-neko marker
+  · 不信任工程内可被随包携带的字段作为 fingerprint 唯一来源
+  ↓
+检查本机 trust store：
+  · 位置：${NEKO_HOME}/trust/workspaces/{fingerprint}.json
+  · 已记录 trustLevel → 使用本机记录值
   · 已记录 demoted / blocked → restricted 或 limited
-  · 无记录 → 进入来源判定
+  · 无本机记录 → 进入来源判定
+  ↓
+读取工程内 .neko/workspace-trust.json（可选）：
+  · 仅作为 provenance hint / 迁移提示
+  · 不能把 workspace 提升为 trusted
+  · 若声称 trusted 但本机无记录 → 仍按来源判定进入 restricted / limited
   ↓
 来源判定：
   · 当前机器由 Neko 创建的新工程 → trusted
@@ -668,17 +679,24 @@ limited (untrusted source 加载的工程)
 ### 7.3 状态持久化
 
 ```
-位置：每工程的 .neko/workspace-trust.json
+权威位置：${NEKO_HOME}/trust/workspaces/{fingerprint}.json
 内容：
 {
   trustLevel: 'trusted' | 'restricted' | 'limited',
+  workspaceFingerprint: string,
+  workspaceUriHash: string,
   promotedAt: timestamp,
   promotedBy: userId,
-  reason?: string
+  reason?: string,
+  source: 'created-locally' | 'user-promoted' | 'demoted' | 'blocked'
 }
 
 不上传 server（隐私）
 跨机器不同步（每台机器独立判定）
+工程内 .neko/workspace-trust.json 仅能保存 provenance hint：
+  · createdByNeko / exportedAt / sourceKind 等非授权信息
+  · 旧版本 trusted 记录迁移时必须弹窗让用户确认
+  · 不得作为 trusted 权威来源
 ```
 
 ### 7.4 子包工程类型默认策略
@@ -705,6 +723,7 @@ quarantined download   limited (系统或 Neko 标记为不可信来源)
 // each subpackage extension
 export interface WorkspaceTrustProvider {
   getInitialTrust(workspaceUri: string): Promise<'trusted' | 'restricted' | 'limited'>;
+  getWorkspaceFingerprint(workspaceUri: string): Promise<string>;
   onPromote(workspaceUri: string, newLevel: string): Promise<void>;
 }
 ```
@@ -1014,7 +1033,8 @@ pub extern "C" fn plugin_init(ctx: *mut Context) {
 
 ```
 POST /api/v1/plugins/:id/build
-  body: { userId, version, targetTriple, sessionId }
+  headers: Authorization: Bearer <token>
+  body: { version, targetTriple, sessionId }
   flow: 触发 per-user build；同步 wait 或异步 polling
   return: { url, expiresAt, integrity, watermarkInfo }
 
@@ -1480,7 +1500,7 @@ POST /api/v1/audit/permission-violation     # engine → server 上报
    不匹配 → 404
 
 ㉔ Tier A/S plugin 的下载 URL 必为 per-user build 产物，不许共用
-   server 端缓存 key 含 userId
+   server 端缓存 key 含 authenticated userId（由 Bearer auth 推导）
 
 ㉕ Native cdylib 上传必经 verified-publisher 接口（KYC 已通过）
    未 KYC 上传 → 422 拒收
@@ -1637,7 +1657,8 @@ P1.b  Permission 声明模型 + audit
       └── host-api 违反声明 → server 上报 + publisher 信誉降级
 
 P1.c  Workspace trust 持久化
-      ├── .neko/workspace-trust.json
+      ├── ${NEKO_HOME}/trust/workspaces/{fingerprint}.json 本机权威 store
+      ├── .neko/workspace-trust.json 仅作为 provenance hint / 迁移来源
       ├── 各子包 WorkspaceTrustProvider 实现
       ├── promote / demote UI（顶部条 + settings）
       └── 与 plugin 加载流程协作
@@ -1766,12 +1787,12 @@ P2.b  方案 Z 引导社区走其它 type
 | `preset` (lut/transition/...) | 自制 LUT / 朋友分享调色 | 极低 | **直接接受** |
 | `skill` | 写自己的 prompt-chain | 低 | **直接接受** |
 | `shader` (源码) | 写自己的 WGSL 滤镜 | 低（GPU 沙箱） | **直接接受** |
-| `shader` (binary) | github 下载 SPIR-V | 低 | **接受 + warning** |
+| `shader` (binary) | github 下载 SPIR-V | 中 | **接受 + warning + validator** |
 | `media` | （走 import 通道，非 sideload） | — | — |
 | `starter` | 自己的工程模板 | 低 | **直接接受**（受 workspace trust 制约） |
 | `identity` | 自创角色身份包 | 低 | **接受 + ULID 唯一性校验** |
-| `model` (LoRA / embedding) | 自训 / 下载社区 LoRA | 中 | **接受 + 来源 warning** |
-| `model` (base) | 自部署 GGUF / safetensors | 中 | **接受 + 来源 warning** |
+| `model` (LoRA / embedding) | 自训 / 下载社区 LoRA | 中 | **接受 + 来源 warning + runtime probe** |
+| `model` (base) | 自部署 GGUF / safetensors | 中 | **接受 + 来源 warning + runtime probe** |
 | `endpoint` | 私有 / 自建 API | 低 | **接受 + 用户填凭证** |
 | `provider` | 自定义 ProviderCard | 低 | **接受** |
 | `plugin` | dev 测试 cdylib | **高** | **一律拒，仅 dev-mode 例外**（详见 §六.3） |
@@ -1817,6 +1838,28 @@ P2.b  方案 Z 引导社区走其它 type
 ✓ 备份策略可以分开（local 独立保护，market 重新装即可）
 ✓ trustLevel='untrusted' 默认仅作用于 ~/.neko/local/
 ```
+
+### 19.3.1 Copy-managed 与 local-link
+
+Local Install 有两种存储语义，默认必须选择 **copy-managed**：
+
+```
+copy-managed（默认）
+  · 用户选择原始文件 / 目录
+  · market 复制到 ${NEKO_HOME}/local/<type>/...
+  · manifest.source.path 保存 ${NEKO_HOME}/local/... 变量路径
+  · 卸载时删除这份 managed copy + local-installed.json 记录
+  · 不保存用户原始绝对路径（避免隐私泄露和跨机失效）
+
+local-link（显式高级模式）
+  · 不复制文件，只登记外部路径引用
+  · source.kind = 'local-link'
+  · path 必须经 PathResolver 保存为 ${WORKSPACE}/... 或 ${VAR}/...
+  · 卸载时只删除 local-installed.json 记录，不删除外部文件
+  · UI 必须提示“原文件由用户自行管理”
+```
+
+除非用户明确选择 local-link，否则所有 sideload manifest 都按 copy-managed 生成。
 
 ### 19.4 自动推断 Type
 
@@ -1871,7 +1914,8 @@ Sideloaded 资产需要本地生成 manifest。两步流程：
 
 2. 用户编辑（可选）
    弹窗 review，编辑 name / version / description
-   落到 ~/.neko/local/local-installed.json
+   默认复制到 ${NEKO_HOME}/local/<type>/...
+   落到 ${NEKO_HOME}/local/local-installed.json
 ```
 
 最小 manifest 示例：
@@ -1882,7 +1926,11 @@ Sideloaded 资产需要本地生成 manifest。两步流程：
   "name": "My Warm LUT",
   "version": "1.0.0",
   "type": "preset",
-  "source": { "kind": "local", "path": "/Users/me/luts/warm.cube" },
+  "source": {
+    "kind": "local",
+    "path": "${NEKO_HOME}/local/presets/lut/my-warm-lut/warm.cube",
+    "storageMode": "copy-managed"
+  },
   "distributionKind": "archive",
   "typeMetadata": {
     "type": "preset",
@@ -1893,7 +1941,17 @@ Sideloaded 资产需要本地生成 manifest。两步流程：
 }
 ```
 
-注意：sideload manifest 无 `distribution` 字段（无 license / signature / publisher / trustLevel）。这是与 market 安装包的关键区别。
+注意：sideload manifest 无 `distribution` 字段（无 license / signature / publisher / trustLevel）。这是与 market 安装包的关键区别。copy-managed manifest 不保存用户选择时的原始绝对路径；需要引用外部文件时必须使用显式 local-link：
+
+```json
+{
+  "source": {
+    "kind": "local-link",
+    "path": "${WORKSPACE}/luts/warm.cube",
+    "storageMode": "local-link"
+  }
+}
+```
 
 ### 19.6 Market.Installed UI 统一展示
 
@@ -1909,7 +1967,8 @@ Market.Installed Tab
   · source: 'market' | 'local' | 'ai-generated'
   · 卸载行为：
       market source → 走 §九 8 阶段反演（需 entitlement）
-      local source → 删 ~/.neko/local/<type>/<file>（无 license 概念）
+      local copy-managed → 删 ${NEKO_HOME}/local/<type>/<file> + 本地记录
+      local-link → 只删本地记录，不删除外部目标文件
   · 启停 / 信息查看 等操作一致
 ```
 
@@ -1922,7 +1981,8 @@ Market.Installed Tab 顶部按钮：[+ Install Local...]
         ↓
 自动推断 type → 弹窗预览 + 用户确认
         ↓
-落 ~/.neko/local/<type>/ + local-installed.json + 触发 onDidInstall
+copy-managed: 复制到 ${NEKO_HOME}/local/<type>/ + local-installed.json + 触发 onDidInstall
+local-link: 写入 local-installed.json + 触发 onDidInstall（不复制 / 不拥有外部文件）
 ```
 
 或命令面板：`neko: Install Local Asset...`
@@ -1937,9 +1997,13 @@ preset / skill / shader-source / starter / identity / provider / endpoint
 
 shader-binary (SPIR-V)
   → 接受加载 + UI warning（来自非市场源）
+  → 激活前必须通过 SPIR-V validator / Naga 等配置校验
+  → 超出资源限制、stage 不匹配、编译失败时 blocked
 
 model (LoRA / embedding / GGUF / safetensors)
   → 接受加载 + UI warning（自训模型可能含恶意 hidden trigger）
+  → 激活前执行 runtime probe：格式、framework、文件大小、VRAM/RAM 预算
+  → 超出资源策略时 blocked 或要求 trusted workspace 下显式 override（非 native）
 
 plugin (native cdylib)
   → 一律拒，仅 dev-mode 例外（§六.3-6.5）
@@ -2017,6 +2081,10 @@ neko-market dev-mode on / off / status
 ✗ Sideload 不应跨工程"自动启用"
    每个工程的 workspace trust 独立判定
    防止恶意工程自动激活
+
+✗ copy-managed sideload 不应保存原始绝对路径
+   默认只保存 ${NEKO_HOME}/local/... managed copy 路径
+   需要外部引用时必须显式 local-link，并遵循 PathResolver 变量路径规则
 ```
 
 ### 19.11 与 §六 T4 Plugin Sideload 的关系

@@ -25,6 +25,15 @@ struct PluginIdOptions {
     id: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PluginSystemInfoOptions {
+    id: Option<String>,
+    purchaser_id: Option<String>,
+    session_id: Option<String>,
+    watermark_id: Option<String>,
+}
+
 impl Controller for PluginsController {
     async fn handle(
         &self,
@@ -89,6 +98,33 @@ impl Controller for PluginsController {
                     "",
                     serde_json::json!({ "reloaded": count }),
                 ))
+            }
+            "system-info" => {
+                let opts: PluginSystemInfoOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+                let id = opts
+                    .id
+                    .ok_or_else(|| ApiError::InvalidRequest("id required".to_string()))?;
+
+                let info = self
+                    .plugin_manager
+                    .plugin_system_info(
+                        &id,
+                        Some(crate::plugin::PluginAuditContext {
+                            purchaser_id: opts.purchaser_id,
+                            session_id: opts.session_id,
+                            watermark_id: opts.watermark_id,
+                        }),
+                    )
+                    .map_err(|e| {
+                        ApiError::ServiceError(format!("Failed to read plugin system info: {e}"))
+                    })?;
+
+                Ok(ActionResponse::ok("", serde_json::to_value(info)?))
+            }
+            "audit-events" => {
+                let events = self.plugin_manager.audit_events();
+                Ok(ActionResponse::ok("", serde_json::to_value(events)?))
             }
             _ => Err(ApiError::UnknownAction {
                 group: "plugins".to_string(),
@@ -156,5 +192,7 @@ mod tests {
         assert!(actions.contains(&"enable"));
         assert!(actions.contains(&"disable"));
         assert!(actions.contains(&"reload"));
+        assert!(actions.contains(&"system-info"));
+        assert!(actions.contains(&"audit-events"));
     }
 }

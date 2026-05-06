@@ -313,6 +313,178 @@ describe('MarketClient', () => {
     });
   });
 
+  describe('plugin governance endpoints', () => {
+    it('checks entitlement before plugin build and omits userId from build body', async () => {
+      client.setAuthToken('token-a');
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ allowed: true, reason: 'purchased' }))
+        .mockResolvedValueOnce(
+          jsonResponse({ buildId: 'build-1', status: 'queued', estimatedDuration: 30 }),
+        );
+
+      await expect(
+        client.requestPluginBuild('@test/plugin', {
+          version: '1.0.0',
+          targetTriple: 'aarch64-apple-darwin',
+          sessionId: 'session-1',
+        }),
+      ).resolves.toMatchObject({ buildId: 'build-1', status: 'queued' });
+
+      const entitlementRequest = mockFetch.mock.calls[0]?.[1] as RequestInit;
+      expect(JSON.parse(entitlementRequest.body as string)).toEqual({
+        packageId: '@test/plugin',
+        version: '1.0.0',
+      });
+
+      const buildUrl = mockFetch.mock.calls[1]?.[0] as string;
+      const buildRequest = mockFetch.mock.calls[1]?.[1] as RequestInit;
+      const buildBody = JSON.parse(buildRequest.body as string) as Record<string, unknown>;
+      expect(buildUrl).toBe('https://test.api/v1/plugins/%40test%2Fplugin/build');
+      expect(buildBody).toEqual({
+        version: '1.0.0',
+        targetTriple: 'aarch64-apple-darwin',
+        sessionId: 'session-1',
+      });
+      expect(buildBody).not.toHaveProperty('userId');
+      expect(buildRequest.headers).toMatchObject({ Authorization: 'Bearer token-a' });
+    });
+
+    it('does not request plugin build when entitlement is denied', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ allowed: false, reason: 'not-purchased' }));
+
+      await expect(
+        client.requestPluginBuild('@test/plugin', {
+          version: '1.0.0',
+          targetTriple: 'aarch64-apple-darwin',
+          sessionId: 'session-1',
+        }),
+      ).rejects.toMatchObject({
+        status: 403,
+        problem: expect.objectContaining({
+          type: 'urn:neko:market:entitlement-denied',
+        }),
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('polls plugin build status and result endpoints', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'done', progress: 100 }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            url: 'https://cdn/plugin.dylib',
+            expiresAt: 123,
+            integrity: 'sha256-build',
+          }),
+        );
+
+      await expect(client.getPluginBuildStatus('@test/plugin', 'build-1')).resolves.toEqual({
+        status: 'done',
+        progress: 100,
+      });
+      await expect(client.getPluginBuildResult('@test/plugin', 'build-1')).resolves.toEqual({
+        url: 'https://cdn/plugin.dylib',
+        expiresAt: 123,
+        integrity: 'sha256-build',
+      });
+
+      expect(mockFetch.mock.calls[0]?.[0]).toBe(
+        'https://test.api/v1/plugins/%40test%2Fplugin/build-status?buildId=build-1',
+      );
+      expect(mockFetch.mock.calls[1]?.[0]).toBe(
+        'https://test.api/v1/plugins/%40test%2Fplugin/build-result?buildId=build-1',
+      );
+    });
+
+    it('uses server-owned publisher verification endpoints', async () => {
+      mockFetch
+        .mockResolvedValueOnce(
+          jsonResponse({ applicationId: 'app-1', status: 'submitted', expectedReviewDays: 5 }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ status: 'approved', badgeIssuedAt: 123 }));
+
+      await expect(
+        client.submitPublisherVerification({
+          legalName: 'Studio',
+          country: 'US',
+          documentType: 'business-license',
+          documentRef: 'portal-doc-1',
+          contactEmail: 'publisher@example.invalid',
+          publicKeyPem: '-----BEGIN PUBLIC KEY-----',
+        }),
+      ).resolves.toMatchObject({ applicationId: 'app-1', status: 'submitted' });
+      await expect(client.getPublisherVerificationStatus('publisher-1')).resolves.toEqual({
+        status: 'approved',
+        badgeIssuedAt: 123,
+      });
+
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('https://test.api/v1/publishers/verify');
+      expect(mockFetch.mock.calls[1]?.[0]).toBe(
+        'https://test.api/v1/publishers/publisher-1/verification-status',
+      );
+    });
+
+    it('reports permission audits or retains them when unsupported or transiently unavailable', async () => {
+      const recordAudit = vi.fn();
+      client = new MarketClient({
+        registryUrl: 'https://test.api/v1',
+        maxRetries: 1,
+        sleep: () => Promise.resolve(),
+        auditRetention: { record: recordAudit },
+      });
+      const payload = {
+        pluginId: '@test/plugin',
+        permission: 'process-spawn' as const,
+        declared: false as const,
+        timestamp: 123,
+        sessionId: 'session-1',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ version: '1.1.0', capabilities: ['plugin-audit'] }))
+        .mockResolvedValueOnce(noContentResponse());
+
+      await expect(client.reportPermissionViolation(payload)).resolves.toEqual({
+        delivered: true,
+        retained: false,
+      });
+      expect(recordAudit).not.toHaveBeenCalled();
+
+      client = new MarketClient({
+        registryUrl: 'https://test.api/v1',
+        maxRetries: 1,
+        sleep: () => Promise.resolve(),
+        auditRetention: { record: recordAudit },
+      });
+      mockFetch.mockResolvedValueOnce(jsonResponse({ version: '1.1.0', capabilities: [] }));
+
+      await expect(client.reportPermissionViolation(payload)).resolves.toEqual({
+        delivered: false,
+        retained: true,
+        reason: 'unsupported-capability',
+      });
+      expect(recordAudit).toHaveBeenCalledWith(payload, 'unsupported-capability');
+
+      client = new MarketClient({
+        registryUrl: 'https://test.api/v1',
+        maxRetries: 1,
+        sleep: () => Promise.resolve(),
+        auditRetention: { record: recordAudit },
+      });
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ version: '1.1.0', capabilities: ['plugin-audit'] }))
+        .mockResolvedValueOnce(jsonResponse({ title: 'temporarily unavailable' }, 503));
+
+      await expect(client.reportPermissionViolation(payload)).resolves.toEqual({
+        delivered: false,
+        retained: true,
+        reason: 'transient-failure',
+      });
+      expect(recordAudit).toHaveBeenCalledWith(payload, 'transient-failure');
+    });
+  });
+
   describe('server info and errors', () => {
     it('probes server capabilities', async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({ version: '1.1.0', capabilities: ['sparse'] }));
