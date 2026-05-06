@@ -5,7 +5,12 @@
  * Provides custom editor for .nks files with a WebGL-based drawing canvas.
  */
 import * as vscode from 'vscode';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import type { NekoSketchAPI, SketchImportContext } from '@neko/shared';
 import { createNekoSketchCapabilityProvider } from './agentCapabilityProvider';
 import { SketchEditorProvider } from './editor';
@@ -23,9 +28,15 @@ let sketchStatusBar: SketchStatusBar;
  * Activate the extension
  */
 export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
-  const rootLogger = createVSCodeLogger('Neko Sketch', 'NekoSketch', context);
+  const rootLogger = createVSCodeLogger(
+    'Neko Sketch',
+    'NekoSketch',
+    context,
+    resolveLogLevelSetting(),
+  );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
+  watchLogLevel(rootLogger, context);
   const logger = getRootLogger();
 
   logger.info('Activating extension...');

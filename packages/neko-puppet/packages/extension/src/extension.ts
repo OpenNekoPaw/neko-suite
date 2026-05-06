@@ -5,7 +5,12 @@
  * Provides custom editor for .nkp and .inp files.
  */
 import * as vscode from 'vscode';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import type { NekoPuppetAPI } from '@neko/shared';
 import { PuppetEditorProvider } from './editor';
 import { setRootLogger, getRootLogger } from './utils/logger';
@@ -18,9 +23,15 @@ import { registerMarketInstallTargets } from './market/registerMarketInstallTarg
  * Activate the extension
  */
 export async function activate(context: vscode.ExtensionContext): Promise<NekoPuppetAPI> {
-  const rootLogger = createVSCodeLogger('Neko Puppet', 'NekoPuppet', context);
+  const rootLogger = createVSCodeLogger(
+    'Neko Puppet',
+    'NekoPuppet',
+    context,
+    resolveLogLevelSetting(),
+  );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
+  watchLogLevel(rootLogger, context);
   const logger = getRootLogger();
 
   logger.info('Activating extension...');

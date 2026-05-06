@@ -29,7 +29,12 @@ import { EpubOutlineProvider } from './providers/EpubOutlineProvider';
 import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
 import type { NekoPreviewAPI } from './types/api';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler } from './utils/errorHandler';
 
@@ -53,9 +58,15 @@ let sharedPreviewService: PreviewService | null = null;
 // =============================================================================
 
 export async function activate(context: vscode.ExtensionContext): Promise<NekoPreviewAPI> {
-  const rootLogger = createVSCodeLogger('Neko Preview', 'NekoPreview', context);
+  const rootLogger = createVSCodeLogger(
+    'Neko Preview',
+    'NekoPreview',
+    context,
+    resolveLogLevelSetting(),
+  );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
+  watchLogLevel(rootLogger, context);
 
   logger.info('Activating extension...');
 

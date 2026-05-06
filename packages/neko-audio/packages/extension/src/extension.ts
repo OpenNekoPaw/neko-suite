@@ -21,6 +21,8 @@ import {
   createVSCodeLogger,
   createNewFile,
   VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
@@ -60,9 +62,15 @@ let statusBar: AudioStatusBar | null = null;
 // =============================================================================
 
 export async function activate(context: vscode.ExtensionContext): Promise<NekoAudioAPI> {
-  const rootLogger = createVSCodeLogger('Neko Audio', 'NekoAudio', context);
+  const rootLogger = createVSCodeLogger(
+    'Neko Audio',
+    'NekoAudio',
+    context,
+    resolveLogLevelSetting(),
+  );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
+  watchLogLevel(rootLogger, context);
 
   logger.info('Activating extension...');
 

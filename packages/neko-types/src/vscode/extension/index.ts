@@ -12,8 +12,13 @@
 export { BaseOutlineProvider } from './baseOutlineProvider';
 export type { IOutlineProvider } from './baseOutlineProvider';
 
-// Logger (OutputChannel transport)
-export { OutputChannelTransport, createVSCodeLogger } from './logger';
+// Logger (OutputChannel transport + log level config)
+export {
+  OutputChannelTransport,
+  createVSCodeLogger,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from './logger';
 
 // Error reporter (showErrorMessage wrapper)
 export { VSCodeErrorHandler } from './error-reporter';

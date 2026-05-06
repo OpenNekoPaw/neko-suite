@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
-import { createNewFile, createVSCodeLogger } from '@neko/shared/vscode/extension';
+import {
+  createNewFile,
+  createVSCodeLogger,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import { setRootLogger, getRootLogger } from './logger';
 import { ModelEditorProvider } from './editor/ModelEditorProvider';
 
@@ -21,8 +26,9 @@ let modelEditorProvider: ModelEditorProvider;
 
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize shared logger
-  const logger = createVSCodeLogger('Neko Model', 'NekoModel', context);
+  const logger = createVSCodeLogger('Neko Model', 'NekoModel', context, resolveLogLevelSetting());
   setRootLogger(logger);
+  watchLogLevel(logger, context);
   getRootLogger().info('Activating extension...');
 
   modelEditorProvider = new ModelEditorProvider(context);

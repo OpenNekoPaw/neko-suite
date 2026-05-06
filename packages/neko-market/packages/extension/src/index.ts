@@ -3,8 +3,11 @@
  */
 
 import * as vscode from 'vscode';
-import { createVSCodeLogger } from '@neko/shared/vscode/extension';
-import { LogLevel } from '@neko/shared';
+import {
+  createVSCodeLogger,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import { createVSCodeMarketplaceServiceOptions, MarketplaceService } from './MarketplaceService';
 import { MarketplaceProvider } from './MarketplaceProvider';
 import { NekoMarketAPIImpl } from './market-api';
@@ -13,7 +16,13 @@ import type { NekoMarketAPI, MarketAssetEvent } from './market-api';
 export type { NekoMarketAPI, MarketAssetEvent };
 
 export async function activate(context: vscode.ExtensionContext): Promise<NekoMarketAPI> {
-  const logger = createVSCodeLogger('Neko Marketplace', 'NekoMarket', context, LogLevel.Info);
+  const logger = createVSCodeLogger(
+    'Neko Marketplace',
+    'NekoMarket',
+    context,
+    resolveLogLevelSetting(),
+  );
+  watchLogLevel(logger, context);
 
   logger.info('Neko Marketplace activating');
 

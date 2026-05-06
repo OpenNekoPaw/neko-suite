@@ -45,19 +45,22 @@ export class ConsoleTransport implements ILogTransport {
  * exportLogger.info('Export started'); // [NekoCut:Export] Export started
  * ```
  */
+export type LogLevelRef = { level: LogLevel };
+
 export class ConsoleLogger implements ILogger {
-  private _level: LogLevel;
+  /** @internal shared across parent + all children so setLevel() propagates */
+  _levelRef: LogLevelRef;
 
   constructor(
     readonly source: string,
-    level: LogLevel = LogLevel.Info,
+    level: LogLevel | LogLevelRef = LogLevel.Info,
     private readonly transports: ILogTransport[] = [new ConsoleTransport()],
   ) {
-    this._level = level;
+    this._levelRef = typeof level === 'number' ? { level } : level;
   }
 
   setLevel(level: LogLevel): void {
-    this._level = level;
+    this._levelRef.level = level;
   }
 
   debug(message: string, data?: unknown): void {
@@ -77,11 +80,11 @@ export class ConsoleLogger implements ILogger {
   }
 
   child(subSource: string): ILogger {
-    return new ConsoleLogger(`${this.source}:${subSource}`, this._level, this.transports);
+    return new ConsoleLogger(`${this.source}:${subSource}`, this._levelRef, this.transports);
   }
 
   private write(level: LogLevel, message: string, data?: unknown): void {
-    if (level < this._level) return;
+    if (level < this._levelRef.level) return;
 
     const entry: LogEntry = {
       level,

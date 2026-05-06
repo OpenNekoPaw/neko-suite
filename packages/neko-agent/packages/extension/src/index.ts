@@ -13,7 +13,12 @@ import {
   setErrorHandler,
   getRootLogger,
 } from './base';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { setPlatformRootLogger } from '@neko/platform';
 import { setRootLogger as setAgentRootLogger } from '@neko/agent';
@@ -38,13 +43,14 @@ import { registerMarketInstallTargets } from './market/registerMarketInstallTarg
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Initialize logger
-  const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context);
+  const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context, resolveLogLevelSetting());
   setRootLogger(logger);
   setPlatformRootLogger(logger.child('Platform'));
   setAgentRootLogger(logger.child('Agent'));
 
   // Initialize error handler
   setErrorHandler(new VSCodeErrorHandler(logger));
+  watchLogLevel(logger, context);
 
   logger.info('Activating extension...');
 

@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import type { AssetEntity, IErrorHandler, ILogger, VariantComparisonResult } from '@neko/shared';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import {
   clearGlobalServices,
   ServiceCollection,
@@ -114,7 +119,8 @@ export function bootstrapCoreServices(
   context: vscode.ExtensionContext,
 ): ICoreServicesBootstrapResult {
   const services = new ServiceCollection();
-  const logger = createVSCodeLogger('Neko Tools', 'NekoTools', context);
+  const logger = createVSCodeLogger('Neko Tools', 'NekoTools', context, resolveLogLevelSetting());
+  watchLogLevel(logger, context);
   const errorHandler = new VSCodeErrorHandler(logger);
   const i18n = new VscodeExtensionI18n();
   const engineRuntimeResolver = new VSCodeEngineRuntimeResolver();

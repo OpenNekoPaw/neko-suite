@@ -36,7 +36,12 @@ import { AssetManagerTreeProvider } from './providers/AssetManagerTreeProvider';
 import { AssetHistoryTreeProvider } from './providers/AssetHistoryTreeProvider';
 import { MediaLibraryTreeProvider } from './providers/MediaLibraryTreeProvider';
 import { VscodeGitService } from './services/VscodeGitService';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { openAssetPreview } from './utils/preview';
@@ -90,9 +95,15 @@ const nodeFileSystem: IFileSystem = {
 export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<import('@neko/shared').NekoAssetsAPI> {
-  const rootLogger = createVSCodeLogger('Neko Assets', 'NekoAssets', context);
+  const rootLogger = createVSCodeLogger(
+    'Neko Assets',
+    'NekoAssets',
+    context,
+    resolveLogLevelSetting(),
+  );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
+  watchLogLevel(rootLogger, context);
 
   logger.info('Activating extension...');
 

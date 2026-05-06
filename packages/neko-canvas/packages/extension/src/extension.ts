@@ -16,6 +16,8 @@ import {
   createVSCodeLogger,
   VSCodeErrorHandler,
   createNewFile,
+  resolveLogLevelSetting,
+  watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import type { AssetEntity, AssetFile, NekoAssetsAPI } from '@neko/shared';
 import { NEKO_EXTENSION_IDS } from '@neko/shared';
@@ -135,9 +137,15 @@ function matchesAssetFilter(
  * Activate the extension
  */
 export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISkillProvider {
-  const rootLogger = createVSCodeLogger('Neko Canvas', 'NekoCanvas', context);
+  const rootLogger = createVSCodeLogger(
+    'Neko Canvas',
+    'NekoCanvas',
+    context,
+    resolveLogLevelSetting(),
+  );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
+  watchLogLevel(rootLogger, context);
   const logger = getRootLogger();
 
   logger.info('Activating extension...');

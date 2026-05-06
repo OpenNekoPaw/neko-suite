@@ -22,7 +22,12 @@ import {
   type ExportProgress,
 } from './mediaEngine/export';
 import { setRootLogger, setErrorHandler, handleError, getLogger } from './base';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import { initOrtDylib } from './mediaEngine/OrtInitializer';
 import { createEngineCapabilityProvider } from './agentCapabilityProvider';
 
@@ -49,9 +54,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(outputChannel);
 
   // Initialize structured logger and error handler
-  const logger = createVSCodeLogger('Neko Engine', 'NekoEngine', context);
+  const logger = createVSCodeLogger('Neko Engine', 'NekoEngine', context, resolveLogLevelSetting());
   setRootLogger(logger);
   setErrorHandler(new VSCodeErrorHandler(logger));
+  watchLogLevel(logger, context);
 
   log('Activating extension...');
 

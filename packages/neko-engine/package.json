@@ -87,6 +87,23 @@
           "type": "string",
           "default": "",
           "description": "Preferred GPU device name (empty for auto-select)"
+        },
+        "neko.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "enumDescriptions": [
+            "All logs including debug traces",
+            "Informational messages, warnings, and errors",
+            "Warnings and errors only",
+            "Critical errors only (recommended for production)"
+          ],
+          "description": "Log level for all Neko Suite extensions (applies to both TypeScript and Rust engine)"
         }
       }
     }

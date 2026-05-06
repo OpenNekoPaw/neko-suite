@@ -64,3 +64,54 @@ export function createVSCodeLogger(
   context.subscriptions.push(channel);
   return new ConsoleLogger(source, level, [new OutputChannelTransport(channel)]);
 }
+
+const LOG_LEVEL_MAP: Record<string, LogLevel> = {
+  debug: LogLevel.Debug,
+  info: LogLevel.Info,
+  warn: LogLevel.Warn,
+  error: LogLevel.Error,
+};
+
+const RUST_LOG_MAP: Record<LogLevel, string> = {
+  [LogLevel.Debug]: 'debug',
+  [LogLevel.Info]: 'info',
+  [LogLevel.Warn]: 'warn',
+  [LogLevel.Error]: 'error',
+  [LogLevel.Off]: 'error',
+};
+
+/**
+ * Read `neko.logLevel` from VSCode settings and map to LogLevel enum.
+ */
+export function resolveLogLevelSetting(): LogLevel {
+  const raw = vscode.workspace.getConfiguration('neko').get<string>('logLevel', 'info');
+  return LOG_LEVEL_MAP[raw] ?? LogLevel.Info;
+}
+
+/**
+ * Watch `neko.logLevel` changes and hot-reload the logger level.
+ * Also sets `process.env.RUST_LOG` so the Rust engine picks up the level
+ * on next `init_tracing()` call.
+ */
+export function watchLogLevel(logger: ConsoleLogger, context: vscode.ExtensionContext): void {
+  syncRustLogEnv(resolveLogLevelSetting());
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('neko.logLevel')) {
+        const level = resolveLogLevelSetting();
+        logger.setLevel(level);
+        syncRustLogEnv(level);
+      }
+    }),
+  );
+}
+
+let rustLogManagedByUs = false;
+
+function syncRustLogEnv(level: LogLevel): void {
+  // Only manage RUST_LOG if no external value was present at first call
+  if (!rustLogManagedByUs && process.env['RUST_LOG']) return;
+  rustLogManagedByUs = true;
+  process.env['RUST_LOG'] = RUST_LOG_MAP[level] ?? 'info';
+}

@@ -21,7 +21,7 @@ export {
 // Logger registry factory — eliminates boilerplate in each package
 import type { ILogger } from './types';
 import { LogLevel } from './types';
-import { ConsoleLogger } from './console-logger';
+import { ConsoleLogger, type LogLevelRef } from './console-logger';
 
 /**
  * Create a logger registry for a package.
@@ -29,14 +29,25 @@ import { ConsoleLogger } from './console-logger';
  * Each package calls this once to get its own setRootLogger/getLogger/getRootLogger
  * functions, backed by a module-scoped root logger instance.
  *
+ * When setRootLogger replaces the root, any loggers already created via getLogger()
+ * are bridged to the new root's level ref so that setLevel() propagates to all.
+ *
  * @param packageName Default root logger source name (e.g., 'Agent', 'Platform')
  * @param defaultLevel Default log level (defaults to Info)
  */
 export function createLoggerRegistry(packageName: string, defaultLevel = LogLevel.Info) {
-  let rootLogger: ILogger = new ConsoleLogger(packageName, defaultLevel);
+  const sharedRef: LogLevelRef = { level: defaultLevel };
+  let rootLogger: ILogger = new ConsoleLogger(packageName, sharedRef);
   return {
     setRootLogger(logger: ILogger) {
       rootLogger = logger;
+      if (logger instanceof ConsoleLogger) {
+        // Adopt the shared ref so that pre-existing children (created before
+        // setRootLogger) and the new root + its future children all share
+        // the same level. setLevel() on the new root propagates everywhere.
+        sharedRef.level = logger._levelRef.level;
+        logger._levelRef = sharedRef;
+      }
     },
     getRootLogger() {
       return rootLogger;

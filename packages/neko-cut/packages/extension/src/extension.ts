@@ -14,7 +14,12 @@ import {
   setErrorHandler,
   getRootLogger,
 } from './base';
-import { createVSCodeLogger, VSCodeErrorHandler } from '@neko/shared/vscode/extension';
+import {
+  createVSCodeLogger,
+  VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
+} from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
 import { registerCommands } from './commands';
@@ -31,11 +36,12 @@ export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<NekoCutAPI & ISkillProvider> {
   // Initialize logger → VSCode OutputChannel + Console
-  const logger = createVSCodeLogger('Neko Cut', 'NekoCut', context);
+  const logger = createVSCodeLogger('Neko Cut', 'NekoCut', context, resolveLogLevelSetting());
   setRootLogger(logger);
 
   // Initialize error handler
   setErrorHandler(new VSCodeErrorHandler(logger));
+  watchLogLevel(logger, context);
 
   logger.info('Activating extension...');
 

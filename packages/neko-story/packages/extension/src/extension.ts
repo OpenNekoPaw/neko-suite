@@ -8,6 +8,8 @@ import {
   createNewFile,
   resolveCharacterRegistryPath,
   VSCodeErrorHandler,
+  resolveLogLevelSetting,
+  watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
@@ -49,9 +51,15 @@ const FOUNTAIN_SELECTOR: vscode.DocumentSelector = { language: 'nekostory' };
 type FlowId = 'flowA' | 'flowB' | 'flowC' | 'flowD' | 'flowE' | 'flowF';
 
 export function activate(context: vscode.ExtensionContext) {
-  const rootLogger = createVSCodeLogger('Neko Story', 'NekoStory', context);
+  const rootLogger = createVSCodeLogger(
+    'Neko Story',
+    'NekoStory',
+    context,
+    resolveLogLevelSetting(),
+  );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));
+  watchLogLevel(rootLogger, context);
   const logger = getRootLogger();
 
   logger.info('Extension activated');
