@@ -143,21 +143,24 @@ export function createBuiltInNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
       type: 'scene',
       labelKey: 'node.sceneGroup',
       icon: '\u{1F39E}',
-      defaultSize: { width: 600, height: 300 },
+      defaultSize: { width: 640, height: 400 },
       renderer: ({
         node,
         allNodes,
         selectedNodeIds,
+        onSelect,
         onAssignSelectedShotsToScene,
         onAutoLayoutSceneShots,
         onBatchGenerateSceneShots,
         onReorderSceneShots,
+        onDetachShotFromScene,
         ...commonProps
       }) => (
         <SceneGroupNode
           key={node.id}
           node={node as SceneGroupCanvasNode}
           {...commonProps}
+          onSelect={onSelect}
           selectedShotCount={
             allNodes.filter(
               (candidate) => selectedNodeIds.includes(candidate.id) && candidate.type === 'shot',
@@ -171,11 +174,22 @@ export function createBuiltInNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
                 (node as SceneGroupCanvasNode).data.shotIds.indexOf(a.id) -
                 (node as SceneGroupCanvasNode).data.shotIds.indexOf(b.id),
             )
-            .map((shot) => ({ id: shot.id, shotNumber: shot.data.shotNumber }))}
+            .map((shot) => ({
+              id: shot.id,
+              shotNumber: shot.data.shotNumber,
+              shotScale: shot.data.shotScale,
+              generatedImage:
+                shot.data.generatedImage ??
+                shot.data.generationHistory.find((v) => v.selected)?.dataUrl,
+              generationStatus: shot.data.generationStatus,
+              visualDescription: shot.data.visualDescription,
+            }))}
+          onShotThumbnailClick={(shotId) => onSelect?.(shotId, false)}
           onAssignSelectedShots={onAssignSelectedShotsToScene}
           onAutoLayoutShots={onAutoLayoutSceneShots}
           onBatchGenerateShots={onBatchGenerateSceneShots}
           onReorderShots={onReorderSceneShots}
+          onDetachShot={onDetachShotFromScene}
         />
       ),
     },

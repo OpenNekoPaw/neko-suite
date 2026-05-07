@@ -86,6 +86,24 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
         selectConnection(connId);
         return;
       }
+      if (action.startsWith('detachShot:')) {
+        const parts = action.slice('detachShot:'.length).split(':');
+        const shotId = parts[0];
+        const sceneId = parts[1];
+        if (shotId && sceneId) {
+          useCanvasStore.getState().detachShotFromScene(sceneId, shotId);
+          reportAction('detachShot', `Detached shot from scene`);
+        }
+        return;
+      }
+      if (action.startsWith('deleteNode:')) {
+        const nodeId = action.slice('deleteNode:'.length);
+        if (nodeId) {
+          useCanvasStore.getState().removeNode(nodeId);
+          reportAction('deleteNode', `Deleted node from outline`);
+        }
+        return;
+      }
 
       switch (action) {
         case 'deleteSelected':

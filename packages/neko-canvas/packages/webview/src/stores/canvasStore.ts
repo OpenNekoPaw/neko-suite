@@ -94,6 +94,8 @@ export interface CanvasStore {
   reorderSceneShots: (sceneId: string, shotIds: string[], autoLayout?: boolean) => void;
   /** Auto-layout all shots owned by a scene using the current shotIds order */
   autoLayoutSceneShots: (sceneId: string) => void;
+  /** Detach a ShotNode from its parent SceneGroupNode (keeps the shot on canvas) */
+  detachShotFromScene: (sceneId: string, shotId: string) => void;
 
   /** Update node port definitions (records history) */
   updateNodePorts: (id: string, ports: PortDefinition[]) => void;
@@ -473,13 +475,36 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!canvasData) return;
 
     // No history recording – called on every mousemove during drag
+    const target = canvasData.nodes.find((n) => n.id === id);
+    if (!target) return;
 
-    set({
-      canvasData: {
-        ...canvasData,
-        nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node)),
-      },
-    });
+    if (isSceneGroupNode(target)) {
+      const dx = position.x - target.position.x;
+      const dy = position.y - target.position.y;
+      const childShotIds = new Set(getSceneOwnedShots(canvasData.nodes, id).map((s) => s.id));
+      set({
+        canvasData: {
+          ...canvasData,
+          nodes: canvasData.nodes.map((node) => {
+            if (node.id === id) return { ...node, position };
+            if (childShotIds.has(node.id)) {
+              return {
+                ...node,
+                position: { x: node.position.x + dx, y: node.position.y + dy },
+              };
+            }
+            return node;
+          }),
+        },
+      });
+    } else {
+      set({
+        canvasData: {
+          ...canvasData,
+          nodes: canvasData.nodes.map((node) => (node.id === id ? { ...node, position } : node)),
+        },
+      });
+    }
   },
 
   moveNodeEnd: (id, position) => {
@@ -489,18 +514,29 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
-    const movedNodes = canvasData.nodes.map((node) =>
-      node.id === id ? { ...node, position } : node,
-    );
-    const nextNodes =
-      oldNode && isShotNode(oldNode) ? syncShotSceneMembership(movedNodes, id) : movedNodes;
-
-    set({
-      canvasData: {
-        ...canvasData,
-        nodes: nextNodes,
-      },
-    });
+    if (oldNode && isSceneGroupNode(oldNode)) {
+      const dx = position.x - oldNode.position.x;
+      const dy = position.y - oldNode.position.y;
+      const childShotIds = new Set(getSceneOwnedShots(canvasData.nodes, id).map((s) => s.id));
+      const nextNodes = canvasData.nodes.map((node) => {
+        if (node.id === id) return { ...node, position };
+        if (childShotIds.has(node.id)) {
+          return {
+            ...node,
+            position: { x: node.position.x + dx, y: node.position.y + dy },
+          };
+        }
+        return node;
+      });
+      set({ canvasData: { ...canvasData, nodes: nextNodes } });
+    } else {
+      const movedNodes = canvasData.nodes.map((node) =>
+        node.id === id ? { ...node, position } : node,
+      );
+      const nextNodes =
+        oldNode && isShotNode(oldNode) ? syncShotSceneMembership(movedNodes, id) : movedNodes;
+      set({ canvasData: { ...canvasData, nodes: nextNodes } });
+    }
 
     if (oldNode) {
       useCanvasOperationStore
@@ -707,6 +743,36 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
     });
 
+    recordChangedNodesForAudit(canvasData.nodes, nextNodes);
+  },
+
+  detachShotFromScene: (sceneId, shotId) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+
+    const scene = canvasData.nodes.find(
+      (node): node is SceneGroupCanvasNode => isSceneGroupNode(node) && node.id === sceneId,
+    );
+    if (!scene || !scene.data.shotIds.includes(shotId)) return;
+
+    recordHistory(canvasData);
+
+    const nextNodes = relinkSceneShotIds(
+      canvasData.nodes.map((node) => {
+        if (isShotNode(node) && node.id === shotId) {
+          return { ...node, data: { ...node.data, sceneGroupId: undefined } };
+        }
+        if (isSceneGroupNode(node) && node.id === sceneId) {
+          return {
+            ...node,
+            data: { ...node.data, shotIds: node.data.shotIds.filter((id) => id !== shotId) },
+          };
+        }
+        return node;
+      }),
+    );
+
+    set({ canvasData: { ...canvasData, nodes: nextNodes } });
     recordChangedNodesForAudit(canvasData.nodes, nextNodes);
   },
 

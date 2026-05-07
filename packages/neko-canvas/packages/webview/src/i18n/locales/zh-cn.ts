@@ -206,6 +206,8 @@ export const zhCN = {
   'scene.autoLayout': '整理布局',
   'scene.emptyHint': '拖入 ShotNode 到此场景',
   'scene.shotBadgeTitle': '镜头 {number}',
+  'scene.detachShotTitle': '将镜头移出场景（保留在画布上）',
+  'scene.shotThumbnailHint': '点击编辑镜头属性',
   'canvasEmbed.defaultTitle': '画布',
   'canvasEmbed.open': '打开',
   'canvasEmbed.badge': 'CANVAS · EMBED',

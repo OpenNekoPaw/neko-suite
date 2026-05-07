@@ -206,6 +206,8 @@ export const en = {
   'scene.autoLayout': 'Auto Layout',
   'scene.emptyHint': 'Drop ShotNode into this scene',
   'scene.shotBadgeTitle': 'Shot {number}',
+  'scene.detachShotTitle': 'Remove shot from this scene (keep on canvas)',
+  'scene.shotThumbnailHint': 'Click to edit shot properties',
   'canvasEmbed.defaultTitle': 'Canvas',
   'canvasEmbed.open': 'Open',
   'canvasEmbed.badge': 'CANVAS · EMBED',

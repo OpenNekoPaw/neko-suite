@@ -5,6 +5,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { CanvasNode, CanvasConnection, CanvasViewport as ViewportType } from '@neko/shared';
+import { isShotNode } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
 import { createBuiltInNodeRendererRegistry, renderCanvasNode } from './nodes';
@@ -93,6 +94,8 @@ export interface InfiniteCanvasProps {
   onBatchGenerateSceneShots?: (sceneId: string) => void;
   /** Called to reorder the shots inside a scene */
   onReorderSceneShots?: (sceneId: string, shotIds: string[]) => void;
+  /** Called to detach a shot from its parent scene (keep on canvas) */
+  onDetachShotFromScene?: (sceneId: string, shotId: string) => void;
 }
 
 // =============================================================================
@@ -134,6 +137,7 @@ export function InfiniteCanvas({
   onAutoLayoutSceneShots,
   onBatchGenerateSceneShots,
   onReorderSceneShots,
+  onDetachShotFromScene,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -261,40 +265,43 @@ export function InfiniteCanvas({
           onConnectionSelect={onConnectionSelect}
         />
 
-        {/* Node layer - 使用裁剪后的可见节点 */}
-        {visibleNodes.map((node) => {
-          const isSelected = selectedNodeIds.includes(node.id);
+        {/* Node layer - 使用裁剪后的可见节点; managed shots rendered inside SceneGroupNode */}
+        {visibleNodes
+          .filter((node) => !(isShotNode(node) && node.data.sceneGroupId))
+          .map((node) => {
+            const isSelected = selectedNodeIds.includes(node.id);
 
-          return renderNode(nodeRendererRegistryRef.current, {
-            node,
-            allNodes: nodes,
-            viewport,
-            isSelected,
-            containerRef: containerRef as React.RefObject<HTMLElement | null>,
-            onSelect: onNodeSelect,
-            onDrag: onNodeDrag,
-            onMove: onNodeMove,
-            onResize: onNodeResize,
-            onResizeEnd: onNodeResizeEnd,
-            onRotate: onNodeRotate,
-            onRotateEnd: onNodeRotateEnd,
-            onUpdateData: onNodeUpdateData,
-            onConnectionStart: startDragConnection,
-            onScriptLoadScenes,
-            onScriptOpen,
-            onScriptNavigateToScene,
-            onDocumentOpen,
-            onCanvasEmbedOpen,
-            onModelCheckInstalled,
-            onSelectShotCandidate,
-            onSelectGalleryCellCandidate,
-            onAssignSelectedShotsToScene,
-            onAutoLayoutSceneShots,
-            onBatchGenerateSceneShots,
-            onReorderSceneShots,
-            selectedNodeIds,
-          });
-        })}
+            return renderNode(nodeRendererRegistryRef.current, {
+              node,
+              allNodes: nodes,
+              viewport,
+              isSelected,
+              containerRef: containerRef as React.RefObject<HTMLElement | null>,
+              onSelect: onNodeSelect,
+              onDrag: onNodeDrag,
+              onMove: onNodeMove,
+              onResize: onNodeResize,
+              onResizeEnd: onNodeResizeEnd,
+              onRotate: onNodeRotate,
+              onRotateEnd: onNodeRotateEnd,
+              onUpdateData: onNodeUpdateData,
+              onConnectionStart: startDragConnection,
+              onScriptLoadScenes,
+              onScriptOpen,
+              onScriptNavigateToScene,
+              onDocumentOpen,
+              onCanvasEmbedOpen,
+              onModelCheckInstalled,
+              onSelectShotCandidate,
+              onSelectGalleryCellCandidate,
+              onAssignSelectedShotsToScene,
+              onAutoLayoutSceneShots,
+              onBatchGenerateSceneShots,
+              onReorderSceneShots,
+              onDetachShotFromScene,
+              selectedNodeIds,
+            });
+          })}
       </CanvasViewport>
 
       {/* Marquee selection rectangle */}

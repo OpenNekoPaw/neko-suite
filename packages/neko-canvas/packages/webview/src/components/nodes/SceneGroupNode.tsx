@@ -2,10 +2,11 @@
  * SceneGroupNode - A semantic scene container that wraps ordered ShotNodes.
  * Renders as a dashed-border container with scene metadata in the header.
  * Child ShotNodes remain in canvasData.nodes; shotIds stores order only.
+ * Managed shots are displayed as a thumbnail grid inside this node.
  */
 
 import { useMemo, useState } from 'react';
-import type { SceneGroupCanvasNode, CanvasViewport } from '@neko/shared';
+import type { SceneGroupCanvasNode, CanvasViewport, ShotScale } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { EditableText } from '../common/EditableText';
 import { InlineInput, InlineSelect, TIME_OF_DAY } from '../common/InlineControls';
@@ -14,6 +15,15 @@ import { t } from '../../i18n';
 // =============================================================================
 // Types
 // =============================================================================
+
+export interface ShotThumbnailData {
+  id: string;
+  shotNumber?: number;
+  shotScale?: ShotScale;
+  generatedImage?: string;
+  generationStatus?: string;
+  visualDescription?: string;
+}
 
 export interface SceneGroupNodeProps {
   node: SceneGroupCanvasNode;
@@ -38,9 +48,26 @@ export interface SceneGroupNodeProps {
   onAssignSelectedShots?: (sceneId: string) => void;
   onAutoLayoutShots?: (sceneId: string) => void;
   onBatchGenerateShots?: (sceneId: string) => void;
-  shots?: Array<{ id: string; shotNumber?: number }>;
+  shots?: ShotThumbnailData[];
   onReorderShots?: (sceneId: string, shotIds: string[]) => void;
+  onDetachShot?: (sceneId: string, shotId: string) => void;
+  onShotThumbnailClick?: (shotId: string) => void;
 }
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const SHOT_SCALE_SHORT: Record<string, string> = {
+  ECU: 'ECU',
+  CU: 'CU',
+  MCU: 'MCU',
+  MS: 'MS',
+  MLS: 'MLS',
+  LS: 'LS',
+  VLS: 'VLS',
+  ELS: 'ELS',
+};
 
 // =============================================================================
 // Component
@@ -63,9 +90,12 @@ export function SceneGroupNode({
   onBatchGenerateShots,
   shots = [],
   onReorderShots,
+  onDetachShot,
+  onShotThumbnailClick,
 }: SceneGroupNodeProps) {
   const { sceneTitle, sceneNumber, location, timeOfDay, shotIds } = node.data;
   const [draggedShotId, setDraggedShotId] = useState<string | null>(null);
+  const [hoveredShotId, setHoveredShotId] = useState<string | null>(null);
   const orderedShots = useMemo(() => {
     const shotMap = new Map(shots.map((shot) => [shot.id, shot]));
     return shotIds
@@ -211,20 +241,34 @@ export function SceneGroupNode({
           </div>
         </div>
 
-        {/* ── Horizontal shot strip placeholder ── */}
+        {/* ── Shot thumbnail grid ── */}
         <div
-          className="flex-1 flex items-center justify-center px-2 py-2"
+          className="flex-1 overflow-auto px-2 py-2"
           style={{ color: 'var(--node-fg-secondary)' }}
         >
           {shotIds.length === 0 ? (
-            <span style={{ opacity: 0.4 }}>{t('scene.emptyHint')}</span>
+            <div className="flex items-center justify-center h-full">
+              <span style={{ opacity: 0.4 }}>{t('scene.emptyHint')}</span>
+            </div>
           ) : (
-            <div className="flex flex-wrap gap-1.5 items-center justify-center">
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                gap: 6,
+              }}
+            >
               {orderedShots.map((shot, i) => (
                 <div
                   key={shot.id}
                   draggable={!node.locked}
                   onMouseDown={(e) => e.stopPropagation()}
+                  onMouseEnter={() => setHoveredShotId(shot.id)}
+                  onMouseLeave={() => setHoveredShotId(null)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShotThumbnailClick?.(shot.id);
+                  }}
                   onDragStart={(e) => {
                     e.stopPropagation();
                     setDraggedShotId(shot.id);
@@ -241,21 +285,107 @@ export function SceneGroupNode({
                     setDraggedShotId(null);
                   }}
                   onDragEnd={() => setDraggedShotId(null)}
-                  className="px-2 py-1 rounded-md flex items-center gap-1.5"
+                  className="relative rounded-md overflow-hidden"
                   style={{
-                    backgroundColor:
-                      draggedShotId === shot.id ? 'rgba(59,130,246,0.18)' : 'var(--control-bg)',
-                    border: '1px solid var(--node-border)',
-                    color: 'var(--neko-fg)',
-                    opacity: 0.6 + (i / Math.max(shotIds.length, 1)) * 0.4,
-                    cursor: node.locked ? 'default' : 'grab',
+                    border:
+                      draggedShotId === shot.id
+                        ? '1.5px solid #3b82f6'
+                        : '1px solid var(--node-border)',
+                    backgroundColor: 'var(--node-surface)',
+                    cursor: node.locked ? 'default' : 'pointer',
+                    opacity: draggedShotId === shot.id ? 0.6 : 1,
                   }}
-                  title={t('scene.shotBadgeTitle', { number: shot.shotNumber ?? i + 1 })}
+                  title={shot.visualDescription || t('scene.shotThumbnailHint')}
                 >
-                  <span style={{ fontSize: 9, opacity: 0.6 }}>⋮⋮</span>
-                  <span className="font-mono" style={{ fontSize: 10 }}>
-                    #{String(shot.shotNumber ?? i + 1).padStart(2, '0')}
-                  </span>
+                  {/* Thumbnail image area */}
+                  <div
+                    className="relative flex items-center justify-center overflow-hidden"
+                    style={{ height: 72, backgroundColor: 'var(--node-surface)' }}
+                  >
+                    {shot.generationStatus === 'generating' ? (
+                      <div
+                        className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                        style={{ borderColor: '#3b82f688', borderTopColor: 'transparent' }}
+                      />
+                    ) : shot.generatedImage ? (
+                      <img
+                        src={shot.generatedImage}
+                        alt={`Shot ${shot.shotNumber ?? i + 1}`}
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
+                    ) : (
+                      <span style={{ fontSize: 18, opacity: 0.2 }}>⌘</span>
+                    )}
+
+                    {/* Status dot */}
+                    {shot.generationStatus && shot.generationStatus !== 'idle' && (
+                      <div
+                        className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                        style={{
+                          backgroundColor:
+                            shot.generationStatus === 'done'
+                              ? '#22c55e'
+                              : shot.generationStatus === 'error'
+                                ? '#ef4444'
+                                : shot.generationStatus === 'generating'
+                                  ? '#3b82f6'
+                                  : '#f59e0b',
+                        }}
+                      />
+                    )}
+
+                    {/* Detach button on hover */}
+                    {!node.locked && hoveredShotId === shot.id && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDetachShot?.(node.id, shot.id);
+                        }}
+                        className="absolute top-0.5 left-0.5 flex items-center justify-center"
+                        style={{
+                          width: 16,
+                          height: 16,
+                          fontSize: 10,
+                          lineHeight: 1,
+                          borderRadius: 3,
+                          border: 'none',
+                          background: 'rgba(0,0,0,0.5)',
+                          color: '#fff',
+                          cursor: 'pointer',
+                        }}
+                        title={t('scene.detachShotTitle')}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Footer: shot number + scale */}
+                  <div
+                    className="flex items-center justify-between px-1.5 py-1"
+                    style={{
+                      borderTop: '1px solid var(--node-border)',
+                      backgroundColor: 'var(--control-bg)',
+                    }}
+                  >
+                    <span className="font-mono" style={{ fontSize: 9, color: 'var(--neko-fg)' }}>
+                      #{String(shot.shotNumber ?? i + 1).padStart(2, '0')}
+                    </span>
+                    {shot.shotScale && (
+                      <span
+                        style={{
+                          fontSize: 8,
+                          color: 'var(--node-fg-secondary)',
+                          backgroundColor: 'var(--node-header-bg)',
+                          padding: '0 3px',
+                          borderRadius: 2,
+                        }}
+                      >
+                        {SHOT_SCALE_SHORT[shot.shotScale] ?? shot.shotScale}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

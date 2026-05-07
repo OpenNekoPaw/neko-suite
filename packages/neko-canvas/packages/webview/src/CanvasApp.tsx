@@ -102,6 +102,7 @@ export function CanvasApp() {
     assignShotsToScene,
     reorderSceneShots,
     autoLayoutSceneShots,
+    detachShotFromScene,
     selectNodes,
     groupNodes,
     ungroupNodes,
@@ -1047,6 +1048,7 @@ export function CanvasApp() {
             onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
             onBatchGenerateSceneShots={handleBatchGenerateSceneShots}
             onReorderSceneShots={handleReorderSceneShots}
+            onDetachShotFromScene={detachShotFromScene}
             isPanMode={isPanMode}
           />
 

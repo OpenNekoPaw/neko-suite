@@ -126,6 +126,16 @@
         "command": "neko.canvas.updateNodeImage",
         "title": "%neko.canvas.updateNodeImage.title%",
         "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.detachShotFromScene",
+        "title": "%neko.canvas.detachShotFromScene.title%",
+        "category": "NekoCanvas"
+      },
+      {
+        "command": "neko.canvas.deleteNodeFromOutline",
+        "title": "%neko.canvas.deleteNodeFromOutline.title%",
+        "category": "NekoCanvas"
       }
     ],
     "keybindings": [
@@ -175,6 +185,18 @@
         {
           "command": "neko.canvas.new",
           "group": "1@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "neko.canvas.detachShotFromScene",
+          "when": "view == neko.canvasOutline && viewItem == shotChild",
+          "group": "1_shot@1"
+        },
+        {
+          "command": "neko.canvas.deleteNodeFromOutline",
+          "when": "view == neko.canvasOutline && viewItem =~ /canvasNode|shotChild/",
+          "group": "2_manage@1"
         }
       ]
     }

@@ -148,11 +148,11 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
         item.iconPath = NODE_ICONS[node.type] ?? new vscode.ThemeIcon('circle-outline');
         item.description = node.detail;
         item.tooltip = `${node.type}: ${node.label}${node.locked ? ' 🔒' : ''}`;
-        item.contextValue = 'canvasNode';
+        item.contextValue = element.kind === 'shot-child' ? 'shotChild' : 'canvasNode';
         item.command = {
           command: 'neko.canvas.selectNodeFromOutline',
           title: 'Select Node',
-          arguments: [node.id],
+          arguments: element.kind === 'shot-child' ? [node.id, element.parentSceneId] : [node.id],
         };
         return item;
       }

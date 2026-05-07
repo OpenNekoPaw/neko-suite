@@ -496,6 +496,32 @@ function registerCommands(
     ),
   );
 
+  // Outline context-menu: detach shot from scene
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.detachShotFromScene',
+      (element?: { kind?: string; node?: { id: string }; parentSceneId?: string }) => {
+        if (element?.kind === 'shot-child' && element.node?.id && element.parentSceneId) {
+          canvasEditorProvider.postKeyboardAction(
+            `detachShot:${element.node.id}:${element.parentSceneId}`,
+          );
+        }
+      },
+    ),
+  );
+
+  // Outline context-menu: delete node
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.deleteNodeFromOutline',
+      (element?: { kind?: string; node?: { id: string } }) => {
+        if (element?.node?.id) {
+          canvasEditorProvider.postKeyboardAction(`deleteNode:${element.node.id}`);
+        }
+      },
+    ),
+  );
+
   // Zoom reset command (triggered from status bar)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.canvas.resetZoom', () => {
