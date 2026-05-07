@@ -97,6 +97,12 @@ export function useFileDrop(
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    const types = Array.from(e.dataTransfer.types);
+    const hasExternalPayload =
+      types.includes('Files') ||
+      types.includes('text/uri-list') ||
+      types.includes('application/json');
+    if (!hasExternalPayload) return;
     counterRef.current++;
     if (counterRef.current === 1) {
       setIsDragOver(true);
@@ -112,6 +118,7 @@ export function useFileDrop(
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (counterRef.current <= 0) return;
     counterRef.current--;
     if (counterRef.current <= 0) {
       counterRef.current = 0;
