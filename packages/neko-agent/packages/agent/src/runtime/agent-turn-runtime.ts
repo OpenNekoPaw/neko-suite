@@ -37,6 +37,11 @@ import {
   buildTurnMultimodalContextPacket,
   createCanvasSelectionContextPacket,
 } from './multimodal-context-packet';
+import { getLogger } from '../utils/logger';
+
+function getAgentTurnRuntimeLogger() {
+  return getLogger('AgentTurnRuntime');
+}
 
 export interface AgentTurnDisposable {
   dispose(): void;
@@ -327,6 +332,37 @@ export async function executeAgentTurn<
 >(
   input: ExecuteAgentTurnInput<TPlatform, TContext, THistoryMessage, TProvider, TRunner>,
 ): Promise<AgentTurnExecutionResult> {
+  const startTime = Date.now();
+  const logger = getAgentTurnRuntimeLogger();
+  logger.info('neko.agent.turn.execute.request', {
+    conversationId: input.conversationId,
+    messageChars: input.message.length,
+    hasPlatform: input.platform !== undefined && input.platform !== null,
+    hasChatModel: input.chatModel !== undefined,
+    chatModel: input.chatModel,
+    mediaModel: input.mediaModel,
+    mediaModelCategories: input.mediaModels ? Object.keys(input.mediaModels) : [],
+    imageAttachmentCount: input.imageAttachments?.length ?? 0,
+    imageAttachmentSummary: summarizeTurnImages(input.imageAttachments),
+    hasExecutionOverrides: input.executionOverrides !== undefined,
+    executionMode: input.settings.executionMode,
+    selectedProviderId: input.providerSource.selectedProviderId,
+    requestedProviderId: input.providerSource.requestedProviderId,
+    hasActiveSkill: input.activeSkill !== undefined && input.activeSkill !== null,
+    activeSkillName: input.activeSkill?.skill.name,
+  });
+  logger.debug('neko.agent.turn.execute.request.raw', {
+    conversationId: input.conversationId,
+    message: input.message,
+    chatModel: input.chatModel,
+    mediaModel: input.mediaModel,
+    mediaModels: input.mediaModels,
+    imageAttachments: summarizeTurnImages(input.imageAttachments),
+    executionOverrides: input.executionOverrides,
+    settings: input.settings,
+    activeSkill: input.activeSkill,
+  });
+
   const providerSelection = selectAgentTurnProvider({
     requestedProviderId: input.providerSource.requestedProviderId ?? undefined,
     selectedProviderId: input.providerSource.selectedProviderId ?? undefined,
@@ -334,11 +370,23 @@ export async function executeAgentTurn<
     getDefaultProvider: () => input.providerSource.getDefaultProvider(),
   });
   if (!providerSelection.ok) {
+    logger.warn('neko.agent.turn.execute.failed', {
+      conversationId: input.conversationId,
+      durationMs: Date.now() - startTime,
+      reason: providerSelection.reason,
+      effectiveProviderId: providerSelection.effectiveProviderId,
+    });
     return { status: 'fallback', reason: 'no-provider-configured' };
   }
 
   const platform = input.platform;
   if (!platform) {
+    logger.warn('neko.agent.turn.execute.failed', {
+      conversationId: input.conversationId,
+      durationMs: Date.now() - startTime,
+      reason: 'missing-platform',
+      effectiveProviderId: providerSelection.effectiveProviderId,
+    });
     return { status: 'fallback', reason: 'missing-platform' };
   }
 
@@ -428,6 +476,32 @@ export async function executeAgentTurn<
     multimodalContextPacket,
     executionMetadata: turnConfig.executionMetadata,
   });
+  logger.info('neko.agent.turn.context.patch', {
+    conversationId: input.conversationId,
+    workspaceRoot,
+    ambientCanvasCount: ambientCanvas.length,
+    imageAttachmentCount: input.imageAttachments?.length ?? 0,
+    hasTimelineContextPacket: timelineContextPacket !== undefined && timelineContextPacket !== null,
+    hasCanvasContextPacket: canvasContextPacket !== undefined && canvasContextPacket !== null,
+    hasMultimodalContextPacket: multimodalContextPacket !== undefined,
+    contextPatchSummary: summarizeContextPatch(contextPatch),
+    systemPromptChars: turnConfig.systemPrompt.length,
+    providerExpressionTargetCount: turnConfig.providerExpressionTargets?.length ?? 0,
+    providerExpressionTargets: turnConfig.providerExpressionTargets ?? [],
+    executionMetadataKeys: turnConfig.executionMetadata
+      ? Object.keys(turnConfig.executionMetadata)
+      : [],
+  });
+  logger.debug('neko.agent.turn.context.patch.raw', {
+    conversationId: input.conversationId,
+    workspaceRoot,
+    ambientCanvas,
+    timelineContextPacket,
+    canvasContextPacket,
+    multimodalContextPacket: sanitizeTurnDebugValue(multimodalContextPacket),
+    contextPatch: sanitizeTurnDebugValue(contextPatch),
+    systemPrompt: turnConfig.systemPrompt,
+  });
   applyAgentTurnContextPatch(context, contextPatch, input.applyContextPatch);
 
   let confirmationDisposable: AgentTurnDisposable | undefined;
@@ -468,9 +542,36 @@ export async function executeAgentTurn<
     });
     if (assistantMessage) {
       input.conversations.addAssistantMessage(input.conversationId, assistantMessage);
+      logger.info('neko.agent.turn.execute.result', {
+        conversationId: input.conversationId,
+        durationMs: Date.now() - startTime,
+        status: 'completed',
+        assistantMessageChars: assistantMessage.content.length,
+        toolCallCount: stream.collectedToolCalls.length,
+        contentBlockCount: stream.contentBlocks.length,
+        hasThinking: stream.accumulatedThinking.length > 0,
+      });
+      logger.debug('neko.agent.turn.execute.result.raw', {
+        conversationId: input.conversationId,
+        stream: sanitizeTurnDebugValue(stream),
+        assistantMessage: sanitizeTurnDebugValue(assistantMessage),
+      });
       return { status: 'completed', assistantMessage };
     }
 
+    logger.info('neko.agent.turn.execute.result', {
+      conversationId: input.conversationId,
+      durationMs: Date.now() - startTime,
+      status: 'completed',
+      assistantMessageChars: 0,
+      toolCallCount: stream.collectedToolCalls.length,
+      contentBlockCount: stream.contentBlocks.length,
+      hasThinking: stream.accumulatedThinking.length > 0,
+    });
+    logger.debug('neko.agent.turn.execute.result.raw', {
+      conversationId: input.conversationId,
+      stream: sanitizeTurnDebugValue(stream),
+    });
     return { status: 'completed' };
   } finally {
     confirmationDisposable?.dispose();
@@ -508,6 +609,82 @@ function hydrateAgentHistoryIfNeeded<
   if (hydrationPlan.kind === 'load-history') {
     input.agentManager.loadHistoryWithContext(input.conversationId, hydrationPlan.historyToLoad);
   }
+}
+
+function summarizeTurnImages(
+  images: readonly AgentBase64ImageAttachment[] | undefined,
+): readonly Record<string, unknown>[] {
+  return (images ?? []).map((image, index) => ({
+    index,
+    type: image.type,
+    mediaType: image.media_type,
+    dataChars: image.data.length,
+  }));
+}
+
+function summarizeContextPatch(
+  patch: ReturnType<typeof buildAgentTurnContextPatch>,
+): Record<string, unknown> {
+  return {
+    hasImageAttachments: patch.imageAttachments !== undefined,
+    imageAttachmentCount: patch.imageAttachments?.length ?? 0,
+    hasCanvasContext: patch.canvasContext !== undefined,
+    canvasNodeCount: patch.canvasContext?.selectedNodes.length ?? 0,
+    hasMultimodalContextPacket: patch.multimodalContextPacket !== undefined,
+    metadataKeys: patch.metadata ? Object.keys(patch.metadata) : [],
+  };
+}
+
+function sanitizeTurnDebugValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return sanitizeTurnStringForDebugLog(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeTurnDebugValue(item));
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => {
+      if (isLikelyMediaDataKey(key) && typeof entry === 'string') {
+        return [key, sanitizeTurnStringForDebugLog(entry)];
+      }
+      return [key, sanitizeTurnDebugValue(entry)];
+    }),
+  );
+}
+
+function isLikelyMediaDataKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    normalized === 'data' ||
+    normalized === 'imagedata' ||
+    normalized === 'image' ||
+    normalized === 'preview' ||
+    normalized === 'thumbnail'
+  );
+}
+
+function sanitizeTurnStringForDebugLog(value: string): string {
+  if (value.startsWith('data:')) {
+    const metadataEnd = value.indexOf(',');
+    const metadata = metadataEnd >= 0 ? value.slice(0, metadataEnd) : 'data:';
+    return `${metadata},<omitted ${value.length} chars>`;
+  }
+
+  if (value.length > 4096 && /^[A-Za-z0-9+/=\r\n]+$/.test(value)) {
+    return `<base64 omitted ${value.length} chars>`;
+  }
+
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function applyAgentTurnContextPatch<TContext extends object>(

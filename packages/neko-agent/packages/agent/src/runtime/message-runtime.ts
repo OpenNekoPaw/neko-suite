@@ -33,6 +33,11 @@ import {
   type AgentBase64ImageAttachment,
   type AgentProcessedAttachments,
 } from './attachment-projection';
+import { getLogger } from '../utils/logger';
+
+function getMessageRuntimeLogger() {
+  return getLogger('MessageRuntime');
+}
 
 export interface AgentMessageExecutionOverrides {
   readonly executionMode?: 'auto' | 'ask' | 'plan';
@@ -479,7 +484,36 @@ export async function mergeReferencedMediaImageAttachments(
 export async function prepareAgentMessageDispatch(
   input: PrepareAgentMessageDispatchInput,
 ): Promise<PreparedAgentMessageDispatch> {
+  const startTime = Date.now();
   const request = input.request;
+  const logger = getMessageRuntimeLogger();
+  logger.info('neko.agent.message.assembly.request', {
+    conversationId: request.conversationId,
+    sessionMode: request.sessionMode,
+    messageChars: request.messageText.length,
+    attachmentCount: request.attachments?.length ?? 0,
+    attachmentSummary: summarizeMessageAttachments(request.attachments),
+    contextPayloadCount: request.contextPayloads?.length ?? 0,
+    contextPayloadSummary: summarizeContextPayloads(request.contextPayloads),
+    hasChatModel: request.chatModel !== undefined,
+    hasMediaModel: request.mediaModel !== undefined,
+    mediaModelCategories: request.mediaModels ? Object.keys(request.mediaModels) : [],
+    promptId: request.promptId,
+    hasExecutionOverrides: request.executionOverrides !== undefined,
+  });
+  logger.debug('neko.agent.message.assembly.request.raw', {
+    conversationId: request.conversationId,
+    sessionMode: request.sessionMode,
+    messageText: request.messageText,
+    attachments: sanitizeAttachmentsForDebugLog(request.attachments),
+    contextPayloads: sanitizeForDebugLog(request.contextPayloads),
+    chatModel: request.chatModel,
+    mediaModel: request.mediaModel,
+    mediaModels: request.mediaModels,
+    promptId: request.promptId,
+    executionOverrides: sanitizeForDebugLog(request.executionOverrides),
+  });
+
   const { message: parsedMessage, fileContents } = await prepareAgentMessageFileReferences({
     messageText: request.messageText,
     inputProcessor: input.inputProcessor,
@@ -498,14 +532,49 @@ export async function prepareAgentMessageDispatch(
     onError: input.onReferencedMediaError,
   });
 
+  const enhancedMessage = buildEnhancedAgentMessage({
+    message: parsedMessage,
+    contextPayloads: request.contextPayloads,
+    fileContents,
+    attachmentText,
+  });
+  const route: AgentMessageDispatchRoute =
+    request.sessionMode !== 'agent' && request.mediaModel
+      ? { kind: 'media', mediaModel: request.mediaModel }
+      : { kind: 'agent' };
+
+  logger.info('neko.agent.message.assembly.result', {
+    conversationId: request.conversationId,
+    durationMs: Date.now() - startTime,
+    routeKind: route.kind,
+    inputMessageChars: request.messageText.length,
+    parsedMessageChars: parsedMessage.length,
+    enhancedMessageChars: enhancedMessage.length,
+    referencedFileCount: fileContents.length,
+    referencedFiles: fileContents.map((file) => ({
+      path: file.path,
+      chars: file.content.length,
+    })),
+    attachmentTextChars: attachmentText.length,
+    imageAttachmentCount: imageAttachments.length,
+    mediaImageCount: mediaImages.length,
+    mediaImageSummary: summarizeBase64Images(mediaImages),
+    contextPayloadCount: request.contextPayloads?.length ?? 0,
+  });
+  logger.debug('neko.agent.message.assembly.result.raw', {
+    conversationId: request.conversationId,
+    route,
+    parsedMessage,
+    enhancedMessage,
+    referencedFiles: fileContents,
+    attachmentText,
+    mediaImages: summarizeBase64Images(mediaImages),
+    userMessageContent: request.messageText,
+  });
+
   return {
     conversationId: request.conversationId,
-    enhancedMessage: buildEnhancedAgentMessage({
-      message: parsedMessage,
-      contextPayloads: request.contextPayloads,
-      fileContents,
-      attachmentText,
-    }),
+    enhancedMessage,
     userMessage: {
       id: input.generateMessageId(),
       role: 'user',
@@ -513,10 +582,7 @@ export async function prepareAgentMessageDispatch(
       timestamp: input.now?.() ?? Date.now(),
     },
     mediaImages,
-    route:
-      request.sessionMode !== 'agent' && request.mediaModel
-        ? { kind: 'media', mediaModel: request.mediaModel }
-        : { kind: 'agent' },
+    route,
   };
 }
 
@@ -998,6 +1064,103 @@ export function summarizeAgentEventProgress(event: AgentEvent): string | undefin
     default:
       return undefined;
   }
+}
+
+function summarizeMessageAttachments(
+  attachments: readonly MessageAttachment[] | undefined,
+): readonly Record<string, unknown>[] {
+  return (attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    name: attachment.name,
+    type: attachment.type,
+    hasPath: typeof attachment.path === 'string' && attachment.path.length > 0,
+    path: attachment.path,
+    hasPreview: typeof attachment.preview === 'string' && attachment.preview.length > 0,
+    previewChars: attachment.preview?.length ?? 0,
+  }));
+}
+
+function summarizeContextPayloads(
+  payloads: readonly AgentContextPayload[] | undefined,
+): readonly Record<string, unknown>[] {
+  return (payloads ?? []).map((payload) => ({
+    id: payload.id,
+    type: payload.type,
+    label: payload.label,
+    summaryChars: payload.summary.length,
+    dataKeys: isRecord(payload.data) ? Object.keys(payload.data) : [],
+    hasText: extractAgentContextText(payload.data) !== undefined,
+    hasImageData: extractAgentContextImageData(payload.data) !== undefined,
+    hasFilePath: extractAgentContextFilePath(payload.data) !== undefined,
+  }));
+}
+
+function summarizeBase64Images(
+  images: readonly AgentBase64ImageAttachment[],
+): readonly Record<string, unknown>[] {
+  return images.map((image, index) => ({
+    index,
+    type: image.type,
+    mediaType: image.media_type,
+    dataChars: image.data.length,
+  }));
+}
+
+function sanitizeAttachmentsForDebugLog(
+  attachments: readonly MessageAttachment[] | undefined,
+): readonly Record<string, unknown>[] {
+  return (attachments ?? []).map((attachment) => ({
+    ...attachment,
+    ...(attachment.preview ? { preview: sanitizeMediaStringForDebugLog(attachment.preview) } : {}),
+  }));
+}
+
+function sanitizeForDebugLog(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return sanitizeMediaStringForDebugLog(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForDebugLog(item));
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => {
+      if (isLikelyMediaDataKey(key) && typeof entry === 'string') {
+        return [key, sanitizeMediaStringForDebugLog(entry)];
+      }
+      return [key, sanitizeForDebugLog(entry)];
+    }),
+  );
+}
+
+function isLikelyMediaDataKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    normalized === 'data' ||
+    normalized === 'imagedata' ||
+    normalized === 'image' ||
+    normalized === 'preview' ||
+    normalized === 'thumbnail'
+  );
+}
+
+function sanitizeMediaStringForDebugLog(value: string): string {
+  if (value.startsWith('data:')) {
+    const metadataEnd = value.indexOf(',');
+    const metadata = metadataEnd >= 0 ? value.slice(0, metadataEnd) : 'data:';
+    return `${metadata},<omitted ${value.length} chars>`;
+  }
+
+  if (value.length > 4096 && /^[A-Za-z0-9+/=\r\n]+$/.test(value)) {
+    return `<base64 omitted ${value.length} chars>`;
+  }
+
+  return value;
 }
 
 function extractAgentContextText(data: unknown): string | undefined {

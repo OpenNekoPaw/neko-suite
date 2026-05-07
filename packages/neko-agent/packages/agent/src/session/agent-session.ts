@@ -155,6 +155,10 @@ import {
 
 const logger = getLogger('AgentSession');
 
+function getAgentSessionLogger() {
+  return getLogger('AgentSession');
+}
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -2340,6 +2344,29 @@ export class AgentSession implements IAgentSession {
         systemPromptSections: structured.sections,
       });
     }
+
+    const promptSections = this._promptComposer.dumpSections();
+    const promptLogger = getAgentSessionLogger();
+    promptLogger.info('neko.agent.prompt.composed', {
+      sectionCount: promptSections.length,
+      textChars: structured.text.length,
+      sectionChars: structured.sections.map((section, index) => ({
+        index,
+        chars: section.content.length,
+        cacheControl: section.cacheControl,
+      })),
+      sections: promptSections,
+      layerUsage: this._promptComposer.getLayerUsage(),
+    });
+    promptLogger.debug('neko.agent.prompt.composed.raw', {
+      text: structured.text,
+      sections: structured.sections.map((section, index) => ({
+        index,
+        cacheControl: section.cacheControl,
+        content: section.content,
+      })),
+      dump: promptSections,
+    });
   }
 
   private _applyPromptModuleSync(module: PromptModule): void {

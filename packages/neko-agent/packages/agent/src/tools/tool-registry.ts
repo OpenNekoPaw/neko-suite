@@ -120,9 +120,32 @@ export class ToolRegistry implements IToolRegistry {
     args: Record<string, unknown>,
     options?: ToolExecuteOptions,
   ): Promise<ToolResult> {
+    const requestId = createToolExecutionRequestId();
+    const startedAt = Date.now();
+    const logger = getToolRegistryLogger();
+    logger.info('neko.agent.tool.execute.request', {
+      requestId,
+      toolName: name,
+      argSummary: summarizeRecordShape(args),
+      hasOptions: options !== undefined,
+      metadataSummary: summarizeRecordShape(options?.metadata),
+    });
+    logger.debug('neko.agent.tool.execute.request.raw', {
+      requestId,
+      toolName: name,
+      args,
+      options: summarizeToolExecuteOptionsForDebug(options),
+    });
+
     const tool = this.get(name);
 
     if (!tool) {
+      logger.warn('neko.agent.tool.execute.failed', {
+        requestId,
+        toolName: name,
+        durationMs: Date.now() - startedAt,
+        reason: 'not-found',
+      });
       return {
         success: false,
         error: `Tool not found: ${name}`,
@@ -133,6 +156,15 @@ export class ToolRegistry implements IToolRegistry {
     if (tool.parameters) {
       const validationErrors = validateSchema(args, tool.parameters);
       if (validationErrors.length > 0) {
+        logger.warn('neko.agent.tool.execute.failed', {
+          requestId,
+          toolName: name,
+          category: tool.category,
+          durationMs: Date.now() - startedAt,
+          reason: 'validation',
+          validationErrorCount: validationErrors.length,
+          validationErrors,
+        });
         return {
           success: false,
           error: formatValidationErrors(validationErrors),
@@ -142,15 +174,40 @@ export class ToolRegistry implements IToolRegistry {
     }
 
     try {
-      const startTime = Date.now();
       const result = await tool.execute(args, options);
-      const duration = Date.now() - startTime;
-
-      return {
+      const duration = Date.now() - startedAt;
+      const resultWithDuration = {
         ...result,
         duration,
       };
+
+      logger.info('neko.agent.tool.execute.result', {
+        requestId,
+        toolName: name,
+        category: tool.category,
+        kind: tool.kind,
+        durationMs: duration,
+        success: resultWithDuration.success,
+        resultSummary: summarizeToolResult(resultWithDuration),
+      });
+      logger.debug('neko.agent.tool.execute.result.raw', {
+        requestId,
+        toolName: name,
+        result: resultWithDuration,
+      });
+
+      return resultWithDuration;
     } catch (error) {
+      const duration = Date.now() - startedAt;
+      logger.warn('neko.agent.tool.execute.failed', {
+        requestId,
+        toolName: name,
+        category: tool.category,
+        kind: tool.kind,
+        durationMs: duration,
+        reason: 'exception',
+        error: summarizeUnknownError(error),
+      });
       if (error instanceof AgentError) {
         return {
           success: false,
@@ -239,6 +296,84 @@ export class ToolRegistry implements IToolRegistry {
       this.register(tool);
     }
   }
+}
+
+let toolExecutionSequence = 0;
+
+function getToolRegistryLogger() {
+  return getLogger('ToolRegistry');
+}
+
+function createToolExecutionRequestId(now = Date.now()): string {
+  toolExecutionSequence =
+    toolExecutionSequence >= Number.MAX_SAFE_INTEGER ? 1 : toolExecutionSequence + 1;
+  return `tool-${now.toString(36)}-${toolExecutionSequence.toString(36)}`;
+}
+
+function summarizeRecordShape(value: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!value) {
+    return {
+      keyCount: 0,
+      keys: [],
+    };
+  }
+
+  const keys = Object.keys(value);
+  return {
+    keyCount: keys.length,
+    keys,
+    fieldTypes: Object.fromEntries(keys.map((key) => [key, summarizeValueType(value[key])])),
+  };
+}
+
+function summarizeToolExecuteOptionsForDebug(
+  options: ToolExecuteOptions | undefined,
+): Record<string, unknown> | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  return {
+    hasOnProgress: options.onProgress !== undefined,
+    metadata: options.metadata,
+  };
+}
+
+function summarizeToolResult(result: ToolResult): Record<string, unknown> {
+  return {
+    hasData: result.data !== undefined,
+    dataType: summarizeValueType(result.data),
+    errorChars: result.error?.length ?? 0,
+    duration: result.duration,
+    validationErrorCount: result.validationErrors?.length ?? 0,
+    attachmentCount: result.attachments?.length ?? 0,
+    perceptionCardCount: result.perceptionCards?.length ?? 0,
+    backfillDiagnosticCount: result.backfillDiagnostics?.length ?? 0,
+  };
+}
+
+function summarizeValueType(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return `array(${value.length})`;
+  }
+  return typeof value;
+}
+
+function summarizeUnknownError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    name: typeof error,
+    message: String(error),
+  };
 }
 
 /**

@@ -8,6 +8,11 @@
 
 import type { Skill, SkillInjection, ISkillInjector } from '@neko/shared';
 import { replaceShellCommands } from './shell-replacer';
+import { getLogger } from '../utils/logger';
+
+function getSkillInjectorLogger() {
+  return getLogger('SkillInjector');
+}
 
 /**
  * Skill injector implementation
@@ -31,6 +36,30 @@ export class SkillInjector implements ISkillInjector {
    * @returns Injection configuration
    */
   async injectSkill(skill: Skill, args?: string): Promise<SkillInjection> {
+    const startTime = Date.now();
+    const logger = getSkillInjectorLogger();
+    logger.info('neko.agent.skill.injector.request', {
+      skillName: skill.name,
+      command: skill.command,
+      type: skill.command ? 'slash-command' : 'skill',
+      source: skill.source,
+      domain: skill.domain,
+      contentChars: skill.content.length,
+      supportsArguments: skill.supportsArguments === true,
+      hasArgs: args !== undefined && args.length > 0,
+      argChars: args?.length ?? 0,
+      allowedToolCount: skill.allowedTools?.length ?? 0,
+      allowedTools: skill.allowedTools ?? [],
+      supportFileRefCount: skill.supportFileRefs?.length ?? 0,
+      supportFileRefs: skill.supportFileRefs ?? [],
+      hasDirectoryPath: skill.directoryPath !== undefined,
+      shellEnabled: (skill as { shell?: boolean }).shell !== false,
+    });
+    logger.debug('neko.agent.skill.injector.request.raw', {
+      skill,
+      args,
+    });
+
     let systemPrompt = skill.content;
 
     // Argument interpolation (for skills with slash command trigger)
@@ -57,13 +86,32 @@ export class SkillInjector implements ISkillInjector {
       systemPrompt += `\n\n---\n_Support files available in: ${skill.directoryPath}_`;
     }
 
-    return {
+    const injection: SkillInjection = {
       systemPrompt,
       allowedTools: skill.allowedTools,
       name: skill.command ?? skill.name,
       model: skill.model,
       type: skill.command ? 'slash-command' : 'skill',
     };
+    logger.info('neko.agent.skill.injector.result', {
+      skillName: skill.name,
+      injectionName: injection.name,
+      type: injection.type,
+      durationMs: Date.now() - startTime,
+      originalContentChars: skill.content.length,
+      systemPromptChars: systemPrompt.length,
+      allowedToolCount: injection.allowedTools?.length ?? 0,
+      supportHintInjected:
+        skill.directoryPath !== undefined && (skill.supportFileRefs?.length ?? 0) > 0,
+      hasModelOverride: injection.model !== undefined,
+    });
+    logger.debug('neko.agent.skill.injector.result.raw', {
+      skillName: skill.name,
+      args,
+      injection,
+    });
+
+    return injection;
   }
 
   // ===========================================================================

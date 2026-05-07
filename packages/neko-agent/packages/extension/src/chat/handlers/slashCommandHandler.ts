@@ -26,6 +26,11 @@ import type { TaskHandler } from './taskHandler';
 import type { ContextHandler } from './contextHandler';
 import type { PlanModeHandler } from './planModeHandler';
 import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
+import { getLogger } from '../../base';
+
+function getSlashCommandLogger() {
+  return getLogger('SlashCommandHandler');
+}
 
 /**
  * Dependencies for SlashCommandHandler
@@ -66,11 +71,42 @@ export class SlashCommandHandler {
     args: string | undefined,
     conversationId: string,
   ): Promise<void> {
-    await runExtensionSlashCommandRuntime(
-      { command, conversationId, ...(args !== undefined ? { args } : {}) },
-      this._createRuntimeDeps(webview),
-      this._createRuntimeEffects(webview),
-    );
+    const startTime = Date.now();
+    const logger = getSlashCommandLogger();
+    logger.info('neko.agent.command.slash.request', {
+      command,
+      conversationId,
+      hasArgs: args !== undefined && args.length > 0,
+      argChars: args?.length ?? 0,
+    });
+    logger.debug('neko.agent.command.slash.request.raw', {
+      command,
+      conversationId,
+      args,
+    });
+
+    try {
+      const result = await runExtensionSlashCommandRuntime(
+        { command, conversationId, ...(args !== undefined ? { args } : {}) },
+        this._createRuntimeDeps(webview),
+        this._createRuntimeEffects(webview),
+      );
+      logger.info('neko.agent.command.slash.result', {
+        command: result.command,
+        conversationId,
+        durationMs: Date.now() - startTime,
+        handled: result.handled,
+        source: result.source,
+      });
+    } catch (error) {
+      logger.warn('neko.agent.command.slash.failed', {
+        command,
+        conversationId,
+        durationMs: Date.now() - startTime,
+        error: summarizeSlashCommandError(error),
+      });
+      throw error;
+    }
   }
 
   /**
@@ -181,6 +217,28 @@ export class SlashCommandHandler {
     webview: vscode.Webview,
     dispatch: ExtensionSlashCommandExecutionDispatch,
   ): Promise<void> | undefined {
+    const logger = getSlashCommandLogger();
+    logger.info('neko.agent.command.skillPrompt.dispatch', {
+      conversationId: dispatch.conversationId,
+      messageChars: dispatch.messageText.length,
+      sessionMode: dispatch.sessionMode,
+      hasExecutionOverrides: dispatch.executionOverrides !== undefined,
+    });
+    logger.debug('neko.agent.command.skillPrompt.dispatch.raw', dispatch);
     return this.deps.messages?.handleUserMessage(webview, dispatch);
   }
+}
+
+function summarizeSlashCommandError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    name: typeof error,
+    message: String(error),
+  };
 }

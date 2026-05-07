@@ -6,7 +6,13 @@
  * as they are unnecessary for a single-user desktop application.
  */
 
-import type { ChatChunk, ChatMessage, ChatOptions } from '../types/adapter';
+import type {
+  ChatChunk,
+  ChatMessage,
+  ChatOptions,
+  ChatResponse,
+  MessageRole,
+} from '../types/adapter';
 import type {
   ServiceOptions,
   ServiceResponse,
@@ -20,6 +26,7 @@ import { ProviderRegistry } from '../provider/provider-registry';
 import { ModelSelector } from './model-selector';
 import { PlatformError } from '../provider/platform-error';
 import { createStreamCollector } from '../llm/adapter/stream-aggregator';
+import { getLogger } from '../utils/logger';
 
 /**
  * AI Service configuration
@@ -145,16 +152,75 @@ export class Service implements IService {
    */
   async chat(messages: ChatMessage[], options: ServiceOptions = {}): Promise<ServiceResponse> {
     const startTime = Date.now();
+    const requestId = createModelCallRequestId(startTime);
+    const logger = getServiceLogger();
     const routing = this.resolveRouting(options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
     const chatOptions: ChatOptions = { ...options, model: model.name };
-    const projectedMessages = await projectMessagesForProvider(messages, chatOptions, {
-      providerId: routing.providerId,
-      modelId: routing.modelId,
-    });
-    const response = await adapter.chat(projectedMessages, chatOptions, model, provider);
-    return { ...response, ...this.buildResponseMeta(routing, startTime) };
+    try {
+      const projectedMessages = await projectMessagesForProvider(messages, chatOptions, {
+        providerId: routing.providerId,
+        modelId: routing.modelId,
+      });
+      logger.info(
+        'neko.agent.llm.request',
+        createModelCallRequestLog({
+          requestId,
+          stream: false,
+          routing,
+          options: chatOptions,
+          originalMessages: messages,
+          projectedMessages,
+        }),
+      );
+      logger.debug(
+        'neko.agent.llm.request.raw',
+        createModelCallRequestDebugLog({
+          requestId,
+          stream: false,
+          routing,
+          options: chatOptions,
+          originalMessages: messages,
+          projectedMessages,
+        }),
+      );
+
+      const response = await adapter.chat(projectedMessages, chatOptions, model, provider);
+      const responseMeta = this.buildResponseMeta(routing, startTime);
+      logger.info(
+        'neko.agent.llm.response',
+        createModelCallResponseLog({
+          requestId,
+          stream: false,
+          routing,
+          durationMs: responseMeta.timing.duration,
+          response,
+        }),
+      );
+      logger.debug(
+        'neko.agent.llm.response.raw',
+        createModelCallResponseDebugLog({
+          requestId,
+          stream: false,
+          routing,
+          response,
+        }),
+      );
+      return { ...response, ...responseMeta };
+    } catch (error) {
+      logger.warn(
+        'neko.agent.llm.failed',
+        createModelCallFailureLog({
+          requestId,
+          stream: false,
+          routing,
+          durationMs: Date.now() - startTime,
+          error,
+        }),
+      );
+      throw error;
+    }
   }
 
   /**
@@ -162,6 +228,8 @@ export class Service implements IService {
    */
   chatStream(messages: ChatMessage[], options: ServiceOptions = {}): ServiceStreamResponse {
     const startTime = Date.now();
+    const requestId = createModelCallRequestId(startTime);
+    const logger = getServiceLogger();
     const routing = this.resolveRouting(options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
@@ -171,6 +239,30 @@ export class Service implements IService {
       options: chatOptions,
       providerId: routing.providerId,
       modelId: routing.modelId,
+      onProjected: (projectedMessages) => {
+        logger.info(
+          'neko.agent.llm.request',
+          createModelCallRequestLog({
+            requestId,
+            stream: true,
+            routing,
+            options: chatOptions,
+            originalMessages: messages,
+            projectedMessages,
+          }),
+        );
+        logger.debug(
+          'neko.agent.llm.request.raw',
+          createModelCallRequestDebugLog({
+            requestId,
+            stream: true,
+            routing,
+            options: chatOptions,
+            originalMessages: messages,
+            projectedMessages,
+          }),
+        );
+      },
       start: (projectedMessages) =>
         adapter.chatStream(projectedMessages, chatOptions, model, provider),
     });
@@ -183,10 +275,46 @@ export class Service implements IService {
 
     return {
       stream: collectedStream,
-      response: responsePromise.then((response) => ({
-        ...response,
-        ...this.buildResponseMeta(routing, startTime),
-      })),
+      response: responsePromise
+        .then((response) => {
+          const responseMeta = this.buildResponseMeta(routing, startTime);
+          logger.info(
+            'neko.agent.llm.response',
+            createModelCallResponseLog({
+              requestId,
+              stream: true,
+              routing,
+              durationMs: responseMeta.timing.duration,
+              response,
+            }),
+          );
+          logger.debug(
+            'neko.agent.llm.response.raw',
+            createModelCallResponseDebugLog({
+              requestId,
+              stream: true,
+              routing,
+              response,
+            }),
+          );
+          return {
+            ...response,
+            ...responseMeta,
+          };
+        })
+        .catch((error: unknown) => {
+          logger.warn(
+            'neko.agent.llm.failed',
+            createModelCallFailureLog({
+              requestId,
+              stream: true,
+              routing,
+              durationMs: Date.now() - startTime,
+              error,
+            }),
+          );
+          throw error;
+        }),
     };
   }
 
@@ -404,6 +532,7 @@ function createProjectedChatStream(input: {
   readonly options: ChatOptions;
   readonly providerId: string;
   readonly modelId: string;
+  readonly onProjected?: (messages: ChatMessage[]) => void;
   readonly start: (messages: ChatMessage[]) => AsyncIterable<ChatChunk>;
 }): AsyncIterable<ChatChunk> {
   return {
@@ -412,7 +541,405 @@ function createProjectedChatStream(input: {
         providerId: input.providerId,
         modelId: input.modelId,
       });
+      input.onProjected?.(projectedMessages);
       yield* input.start(projectedMessages);
     },
   };
+}
+
+interface ChatMessageSummary {
+  readonly messageCount: number;
+  readonly roleCounts: Record<MessageRole, number>;
+  readonly stringContentMessages: number;
+  readonly partContentMessages: number;
+  readonly textPartCount: number;
+  readonly imagePartCount: number;
+  readonly videoPartCount: number;
+  readonly textChars: number;
+  readonly toolCallCount: number;
+  readonly toolCallNames: readonly string[];
+}
+
+interface ModelCallOptionsSummary {
+  readonly maxTokens?: number;
+  readonly temperature?: number;
+  readonly topP?: number;
+  readonly frequencyPenalty?: number;
+  readonly presencePenalty?: number;
+  readonly stopSequenceCount: number;
+  readonly toolCount: number;
+  readonly toolNames: readonly string[];
+  readonly toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; name: string };
+  readonly responseFormat?: NonNullable<ChatOptions['responseFormat']>['type'];
+  readonly thinkingBudget?: number;
+  readonly systemPromptSectionCount: number;
+  readonly cachedSystemPromptSectionCount: number;
+  readonly hasAbortSignal: boolean;
+  readonly hasMessageProjector: boolean;
+}
+
+interface ErrorSummary {
+  readonly name: string;
+  readonly message: string;
+}
+
+interface RawMessageSnapshot {
+  readonly index: number;
+  readonly role: MessageRole;
+  readonly name?: string;
+  readonly toolCallId?: string;
+  readonly content: RawContentSnapshot;
+  readonly toolCalls?: readonly RawToolCallSnapshot[];
+}
+
+type RawContentSnapshot = string | readonly RawContentPartSnapshot[];
+
+type RawContentPartSnapshot =
+  | {
+      readonly type: 'text';
+      readonly text: string;
+    }
+  | {
+      readonly type: 'image';
+      readonly imageUrl: string;
+      readonly detail?: 'auto' | 'low' | 'high';
+    }
+  | {
+      readonly type: 'video';
+      readonly videoUrl: string;
+      readonly mimeType?: string;
+    };
+
+interface RawToolCallSnapshot {
+  readonly id: string;
+  readonly type: 'function';
+  readonly functionName: string;
+  readonly arguments: string;
+}
+
+let modelCallSequence = 0;
+
+function getServiceLogger() {
+  return getLogger('Service');
+}
+
+function createModelCallRequestId(now = Date.now()): string {
+  modelCallSequence = modelCallSequence >= Number.MAX_SAFE_INTEGER ? 1 : modelCallSequence + 1;
+  return `llm-${now.toString(36)}-${modelCallSequence.toString(36)}`;
+}
+
+function createModelCallRequestLog(input: {
+  readonly requestId: string;
+  readonly stream: boolean;
+  readonly routing: RoutingResult;
+  readonly options: ChatOptions;
+  readonly originalMessages: readonly ChatMessage[];
+  readonly projectedMessages: readonly ChatMessage[];
+}): Record<string, unknown> {
+  const originalSummary = summarizeChatMessages(input.originalMessages);
+  const projectedSummary = summarizeChatMessages(input.projectedMessages);
+
+  return {
+    requestId: input.requestId,
+    providerId: input.routing.providerId,
+    modelId: input.routing.modelId,
+    stream: input.stream,
+    attempt: input.routing.attempt,
+    options: summarizeModelCallOptions(input.options),
+    originalMessages: originalSummary,
+    projectedMessages: projectedSummary,
+    projectionDelta: {
+      messageCount: input.projectedMessages.length - input.originalMessages.length,
+      textChars: projectedSummary.textChars - originalSummary.textChars,
+    },
+  };
+}
+
+function createModelCallResponseLog(input: {
+  readonly requestId: string;
+  readonly stream: boolean;
+  readonly routing: RoutingResult;
+  readonly durationMs: number;
+  readonly response: ChatResponse;
+}): Record<string, unknown> {
+  return {
+    requestId: input.requestId,
+    providerId: input.routing.providerId,
+    modelId: input.routing.modelId,
+    stream: input.stream,
+    attempt: input.routing.attempt,
+    durationMs: input.durationMs,
+    responseId: input.response.id,
+    providerModel: input.response.model,
+    finishReason: input.response.finishReason,
+    usage: input.response.usage,
+    outputChars: countContentChars(input.response.message.content),
+    toolCallCount: input.response.message.toolCalls?.length ?? 0,
+    toolCallNames: input.response.message.toolCalls?.map((call) => call.function.name) ?? [],
+    hasThinking: input.response.thinking !== undefined,
+  };
+}
+
+function createModelCallRequestDebugLog(input: {
+  readonly requestId: string;
+  readonly stream: boolean;
+  readonly routing: RoutingResult;
+  readonly options: ChatOptions;
+  readonly originalMessages: readonly ChatMessage[];
+  readonly projectedMessages: readonly ChatMessage[];
+}): Record<string, unknown> {
+  return {
+    requestId: input.requestId,
+    providerId: input.routing.providerId,
+    modelId: input.routing.modelId,
+    stream: input.stream,
+    attempt: input.routing.attempt,
+    debugPayloadIncludesRawText: true,
+    debugPayloadMediaPolicy: 'image/video URLs are preserved only for non-data URLs',
+    systemPromptSections: input.options.systemPromptSections?.map((section, index) => ({
+      index,
+      cacheControl: section.cacheControl,
+      content: section.content,
+    })),
+    originalMessages: createRawMessageSnapshots(input.originalMessages),
+    projectedMessages: createRawMessageSnapshots(input.projectedMessages),
+    tools: input.options.tools?.map((tool) => ({
+      name: tool.function.name,
+      description: tool.function.description,
+      parameters: tool.function.parameters,
+    })),
+    toolChoice: summarizeToolChoice(input.options.toolChoice),
+  };
+}
+
+function createModelCallResponseDebugLog(input: {
+  readonly requestId: string;
+  readonly stream: boolean;
+  readonly routing: RoutingResult;
+  readonly response: ChatResponse;
+}): Record<string, unknown> {
+  return {
+    requestId: input.requestId,
+    providerId: input.routing.providerId,
+    modelId: input.routing.modelId,
+    stream: input.stream,
+    attempt: input.routing.attempt,
+    responseId: input.response.id,
+    providerModel: input.response.model,
+    finishReason: input.response.finishReason,
+    usage: input.response.usage,
+    message: createRawMessageSnapshot(input.response.message, 0),
+    thinking: input.response.thinking,
+  };
+}
+
+function createModelCallFailureLog(input: {
+  readonly requestId: string;
+  readonly stream: boolean;
+  readonly routing: RoutingResult;
+  readonly durationMs: number;
+  readonly error: unknown;
+}): Record<string, unknown> {
+  return {
+    requestId: input.requestId,
+    providerId: input.routing.providerId,
+    modelId: input.routing.modelId,
+    stream: input.stream,
+    attempt: input.routing.attempt,
+    durationMs: input.durationMs,
+    error: summarizeError(input.error),
+  };
+}
+
+function createRawMessageSnapshots(
+  messages: readonly ChatMessage[],
+): readonly RawMessageSnapshot[] {
+  return messages.map((message, index) => createRawMessageSnapshot(message, index));
+}
+
+function createRawMessageSnapshot(message: ChatMessage, index: number): RawMessageSnapshot {
+  return {
+    index,
+    role: message.role,
+    name: message.name,
+    toolCallId: message.toolCallId,
+    content: createRawContentSnapshot(message.content),
+    toolCalls: message.toolCalls?.map((toolCall) => ({
+      id: toolCall.id,
+      type: toolCall.type,
+      functionName: toolCall.function.name,
+      arguments: toolCall.function.arguments,
+    })),
+  };
+}
+
+function createRawContentSnapshot(content: ChatMessage['content']): RawContentSnapshot {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  return content.map((part) => {
+    switch (part.type) {
+      case 'text':
+        return {
+          type: 'text',
+          text: part.text,
+        };
+      case 'image':
+        return {
+          type: 'image',
+          imageUrl: sanitizeMediaUrlForDebugLog(part.imageUrl),
+          detail: part.detail,
+        };
+      case 'video':
+        return {
+          type: 'video',
+          videoUrl: sanitizeMediaUrlForDebugLog(part.videoUrl),
+          mimeType: part.mimeType,
+        };
+    }
+  });
+}
+
+function summarizeModelCallOptions(options: ChatOptions): ModelCallOptionsSummary {
+  const toolNames = options.tools?.map((tool) => tool.function.name) ?? [];
+  const systemPromptSections = options.systemPromptSections ?? [];
+
+  return {
+    maxTokens: options.maxTokens,
+    temperature: options.temperature,
+    topP: options.topP,
+    frequencyPenalty: options.frequencyPenalty,
+    presencePenalty: options.presencePenalty,
+    stopSequenceCount: options.stop?.length ?? 0,
+    toolCount: toolNames.length,
+    toolNames,
+    toolChoice: summarizeToolChoice(options.toolChoice),
+    responseFormat: options.responseFormat?.type,
+    thinkingBudget: options.thinkingBudget,
+    systemPromptSectionCount: systemPromptSections.length,
+    cachedSystemPromptSectionCount: systemPromptSections.filter(
+      (section) => section.cacheControl === 'ephemeral',
+    ).length,
+    hasAbortSignal: options.signal !== undefined,
+    hasMessageProjector: options.messageProjector !== undefined,
+  };
+}
+
+function summarizeToolChoice(
+  toolChoice: ChatOptions['toolChoice'],
+): ModelCallOptionsSummary['toolChoice'] {
+  if (toolChoice === undefined || typeof toolChoice === 'string') {
+    return toolChoice;
+  }
+
+  return {
+    type: 'function',
+    name: toolChoice.function.name,
+  };
+}
+
+function summarizeChatMessages(messages: readonly ChatMessage[]): ChatMessageSummary {
+  const roleCounts: Record<MessageRole, number> = {
+    system: 0,
+    user: 0,
+    assistant: 0,
+    tool: 0,
+  };
+  const toolCallNames: string[] = [];
+  let stringContentMessages = 0;
+  let partContentMessages = 0;
+  let textPartCount = 0;
+  let imagePartCount = 0;
+  let videoPartCount = 0;
+  let textChars = 0;
+  let toolCallCount = 0;
+
+  for (const message of messages) {
+    roleCounts[message.role] += 1;
+
+    if (typeof message.content === 'string') {
+      stringContentMessages += 1;
+      textChars += message.content.length;
+    } else {
+      partContentMessages += 1;
+      for (const part of message.content) {
+        switch (part.type) {
+          case 'text':
+            textPartCount += 1;
+            textChars += part.text.length;
+            break;
+          case 'image':
+            imagePartCount += 1;
+            break;
+          case 'video':
+            videoPartCount += 1;
+            break;
+        }
+      }
+    }
+
+    if (message.toolCalls) {
+      toolCallCount += message.toolCalls.length;
+      toolCallNames.push(...message.toolCalls.map((call) => call.function.name));
+    }
+  }
+
+  return {
+    messageCount: messages.length,
+    roleCounts,
+    stringContentMessages,
+    partContentMessages,
+    textPartCount,
+    imagePartCount,
+    videoPartCount,
+    textChars,
+    toolCallCount,
+    toolCallNames,
+  };
+}
+
+function countContentChars(content: ChatMessage['content']): number {
+  if (typeof content === 'string') {
+    return content.length;
+  }
+
+  return content.reduce((sum, part) => {
+    if (part.type !== 'text') {
+      return sum;
+    }
+    return sum + part.text.length;
+  }, 0);
+}
+
+function summarizeError(error: unknown): ErrorSummary {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: truncateForLog(error.message),
+    };
+  }
+
+  return {
+    name: typeof error,
+    message: truncateForLog(String(error)),
+  };
+}
+
+function truncateForLog(value: string, maxLength = 500): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function sanitizeMediaUrlForDebugLog(url: string): string {
+  if (url.startsWith('data:')) {
+    const metadataEnd = url.indexOf(',');
+    const metadata = metadataEnd >= 0 ? url.slice(0, metadataEnd) : 'data:';
+    return `${metadata},<omitted ${url.length} chars>`;
+  }
+
+  return url;
 }

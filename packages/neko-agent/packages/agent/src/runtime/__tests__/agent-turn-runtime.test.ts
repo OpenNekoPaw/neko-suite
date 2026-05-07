@@ -279,7 +279,7 @@ describe('executeAgentTurn', () => {
       expect.objectContaining({
         imageAttachments,
         multimodalContextPacket: expect.objectContaining({
-          metadata: { conversationId: 'conv-1' },
+          metadata: expect.objectContaining({ conversationId: 'conv-1' }),
           selection: expect.arrayContaining([
             expect.objectContaining({ id: 'sel-text-user-message', kind: 'unknown' }),
             expect.objectContaining({ id: 'sel-attachment-image-1', kind: 'asset' }),
@@ -349,7 +349,7 @@ describe('executeAgentTurn', () => {
       'current request',
       expect.objectContaining({
         multimodalContextPacket: expect.objectContaining({
-          metadata: { conversationId: 'conv-1' },
+          metadata: expect.objectContaining({ conversationId: 'conv-1' }),
           selection: expect.arrayContaining([
             expect.objectContaining({ id: 'sel-text-user-message', kind: 'unknown' }),
             expect.objectContaining({

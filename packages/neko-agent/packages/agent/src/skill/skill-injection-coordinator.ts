@@ -22,6 +22,11 @@ import type { IPermissionManager } from '../permission/permission-manager-types'
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { freezePromptContext, type PromptContext } from '../prompt/context';
 import { createToolGuard, type IToolGuard } from './tool-guard';
+import { getLogger } from '../utils/logger';
+
+function getSkillInjectionLogger() {
+  return getLogger('SkillInjectionCoordinator');
+}
 
 // =============================================================================
 // Types
@@ -109,10 +114,37 @@ export class SkillInjectionCoordinator {
    * @param skill Optional full Skill object for active skill tracking
    */
   apply(injection: SkillInjection, skill?: Skill): void {
+    const startTime = Date.now();
+    const logger = getSkillInjectionLogger();
+    logger.info('neko.agent.skill.injection.request', {
+      skillName: injection.name,
+      type: injection.type,
+      skillSource: skill ? summarizeSkillSource(skill) : undefined,
+      promptChars: injection.systemPrompt.length,
+      allowedToolCount: injection.allowedTools?.length ?? 0,
+      allowedTools: injection.allowedTools ?? [],
+      hasModelOverride: injection.model !== undefined,
+      injectionEnabled: this._deps.enableInjection !== false,
+    });
+    logger.debug('neko.agent.skill.injection.request.raw', {
+      skillName: injection.name,
+      type: injection.type,
+      systemPrompt: injection.systemPrompt,
+      allowedTools: injection.allowedTools,
+      model: injection.model,
+      skill,
+    });
+
     // Ablation: when injection is disabled, short-circuit. Callers can still
     // observe the call succeeded (no throw) but no state changes — consistent
     // with "skill discovered but not injected" semantics.
     if (this._deps.enableInjection === false) {
+      logger.info('neko.agent.skill.injection.skipped', {
+        skillName: injection.name,
+        type: injection.type,
+        reason: 'disabled-by-ablation',
+        durationMs: Date.now() - startTime,
+      });
       return;
     }
 
@@ -162,6 +194,16 @@ export class SkillInjectionCoordinator {
         toolGuard,
         activatedToolSets,
       };
+      logger.info('neko.agent.skill.injection.applied', {
+        skillName: injection.name,
+        type: injection.type,
+        durationMs: Date.now() - startTime,
+        allowRuleCount: allowRules.length,
+        allowRules,
+        activatedToolSetCount: activatedToolSets.length,
+        activatedToolSets,
+        trackASectionId: `skill:${injection.name}`,
+      });
     } catch (error) {
       // Rollback Track A: clear module + remove prompt section
       this._clearTrackASection(injection.name);
@@ -175,6 +217,13 @@ export class SkillInjectionCoordinator {
         }
       }
 
+      logger.warn('neko.agent.skill.injection.failed', {
+        skillName: injection.name,
+        type: injection.type,
+        durationMs: Date.now() - startTime,
+        error: summarizeUnknownError(error),
+        rollbackAllowRuleCount: allowRules.length,
+      });
       throw error;
     }
   }
@@ -246,10 +295,20 @@ export class SkillInjectionCoordinator {
    * Internal remove logic — reverses all four tracks.
    */
   private _removeInternal(name: string): void {
+    const startTime = Date.now();
+    const logger = getSkillInjectionLogger();
+    logger.info('neko.agent.skill.injection.remove.request', {
+      skillName: name,
+      hasActiveInjection: this._activeInjection !== null,
+      activeSkillName: this._activeInjection?.name,
+    });
+
     // Track A: Remove prompt section (via module when wired).
     this._clearTrackASection(name);
     this._deps.syncSystemPrompt();
 
+    let removedAllowRuleCount = 0;
+    let deactivatedToolSetCount = 0;
     if (this._activeInjection && this._activeInjection.name === name) {
       // Track B: Remove permission allow rules
       const permissionHooks = this._deps.getPermissionHooks();
@@ -257,6 +316,7 @@ export class SkillInjectionCoordinator {
         for (const rule of this._activeInjection.allowRules) {
           permissionHooks.removeAllowRule(rule);
         }
+        removedAllowRuleCount = this._activeInjection.allowRules.length;
       }
 
       // Track D: Deactivate ToolSets that were activated by this skill
@@ -264,11 +324,20 @@ export class SkillInjectionCoordinator {
         for (const setName of this._activeInjection.activatedToolSets) {
           this._deps.toolSetActivator.deactivateToolSet(setName);
         }
+        deactivatedToolSetCount = this._activeInjection.activatedToolSets.length;
       }
 
       // Track C: Clear state
       this._activeInjection = null;
     }
+
+    logger.info('neko.agent.skill.injection.removed', {
+      skillName: name,
+      durationMs: Date.now() - startTime,
+      removedAllowRuleCount,
+      deactivatedToolSetCount,
+      trackASectionId: `skill:${name}`,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -350,4 +419,30 @@ export function createSkillInjectionCoordinator(
   deps: SkillInjectionCoordinatorDeps,
 ): SkillInjectionCoordinator {
   return new SkillInjectionCoordinator(deps);
+}
+
+function summarizeSkillSource(skill: Skill): Record<string, unknown> {
+  return {
+    name: skill.name,
+    description: skill.description,
+    command: skill.command,
+    domain: skill.domain,
+    source: skill.source,
+    enabled: skill.enabled,
+    autoInvoke: skill.autoInvoke,
+  };
+}
+
+function summarizeUnknownError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    name: typeof error,
+    message: String(error),
+  };
 }
