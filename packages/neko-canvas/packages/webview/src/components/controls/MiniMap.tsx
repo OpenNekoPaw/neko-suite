@@ -5,6 +5,7 @@
 
 import { useMemo, useCallback, useRef } from 'react';
 import type { CanvasNode, CanvasNodeType, CanvasViewport } from '@neko/shared';
+import { isShotNode } from '@neko/shared';
 
 // =============================================================================
 // Types
@@ -135,8 +136,14 @@ export function MiniMap({
 }: MiniMapProps) {
   const miniMapRef = useRef<HTMLDivElement>(null);
 
+  // Filter out managed shots — they are rendered inside their parent SceneGroupNode
+  const visibleNodes = useMemo(
+    () => nodes.filter((n) => !(isShotNode(n) && n.data.sceneGroupId)),
+    [nodes],
+  );
+
   // Calculate content bounds
-  const bounds = useMemo(() => calculateBounds(nodes), [nodes]);
+  const bounds = useMemo(() => calculateBounds(visibleNodes), [visibleNodes]);
 
   // Calculate scale to fit content in minimap
   const scale = useMemo(() => {
@@ -208,7 +215,7 @@ export function MiniMap({
 
         {/* Nodes */}
         <g transform={`translate(10, 10)`}>
-          {nodes.map((node) => {
+          {visibleNodes.map((node) => {
             const x = (node.position.x - bounds.minX) * scale;
             const y = (node.position.y - bounds.minY) * scale;
             const w = node.size.width * scale;
