@@ -172,9 +172,15 @@ export function App(): React.JSX.Element {
             case 'escape':
               selectNode(null);
               break;
-            case 'resetView':
-              // TODO: reset camera to default position
+            case 'resetView': {
+              useModelStore.getState().resetCamera();
+              if (enginePort !== null) {
+                const store = useModelStore.getState();
+                const client = new EngineClient(enginePort);
+                void client.updateEditorCamera(store.getCameraPosition(), store.cameraTarget);
+              }
               break;
+            }
           }
           break;
         case 'latency:response':

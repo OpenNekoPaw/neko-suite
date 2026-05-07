@@ -31,8 +31,8 @@ pub mod viewport;
 pub use asset_cache::{AssetCache, AssetCacheError, GpuMaterial, GpuMesh, MaterialUniforms};
 pub use environment::Environment;
 pub use frame_scheduler::{
-    ControlAckHealthSample, DegradationDecision, DegradationStep, FrameBudget, FrameLoadSample,
-    FrameScheduleDecision, FrameScheduler,
+    ControlAckHealthSample, DegradationDecision, DegradationHysteresis, DegradationStep,
+    FrameBudget, FrameLoadSample, FrameScheduleDecision, FrameScheduler,
 };
 pub use particles::{GpuParticleSystem, ParticleEmitterConfig};
 pub use pbr_pipeline::{PbrRenderError, PbrRenderer};

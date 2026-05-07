@@ -6,9 +6,10 @@ use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
 use neko_engine_kernel::domain::{StreamCodec, StreamConfig};
 use neko_engine_kernel::gpu::scene_renderer::{
-    CameraParams, ControlAckHealthSample, DegradationDecision, DegradationStep, FrameLoadSample,
-    FrameScheduleDecision, FrameScheduler, SceneToneMapping, ViewportDebugView, ViewportDescriptor,
-    ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
+    CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
+    DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneToneMapping,
+    ViewportDebugView, ViewportDescriptor, ViewportPostProcess, ViewportRenderMode,
+    ViewportWorkMode,
 };
 use neko_engine_kernel::services::{ISceneService, SceneService};
 use neko_engine_types::registry;
@@ -232,6 +233,23 @@ impl SceneStreamRuntimeScheduler {
         self.apply_decision(&decision)
     }
 
+    fn settings_stabilized(
+        &self,
+        auxiliary_viewport_count: usize,
+        load: FrameLoadSample,
+        control_ack: ControlAckHealthSample,
+        hysteresis: &mut DegradationHysteresis,
+    ) -> SceneStreamRuntimeSettings {
+        let raw_decision = self.scheduler.degradation_plan(
+            &self.base_decision,
+            auxiliary_viewport_count,
+            load,
+            control_ack,
+        );
+        let decision = hysteresis.stabilize(raw_decision);
+        self.apply_decision(&decision)
+    }
+
     fn apply_decision(&self, decision: &DegradationDecision) -> SceneStreamRuntimeSettings {
         let mut settings = SceneStreamRuntimeSettings {
             width: self.base_width,
@@ -359,6 +377,45 @@ fn parse_work_mode(value: &str) -> ViewportWorkMode {
     }
 }
 
+fn parse_camera_ref_to_params(value: Option<&Value>) -> Option<CameraParams> {
+    let value = value?;
+    let kind = value.get("kind")?.as_str()?;
+    if kind != "editorCamera" {
+        return None;
+    }
+    let rig = value.get("rig")?;
+    let pos = rig.get("position")?;
+    let tgt = rig.get("target")?;
+    let position = glam::Vec3::new(
+        pos.get("x")?.as_f64()? as f32,
+        pos.get("y")?.as_f64()? as f32,
+        pos.get("z")?.as_f64()? as f32,
+    );
+    let target = glam::Vec3::new(
+        tgt.get("x")?.as_f64()? as f32,
+        tgt.get("y")?.as_f64()? as f32,
+        tgt.get("z")?.as_f64()? as f32,
+    );
+    let up = rig.get("up").and_then(|u| {
+        Some(glam::Vec3::new(
+            u.get("x")?.as_f64()? as f32,
+            u.get("y")?.as_f64()? as f32,
+            u.get("z")?.as_f64()? as f32,
+        ))
+    });
+    let fov_y = rig
+        .get("fov")
+        .and_then(|f| f.as_f64())
+        .map(|f| (f as f32).to_radians());
+    Some(CameraParams {
+        position,
+        target,
+        up: up.unwrap_or(glam::Vec3::Y),
+        fov_y: fov_y.unwrap_or(45.0_f32.to_radians()),
+        ..CameraParams::default()
+    })
+}
+
 fn parse_post_process(value: Option<&Value>) -> ViewportPostProcess {
     let Some(value) = value else {
         return ViewportPostProcess::default();
@@ -379,6 +436,7 @@ fn spawn_scene_stream_producer(
 ) {
     tokio::spawn(async move {
         let runtime_scheduler = SceneStreamRuntimeScheduler::new(&config);
+        let mut hysteresis = DegradationHysteresis::default();
         let mut load = FrameLoadSample::default();
         let mut control_ack = ControlAckHealthSample::default();
         let mut settings = runtime_scheduler.settings(0, load, control_ack);
@@ -390,6 +448,7 @@ fn spawn_scene_stream_producer(
                 _ = tokio::time::sleep(settings.frame_duration()) => {
                     let frame_started = Instant::now();
                     let service = Arc::clone(&scene_service);
+                    let camera = service.get_editor_camera();
                     let pts_us = (frame_id as f64 * 1_000_000.0 / settings.fps) as i64;
                     let output_size = (settings.width, settings.height);
                     let duration_us = settings.duration_us();
@@ -398,7 +457,7 @@ fn spawn_scene_stream_producer(
                     let frame = tokio::task::spawn_blocking(move || {
                         service.capture_h264_keyframe(
                             output_size,
-                            None,
+                            camera.as_ref(),
                             None,
                             quality,
                             pts_us,
@@ -444,7 +503,7 @@ fn spawn_scene_stream_producer(
                         .len()
                         .saturating_sub(1);
                     let next_settings =
-                        runtime_scheduler.settings(auxiliary_viewport_count, load, control_ack);
+                        runtime_scheduler.settings_stabilized(auxiliary_viewport_count, load, control_ack, &mut hysteresis);
                     if next_settings.quality_tier != settings.quality_tier {
                         tracing::info!(
                             "Scene stream {} quality tier changed to {} ({}x{} @ {:.1}fps, control_ack_preserved={})",
@@ -730,6 +789,11 @@ impl Controller for ScenesController {
                     .await;
 
                 if let Some(scene_service) = self.scene_service.clone() {
+                    if let Some(camera) =
+                        parse_camera_ref_to_params(opts.camera_ref.as_ref())
+                    {
+                        scene_service.set_editor_camera(camera);
+                    }
                     spawn_scene_stream_producer(
                         stream_registry,
                         scene_service,
@@ -1240,6 +1304,30 @@ impl Controller for ScenesController {
                 service
                     .delete_node(&opts.node_id)
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", Value::Null))
+            }
+
+            "update_camera" => {
+                #[derive(Debug, Deserialize)]
+                #[serde(rename_all = "camelCase")]
+                struct CameraOptions {
+                    position: [f32; 3],
+                    target: [f32; 3],
+                    up: Option<[f32; 3]>,
+                    fov_y: Option<f32>,
+                }
+                let opts: CameraOptions = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+
+                let service = self.service()?;
+                service.set_editor_camera(CameraParams {
+                    position: glam::Vec3::from(opts.position),
+                    target: glam::Vec3::from(opts.target),
+                    up: opts.up.map(glam::Vec3::from).unwrap_or(glam::Vec3::Y),
+                    fov_y: opts.fov_y.unwrap_or(45.0_f32.to_radians()),
+                    ..CameraParams::default()
+                });
 
                 Ok(ActionResponse::ok("", Value::Null))
             }

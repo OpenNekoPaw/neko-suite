@@ -42,7 +42,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicU32, Ordering},
-    Arc, Mutex,
+    Arc, Mutex, RwLock,
 };
 use std::time::{Duration, Instant};
 
@@ -176,6 +176,9 @@ pub struct SceneService {
     procedural_meshes: Mutex<HashMap<String, ProceduralMesh>>,
     /// VRM face parameter presets (populated from NkmProject on load)
     face_params: Mutex<HashMap<String, f32>>,
+    /// Editor camera override for viewport orbit controls.
+    /// Read by the scene stream producer on each frame.
+    editor_camera: RwLock<Option<CameraParams>>,
 }
 
 impl SceneService {
@@ -192,6 +195,7 @@ impl SceneService {
             render_extract_cache: Mutex::new(SharedRenderExtractCache::default()),
             procedural_meshes: Mutex::new(HashMap::new()),
             face_params: Mutex::new(HashMap::new()),
+            editor_camera: RwLock::new(None),
         }
     }
 
@@ -211,11 +215,22 @@ impl SceneService {
             render_extract_cache: Mutex::new(SharedRenderExtractCache::default()),
             procedural_meshes: Mutex::new(HashMap::new()),
             face_params: Mutex::new(HashMap::new()),
+            editor_camera: RwLock::new(None),
         }
     }
 }
 
 impl SceneService {
+    pub fn set_editor_camera(&self, camera: CameraParams) {
+        if let Ok(mut guard) = self.editor_camera.write() {
+            *guard = Some(camera);
+        }
+    }
+
+    pub fn get_editor_camera(&self) -> Option<CameraParams> {
+        self.editor_camera.read().ok().and_then(|g| g.clone())
+    }
+
     pub fn current_revision(&self) -> Result<u64> {
         let mut world = self
             .world
@@ -430,8 +445,11 @@ impl SceneService {
             world.tick(clip, time);
         }
 
+        let stored_camera = self.get_editor_camera();
         let default_camera = CameraParams::default();
-        let camera = camera_override.unwrap_or(&default_camera);
+        let camera = camera_override
+            .or(stored_camera.as_ref())
+            .unwrap_or(&default_camera);
 
         let asset_database = self
             .asset_database

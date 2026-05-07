@@ -2,10 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { RenderFrameMeta, SceneDelta, ViewportDescriptor } from '@neko/shared';
 import { EngineClient, H264StreamClient, type SceneControlSocket } from '@neko/neko-client';
 import type { LocalPredictionSnapshot } from '../scene/LocalPredictionLayer';
-import { InteractionLayer } from './InteractionLayer';
+import { InteractionLayer, isCompatibleViewportQueryResult } from './InteractionLayer';
 import { OverlayCanvas } from './OverlayCanvas';
+import { ViewportOrbitControls } from './ViewportOrbitControls';
 import { postMessage } from '@neko/shared/vscode';
 import { useModelStore } from '../stores/modelStore';
+import type { SceneHitTestResult } from '../scene/SceneDocument';
 
 export interface VideoViewportProps {
   enginePort: number;
@@ -23,7 +25,11 @@ export interface VideoViewportProps {
 
 const MAIN_VIEWPORT_ID = 'main';
 
-function createViewportDescriptor(sceneId: string): ViewportDescriptor {
+function createViewportDescriptor(
+  sceneId: string,
+  cameraPosition: [number, number, number],
+  cameraTarget: [number, number, number],
+): ViewportDescriptor {
   return {
     viewportId: MAIN_VIEWPORT_ID,
     sceneId,
@@ -42,6 +48,14 @@ function createViewportDescriptor(sceneId: string): ViewportDescriptor {
       taa: true,
     },
     workMode: 'edit-parametric',
+    cameraRef: {
+      kind: 'editorCamera',
+      rig: {
+        position: { x: cameraPosition[0], y: cameraPosition[1], z: cameraPosition[2] },
+        target: { x: cameraTarget[0], y: cameraTarget[1], z: cameraTarget[2] },
+        fov: 45,
+      },
+    },
   };
 }
 
@@ -100,7 +114,10 @@ export function VideoViewport({
       }
 
       try {
-        const stream = await engineClient.startSceneRenderStream(createViewportDescriptor(sceneId));
+        const store = useModelStore.getState();
+        const stream = await engineClient.startSceneRenderStream(
+          createViewportDescriptor(sceneId, store.getCameraPosition(), store.cameraTarget),
+        );
         if (disposed) {
           void engineClient.controlStream('streams', stream.descriptor.streamId, 'destroy');
           return;
@@ -201,6 +218,26 @@ export function VideoViewport({
     );
   }
 
+  const handleClickSelect = React.useCallback(
+    async (normalizedX: number, normalizedY: number) => {
+      if (!sceneControlSocket) return;
+      try {
+        const result = (await sceneControlSocket.query('hitTest', {
+          viewportId: MAIN_VIEWPORT_ID,
+          sceneRevision,
+          x: normalizedX,
+          y: normalizedY,
+        })) as SceneHitTestResult;
+        if (isCompatibleViewportQueryResult(result, MAIN_VIEWPORT_ID, sceneRevision)) {
+          onSelectNode(result.nodeId);
+        }
+      } catch {
+        onSceneControlError('Hit test failed');
+      }
+    },
+    [sceneControlSocket, sceneRevision, onSelectNode, onSceneControlError],
+  );
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
       <canvas ref={canvasRef} className="h-full w-full" aria-hidden={!hasEngineFrame} />
@@ -232,6 +269,7 @@ export function VideoViewport({
         predictions={predictions}
         topologyWarning={topologyWarning}
       />
+      <ViewportOrbitControls enginePort={enginePort} onClickSelect={handleClickSelect} />
     </div>
   );
 }

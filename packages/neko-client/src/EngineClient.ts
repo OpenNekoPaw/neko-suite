@@ -1035,6 +1035,19 @@ export class EngineClient {
     return (resp.data as Record<string, unknown>) ?? {};
   }
 
+  async updateEditorCamera(
+    position: [number, number, number],
+    target: [number, number, number],
+    fovY?: number,
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'update_camera',
+      options: { position, target, fovY },
+    });
+    this.assertOk(resp, 'scenes:update_camera');
+  }
+
   /**
    * Create a parametric shape in the 3D scene.
    * Dispatches `scenes:create_shape`.

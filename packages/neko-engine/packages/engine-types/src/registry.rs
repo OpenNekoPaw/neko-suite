@@ -182,6 +182,7 @@ pub mod actions {
         "delete_node",
         "set_face_params",
         "get_face_params",
+        "update_camera",
     ];
 
     pub const PUPPETS: &[&str] = &[

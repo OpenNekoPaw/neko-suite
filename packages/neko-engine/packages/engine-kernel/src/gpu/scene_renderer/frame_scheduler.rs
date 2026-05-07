@@ -84,6 +84,64 @@ pub struct DegradationDecision {
     pub preserve_control_ack: bool,
 }
 
+/// Prevents quality tier oscillation by requiring several consecutive
+/// frames at a better tier before upgrading (degrade fast, restore slow).
+#[derive(Debug, Clone)]
+pub struct DegradationHysteresis {
+    current_severity: usize,
+    upgrade_hold: u32,
+}
+
+impl Default for DegradationHysteresis {
+    fn default() -> Self {
+        Self {
+            current_severity: 0,
+            upgrade_hold: 0,
+        }
+    }
+}
+
+impl DegradationHysteresis {
+    const UPGRADE_THRESHOLD: u32 = 10;
+
+    pub fn stabilize(&mut self, proposed: DegradationDecision) -> DegradationDecision {
+        let proposed_severity = proposed.steps.len();
+        if proposed_severity >= self.current_severity {
+            self.current_severity = proposed_severity;
+            self.upgrade_hold = 0;
+            return proposed;
+        }
+        self.upgrade_hold += 1;
+        if self.upgrade_hold >= Self::UPGRADE_THRESHOLD {
+            self.current_severity = proposed_severity;
+            self.upgrade_hold = 0;
+            return proposed;
+        }
+        // Hold at current severity: rebuild the steps list to match
+        let all_steps = [
+            DegradationStep::AuxiliaryHelperPasses,
+            DegradationStep::AuxiliaryViewportFpsResolution,
+            DegradationStep::MainViewportPostProcessQuality,
+            DegradationStep::MainViewportFps,
+            DegradationStep::MainViewportResolution,
+        ];
+        DegradationDecision {
+            steps: all_steps
+                .iter()
+                .filter(|step| proposed.steps.contains(step))
+                .chain(
+                    all_steps
+                        .iter()
+                        .filter(|step| !proposed.steps.contains(step)),
+                )
+                .take(self.current_severity)
+                .copied()
+                .collect(),
+            preserve_control_ack: proposed.preserve_control_ack,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct FrameScheduler;
 
@@ -333,6 +391,74 @@ mod tests {
             decision.steps,
             vec![DegradationStep::MainViewportPostProcessQuality]
         );
+    }
+
+    #[test]
+    fn hysteresis_degrades_immediately() {
+        let mut hyst = DegradationHysteresis::default();
+        let decision = DegradationDecision {
+            steps: vec![
+                DegradationStep::MainViewportPostProcessQuality,
+                DegradationStep::MainViewportFps,
+            ],
+            preserve_control_ack: true,
+        };
+        let result = hyst.stabilize(decision.clone());
+        assert_eq!(result.steps, decision.steps);
+        assert_eq!(hyst.current_severity, 2);
+    }
+
+    #[test]
+    fn hysteresis_holds_before_upgrade() {
+        let mut hyst = DegradationHysteresis::default();
+        // Degrade to severity 2
+        hyst.stabilize(DegradationDecision {
+            steps: vec![
+                DegradationStep::MainViewportPostProcessQuality,
+                DegradationStep::MainViewportFps,
+            ],
+            preserve_control_ack: true,
+        });
+        // Propose upgrade to severity 0 — should hold at 2
+        for _ in 0..9 {
+            let result = hyst.stabilize(DegradationDecision {
+                steps: vec![],
+                preserve_control_ack: true,
+            });
+            assert_eq!(result.steps.len(), 2, "should hold at severity 2");
+        }
+        // 10th frame: upgrade applied
+        let result = hyst.stabilize(DegradationDecision {
+            steps: vec![],
+            preserve_control_ack: true,
+        });
+        assert!(result.steps.is_empty(), "should upgrade after threshold");
+    }
+
+    #[test]
+    fn hysteresis_resets_hold_on_re_degrade() {
+        let mut hyst = DegradationHysteresis::default();
+        hyst.stabilize(DegradationDecision {
+            steps: vec![DegradationStep::MainViewportPostProcessQuality],
+            preserve_control_ack: true,
+        });
+        // Propose upgrade for 5 frames
+        for _ in 0..5 {
+            hyst.stabilize(DegradationDecision {
+                steps: vec![],
+                preserve_control_ack: true,
+            });
+        }
+        // Re-degrade resets hold counter
+        hyst.stabilize(DegradationDecision {
+            steps: vec![
+                DegradationStep::MainViewportPostProcessQuality,
+                DegradationStep::MainViewportFps,
+            ],
+            preserve_control_ack: true,
+        });
+        assert_eq!(hyst.upgrade_hold, 0);
+        assert_eq!(hyst.current_severity, 2);
     }
 
     #[test]

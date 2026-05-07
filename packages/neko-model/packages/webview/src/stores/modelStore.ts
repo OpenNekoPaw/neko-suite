@@ -83,6 +83,12 @@ export interface ModelState {
   isVRMLoaded: boolean;
   isExpressionPresetOpen: boolean;
 
+  // Camera
+  cameraTheta: number;
+  cameraPhi: number;
+  cameraRadius: number;
+  cameraTarget: [number, number, number];
+
   // Phase 2 panels
   isBoneExpressionOpen: boolean;
   isCsgPanelOpen: boolean;
@@ -172,6 +178,13 @@ export interface ModelState {
   toggleKeyframeEditor: () => void;
   setCurrentTimeMs: (timeMs: number) => void;
 
+  // Actions — Camera
+  orbitCamera: (deltaTheta: number, deltaPhi: number) => void;
+  panCamera: (dx: number, dy: number) => void;
+  zoomCamera: (deltaRadius: number) => void;
+  resetCamera: () => void;
+  getCameraPosition: () => [number, number, number];
+
   // Actions — Project
   getEditorState: () => Record<string, unknown>;
   restoreEditorState: (state: Record<string, unknown>) => void;
@@ -215,6 +228,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
   isSculptBrushOpen: false,
   csgOperandA: null,
   csgOperandB: null,
+  cameraTheta: 0,
+  cameraPhi: Math.PI / 4,
+  cameraRadius: 5,
+  cameraTarget: [0, 0.9, 0],
   keyframeTracks: [],
   selectedKeyframeIds: new Set<string>(),
   isKeyframeEditorOpen: false,
@@ -574,6 +591,41 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   setCurrentTimeMs: (timeMs) => set({ currentTimeMs: timeMs }),
 
+  // Camera actions
+  orbitCamera: (deltaTheta, deltaPhi) =>
+    set((state) => ({
+      cameraTheta: state.cameraTheta + deltaTheta,
+      cameraPhi: Math.max(0.05, Math.min(Math.PI - 0.05, state.cameraPhi + deltaPhi)),
+    })),
+
+  panCamera: (dx, dy) =>
+    set((state) => {
+      const theta = state.cameraTheta;
+      const rightX = Math.cos(theta);
+      const rightZ = -Math.sin(theta);
+      const [tx, ty, tz] = state.cameraTarget;
+      return {
+        cameraTarget: [tx - dx * rightX, ty + dy, tz - dx * rightZ] as [number, number, number],
+      };
+    }),
+
+  zoomCamera: (deltaRadius) =>
+    set((state) => ({
+      cameraRadius: Math.max(0.5, Math.min(50, state.cameraRadius + deltaRadius)),
+    })),
+
+  resetCamera: () =>
+    set({ cameraTheta: 0, cameraPhi: Math.PI / 4, cameraRadius: 5, cameraTarget: [0, 0.9, 0] }),
+
+  getCameraPosition: () => {
+    const { cameraTheta, cameraPhi, cameraRadius, cameraTarget } = get();
+    return [
+      cameraTarget[0] + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta),
+      cameraTarget[1] + cameraRadius * Math.cos(cameraPhi),
+      cameraTarget[2] + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta),
+    ] as [number, number, number];
+  },
+
   // Project actions
   getEditorState: () => {
     const s = get();
@@ -590,6 +642,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
       keyframeTracks: s.keyframeTracks,
       currentTimeMs: s.currentTimeMs,
       isKeyframeEditorOpen: s.isKeyframeEditorOpen,
+      cameraTheta: s.cameraTheta,
+      cameraPhi: s.cameraPhi,
+      cameraRadius: s.cameraRadius,
+      cameraTarget: s.cameraTarget,
     };
   },
 
@@ -607,6 +663,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
       keyframeTracks: (state['keyframeTracks'] as EditorKeyframeTrack[]) ?? [],
       currentTimeMs: (state['currentTimeMs'] as number) ?? 0,
       isKeyframeEditorOpen: (state['isKeyframeEditorOpen'] as boolean) ?? false,
+      cameraTheta: (state['cameraTheta'] as number) ?? 0,
+      cameraPhi: (state['cameraPhi'] as number) ?? Math.PI / 4,
+      cameraRadius: (state['cameraRadius'] as number) ?? 5,
+      cameraTarget: (state['cameraTarget'] as [number, number, number]) ?? [0, 0.9, 0],
     }),
 }));
 

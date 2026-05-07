@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { SceneControlSocket } from '@neko/neko-client';
 import type { SceneHitTestResult } from '../scene/SceneDocument';
 
@@ -27,8 +27,6 @@ export function InteractionLayer({
   sceneRevision,
   selectedNodeId,
   socket,
-  onSelectNode,
-  onQueryError,
 }: InteractionLayerProps): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -46,31 +44,11 @@ export function InteractionLayer({
     });
   }, [sceneRevision, selectedNodeId, socket, viewportId]);
 
-  const handlePointerDown = useCallback(
-    async (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!socket || event.button !== 0) return;
-      const rect = rootRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const payload = buildViewportPointerQuery(viewportId, sceneRevision, rect, event);
-
-      try {
-        const result = (await socket.query('hitTest', payload)) as SceneHitTestResult;
-        if (isCompatibleViewportQueryResult(result, viewportId, sceneRevision)) {
-          onSelectNode(result.nodeId);
-        }
-      } catch (error) {
-        onQueryError?.(error instanceof Error ? error : new Error(String(error)));
-      }
-    },
-    [onQueryError, onSelectNode, sceneRevision, socket, viewportId],
-  );
-
   return (
     <div
       ref={rootRef}
-      className="absolute inset-0 cursor-crosshair"
+      className="pointer-events-none absolute inset-0"
       data-route-a-interaction-layer="engine-queries"
-      onPointerDown={handlePointerDown}
     />
   );
 }
