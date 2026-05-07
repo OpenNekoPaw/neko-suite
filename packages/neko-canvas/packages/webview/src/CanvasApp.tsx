@@ -284,6 +284,9 @@ export function CanvasApp() {
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
     onAddMediaFromExtension: handleAddMediaFromExtension,
+    onImportGeneratedAsset: (asset) => {
+      addMediaAt(getViewportCenter(), asset.mediaType, asset.path, asset.name);
+    },
     onDropAssets: (assets: CanvasDroppedAsset[]) => {
       const pos = dropPositionRef.current ?? getViewportCenter();
       assets.forEach((asset, i) => {

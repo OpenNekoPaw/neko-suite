@@ -118,6 +118,16 @@
 
 ### Cross-module
 
+- [ ] **Agent Rich Content delivery follow-ups** ([analysis](./docs/architecture/agent-rich-content-delivery-analysis.md), 2026-05-07):
+  - [ ] **P1: Cut generated audio landing** — `cutStoryboard` currently creates image clips, subtitle cues, and text notes; connect `voiceOver` / `soundCue` to real TTS / sound-effect asset generation and place generated audio clips on audio tracks
+  - [ ] **P1: Batch transfer semantics** — define whether `assetBatch` is best-effort per asset or atomic per target; add target-side feedback so Agent can report partial failures deterministically
+  - [ ] **P1: Model extension type-check boundary** — `@neko-model/extension` build passes, but direct `tsc -p packages/neko-model/packages/extension/tsconfig.json --noEmit` still pulls `@neko/neko-client` DOM/WebCodecs types without DOM libs; isolate the extension-facing type surface or adjust the tsconfig boundary
+  - [ ] **P2: Send-to payload projection parity** — `SendToMenu` must keep webview-side payload builders aligned with `@neko/agent/runtime` plan builders while preserving the webview/extension package boundary
+  - [ ] **P2: Storyboard Send-to toolbar density** — Canvas/Cut/Explorer actions can render side by side in scene toolbars; revisit the product affordance if the row becomes cramped
+  - [ ] **P2: Model glTF sidecar import** — external `.glb/.vrm` imports are now materialized into project-local `.neko/imports/models`; define a safe copy strategy for `.gltf` relative `.bin` / texture dependencies
+  - [ ] **P2: Puppet Send-to target** — design and implement Agent → Puppet delivery (`moc3` / motion / expression payloads) without coupling Agent webview directly to Puppet internals
+  - [ ] **P2: Model structured import protocol** — extend beyond path-based `.glb/.gltf/.vrm` import to structured 3D scene / material / skeleton / animation payloads
+  - [ ] **P2: Composite structured delivery** — design projections for `comparison` / `gallery` / `report`; `storyboard-table` is already handled by `CanvasStoryboardPayload` / `cutStoryboard`
 - [ ] **Cross-domain linking**: Script→media references / asset path completion
 - [ ] `neko://` protocol (ADR design only; depends on server-side)
 - [ ] **AIEditResult 标准格式**: AI 工具统一返回 (generatedAssets + operations + rollback + preconditions) — 替代当前每个工具手写应用逻辑

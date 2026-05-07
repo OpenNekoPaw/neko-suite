@@ -41,6 +41,9 @@ export {
 export { createNewFile } from './create-new-file';
 export type { CreateNewFileOptions, TemplateChoice } from './create-new-file';
 
+// Command payload parsing helpers
+export { isRecord, readNonEmptyString } from './command-args';
+
 // Binary template generators for new-file templates
 export {
   generateMinimalInp,

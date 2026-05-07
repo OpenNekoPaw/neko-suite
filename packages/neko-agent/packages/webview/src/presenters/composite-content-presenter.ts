@@ -6,10 +6,11 @@ import type {
   ToolCall,
 } from '@/components/types';
 import type { ToolResultAttachment } from '@neko/shared';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 'asset-gallery';
 
-export type CompositeMediaType = 'image' | 'video' | 'audio' | 'unknown';
+export type CompositeMediaType = 'image' | 'video' | 'audio' | 'model' | 'unknown';
 
 export type CompositeMediaDiagnosticCode = 'missing-tool-result' | 'missing-asset' | 'missing-uri';
 
@@ -49,6 +50,7 @@ export interface ResolvedCompositeSection {
 export interface CompositeRichContentData {
   readonly template: CompositeBlockData['template'];
   readonly title?: string;
+  readonly plugins?: PluginsAvailable;
   readonly sections: readonly ResolvedCompositeSection[];
   readonly diagnostics: readonly CompositeMediaDiagnostic[];
 }
@@ -83,6 +85,7 @@ export interface ProjectCompositeBlockRichContentInput {
   readonly composite: CompositeBlockData;
   readonly siblingBlocks?: readonly ContentBlock[];
   readonly toolCalls?: readonly ToolCall[];
+  readonly plugins?: PluginsAvailable;
 }
 
 interface MediaCandidate {
@@ -114,6 +117,7 @@ export function projectCompositeBlockRichContent(
 
   const base = {
     ...(input.composite.title ? { title: input.composite.title } : {}),
+    ...(input.plugins ? { plugins: input.plugins } : {}),
     sections,
     diagnostics,
   };
@@ -190,7 +194,19 @@ function resolveCompositeMediaRef(
     };
   }
 
-  if (!candidate.src) {
+  if (candidate.type === 'model' && !candidate.localPath) {
+    return {
+      diagnostic: {
+        code: 'missing-uri',
+        toolCallId: mediaRef.toolCallId,
+        assetIndex,
+        ...(candidate.assetId ? { assetId: candidate.assetId } : {}),
+        message: `Asset ${assetIndex} does not have a local model path`,
+      },
+    };
+  }
+
+  if (!candidate.src && candidate.type !== 'model') {
     return {
       diagnostic: {
         code: 'missing-uri',
@@ -212,7 +228,7 @@ function resolveCompositeMediaRef(
       toolCallId: mediaRef.toolCallId,
       assetIndex,
       type: candidate.type,
-      src: candidate.src,
+      src: candidate.src ?? candidate.localPath ?? candidate.stableUri ?? '',
       ...(candidate.assetId ? { assetId: candidate.assetId } : {}),
       ...(candidate.stableUri ? { stableUri: candidate.stableUri } : {}),
       ...(candidate.localPath ? { localPath: candidate.localPath } : {}),
@@ -248,7 +264,7 @@ function collectMediaCandidates(toolCall: ToolCall): readonly MediaCandidate[] {
   const data = asRecord(toolCall.result?.data);
 
   const addCandidate = (candidate: MediaCandidate): void => {
-    const key = candidate.assetId ?? candidate.stableUri ?? candidate.src;
+    const key = candidate.assetId ?? candidate.stableUri ?? candidate.src ?? candidate.localPath;
     if (!key || seen.has(key)) return;
     seen.add(key);
     candidates.push(candidate);
@@ -395,6 +411,7 @@ function inferGeneratedAssetType(
   if (assetType === 'generated-video') return 'video';
   if (assetType === 'generated-audio') return 'audio';
   if (assetType === 'generated-image' || assetType === 'generated-storyboard') return 'image';
+  if (assetType === 'generated-model') return 'model';
   return inferMediaType(mimeType);
 }
 
@@ -407,12 +424,24 @@ function inferMediaType(
   if (mimeType?.startsWith('image/')) return 'image';
   if (mimeType?.startsWith('video/')) return 'video';
   if (mimeType?.startsWith('audio/')) return 'audio';
+  if (isModelMimeType(mimeType)) return 'model';
 
   const lowerUri = uri?.toLowerCase() ?? '';
   if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/.test(lowerUri)) return 'image';
   if (/\.(mp4|webm|mov|avi|mkv)(\?|#|$)/.test(lowerUri)) return 'video';
   if (/\.(mp3|wav|ogg|aac|flac|m4a)(\?|#|$)/.test(lowerUri)) return 'audio';
+  if (/\.(glb|gltf|vrm)(\?|#|$)/.test(lowerUri)) return 'model';
   return 'unknown';
+}
+
+function isModelMimeType(mimeType: string | undefined): boolean {
+  return (
+    mimeType === 'model/gltf-binary' ||
+    mimeType === 'model/gltf+json' ||
+    mimeType === 'model/vrm' ||
+    mimeType === 'application/octet-stream+glb' ||
+    mimeType === 'application/x-vrm'
+  );
 }
 
 function isRenderableUri(value: string): boolean {

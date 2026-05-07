@@ -11,7 +11,9 @@
 import { memo, useCallback } from 'react';
 import { VSCodeMessages } from '@/messages';
 import type {
+  PluginTransferAssetRef,
   PluginTransferMediaType,
+  PluginTransferPayload,
   PluginTransferTarget,
   PluginsAvailable as SharedPluginsAvailable,
 } from '@neko-agent/types';
@@ -24,7 +26,15 @@ export type SendToTarget = PluginTransferTarget;
 
 interface SendToMenuProps {
   /** Asset path on disk (absolute) */
-  assetPath: string;
+  assetPath?: string;
+  /** Multiple asset paths on disk. */
+  assetPaths?: readonly string[];
+  /** Fully typed asset refs, used when names or mixed media metadata are available. */
+  assets?: readonly PluginTransferAssetRef[];
+  /** Structured transfer payload. Overrides assetPath / assetPaths / assets when provided. */
+  payload?: PluginTransferPayload;
+  /** Optional target allow-list for composite UIs that split structured and flat transfers. */
+  allowedTargets?: readonly PluginTransferTarget[];
   /** Media type hint for determining valid targets */
   mediaType: PluginTransferMediaType;
   /** Detected installed plugins */
@@ -32,24 +42,49 @@ interface SendToMenuProps {
   className?: string;
 }
 
-function SendToMenuComponent({ assetPath, mediaType, plugins, className }: SendToMenuProps) {
+function SendToMenuComponent({
+  assetPath,
+  assetPaths,
+  assets,
+  payload,
+  allowedTargets,
+  mediaType,
+  plugins,
+  className,
+}: SendToMenuProps) {
   const handleSendTo = useCallback(
     (target: SendToTarget) => {
-      VSCodeMessages.sendToPlugin(target, assetPath, mediaType);
+      const transferPayload = buildPluginTransferPayload({
+        assetPath,
+        assetPaths,
+        assets,
+        mediaType,
+        payload,
+      });
+      if (!transferPayload) return;
+      VSCodeMessages.sendToPlugin(target, transferPayload);
     },
-    [assetPath, mediaType],
+    [assetPath, assetPaths, assets, mediaType, payload],
   );
 
-  const projection = projectPluginTransferMenu({ mediaType, plugins });
+  const projection = projectPluginTransferMenu({
+    mediaType,
+    plugins,
+    ...(payload?.kind === 'canvasStoryboard' ? { structuredKind: 'canvasStoryboard' } : {}),
+    ...(payload?.kind === 'cutStoryboard' ? { structuredKind: 'cutStoryboard' } : {}),
+  });
+  const targets = allowedTargets
+    ? projection.targets.filter((target) => allowedTargets.includes(target.id))
+    : projection.targets;
 
-  if (!projection.showMenu) return null;
+  if (targets.length === 0) return null;
 
   return (
     <div className={`flex items-center gap-1 ${className ?? ''}`}>
       <span className="text-[9px] text-[var(--vscode-descriptionForeground)] shrink-0">
         Send to
       </span>
-      {projection.targets.map((target) => (
+      {targets.map((target) => (
         <button
           key={target.id}
           onClick={() => handleSendTo(target.id)}
@@ -69,9 +104,43 @@ function SendToMenuComponent({ assetPath, mediaType, plugins, className }: SendT
   );
 }
 
+function buildPluginTransferPayload(input: {
+  assetPath?: string;
+  assetPaths?: readonly string[];
+  assets?: readonly PluginTransferAssetRef[];
+  mediaType: PluginTransferMediaType;
+  payload?: PluginTransferPayload;
+}): PluginTransferPayload | null {
+  if (input.payload) return input.payload;
+
+  const assets =
+    input.assets ??
+    input.assetPaths?.map((path) => ({
+      path,
+      mediaType: input.mediaType,
+    })) ??
+    (input.assetPath
+      ? [
+          {
+            path: input.assetPath,
+            mediaType: input.mediaType,
+          },
+        ]
+      : []);
+
+  const validAssets = assets.filter((asset) => asset.path);
+  if (validAssets.length === 0) return null;
+  if (validAssets.length === 1 && validAssets[0]) {
+    return { kind: 'singleAsset', asset: validAssets[0] };
+  }
+  return { kind: 'assetBatch', assets: validAssets };
+}
+
 function getTargetIcon(target: SendToTarget): string {
   if (target === 'canvas') return '🖼️';
   if (target === 'cut') return '🎬';
+  if (target === 'sketch') return '✏️';
+  if (target === 'model') return '🧊';
   if (target === 'explorer') return '📁';
   return '';
 }

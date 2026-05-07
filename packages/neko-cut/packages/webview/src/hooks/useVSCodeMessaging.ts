@@ -6,19 +6,27 @@
 // composing domain-specific handlers on top of it.
 
 import { useEffect, useCallback, useRef } from 'react';
-import { useEditorStore } from '../stores/editor-store';
-import type { ProjectData } from '../types';
+import { useEditorStore, type EditorStore } from '../stores/editor-store';
+import type { EditorSubtitleElement, ProjectData, TextElement, TimelineTrack } from '../types';
 import { getLogger } from '../utils/logger';
 
-const logger = getLogger('useVSCodeMessaging');
 import { DEFAULT_IMAGE_DURATION, DEFAULT_VIDEO_DURATION } from '../constants';
 import { getMediaInfoService } from '../services';
+import { CENTERED_TRANSFORM } from '@neko/shared';
 import { getVSCodeAPI, postMessage } from '../utils/vscodeApi';
 import {
   getFileUri as getFileUriAsync,
   handleFileUriResponse,
   requestFileUri as requestFileUriUtil,
 } from '../utils/fileUri';
+import {
+  buildStoryboardMetadataCues,
+  buildStoryboardImageClips,
+  normalizeCutStoryboardImportPayload,
+} from '../utils/storyboardImport';
+import type { CutStoryboardImportPayload } from '../utils/storyboardImport';
+
+const logger = getLogger('useVSCodeMessaging');
 
 // Get VSCode API singleton
 const vscode = getVSCodeAPI();
@@ -27,8 +35,19 @@ const vscode = getVSCodeAPI();
 const pendingContextMenuCallbacks = new Map<string, (selectedId?: string) => void>();
 
 export function useVSCodeMessaging() {
-  const { setProject, project, currentTime, isPlaying, selectElement, seek, setAIActionStatus } =
-    useEditorStore();
+  const {
+    setProject,
+    project,
+    currentTime,
+    isPlaying,
+    selectElement,
+    seek,
+    setAIActionStatus,
+    addElement,
+    addMediaElement,
+    addTrack,
+    getTotalDuration,
+  } = useEditorStore();
   const projectRef = useRef(project);
   const lastSavedRef = useRef<string>('');
 
@@ -74,6 +93,23 @@ export function useVSCodeMessaging() {
       }
     }
   }, [sendMessage]);
+
+  const importStoryboard = useCallback(
+    (payload: CutStoryboardImportPayload) => {
+      importStoryboardToStore(
+        {
+          addElement,
+          addMediaElement,
+          addTrack,
+          getTotalDuration,
+          project: projectRef.current,
+        },
+        payload,
+        sendMessage,
+      );
+    },
+    [addElement, addMediaElement, addTrack, getTotalDuration, sendMessage],
+  );
 
   // Handle incoming messages from Extension Host
   useEffect(() => {
@@ -152,6 +188,21 @@ export function useVSCodeMessaging() {
             });
           }
           break;
+
+        case 'importStoryboard': {
+          const payload = normalizeCutStoryboardImportPayload(message);
+          if (!payload) {
+            logger.warn('Ignored malformed storyboard import payload');
+            break;
+          }
+
+          try {
+            importStoryboard(payload);
+          } catch (err) {
+            logger.error('Failed to import storyboard into timeline:', err);
+          }
+          break;
+        }
 
         case 'saved':
           // Confirmation that file was saved
@@ -341,7 +392,7 @@ export function useVSCodeMessaging() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [setProject, sendStatusUpdate, selectElement, seek, setAIActionStatus]);
+  }, [setProject, sendStatusUpdate, selectElement, seek, setAIActionStatus, importStoryboard]);
 
   // Send status updates when playback state changes
   useEffect(() => {
@@ -461,5 +512,120 @@ export function useVSCodeMessaging() {
     sendExportProgress,
     // Context menu
     showContextMenu,
+  };
+}
+
+type StoryboardCue = ReturnType<typeof buildStoryboardMetadataCues>[number];
+type StoryboardImportStoreActions = Pick<
+  EditorStore,
+  'addElement' | 'addMediaElement' | 'addTrack' | 'getTotalDuration' | 'project'
+>;
+
+function importStoryboardToStore(
+  store: StoryboardImportStoreActions,
+  payload: CutStoryboardImportPayload,
+  sendMessage: (message: unknown) => void,
+): void {
+  const startTime = store.getTotalDuration();
+  const clips = buildStoryboardImageClips(payload, startTime);
+  const cues = buildStoryboardMetadataCues(payload, startTime);
+
+  for (const clip of clips) {
+    store.addMediaElement('', clip.path, clip.name, clip.duration, clip.startTime);
+    sendMessage({ type: 'requestFile', path: clip.path });
+  }
+
+  const dialogueCues = cues.filter((cue) => cue.kind === 'dialogue');
+  if (dialogueCues.length > 0) {
+    const subtitleTrackId = findOrCreateStoryboardTrack(
+      store.project?.tracks,
+      'subtitle',
+      'Storyboard Dialogue',
+      store.addTrack,
+    );
+    for (const cue of dialogueCues) {
+      store.addElement(subtitleTrackId, createStoryboardSubtitleElement(cue));
+    }
+  }
+
+  const noteCues = cues.filter((cue) => cue.kind !== 'dialogue');
+  if (noteCues.length > 0) {
+    const textTrackId = findOrCreateStoryboardTrack(
+      store.project?.tracks,
+      'text',
+      'Storyboard Audio Notes',
+      store.addTrack,
+    );
+    for (const cue of noteCues) {
+      store.addElement(textTrackId, createStoryboardTextElement(cue));
+    }
+  }
+
+  logger.info(
+    `Imported ${clips.length} storyboard shots and ${cues.length} metadata cues from ${payload.projectName} into timeline`,
+  );
+}
+
+function findOrCreateStoryboardTrack(
+  tracks: readonly TimelineTrack[] | undefined,
+  type: TimelineTrack['type'],
+  name: string,
+  addTrack: (type: TimelineTrack['type'], name?: string) => string,
+): string {
+  return (
+    tracks?.find((track) => track.type === type && track.name === name)?.id ?? addTrack(type, name)
+  );
+}
+
+function createStoryboardSubtitleElement(cue: StoryboardCue): Omit<EditorSubtitleElement, 'id'> {
+  return {
+    type: 'subtitle',
+    name: cue.name,
+    text: cue.text,
+    fontSize: 48,
+    color: '#ffffff',
+    fontFamily: 'Arial',
+    backgroundColor: 'transparent',
+    textAlign: 'center',
+    strokeColor: 'transparent',
+    strokeWidth: 0,
+    duration: cue.duration,
+    startTime: cue.startTime,
+    trimStart: 0,
+    trimEnd: 0,
+    transform: CENTERED_TRANSFORM,
+    opacity: 1,
+    blendMode: 'normal',
+    effects: [],
+    muted: false,
+    hidden: false,
+    locked: false,
+  };
+}
+
+function createStoryboardTextElement(cue: StoryboardCue): Omit<TextElement, 'id'> {
+  const prefix = cue.kind === 'voiceOver' ? 'Voice Over' : 'Sound Cue';
+  return {
+    type: 'text',
+    name: cue.name,
+    content: `${prefix}: ${cue.text}`,
+    fontSize: 36,
+    fontFamily: 'Arial',
+    color: '#f8fafc',
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+    textAlign: 'left',
+    fontWeight: 'normal',
+    fontStyle: 'normal',
+    duration: cue.duration,
+    startTime: cue.startTime,
+    trimStart: 0,
+    trimEnd: 0,
+    transform: CENTERED_TRANSFORM,
+    opacity: 1,
+    blendMode: 'normal',
+    effects: [],
+    muted: false,
+    hidden: false,
+    locked: false,
   };
 }

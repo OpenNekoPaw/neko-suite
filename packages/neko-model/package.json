@@ -62,6 +62,11 @@
         "category": "NekoModel"
       },
       {
+        "command": "neko.model.importAsset",
+        "title": "%neko.model.importAsset.title%",
+        "category": "NekoModel"
+      },
+      {
         "command": "neko.model.deleteSelected",
         "title": "%neko.model.deleteSelected.title%",
         "category": "NekoModel"

@@ -1,18 +1,21 @@
 /**
- * ScriptTableView — lightweight storyboard review table.
+ * ScriptTableView — scene dispatch panel for creators.
  *
- * This is intentionally scene-level only:
- * - review Agent planning readiness
- * - inspect Canvas handoff status
- * - trigger downstream actions
+ * 3-column layout: # | Scene | Status + Action
+ * Unified 5-state: pending → processing → attention/done/skipped
+ * Context-driven single primary action per state.
  *
  * It must not become a second storyboard editor.
  */
 
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { NekoStoryScriptIndex } from '@neko/shared';
 import type { StorySceneAction, StorySceneState } from '../types';
 import { formatDurationShort } from '../utils/sceneBreakdown';
 import { useTranslation } from '../i18n/I18nContext';
+
+type TranslationFn = ReturnType<typeof useTranslation>['t'];
 
 interface ScriptTableViewProps {
   scriptIndex: NekoStoryScriptIndex | null;
@@ -20,6 +23,85 @@ interface ScriptTableViewProps {
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
 }
+
+const DEFAULT_SCENE_STATE: Omit<StorySceneState, 'sceneId'> = {
+  agentStatus: 'not-requested',
+  canvasStatus: 'not-sent',
+};
+
+// =============================================================================
+// Unified status mapping (creator perspective)
+// =============================================================================
+
+type CreatorStatus = 'pending' | 'processing' | 'attention' | 'done' | 'skipped';
+
+function deriveCreatorStatus(state: StorySceneState): CreatorStatus {
+  const { agentStatus, canvasStatus, generationStatus } = state;
+
+  if (agentStatus === 'skipped' || canvasStatus === 'skipped') return 'skipped';
+
+  if (
+    agentStatus === 'failed' ||
+    generationStatus === 'partial-fail' ||
+    agentStatus === 'review' ||
+    agentStatus === 'prompt-review' ||
+    agentStatus === 'pilot-review'
+  ) {
+    return 'attention';
+  }
+
+  if (
+    (agentStatus === 'timeline-arranged' || agentStatus === 'sent') &&
+    (canvasStatus === 'sent' || canvasStatus === 'opened')
+  ) {
+    return 'done';
+  }
+
+  if (
+    agentStatus === 'parsing' ||
+    agentStatus === 'generating' ||
+    generationStatus === 'generating' ||
+    canvasStatus === 'queued' ||
+    canvasStatus === 'sent'
+  ) {
+    return 'processing';
+  }
+
+  if (agentStatus === 'ready') return 'processing';
+
+  return 'pending';
+}
+
+function getStatusDetail(state: StorySceneState, t: TranslationFn): string | undefined {
+  if (state.agentStatus === 'failed' || state.generationStatus === 'partial-fail') {
+    return t('table.status.detail.failed');
+  }
+  if (
+    state.agentStatus === 'review' ||
+    state.agentStatus === 'prompt-review' ||
+    state.agentStatus === 'pilot-review'
+  ) {
+    return t('table.status.detail.review');
+  }
+  if (state.agentStatus === 'parsing' || state.agentStatus === 'ready') {
+    return t('table.status.detail.analyzing');
+  }
+  if (state.agentStatus === 'generating' || state.generationStatus === 'generating') {
+    return t('table.status.detail.generating');
+  }
+  if (state.canvasStatus === 'queued' || state.canvasStatus === 'sent') {
+    return t('table.status.detail.sending');
+  }
+  return undefined;
+}
+
+const STATUS_PALETTE = {
+  pending: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
+  processing: { bg: '#3b82f620', fg: '#3b82f6' },
+  attention: { bg: '#f59e0b20', fg: '#f59e0b' },
+  done: { bg: '#16a34a20', fg: '#16a34a' },
+  skipped: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
+} as const;
 
 // =============================================================================
 // Primitives
@@ -46,53 +128,29 @@ function Th({ children, width }: { children: React.ReactNode; width?: string }) 
 }
 
 function StatusBadge({
+  status,
   label,
-  tone,
+  title,
 }: {
+  status: CreatorStatus;
   label: string;
-  tone: 'neutral' | 'info' | 'success' | 'warn';
+  title?: string;
 }) {
-  const palette = {
-    neutral: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
-    info: { bg: '#3b82f620', fg: '#3b82f6' },
-    success: { bg: '#16a34a20', fg: '#16a34a' },
-    warn: { bg: '#f59e0b20', fg: '#f59e0b' },
-  } as const;
-
+  const palette = STATUS_PALETTE[status];
   return (
     <span
+      title={title}
       style={{
         display: 'inline-block',
-        padding: '1px 6px',
+        padding: '1px 8px',
         borderRadius: 3,
         whiteSpace: 'nowrap',
-        backgroundColor: palette[tone].bg,
-        color: palette[tone].fg,
+        backgroundColor: palette.bg,
+        color: palette.fg,
         fontSize: 10,
         lineHeight: '16px',
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function IntExtBadge({ value }: { value: string | null | undefined }) {
-  const label = value ?? '—';
-  const isExt = value === 'EXT';
-  const isInt = value === 'INT';
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        padding: '0 4px',
-        borderRadius: 3,
-        fontSize: 9,
-        lineHeight: '16px',
-        fontWeight: 600,
-        backgroundColor: isExt ? '#16a34a20' : isInt ? '#3b82f620' : '#6b728020',
-        color: isExt ? '#16a34a' : isInt ? '#3b82f6' : 'var(--vscode-descriptionForeground)',
-        marginLeft: 6,
+        opacity: status === 'skipped' ? 0.6 : 1,
+        cursor: title ? 'help' : undefined,
       }}
     >
       {label}
@@ -121,7 +179,45 @@ function CharacterBadge({ name }: { name: string }) {
   );
 }
 
-function ActionButton({ label, onClick }: { label: string; onClick: () => void }) {
+// =============================================================================
+// Action button primitives
+// =============================================================================
+
+function PrimaryActionButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      style={{
+        display: 'inline-block',
+        padding: '2px 10px',
+        borderRadius: 3,
+        border: 'none',
+        color: 'var(--vscode-button-foreground)',
+        backgroundColor: 'var(--vscode-button-background)',
+        fontSize: 10,
+        lineHeight: '16px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+          'var(--vscode-button-hoverBackground)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+          'var(--vscode-button-background)';
+      }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function SecondaryActionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       style={{
@@ -135,8 +231,6 @@ function ActionButton({ label, onClick }: { label: string; onClick: () => void }
         lineHeight: '14px',
         cursor: 'pointer',
         whiteSpace: 'nowrap',
-        marginRight: 3,
-        marginBottom: 2,
       }}
       onMouseEnter={(e) => {
         const el = e.currentTarget as HTMLButtonElement;
@@ -160,53 +254,109 @@ function ActionButton({ label, onClick }: { label: string; onClick: () => void }
 }
 
 // =============================================================================
-// Status helpers
+// Inline dropdown menu
 // =============================================================================
 
-type TranslationFn = ReturnType<typeof useTranslation>['t'];
-
-function getAgentStatusMeta(status: StorySceneState['agentStatus'], t: TranslationFn) {
-  switch (status) {
-    case 'ready':
-      return { label: t('table.status.agent.ready'), tone: 'info' as const };
-    case 'review':
-      return { label: t('table.status.agent.review'), tone: 'warn' as const };
-    case 'parsing':
-      return { label: t('table.status.agent.parsing'), tone: 'info' as const };
-    case 'prompt-review':
-      return { label: t('table.status.agent.prompt-review'), tone: 'warn' as const };
-    case 'pilot-review':
-      return { label: t('table.status.agent.pilot-review'), tone: 'warn' as const };
-    case 'generating':
-      return { label: t('table.status.agent.generating'), tone: 'info' as const };
-    case 'timeline-arranged':
-      return { label: t('table.status.agent.timeline-arranged'), tone: 'success' as const };
-    case 'sent':
-      return { label: t('table.status.agent.sent'), tone: 'success' as const };
-    case 'failed':
-      return { label: t('table.status.agent.failed'), tone: 'warn' as const };
-    case 'skipped':
-      return { label: t('table.status.skipped'), tone: 'neutral' as const };
-    case 'not-requested':
-    default:
-      return { label: t('table.status.agent.pending'), tone: 'neutral' as const };
-  }
+interface DropdownMenuItem {
+  label: string;
+  onClick: () => void;
 }
 
-function getCanvasStatusMeta(status: StorySceneState['canvasStatus'], t: TranslationFn) {
-  switch (status) {
-    case 'queued':
-      return { label: t('table.status.canvas.queued'), tone: 'warn' as const };
-    case 'sent':
-      return { label: t('table.status.canvas.sent'), tone: 'info' as const };
-    case 'opened':
-      return { label: t('table.status.canvas.opened'), tone: 'success' as const };
-    case 'skipped':
-      return { label: t('table.status.skipped'), tone: 'neutral' as const };
-    case 'not-sent':
-    default:
-      return { label: t('table.status.canvas.pending'), tone: 'neutral' as const };
-  }
+function DropdownMenu({
+  items,
+  anchorRef,
+  onClose,
+}: {
+  items: DropdownMenuItem[];
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const rect = anchorRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuWidth = 140;
+    const vw = window.innerWidth;
+    const x = rect.right + menuWidth > vw ? rect.right - menuWidth : rect.left;
+    setPos({ x, y: rect.bottom + 2 });
+  }, [anchorRef]);
+
+  useEffect(() => {
+    const handlePointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      role="menu"
+      style={{
+        position: 'fixed',
+        left: pos.x,
+        top: pos.y,
+        zIndex: 999,
+        minWidth: 120,
+        padding: '4px 0',
+        borderRadius: 4,
+        border: '1px solid var(--vscode-panel-border)',
+        backgroundColor: 'var(--vscode-menu-background, var(--vscode-editor-background))',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+      }}
+    >
+      {items.map((item, i) => (
+        <button
+          key={i}
+          role="menuitem"
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '4px 12px',
+            border: 'none',
+            background: 'none',
+            textAlign: 'left',
+            fontSize: 11,
+            color: 'var(--vscode-menu-foreground, var(--vscode-foreground))',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+              'var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground))';
+            (e.currentTarget as HTMLButtonElement).style.color =
+              'var(--vscode-menu-selectionForeground, var(--vscode-foreground))';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
+            (e.currentTarget as HTMLButtonElement).style.color =
+              'var(--vscode-menu-foreground, var(--vscode-foreground))';
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            item.onClick();
+            onClose();
+          }}
+          type="button"
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  );
 }
 
 // =============================================================================
@@ -215,15 +365,13 @@ function getCanvasStatusMeta(status: StorySceneState['canvasStatus'], t: Transla
 
 const MAX_VISIBLE_CHARACTERS = 3;
 
-function SceneRow({
-  scene,
-  sceneIndex,
-  isOdd,
-  state,
-  onNavigate,
-  onSceneAction,
-  t,
-}: {
+const CELL_STYLE: React.CSSProperties = {
+  padding: '8px 12px',
+  verticalAlign: 'top',
+  borderBottom: '1px solid var(--vscode-panel-border)',
+};
+
+interface SceneRowProps {
   scene: NekoStoryScriptIndex['scenes'][number];
   sceneIndex: number;
   isOdd: boolean;
@@ -231,11 +379,24 @@ function SceneRow({
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
   t: TranslationFn;
-}) {
-  const agentStatus = getAgentStatusMeta(state.agentStatus, t);
-  const canvasStatus = getCanvasStatusMeta(state.canvasStatus, t);
-  const isSkipped = state.agentStatus === 'skipped' || state.canvasStatus === 'skipped';
-  const canStartCreation = state.agentStatus === 'not-requested' || state.agentStatus === 'ready';
+}
+
+const SceneRow = memo(function SceneRow({
+  scene,
+  sceneIndex,
+  isOdd,
+  state,
+  onNavigate,
+  onSceneAction,
+  t,
+}: SceneRowProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+
+  const creatorStatus = deriveCreatorStatus(state);
+  const statusDetail = getStatusDetail(state, t);
+  const isSkipped = creatorStatus === 'skipped';
+
   const displayNumber = scene.sceneNumber
     ? `#${scene.sceneNumber}`
     : `#${String(sceneIndex).padStart(2, '0')}`;
@@ -243,6 +404,56 @@ function SceneRow({
   const overflowCount = scene.sceneCharacters.length - MAX_VISIBLE_CHARACTERS;
 
   const rowBg = isOdd ? 'var(--vscode-list-hoverBackground)' : 'transparent';
+
+  const fire = useCallback(
+    (action: StorySceneAction) => onSceneAction?.(scene.sceneId, action),
+    [onSceneAction, scene.sceneId],
+  );
+
+  // Context-driven primary action
+  const primaryAction = useMemo(() => {
+    switch (creatorStatus) {
+      case 'pending':
+        return { label: t('table.action.start'), action: 'startVideoCreation' as StorySceneAction };
+      case 'attention':
+        return state.agentStatus === 'failed' || state.generationStatus === 'partial-fail'
+          ? { label: t('table.action.retry'), action: 'retryFailed' as StorySceneAction }
+          : { label: t('table.action.review'), action: 'analyze' as StorySceneAction };
+      case 'done':
+        return { label: t('table.action.view'), action: 'openCanvas' as StorySceneAction };
+      case 'skipped':
+        return { label: t('table.action.restore'), action: 'toggleSkip' as StorySceneAction };
+      case 'processing':
+      default:
+        return null;
+    }
+  }, [creatorStatus, state.agentStatus, state.generationStatus, t]);
+
+  // Dropdown items vary by state
+  const menuItems = useMemo<DropdownMenuItem[]>(() => {
+    const items: DropdownMenuItem[] = [];
+    if (creatorStatus !== 'skipped') {
+      items.push({ label: t('table.action.analyze'), onClick: () => fire('analyze') });
+      items.push({
+        label: t('table.action.storyboard'),
+        onClick: () => fire('generateStoryboard'),
+      });
+      items.push({ label: t('table.action.sendToCanvas'), onClick: () => fire('sendToCanvas') });
+      items.push({ label: t('table.action.openCanvas'), onClick: () => fire('openCanvas') });
+    }
+    if (creatorStatus === 'done') {
+      items.push({ label: t('table.action.restart'), onClick: () => fire('startVideoCreation') });
+    }
+    items.push({
+      label: isSkipped ? t('table.action.unskip') : t('table.action.skip'),
+      onClick: () => fire('toggleSkip'),
+    });
+    return items;
+  }, [t, fire, creatorStatus, isSkipped]);
+
+  const handleCloseMenu = useCallback(() => setMenuOpen(false), []);
+
+  const statusLabel = t(`table.status.${creatorStatus}` as Parameters<TranslationFn>[0]);
 
   return (
     <tr
@@ -263,14 +474,7 @@ function SceneRow({
       }}
     >
       {/* # */}
-      <td
-        style={{
-          padding: '8px 12px',
-          textAlign: 'center',
-          verticalAlign: 'top',
-          borderBottom: '1px solid var(--vscode-panel-border)',
-        }}
-      >
+      <td style={{ ...CELL_STYLE, textAlign: 'center', width: 52 }}>
         <span
           style={{
             display: 'inline-block',
@@ -288,32 +492,23 @@ function SceneRow({
         </span>
       </td>
 
-      {/* Scene info */}
-      <td
-        style={{
-          padding: '8px 12px',
-          verticalAlign: 'top',
-          borderBottom: '1px solid var(--vscode-panel-border)',
-        }}
-      >
-        {/* Title + INT/EXT */}
+      {/* Scene info (merged: title·duration + summary + characters) */}
+      <td style={CELL_STYLE}>
+        {/* Title · Duration */}
         <div style={{ lineHeight: '20px' }}>
           <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--vscode-foreground)' }}>
             {scene.sceneTitle}
           </span>
-          <IntExtBadge value={scene.intExt} />
-        </div>
-        {/* Location · Time · Duration */}
-        <div style={{ fontSize: 11, color: 'var(--vscode-descriptionForeground)', marginTop: 2 }}>
-          {scene.location && <span>{scene.location}</span>}
-          {scene.location && scene.timeOfDay && (
-            <span style={{ margin: '0 3px', opacity: 0.5 }}>·</span>
-          )}
-          {scene.timeOfDay && <span>{scene.timeOfDay}</span>}
-          {(scene.location || scene.timeOfDay) && (
-            <span style={{ margin: '0 3px', opacity: 0.5 }}>·</span>
-          )}
-          <span style={{ opacity: 0.6 }}>{formatDurationShort(scene.estimatedDuration)}</span>
+          <span
+            style={{
+              fontSize: 10,
+              color: 'var(--vscode-descriptionForeground)',
+              opacity: 0.6,
+              marginLeft: 8,
+            }}
+          >
+            {formatDurationShort(scene.estimatedDuration)}
+          </span>
         </div>
         {/* Summary */}
         {scene.actionSummary && (
@@ -332,18 +527,9 @@ function SceneRow({
             {scene.actionSummary}
           </div>
         )}
-      </td>
-
-      {/* Characters */}
-      <td
-        style={{
-          padding: '8px 12px',
-          verticalAlign: 'top',
-          borderBottom: '1px solid var(--vscode-panel-border)',
-        }}
-      >
-        {scene.sceneCharacters.length > 0 ? (
-          <div>
+        {/* Characters (inline) */}
+        {scene.sceneCharacters.length > 0 && (
+          <div style={{ marginTop: 4 }}>
             {visibleChars.map((name) => (
               <CharacterBadge key={name} name={name} />
             ))}
@@ -356,131 +542,68 @@ function SceneRow({
               </span>
             )}
           </div>
-        ) : (
-          <span style={{ fontSize: 11, color: 'var(--vscode-descriptionForeground)' }}>—</span>
         )}
       </td>
 
-      {/* Status */}
-      <td
-        style={{
-          padding: '8px 12px',
-          verticalAlign: 'top',
-          borderBottom: '1px solid var(--vscode-panel-border)',
-        }}
-      >
-        <div>
-          <div style={{ marginBottom: 4 }}>
-            <span
-              style={{
-                fontSize: 9,
-                color: 'var(--vscode-descriptionForeground)',
-                opacity: 0.5,
-                marginRight: 4,
-              }}
-            >
-              A
-            </span>
-            <StatusBadge label={agentStatus.label} tone={agentStatus.tone} />
-          </div>
-          <div style={{ marginBottom: 4 }}>
-            <span
-              style={{
-                fontSize: 9,
-                color: 'var(--vscode-descriptionForeground)',
-                opacity: 0.5,
-                marginRight: 4,
-              }}
-            >
-              C
-            </span>
-            <StatusBadge label={canvasStatus.label} tone={canvasStatus.tone} />
-          </div>
-          {state.generationStatus && state.generationStatus !== 'idle' && (
-            <div>
-              <span
-                style={{
-                  fontSize: 9,
-                  color: 'var(--vscode-descriptionForeground)',
-                  opacity: 0.5,
-                  marginRight: 4,
-                }}
-              >
-                G
-              </span>
-              <StatusBadge
-                label={
-                  state.generationStatus === 'generating'
-                    ? t('table.status.agent.generating')
-                    : state.generationStatus === 'done'
-                      ? t('table.status.agent.sent')
-                      : t('table.status.agent.failed')
-                }
-                tone={
-                  state.generationStatus === 'done'
-                    ? 'success'
-                    : state.generationStatus === 'partial-fail'
-                      ? 'warn'
-                      : 'info'
-                }
-              />
-            </div>
-          )}
-        </div>
-      </td>
+      {/* Status + Actions (merged column) */}
+      <td style={{ ...CELL_STYLE, width: 180 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Unified status badge */}
+          <StatusBadge status={creatorStatus} label={statusLabel} title={statusDetail} />
 
-      {/* Actions */}
-      <td
-        style={{
-          padding: '8px 12px',
-          verticalAlign: 'top',
-          borderBottom: '1px solid var(--vscode-panel-border)',
-        }}
-      >
-        <div>
-          {canStartCreation && (
-            <>
-              <ActionButton
-                label={t('table.action.startVideo')}
-                onClick={() => onSceneAction?.(scene.sceneId, 'startVideoCreation')}
-              />
-              <ActionButton
-                label={t('table.action.generateScene')}
-                onClick={() => onSceneAction?.(scene.sceneId, 'generateCurrentScene')}
-              />
-            </>
-          )}
-          {state.agentStatus === 'failed' && (
-            <ActionButton
-              label={t('table.action.retry')}
-              onClick={() => onSceneAction?.(scene.sceneId, 'retryFailed')}
+          {/* Primary action */}
+          {primaryAction && (
+            <PrimaryActionButton
+              label={primaryAction.label}
+              onClick={() => fire(primaryAction.action)}
             />
           )}
-          <ActionButton
-            label={t('table.action.analyze')}
-            onClick={() => onSceneAction?.(scene.sceneId, 'analyze')}
-          />
-          <ActionButton
-            label={t('table.action.storyboard')}
-            onClick={() => onSceneAction?.(scene.sceneId, 'generateStoryboard')}
-          />
-          <ActionButton
-            label={t('table.action.canvas')}
-            onClick={() => onSceneAction?.(scene.sceneId, 'sendToCanvas')}
-          />
-          <ActionButton
-            label={t('table.action.openCanvas')}
-            onClick={() => onSceneAction?.(scene.sceneId, 'openCanvas')}
-          />
-          <ActionButton
-            label={isSkipped ? t('table.action.unskip') : t('table.action.skip')}
-            onClick={() => onSceneAction?.(scene.sceneId, 'toggleSkip')}
-          />
+
+          {/* More menu trigger */}
+          <button
+            ref={moreButtonRef}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 18,
+              borderRadius: 3,
+              border: '1px solid var(--vscode-panel-border)',
+              color: 'var(--vscode-descriptionForeground)',
+              backgroundColor: 'transparent',
+              fontSize: 11,
+              cursor: 'pointer',
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                'var(--vscode-list-hoverBackground)';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--vscode-foreground)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
+              (e.currentTarget as HTMLButtonElement).style.color =
+                'var(--vscode-descriptionForeground)';
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
+            title={t('table.action.more')}
+            type="button"
+          >
+            ···
+          </button>
+          {menuOpen && (
+            <DropdownMenu items={menuItems} anchorRef={moreButtonRef} onClose={handleCloseMenu} />
+          )}
         </div>
       </td>
     </tr>
   );
-}
+});
 
 // =============================================================================
 // Main component
@@ -493,6 +616,30 @@ export function ScriptTableView({
   onSceneAction,
 }: ScriptTableViewProps) {
   const { t } = useTranslation();
+
+  const { totalDuration, doneCount, hasCharacters } = useMemo(() => {
+    if (!scriptIndex) return { totalDuration: 0, doneCount: 0, hasCharacters: false };
+    let duration = 0;
+    let done = 0;
+    let chars = false;
+    for (const scene of scriptIndex.scenes) {
+      duration += scene.estimatedDuration;
+      if (scene.sceneCharacters.length > 0) chars = true;
+      const st = sceneStates[scene.sceneId];
+      if (st && deriveCreatorStatus(st) === 'done') done++;
+    }
+    return { totalDuration: duration, doneCount: done, hasCharacters: chars };
+  }, [scriptIndex, sceneStates]);
+
+  const handleBatchStart = useCallback(() => {
+    if (!scriptIndex || !onSceneAction) return;
+    for (const scene of scriptIndex.scenes) {
+      const st = sceneStates[scene.sceneId];
+      if (!st || deriveCreatorStatus(st) === 'pending') {
+        onSceneAction(scene.sceneId, 'startVideoCreation');
+      }
+    }
+  }, [scriptIndex, sceneStates, onSceneAction]);
 
   if (!scriptIndex) {
     return (
@@ -516,7 +663,7 @@ export function ScriptTableView({
     );
   }
 
-  const totalDuration = scriptIndex.scenes.reduce((sum, scene) => sum + scene.estimatedDuration, 0);
+  const total = scriptIndex.scenes.length;
 
   return (
     <div
@@ -533,9 +680,19 @@ export function ScriptTableView({
           fontSize: 11,
         }}
       >
-        <span>{t('table.scenes', { count: scriptIndex.scenes.length })}</span>
-        <span>{t('table.characters', { count: scriptIndex.characters.length })}</span>
+        <span>{t('table.scenes', { count: total })}</span>
+        {hasCharacters && (
+          <span>{t('table.characters', { count: scriptIndex.characters.length })}</span>
+        )}
         <span>{t('table.totalDuration', { duration: formatDurationShort(totalDuration) })}</span>
+        <span style={{ opacity: 0.7 }}>|</span>
+        <StatusBadge
+          status={doneCount === total ? 'done' : doneCount > 0 ? 'processing' : 'pending'}
+          label={t('table.summary.progress', { done: doneCount, total })}
+        />
+        <div style={{ marginLeft: 'auto' }}>
+          <SecondaryActionButton label={t('table.batch.startAll')} onClick={handleBatchStart} />
+        </div>
       </div>
 
       {/* Table */}
@@ -543,10 +700,8 @@ export function ScriptTableView({
         <thead>
           <tr>
             <Th width="52px">#</Th>
-            <Th>{t('table.header.heading')}</Th>
-            <Th width="150px">{t('table.header.characters')}</Th>
-            <Th width="120px">{t('table.header.status')}</Th>
-            <Th width="auto">{t('table.header.action')}</Th>
+            <Th>{t('table.header.scene')}</Th>
+            <Th width="180px">{t('table.header.status')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -559,8 +714,7 @@ export function ScriptTableView({
               state={
                 sceneStates[scene.sceneId] ?? {
                   sceneId: scene.sceneId,
-                  agentStatus: 'not-requested',
-                  canvasStatus: 'not-sent',
+                  ...DEFAULT_SCENE_STATE,
                 }
               }
               onNavigate={onNavigate}

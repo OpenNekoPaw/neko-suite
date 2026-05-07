@@ -8,6 +8,11 @@ import {
   injectLocaleAttribute,
 } from '@neko/shared/vscode/extension';
 import { ModelDocument } from './ModelDocument';
+import {
+  createModelImportConflictPath,
+  createModelProjectImportPlan,
+  formatModelProjectSrc,
+} from '../importModelAsset';
 
 const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
 
@@ -23,6 +28,8 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   public static readonly viewType = 'neko.modelEditor';
 
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
+  private activeDocument: vscode.CustomDocument | undefined;
+  private queuedModelImport: { uri: vscode.Uri } | undefined;
   private engineClient: EngineClient | undefined;
   private activeStreamId: string | undefined;
 
@@ -42,13 +49,17 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     _token: vscode.CancellationToken,
   ): Promise<void> {
     this.activeWebviewPanel = webviewPanel;
+    this.activeDocument = document;
 
-    const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri);
+    const workspaceFolders = this.getWorkspaceFolderUris();
+    const documentResourceRoots =
+      document.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(document.uri.fsPath))] : [];
 
     webviewPanel.webview.options = {
       enableScripts: true,
       localResourceRoots: [
         vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
+        ...documentResourceRoots,
         ...workspaceFolders,
       ],
     };
@@ -64,6 +75,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     webviewPanel.onDidDispose(() => {
       if (this.activeWebviewPanel === webviewPanel) {
         this.activeWebviewPanel = undefined;
+        this.activeDocument = undefined;
       }
       const streamId = this.activeStreamId;
       if (streamId && this.engineClient) {
@@ -86,6 +98,24 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       type: 'keyboardAction',
       action,
     });
+  }
+
+  isActive(): boolean {
+    return Boolean(this.activeWebviewPanel && this.activeDocument);
+  }
+
+  queueModelImport(uri: vscode.Uri): void {
+    this.queuedModelImport = { uri };
+  }
+
+  clearQueuedModelImport(): void {
+    this.queuedModelImport = undefined;
+  }
+
+  async importAsset(uri: vscode.Uri): Promise<boolean> {
+    if (!this.activeWebviewPanel || !this.activeDocument) return false;
+    await this.importModelFile(uri.fsPath, this.activeDocument, this.activeWebviewPanel);
+    return true;
   }
 
   /**
@@ -140,6 +170,12 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
           // Also load in engine backend if available
           await this.loadModelInEngine(filePath, webviewPanel);
+        }
+
+        const queued = this.queuedModelImport;
+        if (queued) {
+          this.queuedModelImport = undefined;
+          await this.importModelFile(queued.uri.fsPath, document, webviewPanel);
         }
         break;
       }
@@ -542,33 +578,98 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     document: vscode.CustomDocument,
     webviewPanel: vscode.WebviewPanel,
   ): Promise<void> {
+    let importPath = path.resolve(modelPath);
+
     // Update model.src in the .nkm project file
     if (document.uri.fsPath.endsWith('.nkm')) {
       try {
+        const importPlan = createModelProjectImportPlan({
+          sourcePath: modelPath,
+          documentPath: document.uri.fsPath,
+          workspaceFolderPaths: (vscode.workspace.workspaceFolders ?? []).map(
+            (folder) => folder.uri.fsPath,
+          ),
+        });
+
+        importPath = importPlan.importPath;
+        let projectModelSrc = importPlan.projectModelSrc;
+
+        if (importPlan.action === 'copy') {
+          importPath = await this.resolveAvailableImportPath(importPlan.importPath);
+          await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(importPath)));
+          await vscode.workspace.fs.copy(
+            vscode.Uri.file(importPlan.sourcePath),
+            vscode.Uri.file(importPath),
+            { overwrite: false },
+          );
+          projectModelSrc = formatModelProjectSrc(
+            path.relative(path.dirname(document.uri.fsPath), importPath),
+          );
+        }
+
         const nkmData = await vscode.workspace.fs.readFile(document.uri);
         const project = JSON.parse(new TextDecoder().decode(nkmData)) as Record<string, unknown>;
-        const nkmDir = path.dirname(document.uri.fsPath);
-        const relativePath = path.relative(nkmDir, modelPath).replace(/\\/g, '/');
-        (project as { model?: { src?: string } }).model = { src: `./${relativePath}` };
+        (project as { model?: { src?: string } }).model = { src: projectModelSrc };
         await vscode.workspace.fs.writeFile(
           document.uri,
           new TextEncoder().encode(JSON.stringify(project, null, 2)),
         );
       } catch (err) {
         this.logError('updateNkmModelSrc', err);
+        return;
       }
     }
 
     // Send model URI to webview for R3F loading
-    const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(modelPath));
+    this.addWebviewResourceRoot(webviewPanel, path.dirname(importPath));
+    const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(importPath));
     webviewPanel.webview.postMessage({
       type: 'loadModel',
       uri: modelUri.toString(),
-      filePath: modelPath,
+      filePath: importPath,
     });
 
     // Also load in engine backend
-    await this.loadModelInEngine(modelPath, webviewPanel);
+    await this.loadModelInEngine(importPath, webviewPanel);
+  }
+
+  private async resolveAvailableImportPath(targetPath: string): Promise<string> {
+    if (!(await this.fileExists(targetPath))) {
+      return targetPath;
+    }
+
+    const nonce = Date.now();
+    const timestampedPath = createModelImportConflictPath({ targetPath, nonce });
+    if (!(await this.fileExists(timestampedPath))) {
+      return timestampedPath;
+    }
+
+    return createModelImportConflictPath({ targetPath, nonce, attempt: 1 });
+  }
+
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private addWebviewResourceRoot(webviewPanel: vscode.WebviewPanel, rootPath: string): void {
+    const nextRoot = vscode.Uri.file(rootPath);
+    const currentRoots = webviewPanel.webview.options.localResourceRoots ?? [];
+    const hasRoot = currentRoots.some((root) => root.toString() === nextRoot.toString());
+    if (hasRoot) return;
+
+    webviewPanel.webview.options = {
+      ...webviewPanel.webview.options,
+      localResourceRoots: [...currentRoots, nextRoot],
+    };
+  }
+
+  private getWorkspaceFolderUris(): readonly vscode.Uri[] {
+    return (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri);
   }
 
   /**

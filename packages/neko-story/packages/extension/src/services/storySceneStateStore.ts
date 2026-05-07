@@ -32,6 +32,7 @@ interface StorySceneWorkflowRecord extends StorySceneState {
   readonly pipelineId?: string;
   readonly canvasSceneNodeId?: string;
   readonly shotIds?: readonly string[];
+  readonly canvasFileUri?: string;
 }
 
 interface StorySceneStatePersistence {
@@ -121,7 +122,7 @@ export class StorySceneStateStore implements vscode.Disposable {
   getCanvasBinding(
     sceneId: string,
     documentUri?: vscode.Uri,
-  ): { canvasSceneNodeId: string; shotIds: readonly string[] } | undefined {
+  ): { canvasSceneNodeId: string; shotIds: readonly string[]; canvasFileUri?: string } | undefined {
     const searchEntries = documentUri
       ? [[documentUri.toString(), this.statesByDocument.get(documentUri.toString())] as const]
       : this.statesByDocument.entries();
@@ -133,6 +134,7 @@ export class StorySceneStateStore implements vscode.Disposable {
         return {
           canvasSceneNodeId: record.canvasSceneNodeId,
           shotIds: record.shotIds ?? [],
+          canvasFileUri: record.canvasFileUri,
         };
       }
     }
@@ -311,6 +313,7 @@ export class StorySceneStateStore implements vscode.Disposable {
     scriptIndex: NekoStoryScriptIndex,
     importedScene: CreatedCanvasStoryboardScene,
     nextState: Partial<StorySceneWorkflowRecord> = {},
+    canvasFileUri?: string,
   ): void {
     const current = this.getSceneStates(documentUri, scriptIndex)[importedScene.sourceSceneId];
     if (!current) {
@@ -322,6 +325,7 @@ export class StorySceneStateStore implements vscode.Disposable {
       canvasStatus: current.canvasStatus === 'opened' ? 'opened' : 'sent',
       canvasSceneNodeId: importedScene.sceneNodeId,
       shotIds: importedScene.shotIds,
+      ...(canvasFileUri ? { canvasFileUri } : {}),
     });
   }
 

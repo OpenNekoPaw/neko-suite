@@ -4,6 +4,7 @@
 import * as vscode from 'vscode';
 import type { SketchImportContext } from '@neko/shared';
 import { createNewFile } from '@neko/shared/vscode/extension';
+import { isRecord, readNonEmptyString } from '@neko/shared/vscode/extension/command-args';
 import type { SketchEditorProvider } from '../editor/sketchEditorProvider';
 import { handleError } from '../utils/errorHandler';
 
@@ -153,8 +154,26 @@ export function registerCommands(
 
   // Import asset
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.sketch.importAsset', () => {
-      editorProvider.postKeyboardAction('importAsset');
+    vscode.commands.registerCommand('neko.sketch.importAsset', async (args?: unknown) => {
+      const payload = parseImportAssetArgs(args);
+      if (!payload) {
+        editorProvider.postKeyboardAction('importAsset');
+        return;
+      }
+
+      try {
+        const uri = vscode.Uri.file(payload.path);
+        const options = payload.name ? { name: payload.name } : undefined;
+        if (editorProvider.isActive()) {
+          await editorProvider.importFileAsset(uri, options);
+        } else {
+          await openSketchWithQueuedFileImport(editorProvider, uri, options);
+        }
+      } catch (error) {
+        void handleError(error instanceof Error ? error : new Error(String(error)), {
+          showToUser: true,
+        });
+      }
     }),
   );
 
@@ -263,4 +282,46 @@ export function registerCommands(
       },
     ),
   );
+}
+
+async function openSketchWithQueuedFileImport(
+  editorProvider: SketchEditorProvider,
+  uri: vscode.Uri,
+  options?: { readonly name?: string },
+): Promise<void> {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders?.[0]) {
+    void handleError(new Error(vscode.l10n.t('neko.sketch.editImage.noWorkspace')), {
+      showToUser: true,
+    });
+    return;
+  }
+
+  const tempDir = vscode.Uri.joinPath(workspaceFolders[0].uri, '.neko', 'temp');
+  const tempFile = vscode.Uri.joinPath(tempDir, `import-${Date.now()}.nks`);
+  try {
+    await vscode.workspace.fs.createDirectory(tempDir);
+    await vscode.workspace.fs.writeFile(
+      tempFile,
+      Buffer.from(getSketchTemplate('Sketch Import'), 'utf-8'),
+    );
+    editorProvider.queueFileImport(uri, options);
+    await vscode.commands.executeCommand('vscode.openWith', tempFile, 'neko.sketchEditor');
+  } catch (error) {
+    editorProvider.clearQueuedFileImport();
+    throw error;
+  }
+}
+
+function parseImportAssetArgs(
+  args: unknown,
+): { readonly path: string; readonly name?: string } | null {
+  if (!isRecord(args)) return null;
+  const path = readNonEmptyString(args.path);
+  if (!path) return null;
+  const name = readNonEmptyString(args.name);
+  return {
+    path,
+    ...(name ? { name } : {}),
+  };
 }

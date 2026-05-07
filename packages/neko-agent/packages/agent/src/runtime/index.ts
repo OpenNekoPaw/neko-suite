@@ -545,6 +545,7 @@ export {
   buildRuntimePluginTransferPlan,
   buildRuntimePluginsAvailableMessage,
   createRuntimePluginSlashCommandRegistry,
+  expandRuntimePluginTransferInputs,
   type BuildPluginTransferPlanInput,
   type PluginSlashCommandDef,
   type RegisteredPluginSlashCommand,

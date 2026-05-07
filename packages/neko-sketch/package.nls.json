@@ -11,6 +11,7 @@
   "neko.sketch.undo.title": "Undo",
   "neko.sketch.redo.title": "Redo",
   "neko.sketch.import.title": "Import Image",
+  "neko.sketch.importAsset.title": "Import Asset",
   "neko.sketch.export.title": "Export...",
   "neko.sketch.selectLayerFromOutline.title": "Select Layer",
   "neko.sketch.resetZoom.title": "Reset Zoom",

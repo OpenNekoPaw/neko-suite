@@ -9,6 +9,7 @@ import { MessageActions } from '@/components/ChatView/MessageActions';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { ImagePreview, AudioCard, VideoCard } from '@/components/ChatView/MediaPreview';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import {
   selectMessageLevelSubAgentWorkItems,
@@ -222,6 +223,7 @@ function AssistantContentBlocks({
   onModifyPlanStep,
   onApproveAllPlanSteps,
   onRejectAllPlanSteps,
+  pluginsAvailable,
 }: {
   message: Message;
   isStreaming?: boolean;
@@ -233,6 +235,7 @@ function AssistantContentBlocks({
   onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
   onApproveAllPlanSteps?: (planId: string) => void;
   onRejectAllPlanSteps?: (planId: string) => void;
+  pluginsAvailable?: PluginsAvailable;
 }) {
   // If contentBlocks available, render them in order
   if (message.contentBlocks && message.contentBlocks.length > 0) {
@@ -242,6 +245,7 @@ function AssistantContentBlocks({
       undefined,
       message.contentBlocks,
       message.toolCalls,
+      pluginsAvailable,
     );
 
     return (
@@ -412,6 +416,7 @@ export const MessageItem = memo(function MessageItem({
               onModifyPlanStep={onModifyPlanStep}
               onApproveAllPlanSteps={onApproveAllPlanSteps}
               onRejectAllPlanSteps={onRejectAllPlanSteps}
+              pluginsAvailable={pluginsAvailable}
             />
           )}
 

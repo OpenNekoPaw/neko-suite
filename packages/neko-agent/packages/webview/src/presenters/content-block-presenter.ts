@@ -4,6 +4,7 @@ import {
   projectCompositeBlockRichContent,
   type CompositeRichContentProjection,
 } from './composite-content-presenter';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type ContentBlockRenderKind =
   | 'thinking'
@@ -92,6 +93,7 @@ export interface ProjectContentBlockUiInput {
   toolCalls?: readonly ToolCall[];
   parentIsStreaming?: boolean;
   formatTimestamp?: (timestamp: number) => string;
+  plugins?: PluginsAvailable;
 }
 
 interface ContentBlockHeaderMetadata {
@@ -193,6 +195,7 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
           composite: input.block.composite,
           siblingBlocks: input.siblingBlocks,
           toolCalls: input.toolCalls,
+          plugins: input.plugins,
         }),
       };
   }
@@ -204,6 +207,7 @@ export function projectContentBlocksUi(
   formatTimestamp?: (timestamp: number) => string,
   siblingBlocks: readonly ContentBlock[] | undefined = blocks,
   toolCalls?: readonly ToolCall[],
+  plugins?: PluginsAvailable,
 ): ContentBlockUiProjection[] {
   return (
     blocks?.map((block) =>
@@ -213,6 +217,7 @@ export function projectContentBlocksUi(
         toolCalls,
         parentIsStreaming,
         formatTimestamp,
+        plugins,
       }),
     ) ?? []
   );

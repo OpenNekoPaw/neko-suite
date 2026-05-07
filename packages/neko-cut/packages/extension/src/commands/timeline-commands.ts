@@ -444,6 +444,7 @@ export function registerTimelineCommands(
           id: string;
           shotNumber: number;
           duration: number;
+          imagePath?: string;
           imageDataUrl?: string;
           dialogue?: string;
           voiceOver?: string;

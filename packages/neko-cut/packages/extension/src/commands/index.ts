@@ -13,6 +13,24 @@ import { getLogger, handleError } from '../base';
 
 const logger = getLogger('Commands');
 import { registerTimelineCommands } from './timeline-commands';
+
+type GeneratedClipMediaType = 'image' | 'video' | 'audio';
+
+function inferGeneratedClipMediaType(
+  assetPath: string,
+  mediaTypeHint?: string,
+): GeneratedClipMediaType {
+  if (mediaTypeHint === 'image' || mediaTypeHint === 'video' || mediaTypeHint === 'audio') {
+    return mediaTypeHint;
+  }
+
+  const ext = path.extname(assetPath).toLowerCase();
+  if (['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'].includes(ext)) return 'video';
+  if (['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].includes(ext)) return 'audio';
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) return 'image';
+  return 'video';
+}
+
 /**
  * Register all extension commands
  */
@@ -119,7 +137,12 @@ export function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.cut.importGeneratedClip',
-      async (params: { assetPath: string; duration?: number; trackIndex?: number }) => {
+      async (params: {
+        assetPath: string;
+        mediaType?: string;
+        duration?: number;
+        trackIndex?: number;
+      }) => {
         const webview = videoEditorProvider.getActiveWebview();
         if (!webview) {
           void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
@@ -128,14 +151,7 @@ export function registerCommands(
           });
           return;
         }
-        const ext = path.extname(params.assetPath).toLowerCase();
-        const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
-        const imageExts = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'];
-        const mediaType = videoExts.includes(ext)
-          ? 'video'
-          : imageExts.includes(ext)
-            ? 'image'
-            : 'video';
+        const mediaType = inferGeneratedClipMediaType(params.assetPath, params.mediaType);
 
         webview.postMessage({
           type: 'importGeneratedClip',

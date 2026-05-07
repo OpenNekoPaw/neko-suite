@@ -7,7 +7,7 @@ import type {
 
 export interface PluginTransferTargetProjection {
   id: PluginTransferTarget;
-  label: 'Canvas' | 'Timeline' | 'Explorer';
+  label: 'Canvas' | 'Timeline' | 'Sketch' | 'Model' | 'Explorer';
   accepts: readonly PluginTransferMediaType[];
   requiresPlugin: NekoPluginKey | null;
 }
@@ -31,9 +31,21 @@ const PLUGIN_TRANSFER_TARGETS: readonly PluginTransferTargetProjection[] = [
     requiresPlugin: 'cut',
   },
   {
+    id: 'sketch',
+    label: 'Sketch',
+    accepts: ['image'],
+    requiresPlugin: 'sketch',
+  },
+  {
+    id: 'model',
+    label: 'Model',
+    accepts: ['model'],
+    requiresPlugin: 'model',
+  },
+  {
     id: 'explorer',
     label: 'Explorer',
-    accepts: ['image', 'video', 'audio'],
+    accepts: ['image', 'video', 'audio', 'model'],
     requiresPlugin: null,
   },
 ];
@@ -41,9 +53,16 @@ const PLUGIN_TRANSFER_TARGETS: readonly PluginTransferTargetProjection[] = [
 export function projectPluginTransferMenu(input: {
   mediaType: PluginTransferMediaType;
   plugins: PluginsAvailable;
+  structuredKind?: 'canvasStoryboard' | 'cutStoryboard';
 }): PluginTransferMenuProjection {
   const targets = PLUGIN_TRANSFER_TARGETS.filter((target) => {
-    if (!target.accepts.includes(input.mediaType)) return false;
+    if (input.structuredKind === 'canvasStoryboard') {
+      if (target.id !== 'canvas') return false;
+    } else if (input.structuredKind === 'cutStoryboard') {
+      if (target.id !== 'cut') return false;
+    } else if (!target.accepts.includes(input.mediaType)) {
+      return false;
+    }
     if (target.requiresPlugin && !input.plugins[target.requiresPlugin]) return false;
     return true;
   });

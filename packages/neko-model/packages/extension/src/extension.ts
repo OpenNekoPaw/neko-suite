@@ -7,6 +7,12 @@ import {
 } from '@neko/shared/vscode/extension';
 import { setRootLogger, getRootLogger } from './logger';
 import { ModelEditorProvider } from './editor/ModelEditorProvider';
+import {
+  formatSupportedModelAssetExtensions,
+  getSupportedModelAssetFileExtensions,
+  parseModelImportAssetArgs,
+  validateModelAssetPath,
+} from './importModelAsset';
 
 /** Default .nkm document template */
 function getModelTemplate(title: string): string {
@@ -70,4 +76,88 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.model.importAsset', async (args?: unknown) => {
+      const parseResult = parseModelImportAssetArgs(args);
+      if (parseResult.status === 'missing') {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          filters: { '3D Models': Array.from(getSupportedModelAssetFileExtensions()) },
+        });
+        if (uris?.[0]) {
+          await importModelAsset(modelEditorProvider, uris[0]);
+        }
+        return;
+      }
+
+      if (parseResult.status === 'invalid') {
+        const message = getUnsupportedModelAssetMessage();
+        getRootLogger().warn(`importAsset rejected unsupported format: ${parseResult.path}`);
+        void vscode.window.showErrorMessage(message);
+        return;
+      }
+
+      try {
+        await importModelAsset(modelEditorProvider, vscode.Uri.file(parseResult.payload.path));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        getRootLogger().error(`importAsset failed: ${message}`);
+        void vscode.window.showErrorMessage(message);
+      }
+    }),
+  );
+}
+
+export function deactivate(): void {
+  // No extension-level resources require explicit shutdown beyond VSCode disposables.
+}
+
+async function importModelAsset(provider: ModelEditorProvider, uri: vscode.Uri): Promise<void> {
+  if (!validateModelAssetPath(uri.fsPath).supported) {
+    throw new Error(getUnsupportedModelAssetMessage());
+  }
+
+  if (provider.isActive()) {
+    await provider.importAsset(uri);
+    return;
+  }
+
+  await openModelProjectWithQueuedImport(provider, uri);
+}
+
+async function openModelProjectWithQueuedImport(
+  provider: ModelEditorProvider,
+  uri: vscode.Uri,
+): Promise<void> {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders?.[0]) {
+    const message = vscode.l10n.t('neko.model.importAsset.noWorkspace');
+    getRootLogger().warn(message);
+    void vscode.window.showWarningMessage(message);
+    return;
+  }
+
+  const tempDir = vscode.Uri.joinPath(workspaceFolders[0].uri, '.neko', 'temp');
+  const tempFile = vscode.Uri.joinPath(tempDir, `model-import-${Date.now()}.nkm`);
+  try {
+    await vscode.workspace.fs.createDirectory(tempDir);
+    await vscode.workspace.fs.writeFile(
+      tempFile,
+      Buffer.from(getModelTemplate('Model Import'), 'utf-8'),
+    );
+    provider.queueModelImport(uri);
+    await vscode.commands.executeCommand('vscode.openWith', tempFile, ModelEditorProvider.viewType);
+  } catch (error) {
+    provider.clearQueuedModelImport();
+    throw error;
+  }
+}
+
+function getUnsupportedModelAssetMessage(): string {
+  return vscode.l10n.t('neko.model.importAsset.unsupportedFormat', {
+    extensions: formatSupportedModelAssetExtensions(),
+  });
 }

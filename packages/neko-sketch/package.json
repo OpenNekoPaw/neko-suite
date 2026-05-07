@@ -105,6 +105,11 @@
         "category": "NekoSketch"
       },
       {
+        "command": "neko.sketch.importAsset",
+        "title": "%neko.sketch.importAsset.title%",
+        "category": "NekoSketch"
+      },
+      {
         "command": "neko.sketch.export",
         "title": "%neko.sketch.export.title%",
         "category": "NekoSketch"

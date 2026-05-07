@@ -7,6 +7,7 @@
 
 import type {
   AgentContextPayload,
+  CanvasStoryboardPayload,
   ChatModelOption,
   MessageAttachment,
   ModelType,
@@ -33,6 +34,12 @@ import type {
   TaskWorkItem,
 } from './work-item';
 import type { AgentWorkflowRun } from './workflow';
+import type {
+  PluginTransferAssetRef,
+  PluginTransferCutStoryboardPayload,
+  PluginTransferCutStoryboardShot,
+  PluginTransferPayload,
+} from './plugin-transfer-contract';
 
 export type ProtocolModelCategory = ModelType;
 export type MediaModelCategory = Exclude<ProtocolModelCategory, 'llm'>;
@@ -166,8 +173,9 @@ export interface SetPromptModeWebviewMessage {
 export interface SendToPluginWebviewMessage {
   type: 'sendToPlugin';
   target: string;
-  assetPath: string;
+  assetPath?: string;
   mediaType?: string;
+  payload?: PluginTransferPayload;
 }
 
 export interface DragStartWebviewMessage {
@@ -259,6 +267,7 @@ export interface PluginsAvailable {
   canvas?: boolean;
   cut?: boolean;
   sketch?: boolean;
+  model?: boolean;
 }
 
 export interface ThinkingMessage {
@@ -1239,15 +1248,175 @@ function parseSetPromptModeMessage(
 
 function parseSendToPluginMessage(raw: Record<string, unknown>): SendToPluginWebviewMessage | null {
   const target = requiredString(raw.target);
-  const assetPath = requiredString(raw.assetPath);
+  const assetPath = optionalStringStrict(raw.assetPath);
   const mediaType = optionalStringStrict(raw.mediaType);
-  if (!target || !assetPath || mediaType === null) return null;
+  const payload = raw.payload === undefined ? undefined : parsePluginTransferPayload(raw.payload);
+  if (!target || assetPath === null || mediaType === null || payload === null) return null;
+  if (payload === undefined && assetPath === undefined) return null;
   return {
     type: 'sendToPlugin',
     target,
-    assetPath,
+    ...(assetPath !== undefined ? { assetPath } : {}),
     ...(mediaType !== undefined ? { mediaType } : {}),
+    ...(payload !== undefined ? { payload } : {}),
   };
+}
+
+function parsePluginTransferPayload(value: unknown): PluginTransferPayload | null {
+  if (!isRecord(value)) return null;
+
+  if (value.kind === 'singleAsset') {
+    const asset = parsePluginTransferAssetRef(value.asset);
+    return asset ? { kind: 'singleAsset', asset } : null;
+  }
+
+  if (value.kind === 'assetBatch') {
+    if (!Array.isArray(value.assets)) return null;
+    const assets: PluginTransferAssetRef[] = [];
+    for (const item of value.assets) {
+      const asset = parsePluginTransferAssetRef(item);
+      if (!asset) return null;
+      assets.push(asset);
+    }
+    return { kind: 'assetBatch', assets };
+  }
+
+  if (value.kind === 'canvasStoryboard') {
+    if (!isCanvasStoryboardPayload(value.storyboard)) return null;
+    return { kind: 'canvasStoryboard', storyboard: value.storyboard };
+  }
+
+  if (value.kind === 'cutStoryboard') {
+    const storyboard = parseCutStoryboardPayload(value.storyboard);
+    return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
+  }
+
+  return null;
+}
+
+function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | null {
+  if (!isRecord(value)) return null;
+  const path = requiredString(value.path);
+  const mediaType = optionalStringStrict(value.mediaType);
+  const name = optionalStringStrict(value.name);
+  if (!path || mediaType === null || name === null) return null;
+  if (mediaType !== undefined) {
+    if (!isPluginTransferMediaType(mediaType)) return null;
+    if (name !== undefined) return { path, mediaType, name };
+    return { path, mediaType };
+  }
+  if (name !== undefined) return { path, name };
+  return { path };
+}
+
+function isPluginTransferMediaType(
+  value: string,
+): value is NonNullable<PluginTransferAssetRef['mediaType']> {
+  return value === 'image' || value === 'video' || value === 'audio' || value === 'model';
+}
+
+function isCanvasStoryboardPayload(value: unknown): value is CanvasStoryboardPayload {
+  if (!isRecord(value)) return false;
+  if (value.mode !== 'mechanical' && value.mode !== 'semantic') return false;
+  if (typeof value.sourceScriptUri !== 'string') return false;
+  if (!Array.isArray(value.scenes)) return false;
+  return value.scenes.every(isCanvasStoryboardScenePlan);
+}
+
+function isCanvasStoryboardScenePlan(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.sceneId === 'string' &&
+    typeof value.sceneTitle === 'string' &&
+    typeof value.sceneNumber === 'number' &&
+    Number.isFinite(value.sceneNumber) &&
+    Array.isArray(value.shotPlans) &&
+    value.shotPlans.every(isCanvasStoryboardShotPlan)
+  );
+}
+
+function isCanvasStoryboardShotPlan(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.shotNumber === 'number' &&
+    Number.isFinite(value.shotNumber) &&
+    typeof value.duration === 'number' &&
+    Number.isFinite(value.duration) &&
+    typeof value.visualDescription === 'string' &&
+    Array.isArray(value.characters) &&
+    typeof value.shotScale === 'string' &&
+    typeof value.characterAction === 'string' &&
+    Array.isArray(value.emotion) &&
+    value.emotion.every((item) => typeof item === 'string') &&
+    Array.isArray(value.sceneTags) &&
+    value.sceneTags.every((item) => typeof item === 'string')
+  );
+}
+
+function parseCutStoryboardPayload(value: unknown): PluginTransferCutStoryboardPayload | null {
+  if (!isRecord(value)) return null;
+  const projectName = requiredString(value.projectName);
+  if (!projectName || !Array.isArray(value.shots)) return null;
+  const shots: PluginTransferCutStoryboardShot[] = [];
+  for (const item of value.shots) {
+    const shot = parseCutStoryboardShot(item);
+    if (!shot) return null;
+    shots.push(shot);
+  }
+  return shots.length > 0 ? { projectName, shots } : null;
+}
+
+function parseCutStoryboardShot(value: unknown): PluginTransferCutStoryboardShot | null {
+  if (!isRecord(value)) return null;
+  const id = requiredString(value.id);
+  const label = requiredString(value.label);
+  const imagePath = optionalStringStrict(value.imagePath);
+  const imageDataUrl = optionalStringStrict(value.imageDataUrl);
+  const dialogue = optionalStringStrict(value.dialogue);
+  const voiceOver = optionalStringStrict(value.voiceOver);
+  const soundCue = optionalStringStrict(value.soundCue);
+  if (
+    !id ||
+    !label ||
+    typeof value.shotNumber !== 'number' ||
+    !Number.isFinite(value.shotNumber) ||
+    typeof value.duration !== 'number' ||
+    !Number.isFinite(value.duration) ||
+    imagePath === null ||
+    imageDataUrl === null ||
+    dialogue === null ||
+    voiceOver === null ||
+    soundCue === null
+  ) {
+    return null;
+  }
+
+  const base = {
+    id,
+    shotNumber: value.shotNumber,
+    duration: value.duration,
+    ...(dialogue !== undefined ? { dialogue } : {}),
+    ...(voiceOver !== undefined ? { voiceOver } : {}),
+    ...(soundCue !== undefined ? { soundCue } : {}),
+    label,
+  };
+
+  if (imagePath) {
+    return {
+      ...base,
+      imagePath,
+      ...(imageDataUrl !== undefined ? { imageDataUrl } : {}),
+    };
+  }
+
+  if (imageDataUrl) {
+    return {
+      ...base,
+      imageDataUrl,
+    };
+  }
+
+  return null;
 }
 
 function parseDragStartMessage(raw: Record<string, unknown>): DragStartWebviewMessage | null {

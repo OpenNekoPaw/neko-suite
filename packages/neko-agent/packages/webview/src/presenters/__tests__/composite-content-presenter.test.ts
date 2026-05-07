@@ -87,6 +87,52 @@ describe('composite content presenter', () => {
     });
   });
 
+  it('projects local 3D model assets without requiring a renderable preview URI', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'gallery',
+        sections: [
+          {
+            heading: 'Character',
+            mediaRefs: [{ toolCallId: 'call-model', assetIndex: 0 }],
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'call-model',
+          name: 'GenerateModel',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              assets: [
+                {
+                  id: 'model-1',
+                  type: 'generated-model',
+                  path: '/repo/.neko/generated/model/character.glb',
+                  mimeType: 'model/gltf-binary',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+      plugins: { model: true },
+    });
+
+    expect(projection.kind).toBe('asset-gallery');
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        type: 'model',
+        src: '/repo/.neko/generated/model/character.glb',
+        localPath: '/repo/.neko/generated/model/character.glb',
+        assetId: 'model-1',
+      }),
+    ]);
+    expect(projection.data.plugins).toEqual({ model: true });
+  });
+
   it('diagnoses stable asset refs that lack adapter-provided webview URIs', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {

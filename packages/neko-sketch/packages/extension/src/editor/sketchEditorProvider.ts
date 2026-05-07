@@ -95,6 +95,11 @@ interface PendingRequest<T> {
   timer: ReturnType<typeof setTimeout>;
 }
 
+interface PendingFileImport {
+  readonly uri: vscode.Uri;
+  readonly name?: string;
+}
+
 export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
   public static readonly viewType = 'neko.sketchEditor';
 
@@ -113,6 +118,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   // Phase 2: import context for round-trip workflow
   private importContext: SketchImportContext | undefined;
   private pendingImport: { base64: string; name: string; context: SketchImportContext } | undefined;
+  private pendingFileImport: PendingFileImport | undefined;
 
   // Phase 2/3: pending Extension → Webview request/response round-trips
   // Key: requestId, Value: pending promise
@@ -252,6 +258,28 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       data: base64,
       path: '',
     });
+  }
+
+  /** Queue a file import until the next sketch editor reports ready. */
+  queueFileImport(uri: vscode.Uri, options?: { readonly name?: string }): void {
+    this.pendingFileImport = options?.name ? { uri, name: options.name } : { uri };
+  }
+
+  /** Clear a queued file import if opening the target sketch document fails. */
+  clearQueuedFileImport(): void {
+    this.pendingFileImport = undefined;
+  }
+
+  /** Import a local image/PSD file into the active sketch editor, or queue it for the next one. */
+  async importFileAsset(uri: vscode.Uri, options?: { readonly name?: string }): Promise<boolean> {
+    const webviewPanel = this.activeWebviewPanel;
+    if (!webviewPanel) {
+      this.queueFileImport(uri, options);
+      return true;
+    }
+
+    await this.importFileUri(uri, webviewPanel, options);
+    return true;
   }
 
   private async postFeatureFlags(webviewPanel = this.activeWebviewPanel): Promise<void> {
@@ -667,6 +695,15 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
             path: '',
           });
         }
+        if (this.pendingFileImport) {
+          const pending = this.pendingFileImport;
+          this.pendingFileImport = undefined;
+          await this.importFileUri(
+            pending.uri,
+            webviewPanel,
+            pending.name ? { name: pending.name } : undefined,
+          );
+        }
         break;
       }
       case 'document:save': {
@@ -860,7 +897,11 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
-  private async importFileUri(uri: vscode.Uri, webviewPanel: vscode.WebviewPanel): Promise<void> {
+  private async importFileUri(
+    uri: vscode.Uri,
+    webviewPanel: vscode.WebviewPanel,
+    options?: { readonly name?: string },
+  ): Promise<void> {
     try {
       if (isPsdUri(uri)) {
         if (!isPsdImportEnabled()) {
@@ -888,7 +929,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       const fileData = await vscode.workspace.fs.readFile(uri);
       const base64 = Buffer.from(fileData).toString('base64');
-      const name = uri.path.split('/').pop() || 'imported';
+      const name = options?.name?.trim() || uri.path.split('/').pop() || 'imported';
       await webviewPanel.webview.postMessage({
         type: 'file:imported',
         name,

@@ -34,7 +34,12 @@ export function tryHandleFileAndPluginRoute(
       return true;
 
     case 'sendToPlugin':
-      void sendGeneratedAssetToPlugin(message.target, message.assetPath);
+      void sendGeneratedAssetToPlugin(
+        message.target,
+        message.assetPath,
+        message.mediaType,
+        message.payload,
+      );
       return true;
 
     case 'dnd:start':

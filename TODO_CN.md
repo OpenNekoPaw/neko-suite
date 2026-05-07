@@ -112,6 +112,16 @@
 
 ### 跨模块
 
+- [ ] **Agent Rich Content 跨组件投递后续**（[分析文档](./docs/architecture/agent-rich-content-delivery-analysis.md)，2026-05-07）：
+  - [ ] **P1：Cut 生成音频落地** — `cutStoryboard` 当前已创建图片片段、字幕片段和文本提示；继续把 `voiceOver` / `soundCue` 接入真实 TTS / 音效资产生成，并将生成音频放入 audio 轨
+  - [ ] **P1：批量投递语义** — 明确 `assetBatch` 是逐资产 best-effort 还是目标侧原子导入；补目标侧反馈，让 Agent 能稳定报告部分失败
+  - [ ] **P1：Model extension 类型检查边界** — `@neko-model/extension` build 已通过，但直接执行 `tsc -p packages/neko-model/packages/extension/tsconfig.json --noEmit` 仍会把 `@neko/neko-client` 的 DOM/WebCodecs 类型拉入无 DOM lib 的 extension tsconfig；需要隔离 extension-facing 类型面或调整 tsconfig 边界
+  - [ ] **P2：Send-to payload 投影同步** — `SendToMenu` 需持续与 `@neko/agent/runtime` plan builder 保持 payload 构造逻辑一致，同时保留 webview / extension 包边界
+  - [ ] **P2：Storyboard Send-to 工具栏密度** — Canvas/Cut/Explorer 三个动作可能在场景工具栏并排显示；若后续空间紧张，再调整产品交互入口
+  - [ ] **P2：Model glTF sidecar 导入** — 外部 `.glb/.vrm` 已本地化到项目 `.neko/imports/models`；后续需为 `.gltf` 的相对 `.bin` / 贴图依赖定义安全复制策略
+  - [ ] **P2：Puppet Send-to 目标** — 设计并实现 Agent → Puppet 投递（`moc3` / motion / expression payload），避免 Agent webview 直接耦合 Puppet 内部实现
+  - [ ] **P2：Model 结构化导入协议** — 从当前 path-based `.glb/.gltf/.vrm` 导入扩展到结构化 3D 场景 / 材质 / 骨骼 / 动画 payload
+  - [ ] **P2：Composite 结构化投递** — 为 `comparison` / `gallery` / `report` 设计投影协议；`storyboard-table` 已通过 `CanvasStoryboardPayload` / `cutStoryboard` 接入
 - [ ] **跨域链接**：剧本→媒体引用 / 资产路径补全
 - [ ] `neko://` 协议（仅 ADR 设计，依赖服务端）
 - [ ] Git LFS 集成

@@ -10,6 +10,11 @@ import {
   type WebviewToExtensionMessage,
 } from '@neko-agent/types';
 import { CONFIG_BRIDGE_MESSAGE_TYPES } from '../../services/configBridge';
+import { sendGeneratedAssetToPlugin } from '../../services/pluginTransferBridge';
+
+vi.mock('../../services/pluginTransferBridge', () => ({
+  sendGeneratedAssetToPlugin: vi.fn(),
+}));
 
 type RoutedWebviewMessageType =
   | (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number]
@@ -194,6 +199,49 @@ describe('handleChatWebviewMessage', () => {
       conversationId: 'conv-1',
       args: 'scene 1',
     });
+  });
+
+  it('routes sendToPlugin with the media type hint intact', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'sendToPlugin',
+        target: 'canvas',
+        assetPath: '/tmp/frame.png',
+        mediaType: 'image',
+      },
+      deps,
+    );
+
+    expect(sendGeneratedAssetToPlugin).toHaveBeenCalledWith(
+      'canvas',
+      '/tmp/frame.png',
+      'image',
+      undefined,
+    );
+  });
+
+  it('routes structured sendToPlugin payloads intact', () => {
+    const deps = createDeps();
+    const payload = {
+      kind: 'assetBatch' as const,
+      assets: [
+        { path: '/tmp/frame-1.png', mediaType: 'image' as const },
+        { path: '/tmp/frame-2.png', mediaType: 'image' as const },
+      ],
+    };
+
+    handleChatWebviewMessage(
+      {
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload,
+      },
+      deps,
+    );
+
+    expect(sendGeneratedAssetToPlugin).toHaveBeenCalledWith('cut', undefined, undefined, payload);
   });
 
   it('rejects plugin slash commands without an explicit conversationId', () => {

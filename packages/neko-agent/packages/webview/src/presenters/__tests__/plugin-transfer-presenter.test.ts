@@ -6,7 +6,7 @@ describe('plugin transfer presenter', () => {
     expect(
       projectPluginTransferMenu({
         mediaType: 'image',
-        plugins: { canvas: true, cut: false },
+        plugins: { canvas: true, cut: false, sketch: true },
       }),
     ).toEqual({
       showMenu: true,
@@ -18,9 +18,15 @@ describe('plugin transfer presenter', () => {
           requiresPlugin: 'canvas',
         },
         {
+          id: 'sketch',
+          label: 'Sketch',
+          accepts: ['image'],
+          requiresPlugin: 'sketch',
+        },
+        {
           id: 'explorer',
           label: 'Explorer',
-          accepts: ['image', 'video', 'audio'],
+          accepts: ['image', 'video', 'audio', 'model'],
           requiresPlugin: null,
         },
       ],
@@ -44,10 +50,35 @@ describe('plugin transfer presenter', () => {
         {
           id: 'explorer',
           label: 'Explorer',
-          accepts: ['image', 'video', 'audio'],
+          accepts: ['image', 'video', 'audio', 'model'],
           requiresPlugin: null,
         },
       ],
     });
+
+    expect(
+      projectPluginTransferMenu({
+        mediaType: 'model',
+        plugins: { model: true },
+      }).targets.map((target) => target.id),
+    ).toEqual(['model', 'explorer']);
+  });
+
+  it('limits structured storyboard payloads to compatible plugin targets', () => {
+    expect(
+      projectPluginTransferMenu({
+        mediaType: 'image',
+        plugins: { canvas: true, cut: true },
+        structuredKind: 'canvasStoryboard',
+      }).targets.map((target) => target.id),
+    ).toEqual(['canvas']);
+
+    expect(
+      projectPluginTransferMenu({
+        mediaType: 'image',
+        plugins: { canvas: true, cut: true },
+        structuredKind: 'cutStoryboard',
+      }).targets.map((target) => target.id),
+    ).toEqual(['cut']);
   });
 });

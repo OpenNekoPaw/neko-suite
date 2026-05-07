@@ -3,10 +3,17 @@ import type {
   AssetGalleryRichData,
   ComparisonGridRichData,
   CompositeMediaDiagnostic,
+  CompositeMediaType,
   ResolvedCompositeMedia,
   StoryboardTableRichData,
 } from '@/presenters/composite-content-presenter';
 import { VSCodeMessages } from '@/messages';
+import { SendToMenu } from '@/components/ChatView/SendToMenu';
+import {
+  projectStoryboardTableAssetBatch,
+  projectStoryboardTableCutTimelinePayload,
+  projectStoryboardTableTransferPayload,
+} from '@/presenters/storyboard-transfer-presenter';
 
 function isStoryboardTableRichData(data: unknown): data is StoryboardTableRichData {
   return isCompositeData(data, 'storyboard-table');
@@ -24,9 +31,47 @@ function StoryboardTableRendererComponent({
   data,
   className,
 }: RichContentProps<StoryboardTableRichData>) {
+  const canvasPayload = projectStoryboardTableTransferPayload(data);
+  const cutPayload = projectStoryboardTableCutTimelinePayload(data);
+  const assetBatchPayload = projectStoryboardTableAssetBatch(data);
+  const plugins = data.plugins;
+
   return (
     <div className={`agent-inline-card overflow-hidden ${className ?? ''}`}>
-      <CompositeHeader title={data.title ?? 'Storyboard'} count={`${data.sections.length} rows`} />
+      <CompositeHeader
+        title={data.title ?? 'Storyboard'}
+        count={`${data.sections.length} rows`}
+        actions={
+          plugins && (canvasPayload || cutPayload || assetBatchPayload) ? (
+            <div className="flex items-center gap-1">
+              {canvasPayload && (
+                <SendToMenu
+                  payload={canvasPayload}
+                  mediaType="image"
+                  plugins={plugins}
+                  allowedTargets={['canvas']}
+                />
+              )}
+              {cutPayload && (
+                <SendToMenu
+                  payload={cutPayload}
+                  mediaType="image"
+                  plugins={plugins}
+                  allowedTargets={['cut']}
+                />
+              )}
+              {assetBatchPayload && (
+                <SendToMenu
+                  payload={assetBatchPayload}
+                  mediaType="image"
+                  plugins={plugins}
+                  allowedTargets={['explorer']}
+                />
+              )}
+            </div>
+          ) : null
+        }
+      />
       <div className="divide-y divide-[var(--agent-divider)]">
         {data.sections.map((section) => (
           <div
@@ -94,6 +139,7 @@ function ComparisonGridRendererComponent({
                   {section.content}
                 </p>
               )}
+              <MediaTransferActions media={media} plugins={data.plugins} />
             </div>
           </div>
         ))}
@@ -134,6 +180,7 @@ function AssetGalleryRendererComponent({
                   Open
                 </button>
               )}
+              <MediaTransferActions media={media} plugins={data.plugins} />
             </div>
           </div>
         ))}
@@ -143,11 +190,20 @@ function AssetGalleryRendererComponent({
   );
 }
 
-function CompositeHeader({ title, count }: { title: string; count: string }) {
+function CompositeHeader({
+  title,
+  count,
+  actions,
+}: {
+  title: string;
+  count: string;
+  actions?: React.ReactNode;
+}) {
   return (
     <div className="flex items-center gap-2 border-b border-[var(--agent-divider)] bg-[var(--agent-elevated)] px-2 py-1.5">
       <span className="text-[12px] font-medium text-[var(--agent-fg)]">{title}</span>
       <span className="flex-1" />
+      {actions}
       <span className="text-[10px] text-[var(--agent-fg-secondary)]">{count}</span>
     </div>
   );
@@ -197,6 +253,19 @@ function MediaPreview({
     return <audio src={media.src} controls className="w-full" title={label} />;
   }
 
+  if (media.type === 'model') {
+    return (
+      <button
+        type="button"
+        className="flex w-full items-center justify-center rounded border border-[var(--agent-divider)] bg-[var(--vscode-editor-background)] px-2 py-4 text-[10px] text-[var(--agent-fg-secondary)]"
+        onClick={() => openMedia(media)}
+        title={label}
+      >
+        3D Model - {label}
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -207,6 +276,41 @@ function MediaPreview({
       {label}
     </button>
   );
+}
+
+function MediaTransferActions({
+  media,
+  plugins,
+}: {
+  media: ResolvedCompositeMedia;
+  plugins?: AssetGalleryRichData['plugins'];
+}) {
+  if (!plugins || !media.localPath) return null;
+  const mediaType = toPluginTransferMediaType(media.type);
+  if (!mediaType) return null;
+
+  return (
+    <SendToMenu
+      assetPath={media.localPath}
+      mediaType={mediaType}
+      plugins={plugins}
+      allowedTargets={mediaType === 'model' ? ['model', 'explorer'] : undefined}
+    />
+  );
+}
+
+function toPluginTransferMediaType(
+  mediaType: CompositeMediaType,
+): 'image' | 'video' | 'audio' | 'model' | null {
+  if (
+    mediaType === 'image' ||
+    mediaType === 'video' ||
+    mediaType === 'audio' ||
+    mediaType === 'model'
+  ) {
+    return mediaType;
+  }
+  return null;
 }
 
 function Diagnostics({

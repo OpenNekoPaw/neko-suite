@@ -12,9 +12,14 @@
 import { useState, useCallback, memo } from 'react';
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import {
+  projectStoryboardScenesAssetBatch,
+  projectStoryboardScenesCutTimelinePayload,
+  projectStoryboardScenesTransferPayload,
+} from '@/presenters/storyboard-transfer-presenter';
 
 /** A single shot within a scene */
-interface StoryboardShot {
+export interface StoryboardShot {
   /** Webview-safe image URI */
   url: string;
   /** Original local file path */
@@ -49,6 +54,10 @@ function StoryboardMessageComponent({
   onRegenerateScene,
   className,
 }: StoryboardMessageProps) {
+  const canvasPayload = projectStoryboardScenesTransferPayload(scenes);
+  const cutPayload = projectStoryboardScenesCutTimelinePayload(scenes);
+  const assetBatchPayload = projectStoryboardScenesAssetBatch(scenes);
+
   return (
     <div className={`space-y-3 ${className ?? ''}`}>
       {scenes.map((scene) => (
@@ -56,6 +65,9 @@ function StoryboardMessageComponent({
           key={`scene-${scene.sceneIndex}`}
           scene={scene}
           plugins={plugins}
+          canvasPayload={canvasPayload}
+          cutPayload={cutPayload}
+          assetBatchPayload={assetBatchPayload}
           onRegenerate={onRegenerateScene}
         />
       ))}
@@ -70,10 +82,16 @@ function StoryboardMessageComponent({
 function SceneGroup({
   scene,
   plugins,
+  canvasPayload,
+  cutPayload,
+  assetBatchPayload,
   onRegenerate,
 }: {
   scene: StoryboardScene;
   plugins?: PluginsAvailable;
+  canvasPayload?: ReturnType<typeof projectStoryboardScenesTransferPayload>;
+  cutPayload?: ReturnType<typeof projectStoryboardScenesCutTimelinePayload>;
+  assetBatchPayload?: ReturnType<typeof projectStoryboardScenesAssetBatch>;
   onRegenerate?: (sceneIndex: number) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -154,12 +172,33 @@ function SceneGroup({
               </button>
             )}
             <span className="flex-1" />
-            {scene.shots[0]?.localPath && plugins && (
-              <SendToMenu
-                assetPath={scene.shots[0].localPath}
-                mediaType="image"
-                plugins={plugins}
-              />
+            {(canvasPayload || cutPayload || assetBatchPayload) && plugins && (
+              <>
+                {canvasPayload && (
+                  <SendToMenu
+                    payload={canvasPayload}
+                    mediaType="image"
+                    plugins={plugins}
+                    allowedTargets={['canvas']}
+                  />
+                )}
+                {cutPayload && (
+                  <SendToMenu
+                    payload={cutPayload}
+                    mediaType="image"
+                    plugins={plugins}
+                    allowedTargets={['cut']}
+                  />
+                )}
+                {assetBatchPayload && (
+                  <SendToMenu
+                    payload={assetBatchPayload}
+                    mediaType="image"
+                    plugins={plugins}
+                    allowedTargets={['explorer']}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>

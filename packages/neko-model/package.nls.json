@@ -1,5 +1,6 @@
 {
   "neko.model.new.title": "New 3D Model Project",
+  "neko.model.importAsset.title": "Import 3D Model Asset",
   "neko.model.deleteSelected.title": "Delete Selected",
   "neko.model.escape.title": "Cancel / Deselect",
   "neko.model.selectAll.title": "Select All",

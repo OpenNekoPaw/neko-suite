@@ -416,7 +416,7 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.canvas.importAsset',
-      async (asset?: { path?: string; type?: string }) => {
+      async (asset?: { path?: string; type?: string; name?: string }) => {
         if (!asset?.path) {
           void handleError(new Error('neko.canvas.importAsset: missing asset path'), {
             showToUser: true,

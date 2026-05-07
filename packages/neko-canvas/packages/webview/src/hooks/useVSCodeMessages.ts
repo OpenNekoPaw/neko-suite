@@ -17,6 +17,10 @@ import type {
 } from '@neko/shared';
 import { setLocale } from '../i18n';
 import { useCanvasOperationStore } from '../stores/canvasOperationStore';
+import {
+  normalizeImportedGeneratedAsset,
+  type ImportedGeneratedAssetPayload,
+} from '../utils/importedGeneratedAsset';
 import { normalizeScriptScenes } from '../utils/scriptScenes';
 
 // =============================================================================
@@ -42,6 +46,7 @@ export interface UseVSCodeMessagesOptions {
   defaultCanvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
   onAddMediaFromExtension: (mediaType: string, uri: string, name: string) => void;
+  onImportGeneratedAsset?: (asset: ImportedGeneratedAssetPayload) => void;
   onDropAssets: (assets: CanvasDroppedAsset[]) => void;
   /** Called when generation status/image arrives from the extension scheduler */
   onGenerationProgress?: (payload: GenerationProgressPayload) => void;
@@ -88,6 +93,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     defaultCanvasData,
     setCanvasData,
     onAddMediaFromExtension,
+    onImportGeneratedAsset,
     onDropAssets,
     onGenerationProgress,
     onBuildPromptResult,
@@ -107,6 +113,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   // Stable refs for callbacks to avoid re-registering listener
   const onAddMediaRef = useRef(onAddMediaFromExtension);
   onAddMediaRef.current = onAddMediaFromExtension;
+  const onImportGeneratedAssetRef = useRef(onImportGeneratedAsset);
+  onImportGeneratedAssetRef.current = onImportGeneratedAsset;
   const onDropAssetsRef = useRef(onDropAssets);
   onDropAssetsRef.current = onDropAssets;
   const onGenerationProgressRef = useRef(onGenerationProgress);
@@ -152,6 +160,13 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               message.name as string,
             );
             break;
+          case 'importGeneratedAsset': {
+            const asset = normalizeImportedGeneratedAsset(message.asset);
+            if (asset) {
+              onImportGeneratedAssetRef.current?.(asset);
+            }
+            break;
+          }
           case 'dropAssets': {
             const assets = (message.assets as CanvasDroppedAsset[] | undefined) ?? [];
             onDropAssetsRef.current(assets);

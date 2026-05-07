@@ -336,9 +336,9 @@ describe('webview protocol projectors', () => {
         },
       ],
     });
-    expect(buildPluginsAvailableMessage({ canvas: true, cut: false })).toEqual({
+    expect(buildPluginsAvailableMessage({ canvas: true, cut: false, model: true })).toEqual({
       type: 'pluginsAvailable',
-      plugins: { canvas: true, cut: false },
+      plugins: { canvas: true, cut: false, model: true },
     });
 
     expect(
@@ -377,6 +377,262 @@ describe('webview protocol projectors', () => {
         type: 'invokePluginSlashCommand',
         extensionId: 'neko.canvas',
         commandId: 'batch',
+      }),
+    ).toBeNull();
+  });
+
+  it('parses structured send-to-plugin payloads', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'assetBatch',
+          assets: [
+            { path: '/repo/a.png', mediaType: 'image', name: 'A' },
+            { path: '/repo/b.wav', mediaType: 'audio' },
+          ],
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'cut',
+      payload: {
+        kind: 'assetBatch',
+        assets: [
+          { path: '/repo/a.png', mediaType: 'image', name: 'A' },
+          { path: '/repo/b.wav', mediaType: 'audio' },
+        ],
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard: {
+            projectName: 'Opening',
+            shots: [
+              {
+                id: 'shot-1',
+                shotNumber: 1,
+                duration: 3,
+                imageDataUrl: 'data:image/png;base64,AAAA',
+                label: '#001',
+              },
+            ],
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'cut',
+      payload: {
+        kind: 'cutStoryboard',
+        storyboard: {
+          projectName: 'Opening',
+          shots: [
+            {
+              id: 'shot-1',
+              shotNumber: 1,
+              duration: 3,
+              imageDataUrl: 'data:image/png;base64,AAAA',
+              label: '#001',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'model',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/repo/character.glb', mediaType: 'model', name: 'Character' },
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'model',
+      payload: {
+        kind: 'singleAsset',
+        asset: { path: '/repo/character.glb', mediaType: 'model', name: 'Character' },
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasStoryboard',
+          storyboard: {
+            mode: 'semantic',
+            sourceScriptUri: 'agent://rich-content/storyboard',
+            scenes: [
+              {
+                sceneId: 'scene-1',
+                sceneTitle: 'Opening',
+                sceneNumber: 1,
+                shotPlans: [
+                  {
+                    shotNumber: 1,
+                    duration: 3,
+                    visualDescription: 'Wide shot',
+                    characters: [],
+                    shotScale: 'MS',
+                    characterAction: '',
+                    emotion: [],
+                    sceneTags: [],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: expect.objectContaining({ kind: 'canvasStoryboard' }),
+      }),
+    );
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard: {
+            projectName: 'Opening',
+            shots: [
+              {
+                id: 'shot-1',
+                shotNumber: 1,
+                duration: 3,
+                imagePath: '/repo/shot-1.png',
+                dialogue: 'Wide establishing frame',
+                label: '#001',
+              },
+            ],
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'cut',
+      payload: {
+        kind: 'cutStoryboard',
+        storyboard: {
+          projectName: 'Opening',
+          shots: [
+            {
+              id: 'shot-1',
+              shotNumber: 1,
+              duration: 3,
+              imagePath: '/repo/shot-1.png',
+              dialogue: 'Wide establishing frame',
+              label: '#001',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'assetBatch',
+          assets: [{ path: '/repo/a.bin', mediaType: 'unknown' }],
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard: {
+            projectName: 'Opening',
+            shots: [
+              {
+                id: 'shot-1',
+                shotNumber: 1,
+                duration: 3,
+                label: '#001',
+              },
+            ],
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects malformed cut storyboard transfer payloads', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard: {
+            projectName: 'Opening',
+            shots: [],
+          },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard: {
+            projectName: 'Opening',
+            shots: [
+              {
+                id: 'shot-1',
+                shotNumber: 1,
+                duration: 3,
+                label: '#001',
+              },
+            ],
+          },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard: {
+            projectName: 'Opening',
+            shots: [
+              {
+                id: 'shot-1',
+                shotNumber: 1,
+                duration: Number.POSITIVE_INFINITY,
+                imagePath: '/repo/shot-1.png',
+                label: '#001',
+              },
+            ],
+          },
+        },
       }),
     ).toBeNull();
   });

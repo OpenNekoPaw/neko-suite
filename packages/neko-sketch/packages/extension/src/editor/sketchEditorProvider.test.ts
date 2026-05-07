@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as vscode from 'vscode';
 import type { PsdImportIssue, SketchSelectionData } from '@neko/shared';
 import {
   SketchEditorProvider,
@@ -37,6 +38,7 @@ const mockState = vi.hoisted(() => {
     createdDirs: new Set<string>(),
     deletedUris: new Set<string>(),
     executeCommand: vi.fn(async () => undefined),
+    readFile: vi.fn(),
   };
 });
 
@@ -57,7 +59,7 @@ vi.mock('vscode', () => ({
       delete: vi.fn(async (uri: InstanceType<typeof mockState.MockUri>) => {
         mockState.deletedUris.add(uri.toString());
       }),
-      readFile: vi.fn(),
+      readFile: mockState.readFile,
     },
     getConfiguration: () => ({
       get: (_key: string, defaultValue: boolean) => defaultValue,
@@ -92,6 +94,7 @@ describe('SketchEditorProvider AI context snapshot', () => {
     mockState.createdDirs.clear();
     mockState.deletedUris.clear();
     mockState.executeCommand.mockClear();
+    mockState.readFile.mockReset();
   });
 
   it('caches canvas and selection assets as fileUri refs', async () => {
@@ -302,6 +305,61 @@ describe('SketchEditorProvider AI context snapshot', () => {
           'Use Neko Sketch inpaint on the active sketch. Prompt: replace the sky Parameters: negativePrompt=low detail; strength=1; layerName=Sky fix',
       }),
     );
+  });
+
+  it('imports an image file asset into the active sketch webview', async () => {
+    const provider = createProvider({});
+    const postMessage = vi.fn(async () => true);
+    mockState.readFile.mockImplementationOnce(async () => Buffer.from('image-bytes'));
+    (provider as unknown as { activeWebviewPanel: unknown }).activeWebviewPanel = {
+      webview: { postMessage },
+    };
+
+    await provider.importFileAsset(
+      mockState.MockUri.file('/tmp/frame.png') as unknown as vscode.Uri,
+      {
+        name: 'Generated Frame',
+      },
+    );
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'file:imported',
+      name: 'Generated Frame',
+      data: Buffer.from('image-bytes').toString('base64'),
+      path: '/tmp/frame.png',
+    });
+  });
+
+  it('imports a queued file asset after the next sketch document loads', async () => {
+    const provider = createProvider({});
+    const postMessage = vi.fn(async () => true);
+    mockState.readFile
+      .mockImplementationOnce(async () => Buffer.from('{"layers":[]}'))
+      .mockImplementationOnce(async () => Buffer.from('queued-image'));
+    provider.queueFileImport(mockState.MockUri.file('/tmp/queued.png') as unknown as vscode.Uri, {
+      name: 'Queued',
+    });
+
+    await (
+      provider as unknown as {
+        handleWebviewMessage(
+          message: { type: string; [key: string]: unknown },
+          webviewPanel: unknown,
+          document: unknown,
+        ): Promise<void>;
+      }
+    ).handleWebviewMessage(
+      { type: 'ready' },
+      { webview: { postMessage } },
+      { uri: mockState.MockUri.file('/tmp/doc.nks') },
+    );
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'file:imported',
+      name: 'Queued',
+      data: Buffer.from('queued-image').toString('base64'),
+      path: '/tmp/queued.png',
+    });
   });
 });
 

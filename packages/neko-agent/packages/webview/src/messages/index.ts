@@ -9,7 +9,11 @@
  */
 
 import { getVSCodeAPI, postMessage as postRawMessage, type VSCodeAPI } from '@neko/shared/vscode';
-import type { SendMessageWebviewMessage, WebviewToExtensionMessage } from '@neko-agent/types';
+import type {
+  PluginTransferPayload,
+  SendMessageWebviewMessage,
+  WebviewToExtensionMessage,
+} from '@neko-agent/types';
 
 // Re-export for backward compatibility
 export { postRawMessage as postMessage, type VSCodeAPI };
@@ -340,9 +344,22 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'openUrl', url });
   },
 
-  /** Send an asset to another extension (canvas, cut, sketch) */
-  sendToPlugin: (target: string, assetPath: string, mediaType: string) => {
-    postWebviewMessage({ type: 'sendToPlugin', target, assetPath, mediaType });
+  /** Send generated content to another extension (canvas, cut, explorer). */
+  sendToPlugin: (
+    target: string,
+    assetPathOrPayload: string | PluginTransferPayload,
+    mediaType?: string,
+  ) => {
+    if (typeof assetPathOrPayload === 'string') {
+      postWebviewMessage({
+        type: 'sendToPlugin',
+        target,
+        assetPath: assetPathOrPayload,
+        ...(mediaType !== undefined ? { mediaType } : {}),
+      });
+      return;
+    }
+    postWebviewMessage({ type: 'sendToPlugin', target, payload: assetPathOrPayload });
   },
 
   /** Retry a failed background task */

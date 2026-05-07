@@ -240,6 +240,23 @@ export class PreviewPanel implements vscode.Disposable {
     }
 
     if (action === 'openCanvas') {
+      const binding = this.sceneStateStore.getCanvasBinding(sceneId, editor.document.uri);
+      if (binding?.canvasFileUri) {
+        const uri = vscode.Uri.parse(binding.canvasFileUri);
+        try {
+          await vscode.workspace.fs.stat(uri);
+          await vscode.commands.executeCommand('vscode.open', uri);
+          if (binding.canvasSceneNodeId) {
+            await vscode.commands.executeCommand(
+              'neko.canvas.selectNodeFromOutline',
+              binding.canvasSceneNodeId,
+            );
+          }
+          return;
+        } catch {
+          // Canvas file no longer exists, fall through to create new
+        }
+      }
       await vscode.commands.executeCommand('neko.canvas.new');
       return;
     }
@@ -289,9 +306,16 @@ export class PreviewPanel implements vscode.Disposable {
     }
 
     if (action === 'sendToCanvas') {
+      const canvasFileUri = findActiveCanvasFileUri();
       const importedScene = await this.sendSceneToCanvas(scriptIndex, scene);
       if (importedScene) {
-        this.sceneStateStore.recordCanvasImport(editor.document.uri, scriptIndex, importedScene);
+        this.sceneStateStore.recordCanvasImport(
+          editor.document.uri,
+          scriptIndex,
+          importedScene,
+          {},
+          canvasFileUri,
+        );
       } else {
         this.sceneStateStore.updateSceneState(editor.document.uri, scriptIndex, sceneId, {
           canvasStatus: 'sent',
@@ -463,6 +487,20 @@ export class PreviewPanel implements vscode.Disposable {
       }
     }
   }
+}
+
+function findActiveCanvasFileUri(): string | undefined {
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (
+        tab.input instanceof vscode.TabInputCustom &&
+        tab.input.viewType === 'neko.canvasEditor'
+      ) {
+        return tab.input.uri.toString();
+      }
+    }
+  }
+  return undefined;
 }
 
 function getNonce(): string {

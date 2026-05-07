@@ -364,13 +364,42 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
    * Forward a GeneratedAsset import to the active canvas webview (ADR-5 P0).
    * Returns false if no canvas editor is open.
    */
-  postImportAsset(asset: { path?: string; type?: string }): boolean {
+  postImportAsset(asset: { path?: string; type?: string; name?: string }): boolean {
     if (!this.activeWebviewPanel) return false;
+    const webviewAsset = this.toWebviewImportAsset(asset);
     this.activeWebviewPanel.webview.postMessage({
       type: 'importGeneratedAsset',
-      asset,
+      asset: webviewAsset,
     });
     return true;
+  }
+
+  private toWebviewImportAsset(asset: { path?: string; type?: string; name?: string }): {
+    path?: string;
+    type?: string;
+    name?: string;
+    originalPath?: string;
+  } {
+    if (!asset.path) return asset;
+    if (
+      asset.path.startsWith('http://') ||
+      asset.path.startsWith('https://') ||
+      asset.path.startsWith('blob:') ||
+      asset.path.includes('vscode-resource.vscode-cdn.net')
+    ) {
+      return asset;
+    }
+    if (!(asset.path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(asset.path))) {
+      return asset;
+    }
+
+    const webviewUri = this.activeWebviewPanel?.webview.asWebviewUri(vscode.Uri.file(asset.path));
+    if (!webviewUri) return asset;
+    return {
+      ...asset,
+      originalPath: asset.path,
+      path: webviewUri.toString(),
+    };
   }
 
   /**
