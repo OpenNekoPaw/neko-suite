@@ -65,7 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
   // Register Agent Capability Provider
   try {
     const provider = createNekoPuppetCapabilityProvider(api);
-    await vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
+    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
   } catch {
     // neko-agent not installed — silently skip
   }

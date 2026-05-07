@@ -82,10 +82,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Update status bar
   updateStatusBar('idle');
 
-  // Register agent capability provider (non-blocking — neko-agent may not be installed)
+  // Register agent capability provider (fire-and-forget — neko-agent may activate later)
   try {
     const provider = createEngineCapabilityProvider();
-    await vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
+    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
   } catch {
     // neko-agent not installed
   }

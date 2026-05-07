@@ -181,7 +181,7 @@ export async function activate(
   // Falls back silently if neko-agent is not installed.
   try {
     const capabilityProvider = createNekoCutCapabilityProvider(api, timelineBridge);
-    await vscode.commands.executeCommand('neko.agent.registerCapabilities', capabilityProvider);
+    void vscode.commands.executeCommand('neko.agent.registerCapabilities', capabilityProvider);
   } catch {
     // neko-agent not installed — capability registration silently skipped
   }

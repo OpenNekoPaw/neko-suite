@@ -33,6 +33,12 @@
     "neko.neko-preview"
   ],
   "activationEvents": [
+    "onCommand:neko.agent.registerCapabilities",
+    "onCommand:neko.agent.registerSlashCommands",
+    "onCommand:neko.agent.sendContext",
+    "onCommand:neko.agent.clearDndPayload",
+    "onCommand:neko.agent.rescanSkills",
+    "onCommand:neko.agent.refreshModels",
     "onInstallType:skill",
     "onInstallType:endpoint",
     "onInstallType:provider",
