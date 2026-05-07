@@ -36,6 +36,8 @@ export const en = {
   'animation.statusPlaying': 'Playing',
   'animation.statusPaused': 'Paused',
   'animation.statusStopped': 'Stopped',
+  'animation.fade': 'Fade',
+  'animation.unit': 's',
 
   // Transform panel
   'transform.noSelection': 'No node selected',
@@ -122,4 +124,43 @@ export const en = {
   'latency.moderate': 'Moderate latency, consider JPEG frame mode',
   'latency.high': 'High latency, recommend R3F dual rendering',
   'latency.footer': 'Measure Webview ↔ Rust engine round-trip time',
+
+  // Diagnostics panel
+  'diagnostics.title': 'Engine',
+  'diagnostics.scene': 'scene',
+  'diagnostics.topology': 'topology',
+  'diagnostics.appliedSeq': 'appliedSeq',
+  'diagnostics.predictions': 'predictions',
+  'diagnostics.session': 'session',
+  'diagnostics.quality': 'quality',
+  'diagnostics.ackP95': 'ack p95',
+  'diagnostics.patchBw': 'patch bw',
+  'diagnostics.gpuUpload': 'gpu upload',
+  'diagnostics.frameP95': 'frame p95',
+  'diagnostics.dropped': 'dropped',
+
+  // Error boundary
+  'error.title': 'Something went wrong',
+  'error.retry': 'Try again',
+
+  // Keyframe timeline
+  'keyframe.noTracks': 'No keyframe tracks',
+  'keyframe.selectClip': 'Select an animation clip',
+
+  // Sculpt brush
+  'sculpt.title': 'Sculpt Brush',
+  'sculpt.brush': 'Brush',
+  'sculpt.radius': 'Radius',
+  'sculpt.strength': 'Strength',
+  'sculpt.falloff': 'Falloff',
+  'sculpt.session': 'Session',
+  'sculpt.begin': 'Begin',
+  'sculpt.strokeSample': 'Stroke Sample',
+  'sculpt.commit': 'Commit',
+  'sculpt.cancel': 'Cancel',
+  'sculpt.selectMesh': 'Select a mesh',
+  'sculpt.engineUnavailable': 'Engine unavailable',
+  'sculpt.ready': 'Ready',
+  'sculpt.sessionInfo': 'Session {id}',
+  'sculpt.lastPatchSeq': 'Last patch seq {seq}',
 } satisfies MessageBundle;

@@ -4,6 +4,7 @@ import {
   VRM_EXPRESSION_LABELS,
   type VRMExpressionPreset,
 } from '../../types/vrmExpressions';
+import { useTranslation } from '../../i18n/I18nContext';
 
 interface ExpressionPresetPanelProps {
   onApplyExpression: (expression: VRMExpressionPreset, weight: number) => void;
@@ -27,6 +28,7 @@ export function ExpressionPresetPanel({
 }: ExpressionPresetPanelProps): React.JSX.Element {
   const [selectedExpression, setSelectedExpression] = useState<VRMExpressionPreset>('neutral');
   const controlsDisabled = disabled || !characterId;
+  const { t } = useTranslation();
 
   const handleApply = () => {
     onApplyExpression(selectedExpression, 1);
@@ -35,7 +37,7 @@ export function ExpressionPresetPanel({
   return (
     <div className="model-side-panel h-full w-64">
       <div className="model-panel-header">
-        <h2 className="model-title">VRM 表情预设</h2>
+        <h2 className="model-title">{t('expression.title')}</h2>
       </div>
 
       {controlsDisabled && (
@@ -81,11 +83,11 @@ export function ExpressionPresetPanel({
           disabled={controlsDisabled}
           className="model-btn-primary w-full text-sm"
         >
-          应用表情
+          {t('expression.apply')}
         </button>
       </div>
 
-      <div className="model-panel-footer text-xs">VRM 1.0 标准表情预设</div>
+      <div className="model-panel-footer text-xs">{t('expression.footer')}</div>
     </div>
   );
 }

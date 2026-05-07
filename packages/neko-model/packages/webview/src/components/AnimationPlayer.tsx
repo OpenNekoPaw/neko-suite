@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import type { AnimationClipInfo, PlaybackState } from '../types';
+import { useTranslation } from '../i18n/I18nContext';
 
 interface AnimationPlayerProps {
   clips: AnimationClipInfo[];
@@ -43,6 +44,8 @@ export function AnimationPlayer({
     [playbackState, activeClip, fadeDuration, onCrossfade, onSelectClip],
   );
 
+  const { t } = useTranslation();
+
   if (clips.length === 0) {
     return <></>;
   }
@@ -55,7 +58,7 @@ export function AnimationPlayer({
         onChange={(e) => handleClipChange(e.target.value)}
         disabled={disabled}
       >
-        <option value="">-- Select Animation --</option>
+        <option value="">{t('animation.selectPlaceholder')}</option>
         {clips.map((clip) => (
           <option key={clip.name} value={clip.name}>
             {clip.name} ({clip.duration.toFixed(2)}s)
@@ -68,7 +71,7 @@ export function AnimationPlayer({
         onClick={playbackState === 'playing' ? onPause : onPlay}
         disabled={disabled || !activeClip}
       >
-        {playbackState === 'playing' ? 'Pause' : 'Play'}
+        {playbackState === 'playing' ? t('animation.pause') : t('animation.play')}
       </button>
 
       <button
@@ -76,11 +79,11 @@ export function AnimationPlayer({
         onClick={onStop}
         disabled={disabled || !activeClip || playbackState === 'stopped'}
       >
-        Stop
+        {t('animation.stop')}
       </button>
 
       <label className="flex items-center gap-1 text-[var(--model-fg-secondary)]">
-        Fade
+        {t('animation.fade')}
         <input
           type="number"
           min={0}
@@ -91,16 +94,16 @@ export function AnimationPlayer({
           disabled={disabled}
           className="model-input w-12 px-1 py-0.5 text-center text-xs"
         />
-        s
+        {t('animation.unit')}
       </label>
 
       {activeClip && (
         <span className="ml-auto text-[var(--model-fg-secondary)]">
           {playbackState === 'playing'
-            ? 'Playing'
+            ? t('animation.statusPlaying')
             : playbackState === 'paused'
-              ? 'Paused'
-              : 'Stopped'}{' '}
+              ? t('animation.statusPaused')
+              : t('animation.statusStopped')}{' '}
           {activeClip}
         </span>
       )}

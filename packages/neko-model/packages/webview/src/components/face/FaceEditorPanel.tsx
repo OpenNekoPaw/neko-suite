@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { useTranslation } from '../../i18n/I18nContext';
 
 const logger = new ConsoleLogger('FaceEditorPanel', LogLevel.Info);
 import { FaceParameterCategory } from './FaceParameterCategory';
@@ -71,11 +72,12 @@ export function FaceEditorPanel({
     onSetMorph(name, value);
   };
   const controlsDisabled = disabled || !characterId;
+  const { t } = useTranslation();
 
   return (
     <div className="model-side-panel h-full w-64">
       <div className="model-panel-header">
-        <h2 className="model-title">面部编辑器</h2>
+        <h2 className="model-title">{t('face.title')}</h2>
       </div>
 
       <div className="model-panel-section flex gap-2">
@@ -84,20 +86,20 @@ export function FaceEditorPanel({
           disabled={controlsDisabled}
           className="model-btn-primary flex-1"
         >
-          随机
+          {t('face.random')}
         </button>
         <button
           onClick={handleReset}
           disabled={controlsDisabled}
           className="model-btn-secondary flex-1"
         >
-          重置
+          {t('face.reset')}
         </button>
       </div>
 
       <div className="model-panel-section">
         <button onClick={handleAIGenerate} className="model-btn-primary w-full">
-          AI 生成
+          {t('face.aiGenerate')}
         </button>
       </div>
 
@@ -114,7 +116,9 @@ export function FaceEditorPanel({
         ))}
       </div>
 
-      <div className="model-panel-footer text-xs">{FACE_PARAMETERS.length} 个参数</div>
+      <div className="model-panel-footer text-xs">
+        {t('face.paramCount', { count: FACE_PARAMETERS.length })}
+      </div>
     </div>
   );
 }

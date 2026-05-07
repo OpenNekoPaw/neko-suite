@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { postMessage } from '@neko/shared/vscode';
+import { useTranslation } from '../i18n/I18nContext';
 
 interface LatencyStats {
   min: number;
@@ -82,21 +83,23 @@ export function LatencyTester(): React.JSX.Element {
     setIsRunning(false);
   }, [calculateStats]);
 
+  const { t } = useTranslation();
+
   return (
     <div className="model-side-panel h-full w-64">
       <div className="model-panel-header">
-        <h2 className="model-title">延迟测试</h2>
+        <h2 className="model-title">{t('latency.title')}</h2>
       </div>
 
       <div className="model-panel-section">
         <button onClick={runTest} disabled={isRunning} className="model-btn-primary w-full text-sm">
-          {isRunning ? '测试中...' : '开始测试 (100 次)'}
+          {isRunning ? t('latency.testing') : t('latency.start')}
         </button>
       </div>
 
       {currentRtt !== null && (
         <div className="model-panel-section">
-          <div className="text-xs text-[var(--model-fg-secondary)]">当前 RTT</div>
+          <div className="text-xs text-[var(--model-fg-secondary)]">{t('latency.currentRtt')}</div>
           <div className="text-2xl font-mono text-[var(--model-fg)]">
             {currentRtt.toFixed(2)} ms
           </div>
@@ -106,49 +109,51 @@ export function LatencyTester(): React.JSX.Element {
       {stats && (
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
           <div>
-            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">最小值</div>
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">{t('latency.min')}</div>
             <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.min.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">最大值</div>
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">{t('latency.max')}</div>
             <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.max.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">平均值</div>
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">{t('latency.avg')}</div>
             <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.avg.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">P95</div>
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">{t('latency.p95')}</div>
             <div className="text-lg font-mono text-[var(--model-fg)]">
               {stats.p95.toFixed(2)} ms
             </div>
           </div>
 
           <div>
-            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">样本数</div>
+            <div className="mb-1 text-xs text-[var(--model-fg-secondary)]">
+              {t('latency.samples')}
+            </div>
             <div className="text-lg font-mono text-[var(--model-fg)]">{stats.samples.length}</div>
           </div>
 
           <div className="model-quote mt-4 p-2">
             <div className="text-xs text-[var(--model-fg)]">
-              {stats.avg < 15 && '✅ 延迟优秀，H.264 流方案足够'}
-              {stats.avg >= 15 && stats.avg < 30 && '⚠️ 延迟中等，考虑 JPEG 单帧模式'}
-              {stats.avg >= 30 && '❌ 延迟较高，建议 R3F 双渲染'}
+              {stats.avg < 15 && t('latency.excellent')}
+              {stats.avg >= 15 && stats.avg < 30 && t('latency.moderate')}
+              {stats.avg >= 30 && t('latency.high')}
             </div>
           </div>
         </div>
       )}
 
-      <div className="model-panel-footer text-xs">测量 Webview ↔ Rust 引擎往返时间</div>
+      <div className="model-panel-footer text-xs">{t('latency.footer')}</div>
     </div>
   );
 }

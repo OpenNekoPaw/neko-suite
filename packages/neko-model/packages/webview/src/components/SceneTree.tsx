@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SceneNodeSnapshot } from '../types';
+import { useTranslation } from '../i18n/I18nContext';
 
 interface SceneTreeProps {
   nodes: SceneNodeSnapshot[];
@@ -15,13 +16,14 @@ export function SceneTree({
   selectedNodeId,
   onSelectNode,
 }: SceneTreeProps): React.JSX.Element {
+  const { t } = useTranslation();
   // Build tree structure
   const rootNodes = nodes.filter((n) => !n.parentId);
 
   return (
     <div className="model-tree-panel w-52 overflow-y-auto text-xs">
       <div className="border-b border-[var(--model-divider)] p-2 font-semibold text-[var(--model-fg)]">
-        Scene
+        {t('sceneTree.title')}
       </div>
       <div className="p-1">
         {rootNodes.map((node) => (

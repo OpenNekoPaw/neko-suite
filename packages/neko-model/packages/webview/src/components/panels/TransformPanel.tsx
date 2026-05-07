@@ -3,6 +3,13 @@ import type { SceneNodeSnapshot, TransformMode } from '../../types';
 import { MODEL_COMPONENT_SCHEMA_REGISTRY } from '../../scene/ComponentSchemaRegistry';
 import type { ComponentFieldSchema } from '../../scene/ComponentSchemaRegistry';
 import type { EditableNodeTransform } from '../../scene/SceneEditingTypes';
+import { useTranslation } from '../../i18n/I18nContext';
+
+const MODE_I18N_KEY: Record<TransformMode, string> = {
+  translate: 'transform.translate',
+  rotate: 'transform.rotate',
+  scale: 'transform.scaleMode',
+};
 
 export type { EditableNodeTransform } from '../../scene/SceneEditingTypes';
 
@@ -27,6 +34,7 @@ export function TransformPanel({
   onTransformCommit,
   disabled = false,
 }: TransformPanelProps): React.JSX.Element {
+  const { t } = useTranslation();
   const [draftTransform, setDraftTransform] = React.useState<EditableNodeTransform>(() =>
     toNodeTransform(node),
   );
@@ -38,7 +46,7 @@ export function TransformPanel({
   if (!node) {
     return (
       <div className="model-side-panel w-56 items-center justify-center px-4 text-center text-xs text-[var(--model-fg-secondary)]">
-        No node selected
+        {t('transform.noSelection')}
       </div>
     );
   }
@@ -65,7 +73,7 @@ export function TransformPanel({
       </div>
 
       <div className="model-panel-section">
-        <div className="mb-1 font-semibold text-[var(--model-fg)]">Transform Mode</div>
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">{t('transform.mode')}</div>
         <div className="flex gap-1">
           {(['translate', 'rotate', 'scale'] as const).map((mode) => (
             <button
@@ -75,14 +83,14 @@ export function TransformPanel({
               }`}
               onClick={() => onTransformModeChange(mode)}
             >
-              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              {t(MODE_I18N_KEY[mode])}
             </button>
           ))}
         </div>
       </div>
 
       <div className="model-panel-section">
-        <div className="mb-1 font-semibold text-[var(--model-fg)]">Position</div>
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">{t('transform.position')}</div>
         <div className="grid grid-cols-3 gap-1">
           <PropertyField
             label="X"
@@ -109,7 +117,7 @@ export function TransformPanel({
       </div>
 
       <div className="model-panel-section">
-        <div className="mb-1 font-semibold text-[var(--model-fg)]">Rotation (XYZW)</div>
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">{t('transform.rotation')}</div>
         <div className="grid grid-cols-2 gap-1">
           <PropertyField
             label="X"
@@ -143,7 +151,7 @@ export function TransformPanel({
       </div>
 
       <div className="p-2">
-        <div className="mb-1 font-semibold text-[var(--model-fg)]">Scale</div>
+        <div className="mb-1 font-semibold text-[var(--model-fg)]">{t('transform.scale')}</div>
         <div className="grid grid-cols-3 gap-1">
           <PropertyField
             label="X"
@@ -171,10 +179,10 @@ export function TransformPanel({
 
       <div className="model-panel-footer text-[10px]">
         <div className="flex flex-wrap gap-2">
-          {(node.kind === 'mesh' || node.mesh) && <span>Mesh</span>}
-          {node.kind === 'light' && <span>Light</span>}
-          {node.kind === 'camera' && <span>Camera</span>}
-          {node.kind === 'skeleton' && <span>Skeleton</span>}
+          {(node.kind === 'mesh' || node.mesh) && <span>{t('transform.mesh')}</span>}
+          {node.kind === 'light' && <span>{t('transform.light')}</span>}
+          {node.kind === 'camera' && <span>{t('transform.camera')}</span>}
+          {node.kind === 'skeleton' && <span>{t('transform.skeleton')}</span>}
         </div>
       </div>
     </div>

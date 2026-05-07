@@ -8,6 +8,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { KeyframeTimeline } from '@neko/shared/components';
 import type { EasingType } from '@neko/shared';
+import { useTranslation } from '../i18n/I18nContext';
 import { useModelStore } from '../stores/modelStore';
 
 export interface ModelKeyframeTimelineProps {
@@ -24,6 +25,7 @@ export function ModelKeyframeTimeline({
   onSeek,
   onKeyframeMutation,
 }: ModelKeyframeTimelineProps): React.JSX.Element {
+  const { t } = useTranslation();
   const keyframeTracks = useModelStore((s) => s.keyframeTracks);
   const currentTimeMs = useModelStore((s) => s.currentTimeMs);
   const selectedKeyframeIds = useModelStore((s) => s.selectedKeyframeIds);
@@ -120,7 +122,7 @@ export function ModelKeyframeTimeline({
   if (keyframeTracks.length === 0) {
     return (
       <div className="p-2 text-xs opacity-40 text-center">
-        {activeAnimation ? 'No keyframe tracks' : 'Select an animation clip'}
+        {activeAnimation ? t('keyframe.noTracks') : t('keyframe.selectClip')}
       </div>
     );
   }

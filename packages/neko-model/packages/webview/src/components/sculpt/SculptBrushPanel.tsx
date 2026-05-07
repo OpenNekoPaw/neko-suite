@@ -6,6 +6,7 @@ import {
   modelingWebSocketUrl,
   type SculptBrushSettings,
 } from '../../scene/SculptBrushWorkflow';
+import { useTranslation } from '../../i18n/I18nContext';
 
 interface SculptBrushPanelProps {
   disabled?: boolean;
@@ -48,12 +49,13 @@ export function SculptBrushPanel({
   const clientRef = useRef<VertexBrushPatchClient | null>(null);
   const controllerRef = useRef<SculptBrushStrokeController | null>(null);
 
+  const { t } = useTranslation();
   const canEdit = !disabled && enginePort !== null && selectedNodeId !== null;
   const status = useMemo(() => {
-    if (!selectedNodeId) return 'Select a mesh';
-    if (!enginePort) return 'Engine unavailable';
-    return sessionId ? `Session ${sessionId}` : 'Ready';
-  }, [enginePort, selectedNodeId, sessionId]);
+    if (!selectedNodeId) return t('sculpt.selectMesh');
+    if (!enginePort) return t('sculpt.engineUnavailable');
+    return sessionId ? t('sculpt.sessionInfo', { id: sessionId }) : t('sculpt.ready');
+  }, [enginePort, selectedNodeId, sessionId, t]);
 
   const beginSession = useCallback(() => {
     if (!canEdit || enginePort === null || !selectedNodeId) return;
@@ -136,14 +138,14 @@ export function SculptBrushPanel({
   return (
     <div className="model-side-panel h-full w-64">
       <div className="model-panel-header">
-        <h2 className="model-title">Sculpt Brush</h2>
+        <h2 className="model-title">{t('sculpt.title')}</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="model-panel-section">
-          <div className="model-section-title mb-2">Brush</div>
+          <div className="model-section-title mb-2">{t('sculpt.brush')}</div>
           <BrushSlider
-            label="Radius"
+            label={t('sculpt.radius')}
             min={1}
             max={64}
             step={1}
@@ -151,7 +153,7 @@ export function SculptBrushPanel({
             onChange={(radius) => setSettings((prev) => ({ ...prev, radius }))}
           />
           <BrushSlider
-            label="Strength"
+            label={t('sculpt.strength')}
             min={0}
             max={1}
             step={0.01}
@@ -159,7 +161,7 @@ export function SculptBrushPanel({
             onChange={(strength) => setSettings((prev) => ({ ...prev, strength }))}
           />
           <BrushSlider
-            label="Falloff"
+            label={t('sculpt.falloff')}
             min={0}
             max={1}
             step={0.01}
@@ -169,33 +171,33 @@ export function SculptBrushPanel({
         </div>
 
         <div className="model-panel-section">
-          <div className="model-section-title mb-2">Session</div>
+          <div className="model-section-title mb-2">{t('sculpt.session')}</div>
           <div className="mb-2 text-[11px] text-[var(--model-fg-secondary)]">{status}</div>
           <button
             className="model-btn-primary mb-2 w-full"
             disabled={!canEdit || sessionId !== null}
             onClick={beginSession}
           >
-            Begin
+            {t('sculpt.begin')}
           </button>
           <button
             className="model-btn-secondary mb-2 w-full"
             disabled={!sessionId}
             onClick={sampleStroke}
           >
-            Stroke Sample
+            {t('sculpt.strokeSample')}
           </button>
           <div className="grid grid-cols-2 gap-2">
             <button className="model-btn-primary" disabled={!sessionId} onClick={commitSession}>
-              Commit
+              {t('sculpt.commit')}
             </button>
             <button className="model-btn-secondary" disabled={!sessionId} onClick={cancelSession}>
-              Cancel
+              {t('sculpt.cancel')}
             </button>
           </div>
           {lastStrokeSeq !== null && (
             <div className="mt-2 text-[11px] text-[var(--model-fg-secondary)]">
-              Last patch seq {lastStrokeSeq}
+              {t('sculpt.lastPatchSeq', { seq: lastStrokeSeq })}
             </div>
           )}
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useTranslation } from '../../i18n/I18nContext';
 
 interface TextEditorPanelProps {
   disabled?: boolean;
@@ -18,6 +19,8 @@ export function TextEditorPanel({
   const [fontSize, setFontSize] = useState(48);
   const [extrusionDepth, setExtrusionDepth] = useState(0.5);
 
+  const { t } = useTranslation();
+
   const handleCreate = useCallback(() => {
     if (!text.trim()) return;
     onCreateText(text.trim(), fontSize, extrusionDepth);
@@ -26,25 +29,25 @@ export function TextEditorPanel({
   return (
     <div className="model-side-panel h-full w-64">
       <div className="model-panel-header">
-        <h2 className="model-title">Text Mesh</h2>
+        <h2 className="model-title">{t('textMesh.title')}</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="model-panel-section">
-          <div className="model-section-title mb-1">Text</div>
+          <div className="model-section-title mb-1">{t('textMesh.text')}</div>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             disabled={disabled}
             rows={3}
             className="model-input min-h-[4.5rem] resize-none"
-            placeholder="Enter text..."
+            placeholder={t('textMesh.placeholder')}
           />
         </div>
 
         <div className="model-panel-section">
           <div className="flex items-center justify-between mb-1">
-            <span className="model-section-title">Font Size</span>
+            <span className="model-section-title">{t('textMesh.fontSize')}</span>
             <span className="text-[10px] text-[var(--model-fg-secondary)]">{fontSize}</span>
           </div>
           <input
@@ -61,7 +64,7 @@ export function TextEditorPanel({
 
         <div className="model-panel-section">
           <div className="flex items-center justify-between mb-1">
-            <span className="model-section-title">Extrusion Depth</span>
+            <span className="model-section-title">{t('textMesh.depth')}</span>
             <span className="text-[10px] text-[var(--model-fg-secondary)]">
               {extrusionDepth.toFixed(2)}
             </span>
@@ -84,7 +87,7 @@ export function TextEditorPanel({
             disabled={disabled || !text.trim()}
             className="model-btn-primary w-full"
           >
-            Create Text Mesh
+            {t('textMesh.create')}
           </button>
         </div>
       </div>

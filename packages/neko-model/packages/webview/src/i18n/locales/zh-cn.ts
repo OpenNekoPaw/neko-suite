@@ -36,6 +36,8 @@ export const zhCN = {
   'animation.statusPlaying': '播放中',
   'animation.statusPaused': '已暂停',
   'animation.statusStopped': '已停止',
+  'animation.fade': '淡入淡出',
+  'animation.unit': '秒',
 
   // Transform panel
   'transform.noSelection': '未选择节点',
@@ -122,4 +124,43 @@ export const zhCN = {
   'latency.moderate': '⚠️ 延迟中等，考虑 JPEG 单帧模式',
   'latency.high': '❌ 延迟较高，建议 R3F 双渲染',
   'latency.footer': '测量 Webview ↔ Rust 引擎往返时间',
+
+  // Diagnostics panel
+  'diagnostics.title': '引擎',
+  'diagnostics.scene': '场景',
+  'diagnostics.topology': '拓扑',
+  'diagnostics.appliedSeq': '已应用序列',
+  'diagnostics.predictions': '预测',
+  'diagnostics.session': '会话',
+  'diagnostics.quality': '质量',
+  'diagnostics.ackP95': '确认 p95',
+  'diagnostics.patchBw': '补丁带宽',
+  'diagnostics.gpuUpload': 'GPU 上传',
+  'diagnostics.frameP95': '帧 p95',
+  'diagnostics.dropped': '丢弃',
+
+  // Error boundary
+  'error.title': '出现错误',
+  'error.retry': '重试',
+
+  // Keyframe timeline
+  'keyframe.noTracks': '无关键帧轨道',
+  'keyframe.selectClip': '请选择动画片段',
+
+  // Sculpt brush
+  'sculpt.title': '雕刻笔刷',
+  'sculpt.brush': '笔刷',
+  'sculpt.radius': '半径',
+  'sculpt.strength': '强度',
+  'sculpt.falloff': '衰减',
+  'sculpt.session': '会话',
+  'sculpt.begin': '开始',
+  'sculpt.strokeSample': '笔画采样',
+  'sculpt.commit': '提交',
+  'sculpt.cancel': '取消',
+  'sculpt.selectMesh': '请选择网格',
+  'sculpt.engineUnavailable': '引擎不可用',
+  'sculpt.ready': '就绪',
+  'sculpt.sessionInfo': '会话 {id}',
+  'sculpt.lastPatchSeq': '最后补丁序列 {seq}',
 } satisfies MessageBundle;

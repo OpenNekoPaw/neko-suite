@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { PHONEME_ROTATIONS, type Phoneme } from '../../types/boneExpression';
+import { useTranslation } from '../../i18n/I18nContext';
 
 const PHONEMES: Phoneme[] = ['A', 'I', 'U', 'E', 'O', 'silent'];
 
@@ -29,6 +30,7 @@ export function BoneExpressionPanel({
   const eyeTrackRef = useRef<HTMLDivElement>(null);
 
   const controlsDisabled = disabled || !characterId;
+  const { t } = useTranslation();
 
   const handlePhonemeClick = useCallback(
     (phoneme: Phoneme) => {
@@ -101,12 +103,12 @@ export function BoneExpressionPanel({
   return (
     <div className="model-side-panel h-full w-64">
       <div className="model-panel-header">
-        <h2 className="model-title">Bone Expression</h2>
+        <h2 className="model-title">{t('bone.title')}</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         <div className="model-panel-section">
-          <div className="model-section-title mb-2">Lip Sync</div>
+          <div className="model-section-title mb-2">{t('bone.lipSync')}</div>
           <div className="grid grid-cols-3 gap-1">
             {PHONEMES.map((p) => (
               <button
@@ -124,7 +126,7 @@ export function BoneExpressionPanel({
         </div>
 
         <div className="model-panel-section">
-          <div className="model-section-title mb-2">Eye Tracking</div>
+          <div className="model-section-title mb-2">{t('bone.eyeTracking')}</div>
           <div
             ref={eyeTrackRef}
             onMouseMove={handleEyeTrack}
@@ -140,28 +142,28 @@ export function BoneExpressionPanel({
             </div>
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="text-[10px] text-[var(--model-fg-secondary)] opacity-70">
-                Move mouse
+                {t('bone.moveMouse')}
               </span>
             </div>
           </div>
         </div>
 
         <div className="px-3 py-2">
-          <div className="model-section-title mb-2">Eyebrow</div>
+          <div className="model-section-title mb-2">{t('bone.eyebrow')}</div>
           <EyebrowSlider
-            label="Raise"
+            label={t('bone.raise')}
             value={eyebrowRaise}
             onChange={(v) => handleEyebrowChange('raise', v)}
             disabled={controlsDisabled}
           />
           <EyebrowSlider
-            label="Lower"
+            label={t('bone.lower')}
             value={eyebrowLower}
             onChange={(v) => handleEyebrowChange('lower', v)}
             disabled={controlsDisabled}
           />
           <EyebrowSlider
-            label="Furrow"
+            label={t('bone.furrow')}
             value={eyebrowFurrow}
             onChange={(v) => handleEyebrowChange('furrow', v)}
             disabled={controlsDisabled}
