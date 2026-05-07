@@ -457,37 +457,48 @@ window.addEventListener('drop', e => {
 
 ### 6.1 预览分层架构
 
-#### 两层预览（不合并）
+#### 两层预览（职责分离，流客户端共享）
 
 ```
 Layer 1：neko-preview（完整流媒体播放应用）
-  ├── VideoPlayer  ← H264StreamClient + WebCodecs + FrameScheduler + PiP
+  ├── VideoPlayer  ← H264StreamClient + WebCodecs + FrameScheduler + PiP + Seek + 字幕
   └── AudioPlayer  ← AudioStreamClient (PCM over WebSocket) + 波形 + 歌词 + 频谱
-  以 CustomReadonlyEditorProvider 打开，独立编辑器面板，依赖 @neko/neko-client
+  以 CustomReadonlyEditorProvider 打开，独立编辑器面板
+  完整播放控制（时间轴 scrub / seek / PiP / 全屏）
 
-Layer 2：neko-agent MediaPreview（生成结果展示卡片）
+Layer 2：neko-agent MediaPreview（生成结果确认卡片，两态模型）
   ├── ImagePreview  ← <img>，折叠卡片，点击在 VSCode 中打开
-  ├── VideoCard     ← poster 图 + 时长 badge，点击 → neko-preview
-  └── AudioCard     ← 波形占位 + 时长 badge，点击 → neko-preview
-  嵌入 Chat 对话中，委托播放给 Layer 1
-  元数据（poster/波形/时长）由 extension host 从 engine 获取后传入
+  ├── VideoCard     ← [Idle] poster + 时长 badge | [Active] InlineChatPlayer 内联播放
+  └── AudioCard     ← [Idle] 波形占位 + 时长 badge | [Active] InlineChatPlayer 内联播放
+  嵌入 Chat 对话中，仅 play/stop（无 seek/scrub）
+  专业播放仍委托 Layer 1（点击"在预览中打开"按钮）
+
+两层共享 @neko/neko-client（H264StreamClient + AudioStreamClient + FrameScheduler）
 ```
 
-不合并理由：
-- 两个 webview 是独立 Vite 构建（不同 bundle entry），React 组件无法跨包共享
-- Layer 1 核心逻辑（WebCodecs/PCM 流）与 Layer 2（静态卡片）之间无可复用业务逻辑
-- 强行共享会引入 VSCode 沙箱依赖管理问题
+职责分离而非隔离：
+- 两个 webview 是独立 Vite 构建（不同 bundle entry），React 组件不跨包共享
+- 但流客户端（`@neko/neko-client`）是纯 TS 库（零 vscode 依赖），可被任意 webview 安全引入
+- Layer 2 只做 play/stop 确认；专业功能（seek / scrub / PiP / 字幕 / 频谱）属于 Layer 1
 
 #### 音视频引擎约束
 
-**关键约束**：VSCode webview 沙箱对 `<audio>`/`<video>` 格式支持有限，为保证兼容性，所有音视频播放统一走 neko-engine（H264 + PCM 流式传输）。
+**关键约束**：VSCode webview 沙箱对 DOM `<audio>`/`<video>` 元素的编解码能力有限（Electron 不一定内置所有编解码器）。因此 **禁止使用 DOM `<video>`/`<audio>` 元素**——包括用 `<video>` 取 poster、用 `<audio controls>` 播放。
+
+**允许的播放路径**：通过 `@neko/neko-client` 的 WebCodecs + Web Audio API 路径，该路径完全绕过 DOM 元素的编解码限制：
+- H264StreamClient：WebSocket 接收 NAL 单元 → WebCodecs `VideoDecoder`（硬件加速 H.264 解码）→ `VideoFrame` → Canvas 2D `drawImage`
+- AudioStreamClient：WebSocket 接收 PCM f32le → Web Audio API `AudioBuffer`（无编解码步骤）
+
+此路径已在 neko-canvas（InlineMediaPlayer）、neko-model（SceneControlSocket）、neko-preview（VideoPlayer/AudioPlayer）中验证。
 
 **影响**：
-- Layer 2 **不能**使用 `<video>` 取 poster、不能用 `<audio controls>` 播放
-- Layer 2 展示所需的元数据（poster 帧、波形、时长、分辨率）全部由 extension host 侧通过 EngineClient 获取
+- Layer 2 **不能**使用 DOM `<video>` 取 poster、不能用 `<audio controls>` 播放
+- Layer 2 **可以**通过 neko-client WebCodecs + PCM 路径实现内联播放（play/stop 确认，无 seek/scrub）
+- Layer 2 的 Idle 态元数据（poster 帧、波形、时长、分辨率）全部由 extension host 侧通过 EngineClient 获取
 - 音视频文件必须先下载到本地磁盘，然后以文件路径传给 engine
+- 同一时刻仅允许一个 Active 播放卡片（与 neko-canvas 相同策略）
 
-**修正后的数据流**：
+**数据流**：
 
 ```
 AI 生成音视频
@@ -501,7 +512,7 @@ extension host 调用 EngineClient（通过 neko-preview API 或直接 dispatch�
   ↓
 extension host 构造元数据 JSON：
   {
-    posterUri: webview.asWebviewUri(posterPath),  // 或 data:image base64
+    posterUri: webview.asWebviewUri(posterPath),
     duration: 12.5,
     resolution: { width: 1920, height: 1080 },
     waveformPeaks: Float32Array,
@@ -510,26 +521,47 @@ extension host 构造元数据 JSON：
   ↓
 postMessage 传给 webview（纯 JSON，无二进制）
   ↓
-Chat webview 渲染静态卡片：
-  ├─ VideoCard: poster 图 + 时长 + 分辨率 badge + 点击→neko-preview
-  └─ AudioCard: 波形占位图 + 时长 badge + 点击→neko-preview
+Chat webview 渲染 Idle 态卡片：
+  ├─ VideoCard: poster 图 + 时长 + 分辨率 badge
+  └─ AudioCard: 波形占位图 + 时长 badge
   ↓
-用户点击 → postMessage('openFile', { filePath })
+用户点击播放 → postMessage('media:play', { filePath })
+  ↓
+extension host：
+  ├─ api = getExtension<NekoPreviewAPI>('neko.neko-preview')?.exports
+  ├─ streamIds = await api.startPlayback(filePath, mediaInfo)
+  └─ wsUrls = api.getStreamWebSocketUrl(streamIds)
+  ↓
+postMessage('media:streamReady', { videoWsUrl, audioWsUrl })
+  ↓
+Agent webview InlineChatPlayer (Active 态)：
+  ├─ H264StreamClient.connect(videoWsUrl) → WebCodecs decode → <canvas> drawImage
+  └─ AudioStreamClient.connect(audioWsUrl) → PCM → Web Audio API
+  ├─ FrameScheduler 同步视频帧到 audio master clock
+  └─ 仅 play/stop 控制（无 seek/scrub）
+  ↓
+用户点击停止 / 播放结束 → disconnect streams → 回到 Idle 态（poster 图）
+  ↓
+用户点击"在预览中打开" → postMessage('openFile', { filePath })
   ↓
 extension host → vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview')
   ↓
-neko-preview 独立面板：probe → stream → H264/PCM WebSocket 播放
+neko-preview 独立面板：完整播放控制（seek / scrub / PiP / 字幕 / 频谱）
 ```
+
+**降级开关**：`ablation:agent-inline-playback`（默认 on）。关闭时 Layer 2 退化为纯 Idle 态卡片 + 点击委托 neko-preview，与之前行为一致。
 
 #### 组件显示模式（修正后）
 
 | 组件 | 展开模式（默认） | inline 模式（TaskCard 内用） |
 |------|-----------------|------------------------------|
 | `ImagePreview` | 折叠卡片 + `<img>` | 纯 `<img>` |
-| `VideoCard` | 折叠卡片 + poster 图（engine 提供）+ 时长/分辨率 badge + 点击→neko-preview | 紧凑 poster + 点击→neko-preview |
-| `AudioCard` | 折叠卡片 + 波形占位（engine 提供）+ 时长 badge + 点击→neko-preview | 波形图标 + 时长 + 点击→neko-preview |
+| `VideoCard` | 折叠卡片 + poster + 时长/分辨率 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview | 紧凑 poster + 点击 ▶ 内联播放 |
+| `AudioCard` | 折叠卡片 + 波形占位 + 时长 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview | 波形图标 + 时长 + 点击 ▶ 内联播放 |
 
-三个组件的 inline/展开模式**行为一致**：均为静态展示 + 点击委托 neko-preview，消除了原来 AudioCard inline 使用 `<audio controls>` 的不一致。
+三个组件的 inline/展开模式**行为一致**：Idle 态静态展示，Active 态 neko-client 内联播放（play/stop），专业查看委托 neko-preview。消除了原来 AudioCard inline 使用 `<audio controls>` 的不一致。
+
+`InlineChatPlayer` 是 agent webview 的内联播放组件，复用 `@neko/neko-client` 的 H264StreamClient + AudioStreamClient + FrameScheduler。与 neko-canvas 的 `InlineMediaPlayer` 共享流客户端但不共享 React 组件（独立 Vite 构建）。如两者实现大幅趋同，后续可提取共享播放逻辑到 `@neko/neko-client` 导出的 headless controller。
 
 #### 重命名
 

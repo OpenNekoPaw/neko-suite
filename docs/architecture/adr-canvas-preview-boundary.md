@@ -2,11 +2,14 @@
 
 - **Status**: Proposed
 - **Date**: 2026-05-07
-- **Scope**: neko-canvas, neko-preview, neko-model
+- **Scope**: neko-canvas, neko-preview, neko-model, neko-agent
+- **Refines**: `adr-panoramic-image-preview.md` q2 reuse decision (line 378) and NFR reusability (line 140)
 
 ## Context
 
 neko-canvas is an infinite canvas editor serving as the semantic orchestration hub of neko-suite. As the project adds richer asset types (3D models, 2D skeletal rigs, panoramic images, HDR environment maps), the question arises: which preview capabilities belong in the canvas, and which should be delegated to specialized extensions?
+
+A secondary question arises for neko-agent: when the AI assistant generates, retrieves, or compares rich media assets (including panoramic/HDR content), what level of inline preview should the chat UI provide?
 
 ## Decision
 
@@ -55,7 +58,8 @@ All canvas nodes follow the same interaction pattern:
 
 | Plugin | Role | Panoramic/HDR | 3D Model | 2D Skeletal | Video/Audio |
 |--------|------|---------------|----------|-------------|-------------|
-| **neko-canvas** | Orchestration | Flat thumbnail | Static screenshot | Static pose | DOM `<video>`/`<audio>` |
+| **neko-canvas** | Orchestration | Flat equirectangular thumbnail | Static screenshot | Static pose | DOM `<video>`/`<audio>` |
+| **neko-agent** | AI assistant | Center-crop 90° FOV thumbnail | Static screenshot | Static pose | Poster/waveform (idle) or neko-client inline playback (active) |
 | **neko-preview** | Professional viewing | Spherical WebGL viewer + HDR tone mapping | - | - | Streaming playback |
 | **neko-model** | 3D editing | IBL environment map (skybox) | R3F 3D viewport | - | - |
 | **neko-puppet** | 2D skeletal editing | - | - | Full skeletal animation editor | - |
@@ -70,9 +74,145 @@ neko-canvas (thumbnail)
   ├── double-click .glb → neko-model (3D editor)
   ├── double-click .mp4 → neko-preview (video playback)
   └── double-click .puppet → neko-puppet (skeletal editor)
+
+neko-agent (chat media card)
+  ├── click .hdr → neko-preview (spherical viewer)
+  ├── click .glb → neko-model (3D editor)
+  ├── click .mp4 → neko-preview (video playback)
+  └── "Send to Canvas" → neko-canvas (create node)
 ```
 
-Direction is always **canvas → specialized plugin**. No specialized plugin depends on canvas for preview. No cross-extension dependencies (enforced by `dependency-cruiser` rule `no-cross-extension-deps`).
+Direction is always **canvas/agent → specialized plugin**. No specialized plugin depends on canvas or agent for preview. No cross-extension dependencies (enforced by `dependency-cruiser` rule `no-cross-extension-deps`).
+
+#### Delegation Mechanisms (Exhaustive List)
+
+Cross-plugin delegation must not introduce import-level dependencies. The only permitted mechanisms are:
+
+| Mechanism | When to use | Example |
+|-----------|-------------|---------|
+| `vscode.commands.executeCommand(id, ...args)` | Fire-and-forget actions, opening editors | `neko.preview.openPanoramic`, `neko.model.setEnvironment` |
+| `vscode.commands.executeCommand('vscode.openWith', uri, viewType)` | Open a file in a specific custom editor | Open `.hdr` in `neko.preview.panoramic` |
+| `vscode.extensions.getExtension<API>(id)?.exports` | Query capabilities or call methods with return values | `NekoPreviewAPI.probeMedia(path)` |
+| Shared types in `@neko/shared` | Type contracts consumed by multiple extensions | `ImageProbeInfo`, `MediaInfo`, `projectionType` |
+| Shared protobuf in `@neko/proto` | Engine communication contracts | Proto DTOs for engine actions |
+
+**Prohibited**:
+- Direct `import` from another extension's package (violates `no-cross-extension-deps`)
+- Passing live objects (class instances, callbacks) across extension boundaries — use serializable data only
+- Defining shared contracts inside a specific extension package — move to `@neko/shared` or `@neko/proto`
+
+### neko-agent Preview Boundary
+
+neko-agent is a **conversational interface**, not a spatial editor. Users consume text + result references; media previews serve one purpose: **confirm whether a generated/retrieved asset is correct without leaving the chat**.
+
+Agent's core loop is **generate → confirm → iterate**. Every context switch (chat → preview panel → chat) adds friction to this loop. Therefore agent supports **inline playback** for video/audio via `@neko/neko-client` (WebCodecs + PCM), allowing users to confirm results without leaving the conversation.
+
+#### Two-state card model
+
+Each media card has two states:
+
+```
+[Idle]   Engine-provided poster/waveform + metadata badges (pure <img>, lightweight)
+            ↓ user clicks play
+[Active]  neko-client inline playback (H264StreamClient + AudioStreamClient + FrameScheduler)
+            ↓ user clicks stop / playback ends / another card starts
+[Idle]   Returns to poster (resources released)
+```
+
+Only **one** card can be Active at a time (same constraint as canvas). Idle cards are identical to the former static-only design — zero streaming overhead in chat history scrolling.
+
+#### Agent CAN do
+
+| Asset Type | Idle state | Active state (click to play) | Implementation |
+|------------|------------|------------------------------|----------------|
+| Raster image | Thumbnail (ImagePreview) | — (click opens in VSCode) | `<img>` tag |
+| GIF / Animated image | Animated thumbnail | — (click opens in VSCode) | `<img>` native |
+| Video | Engine-provided poster + duration badge | **Inline H.264 playback** via neko-client | `<img>` idle → `<canvas>` + H264StreamClient active |
+| Audio | Engine-provided waveform + duration badge | **Inline PCM playback** via neko-client | `<img>` idle → AudioStreamClient + waveform animation active |
+| Panoramic image | Center-crop 90° FOV thumbnail | Engine pre-rendered rotation GIF | Engine `image:crop-fov` → `<img>`; turntable via `<img src="*.gif">` |
+| 3D Model | Static screenshot | Engine pre-rendered turntable GIF | Engine offline render → `<img src="*.gif">` |
+| 2D Skeletal | Static pose screenshot | Engine pre-rendered animation GIF | Engine offline render → `<img src="*.gif">` |
+| 360° Video | Engine-provided poster + duration badge | **Inline H.264 playback** (flat, not spherical) | Same as Video |
+
+**Constraint**: DOM `<video>` / `<audio>` elements remain prohibited — VSCode webview sandbox has limited codec support. All playback uses neko-client's WebCodecs (H.264 hardware decode → VideoFrame → Canvas 2D `drawImage`) and Web Audio API (PCM f32le → AudioBuffer), which bypass native codec limitations entirely.
+
+**Toggle**: `ablation:agent-inline-playback` (default: on). When off, cards degrade to idle-only with click → open in neko-preview (the former static-card design).
+
+#### Agent MUST NOT do
+
+| Capability | Reason | Delegate to |
+|------------|--------|-------------|
+| DOM `<video>` / `<audio>` elements | VSCode webview sandbox codec limitations; use neko-client WebCodecs + PCM instead | — |
+| WebGL sphere rendering | Heavyweight, out of scope for chat | neko-preview |
+| HDR tone mapping controls | Editing, not confirmation | neko-preview |
+| Video timeline scrubbing / seek | Editing capability; inline playback is play/stop only | neko-preview |
+| Image zoom/pan viewer | Chat cards are compact; open in VSCode for detail | VSCode image viewer |
+
+#### Inline playback data flow
+
+```
+User clicks play button on VideoCard
+  ↓
+postMessage('media:play', { filePath, startTime? })
+  ↓
+Extension host:
+  ├─ api = vscode.extensions.getExtension<NekoPreviewAPI>('neko.neko-preview')?.exports
+  ├─ streamIds = await api.startPlayback(filePath, mediaInfo)
+  └─ wsUrls = api.getStreamWebSocketUrl(streamIds)
+  ↓
+postMessage('media:streamReady', { videoWsUrl, audioWsUrl })
+  ↓
+Agent webview (InlineChatPlayer component):
+  ├─ H264StreamClient.connect(videoWsUrl)   → WebCodecs decode → canvas drawImage
+  └─ AudioStreamClient.connect(audioWsUrl)  → PCM → Web Audio API
+  ↓
+FrameScheduler syncs video frames to audio master clock
+  ↓
+User clicks stop / playback ends → disconnect streams → return to poster
+```
+
+#### Canvas vs Agent: Why Thumbnails Differ for Panoramic Content
+
+Canvas displays the **full equirectangular flat projection** — the spatial layout gives nodes enough room, and users arranging assets in a storyboard expect to see the complete projection as a reference.
+
+Agent displays a **center-crop 90° FOV extract** — a flat equirectangular strip in a compact chat bubble is unrecognizable to most users. Cropping the center viewport produces a "what you'd see standing in the middle" thumbnail that is immediately comprehensible.
+
+Both consume the same engine pre-render pipeline for turntable/rotation previews.
+
+#### Shared Preview Assets
+
+Canvas and Agent consume the same engine-generated preview assets. No extension renders these independently:
+
+```
+Engine (offline render)
+  ├── image:crop-fov   → 90° FOV center crop (for Agent panoramic thumbnails)
+  ├── image:turntable  → rotation mp4/GIF   (for Canvas + Agent hover)
+  ├── model:turntable  → 3D turntable mp4   (for Canvas + Agent hover)
+  └── puppet:clip      → animation mp4/GIF  (for Canvas + Agent hover)
+
+neko-canvas → consumes as <img>/<video> in node (DOM-native allowed)
+neko-agent  → consumes as <img> in idle cards; neko-client streams for active playback
+```
+
+### Refinement: Panoramic Viewer Reuse Scope
+
+`adr-panoramic-image-preview.md` states (line 140, 378, 392):
+
+> 球面查看器组件需可被 neko-model（环境贴图编辑）、neko-canvas（全景背景节点）复用
+
+> 球面查看器是否抽出独立 npm 包（`@neko/panorama-viewer`）供 neko-model / neko-canvas 复用？倾向是
+
+This ADR **refines** that decision. "Reuse" means reusing the **protocol, preview assets, and command entry points** — not embedding the WebGL sphere renderer into canvas or agent webviews:
+
+| Reuse type | Allowed | Example |
+|------------|---------|---------|
+| **Command entry point** | Yes | `vscode.commands.executeCommand('neko.preview.openPanoramic', uri)` |
+| **Pre-rendered assets** | Yes | Engine-generated turntable mp4, center-crop thumbnails |
+| **Shared types / contracts** | Yes | `ImageProbeInfo`, `projectionType` in `@neko/shared` |
+| **`@neko/panorama-viewer` as iframe / webview panel** | Yes (neko-model only) | neko-model embeds the viewer as an environment map picker panel |
+| **`@neko/panorama-viewer` WebGL component in canvas/agent** | No | Violates lightweight preview boundary |
+
+neko-model may embed the sphere viewer for environment map editing (its WebGL context is already justified by R3F). Canvas and agent must not — they consume pre-rendered substitutes and delegate interactive viewing to neko-preview.
 
 ### neko-preview vs neko-model for Panoramic Content
 
@@ -89,31 +229,45 @@ Direction is always **canvas → specialized plugin**. No specialized plugin dep
 
 ## Rationale
 
-1. **SRP**: Canvas orchestrates, preview views, editors edit. Adding interactive 3D/spherical rendering to canvas would make it a viewer, violating its single responsibility.
+1. **SRP**: Canvas orchestrates, agent converses, preview views, editors edit. Adding interactive 3D/spherical rendering to canvas or agent would turn them into viewers, violating their single responsibility. Inline video/audio playback in agent is not "viewing" — it is **confirmation of generation results**, which is core to agent's conversational responsibility.
 
-2. **Performance**: Canvas may display dozens of nodes simultaneously. DOM-native `<video>`/`<audio>` elements are hardware-accelerated and lightweight. WebGL contexts are not — multiple GL contexts on one page is a known browser bottleneck.
+2. **Performance**: Canvas may display dozens of nodes simultaneously; DOM-native `<video>`/`<audio>` elements are hardware-accelerated and lightweight there. Agent chat history may contain many media cards, but only one can be in Active (playing) state at a time — idle cards are pure `<img>`, identical cost to the static-only design. WebGL contexts are not lightweight — multiple GL contexts on one page is a known browser bottleneck, prohibited in both surfaces.
 
-3. **Dependency rules**: The `no-cross-extension-deps` constraint means any extension needing panoramic preview cannot depend on neko-model. A standalone viewer in neko-preview keeps the dependency graph clean.
+3. **Dependency rules**: The `no-cross-extension-deps` constraint means any extension needing panoramic preview cannot depend on neko-model. A standalone viewer in neko-preview keeps the dependency graph clean. Agent and canvas both delegate to neko-preview for professional viewing without knowing about each other. Agent's inline playback uses `@neko/neko-client` (a shared Layer 0 package), not a cross-extension import.
 
-4. **Consistency**: All canvas nodes follow the same pattern (thumbnail + delegate). No special rendering for any single asset type. This is predictable for users and maintainable for developers.
+4. **Consistency**: All canvas nodes follow the same pattern (thumbnail → hover preview → double-click delegate). All agent media cards follow the same two-state pattern (idle poster → click to play inline → click to open full viewer). No special rendering for any single asset type in either surface.
 
-5. **Dynamic preview via pre-rendering**: For asset types that cannot be previewed with DOM-native elements (3D, skeletal, panoramic), the engine can pre-render short turntable videos or GIFs. This gives users meaningful visual feedback without breaking the canvas's lightweight architecture.
+5. **Dynamic preview via pre-rendering**: For asset types that cannot be streamed via neko-client (3D, skeletal, panoramic), the engine pre-renders turntable videos or GIFs. Canvas and agent consume the same pre-rendered assets — no duplication at the rendering layer.
+
+6. **Context-appropriate thumbnails**: The same asset type may warrant different thumbnail strategies in different surfaces. Canvas has spatial room for full equirectangular projections; agent chat cards are compact and need immediately comprehensible crops. The engine provides both variants; the consuming surface picks the appropriate one.
+
+7. **Iteration efficiency**: Agent's generate→confirm→iterate loop is the dominant workflow. Every context switch (chat → preview panel → chat) costs ~3-5 seconds of orientation time. With inline playback, users confirm results in-place; with static-only cards, each confirmation round-trip adds two context switches. Over a multi-round generation session this compounds significantly.
 
 ## Consequences
 
 ### Positive
 
 - Clear ownership: each plugin knows exactly what it is responsible for
-- Canvas stays lightweight and performant regardless of asset diversity
-- New asset types follow the same pattern: add thumbnail renderer + delegate command
-- No WebGL in canvas webview = simpler CSP, fewer GPU resource conflicts
+- Canvas and agent both stay lightweight when idle (pure `<img>` thumbnails) regardless of asset diversity
+- New asset types follow the same pattern in both surfaces: add thumbnail variant + delegate command
+- No WebGL in canvas or agent webview = simpler CSP, fewer GPU resource conflicts
+- Pre-rendered preview assets are generated once by the engine and consumed by both canvas and agent
+- Agent gets panoramic previews "for free" via the same engine pipeline that serves canvas
+- Agent inline playback eliminates context-switch friction in the generate→confirm→iterate loop
+- `ablation:agent-inline-playback` toggle allows graceful degradation to static-only mode
 
 ### Negative
 
-- Pre-rendered dynamic thumbnails require engine support (turntable render, panorama rotation capture)
-- Users cannot interactively explore 3D/panoramic assets without opening another editor
-- Two-step workflow for "quick look" at 3D/panoramic content (canvas → preview/editor)
+- Pre-rendered dynamic thumbnails require engine support (turntable render, panorama rotation capture, center-crop FOV extraction)
+- Users cannot interactively explore 3D/panoramic assets without opening another editor — applies to both canvas and agent
+- Two-step workflow for "quick look" at 3D/panoramic content (canvas/agent → preview/editor)
+- Agent requires an additional thumbnail variant (center-crop FOV) that canvas does not need
+- Agent webview gains `@neko/neko-client` as a dependency (+~54KB source, tree-shaken to H264StreamClient + AudioStreamClient + FrameScheduler)
+- Agent inline playback component (`InlineChatPlayer`) needs maintenance parity with canvas's `InlineMediaPlayer` — consider extracting shared playback logic to `@neko/neko-client` if divergence becomes costly
 
 ### Neutral
 
 - Engine IBL pipeline is shared between neko-preview and neko-model; no duplication at the Rust layer
+- Agent and canvas consume the same pre-rendered mp4/GIF for turntable/rotation previews; the only difference is the static thumbnail strategy (full projection vs center crop)
+- 360° video receives no special treatment in either surface — spherical playback is exclusively neko-preview's responsibility
+- Agent inline playback uses the same WebSocket streaming path as canvas (webview → direct WS to neko-preview frame server); extension host only brokers the initial handshake
