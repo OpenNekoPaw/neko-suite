@@ -90,7 +90,7 @@
         },
         "neko.logLevel": {
           "type": "string",
-          "default": "info",
+          "default": "debug",
           "enum": [
             "debug",
             "info",

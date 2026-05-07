@@ -27,6 +27,9 @@ export class OutputChannelTransport implements ILogTransport {
     const ts = new Date(entry.timestamp).toISOString().slice(11, 23);
     const level = LEVEL_LABELS[entry.level] ?? 'INFO';
     this.channel.appendLine(`[${ts}] [${level}] [${entry.source}] ${entry.message}`);
+    if (entry.data !== undefined && !(entry.data instanceof Error)) {
+      this.channel.appendLine(formatLogData(entry.data));
+    }
     if (entry.error?.stack) {
       this.channel.appendLine(entry.error.stack);
     }
@@ -108,6 +111,45 @@ export function watchLogLevel(logger: ConsoleLogger, context: vscode.ExtensionCo
 }
 
 let rustLogManagedByUs = false;
+
+function formatLogData(data: unknown): string {
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  try {
+    return JSON.stringify(data, createLogDataReplacer(), 2);
+  } catch {
+    return String(data);
+  }
+}
+
+function createLogDataReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+
+  return (_key, value) => {
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: value.message,
+        stack: value.stack,
+      };
+    }
+
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return '[Circular]';
+      }
+      seen.add(value);
+    }
+
+    return value;
+  };
+}
 
 function syncRustLogEnv(level: LogLevel): void {
   // Only manage RUST_LOG if no external value was present at first call
