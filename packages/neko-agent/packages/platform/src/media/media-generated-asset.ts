@@ -34,6 +34,11 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
       model: input.model,
       ...lineage,
     };
+    const assetRef = {
+      assetId: base.id,
+      uri: toStableGeneratedAssetUri(localPath),
+      mimeType: base.mimeType,
+    };
 
     switch (input.taskType) {
       case 'image': {
@@ -41,6 +46,7 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
         const height = output?.height ?? 1024;
         const asset: GeneratedImage = {
           ...base,
+          assetRef,
           type: 'generated-image',
           width,
           height,
@@ -52,6 +58,7 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
       case 'video': {
         const asset: GeneratedVideo = {
           ...base,
+          assetRef,
           type: 'generated-video',
           duration: output?.duration ?? 0,
           width: output?.width ?? 1280,
@@ -64,6 +71,7 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
       case 'audio': {
         const asset: GeneratedAudio = {
           ...base,
+          assetRef,
           type: 'generated-audio',
           duration: output?.duration ?? 0,
           sampleRate: 44100,
@@ -76,6 +84,16 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
   }
 
   return assets;
+}
+
+export function toStableGeneratedAssetUri(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const marker = '/.neko/generated/';
+  const markerIndex = normalized.lastIndexOf(marker);
+  if (markerIndex >= 0) {
+    return `\${WORKSPACE}${normalized.slice(markerIndex)}`;
+  }
+  return `generated-assets/${path.basename(filePath)}`;
 }
 
 export function inferGeneratedMediaMimeType(filePath: string): string {

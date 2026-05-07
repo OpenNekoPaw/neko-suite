@@ -2,6 +2,7 @@ import type { TaskCreatedMessage, TaskUpdatedMessage } from '@neko-agent/types';
 import type { BackgroundTaskProgressPatch, BackgroundTaskView } from '../task/task-view-projector';
 import type { AgentEvent } from '../session/types';
 import {
+  type AgentStreamBackgroundTaskPersistInput,
   projectAgentStreamBackgroundTaskProgress,
   projectAgentStreamBackgroundTaskStart,
 } from './agent-stream-background-task';
@@ -9,6 +10,7 @@ import {
 export interface AgentStreamBackgroundTaskDeliveryContext {
   readonly conversationId: string;
   readonly taskId: string;
+  readonly toolCallId?: string;
   readonly taskType: BackgroundTaskView['type'];
   readonly baseTask: BackgroundTaskView;
 }
@@ -89,11 +91,9 @@ export interface StartAgentStreamBackgroundTaskObserverInput<
   ) =>
     | AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>
     | Promise<AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>>;
-  readonly persistResultUrls?: (input: {
-    readonly conversationId: string;
-    readonly taskId: string;
-    readonly urls: readonly string[];
-  }) => void;
+  readonly persistResultUrls?: (
+    input: AgentStreamBackgroundTaskPersistInput<TDeliveryPlan>,
+  ) => void;
   readonly onIgnoredConversationTask?: (
     event: AgentStreamBackgroundTaskIgnoredEvent<TSourceTask>,
   ) => void;
@@ -142,6 +142,7 @@ export function startAgentStreamBackgroundTaskObserver<
   const context: AgentStreamBackgroundTaskDeliveryContext = {
     conversationId: input.conversationId,
     taskId: start.taskId,
+    ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
     taskType: start.taskType,
     baseTask: start.task,
   };
@@ -178,7 +179,11 @@ export function startAgentStreamBackgroundTaskObserver<
         input.persistResultUrls?.({
           conversationId: input.conversationId,
           taskId: start.taskId,
+          ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
           urls: projection.persistResultUrls,
+          ...(projection.deliveryPlan !== undefined
+            ? { deliveryPlan: projection.deliveryPlan }
+            : {}),
         });
       }
     },

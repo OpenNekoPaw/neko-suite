@@ -5,6 +5,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStreamProcessor } from '../agentStreamProcessor';
 
+vi.mock('vscode', () => ({
+  Uri: {
+    file: (fsPath: string) => ({ fsPath }),
+  },
+  workspace: {
+    workspaceFolders: [{ uri: { fsPath: '/workspace' } }],
+    getConfiguration: () => ({
+      get: (_key: string, fallback: unknown) => fallback,
+    }),
+  },
+  window: {
+    showInformationMessage: vi.fn(),
+  },
+  commands: {
+    executeCommand: vi.fn(),
+  },
+}));
+
 // Mock the logger
 vi.mock('../../../base', () => ({
   getLogger: () => ({
@@ -366,6 +384,127 @@ describe('AgentStreamProcessor', () => {
               providerName: 'runway',
             }),
           }),
+        }),
+      );
+    });
+
+    it('should backfill completed media assets with stable refs and trigger perception', async () => {
+      let progressCallback: ((task: any) => Promise<void>) | undefined;
+      const backfillSink = { applyBackfill: vi.fn().mockResolvedValue(undefined) };
+      const perceptionPipeline = { perceive: vi.fn().mockResolvedValue({ card: {} }) };
+      const platform = {
+        media: {
+          onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
+            progressCallback = callback;
+            return vi.fn();
+          }),
+        },
+      };
+      const mediaDeliveryHost = {
+        createProgressViewDelivery: vi.fn(async () => ({
+          view: {
+            id: 'task-media',
+            type: 'image',
+            status: 'completed',
+            progress: 100,
+            result: { urls: ['webview-uri:/workspace/.neko/generated/image/out.png'] },
+            updatedAt: '2026-01-01T00:00:01.000Z',
+          },
+          deliveryPlan: {
+            resultUrls: ['/workspace/.neko/generated/image/out.png'],
+            thumbnailUrl: '/workspace/.neko/generated/image/out.png',
+            localPaths: ['/workspace/.neko/generated/image/out.png'],
+            shouldPersistResultUrls: true,
+            shouldUnsubscribe: true,
+            generatedAssets: [
+              {
+                id: 'asset-1',
+                type: 'generated-image',
+                path: '/workspace/.neko/generated/image/out.png',
+                mimeType: 'image/png',
+                generatedAt: '2026-01-01T00:00:01.000Z',
+                width: 1024,
+                height: 1024,
+                ratio: '1:1',
+              },
+            ],
+          },
+        })),
+      };
+      processor = new AgentStreamProcessor({
+        platform: platform as any,
+        mediaDeliveryHost: mediaDeliveryHost as any,
+        mediaBackfill: {
+          backfillSink,
+          perceptionPipeline: perceptionPipeline as any,
+        },
+      });
+
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-media',
+              success: true,
+              data: {
+                backgroundMode: true,
+                taskId: 'task-media',
+                type: 'image',
+                message: 'Generate a cat',
+                routedTo: { provider: 'openai' },
+              },
+            },
+          },
+        ]),
+        callbacks,
+      );
+
+      await progressCallback?.({
+        id: 'task-media',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+        outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
+        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-1' } },
+      });
+
+      expect(backfillSink.applyBackfill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolCallId: 'tc-media',
+          dataPatch: expect.objectContaining({
+            status: 'completed',
+            taskId: 'task-media',
+            resultAssetRefs: [
+              expect.objectContaining({
+                uri: '${WORKSPACE}/.neko/generated/image/out.png',
+                mimeType: 'image/png',
+              }),
+            ],
+          }),
+          attachments: [
+            expect.objectContaining({
+              type: 'image',
+              path: '${WORKSPACE}/.neko/generated/image/out.png',
+            }),
+          ],
+        }),
+      );
+      expect(perceptionPipeline.perceive).toHaveBeenCalledWith(
+        expect.objectContaining({
+          asset: expect.objectContaining({
+            ref: expect.objectContaining({
+              uri: '${WORKSPACE}/.neko/generated/image/out.png',
+            }),
+          }),
+          sourceToolCallId: 'tc-media',
+          policy: expect.objectContaining({ timing: 'on-completion', layers: [0] }),
         }),
       );
     });

@@ -54,5 +54,6 @@ export type {
   ThinkingMessage,
   ToolCallMessage,
   ToolConfirmationMessage,
+  ToolResultBackfillMessage,
   ToolResultMessage,
 } from '@neko-agent/types';

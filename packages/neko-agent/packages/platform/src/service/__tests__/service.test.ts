@@ -141,6 +141,30 @@ describe('Service', () => {
       expect(response.routing.modelId).toBe('gpt-4');
     });
 
+    it('projects messages before sending to the adapter', async () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      await service.chat([{ role: 'user', content: 'Hello' }], {
+        modelId: 'gpt-4',
+        messageProjector: ({ messages, providerId, modelId }) => [
+          ...messages,
+          { role: 'user', content: `projected:${providerId}:${modelId}` },
+        ],
+      });
+
+      expect(adapter.chat).toHaveBeenCalledWith(
+        [
+          { role: 'user', content: 'Hello' },
+          { role: 'user', content: 'projected:openai:gpt-4' },
+        ],
+        expect.objectContaining({ model: 'gpt-4' }),
+        expect.objectContaining({ id: 'gpt-4' }),
+        expect.objectContaining({ id: 'openai' }),
+      );
+    });
+
     it('should throw when no model available', async () => {
       const config = createMockConfig();
       (config.configManager.getEnabledModels as ReturnType<typeof vi.fn>).mockReturnValue([]);
@@ -181,6 +205,31 @@ describe('Service', () => {
       const finalResponse = await response;
       expect(finalResponse.message.content).toBe('Hello World');
       expect(finalResponse.routing.modelId).toBe('gpt-4');
+    });
+
+    it('projects messages before opening a chat stream', async () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      const { stream } = service.chatStream([{ role: 'user', content: 'Hello' }], {
+        modelId: 'gpt-4',
+        messageProjector: ({ messages }) => [...messages, { role: 'user', content: 'projected' }],
+      });
+
+      for await (const _chunk of stream) {
+        // Drain stream.
+      }
+
+      expect(adapter.chatStream).toHaveBeenCalledWith(
+        [
+          { role: 'user', content: 'Hello' },
+          { role: 'user', content: 'projected' },
+        ],
+        expect.objectContaining({ model: 'gpt-4', stream: true }),
+        expect.objectContaining({ id: 'gpt-4' }),
+        expect.objectContaining({ id: 'openai' }),
+      );
     });
 
     it('should throw when no model available', () => {

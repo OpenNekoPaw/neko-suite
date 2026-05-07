@@ -15,26 +15,42 @@
 import type {
   IService as SharedIService,
   ChatMessage,
+  IProviderCardRegistry,
+  PerceptionCard,
   ServiceOptions as SharedServiceOptions,
   ServiceResponse as SharedServiceResponse,
   StreamChunk,
 } from '@neko/shared';
+import {
+  projectMultimodalPacketToChatMessageAsync,
+  type PerceptionAssetLoader,
+  type VisionPreprocessPolicy,
+} from '@neko/ai-sdk';
 import type { Service } from './service';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('SharedServiceAdapter');
 
+export interface SharedServiceAdapterOptions {
+  readonly providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
+  readonly assetLoader?: PerceptionAssetLoader;
+  readonly visionPolicy?: VisionPreprocessPolicy;
+}
+
 /**
  * Wraps a Platform Service to conform to @neko/shared's IService interface.
  */
 export class SharedServiceAdapter implements SharedIService {
-  constructor(private readonly _service: Service) {}
+  constructor(
+    private readonly _service: Service,
+    private readonly _options: SharedServiceAdapterOptions = {},
+  ) {}
 
   async chat(
     messages: ChatMessage[],
     options?: SharedServiceOptions,
   ): Promise<SharedServiceResponse> {
-    const response = await this._service.chat(messages, options);
+    const response = await this._service.chat(messages, this.withMessageProjector(options));
     return {
       id: response.id,
       model: response.model,
@@ -49,7 +65,10 @@ export class SharedServiceAdapter implements SharedIService {
     messages: ChatMessage[],
     options?: SharedServiceOptions,
   ): AsyncIterable<StreamChunk> {
-    const { stream, response } = this._service.chatStream(messages, options);
+    const { stream, response } = this._service.chatStream(
+      messages,
+      this.withMessageProjector(options),
+    );
 
     // Prevent unhandled rejection from the response Promise.
     // The error is already propagated via the stream iterator (re-thrown from AI SDK error parts).
@@ -108,11 +127,165 @@ export class SharedServiceAdapter implements SharedIService {
     const response = await this._service.embed(texts);
     return { embeddings: response.embeddings };
   }
+
+  private withMessageProjector(options?: SharedServiceOptions): SharedServiceOptions | undefined {
+    if (!this._options.assetLoader) {
+      return options;
+    }
+
+    return {
+      ...options,
+      messageProjector: async (input) => {
+        const projected = await projectProviderAwareMessages({
+          messages: input.messages,
+          providerId: input.providerId,
+          modelId: input.modelId,
+          providerCardRegistry: this._options.providerCardRegistry,
+          assetLoader: this._options.assetLoader,
+          visionPolicy: this._options.visionPolicy,
+        });
+        if (options?.messageProjector) {
+          return options.messageProjector({
+            ...input,
+            messages: projected,
+          });
+        }
+        return projected;
+      },
+    };
+  }
 }
 
 /**
  * Wrap a Platform Service as @neko/shared IService
  */
-export function toSharedService(service: Service): SharedIService {
-  return new SharedServiceAdapter(service);
+export function toSharedService(
+  service: Service,
+  options?: SharedServiceAdapterOptions,
+): SharedIService {
+  return new SharedServiceAdapter(service, options);
+}
+
+interface ProviderAwareMessageProjectionInput {
+  readonly messages: readonly ChatMessage[];
+  readonly providerId?: string;
+  readonly modelId?: string;
+  readonly providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
+  readonly assetLoader?: PerceptionAssetLoader;
+  readonly visionPolicy?: VisionPreprocessPolicy;
+}
+
+export async function projectProviderAwareMessages(
+  input: ProviderAwareMessageProjectionInput,
+): Promise<readonly ChatMessage[]> {
+  const packet = readLatestMultimodalContextPacket(input.messages);
+  const perceptionCards = collectPerceptionCards(input.messages);
+  if (!packet || perceptionCards.length === 0) {
+    return input.messages;
+  }
+
+  const result = await projectMultimodalPacketToChatMessageAsync(packet, {
+    provider: {
+      ...(input.providerId ? { providerId: input.providerId } : {}),
+      ...(input.providerCardRegistry && input.providerId
+        ? { providerCard: input.providerCardRegistry.get(input.providerId, input.modelId) }
+        : {}),
+    },
+    perceptionCards,
+    assetLoader: input.assetLoader,
+    visionPolicy: input.visionPolicy,
+  });
+
+  if (result.diagnostics.length > 0) {
+    logger.warn('Provider-aware perception projection degraded', {
+      diagnostics: result.diagnostics,
+    });
+  }
+
+  return [...input.messages, result.message];
+}
+
+function readLatestMultimodalContextPacket(
+  messages: readonly ChatMessage[],
+): import('@neko/shared').MultimodalContextPacket | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    const packet = readMultimodalContextPacket(message);
+    if (packet) {
+      return packet;
+    }
+  }
+  return undefined;
+}
+
+function readMultimodalContextPacket(
+  message: ChatMessage | undefined,
+): import('@neko/shared').MultimodalContextPacket | undefined {
+  if (!message || message.role !== 'user' || typeof message.content !== 'string') {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(message.content) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { readonly id?: unknown }).id === 'string' &&
+      Array.isArray((parsed as { readonly perceptionInputs?: unknown }).perceptionInputs)
+    ) {
+      return parsed as import('@neko/shared').MultimodalContextPacket;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function collectPerceptionCards(messages: readonly ChatMessage[]): PerceptionCard[] {
+  const cardsByKey = new Map<string, PerceptionCard>();
+  for (const message of messages) {
+    if (message.role !== 'tool' || typeof message.content !== 'string') {
+      continue;
+    }
+    for (const card of readToolResultPerceptionCards(message.content)) {
+      cardsByKey.set(getPerceptionCardKey(card), card);
+    }
+  }
+  return Array.from(cardsByKey.values());
+}
+
+function readToolResultPerceptionCards(content: string): readonly PerceptionCard[] {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      (parsed as { readonly schema?: unknown }).schema === 'neko.tool-result.v1' &&
+      Array.isArray((parsed as { readonly perceptionCards?: unknown }).perceptionCards)
+    ) {
+      return (parsed as { readonly perceptionCards: readonly unknown[] }).perceptionCards.filter(
+        isPerceptionCard,
+      );
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
+}
+
+function isPerceptionCard(value: unknown): value is PerceptionCard {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { readonly assetId?: unknown }).assetId === 'string' &&
+    typeof (value as { readonly modality?: unknown }).modality === 'string',
+  );
+}
+
+function getPerceptionCardKey(card: PerceptionCard): string {
+  return [card.assetId, card.version, card.cacheKey ?? ''].join(':');
 }

@@ -247,6 +247,129 @@ CORRUPTED LINE
       expect(tool.toolCallId).toBe('tc-1');
     });
 
+    it('should patch projected tool result history from backfill events', async () => {
+      const entries: JournalEntry[] = [
+        {
+          seq: 1,
+          ts: 1000,
+          type: 'event',
+          event: {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-1',
+              success: true,
+              data: { taskId: 'task-1', status: 'queued', prompt: 'rain' },
+            },
+          },
+        },
+        {
+          seq: 2,
+          ts: 1001,
+          type: 'event',
+          event: {
+            type: 'tool_result_backfill',
+            toolResultBackfill: {
+              toolCallId: 'tc-1',
+              timestamp: 1001,
+              dataPatch: {
+                status: 'completed',
+                width: 1024,
+                prompt: 'incoming',
+              },
+            },
+          },
+        },
+      ];
+      const reader = new JournalReader({
+        filePath: '/tmp/test.jsonl',
+        fsOps: createMockFsOps(entriesToJsonl(entries)),
+      });
+
+      const state = await reader.readSessionState();
+
+      expect(state!.history).toEqual([
+        {
+          role: 'tool',
+          toolCallId: 'tc-1',
+          content: JSON.stringify({
+            schema: 'neko.tool-result.v1',
+            data: {
+              taskId: 'task-1',
+              status: 'completed',
+              prompt: 'rain',
+              width: 1024,
+            },
+            backfillDiagnostics: [
+              {
+                path: 'prompt',
+                reason: 'conflict',
+                existing: 'rain',
+                incoming: 'incoming',
+              },
+            ],
+          }),
+        },
+      ]);
+    });
+
+    it('should patch a successful string tool result that starts with Error without reclassifying it', async () => {
+      const entries: JournalEntry[] = [
+        {
+          seq: 1,
+          ts: 1000,
+          type: 'event',
+          event: {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-1',
+              success: true,
+              data: 'Error: this is data',
+            },
+          },
+        },
+        {
+          seq: 2,
+          ts: 1001,
+          type: 'event',
+          event: {
+            type: 'tool_result_backfill',
+            toolResultBackfill: {
+              toolCallId: 'tc-1',
+              timestamp: 1001,
+              dataPatch: { status: 'completed' },
+              perceptionCards: [
+                {
+                  version: 1,
+                  assetId: 'asset-1',
+                  modality: 'text',
+                  createdAt: 1001,
+                  layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'skipped' },
+                  structural: { format: 'txt', mimeType: 'text/plain', byteSize: 19 },
+                },
+              ],
+            },
+          },
+        },
+      ];
+      const reader = new JournalReader({
+        filePath: '/tmp/test.jsonl',
+        fsOps: createMockFsOps(entriesToJsonl(entries)),
+      });
+
+      const state = await reader.readSessionState();
+      const content = JSON.parse(state!.history[0]!.content as string);
+
+      expect(content).toEqual(
+        expect.objectContaining({
+          schema: 'neko.tool-result.v1',
+          data: { status: 'completed' },
+          perceptionCards: [expect.objectContaining({ assetId: 'asset-1' })],
+        }),
+      );
+      expect(content.success).toBeUndefined();
+      expect(content.error).toBeUndefined();
+    });
+
     it('should extract executionMode from last snapshot', async () => {
       const entries: JournalEntry[] = [
         {

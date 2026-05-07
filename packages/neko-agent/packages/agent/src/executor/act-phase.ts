@@ -10,7 +10,6 @@
 import type {
   AgentStep,
   ChatMessage,
-  ContentPart,
   IToolRegistry,
   ExecutorHooks,
   ToolCallInfo,
@@ -147,11 +146,14 @@ export function observe(results: ToolResultWithMeta[]): AgentStep {
   };
 }
 
+const TOOL_RESULT_ENVELOPE_SCHEMA = 'neko.tool-result.v1';
+
 /**
  * Build tool result messages for context history.
  *
- * When a tool result contains attachments (image/audio/video),
- * the message content becomes a ContentPart[] with mixed text + media parts.
+ * Tool result media stays provider-neutral here: attachments and perception
+ * cards are serialized as stable metadata, while provider payload loading is
+ * deferred to the AI SDK/platform adapter boundary.
  */
 export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMessage[] {
   return results.map((result) => {
@@ -159,8 +161,12 @@ export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMess
       ? JSON.stringify(result.data)
       : JSON.stringify({ error: result.error });
 
-    // If no attachments, return plain string content (fast path)
-    if (!result.attachments || result.attachments.length === 0) {
+    const hasExtendedFields =
+      (result.attachments?.length ?? 0) > 0 ||
+      (result.perceptionCards?.length ?? 0) > 0 ||
+      (result.backfillDiagnostics?.length ?? 0) > 0;
+
+    if (!hasExtendedFields) {
       return {
         role: 'tool',
         content: textContent,
@@ -168,28 +174,16 @@ export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMess
       } as ChatMessage;
     }
 
-    // Build multimodal content parts
-    const parts: ContentPart[] = [{ type: 'text', text: textContent }];
-
-    for (const attachment of result.attachments) {
-      if (attachment.type === 'image') {
-        parts.push({
-          type: 'image',
-          imageUrl: `file://${attachment.path}`,
-        });
-      } else {
-        // Audio/video attachments: append as text reference (LLM APIs don't support inline audio/video yet)
-        const mime = attachment.mimeType ? ` (${attachment.mimeType})` : '';
-        parts.push({
-          type: 'text',
-          text: `[Attachment: ${attachment.type}${mime} ${attachment.path}]`,
-        });
-      }
-    }
-
     return {
       role: 'tool',
-      content: parts,
+      content: JSON.stringify({
+        schema: TOOL_RESULT_ENVELOPE_SCHEMA,
+        ...(result.success ? {} : { success: false, error: result.error ?? 'Unknown error' }),
+        data: result.data,
+        attachments: result.attachments,
+        perceptionCards: result.perceptionCards,
+        backfillDiagnostics: result.backfillDiagnostics,
+      }),
       toolCallId: result.callId,
     } as ChatMessage;
   });

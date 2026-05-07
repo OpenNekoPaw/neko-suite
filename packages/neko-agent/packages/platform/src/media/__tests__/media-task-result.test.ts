@@ -50,6 +50,11 @@ describe('media-task-result', () => {
     expect(result.resultUrls).toEqual(['/repo/.neko/generated/image.png']);
     expect(result.thumbnailUrl).toBe('/repo/.neko/generated/image.png');
     expect(result.generatedAssets).toHaveLength(1);
+    expect(result.generatedAssets[0]?.assetRef).toEqual({
+      assetId: 'asset-1',
+      uri: '${WORKSPACE}/.neko/generated/image.png',
+      mimeType: 'image/png',
+    });
     expect(assetIndex.add).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'asset-1',

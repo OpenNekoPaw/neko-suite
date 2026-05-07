@@ -5,7 +5,17 @@
  */
 
 // Message protocol
-export type { Message, ToolCall, ContentBlock, ContentBlockType, CodeDiff } from './message';
+export type {
+  Message,
+  ToolCall,
+  ContentBlock,
+  ContentBlockType,
+  CodeDiff,
+  CompositeBlockData,
+  CompositeSection,
+  CompositeTemplate,
+  MediaRef,
+} from './message';
 export type {
   CloseCurrentConversationTabInput,
   CloseCurrentConversationTabProjection,
@@ -265,6 +275,7 @@ export type {
   ThinkingMessage,
   ToolCallMessage,
   ToolConfirmationMessage,
+  ToolResultBackfillMessage,
   ToolResultMessage,
   UpdateSettingsWebviewMessage,
   UpdateTabStateWebviewMessage,

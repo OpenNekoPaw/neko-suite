@@ -412,6 +412,36 @@ export {
 } from './agent-stream-state';
 
 export {
+  BackfillCoordinator,
+  createBackfillCoordinator,
+  type BackfillCoordinatorApplyResult,
+  type BackfillCoordinatorConfig,
+  type BackfillCoordinatorSessionPort,
+  type BackfillCoordinatorStreamPort,
+  type BackfillCoordinatorWebviewPort,
+} from './backfill-coordinator';
+
+export type {
+  BackfillSink,
+  IPerceptionPipeline,
+  MediaProbePort,
+  PerceptionClientPort,
+  PerceptionPipelinePorts,
+  PerceptualAssetPort,
+  PerceptualAssetResolverPort,
+  ResolvedPerceptualAsset,
+} from '../perception';
+
+export {
+  applyToolResultBackfillToResult,
+  mergeToolResultAttachments,
+  mergeToolResultBackfillData,
+  mergeToolResultPerceptionCards,
+  type ApplyToolResultBackfillResult,
+  type BackfillableToolResult,
+} from './tool-result-backfill';
+
+export {
   AgentEventStreamRuntimeProcessor,
   type AgentEventStreamRuntimeBackgroundTasks,
   type AgentEventStreamRuntimeMessage,

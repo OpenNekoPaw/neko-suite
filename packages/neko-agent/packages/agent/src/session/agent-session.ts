@@ -77,6 +77,7 @@ import type {
   ExecutionMode,
   ExecutionContext,
   CompressionResult,
+  ToolResultPatchResult,
 } from './types';
 
 import type { ToolConfirmationRequest } from '../permission/types';
@@ -124,7 +125,11 @@ import {
   type QualityEvidenceTimeRange,
 } from '../validation/quality-evidence-normalizer';
 import { createDefaultControlPlane, type StageTransitionGuidance } from '../control-plane';
-import { projectPersistedEventsToWorkingMemory, type PersistedAgentEvent } from './working-memory';
+import {
+  applyToolResultBackfillToChatHistory,
+  projectPersistedEventsToWorkingMemory,
+  type PersistedAgentEvent,
+} from './working-memory';
 import { getLogger } from '../utils/logger';
 import { toSerializableErrorCause } from '../utils/serializable-error';
 import type { IdcProjectedTaskArtifactBinding } from '../task/idc-projected-task';
@@ -1096,6 +1101,29 @@ export class AgentSession implements IAgentSession {
   addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void {
     this._history.push(message);
     this._historyEventIds.push(sourceEventIds ? [...sourceEventIds] : []);
+  }
+
+  async patchToolResult(
+    payload: import('@neko/shared').ToolResultBackfillPayload,
+  ): Promise<ToolResultPatchResult> {
+    const event: AgentEvent = {
+      type: 'tool_result_backfill',
+      toolResultBackfill: payload,
+    };
+    const eventId = this._journalWriter
+      ? await this._journalWriter.appendEvent(++this._journalSeq, event)
+      : undefined;
+    const patched = applyToolResultBackfillToChatHistory(this._history, payload);
+
+    if (patched && eventId) {
+      this._appendSourceEventIdToLastToolMessage(payload.toolCallId, eventId);
+    }
+
+    if (this._journalWriter) {
+      await this._journalWriter.flush();
+    }
+
+    return { patched, ...(eventId ? { eventId } : {}) };
   }
 
   /**
@@ -2257,6 +2285,21 @@ export class AgentSession implements IAgentSession {
   private _markProcessedMemoryEventIds(eventIds: readonly string[]): void {
     for (const eventId of eventIds) {
       this._processedMemoryEventIds.add(eventId);
+    }
+  }
+
+  private _appendSourceEventIdToLastToolMessage(toolCallId: string, eventId: string): void {
+    for (let index = this._history.length - 1; index >= 0; index--) {
+      const message = this._history[index];
+      if (message?.role !== 'tool' || message.toolCallId !== toolCallId) {
+        continue;
+      }
+
+      const existing = this._historyEventIds[index] ?? [];
+      if (!existing.includes(eventId)) {
+        this._historyEventIds[index] = [...existing, eventId];
+      }
+      return;
     }
   }
 

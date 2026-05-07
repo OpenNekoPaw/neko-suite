@@ -35,6 +35,7 @@ export interface AgentRunnerRuntimeAdapterDeps {
   readonly createRuntimeController?: (
     target: AgentRuntimeSessionControllerTarget,
   ) => AgentRuntimeSessionController;
+  readonly perceptionAssetLoader?: import('@neko/ai-sdk').PerceptionAssetLoader;
 }
 
 export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, IAgentContext> {
@@ -228,7 +229,13 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     config: IAgentConfig,
   ): AgentRuntimeSessionAssemblyInput {
     return {
-      createService: () => toSharedService(config.platform.createService()),
+      createService: () =>
+        toSharedService(config.platform.createService(), {
+          providerCardRegistry: getCapabilityRuntimeBindings().providerCardRegistry,
+          ...(this.deps.perceptionAssetLoader
+            ? { assetLoader: this.deps.perceptionAssetLoader }
+            : {}),
+        }),
       toolRegistry: config.platform.tools,
       systemPrompt: config.systemPrompt,
       maxIterations: config.maxIterations,

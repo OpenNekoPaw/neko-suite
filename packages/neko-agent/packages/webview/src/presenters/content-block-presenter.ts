@@ -1,9 +1,26 @@
 import type { CodeDiff, ContentBlock, ToolCall } from '@/components/types';
 import type { Plan } from '@neko-agent/types';
+import {
+  projectCompositeBlockRichContent,
+  type CompositeRichContentProjection,
+} from './composite-content-presenter';
 
-export type ContentBlockRenderKind = 'thinking' | 'markdown' | 'tool' | 'diff' | 'plan' | 'empty';
+export type ContentBlockRenderKind =
+  | 'thinking'
+  | 'markdown'
+  | 'tool'
+  | 'diff'
+  | 'plan'
+  | 'composite'
+  | 'empty';
 
-export type ContentBlockHeaderIconKind = 'thinking' | 'response' | 'tool' | 'edit' | 'plan';
+export type ContentBlockHeaderIconKind =
+  | 'thinking'
+  | 'response'
+  | 'tool'
+  | 'edit'
+  | 'plan'
+  | 'composite';
 
 export type ContentBlockHeaderTone = 'purple' | 'green' | 'blue' | 'orange' | 'yellow';
 
@@ -51,6 +68,11 @@ export interface PlanContentBlockProjection extends ContentBlockProjectionBase {
   plan: Plan;
 }
 
+export interface CompositeContentBlockProjection extends ContentBlockProjectionBase {
+  renderKind: 'composite';
+  richContent: CompositeRichContentProjection;
+}
+
 export interface EmptyContentBlockProjection extends ContentBlockProjectionBase {
   renderKind: 'empty';
 }
@@ -61,10 +83,13 @@ export type ContentBlockUiProjection =
   | ToolContentBlockProjection
   | DiffContentBlockProjection
   | PlanContentBlockProjection
+  | CompositeContentBlockProjection
   | EmptyContentBlockProjection;
 
 export interface ProjectContentBlockUiInput {
   block: ContentBlock;
+  siblingBlocks?: readonly ContentBlock[];
+  toolCalls?: readonly ToolCall[];
   parentIsStreaming?: boolean;
   formatTimestamp?: (timestamp: number) => string;
 }
@@ -100,6 +125,11 @@ const CONTENT_BLOCK_HEADER_METADATA: Record<ContentBlock['type'], ContentBlockHe
     iconKind: 'plan',
     label: 'Plan',
     tone: 'yellow',
+  },
+  composite: {
+    iconKind: 'composite',
+    label: 'Composite',
+    tone: 'blue',
   },
 };
 
@@ -152,6 +182,19 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
         renderKind: 'plan',
         plan: input.block.plan,
       };
+    case 'composite':
+      if (!input.block.composite) {
+        return { ...base, renderKind: 'empty' };
+      }
+      return {
+        ...base,
+        renderKind: 'composite',
+        richContent: projectCompositeBlockRichContent({
+          composite: input.block.composite,
+          siblingBlocks: input.siblingBlocks,
+          toolCalls: input.toolCalls,
+        }),
+      };
   }
 }
 
@@ -159,10 +202,19 @@ export function projectContentBlocksUi(
   blocks: readonly ContentBlock[] | undefined,
   parentIsStreaming = false,
   formatTimestamp?: (timestamp: number) => string,
+  siblingBlocks: readonly ContentBlock[] | undefined = blocks,
+  toolCalls?: readonly ToolCall[],
 ): ContentBlockUiProjection[] {
   return (
-    blocks?.map((block) => projectContentBlockUi({ block, parentIsStreaming, formatTimestamp })) ??
-    []
+    blocks?.map((block) =>
+      projectContentBlockUi({
+        block,
+        siblingBlocks,
+        toolCalls,
+        parentIsStreaming,
+        formatTimestamp,
+      }),
+    ) ?? []
   );
 }
 

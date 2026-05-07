@@ -88,16 +88,17 @@ async function resolveTimelinePerceptionInput(
   fsOps: PerceptionInputResolverFsOps,
   cacheDir: string,
 ): Promise<PerceptionInputRef> {
-  if (input.kind === 'video-frame' && input.uri) {
-    return resolveVideoFrameInput(input, options, fsOps, cacheDir);
+  const inputUri = input.uri;
+  if (input.kind === 'video-frame' && inputUri) {
+    return resolveVideoFrameInput(input, inputUri, options, fsOps, cacheDir);
   }
 
-  if (input.kind === 'audio-segment' && input.uri && options.engineClient.extractAudioSegment) {
-    return resolveAudioSegmentInput(input, options, fsOps, cacheDir);
+  if (input.kind === 'audio-segment' && inputUri && options.engineClient.extractAudioSegment) {
+    return resolveAudioSegmentInput(input, inputUri, options, fsOps, cacheDir);
   }
 
-  if (input.kind === 'canvas-crop' && input.uri && options.engineClient.captureImage) {
-    return resolveCanvasCropInput(input, options, fsOps, cacheDir);
+  if (input.kind === 'canvas-crop' && inputUri && options.engineClient.captureImage) {
+    return resolveCanvasCropInput(input, inputUri, options, fsOps, cacheDir);
   }
 
   return input;
@@ -105,11 +106,12 @@ async function resolveTimelinePerceptionInput(
 
 async function resolveVideoFrameInput(
   input: PerceptionInputRef,
+  inputUri: string,
   options: ResolvePerceptionInputsOptions,
   fsOps: PerceptionInputResolverFsOps,
   cacheDir: string,
 ): Promise<PerceptionInputRef> {
-  const sourcePath = resolveProjectUri(input.uri, options.workspaceRoot);
+  const sourcePath = resolveProjectUri(inputUri, options.workspaceRoot);
   const sourceTimeMs = resolveSourceTimeMs(input);
   const imageFormat = options.imageFormat ?? 'jpeg';
   const frameData = await options.engineClient.extractFrame(sourcePath, sourceTimeMs / 1000, {
@@ -136,7 +138,7 @@ async function resolveVideoFrameInput(
     metadata: {
       ...readMetadata(input),
       resolvedFromInputId: input.id,
-      resolvedSourceUri: input.uri,
+      resolvedSourceUri: inputUri,
       resolvedSourceTimeMs: sourceTimeMs,
     },
   };
@@ -144,6 +146,7 @@ async function resolveVideoFrameInput(
 
 async function resolveCanvasCropInput(
   input: PerceptionInputRef,
+  inputUri: string,
   options: ResolvePerceptionInputsOptions,
   fsOps: PerceptionInputResolverFsOps,
   cacheDir: string,
@@ -153,7 +156,7 @@ async function resolveCanvasCropInput(
     return input;
   }
 
-  const sourcePath = resolveProjectUri(input.uri, options.workspaceRoot);
+  const sourcePath = resolveProjectUri(inputUri, options.workspaceRoot);
   const imageFormat = options.imageFormat ?? 'jpeg';
   const bounds = readBounds(readMetadata(input), 'bounds');
   const imageData = await captureImage(sourcePath, {
@@ -181,7 +184,7 @@ async function resolveCanvasCropInput(
     metadata: {
       ...readMetadata(input),
       resolvedFromInputId: input.id,
-      resolvedSourceUri: input.uri,
+      resolvedSourceUri: inputUri,
       resolvedInputKind: 'canvas-crop',
       ...(bounds ? { resolvedCropBounds: bounds } : {}),
     },
@@ -190,6 +193,7 @@ async function resolveCanvasCropInput(
 
 async function resolveAudioSegmentInput(
   input: PerceptionInputRef,
+  inputUri: string,
   options: ResolvePerceptionInputsOptions,
   fsOps: PerceptionInputResolverFsOps,
   cacheDir: string,
@@ -199,7 +203,7 @@ async function resolveAudioSegmentInput(
     return input;
   }
 
-  const sourcePath = resolveProjectUri(input.uri, options.workspaceRoot);
+  const sourcePath = resolveProjectUri(inputUri, options.workspaceRoot);
   const sourceStartMs = resolveSourceRangeStartMs(input);
   const sourceDurationMs = resolveSourceDurationMs(input);
   if (sourceDurationMs <= 0) {
@@ -235,7 +239,7 @@ async function resolveAudioSegmentInput(
     metadata: {
       ...readMetadata(input),
       resolvedFromInputId: input.id,
-      resolvedSourceUri: input.uri,
+      resolvedSourceUri: inputUri,
       resolvedSourceStartMs: sourceStartMs,
       resolvedSourceDurationMs: sourceDurationMs,
     },

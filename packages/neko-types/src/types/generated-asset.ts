@@ -25,8 +25,14 @@ export interface BaseGeneratedAsset {
   type: GeneratedAssetType;
   /** Globally unique identifier (e.g. `crypto.randomUUID()`) */
   id: string;
-  /** Absolute file-system path to the generated binary */
+  /**
+   * Backward-compatible asset path.
+   * Existing host adapters may still keep an absolute file-system path here,
+   * but persisted cross-layer metadata should prefer `assetRef`.
+   */
   path: string;
+  /** Stable host-agnostic reference for persistence and tool backfill. */
+  assetRef?: import('./perception-card').PerceptualAssetRef;
   /** MIME type of the stored file */
   mimeType: string;
   /** ISO 8601 timestamp of generation */

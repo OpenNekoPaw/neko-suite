@@ -258,7 +258,7 @@ describe('buildToolResultMessages', () => {
     expect(typeof messages[0]!.content).toBe('string');
   });
 
-  it('should return ContentPart[] when image attachments are present', () => {
+  it('should serialize image attachments as provider-neutral metadata', () => {
     const results: ToolResultWithMeta[] = [
       {
         success: true,
@@ -272,13 +272,13 @@ describe('buildToolResultMessages', () => {
     const messages = buildToolResultMessages(results);
     const content = messages[0]!.content;
 
-    expect(Array.isArray(content)).toBe(true);
-    const parts = content as Array<{ type: string; text?: string; imageUrl?: string }>;
-    expect(parts).toHaveLength(2);
-    expect(parts[0]!.type).toBe('text');
-    expect(parts[0]!.text).toBe(JSON.stringify({ url: '/output.png' }));
-    expect(parts[1]!.type).toBe('image');
-    expect(parts[1]!.imageUrl).toBe('file:///tmp/output.png');
+    expect(typeof content).toBe('string');
+    expect(content).not.toContain('file://');
+    expect(JSON.parse(content as string)).toMatchObject({
+      schema: 'neko.tool-result.v1',
+      data: { url: '/output.png' },
+      attachments: [{ type: 'image', path: '/tmp/output.png', mimeType: 'image/png' }],
+    });
   });
 
   it('should handle audio/video attachments as text references', () => {
@@ -296,17 +296,15 @@ describe('buildToolResultMessages', () => {
     ];
 
     const messages = buildToolResultMessages(results);
-    const parts = messages[0]!.content as Array<{ type: string; text?: string }>;
+    const content = JSON.parse(messages[0]!.content as string);
 
-    expect(parts).toHaveLength(3); // text + audio ref + video ref
-    expect(parts[1]!.text).toContain('audio');
-    expect(parts[1]!.text).toContain('audio/mpeg');
-    expect(parts[1]!.text).toContain('/tmp/music.mp3');
-    expect(parts[2]!.text).toContain('video');
-    expect(parts[2]!.text).toContain('/tmp/clip.mp4');
+    expect(content.attachments).toEqual([
+      { type: 'audio', path: '/tmp/music.mp3', mimeType: 'audio/mpeg' },
+      { type: 'video', path: '/tmp/clip.mp4' },
+    ]);
   });
 
-  it('should handle mixed image and non-image attachments', () => {
+  it('should handle mixed image and non-image attachments without inline payloads', () => {
     const results: ToolResultWithMeta[] = [
       {
         success: true,
@@ -321,13 +319,12 @@ describe('buildToolResultMessages', () => {
     ];
 
     const messages = buildToolResultMessages(results);
-    const parts = messages[0]!.content as Array<{ type: string; text?: string; imageUrl?: string }>;
+    const content = JSON.parse(messages[0]!.content as string);
 
-    expect(parts).toHaveLength(3);
-    expect(parts[0]!.type).toBe('text');
-    expect(parts[1]!.type).toBe('image');
-    expect(parts[1]!.imageUrl).toBe('file:///tmp/thumb.jpg');
-    expect(parts[2]!.type).toBe('text');
-    expect(parts[2]!.text).toContain('video');
+    expect(JSON.stringify(content)).not.toContain('file://');
+    expect(content.attachments).toEqual([
+      { type: 'image', path: '/tmp/thumb.jpg' },
+      { type: 'video', path: '/tmp/output.mp4', mimeType: 'video/mp4' },
+    ]);
   });
 });

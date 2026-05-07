@@ -6,6 +6,7 @@ import { PlanReview } from '@/components/ChatView/PlanReview';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
 import { MessageActions } from '@/components/ChatView/MessageActions';
+import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { ImagePreview, AudioCard, VideoCard } from '@/components/ChatView/MediaPreview';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
@@ -192,6 +193,16 @@ function ContentBlockRenderer({
         </div>
       );
 
+    case 'composite':
+      return (
+        <div className="w-full">
+          <RichContentRenderer
+            kind={projection.richContent.kind}
+            data={projection.richContent.data}
+          />
+        </div>
+      );
+
     case 'empty':
       return null;
   }
@@ -225,7 +236,13 @@ function AssistantContentBlocks({
 }) {
   // If contentBlocks available, render them in order
   if (message.contentBlocks && message.contentBlocks.length > 0) {
-    const projections = projectContentBlocksUi(message.contentBlocks, isStreaming);
+    const projections = projectContentBlocksUi(
+      message.contentBlocks,
+      isStreaming,
+      undefined,
+      message.contentBlocks,
+      message.toolCalls,
+    );
 
     return (
       <div className="space-y-2">

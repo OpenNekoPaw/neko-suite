@@ -10,6 +10,7 @@ import type { ContentBlock } from '@/components/types';
 import { ToolCallDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
+import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import {
@@ -32,6 +33,8 @@ interface ContentBlockItemProps {
   conversationId: string | null;
   /** Work items linked to the parent message */
   workItemIds?: string[];
+  /** Sibling blocks from the owner message, used for composite media resolution */
+  siblingBlocks?: ContentBlock[];
 }
 
 // Assistant avatar component - compact size (20px)
@@ -51,6 +54,7 @@ const blockHeaderIconByKind: Record<ContentBlockHeaderIconKind, string> = {
   tool: '🔧',
   edit: '📝',
   plan: '📋',
+  composite: '[]',
 };
 
 const blockHeaderToneClassByTone: Record<ContentBlockHeaderTone, string> = {
@@ -67,9 +71,14 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   isStreaming,
   conversationId,
   workItemIds,
+  siblingBlocks,
 }: ContentBlockItemProps) {
   const actions = useMessageActions();
-  const projection = projectContentBlockUi({ block, parentIsStreaming: isStreaming });
+  const projection = projectContentBlockUi({
+    block,
+    siblingBlocks,
+    parentIsStreaming: isStreaming,
+  });
 
   return (
     <div className="group hover:bg-[var(--vscode-list-hoverBackground)] transition-colors">
@@ -189,6 +198,16 @@ function renderBlockContent(
                 ? () => callbacks.onRejectAllPlanSteps!(projection.plan.id)
                 : undefined
             }
+          />
+        </div>
+      );
+
+    case 'composite':
+      return (
+        <div className="w-full">
+          <RichContentRenderer
+            kind={projection.richContent.kind}
+            data={projection.richContent.data}
           />
         </div>
       );

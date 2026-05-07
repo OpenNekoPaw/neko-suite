@@ -8,6 +8,7 @@ export default defineConfig({
     include: [
       'packages/extension/src/**/*.test.ts',
       'packages/platform/src/**/*.test.ts',
+      'packages/ai-sdk/src/**/*.test.ts',
       'packages/agent/src/**/*.test.ts',
       'packages/agent-types/src/**/*.test.ts',
       'packages/cli/src/**/*.test.ts',

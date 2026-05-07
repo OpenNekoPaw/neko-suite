@@ -20,6 +20,7 @@ export interface MessageListContentBlockItemProjection {
   messageId: string;
   workItemIds?: string[];
   block: ContentBlock;
+  siblingBlocks: ContentBlock[];
   isFirst: boolean;
   isLast: boolean;
   isStreaming: boolean;
@@ -81,6 +82,7 @@ export function projectMessageListItems(
           messageId: message.id,
           workItemIds: message.workItemIds,
           block,
+          siblingBlocks: message.contentBlocks ?? [],
           isFirst: blockIndex === 0,
           isLast: blockIndex === message.contentBlocks!.length - 1,
           isStreaming: message.isStreaming ?? false,
@@ -135,6 +137,8 @@ function estimateContentBlockHeight(block: ContentBlock): number {
       return 200;
     case 'plan':
       return 150;
+    case 'composite':
+      return 220;
     case 'text': {
       const contentLines = Math.ceil((block.content?.length ?? 0) / 60);
       return Math.max(MESSAGE_LIST_ESTIMATED_CONTENT_BLOCK_HEIGHT, contentLines * 20 + 40);

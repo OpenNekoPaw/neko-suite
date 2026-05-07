@@ -8,15 +8,19 @@
 import * as vscode from 'vscode';
 import type { MediaTask, Platform } from '@neko/platform';
 import { observeMediaTaskProgress } from '@neko/platform';
+import { toStableGeneratedAssetUri as toPlatformStableGeneratedAssetUri } from '@neko/platform/media';
 import { createMediaTaskProgressView } from '@neko/platform/media/media-task-view';
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import {
   AgentEventStreamRuntimeProcessor,
   persistAgentStreamBackgroundTaskResultUrls,
+  type BackfillSink,
   type AgentStreamBackgroundTaskObservedProgress,
   type CollectedToolCall,
+  type IPerceptionPipeline,
 } from '@neko/agent/runtime';
-import { type AgentEvent } from '@neko/agent';
+import type { AgentEvent } from '@neko/agent';
+import type { GeneratedAsset, ToolResultBackfillPayload } from '@neko/shared';
 import { type AgentPhase, type ContentBlock } from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
@@ -64,6 +68,11 @@ export interface AgentStreamProcessorDeps {
   ) => Promise<boolean>;
   /** VSCode-only media delivery host adapter. */
   mediaDeliveryHost?: MediaTaskDeliveryHost;
+  /** Optional runtime perception/backfill adapter for completed media tasks. */
+  mediaBackfill?: {
+    readonly perceptionPipeline?: IPerceptionPipeline;
+    readonly backfillSink?: BackfillSink;
+  };
 }
 
 /**
@@ -155,6 +164,17 @@ export class AgentStreamProcessor {
             task,
             context.taskType,
           );
+          if (
+            context.toolCallId &&
+            delivery.deliveryPlan.generatedAssets.length > 0 &&
+            delivery.deliveryPlan.shouldPersistResultUrls
+          ) {
+            await this.applyCompletedMediaTaskBackfill({
+              toolCallId: context.toolCallId,
+              taskId: context.taskId,
+              assets: delivery.deliveryPlan.generatedAssets,
+            });
+          }
           return {
             progress: delivery.view,
             deliveryPlan: delivery.deliveryPlan,
@@ -200,11 +220,87 @@ export class AgentStreamProcessor {
     });
   }
 
+  private async applyCompletedMediaTaskBackfill(input: {
+    readonly toolCallId: string;
+    readonly taskId: string;
+    readonly assets: readonly GeneratedAsset[];
+  }): Promise<void> {
+    const sink = this.deps.mediaBackfill?.backfillSink;
+    const pipeline = this.deps.mediaBackfill?.perceptionPipeline;
+    if (!sink && !pipeline) {
+      return;
+    }
+
+    const assetRefs = input.assets.map((asset) => toPerceptualAssetRef(asset));
+    const payload: ToolResultBackfillPayload = {
+      toolCallId: input.toolCallId,
+      timestamp: Date.now(),
+      dataPatch: {
+        status: 'completed',
+        taskId: input.taskId,
+        resultAssetRefs: assetRefs,
+        ...(assetRefs[0] ? { thumbnailAssetRef: assetRefs[0] } : {}),
+      },
+      attachments: input.assets.map((asset) => ({
+        type: toAttachmentType(asset),
+        path: assetRefs.find((ref) => ref.assetId === asset.id)?.uri ?? asset.path,
+        mimeType: asset.mimeType,
+        assetRef: toPerceptualAssetRef(asset),
+      })),
+    };
+
+    await sink?.applyBackfill(payload);
+
+    if (!pipeline) {
+      return;
+    }
+
+    for (const asset of input.assets) {
+      await pipeline.perceive({
+        asset: { assetId: asset.id, ref: toPerceptualAssetRef(asset) },
+        sourceToolCallId: input.toolCallId,
+        policy: {
+          timing: 'on-completion',
+          layers: [0],
+          reason: 'completed media task output',
+        },
+      });
+    }
+  }
+
   clearConversation(conversationId: string): void {
     this.streamRuntime.clearConversation(conversationId);
   }
 
   dispose(): void {
     this.streamRuntime.dispose();
+  }
+}
+
+function toPerceptualAssetRef(asset: GeneratedAsset): import('@neko/shared').PerceptualAssetRef {
+  if (asset.assetRef) {
+    return asset.assetRef;
+  }
+
+  return {
+    assetId: asset.id,
+    uri: toStableGeneratedAssetUri(asset),
+    mimeType: asset.mimeType,
+  };
+}
+
+function toStableGeneratedAssetUri(asset: GeneratedAsset): string {
+  return toPlatformStableGeneratedAssetUri(asset.path);
+}
+
+function toAttachmentType(asset: GeneratedAsset): 'image' | 'video' | 'audio' {
+  switch (asset.type) {
+    case 'generated-video':
+      return 'video';
+    case 'generated-audio':
+      return 'audio';
+    case 'generated-storyboard':
+    case 'generated-image':
+      return 'image';
   }
 }

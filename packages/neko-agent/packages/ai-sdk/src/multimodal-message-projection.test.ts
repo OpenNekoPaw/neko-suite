@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { MultimodalContextPacket } from '@neko/shared';
-import { projectMultimodalPacketToChatMessage } from './multimodal-message-projection';
+import type { MultimodalContextPacket, PerceptionCard } from '@neko/shared';
+import {
+  projectMultimodalPacketToChatMessage,
+  projectMultimodalPacketToChatMessageAsync,
+  resolveProviderInputModalities,
+} from './multimodal-message-projection';
 
 describe('multimodal-message-projection', () => {
   it('projects provider-neutral packets into platform chat content parts', () => {
@@ -97,4 +101,154 @@ describe('multimodal-message-projection', () => {
       ],
     });
   });
+
+  it('resolves provider input modalities by runtime, card, defaults, then text fallback', () => {
+    expect(resolveProviderInputModalities({ providerId: 'openai' })).toMatchObject({
+      text: true,
+      image: true,
+      video: false,
+    });
+    expect(
+      resolveProviderInputModalities({
+        providerId: 'unknown',
+        providerCard: { inputModalities: { video: true } },
+        runtime: { image: true },
+      }),
+    ).toEqual({ text: true, image: true, video: true, audio: false });
+    expect(resolveProviderInputModalities({ providerId: 'unknown' })).toEqual({
+      text: true,
+      image: false,
+      video: false,
+      audio: false,
+    });
+  });
+
+  it('async projection includes perception summary and image payload for image-capable providers', async () => {
+    const loader = {
+      load: async () => ({
+        kind: 'image' as const,
+        url: 'data:image/png;base64,thumb',
+        mimeType: 'image/png',
+      }),
+    };
+
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'openai' },
+      perceptionCards: [imageCard()],
+      assetLoader: loader,
+      imageDetail: 'high',
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
+      { type: 'image', imageUrl: 'data:image/png;base64,thumb', detail: 'high' },
+    ]);
+  });
+
+  it('async projection falls back to text for text-only providers', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'unknown' },
+      perceptionCards: [imageCard()],
+      assetLoader: {
+        load: async () => {
+          throw new Error('should not load');
+        },
+      },
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
+    ]);
+  });
+
+  it('records loader failure diagnostics while keeping text summary', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'openai' },
+      perceptionCards: [imageCard()],
+      assetLoader: {
+        load: async () => {
+          throw new Error('cannot read asset');
+        },
+      },
+    });
+
+    expect(result.diagnostics).toEqual([
+      { code: 'asset-load-failed', assetId: 'thumb-1', message: 'cannot read asset' },
+    ]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
+    ]);
+  });
+
+  it('projects realtime-only audio as text fallback diagnostics', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { runtime: { audio: 'realtime-only' } },
+      perceptionCards: [audioCard()],
+    });
+
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'unsupported-modality',
+        assetId: 'audio-1',
+      }),
+    ]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('transcript') }),
+    ]);
+  });
 });
+
+function emptyPacket(): MultimodalContextPacket {
+  return {
+    id: 'packet-empty',
+    selection: [],
+    artifactRefs: [],
+    projectRefs: [],
+    perceptionInputs: [],
+    uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+    createdAt: 1,
+  };
+}
+
+function imageCard(): PerceptionCard {
+  return {
+    version: 1,
+    assetId: 'asset-1',
+    modality: 'image',
+    createdAt: 1,
+    layerStatus: { layer0: 'complete', layer1: 'complete', layer2: 'complete' },
+    structural: { format: 'png', mimeType: 'image/png', byteSize: 10, width: 512, height: 512 },
+    semantic: {
+      evidences: [{ kind: 'description', confidence: 0.9, value: 'rainy street' }],
+    },
+    perceptual: {
+      thumbnailRef: {
+        assetId: 'thumb-1',
+        uri: '${WORKSPACE}/thumb.png',
+        mimeType: 'image/png',
+      },
+    },
+  };
+}
+
+function audioCard(): PerceptionCard {
+  return {
+    version: 1,
+    assetId: 'audio-1',
+    modality: 'audio',
+    createdAt: 1,
+    layerStatus: { layer0: 'complete', layer1: 'complete', layer2: 'skipped' },
+    structural: {
+      format: 'wav',
+      mimeType: 'audio/wav',
+      byteSize: 10,
+      durationMs: 1000,
+      channels: 2,
+    },
+    semantic: {
+      evidences: [{ kind: 'transcript', confidence: 0.8, value: 'hello' }],
+    },
+  };
+}

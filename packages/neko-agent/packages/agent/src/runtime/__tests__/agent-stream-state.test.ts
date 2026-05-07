@@ -93,6 +93,80 @@ describe('agent stream state reducer', () => {
     });
   });
 
+  it('applies delayed tool result backfill to collected calls and blocks', () => {
+    const state = createAgentStreamProjectionState();
+
+    applyAgentStreamEventToState(
+      state,
+      {
+        type: 'tool_call',
+        toolCall: { id: 'tool-1', name: 'generate_image', arguments: { prompt: 'rain' } },
+      },
+      { now: () => 1 },
+    );
+    applyAgentStreamEventToState(state, {
+      type: 'tool_result',
+      toolResult: {
+        toolCallId: 'tool-1',
+        success: true,
+        data: { taskId: 'task-1', status: 'queued', prompt: 'rain' },
+      },
+    });
+
+    applyAgentStreamEventToState(state, {
+      type: 'tool_result_backfill',
+      toolResultBackfill: {
+        toolCallId: 'tool-1',
+        timestamp: 2,
+        dataPatch: {
+          status: 'completed',
+          prompt: 'incoming should not overwrite',
+          thumbnailAssetRef: {
+            assetId: 'asset-1',
+            uri: '${WORKSPACE}/.neko/generated/image/out.png',
+            mimeType: 'image/png',
+          },
+        },
+        perceptionCards: [
+          {
+            version: 1,
+            assetId: 'asset-1',
+            modality: 'image',
+            createdAt: 2,
+            layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'skipped' },
+            structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+          },
+        ],
+      },
+    });
+
+    expect(state.collectedToolCalls[0]?.result).toEqual(
+      expect.objectContaining({
+        success: true,
+        data: {
+          taskId: 'task-1',
+          status: 'completed',
+          prompt: 'rain',
+          thumbnailAssetRef: {
+            assetId: 'asset-1',
+            uri: '${WORKSPACE}/.neko/generated/image/out.png',
+            mimeType: 'image/png',
+          },
+        },
+        perceptionCards: [expect.objectContaining({ assetId: 'asset-1' })],
+        backfillDiagnostics: [
+          {
+            path: 'prompt',
+            reason: 'conflict',
+            existing: 'rain',
+            incoming: 'incoming should not overwrite',
+          },
+        ],
+      }),
+    );
+    expect(state.contentBlocks[0]?.toolCall?.result).toEqual(state.collectedToolCalls[0]?.result);
+  });
+
   it('projects plan tool results into plan content blocks', () => {
     const state = createAgentStreamProjectionState();
 
@@ -165,6 +239,32 @@ describe('agent stream state reducer', () => {
     ).toEqual([
       { type: 'streamComplete', conversationId: 'conv-1', messageId: 'msg-1' },
       { type: 'contextTokenCount', conversationId: 'conv-1', tokenCount: 42 },
+    ]);
+
+    expect(
+      projectAgentStreamEventToWebviewMessages({
+        conversationId: 'conv-1',
+        messageId: 'msg-1',
+        event: {
+          type: 'tool_result_backfill',
+          toolResultBackfill: {
+            toolCallId: 'tool-1',
+            timestamp: 1,
+            dataPatch: { status: 'completed' },
+          },
+        },
+      }),
+    ).toEqual([
+      {
+        type: 'toolResultBackfill',
+        conversationId: 'conv-1',
+        messageId: 'msg-1',
+        toolCallId: 'tool-1',
+        dataPatch: { status: 'completed' },
+        attachments: undefined,
+        perceptionCards: undefined,
+        backfillDiagnostics: undefined,
+      },
     ]);
   });
 });

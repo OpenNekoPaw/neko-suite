@@ -61,6 +61,29 @@ capabilities: [image.generate]
     expect(card.modelId).toBe('gpt-image-1');
   });
 
+  it('parses ProviderCard input modalities separately from generation capabilities', () => {
+    const card = parseProviderCardMarkdown(
+      `---
+providerId: openai
+modelId: gpt-vision
+version: 1.0.0
+displayName: GPT Vision
+capabilities: [image.generate]
+inputModalities: [text, image, audio:realtime-only]
+---
+# GPT Vision
+`,
+      { sourceLayer: 'builtin' },
+    );
+
+    expect(card.capabilities).toEqual(['image.generate']);
+    expect(card.inputModalities).toEqual({
+      text: true,
+      image: true,
+      audio: 'realtime-only',
+    });
+  });
+
   it('routes by style affinity with preference and fallback reasoning', () => {
     const registry = createProviderCardRegistry([
       parseProviderCardMarkdown(readCard('flux.card.md'), { sourceLayer: 'builtin' }),

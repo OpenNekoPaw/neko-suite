@@ -118,6 +118,7 @@ export function MessageList({
                     isStreaming={item.isStreaming}
                     conversationId={activeConversationId}
                     workItemIds={item.workItemIds}
+                    siblingBlocks={item.siblingBlocks}
                   />
                 ) : (
                   <MessageItem

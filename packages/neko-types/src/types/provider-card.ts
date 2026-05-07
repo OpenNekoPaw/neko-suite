@@ -16,6 +16,13 @@ export function isValidProviderId(providerId: string): providerId is ProviderId 
 
 export type ProviderGenerationCapability = 'image.generate' | 'video.generate' | 'audio.generate';
 
+export interface ProviderInputModalities {
+  readonly text: boolean;
+  readonly image: boolean;
+  readonly video: boolean;
+  readonly audio: boolean | 'realtime-only';
+}
+
 export type StyleFamily =
   | 'photorealistic'
   | 'anime'
@@ -72,6 +79,7 @@ export interface ProviderCard {
   readonly displayName: string;
   readonly version: string;
   readonly capabilities: readonly ProviderGenerationCapability[];
+  readonly inputModalities?: Partial<ProviderInputModalities>;
   readonly sourceLayer: ProviderCardLayer;
   readonly sourceRef?: string;
   readonly syntaxProfile: ProviderSyntaxProfile;

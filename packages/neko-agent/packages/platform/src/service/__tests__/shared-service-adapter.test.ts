@@ -3,10 +3,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SharedServiceAdapter, toSharedService } from '../shared-service-adapter';
+import {
+  SharedServiceAdapter,
+  projectProviderAwareMessages,
+  toSharedService,
+} from '../shared-service-adapter';
 import type { Service } from '../service';
 import type { ChatChunk } from '../../types/adapter';
 import type { ServiceResponse, ServiceStreamResponse } from '../../types/service';
+import type { ChatMessage, PerceptionCard } from '@neko/shared';
 
 // Mock platform logger to capture warn calls
 const { mockLogger } = vi.hoisted(() => {
@@ -230,3 +235,117 @@ describe('SharedServiceAdapter', () => {
     expect(shared).toBeInstanceOf(SharedServiceAdapter);
   });
 });
+
+describe('projectProviderAwareMessages', () => {
+  it('appends provider-ready perception content from backfilled tool results', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: 'system' },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          id: 'packet-1',
+          selection: [],
+          artifactRefs: [],
+          projectRefs: [],
+          perceptionInputs: [],
+          uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+          createdAt: 1,
+        }),
+      },
+      {
+        role: 'tool',
+        toolCallId: 'call-1',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { status: 'completed' },
+          perceptionCards: [imageCard()],
+        }),
+      },
+    ];
+
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'openai',
+      modelId: 'gpt-vision',
+      providerCardRegistry: {
+        get: () => ({
+          providerId: 'openai',
+          modelId: 'gpt-vision',
+          displayName: 'GPT Vision',
+          version: '1.0.0',
+          capabilities: ['image.generate'],
+          inputModalities: { image: true },
+          sourceLayer: 'builtin',
+          syntaxProfile: { notes: [] },
+          conceptCoverage: { entries: [] },
+          trainingProfile: { styleAffinities: {}, antiBiasStrategies: [] },
+        }),
+      },
+      assetLoader: {
+        load: async () => ({ kind: 'image', url: 'data:image/png;base64,thumb' }),
+      },
+    });
+
+    expect(projected).toHaveLength(4);
+    expect(projected[3]).toEqual({
+      role: 'user',
+      content: [
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
+        { type: 'image', imageUrl: 'data:image/png;base64,thumb', detail: 'auto' },
+      ],
+    });
+    expect(JSON.stringify(projected)).not.toContain('file://');
+  });
+
+  it('does not duplicate multimodal packet content before perception cards are backfilled', async () => {
+    const messages: ChatMessage[] = [
+      {
+        role: 'user',
+        content: JSON.stringify({
+          id: 'packet-1',
+          selection: [],
+          artifactRefs: [],
+          projectRefs: [],
+          perceptionInputs: [
+            {
+              id: 'input-text',
+              kind: 'structured-data',
+              modality: 'text',
+              metadata: { text: 'describe this frame' },
+            },
+          ],
+          uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+          createdAt: 1,
+        }),
+      },
+    ];
+
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'openai',
+    });
+
+    expect(projected).toBe(messages);
+  });
+});
+
+function imageCard(): PerceptionCard {
+  return {
+    version: 1,
+    assetId: 'asset-1',
+    modality: 'image',
+    createdAt: 1,
+    layerStatus: { layer0: 'complete', layer1: 'complete', layer2: 'complete' },
+    structural: { format: 'png', mimeType: 'image/png', byteSize: 10, width: 512, height: 512 },
+    semantic: {
+      evidences: [{ kind: 'description', confidence: 0.9, value: 'rainy street' }],
+    },
+    perceptual: {
+      thumbnailRef: {
+        assetId: 'thumb-1',
+        uri: '${WORKSPACE}/thumb.png',
+        mimeType: 'image/png',
+      },
+    },
+  };
+}

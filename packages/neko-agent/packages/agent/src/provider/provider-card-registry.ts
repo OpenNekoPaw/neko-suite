@@ -95,6 +95,7 @@ function mergeProviderCards(cards: readonly ProviderCard[]): ProviderCard {
       ...current,
       ...next,
       capabilities: mergeArray(current.capabilities, next.capabilities),
+      inputModalities: mergeInputModalities(current.inputModalities, next.inputModalities),
       syntaxProfile: {
         ...current.syntaxProfile,
         ...next.syntaxProfile,
@@ -123,6 +124,15 @@ function mergeProviderCards(cards: readonly ProviderCard[]): ProviderCard {
 
 function mergeArray<T>(left: readonly T[], right: readonly T[]): readonly T[] {
   return Array.from(new Set([...left, ...right]));
+}
+
+function mergeInputModalities(
+  left: ProviderCard['inputModalities'],
+  right: ProviderCard['inputModalities'],
+): ProviderCard['inputModalities'] {
+  if (!left) return right;
+  if (!right) return left;
+  return { ...left, ...right };
 }
 
 function mergeConceptEntries(

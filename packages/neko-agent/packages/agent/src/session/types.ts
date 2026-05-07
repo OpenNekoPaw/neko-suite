@@ -232,6 +232,15 @@ export interface AgentSessionConfig {
   };
 
   /**
+   * Optional aggregate perception runtime.
+   *
+   * When supplied, AgentSession registers the lazy `perception.perceive`
+   * aggregate tool. The pipeline remains a runtime service with injected
+   * ports; Extension/Webview adapters do not own perception business logic.
+   */
+  perceptionPipeline?: import('../perception').IPerceptionPipeline;
+
+  /**
    * Optional reference to the shared SkillService. When supplied, ablation
    * toggles that control discovery (e.g. `skillDiscovery: false`) can flip
    * the service's discovery state at session init and restore it on dispose.
@@ -386,6 +395,7 @@ export type AgentEventType =
   | 'text_delta' // Streaming text chunk (incremental)
   | 'tool_call' // Tool invocation
   | 'tool_result' // Tool execution result
+  | 'tool_result_backfill' // Delayed tool result patch from background work
   | 'tool_progress' // Tool execution progress update
   | 'tool_confirmation' // Tool requires confirmation
   | 'version_recorded' // Creative version entry recorded
@@ -423,9 +433,16 @@ export interface AgentEvent {
     error?: string;
     /** Multimodal attachments from tool execution (e.g. generated images) */
     attachments?: import('@neko/shared').ToolResultAttachment[];
+    /** Structured media perception generated after tool completion. */
+    perceptionCards?: import('@neko/shared').PerceptionCard[];
+    /** Diagnostics captured while merging delayed result payloads. */
+    backfillDiagnostics?: import('@neko/shared').ToolResultBackfillDiagnostic[];
     /** Tool-level observability metadata persisted to journal consumers. */
     metadata?: Record<string, unknown>;
   };
+
+  /** Delayed tool result backfill payload */
+  toolResultBackfill?: import('@neko/shared').ToolResultBackfillPayload;
 
   /** Tool execution progress update */
   toolProgress?: {
@@ -532,6 +549,11 @@ export interface CompressionResult {
 
   /** Compression ratio (0-1) */
   ratio: number;
+}
+
+export interface ToolResultPatchResult {
+  readonly patched: boolean;
+  readonly eventId?: string;
 }
 
 // =============================================================================
@@ -692,6 +714,13 @@ export interface IAgentSession {
    * Add message to history
    */
   addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void;
+
+  /**
+   * Patch an existing tool result after background work completes.
+   */
+  patchToolResult(
+    payload: import('@neko/shared').ToolResultBackfillPayload,
+  ): Promise<ToolResultPatchResult>;
 
   /**
    * Apply skill injection (reversible via removeSkillInjection)

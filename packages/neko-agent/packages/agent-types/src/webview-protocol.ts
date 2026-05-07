@@ -434,6 +434,20 @@ export interface ToolResultMessage {
   data?: unknown;
   error?: string;
   plan?: Plan;
+  attachments?: readonly import('@neko/shared').ToolResultAttachment[];
+  perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
+  backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
+}
+
+export interface ToolResultBackfillMessage {
+  type: 'toolResultBackfill';
+  conversationId: string;
+  messageId?: string;
+  toolCallId: string;
+  dataPatch: Record<string, unknown>;
+  attachments?: readonly import('@neko/shared').ToolResultAttachment[];
+  perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
+  backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
 }
 
 export interface ToolConfirmationMessage {
@@ -614,6 +628,7 @@ export type ExtensionToWebviewMessage =
   | SsoErrorMessage
   | ToolCallMessage
   | ToolResultMessage
+  | ToolResultBackfillMessage
   | ToolConfirmationMessage
   | PlanStepStatusUpdateMessage
   | PlanStatusUpdateMessage

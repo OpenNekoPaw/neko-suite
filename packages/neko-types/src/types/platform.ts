@@ -107,6 +107,16 @@ export interface ServiceOptions {
     content: string;
     cacheControl?: 'ephemeral';
   }>;
+
+  /**
+   * Optional async message projection hook used by platform adapters to enrich
+   * generic chat history with provider-ready multimodal content at send time.
+   */
+  messageProjector?: (input: {
+    messages: readonly ChatMessage[];
+    providerId?: string;
+    modelId?: string;
+  }) => Promise<readonly ChatMessage[]> | readonly ChatMessage[];
 }
 
 /**

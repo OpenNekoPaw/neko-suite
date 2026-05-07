@@ -53,10 +53,16 @@ export interface ToolValidationError {
  */
 export interface ToolResultAttachment {
   type: 'image' | 'audio' | 'video';
-  /** Absolute file path to the generated asset */
+  /**
+   * Backward-compatible path/URI reference to the generated asset.
+   * New persisted results should use stable relative paths or ${VAR}/path
+   * values. Host-specific absolute paths are adapter-only compatibility data.
+   */
   path: string;
   /** Optional MIME type hint */
   mimeType?: string;
+  /** Stable asset reference for generated or perceptual assets. */
+  assetRef?: import('./perception-card').PerceptualAssetRef;
 }
 
 /**
@@ -87,6 +93,10 @@ export interface ToolResult {
   validationErrors?: ToolValidationError[];
   /** Multimodal attachments (e.g. generated image/audio/video previews) */
   attachments?: ToolResultAttachment[];
+  /** Structured media perception generated after tool completion. */
+  perceptionCards?: import('./perception-card').PerceptionCard[];
+  /** Diagnostics captured while merging delayed tool result backfill data. */
+  backfillDiagnostics?: import('./perception-card').ToolResultBackfillDiagnostic[];
 }
 
 /**

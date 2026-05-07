@@ -1,12 +1,13 @@
-import type { AgentPhase, ContentBlock, Plan } from '@neko-agent/types';
+import type { AgentPhase, ContentBlock, Plan, ToolCall } from '@neko-agent/types';
 import type { AgentEvent } from '../session';
 import { createPlanContentBlockFromToolResultData } from '../plan';
+import { applyToolResultBackfillToResult } from './tool-result-backfill';
 
 export interface CollectedToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
-  result?: { success: boolean; data: unknown; error?: string };
+  result?: ToolCall['result'];
 }
 
 export interface AgentStreamProjectionState {
@@ -66,7 +67,20 @@ export type AgentStreamWebviewMessage =
       toolCallId?: string;
       success?: boolean;
       data?: unknown;
+      attachments?: import('@neko/shared').ToolResultAttachment[];
+      perceptionCards?: import('@neko/shared').PerceptionCard[];
+      backfillDiagnostics?: import('@neko/shared').ToolResultBackfillDiagnostic[];
       plan?: Plan;
+    }
+  | {
+      type: 'toolResultBackfill';
+      conversationId: string;
+      messageId: string;
+      toolCallId: string;
+      dataPatch: Record<string, unknown>;
+      attachments?: readonly import('@neko/shared').ToolResultAttachment[];
+      perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
+      backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
     }
   | {
       type: 'toolConfirmation';
@@ -170,9 +184,27 @@ export function projectAgentStreamEventToWebviewMessages(
           toolCallId: event.toolResult?.toolCallId,
           success: event.toolResult?.success,
           data: event.toolResult?.data,
+          attachments: event.toolResult?.attachments,
+          perceptionCards: event.toolResult?.perceptionCards,
+          backfillDiagnostics: event.toolResult?.backfillDiagnostics,
           plan,
         },
       ];
+    case 'tool_result_backfill':
+      return event.toolResultBackfill
+        ? [
+            {
+              type: 'toolResultBackfill',
+              conversationId,
+              messageId,
+              toolCallId: event.toolResultBackfill.toolCallId,
+              dataPatch: event.toolResultBackfill.dataPatch,
+              attachments: event.toolResultBackfill.attachments,
+              perceptionCards: event.toolResultBackfill.perceptionCards,
+              backfillDiagnostics: event.toolResultBackfill.diagnostics,
+            },
+          ]
+        : [];
     case 'tool_confirmation':
       return [
         {
@@ -238,6 +270,8 @@ export function applyAgentStreamEventToState(
       return applyToolCall(state, event, options);
     case 'tool_result':
       return applyToolResult(state, event, options);
+    case 'tool_result_backfill':
+      return applyToolResultBackfill(state, event);
     case 'error':
       state.hasError = true;
       return setPhase(state, 'idle');
@@ -372,6 +406,13 @@ function applyToolResult(
     success: event.toolResult.success,
     data: event.toolResult.data,
     error: event.toolResult.error,
+    ...(event.toolResult.attachments ? { attachments: event.toolResult.attachments } : {}),
+    ...(event.toolResult.perceptionCards
+      ? { perceptionCards: event.toolResult.perceptionCards }
+      : {}),
+    ...(event.toolResult.backfillDiagnostics
+      ? { backfillDiagnostics: event.toolResult.backfillDiagnostics }
+      : {}),
   };
 
   const collectedToolCall = state.collectedToolCalls.find(
@@ -395,6 +436,39 @@ function applyToolResult(
 
   state.contentBlocks.push(planProjection.contentBlock);
   return { plan: planProjection.plan };
+}
+
+function applyToolResultBackfill(
+  state: AgentStreamProjectionState,
+  event: AgentEvent,
+): AgentStreamStateUpdate {
+  const payload = event.toolResultBackfill;
+  if (!payload) return {};
+
+  const collectedToolCall = state.collectedToolCalls.find(
+    (toolCall) => toolCall.id === payload.toolCallId,
+  );
+  let mergedCollectedResult: ToolCall['result'] | undefined;
+
+  if (collectedToolCall?.result) {
+    mergedCollectedResult = applyToolResultBackfillToResult(
+      collectedToolCall.result,
+      payload,
+    ).result;
+    collectedToolCall.result = mergedCollectedResult;
+  }
+
+  const toolBlock = state.contentBlocks.find(
+    (block) => block.type === 'tool_call' && block.toolCall?.id === payload.toolCallId,
+  );
+  if (toolBlock?.toolCall?.result) {
+    toolBlock.toolCall.result =
+      toolBlock.toolCall === collectedToolCall && mergedCollectedResult
+        ? mergedCollectedResult
+        : applyToolResultBackfillToResult(toolBlock.toolCall.result, payload).result;
+  }
+
+  return {};
 }
 
 function setPhase(

@@ -68,17 +68,18 @@ export function projectMessageForResourceDisplay(
 
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     projectedMessage.contentBlocks = message.contentBlocks.map((block) => {
-      if (block.type !== 'tool_call' || !block.toolCall?.result?.data) {
+      const toolCall = block.type === 'tool_call' ? block.toolCall : undefined;
+      if (!toolCall?.result?.data) {
         return block;
       }
 
       return {
         ...block,
         toolCall: {
-          ...block.toolCall,
+          ...toolCall,
           result: {
-            ...block.toolCall.result,
-            data: projectResourceValue(block.toolCall.result.data, options),
+            ...toolCall.result,
+            data: projectResourceValue(toolCall.result.data, options),
           },
         },
       };
@@ -126,8 +127,12 @@ export function updateBackgroundTaskToolResultUrls(
 
     if (message.contentBlocks) {
       projectedMessage.contentBlocks = message.contentBlocks.map((block) => {
-        const data = block.toolCall?.result?.data;
-        if (block.type !== 'tool_call' || !data || !isMatchingBackgroundTaskData(data, taskId)) {
+        if (block.type !== 'tool_call' || !block.toolCall) {
+          return block;
+        }
+
+        const result = block.toolCall.result;
+        if (!result || !isMatchingBackgroundTaskData(result.data, taskId)) {
           return block;
         }
 
@@ -137,8 +142,8 @@ export function updateBackgroundTaskToolResultUrls(
           toolCall: {
             ...block.toolCall,
             result: {
-              ...block.toolCall.result,
-              data: completeBackgroundTaskData(data, urls),
+              ...result,
+              data: completeBackgroundTaskData(result.data, urls),
             },
           },
         };

@@ -12,6 +12,7 @@ import type { MessageHandler, HandlerRegistration } from './types';
 import type {
   ToolCallMessage,
   ToolResultMessage,
+  ToolResultBackfillMessage,
   ToolConfirmationMessage,
   PlanStepStatusUpdateMessage,
   PlanStatusUpdateMessage,
@@ -27,6 +28,7 @@ import {
   updatePlanStepInMessages,
   type ToolResultMessageProjectionResult,
 } from '../presenters/message-presenter';
+import { projectToolResultBackfillIntoMessages } from '../presenters/tool-result-backfill-presenter';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ToolHandlers');
@@ -122,6 +124,30 @@ const handleToolResult: MessageHandler<'toolResult'> = (message: ToolResultMessa
   // Webview only renders task state received via task-handlers.ts
 };
 
+const handleToolResultBackfill: MessageHandler<'toolResultBackfill'> = (
+  message: ToolResultBackfillMessage,
+  context,
+) => {
+  logger.info('toolResultBackfill received:', {
+    messageId: message.messageId,
+    toolCallId: message.toolCallId,
+  });
+
+  updateConversation(context, message.conversationId, (msgs, streamingId) => {
+    const projection = projectToolResultBackfillIntoMessages({
+      messages: msgs,
+      streamingMessageId: streamingId,
+      message,
+    });
+
+    if (!projection.updated) {
+      logger.info('No target message found for toolResultBackfill');
+    }
+
+    return { messages: projection.messages };
+  });
+};
+
 /**
  * Handle 'toolConfirmation' message - Tool requires user confirmation (ask mode)
  * Updates the corresponding tool_call to show confirmation UI
@@ -203,6 +229,7 @@ const handlePlanStatusUpdate: MessageHandler<'planStatusUpdate'> = (
 export const toolHandlers: HandlerRegistration[] = [
   defineHandler('toolCall', handleToolCall),
   defineHandler('toolResult', handleToolResult),
+  defineHandler('toolResultBackfill', handleToolResultBackfill),
   defineHandler('toolConfirmation', handleToolConfirmation),
   defineHandler('planStepStatusUpdate', handlePlanStepStatusUpdate),
   defineHandler('planStatusUpdate', handlePlanStatusUpdate),

@@ -30,6 +30,7 @@ import {
   DEFAULT_INJECTION_CONFIG,
   resolveToolGroupTier,
 } from '../tools';
+import { PerceiveTool } from '../perception';
 import { SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
 import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
@@ -229,6 +230,9 @@ export function initializeSession(
   }
 
   if (!ablationMarker?.disableAgentFirstToolEvidence) {
+    if (config.perceptionPipeline) {
+      config.toolRegistry.register(new PerceiveTool({ pipeline: config.perceptionPipeline }));
+    }
     for (const tool of createPerceptionTools({
       ...(config.perceptionClients?.transcribe && {
         transcribeClient: config.perceptionClients.transcribe,

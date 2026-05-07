@@ -57,6 +57,14 @@ export interface PersistAgentStreamBackgroundTaskResultUrlsInput {
   readonly onError?: (error: unknown) => void;
 }
 
+export interface AgentStreamBackgroundTaskPersistInput<TDeliveryPlan = unknown> {
+  readonly conversationId: string;
+  readonly taskId: string;
+  readonly toolCallId?: string;
+  readonly urls: readonly string[];
+  readonly deliveryPlan?: TDeliveryPlan;
+}
+
 export function projectAgentStreamBackgroundTaskStart(
   input: AgentStreamBackgroundTaskStartInput,
 ): AgentStreamBackgroundTaskStartProjection | null {

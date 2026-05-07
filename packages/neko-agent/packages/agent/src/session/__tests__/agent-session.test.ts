@@ -552,6 +552,63 @@ describe('AgentSession', () => {
     });
   });
 
+  describe('patchToolResult()', () => {
+    it('patches in-memory tool history and appends a journal backfill event', async () => {
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(createConfig({ journalWriter }));
+      session.loadHistory([
+        {
+          role: 'tool',
+          toolCallId: 'call-1',
+          content: JSON.stringify({ status: 'queued', taskId: 'task-1' }),
+        },
+      ]);
+
+      const result = await session.patchToolResult({
+        toolCallId: 'call-1',
+        timestamp: 1,
+        dataPatch: {
+          status: 'completed',
+          thumbnailAssetRef: {
+            assetId: 'asset-1',
+            uri: '${WORKSPACE}/thumb.png',
+            mimeType: 'image/png',
+          },
+        },
+        perceptionCards: [
+          {
+            version: 1,
+            assetId: 'asset-1',
+            modality: 'image',
+            createdAt: 1,
+            layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'skipped' },
+            structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+          },
+        ],
+      });
+
+      expect(result).toEqual({ patched: true, eventId: 'evt-1' });
+      expect(journalWriter.appendEvent).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ type: 'tool_result_backfill' }),
+      );
+      expect(journalWriter.flush).toHaveBeenCalled();
+      const toolMessage = session
+        .getHistory()
+        .find((message) => message.role === 'tool' && message.toolCallId === 'call-1');
+      expect(JSON.parse(toolMessage!.content as string)).toEqual(
+        expect.objectContaining({
+          schema: 'neko.tool-result.v1',
+          data: expect.objectContaining({
+            status: 'completed',
+            taskId: 'task-1',
+          }),
+          perceptionCards: [expect.objectContaining({ assetId: 'asset-1' })],
+        }),
+      );
+    });
+  });
+
   // -------------------------------------------------------------------------
   // 6. execute() — plan mode injects reminder
   // -------------------------------------------------------------------------

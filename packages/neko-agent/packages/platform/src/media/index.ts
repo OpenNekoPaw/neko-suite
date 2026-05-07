@@ -56,6 +56,7 @@ export {
   buildGeneratedMediaAssets,
   computeAspectRatioLabel,
   inferGeneratedMediaMimeType,
+  toStableGeneratedAssetUri,
   type BuildGeneratedMediaAssetsInput,
   type GeneratedMediaTaskType,
 } from './media-generated-asset';

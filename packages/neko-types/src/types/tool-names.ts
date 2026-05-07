@@ -152,6 +152,7 @@ export const TOOL_NAMES_TRANSCRIBE = {
 // =============================================================================
 
 export const TOOL_NAMES_PERCEPTION = {
+  PERCEIVE: 'perception.perceive',
   DESCRIBE_INPUT: 'perception.describeInput',
   AUDIO_TRANSCRIBE: 'perception.audio.transcribe',
   IMAGE_SIMILARITY: 'perception.image.similarity',

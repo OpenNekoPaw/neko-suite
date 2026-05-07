@@ -6,7 +6,7 @@
  * as they are unnecessary for a single-user desktop application.
  */
 
-import type { ChatMessage, ChatOptions } from '../types/adapter';
+import type { ChatChunk, ChatMessage, ChatOptions } from '../types/adapter';
 import type {
   ServiceOptions,
   ServiceResponse,
@@ -149,7 +149,11 @@ export class Service implements IService {
     const { model, provider, adapter } = this.resolveResources(routing);
 
     const chatOptions: ChatOptions = { ...options, model: model.name };
-    const response = await adapter.chat(messages, chatOptions, model, provider);
+    const projectedMessages = await projectMessagesForProvider(messages, chatOptions, {
+      providerId: routing.providerId,
+      modelId: routing.modelId,
+    });
+    const response = await adapter.chat(projectedMessages, chatOptions, model, provider);
     return { ...response, ...this.buildResponseMeta(routing, startTime) };
   }
 
@@ -162,7 +166,14 @@ export class Service implements IService {
     const { model, provider, adapter } = this.resolveResources(routing);
 
     const chatOptions: ChatOptions = { ...options, model: model.name, stream: true };
-    const rawStream = adapter.chatStream(messages, chatOptions, model, provider);
+    const rawStream = createProjectedChatStream({
+      messages,
+      options: chatOptions,
+      providerId: routing.providerId,
+      modelId: routing.modelId,
+      start: (projectedMessages) =>
+        adapter.chatStream(projectedMessages, chatOptions, model, provider),
+    });
 
     // Apply stream timeout if configured
     const timeoutMs = this.getStreamTimeout();
@@ -369,4 +380,39 @@ export class Service implements IService {
       yield chunk;
     }
   }
+}
+
+async function projectMessagesForProvider(
+  messages: ChatMessage[],
+  options: ChatOptions,
+  routing: { providerId: string; modelId: string },
+): Promise<ChatMessage[]> {
+  if (!options.messageProjector) {
+    return messages;
+  }
+
+  const projected = await options.messageProjector({
+    messages,
+    providerId: routing.providerId,
+    modelId: routing.modelId,
+  });
+  return [...projected];
+}
+
+function createProjectedChatStream(input: {
+  readonly messages: ChatMessage[];
+  readonly options: ChatOptions;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly start: (messages: ChatMessage[]) => AsyncIterable<ChatChunk>;
+}): AsyncIterable<ChatChunk> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      const projectedMessages = await projectMessagesForProvider(input.messages, input.options, {
+        providerId: input.providerId,
+        modelId: input.modelId,
+      });
+      yield* input.start(projectedMessages);
+    },
+  };
 }

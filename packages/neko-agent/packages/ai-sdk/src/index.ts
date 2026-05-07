@@ -11,6 +11,17 @@ export type { LegacyMediaAdapter, LegacyAdapterResult, LegacyMediaOutput } from 
 export { createNewAPIProvider } from './providers/newapi';
 export { createLegacyBridgeProvider } from './bridge';
 export {
+  projectMultimodalPacketToChatMessageAsync,
   projectMultimodalPacketToChatMessage,
+  projectPerceptionCardToContentParts,
+  resolveProviderInputModalities,
+  type AsyncMultimodalMessageProjectionOptions,
+  type AsyncMultimodalMessageProjectionResult,
+  type PerceptionAssetLoader,
+  type ProjectionDiagnostic,
+  type ProviderInputModalities,
+  type ProviderInputModalityResolverInput,
   type MultimodalMessageProjectionOptions,
+  type ProviderReadyAssetPayload,
+  type VisionPreprocessPolicy,
 } from './multimodal-message-projection';

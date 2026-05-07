@@ -9,6 +9,7 @@ describe('perceptionToolGroup', () => {
         name: 'perception-evidence',
         tools: [
           TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT,
+          TOOL_NAMES_PERCEPTION.PERCEIVE,
           TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE,
           TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY,
           TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY,

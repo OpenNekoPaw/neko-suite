@@ -3,6 +3,7 @@ import type {
   ProviderCardLayer,
   ProviderConceptEntry,
   ProviderGenerationCapability,
+  ProviderInputModalities,
   ProviderSyntaxProfile,
   ProviderTrainingProfile,
   StyleAffinityLevel,
@@ -42,6 +43,7 @@ export function parseProviderCardMarkdown(
     attributes.get('displayName') ?? parseTitle(markdown) ?? modelId ?? providerId;
   const version = attributes.get('version') ?? '0.0.0';
   const capabilities = parseCapabilities(attributes.get('capabilities'));
+  const inputModalities = parseInputModalities(attributes.get('inputModalities'));
 
   return {
     providerId,
@@ -49,6 +51,7 @@ export function parseProviderCardMarkdown(
     displayName,
     version,
     capabilities,
+    ...(inputModalities ? { inputModalities } : {}),
     sourceLayer: options.sourceLayer,
     ...(options.sourceRef ? { sourceRef: options.sourceRef } : {}),
     syntaxProfile: parseSyntaxProfile(markdown),
@@ -94,6 +97,47 @@ function parseCapabilities(value: string | undefined): readonly ProviderGenerati
       CAPABILITIES.includes(entry as ProviderGenerationCapability),
     );
   return parsed.length > 0 ? parsed : ['image.generate'];
+}
+
+function parseInputModalities(
+  value: string | undefined,
+): Partial<ProviderInputModalities> | undefined {
+  if (!value) return undefined;
+
+  const result: {
+    text?: boolean;
+    image?: boolean;
+    video?: boolean;
+    audio?: boolean | 'realtime-only';
+  } = {};
+  for (const entry of parseListAttribute(value)) {
+    const normalized = entry.toLowerCase();
+    if (normalized === 'text') {
+      result.text = true;
+    } else if (normalized === 'image') {
+      result.image = true;
+    } else if (normalized === 'video') {
+      result.video = true;
+    } else if (normalized === 'audio') {
+      result.audio = true;
+    } else if (
+      normalized === 'audio:realtime-only' ||
+      normalized === 'audio=realtime-only' ||
+      normalized === 'audio.realtime-only'
+    ) {
+      result.audio = 'realtime-only';
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseListAttribute(value: string): readonly string[] {
+  return value
+    .replace(/[[\]]/g, '')
+    .split(',')
+    .map((entry) => entry.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean);
 }
 
 function parseSyntaxProfile(markdown: string): ProviderSyntaxProfile {

@@ -10,6 +10,9 @@ import {
   videoRendererEntry,
   audioRendererEntry,
   storyboardRendererEntry,
+  storyboardTableRendererEntry,
+  comparisonGridRendererEntry,
+  assetGalleryRendererEntry,
 } from './renderers';
 
 let initialized = false;
@@ -26,4 +29,7 @@ export function registerDefaultRenderers(): void {
   richContentRegistry.register(videoRendererEntry);
   richContentRegistry.register(audioRendererEntry);
   richContentRegistry.register(storyboardRendererEntry);
+  richContentRegistry.register(storyboardTableRendererEntry);
+  richContentRegistry.register(comparisonGridRendererEntry);
+  richContentRegistry.register(assetGalleryRendererEntry);
 }

@@ -4,7 +4,12 @@
  * SSOT for: Message, ToolCall, ContentBlock, ContentBlockType, CodeDiff
  */
 
-import type { MessageAttachment } from '@neko/shared';
+import type {
+  MessageAttachment,
+  PerceptionCard,
+  ToolResultAttachment,
+  ToolResultBackfillDiagnostic,
+} from '@neko/shared';
 import type { Plan } from './plan';
 
 // ---------------------------------------------------------------------------
@@ -21,6 +26,9 @@ export interface ToolCall {
     error?: string;
     /** Execution time in milliseconds */
     duration?: number;
+    attachments?: readonly ToolResultAttachment[];
+    perceptionCards?: readonly PerceptionCard[];
+    backfillDiagnostics?: readonly ToolResultBackfillDiagnostic[];
   };
   /** For tool confirmation (ask mode) */
   pendingConfirmation?: boolean;
@@ -39,7 +47,35 @@ export interface ToolCall {
  * Content block types for sequential rendering of AI responses.
  * Allows thinking, tool calls, text, and code diffs to be rendered in chronological order.
  */
-export type ContentBlockType = 'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan';
+export type ContentBlockType =
+  | 'thinking'
+  | 'text'
+  | 'tool_call'
+  | 'code_diff'
+  | 'plan'
+  | 'composite';
+
+export type CompositeTemplate = 'storyboard-table' | 'comparison' | 'gallery' | 'report';
+
+export interface MediaRef {
+  readonly toolCallId: string;
+  readonly assetIndex?: number;
+  readonly caption?: string;
+  readonly role?: string;
+}
+
+export interface CompositeSection {
+  readonly heading?: string;
+  readonly content?: string;
+  readonly mediaRefs?: readonly MediaRef[];
+  readonly layout?: 'inline' | 'grid' | 'table-row';
+}
+
+export interface CompositeBlockData {
+  readonly template: CompositeTemplate;
+  readonly title?: string;
+  readonly sections: readonly CompositeSection[];
+}
 
 /**
  * Code diff information for file edits
@@ -69,6 +105,8 @@ export interface ContentBlock {
   codeDiff?: CodeDiff;
   /** For plan blocks — the parsed Plan (from plan-mode markdown). */
   plan?: Plan;
+  /** For composite blocks — structured multimodal presentation intent. */
+  composite?: CompositeBlockData;
 }
 
 // ---------------------------------------------------------------------------

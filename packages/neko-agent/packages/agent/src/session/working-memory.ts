@@ -1,6 +1,18 @@
-import type { ChatMessage } from '@neko/shared';
+import type {
+  ChatMessage,
+  PerceptionCard,
+  ToolResultAttachment,
+  ToolResultBackfillDiagnostic,
+  ToolResultBackfillPayload,
+} from '@neko/shared';
 import type { AgentEvent } from './types';
 import type { JournalEntry } from './journal-writer';
+import {
+  applyToolResultBackfillToResult,
+  type BackfillableToolResult,
+} from '../runtime/tool-result-backfill';
+
+const TOOL_RESULT_ENVELOPE_SCHEMA = 'neko.tool-result.v1';
 
 export interface WorkingMemoryMessage {
   message: ChatMessage;
@@ -102,14 +114,16 @@ export function projectPersistedEventsToWorkingMemory(
           history.push({
             message: {
               role: 'tool',
-              content: event.toolResult.success
-                ? JSON.stringify(event.toolResult.data)
-                : `Error: ${event.toolResult.error ?? 'Unknown error'}`,
+              content: serializeToolResultMessageContent(event.toolResult),
               toolCallId: event.toolResult.toolCallId,
             },
             sourceEventIds: toSourceEventIds(entry.eventId),
           });
         }
+        break;
+
+      case 'tool_result_backfill':
+        applyToolResultBackfillToHistory(history, event.toolResultBackfill);
         break;
 
       case 'compaction':
@@ -188,6 +202,30 @@ export function workingMemoryToHistory(entries: readonly WorkingMemoryMessage[])
   };
 }
 
+export function applyToolResultBackfillToChatHistory(
+  history: ChatMessage[],
+  payload: ToolResultBackfillPayload | undefined,
+): boolean {
+  if (!payload) return false;
+
+  for (let index = history.length - 1; index >= 0; index--) {
+    const message = history[index];
+    if (message?.role !== 'tool' || message.toolCallId !== payload.toolCallId) {
+      continue;
+    }
+
+    const existingResult = parseToolMessageResult(message);
+    const merged = applyToolResultBackfillToResult(existingResult, payload);
+    history[index] = {
+      ...message,
+      content: serializeToolResultMessageContent(merged.result),
+    };
+    return true;
+  }
+
+  return false;
+}
+
 function applyCompactionEvents(
   history: readonly WorkingMemoryMessage[],
   compactionEvents: readonly ProjectedCompactionEvent[],
@@ -251,6 +289,125 @@ function flushPendingAssistant(
     sourceEventIds: [...pendingAssistant.sourceEventIds],
   });
   return null;
+}
+
+function applyToolResultBackfillToHistory(
+  history: WorkingMemoryMessage[],
+  payload: ToolResultBackfillPayload | undefined,
+): void {
+  if (!payload) return;
+  for (let index = history.length - 1; index >= 0; index--) {
+    const entry = history[index];
+    if (entry?.message.role !== 'tool' || entry.message.toolCallId !== payload.toolCallId) {
+      continue;
+    }
+
+    const existingResult = parseToolMessageResult(entry.message);
+    const merged = applyToolResultBackfillToResult(existingResult, payload);
+    entry.message = {
+      ...entry.message,
+      content: serializeToolResultMessageContent(merged.result),
+    };
+    return;
+  }
+}
+
+function serializeToolResultMessageContent(
+  result: BackfillableToolResult | NonNullable<AgentEvent['toolResult']>,
+): string {
+  const hasExtendedFields =
+    (result.attachments?.length ?? 0) > 0 ||
+    (result.perceptionCards?.length ?? 0) > 0 ||
+    (result.backfillDiagnostics?.length ?? 0) > 0;
+
+  if (!result.success) {
+    if (!hasExtendedFields) {
+      return `Error: ${result.error ?? 'Unknown error'}`;
+    }
+    return stringifyToolResultContent({
+      schema: TOOL_RESULT_ENVELOPE_SCHEMA,
+      success: false,
+      error: result.error ?? 'Unknown error',
+      data: result.data,
+      attachments: result.attachments,
+      perceptionCards: result.perceptionCards,
+      backfillDiagnostics: result.backfillDiagnostics,
+    });
+  }
+
+  if (!hasExtendedFields) {
+    return stringifyToolResultContent(result.data);
+  }
+
+  return stringifyToolResultContent({
+    schema: TOOL_RESULT_ENVELOPE_SCHEMA,
+    data: result.data,
+    attachments: result.attachments,
+    perceptionCards: result.perceptionCards,
+    backfillDiagnostics: result.backfillDiagnostics,
+  });
+}
+
+function parseToolMessageResult(message: ChatMessage): BackfillableToolResult {
+  if (typeof message.content !== 'string') {
+    return { success: true, data: message.content };
+  }
+
+  try {
+    const parsed = JSON.parse(message.content) as unknown;
+    if (isSerializedToolResultEnvelope(parsed)) {
+      return {
+        success: parsed.success ?? true,
+        data: parsed.data,
+        ...(typeof parsed.error === 'string' ? { error: parsed.error } : {}),
+        ...(parsed.attachments ? { attachments: parsed.attachments } : {}),
+        ...(parsed.perceptionCards ? { perceptionCards: parsed.perceptionCards } : {}),
+        ...(parsed.backfillDiagnostics ? { backfillDiagnostics: parsed.backfillDiagnostics } : {}),
+      };
+    }
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as { readonly error?: unknown }).error === 'string' &&
+      Object.keys(parsed).length === 1
+    ) {
+      return { success: false, data: {}, error: (parsed as { readonly error: string }).error };
+    }
+    return { success: true, data: parsed };
+  } catch {
+    if (message.content.startsWith('Error:')) {
+      return { success: false, data: {}, error: message.content.slice('Error:'.length).trim() };
+    }
+    return { success: true, data: message.content };
+  }
+}
+
+interface SerializedToolResultEnvelope {
+  readonly schema: typeof TOOL_RESULT_ENVELOPE_SCHEMA;
+  readonly success?: boolean;
+  readonly data: unknown;
+  readonly error?: string;
+  readonly attachments?: readonly ToolResultAttachment[];
+  readonly perceptionCards?: readonly PerceptionCard[];
+  readonly backfillDiagnostics?: readonly ToolResultBackfillDiagnostic[];
+}
+
+function isSerializedToolResultEnvelope(value: unknown): value is SerializedToolResultEnvelope {
+  if (!isRecord(value) || value['schema'] !== TOOL_RESULT_ENVELOPE_SCHEMA) {
+    return false;
+  }
+
+  return Object.hasOwn(value, 'data');
+}
+
+function stringifyToolResultContent(value: unknown): string {
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? String(value) : serialized;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function mergeSourceEventIds(left: readonly string[], right: readonly string[]): string[] {

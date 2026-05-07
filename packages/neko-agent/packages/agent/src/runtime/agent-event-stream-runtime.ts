@@ -16,6 +16,7 @@ import {
   type StartAgentStreamBackgroundTaskObserverInput,
 } from './agent-stream-task-observer';
 import type { AgentStreamPersistenceSnapshot } from './message-runtime';
+import type { AgentStreamBackgroundTaskPersistInput } from './agent-stream-background-task';
 
 export type AgentEventStreamRuntimeMessage =
   | AgentStreamWebviewMessage
@@ -37,10 +38,9 @@ export interface AgentEventStreamRuntimeBackgroundTasks<
     TSourceTask,
     TDeliveryPlan
   >['createProgressDelivery'];
-  readonly persistResultUrls?: StartAgentStreamBackgroundTaskObserverInput<
-    TSourceTask,
-    TDeliveryPlan
-  >['persistResultUrls'];
+  readonly persistResultUrls?: (
+    input: AgentStreamBackgroundTaskPersistInput<TDeliveryPlan>,
+  ) => void;
   readonly onIgnoredConversationTask?: StartAgentStreamBackgroundTaskObserverInput<
     TSourceTask,
     TDeliveryPlan

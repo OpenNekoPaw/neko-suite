@@ -16,3 +16,8 @@ export type { ImageGridRichData } from './renderers/ImageGridRenderer';
 export type { VideoRichData } from './renderers/VideoRenderer';
 export type { AudioRichData } from './renderers/AudioRenderer';
 export type { StoryboardRichData } from './renderers/StoryboardRenderer';
+export type {
+  AssetGalleryRichData,
+  ComparisonGridRichData,
+  StoryboardTableRichData,
+} from '@/presenters/composite-content-presenter';

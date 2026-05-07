@@ -17,6 +17,10 @@ export type {
   ContentBlock,
   ContentBlockType,
   CodeDiff,
+  CompositeBlockData,
+  CompositeSection,
+  CompositeTemplate,
+  MediaRef,
   // Plan
   Plan,
   PlanStep,

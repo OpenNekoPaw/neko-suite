@@ -3,6 +3,7 @@ import {
   buildGeneratedMediaAssets,
   computeAspectRatioLabel,
   inferGeneratedMediaMimeType,
+  toStableGeneratedAssetUri,
 } from '../media-generated-asset';
 
 describe('media generated asset helpers', () => {
@@ -46,6 +47,11 @@ describe('media generated asset helpers', () => {
         model: 'flux',
         sourceNodeId: 'node-1',
         characterIds: ['char-1'],
+        assetRef: {
+          assetId: 'asset-1',
+          uri: 'generated-assets/image.png',
+          mimeType: 'image/png',
+        },
         type: 'generated-image',
         width: 768,
         height: 512,
@@ -89,5 +95,12 @@ describe('media generated asset helpers', () => {
         channels: 2,
       }),
     );
+  });
+
+  it('normalizes generated asset paths through one stable URI helper', () => {
+    expect(toStableGeneratedAssetUri('/repo/.neko/generated/image.png')).toBe(
+      '${WORKSPACE}/.neko/generated/image.png',
+    );
+    expect(toStableGeneratedAssetUri('/tmp/image.png')).toBe('generated-assets/image.png');
   });
 });
