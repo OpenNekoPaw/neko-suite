@@ -90,6 +90,8 @@ export default defineConfig({
         cbz: path.resolve(__dirname, 'cbz.html'),
         epub: path.resolve(__dirname, 'epub.html'),
         docx: path.resolve(__dirname, 'docx.html'),
+        'panorama-image': path.resolve(__dirname, 'panorama-image.html'),
+        'panorama-video': path.resolve(__dirname, 'panorama-video.html'),
       },
       output: {
         entryFileNames: 'assets/[name].js',

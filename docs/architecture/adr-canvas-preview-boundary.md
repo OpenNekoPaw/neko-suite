@@ -2,7 +2,7 @@
 
 - **Status**: Proposed
 - **Date**: 2026-05-07
-- **Scope**: neko-canvas, neko-preview, neko-model, neko-agent
+- **Scope**: neko-canvas, neko-preview, neko-model, neko-agent, @neko/neko-client, neko-engine
 - **Refines**: `adr-panoramic-image-preview.md` q2 reuse decision (line 378) and NFR reusability (line 140)
 
 ## Context
@@ -90,16 +90,27 @@ Cross-plugin delegation must not introduce import-level dependencies. The only p
 
 | Mechanism | When to use | Example |
 |-----------|-------------|---------|
-| `vscode.commands.executeCommand(id, ...args)` | Fire-and-forget actions, opening editors | `neko.preview.openPanoramic`, `neko.model.setEnvironment` |
-| `vscode.commands.executeCommand('vscode.openWith', uri, viewType)` | Open a file in a specific custom editor | Open `.hdr` in `neko.preview.panoramic` |
-| `vscode.extensions.getExtension<API>(id)?.exports` | Query capabilities or call methods with return values | `NekoPreviewAPI.probeMedia(path)` |
+| `vscode.commands.executeCommand(id, ...args)` | Fire-and-forget actions, opening editors | `neko.preview.openPanoramicImage`, `neko.preview.openPanoramicVideo`, `neko.preview.openBestPanoramic`, `neko.model.useEnvironment` |
+| `vscode.commands.executeCommand('vscode.openWith', uri, viewType)` | Open a file in a specific custom editor | Open `.hdr` in `neko.preview.panoramicImage`; open trusted 360 video in `neko.preview.panoramicVideo` |
+| `vscode.extensions.getExtension<API>(id)?.exports` | Query capabilities or call methods with return values; `API` must be a local minimal interface or a shared contract | `PreviewPlaybackAPI.probeMedia(path)` |
 | Shared types in `@neko/shared` | Type contracts consumed by multiple extensions | `ImageProbeInfo`, `MediaInfo`, `projectionType` |
 | Shared protobuf in `@neko/proto` | Engine communication contracts | Proto DTOs for engine actions |
 
 **Prohibited**:
 - Direct `import` from another extension's package (violates `no-cross-extension-deps`)
+- Importing another extension's exported API type from its package; consumers must declare the minimal shape locally or use a contract moved to `@neko/shared`
 - Passing live objects (class instances, callbacks) across extension boundaries — use serializable data only
 - Defining shared contracts inside a specific extension package — move to `@neko/shared` or `@neko/proto`
+
+Final panoramic routing names:
+
+| Route | Value |
+|-------|-------|
+| Panoramic image viewType | `neko.preview.panoramicImage` |
+| Panoramic video viewType | `neko.preview.panoramicVideo` |
+| Explicit image command | `neko.preview.openPanoramicImage` |
+| Explicit video command | `neko.preview.openPanoramicVideo` |
+| Best-effort route command | `neko.preview.openBestPanoramic` |
 
 ### neko-agent Preview Boundary
 
@@ -109,7 +120,7 @@ Agent's core loop is **generate → confirm → iterate**. Every context switch 
 
 #### Two-state card model
 
-Each media card has two states:
+Media cards that support inline audio/video playback have two states:
 
 ```
 [Idle]   Engine-provided poster/waveform + metadata badges (pure <img>, lightweight)
@@ -119,7 +130,7 @@ Each media card has two states:
 [Idle]   Returns to poster (resources released)
 ```
 
-Only **one** card can be Active at a time (same constraint as canvas). Idle cards are identical to the former static-only design — zero streaming overhead in chat history scrolling.
+Only **one** playback-capable card can be Active at a time (same constraint as canvas). Panoramic cards remain Idle-only thumbnails and delegate interaction to `neko-preview`. Idle cards are identical to the former static-only design — zero streaming overhead in chat history scrolling.
 
 #### Agent CAN do
 
@@ -129,10 +140,10 @@ Only **one** card can be Active at a time (same constraint as canvas). Idle card
 | GIF / Animated image | Animated thumbnail | — (click opens in VSCode) | `<img>` native |
 | Video | Engine-provided poster + duration badge | **Inline H.264 playback** via neko-client | `<img>` idle → `<canvas>` + H264StreamClient active |
 | Audio | Engine-provided waveform + duration badge | **Inline PCM playback** via neko-client | `<img>` idle → AudioStreamClient + waveform animation active |
-| Panoramic image | Center-crop 90° FOV thumbnail | Engine pre-rendered rotation GIF | Engine `image:crop-fov` → `<img>`; turntable via `<img src="*.gif">` |
+| Panoramic image | Center-crop 90° FOV thumbnail | — (click opens spherical preview in neko-preview) | Engine `fov-crop` → `<img>`; delegate to `neko.preview.panoramicImage` |
 | 3D Model | Static screenshot | Engine pre-rendered turntable GIF | Engine offline render → `<img src="*.gif">` |
 | 2D Skeletal | Static pose screenshot | Engine pre-rendered animation GIF | Engine offline render → `<img src="*.gif">` |
-| 360° Video | Engine-provided poster + duration badge | **Inline H.264 playback** (flat, not spherical) | Same as Video |
+| 360° Video | Engine-provided poster + duration badge | — (click opens spherical preview in neko-preview) | Engine `thumbnail` → `<img>`; delegate to `neko.preview.panoramicVideo` |
 
 **Constraint**: DOM `<video>` / `<audio>` elements remain prohibited — VSCode webview sandbox has limited codec support. All playback uses neko-client's WebCodecs (H.264 hardware decode → VideoFrame → Canvas 2D `drawImage`) and Web Audio API (PCM f32le → AudioBuffer), which bypass native codec limitations entirely.
 
@@ -156,7 +167,7 @@ User clicks play button on VideoCard
 postMessage('media:play', { filePath, startTime? })
   ↓
 Extension host:
-  ├─ api = vscode.extensions.getExtension<NekoPreviewAPI>('neko.neko-preview')?.exports
+  ├─ api = vscode.extensions.getExtension<PreviewPlaybackAPI>('neko.neko-preview')?.exports
   ├─ streamIds = await api.startPlayback(filePath, mediaInfo)
   └─ wsUrls = api.getStreamWebSocketUrl(streamIds)
   ↓
@@ -168,8 +179,15 @@ Agent webview (InlineChatPlayer component):
   ↓
 FrameScheduler syncs video frames to audio master clock
   ↓
-User clicks stop / playback ends → disconnect streams → return to poster
+User clicks stop / playback ends
+  ├─ webview disconnects H264StreamClient / AudioStreamClient
+  ├─ postMessage('media:stop', { videoStreamId, audioStreamId })
+  └─ extension host calls api.stopStreams(videoStreamId, audioStreamId)
+  ↓
+Return to poster
 ```
+
+The extension host that starts a playback stream owns its cleanup. `stopStreams()` must be called when playback stops, when another card becomes Active, when the chat webview is disposed, and when stream startup fails after either stream has been allocated.
 
 #### Canvas vs Agent: Why Thumbnails Differ for Panoramic Content
 
@@ -179,20 +197,34 @@ Agent displays a **center-crop 90° FOV extract** — a flat equirectangular str
 
 Both consume the same engine pre-render pipeline for turntable/rotation previews.
 
+Canvas and Agent do not own panoramic view angles. Interactive `yaw/pitch/fov` belongs to neko-preview's viewer-local state; only low-frequency semantic requests such as FOV crop thumbnails, saved default views, screenshots, tile requests, or `EnvironmentPlacement` for neko-model cross the engine/shared-contract boundary.
+
 #### Shared Preview Assets
 
 Canvas and Agent consume the same engine-generated preview assets. No extension renders these independently:
 
 ```
-Engine (offline render)
-  ├── image:crop-fov   → 90° FOV center crop (for Agent panoramic thumbnails)
-  ├── image:turntable  → rotation mp4/GIF   (for Canvas + Agent hover)
+Engine preview manifest / variant API
+  ├── role=proxy       → flat equirectangular proxy (for Canvas node preview)
+  ├── role=thumbnail   → poster/static thumbnail (for video and generic cards)
+  ├── role=fov-crop    → 90° FOV center crop (for Agent panoramic cards)
   ├── model:turntable  → 3D turntable mp4   (for Canvas + Agent hover)
   └── puppet:clip      → animation mp4/GIF  (for Canvas + Agent hover)
 
 neko-canvas → consumes as <img>/<video> in node (DOM-native allowed)
 neko-agent  → consumes as <img> in idle cards; neko-client streams for active playback
 ```
+
+Canvas/Agent preview variant lifecycle is request-scoped:
+
+1. The extension host registers a source through `registerPreviewAsset({ source, kind, expectedProjection })`.
+2. It requests the needed `PreviewVariant` (`proxy`, `thumbnail`, or `fov-crop`) with an optional `PanoramaViewState`.
+3. It sends only the variant URL/metadata to the webview.
+4. It calls `unregisterPreviewAsset(assetIdOrToken)` in `finally`, on source change, and on webview disposal for any resource it started.
+
+This mirrors the engine-first preview rule: Canvas and Agent may display engine-issued URLs, but they do not create a direct local media loading path for panoramic content.
+
+Implementation note (2026-05-08): the Phase 1 engine variant path is contract-complete but role-specific rendering is still incremental. `proxy`, `thumbnail`, and `fov-crop` requests are routed through `PreviewManifest` / `PreviewVariant` and engine-managed tokens; until the P1 renderer generates distinct files, variants may be passthrough descriptors over the registered source URL. Consumers must treat those URLs as opaque and short-lived. Canvas delegates panoramic nodes with double-click or the explicit preview button, while Agent panoramic cards remain idle thumbnails that open `neko-preview` on click.
 
 ### Refinement: Panoramic Viewer Reuse Scope
 
@@ -206,7 +238,7 @@ This ADR **refines** that decision. "Reuse" means reusing the **protocol, previe
 
 | Reuse type | Allowed | Example |
 |------------|---------|---------|
-| **Command entry point** | Yes | `vscode.commands.executeCommand('neko.preview.openPanoramic', uri)` |
+| **Command entry point** | Yes | `vscode.commands.executeCommand('neko.preview.openPanoramicImage', uri)` or `vscode.openWith(uri, 'neko.preview.panoramicVideo')` |
 | **Pre-rendered assets** | Yes | Engine-generated turntable mp4, center-crop thumbnails |
 | **Shared types / contracts** | Yes | `ImageProbeInfo`, `projectionType` in `@neko/shared` |
 | **`@neko/panorama-viewer` as iframe / webview panel** | Yes (neko-model only) | neko-model embeds the viewer as an environment map picker panel |
@@ -270,4 +302,4 @@ neko-model may embed the sphere viewer for environment map editing (its WebGL co
 - Engine IBL pipeline is shared between neko-preview and neko-model; no duplication at the Rust layer
 - Agent and canvas consume the same pre-rendered mp4/GIF for turntable/rotation previews; the only difference is the static thumbnail strategy (full projection vs center crop)
 - 360° video receives no special treatment in either surface — spherical playback is exclusively neko-preview's responsibility
-- Agent inline playback uses the same WebSocket streaming path as canvas (webview → direct WS to neko-preview frame server); extension host only brokers the initial handshake
+- Agent inline playback uses the same WebSocket streaming path as canvas (webview → direct WS to neko-preview frame server); extension host brokers stream start/stop and owns engine-side cleanup

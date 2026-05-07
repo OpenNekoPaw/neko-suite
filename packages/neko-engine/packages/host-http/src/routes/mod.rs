@@ -72,6 +72,19 @@ pub fn build_router(engine: Arc<EngineApi>) -> Router {
         )
         // Document preview — Range-capable static file serving (PDF / CBZ)
         .route("/v1/preview/register", post(preview_file::handle_register))
+        // Engine-first preview manifests for image/video preview surfaces.
+        .route(
+            "/v1/preview/assets",
+            post(preview_file::handle_register_asset),
+        )
+        .route(
+            "/v1/preview/assets/:asset_id/variants",
+            post(preview_file::handle_request_variant),
+        )
+        .route(
+            "/v1/preview/assets/:asset_id_or_token",
+            delete(preview_file::handle_unregister_asset),
+        )
         .route(
             "/v1/preview/unregister/:token",
             delete(preview_file::handle_unregister),

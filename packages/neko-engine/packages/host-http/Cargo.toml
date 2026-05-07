@@ -28,6 +28,9 @@ uuid.workspace = true
 # ZIP archive reading (for EPUB on-demand entry serving)
 zip.workspace = true
 
+# Image metadata probing for preview manifests
+image.workspace = true
+
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
@@ -37,3 +40,4 @@ tracing.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
+tempfile = "3"

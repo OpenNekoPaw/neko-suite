@@ -2483,11 +2483,13 @@ name = "neko-host-http"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "image",
  "neko-engine-types",
  "neko-host-api",
  "neko-runtime-scene",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tower-http",

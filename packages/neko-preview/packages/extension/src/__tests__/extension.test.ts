@@ -40,6 +40,7 @@ vi.mock('vscode', () => {
     window: {
       registerCustomEditorProvider: vi.fn(() => ({ dispose: vi.fn() })),
       showOpenDialog: vi.fn(),
+      showWarningMessage: vi.fn(),
       createStatusBarItem: vi.fn(() => ({
         text: '',
         tooltip: '',
@@ -62,6 +63,12 @@ vi.mock('vscode', () => {
         hide: vi.fn(),
         dispose: vi.fn(),
       })),
+    },
+    workspace: {
+      getConfiguration: vi.fn(() => ({
+        get: vi.fn((_key: string, fallback: unknown) => fallback),
+      })),
+      onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
     },
     commands: {
       registerCommand: vi.fn((_id: string, handler: (...args: unknown[]) => unknown) => {
@@ -91,6 +98,9 @@ const mockPreviewService = {
   seekStreams: vi.fn(),
   setStreamSpeed: vi.fn(),
   captureFrame: vi.fn(),
+  registerPreviewAsset: vi.fn(),
+  requestPreviewVariant: vi.fn(),
+  unregisterPreviewAsset: vi.fn(),
   getStreamWebSocketUrl: vi.fn((id: string) => `ws://127.0.0.1:9090/v1/streams/${id}`),
   dispose: vi.fn(),
 };
@@ -119,6 +129,24 @@ vi.mock('../providers/AudioPreviewProvider', () => {
   return { AudioPreviewProvider: ctor };
 });
 
+vi.mock('../providers/PanoramicImagePreviewProvider', () => {
+  const ctor = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.setPreviewService = vi.fn();
+    this.dispose = vi.fn();
+  });
+  (ctor as unknown as Record<string, string>).viewType = 'neko.preview.panoramicImage';
+  return { PanoramicImagePreviewProvider: ctor };
+});
+
+vi.mock('../providers/PanoramicVideoPreviewProvider', () => {
+  const ctor = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.setPreviewService = vi.fn();
+    this.dispose = vi.fn();
+  });
+  (ctor as unknown as Record<string, string>).viewType = 'neko.preview.panoramicVideo';
+  return { PanoramicVideoPreviewProvider: ctor };
+});
+
 vi.mock('../ui/StatusBarManager', () => ({
   StatusBarManager: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
     this.show = vi.fn();
@@ -132,6 +160,7 @@ import { activate, deactivate } from '../extension';
 import { PreviewService } from '../services/PreviewService';
 import { VideoPreviewProvider } from '../providers/VideoPreviewProvider';
 import { AudioPreviewProvider } from '../providers/AudioPreviewProvider';
+import { PanoramicImagePreviewProvider } from '../providers/PanoramicImagePreviewProvider';
 import * as vscode from 'vscode';
 
 // ============================================================================
@@ -222,6 +251,7 @@ describe('extension', () => {
 
       expect(registeredCommands).toContain('neko.preview.openVideo');
       expect(registeredCommands).toContain('neko.preview.openAudio');
+      expect(registeredCommands).toContain('neko.preview.openPanoramicImage');
     });
 
     it('should not depend on active text editor events for EPUB outline sync', async () => {
@@ -239,9 +269,11 @@ describe('extension', () => {
 
       const videoInstance = vi.mocked(VideoPreviewProvider).mock.results[0]?.value;
       const audioInstance = vi.mocked(AudioPreviewProvider).mock.results[0]?.value;
+      const panoramicInstance = vi.mocked(PanoramicImagePreviewProvider).mock.results[0]?.value;
 
       expect(videoInstance.setPreviewService).toHaveBeenCalledWith(mockPreviewService);
       expect(audioInstance.setPreviewService).toHaveBeenCalledWith(mockPreviewService);
+      expect(panoramicInstance.setPreviewService).toHaveBeenCalledWith(mockPreviewService);
     });
 
     it('should push disposables into context.subscriptions', async () => {
@@ -270,6 +302,9 @@ describe('extension', () => {
       expect(typeof api.resumeStreams).toBe('function');
       expect(typeof api.setStreamSpeed).toBe('function');
       expect(typeof api.captureFrame).toBe('function');
+      expect(typeof api.registerPreviewAsset).toBe('function');
+      expect(typeof api.requestPreviewVariant).toBe('function');
+      expect(typeof api.unregisterPreviewAsset).toBe('function');
     });
 
     it('should return API with correct availability status', async () => {
@@ -300,9 +335,11 @@ describe('extension', () => {
 
       const videoInstance = vi.mocked(VideoPreviewProvider).mock.results[0]?.value;
       const audioInstance = vi.mocked(AudioPreviewProvider).mock.results[0]?.value;
+      const panoramicInstance = vi.mocked(PanoramicImagePreviewProvider).mock.results[0]?.value;
 
       expect(videoInstance.setPreviewService).not.toHaveBeenCalled();
       expect(audioInstance.setPreviewService).not.toHaveBeenCalled();
+      expect(panoramicInstance.setPreviewService).not.toHaveBeenCalled();
     });
 
     describe('API methods', () => {

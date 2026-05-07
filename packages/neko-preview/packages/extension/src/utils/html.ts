@@ -10,10 +10,19 @@ import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { getNonce } from './nonce';
 
 /** Supported preview entry points */
-export type PreviewEntry = 'video' | 'audio' | 'pdf' | 'cbz' | 'epub' | 'docx';
+export type PreviewEntry =
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'cbz'
+  | 'epub'
+  | 'docx'
+  | 'panorama-image'
+  | 'panorama-video';
 
 /** Document entries — webview fetches data directly from neko-engine HTTP */
 const DOCUMENT_ENTRIES = new Set<PreviewEntry>(['pdf', 'cbz', 'epub', 'docx']);
+const ENGINE_MEDIA_ENTRIES = new Set<PreviewEntry>(['panorama-image', 'panorama-video']);
 
 export interface WebviewHtmlOptions {
   /** Webview instance */
@@ -51,6 +60,8 @@ const ENTRY_TITLES: Record<PreviewEntry, string> = {
   cbz: 'CBZ Preview',
   epub: 'EPUB Preview',
   docx: 'DOCX Preview',
+  'panorama-image': 'Panoramic Image Preview',
+  'panorama-video': 'Panoramic Video Preview',
 };
 
 /** neko-engine HTTP origin pattern */
@@ -67,6 +78,7 @@ function getDevHtml(
 ): string {
   const devUrl = `http://localhost:${devPort}`;
   const isDocument = DOCUMENT_ENTRIES.has(entry);
+  const isEngineMedia = ENGINE_MEDIA_ENTRIES.has(entry);
   const isEpub = entry === 'epub';
 
   // All documents connect to neko-engine; EPUB also needs blob: for epubjs
@@ -76,10 +88,11 @@ function getDevHtml(
       : `connect-src ${devUrl} ${ENGINE};`
     : `connect-src ws://localhost:${devPort} ws://127.0.0.1:* ${devUrl} ${ENGINE};`;
 
-  // Documents load images/styles/fonts from neko-engine
-  const imgSrc = isDocument
-    ? `img-src ${devUrl} ${ENGINE} data: blob:;`
-    : `img-src ${devUrl} data: blob:;`;
+  // Documents and panoramic previews load media from neko-engine.
+  const imgSrc =
+    isDocument || isEngineMedia
+      ? `img-src ${devUrl} ${ENGINE} data: blob:;`
+      : `img-src ${devUrl} data: blob:;`;
   const styleSrc = isDocument
     ? `style-src 'unsafe-inline' blob: ${devUrl} ${ENGINE};`
     : `style-src 'unsafe-inline' ${devUrl};`;
@@ -130,6 +143,7 @@ function getProdHtml(
   const csp = webview.cspSource;
 
   const isDocument = DOCUMENT_ENTRIES.has(entry);
+  const isEngineMedia = ENGINE_MEDIA_ENTRIES.has(entry);
   const isEpub = entry === 'epub';
 
   const connectSrc = isDocument
@@ -138,9 +152,10 @@ function getProdHtml(
       : `connect-src ${ENGINE};`
     : `connect-src ws://127.0.0.1:* ${ENGINE};`;
 
-  const imgSrc = isDocument
-    ? `img-src ${csp} ${ENGINE} data: blob:;`
-    : `img-src ${csp} data: blob:;`;
+  const imgSrc =
+    isDocument || isEngineMedia
+      ? `img-src ${csp} ${ENGINE} data: blob:;`
+      : `img-src ${csp} data: blob:;`;
   const styleSrc = isDocument
     ? `style-src 'unsafe-inline' blob: ${csp} ${ENGINE};`
     : `style-src 'unsafe-inline' ${csp};`;

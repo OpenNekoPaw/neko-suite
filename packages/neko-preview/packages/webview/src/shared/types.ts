@@ -5,6 +5,13 @@
  */
 
 import type { DocumentExtensionMessage, DocumentWebviewMessage } from './document-types';
+import type {
+  EnvironmentPlacement,
+  PanoramaViewState,
+  PreviewManifest,
+  PreviewVariant,
+  PreviewVariantRequest,
+} from '@neko/shared';
 
 // =============================================================================
 // Media Info (from Extension probe)
@@ -73,6 +80,28 @@ export interface PreviewLyricsMessage {
   };
 }
 
+export interface PanoramaInitMessage {
+  type: 'panorama:init';
+  payload: {
+    manifest: PreviewManifest;
+    engineBaseUrl: string | null;
+  };
+}
+
+export interface PanoramaVariantReadyMessage {
+  type: 'panorama:variantReady';
+  payload: {
+    variant: PreviewVariant;
+  };
+}
+
+export interface PanoramaErrorMessage {
+  type: 'panorama:error';
+  payload: {
+    message: string;
+  };
+}
+
 export interface PreviewStreamReconnectMessage {
   type: 'preview:streamReconnect';
   payload: {
@@ -90,6 +119,9 @@ export type ExtensionMessage =
   | PreviewFrameDataMessage
   | PreviewWaveformMessage
   | PreviewLyricsMessage
+  | PanoramaInitMessage
+  | PanoramaVariantReadyMessage
+  | PanoramaErrorMessage
   | DocumentExtensionMessage;
 
 // =============================================================================
@@ -143,6 +175,31 @@ export interface EofMessage {
   type: 'preview:eof';
 }
 
+export interface PanoramaConfirmProjectionMessage {
+  type: 'panorama:confirmProjection';
+  assetId: string;
+  projectionType: 'equirectangular' | 'flat';
+}
+
+export interface PanoramaSaveDefaultViewMessage {
+  type: 'panorama:saveDefaultView';
+  assetId: string;
+  viewState: PanoramaViewState;
+}
+
+export interface PanoramaRequestVariantMessage {
+  type: 'panorama:requestVariant';
+  assetId: string;
+  request: PreviewVariantRequest;
+}
+
+export interface PanoramaSendToModelMessage {
+  type: 'panorama:sendToModel';
+  assetId: string;
+  viewState?: PanoramaViewState;
+  placement?: Partial<EnvironmentPlacement>;
+}
+
 export type WebviewMessage =
   | ReadyMessage
   | PlayMessage
@@ -154,4 +211,8 @@ export type WebviewMessage =
   | CaptureFrameMessage
   | StatusUpdateMessage
   | EofMessage
+  | PanoramaConfirmProjectionMessage
+  | PanoramaSaveDefaultViewMessage
+  | PanoramaRequestVariantMessage
+  | PanoramaSendToModelMessage
   | DocumentWebviewMessage;

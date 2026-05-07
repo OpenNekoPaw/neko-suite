@@ -449,8 +449,8 @@ window.addEventListener('drop', e => {
 
 **三层架构：**
 
-1. **Layer 1（neko-preview）**：完整流媒体播放，独立编辑器面板，不合并。
-2. **Layer 2（agent MediaPreview）**：轻量展示卡片，音视频元数据从 engine 获取，点击跳转 Layer 1，不内嵌播放。
+1. **Layer 1（neko-preview）**：完整流媒体播放与全景交互查看，独立编辑器面板，不合并。
+2. **Layer 2（agent MediaPreview）**：轻量展示卡片，音视频元数据与全景 thumbnail/FOV crop 从 engine 获取；音视频可进入内联 play/stop 确认态，全景点击跳转 Layer 1。
 3. **Layer 3（RichContentBlock + Registry）**：新增 `rich_content` 内容块类型，用注册表模式动态映射 `kind → React 组件`，支持分镜/表单/对比等复杂展示。类型定义在 `@neko/shared`，渲染组件各包独立注册。
 
 ---
@@ -462,14 +462,17 @@ window.addEventListener('drop', e => {
 ```
 Layer 1：neko-preview（完整流媒体播放应用）
   ├── VideoPlayer  ← H264StreamClient + WebCodecs + FrameScheduler + PiP + Seek + 字幕
-  └── AudioPlayer  ← AudioStreamClient (PCM over WebSocket) + 波形 + 歌词 + 频谱
+  ├── AudioPlayer  ← AudioStreamClient (PCM over WebSocket) + 波形 + 歌词 + 频谱
+  └── PanoramicViewer ← engine PreviewManifest + token/proxy/stream + WebGL/WebGPU sphere
   以 CustomReadonlyEditorProvider 打开，独立编辑器面板
   完整播放控制（时间轴 scrub / seek / PiP / 全屏）
+  全景查看控制（yaw / pitch / FOV / tone mapping / sphere/flat/little-planet）
 
 Layer 2：neko-agent MediaPreview（生成结果确认卡片，两态模型）
   ├── ImagePreview  ← <img>，折叠卡片，点击在 VSCode 中打开
   ├── VideoCard     ← [Idle] poster + 时长 badge | [Active] InlineChatPlayer 内联播放
-  └── AudioCard     ← [Idle] 波形占位 + 时长 badge | [Active] InlineChatPlayer 内联播放
+  ├── AudioCard     ← [Idle] 波形占位 + 时长 badge | [Active] InlineChatPlayer 内联播放
+  └── PanoramicCard ← [Idle] engine FOV crop / thumbnail，点击打开 neko-preview
   嵌入 Chat 对话中，仅 play/stop（无 seek/scrub）
   专业播放仍委托 Layer 1（点击"在预览中打开"按钮）
 
@@ -479,7 +482,7 @@ Layer 2：neko-agent MediaPreview（生成结果确认卡片，两态模型）
 职责分离而非隔离：
 - 两个 webview 是独立 Vite 构建（不同 bundle entry），React 组件不跨包共享
 - 但流客户端（`@neko/neko-client`）是纯 TS 库（零 vscode 依赖），可被任意 webview 安全引入
-- Layer 2 只做 play/stop 确认；专业功能（seek / scrub / PiP / 字幕 / 频谱）属于 Layer 1
+- Layer 2 只做 play/stop 确认或全景轻量卡片；专业功能（seek / scrub / PiP / 字幕 / 频谱 / 球面全景交互）属于 Layer 1
 
 #### 音视频引擎约束
 
@@ -523,12 +526,13 @@ postMessage 传给 webview（纯 JSON，无二进制）
   ↓
 Chat webview 渲染 Idle 态卡片：
   ├─ VideoCard: poster 图 + 时长 + 分辨率 badge
-  └─ AudioCard: 波形占位图 + 时长 badge
+  ├─ AudioCard: 波形占位图 + 时长 badge
+  └─ PanoramicCard: engine FOV crop / thumbnail + 360 badge
   ↓
 用户点击播放 → postMessage('media:play', { filePath })
   ↓
 extension host：
-  ├─ api = getExtension<NekoPreviewAPI>('neko.neko-preview')?.exports
+  ├─ api = getExtension<PreviewPlaybackAPI>('neko.neko-preview')?.exports
   ├─ streamIds = await api.startPlayback(filePath, mediaInfo)
   └─ wsUrls = api.getStreamWebSocketUrl(streamIds)
   ↓
@@ -540,7 +544,12 @@ Agent webview InlineChatPlayer (Active 态)：
   ├─ FrameScheduler 同步视频帧到 audio master clock
   └─ 仅 play/stop 控制（无 seek/scrub）
   ↓
-用户点击停止 / 播放结束 → disconnect streams → 回到 Idle 态（poster 图）
+用户点击停止 / 播放结束
+  ├─ webview disconnect H264StreamClient / AudioStreamClient
+  ├─ postMessage('media:stop', { videoStreamId, audioStreamId })
+  └─ extension host 调用 api.stopStreams(videoStreamId, audioStreamId)
+  ↓
+回到 Idle 态（poster 图）
   ↓
 用户点击"在预览中打开" → postMessage('openFile', { filePath })
   ↓
@@ -549,7 +558,13 @@ extension host → vscode.commands.executeCommand('vscode.openWith', uri, 'neko.
 neko-preview 独立面板：完整播放控制（seek / scrub / PiP / 字幕 / 频谱）
 ```
 
+全景图片/视频卡片不进入 Active 内联球面播放态。它们只展示 engine 生成的 `thumbnail` / `fov-crop` / `proxy` URL，点击后由 extension host 按 `@neko/shared` 的 `getPanoramicPreviewRoute()` 选择 `neko.preview.panoramicImage` 或 `neko.preview.panoramicVideo`。Agent webview 不 import 或挂载 `neko-preview` 的 `PanoramicViewer`，也不维护 direct local media loading 路径。
+
 **降级开关**：`ablation:agent-inline-playback`（默认 on）。关闭时 Layer 2 退化为纯 Idle 态卡片 + 点击委托 neko-preview，与之前行为一致。
+
+**API 契约边界**：`PreviewPlaybackAPI` 是 agent extension 本地声明的最小接口，或后续迁移到 `@neko/shared` 的共享契约。`neko-agent` 不得从 `neko-preview` 包 import `NekoPreviewAPI` 类型；跨扩展调用只允许通过 `vscode.extensions.getExtension(...).exports` 获取运行时能力。
+
+**资源释放责任**：发起 `startPlayback()` 的 agent extension host 同时负责调用 `stopStreams()`。停止条件包括用户点击停止、播放结束、另一张卡片进入 Active 态、chat webview dispose，以及启动过程中任一 stream 已分配但后续步骤失败。
 
 #### 组件显示模式（修正后）
 
@@ -558,6 +573,7 @@ neko-preview 独立面板：完整播放控制（seek / scrub / PiP / 字幕 / �
 | `ImagePreview` | 折叠卡片 + `<img>` | 纯 `<img>` |
 | `VideoCard` | 折叠卡片 + poster + 时长/分辨率 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview | 紧凑 poster + 点击 ▶ 内联播放 |
 | `AudioCard` | 折叠卡片 + 波形占位 + 时长 badge；点击 ▶ → InlineChatPlayer 内联播放；点击 ↗ → neko-preview | 波形图标 + 时长 + 点击 ▶ 内联播放 |
+| `PanoramicCard` | 折叠卡片 + engine thumbnail/FOV crop + 360 badge；点击 → neko-preview | 紧凑 `<img>` + 360 badge；点击 → neko-preview |
 
 三个组件的 inline/展开模式**行为一致**：Idle 态静态展示，Active 态 neko-client 内联播放（play/stop），专业查看委托 neko-preview。消除了原来 AudioCard inline 使用 `<audio controls>` 的不一致。
 
@@ -1051,8 +1067,8 @@ RichContentRegistry.get(kind).component 渲染
   canvas/cut/audio 安装时提供渐进增强路径（"发送到"按钮）
 
 预览三层：
-  Layer 1  neko-preview       → 完整流媒体播放（H264 / PCM streaming via engine）
-  Layer 2  agent MediaPreview → 轻量结果卡片（元数据从 engine 获取，点击→Layer 1）
+  Layer 1  neko-preview       → 完整流媒体播放 + 全景交互查看（engine manifest / stream）
+  Layer 2  agent MediaPreview → 轻量结果卡片（元数据与全景变体从 engine 获取，点击→Layer 1）
   Layer 3  RichContentBlock   → 结构化富内容（注册表模式，kind → 组件动态映射）
 
 音视频约束：

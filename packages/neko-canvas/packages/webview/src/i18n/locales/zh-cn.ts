@@ -91,6 +91,7 @@ export const zhCN = {
   'node.editPlaceholder': '双击编辑...',
   'node.descPlaceholder': '双击添加描述...',
   'node.clickToView': '点击查看',
+  'node.openInPreview': '在 Preview 中打开',
   'node.backToThumbnail': '返回缩略图',
 
   // Group

@@ -363,6 +363,47 @@ describe('work-item-presenter', () => {
     });
   });
 
+  it('projects panoramic image results as lightweight delegated cards', () => {
+    expect(
+      projectBackgroundTaskResultContent({
+        ...createBackgroundTask('image-360', 'Render skybox'),
+        result: {
+          urls: ['webview://skybox.jpg'],
+          localPaths: ['/tmp/skybox_360.jpg'],
+          thumbnailUrl: 'webview://skybox-fov.jpg',
+        },
+      }),
+    ).toMatchObject({
+      contentKind: 'panoramic-image',
+      contentData: {
+        src: 'webview://skybox-fov.jpg',
+        localPath: '/tmp/skybox_360.jpg',
+        kind: 'image',
+      },
+    });
+  });
+
+  it('projects panoramic video results as lightweight delegated cards', () => {
+    expect(
+      projectBackgroundTaskResultContent({
+        ...createBackgroundTask('video-360', 'Render tour'),
+        type: 'video',
+        result: {
+          urls: ['webview://tour.mp4'],
+          localPaths: ['/tmp/tour_360.mp4'],
+          thumbnailUrl: 'webview://tour-poster.jpg',
+        },
+      }),
+    ).toMatchObject({
+      contentKind: 'panoramic-video',
+      contentData: {
+        src: 'webview://tour-poster.jpg',
+        localPath: '/tmp/tour_360.mp4',
+        kind: 'video',
+      },
+    });
+  });
+
   it('projects subagent card display semantics', () => {
     const item: SubAgentWorkItem = {
       ...createSubAgentWorkItem('sub-1', 'tool-1'),

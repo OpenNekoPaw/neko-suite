@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {
   applyStoryboardPayloadToCanvas,
+  getPanoramicPreviewRoute,
   type ApplyCanvasStoryboardOptions,
   type CanvasStoryboardPayload,
   type CreatedCanvasStoryboard,
@@ -582,7 +583,10 @@ function registerCommands(
       const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
 
       try {
-        if (videoExts.includes(ext)) {
+        const panoramicRoute = getPanoramicPreviewRoute({ filePath: uri.fsPath });
+        if (panoramicRoute) {
+          await vscode.commands.executeCommand('vscode.openWith', uri, panoramicRoute.viewType);
+        } else if (videoExts.includes(ext)) {
           await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.videoPreview');
         } else if (audioExts.includes(ext)) {
           await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');

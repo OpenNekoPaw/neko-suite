@@ -1,0 +1,268 @@
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: #f6f7f9;
+  background: #121418;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.panorama-loading,
+.panorama-shell {
+  width: 100%;
+  height: 100%;
+}
+
+.panorama-loading {
+  display: grid;
+  place-items: center;
+  color: #b9c0cc;
+}
+
+.panorama-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  min-width: 0;
+}
+
+.panorama-stage {
+  min-width: 0;
+  padding: 16px;
+}
+
+.panorama-viewport {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.08), transparent 35%),
+    #07080a;
+  cursor: grab;
+  user-select: none;
+}
+
+.panorama-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.panorama-viewport img {
+  display: block;
+  max-width: 92%;
+  max-height: 92%;
+  object-fit: contain;
+  transition:
+    border-radius 160ms ease,
+    transform 80ms linear;
+}
+
+.panorama-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.panorama-canvas.is-hidden {
+  display: none;
+}
+
+.panorama-viewport.mode-sphere img {
+  width: min(74vh, 74vw);
+  height: min(74vh, 74vw);
+  object-fit: cover;
+  box-shadow:
+    inset 0 0 50px rgba(0, 0, 0, 0.4),
+    0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.panorama-viewport.mode-flat img {
+  width: min(100%, 1200px);
+  height: auto;
+}
+
+.panorama-viewport.mode-little-planet img {
+  width: min(70vh, 70vw);
+  height: min(70vh, 70vw);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.panorama-empty,
+.panorama-error {
+  color: #cbd3df;
+}
+
+.fallback-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #dce3ee;
+  background: rgba(25, 28, 34, 0.82);
+  font-size: 12px;
+}
+
+.panorama-error {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 32px;
+  text-align: center;
+}
+
+.panorama-error h1,
+.panorama-inspector h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.panorama-error p,
+.panorama-inspector p {
+  margin: 6px 0 0;
+  color: #aab3c1;
+  font-size: 12px;
+}
+
+.panorama-inspector {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-width: 0;
+  padding: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: #191c22;
+}
+
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.mode-tabs button,
+.reset-button {
+  min-height: 32px;
+  border: 0;
+  color: #dce3ee;
+  background: transparent;
+  cursor: pointer;
+}
+
+.mode-tabs button.is-active,
+.reset-button {
+  background: #2c6fbb;
+  color: #ffffff;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 0;
+}
+
+.metadata-grid div {
+  display: grid;
+  gap: 3px;
+}
+
+.metadata-grid dt,
+.control-row span {
+  color: #8f9aaa;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.metadata-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.control-row {
+  display: grid;
+  gap: 8px;
+}
+
+.control-row input {
+  width: 100%;
+}
+
+.reset-button {
+  border-radius: 8px;
+}
+
+.semantic-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.semantic-actions button {
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #dce3ee;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.confirmation-box {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 196, 87, 0.45);
+  border-radius: 8px;
+  background: rgba(255, 196, 87, 0.08);
+}
+
+.confirmation-box span {
+  color: #ffd891;
+  font-size: 12px;
+}
+
+.confirmation-box button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  color: #171717;
+  background: #ffd891;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .panorama-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .panorama-stage {
+    padding: 10px;
+  }
+
+  .panorama-inspector {
+    grid-template-columns: 1fr;
+    max-height: 42vh;
+    overflow: auto;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 0;
+  }
+}

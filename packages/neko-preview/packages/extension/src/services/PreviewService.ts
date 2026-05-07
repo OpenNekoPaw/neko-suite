@@ -13,6 +13,12 @@
 import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
 import type { ActionRequest as EngineActionRequest, ActionResponse } from '@neko/neko-client';
+import type {
+  PreviewManifest,
+  PreviewVariant,
+  PreviewVariantRequest,
+  RegisterPreviewAssetRequest,
+} from '@neko/shared';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PreviewService');
@@ -129,6 +135,11 @@ export class PreviewService implements vscode.Disposable {
     return `ws://127.0.0.1:${this._port}/v1/streams/${streamId}`;
   }
 
+  getPreviewBaseUrl(): string | null {
+    if (!this._port) return null;
+    return `http://127.0.0.1:${this._port}`;
+  }
+
   // =========================================================================
   // Media Probing
   // =========================================================================
@@ -168,6 +179,28 @@ export class PreviewService implements vscode.Disposable {
       metadata: data.metadata as Record<string, string> | undefined,
       coverArt: data.coverArt as { mimeType: string; dataBase64: string } | undefined,
     };
+  }
+
+  async registerPreviewAsset(request: RegisterPreviewAssetRequest): Promise<PreviewManifest> {
+    if (!this._client || this._disposed) {
+      throw new Error('PreviewService not available');
+    }
+    return this._client.registerPreviewAsset(request);
+  }
+
+  async requestPreviewVariant(
+    assetId: string,
+    request: PreviewVariantRequest,
+  ): Promise<PreviewVariant> {
+    if (!this._client || this._disposed) {
+      throw new Error('PreviewService not available');
+    }
+    return this._client.requestPreviewVariant(assetId, request);
+  }
+
+  async unregisterPreviewAsset(assetIdOrToken: string): Promise<void> {
+    if (!this._client || this._disposed) return;
+    await this._client.unregisterPreviewAsset(assetIdOrToken);
   }
 
   // =========================================================================

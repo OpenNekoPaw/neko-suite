@@ -113,6 +113,13 @@ export {
 } from './EngineClient';
 
 export type {
+  PreviewManifest,
+  PreviewVariant,
+  PreviewVariantRequest,
+  RegisterPreviewAssetRequest,
+} from '@neko/shared';
+
+export type {
   // Request / Response
   ActionRequest,
   ActionResponse,

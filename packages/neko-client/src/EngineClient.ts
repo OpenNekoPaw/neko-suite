@@ -17,6 +17,10 @@
 import { PathResolver } from '@neko/shared';
 import type {
   AudioStreamDescriptor,
+  PreviewManifest,
+  PreviewVariant,
+  PreviewVariantRequest,
+  RegisterPreviewAssetRequest,
   RenderStreamDescriptor,
   SceneSnapshot,
   ViewportDescriptor,
@@ -1923,6 +1927,55 @@ export class EngineClient {
     }
     const body = (await res.json()) as { token: string };
     return body.token;
+  }
+
+  /**
+   * Register any preview asset through the engine-first manifest path.
+   *
+   * Webviews should consume returned manifest URLs/tokens/streams rather than
+   * receiving raw local file paths for Neko-owned preview media.
+   */
+  async registerPreviewAsset(request: RegisterPreviewAssetRequest): Promise<PreviewManifest> {
+    const resolved = this.resolveSource(request.source);
+    const res = await fetch(`${this.baseUrl}/v1/preview/assets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, source: resolved }),
+    });
+    if (!res.ok) {
+      throw new Error(`preview:registerAsset failed: ${res.status} ${res.statusText}`);
+    }
+    return (await res.json()) as PreviewManifest;
+  }
+
+  /** Request a manifest-linked preview variant such as thumbnail or FOV crop. */
+  async requestPreviewVariant(
+    assetId: string,
+    request: PreviewVariantRequest,
+  ): Promise<PreviewVariant> {
+    const res = await fetch(`${this.baseUrl}/v1/preview/assets/${assetId}/variants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) {
+      throw new Error(`preview:requestVariant failed: ${res.status} ${res.statusText}`);
+    }
+    return (await res.json()) as PreviewVariant;
+  }
+
+  /** Unregister a preview asset and release manifest tokens/variants best-effort. */
+  async unregisterPreviewAsset(assetIdOrToken: string): Promise<void> {
+    await fetch(`${this.baseUrl}/v1/preview/assets/${assetIdOrToken}`, {
+      method: 'DELETE',
+    }).catch(() => {
+      // Best-effort; engine may have already stopped.
+    });
+  }
+
+  /** Build the engine token URL for callers that receive token-only manifests. */
+  getPreviewTokenUrl(token: string): string {
+    return `${this.baseUrl}/v1/preview/file/${token}`;
   }
 
   /** Unregister a previously registered document token. */

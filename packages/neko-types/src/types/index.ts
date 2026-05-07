@@ -185,6 +185,10 @@ export * from './audioProject';
 // Proxy protocol types (video proxy generation and management)
 export * from './proxyProtocol';
 
+// Engine-first preview contracts
+export * from './preview';
+export * from './panoramic-preview';
+
 // Extension API types (inter-extension communication)
 export * from './extension-api';
 

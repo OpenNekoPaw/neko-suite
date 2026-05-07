@@ -6,10 +6,17 @@ import type {
   AgentWorkItemTaskType,
   SubAgentWorkItem,
 } from '@neko-agent/types';
+import { getPanoramicPreviewRoute } from '@neko/shared';
 
 export type AgentWorkItemStatusTone = 'info' | 'success' | 'danger' | 'neutral';
 
-export type AgentTaskRichContentKind = 'image' | 'image-grid' | 'video' | 'audio';
+export type AgentTaskRichContentKind =
+  | 'image'
+  | 'image-grid'
+  | 'video'
+  | 'audio'
+  | 'panoramic-image'
+  | 'panoramic-video';
 
 export interface AgentTaskResultContentProjection {
   contentKind: AgentTaskRichContentKind | null;
@@ -307,6 +314,20 @@ function projectTaskRichContent(
   switch (task.type) {
     case 'video':
       if (!firstUrl) return EMPTY_TASK_RESULT_CONTENT;
+      const isPanoramicVideo =
+        firstLocalPath && getPanoramicPreviewRoute({ filePath: firstLocalPath })?.kind === 'video';
+      if (isPanoramicVideo) {
+        return {
+          contentKind: 'panoramic-video',
+          contentData: {
+            src: thumbnailUrl ?? firstUrl,
+            poster: thumbnailUrl,
+            name: task.name,
+            localPath: firstLocalPath,
+            kind: 'video',
+          },
+        };
+      }
       return {
         contentKind: 'video',
         contentData: {
@@ -335,6 +356,14 @@ function projectTaskRichContent(
       }
       const imgSrc = thumbnailUrl || firstUrl;
       if (!imgSrc) return EMPTY_TASK_RESULT_CONTENT;
+      const isPanoramicImage =
+        firstLocalPath && getPanoramicPreviewRoute({ filePath: firstLocalPath })?.kind === 'image';
+      if (isPanoramicImage) {
+        return {
+          contentKind: 'panoramic-image',
+          contentData: { src: imgSrc, name: task.name, localPath: firstLocalPath, kind: 'image' },
+        };
+      }
       return {
         contentKind: 'image',
         contentData: { src: imgSrc, name: task.name, localPath: firstLocalPath },

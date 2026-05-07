@@ -3,12 +3,12 @@
  *
  * Displays video, image, or audio assets on the canvas.
  * Video/Audio: click to play inline via H.264+PCM stream (neko-preview API).
- * Image: inline viewer with zoom.
+ * Image: inline viewer with zoom unless it is a panoramic candidate.
  * "Open in Preview" button still available for full-featured playback.
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { MediaCanvasNode, CanvasViewport } from '@neko/shared';
+import { getPanoramicPreviewRoute, type MediaCanvasNode, type CanvasViewport } from '@neko/shared';
 import { BaseNode } from './BaseNode';
 import { ImageViewer } from '../media/ImageViewer';
 import { InlineMediaPlayer } from '../media/InlineMediaPlayer';
@@ -101,6 +101,10 @@ function getMediaUrl(assetPath: string, baseUrl?: string): string {
   return assetPath;
 }
 
+function isPanoramicPreviewCandidate(assetPath: string, mediaType?: string): boolean {
+  return getPanoramicPreviewRoute({ filePath: assetPath, mediaType }) !== null;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -131,6 +135,7 @@ export function MediaNode({
 
   const mediaUrl = getMediaUrl(assetPath, mediaBaseUrl);
   const posterUrl = thumbnailPath ? getMediaUrl(thumbnailPath, mediaBaseUrl) : undefined;
+  const panoramicCandidate = isPanoramicPreviewCandidate(assetPath, mediaType);
 
   // If another node starts playing, stop this one
   useEffect(() => {
@@ -273,9 +278,17 @@ export function MediaNode({
   const switchToImageViewer = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (panoramicCandidate) {
+        getVscode()?.postMessage({
+          type: 'openMediaPreview',
+          assetPath,
+          mediaType,
+        });
+        return;
+      }
       if (mediaType === 'image') setViewMode('image-viewer');
     },
-    [mediaType],
+    [assetPath, mediaType, panoramicCandidate],
   );
 
   // Image: switch back to thumbnail
@@ -283,6 +296,29 @@ export function MediaNode({
     e.stopPropagation();
     setViewMode('thumbnail');
   }, []);
+
+  const handleThumbnailClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (panoramicCandidate) {
+        e.stopPropagation();
+        return;
+      }
+      if ((mediaType === 'video' && !panoramicCandidate) || mediaType === 'audio') {
+        handlePlay(e);
+        return;
+      }
+      switchToImageViewer(e);
+    },
+    [handlePlay, mediaType, panoramicCandidate, switchToImageViewer],
+  );
+
+  const handleThumbnailDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!panoramicCandidate) return;
+      openInPreview(e);
+    },
+    [openInPreview, panoramicCandidate],
+  );
 
   // =========================================================================
   // Render media content
@@ -336,14 +372,11 @@ export function MediaNode({
       );
     }
 
-    // Thumbnail mode (default)
-    const handleClick =
-      mediaType === 'video' || mediaType === 'audio' ? handlePlay : switchToImageViewer;
-
     return (
       <div
         className="flex-1 relative bg-black/30 overflow-hidden cursor-pointer group"
-        onClick={handleClick}
+        onClick={handleThumbnailClick}
+        onDoubleClick={handleThumbnailDoubleClick}
       >
         {thumbnailPath || capturedThumbnail || mediaType === 'image' ? (
           <img
@@ -367,11 +400,11 @@ export function MediaNode({
           </div>
         )}
 
-        {/* Image: zoom hint */}
+        {/* Image: zoom/delegation hint */}
         {mediaType === 'image' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="px-2 py-1 bg-black/60 rounded text-xs text-white">
-              {t('node.clickToView')}
+              {panoramicCandidate ? t('node.openInPreview') : t('node.clickToView')}
             </div>
           </div>
         )}
@@ -446,7 +479,7 @@ export function MediaNode({
               {formatDuration(duration)}
             </span>
           )}
-          {(mediaType === 'video' || mediaType === 'audio') && (
+          {(mediaType === 'video' || mediaType === 'audio' || panoramicCandidate) && (
             <button
               className="p-0.5 rounded hover:bg-[var(--control-hover)] transition-colors shrink-0"
               onClick={openInPreview}

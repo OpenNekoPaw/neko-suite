@@ -91,6 +91,7 @@ export const en = {
   'node.editPlaceholder': 'Double-click to edit...',
   'node.descPlaceholder': 'Double-click to add description...',
   'node.clickToView': 'Click to view',
+  'node.openInPreview': 'Open in Preview',
   'node.backToThumbnail': 'Back to thumbnail',
 
   // Group

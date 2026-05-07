@@ -6,6 +6,13 @@
  *   const api = ext?.exports as NekoPreviewAPI;
  */
 
+import type {
+  PreviewManifest,
+  PreviewVariant,
+  PreviewVariantRequest,
+  RegisterPreviewAssetRequest,
+} from '@neko/shared';
+
 export interface MediaInfo {
   duration: number;
   width: number;
@@ -71,4 +78,13 @@ export interface NekoPreviewAPI {
 
   /** Capture a single frame as base64 JPEG */
   captureFrame(filePath: string, time: number, quality?: number): Promise<string>;
+
+  /** Register a lightweight preview asset for cross-extension thumbnail/proxy consumers. */
+  registerPreviewAsset(request: RegisterPreviewAssetRequest): Promise<PreviewManifest>;
+
+  /** Request a lightweight preview variant such as Canvas proxy or Agent FOV thumbnail. */
+  requestPreviewVariant(assetId: string, request: PreviewVariantRequest): Promise<PreviewVariant>;
+
+  /** Release registered preview asset tokens and variants. */
+  unregisterPreviewAsset(assetIdOrToken: string): Promise<void>;
 }
