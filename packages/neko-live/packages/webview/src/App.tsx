@@ -8,6 +8,7 @@ import type { LiveExtensionMessage } from './types/messages';
 import { vscode } from './vscode-api';
 import { CanvasRecorder } from './recording/CanvasRecorder';
 import { t } from './i18n';
+import { NEKO_LIVE_RENDERER_FALLBACK_ENABLED } from './rendererMigration';
 
 const canvasRecorder = new CanvasRecorder();
 
@@ -173,7 +174,17 @@ export function App() {
           transition: 'border-color 0.2s',
         }}
       >
-        {!avatarUrl ? <EmptyState /> : avatarType === 'puppet' ? <PuppetViewer /> : <Viewport3D />}
+        {!avatarUrl ? (
+          <EmptyState />
+        ) : NEKO_LIVE_RENDERER_FALLBACK_ENABLED ? (
+          avatarType === 'puppet' ? (
+            <PuppetViewer />
+          ) : (
+            <Viewport3D />
+          )
+        ) : (
+          <EmptyState />
+        )}
 
         {/* REC badge overlay */}
         {isRecording && (

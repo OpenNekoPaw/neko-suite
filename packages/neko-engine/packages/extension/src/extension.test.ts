@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+let activeExtension: { deactivate?: () => Promise<void> } | undefined;
+
 const mockState = vi.hoisted(() => {
   const commands = new Map<string, (...args: unknown[]) => unknown>();
 
@@ -48,7 +50,9 @@ const mockState = vi.hoisted(() => {
   };
 
   const showInformationMessage = vi.fn();
+  const showWarningMessage = vi.fn();
   const showErrorMessage = vi.fn();
+  const showQuickPick = vi.fn();
   const executeCommand = vi.fn(async (id: string, ...args: unknown[]) => {
     const handler = commands.get(id);
     if (!handler) return undefined;
@@ -66,7 +70,9 @@ const mockState = vi.hoisted(() => {
     manager,
     exportService,
     showInformationMessage,
+    showWarningMessage,
     showErrorMessage,
+    showQuickPick,
     executeCommand,
     fetch,
   };
@@ -85,8 +91,11 @@ vi.mock('vscode', () => ({
   window: {
     createOutputChannel: () => mockState.outputChannel,
     createStatusBarItem: () => mockState.statusBarItem,
+    createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
     showInformationMessage: mockState.showInformationMessage,
+    showWarningMessage: mockState.showWarningMessage,
     showErrorMessage: mockState.showErrorMessage,
+    showQuickPick: mockState.showQuickPick,
     showOpenDialog: vi.fn(),
     showSaveDialog: vi.fn(),
     withProgress: vi.fn(),
@@ -114,6 +123,33 @@ vi.mock('vscode', () => ({
   ThemeColor: class {
     constructor(public readonly id: string) {}
   },
+  EventEmitter: class<T> {
+    private listeners: Array<(event: T) => void> = [];
+    event = (listener: (event: T) => void) => {
+      this.listeners.push(listener);
+      return {
+        dispose: () => (this.listeners = this.listeners.filter((entry) => entry !== listener)),
+      };
+    };
+    fire(event: T) {
+      for (const listener of this.listeners) listener(event);
+    }
+    dispose() {
+      this.listeners = [];
+    }
+  },
+  TreeItem: class {
+    description: string | undefined;
+    contextValue: string | undefined;
+    tooltip: string | undefined;
+    constructor(
+      public readonly label: string,
+      public readonly collapsibleState: number,
+    ) {}
+  },
+  TreeItemCollapsibleState: {
+    None: 0,
+  },
 }));
 
 vi.mock('./mediaEngine', () => ({
@@ -140,6 +176,8 @@ vi.mock('@neko/shared/vscode/extension', () => ({
   VSCodeErrorHandler: class {
     handleError = vi.fn(async () => undefined);
   },
+  resolveLogLevelSetting: vi.fn(() => 'debug'),
+  watchLogLevel: vi.fn(),
 }));
 
 vi.mock('./mediaEngine/OrtInitializer', () => ({
@@ -147,6 +185,8 @@ vi.mock('./mediaEngine/OrtInitializer', () => ({
 }));
 
 async function activateExtension() {
+  await activeExtension?.deactivate?.();
+  activeExtension = undefined;
   vi.resetModules();
   mockState.commands.clear();
 
@@ -155,20 +195,35 @@ async function activateExtension() {
     subscriptions: [] as { dispose?: () => void }[],
     extensionUri: { fsPath: '/tmp/extension' },
     globalStorageUri: { fsPath: '/tmp/storage' },
+    globalState: {
+      get: vi.fn(() => undefined),
+      update: vi.fn(async () => undefined),
+    },
+    workspaceState: {
+      get: vi.fn(() => undefined),
+      update: vi.fn(async () => undefined),
+    },
   };
 
-  extension.activate(context as never);
+  await extension.activate(context as never);
+  activeExtension = extension;
 
   return { extension, context };
 }
 
 describe('neko-engine extension command bridge', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await activeExtension?.deactivate?.();
+    activeExtension = undefined;
+    vi.resetModules();
+    mockState.commands.clear();
     mockState.outputChannel.appendLine.mockClear();
     mockState.outputChannel.show.mockClear();
     mockState.statusBarItem.show.mockClear();
     mockState.showInformationMessage.mockClear();
+    mockState.showWarningMessage.mockClear();
     mockState.showErrorMessage.mockClear();
+    mockState.showQuickPick.mockClear();
     mockState.executeCommand.mockClear();
     mockState.manager.getCompatibleEngine.mockClear();
     mockState.manager.disposeEngines.mockClear();
@@ -237,5 +292,46 @@ describe('neko-engine extension command bridge', () => {
       null,
       null,
     );
+  });
+
+  it('registers device commands and lists devices through the frame server', async () => {
+    mockState.fetch.mockImplementation(async (_url: string, init?: { body?: string }) => {
+      if (!init?.body) return { ok: true };
+      const req = JSON.parse(init.body) as { group: string; action: string };
+      if (req.group === 'audios' && req.action === 'list_input_devices') {
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'ok',
+            data: [
+              {
+                id: 'mic-1',
+                name: 'Mic',
+                sampleRates: [48000],
+                channels: [1],
+                isDefault: true,
+              },
+            ],
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ status: 'ok', data: [] }) };
+    });
+
+    await activateExtension();
+
+    const result = await mockState.executeCommand('neko.devices.list');
+
+    expect(result).toEqual([
+      {
+        id: 'mic-1',
+        type: 'audio-input',
+        label: 'Mic',
+        isDefault: true,
+        connectionState: 'available',
+        permissionState: 'unknown',
+        capabilities: { sampleRates: [48000], channels: [1] },
+      },
+    ]);
   });
 });

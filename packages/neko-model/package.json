@@ -67,6 +67,16 @@
         "category": "NekoModel"
       },
       {
+        "command": "neko.model.liveMode.start",
+        "title": "%neko.model.liveMode.start.title%",
+        "category": "NekoModel"
+      },
+      {
+        "command": "neko.model.liveMode.stop",
+        "title": "%neko.model.liveMode.stop.title%",
+        "category": "NekoModel"
+      },
+      {
         "command": "neko.model.deleteSelected",
         "title": "%neko.model.deleteSelected.title%",
         "category": "NekoModel"

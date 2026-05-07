@@ -67,6 +67,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
   private _activeDocument: PuppetDocument | undefined;
   private enginePort: number | undefined;
+  private activeParameterNames = new Set<string>();
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
     vscode.CustomDocumentContentChangeEvent<PuppetDocument>
@@ -266,10 +267,19 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         if (document.isInpFile || !document.projectData) break;
         const params = message.parameters as Record<string, number> | undefined;
         if (params) {
+          this.activeParameterNames = new Set(Object.keys(params));
           document.projectData.parameters = params;
           document.dirty = true;
           this._onDidChangeCustomDocument.fire({ document });
         }
+        break;
+      }
+
+      case 'puppet:parametersLoaded': {
+        const names = Array.isArray(message.parameters)
+          ? message.parameters.filter((name): name is string => typeof name === 'string')
+          : [];
+        this.activeParameterNames = new Set(names);
         break;
       }
 
@@ -429,18 +439,30 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     return this._activeDocument?.projectData?.parameters ?? {};
   }
 
+  /** Get parameter names reported by the active puppet renderer */
+  getAvailableFaceParamNames(): string[] {
+    if (this.activeParameterNames.size > 0) return [...this.activeParameterNames];
+    return Object.keys(this.getCurrentFaceParams());
+  }
+
   /** Set face parameters on the active puppet document and sync to webview */
-  async setFaceParams(params: Record<string, number>): Promise<void> {
+  async setFaceParams(
+    params: Record<string, number>,
+    options: { persist?: boolean } = {},
+  ): Promise<void> {
     if (!this._activeDocument?.projectData) return;
-    this._activeDocument.projectData.parameters = {
+    const nextParameters = {
       ...this._activeDocument.projectData.parameters,
       ...params,
     };
-    this._activeDocument.dirty = true;
+    if (options.persist !== false) {
+      this._activeDocument.projectData.parameters = nextParameters;
+      this._activeDocument.dirty = true;
+    }
     // Sync to webview
     this.activeWebviewPanel?.webview.postMessage({
       type: 'loadState',
-      parameters: this._activeDocument.projectData.parameters,
+      parameters: nextParameters,
     });
   }
 }

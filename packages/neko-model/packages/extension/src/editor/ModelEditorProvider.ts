@@ -13,6 +13,7 @@ import {
   createModelProjectImportPlan,
   formatModelProjectSrc,
 } from '../importModelAsset';
+import type { VrmExpressionValues } from '../live/vmcMapping';
 
 const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
 
@@ -97,6 +98,13 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     this.activeWebviewPanel?.webview.postMessage({
       type: 'keyboardAction',
       action,
+    });
+  }
+
+  applyLiveExpressions(expressions: VrmExpressionValues): void {
+    this.activeWebviewPanel?.webview.postMessage({
+      type: 'liveExpressions',
+      expressions,
     });
   }
 

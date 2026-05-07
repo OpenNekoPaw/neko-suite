@@ -7,6 +7,7 @@ import {
 } from '@neko/shared/vscode/extension';
 import { LivePanelProvider } from './LivePanelProvider';
 import { setErrorHandler } from './utils/errorHandler';
+import { TrackingService, registerTrackingCommands } from './tracking/TrackingService';
 
 export function activate(context: vscode.ExtensionContext) {
   const logger = createVSCodeLogger('Neko Live', 'NekoLive', context, resolveLogLevelSetting());
@@ -15,9 +16,14 @@ export function activate(context: vscode.ExtensionContext) {
 
   logger.info('Extension activated');
 
-  const provider = new LivePanelProvider(context.extensionUri, logger);
+  const vmcPort = vscode.workspace.getConfiguration('neko.live').get<number>('vmcPort', 39539);
+  const trackingService = new TrackingService(logger, vmcPort);
+  registerTrackingCommands(context, trackingService);
+
+  const provider = new LivePanelProvider(context.extensionUri, logger, trackingService);
 
   context.subscriptions.push(
+    trackingService,
     vscode.window.registerWebviewViewProvider(LivePanelProvider.viewType, provider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),

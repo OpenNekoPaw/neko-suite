@@ -34,9 +34,9 @@ export const zhCN = {
 
   // Empty state (no avatar loaded)
   'empty.title': 'Neko Live',
-  'empty.step1': '1. 点击「开始」连接 VMC 追踪',
-  'empty.step2': '2. 点击「头像」加载 VRM 或 Puppet 模型',
-  'empty.step3': '3. 追踪数据将实时驱动虚拟形象',
+  'empty.step1': '1. 连接 VMC 追踪或绑定场景设备',
+  'empty.step2': '2. 添加用于合成与录制的直播源',
+  'empty.step3': '3. 单头像预览请使用 Neko Puppet 或 Neko Model Live Mode',
   'empty.waitingData': '等待追踪数据...',
   'empty.trackingPreview': '追踪数据预览',
   'empty.headRotation': '头部',

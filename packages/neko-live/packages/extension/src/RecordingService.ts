@@ -95,9 +95,7 @@ export class RecordingService {
     if (this.audioStreamId && this.engineClient) {
       try {
         const audioResult = await this.engineClient.recordStop(this.audioStreamId);
-        result.audioPath = (audioResult as Record<string, unknown>).outputPath as
-          | string
-          | undefined;
+        result.audioPath = getOutputPath(audioResult);
         this.logger.info(`Audio recording stopped: ${result.audioPath}`);
       } catch (err) {
         this.logger.error('Failed to stop audio recording', err);
@@ -128,4 +126,10 @@ export class RecordingService {
       this.stop().catch(() => {});
     }
   }
+}
+
+function getOutputPath(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const outputPath = (value as { outputPath?: unknown }).outputPath;
+  return typeof outputPath === 'string' ? outputPath : undefined;
 }

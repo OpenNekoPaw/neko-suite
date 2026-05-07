@@ -34,9 +34,9 @@ export const en = {
 
   // Empty state (no avatar loaded)
   'empty.title': 'Neko Live',
-  'empty.step1': '1. Click "Start" to connect VMC tracking',
-  'empty.step2': '2. Click "Avatar" to load a VRM or Puppet model',
-  'empty.step3': '3. Tracking data will drive the avatar in real-time',
+  'empty.step1': '1. Connect VMC tracking or bind a scene device',
+  'empty.step2': '2. Add live sources for composition and recording',
+  'empty.step3': '3. Use Neko Puppet or Neko Model Live Mode for single-avatar preview',
   'empty.waitingData': 'Waiting for tracking data...',
   'empty.trackingPreview': 'Tracking Data Preview',
   'empty.headRotation': 'Head',

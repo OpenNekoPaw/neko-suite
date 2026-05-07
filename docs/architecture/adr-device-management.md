@@ -2,7 +2,14 @@
 
 ## 状态
 
-Proposed (2026-05-07)
+Accepted / Implemented (2026-05-08)
+
+实现收口：
+
+1. `TrackingService` 迁移期由 `neko-live` 注册 `neko.tracking.*` 命令并托管 VMC receiver；消费者只通过 `TrackingServiceApi` 获取服务，不 import `neko-live` 私有类。当前 `neko.tracking.getApi` 返回 Extension Host 同进程服务实例，满足现阶段跨扩展消费；若后续出现跨进程或远程消费者，再引入可序列化 proxy 协议。后续可把 owner 迁到 `neko-suite` 聚合扩展或 platform extension，代码中保留 `TODO(P2)`。
+2. 设备权限配置落点为 `DevicePermissionService` 的 workspace/global memento key：`neko.devices.permissions.workspace` / `neko.devices.permissions.global`；`Allow` 写 workspace，`Allow and Remember` 写 global，revoke 通过 `neko.devices.revokePermission`，OS 权限失败映射为设备 error/status。
+3. Rust 侧实时输入 binding 层命名为 `DeviceBindingService`，归属 `engine-kernel/src/services/device_binding.rs`。
+4. `neko-live` 已提取 `LiveSessionService`，`VmcReceiver` 改由 `TrackingService` 托管；`neko-puppet` / `neko-model` 已新增 Live Mode 并迁入各自 mapping。`neko-live` 旧 avatar renderer 通过 `NEKO_LIVE_RENDERER_FALLBACK_ENABLED` 门控保留，删除动作仍为 P2。
 
 ## 背景
 
@@ -25,8 +32,8 @@ neko-suite 的创作工作流涉及多种外部设备：手柄（动画预览控
 
 | 缺口 | 影响 |
 |------|------|
-| `@neko/shared` 无设备类型定义 | Rust/TS 类型不对齐，各扩展自定义 |
-| 无统一设备客户端 | neko-audio 自己处理设备枚举，gamepad/MIDI 在 TS 无法消费 |
+| `@neko/shared` 无归一化设备类型定义 | `@neko/neko-client` 只有低层 engine DTO，跨扩展没有稳定应用层契约 |
+| 无统一设备客户端 | `EngineClient` 已有 audio/camera/MIDI/gamepad 基础方法，但缺少按设备域聚合、订阅和生命周期管理 |
 | 无设备状态聚合 | 热插拔/连接状态分散在各 controller，无统一事件源 |
 | 无权限层 | 摄像头/XR 等敏感设备缺少用户授权确认 |
 
@@ -83,7 +90,85 @@ packages/neko-client/src/device/
 
 类型定义提升到 `@neko/shared/types/device.ts`，与 Rust `engine-kernel/services/` 的 trait 对齐。
 
+`@neko/neko-client/src/engine/types.ts` 中已有的 `AudioInputDevice` / `CameraDevice` / `MidiPort` / `GamepadInfo` 保留为低层 wire DTO；新增共享设备契约是**应用层归一化契约**。迁移后 `neko-client/src/device/types.ts` 只允许 re-export 或组合 `@neko/shared` 类型，避免 `@neko/shared` 与 `@neko/neko-client` 双写同一设备模型。
+
 **不建议新建顶层子包** `neko-device`——治理开销不匹配收益。
+
+#### 1.1 设备客户端契约草案
+
+`DeviceManager` 只负责发现、权限、连接状态和事件聚合；不承载实时动作执行。低延迟控制仍由 engine 内部的设备 binding / runtime consumer 消费 `runtime-device` 事件。
+
+```typescript
+// packages/neko-types/src/types/device.ts
+export type DeviceType =
+  | 'audio-input'
+  | 'camera'
+  | 'midi-input'
+  | 'gamepad'
+  | 'xr';
+
+export type DeviceConnectionState =
+  | 'available'
+  | 'connected'
+  | 'busy'
+  | 'disconnected'
+  | 'error';
+
+export type DevicePermissionState = 'unknown' | 'granted' | 'denied';
+
+export interface DeviceInfo {
+  id: string;
+  type: DeviceType;
+  label: string;
+  isDefault?: boolean;
+  connectionState: DeviceConnectionState;
+  permissionState: DevicePermissionState;
+  capabilities?: DeviceCapabilities;
+  errorMessage?: string;
+}
+
+export interface DeviceCapabilities {
+  sampleRates?: number[];
+  channels?: number[];
+  resolutions?: Array<{ width: number; height: number; fps: number[] }>;
+  controls?: string[];
+}
+
+export type DeviceEvent =
+  | { type: 'added'; device: DeviceInfo }
+  | { type: 'removed'; deviceId: string; deviceType: DeviceType }
+  | { type: 'changed'; device: DeviceInfo }
+  | { type: 'permissionChanged'; deviceId: string; state: DevicePermissionState }
+  | { type: 'error'; deviceId?: string; deviceType?: DeviceType; message: string };
+
+export interface DisposableLike {
+  dispose(): void;
+}
+```
+
+```typescript
+// packages/neko-client/src/device/DeviceManager.ts
+export interface DeviceManager {
+  refresh(signal?: AbortSignal): Promise<readonly DeviceInfo[]>;
+  list(type?: DeviceType): readonly DeviceInfo[];
+  requestPermission(type: DeviceType, deviceId?: string): Promise<DevicePermissionState>;
+  connect(deviceId: string): Promise<DeviceSession>;
+  disconnect(sessionId: string): Promise<void>;
+  onDeviceChange(listener: (event: DeviceEvent) => void): DisposableLike;
+  dispose(): void;
+}
+
+export interface DeviceSession {
+  sessionId: string;
+  deviceId: string;
+  deviceType: DeviceType;
+  streamUrl?: string;
+}
+```
+
+`DisposableLike` 是共享层最小契约，避免 `@neko/shared` 依赖 `vscode`；Extension Host 可以用 `vscode.Disposable` 实现该接口。
+
+设备事件流（MIDI/Gamepad）需要支持可注入 `WebSocket` factory，沿用 `SceneControlSocket` 的测试方式，避免在单元测试中依赖浏览器全局对象。
 
 ### 2. 设备管理 UI 使用原生 VSCode 组件，不建 Webview
 
@@ -97,6 +182,28 @@ packages/neko-client/src/device/
 | Notification | 热插拔提示 |
 
 唯一需要 Webview 显示设备数据的场景是**调试可视化**（手柄摇杆实时位置、MIDI velocity 显示），归属 neko-tools 调试面板，不是设备管理职责。
+
+#### 2.1 权限策略
+
+设备权限属于 Extension Host 管控的工作区/用户偏好，不由 Webview 自行决定，也不由 engine action 隐式弹窗。
+
+| 设备类型 | 默认权限 | 授权粒度 | 持久化建议 | 说明 |
+|----------|----------|----------|------------|------|
+| `audio-input` | ask | device type + optional deviceId | workspace 优先，允许全局记住 | 录音会写入文件，必须显式确认 |
+| `camera` | ask | device type + optional deviceId | workspace 优先 | 捕获画面敏感，启动 capture 前确认 |
+| `midi-input` | granted | device type | 不必持久化到设备 ID | MIDI 输入通常非隐私，但连接失败需可见 |
+| `gamepad` | granted | device type | 不必持久化到设备 ID | 控制器输入低敏，仍显示连接状态 |
+| `xr` | ask | device type + runtime | workspace 优先 | 涉及空间追踪和未来设备 runtime，P3 再落地 |
+
+权限检查发生在 `DeviceManager.requestPermission()` / `connect()` 前：
+
+1. 读取 `@neko/shared` 配置契约中的设备权限状态。
+2. 若状态是 `unknown` 且设备类型需要确认，由 Extension Host 弹出 VSCode modal/QuickPick。
+3. 用户拒绝时，`connect()` 返回 typed error，不调用 engine action。
+4. 用户授权后再调用 `EngineClient` 低层方法，并把结果归一化成 `DeviceSession`。
+5. 设备管理 TreeView 提供 revoke command，撤销后主动断开相关 session。
+
+权限状态只表达 Neko Suite 是否允许使用该设备；OS 级授权仍由系统控制。若 engine action 因 OS 权限失败，`DeviceManager` 应转成 `DeviceEvent.type === 'error'` 并给出可恢复提示。
 
 ### 3. 实时设备输入在 engine 进程内闭环，不经过 Webview
 
@@ -112,6 +219,10 @@ packages/neko-client/src/device/
   Gamepad → WS → Extension Host → postMessage → Webview
   → postMessage → Extension → engine
 ```
+
+这要求 Rust 侧后续补一个明确的 engine 内绑定层，例如 `DeviceBindingService` / `InputRouter`：负责把 `GamepadEvent` / `MidiEvent` 绑定到 scene camera、puppet parameter、audio trigger 或 timeline action。TS 侧可以配置绑定关系，但不能成为实时动作的必经路径。
+
+Webview 仍可消费 Extension Host 授权后传入的媒体/事件 stream URL（现有 H264/PCM/fMP4 客户端即是这种模式）。禁止的是 Webview 自行发现 engine、绕过权限层拼接设备控制 URL，或把设备事件送进 Webview 后再反向回写 engine 执行动作。
 
 ### 4. 延迟分析
 
@@ -194,8 +305,8 @@ neko-live 当前是一个混合体（追踪输入 + 重复渲染 + 录制 + 控�
 └──────────────────────────────────────────────────────────┘
         ↓ 消费                         ↓ 消费
 ┌─ neko-puppet ─────────────┐  ┌─ neko-model ────────────────┐
-│ + "Live Mode" 命令         │  │ + "Live Mode" 命令          │
-│ 用自己的 PuppetCanvas 渲染  │  │ 用自己的 R3F 渲染           │
+│ `neko.puppet.liveMode.*`   │  │ `neko.model.liveMode.*`     │
+│ 用自己的 PuppetCanvas 渲染  │  │ 用自己的 editor/preview 状态 │
 │ (346行专业渲染器)           │  │ (含 Gizmo/Grid/灯光)       │
 │ + puppetMapping 迁入       │  │ + vmcMapping 迁入           │
 └───────────────────────────┘  └─────────────────────────────┘
@@ -208,11 +319,53 @@ neko-live 当前是一个混合体（追踪输入 + 重复渲染 + 录制 + 控�
 
 #### 7.1 TrackingService 提取为共享服务
 
-`VmcReceiver` 从 neko-live 的 `LivePanelProvider` 中提取，成为 extension 级共享服务：
+`VmcReceiver` 从 neko-live 的 `LivePanelProvider` 中提取，成为 Extension Host 级共享服务。该服务的 owner 应是稳定基础包，而不是任意消费者 Webview：
 
-- 任何子包通过 `vscode.commands.executeCommand('neko.tracking.start')` 启动追踪
-- TrackingData 通过 `vscode.EventEmitter` 广播，消费者按需订阅
-- neko-live、neko-puppet、neko-model 都是平等消费者
+| 层级 | 决策 |
+|------|------|
+| 服务 owner | 优先放 `neko-suite` 聚合扩展或未来稳定 platform extension；迁移期可先由 `neko-live` 注册命令，但不得让消费者 import `neko-live` 内部类 |
+| 协议入口 | `neko.tracking.getApi` 返回 `TrackingServiceApi`；`neko.tracking.start/stop/status` 作为简单命令入口 |
+| 订阅方式 | 消费者通过 `TrackingServiceApi` 注册 listener；不能跨扩展共享裸 `EventEmitter` 实例 |
+| 资源释放 | listener 返回 `vscode.Disposable`；服务 owner dispose 时停止 UDP socket 并广播 stopped |
+| 数据契约 | `TrackingData` 放 `@neko/shared/types/tracking.ts`，VMC 只是 `source: 'vmc'` 的一种输入 |
+
+```typescript
+// packages/neko-types/src/types/tracking.ts
+export type TrackingSource = 'vmc' | 'camera-face' | 'xr' | 'manual';
+
+export interface TrackingData {
+  source: TrackingSource;
+  timestamp: number;
+  blendShapes: Record<string, number>;
+  headRotation?: readonly [number, number, number, number];
+  headPosition?: readonly [number, number, number];
+  boneTransforms?: Record<
+    string,
+    {
+      rotation: readonly [number, number, number, number];
+      position?: readonly [number, number, number];
+    }
+  >;
+}
+
+export interface TrackingStatus {
+  source: TrackingSource;
+  active: boolean;
+  fps: number;
+  port?: number;
+  errorMessage?: string;
+}
+
+export interface TrackingServiceApi {
+  start(options?: { source?: TrackingSource; port?: number }): Promise<TrackingStatus>;
+  stop(source?: TrackingSource): Promise<TrackingStatus>;
+  status(source?: TrackingSource): Promise<TrackingStatus>;
+  onTrackingData(listener: (data: TrackingData) => void): DisposableLike;
+  onStatusChange(listener: (status: TrackingStatus) => void): DisposableLike;
+}
+```
+
+`neko-live`、`neko-puppet`、`neko-model` 都是 `TrackingServiceApi` 的平等消费者。任何子包都不能直接 new `VmcReceiver`，也不能 import 另一个扩展的 private source file。
 
 #### 7.2 Live Mode 归入消费者子包
 
@@ -242,8 +395,8 @@ neko-live 不再自己渲染头像，职责收缩为：
 | `VmcReceiver` + `osc-parser` | 提取为共享 extension 级 TrackingService | 多子包共享 |
 | `vmcMapping.ts` | → neko-model | VRM 表情映射属于 3D 域 |
 | `puppetMapping.ts` | → neko-puppet | Puppet 参数映射属于 2D 域 |
-| `AvatarViewer.tsx` + `Viewport3D.tsx` | **删除** | neko-model 已有更完整版本 |
-| `PuppetViewer.tsx` | **删除** | neko-puppet 已有专业版本 |
+| `AvatarViewer.tsx` + `Viewport3D.tsx` | P2 删除，当前由 `NEKO_LIVE_RENDERER_FALLBACK_ENABLED` 门控保留 | neko-model Live Mode 已有入口，删除需等完整替代流程可用 |
+| `PuppetViewer.tsx` | P2 删除，当前由 `NEKO_LIVE_RENDERER_FALLBACK_ENABLED` 门控保留 | neko-puppet Live Mode 已有入口，删除需等完整替代流程可用 |
 | `TrackingPanel.tsx` | 保留在 neko-live（精简为场景控制） | 场景合成控制 |
 | `CanvasRecorder.ts` + `RecordingService.ts` | 保留在 neko-live | 录制是 live 独有职责 |
 | `EmptyState.tsx` | 改为场景合成引导 | 职责变更 |
@@ -267,16 +420,42 @@ neko-live 面板通过 `DeviceManager` API 获取设备列表，在自己的工�
 
 在场景合成需求到来之前，将追踪/场景/录制状态从 `LivePanelProvider` 提取到独立的 `LiveSessionService`，为多面板消费做准备。这是当前值得提前做的抽象，也是 TrackingService 提取的前置步骤。
 
+`LiveSessionService` 只管理 neko-live 自身 session，不替代 TrackingService / DeviceManager：
+
+```typescript
+export interface LiveSessionService {
+  getSnapshot(): LiveSessionSnapshot;
+  updateScene(patch: LiveScenePatch): Promise<void>;
+  startRecording(options: LiveRecordingOptions): Promise<void>;
+  stopRecording(): Promise<LiveRecordingResult>;
+  bindDevice(deviceId: string, role: LiveDeviceRole): Promise<void>;
+  onDidChange(listener: (event: LiveSessionEvent) => void): vscode.Disposable;
+  dispose(): void;
+}
+```
+
+职责边界：
+
+| 服务 | 管什么 | 不管什么 |
+|------|--------|----------|
+| `DeviceManager` | 系统设备发现、权限、连接状态、stream/session handle | live 场景语义 |
+| `TrackingService` | 追踪输入接收、状态、`TrackingData` 广播 | VRM/puppet 映射和渲染 |
+| `LiveSessionService` | neko-live 场景、录制、推流、设备 role binding | 设备枚举、追踪协议解析 |
+
+这三个服务可以在 Extension Host 通过依赖注入组合，Webview 只通过自己的 provider 订阅必要状态切片。
+
 ## 优先级
 
 ### 设备管理
 
 | 优先级 | 任务 | 说明 |
 |--------|------|------|
-| P1 | `@neko/shared/types/device.ts` | 设备类型定义，与 Rust kernel traits 对齐 |
-| P1 | `neko-client/src/device/DeviceManager.ts` | 统一发现 + 事件聚合 + `onDeviceChange` |
+| P1 | `@neko/shared/types/device.ts` | 应用层设备契约，低层 wire DTO 由 `@neko/neko-client` 适配 |
+| P1 | `@neko/shared/types/tracking.ts` | `TrackingData` / `TrackingStatus` / `TrackingServiceApi` 共享契约 |
+| P1 | `neko-client/src/device/DeviceManager.ts` | 统一发现 + 权限 + 事件聚合 + `onDeviceChange` |
 | P2 | `GamepadClient` / `MidiClient` | 让 neko-puppet、neko-sketch 能用手柄/MIDI |
 | P2 | `CameraClient` | 配合 Rust 侧 `camera.rs` 补完 |
+| P2 | `DeviceBindingService` / `InputRouter`（Rust） | engine 内消费 MIDI/Gamepad 事件，避免实时动作经 Webview 回环 |
 | P3 | 设备管理 TreeView | 原生 VSCode 侧栏设备列表 |
 | P3 | XR 设备客户端 | 等 `runtime-xr` ADR 实现后 |
 
@@ -285,16 +464,31 @@ neko-live 面板通过 `DeviceManager` API 获取设备列表，在自己的工�
 | 优先级 | 任务 | 说明 |
 |--------|------|------|
 | P1 | `LiveSessionService` 提取 | 从 LivePanelProvider 解耦追踪/场景/录制状态 |
-| P1 | `TrackingService` 提取 | VmcReceiver → extension 级共享服务 + 命令协议 |
+| P1 | `TrackingService` 提取 | VmcReceiver → Extension Host 共享服务 + 命令/API 协议 |
 | P1 | neko-puppet 加 Live Mode | 订阅 TrackingService + 迁入 `puppetMapping` |
 | P1 | neko-model 加 Live Mode | 订阅 TrackingService + 迁入 `vmcMapping` |
 | P2 | 删除 neko-live 重复渲染器 | 移除 AvatarViewer / PuppetViewer / Viewport3D |
 | P2 | neko-live 改为场景合成器 | 多源输入 + 录制/推流，不再自渲染 |
 | P3 | 共享 VRM loader 提取 | `@neko/shared` 消除 neko-model 剩余 VRM 加载重复 |
 
+执行顺序约束：先落地共享契约和服务抽象，再接入 neko-puppet/neko-model Live Mode，最后删除 neko-live 旧渲染器。删除动作不得早于替代工作流可用。
+
+## 测试策略
+
+| 范围 | 验证点 | 建议测试 |
+|------|--------|----------|
+| `@neko/shared` 设备/追踪契约 | 类型可导出、命名稳定、无 DOM/VSCode 依赖 | `pnpm --filter @neko/shared test` |
+| `DeviceManager` | wire DTO 归一化、权限拒绝不调用 engine、断开会关闭 session、事件 listener 可 dispose | fake `EngineClient` + fake `WebSocket` 单元测试 |
+| `GamepadClient` / `MidiClient` | connect 返回 stream、消息 parse、close/error 传播、reconnect 不重复 listener | fake WebSocket 单元测试，参考 `SceneControlSocket` |
+| 权限层 | ask/granted/denied 三态、workspace/global 优先级、revoke 断开 session | Extension Host service 单元测试 |
+| `TrackingService` | start/stop 幂等、端口占用错误、listener dispose、status change、owner dispose 清理 UDP socket | fake `VmcReceiver` 单元测试 |
+| `puppetMapping` / `vmcMapping` | ARKit → Live2D/VRM 映射边界、clamp、缺失参数过滤 | 迁移到对应子包后补单元测试 |
+| `LiveSessionService` | 多 Webview 订阅状态切片、录制 start/stop、设备 role binding | provider-level 单元测试 |
+| 架构边界 | Webview 不 import `vscode`，Extension 不 import React，跨扩展不 import private source | `pnpm check` + 现有边界测试 |
+
 ## 不变量
 
-1. **Rust engine 是设备数据 SSOT** — TS 层不重复设备枚举/通信逻辑，只做客户端封装
+1. **Rust engine 是设备数据 SSOT** — TS 层不重复硬件枚举/底层通信逻辑，只做客户端封装和应用层状态聚合
 2. **实时输入在 engine 内闭环** — 控制信号不经过 Webview 中转
 3. **手写板通过 PointerEvent** — 不走 engine 路径
 4. **设备管理用原生 VSCode UI** — 不为管理面建 Webview
@@ -308,7 +502,7 @@ neko-live 面板通过 `DeviceManager` API 获取设备列表，在自己的工�
 | # | 反模式 | 为什么错 | 正确做法 |
 |---|--------|---------|---------|
 | 1 | 新建 `neko-device` 顶层子包 | 设备管理是基础设施不是功能域，治理开销不匹配 | 放在 `neko-client/src/device/` |
-| 2 | Webview 直接创建 WebSocket 到 engine | VSCode Webview 沙箱限制，无法发起网络连接 | Extension Host 代理 |
+| 2 | Webview 自行发现 engine 并拼接设备控制 WebSocket | 绕过权限层与 Extension Host 生命周期管理 | Extension Host 授权并传入 stream URL；Webview 只消费已授权 stream |
 | 3 | 设备输入事件经 Webview 中转再回 engine | 多余两跳延迟 + 语义错误 | engine 进程内 broadcast 消费 |
 | 4 | 为设备管理建 Webview 面板 | 交互频率低、数据简单，杀鸡用牛刀 | 原生 TreeView + QuickPick + StatusBar |
 | 5 | neko-live 自建页面路由框架 | VSCode 已提供多面板机制 | 用 WebviewView + CustomEditor 组合 |

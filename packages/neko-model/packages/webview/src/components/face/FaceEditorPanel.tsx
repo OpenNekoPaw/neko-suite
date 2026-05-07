@@ -39,12 +39,12 @@ export function FaceEditorPanel({
   // Initialize default params on mount
   useEffect(() => {
     if (Object.keys(faceParams).length === 0) {
-      setFaceParams(getDefaultFaceParams());
+      setFaceParams(getDefaultFaceParams(), { replace: true });
     }
   }, []);
 
   const handleReset = () => {
-    setFaceParams(getDefaultFaceParams());
+    setFaceParams(getDefaultFaceParams(), { replace: true });
     for (const [name, value] of Object.entries(getDefaultFaceParams())) {
       onSetMorph(name, value);
     }
@@ -55,7 +55,7 @@ export function FaceEditorPanel({
     for (const param of FACE_PARAMETERS) {
       randomized[param.name] = Math.random() * (param.max - param.min) + param.min;
     }
-    setFaceParams(randomized);
+    setFaceParams(randomized, { replace: true });
     for (const [name, value] of Object.entries(randomized)) {
       onSetMorph(name, value);
     }

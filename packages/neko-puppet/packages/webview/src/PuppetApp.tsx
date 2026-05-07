@@ -199,6 +199,10 @@ export function PuppetApp() {
           // Load parameters and animations
           const params = await ctrl.getParameters();
           store.setPuppetParameters(params);
+          vscode.postMessage({
+            type: 'puppet:parametersLoaded',
+            parameters: params.map((param) => param.name),
+          });
 
           // Apply pending parameter overrides if any
           const pending = pendingStateRef.current;

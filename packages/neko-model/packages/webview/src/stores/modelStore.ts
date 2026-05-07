@@ -151,7 +151,7 @@ export interface ModelState {
 
   // Actions — Face Editor
   setFaceParam: (name: string, value: number) => void;
-  setFaceParams: (params: Record<string, number>) => void;
+  setFaceParams: (params: Record<string, number>, options?: { replace?: boolean }) => void;
   resetFaceParams: () => void;
   randomizeFaceParams: () => void;
   toggleFaceEditor: () => void;
@@ -533,7 +533,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
       faceParams: { ...state.faceParams, [name]: value },
     })),
 
-  setFaceParams: (params) => set({ faceParams: params }),
+  setFaceParams: (params, options) =>
+    set((state) => ({
+      faceParams: options?.replace === true ? params : { ...state.faceParams, ...params },
+    })),
 
   resetFaceParams: () => set({ faceParams: {} }),
 

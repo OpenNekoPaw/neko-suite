@@ -8,5 +8,9 @@
   "neko.puppet.template.humanoid.desc": "Pre-built skeleton (head, body, limbs)",
   "neko.puppet.template.import": "Import Existing File",
   "neko.puppet.template.import.desc": "Import an .inp or .moc3 file from disk",
-  "neko.puppet.import.filter": "2D Puppet Files"
+  "neko.puppet.import.filter": "2D Puppet Files",
+  "neko.puppet.liveMode.start.title": "Start Puppet Live Mode",
+  "neko.puppet.liveMode.stop.title": "Stop Puppet Live Mode",
+  "neko.puppet.liveMode.started": "Puppet Live Mode started",
+  "neko.puppet.liveMode.stopped": "Puppet Live Mode stopped"
 }

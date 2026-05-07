@@ -19,6 +19,7 @@
   "neko.live.avatar.noModelSrc": "此 .nkm 项目未关联模型，请先在 Neko Model 中打开。",
   "neko.live.avatar.noPuppetSrc": "此 .nkp 项目未关联 Puppet，请先在 Neko Puppet 中打开。",
   "neko.live.avatar.projectReadFailed": "读取项目文件失败：{0}",
+  "neko.live.camera.noDevice": "没有可用的摄像头设备。",
   "neko.live.calibrating": "正在校准追踪...",
   "neko.live.streamingStarted": "推流已开始"
 }

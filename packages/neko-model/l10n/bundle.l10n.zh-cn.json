@@ -11,5 +11,9 @@
   "neko.model.template.humanoid": "简单人形",
   "neko.model.template.humanoid.desc": "预制骨骼层级（脊柱/四肢）",
   "neko.model.template.import": "导入现有文件",
-  "neko.model.template.import.desc": "从磁盘导入 .gltf / .glb / .vrm 文件"
+  "neko.model.template.import.desc": "从磁盘导入 .gltf / .glb / .vrm 文件",
+  "neko.model.liveMode.start.title": "启动 Model Live Mode",
+  "neko.model.liveMode.stop.title": "停止 Model Live Mode",
+  "neko.model.liveMode.started": "Model Live Mode 已启动",
+  "neko.model.liveMode.stopped": "Model Live Mode 已停止"
 }

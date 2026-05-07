@@ -1,5 +1,6 @@
 import type { SceneCapturePreview } from '@neko/neko-client';
 import type { EditorKeyframeTrack, SceneDelta, SceneSnapshot } from '@neko/shared';
+import type { VRMExpressionPreset } from './vrmExpressions';
 
 export type { SceneDelta, SceneSnapshot };
 export type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
@@ -23,6 +24,7 @@ export type ExtensionMessage =
   | { type: 'exportComplete'; success: boolean; filePath?: string; error?: string }
   | { type: 'projectSaved'; success: boolean; filePath?: string; error?: string }
   | { type: 'projectLoaded'; snapshot: SceneSnapshot; editorState: unknown }
+  | { type: 'liveExpressions'; expressions: Partial<Record<VRMExpressionPreset, number>> }
   | { type: 'keyframeTracks'; tracks: EditorKeyframeTrack[] }
   | { type: 'keyframeAdded'; trackProperty: string; keyframeId: string }
   | { type: 'keyframeRemoved'; trackProperty: string; keyframeId: string };

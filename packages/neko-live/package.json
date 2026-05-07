@@ -84,6 +84,21 @@
         "command": "neko.live.startStreaming",
         "title": "%neko.live.cmd.startStreaming%",
         "category": "Neko Live"
+      },
+      {
+        "command": "neko.tracking.start",
+        "title": "%neko.tracking.cmd.start%",
+        "category": "Neko Tracking"
+      },
+      {
+        "command": "neko.tracking.stop",
+        "title": "%neko.tracking.cmd.stop%",
+        "category": "Neko Tracking"
+      },
+      {
+        "command": "neko.tracking.status",
+        "title": "%neko.tracking.cmd.status%",
+        "category": "Neko Tracking"
       }
     ],
     "configuration": {

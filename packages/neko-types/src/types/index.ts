@@ -218,6 +218,10 @@ export * from './agent-capability';
 // Agent-first multimodal observation / rationale contracts
 export * from './agent-observation';
 export * from './multimodal-context';
+
+// Device and live tracking contracts
+export * from './device';
+export * from './tracking';
 export * from './decision-rationale';
 export * from './recovery-guidance';
 export * from './subagent-reviewer';

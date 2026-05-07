@@ -13,6 +13,7 @@ import {
   parseModelImportAssetArgs,
   validateModelAssetPath,
 } from './importModelAsset';
+import { ModelLiveModeService } from './live';
 
 /** Default .nkm document template */
 function getModelTemplate(title: string): string {
@@ -38,9 +39,14 @@ export function activate(context: vscode.ExtensionContext): void {
   getRootLogger().info('Activating extension...');
 
   modelEditorProvider = new ModelEditorProvider(context);
+  const liveModeService = new ModelLiveModeService({
+    editorProvider: modelEditorProvider,
+    logger: logger.child('LiveMode'),
+  });
 
   // Register custom editor
   context.subscriptions.push(
+    liveModeService,
     vscode.window.registerCustomEditorProvider(ModelEditorProvider.viewType, modelEditorProvider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
@@ -78,6 +84,20 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('neko.model.liveMode.start', async () => {
+      try {
+        await liveModeService.start();
+        void vscode.window.showInformationMessage(vscode.l10n.t('neko.model.liveMode.started'));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        getRootLogger().error(`liveMode.start failed: ${message}`);
+        void vscode.window.showErrorMessage(message);
+      }
+    }),
+    vscode.commands.registerCommand('neko.model.liveMode.stop', async () => {
+      await liveModeService.stop();
+      void vscode.window.showInformationMessage(vscode.l10n.t('neko.model.liveMode.stopped'));
+    }),
     vscode.commands.registerCommand('neko.model.importAsset', async (args?: unknown) => {
       const parseResult = parseModelImportAssetArgs(args);
       if (parseResult.status === 'missing') {

@@ -8,19 +8,25 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { ILogger } from '@neko/shared';
-import { EngineClient } from '@neko/neko-client';
-import { VmcReceiver } from './vmc/VmcReceiver';
-import { RecordingService } from './RecordingService';
+import type {
+  DeviceInfo,
+  DevicePermissionRequest,
+  DevicePermissionState,
+  DeviceType,
+  ILogger,
+  TrackingServiceApi,
+} from '@neko/shared';
+import { EngineClient, EngineDeviceManager, type DeviceManager } from '@neko/neko-client';
+import { LiveSessionService } from './LiveSessionService';
 import { handleError } from './utils/errorHandler';
 
 export class LivePanelProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'neko.livePreview';
 
   private view?: vscode.WebviewView;
-  private vmcReceiver?: VmcReceiver;
   private engineClient?: EngineClient;
-  private recordingService?: RecordingService;
+  private deviceManager?: DeviceManager;
+  private readonly sessionService: LiveSessionService;
   private puppetStreamWs?: { close: () => void };
   private readonly disposables: vscode.Disposable[] = [];
   private readonly logger: ILogger;
@@ -28,8 +34,39 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly extensionUri: vscode.Uri,
     logger: ILogger,
+    private readonly trackingService: TrackingServiceApi,
   ) {
     this.logger = logger.child('LivePanel');
+    this.sessionService = new LiveSessionService({
+      logger: this.logger,
+      getEngineClient: () => this.ensureEngineClient(),
+      getDeviceManager: () => this.deviceManager,
+      ensureDeviceManager: () => this.ensureDeviceManager(),
+    });
+    this.disposables.push(
+      this.sessionService.onDidChange((event) => {
+        if (event.type === 'recordingProgress') {
+          this.postMessage({ type: 'recordingProgress', elapsedMs: event.elapsedMs });
+        }
+      }),
+      this.toVSCodeDisposable(
+        this.trackingService.onTrackingData((data) => {
+          this.postMessage({ type: 'vmcTrackingData', data });
+        }),
+      ),
+      this.toVSCodeDisposable(
+        this.trackingService.onStatusChange((status) => {
+          if (status.errorMessage) {
+            void handleError(new Error(status.errorMessage), { showToUser: true });
+          }
+          this.postMessage({
+            type: 'trackingStatus',
+            mode: status.source,
+            active: status.active,
+          });
+        }),
+      ),
+    );
   }
 
   // ─── WebviewViewProvider ────────────────────────────────────────────────
@@ -55,8 +92,8 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     webviewView.onDidDispose(
       () => {
         this.stopVmc();
+        void this.stopCameraCapture();
         this.closePuppetStream();
-        this.recordingService?.dispose();
       },
       null,
       this.disposables,
@@ -128,6 +165,10 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     const uri = vscode.Uri.file(filePath);
     const webviewUri = this.view?.webview.asWebviewUri(uri);
     if (webviewUri) {
+      this.sessionService.updateScene({
+        avatarUri: webviewUri.toString(),
+        avatarType: 'vrm',
+      });
       this.postMessage({ type: 'avatarSelected', uri: webviewUri.toString(), avatarType: 'vrm' });
     }
   }
@@ -182,37 +223,17 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
   public startVmc(): void {
     const port = vscode.workspace.getConfiguration('neko.live').get<number>('vmcPort', 39539);
-    this.stopVmc();
-
-    this.vmcReceiver = new VmcReceiver(port, this.logger);
-
-    this.vmcReceiver.on('tracking', (data) => {
-      this.postMessage({ type: 'vmcTrackingData', data });
-    });
-
-    this.vmcReceiver.on('error', (err) => {
-      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
-    });
-
-    this.vmcReceiver.on('started', () => {
-      this.postMessage({ type: 'trackingStatus', mode: 'vmc', active: true });
-    });
-
-    this.vmcReceiver.on('stopped', () => {
-      this.postMessage({ type: 'trackingStatus', mode: 'vmc', active: false });
-    });
-
-    this.vmcReceiver.start().catch((err: Error) => {
-      this.logger.error('Failed to start VMC receiver', err);
-      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
+    this.sessionService.updateScene({ trackingMode: 'vmc' });
+    this.trackingService.start({ source: 'vmc', port }).catch((err: Error) => {
+      this.logger.error('Failed to start VMC tracking', err);
+      void handleError(err, { showToUser: true });
     });
   }
 
   public stopVmc(): void {
-    if (this.vmcReceiver) {
-      this.vmcReceiver.stop();
-      this.vmcReceiver = undefined;
-    }
+    this.trackingService.stop('vmc').catch((err: Error) => {
+      this.logger.error('Failed to stop VMC tracking', err);
+    });
   }
 
   // ─── Puppet Management ──────────────────────────────────────────────────
@@ -243,6 +264,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       });
 
       this.postMessage({ type: 'avatarSelected', uri: filePath, avatarType: 'puppet' });
+      this.sessionService.updateScene({ avatarUri: filePath, avatarType: 'puppet' });
       this.startPuppetStream(client);
       this.logger.info(vscode.l10n.t('neko.live.puppetLoaded', filePath));
     } catch (err) {
@@ -291,15 +313,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
    * Video capture runs in webview; audio capture runs via engine.
    */
   public async startRecording(includeAudio: boolean): Promise<void> {
-    const client = await this.ensureEngineClient();
-
-    this.recordingService = new RecordingService(
-      client,
-      (elapsedMs) => this.postMessage({ type: 'recordingProgress', elapsedMs }),
-      this.logger,
-    );
-
-    await this.recordingService.start({ includeAudio });
+    await this.sessionService.startRecording({ includeAudio });
     // Note: webview already set recording state before sending this message
   }
 
@@ -307,10 +321,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
    * Stop audio recording (called after webview has stopped canvas capture and sent blob).
    */
   public async stopRecording(): Promise<void> {
-    if (!this.recordingService) return;
-
-    const result = await this.recordingService.stop();
-    this.recordingService = undefined;
+    const result = await this.sessionService.stopRecording();
 
     // Report audio path — video blob arrives separately via videoRecordingBlob
     const filePath = result.audioPath ?? '';
@@ -353,6 +364,83 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     return os.tmpdir();
   }
 
+  // ─── Camera Devices ─────────────────────────────────────────────────────
+
+  private async listCameraDevices(): Promise<void> {
+    const manager = await this.ensureDeviceManager();
+    if (!manager) {
+      this.postMessage({ type: 'cameraDevices', devices: [] });
+      return;
+    }
+
+    try {
+      await manager.refresh();
+      const devices = manager.list('camera');
+      this.postMessage({
+        type: 'cameraDevices',
+        devices: devices.map((device) => ({
+          id: device.id,
+          name: device.label,
+          isDefault: device.isDefault ?? false,
+        })),
+      });
+    } catch (err) {
+      this.logger.error('Failed to list camera devices', err);
+      void handleError(err instanceof Error ? err : new Error(String(err)), {
+        showToUser: true,
+        severity: 'warning',
+      });
+      this.postMessage({ type: 'cameraDevices', devices: [] });
+    }
+  }
+
+  private async startCameraCapture(deviceId?: string): Promise<void> {
+    const manager = await this.ensureDeviceManager();
+    if (!manager) return;
+
+    try {
+      await manager.refresh();
+      const device = this.pickCameraDevice(manager.list('camera'), deviceId);
+      if (!device) {
+        void handleError(new Error(vscode.l10n.t('neko.live.camera.noDevice')), {
+          showToUser: true,
+          severity: 'warning',
+        });
+        return;
+      }
+      const session = await this.sessionService.startDeviceStream('camera', device);
+      this.postMessage({
+        type: 'cameraStreamStarted',
+        streamId: session.sessionId,
+        wsUrl: session.streamUrl ?? '',
+      });
+    } catch (err) {
+      this.logger.error('Failed to start camera capture', err);
+      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
+    }
+  }
+
+  private async stopCameraCapture(): Promise<void> {
+    if (!this.deviceManager) {
+      this.postMessage({ type: 'cameraStreamStopped' });
+      return;
+    }
+    try {
+      await this.sessionService.stopDeviceStream('camera');
+      this.postMessage({ type: 'cameraStreamStopped' });
+    } catch (err) {
+      this.logger.error('Failed to stop camera capture', err);
+    }
+  }
+
+  private pickCameraDevice(
+    devices: readonly DeviceInfo[],
+    deviceId: string | undefined,
+  ): DeviceInfo | undefined {
+    if (deviceId) return devices.find((device) => device.id === deviceId);
+    return devices.find((device) => device.isDefault) ?? devices[0];
+  }
+
   // ─── Engine Client ──────────────────────────────────────────────────────
 
   private async ensureEngineClient(): Promise<EngineClient | undefined> {
@@ -370,6 +458,46 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       this.logger.error('Failed to connect to engine', err);
     }
     return undefined;
+  }
+
+  private async ensureDeviceManager(): Promise<DeviceManager | undefined> {
+    if (this.deviceManager) return this.deviceManager;
+    const client = await this.ensureEngineClient();
+    if (!client) return undefined;
+    this.deviceManager = new EngineDeviceManager({
+      engine: client,
+      permissionPolicy: {
+        getPermission: (request) => this.getDevicePermission(request),
+        requestPermission: (request) => this.requestDevicePermission(request),
+      },
+    });
+    return this.deviceManager;
+  }
+
+  private async getDevicePermission(
+    request: DevicePermissionRequest,
+  ): Promise<DevicePermissionState> {
+    return this.defaultPermissionForDeviceType(request.deviceType);
+  }
+
+  private async requestDevicePermission(
+    request: DevicePermissionRequest,
+  ): Promise<DevicePermissionState> {
+    try {
+      const state = await vscode.commands.executeCommand<DevicePermissionState>(
+        'neko.devices.requestPermission',
+        request.deviceType,
+        request.deviceId,
+      );
+      return state ?? this.defaultPermissionForDeviceType(request.deviceType);
+    } catch (err) {
+      this.logger.warn(`Device permission lookup failed: ${String(err)}`);
+      return this.defaultPermissionForDeviceType(request.deviceType);
+    }
+  }
+
+  private defaultPermissionForDeviceType(type: DeviceType): DevicePermissionState {
+    return type === 'audio-input' || type === 'camera' || type === 'xr' ? 'unknown' : 'granted';
   }
 
   // ─── Message Routing ────────────────────────────────────────────────────
@@ -396,6 +524,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
           case 'setTrackingMode': {
             const mode = message.mode as string;
+            this.sessionService.updateScene({ trackingMode: mode });
             this.logger.info(`Tracking mode set to: ${mode}`);
             break;
           }
@@ -414,6 +543,18 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
           case 'stopRecording':
             await this.stopRecording();
+            break;
+
+          case 'listCameraDevices':
+            await this.listCameraDevices();
+            break;
+
+          case 'startCameraCapture':
+            await this.startCameraCapture(message.deviceId as string | undefined);
+            break;
+
+          case 'stopCameraCapture':
+            await this.stopCameraCapture();
             break;
 
           case 'videoRecordingBlob':
@@ -442,6 +583,10 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
   private postMessage(msg: unknown): void {
     this.view?.webview.postMessage(msg);
+  }
+
+  private toVSCodeDisposable(disposable: { dispose(): void }): vscode.Disposable {
+    return new vscode.Disposable(() => disposable.dispose());
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
@@ -473,8 +618,10 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
   public dispose(): void {
     this.stopVmc();
+    void this.stopCameraCapture();
     this.closePuppetStream();
-    this.recordingService?.dispose();
+    this.sessionService.dispose();
+    this.deviceManager?.dispose();
     this.disposables.forEach((d) => d.dispose());
   }
 }

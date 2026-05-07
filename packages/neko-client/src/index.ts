@@ -63,6 +63,31 @@ export {
   type VertexBrushPatchClientConfig,
 } from './VertexBrushPatchClient';
 
+export {
+  CameraClient,
+  DeviceStreamClient,
+  EngineDeviceManager,
+  GamepadClient,
+  MidiClient,
+  audioInputToDeviceInfo,
+  cameraToDeviceInfo,
+  deviceKey,
+  gamepadToDeviceInfo,
+  midiPortToDeviceInfo,
+  withConnectionState,
+  type DeviceConnectOptions,
+  type DeviceEngineClient,
+  type DeviceManager,
+  type DeviceManagerConfig,
+  type DevicePermissionPolicy,
+  type DeviceSnapshotDelta,
+  type DeviceStreamClientConfig,
+  type DeviceWebSocketFactory,
+  type DeviceWebSocketLike,
+  type GamepadEvent,
+  type MidiEvent,
+} from './device';
+
 // Browser capability detection
 export {
   detectCapabilities,

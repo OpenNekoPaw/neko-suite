@@ -66,6 +66,16 @@
         "command": "neko.puppet.new",
         "title": "%neko.puppet.new.title%",
         "category": "NekoPuppet"
+      },
+      {
+        "command": "neko.puppet.liveMode.start",
+        "title": "%neko.puppet.liveMode.start.title%",
+        "category": "NekoPuppet"
+      },
+      {
+        "command": "neko.puppet.liveMode.stop",
+        "title": "%neko.puppet.liveMode.stop.title%",
+        "category": "NekoPuppet"
       }
     ],
     "menus": {

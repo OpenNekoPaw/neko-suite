@@ -6,6 +6,7 @@
 mod audio;
 pub mod audio_mixdown;
 pub mod camera;
+pub mod device_binding;
 mod effects;
 mod export;
 pub mod gamepad;
@@ -25,6 +26,10 @@ pub mod impls;
 
 pub use audio::IAudioService;
 pub use camera::ICameraService;
+pub use device_binding::{
+    DeviceActionBinding, DeviceActionInvocation, DeviceBindingService, DeviceBindingSource,
+    DeviceInputEvent, DeviceInputMatcher, IDeviceBindingService,
+};
 pub use effects::IEffectsService;
 pub use export::IExportService;
 pub use gamepad::IGamepadService;

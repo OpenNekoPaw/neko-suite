@@ -19,6 +19,7 @@
   "neko.live.avatar.noModelSrc": "This .nkm project has no model linked. Open it in Neko Model first.",
   "neko.live.avatar.noPuppetSrc": "This .nkp project has no puppet linked. Open it in Neko Puppet first.",
   "neko.live.avatar.projectReadFailed": "Failed to read project file: {0}",
+  "neko.live.camera.noDevice": "No camera device is available.",
   "neko.live.calibrating": "Calibrating tracking...",
   "neko.live.streamingStarted": "Streaming started"
 }

@@ -229,6 +229,9 @@ export function App(): React.JSX.Element {
           }
           break;
         }
+        case 'liveExpressions':
+          useModelStore.getState().setFaceParams(message.expressions);
+          break;
         default:
           break;
       }

@@ -11,5 +11,9 @@
   "neko.model.template.humanoid": "Simple Humanoid",
   "neko.model.template.humanoid.desc": "Pre-built bone hierarchy (spine, limbs)",
   "neko.model.template.import": "Import Existing File",
-  "neko.model.template.import.desc": "Import a .gltf / .glb / .vrm file from disk"
+  "neko.model.template.import.desc": "Import a .gltf / .glb / .vrm file from disk",
+  "neko.model.liveMode.start.title": "Start Model Live Mode",
+  "neko.model.liveMode.stop.title": "Stop Model Live Mode",
+  "neko.model.liveMode.started": "Model Live Mode started",
+  "neko.model.liveMode.stopped": "Model Live Mode stopped"
 }

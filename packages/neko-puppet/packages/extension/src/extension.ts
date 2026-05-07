@@ -18,6 +18,7 @@ import { setErrorHandler } from './utils/errorHandler';
 import { registerCommands } from './commands';
 import { createNekoPuppetCapabilityProvider } from './agentCapabilityProvider';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
+import { PuppetLiveModeService } from './live';
 
 /**
  * Activate the extension
@@ -37,9 +38,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
   logger.info('Activating extension...');
 
   const puppetEditorProvider = new PuppetEditorProvider(context);
+  const liveModeService = new PuppetLiveModeService({
+    editorProvider: puppetEditorProvider,
+    logger: logger.child('LiveMode'),
+  });
 
   // Register custom editor for .nkp and .inp files
   context.subscriptions.push(
+    liveModeService,
     vscode.window.registerCustomEditorProvider(
       PuppetEditorProvider.viewType,
       puppetEditorProvider,
@@ -52,7 +58,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
   );
 
   // Register commands
-  registerCommands(context);
+  registerCommands(context, liveModeService);
 
   logger.info('Extension activated');
 
