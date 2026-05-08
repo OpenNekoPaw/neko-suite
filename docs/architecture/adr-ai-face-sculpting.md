@@ -757,4 +757,393 @@ Sources:
   └─ 其余 → API 优先，ONNX 备用
            （mlInferenceMode='auto' 自动降级）
 ```
-- [SAM VRAM Issues](https://github.com/facebookresearch/segment-anything/issues/78)
+
+---
+
+## 附录 D：多模态领域模型 API 闭环架构
+
+> API → VLM → API 三角闭环：专业领域模型 API 做感知/执行，VLM 做编排/验证。
+
+### D.1 三角闭环模型
+
+```
+                    ┌─────────────────────┐
+                    │    VLM (大脑)        │
+                    │  Claude / GPT-4o    │
+                    │  理解 · 决策 · 验证   │
+                    └──────┬──────┬───────┘
+                  感知结果↑ │      │ ↓调用指令
+                           │      │
+              ┌────────────┘      └────────────┐
+              │                                │
+    ┌─────────▼──────────┐          ┌──────────▼─────────┐
+    │  领域模型 API (感知)  │          │  领域模型 API (执行)  │
+    │  SAM · Depth · Face │          │  TripoSR · Upscale  │
+    │  Pose · CLIP · STT  │          │  SD · Remove.bg     │
+    └─────────┬──────────┘          └──────────┬─────────┘
+              │       结果传递                   │
+              └────────────────────────────────┘
+```
+
+**核心原则**：
+- VLM **不做**像素/信号处理（做不到也不该做）
+- VLM **编排**专业 API 并用视觉能力**验证**中间结果
+- 领域模型 API 不是 LLM/VLM，而是**单任务专业模型**的云端推理端点
+- ONNX 退到**离线备用 + 实时场景**
+
+### D.2 VLM 在闭环中的三个不可替代角色
+
+| 角色 | 行为 | 为什么 API 链做不到 |
+|------|------|-------------------|
+| **意图理解** | "把照片变好看" → 拆解为 denoise + color correct + upscale | 需要语义推理 |
+| **质量验证** | 看超分结果判断"是否出现伪影" | 需要视觉理解 + 审美判断 |
+| **步骤编排** | 根据中间结果决定下一步（跳过/重试/改序） | 需要动态推理 |
+
+```
+示例: VLM 闭环决策
+
+VLM 看到 SAM 分割结果 → "边缘有锯齿"
+  → 决策 A: 调用 SAM API 重试 (prompt 加 "high quality edges")
+  → 决策 B: 先调 Upscale API 超分再分割 (改变步骤顺序)
+  → 决策 C: "可接受，继续下一步" (容忍不完美)
+
+这种基于视觉的动态决策是纯 API 调用链无法实现的。
+```
+
+### D.3 当前 MediaAdapter 覆盖 vs 缺口
+
+neko-agent 已有 **10 个 MediaAdapter**，全部集中在生成类：
+
+| 已有 Adapter | 覆盖任务 |
+|-------------|---------|
+| fal.ai | 图片生成 (Flux/SDXL)、ControlNet (canny/depth/pose) |
+| OpenAI | DALL-E 图片生成 |
+| Runway | 视频生成 (Gen-3) |
+| Luma | 视频生成 (Dream Machine) |
+| Suno | 音乐生成 |
+| MiniMax / Vidu / DashScope / LibLib / Midjourney | 图片/视频/音频生成 |
+
+**完全缺失的领域模型 API 类型**：
+
+| 缺失类别 | 用途 | 推荐 API | 单次成本 | 延迟 |
+|---------|------|---------|---------|------|
+| 分割 (Segmentation) | 背景移除、图层分离 | Replicate SAM 2 / fal.ai SAM 3 | $0.002-0.005 | 1-5s |
+| 深度估计 (Depth) | 2D→3D、视差效果 | Replicate Depth Anything V2 | $0.0016 | 1-3s |
+| 超分 (Upscale) | 素材增强 | Replicate Real-ESRGAN / HAT | $0.002 | 2-10s |
+| 降噪 (Denoise) | 素材修复 | Replicate NAFNet | ~$0.002 | 2-5s |
+| 去背景 (Remove BG) | 前景提取 | PhotoRoom ($0.02) / Replicate RMBG ($0.002) | $0.002-0.02 | <1s-3s |
+| 姿态估计 (Pose) | 骨骼绑定 | Replicate DWPose | $0.002-0.005 | 1-3s |
+| 图片→3D (Reconstruction) | 3D 模型生成 | fal.ai TripoSR ($0.07) / Tripo3D v2.5 ($0.20-0.40) | $0.07-0.40 | 5-30s |
+| 人脸关键点 (Face Mesh) | 捏脸参数映射 | Azure Face API ($1/1K) | $0.001 | 50-200ms |
+| 图文嵌入 (Embedding) | 语义搜索 | Jina CLIP v2 ($0.02/1M tokens) | 极低 | <100ms |
+| 语音识别 (STT) | 批量转录 | AssemblyAI ($0.15/hr) / GPT-4o-mini-transcribe ($0.18/hr) | $0.0025-0.006/min | 150-300ms |
+| 着色 (Colorize) | 旧照修复 | Replicate DeOldify | ~$0.003 | 3-5s |
+
+**注意**：MediaPipe Face Mesh（478 关键点 + 52 blendshapes）**无云端 REST API**，仅客户端 SDK。人脸关键点需走 ONNX（engine 内）或退而用 Azure Face API（仅 27 关键点）。
+
+### D.4 统一接入层：Replicate 作为通用网关
+
+Replicate 托管大部分领域模型，一个 Adapter 覆盖多个任务：
+
+```typescript
+// 新增: MediaProcessingType（与现有 MediaGenerationType 并列）
+type MediaProcessingType =
+  // 增强类
+  | 'upscale' | 'denoise' | 'restore' | 'colorize'
+  // 分析类
+  | 'segment' | 'depth-estimate' | 'face-landmark'
+  | 'pose-estimate' | 'embed-image' | 'embed-text' | 'ocr'
+  // 转换类
+  | 'image-to-3d' | 'remove-background' | 'style-transfer';
+
+// ReplicateProcessingAdapter — 一个 Adapter 覆盖大部分领域模型
+const REPLICATE_PROCESSING_MODELS = {
+  'upscale':        'nightmareai/real-esrgan:...',
+  'upscale-hat':    'jingyunliang/hat:...',
+  'segment':        'meta/sam-2:...',
+  'depth-estimate': 'chenxwh/depth-anything-v2:...',
+  'pose-estimate':  'replicate/cog-dwpose:...',
+  'remove-bg':      'lucataco/remove-bg:...',
+  'image-to-3d':    'stability-ai/triposr:...',
+  'denoise':        'sczhou/nafnet:...',
+  'colorize':       'arielreplicate/deoldify:...',
+} as const;
+```
+
+**Adapter 新增计划**：
+
+| 新 Adapter | 覆盖任务 | 优先级 |
+|-----------|---------|--------|
+| ReplicateProcessingAdapter | 分割/深度/超分/降噪/姿态/去背/着色/3D (通用) | P0 |
+| JinaEmbeddingAdapter | 图文嵌入 (CLIP v2 / SigLIP) | P1 |
+| DeepgramAdapter / AssemblyAIAdapter | 批量语音识别 | P2 |
+| TripoAdapter | Image→3D (高品质 Tripo3D v2.5) | P2 |
+
+### D.5 闭环场景示例
+
+#### 场景 A：图片→3D 模型 + 骨骼绑定
+
+```
+用户: "把这张人脸照片变成 3D 模型"
+
+VLM 分析意图 → 制定 5 步计划
+  │
+  ├─ Step 1: SAM API → 分割人脸前景          ($0.002)
+  │    VLM 验证: "分割边界是否干净？" ✅
+  │
+  ├─ Step 2: Face Mesh (ONNX) → 468 关键点   ($0, 本地)
+  │    VLM 分析: 五官比例 → 映射到 22 个捏脸参数
+  │
+  ├─ Step 3: Depth API → 深度图              ($0.0016)
+  │    VLM 验证: "深度图是否合理？" ✅
+  │
+  ├─ Step 4: TripoSR API → 3D mesh           ($0.07)
+  │    VLM 验证: "3D 模型是否像原图？" ✅/❌
+  │    如果 ❌ → 调整 prompt 重试 (闭环)
+  │
+  └─ Step 5: Engine 算法 → retopo + skinning  ($0, 本地)
+       VLM 验证: Engine 截图 → "骨骼绑定正确？" ✅
+
+总成本: ~$0.08 (API) + ~$0.05 (VLM 编排) = ~$0.13
+```
+
+#### 场景 B：素材智能增强管线
+
+```
+用户: "帮我把这张旧照片修复并超分到 4K"
+
+VLM 分析: 旧照片 → 需要降噪 + 超分 + 可能着色
+  │
+  ├─ Step 1: Denoise API → 去噪              ($0.002)
+  │    VLM 验证: "噪点去除/细节保留？" ✅
+  │
+  ├─ Step 2: Upscale API (HAT 4x) → 超分     ($0.002)
+  │    VLM 验证: "放大后是否出现伪影？" ✅
+  │
+  └─ Step 3 (条件): VLM 判断 "是黑白照" → Colorize API  ($0.003)
+       VLM 验证: "色彩是否自然？" ✅/❌ → 重试
+
+总成本: ~$0.007-0.01 (API) + ~$0.02 (VLM) = ~$0.03
+```
+
+#### 场景 C：Puppet 自动骨骼绑定
+
+```
+用户: "把这张角色图绑定骨骼做成 puppet"
+
+VLM 分析: 角色插画 → 需要分层 + 关键点 + 骨骼
+  │
+  ├─ Step 1: SAM API → 多层分割 (头/身体/四肢)  ($0.005)
+  │    VLM 验证: 各层分离是否干净
+  │
+  ├─ Step 2: Pose API → 全身关键点              ($0.005)
+  │    VLM 分析: 关键点映射到 puppet 骨骼节点
+  │
+  ├─ Step 3: Depth API → 图层前后关系推断        ($0.0016)
+  │    VLM: "手臂在身体前面" → z-order 确定
+  │
+  └─ Step 4: Engine 算法 → mesh deform + IK     ($0, 本地)
+       VLM 验证: "试运行一个挥手动画" → 视觉检查
+
+总成本: ~$0.012 (API) + ~$0.03 (VLM) = ~$0.04
+```
+
+### D.6 扩展后的路由架构
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                  MediaRoutingManager (扩展)                       │
+│                                                                  │
+│  路由策略:                                                       │
+│  1. API 在线 + 非实时 → 领域模型 API (首选)                      │
+│  2. API 不可用 / 离线 → ONNX 本地备用                            │
+│  3. 实时场景 (<100ms) → 始终 ONNX                                │
+│  4. VLM 编排场景 → 必须 API (VLM 需要看到中间结果做决策)         │
+├──────────────────────────────────────────────────────────────────┤
+│                  MediaAdapter Registry                           │
+│                                                                  │
+│  ┌─── 生成类 (已有 10 个 Adapter) ───────────────────────┐      │
+│  │ fal · openai · runway · luma · suno · ...              │      │
+│  └────────────────────────────────────────────────────────┘      │
+│                                                                  │
+│  ┌─── 分析/增强/转换类 (新增) ────────────────────────────┐      │
+│  │ ReplicateProcessingAdapter (SAM/Depth/Pose/Upscale/...) │      │
+│  │ JinaEmbeddingAdapter       (CLIP embedding)             │      │
+│  │ DeepgramAdapter            (STT batch)                  │      │
+│  │ TripoAdapter               (Image→3D)                  │      │
+│  └────────────────────────────────────────────────────────┘      │
+│                                                                  │
+│  ┌─── 本地备用 (ONNX via EngineClient) ──────────────────┐      │
+│  │ upscale/denoise/clip/whisper/face-mesh/depth/pose       │      │
+│  │ 触发: 离线 / API 不可用 / 实时场景 / mlInferenceMode    │      │
+│  └────────────────────────────────────────────────────────┘      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### D.7 闭环成本估算
+
+| 闭环场景 | API 调用链 | API 成本 | VLM 编排成本 | 合计 |
+|---------|-----------|---------|------------|------|
+| 图片→3D 模型 | SAM + Depth + Face + TripoSR | ~$0.08 | ~$0.05 | **~$0.13** |
+| 旧照片修复 | Denoise + Upscale + Colorize | ~$0.007 | ~$0.02 | **~$0.03** |
+| Puppet 骨骼绑定 | SAM + Depth + Pose | ~$0.012 | ~$0.03 | **~$0.04** |
+| 素材语义搜索 (100张) | Jina CLIP × 100 | ~$0.002 | — | **~$0.002** |
+| AI 捏脸 (参数生成+验证) | LLM + Engine screenshot | ~$0 | ~$0.05 | **~$0.05** |
+
+Sources:
+- [Replicate Pricing](https://replicate.com/pricing)
+- [fal.ai Pricing](https://fal.ai/pricing)
+- [Jina CLIP v2 API](https://jina.ai/embeddings/)
+- [AssemblyAI Pricing](https://www.assemblyai.com/pricing)
+- [OpenAI Audio Transcription](https://platform.openai.com/docs/guides/speech-to-text)
+- [Azure Face API Pricing](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/face-api/)
+- [PhotoRoom API](https://www.photoroom.com/api)
+- [Tripo3D API Pricing](https://www.tripo3d.ai/pricing)
+- [Meshy API](https://docs.meshy.ai/)
+- [Cohere Embed v4](https://cohere.com/embed)
+
+---
+
+## 附录 E：2026 推理框架格局 vs ONNX
+
+> 分析 2026 各领域 ML 框架/模型能否替代 ONNX Runtime。
+
+### E.1 当前 ONNX 清单
+
+neko-engine `runtime-ml` 运行 4 个 ONNX 模型，均通过 `ort` crate + CoreML EP (macOS) / CPU：
+
+| 模型 | 任务 | 模型大小 | 推理管线特征 |
+|------|------|---------|------------|
+| Real-ESRGAN / SwinIR | 图像超分 | ~65 MB | Tile-based (512×512, 32px overlap), NCHW f32 |
+| SCUNet | 图像降噪 | ~65 MB | 同上 tile-based 管线 |
+| CLIP ViT-B/32 | 图文匹配 | ~340 MB | 双编码器 (image 224×224 + text BPE) → cosine |
+| Whisper Base | 语音识别 | ~140 MB | FFmpeg→mel spectrogram→encoder→autoregressive decoder |
+
+### E.2 Rust 推理框架对比（2026 现状）
+
+| 框架 | 版本 | GPU 支持 | 模型覆盖 | 能否替代 ORT？ |
+|------|------|---------|---------|---------------|
+| **ort** (ONNX Runtime) | 2.0.0-rc | CoreML/CUDA/DirectML/OpenVINO | 任何 ONNX 导出模型 | — (当前方案) |
+| **candle** (HuggingFace) | v0.9.3 | Metal + CUDA | Transformer 类优秀 (Whisper/CLIP/LLM/SD)；CNN/GAN 弱 | **部分可替代** (Whisper+CLIP) |
+| **burn** | v0.20 | CubeCL → CUDA/Metal/WebGPU/Vulkan/ROCm | 预训练模型极少；`burn-onnx` 算子覆盖不足 | ❌ 不可替代 |
+| **tract** (Sonos) | — | CPU only | ONNX 兼容 ~85%；`ort-tract` 后端可无缝切换 | ⚠️ CPU 场景可替代 |
+| **tch-rs** | — | CUDA + MPS | 完整 PyTorch 绑定 | ❌ 需 libtorch ~2GB |
+| **wonnx** | — | WebGPU/wgpu | ONNX 子集；无 64-bit、无动态 shape | ❌ 算子限制太多 |
+| **whisper-rs** | — | Metal + CUDA + CPU | 仅 Whisper | ✅ Whisper 专用最优解 |
+| **mlx-rs** | v0.25.3 | Apple Silicon MLX | 非官方 Rust 绑定 | ❌ macOS only |
+
+### E.3 逐任务替代分析
+
+#### 图像超分 (Real-ESRGAN)
+
+| 替代候选 | 可行性 | 理由 |
+|---------|--------|------|
+| ONNX 内升级 (HAT/DAT) | ✅ 推荐 | 新模型全部支持 ONNX 导出，管线无需改动 |
+| candle | ❌ | 无现成超分实现，CNN/GAN 支持弱 |
+| wgpu compute shader | ❌ | 需逐层手写 shader，不实际 |
+| 多模态 LLM | ❌ | 无法做像素级操作 |
+| Cloud API (Replicate) | ✅ 备用 | 延迟 2-10s vs ONNX <500ms |
+| **结论** | **ONNX 不可替代** | 可在 ONNX 内升级到 HAT/DAT |
+
+#### 图像降噪 (SCUNet)
+
+| 替代候选 | 可行性 | 理由 |
+|---------|--------|------|
+| ONNX 内升级 (Restormer/NAFNet) | ✅ 推荐 | 同上 |
+| candle / burn | ❌ | 无现成降噪实现 |
+| Cloud API | ✅ 备用 | 延迟 2-5s |
+| **结论** | **ONNX 不可替代** | |
+
+#### 图文匹配 (CLIP)
+
+| 替代候选 | 可行性 | 理由 |
+|---------|--------|------|
+| ONNX 内升级 (SigLIP) | ✅ 推荐 | 精度↑15%，有 ONNX 导出 |
+| candle CLIP | ✅ 可行 | 纯 Rust，消除 ORT dylib (~50MB) |
+| Jina CLIP v2 API | ✅ 批量查询 | $0.02/1M tokens |
+| Ollama embedding | ❌ | 无图像嵌入能力 |
+| **结论** | **ONNX 可用，candle 是唯一可行替代** | 迁移优先级低 |
+
+#### 语音识别 (Whisper)
+
+| 替代候选 | 可行性 | 理由 |
+|---------|--------|------|
+| ONNX 内升级 (Distil-Whisper) | ✅ 推荐 | 6x 加速，精度接近 |
+| whisper-rs (whisper.cpp) | ✅ 最优 | Metal 性能 2-3x 优于 ORT |
+| candle-whisper | ✅ 可行 | 纯 Rust，无 C++ 依赖 |
+| Cloud API (AssemblyAI) | ✅ 批量 | 实时字幕延迟不可接受 |
+| **结论** | **whisper-rs 是最强替代候选** | 迁移 ROI 需评估 |
+
+### E.4 新增候选模型（扩展 ONNX 清单）
+
+| 模型 | 任务 | ONNX 支持 | 受益场景 | 优先级 |
+|------|------|----------|---------|--------|
+| SAM 2 / EfficientSAM | 图像分割 | ✅ | 背景移除、puppet 图层分离 | P1 |
+| Depth Anything V2 | 深度估计 | ✅ (HF 预导出) | 2D→3D 转换、视差效果 | P1 |
+| MediaPipe Face Mesh | 人脸关键点 | ✅ (TFLite→ONNX) | AI 捏脸 (478 点 + 52 blendshapes) | P1 |
+| RTMPose / DWPose | 姿态估计 | ✅ | puppet 骨骼绑定 | P2 |
+| SigLIP | 图文匹配 | ✅ | 替换 CLIP (精度↑) | P2 |
+| Distil-Whisper v3.5 | 语音识别 | ✅ | 替换 Whisper (速度 6x↑) | P2 |
+| Florence-2 | 统一视觉 | ✅ | OCR/检测/描述多合一 | P3 |
+| RIFE / IFNet | 视频插帧 | ✅ | neko-cut 慢动作 | P3 |
+
+### E.5 范式分析：多模态 LLM 能否吞噬 ONNX 任务？
+
+| 能力 | GPT-4o / Claude / Gemini 2.0 | 能替代 ONNX？ |
+|------|------------------------------|---------------|
+| 图像理解 + 描述 | ✅ 极强 | ❌ ≠ 像素操作 |
+| 图像生成 | ✅ (GPT-4o native image) | ❌ ≠ 超分/降噪 |
+| 音频理解 | ✅ (Gemini native audio) | ⚠️ 非实时 1-3s |
+| 语义搜索 | ✅ (embedding API) | ❌ 无 image embedding |
+
+**结论**：多模态 LLM 永远不能替代 ONNX 的信号处理任务——两者在不同计算域（信号处理 vs 语义推理）。
+
+### E.6 推荐策略
+
+```
+                    2026 neko-engine ML 推理策略
+
+  ┌─ 继续 ONNX (不可替代) ──────────────────────────────────┐
+  │  ✅ 超分 (ESRGAN → HAT/DAT 升级)                        │
+  │  ✅ 降噪 (SCUNet → Restormer 升级)                       │
+  │  ✅ CLIP (升级到 SigLIP, 更高精度)                        │
+  │  ✅ 新增: SAM 2 / Depth Anything / Face Mesh              │
+  └──────────────────────────────────────────────────────────┘
+
+  ┌─ 可考虑迁移 ─────────────────────────────────────────────┐
+  │  ⚠️ Whisper → whisper-rs (whisper.cpp)                    │
+  │     Metal 性能 2-3x，支持 distil-whisper                   │
+  │  ⚠️ CLIP → candle CLIP                                     │
+  │     消除 ORT dylib (~50MB)                                  │
+  │  ⚠️ 紧急方案: ort-tract 后端                                │
+  │     消除 ORT dylib 同时保持 ort API 不变 (CPU only)         │
+  └──────────────────────────────────────────────────────────┘
+
+  ┌─ 不可替代 ───────────────────────────────────────────────┐
+  │  ❌ 超分/降噪无 Rust 原生替代 (candle/burn 均无)           │
+  │  ❌ 多模态 LLM 无法做信号处理任务                           │
+  │  ❌ Cloud API 延迟不满足实时/高频场景                       │
+  └──────────────────────────────────────────────────────────┘
+```
+
+### E.7 结论
+
+| 问题 | 答案 |
+|------|------|
+| ONNX 整体可被替代？ | **否** — 2026 无单一框架覆盖 ORT 的模型广度 + GPU EP |
+| 个别任务可迁移？ | **是** — Whisper → whisper-rs, CLIP → candle |
+| 应该替换？ | **不急** — 优先在 ONNX 内升级模型 (HAT/SigLIP/Distil-Whisper) |
+| candle 何时接管？ | 当支持 CNN/GAN 且性能 ≥ ORT 时 — 预计 2027+ |
+| 应该做什么？ | ① ONNX 内升级模型 ② 新增 SAM/Depth/FaceMesh ③ 观察 candle/whisper-rs |
+
+Sources:
+- [candle v0.9.3](https://github.com/huggingface/candle)
+- [burn v0.20 CubeCL](https://www.phoronix.com/news/Burn-0.20-Released)
+- [tract — Sonos ONNX inference](https://github.com/sonos/tract)
+- [ort alternative backends (tract)](https://ort.pyke.io/backends)
+- [whisper-rs](https://crates.io/crates/whisper-rs)
+- [mlx-rs v0.25.3](https://github.com/oxideai/mlx-rs)
+- [Distil-Whisper v3.5](https://huggingface.co/distil-whisper/distil-large-v3.5)
+- [SigLIP ONNX export](https://deepwiki.com/deepghs/realutils/7.4-siglip-model-export)
+- [Depth Anything V2 ONNX](https://huggingface.co/onnx-community/depth-anything-v2-small)
+- [EfficientSAM ONNX](https://github.com/yformer/EfficientSAM)
