@@ -116,7 +116,7 @@ The system SHALL allow panoramic image assets to be sent from `neko-preview` to 
 - **THEN** the model environment rotation remains the explicit `EnvironmentPlacement.rotationDeg` value rather than the viewer's current yaw or pitch
 
 ### Requirement: Canvas And Agent Lightweight Consumption
-The system SHALL keep Canvas and Agent panoramic handling lightweight. They MUST consume engine-generated thumbnails, FOV crops, proxy previews, or pre-rendered rotation assets and MUST delegate interactive panoramic viewing to `neko-preview`.
+The system SHALL keep Canvas and Agent panoramic handling lightweight. They MUST consume engine-generated thumbnails, FOV crops, proxy previews, or pre-rendered rotation assets through composable preview capability contracts and MUST delegate interactive panoramic viewing to `neko-preview`.
 
 #### Scenario: Agent shows panoramic thumbnail
 - **WHEN** Agent displays a panoramic image result
@@ -124,7 +124,11 @@ The system SHALL keep Canvas and Agent panoramic handling lightweight. They MUST
 
 #### Scenario: Canvas shows panoramic node preview
 - **WHEN** Canvas displays a panoramic asset node
-- **THEN** it shows a flat/proxy thumbnail or pre-rendered preview and delegates spherical interaction to `neko-preview`
+- **THEN** it shows a flat/proxy thumbnail or pre-rendered preview through preview capabilities and delegates spherical interaction to `neko-preview`
+
+#### Scenario: Canvas preview capability does not embed sphere renderer
+- **WHEN** a Canvas block declares panoramic preview capability
+- **THEN** the Canvas renderer consumes engine-issued preview variants and delegate commands without mounting a WebGL sphere viewer
 
 ### Requirement: Built-in Preview Delegation
 The system SHALL optimize built-in/native preview behavior only after dedicated panoramic preview is available. Built-in preview commands or route contributions MUST delegate panoramic candidates to the manifest-backed `neko-preview` viewer rather than implementing a separate content loader.
@@ -140,3 +144,4 @@ The system SHALL optimize built-in/native preview behavior only after dedicated 
 #### Scenario: Heuristic route asks first
 - **WHEN** the only signal is a low-confidence aspect-ratio heuristic
 - **THEN** the system asks for user confirmation or provides an explicit command rather than silently replacing normal image preview
+
