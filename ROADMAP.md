@@ -17,18 +17,18 @@
 
 | Module           | Status | Progress | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **neko-engine**  | Alpha  | 98%      | GPU rendering + codec + export + HTTP/WS + device proxy + ONNX ML inference + full color/keying pipeline + keyframe/animation blending + character editing API + **concurrency guard Semaphore(8/4/2) ✅**                                                                                                                                                                                                                                                                                                                                                   |
-| **neko-agent**   | Alpha  | 99%      | **0 TODOs**, 1957+ tests, 300+ files; 7 LLM + 10 media adapters + MCP + Coordinator + SubAgent + Creative Memory + quality assessment + Webview P0 complete + **IDC Unified Workflow Phase A+B+closure ✅** (3-stage draft/plan/apply, ArtifactValidator/Watcher/ObservationHooks closed-loop self-correct, §4 revision 2026-04-22); architecture docs consolidated on Agent Unified Workflow + Capability Protocol; remaining: MCP reconnection backoff + P1 Zustand migration + ask-mode decoupling ([ADR](./docs/architecture/agent-unified-workflow.md)) |
+| **neko-engine**  | Alpha  | 98%      | GPU rendering + codec + export + HTTP/WS + device proxy + ONNX ML inference + full color/keying pipeline + keyframe/animation blending + character editing API + **concurrency guard Semaphore(8/4/2) ✅** + **3D rendering control plane ✅** + configurable log levels                                                                                                                                                                                                                                                                                       |
+| **neko-agent**   | Alpha  | 99%      | **0 TODOs**, 1957+ tests, 300+ files; 7 LLM + 10 media adapters + MCP + Coordinator + SubAgent + Creative Memory + quality assessment + Webview P0 complete + **IDC Unified Workflow Phase A+B+closure ✅** + **multimodal perception pipeline ✅** + **rich content delivery ✅** + **runtime boundary hardening ✅** (workflow evaluation harness, feedback loops, boundary adapters) + **dead code cleanup ✅** (13 unused bridges/routes removed); remaining: MCP reconnection backoff + P1 Zustand migration + ask-mode decoupling ([ADR](./docs/architecture/agent-unified-workflow.md)) |
 | **neko-cut**     | Alpha  | 95%      | **~65K LOC**, 50+ commands; AI Handler 14/16 actions; **P0 closed**; subtitle/ripple editing/playback speed/effects export complete; remaining: export round-trip tests + ai-auto-edit/ai-match-music + advanced time editing ([ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md))                                                                                                                                                                                                                                                          |
 | **neko-story**   | Alpha  | 95%      | **0 TODO(P0)**, 155+ tests; 8 LSP Providers + Fountain parser + 3 preview views + ScenePlan/ShotPlan planners + StorySceneStateStore cross-session persistence; Story→Agent→Canvas semantic pipeline fully operational ([ADR](./docs/architecture/story-agent-canvas-boundary.md))                                                                                                                                                                                                                                                                           |
-| **neko-canvas**  | Alpha  | 92%      | 13 node types + BatchGenerationScheduler + 7 MCP Tools; **P0 fully converged** ✅ + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + **NodeTypeDescriptor registry** ✅ (labels/icons/defaultSize converged; property panels remain separate); remaining P1 enhancements ([ADR](./docs/architecture/canvas-role-boundary.md))                                                                                                                                                                                                                              |
-| **neko-preview** | Alpha  | 86%      | 6 editor types + waterfall layout + Content→Agent + **EPUB outline TreeView ✅**; Phase 1 remaining: FDX; Phase 2: XLSX/PPTX                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **neko-canvas**  | Alpha  | 93%      | 13 node types + BatchGenerationScheduler + 7 MCP Tools; **P0 fully converged** ✅ + P1-1 CanvasEmbedNode + P1-4 NodeRendererRegistry + **NodeTypeDescriptor registry** ✅ + **scene-shot thumbnail mode + management UI ✅**; remaining P1 enhancements ([ADR](./docs/architecture/canvas-role-boundary.md))                                                                                                                                                                                                                                                  |
+| **neko-preview** | Alpha  | 88%      | 6 editor types + waterfall layout + Content→Agent + **EPUB outline TreeView ✅** + **panoramic image preview (WIP)**; Phase 1 remaining: FDX + panoramic; Phase 2: XLSX/PPTX ([ADR](./docs/architecture/adr-panoramic-image-preview.md))                                                                                                                                                                                                                                                                                                                     |
 | **neko-assets**  | Alpha  | 88%      | Pure TreeView architecture + ThumbnailService + **search L0 persistent index + type filtering + 200 limit ✅**; remaining: L1-L3 cache (depends on new Engine actions)                                                                                                                                                                                                                                                                                                                                                                                       |
-| **neko-market**  | Alpha  | 88%      | **~4.4K LOC**; full React Webview implementation (Browse/Installed/Updates + Zustand + i18n) + market-core 58 tests; remaining: Registry Server integration (neko-hub)                                                                                                                                                                                                                                                                                                                                                                                       |
+| **neko-market**  | Alpha  | 90%      | **~4.4K LOC**; full React Webview + market-core 58 tests + **plugin governance hardening ✅** (registry contract alignment); remaining: Registry Server integration (neko-hub)                                                                                                                                                                                                                                                                                                                                                                                |
 | **neko-auth**    | Alpha  | 90%      | Full OAuth 2.0 + PKCE implementation (OAuthClient + TokenManager + NekoAuthService + VscodeTokenStorage), 0 TODOs, 43 tests; remaining: backend end-to-end verification                                                                                                                                                                                                                                                                                                                                                                                      |
 | **neko-tools**   | Alpha  | 72%      | **~15K LOC**; image/video/audio diff + silence detection + metadata viewer; remaining: polish                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **neko-types**   | Alpha  | 92%      | Shared types + unified cross-cutting concerns + type-safe Operations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **neko-client**  | Alpha  | 80%      | H264/fMP4/PCM streaming client + EngineClient HTTP dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **neko-types**   | Alpha  | 93%      | Shared types + unified cross-cutting concerns + type-safe Operations + **device/tracking/preview contracts ✅**                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **neko-client**  | Alpha  | 82%      | H264/fMP4/PCM streaming client + EngineClient HTTP dispatch + **device client classes (WIP)** + **perception facade ✅**                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **neko-proto**   | Stable | 100%     | timeline.proto + diff.proto complete IDL                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ### Phase 2: Creative Tools Completion
@@ -38,7 +38,7 @@
 | Module          | Status | Progress | Description                                                                                                                                                                                                                                                                                                                                                  |
 | --------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **neko-audio**  | Alpha  | 72%      | **0 TODOs**, ~9.1K LOC, 78 tests; waveform + spectrum + 12-type effect chain + multi-track skeleton + microphone; **missing**: multi-track P0 UI (marker lane / clip drag / track header / recording closure) + P1 Mixer/Automation + P2 Bus/Stem/Comping ([ADR](./docs/architecture/neko-audio-workstation-assessment.md))                                  |
-| **neko-sketch** | Alpha  | 65%      | **~13.5K LOC**, 7 tests; brush engine + pressure sensitivity + layers + selection + AI tools + cross-module workflow; **missing**: P0 core tools (adjustment layers / layer masks / lasso / alpha lock) + transform tools + 2D lighting system ([ADR](./docs/architecture/sketch-feature-gap-analysis.md), [ADR](./docs/architecture/sketch-2d-lighting.md)) |
+| **neko-sketch** | Alpha  | 68%      | **~14K+ LOC**; brush engine + pressure sensitivity + layers + selection + AI tools + cross-module workflow + **PSD import + AI bridge ✅** + **.nks migration ✅**; **missing**: P0 core tools (adjustment layers / layer masks / lasso / alpha lock) + transform tools + 2D lighting system ([ADR](./docs/architecture/sketch-feature-gap-analysis.md), [ADR](./docs/architecture/sketch-2d-lighting.md)) |
 
 ### Phase 3: Professional Editing Capabilities
 
@@ -46,9 +46,9 @@
 
 | Module          | Status | Progress | Description                                                                                                                                                                                                                                                                         |
 | --------------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **neko-puppet** | Alpha  | 92%      | **8.5K LOC** + 104 Rust tests; **MOC3 loading** (clean-room parser/deformers/expressions/motions/physics) + INP legacy read-only + parameter deformation + animation blending + 60fps streaming + Canvas rendering; remaining: AI tools (Phase 6) / VTS API (Phase 7) / MOC3 export |
-| **neko-model**  | Alpha  | 85%      | **12.6K LOC** + 49 Rust tests; glTF/VRM + PBR/IBL + CSG + face sculpting + particles + keyframes; remaining: IK UI / Undo / Blender bridging                                                                                                                                        |
-| **neko-live**   | Alpha  | 55%      | **2.6K LOC** + 0 tests; VMC+VRM + Puppet integration + recording; **blocked**: nokhwa crate / MediaPipe / streaming                                                                                                                                                                 |
+| **neko-puppet** | Alpha  | 92%      | **8.5K LOC** + 104 Rust tests; **MOC3 loading** (clean-room parser/deformers/expressions/motions/physics) + INP legacy read-only + parameter deformation + animation blending + 60fps streaming + Canvas rendering + **Live Mode (WIP)**; remaining: AI tools (Phase 6) / VTS API (Phase 7) / MOC3 export |
+| **neko-model**  | Alpha  | 87%      | **12.6K LOC** + 49 Rust tests; glTF/VRM + PBR/IBL + CSG + face sculpting + particles + keyframes + **viewport orbit/pan/zoom ✅** + **3D rendering pipeline fixes ✅** + **i18n complete ✅** + **engine rendering control plane ✅** + **Live Mode (WIP)**; remaining: IK UI / Undo / Blender bridging |
+| **neko-live**   | Alpha  | 58%      | **~3K LOC** + 0 tests; VMC+VRM + Puppet integration + recording + **LiveSessionService (WIP)** + **TrackingService extraction (WIP)**; **blocked**: nokhwa crate / MediaPipe / streaming ([ADR](./docs/architecture/adr-device-management.md))                                                        |
 
 ### Meta Package
 
@@ -171,6 +171,7 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - ✅ **P1: Asset proxy boundary** — converged to `neko-assets` restricted proxy + `timelineSync` minimal write-back contract
 - ✅ `.nkc-ops` operation history persistence + AI source filter
 - ✅ **P1: `NodeTypeDescriptor` unified registry** — labels/icons/defaultSize converged into single descriptor per node type; PropertyPanel labels + nodeFactory sizes migrated; property panel renderers remain in PropertyPanel (circular dep constraint)
+- ✅ **P1: Scene-shot thumbnail mode** — thumbnail rendering + management UI for scene-shot overview; managed shots hidden from minimap
 - [ ] P1: `asset` namespace cleanup (push `neko-assets` to provide formal extension API)
 - [ ] P2: Batch candidate comparator + stronger review UI
 - [ ] P2: Character consistency (@reference assets → IP-Adapter reference injection)
@@ -224,6 +225,44 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - ✅ `StorySceneStateStore` + `workspaceState` cross-session persistence + pipeline event scene state write-back
 - ✅ Fountain pipeline routed through scene planning (Agent routing + semantic storyboard canvas import)
 - [ ] P2: Upgrade `canvasStatus = opened` from button-driven to canvas real-time event write-back
+
+### neko-agent — Multimodal Perception Pipeline ✅ (2026-05-06)
+
+> [ADR](./docs/architecture/adr-agent-multimodal-perception.md) — PerceptionCard + CompositeBlock + Provider-Aware Delivery
+
+- ✅ PerceptionCard three-layer perception intermediary (Structural / Semantic / Perceptual)
+- ✅ Agent-first multimodal contracts (@neko/shared)
+- ✅ EngineClient perception facade + capture helpers
+- ✅ Agent feedback signals, perception tools, persona integration
+- ✅ Observation recorder + journal events + ControlPlane wiring
+- ✅ Multimodal context resolution + operation adapters
+- [ ] P1: PerceptionPolicy strategy-driven timing (on-completion / on-reference / on-demand)
+- [ ] P1: Provider-Aware Delivery (per LLM modality capability routing)
+- [ ] P2: CompositeBlock multimodal assembly (storyboard-table / comparison / gallery)
+- [ ] P2: Task Completion Backfill pipeline closure
+
+### neko-agent — Rich Content Delivery ✅ (2026-05-07)
+
+> [Analysis](./docs/architecture/agent-rich-content-delivery-analysis.md) — Agent → creative tools structured delivery
+
+- ✅ Rich content delivery to Canvas, Cut, Model, Puppet, Explorer targets
+- ✅ Structured payload projection (storyboard → canvas nodes, timeline clips, model import)
+- [ ] P1: Cut generated audio landing (connect voiceOver/soundCue to TTS/sound-effect generation)
+- [ ] P1: Batch transfer semantics (best-effort vs atomic per target + target-side feedback)
+- [ ] P2: Puppet Send-to target (moc3/motion/expression payloads)
+- [ ] P2: Model structured import protocol (beyond path-based .glb/.vrm)
+- [ ] P2: Composite structured delivery (comparison / gallery / report projections)
+
+### neko-agent — Runtime Workflow Hardening ✅ (2026-04-27 → 2026-05-04)
+
+- ✅ Runtime boundary guards + unified workflow boundaries
+- ✅ Workflow evaluation harness (structured test framework for pipeline paths)
+- ✅ Runner boundary adapters hardening
+- ✅ Runtime feedback loops closure + workflow polish gaps
+- ✅ Capability injection state bounding
+- ✅ Video quality evidence foundation + production wiring
+- ✅ Dead code cleanup: 13 commits removing unused bridges, routes, messages (marketplace opener, config bridge, MCP test protocol, generation progress bridge, connection state bridge, skill task actions, webview control protocols)
+- ✅ Domain logic restructuring: runtime modules + platform services + webview/runtime contract separation + shared presenter/helper consolidation
 
 ### neko-agent — Rich Media Architecture TODO
 
@@ -290,6 +329,8 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 
 **Skill prompt-chain cleanup (2026-04-26)**: pre-launch Skill workflow DSL fields were removed from runtime contracts and market install gates. New Skill authoring uses prompt-chain body sections plus deterministic metadata boundaries.
 
+**Marketplace governance hardening (2026-05-02)**: plugin governance contracts aligned with registry; trust level enforcement + signature gate tightened.
+
 ### neko-model (3D) + neko-puppet (2D) — Character Editing Rust Engine ✅
 
 - Phase 3.1-3.3 ✅ (basic 3D + AI face sculpting + CSG + PBR + particles + timeline integration)
@@ -315,12 +356,29 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - Phase 3.2 remaining: AI MCP Tools (face.generate_params / face.from_image / face.adjust)
 - Phase 3.4: AI-assisted 3D + 3DGS + MCP bridging
 
-### neko-sketch (2D) — S.1-S.4 All Complete ✅
+### neko-preview — Panoramic Image Preview (WIP)
+
+> [ADR](./docs/architecture/adr-panoramic-image-preview.md) — Spherical viewer + HDR first-class + Send-to-Model
+
+**Phase 1 (WIP)**:
+
+- ⏳ `PanoramicImagePreviewProvider` + `PanoramicVideoPreviewProvider` (custom editor providers)
+- ⏳ Panoramic routing logic (equirectangular detection + projection type identification)
+- ⏳ Panorama webview (sphere mesh + equirect shader + drag-to-orbit + zoom)
+- ⏳ Preview manifest client (`PreviewManifestClient` in neko-client)
+- ⏳ Engine-first routing (HDR/EXR files loaded via engine HTTP endpoints, bypassing Webview CSP limits)
+- ⏳ Shared preview types (`@neko/shared/types/preview.ts`)
+- [ ] HDR tone mapping (Reinhard/ACES in fragment shader)
+- [ ] "Use as Environment in neko-model" Send-to action
+- [ ] AI panoramic generation metadata (`projection` field on `ImageGenerationRequest`)
+
+### neko-sketch (2D) — S.1-S.4 All Complete ✅ + PSD Import ✅
 
 - ✅ Phase S.1-S.3 (painting + skeletal animation + advanced 2D)
 - ✅ Phase S.4 P1: `sketch.generate` (SketchGenerate MCP tool → MediaGenerationService → canvas layer)
 - ✅ Phase S.4 P1: Inpaint / StyleTransfer / AutoLayer AI tools (getSelectionMask/getCanvasImageData → generate → new layer)
 - ✅ Phase S.4: Cross-module workflow (editImage → SketchEditorProvider → pendingImport; sendToTimeline / sendToCanvas commands)
+- ✅ **Phase S.5: PSD Import + AI Bridge** — extension-level PSD import + AI painting tools in webview + shared sketch contracts + `.nks` format migration
 - [ ] Phase S.4 P2: `style_transfer` cross-module integration enhancement (depends on NekoCanvasAPI image node support)
 
 ### neko-sketch — P0 Core Tool Gaps
@@ -489,10 +547,21 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 > [ADR](./docs/architecture/ui-modernization-design.md)
 
-### Device Proxy ✅
+### Device Proxy ✅ + Device Management (WIP)
 
 - Microphone ✅ | MIDI ✅ | Gamepad ✅ | Camera ⚠️ framework ready (capture TODO, prerequisite for neko-live)
-  > [ADR](./docs/architecture/device-access.md)
+  > [Device Access ADR](./docs/architecture/device-access.md) · [Device Management ADR](./docs/architecture/adr-device-management.md)
+
+**Device Management System (WIP, 2026-05-07)**:
+
+- ⏳ TS device clients in `neko-client/src/device/` (GamepadClient, MidiClient, MicrophoneClient, CameraClient)
+- ⏳ Engine device binding service (`engine-kernel/src/services/device_binding.rs`)
+- ⏳ Extension-level device providers (`neko-engine/packages/extension/src/device/`)
+- ⏳ Shared device/tracking types (`@neko/shared` — `device.ts`, `tracking.ts`)
+- ⏳ neko-live TrackingService extraction (shared extension-level service)
+- ⏳ neko-puppet Live Mode (`packages/extension/src/live/`)
+- ⏳ neko-model Live Mode (`packages/extension/src/live/`)
+- [ ] Native VSCode UI for device management (TreeView / QuickPick / StatusBar — no Webview)
 
 ---
 
@@ -554,6 +623,9 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 | PBR rendering (Cook-Torrance + IBL + post-processing)                             | 2,917 lines Rust GPU | Production              |
 | GPU particle system (Compute Shader)                                              | 449 lines Rust       | Production              |
 | Parametric face sculpting (22 params + skeletal expressions + VRM 17 expressions) | 632 lines TS         | Production              |
+| Viewport controls (orbit/pan/zoom + quality stabilization)                        | ~200 lines TS        | Production              |
+| Full i18n (all hardcoded strings replaced)                                        | —                    | Production              |
+| 3D rendering control plane (engine-side)                                          | ~300 lines Rust      | Production              |
 | IK solver (FABRIK, 12 tests)                                                      | 482 lines Rust       | Backend complete, no UI |
 
 **Phase 3.4: AI-Assisted 3D (Long-term)**
@@ -629,9 +701,9 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 ### neko-live Long-term Roadmap
 
-> [Device Proxy ADR](./docs/architecture/device-access.md)
+> [Device Proxy ADR](./docs/architecture/device-access.md) · [Device Management ADR](./docs/architecture/adr-device-management.md)
 
-**Current state**: Phases 5.1.1-5.1.2 complete, 2,600 lines of production code (1,032 extension + 1,580 webview), 0 tests.
+**Current state**: Phases 5.1.1-5.1.2 complete, ~3,000 lines of production code, 0 tests. **Active refactoring**: TrackingService extraction + LiveSessionService + neko-live three-layer split per Device Management ADR.
 
 | Completed Capability                                                 | LOC                         | Quality                                |
 | -------------------------------------------------------------------- | --------------------------- | -------------------------------------- |
@@ -959,4 +1031,4 @@ agent/market are included in core; scenario sub-packs stack with zero duplicatio
 
 ---
 
-_Last updated: 2026-04-26 (Architecture docs cleanup: obsolete workflow/capability exploration docs removed from active references; current entry points are Agent Unified Workflow + Capability Protocol.)_
+_Last updated: 2026-05-07 (Device management WIP + Panoramic preview WIP + Agent multimodal perception pipeline + Rich content delivery + Runtime workflow hardening + neko-sketch PSD import + neko-model 3D fixes + Marketplace governance hardening.)_

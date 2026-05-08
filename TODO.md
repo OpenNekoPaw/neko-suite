@@ -29,6 +29,41 @@
 - [x] **neko-story**: Scene workflow state persistence (`StorySceneStateStore` + `workspaceState` cross-session) + semantic storyboard pipeline entry `neko.story.startVideoCreation` + scene/shot planning tools + canvas handoff
 - [x] **neko-agent**: Fountain pipeline routed through scene planning + semantic storyboard canvas import pipeline
 
+### ✅ Sprint 3 Complete (2026-05-07)
+
+- [x] **neko-agent**: Multimodal perception pipeline — PerceptionCard three-layer intermediary + Agent-first feedback signals + perception tools + persona + observation recorder + journal events + ControlPlane wiring + EngineClient perception facade
+- [x] **neko-agent**: Rich content delivery to creative tools (Canvas/Cut/Model/Puppet/Explorer structured payload projection)
+- [x] **neko-agent**: Runtime workflow hardening — boundary guards + evaluation harness + feedback loops closure + runner boundary adapter hardening + capability injection state bounding + video quality evidence foundation
+- [x] **neko-agent**: Dead code cleanup — 13 commits removing unused bridges/routes/messages (marketplace opener, config bridge, MCP test protocol, generation progress bridge, connection state bridge, skill task actions, webview control protocols)
+- [x] **neko-agent**: Domain logic restructuring — runtime modules + platform services + webview/runtime contract separation + shared presenter/helper consolidation
+- [x] **neko-canvas**: Scene-shot thumbnail mode + management UI; managed shots hidden from minimap
+- [x] **neko-model**: 3D rendering pipeline fixes (multi-mesh models, GPU validation, stream lifecycle) + viewport orbit/pan/zoom controls + quality flickering fix + full i18n
+- [x] **neko-model**: 3D engine rendering control plane implementation
+- [x] **neko-sketch**: PSD import (`extension` PSD import + AI bridge) + webview AI painting tools + shared sketch contracts + `.nks` migration
+- [x] **neko-market**: Plugin governance hardening + registry contract alignment
+- [x] **neko-types**: Shared contracts: `device.ts` + `tracking.ts` + `preview.ts`
+- [x] **neko-client**: EngineClient perception facade + capture helpers
+- [x] **neko-engine**: Configurable log level via `neko.logLevel` VSCode setting + `audios:segment` action for time-range audio export
+- [x] **neko-shared**: File drop overlay fix (prevent internal node drag from triggering file drop overlay)
+
+### ⏳ Sprint 4 — Active (WIP in working tree)
+
+- [ ] **Device Management System** ([ADR](./docs/architecture/adr-device-management.md)):
+  - [ ] TS device clients in `neko-client/src/device/` (GamepadClient / MidiClient / MicrophoneClient / CameraClient)
+  - [ ] Engine device binding service (`device_binding.rs`)
+  - [ ] Extension-level device providers (`neko-engine/packages/extension/src/device/`)
+  - [ ] neko-live TrackingService extraction + LiveSessionService
+  - [ ] neko-puppet Live Mode (`packages/extension/src/live/`)
+  - [ ] neko-model Live Mode (`packages/extension/src/live/`)
+  - [ ] Native VSCode UI (TreeView / QuickPick / StatusBar)
+- [ ] **Panoramic Image Preview** ([ADR](./docs/architecture/adr-panoramic-image-preview.md)):
+  - [ ] `PanoramicImagePreviewProvider` + `PanoramicVideoPreviewProvider`
+  - [ ] Panoramic routing (equirectangular detection + projection type)
+  - [ ] Panorama webview (sphere mesh + equirect shader + orbit controls)
+  - [ ] Preview manifest client
+  - [ ] Engine-first routing for HDR/EXR files
+  - [ ] Shared preview types (`@neko/shared/types/preview.ts`)
+
 ### To Do
 
 ### neko-cut (Video Editing) — P0-1: Field Consistency
@@ -44,6 +79,7 @@
 
 > [ADR](./docs/architecture/canvas-role-boundary.md) — P0 fully converged; entering P1 enhancement phase.
 
+- [x] Scene-shot thumbnail mode + management UI; managed shots hidden from minimap
 - [ ] Continue converging peripheral bridge interfaces (keep `nodes.update/create` unified contract stable)
 - [ ] Message semantic refinement (new message types extend tool layer first, not direct global object access)
 - [ ] Batch candidate comparator + stronger review UI experience
@@ -102,6 +138,10 @@
 
 ### neko-engine (Engine)
 
+- [x] **3D rendering control plane** — engine-side rendering control implementation
+- [x] **`audios:segment` action** — time-range audio export for perception pipeline
+- [x] **Configurable log level** — `neko.logLevel` VSCode setting
+- [ ] **Device binding service** (WIP) — `device_binding.rs` for unified device I/O
 - [ ] New actions: `documents:text-extract` / `models:clip-embed` / `text:stats` (not yet in the action registry)
 - [ ] Integrate `effects:register` / `models:register` into unified plugin lifecycle (PluginManager P1 follow-up)
 - [ ] **Headless CLI export**: `host-cli export --input a.nkv --output a.mp4 --format mp4 --resolution 1080p` (CI/CD 基础, host-cli 已有入口)
@@ -118,6 +158,11 @@
 
 ### Cross-module
 
+- [ ] **Agent Multimodal Perception follow-ups** ([ADR](./docs/architecture/adr-agent-multimodal-perception.md), 2026-05-06):
+  - [ ] **P1: PerceptionPolicy strategy timing** — implement on-completion / on-reference / on-demand perception triggers
+  - [ ] **P1: Provider-Aware Delivery** — per-LLM modality capability routing (text-only / vision / audio providers)
+  - [ ] **P2: CompositeBlock multimodal assembly** — storyboard-table / comparison / gallery block types
+  - [ ] **P2: Task Completion Backfill** — close the pipeline so LLM sees generation results (shared payload + AgentEvent + Webview message + session/history persistence)
 - [ ] **Agent Rich Content delivery follow-ups** ([analysis](./docs/architecture/agent-rich-content-delivery-analysis.md), 2026-05-07):
   - [ ] **P1: Cut generated audio landing** — `cutStoryboard` currently creates image clips, subtitle cues, and text notes; connect `voiceOver` / `soundCue` to real TTS / sound-effect asset generation and place generated audio clips on audio tracks
   - [ ] **P1: Batch transfer semantics** — define whether `assetBatch` is best-effort per asset or atomic per target; add target-side feedback so Agent can report partial failures deterministically
@@ -178,8 +223,12 @@
 
 ## 🟡 Phase 2 — Creative Tools + UX Enhancements
 
-### neko-preview (Document Format Extensions)
+### neko-preview (Document Format Extensions + Panoramic)
 
+- [ ] **Panoramic image preview** ([ADR](./docs/architecture/adr-panoramic-image-preview.md)):
+  - [ ] Panoramic providers (image + video) + routing + sphere mesh webview
+  - [ ] HDR tone mapping + engine-first routing
+  - [ ] "Use as Environment in neko-model" Send-to action
 - [ ] XLSX preview (x-data-spreadsheet)
 - [ ] PPTX preview (LibreOffice headless)
 - [ ] FDX preview (XML parsing + Fountain-style rendering)
@@ -229,6 +278,10 @@
 - [ ] MCP reconnection backoff (exponential backoff + circuit breaker)
 - [ ] **P1-1: Pipeline media landing unification** — `MediaGeneratorAdapter` returns remote URLs; chat main path saves locally + indexes assets. Need shared `MediaPersistenceService` or adapter-level alignment
 - [x] **CapabilityProvider context extension** — extended `AgentCapabilityContext` with `mediaService`/`configManager`/`embedFn`; all sub-packages migrated
+- [x] **Multimodal perception pipeline** — PerceptionCard + Agent-first feedback signals + perception tools + observation recorder + journal events + ControlPlane
+- [x] **Rich content delivery** — structured payload projection to Canvas/Cut/Model/Puppet/Explorer
+- [x] **Runtime workflow hardening** — boundary guards + evaluation harness + feedback loops + runner boundary adapters + capability injection bounding + video quality evidence
+- [x] **Dead code cleanup** — 13 unused bridge/route/message removals + domain logic restructuring into runtime modules
 - [ ] **4 TODO(P1) Generation Tools** — remaining model capabilities: `GenerateCharacter` / `TransferStyle` / `EnhanceVideo` / `OptimizeAudio`
 - [ ] **Zustand state management migration**: replace hook/ref architecture with Zustand stores (conversation, UI, config, resources, skills, context); align with neko-cut/canvas/model Webview pattern
 - [ ] **Subdivide `InputAreaContext`** → `ModelContext` + `MentionContext` + `GenerationContext` to reduce re-render blast radius
@@ -354,6 +407,7 @@
 
 ### neko-sketch (2D Painting)
 
+- [x] **PSD Import + AI Bridge** — extension PSD import + webview AI painting tools + shared sketch contracts + `.nks` format migration
 - [ ] **Transform tool implementation**: rotation/scale/skew (currently UI shell only)
 - [ ] S.4 P2: `style_transfer` / enhanced cross-module integration
 
@@ -413,6 +467,10 @@
 
 ### neko-model (3D Editing)
 
+- [x] **3D rendering pipeline fixes** — multi-mesh models, GPU validation, stream lifecycle
+- [x] **Viewport orbit/pan/zoom controls** + quality flickering fix
+- [x] **Full i18n** — all hardcoded strings replaced with vscode.l10n.t()
+- [x] **3D engine rendering control plane** — engine-side rendering control implementation
 - [ ] IK UI exposure: backend 482-line FABRIK is complete; needs frontend TransformGizmo interaction
 - [ ] Undo/Redo state machine
 - [ ] AI MCP Tools: `face.generate_params` / `face.from_image` / `face.adjust`
@@ -453,6 +511,12 @@
 
 ### neko-live (VTuber Livestreaming)
 
+- [ ] **neko-live three-layer refactoring** ([ADR](./docs/architecture/adr-device-management.md)):
+  - [ ] TrackingService extraction as shared extension-level service
+  - [ ] LiveSessionService (session lifecycle management)
+  - [ ] neko-puppet Live Mode (use puppet's own renderer)
+  - [ ] neko-model Live Mode (use model's own renderer)
+  - [ ] neko-live slim-down to scene compositor (remove duplicate AvatarViewer/PuppetViewer)
 - [ ] Phase 5.1.3: Camera + MediaPipe (needs nokhwa crate)
 - [ ] Phase 5.2: Calibration system + audio/video merging + import into neko-cut timeline
 - [ ] Phase 5.3: Live streaming (RTMP/SRT → OBS)
@@ -667,8 +731,19 @@
 - Removed stale workflow umbrella / routing references from TODO, ROADMAP, architecture docs, proto comments, and test fixtures
 - Removed pre-launch Skill workflow DSL (`phases` / `pipelines`) from types, validation, slash execution, and market install paths; prompt-chain Skill authoring is now canonical
 
+### ✅ Sprint 3 (2026-04-27 → 2026-05-07)
+
+- **neko-agent**: Multimodal perception pipeline + Rich content delivery + Runtime workflow hardening (boundary guards/evaluation harness/feedback loops/runner boundary adapters) + Dead code cleanup (13 unused bridges/routes removed) + Domain logic restructuring (runtime modules/platform services/contract separation)
+- **neko-canvas**: Scene-shot thumbnail mode + management UI + minimap managed shot hiding
+- **neko-model**: 3D rendering pipeline fixes + viewport controls + full i18n + engine rendering control plane
+- **neko-sketch**: PSD import + AI bridge + webview AI painting tools + shared contracts + .nks migration
+- **neko-market**: Plugin governance hardening + registry contract alignment
+- **neko-engine**: Configurable log levels + audios:segment action + 3D rendering control plane
+- **neko-types**: device.ts + tracking.ts + preview.ts shared contracts
+- **neko-client**: EngineClient perception facade + capture helpers
+
 </details>
 
 ---
 
-_Last updated: 2026-04-26 (Architecture docs cleanup: removed obsolete workflow/capability exploration docs and consolidated references on the current Agent Unified Workflow + Capability Protocol ADRs.)_
+_Last updated: 2026-05-07 (Sprint 3 complete: Agent perception/delivery/hardening + Canvas thumbnails + Model 3D fixes + Sketch PSD + Market governance. Sprint 4 active: Device management + Panoramic preview.)_

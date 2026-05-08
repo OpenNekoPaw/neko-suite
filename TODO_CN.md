@@ -29,6 +29,41 @@
 - [x] **neko-story**: 场景工作流状态持久化（`StorySceneStateStore` + `workspaceState` 跨会话）+ 语义分镜流水线入口 `neko.story.startVideoCreation` + 场景/镜头规划工具 + canvas 移交
 - [x] **neko-agent**: Fountain 流水线接入场景规划 + 语义分镜导入 canvas 管道
 
+### ✅ Sprint 3 已完成（2026-05-07）
+
+- [x] **neko-agent**: 多模态感知管线 — PerceptionCard 三层感知中间体 + Agent-first 反馈信号 + 感知工具 + persona + 观察记录器 + 日志事件 + ControlPlane 接线 + EngineClient 感知门面
+- [x] **neko-agent**: 富内容投递到创作工具（Canvas/Cut/Model/Puppet/Explorer 结构化负载投射）
+- [x] **neko-agent**: 运行时工作流加固 — 边界保护 + 评估框架 + 反馈闭环 + runner 边界适配器加固 + 能力注入状态约束 + 视频质量证据基础
+- [x] **neko-agent**: 死代码清理 — 13 提交移除未使用桥接/路由/消息（市场打开器、配置桥接、MCP 测试协议、生成进度桥接、连接状态桥接、技能任务动作、webview 控制协议）
+- [x] **neko-agent**: 领域逻辑重构 — 运行时模块 + 平台服务 + webview/runtime 契约分离 + 共享 presenter/helper 合并
+- [x] **neko-canvas**: 场景-镜头缩略图模式 + 管理 UI；纳管镜头从小地图隐藏
+- [x] **neko-model**: 3D 渲染管线修复（多网格模型、GPU 校验、流生命周期）+ 视口轨道/平移/缩放控制 + 质量闪烁修复 + 完整 i18n
+- [x] **neko-model**: 3D 引擎渲染控制面实现
+- [x] **neko-sketch**: PSD 导入（`extension` PSD 导入 + AI 桥接）+ webview AI 绘画工具 + 共享 sketch 契约 + `.nks` 迁移
+- [x] **neko-market**: 插件治理加固 + 注册表契约对齐
+- [x] **neko-types**: 共享契约：`device.ts` + `tracking.ts` + `preview.ts`
+- [x] **neko-client**: EngineClient 感知门面 + 捕获辅助方法
+- [x] **neko-engine**: 可配置日志级别 `neko.logLevel` + `audios:segment` 时间范围音频导出 action
+- [x] **neko-shared**: 文件放置遮罩修复（防止内部节点拖拽触发文件放置遮罩）
+
+### ⏳ Sprint 4 — 活跃（工作树中进行中）
+
+- [ ] **设备管理系统**（[ADR](./docs/architecture/adr-device-management.md)）：
+  - [ ] TS 设备客户端 `neko-client/src/device/`（GamepadClient / MidiClient / MicrophoneClient / CameraClient）
+  - [ ] 引擎设备绑定服务（`device_binding.rs`）
+  - [ ] 扩展级设备提供者（`neko-engine/packages/extension/src/device/`）
+  - [ ] neko-live TrackingService 提取 + LiveSessionService
+  - [ ] neko-puppet Live Mode（`packages/extension/src/live/`）
+  - [ ] neko-model Live Mode（`packages/extension/src/live/`）
+  - [ ] 原生 VSCode UI（TreeView / QuickPick / StatusBar）
+- [ ] **全景图片预览**（[ADR](./docs/architecture/adr-panoramic-image-preview.md)）：
+  - [ ] `PanoramicImagePreviewProvider` + `PanoramicVideoPreviewProvider`
+  - [ ] 全景路由（等距矩形投影检测 + 投影类型识别）
+  - [ ] 全景 webview（球面网格 + 等距矩形着色器 + 轨道控制）
+  - [ ] 预览清单客户端
+  - [ ] HDR/EXR 文件引擎优先路由
+  - [ ] 共享预览类型（`@neko/shared/types/preview.ts`）
+
 ### 待做
 
 ### neko-cut（视频编辑）— P0-1：字段一致性
@@ -473,4 +508,4 @@
 
 ---
 
-_最后更新：2026-04-26（架构文档清理：移除过时 workflow / capability 探索文档，并统一收口到当前 Agent Unified Workflow + Capability Protocol ADR。）_
+_最后更新：2026-05-07（Sprint 3 完成：Agent 感知/投递/加固 + Canvas 缩略图 + Model 3D 修复 + Sketch PSD + Market 治理。Sprint 4 活跃：设备管理 + 全景预览。）_
