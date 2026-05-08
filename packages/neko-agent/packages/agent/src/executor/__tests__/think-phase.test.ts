@@ -11,6 +11,7 @@ import {
   thinkStream,
   parseToolCallArgs,
   extractThinkTags,
+  StreamingThinkTagStripper,
   type ThinkDeps,
 } from '../think-phase';
 import type {
@@ -318,5 +319,140 @@ Line 2
     const result = extractThinkTags('<THINK>Uppercase</THINK>Text');
     expect(result.content).toBe('Text');
     expect(result.thinking).toBe('Uppercase');
+  });
+});
+
+// =============================================================================
+// StreamingThinkTagStripper
+// =============================================================================
+
+describe('StreamingThinkTagStripper', () => {
+  function collectFromChunks(chunks: string[]): { text: string; thinking: string } {
+    const stripper = new StreamingThinkTagStripper();
+    let text = '';
+    let thinking = '';
+
+    for (const chunk of chunks) {
+      const result = stripper.push(chunk);
+      if (result.text) text += result.text;
+      if (result.thinking) thinking += (thinking ? '\n\n' : '') + result.thinking;
+    }
+
+    const flushed = stripper.flush();
+    if (flushed.text) text += flushed.text;
+    if (flushed.thinking) thinking += (thinking ? '\n\n' : '') + flushed.thinking;
+
+    return { text, thinking };
+  }
+
+  it('should pass through text with no think tags', () => {
+    const result = collectFromChunks(['Hello', ' world', '!']);
+    expect(result.text).toBe('Hello world!');
+    expect(result.thinking).toBe('');
+  });
+
+  it('should handle complete think tag in a single chunk', () => {
+    const result = collectFromChunks(['<think>reasoning</think>response']);
+    expect(result.text).toBe('response');
+    expect(result.thinking).toBe('reasoning');
+  });
+
+  it('should handle open tag split across 2 chunks', () => {
+    const result = collectFromChunks(['<thi', 'nk>reasoning</think>response']);
+    expect(result.text).toBe('response');
+    expect(result.thinking).toBe('reasoning');
+  });
+
+  it('should handle open tag split across 3 chunks', () => {
+    const result = collectFromChunks(['<', 'think>rea', 'soning</think>response']);
+    expect(result.text).toBe('response');
+    expect(result.thinking).toBe('reasoning');
+  });
+
+  it('should handle close tag split across chunks', () => {
+    const result = collectFromChunks(['<think>reasoning</thi', 'nk>response']);
+    expect(result.text).toBe('response');
+    expect(result.thinking).toBe('reasoning');
+  });
+
+  it('should handle close tag split at every boundary', () => {
+    const result = collectFromChunks(['<think>thinking</', 'think>', 'text']);
+    expect(result.text).toBe('text');
+    expect(result.thinking).toBe('thinking');
+  });
+
+  it('should handle text before and after think block', () => {
+    const result = collectFromChunks(['before', '<think>mid</think>', 'after']);
+    expect(result.text).toBe('beforeafter');
+    expect(result.thinking).toBe('mid');
+  });
+
+  it('should handle multiple think blocks across chunks', () => {
+    const result = collectFromChunks(['<think>first</think>text1', '<think>second</think>text2']);
+    expect(result.text).toBe('text1text2');
+    expect(result.thinking).toBe('first\n\nsecond');
+  });
+
+  it('should handle incomplete tag at end of stream (flush as text)', () => {
+    const result = collectFromChunks(['hello<thi']);
+    expect(result.text).toBe('hello<thi');
+    expect(result.thinking).toBe('');
+  });
+
+  it('should handle unclosed think block at end of stream', () => {
+    const result = collectFromChunks(['<think>never closed']);
+    expect(result.text).toBe('<think>never closed');
+    expect(result.thinking).toBe('');
+  });
+
+  it('should handle single-character streaming', () => {
+    const input = '<think>AB</think>CD';
+    const chars = input.split('');
+    const result = collectFromChunks(chars);
+    expect(result.text).toBe('CD');
+    expect(result.thinking).toBe('AB');
+  });
+
+  it('should handle empty think tags', () => {
+    const result = collectFromChunks(['<think></think>text']);
+    expect(result.text).toBe('text');
+    expect(result.thinking).toBe('');
+  });
+
+  it('should handle think block split at tag boundary character by character', () => {
+    const result = collectFromChunks([
+      'pre',
+      '<',
+      't',
+      'h',
+      'i',
+      'n',
+      'k',
+      '>',
+      'thought',
+      '<',
+      '/',
+      't',
+      'h',
+      'i',
+      'n',
+      'k',
+      '>',
+      'post',
+    ]);
+    expect(result.text).toBe('prepost');
+    expect(result.thinking).toBe('thought');
+  });
+
+  it('should be case insensitive', () => {
+    const result = collectFromChunks(['<THINK>upper</THINK>text']);
+    expect(result.text).toBe('text');
+    expect(result.thinking).toBe('upper');
+  });
+
+  it('should handle angle bracket that is not a think tag', () => {
+    const result = collectFromChunks(['a < b and', ' c > d']);
+    expect(result.text).toBe('a < b and c > d');
+    expect(result.thinking).toBe('');
   });
 });

@@ -116,7 +116,8 @@ export async function* thinkStream(
 
   // Accumulate streaming response
   let content = '';
-  let accumulatedThinking = ''; // Track extracted thinking content
+  let accumulatedThinking = '';
+  const thinkStripper = new StreamingThinkTagStripper();
   const toolCallMap = new Map<string, { id: string; name: string; arguments: string }>();
   let finishReason: string | undefined;
   let streamUsage: AgentStep['usage'] | undefined;
@@ -129,18 +130,16 @@ export async function* thinkStream(
         if (chunk.content) {
           content += chunk.content;
 
-          // Extract and strip <think> tags from the delta
-          const { content: cleanDelta, thinking: deltaThinking } = extractThinkTags(chunk.content);
+          const { text, thinking } = thinkStripper.push(chunk.content);
 
-          if (deltaThinking) {
-            accumulatedThinking += (accumulatedThinking ? '\n\n' : '') + deltaThinking;
+          if (thinking) {
+            accumulatedThinking += (accumulatedThinking ? '\n\n' : '') + thinking;
           }
 
-          // Only yield if there's clean content (not just thinking tags)
-          if (cleanDelta) {
+          if (text) {
             yield {
               type: 'content_delta',
-              content: cleanDelta,
+              content: text,
               timestamp: Date.now(),
             };
           }
@@ -172,6 +171,19 @@ export async function* thinkStream(
         streamUsage = chunk.usage;
         break;
     }
+  }
+
+  // Flush any remaining buffered content from the stripper
+  const flushed = thinkStripper.flush();
+  if (flushed.thinking) {
+    accumulatedThinking += (accumulatedThinking ? '\n\n' : '') + flushed.thinking;
+  }
+  if (flushed.text) {
+    yield {
+      type: 'content_delta',
+      content: flushed.text,
+      timestamp: Date.now(),
+    };
   }
 
   // Warn if truncated
@@ -259,6 +271,130 @@ export function extractThinkTags(text: string): { content: string; thinking: str
   const content = text.replace(thinkRegex, '').trim();
 
   return { content, thinking };
+}
+
+export interface StreamingThinkTagStripperResult {
+  text: string | null;
+  thinking: string | null;
+}
+
+const OPEN_TAG = '<think>';
+const CLOSE_TAG = '</think>';
+
+/**
+ * Buffer-based streaming stripper for <think> tags.
+ *
+ * Streaming chunks can split tags across boundaries (e.g. "<thi" + "nk>content</think>").
+ * This class buffers content when a potential tag boundary is detected and only flushes
+ * when it can determine whether the buffered content is a tag or plain text.
+ */
+export class StreamingThinkTagStripper {
+  private buffer = '';
+  private insideThinkBlock = false;
+  private thinkContent = '';
+
+  push(chunk: string): StreamingThinkTagStripperResult {
+    this.buffer += chunk;
+    return this.process();
+  }
+
+  flush(): StreamingThinkTagStripperResult {
+    const result: StreamingThinkTagStripperResult = { text: null, thinking: null };
+
+    if (this.insideThinkBlock) {
+      // Unclosed <think> — treat accumulated think content + remaining buffer as plain text
+      const leaked = OPEN_TAG + this.thinkContent + this.buffer;
+      result.text = leaked || null;
+      this.thinkContent = '';
+    } else if (this.buffer) {
+      // Leftover buffer is a partial tag prefix that never completed — flush as text
+      result.text = this.buffer;
+    }
+
+    this.buffer = '';
+    this.insideThinkBlock = false;
+    return result;
+  }
+
+  private process(): StreamingThinkTagStripperResult {
+    let text = '';
+    let thinking = '';
+
+    while (this.buffer.length > 0) {
+      if (this.insideThinkBlock) {
+        const closeIdx = this.buffer.toLowerCase().indexOf(CLOSE_TAG);
+        if (closeIdx !== -1) {
+          // Found close tag — extract thinking content
+          this.thinkContent += this.buffer.slice(0, closeIdx);
+          this.buffer = this.buffer.slice(closeIdx + CLOSE_TAG.length);
+          this.insideThinkBlock = false;
+          const trimmed = this.thinkContent.trim();
+          if (trimmed) {
+            thinking += (thinking ? '\n\n' : '') + trimmed;
+          }
+          this.thinkContent = '';
+        } else if (this.couldBePartialTag(this.buffer, CLOSE_TAG)) {
+          // Buffer tail could be start of </think> — hold
+          break;
+        } else {
+          // No close tag possible — accumulate as think content
+          this.thinkContent += this.buffer;
+          this.buffer = '';
+        }
+      } else {
+        const openIdx = this.buffer.toLowerCase().indexOf(OPEN_TAG);
+        if (openIdx !== -1) {
+          // Found open tag — flush text before it, enter think block
+          const before = this.buffer.slice(0, openIdx);
+          if (before) text += before;
+          this.buffer = this.buffer.slice(openIdx + OPEN_TAG.length);
+          this.insideThinkBlock = true;
+          this.thinkContent = '';
+        } else {
+          // Check if the tail of the buffer could be a partial "<think>" prefix
+          const safeFlushLen = this.getSafeFlushLength(this.buffer, OPEN_TAG);
+          if (safeFlushLen > 0) {
+            text += this.buffer.slice(0, safeFlushLen);
+            this.buffer = this.buffer.slice(safeFlushLen);
+          }
+          break;
+        }
+      }
+    }
+
+    return {
+      text: text || null,
+      thinking: thinking || null,
+    };
+  }
+
+  /**
+   * Check if `buffer` could end with a partial prefix of `tag`.
+   * Used inside a think block to detect partial `</think>`.
+   */
+  private couldBePartialTag(buffer: string, tag: string): boolean {
+    const lowerBuf = buffer.toLowerCase();
+    for (let len = 1; len < tag.length; len++) {
+      if (lowerBuf.endsWith(tag.slice(0, len))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Return how many characters from the start of `buffer` can be safely flushed
+   * (i.e., the tail of the remaining buffer can't be a prefix of `tag`).
+   */
+  private getSafeFlushLength(buffer: string, tag: string): number {
+    const lowerBuf = buffer.toLowerCase();
+    for (let tailLen = Math.min(tag.length - 1, buffer.length); tailLen > 0; tailLen--) {
+      if (tag.startsWith(lowerBuf.slice(-tailLen))) {
+        return buffer.length - tailLen;
+      }
+    }
+    return buffer.length;
+  }
 }
 
 /**

@@ -3,9 +3,27 @@
  * 支持语法高亮和复制按钮
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useSyncExternalStore } from 'react';
 import { Highlight, themes } from 'prism-react-renderer';
 import { getLogger } from '../../../utils/logger';
+
+function getIsLightTheme(): boolean {
+  const kind = document.body.dataset.vscodeThemeKind;
+  return kind === 'vscode-light' || kind === 'vscode-high-contrast-light';
+}
+
+function subscribeToThemeChange(callback: () => void): () => void {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.body, {
+    attributes: true,
+    attributeFilter: ['data-vscode-theme-kind'],
+  });
+  return () => observer.disconnect();
+}
+
+function useIsLightTheme(): boolean {
+  return useSyncExternalStore(subscribeToThemeChange, getIsLightTheme);
+}
 
 const logger = getLogger('CodeBlock');
 
@@ -17,6 +35,7 @@ interface CodeBlockProps {
 
 export function CodeBlock({ code, language = 'text', showLineNumbers = false }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const isLight = useIsLightTheme();
 
   const handleCopy = useCallback(async () => {
     try {
@@ -30,6 +49,7 @@ export function CodeBlock({ code, language = 'text', showLineNumbers = false }: 
 
   // Normalize language name
   const normalizedLanguage = language?.toLowerCase() || 'text';
+  const highlightTheme = isLight ? themes.vsLight : themes.vsDark;
 
   return (
     <div className="relative group my-2 rounded-md overflow-hidden border border-[var(--vscode-panel-border)] w-full max-w-full">
@@ -58,7 +78,7 @@ export function CodeBlock({ code, language = 'text', showLineNumbers = false }: 
       </div>
 
       {/* Code content with syntax highlighting */}
-      <Highlight theme={themes.vsDark} code={code.trim()} language={normalizedLanguage}>
+      <Highlight theme={highlightTheme} code={code.trim()} language={normalizedLanguage}>
         {({ className, style, tokens, getLineProps, getTokenProps }) => (
           <pre
             className={`${className} overflow-x-auto p-3 m-0 text-[12px] leading-relaxed w-full`}

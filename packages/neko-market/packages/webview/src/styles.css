@@ -85,52 +85,100 @@ body {
 .search-clear { background: none; border: none; cursor: pointer; color: var(--marketplace-fg); opacity: 0.6; }
 .search-clear:hover { opacity: 1; }
 
-.type-filters { display: flex; gap: 4px; flex-wrap: wrap; }
-
 .browse-filters {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
 }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
+.filter-dropdown {
+  position: relative;
+}
+
+.filter-dropdown__trigger {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-}
-
-.filter-group__label {
-  font-size: 10px;
-  text-transform: uppercase;
-  opacity: 0.45;
-}
-
-.filter-group__items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.type-chip {
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 3px 8px;
   border: 1px solid var(--marketplace-border);
+  border-radius: 4px;
   background: none;
   color: var(--marketplace-fg);
   cursor: pointer;
-  font-size: 11px;
-  opacity: 0.7;
-  transition: all 0.1s;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.4;
+  transition: border-color 0.1s, background 0.1s;
 }
 
-.type-chip:hover { opacity: 1; background: var(--marketplace-hover); }
-.type-chip:disabled { opacity: 0.35; cursor: not-allowed; }
-.type-chip--active {
-  background: var(--marketplace-active);
-  color: var(--marketplace-active-fg);
-  border-color: transparent;
-  opacity: 1;
+.filter-dropdown__trigger:hover {
+  background: var(--marketplace-hover);
+}
+
+.filter-dropdown__trigger--active {
+  border-color: var(--marketplace-active);
+}
+
+.filter-dropdown__label {
+  font-size: 10px;
+  opacity: 0.55;
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
+.filter-dropdown__value {
+  font-weight: 500;
+}
+
+.filter-dropdown__chevron {
+  font-size: 10px;
+  opacity: 0.5;
+  margin-left: 2px;
+}
+
+.filter-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 120px;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 20;
+  background: var(--marketplace-bg);
+  border: 1px solid var(--marketplace-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  padding: 4px 0;
+}
+
+.filter-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  border: none;
+  background: none;
+  color: var(--marketplace-fg);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.filter-dropdown__item:hover {
+  background: var(--marketplace-hover);
+}
+
+.filter-dropdown__item--active {
+  font-weight: 500;
+}
+
+.filter-dropdown__check {
+  font-size: 12px;
+  color: var(--marketplace-active);
 }
 
 /* =========================================================================
@@ -257,7 +305,6 @@ body {
   font-size: 11px;
   font-family: inherit;
   transition: opacity 0.1s;
-  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -266,6 +313,8 @@ body {
 .asset-action-btn--primary:hover:not(:disabled) { opacity: 0.85; }
 .asset-action-btn--secondary { background: var(--marketplace-btn-secondary); color: var(--marketplace-btn-secondary-fg); }
 .asset-action-btn--secondary:hover:not(:disabled) { opacity: 0.85; }
+.asset-action-btn--ghost { background: none; color: var(--marketplace-fg); opacity: 0.6; }
+.asset-action-btn--ghost:hover:not(:disabled) { opacity: 1; background: var(--marketplace-hover); }
 
 /* =========================================================================
    Install Progress
@@ -303,6 +352,14 @@ body {
   border: 1px solid var(--marketplace-border);
 }
 
+.installed-item__actions, .update-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.installed-item--disabled { opacity: 0.55; }
 .installed-item__info, .update-item__info, .owned-item__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .installed-item__id, .update-item__id, .owned-item__id { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .installed-item__version, .update-item__versions, .owned-item__meta { font-size: 10px; opacity: 0.5; }
@@ -332,7 +389,6 @@ body {
 .management-strip,
 .local-install-confirm {
   display: flex;
-  align-items: center;
   gap: 8px;
   padding: 6px 8px;
   margin-bottom: 8px;
@@ -342,17 +398,24 @@ body {
 
 .management-strip {
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .management-strip__group {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 6px;
+}
+
+.management-strip__group + .management-strip__group {
+  padding-left: 8px;
+  border-left: 1px solid var(--marketplace-border);
 }
 
 .management-strip__group--end {
   margin-left: auto;
+  padding-left: 8px;
+  border-left: 1px solid var(--marketplace-border);
 }
 
 .management-strip__meta {
@@ -363,6 +426,11 @@ body {
 .local-install-confirm {
   justify-content: space-between;
   align-items: flex-start;
+}
+
+.local-install-confirm .installed-item__actions {
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .local-install-confirm__body {
