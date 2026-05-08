@@ -84,6 +84,7 @@
 - [ ] 批量候选对比器 + 更强的审阅 UI 体验
 - [x] `NodeRendererRegistry` 扩展：metadata、图标、默认尺寸、属性面板 schema 收敛到注册表
 - [ ] `asset` 命名空间边界清理：推动 `neko-assets` 提供正式扩展 API，替代 command 级代理
+- [ ] **Block + Container Phase 2 布局**：将当前确定性 row-major/grid 布局升级为 aspect-ratio-aware packing；保持 policy-driven layout、`lockedChildIds` 避让、绝对坐标与容器边界语义
 
 ### neko-agent（AI 助手）— P0-2：Webview 架构（P0 完成 ✅）
 
@@ -138,6 +139,10 @@
 
 - [ ] 新增 action：`documents:text-extract` / `models:clip-embed` / `text:stats`（action registry 中不存在）
 - [ ] 将 `effects:register` / `models:register` 集成到统一插件生命周期（PluginManager P1 后续）
+
+### neko-types（共享基础）
+
+- [ ] **Layer 0 工具清理**：将重复出现的 `uniqueStrings` / `isRecord` 抽为共享基础工具，补轻量单测；保持零内部包依赖，避免扩大到行为重构
 
 ### neko-assets（资产管理）
 

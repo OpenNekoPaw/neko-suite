@@ -85,6 +85,7 @@
 - [ ] Batch candidate comparator + stronger review UI experience
 - [x] `NodeRendererRegistry` extension: metadata, icons, default sizes, property panel schema converge into registry
 - [ ] `asset` namespace boundary cleanup: push `neko-assets` to provide formal extension API, replace command-level proxy
+- [ ] **Block + Container Phase 2 layout**: upgrade the current deterministic row-major/grid layout to aspect-ratio-aware packing while preserving policy-driven layout, `lockedChildIds` avoidance, absolute coordinates, and container-boundary semantics
 
 ### neko-agent (AI Assistant) — P0-2: Webview Architecture
 
@@ -147,6 +148,10 @@
 - [ ] **Headless CLI export**: `host-cli export --input a.nkv --output a.mp4 --format mp4 --resolution 1080p` (CI/CD 基础, host-cli 已有入口)
 - [ ] **Batch render API**: `POST /v1/batch/render` — 模板 + 数据实例数组 → 队列并行渲染 → N 个视频输出
 - [ ] **.nkv 模板变量绑定**: `{{variable}}` 槽位标记 + JSON 数据源替换 + 校验 — 支持 text/media/puppet/scene3d/emotion 变量
+
+### neko-types (Shared Foundation)
+
+- [ ] **Layer 0 utility cleanup**: extract repeated `uniqueStrings` / `isRecord` helpers into shared base utilities with light unit coverage; keep the utility layer free of internal package dependencies and avoid broad behavior refactors
 
 ### neko-assets (Asset Management)
 
