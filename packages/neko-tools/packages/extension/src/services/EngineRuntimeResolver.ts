@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { EngineClient } from '@neko/neko-client';
+import { EngineClient } from '@neko/neko-client/EngineClient';
 import type { IEngineRuntimeResolver } from '../contracts/IEngineRuntimeResolver';
 import { getLogger } from '../utils/logger';
 

@@ -65,40 +65,8 @@
         "title": "Open API Documentation",
         "category": "Neko Engine",
         "icon": "$(book)"
-      },
-      {
-        "command": "neko.devices.list",
-        "title": "List Devices",
-        "category": "Neko Devices",
-        "icon": "$(plug)"
-      },
-      {
-        "command": "neko.devices.pick",
-        "title": "Pick Device",
-        "category": "Neko Devices",
-        "icon": "$(list-selection)"
-      },
-      {
-        "command": "neko.devices.requestPermission",
-        "title": "Request Device Permission",
-        "category": "Neko Devices",
-        "icon": "$(shield)"
-      },
-      {
-        "command": "neko.devices.revokePermission",
-        "title": "Revoke Device Permission",
-        "category": "Neko Devices",
-        "icon": "$(circle-slash)"
       }
     ],
-    "views": {
-      "explorer": [
-        {
-          "id": "neko.devices",
-          "name": "Neko Devices"
-        }
-      ]
-    },
     "configuration": {
       "title": "Neko Engine",
       "properties": {

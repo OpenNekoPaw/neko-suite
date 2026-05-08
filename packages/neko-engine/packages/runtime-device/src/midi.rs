@@ -7,6 +7,7 @@ use midir::MidiInput;
 use neko_engine_kernel::error::{Error, Result};
 use neko_engine_kernel::services::midi::{IMidiService, MidiEvent, MidiPort};
 use std::collections::HashMap;
+use std::sync::mpsc;
 use std::sync::Mutex;
 use tokio::sync::broadcast;
 
@@ -44,14 +45,18 @@ impl MidiService {
             .ok()
             .and_then(|s| s.get(stream_id).map(|tx| tx.subscribe()))
     }
+
+    fn create_input(client_name: &str) -> Result<MidiInput> {
+        MidiInput::new(client_name).map_err(|e| Error::Other(e.to_string()))
+    }
 }
 
 impl IMidiService for MidiService {
     fn list_ports(&self) -> Vec<MidiPort> {
-        let midi_in = match MidiInput::new("neko-midi-list") {
+        let midi_in = match Self::create_input("neko-midi-list") {
             Ok(m) => m,
             Err(e) => {
-                tracing::error!("Failed to create MIDI input: {e}");
+                tracing::debug!("MIDI input unavailable during port enumeration: {e}");
                 return Vec::new();
             }
         };
@@ -77,6 +82,12 @@ impl IMidiService for MidiService {
             .parse()
             .map_err(|_| Error::Other(format!("Invalid port ID: {port_id}")))?;
 
+        let midi_in = Self::create_input("neko-midi")?;
+        let ports = midi_in.ports();
+        if ports.get(port_index).is_none() {
+            return Err(Error::NotFound(format!("MIDI port not found: {port_id}")));
+        }
+
         let stream_id = format!("midi-{}-{}", port_id, uuid::Uuid::new_v4());
         let (tx, _rx) = broadcast::channel::<MidiEvent>(256);
 
@@ -84,22 +95,17 @@ impl IMidiService for MidiService {
         let cancel = tokio_util::sync::CancellationToken::new();
         let cancel_clone = cancel.clone();
         let stream_id_clone = stream_id.clone();
+        let (started_tx, started_rx) = mpsc::channel::<Result<()>>();
 
         // Spawn MIDI connection on a dedicated thread (midir callback is sync)
         std::thread::spawn(move || {
-            let midi_in = match MidiInput::new("neko-midi") {
-                Ok(m) => m,
-                Err(e) => {
-                    tracing::error!("Failed to create MIDI input: {e}");
-                    return;
-                }
-            };
-
             let ports = midi_in.ports();
             let port = match ports.get(port_index) {
                 Some(p) => p,
                 None => {
-                    tracing::error!("MIDI port {port_index} not found");
+                    let _ = started_tx.send(Err(Error::NotFound(format!(
+                        "MIDI port not found: {port_index}"
+                    ))));
                     return;
                 }
             };
@@ -149,10 +155,14 @@ impl IMidiService for MidiService {
             ) {
                 Ok(conn) => conn,
                 Err(e) => {
-                    tracing::error!("Failed to connect to MIDI port: {e}");
+                    let _ = started_tx.send(Err(Error::Other(format!(
+                        "Failed to connect to MIDI port: {e}"
+                    ))));
                     return;
                 }
             };
+
+            let _ = started_tx.send(Ok(()));
 
             // Keep connection alive until cancelled
             while !cancel_clone.is_cancelled() {
@@ -162,6 +172,10 @@ impl IMidiService for MidiService {
             tracing::info!("MIDI connection closed: {port_name}");
             // _connection is dropped here, closing the MIDI port
         });
+
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .map_err(|err| Error::Other(format!("MIDI connection startup failed: {err}")))??;
 
         // Store connection and sender
         self.connections

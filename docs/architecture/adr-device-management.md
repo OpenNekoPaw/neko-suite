@@ -10,6 +10,10 @@ Accepted / Implemented (2026-05-08)
 2. 设备权限配置落点为 `DevicePermissionService` 的 workspace/global memento key：`neko.devices.permissions.workspace` / `neko.devices.permissions.global`；`Allow` 写 workspace，`Allow and Remember` 写 global，revoke 通过 `neko.devices.revokePermission`，OS 权限失败映射为设备 error/status。
 3. Rust 侧实时输入 binding 层命名为 `DeviceBindingService`，归属 `engine-kernel/src/services/device_binding.rs`。
 4. `neko-live` 已提取 `LiveSessionService`，`VmcReceiver` 改由 `TrackingService` 托管；`neko-puppet` / `neko-model` 已新增 Live Mode 并迁入各自 mapping。`neko-live` 旧 avatar renderer 通过 `NEKO_LIVE_RENDERER_FALLBACK_ENABLED` 门控保留，删除动作仍为 P2。
+5. 设备前端状态与操作管理归属 `@neko/neko-client`：`src/device/` 提供 `EngineDeviceManager`，`src/vscode/device/` 提供 TreeView provider、命令注册和 VSCode 权限存储/提示服务。
+6. 设备管理侧栏由 `neko-tools` 作为 VSCode 薄宿主贡献 `neko-devices` Activity Bar / `neko.devices` TreeView / `neko.devices.*` commands；宿主只负责 manifest 与 activation，不实现设备业务状态。
+7. `neko-engine` 保留后端真实设备枚举、连接、session、stream 与 Rust/runtime/host-api 注册能力；不得注册设备管理侧栏、权限命令或其他前端设备管理 contribution。
+8. `neko-live` 通过 `neko.live.useDevice` 与 `DeviceManager` API 消费设备选择结果，管理自己的 live 场景绑定，不替代设备管理面板。
 
 ## 背景
 
@@ -85,6 +89,11 @@ packages/neko-client/src/device/
 ├── GamepadClient.ts      ← gamepad:* API + WS 事件订阅
 ├── MidiClient.ts         ← midi:* API + WS 事件订阅
 ├── CameraClient.ts       ← cameras:* API
+└── index.ts
+
+packages/neko-client/src/vscode/device/
+├── DevicePermissionService.ts  ← workspace/global 权限状态 + VSCode prompt
+├── DeviceCommands.ts           ← TreeView provider + neko.devices.* 命令注册
 └── index.ts
 ```
 
@@ -182,6 +191,8 @@ export interface DeviceSession {
 | Notification | 热插拔提示 |
 
 唯一需要 Webview 显示设备数据的场景是**调试可视化**（手柄摇杆实时位置、MIDI velocity 显示），归属 neko-tools 调试面板，不是设备管理职责。
+
+VSCode contribution 必须挂载在具体扩展包上，因此设备管理侧栏当前由 `neko-tools/package.json` 贡献；但实现边界仍是 `@neko/neko-client/vscode/device`。`neko-tools` 只负责激活时注入 `DevicePermissionService` 和 `getFrameServerPort`，不得复制 `DeviceManager`、设备权限或 engine DTO 适配逻辑。
 
 #### 2.1 权限策略
 
@@ -453,10 +464,11 @@ export interface LiveSessionService {
 | P1 | `@neko/shared/types/device.ts` | 应用层设备契约，低层 wire DTO 由 `@neko/neko-client` 适配 |
 | P1 | `@neko/shared/types/tracking.ts` | `TrackingData` / `TrackingStatus` / `TrackingServiceApi` 共享契约 |
 | P1 | `neko-client/src/device/DeviceManager.ts` | 统一发现 + 权限 + 事件聚合 + `onDeviceChange` |
+| P1 | `neko-client/src/vscode/device/` | VSCode TreeView provider、权限服务和 `neko.devices.*` 命令注册 |
 | P2 | `GamepadClient` / `MidiClient` | 让 neko-puppet、neko-sketch 能用手柄/MIDI |
 | P2 | `CameraClient` | 配合 Rust 侧 `camera.rs` 补完 |
 | P2 | `DeviceBindingService` / `InputRouter`（Rust） | engine 内消费 MIDI/Gamepad 事件，避免实时动作经 Webview 回环 |
-| P3 | 设备管理 TreeView | 原生 VSCode 侧栏设备列表 |
+| P2 | `neko-tools` VSCode contribution | 贡献 `neko-devices` 容器、`neko.devices` TreeView、命令入口和菜单；保持薄宿主 |
 | P3 | XR 设备客户端 | 等 `runtime-xr` ADR 实现后 |
 
 ### neko-live 职责拆分
@@ -492,10 +504,12 @@ export interface LiveSessionService {
 2. **实时输入在 engine 内闭环** — 控制信号不经过 Webview 中转
 3. **手写板通过 PointerEvent** — 不走 engine 路径
 4. **设备管理用原生 VSCode UI** — 不为管理面建 Webview
-5. **neko-live 页面由 VSCode 管** — 不自建路由/tab 框架，统一 session 状态而非页面
-6. **渲染器不跨子包复制** — 各子包用自己的渲染器，neko-live 不重复实现 VRM/Puppet 渲染
-7. **TrackingService 是共享服务** — 不绑定任何特定子包，所有消费者平等订阅
-8. **设备管理面板与 neko-live 面板不合并** — 职责不同，通过 DeviceManager API + 命令协议协作
+5. **前端设备管理属于 neko-client** — `neko-client` 处理前端状态、权限和 VSCode 命令管理，`neko-tools` 只是 contribution 宿主
+6. **neko-engine 不注册设备管理前端** — engine 只提供真实设备后端能力，不贡献 `neko.devices.*` UI
+7. **neko-live 页面由 VSCode 管** — 不自建路由/tab 框架，统一 session 状态而非页面
+8. **渲染器不跨子包复制** — 各子包用自己的渲染器，neko-live 不重复实现 VRM/Puppet 渲染
+9. **TrackingService 是共享服务** — 不绑定任何特定子包，所有消费者平等订阅
+10. **设备管理面板与 neko-live 面板不合并** — 职责不同，通过 DeviceManager API + 命令协议协作
 
 ## 反模式
 
@@ -513,6 +527,7 @@ export interface LiveSessionService {
 | 10 | 把场景合成也拆进 neko-puppet/neko-model | 场景合成是独立职责（多源编排），不属于单个编辑器 | 保留在 neko-live（瘦身后） |
 | 11 | 现在就删除 neko-live | 场景合成 + 推流仍需要独立承载 | 瘦身而非删除 |
 | 12 | 合并设备管理面板与 neko-live 面板 | 职责不同：设备发现 vs 创作工作流，合并逼用户跨面板操作 | 分开，通过 DeviceManager API + 命令协议协作 |
+| 13 | 在 `neko-engine` extension 注册 `neko.devices.*` 侧栏或权限命令 | 混淆前端设备管理和后端真实设备能力，导致 engine 包承担 UI 生命周期 | `neko-client` 实现前端管理，`neko-tools` 贡献 VSCode 入口，`neko-engine` 只暴露后端 API |
 
 ## 与既有 ADR 的关系
 

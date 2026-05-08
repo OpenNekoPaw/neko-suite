@@ -20,6 +20,10 @@
   "neko.live.avatar.noPuppetSrc": "This .nkp project has no puppet linked. Open it in Neko Puppet first.",
   "neko.live.avatar.projectReadFailed": "Failed to read project file: {0}",
   "neko.live.camera.noDevice": "No camera device is available.",
+  "neko.live.device.noManager": "Neko device manager is not available.",
+  "neko.live.device.notFound": "Device is no longer available: {0}",
+  "neko.live.device.bound": "Bound {0} to Neko Live",
+  "neko.live.device.bindFailed": "Failed to bind device: {0}",
   "neko.live.calibrating": "Calibrating tracking...",
   "neko.live.streamingStarted": "Streaming started"
 }

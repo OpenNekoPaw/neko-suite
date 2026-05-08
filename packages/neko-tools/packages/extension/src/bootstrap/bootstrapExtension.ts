@@ -1,4 +1,10 @@
 import * as vscode from 'vscode';
+import {
+  DevicePermissionService,
+  VSCodeDevicePermissionPrompt,
+  VSCodeDevicePermissionStore,
+  registerDeviceCommands,
+} from '@neko/neko-client/vscode/device';
 import type { ServiceCollection } from '../base/serviceCollection';
 import { bootstrapCoreServices } from './bootstrapCoreServices';
 import { bootstrapAssetDiff } from './bootstrapAssetDiff';
@@ -41,6 +47,20 @@ export function bootstrapNekoToolsExtension(
     i18n: coreServices.i18n,
     assetEntityReader: coreServices.assetEntityReader,
     errorHandler: coreServices.errorHandler,
+  });
+  const devicePermissionService = new DevicePermissionService(
+    new VSCodeDevicePermissionStore(context),
+    new VSCodeDevicePermissionPrompt(),
+  );
+  context.subscriptions.push(devicePermissionService);
+  registerDeviceCommands(context, {
+    permissionService: devicePermissionService,
+    getFrameServerPort: async () => {
+      const result = await vscode.commands.executeCommand<{ port: number } | null>(
+        'neko.engine.ensureFrameServer',
+      );
+      return result?.port ?? null;
+    },
   });
 
   coreServices.logger.info('Extension activated');

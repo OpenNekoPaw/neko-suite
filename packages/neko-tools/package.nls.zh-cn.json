@@ -4,5 +4,16 @@
   "neko.tools.compareVideos.title": "比较视频",
   "neko.tools.compareAudio.title": "比较音频文件",
   "neko.tools.compareAssetVariants.title": "比较素材变体",
-  "neko.tools.showMediaInfo.title": "显示媒体信息"
+  "neko.tools.showMediaInfo.title": "显示媒体信息",
+  "neko.devices.viewContainer.title": "Neko 设备",
+  "neko.devices.view.name": "设备",
+  "neko.devices.view.contextualTitle": "设备管理",
+  "neko.devices.viewWelcome": "刷新设备列表以发现摄像头、麦克风、MIDI 输入和手柄。\n[刷新设备](command:neko.devices.refresh)",
+  "neko.devices.list.title": "列出设备",
+  "neko.devices.refresh.title": "刷新设备",
+  "neko.devices.pick.title": "选择设备",
+  "neko.devices.requestPermission.title": "请求设备权限",
+  "neko.devices.revokePermission.title": "撤销设备权限",
+  "neko.devices.test.title": "测试设备",
+  "neko.devices.useInLive.title": "用于 Neko Live"
 }

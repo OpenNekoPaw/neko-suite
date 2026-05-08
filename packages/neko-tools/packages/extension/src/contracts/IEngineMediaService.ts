@@ -1,4 +1,5 @@
-import type { EngineClient, SilenceAnalysis } from '@neko/neko-client';
+import type { EngineClient } from '@neko/neko-client/EngineClient';
+import type { SilenceAnalysis } from '@neko/neko-client/engine/types';
 import type { EngineDiffResult } from '@neko/shared';
 
 export interface IEngineMediaService {

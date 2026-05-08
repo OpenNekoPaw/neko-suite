@@ -165,9 +165,141 @@
         "command": "neko.tools.showMediaInfo",
         "title": "%neko.tools.showMediaInfo.title%",
         "category": "Neko Tools"
+      },
+      {
+        "command": "neko.devices.list",
+        "title": "%neko.devices.list.title%",
+        "category": "Neko Devices",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "neko.devices.refresh",
+        "title": "%neko.devices.refresh.title%",
+        "category": "Neko Devices",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "neko.devices.pick",
+        "title": "%neko.devices.pick.title%",
+        "category": "Neko Devices",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "neko.devices.requestPermission",
+        "title": "%neko.devices.requestPermission.title%",
+        "category": "Neko Devices",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "neko.devices.revokePermission",
+        "title": "%neko.devices.revokePermission.title%",
+        "category": "Neko Devices",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "neko.devices.test",
+        "title": "%neko.devices.test.title%",
+        "category": "Neko Devices",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "neko.devices.requestSelectedPermission",
+        "title": "%neko.devices.requestPermission.title%",
+        "category": "Neko Devices",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "neko.devices.revokeSelectedPermission",
+        "title": "%neko.devices.revokePermission.title%",
+        "category": "Neko Devices",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "neko.devices.testSelected",
+        "title": "%neko.devices.test.title%",
+        "category": "Neko Devices",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "neko.devices.useInLive",
+        "title": "%neko.devices.useInLive.title%",
+        "category": "Neko Devices",
+        "icon": "$(broadcast)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "neko-devices",
+          "title": "%neko.devices.viewContainer.title%",
+          "icon": "$(plug)"
+        }
+      ]
+    },
+    "views": {
+      "neko-devices": [
+        {
+          "id": "neko.devices",
+          "name": "%neko.devices.view.name%",
+          "contextualTitle": "%neko.devices.view.contextualTitle%"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "neko.devices",
+        "contents": "%neko.devices.viewWelcome%",
+        "when": "view == neko.devices"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "neko.devices.refresh",
+          "when": "view == neko.devices",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "neko.devices.useInLive",
+          "when": "view == neko.devices && viewItem =~ /^nekoDevice:(camera|audio-input|midi-input|gamepad):/",
+          "group": "inline"
+        },
+        {
+          "command": "neko.devices.testSelected",
+          "when": "view == neko.devices && viewItem =~ /^nekoDevice:(camera|audio-input|midi-input|gamepad):/",
+          "group": "inline@2"
+        },
+        {
+          "command": "neko.devices.requestSelectedPermission",
+          "when": "view == neko.devices && viewItem =~ /^nekoDevice:(audio-input|camera|xr):(unknown|denied)$/",
+          "group": "device@1"
+        },
+        {
+          "command": "neko.devices.revokeSelectedPermission",
+          "when": "view == neko.devices && viewItem =~ /^nekoDevice:(audio-input|camera|xr):granted$/",
+          "group": "device@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "neko.devices.requestSelectedPermission",
+          "when": "false"
+        },
+        {
+          "command": "neko.devices.revokeSelectedPermission",
+          "when": "false"
+        },
+        {
+          "command": "neko.devices.testSelected",
+          "when": "false"
+        },
+        {
+          "command": "neko.devices.useInLive",
+          "when": "false"
+        }
+      ],
       "explorer/context": [
         {
           "command": "neko.tools.compareFiles",
@@ -216,6 +348,7 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
+    "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
     "esbuild": "^0.19.8",
     "typescript": "^5.3.2",

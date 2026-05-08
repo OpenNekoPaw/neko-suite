@@ -59,11 +59,11 @@ export class VSCodeDevicePermissionPrompt implements DevicePermissionPrompt {
     const label = request.deviceId
       ? `${request.deviceType} (${request.deviceId})`
       : request.deviceType;
-    const allow = 'Allow';
-    const deny = 'Deny';
-    const remember = 'Allow and Remember';
+    const allow = vscode.l10n.t('neko.devices.permission.allow');
+    const deny = vscode.l10n.t('neko.devices.permission.deny');
+    const remember = vscode.l10n.t('neko.devices.permission.allowRemember');
     const picked = await vscode.window.showWarningMessage(
-      `Allow Neko Suite to use ${label}?`,
+      vscode.l10n.t('neko.devices.permission.prompt', label),
       { modal: true },
       allow,
       remember,

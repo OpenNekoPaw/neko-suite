@@ -5,6 +5,17 @@ vi.mock('vscode', () => ({
   window: {
     showWarningMessage: vi.fn(),
   },
+  l10n: {
+    t: vi.fn((key: string, ...args: unknown[]) => {
+      const messages: Record<string, string> = {
+        'neko.devices.permission.allow': 'Allow',
+        'neko.devices.permission.deny': 'Deny',
+        'neko.devices.permission.allowRemember': 'Allow and Remember',
+        'neko.devices.permission.prompt': `Allow Neko Suite to use ${String(args[0])}?`,
+      };
+      return messages[key] ?? key;
+    }),
+  },
 }));
 
 import {

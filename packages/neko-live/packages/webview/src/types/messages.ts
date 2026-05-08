@@ -5,6 +5,8 @@ import type {
   AvatarType,
   PuppetDelta,
   PuppetParameter,
+  LiveDeviceBinding,
+  LiveDeviceRole,
 } from './tracking';
 
 // ─── Extension → Webview ────────────────────────────────────────────────────
@@ -22,6 +24,7 @@ export type LiveExtensionMessage =
   | { type: 'cameraDevices'; devices: CameraDevice[] }
   | { type: 'cameraStreamStarted'; streamId: string; wsUrl: string }
   | { type: 'cameraStreamStopped' }
+  | { type: 'deviceBindingChanged'; role: LiveDeviceRole; binding?: LiveDeviceBinding }
   | { type: 'stopCanvasCapture' };
 
 // ─── Webview → Extension ────────────────────────────────────────────────────

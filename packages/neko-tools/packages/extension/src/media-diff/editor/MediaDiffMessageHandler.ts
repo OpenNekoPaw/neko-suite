@@ -16,7 +16,7 @@
 
 import * as vscode from 'vscode';
 import type { MediaDiffRequest, MediaDiffResponse } from '@neko/shared';
-import type { EngineClient } from '@neko/neko-client';
+import type { EngineClient } from '@neko/neko-client/EngineClient';
 import type { IScheduler } from '../../contracts/IScheduler';
 import type { ITempFileService } from '../../contracts/ITempFileService';
 import type { IMediaDiffService } from '../services/MediaDiffService';

@@ -33,6 +33,17 @@ export interface CameraDevice {
   isDefault: boolean;
 }
 
+export type LiveDeviceRole = 'camera' | 'audio-input' | 'midi-input' | 'gamepad';
+
+export interface LiveDeviceBinding {
+  role: LiveDeviceRole;
+  deviceId: string;
+  deviceType: LiveDeviceRole;
+  label: string;
+  sessionId?: string;
+  streamUrl?: string;
+}
+
 /** Puppet mesh data for 2D rendering */
 export interface PuppetMesh {
   node_id: string;

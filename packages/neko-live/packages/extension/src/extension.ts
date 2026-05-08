@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { DeviceInfo } from '@neko/shared';
 import {
   createVSCodeLogger,
   VSCodeErrorHandler,
@@ -46,6 +47,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neko.live.startStreaming', () => {
       vscode.window.showInformationMessage(vscode.l10n.t('neko.live.streamingStarted'));
     }),
+    vscode.commands.registerCommand('neko.live.useDevice', (device: DeviceInfo) =>
+      provider.useDevice(device),
+    ),
 
     { dispose: () => provider.dispose() },
   );

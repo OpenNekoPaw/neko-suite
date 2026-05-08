@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DeviceInfo, DeviceSession, ILogger } from '@neko/shared';
-import type { DeviceManager } from '@neko/neko-client';
+import type { DeviceManager } from '@neko/neko-client/device';
 import { LiveSessionService } from './LiveSessionService';
 
 vi.mock('vscode', () => ({

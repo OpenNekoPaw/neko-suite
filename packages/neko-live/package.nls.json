@@ -10,6 +10,7 @@
   "neko.live.cmd.calibrate": "Calibrate Tracking",
   "neko.live.cmd.startRecording": "Start Recording",
   "neko.live.cmd.startStreaming": "Start Streaming",
+  "neko.live.cmd.useDevice": "Use Device",
   "neko.tracking.cmd.start": "Start Tracking",
   "neko.tracking.cmd.stop": "Stop Tracking",
   "neko.tracking.cmd.status": "Show Tracking Status",

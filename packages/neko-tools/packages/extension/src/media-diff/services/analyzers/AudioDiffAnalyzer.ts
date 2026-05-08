@@ -12,7 +12,7 @@ import type {
   AudioDiffDetails,
   EngineAudioDiffRegion,
 } from '@neko/shared';
-import type { SilenceAnalysis } from '@neko/neko-client';
+import type { SilenceAnalysis } from '@neko/neko-client/engine/types';
 import type { IEngineMediaService } from '../../../contracts/IEngineMediaService';
 import type { ITempFileService } from '../../../contracts/ITempFileService';
 import { getLogger } from '../../../utils/logger';

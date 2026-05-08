@@ -10,7 +10,7 @@
 
 import * as vscode from 'vscode';
 import type { ILogger } from '@neko/shared';
-import { EngineClient } from '@neko/neko-client';
+import { EngineClient } from '@neko/neko-client/EngineClient';
 
 export interface RecordingOptions {
   includeAudio: boolean;

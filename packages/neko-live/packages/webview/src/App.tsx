@@ -27,6 +27,7 @@ export function App() {
     setRecordingElapsed,
     setLastRecordingPath,
     setAvatarLoaded,
+    setDeviceBinding,
   } = useLiveStore();
 
   const isRecording = recordingState === 'recording';
@@ -137,6 +138,10 @@ export function App() {
           setRecordingElapsed(msg.elapsedMs);
           break;
 
+        case 'deviceBindingChanged':
+          setDeviceBinding(msg.role, msg.binding);
+          break;
+
         case 'enginePort':
           break;
 
@@ -159,6 +164,7 @@ export function App() {
     setRecordingElapsed,
     setLastRecordingPath,
     setAvatarLoaded,
+    setDeviceBinding,
   ]);
 
   return (

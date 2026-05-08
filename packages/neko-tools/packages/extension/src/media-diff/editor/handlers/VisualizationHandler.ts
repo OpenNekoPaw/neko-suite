@@ -9,7 +9,7 @@
  */
 
 import type { DiffResult } from '@neko/shared';
-import type { EngineClient } from '@neko/neko-client';
+import type { EngineClient } from '@neko/neko-client/EngineClient';
 import type { IHandlerContext } from './types';
 import { handleSeek } from './FrameOperations';
 import { getLogger } from '../../../utils/logger';

@@ -7,7 +7,7 @@
  */
 
 import type * as vscode from 'vscode';
-import type { EngineClient } from '@neko/neko-client';
+import type { EngineClient } from '@neko/neko-client/EngineClient';
 import type { DiffResult, MediaDiffResponse } from '@neko/shared';
 import type { IScheduledTask, IScheduler } from '../../../contracts/IScheduler';
 import type { ITempFileService } from '../../../contracts/ITempFileService';

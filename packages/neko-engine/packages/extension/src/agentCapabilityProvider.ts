@@ -4,11 +4,11 @@
  * Provides GPU effects, transcription, loudness analysis, and frame extraction
  * tools to neko-agent via the AgentCapabilityProvider protocol.
  *
- * All tools communicate with the engine via EngineClient (HTTP), lazily
- * initialised through the `neko.engine.ensureFrameServer` command.
+ * All tools communicate with the local engine extension command bridge.
+ * This package must not import @neko/neko-client; neko-client is an upstream
+ * consumer of engine APIs, not an engine dependency.
  */
 import * as vscode from 'vscode';
-import { EngineClient } from '@neko/neko-client';
 import type {
   AgentCapabilityProvider,
   AgentCapabilityContext,
@@ -18,29 +18,125 @@ import type {
 import { TOOL_NAMES_EFFECTS, TOOL_NAMES_TRANSCRIBE } from '@neko/shared';
 
 // =============================================================================
-// Lazy EngineClient
+// Local Engine Dispatch Adapter
 // =============================================================================
 
-let cachedClient: EngineClient | null = null;
+interface ActionResponse<T = unknown> {
+  readonly status: 'ok' | 'error';
+  readonly data?: T;
+  readonly error?: {
+    readonly message?: string;
+  };
+  readonly message?: string;
+}
+
+interface ShaderParamDef {
+  readonly name: string;
+  readonly default: number;
+  readonly min: number;
+  readonly max: number;
+}
+
+interface EffectPresetInfo {
+  readonly id: string;
+  readonly description: string;
+  readonly params: ShaderParamDef[];
+}
+
+interface TranscribeSegment {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+interface TranscribeResponse {
+  readonly text: string;
+  readonly segments: readonly TranscribeSegment[];
+  readonly language: string | null;
+  readonly durationSecs: number | null;
+}
+
+interface FrameCaptureResponse {
+  readonly data?: string;
+  readonly base64?: string;
+}
 
 /**
- * Obtain a ready EngineClient, starting the frame server if necessary.
- * Uses the neko-engine VSCode command bridge to start the frame server lazily.
+ * Dispatch through this extension's command bridge.
+ *
+ * The bridge owns engine startup and native dispatch; this adapter only gives
+ * the capability provider a typed local facade without depending on neko-client.
  */
-async function getEngineClient(): Promise<EngineClient> {
-  if (cachedClient) {
-    return cachedClient;
-  }
-
-  const result = await vscode.commands.executeCommand<{ port: number } | null>(
-    'neko.engine.ensureFrameServer',
+async function dispatchEngine<T>(
+  group: string,
+  action: string,
+  options?: Record<string, unknown>,
+): Promise<T> {
+  const resultJson = await vscode.commands.executeCommand<string | null>(
+    'neko.engine.dispatch',
+    group,
+    action,
+    options,
   );
-  if (!result) {
-    throw new Error('Failed to start neko-engine Frame Server');
+  if (!resultJson) {
+    throw new Error(`Engine dispatch returned no response for ${group}:${action}`);
   }
 
-  cachedClient = new EngineClient(result.port);
-  return cachedClient;
+  const response = JSON.parse(resultJson) as ActionResponse<T>;
+  if (response.status === 'error') {
+    throw new Error(response.error?.message ?? response.message ?? `${group}:${action} failed`);
+  }
+
+  return response.data as T;
+}
+
+async function listEffects(): Promise<EffectPresetInfo[]> {
+  return dispatchEngine<EffectPresetInfo[]>('effects', 'list', {});
+}
+
+async function getEffectInfo(shaderId: string): Promise<EffectPresetInfo> {
+  return dispatchEngine<EffectPresetInfo>('effects', 'info', { shaderId });
+}
+
+async function registerShader(
+  id: string,
+  code: string,
+  params?: readonly ShaderParamDef[],
+): Promise<void> {
+  await dispatchEngine('effects', 'register', { id, code, params: params ?? [] });
+}
+
+async function transcribe(model: string, audio: string): Promise<TranscribeResponse> {
+  const data = await dispatchEngine<Partial<TranscribeResponse>>('models', 'transcribe', {
+    model,
+    audio,
+  });
+  return {
+    text: data.text ?? '',
+    segments: data.segments ?? [],
+    language: data.language ?? null,
+    durationSecs: data.durationSecs ?? null,
+  };
+}
+
+async function analyzeLoudness(source: string, targetLufs: number): Promise<unknown> {
+  return dispatchEngine('audios', 'analyze_loudness', { source, targetLufs });
+}
+
+async function extractFrameBase64(
+  source: string,
+  time: number,
+  opts: { quality?: number; width?: number; height?: number },
+): Promise<string | undefined> {
+  const data = await dispatchEngine<FrameCaptureResponse>('videos', 'capture', {
+    source,
+    time,
+    quality: opts.quality ?? 85,
+    format: 'jpeg',
+    ...(opts.width != null && { width: opts.width }),
+    ...(opts.height != null && { height: opts.height }),
+  });
+  return data.data ?? data.base64;
 }
 
 // =============================================================================
@@ -58,8 +154,7 @@ function createEffectsTools(): Tool[] {
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(): Promise<ToolResult> {
-        const client = await getEngineClient();
-        const data = await client.listEffects();
+        const data = await listEffects();
         return { success: true, data };
       },
     },
@@ -82,8 +177,7 @@ function createEffectsTools(): Tool[] {
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
-        const client = await getEngineClient();
-        const data = await client.getEffectInfo(args['shaderId'] as string);
+        const data = await getEffectInfo(args['shaderId'] as string);
         return { success: true, data };
       },
     },
@@ -125,12 +219,16 @@ function createEffectsTools(): Tool[] {
       isReadOnly: false,
       isConcurrencySafe: false,
       async execute(args): Promise<ToolResult> {
-        const client = await getEngineClient();
-        await client.registerShader(
+        await registerShader(
           args['id'] as string,
           args['code'] as string,
           args['params'] as
-            | Array<{ name: string; default: number; min: number; max: number }>
+            | Array<{
+                name: string;
+                default: number;
+                min: number;
+                max: number;
+              }>
             | undefined,
         );
         return { success: true, data: { shaderId: args['id'] as string } };
@@ -165,10 +263,9 @@ function createTranscribeTools(): Tool[] {
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
-        const client = await getEngineClient();
         const model = (args['model'] as string) || 'whisper-base';
         const audioSource = args['audioSource'] as string;
-        const data = await client.transcribe(model, audioSource);
+        const data = await transcribe(model, audioSource);
         return { success: true, data };
       },
     },
@@ -200,10 +297,9 @@ function createAnalysisTools(): Tool[] {
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
-        const client = await getEngineClient();
         const source = args['source'] as string;
         const targetLufs = (args['targetLufs'] as number | undefined) ?? -14;
-        const data = await client.analyzeLoudness(source, targetLufs);
+        const data = await analyzeLoudness(source, targetLufs);
         return { success: true, data };
       },
     },
@@ -243,7 +339,6 @@ function createAnalysisTools(): Tool[] {
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
-        const client = await getEngineClient();
         const source = args['source'] as string;
         const time = args['time'] as number;
         const opts: { quality?: number; width?: number; height?: number } = {};
@@ -251,13 +346,11 @@ function createAnalysisTools(): Tool[] {
         if (args['width'] != null) opts.width = args['width'] as number;
         if (args['height'] != null) opts.height = args['height'] as number;
 
-        const frameBuffer = await client.extractFrame(source, time, opts);
-        if (!frameBuffer) {
+        const base64 = await extractFrameBase64(source, time, opts);
+        if (!base64) {
           return { success: false, error: `Failed to extract frame from ${source} at ${time}s` };
         }
 
-        // Convert ArrayBuffer to base64 string for LLM consumption
-        const base64 = Buffer.from(frameBuffer).toString('base64');
         return {
           success: true,
           data: {
@@ -285,7 +378,7 @@ class EngineCapabilityProvider implements AgentCapabilityProvider {
   }
 
   dispose(): void {
-    cachedClient = null;
+    // No retained resources.
   }
 }
 

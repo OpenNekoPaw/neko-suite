@@ -4,6 +4,8 @@ export {
   VSCodeDevicePermissionStore,
   permissionKey,
   type DevicePermissionChangeEvent,
+  type DevicePermissionDecision,
+  type DevicePermissionPersistenceScope,
   type DevicePermissionPrompt,
   type DevicePermissionStore,
 } from './DevicePermissionService';

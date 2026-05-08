@@ -4,5 +4,16 @@
   "neko.tools.compareVideos.title": "Compare Videos",
   "neko.tools.compareAudio.title": "Compare Audio Files",
   "neko.tools.compareAssetVariants.title": "Compare Asset Variants",
-  "neko.tools.showMediaInfo.title": "Show Media Info"
+  "neko.tools.showMediaInfo.title": "Show Media Info",
+  "neko.devices.viewContainer.title": "Neko Devices",
+  "neko.devices.view.name": "Devices",
+  "neko.devices.view.contextualTitle": "Device Management",
+  "neko.devices.viewWelcome": "Refresh the device list to discover cameras, microphones, MIDI inputs, and gamepads.\n[Refresh Devices](command:neko.devices.refresh)",
+  "neko.devices.list.title": "List Devices",
+  "neko.devices.refresh.title": "Refresh Devices",
+  "neko.devices.pick.title": "Pick Device",
+  "neko.devices.requestPermission.title": "Request Device Permission",
+  "neko.devices.revokePermission.title": "Revoke Device Permission",
+  "neko.devices.test.title": "Test Device",
+  "neko.devices.useInLive.title": "Use in Neko Live"
 }

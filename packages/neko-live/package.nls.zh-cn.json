@@ -10,6 +10,7 @@
   "neko.live.cmd.calibrate": "校准追踪",
   "neko.live.cmd.startRecording": "开始录制",
   "neko.live.cmd.startStreaming": "开始推流",
+  "neko.live.cmd.useDevice": "使用设备",
   "neko.tracking.cmd.start": "启动追踪",
   "neko.tracking.cmd.stop": "停止追踪",
   "neko.tracking.cmd.status": "显示追踪状态",

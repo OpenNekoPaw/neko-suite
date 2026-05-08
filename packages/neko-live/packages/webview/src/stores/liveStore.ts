@@ -6,6 +6,8 @@ import type {
   PuppetDelta,
   PuppetParameter,
   RecordingState,
+  LiveDeviceBinding,
+  LiveDeviceRole,
 } from '../types/tracking';
 
 export interface LiveState {
@@ -28,6 +30,7 @@ export interface LiveState {
   recordingState: RecordingState;
   recordingElapsedMs: number;
   lastRecordingPath: string | null;
+  deviceBindings: Partial<Record<LiveDeviceRole, LiveDeviceBinding>>;
 
   // ─── UI ───────────────────────────────────────────────────────────────
   showSkeletonOverlay: boolean;
@@ -43,6 +46,7 @@ export interface LiveState {
   setRecordingState: (state: RecordingState) => void;
   setRecordingElapsed: (ms: number) => void;
   setLastRecordingPath: (path: string | null) => void;
+  setDeviceBinding: (role: LiveDeviceRole, binding?: LiveDeviceBinding) => void;
   toggleSkeletonOverlay: () => void;
 
   // Recording handlers (set by App, called by TrackingPanel)
@@ -70,6 +74,7 @@ export const useLiveStore = create<LiveState>((set) => ({
   recordingState: 'idle',
   recordingElapsedMs: 0,
   lastRecordingPath: null,
+  deviceBindings: {},
 
   showSkeletonOverlay: false,
 
@@ -103,5 +108,15 @@ export const useLiveStore = create<LiveState>((set) => ({
   setRecordingState: (state) => set({ recordingState: state }),
   setRecordingElapsed: (ms) => set({ recordingElapsedMs: ms }),
   setLastRecordingPath: (path) => set({ lastRecordingPath: path }),
+  setDeviceBinding: (role, binding) =>
+    set((state) => {
+      const deviceBindings = { ...state.deviceBindings };
+      if (binding) {
+        deviceBindings[role] = binding;
+      } else {
+        delete deviceBindings[role];
+      }
+      return { deviceBindings };
+    }),
   toggleSkeletonOverlay: () => set((s) => ({ showSkeletonOverlay: !s.showSkeletonOverlay })),
 }));

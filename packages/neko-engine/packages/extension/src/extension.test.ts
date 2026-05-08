@@ -294,44 +294,9 @@ describe('neko-engine extension command bridge', () => {
     );
   });
 
-  it('registers device commands and lists devices through the frame server', async () => {
-    mockState.fetch.mockImplementation(async (_url: string, init?: { body?: string }) => {
-      if (!init?.body) return { ok: true };
-      const req = JSON.parse(init.body) as { group: string; action: string };
-      if (req.group === 'audios' && req.action === 'list_input_devices') {
-        return {
-          ok: true,
-          json: async () => ({
-            status: 'ok',
-            data: [
-              {
-                id: 'mic-1',
-                name: 'Mic',
-                sampleRates: [48000],
-                channels: [1],
-                isDefault: true,
-              },
-            ],
-          }),
-        };
-      }
-      return { ok: true, json: async () => ({ status: 'ok', data: [] }) };
-    });
-
+  it('does not own device-management commands', async () => {
     await activateExtension();
 
-    const result = await mockState.executeCommand('neko.devices.list');
-
-    expect(result).toEqual([
-      {
-        id: 'mic-1',
-        type: 'audio-input',
-        label: 'Mic',
-        isDefault: true,
-        connectionState: 'available',
-        permissionState: 'unknown',
-        capabilities: { sampleRates: [48000], channels: [1] },
-      },
-    ]);
+    expect(mockState.commands.has('neko.devices.list')).toBe(false);
   });
 });

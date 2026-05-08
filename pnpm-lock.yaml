@@ -769,9 +769,6 @@ importers:
       '@neko-engine/host-napi':
         specifier: workspace:*
         version: link:../host-napi
-      '@neko/neko-client':
-        specifier: workspace:*
-        version: link:../../../neko-client
       '@neko/shared':
         specifier: workspace:*
         version: link:../../../neko-types
@@ -1403,6 +1400,9 @@ importers:
         specifier: ^0.34.0
         version: 0.34.5
     devDependencies:
+      '@neko/neko-client':
+        specifier: workspace:*
+        version: link:../neko-client
       '@neko/shared':
         specifier: workspace:*
         version: link:../neko-types

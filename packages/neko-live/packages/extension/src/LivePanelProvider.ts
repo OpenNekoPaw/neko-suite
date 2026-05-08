@@ -16,7 +16,8 @@ import type {
   ILogger,
   TrackingServiceApi,
 } from '@neko/shared';
-import { EngineClient, EngineDeviceManager, type DeviceManager } from '@neko/neko-client';
+import { EngineClient } from '@neko/neko-client/EngineClient';
+import { EngineDeviceManager, type DeviceManager } from '@neko/neko-client/device';
 import { LiveSessionService } from './LiveSessionService';
 import { handleError } from './utils/errorHandler';
 
@@ -47,6 +48,12 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       this.sessionService.onDidChange((event) => {
         if (event.type === 'recordingProgress') {
           this.postMessage({ type: 'recordingProgress', elapsedMs: event.elapsedMs });
+        } else if (event.type === 'deviceBindingChanged') {
+          this.postMessage({
+            type: 'deviceBindingChanged',
+            role: event.role,
+            binding: event.binding,
+          });
         }
       }),
       this.toVSCodeDisposable(
@@ -439,6 +446,49 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
   ): DeviceInfo | undefined {
     if (deviceId) return devices.find((device) => device.id === deviceId);
     return devices.find((device) => device.isDefault) ?? devices[0];
+  }
+
+  public async useDevice(device: DeviceInfo): Promise<boolean> {
+    try {
+      const manager = await this.ensureDeviceManager();
+      if (!manager) {
+        void handleError(new Error(vscode.l10n.t('neko.live.device.noManager')), {
+          showToUser: true,
+          severity: 'warning',
+        });
+        return false;
+      }
+
+      await manager.refresh();
+      const current = manager.list(device.type).find((candidate) => candidate.id === device.id);
+      if (!current) {
+        void handleError(new Error(vscode.l10n.t('neko.live.device.notFound', device.label)), {
+          showToUser: true,
+          severity: 'warning',
+        });
+        return false;
+      }
+
+      const permissionState = await manager.requestPermission(current.type, current.id);
+      if (permissionState !== 'granted') {
+        return false;
+      }
+
+      const session = await this.sessionService.useDevice(current);
+      if (current.type === 'camera' && session) {
+        this.postMessage({
+          type: 'cameraStreamStarted',
+          streamId: session.sessionId,
+          wsUrl: session.streamUrl ?? '',
+        });
+      }
+      vscode.window.showInformationMessage(vscode.l10n.t('neko.live.device.bound', current.label));
+      return true;
+    } catch (err) {
+      this.logger.error('Failed to use device in Neko Live', err);
+      void handleError(err instanceof Error ? err : new Error(String(err)), { showToUser: true });
+      return false;
+    }
   }
 
   // ─── Engine Client ──────────────────────────────────────────────────────

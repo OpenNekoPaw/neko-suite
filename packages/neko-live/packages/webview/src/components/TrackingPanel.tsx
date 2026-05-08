@@ -17,6 +17,7 @@ export function TrackingPanel() {
     recordingState,
     recordingElapsedMs,
     lastRecordingPath,
+    deviceBindings,
     setTrackingMode,
   } = useLiveStore();
 
@@ -50,6 +51,12 @@ export function TrackingPanel() {
   };
 
   const isRecording = recordingState === 'recording';
+  const activeBindingLabels = [
+    deviceBindings.camera?.label,
+    deviceBindings['audio-input']?.label,
+    deviceBindings['midi-input']?.label,
+    deviceBindings.gamepad?.label,
+  ].filter(Boolean);
 
   return (
     <div
@@ -161,6 +168,21 @@ export function TrackingPanel() {
           {isRecording ? t('controls.stopRec') : t('controls.rec')}
         </button>
       </div>
+
+      {/* Last recording path */}
+      {activeBindingLabels.length > 0 && (
+        <div
+          style={{
+            fontSize: 10,
+            color: 'var(--vscode-descriptionForeground)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {t('devices.bound', { devices: activeBindingLabels.join(', ') })}
+        </div>
+      )}
 
       {/* Last recording path */}
       {lastRecordingPath && !isRecording && (

@@ -20,6 +20,10 @@
   "neko.live.avatar.noPuppetSrc": "此 .nkp 项目未关联 Puppet，请先在 Neko Puppet 中打开。",
   "neko.live.avatar.projectReadFailed": "读取项目文件失败：{0}",
   "neko.live.camera.noDevice": "没有可用的摄像头设备。",
+  "neko.live.device.noManager": "Neko 设备管理器不可用。",
+  "neko.live.device.notFound": "设备已不可用：{0}",
+  "neko.live.device.bound": "已将 {0} 绑定到 Neko Live",
+  "neko.live.device.bindFailed": "绑定设备失败：{0}",
   "neko.live.calibrating": "正在校准追踪...",
   "neko.live.streamingStarted": "推流已开始"
 }

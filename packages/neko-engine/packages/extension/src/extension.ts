@@ -30,12 +30,6 @@ import {
 } from '@neko/shared/vscode/extension';
 import { initOrtDylib } from './mediaEngine/OrtInitializer';
 import { createEngineCapabilityProvider } from './agentCapabilityProvider';
-import {
-  DevicePermissionService,
-  VSCodeDevicePermissionPrompt,
-  VSCodeDevicePermissionStore,
-  registerDeviceCommands,
-} from './device';
 
 // =============================================================================
 // Extension State
@@ -47,7 +41,6 @@ let statusBarItem: vscode.StatusBarItem;
 let outputChannel: vscode.OutputChannel;
 /** Cached frame server port for the current extension session (null = not connected) */
 let frameServerPort: number | null = null;
-let devicePermissionService: DevicePermissionService | null = null;
 
 // =============================================================================
 // Activation
@@ -85,21 +78,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Register commands
   registerCommands(context);
-
-  devicePermissionService = new DevicePermissionService(
-    new VSCodeDevicePermissionStore(context),
-    new VSCodeDevicePermissionPrompt(),
-  );
-  context.subscriptions.push(devicePermissionService);
-  registerDeviceCommands(context, {
-    permissionService: devicePermissionService,
-    getFrameServerPort: async () => {
-      const result = await vscode.commands.executeCommand<{ port: number } | null>(
-        'neko.engine.ensureFrameServer',
-      );
-      return result?.port ?? null;
-    },
-  });
 
   // Update status bar
   updateStatusBar('idle');
@@ -824,8 +802,6 @@ export async function deactivate(): Promise<void> {
   }
 
   frameServerPort = null;
-  devicePermissionService?.dispose();
-  devicePermissionService = null;
 
   log('Extension deactivated');
 }

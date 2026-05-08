@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode';
-import type { EngineClient } from '@neko/neko-client';
+import type { EngineClient } from '@neko/neko-client/EngineClient';
 import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
 import type { IScheduler } from '../../contracts/IScheduler';
 import type { ITempFileService } from '../../contracts/ITempFileService';

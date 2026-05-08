@@ -25,7 +25,7 @@ impl ICameraService for CameraService {
     fn list_devices(&self) -> Vec<CameraDevice> {
         // TODO(P2): enumerate via FFmpeg avdevice or nokhwa
         // For now return empty list — camera support requires platform-specific setup
-        tracing::info!("Camera device enumeration not yet implemented");
+        tracing::debug!("Camera device enumeration not yet implemented");
         Vec::new()
     }
 

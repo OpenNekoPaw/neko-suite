@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { DeviceInfo, DeviceSession, DeviceType, ILogger } from '@neko/shared';
-import type { DeviceManager, EngineClient } from '@neko/neko-client';
+import type { EngineClient } from '@neko/neko-client/EngineClient';
+import type { DeviceManager } from '@neko/neko-client/device';
 import { RecordingService, type RecordingOptions, type RecordingResult } from './RecordingService';
 
 export type LiveAvatarType = 'vrm' | 'puppet';
@@ -79,13 +80,17 @@ export class LiveSessionService implements vscode.Disposable {
 
   async startRecording(options: RecordingOptions): Promise<void> {
     const client = await this.config.getEngineClient();
+    const audioBinding = this.snapshot.deviceBindings['audio-input'];
     this.recordingService?.dispose();
     this.recordingService = new RecordingService(
       client,
       (elapsedMs) => this.emit({ type: 'recordingProgress', elapsedMs }),
       this.config.logger,
     );
-    await this.recordingService.start(options);
+    await this.recordingService.start({
+      ...options,
+      audioDeviceId: options.audioDeviceId ?? audioBinding?.deviceId,
+    });
     this.snapshot = {
       ...this.snapshot,
       recording: { active: true },
@@ -126,6 +131,15 @@ export class LiveSessionService implements vscode.Disposable {
     this.emit({ type: 'deviceBindingChanged', role, binding });
     this.emit({ type: 'snapshot', snapshot: this.getSnapshot() });
     return binding;
+  }
+
+  async useDevice(device: DeviceInfo): Promise<DeviceSession | undefined> {
+    const role = deviceRoleForType(device.type);
+    if (role === 'camera') {
+      return this.startDeviceStream(role, device);
+    }
+    this.bindDevice(role, device);
+    return undefined;
   }
 
   async startDeviceStream(role: LiveDeviceRole, device: DeviceInfo): Promise<DeviceSession> {
@@ -209,4 +223,22 @@ function cloneSnapshot(snapshot: LiveSessionSnapshot): LiveSessionSnapshot {
     recording: { ...snapshot.recording },
     deviceBindings: { ...snapshot.deviceBindings },
   };
+}
+
+function deviceRoleForType(type: DeviceType): LiveDeviceRole {
+  switch (type) {
+    case 'camera':
+    case 'audio-input':
+    case 'midi-input':
+    case 'gamepad':
+      return type;
+    case 'xr':
+      throw new Error(`Device type ${type} is not supported by Neko Live`);
+    default:
+      return assertNeverDeviceType(type);
+  }
+}
+
+function assertNeverDeviceType(type: never): never {
+  throw new Error(`Device type ${String(type)} is not supported by Neko Live`);
 }

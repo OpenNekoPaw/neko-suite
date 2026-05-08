@@ -14,8 +14,8 @@
  */
 
 import type { EngineDiffResult } from '@neko/shared';
-import { EngineClient } from '@neko/neko-client';
-import type { SilenceAnalysis } from '@neko/neko-client'; // Used by detectSilence()
+import { EngineClient } from '@neko/neko-client/EngineClient';
+import type { SilenceAnalysis } from '@neko/neko-client/engine/types';
 import type { IEngineMediaService } from '../contracts/IEngineMediaService';
 import type { IEngineRuntimeResolver } from '../contracts/IEngineRuntimeResolver';
 import { VSCodeEngineRuntimeResolver } from './EngineRuntimeResolver';

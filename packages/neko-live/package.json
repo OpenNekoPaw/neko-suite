@@ -86,6 +86,11 @@
         "category": "Neko Live"
       },
       {
+        "command": "neko.live.useDevice",
+        "title": "%neko.live.cmd.useDevice%",
+        "category": "Neko Live"
+      },
+      {
         "command": "neko.tracking.start",
         "title": "%neko.tracking.cmd.start%",
         "category": "Neko Tracking"

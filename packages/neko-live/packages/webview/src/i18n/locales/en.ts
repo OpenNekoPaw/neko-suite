@@ -27,6 +27,7 @@ export const en = {
   'recording.noAvatar': 'Load an avatar before recording',
   'recording.noCanvas': 'No rendering canvas available',
   'recording.captureFailed': 'Canvas capture failed',
+  'devices.bound': 'Devices: {devices}',
 
   // Puppet viewer
   'puppet.waiting': 'Waiting for tracking data...',
