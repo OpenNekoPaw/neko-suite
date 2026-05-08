@@ -12,4 +12,18 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     );
     expect(providerSource).toContain('buildStoryboardImportTimelineSyncPayload(');
   });
+
+  it('registers additive composable Canvas Agent tools', () => {
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_DERIVE_NODE');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT');
+  });
+
+  it('drives preset schemas from shared registry constants', () => {
+    expect(providerSource).toContain('CANVAS_AGENT_NODE_PRESETS');
+    expect(providerSource).toContain('CANVAS_AGENT_DERIVE_TARGET_PRESETS');
+    expect(providerSource).toContain('CANVAS_AGENT_CONTAINER_PRESETS');
+    expect(providerSource).not.toContain("'shot',\n                'scene'");
+  });
 });

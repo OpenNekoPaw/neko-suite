@@ -49,3 +49,31 @@ describe('nodeFactory gallery normalization', () => {
     expect(galleryNode.data.cells[0]?.generationHistory?.[1]?.selected).toBe(true);
   });
 });
+
+describe('nodeFactory composable presets', () => {
+  it('adds composable content for the low-risk annotation preset', () => {
+    const node = buildCanvasNode({
+      type: 'annotation',
+      position: { x: 0, y: 0 },
+      zIndex: 0,
+      preset: 'annotation.basic',
+      data: { content: 'Draft note' },
+    });
+
+    expect(node.type).toBe('annotation');
+    expect(node.preset).toBe('annotation.basic');
+    expect(node.content?.blocks?.[0]?.binding?.path).toBe('/content');
+  });
+
+  it('rejects unknown presets so API callers get typed failures', () => {
+    expect(() =>
+      buildCanvasNode({
+        type: 'annotation',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'unknown.preset',
+        data: { content: 'Legacy note' },
+      }),
+    ).toThrow(/Unsupported preset/);
+  });
+});

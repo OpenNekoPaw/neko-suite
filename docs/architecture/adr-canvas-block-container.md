@@ -5,6 +5,7 @@
 - **Scope**: neko-canvas, @neko/shared (neko-types), neko-agent
 - **Refines**: `adr-canvas-preview-boundary.md` (asset type inventory), `adr-capability-protocol.md` (agent tool surface)
 - **Related**: `adr-asset-federation.md` (asset identity), `agent-unified-workflow.md` (agent orchestration)
+- **OpenSpec Change**: `openspec/changes/canvas-block-container-architecture`
 
 ---
 
@@ -323,6 +324,13 @@ type Block =
   | TextBlock | TableBlock | ListBlock | KeyValueBlock | TagSetBlock
   | SelectBlock | InputBlock | ButtonBlock | SliderBlock | ToggleBlock | StatusBlock;
 ```
+
+Implementation note (2026-05-08): the Phase 0/1 shared contract names this render-level
+primitive set `CanvasBlockKind` rather than mirroring every conceptual `BlockType` above one
+for one. Domain atoms such as image, video, tag set, table, gallery, storyboard row, and
+generation candidate are assembled from `CanvasBlockKind` plus `FieldBinding`, collection,
+projection, preview, and delegate capabilities. This keeps the renderer registry small while
+preserving the ADR's capability-composition model.
 
 ### 3.6 Container Section
 
@@ -651,6 +659,58 @@ This is implemented by a single conditional in the node content area of `BaseNod
 
 ## 6. Unified Container System
 
+The organization layer is a **generic container capability**, not a fixed set of
+`Scene` / `Group` / `Artboard` branches. Scene, Group, and Artboard are the first
+built-in container policies; future policies such as Board, Sequence, Folder, Layer,
+Chapter, or Timeline Section can use the same capability when their children are
+CanvasNodes.
+
+```typescript
+interface ContainerCapability {
+  childIds: string[];
+  policy: 'scene' | 'group' | 'artboard' | (string & {});
+  layout: ContainerLayoutState;
+  acceptedTypes?: CanvasNodeType[];
+  acceptedPresets?: string[];
+}
+```
+
+Rule of thumb: use the organization layer only when the child item needs independent
+canvas identity: selection, drag, copy/paste, connections, generation, agent reference,
+viewport culling, minimap visibility, or movement across containers. Rows, cells,
+tags, table entries, and other node-internal items should stay in `node.data` and be
+rendered by collection/content blocks unless they are explicitly promoted to CanvasNodes.
+
+### 6.0 Layer Decoupling Invariants
+
+The four canvas layers are orthogonal capabilities, not ownership levels:
+
+| Layer | Owns | Must not own |
+|-------|------|--------------|
+| Spatial | `position`, `size`, `zIndex`, `rotation`, drag/resize/culling | node content, parent/child membership, graph edges |
+| Content | `content`, blocks, collections, projections, preview, field bindings | canvas coordinates, container membership, stored connections |
+| Organization | `parentId`, `container.childIds`, container policy, child order/layout intent | child business data, node-internal rows/cells/tags, connections |
+| Relationship | top-level `connections`, ports, endpoints, graph semantics | containment, coordinates, internal UI layout |
+
+They interact only through small contracts:
+
+| Boundary | Contract |
+|----------|----------|
+| Spatial ↔ Organization | IDs and store actions; container movement translates children by delta, but does not change their coordinate system |
+| Content ↔ Organization | `ChildNodeSlot` / `NodePreviewDescriptor`; content displays child summaries but does not own child nodes |
+| Content ↔ Relationship | `blockId` / `fieldPath` endpoint references; blocks can be targets, but connections stay top-level |
+| Organization ↔ Relationship | connection scope classification (`internal` / `boundary` / `external`); containment does not imply graph edges |
+
+Hard invariants:
+
+1. `node.position` is always canvas-world absolute.
+2. `content` does not participate in canvas coordinates, minimap bounds, or viewport culling.
+3. `container.childIds` contains only direct child CanvasNodes.
+4. `parentId` and `container.childIds` must be bidirectionally consistent.
+5. `CanvasData.connections` is the only persistence owner of graph edges.
+6. Connection endpoints may reference node, port, block, or field IDs, but they never change containment.
+7. Rows, cells, tags, and entries are content collections by default, not CanvasNodes.
+
 ### 6.1 Replacing Ad-Hoc Containment
 
 Current state: two incompatible containment mechanisms (`scene.data.shotIds` + `shot.data.sceneGroupId` vs `group.data.childIds`).
@@ -669,6 +729,12 @@ After:
   GroupNode.childIds = ['node-a', 'node-b']
   NodeA.parentId = 'group-1'
 ```
+
+In the long-term shape, `childIds` belongs to `node.container.childIds`; `parentId`
+remains on the child node for fast upward traversal and compatibility with flat
+canvas queries. The Phase 0/1 migration may keep top-level `childIds` as a transitional
+alias, but store reads should go through helpers such as `getContainerChildIds(node)`
+and `getNodeParentId(node)`.
 
 ### 6.2 Recursive Nesting
 
@@ -692,7 +758,41 @@ Scenes are no longer limited to shots. Any node can be a child of any container.
 - `group` preset's derive menu offers: all types
 - Layout engine handles mixed-type children via size-based grid placement
 
-### 6.4 Store Actions
+The policy defines defaults, not the storage model:
+
+| Policy | Organization intent | Default layout | Typical accepted children | Default delete behavior |
+|--------|---------------------|----------------|---------------------------|-------------------------|
+| `scene` | Semantic storyboard container | `sequence` / `grid` | shot, media, annotation, gallery | Ask: delete subtree or release children |
+| `group` | Spatial grouping / temporary cluster | `free` | any CanvasNode | Release children |
+| `artboard` | Bounded export / preview frame | `absolute` / `bounded` | visual nodes | Ask: delete subtree or release children |
+
+Other policy names are valid if registered. A container policy owns behavior such as
+accepted child presets, auto-layout defaults, delete semantics, derive targets, and
+batch actions. It does not own child node data.
+
+### 6.4 Collections, Projections, and Promotion
+
+Not every organized structure is a container. The design separates three shapes:
+
+| Shape | Owns CanvasNodes? | Persistence | Examples |
+|-------|-------------------|-------------|----------|
+| Container | Yes | `parentId` + `container.childIds` | Scene shots, Group members, Artboard contents |
+| Collection | No | `node.data` array/object + `FieldBinding` | Table rows, Gallery cells, tags, key-value entries |
+| Projection | No | References/query + bindings to existing nodes/data | Storyboard table view, asset matrix, generation planning view |
+
+Tables should default to collection blocks. A table row becomes a CanvasNode only when
+it needs independent canvas identity. Gallery cells should default to an internal
+collection because a character sheet is usually one semantic asset. A cell can be
+promoted into a MediaNode, Shot reference node, or Asset node when it needs independent
+dragging, linking, generation lineage, or agent reference.
+
+Storyboard tables should normally be projection views over Scene/Shot nodes rather than
+separate owners of shot data. Row reorder updates the owning scene container order;
+cell edits write through `FieldBinding` paths into the referenced ShotNode data.
+Planning-only tables may start as pure collections and later promote rows into
+Scene/Shot nodes through an explicit user or agent action.
+
+### 6.5 Store Actions
 
 New/modified actions in `canvasStore.ts`:
 
@@ -795,13 +895,13 @@ Fine-grained block-level update:
 }
 ```
 
-### 7.4 `canvas_get_structured_content`
+### 7.4 `canvas_extract_structured_content`
 
 Extracts canvas content as structured data for AI consumption (canvas → agent direction):
 
 ```typescript
 {
-  name: 'canvas_get_structured_content',
+  name: 'canvas_extract_structured_content',
   description: 'Extract structured content from canvas nodes for AI processing.',
   parameters: {
     type: 'object',
@@ -819,8 +919,13 @@ Extracts canvas content as structured data for AI consumption (canvas → agent 
     },
   },
 }
-// Returns: { success, data: { content: string, nodeCount: number } }
+// Returns: { success, data: { format, nodeIds, nodes, content } }
 ```
+
+The response keeps the four layer boundaries visible: spatial fields stay on the node,
+organization is reported through `parentId` and ordered `childIds`, content bindings are listed
+as JSON Pointer paths into `node.data`, and preview output includes only stable descriptors. Runtime
+preview URLs, blob URLs, engine tokens, active playback state, and hover/current time are omitted.
 
 ### 7.5 Existing Tools — No Changes Required
 
@@ -847,18 +952,18 @@ Version bump from `'1.0'` to `'2.0'`. The structure remains a flat JSON array:
     {
       "id": "scene-1",
       "type": "scene",
-      "preset": "scene",
+      "preset": "scene.legacy",
       "position": { "x": 0, "y": 0 },
       "size": { "width": 600, "height": 400 },
       "zIndex": 10,
-      "childIds": ["shot-1", "shot-2"],
+      "container": { "policy": "scene", "childIds": ["shot-1", "shot-2"] },
       "content": { "id": "root", "layout": "vertical", "children": [...] },
       "data": { "sceneTitle": "开场", "sceneNumber": 1, "timeOfDay": "清晨" }
     },
     {
       "id": "shot-1",
       "type": "shot",
-      "preset": "shot",
+      "preset": "shot.legacy",
       "position": { "x": 24, "y": 60 },
       "size": { "width": 220, "height": 320 },
       "zIndex": 20,
@@ -912,6 +1017,37 @@ const CANVAS_MIGRATIONS: CanvasMigrationStep[] = [
 ```
 
 The v1.0 → v2.0 migration is **purely structural** (unifies containment). It does **NOT** populate `content` on existing nodes. Legacy nodes continue rendering through their monolithic `*Node.tsx` components indefinitely until individually migrated.
+
+### 8.3 Rollout Gates
+
+Composable content is opt-in per registered preset. A node renders through the composable path only
+when `node.content` exists. Legacy nodes created without a composable preset, and all existing files
+loaded without `content`, keep the current renderer and `data` shape. This is the Phase 1 rollback
+boundary: disabling composable preset creation stops new `content` nodes without affecting legacy
+Canvas files.
+
+Initial production presets are deliberately low-risk:
+
+| Preset | Node type | Creation mode | Rollout role |
+|--------|-----------|---------------|--------------|
+| `annotation.basic` | `annotation` | composable | first snapshot-covered preset |
+| `text.basic` | `text` | composable | second low-risk text surface |
+| `*.legacy` | existing built-in node types | legacy | compatibility/default behavior |
+
+Shot, Scene, Gallery, Media, Document, Model, and Script remain legacy by default until each has
+parity evidence. Before switching a complex node type to composable creation, the migration PR must
+define visual parity criteria:
+
+- same visible fields and default values as the legacy component,
+- same update path through `node.data`,
+- same generation/runtime status behavior where applicable,
+- same selection, drag, resize, connection, and property-panel affordances,
+- no persisted preview runtime state,
+- snapshot or visual coverage for representative selected/unselected states.
+
+This ADR is implemented by OpenSpec change
+`openspec/changes/canvas-block-container-architecture`. Preview-specific lifecycle and delegation
+boundaries are refined in `docs/architecture/adr-canvas-preview-boundary.md`.
 
 ---
 
@@ -1106,7 +1242,7 @@ Interactive controls as standalone canvas entities. Rejected because:
 
 ---
 
-## 13. Design Addendum: Extensibility, Coordinates, Bindings, Connections, and Auto-Layout
+## 13. Design Addendum: Extensibility, Preview, Coordinates, Bindings, Connections, and Auto-Layout
 
 This addendum records follow-up design decisions from the architecture review. It refines the
 Block + Container model so it can scale to future asset formats, content presentation modes,
@@ -1170,7 +1306,115 @@ over expanding the core union every time. If no specialized renderer exists, the
 back to thumbnail cards or attachment/file cards. Heavy decoding, probing, transcoding, and
 thumbnail generation remain outside the webview.
 
-### 13.3 Content Presentation Extensibility
+### 13.3 Preview Capability Composition
+
+Preview must be modeled as composable capabilities over asset/content blocks, not as one-off
+logic inside every node type. A node should not become an "image node", "video node",
+"panorama node", or "model node" solely because it needs preview behavior. Instead, presets
+compose asset identity, preview variants, playback, delegation, generation candidates, collection
+preview, and node-summary preview as needed.
+
+```typescript
+type BlockCapability =
+  | AssetIdentityCapability
+  | PreviewCapability
+  | PlaybackCapability
+  | DelegateCapability
+  | GenerationPreviewCapability
+  | CollectionPreviewCapability
+  | NodeSummaryCapability;
+
+interface PreviewCapability {
+  kind: 'preview';
+  roles: PreviewRole[];
+  preferredRole?: PreviewRole;
+}
+
+type PreviewRole =
+  | 'thumbnail'
+  | 'proxy'
+  | 'poster'
+  | 'waveform'
+  | 'turntable'
+  | 'rotation'
+  | 'fov-crop'
+  | 'clip';
+
+interface PlaybackCapability {
+  kind: 'playback';
+  mode: 'inline' | 'hover' | 'selected';
+  sourceRole: 'proxy' | 'poster' | 'clip';
+  maxActive?: 1;
+}
+
+interface DelegateCapability {
+  kind: 'delegate';
+  command: string;
+  label: string;
+  when?: string;
+}
+```
+
+Preview resolution is a pipeline:
+
+```
+AssetBlock / Preview-capable block
+  → read declared capabilities
+  → PreviewResolver requests PreviewVariant from extension host / engine
+  → PreviewRendererRegistry chooses renderer by kind + role + mimeType
+  → PreviewRuntime manages hover, playback, active instance, and cleanup
+  → DelegateCapability opens specialized editor/viewer when needed
+```
+
+Storage boundary:
+
+| Persisted in `.nkc` / `node.data` | Runtime only |
+|-----------------------------------|--------------|
+| `assetId`, `src`, `mimeType`, `format` | blob URLs, engine tokens, object URLs |
+| selected generation candidate ID | current playback time |
+| stable preview preference or saved default view | hover/active player state |
+| semantic source metadata | WebGL/canvas player instances |
+
+Canvas content blocks may render lightweight previews only. DOM-native display is allowed for
+static images, low-resolution video/audio proxies, GIFs, waveform images, and engine-issued
+turntable/rotation clips. Real-time 3D rendering, spherical panorama interaction, HDR tone
+mapping controls, timeline scrubbing, audio mixing, and heavy decoding/transcoding remain delegated
+to neko-preview, neko-model, neko-cut, neko-puppet, or the Rust engine according to
+`adr-canvas-preview-boundary.md`.
+
+Examples:
+
+| Preset / block | Capability composition |
+|----------------|------------------------|
+| Image asset | `AssetIdentity` + `Preview(thumbnail/proxy)` + `Delegate(open image/preview)` |
+| Video asset | `AssetIdentity` + `Preview(poster)` + `Playback(proxy)` + `Delegate(neko-preview/neko-cut)` |
+| Audio asset | `AssetIdentity` + `Preview(waveform)` + `Playback(proxy)` + `Delegate(neko-preview/neko-cut)` |
+| Panorama asset | `AssetIdentity` + `Preview(proxy/fov-crop/rotation)` + `Delegate(neko-preview panoramic)` |
+| 3D model | `AssetIdentity` + `Preview(screenshot/turntable)` + `Delegate(neko-model)` |
+| Gallery | `CollectionPreview(cells)` + `GenerationPreview(candidates)` + optional cell promotion |
+| Scene | `ContainerCapability(childIds)` + `ChildNodeSlot` + `NodeSummaryCapability(child thumbnails)` |
+
+Asset preview and node preview are separate. `AssetPreview` renders media referenced by a block.
+`NodeSummaryCapability` renders a compact summary of another CanvasNode for Scene slots, Group
+outlines, minimap-like summaries, and Agent context. Containers should not fully render child nodes
+twice; they should request `NodePreviewDescriptor` from a node-preview adapter.
+
+```typescript
+interface NodePreviewDescriptor {
+  nodeId: string;
+  title?: string;
+  thumbnail?: PreviewVariant;
+  excerpt?: string;
+  badges?: string[];
+  status?: string;
+}
+```
+
+This keeps preview logic reusable across Shot images, Gallery cells, Media nodes, Document covers,
+Model turntables, Scene child slots, and Agent context extraction without reintroducing monolithic
+node-specific preview branches.
+
+### 13.4 Content Presentation Extensibility
 
 `ContainerLayout = 'vertical' | 'horizontal' | 'grid' | 'free'` is sufficient for the first
 migration, but it should become registry-driven before advanced views are added.
@@ -1209,7 +1453,7 @@ with header/body/detail, a Scene with header/actions/children, or a media inspec
 and metadata. This keeps AI extraction and property panel generation from depending on anonymous
 child index positions.
 
-### 13.4 Input and Field Binding Strategy
+### 13.5 Input and Field Binding Strategy
 
 The current `bindField: string` proposal is acceptable for simple scalar fields, but it is too weak
 for nested data such as `gallery.cells[0].prompt`, style objects, candidate selection, structured
@@ -1239,7 +1483,7 @@ Rules:
 - Preset expansion must validate that required bindings exist or provide defaults.
 - Runtime should warn when a block references a missing binding path.
 
-### 13.5 Coordinate Model: Canvas-Absolute as Authority
+### 13.6 Coordinate Model: Canvas-Absolute as Authority
 
 Canvas node positions should remain canvas-world absolute coordinates.
 
@@ -1272,7 +1516,7 @@ Relative coordinates are still appropriate inside a node's `content` tree, Galle
 Artboard internals, and embedded canvas previews. They should not become the global authority for
 ordinary canvas nodes unless a future feature explicitly introduces local sub-canvases.
 
-### 13.6 Container-Bound Content, Nodes, and Connections
+### 13.7 Container-Bound Content, Nodes, and Connections
 
 Container binding has three separate layers:
 
@@ -1319,7 +1563,7 @@ type ConnectionScope = 'internal' | 'boundary' | 'external';
 | Collapse container | Hide or summarize | Route to container boundary | Unchanged |
 | Export container | Include by default | Include optionally as external references | Exclude |
 
-### 13.7 Connection Endpoint Evolution
+### 13.8 Connection Endpoint Evolution
 
 Existing `CanvasConnection` can remain valid for the first migration:
 
@@ -1371,7 +1615,7 @@ Collapsed or hidden containers:
 - Expanding the container restores the exact endpoint rendering.
 - Collapsing a container changes only rendering, not stored connection data.
 
-### 13.8 Child Node Slot
+### 13.9 Child Node Slot
 
 Scene and Group presets need an explicit way to display or place child nodes inside container
 content. A plain `(Block | ContainerSection)[]` tree cannot express "render this container's
@@ -1403,7 +1647,7 @@ Rules:
 - For Group, a slot can render an outline or mini-map style summary without replacing free canvas
   placement.
 
-### 13.9 Auto-Layout and Overlap Avoidance
+### 13.10 Auto-Layout and Overlap Avoidance
 
 Auto-layout is required. It should be split into three capabilities:
 
@@ -1467,11 +1711,12 @@ Creator-facing defaults:
 This prevents derived nodes and agent-created children from covering existing work while preserving
 the creator's spatial memory.
 
-### 13.10 Implementation Impact
+### 13.11 Implementation Impact
 
 The implementation phases should be refined as follows:
 
-1. Add foundation types, including `FieldBinding`, optional `AssetBlock`, and `ChildNodeSlot`.
+1. Add foundation types, including `FieldBinding`, optional `AssetBlock`, preview capability
+   contracts, `PreviewVariant`, and `ChildNodeSlot`.
 2. Keep old `CanvasConnection` for Phase 0/1, but design endpoint resolution so `CanvasConnectionV2`
    can be introduced later without rewriting renderers.
 3. Implement `findFreePosition` before exposing `canvas_derive_node` to agents.
@@ -1487,17 +1732,59 @@ The implementation phases should be refined as follows:
 当前 Canvas 的目标设计应定义为：
 
 > 面向创作者的无限画布工作图。节点使用画布绝对坐标保存；节点内部内容用
-> Block + Container 描述；容器关系用 `parentId` / `childIds` 表达；连接线独立保存为图关系；
+> Block + Container 描述；容器关系用 `parentId` / `container.childIds` 表达；连接线独立保存为图关系；
 > 素材、展示、输入和 Agent 操作通过注册表扩展。
 
 这不是单纯的节点组件重构，而是把 Canvas 拆成四层：
 
-| 层级 | 职责 | 关键数据 |
-|------|------|----------|
-| 空间层 | 节点在无限画布上的位置、大小、层级 | `position`、`size`、`zIndex` |
-| 内容层 | 节点内部如何展示和编辑 | `content`、`Block`、`ContainerSection` |
-| 组织层 | Scene、Group、Artboard 等容器如何管理子节点 | `parentId`、`childIds` |
-| 关系层 | 节点之间的引用、顺序、数据流、生成依赖 | `connections`、`ports`、endpoint |
+| 层级 | 职责 | 关键数据 | 组合设计要求 |
+|------|------|----------|----------------|
+| 空间层 | 节点在无限画布上的位置、大小、层级 | `position`、`size`、`zIndex` | 核心字段固定，只对拖拽/缩放/吸附等行为做轻量组合 |
+| 内容层 | 节点内部如何展示和编辑 | `content`、`Block`、`ContainerSection`、`CollectionView`、`ProjectionView` | 强组合，节点 UI 由 block / section / collection / projection 组装 |
+| 组织层 | 一个节点如何管理其他 CanvasNode | `parentId`、`container.childIds`、container policy | 强组合，但只管理 CanvasNode，不管理 row/cell/tag |
+| 关系层 | 节点之间的引用、顺序、数据流、生成依赖 | `connections`、`ports`、endpoint | 强组合，连接端点可逐步扩展到 node / port / block / field |
+
+四层是正交能力，不是四级嵌套。推荐把节点理解为：
+
+```text
+CanvasNode
+= 固定空间身份
++ content 内容组合
++ optional container 组织能力
++ optional ports 关系能力
++ data 权威状态
+```
+
+其中内容层、组织层、关系层应优先使用组合设计；空间层保持稳定基础契约，避免把
+`position` / `size` / `zIndex` 抽象成过度复杂的插件系统。
+
+四层必须解耦，只通过 ID、binding、endpoint、policy 和 store action 协作：
+
+| 边界 | 解耦规则 |
+|------|----------|
+| 空间层 ↔ 组织层 | `parentId` 不改变坐标系；`node.position` 始终是画布绝对坐标；移动容器通过 store action 按 delta 平移子树 |
+| 内容层 ↔ 组织层 | `content` 只描述节点内部 UI；`container.childIds` 只描述直接子 CanvasNode；容器内容通过 `ChildNodeSlot` / `NodePreviewDescriptor` 展示子节点摘要 |
+| 内容层 ↔ 关系层 | Block 可以提供 `blockId` / `fieldPath` 供 endpoint 引用，但连接线仍由 `CanvasData.connections` 持久化 |
+| 组织层 ↔ 关系层 | 包含关系不是连接线；连接线也不决定 `parentId`；容器操作只按 internal / boundary / external 分类连接 |
+
+实现上四层应对应独立 registry / controller：
+
+```text
+空间层：SpatialIndex / InteractionController
+内容层：BlockRendererRegistry / PreviewRendererRegistry / FieldBindingResolver
+组织层：ContainerPolicyRegistry / LayoutRegistry
+关系层：EndpointResolver / ConnectionRouter
+```
+
+需要保持的硬不变量：
+
+1. `node.position` 永远是 canvas-world absolute。
+2. `content` 不参与画布坐标、minimap bounds 或 viewport culling。
+3. `container.childIds` 只包含直接子 CanvasNode。
+4. `parentId` 与 `container.childIds` 必须双向一致。
+5. `connections` 独立保存在 `CanvasData.connections`。
+6. connection endpoint 可以引用 node / port / block / field，但不改变归属关系。
+7. row / cell / tag / entry 默认不是 CanvasNode，除非显式 promote。
 
 ### 14.1 核心目标模型
 
@@ -1518,7 +1805,7 @@ interface CanvasNode {
 
   content?: ContainerSection;
   parentId?: string;
-  childIds?: string[];
+  container?: ContainerCapability;
   preset?: string;
   data?: Record<string, unknown>;
 }
@@ -1527,7 +1814,7 @@ interface CanvasNode {
 三个关键字段分别解决不同问题：
 
 - `content`：节点内部怎么显示和编辑。
-- `parentId` / `childIds`：容器包含哪些节点，以及子节点顺序。
+- `parentId` / `container.childIds`：容器包含哪些节点，以及子节点顺序。
 - `connections`：节点之间有什么语义关系。
 
 三者可以互相引用，但不应互相嵌套保存。
@@ -1554,24 +1841,69 @@ interface CanvasNode {
 
 ### 14.3 容器边界
 
-容器不是所有数据的拥有者，而是组织关系和展示入口。
+容器不是所有数据的拥有者，而是组织关系和展示入口。组织层应抽象为通用
+`ContainerCapability`，Scene、Group、Artboard 只是第一批内置 policy，不应把组织层封死成
+三种类型。
+
+```typescript
+interface ContainerCapability {
+  childIds: string[];
+  policy: 'scene' | 'group' | 'artboard' | (string & {});
+  layout: ContainerLayoutState;
+  acceptedTypes?: CanvasNodeType[];
+  acceptedPresets?: string[];
+}
+```
+
+第一阶段可以只内置三种 policy：
+
+| Policy | 组织意图 | 默认布局 | 典型子节点 | 默认删除语义 |
+|--------|----------|----------|------------|--------------|
+| `scene` | 语义分镜容器 | `sequence` / `grid` | shot、media、annotation、gallery | 询问删除子树或释放子节点 |
+| `group` | 空间分组 / 临时聚合 | `free` | 任意 CanvasNode | 默认释放子节点 |
+| `artboard` | 有边界的导出 / 预览区域 | `absolute` / `bounded` | visual nodes | 询问删除子树或释放子节点 |
+
+架构上应开放 policy registry，未来 Board、Sequence、Folder、Layer、Chapter、
+Timeline Section 等都可以复用同一套容器能力。policy 定义 accepted children、自动布局、
+删除语义、派生目标和批量动作，但不拥有子节点的业务数据。
 
 容器绑定分三类：
 
 | 类型 | 保存位置 | 说明 |
 |------|----------|------|
 | 内容绑定 | `node.content` | 容器节点自己的标题、按钮、子节点槽位等内部 UI |
-| 节点绑定 | `parentId` / `childIds` | 容器包含哪些直接子节点 |
+| 节点绑定 | `parentId` / `container.childIds` | 容器包含哪些直接子节点 |
 | 连接绑定 | `CanvasData.connections` | 连接线仍属于画布级图结构 |
 
 规则：
 
 - 一个节点同一时间最多一个 `parentId`。
-- 容器的 `childIds` 只包含直接子节点。
-- `parentId` 与 `childIds` 必须双向一致。
+- 容器的 `container.childIds` 只包含直接子节点。
+- `parentId` 与 `container.childIds` 必须双向一致。
 - 禁止容器形成环。
 - 坐标可以辅助吸附和自动收编，但权威归属来自显式 ID。
 - 删除容器时必须明确是删除子树，还是释放子节点。
+
+判断一个结构是否进入组织层，只看它管理的子项是否需要独立 CanvasNode 身份：
+
+- 需要独立选择、拖拽、连线、复制、生成、被 Agent 引用、出现在 minimap 或参与 culling：
+  使用 `parentId` + `container.childIds`。
+- 只是 row、cell、tag、entry：留在内容层集合中。
+- 只是从已有节点或数据派生出的查看/编辑界面：使用投影视图，不复制权威数据。
+
+因此表格、画廊、分镜表要区分处理：
+
+| 结构 | 默认归属 | 说明 |
+|------|----------|------|
+| 普通表格 | 内容层 Collection | row/cell 保存在 `node.data`，由 TableBlock / CollectionView 渲染 |
+| 画廊 | 内容层 Collection | GalleryCell 通常是一个语义资产内部的候选位 |
+| 分镜表 | 内容层 Projection | 行通常引用 ShotNode，编辑写回 ShotNode.data，排序写回 Scene 容器顺序 |
+| Scene 镜头列表 | 组织层 Container | Shot 是独立 CanvasNode，Scene 用 `container.childIds` 管理顺序 |
+| Group 成员 | 组织层 Container | 子项是可独立操作的 CanvasNode |
+| Artboard 内容 | 组织层 Container | 子项是导出/预览范围内的 CanvasNode |
+
+表格行、画廊 cell 或规划表 row 可以通过显式操作提升为 CanvasNode，例如
+`GalleryCell -> MediaNode`、`PlanningRow -> ShotNode`。提升之后才进入组织层。
 
 ### 14.4 连接线目标设计
 
@@ -1621,7 +1953,67 @@ interface ConnectionEndpoint {
 - 新节点类型优先通过 preset 组合已有 Block，而不是新增大型 React 节点组件。
 - Agent 工具读写同一套 schema，避免 UI、Agent、属性面板各自维护字段规则。
 
-### 14.6 自动排列目标
+### 14.6 预览能力目标
+
+预览应作为内容层能力组合，而不是每个节点类型各自实现一套预览逻辑。节点或 Block
+通过能力声明获得预览、播放、委托、候选浏览、集合缩略和节点摘要能力：
+
+```text
+AssetIdentityCapability     资产身份：assetId / src / mimeType / format
+PreviewCapability           预览变体：thumbnail / proxy / poster / waveform / turntable
+PlaybackCapability          播放：audio / video / clip
+DelegateCapability          委托打开：neko-preview / neko-model / neko-cut / neko-puppet
+GenerationPreviewCapability 生成候选：history / selected candidate
+CollectionPreviewCapability 集合预览：gallery cells / table rows
+NodeSummaryCapability       节点缩略摘要：Scene 内的 Shot preview
+```
+
+预览管线：
+
+```text
+AssetBlock / preview-capable block
+  → 读取 capabilities
+  → PreviewResolver 请求 PreviewVariant
+  → PreviewRendererRegistry 选择 renderer
+  → PreviewRuntime 管理 hover / active playback / cleanup
+  → DelegateCapability 打开专业扩展
+```
+
+不同素材类型使用不同能力组合：
+
+| 类型 | 节点内预览 | 动态能力 | 完整查看 / 编辑 |
+|------|------------|----------|-----------------|
+| 文本 | 摘要、markdown/rich preview、line clamp | 选中后编辑、展开详情 | 脚本 / 文档编辑器 |
+| 图片 | thumbnail / proxy `<img>` | 候选切换、hover 提示 | VSCode image viewer / neko-preview |
+| 音频 | waveform 图、duration badge | 单个 active 播放、波形游标 | neko-preview / neko-cut |
+| 视频 | poster / keyframe | hover 或 selected 低清 proxy 播放 | neko-preview / neko-cut |
+| 全景图 / 360 视频 | flat proxy、FOV crop、rotation clip | 预渲染旋转片段；不做球面交互 | neko-preview panoramic viewer |
+| 3D 模型 | screenshot | engine 预渲染 turntable | neko-model |
+| 2D 骨骼 / Live2D | static pose | 预渲染 animation clip | neko-puppet |
+| 文档 | cover thumbnail、页数、类型 badge | 可选少量页预览 | document preview / editor |
+| 未知附件 | icon、文件名、大小、mime | 无 | 系统或对应扩展打开 |
+
+持久化边界：
+
+- 可持久化：`assetId`、`src`、`mimeType`、`format`、选中的生成候选 ID、稳定的预览偏好或默认视角。
+- 不持久化：blob URL、engine token、当前播放进度、hover 状态、active player、WebGL/canvas 实例。
+
+Canvas 内容层只做轻量确认：`thumbnail -> hover/selected dynamic preview -> double-click delegate`。
+实时 3D 渲染、球面全景交互、HDR tone mapping、视频时间线剪辑、音频混音、重型解码和转码都不属于
+Canvas Webview，应由 engine 生成预览变体，或委托 `neko-preview` / `neko-model` / `neko-cut`
+/ `neko-puppet`。
+
+Asset preview 和 Node preview 也要分开：
+
+- Asset preview：预览某个 Block 引用的素材，例如图片、音频、视频、模型、文档。
+- Node preview：预览另一个 CanvasNode 的摘要，例如 Scene 内的 Shot 缩略图、Group outline、
+  minimap 摘要、Agent 上下文摘要。
+
+容器不应完整渲染子节点第二遍，而应通过 `NodeSummaryCapability` 获取轻量
+`NodePreviewDescriptor`。这样 Shot 图片、Gallery cell、Media node、Document cover、Model
+turntable、Scene child slot 和 Agent 内容提取可以复用同一套预览能力。
+
+### 14.7 自动排列目标
 
 自动排列是必要能力，尤其用于派生节点和 Agent 批量创建。
 
@@ -1643,7 +2035,7 @@ interface ConnectionEndpoint {
 
 这能避免新内容覆盖旧内容，同时保护创作者已经建立的空间布局。
 
-### 14.7 目标态总结
+### 14.8 目标态总结
 
 Canvas 的目标态不是“更多节点类型”，而是：
 

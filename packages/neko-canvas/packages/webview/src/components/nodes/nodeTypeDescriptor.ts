@@ -58,14 +58,6 @@ export function getNodeLabel(
 }
 
 /**
- * Get the icon string for a node type.
- */
-export function getNodeIcon(registry: NodeTypeDescriptorRegistry, type: CanvasNodeType): string {
-  const descriptor = registry[type];
-  return descriptor ? descriptor.icon : '\u{1F4C4}';
-}
-
-/**
  * Get the default size for a node type.
  */
 export function getNodeDefaultSize(

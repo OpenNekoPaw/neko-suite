@@ -132,6 +132,36 @@ describe('clipboardStore', () => {
     expect(pastedConn?.targetId).not.toBe('b');
   });
 
+  it('paste should remap container child IDs and parent IDs within the copied subtree', () => {
+    const group: CanvasNode = {
+      id: 'group-1',
+      type: 'group',
+      position: { x: 0, y: 0 },
+      size: { width: 200, height: 160 },
+      zIndex: 0,
+      container: { policy: 'group', childIds: ['child-1'] },
+      data: { childIds: ['child-1'], label: 'Group' },
+    };
+    const child: CanvasNode = {
+      ...createNode('child-1', 20, 20),
+      parentId: 'group-1',
+    };
+
+    useClipboardStore.getState().copy(['group-1', 'child-1'], [group, child], []);
+    const result = useClipboardStore.getState().paste();
+
+    const pastedGroup = result?.nodes.find((node) => node.type === 'group');
+    const pastedChild = result?.nodes.find((node) => node.type === 'annotation');
+
+    expect(pastedGroup?.id).not.toBe('group-1');
+    expect(pastedChild?.id).not.toBe('child-1');
+    expect(pastedGroup?.container?.childIds).toEqual([pastedChild?.id]);
+    expect(pastedChild?.parentId).toBe(pastedGroup?.id);
+    expect(pastedGroup?.type === 'group' ? pastedGroup.data.childIds : []).toEqual([
+      pastedChild?.id,
+    ]);
+  });
+
   it('duplicate should create copies with small offset', () => {
     const nodes = [createNode('a', 100, 200)];
     const connections: CanvasConnection[] = [];

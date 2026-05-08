@@ -94,6 +94,8 @@ describe('canvasStore scene container actions', () => {
     );
 
     expect(scene?.data.shotIds).toEqual(['shot-2', 'shot-1']);
+    expect(scene?.container?.childIds).toEqual(['shot-2', 'shot-1']);
+    expect(shot1?.parentId).toBe('scene-1');
     expect(shot1?.data.sceneGroupId).toBe('scene-1');
     expect(shot2?.data.sceneGroupId).toBe('scene-1');
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
@@ -116,6 +118,7 @@ describe('canvasStore scene container actions', () => {
     );
 
     expect(shot?.data.sceneGroupId).toBe('scene-1');
+    expect(shot?.parentId).toBe('scene-1');
     expect(scene?.data.shotIds).toEqual(['shot-1']);
 
     useCanvasStore.getState().moveNodeEnd('shot-1', { x: 980, y: 980 });
@@ -129,6 +132,7 @@ describe('canvasStore scene container actions', () => {
     );
 
     expect(shot?.data.sceneGroupId).toBeUndefined();
+    expect(shot?.parentId).toBeUndefined();
     expect(scene?.data.shotIds).toEqual([]);
   });
 
@@ -173,6 +177,7 @@ describe('canvasStore scene container actions', () => {
     );
 
     expect(scene?.data.shotIds).toEqual(['shot-2', 'shot-1']);
+    expect(scene?.container?.childIds).toEqual(['shot-2', 'shot-1']);
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
   });
 
@@ -204,5 +209,36 @@ describe('canvasStore scene container actions', () => {
     );
 
     useCanvasStore.getState().autoLayoutSceneShots('scene-1');
+  });
+
+  it('groups and ungroups nodes through generic container membership', () => {
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([createShotNode('shot-1', 100, 100), createShotNode('shot-2', 360, 100)]),
+      );
+
+    const groupId = useCanvasStore.getState().groupNodes(['shot-1', 'shot-2']);
+
+    let state = useCanvasStore.getState().canvasData;
+    const group = state?.nodes.find((node) => node.id === groupId);
+    const shot1 = state?.nodes.find(
+      (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-1',
+    );
+
+    expect(group?.type).toBe('group');
+    expect(group?.container?.childIds).toEqual(['shot-1', 'shot-2']);
+    expect(shot1?.parentId).toBe(groupId);
+    expect(shot1?.data.sceneGroupId).toBeUndefined();
+
+    useCanvasStore.getState().ungroupNodes(groupId);
+
+    state = useCanvasStore.getState().canvasData;
+    const releasedShot = state?.nodes.find(
+      (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-1',
+    );
+
+    expect(state?.nodes.some((node) => node.id === groupId)).toBe(false);
+    expect(releasedShot?.parentId).toBeUndefined();
   });
 });

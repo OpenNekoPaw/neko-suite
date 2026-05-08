@@ -19,9 +19,17 @@ import {
   loadNkc,
 } from '@neko/shared';
 import type {
+  CanvasCreateCompositeRequest,
+  CanvasCreateCompositeResult,
   CanvasDroppedAsset,
+  CanvasDeriveNodeRequest,
+  CanvasDeriveNodeResult,
+  CanvasExtractStructuredContentRequest,
+  CanvasExtractStructuredContentResult,
   CanvasNode,
   CanvasNodeType,
+  CanvasUpdateBlockRequest,
+  CanvasUpdateBlockResult,
   CanvasTimelineSyncPayload,
   CanvasStoryboardPayload,
   CreatedCanvasStoryboard,
@@ -501,13 +509,81 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     type: CanvasNodeType,
     position: { x: number; y: number },
     data: object,
+    preset?: string,
   ): Promise<string> {
     if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
     const result = await this.sendRequest<{ nodeId: string }>('nodes.create', {
-      payload: { type, position, data },
+      payload: { type, position, data, preset },
     });
     this._onDidChangeCanvas.fire({ type: 'add' });
     return result.nodeId;
+  }
+
+  async deriveNode(request: CanvasDeriveNodeRequest): Promise<CanvasDeriveNodeResult> {
+    if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    const result = await this.sendRequest<CanvasDeriveNodeResult>('nodes.derive', {
+      payload: request,
+    });
+    this._onDidChangeCanvas.fire({
+      type: 'add',
+      nodeId: result.nodeId,
+      entityType: 'node',
+      reason: 'nodeDerived',
+      operationType: 'nodes.derive',
+    });
+    return result;
+  }
+
+  async createComposite(
+    request: CanvasCreateCompositeRequest,
+  ): Promise<CanvasCreateCompositeResult> {
+    if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    const result = await this.sendRequest<CanvasCreateCompositeResult>('nodes.createComposite', {
+      payload: request,
+    });
+    this._onDidChangeCanvas.fire({
+      type: 'add',
+      nodeId: result.containerId,
+      nodeIds: [result.containerId, ...result.childIds],
+      entityType: 'node',
+      reason: 'compositeCreated',
+      operationType: 'nodes.createComposite',
+    });
+    return result;
+  }
+
+  async updateBlock(request: CanvasUpdateBlockRequest): Promise<CanvasUpdateBlockResult> {
+    if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    const result = await this.sendRequest<CanvasUpdateBlockResult>('nodes.updateBlock', {
+      payload: request,
+    });
+    this._onDidChangeCanvas.fire({
+      type: 'update',
+      nodeId: result.nodeId,
+      entityType: 'node',
+      reason: 'blockUpdated',
+      operationType: 'nodes.updateBlock',
+    });
+    return result;
+  }
+
+  async extractStructuredContent(
+    request: CanvasExtractStructuredContentRequest,
+  ): Promise<CanvasExtractStructuredContentResult> {
+    if (!this.activeWebviewPanel) {
+      return {
+        format: request.format,
+        nodeIds: [],
+        nodes: [],
+        content: request.format === 'json' ? [] : '',
+      };
+    }
+    return this.sendRequest<CanvasExtractStructuredContentResult>(
+      'nodes.extractStructuredContent',
+      {
+        payload: request,
+      },
+    );
   }
 
   async generateImageForNode(nodeId: string, cellId?: string): Promise<void> {
@@ -758,6 +834,110 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           void handleError(error instanceof Error ? error : new Error(String(error)), {
             showToUser: true,
           });
+        }
+        break;
+      }
+      case 'preview:resolveVariant': {
+        const requestId = message.requestId as string | undefined;
+        const assetPath = message.assetPath as string | undefined;
+        const role = message.role as 'thumbnail' | 'proxy' | 'fov-crop' | undefined;
+        const mediaTypeHint = message.mediaType as string | undefined;
+        if (!requestId || !assetPath) break;
+
+        let assetId: string | null = null;
+        try {
+          const fsPath = await this.resolveAssetPath(assetPath, document.uri);
+          const api = await this.getPreviewApi();
+          if (hasPreviewVariantAPI(api)) {
+            const panoramicRoute = getPanoramicPreviewRoute({
+              filePath: fsPath,
+              mediaType: mediaTypeHint,
+            });
+            const manifest = await api.registerPreviewAsset({
+              source: fsPath,
+              kind:
+                panoramicRoute?.kind ??
+                (mediaTypeHint === 'image' || mediaTypeHint === 'video' || mediaTypeHint === 'audio'
+                  ? mediaTypeHint
+                  : 'unknown'),
+              expectedProjection: panoramicRoute ? 'equirectangular' : undefined,
+            });
+            assetId = manifest.assetId;
+            const variant = await api.requestPreviewVariant(manifest.assetId, {
+              role: role ?? 'thumbnail',
+              width: 640,
+              height: 360,
+            });
+            webviewPanel.webview.postMessage({
+              type: 'preview:variantResolved',
+              requestId,
+              url: variant.url ?? manifest.variants.find((item) => item.role === 'source')?.url,
+            });
+          } else {
+            const uri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(fsPath));
+            webviewPanel.webview.postMessage({
+              type: 'preview:variantResolved',
+              requestId,
+              url: uri.toString(),
+            });
+          }
+        } catch (error) {
+          logger.warn(`Preview variant resolution failed: ${error}`);
+          webviewPanel.webview.postMessage({
+            type: 'preview:variantResolved',
+            requestId,
+            error: error instanceof Error ? error.message : 'Preview variant resolution failed',
+          });
+        } finally {
+          if (assetId) {
+            const api = await this.getPreviewApi();
+            if (hasPreviewVariantAPI(api)) {
+              await api.unregisterPreviewAsset(assetId).catch(() => {});
+            }
+          }
+        }
+        break;
+      }
+      case 'preview:delegateAction': {
+        const action = message.action as
+          | { target?: string; command?: string; route?: string }
+          | undefined;
+        const asset = message.asset as
+          | { path?: string; uri?: string; mediaType?: string }
+          | undefined;
+        const assetPath = asset?.path ?? asset?.uri;
+
+        if (action?.command) {
+          await vscode.commands.executeCommand(action.command, assetPath);
+          break;
+        }
+
+        if (!assetPath) break;
+
+        if (
+          action?.target === 'preview' ||
+          action?.target === 'model' ||
+          action?.target === 'cut' ||
+          action?.target === 'audio'
+        ) {
+          const fsPath = await this.resolveAssetPath(assetPath, document.uri);
+          const fileUri = vscode.Uri.file(fsPath);
+          const panoramicRoute = getPanoramicPreviewRoute({
+            filePath: fsPath,
+            mediaType: asset?.mediaType,
+          });
+          if (panoramicRoute) {
+            await vscode.commands.executeCommand(
+              'vscode.openWith',
+              fileUri,
+              panoramicRoute.viewType,
+            );
+          } else {
+            await vscode.commands.executeCommand('vscode.open', fileUri);
+          }
+        } else {
+          const fsPath = await this.resolveAssetPath(assetPath, document.uri);
+          await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(fsPath));
         }
         break;
       }
@@ -1849,7 +2029,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       const id = ++this.requestId;
       this.pendingRequests.set(id, {
-        resolve: resolve as (value: unknown) => void,
+        resolve: (value: unknown) => {
+          if (
+            typeof value === 'object' &&
+            value !== null &&
+            typeof (value as { error?: unknown }).error === 'string'
+          ) {
+            reject(new Error((value as { error: string }).error));
+            return;
+          }
+          resolve(value as T);
+        },
         reject,
       });
 

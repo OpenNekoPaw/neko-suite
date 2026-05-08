@@ -7,7 +7,7 @@
 
 import type { CanvasData } from '../types/canvas';
 import type { ValidationResult } from '../config/config-adapter';
-import { CANVAS_VERSION } from '../types/canvas';
+import { CURRENT_NKC_VERSION, migrateNkc, type NkcMigrationResult } from './migrator';
 import { validateNkc } from './validator';
 
 /** Result of loading an NKC file */
@@ -16,6 +16,8 @@ export interface NkcLoadResult {
   data: CanvasData;
   /** Validation result */
   validation: ValidationResult;
+  /** Migration result, when a loaded canvas was upgraded in memory. */
+  migration?: NkcMigrationResult;
 }
 
 /** Options for saving an NKC file */
@@ -66,6 +68,16 @@ export function loadNkc(json: string): NkcLoadResult {
     }
   }
 
+  const migration = migrateNkc(parsed as CanvasData);
+  if (migration.migrated) {
+    const postMigrationValidation = validateNkc(migration.data as unknown);
+    return {
+      data: migration.data,
+      validation: postMigrationValidation,
+      migration,
+    };
+  }
+
   // Step 3: Return result
   return {
     data: parsed as CanvasData,
@@ -106,7 +118,7 @@ export function isValidNkc(data: unknown): data is CanvasData {
 
 function createEmptyCanvas(): CanvasData {
   return {
-    version: CANVAS_VERSION,
+    version: CURRENT_NKC_VERSION,
     name: '',
     viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
     nodes: [],

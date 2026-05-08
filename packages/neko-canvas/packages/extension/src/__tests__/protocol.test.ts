@@ -15,6 +15,7 @@
  *   NKV-006: timeline import success round-trips through timelineSync
  *   NKV-007: toolbar can pick .nkc files into canvas-embed nodes
  *   NKV-008: toolbar pickers cover script/document/model reference nodes
+ *   NKV-009: composable Agent node operations use payload wrappers
  */
 
 import { describe, it, expect } from 'vitest';
@@ -52,7 +53,7 @@ describe('canvasEditorProvider message contracts', () => {
 
   describe('NKV-001C: nodes.create payload contract', () => {
     it('sends payload wrapper from extension', () => {
-      expect(providerSource).toContain('payload: { type, position, data }');
+      expect(providerSource).toContain('payload: { type, position, data, preset }');
     });
 
     it('consumes payload wrapper in webview', () => {
@@ -60,6 +61,7 @@ describe('canvasEditorProvider message contracts', () => {
       expect(webviewSource).toContain('type: payload.type ??');
       expect(webviewSource).toContain('position: payload.position ??');
       expect(webviewSource).toContain('data: payload.data ?? {}');
+      expect(webviewSource).toContain('preset: payload.preset');
     });
   });
 
@@ -157,6 +159,33 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("kind: 'script'");
       expect(providerSource).toContain("kind: 'document'");
       expect(providerSource).toContain("kind: 'model'");
+    });
+  });
+
+  describe('NKV-009: Agent composite operation contracts', () => {
+    it('extension sends new node operation payload wrappers', () => {
+      expect(providerSource).toContain("sendRequest<CanvasDeriveNodeResult>('nodes.derive'");
+      expect(providerSource).toContain(
+        "sendRequest<CanvasCreateCompositeResult>('nodes.createComposite'",
+      );
+      expect(providerSource).toContain("sendRequest<CanvasUpdateBlockResult>('nodes.updateBlock'");
+      expect(providerSource).toContain(
+        "sendRequest<CanvasExtractStructuredContentResult>('nodes.extractStructuredContent'",
+      );
+      expect(providerSource).toContain('payload: request');
+    });
+
+    it('webview consumes new node operation requests', () => {
+      expect(webviewSource).toContain("case 'nodes.derive'");
+      expect(webviewSource).toContain("case 'nodes.createComposite'");
+      expect(webviewSource).toContain("case 'nodes.updateBlock'");
+      expect(webviewSource).toContain("case 'nodes.extractStructuredContent'");
+      expect(webviewSource).toContain("withOperationSource('ai'");
+    });
+
+    it('sendRequest rejects typed errors returned by the webview', () => {
+      expect(providerSource).toContain("typeof (value as { error?: unknown }).error === 'string'");
+      expect(providerSource).toContain('reject(new Error((value as { error: string }).error));');
     });
   });
 

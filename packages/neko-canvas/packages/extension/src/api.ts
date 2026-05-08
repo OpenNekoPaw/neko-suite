@@ -4,10 +4,19 @@
 import * as vscode from 'vscode';
 import type {
   ApplyCanvasStoryboardOptions,
+  CanvasCreateCompositeRequest,
+  CanvasCreateCompositeResult,
+  CanvasDeriveNodeRequest,
+  CanvasDeriveNodeResult,
+  CanvasExtractStructuredContentRequest,
+  CanvasExtractStructuredContentResult,
   CanvasChangeEvent as SharedCanvasChangeEvent,
   CanvasNode,
   CanvasNodeType,
   CanvasStoryboardPayload,
+  CanvasUpdateBlockRequest,
+  CanvasUpdateBlockResult,
+  CreatedCanvasStoryboard,
 } from '@neko/shared';
 
 // Types
@@ -137,7 +146,22 @@ export interface NekoCanvasAPI {
     /** Update a node's data fields */
     update(nodeId: string, data: Record<string, unknown>): Promise<void>;
     /** Create a new node; returns the new node's ID */
-    create(type: CanvasNodeType, position: { x: number; y: number }, data: object): Promise<string>;
+    create(
+      type: CanvasNodeType,
+      position: { x: number; y: number },
+      data: object,
+      preset?: string,
+    ): Promise<string>;
+    /** Derive a successor node through registered preset rules */
+    derive(request: CanvasDeriveNodeRequest): Promise<CanvasDeriveNodeResult>;
+    /** Create a container and child nodes as one logical mutation */
+    createComposite(request: CanvasCreateCompositeRequest): Promise<CanvasCreateCompositeResult>;
+    /** Update a composable block binding or explicit JSON Pointer path */
+    updateBlock(request: CanvasUpdateBlockRequest): Promise<CanvasUpdateBlockResult>;
+    /** Extract structured Canvas content for Agent context */
+    extractStructuredContent(
+      request: CanvasExtractStructuredContentRequest,
+    ): Promise<CanvasExtractStructuredContentResult>;
     /** Trigger image generation for a ShotNode or a specific GalleryCell */
     generateImage(nodeId: string, cellId?: string): Promise<void>;
     /** Trigger batch image generation for multiple nodes */

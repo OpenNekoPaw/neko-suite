@@ -4,6 +4,14 @@ import type {
   CanvasNode,
   CanvasConnection,
   CanvasViewport,
+  CanvasCreateCompositeRequest,
+  CanvasCreateCompositeResult,
+  CanvasDeriveNodeRequest,
+  CanvasDeriveNodeResult,
+  CanvasExtractStructuredContentRequest,
+  CanvasExtractStructuredContentResult,
+  CanvasUpdateBlockRequest,
+  CanvasUpdateBlockResult,
   PortDefinition,
   SceneGroupCanvasNode,
   ShotCanvasNode,
@@ -13,9 +21,25 @@ import {
   arePortTypesCompatible,
   isSceneGroupNode,
   isShotNode,
+  getContainerChildIds,
+  isContainerNode,
 } from '@neko/shared';
 import { useHistoryStore } from './historyStore';
 import { useCanvasOperationStore } from './canvasOperationStore';
+import {
+  addContainerChild,
+  releaseContainerChildren,
+  removeContainerChild,
+  reorderContainerChildren,
+  translateContainerSubtree,
+} from '../utils/containerActions';
+import { autoArrangeContainer } from '../utils/containerLayout';
+import {
+  createCanvasComposite,
+  deriveCanvasNode,
+  extractStructuredCanvasContent,
+  updateCanvasBlock,
+} from '../utils/canvasAgentOperations';
 
 // =============================================================================
 // Types
@@ -121,6 +145,16 @@ export interface CanvasStore {
   // ==================== Derive Actions ====================
   /** Create a successor node positioned to the right, auto-connected. Uses targetType if given, else same type as source. */
   deriveSuccessorNode: (sourceNodeId: string, targetType?: string) => string | null;
+  /** API/Agent derive path using preset, placement, and connection contracts. */
+  deriveNode: (request: CanvasDeriveNodeRequest) => CanvasDeriveNodeResult | null;
+  /** API/Agent atomic composite creation path. */
+  createComposite: (request: CanvasCreateCompositeRequest) => CanvasCreateCompositeResult | null;
+  /** Update a composable block binding or explicit JSON Pointer path. */
+  updateBlock: (request: CanvasUpdateBlockRequest) => CanvasUpdateBlockResult | null;
+  /** Extract structured content without preview runtime state. */
+  extractStructuredContent: (
+    request: CanvasExtractStructuredContentRequest,
+  ) => CanvasExtractStructuredContentResult;
 
   // ==================== Viewport Actions ====================
   setViewport: (viewport: Partial<CanvasViewport>) => void;
@@ -177,7 +211,9 @@ function isShotInsideScene(scene: SceneGroupCanvasNode, shot: ShotCanvasNode): b
 }
 
 function getSceneOwnedShots(nodes: CanvasNode[], sceneId: string): ShotCanvasNode[] {
-  return nodes.filter(isShotNode).filter((node) => node.data.sceneGroupId === sceneId);
+  return nodes
+    .filter(isShotNode)
+    .filter((node) => node.parentId === sceneId || node.data.sceneGroupId === sceneId);
 }
 
 function sortShotsByCanvasOrder(shots: ShotCanvasNode[]): ShotCanvasNode[] {
@@ -192,7 +228,7 @@ function sortShotsByCanvasOrder(shots: ShotCanvasNode[]): ShotCanvasNode[] {
 function getSceneShotOrder(scene: SceneGroupCanvasNode, nodes: CanvasNode[]): string[] {
   const ownedShots = getSceneOwnedShots(nodes, scene.id);
   const orderById = new Map(ownedShots.map((shot) => [shot.id, shot]));
-  const explicitOrder = scene.data.shotIds.filter((shotId) => orderById.has(shotId));
+  const explicitOrder = getContainerChildIds(scene).filter((shotId) => orderById.has(shotId));
   const remainingShots = ownedShots.filter((shot) => !explicitOrder.includes(shot.id));
   return [...explicitOrder, ...sortShotsByCanvasOrder(remainingShots).map((shot) => shot.id)];
 }
@@ -203,6 +239,11 @@ function relinkSceneShotIds(nodes: CanvasNode[]): CanvasNode[] {
     const nextShotIds = getSceneShotOrder(node, nodes);
     return {
       ...node,
+      container: {
+        policy: 'scene',
+        ...(node.container ?? {}),
+        childIds: nextShotIds,
+      },
       data: {
         ...node.data,
         shotIds: nextShotIds,
@@ -212,43 +253,14 @@ function relinkSceneShotIds(nodes: CanvasNode[]): CanvasNode[] {
 }
 
 function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
-  const scene = nodes.find((node) => isSceneGroupNode(node) && node.id === sceneId);
-  if (!scene || !isSceneGroupNode(scene)) return nodes;
-
-  const orderedShotIds = getSceneShotOrder(scene, nodes);
-  if (orderedShotIds.length === 0) return nodes;
-
-  const sceneWidth = Math.max(
-    scene.size.width - SCENE_LAYOUT_PADDING_X * 2,
-    SCENE_LAYOUT_MIN_COLUMN_WIDTH,
-  );
-  const shots = orderedShotIds
-    .map((shotId) => nodes.find((node) => isShotNode(node) && node.id === shotId))
-    .filter((node): node is ShotCanvasNode => Boolean(node));
-  if (shots.length === 0) return nodes;
-  const maxShotWidth = Math.max(...shots.map((shot) => shot.size.width));
-  const columns = Math.max(
-    1,
-    Math.floor((sceneWidth + SCENE_LAYOUT_GAP_X) / (maxShotWidth + SCENE_LAYOUT_GAP_X)),
-  );
-
-  return nodes.map((node) => {
-    if (!isShotNode(node)) return node;
-    const shotIndex = orderedShotIds.indexOf(node.id);
-    if (shotIndex < 0) return node;
-
-    const col = shotIndex % columns;
-    const row = Math.floor(shotIndex / columns);
-    return {
-      ...node,
-      position: {
-        x: scene.position.x + SCENE_LAYOUT_PADDING_X + col * (node.size.width + SCENE_LAYOUT_GAP_X),
-        y:
-          scene.position.y +
-          SCENE_LAYOUT_PADDING_TOP +
-          row * (node.size.height + SCENE_LAYOUT_GAP_Y),
-      },
-    };
+  return autoArrangeContainer(relinkSceneShotIds(nodes), {
+    containerId: sceneId,
+    mode: 'sequence',
+    paddingX: SCENE_LAYOUT_PADDING_X,
+    paddingTop: SCENE_LAYOUT_PADDING_TOP,
+    gapX: SCENE_LAYOUT_GAP_X,
+    gapY: SCENE_LAYOUT_GAP_Y,
+    minColumnWidth: SCENE_LAYOUT_MIN_COLUMN_WIDTH,
   });
 }
 
@@ -260,18 +272,16 @@ function syncShotSceneMembership(nodes: CanvasNode[], shotId: string): CanvasNod
     .filter(isSceneGroupNode)
     .find((scene) => isShotInsideScene(scene, shot));
 
-  const nextNodes = nodes.map((node) => {
-    if (!isShotNode(node) || node.id !== shotId) return node;
-    return {
-      ...node,
-      data: {
-        ...node.data,
-        sceneGroupId: targetScene?.id,
-      },
-    };
-  });
+  if (targetScene) {
+    return relinkSceneShotIds(addContainerChild(nodes, targetScene.id, shotId).nodes);
+  }
 
-  return relinkSceneShotIds(nextNodes);
+  const currentParent = shot.parentId ?? shot.data.sceneGroupId;
+  if (currentParent) {
+    return relinkSceneShotIds(removeContainerChild(nodes, currentParent, shotId).nodes);
+  }
+
+  return relinkSceneShotIds(nodes);
 }
 
 function createNodeIndex(nodes: CanvasNode[]): Map<string, CanvasNode> {
@@ -478,23 +488,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const target = canvasData.nodes.find((n) => n.id === id);
     if (!target) return;
 
-    if (isSceneGroupNode(target)) {
+    if (isContainerNode(target)) {
       const dx = position.x - target.position.x;
       const dy = position.y - target.position.y;
-      const childShotIds = new Set(getSceneOwnedShots(canvasData.nodes, id).map((s) => s.id));
       set({
         canvasData: {
           ...canvasData,
-          nodes: canvasData.nodes.map((node) => {
-            if (node.id === id) return { ...node, position };
-            if (childShotIds.has(node.id)) {
-              return {
-                ...node,
-                position: { x: node.position.x + dx, y: node.position.y + dy },
-              };
-            }
-            return node;
-          }),
+          nodes: translateContainerSubtree(canvasData.nodes, id, { x: dx, y: dy }),
         },
       });
     } else {
@@ -514,20 +514,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const oldNode = canvasData.nodes.find((n) => n.id === id);
     recordHistory(canvasData);
 
-    if (oldNode && isSceneGroupNode(oldNode)) {
+    if (oldNode && isContainerNode(oldNode)) {
       const dx = position.x - oldNode.position.x;
       const dy = position.y - oldNode.position.y;
-      const childShotIds = new Set(getSceneOwnedShots(canvasData.nodes, id).map((s) => s.id));
-      const nextNodes = canvasData.nodes.map((node) => {
-        if (node.id === id) return { ...node, position };
-        if (childShotIds.has(node.id)) {
-          return {
-            ...node,
-            position: { x: node.position.x + dx, y: node.position.y + dy },
-          };
-        }
-        return node;
-      });
+      const nextNodes = translateContainerSubtree(canvasData.nodes, id, { x: dx, y: dy });
       set({ canvasData: { ...canvasData, nodes: nextNodes } });
     } else {
       const movedNodes = canvasData.nodes.map((node) =>
@@ -633,33 +623,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     recordHistory(canvasData);
 
-    const assignedNodes = canvasData.nodes.map((node) => {
-      if (!isShotNode(node) || !uniqueShotIds.includes(node.id)) return node;
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          sceneGroupId: sceneId,
-        },
-      };
-    });
-
-    const relinkedNodes = relinkSceneShotIds(
-      assignedNodes.map((node) =>
-        isSceneGroupNode(node) && node.id === sceneId
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                shotIds: [
-                  ...node.data.shotIds.filter((shotId) => !uniqueShotIds.includes(shotId)),
-                  ...uniqueShotIds,
-                ],
-              },
-            }
-          : node,
-      ),
-    );
+    let relinkedNodes = canvasData.nodes;
+    for (const shotId of uniqueShotIds) {
+      relinkedNodes = addContainerChild(relinkedNodes, sceneId, shotId).nodes;
+    }
+    relinkedNodes = relinkSceneShotIds(relinkedNodes);
 
     const nextNodes = autoLayout ? layoutSceneShots(relinkedNodes, sceneId) : relinkedNodes;
 
@@ -700,17 +668,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     recordHistory(canvasData);
 
-    const nextNodes = canvasData.nodes.map((node) =>
-      isSceneGroupNode(node) && node.id === sceneId
-        ? {
-            ...node,
-            data: {
-              ...node.data,
-              shotIds: dedupedShotIds,
-            },
-          }
-        : node,
-    );
+    const reorderResult = reorderContainerChildren(canvasData.nodes, sceneId, dedupedShotIds);
+    const nextNodes = reorderResult.nodes;
 
     const resolvedNodes = autoLayout ? layoutSceneShots(nextNodes, sceneId) : nextNodes;
 
@@ -758,18 +717,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     recordHistory(canvasData);
 
     const nextNodes = relinkSceneShotIds(
-      canvasData.nodes.map((node) => {
-        if (isShotNode(node) && node.id === shotId) {
-          return { ...node, data: { ...node.data, sceneGroupId: undefined } };
-        }
-        if (isSceneGroupNode(node) && node.id === sceneId) {
-          return {
-            ...node,
-            data: { ...node.data, shotIds: node.data.shotIds.filter((id) => id !== shotId) },
-          };
-        }
-        return node;
-      }),
+      removeContainerChild(canvasData.nodes, sceneId, shotId).nodes,
     );
 
     set({ canvasData: { ...canvasData, nodes: nextNodes } });
@@ -852,16 +800,27 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       size: { width: maxX - minX + padding * 2, height: maxY - minY + padding * 2 },
       zIndex: maxZ + 1,
       locked: false,
+      container: {
+        policy: 'group' as const,
+        childIds,
+        deleteBehavior: 'release-children' as const,
+      },
       data: {
         childIds,
         label: 'Group',
       },
     };
 
+    const nextNodes = [...canvasData.nodes, groupNode as CanvasNode];
+    let linkedNodes = nextNodes;
+    for (const childId of childIds) {
+      linkedNodes = addContainerChild(linkedNodes, id, childId).nodes;
+    }
+
     set({
       canvasData: {
         ...canvasData,
-        nodes: [...canvasData.nodes, groupNode],
+        nodes: linkedNodes,
       },
       selection: { nodeIds: [id], connectionIds: [] },
     });
@@ -879,13 +838,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     recordHistory(canvasData);
 
-    const groupData = groupNode.data as { childIds: string[] };
-    const childIds = groupData.childIds ?? [];
+    const childIds = getContainerChildIds(groupNode);
+    const releasedNodes = releaseContainerChildren(canvasData.nodes, groupId).nodes;
 
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.filter((n) => n.id !== groupId),
+        nodes: releasedNodes.filter((n) => n.id !== groupId),
         // Remove connections to/from the group node
         connections: canvasData.connections.filter(
           (c) => c.sourceId !== groupId && c.targetId !== groupId,
@@ -1052,89 +1011,126 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   // ==================== Derive Actions ====================
   deriveSuccessorNode: (sourceNodeId, targetType?) => {
+    const result = get().deriveNode({
+      sourceNodeId,
+      targetType: targetType as CanvasNode['type'] | undefined,
+    });
+    return result?.nodeId ?? null;
+  },
+
+  deriveNode: (request) => {
     const { canvasData } = get();
     if (!canvasData) return null;
 
-    const sourceNode = canvasData.nodes.find((n) => n.id === sourceNodeId);
-    if (!sourceNode) return null;
+    const mutation = deriveCanvasNode(
+      {
+        nodes: canvasData.nodes,
+        connections: canvasData.connections,
+        generateId,
+      },
+      request,
+    );
+    recordHistory(canvasData);
 
-    const nodeType = targetType ?? sourceNode.type;
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: mutation.nodes,
+        connections: mutation.connections,
+      },
+      selection: { nodeIds: [mutation.result.nodeId], connectionIds: [] },
+    });
 
-    // Position new node to the right of source with gap
-    const gap = 60;
-    const newPosition = {
-      x: sourceNode.position.x + sourceNode.size.width + gap,
-      y: sourceNode.position.y,
+    useCanvasOperationStore.getState().recordNodeAdd(mutation.result.node as CanvasNode);
+    if (mutation.result.connectionId) {
+      const connection = mutation.connections.find(
+        (item) => item.id === mutation.result.connectionId,
+      );
+      if (connection) {
+        useCanvasOperationStore.getState().recordConnectionAdd(connection);
+      }
+    }
+
+    return mutation.result;
+  },
+
+  createComposite: (request) => {
+    const { canvasData } = get();
+    if (!canvasData) return null;
+
+    const mutation = createCanvasComposite(
+      {
+        nodes: canvasData.nodes,
+        connections: canvasData.connections,
+        generateId,
+      },
+      request,
+    );
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: mutation.nodes,
+        connections: mutation.connections,
+      },
+      selection: { nodeIds: [mutation.result.containerId], connectionIds: [] },
+    });
+
+    const previousNodeIds = new Set(canvasData.nodes.map((node) => node.id));
+    const addedNodes = mutation.nodes.filter((node) => !previousNodeIds.has(node.id));
+    for (const node of addedNodes) {
+      useCanvasOperationStore.getState().recordNodeAdd(node);
+    }
+
+    return mutation.result;
+  },
+
+  updateBlock: (request) => {
+    const { canvasData } = get();
+    if (!canvasData) return null;
+
+    const node = canvasData.nodes.find((candidate) => candidate.id === request.nodeId);
+    if (!node) {
+      throw new Error(`Node "${request.nodeId}" not found`);
+    }
+
+    const result = updateCanvasBlock(node, request);
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: canvasData.nodes.map((candidate) =>
+          candidate.id === request.nodeId ? result.node : candidate,
+        ),
+      },
+    });
+
+    useCanvasOperationStore
+      .getState()
+      .recordNodeUpdate(
+        request.nodeId,
+        { data: result.data } as Partial<CanvasNode>,
+        { data: node.data } as Partial<CanvasNode>,
+      );
+
+    return {
+      nodeId: result.nodeId,
+      changed: result.changed,
+      data: result.data,
     };
+  },
 
-    // Build new node data based on target type
-    let newData: Record<string, unknown> = {};
-    let newSize = { ...sourceNode.size };
-
-    if (nodeType === 'shot') {
-      const srcData =
-        sourceNode.type === 'shot' ? (sourceNode.data as Record<string, unknown>) : {};
-      // Auto-increment shot number
-      const allShotNumbers = canvasData.nodes
-        .filter((n) => n.type === 'shot')
-        .map((n) => (n.data as Record<string, unknown>).shotNumber as number)
-        .filter((n) => typeof n === 'number');
-      const nextNumber = allShotNumbers.length > 0 ? Math.max(...allShotNumbers) + 1 : 1;
-      newData = {
-        shotNumber: nextNumber,
-        shotScale: srcData.shotScale ?? 'MS',
-        cameraMovement: srcData.cameraMovement,
-        cameraAngle: srcData.cameraAngle,
-        duration: srcData.duration ?? 3,
-        characters: [],
-        emotion: [],
-        generationStatus: 'idle',
-        generationHistory: [],
-      };
-      newSize = { width: 280, height: 320 };
-    } else if (nodeType === 'scene') {
-      newData = { sceneTitle: '', subtitle: '', shotIds: [] };
-      newSize = { width: 300, height: 200 };
-    } else if (nodeType === 'gallery') {
-      newData = {
-        preset: 'character-3view',
-        rows: 1,
-        cols: 3,
-        cells: [
-          { id: 'cell-0', label: '正面', generationStatus: 'idle' },
-          { id: 'cell-1', label: '侧面', generationStatus: 'idle' },
-          { id: 'cell-2', label: '背面', generationStatus: 'idle' },
-        ],
-      };
-      newSize = { width: 320, height: 260 };
-    } else if (nodeType === 'annotation') {
-      newData = { text: '' };
-      newSize = { width: 200, height: 120 };
-    }
-
-    // Create the new node
-    const newNodeId = get().addNode({
-      type: nodeType,
-      position: newPosition,
-      size: newSize,
-      zIndex: (canvasData.nodes.length + 1) * 10,
-      data: newData,
-    } as Omit<CanvasNode, 'id'>);
-
-    // Auto-connect source → new node
-    if (newNodeId) {
-      get().addConnection({
-        sourceId: sourceNodeId,
-        targetId: newNodeId,
-        sourceAnchor: 'right',
-        targetAnchor: 'left',
-      });
-
-      // Select the new node
-      get().selectNode(newNodeId);
-    }
-
-    return newNodeId;
+  extractStructuredContent: (request) => {
+    const { canvasData, selection } = get();
+    const nodes = canvasData?.nodes ?? [];
+    return extractStructuredCanvasContent(nodes, {
+      ...request,
+      nodeIds:
+        request.nodeIds ??
+        (selection.nodeIds.length > 0 ? selection.nodeIds : nodes.map((node) => node.id)),
+    });
   },
 
   // ==================== Viewport Actions ====================

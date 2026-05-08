@@ -21,9 +21,15 @@ import type {
   ICapabilityConfigManager,
   NekoStoryAPI,
   StoryScenePlan,
+  JsonPointerPath,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
+  CANVAS_AGENT_CHILD_PRESETS,
+  CANVAS_AGENT_CONTAINER_PRESETS,
+  CANVAS_AGENT_CREATE_NODE_TYPES,
+  CANVAS_AGENT_DERIVE_TARGET_PRESETS,
+  CANVAS_AGENT_NODE_PRESETS,
   applyCanvasTimelineSyncToCanvas,
   applyStoryboardPayloadToCanvas,
   buildStoryboardImportTimelineSyncPayload,
@@ -60,6 +66,48 @@ async function ensureProjectModel(
     await wsConfig.update(key, model.name, vscode.ConfigurationTarget.Workspace);
     getRootLogger().info(`Auto-resolved ${type} model from ConfigManager: ${model.name}`);
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseToolValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+
+  if (
+    trimmed === 'true' ||
+    trimmed === 'false' ||
+    trimmed === 'null' ||
+    trimmed.startsWith('{') ||
+    trimmed.startsWith('[') ||
+    /^-?\d+(\.\d+)?$/.test(trimmed)
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+
+  return value;
+}
+
+function normalizeJsonPointerPath(value: unknown): JsonPointerPath | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  if (value === '' || value.startsWith('/')) {
+    return value as JsonPointerPath;
+  }
+  throw new Error(`Invalid JSON Pointer path "${value}"`);
 }
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
@@ -269,20 +317,14 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           properties: {
             type: {
               type: 'string',
-              enum: [
-                'shot',
-                'scene',
-                'gallery',
-                'annotation',
-                'media',
-                'storyboard',
-                'text',
-                'artboard',
-                'script',
-                'document',
-                'model',
-              ],
+              enum: [...CANVAS_AGENT_CREATE_NODE_TYPES],
               description: 'Node type',
+            },
+            preset: {
+              type: 'string',
+              enum: [...CANVAS_AGENT_NODE_PRESETS],
+              description:
+                'Optional registered Canvas preset. Legacy presets keep existing node rendering; composable presets opt into block rendering.',
             },
             x: { type: 'number', description: 'Canvas X position' },
             y: { type: 'number', description: 'Canvas Y position' },
@@ -301,10 +343,211 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               args.type as CanvasNodeType,
               { x: args.x as number, y: args.y as number },
               args.data as object,
+              args.preset as string | undefined,
             );
             return { success: true, data };
           } catch (err) {
             return { success: false, error: `Failed to create node: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_DERIVE_NODE,
+        description:
+          'Derive a successor node from an existing Canvas node using registered preset rules, shared placement, and a normal Canvas connection.',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceNodeId: { type: 'string', description: 'Source Canvas node ID' },
+            targetPreset: {
+              type: 'string',
+              enum: [...CANVAS_AGENT_DERIVE_TARGET_PRESETS],
+              description:
+                'Optional target preset from the registered global derive candidates. Source-specific preset rules are enforced at runtime.',
+            },
+            data: {
+              type: 'object',
+              description: 'Optional data overrides merged into the derived node defaults.',
+            },
+            connect: {
+              type: 'boolean',
+              description: 'Whether to connect source to derived node. Defaults to true.',
+            },
+          },
+          required: ['sourceNodeId'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.derive({
+              sourceNodeId: args.sourceNodeId as string,
+              targetPreset: args.targetPreset as string | undefined,
+              data: args.data as Record<string, unknown> | undefined,
+              connect: args.connect as boolean | undefined,
+            });
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to derive node: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+        description:
+          'Create a container and child nodes as one atomic Canvas mutation using container policy validation and shared auto-layout.',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            containerPreset: {
+              type: 'string',
+              enum: [...CANVAS_AGENT_CONTAINER_PRESETS],
+              description: 'Registered container preset, such as scene.legacy or group.container.',
+            },
+            x: { type: 'number', description: 'Container X position' },
+            y: { type: 'number', description: 'Container Y position' },
+            data: {
+              type: 'object',
+              description: 'Container data defaults or overrides.',
+            },
+            children: {
+              type: 'array',
+              description: 'Child node specs. Each child may include preset, type, data, x, and y.',
+              items: {
+                type: 'object',
+                properties: {
+                  preset: {
+                    type: 'string',
+                    enum: [...CANVAS_AGENT_CHILD_PRESETS],
+                  },
+                  type: {
+                    type: 'string',
+                    enum: [...CANVAS_AGENT_CREATE_NODE_TYPES],
+                  },
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                  data: { type: 'object' },
+                },
+              },
+            },
+            autoLayout: {
+              type: 'boolean',
+              description:
+                'Whether to auto-arrange children inside the container. Defaults to true.',
+            },
+          },
+          required: ['containerPreset', 'children'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const children = Array.isArray(args.children)
+              ? args.children.map((child) => {
+                  const value = isRecord(child) ? child : {};
+                  return {
+                    preset: value.preset as string | undefined,
+                    type: value.type as CanvasNodeType | undefined,
+                    position:
+                      typeof value.x === 'number' && typeof value.y === 'number'
+                        ? { x: value.x, y: value.y }
+                        : undefined,
+                    data: isRecord(value.data) ? value.data : undefined,
+                  };
+                })
+              : [];
+            const data = await api.nodes.createComposite({
+              containerPreset: args.containerPreset as string,
+              position:
+                typeof args.x === 'number' && typeof args.y === 'number'
+                  ? { x: args.x, y: args.y }
+                  : undefined,
+              data: args.data as Record<string, unknown> | undefined,
+              children,
+              autoLayout: args.autoLayout as boolean | undefined,
+            });
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to create composite: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK,
+        description:
+          'Update a composable Canvas block through its binding or an explicit JSON Pointer path into node.data.',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            nodeId: { type: 'string', description: 'Canvas node ID' },
+            blockId: { type: 'string', description: 'Composable block ID with a binding' },
+            path: {
+              type: 'string',
+              description:
+                'JSON Pointer path into node.data, for example /content or /cells/0/prompt.',
+            },
+            value: {
+              type: 'string',
+              description: 'New value. Objects should be passed as JSON text.',
+            },
+          },
+          required: ['nodeId', 'value'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.updateBlock({
+              nodeId: args.nodeId as string,
+              blockId: args.blockId as string | undefined,
+              path: normalizeJsonPointerPath(args.path),
+              value: parseToolValue(args.value),
+            });
+            return { success: true, data };
+          } catch (err) {
+            return { success: false, error: `Failed to update block: ${String(err)}` };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT,
+        description:
+          'Extract Canvas node content as JSON, markdown, or prompt-oriented text while preserving layer boundaries and omitting preview runtime state.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            nodeIds: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional explicit node IDs. Omit to use selection or all nodes.',
+            },
+            format: {
+              type: 'string',
+              enum: ['json', 'markdown', 'prompt'],
+              description: 'Extraction format.',
+            },
+            includeChildren: {
+              type: 'boolean',
+              description: 'Include recursive organization children for selected containers.',
+            },
+          },
+          required: ['format'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.extractStructuredContent({
+              nodeIds: Array.isArray(args.nodeIds)
+                ? args.nodeIds.filter((nodeId): nodeId is string => typeof nodeId === 'string')
+                : undefined,
+              format: args.format === 'markdown' || args.format === 'prompt' ? args.format : 'json',
+              includeChildren: args.includeChildren as boolean | undefined,
+            });
+            return { success: true, data };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to extract structured content: ${String(err)}`,
+            };
           }
         },
       },

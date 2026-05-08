@@ -156,6 +156,9 @@ export * from './mediaEngine';
 
 // Canvas types (infinite canvas editor)
 export * from './canvas';
+export * from './canvas-layered';
+export * from './canvas-presets';
+export * from './canvas-agent-operations';
 export * from './canvas-drop';
 export * from './canvas-timeline-sync';
 export * from './storyboard-planner';

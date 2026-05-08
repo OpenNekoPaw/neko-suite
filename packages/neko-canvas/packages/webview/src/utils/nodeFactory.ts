@@ -8,17 +8,24 @@ import type {
   ScriptScene,
   ShotCharacter,
 } from '@neko/shared';
-import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
+import { GALLERY_PRESET_CONFIGS, getBuiltInCanvasNodePresetMetadata } from '@neko/shared';
 import { createBuiltInNodeTypeDescriptors } from '../components/nodes/nodeTypeDescriptors';
 import { getNodeDefaultSize } from '../components/nodes/nodeTypeDescriptor';
+import {
+  applyCanvasNodePreset,
+  createBuiltInCanvasNodePresetRegistry,
+  getCanvasNodePreset,
+} from './canvasPresetRegistry';
 
 const NODE_DESCRIPTORS = createBuiltInNodeTypeDescriptors();
+const NODE_PRESETS = createBuiltInCanvasNodePresetRegistry();
 
 interface BuildCanvasNodeOptions {
   type: CanvasNodeType;
   position: { x: number; y: number };
   data: Record<string, unknown>;
   zIndex: number;
+  preset?: string;
 }
 
 const DEFAULT_EMPTY_HISTORY: GeneratedImageVersion[] = [];
@@ -89,19 +96,26 @@ function inferGenerationStatus(value: unknown): GalleryCell['generationStatus'] 
 
 export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNode, 'id'> {
   const { type, position, data, zIndex } = options;
+  if (options.preset && !getBuiltInCanvasNodePresetMetadata(options.preset)) {
+    throw new Error(`Unsupported preset "${options.preset}"`);
+  }
+  const preset = getCanvasNodePreset(NODE_PRESETS, options.preset);
 
   switch (type) {
     case 'annotation':
-      return {
-        type,
-        position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
-        zIndex,
-        data: {
-          content: asString(data.content, ''),
-          style: typeof data.style === 'object' && data.style ? data.style : undefined,
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+          zIndex,
+          data: {
+            content: asString(data.content, ''),
+            style: typeof data.style === 'object' && data.style ? data.style : undefined,
+          },
         },
-      };
+        preset,
+      );
     case 'media':
       return {
         type,
@@ -129,17 +143,20 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
         },
       };
     case 'text':
-      return {
-        type,
-        position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
-        zIndex,
-        data: {
-          content: asString(data.content, ''),
-          format: data.format === 'markdown' ? 'markdown' : 'plain',
-          style: typeof data.style === 'object' && data.style ? data.style : undefined,
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+          zIndex,
+          data: {
+            content: asString(data.content, ''),
+            format: data.format === 'markdown' ? 'markdown' : 'plain',
+            style: typeof data.style === 'object' && data.style ? data.style : undefined,
+          },
         },
-      };
+        preset,
+      );
     case 'artboard':
       return {
         type,

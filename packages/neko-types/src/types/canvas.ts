@@ -1,3 +1,10 @@
+import type {
+  CanvasConnectionEndpoint,
+  ContainerCapability,
+  ContainerSection,
+  NodePreviewDescriptor,
+} from './canvas-layered';
+
 // =============================================================================
 // Canvas Types - Infinite Canvas Editor Data Model
 // =============================================================================
@@ -81,6 +88,16 @@ export interface CanvasNodeBase {
   locked?: boolean;
   /** Port definitions for data-flow connections (optional, backward compatible) */
   ports?: PortDefinition[];
+  /** Optional composable content tree. Nodes without it use legacy renderers. */
+  content?: ContainerSection;
+  /** Optional organization parent. Position remains absolute canvas coordinates. */
+  parentId?: string;
+  /** Optional generic container capability for Scene, Group, Artboard, and future policies. */
+  container?: ContainerCapability;
+  /** Optional stable node summary descriptor for child slots, minimaps, and Agent context. */
+  preview?: NodePreviewDescriptor;
+  /** Optional registered preset that assembled this node's capabilities. */
+  preset?: string;
 }
 
 /**
@@ -467,6 +484,10 @@ export interface CanvasConnection {
   sourcePort?: string;
   /** Target port ID (for port-based connections) */
   targetPort?: string;
+  /** Optional source endpoint for future node/port/block/field references. */
+  sourceEndpoint?: CanvasConnectionEndpoint;
+  /** Optional target endpoint for future node/port/block/field references. */
+  targetEndpoint?: CanvasConnectionEndpoint;
 }
 
 // =============================================================================

@@ -36,4 +36,28 @@ export {
   extractCanvasNodeGenerationLineage,
   type CanvasGenerationLineage,
 } from './canvasGeneration';
+export {
+  getContainerChildIds,
+  getContainerChildReferences,
+  getContainerPolicyName,
+  getLegacyContainerChildIds,
+  getLegacyNodeParentId,
+  getNodeParentId,
+  getNodeParentReferences,
+  isContainerNode,
+  type CanvasContainerChildReference,
+  type CanvasContainerChildSource,
+  type CanvasParentReference,
+  type CanvasParentReferenceSource,
+} from './canvasLayered';
+export {
+  isJsonPointerPath,
+  parseJsonPointer,
+  readFieldBinding,
+  readJsonPointer,
+  writeFieldBinding,
+  writeJsonPointer,
+  type FieldBindingReadResult,
+  type FieldBindingWriteResult,
+} from './fieldBinding';
 export { createStoryboardPayload, applyStoryboardPayloadToCanvas } from './storyboardPlanner';

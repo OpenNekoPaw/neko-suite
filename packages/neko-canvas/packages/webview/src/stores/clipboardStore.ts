@@ -77,14 +77,32 @@ function cloneWithNewIds(
   }
 
   // Clone nodes with new IDs and offset positions
-  const clonedNodes = nodes.map((node) => ({
-    ...structuredClone(node),
-    id: idMap.get(node.id)!,
-    position: {
-      x: node.position.x + offset.x,
-      y: node.position.y + offset.y,
-    },
-  }));
+  const originalNodeIds = new Set(nodes.map((node) => node.id));
+  const clonedNodes: CanvasNode[] = nodes.map((node) => {
+    const cloned = structuredClone(node);
+    const nextId = idMap.get(node.id);
+    if (!nextId) {
+      return cloned;
+    }
+
+    const nextChildIds =
+      cloned.container?.childIds
+        ?.map((childId) => idMap.get(childId))
+        .filter((childId): childId is string => Boolean(childId)) ?? [];
+    const nextParentId =
+      cloned.parentId && originalNodeIds.has(cloned.parentId)
+        ? idMap.get(cloned.parentId)
+        : undefined;
+
+    return remapClonedNode(cloned, {
+      nextId,
+      nextParentId,
+      nextChildIds,
+      offset,
+      idMap,
+      originalNodeIds,
+    });
+  });
 
   // Clone connections, only keeping those between selected nodes
   const nodeIdSet = new Set(nodes.map((n) => n.id));
@@ -98,6 +116,67 @@ function cloneWithNewIds(
     }));
 
   return { nodes: clonedNodes, connections: clonedConnections };
+}
+
+interface RemapClonedNodeOptions {
+  nextId: string;
+  nextParentId: string | undefined;
+  nextChildIds: string[];
+  offset: { x: number; y: number };
+  idMap: Map<string, string>;
+  originalNodeIds: Set<string>;
+}
+
+function remapClonedNode(node: CanvasNode, options: RemapClonedNodeOptions): CanvasNode {
+  const base = {
+    ...node,
+    id: options.nextId,
+    parentId: options.nextParentId,
+    container: node.container ? { ...node.container, childIds: options.nextChildIds } : undefined,
+    position: {
+      x: node.position.x + options.offset.x,
+      y: node.position.y + options.offset.y,
+    },
+  };
+
+  switch (node.type) {
+    case 'scene':
+      return {
+        ...base,
+        type: 'scene',
+        data: {
+          ...node.data,
+          shotIds: node.data.shotIds
+            .map((shotId) => options.idMap.get(shotId))
+            .filter((shotId): shotId is string => Boolean(shotId)),
+        },
+      };
+    case 'group':
+      return {
+        ...base,
+        type: 'group',
+        data: {
+          ...node.data,
+          childIds: node.data.childIds
+            .map((childId) => options.idMap.get(childId))
+            .filter((childId): childId is string => Boolean(childId)),
+        },
+      };
+    case 'shot':
+      return {
+        ...base,
+        type: 'shot',
+        data: {
+          ...node.data,
+          sceneGroupId:
+            node.data.sceneGroupId && options.originalNodeIds.has(node.data.sceneGroupId)
+              ? options.idMap.get(node.data.sceneGroupId)
+              : undefined,
+        },
+      };
+    default:
+      return base;
+  }
 }
 
 // =============================================================================

@@ -1,0 +1,64 @@
+import type {
+  CanvasNode,
+  CanvasNodeType,
+  ContainerDeleteBehavior,
+  ContainerPolicyName,
+} from '@neko/shared';
+
+export interface ContainerPolicy {
+  name: ContainerPolicyName;
+  acceptedNodeTypes?: CanvasNodeType[];
+  deleteBehavior: ContainerDeleteBehavior;
+  layoutMode: 'manual' | 'grid' | 'sequence';
+  allowNestedContainers: boolean;
+}
+
+export type ContainerPolicyRegistry = ReadonlyMap<ContainerPolicyName, ContainerPolicy>;
+
+const BUILT_IN_CONTAINER_POLICIES: ContainerPolicy[] = [
+  {
+    name: 'scene',
+    acceptedNodeTypes: ['shot', 'media', 'annotation', 'text', 'gallery', 'group'],
+    deleteBehavior: 'release-children',
+    layoutMode: 'sequence',
+    allowNestedContainers: true,
+  },
+  {
+    name: 'group',
+    deleteBehavior: 'release-children',
+    layoutMode: 'manual',
+    allowNestedContainers: true,
+  },
+  {
+    name: 'artboard',
+    deleteBehavior: 'release-children',
+    layoutMode: 'grid',
+    allowNestedContainers: true,
+  },
+];
+
+export function createBuiltInContainerPolicyRegistry(): ContainerPolicyRegistry {
+  return new Map(BUILT_IN_CONTAINER_POLICIES.map((policy) => [policy.name, policy]));
+}
+
+export function getContainerPolicy(
+  registry: ContainerPolicyRegistry,
+  policyName: ContainerPolicyName | undefined,
+): ContainerPolicy | undefined {
+  return policyName ? registry.get(policyName) : undefined;
+}
+
+export function canContainerAcceptChild(
+  policy: ContainerPolicy | undefined,
+  child: CanvasNode,
+): boolean {
+  if (!policy) {
+    return false;
+  }
+
+  if (!policy.allowNestedContainers && child.container) {
+    return false;
+  }
+
+  return !policy.acceptedNodeTypes || policy.acceptedNodeTypes.includes(child.type);
+}

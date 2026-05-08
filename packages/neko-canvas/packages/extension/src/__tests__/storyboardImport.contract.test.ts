@@ -9,8 +9,9 @@ describe('canvas storyboard import contracts', () => {
   it('exports a storyboard import API on NekoCanvasAPI implementation', () => {
     expect(extensionSource).toContain('storyboard: {');
     expect(extensionSource).toContain(
-      'import: (payload, options) => importStoryboardToCanvas(api, payload, options)',
+      'const created = await importStoryboardToCanvas(api, payload, options);',
     );
+    expect(extensionSource).toContain('return created;');
   });
 
   it('registers a public command for storyboard payload import', () => {

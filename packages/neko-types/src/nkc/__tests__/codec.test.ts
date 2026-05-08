@@ -11,7 +11,7 @@ import type { CanvasData } from '../../types/canvas';
 // =============================================================================
 
 const VALID_CANVAS: CanvasData = {
-  version: '1.0',
+  version: '2.0',
   name: 'Test Canvas',
   viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
   nodes: [
@@ -80,7 +80,7 @@ describe('loadNkc', () => {
   });
 
   it('should return validation errors for missing required fields', () => {
-    const result = loadNkc(JSON.stringify({ version: '1.0' }));
+    const result = loadNkc(JSON.stringify({ version: '2.0' }));
 
     expect(result.validation.valid).toBe(false);
     expect(result.validation.errors.some((e) => e.field === 'name')).toBe(true);

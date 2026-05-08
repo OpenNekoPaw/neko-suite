@@ -14,7 +14,13 @@ import type {
   ScriptScene,
   CanvasTimelineSyncPayload,
   OperationSource,
+  CanvasCreateCompositeRequest,
+  CanvasDeriveNodeRequest,
+  CanvasExtractStructuredContentRequest,
+  FieldBinding,
+  CanvasUpdateBlockRequest,
 } from '@neko/shared';
+import { isJsonPointerPath } from '@neko/shared';
 import { setLocale } from '../i18n';
 import { useCanvasOperationStore } from '../stores/canvasOperationStore';
 import {
@@ -69,13 +75,66 @@ export interface UseVSCodeMessagesOptions {
     type: CanvasNodeType;
     position: { x: number; y: number };
     data: Record<string, unknown>;
+    preset?: string;
   }) => string;
+  deriveNode?: (request: CanvasDeriveNodeRequest) => unknown;
+  createComposite?: (request: CanvasCreateCompositeRequest) => unknown;
+  updateBlock?: (request: CanvasUpdateBlockRequest) => unknown;
+  extractStructuredContent?: (request: CanvasExtractStructuredContentRequest) => unknown;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, cellId?: string) => void;
 }
 
 function withOperationSource<T>(source: OperationSource, run: () => T): T {
   return useCanvasOperationStore.getState().withOperationSource(source, run);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeFieldBinding(value: unknown): FieldBinding | undefined {
+  if (!isRecord(value) || typeof value.path !== 'string' || !isJsonPointerPath(value.path)) {
+    return undefined;
+  }
+
+  return {
+    path: value.path,
+    label: typeof value.label === 'string' ? value.label : undefined,
+    valueType: isFieldValueType(value.valueType) ? value.valueType : undefined,
+    mode: isFieldBindingMode(value.mode) ? value.mode : undefined,
+    required: typeof value.required === 'boolean' ? value.required : undefined,
+    fallback: value.fallback,
+  };
+}
+
+function normalizeUpdateBlockRequest(payload: unknown): CanvasUpdateBlockRequest {
+  const value = isRecord(payload) ? payload : {};
+  const path =
+    typeof value.path === 'string' && isJsonPointerPath(value.path) ? value.path : undefined;
+  return {
+    nodeId: typeof value.nodeId === 'string' ? value.nodeId : '',
+    blockId: typeof value.blockId === 'string' ? value.blockId : undefined,
+    path,
+    binding: normalizeFieldBinding(value.binding),
+    value: value.value,
+  };
+}
+
+function isFieldBindingMode(value: unknown): value is FieldBinding['mode'] {
+  return value === 'read' || value === 'write' || value === 'readwrite';
+}
+
+function isFieldValueType(value: unknown): value is FieldBinding['valueType'] {
+  return (
+    value === 'string' ||
+    value === 'number' ||
+    value === 'boolean' ||
+    value === 'array' ||
+    value === 'object' ||
+    value === 'asset' ||
+    value === 'unknown'
+  );
 }
 
 export interface UseVSCodeMessagesReturn {
@@ -104,6 +163,10 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     getNode,
     updateNode,
     createNode,
+    deriveNode,
+    createComposite,
+    updateBlock,
+    extractStructuredContent,
     onUpdateNodeImage,
   } = options;
 
@@ -135,6 +198,14 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   updateNodeRef.current = updateNode;
   const createNodeRef = useRef(createNode);
   createNodeRef.current = createNode;
+  const deriveNodeRef = useRef(deriveNode);
+  deriveNodeRef.current = deriveNode;
+  const createCompositeRef = useRef(createComposite);
+  createCompositeRef.current = createComposite;
+  const updateBlockRef = useRef(updateBlock);
+  updateBlockRef.current = updateBlock;
+  const extractStructuredContentRef = useRef(extractStructuredContent);
+  extractStructuredContentRef.current = extractStructuredContent;
   const onUpdateNodeImageRef = useRef(onUpdateNodeImage);
   onUpdateNodeImageRef.current = onUpdateNodeImage;
 
@@ -267,6 +338,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
                   type?: CanvasNodeType;
                   position?: { x: number; y: number };
                   data?: Record<string, unknown>;
+                  preset?: string;
                 }
               | undefined) ?? { data: {} };
             const id = withOperationSource(
@@ -276,9 +348,101 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
                   type: payload.type ?? 'annotation',
                   position: payload.position ?? { x: 0, y: 0 },
                   data: payload.data ?? {},
+                  preset: payload.preset,
                 }) ?? '',
             );
             vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
+            break;
+          }
+          case 'nodes.derive': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const result = withOperationSource('ai', () =>
+                deriveNodeRef.current?.(
+                  (message.payload as CanvasDeriveNodeRequest | undefined) ?? {
+                    sourceNodeId: '',
+                  },
+                ),
+              );
+              if (!isRecord(result)) {
+                throw new Error('Derive operation failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'nodes.createComposite': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const result = withOperationSource('ai', () =>
+                createCompositeRef.current?.(
+                  (message.payload as CanvasCreateCompositeRequest | undefined) ?? {
+                    children: [],
+                  },
+                ),
+              );
+              if (!isRecord(result)) {
+                throw new Error('Composite creation failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'nodes.updateBlock': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const result = withOperationSource('ai', () =>
+                updateBlockRef.current?.(normalizeUpdateBlockRequest(message.payload)),
+              );
+              if (!isRecord(result)) {
+                throw new Error('Block update failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'nodes.extractStructuredContent': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              // Read-only query: no operation source override because no edit operation is recorded.
+              const result = extractStructuredContentRef.current?.(
+                (message.payload as CanvasExtractStructuredContentRequest | undefined) ?? {
+                  format: 'json',
+                },
+              );
+              if (!isRecord(result)) {
+                throw new Error('Structured content extraction failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
             break;
           }
 

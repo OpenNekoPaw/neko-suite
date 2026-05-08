@@ -32,6 +32,7 @@ import {
   StoryboardNode,
   TextNode,
 } from './index';
+import { NodeContentDispatcher } from '../content';
 
 export interface NodeRendererCommonProps {
   viewport: CanvasViewport;
@@ -222,10 +223,14 @@ export function renderCanvasNode(
   context: NodeRendererContext,
 ): React.ReactNode {
   const renderer = registry[context.node.type];
-  return renderer ? renderer(context) : null;
-}
+  if (!renderer) {
+    return null;
+  }
 
-// Re-export descriptor types and factory for consumers migrating to the unified registry
-export { createBuiltInNodeTypeDescriptors } from './nodeTypeDescriptors';
-export type { NodeTypeDescriptor, NodeTypeDescriptorRegistry } from './nodeTypeDescriptor';
-export { getNodeLabel, getNodeIcon, getNodeDefaultSize } from './nodeTypeDescriptor';
+  return (
+    <NodeContentDispatcher
+      context={context}
+      renderLegacy={(legacyContext) => renderer(legacyContext)}
+    />
+  );
+}

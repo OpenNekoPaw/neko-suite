@@ -18,6 +18,16 @@ import type {
   SceneGroupCanvasNode,
   GalleryCanvasNode,
 } from './canvas';
+import type {
+  CanvasCreateCompositeRequest,
+  CanvasCreateCompositeResult,
+  CanvasDeriveNodeRequest,
+  CanvasDeriveNodeResult,
+  CanvasExtractStructuredContentRequest,
+  CanvasExtractStructuredContentResult,
+  CanvasUpdateBlockRequest,
+  CanvasUpdateBlockResult,
+} from './canvas-agent-operations';
 import type { ProjectData } from './project';
 import type {
   ApplyCanvasStoryboardOptions,
@@ -288,7 +298,34 @@ export interface NekoCanvasAPI {
      * Create a new node at the given canvas position
      * @returns The ID of the created node
      */
-    create(type: CanvasNodeType, position: { x: number; y: number }, data: object): Promise<string>;
+    create(
+      type: CanvasNodeType,
+      position: { x: number; y: number },
+      data: object,
+      preset?: string,
+    ): Promise<string>;
+
+    /**
+     * Derive a successor node from an existing node through registered preset rules.
+     */
+    derive(request: CanvasDeriveNodeRequest): Promise<CanvasDeriveNodeResult>;
+
+    /**
+     * Create a container and its child nodes as one logical canvas mutation.
+     */
+    createComposite(request: CanvasCreateCompositeRequest): Promise<CanvasCreateCompositeResult>;
+
+    /**
+     * Update data bound by a composable block or explicit JSON Pointer path.
+     */
+    updateBlock(request: CanvasUpdateBlockRequest): Promise<CanvasUpdateBlockResult>;
+
+    /**
+     * Extract selected node content as JSON, markdown, or prompt-oriented text.
+     */
+    extractStructuredContent(
+      request: CanvasExtractStructuredContentRequest,
+    ): Promise<CanvasExtractStructuredContentResult>;
 
     /**
      * Trigger image generation for a ShotNode or a specific GalleryCell.

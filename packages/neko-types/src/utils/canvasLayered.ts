@@ -1,0 +1,137 @@
+// =============================================================================
+// Canvas Layered Model Helpers
+//
+// Pure compatibility helpers for the v1 legacy containment fields and the
+// v2 optional layered organization contracts.
+// =============================================================================
+
+import type { CanvasNode } from '../types/canvas';
+import type { ContainerPolicyName } from '../types/canvas-layered';
+
+export type CanvasContainerChildSource =
+  | 'container'
+  | 'legacy-scene-shotIds'
+  | 'legacy-group-childIds';
+
+export interface CanvasContainerChildReference {
+  parentId: string;
+  childId: string;
+  source: CanvasContainerChildSource;
+}
+
+export type CanvasParentReferenceSource = 'parentId' | 'legacy-shot-sceneGroupId';
+
+export interface CanvasParentReference {
+  nodeId: string;
+  parentId: string;
+  source: CanvasParentReferenceSource;
+}
+
+export function getLegacyContainerChildIds(node: CanvasNode): string[] {
+  switch (node.type) {
+    case 'scene':
+      return node.data.shotIds;
+    case 'group':
+      return node.data.childIds;
+    default:
+      return [];
+  }
+}
+
+export function getContainerChildIds(node: CanvasNode): string[] {
+  return uniqueStrings([...(node.container?.childIds ?? []), ...getLegacyContainerChildIds(node)]);
+}
+
+export function getContainerChildReferences(node: CanvasNode): CanvasContainerChildReference[] {
+  const references: CanvasContainerChildReference[] = [];
+
+  for (const childId of node.container?.childIds ?? []) {
+    references.push({ parentId: node.id, childId, source: 'container' });
+  }
+
+  const legacySource = getLegacyContainerChildSource(node);
+  if (legacySource) {
+    for (const childId of getLegacyContainerChildIds(node)) {
+      references.push({ parentId: node.id, childId, source: legacySource });
+    }
+  }
+
+  return references;
+}
+
+export function getLegacyNodeParentId(node: CanvasNode): string | undefined {
+  if (node.type === 'shot') {
+    return node.data.sceneGroupId;
+  }
+
+  return undefined;
+}
+
+export function getNodeParentId(node: CanvasNode): string | undefined {
+  return node.parentId ?? getLegacyNodeParentId(node);
+}
+
+export function getNodeParentReferences(node: CanvasNode): CanvasParentReference[] {
+  const references: CanvasParentReference[] = [];
+
+  if (node.parentId) {
+    references.push({ nodeId: node.id, parentId: node.parentId, source: 'parentId' });
+  }
+
+  const legacyParentId = getLegacyNodeParentId(node);
+  if (legacyParentId) {
+    references.push({
+      nodeId: node.id,
+      parentId: legacyParentId,
+      source: 'legacy-shot-sceneGroupId',
+    });
+  }
+
+  return references;
+}
+
+export function isContainerNode(node: CanvasNode): boolean {
+  return getContainerChildIds(node).length > 0 || node.container !== undefined;
+}
+
+export function getContainerPolicyName(node: CanvasNode): ContainerPolicyName | undefined {
+  if (node.container?.policy) {
+    return node.container.policy;
+  }
+
+  switch (node.type) {
+    case 'scene':
+      return 'scene';
+    case 'group':
+      return 'group';
+    case 'artboard':
+      return 'artboard';
+    default:
+      return undefined;
+  }
+}
+
+function getLegacyContainerChildSource(node: CanvasNode): CanvasContainerChildSource | undefined {
+  switch (node.type) {
+    case 'scene':
+      return 'legacy-scene-shotIds';
+    case 'group':
+      return 'legacy-group-childIds';
+    default:
+      return undefined;
+  }
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    if (!seen.has(value)) {
+      seen.add(value);
+      result.push(value);
+    }
+  }
+
+  return result;
+}

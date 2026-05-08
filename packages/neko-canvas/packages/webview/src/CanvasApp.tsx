@@ -436,9 +436,15 @@ export function CanvasApp() {
         position: nodeSpec.position,
         data: nodeSpec.data,
         zIndex: currentNodes.length,
+        preset: nodeSpec.preset,
       });
       return useCanvasStore.getState().addNode(node);
     },
+    deriveNode: (request) => useCanvasStore.getState().deriveNode(request),
+    createComposite: (request) => useCanvasStore.getState().createComposite(request),
+    updateBlock: (request) => useCanvasStore.getState().updateBlock(request),
+    extractStructuredContent: (request) =>
+      useCanvasStore.getState().extractStructuredContent(request),
   });
 
   // =========================================================================
