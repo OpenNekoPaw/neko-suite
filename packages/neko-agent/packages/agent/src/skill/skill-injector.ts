@@ -38,7 +38,7 @@ export class SkillInjector implements ISkillInjector {
   async injectSkill(skill: Skill, args?: string): Promise<SkillInjection> {
     const startTime = Date.now();
     const logger = getSkillInjectorLogger();
-    logger.info('neko.agent.skill.injector.request', {
+    logger.debug('neko.agent.skill.injector.request', {
       skillName: skill.name,
       command: skill.command,
       type: skill.command ? 'slash-command' : 'skill',
@@ -93,7 +93,7 @@ export class SkillInjector implements ISkillInjector {
       model: skill.model,
       type: skill.command ? 'slash-command' : 'skill',
     };
-    logger.info('neko.agent.skill.injector.result', {
+    logger.debug('neko.agent.skill.injector.result', {
       skillName: skill.name,
       injectionName: injection.name,
       type: injection.type,

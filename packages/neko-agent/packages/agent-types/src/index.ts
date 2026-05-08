@@ -7,6 +7,7 @@
 // Message protocol
 export type {
   Message,
+  MessageContextReference,
   ToolCall,
   ContentBlock,
   ContentBlockType,

@@ -33,7 +33,12 @@ let modelEditorProvider: ModelEditorProvider;
 
 export function activate(context: vscode.ExtensionContext): void {
   // Initialize shared logger
-  const logger = createVSCodeLogger('Neko Model', 'NekoModel', context, resolveLogLevelSetting());
+  const logger = createVSCodeLogger(
+    'Neko Model',
+    'NekoModel',
+    context,
+    resolveLogLevelSetting(context.extensionMode),
+  );
   setRootLogger(logger);
   watchLogLevel(logger, context);
   getRootLogger().info('Activating extension...');

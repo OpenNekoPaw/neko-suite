@@ -38,7 +38,7 @@ const logger = getLogger('ToolHandlers');
  * Creates a tool_call content block; toolCalls[] is auto-derived
  */
 const handleToolCall: MessageHandler<'toolCall'> = (message: ToolCallMessage, context) => {
-  logger.info('handleToolCall received:', {
+  logger.debug('handleToolCall received:', {
     conversationId: message.conversationId,
     messageId: message.messageId,
     toolName: message.toolName,
@@ -56,7 +56,7 @@ const handleToolCall: MessageHandler<'toolCall'> = (message: ToolCallMessage, co
       arguments: message.arguments,
     });
 
-    logger.info('toolCall projected:', {
+    logger.debug('toolCall projected:', {
       updated: projection.updated,
       targetMessageId: projection.targetMessageId,
       createdStreamingMessage: projection.streamingMessageId !== undefined,
@@ -76,7 +76,7 @@ const handleToolCall: MessageHandler<'toolCall'> = (message: ToolCallMessage, co
 const handleToolResult: MessageHandler<'toolResult'> = (message: ToolResultMessage, context) => {
   let projection: ToolResultMessageProjectionResult | undefined;
 
-  logger.info('toolResult received:', {
+  logger.debug('toolResult received:', {
     success: message.success,
     data: message.data,
     messageId: message.messageId,
@@ -97,11 +97,11 @@ const handleToolResult: MessageHandler<'toolResult'> = (message: ToolResultMessa
     });
 
     if (!projection.updated) {
-      logger.info('No target message found for toolResult');
+      logger.debug('No target message found for toolResult');
     }
 
     if (message.plan) {
-      logger.info('Received pre-parsed plan from Extension:', {
+      logger.debug('Received pre-parsed plan from Extension:', {
         planId: message.plan.id,
         title: message.plan.title,
         stepsCount: message.plan.steps.length,
@@ -128,7 +128,7 @@ const handleToolResultBackfill: MessageHandler<'toolResultBackfill'> = (
   message: ToolResultBackfillMessage,
   context,
 ) => {
-  logger.info('toolResultBackfill received:', {
+  logger.debug('toolResultBackfill received:', {
     messageId: message.messageId,
     toolCallId: message.toolCallId,
   });
@@ -141,7 +141,7 @@ const handleToolResultBackfill: MessageHandler<'toolResultBackfill'> = (
     });
 
     if (!projection.updated) {
-      logger.info('No target message found for toolResultBackfill');
+      logger.debug('No target message found for toolResultBackfill');
     }
 
     return { messages: projection.messages };
@@ -158,7 +158,7 @@ const handleToolConfirmation: MessageHandler<'toolConfirmation'> = (
 ) => {
   const toolCallId = message.toolCallId;
 
-  logger.info('toolConfirmation received:', {
+  logger.debug('toolConfirmation received:', {
     conversationId: message.conversationId,
     toolCallId,
     toolName: message.toolName,
@@ -175,7 +175,7 @@ const handleToolConfirmation: MessageHandler<'toolConfirmation'> = (
     });
 
     if (!projection.updated) {
-      logger.info('No target message found for toolConfirmation');
+      logger.debug('No target message found for toolConfirmation');
     }
 
     return { messages: projection.messages };

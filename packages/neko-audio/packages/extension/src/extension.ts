@@ -66,7 +66,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
     'Neko Audio',
     'NekoAudio',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));

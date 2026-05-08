@@ -218,20 +218,25 @@ export function initializeSession(
     config.skillService.setDiscoveryEnabled(false);
   }
 
-  // Step 5: Register core meta tools
+  // Step 5: Register core meta tools (idempotent — shared registry survives across sessions)
   const metaTools = createCoreMetaTools(
     toolCategoryRegistry,
     toolInjectionManager,
     toolGroupRegistry,
   );
   for (const tool of metaTools) {
-    config.toolRegistry.register(tool);
+    if (!config.toolRegistry.get(tool.name)) {
+      config.toolRegistry.register(tool);
+    }
     toolCategoryRegistry.categorizeTool(tool.name, 'system', 'always');
   }
 
   if (!ablationMarker?.disableAgentFirstToolEvidence) {
     if (config.perceptionPipeline) {
-      config.toolRegistry.register(new PerceiveTool({ pipeline: config.perceptionPipeline }));
+      const perceiveTool = new PerceiveTool({ pipeline: config.perceptionPipeline });
+      if (!config.toolRegistry.get(perceiveTool.name)) {
+        config.toolRegistry.register(perceiveTool);
+      }
     }
     for (const tool of createPerceptionTools({
       ...(config.perceptionClients?.transcribe && {
@@ -247,7 +252,9 @@ export function initializeSession(
         detectShotsClient: config.perceptionClients.detectShots,
       }),
     })) {
-      config.toolRegistry.register(tool);
+      if (!config.toolRegistry.get(tool.name)) {
+        config.toolRegistry.register(tool);
+      }
     }
   }
 

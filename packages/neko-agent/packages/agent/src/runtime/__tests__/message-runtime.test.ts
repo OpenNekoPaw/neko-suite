@@ -22,6 +22,7 @@ import {
   projectAgentFileMentions,
   projectAgentMentionExtras,
   projectAgentProjectFilesMessage,
+  projectContextReferences,
   runAgentMessageTurnRuntime,
   selectAgentTurnProvider,
   shouldHydrateAgentHistory,
@@ -301,6 +302,7 @@ describe('message runtime helpers', () => {
         role: 'user',
         content: 'render this [File: clip]\n/tmp/clip.mp4',
         timestamp: 123,
+        attachments: [{ id: 'att-1', name: 'notes.txt', type: 'file', path: '/tmp/notes.txt' }],
       },
       mediaImages: [
         { type: 'base64', media_type: 'image/png', data: 'attached' },
@@ -879,5 +881,76 @@ describe('message runtime helpers', () => {
         executionMetadata: undefined,
       }),
     );
+  });
+
+  it('projectContextReferences extracts lightweight references from payloads', () => {
+    expect(projectContextReferences(undefined)).toBeUndefined();
+    expect(projectContextReferences([])).toBeUndefined();
+
+    expect(
+      projectContextReferences([
+        {
+          type: 'file',
+          id: 'f1',
+          label: 'notes.txt',
+          summary: 'File: notes.txt',
+          data: { filePath: '/tmp/notes.txt' },
+        },
+        {
+          type: 'canvas-node',
+          id: 'node-42',
+          label: 'Shot #003',
+          summary: 'Wide shot',
+          data: { nodes: ['node-42'] },
+        },
+        {
+          type: 'story-selection',
+          id: 's1',
+          label: 'Scene 1',
+          summary: 'Selected text',
+          data: { selectedText: 'Once upon a time' },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: 'file',
+        id: 'f1',
+        label: 'notes.txt',
+        navigationData: { filePath: '/tmp/notes.txt' },
+      },
+      {
+        type: 'canvas-node',
+        id: 'node-42',
+        label: 'Shot #003',
+        navigationData: { nodeId: 'node-42' },
+      },
+      { type: 'story-selection', id: 's1', label: 'Scene 1' },
+    ]);
+  });
+
+  it('prepareAgentMessageDispatch includes contextReferences in userMessage', async () => {
+    const result = await prepareAgentMessageDispatch({
+      request: {
+        conversationId: 'conv-1',
+        messageText: 'describe this',
+        sessionMode: 'agent',
+        contextPayloads: [
+          {
+            type: 'file',
+            id: 'f1',
+            label: 'img.png',
+            summary: '',
+            data: { filePath: '/tmp/img.png' },
+          },
+        ],
+      },
+      processAttachments: async () => ({ textContent: '', imageAttachments: [] }),
+      generateMessageId: () => 'msg-1',
+      now: () => 100,
+    });
+
+    expect(result.userMessage.contextReferences).toEqual([
+      { type: 'file', id: 'f1', label: 'img.png', navigationData: { filePath: '/tmp/img.png' } },
+    ]);
   });
 });

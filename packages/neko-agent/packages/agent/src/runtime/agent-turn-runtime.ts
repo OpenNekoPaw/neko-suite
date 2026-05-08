@@ -334,7 +334,7 @@ export async function executeAgentTurn<
 ): Promise<AgentTurnExecutionResult> {
   const startTime = Date.now();
   const logger = getAgentTurnRuntimeLogger();
-  logger.info('neko.agent.turn.execute.request', {
+  logger.debug('neko.agent.turn.execute.request', {
     conversationId: input.conversationId,
     messageChars: input.message.length,
     hasPlatform: input.platform !== undefined && input.platform !== null,
@@ -476,7 +476,7 @@ export async function executeAgentTurn<
     multimodalContextPacket,
     executionMetadata: turnConfig.executionMetadata,
   });
-  logger.info('neko.agent.turn.context.patch', {
+  logger.debug('neko.agent.turn.context.patch', {
     conversationId: input.conversationId,
     workspaceRoot,
     ambientCanvasCount: ambientCanvas.length,
@@ -542,7 +542,7 @@ export async function executeAgentTurn<
     });
     if (assistantMessage) {
       input.conversations.addAssistantMessage(input.conversationId, assistantMessage);
-      logger.info('neko.agent.turn.execute.result', {
+      logger.debug('neko.agent.turn.execute.result', {
         conversationId: input.conversationId,
         durationMs: Date.now() - startTime,
         status: 'completed',
@@ -559,7 +559,7 @@ export async function executeAgentTurn<
       return { status: 'completed', assistantMessage };
     }
 
-    logger.info('neko.agent.turn.execute.result', {
+    logger.debug('neko.agent.turn.execute.result', {
       conversationId: input.conversationId,
       durationMs: Date.now() - startTime,
       status: 'completed',

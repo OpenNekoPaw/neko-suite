@@ -5,6 +5,7 @@ import type {
   GlobalErrorMessage,
   MediaModelCategory,
   Message,
+  MessageContextReference,
   ModelRef,
   ProjectFileMentionInfo,
   ProjectFilesWebviewMessage,
@@ -481,13 +482,37 @@ export async function mergeReferencedMediaImageAttachments(
   return result;
 }
 
+export function projectContextReferences(
+  payloads: readonly AgentContextPayload[] | undefined,
+): MessageContextReference[] | undefined {
+  if (!payloads || payloads.length === 0) return undefined;
+  return payloads.map((p) => ({
+    type: p.type,
+    id: p.id,
+    label: p.label,
+    navigationData: extractContextNavigationData(p),
+  }));
+}
+
+function extractContextNavigationData(
+  payload: AgentContextPayload,
+): Record<string, string> | undefined {
+  const data = payload.data as Record<string, unknown> | null | undefined;
+  if (!data || typeof data !== 'object') return undefined;
+  const nav: Record<string, string> = {};
+  if (typeof data['filePath'] === 'string') nav['filePath'] = data['filePath'];
+  if (typeof data['path'] === 'string') nav['path'] = data['path'];
+  if (payload.type === 'canvas-node') nav['nodeId'] = payload.id;
+  return Object.keys(nav).length > 0 ? nav : undefined;
+}
+
 export async function prepareAgentMessageDispatch(
   input: PrepareAgentMessageDispatchInput,
 ): Promise<PreparedAgentMessageDispatch> {
   const startTime = Date.now();
   const request = input.request;
   const logger = getMessageRuntimeLogger();
-  logger.info('neko.agent.message.assembly.request', {
+  logger.debug('neko.agent.message.assembly.request', {
     conversationId: request.conversationId,
     sessionMode: request.sessionMode,
     messageChars: request.messageText.length,
@@ -543,7 +568,7 @@ export async function prepareAgentMessageDispatch(
       ? { kind: 'media', mediaModel: request.mediaModel }
       : { kind: 'agent' };
 
-  logger.info('neko.agent.message.assembly.result', {
+  logger.debug('neko.agent.message.assembly.result', {
     conversationId: request.conversationId,
     durationMs: Date.now() - startTime,
     routeKind: route.kind,
@@ -572,6 +597,8 @@ export async function prepareAgentMessageDispatch(
     userMessageContent: request.messageText,
   });
 
+  const contextReferences = projectContextReferences(request.contextPayloads);
+
   return {
     conversationId: request.conversationId,
     enhancedMessage,
@@ -580,6 +607,10 @@ export async function prepareAgentMessageDispatch(
       role: 'user',
       content: request.messageText,
       timestamp: input.now?.() ?? Date.now(),
+      ...(request.attachments && request.attachments.length > 0
+        ? { attachments: request.attachments }
+        : {}),
+      ...(contextReferences ? { contextReferences } : {}),
     },
     mediaImages,
     route,

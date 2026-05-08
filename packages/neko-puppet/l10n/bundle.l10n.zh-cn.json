@@ -1,4 +1,5 @@
 {
+  "neko.puppet.editor.title": "Puppet 编辑器",
   "neko.puppet.new.title": "新建 Puppet",
   "neko.puppet.new.noFolder": "未打开工作区文件夹",
   "neko.puppet.new.pickTemplate": "选择模板",

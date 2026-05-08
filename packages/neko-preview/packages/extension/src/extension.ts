@@ -72,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
     'Neko Preview',
     'NekoPreview',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));

@@ -1,8 +1,8 @@
 /**
- * BrowseFilters — AssetCategory → AssetType → kind filtering for Browse.
+ * BrowseFilters — Compact dropdown-based filter bar for Browse.
  */
 
-import React from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   buildBrowseQueryFromState,
   useMarketplaceStore,
@@ -77,110 +77,139 @@ export const BrowseFilters: React.FC = () => {
     isPricingSupported(option.key, serverInfo?.capabilities),
   );
 
-  const runSearch = (next: Partial<BrowseFilterState>) => {
-    setBrowseFilters(next);
-    setSearching(true);
-    const merged = { ...browseFilters, ...next };
-    MarketMessages.search(buildBrowseQueryFromState(searchText, merged));
-  };
+  const runSearch = useCallback(
+    (next: Partial<BrowseFilterState>) => {
+      setBrowseFilters(next);
+      setSearching(true);
+      const merged = { ...browseFilters, ...next };
+      MarketMessages.search(buildBrowseQueryFromState(searchText, merged));
+    },
+    [browseFilters, searchText, setBrowseFilters, setSearching],
+  );
+
+  const typeOptions: Array<{ key: string; label: string }> = [
+    { key: 'all', label: t('marketplace.filter.all') },
+    ...availableTypes.map((type) => ({ key: type, label: t(`marketplace.filter.${type}`) })),
+  ];
+
+  const kindDropdownOptions: Array<{ key: string; label: string }> = [
+    { key: '', label: t('marketplace.filter.all') },
+    ...kindOptions.map((kind) => ({ key: kind, label: kind })),
+  ];
 
   return (
     <div className="browse-filters">
-      <SegmentedGroup label={t('marketplace.filter.category')}>
-        {CATEGORY_OPTIONS.map(({ key, i18nKey }) => (
-          <FilterButton
-            key={key}
-            active={browseFilters.category === key}
-            onClick={() => runSearch({ category: key, type: 'all', kind: undefined })}
-          >
-            {t(i18nKey)}
-          </FilterButton>
-        ))}
-      </SegmentedGroup>
+      <FilterDropdown
+        label={t('marketplace.filter.category')}
+        value={browseFilters.category}
+        options={CATEGORY_OPTIONS.map(({ key, i18nKey }) => ({
+          key,
+          label: t(i18nKey),
+        }))}
+        onChange={(key) =>
+          runSearch({
+            category: key as BrowseFilterState['category'],
+            type: 'all',
+            kind: undefined,
+          })
+        }
+      />
 
-      <SegmentedGroup label={t('marketplace.filter.type')}>
-        <FilterButton
-          active={browseFilters.type === 'all'}
-          onClick={() => runSearch({ type: 'all', kind: undefined })}
-        >
-          {t('marketplace.filter.all')}
-        </FilterButton>
-        {availableTypes.map((type) => (
-          <FilterButton
-            key={type}
-            active={browseFilters.type === type}
-            onClick={() => runSearch({ type, kind: undefined })}
-          >
-            {t(`marketplace.filter.${type}`)}
-          </FilterButton>
-        ))}
-      </SegmentedGroup>
+      <FilterDropdown
+        label={t('marketplace.filter.type')}
+        value={browseFilters.type}
+        options={typeOptions}
+        onChange={(key) => runSearch({ type: key as AssetType | 'all', kind: undefined })}
+      />
 
       {kindOptions.length > 0 && (
-        <SegmentedGroup label={t('marketplace.filter.kind')}>
-          <FilterButton active={!browseFilters.kind} onClick={() => runSearch({ kind: undefined })}>
-            {t('marketplace.filter.all')}
-          </FilterButton>
-          {kindOptions.map((kind) => (
-            <FilterButton
-              key={kind}
-              active={browseFilters.kind === kind}
-              onClick={() => runSearch({ kind })}
-            >
-              {kind}
-            </FilterButton>
-          ))}
-        </SegmentedGroup>
+        <FilterDropdown
+          label={t('marketplace.filter.kind')}
+          value={browseFilters.kind ?? ''}
+          options={kindDropdownOptions}
+          onChange={(key) => runSearch({ kind: key || undefined })}
+        />
       )}
 
-      <SegmentedGroup label={t('marketplace.filter.sort')}>
-        {sortOptions.map(({ key, i18nKey }) => (
-          <FilterButton
-            key={key}
-            active={browseFilters.sort === key}
-            onClick={() => runSearch({ sort: key })}
-          >
-            {t(i18nKey)}
-          </FilterButton>
-        ))}
-      </SegmentedGroup>
+      <FilterDropdown
+        label={t('marketplace.filter.sort')}
+        value={browseFilters.sort}
+        options={sortOptions.map(({ key, i18nKey }) => ({
+          key,
+          label: t(i18nKey),
+        }))}
+        onChange={(key) => runSearch({ sort: key as MarketSort })}
+      />
 
-      <SegmentedGroup label={t('marketplace.filter.pricing')}>
-        {pricingOptions.map(({ key, i18nKey }) => (
-          <FilterButton
-            key={key}
-            active={browseFilters.pricing === key}
-            onClick={() => runSearch({ pricing: key })}
-          >
-            {t(i18nKey)}
-          </FilterButton>
-        ))}
-      </SegmentedGroup>
+      {pricingOptions.length > 1 && (
+        <FilterDropdown
+          label={t('marketplace.filter.pricing')}
+          value={browseFilters.pricing}
+          options={pricingOptions.map(({ key, i18nKey }) => ({
+            key,
+            label: t(i18nKey),
+          }))}
+          onChange={(key) => runSearch({ pricing: key as MarketPricing })}
+        />
+      )}
     </div>
   );
 };
 
-function SegmentedGroup(props: { label: string; children: React.ReactNode }): JSX.Element {
-  return (
-    <div className="filter-group" role="group" aria-label={props.label}>
-      <span className="filter-group__label">{props.label}</span>
-      <div className="filter-group__items">{props.children}</div>
-    </div>
-  );
-}
-
-function FilterButton(props: {
-  active: boolean;
-  children: React.ReactNode;
-  onClick: () => void;
+function FilterDropdown(props: {
+  label: string;
+  value: string;
+  options: Array<{ key: string; label: string }>;
+  onChange: (key: string) => void;
 }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedLabel =
+    props.options.find((o) => o.key === props.value)?.label ?? props.options[0]?.label ?? '';
+
+  const isDefault = props.value === props.options[0]?.key;
+
+  const handleBlur = useCallback((e: React.FocusEvent) => {
+    if (!containerRef.current?.contains(e.relatedTarget as Node)) {
+      setOpen(false);
+    }
+  }, []);
+
   return (
-    <button
-      className={`type-chip ${props.active ? 'type-chip--active' : ''}`}
-      onClick={props.onClick}
-    >
-      {props.children}
-    </button>
+    <div className="filter-dropdown" ref={containerRef} onBlur={handleBlur}>
+      <button
+        className={`filter-dropdown__trigger${!isDefault ? ' filter-dropdown__trigger--active' : ''}`}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label={props.label}
+      >
+        <span className="filter-dropdown__label">{props.label}</span>
+        <span className="filter-dropdown__value">{selectedLabel}</span>
+        <span className="filter-dropdown__chevron codicon codicon-chevron-down" />
+      </button>
+      {open && (
+        <div className="filter-dropdown__menu" role="listbox" aria-label={props.label}>
+          {props.options.map(({ key, label }) => (
+            <button
+              key={key}
+              className={`filter-dropdown__item${key === props.value ? ' filter-dropdown__item--active' : ''}`}
+              role="option"
+              aria-selected={key === props.value}
+              onClick={() => {
+                props.onChange(key);
+                setOpen(false);
+              }}
+            >
+              {key === props.value && (
+                <span className="codicon codicon-check filter-dropdown__check" />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

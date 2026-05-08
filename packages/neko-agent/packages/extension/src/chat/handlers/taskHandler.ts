@@ -129,7 +129,7 @@ export class TaskHandler {
       openTaskResult: (plan: TaskResultOpenPlan) => this.executeOpenPlan(plan),
       onRejectedAction: ({ action, plan }) => this.logRejectedTaskAction(action, plan),
       onTaskRetried: ({ taskId, newTaskId }) => {
-        logger.info('Task retried', { originalTaskId: taskId, newTaskId });
+        logger.debug('Task retried', { originalTaskId: taskId, newTaskId });
       },
       onRetryFailed: ({ taskId, error }) => {
         logger.error('Failed to retry task', { taskId, error });

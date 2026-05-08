@@ -20,7 +20,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoMa
     'Neko Marketplace',
     'NekoMarket',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   watchLogLevel(logger, context);
 

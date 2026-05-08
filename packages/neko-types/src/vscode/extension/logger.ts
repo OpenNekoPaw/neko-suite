@@ -85,10 +85,34 @@ const RUST_LOG_MAP: Record<LogLevel, string> = {
 
 /**
  * Read `neko.logLevel` from VSCode settings and map to LogLevel enum.
+ *
+ * When the user has not explicitly set `neko.logLevel`, the default is
+ * chosen by ExtensionMode:
+ *   Development → Debug | Production / Test → Warn
+ *
+ * An explicit user setting (global / workspace / folder) always wins.
  */
-export function resolveLogLevelSetting(): LogLevel {
-  const raw = vscode.workspace.getConfiguration('neko').get<string>('logLevel', 'info');
-  return LOG_LEVEL_MAP[raw] ?? LogLevel.Info;
+export function resolveLogLevelSetting(extensionMode?: vscode.ExtensionMode): LogLevel {
+  const config = vscode.workspace.getConfiguration('neko');
+  const inspection = config.inspect<string>('logLevel');
+
+  const explicit =
+    inspection?.globalValue ?? inspection?.workspaceValue ?? inspection?.workspaceFolderValue;
+
+  if (explicit !== undefined) {
+    return LOG_LEVEL_MAP[explicit] ?? LogLevel.Info;
+  }
+
+  // ExtensionMode enum: Production = 1, Development = 2, Test = 3
+  switch (extensionMode) {
+    case 2:
+      return LogLevel.Debug;
+    case 1:
+    case 3:
+      return LogLevel.Warn;
+    default:
+      return LogLevel.Info;
+  }
 }
 
 /**
@@ -97,12 +121,12 @@ export function resolveLogLevelSetting(): LogLevel {
  * on next `init_tracing()` call.
  */
 export function watchLogLevel(logger: ConsoleLogger, context: vscode.ExtensionContext): void {
-  syncRustLogEnv(resolveLogLevelSetting());
+  syncRustLogEnv(resolveLogLevelSetting(context.extensionMode));
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('neko.logLevel')) {
-        const level = resolveLogLevelSetting();
+        const level = resolveLogLevelSetting(context.extensionMode);
         logger.setLevel(level);
         syncRustLogEnv(level);
       }

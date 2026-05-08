@@ -54,7 +54,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(outputChannel);
 
   // Initialize structured logger and error handler
-  const logger = createVSCodeLogger('Neko Engine', 'NekoEngine', context, resolveLogLevelSetting());
+  const logger = createVSCodeLogger(
+    'Neko Engine',
+    'NekoEngine',
+    context,
+    resolveLogLevelSetting(context.extensionMode),
+  );
   setRootLogger(logger);
   setErrorHandler(new VSCodeErrorHandler(logger));
   watchLogLevel(logger, context);

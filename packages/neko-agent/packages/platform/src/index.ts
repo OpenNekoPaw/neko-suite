@@ -431,7 +431,7 @@ export function createPlatform(options: PlatformOptions): Platform {
 
     startPlatformTaskManager(mediaTaskManager);
   } else {
-    logger.info('taskManager not provided — media generation disabled');
+    logger.debug('taskManager not provided — media generation disabled');
     mediaGenerationService = undefined;
   }
 

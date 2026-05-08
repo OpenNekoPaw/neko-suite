@@ -116,7 +116,7 @@ export class SkillInjectionCoordinator {
   apply(injection: SkillInjection, skill?: Skill): void {
     const startTime = Date.now();
     const logger = getSkillInjectionLogger();
-    logger.info('neko.agent.skill.injection.request', {
+    logger.debug('neko.agent.skill.injection.request', {
       skillName: injection.name,
       type: injection.type,
       skillSource: skill ? summarizeSkillSource(skill) : undefined,
@@ -139,7 +139,7 @@ export class SkillInjectionCoordinator {
     // observe the call succeeded (no throw) but no state changes — consistent
     // with "skill discovered but not injected" semantics.
     if (this._deps.enableInjection === false) {
-      logger.info('neko.agent.skill.injection.skipped', {
+      logger.debug('neko.agent.skill.injection.skipped', {
         skillName: injection.name,
         type: injection.type,
         reason: 'disabled-by-ablation',
@@ -194,7 +194,7 @@ export class SkillInjectionCoordinator {
         toolGuard,
         activatedToolSets,
       };
-      logger.info('neko.agent.skill.injection.applied', {
+      logger.debug('neko.agent.skill.injection.applied', {
         skillName: injection.name,
         type: injection.type,
         durationMs: Date.now() - startTime,
@@ -297,7 +297,7 @@ export class SkillInjectionCoordinator {
   private _removeInternal(name: string): void {
     const startTime = Date.now();
     const logger = getSkillInjectionLogger();
-    logger.info('neko.agent.skill.injection.remove.request', {
+    logger.debug('neko.agent.skill.injection.remove.request', {
       skillName: name,
       hasActiveInjection: this._activeInjection !== null,
       activeSkillName: this._activeInjection?.name,
@@ -331,7 +331,7 @@ export class SkillInjectionCoordinator {
       this._activeInjection = null;
     }
 
-    logger.info('neko.agent.skill.injection.removed', {
+    logger.debug('neko.agent.skill.injection.removed', {
       skillName: name,
       durationMs: Date.now() - startTime,
       removedAllowRuleCount,

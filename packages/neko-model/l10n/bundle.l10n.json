@@ -15,5 +15,11 @@
   "neko.model.liveMode.start.title": "Start Model Live Mode",
   "neko.model.liveMode.stop.title": "Stop Model Live Mode",
   "neko.model.liveMode.started": "Model Live Mode started",
-  "neko.model.liveMode.stopped": "Model Live Mode stopped"
+  "neko.model.liveMode.stopped": "Model Live Mode stopped",
+  "neko.model.importAsset.title": "Import Asset to Model Editor",
+  "neko.model.deleteSelected.title": "Delete Selected",
+  "neko.model.escape.title": "Deselect",
+  "neko.model.selectAll.title": "Select All",
+  "neko.model.undo.title": "Undo",
+  "neko.model.redo.title": "Redo"
 }

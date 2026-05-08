@@ -73,7 +73,7 @@ export class SlashCommandHandler {
   ): Promise<void> {
     const startTime = Date.now();
     const logger = getSlashCommandLogger();
-    logger.info('neko.agent.command.slash.request', {
+    logger.debug('neko.agent.command.slash.request', {
       command,
       conversationId,
       hasArgs: args !== undefined && args.length > 0,
@@ -91,7 +91,7 @@ export class SlashCommandHandler {
         this._createRuntimeDeps(webview),
         this._createRuntimeEffects(webview),
       );
-      logger.info('neko.agent.command.slash.result', {
+      logger.debug('neko.agent.command.slash.result', {
         command: result.command,
         conversationId,
         durationMs: Date.now() - startTime,
@@ -218,7 +218,7 @@ export class SlashCommandHandler {
     dispatch: ExtensionSlashCommandExecutionDispatch,
   ): Promise<void> | undefined {
     const logger = getSlashCommandLogger();
-    logger.info('neko.agent.command.skillPrompt.dispatch', {
+    logger.debug('neko.agent.command.skillPrompt.dispatch', {
       conversationId: dispatch.conversationId,
       messageChars: dispatch.messageText.length,
       sessionMode: dispatch.sessionMode,

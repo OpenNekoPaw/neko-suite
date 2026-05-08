@@ -5,6 +5,7 @@
  */
 
 import type {
+  AgentContextType,
   MessageAttachment,
   PerceptionCard,
   ToolResultAttachment,
@@ -110,6 +111,17 @@ export interface ContentBlock {
 }
 
 // ---------------------------------------------------------------------------
+// MessageContextReference — lightweight context chip stored with user messages
+// ---------------------------------------------------------------------------
+
+export interface MessageContextReference {
+  type: AgentContextType;
+  id: string;
+  label: string;
+  navigationData?: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
 // Message
 // ---------------------------------------------------------------------------
 
@@ -122,6 +134,8 @@ export interface Message {
   toolCalls?: ToolCall[];
   isStreaming?: boolean;
   attachments?: MessageAttachment[];
+  /** Lightweight context references attached when the user sent this message */
+  contextReferences?: MessageContextReference[];
   /** Associated unified work item IDs (media tasks, tool background tasks, subagents) */
   workItemIds?: string[];
   /** AI thinking process (legacy, for backward compatibility) */

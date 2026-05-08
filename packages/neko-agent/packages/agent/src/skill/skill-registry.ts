@@ -118,7 +118,7 @@ export class SkillRegistry implements ISkillRegistry {
       try {
         const fullSkill = await lazy.loadContent();
         this.skills.set(name, fullSkill);
-        logger.info('Lazy skill loaded', { name });
+        logger.debug('Lazy skill loaded', { name });
         return fullSkill;
       } catch (error) {
         logger.error('Failed to load lazy skill content', { name, error });

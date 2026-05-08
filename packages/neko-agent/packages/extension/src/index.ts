@@ -43,7 +43,12 @@ import { registerMarketInstallTargets } from './market/registerMarketInstallTarg
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // Initialize logger
-  const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context, resolveLogLevelSetting());
+  const logger = createVSCodeLogger(
+    'Neko Agent',
+    'NekoAgent',
+    context,
+    resolveLogLevelSetting(context.extensionMode),
+  );
   setRootLogger(logger);
   setPlatformRootLogger(logger.child('Platform'));
   setAgentRootLogger(logger.child('Agent'));

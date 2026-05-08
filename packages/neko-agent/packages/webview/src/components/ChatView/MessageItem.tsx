@@ -23,6 +23,8 @@ import {
   projectMessageAttachments,
   type MessageAttachmentProjection,
 } from '@/presenters/message-attachment-presenter';
+import { AgentContextChip } from '@/components/ChatView/InputArea/AgentContextChip';
+import { VSCodeMessages } from '@/components/hooks/useVSCode';
 
 interface MessageItemProps {
   message: Message;
@@ -387,6 +389,26 @@ export const MessageItem = memo(function MessageItem({
             <div
               className={`inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] via-[var(--vscode-button-background)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] rounded-tr-sm shadow-[0_2px_8px_rgba(0,0,0,0.2)]`}
             >
+              {/* Context references for user messages */}
+              {message.contextReferences && message.contextReferences.length > 0 && (
+                <div className="mb-1.5 flex flex-wrap gap-1">
+                  {message.contextReferences.map((ref) => (
+                    <AgentContextChip
+                      key={ref.id}
+                      payload={{
+                        type: ref.type,
+                        id: ref.id,
+                        label: ref.label,
+                        summary: '',
+                        data: null,
+                      }}
+                      onClick={() =>
+                        VSCodeMessages.revealContextSource(ref.type, ref.id, ref.navigationData)
+                      }
+                    />
+                  ))}
+                </div>
+              )}
               {/* Attachments for user messages */}
               {attachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-1">

@@ -149,12 +149,13 @@ function estimateContentBlockHeight(block: ContentBlock): number {
 function estimateMessageHeight(message: Message): number {
   const contentLines = Math.ceil((message.content?.length ?? 0) / 60);
   const attachmentHeight = (message.attachments?.length ?? 0) * 100;
+  const contextRefHeight = (message.contextReferences?.length ?? 0) > 0 ? 28 : 0;
   const toolCallHeight = (message.toolCalls?.length ?? 0) * 60;
   const thinkingHeight = message.thinking ? 100 : 0;
 
   return Math.max(
     MESSAGE_LIST_ESTIMATED_MESSAGE_HEIGHT,
-    contentLines * 20 + attachmentHeight + toolCallHeight + thinkingHeight + 40,
+    contentLines * 20 + attachmentHeight + contextRefHeight + toolCallHeight + thinkingHeight + 40,
   );
 }
 

@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
     'Neko Sketch',
     'NekoSketch',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));

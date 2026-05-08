@@ -114,7 +114,7 @@ export async function autoCompactIfNeeded(
       return { compressed: false, skipReason: 'circuit_open' };
     }
     // Half-open: allow one retry
-    logger.info('Circuit breaker half-open, allowing retry');
+    logger.debug('Circuit breaker half-open, allowing retry');
   }
 
   // 2. Check if compression is needed

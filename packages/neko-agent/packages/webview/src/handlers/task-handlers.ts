@@ -63,7 +63,7 @@ const handleTaskCreated: MessageHandler<'taskCreated'> = (message: TaskCreatedMe
  * Handle 'taskUpdated' message - Background task updated
  */
 const handleTaskUpdated: MessageHandler<'taskUpdated'> = (message: TaskUpdatedMessage, context) => {
-  logger.info('Task updated:', message.workItem);
+  logger.debug('Task updated:', message.workItem);
   const conversationId = message.conversationId;
   if (!conversationId) {
     logger.warn('Ignoring taskUpdated without conversationId', message.workItem);

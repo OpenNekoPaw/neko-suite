@@ -175,7 +175,7 @@ export class CapabilityRegistryRuntime {
     this.setCapabilityContext(context);
 
     if (this.providers.has(id)) {
-      this.logger.info(`Re-registering provider: ${id}`);
+      this.logger.debug(`Re-registering provider: ${id}`);
       this.unregisterProvider(id);
     }
 

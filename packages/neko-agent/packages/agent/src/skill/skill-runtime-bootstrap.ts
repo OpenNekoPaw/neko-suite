@@ -51,6 +51,7 @@ export interface RuntimeSkillLazySync {
 }
 
 export interface RuntimeSkillBootstrapLogger {
+  debug?(message: string, details?: unknown): void;
   info(message: string, details?: unknown): void;
   warn?(message: string, details?: unknown): void;
   error?(message: string, details?: unknown): void;
@@ -179,7 +180,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
       skillService: this.skillService,
     });
 
-    this.logger?.info(`Building system prompt with ${result.enabledSkillCount} skills`);
+    this.logger?.debug?.(`Building system prompt with ${result.enabledSkillCount} skills`);
     return result;
   }
 

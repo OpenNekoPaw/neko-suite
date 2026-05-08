@@ -123,7 +123,7 @@ export class ToolRegistry implements IToolRegistry {
     const requestId = createToolExecutionRequestId();
     const startedAt = Date.now();
     const logger = getToolRegistryLogger();
-    logger.info('neko.agent.tool.execute.request', {
+    logger.debug('neko.agent.tool.execute.request', {
       requestId,
       toolName: name,
       argSummary: summarizeRecordShape(args),
@@ -181,7 +181,7 @@ export class ToolRegistry implements IToolRegistry {
         duration,
       };
 
-      logger.info('neko.agent.tool.execute.result', {
+      logger.debug('neko.agent.tool.execute.result', {
         requestId,
         toolName: name,
         category: tool.category,

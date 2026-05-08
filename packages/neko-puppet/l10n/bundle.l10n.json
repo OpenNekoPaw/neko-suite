@@ -1,4 +1,5 @@
 {
+  "neko.puppet.editor.title": "Puppet Editor",
   "neko.puppet.new.title": "New Puppet",
   "neko.puppet.new.noFolder": "No workspace folder open",
   "neko.puppet.new.pickTemplate": "Select a template",

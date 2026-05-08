@@ -371,7 +371,10 @@ export class SkillFileService implements vscode.Disposable {
     const matches = this.runtime.resolvePathTriggers(filePath);
 
     for (const match of matches) {
-      logger.info('Skill path triggered', { skillName: match.skillName, filePath: match.filePath });
+      logger.debug('Skill path triggered', {
+        skillName: match.skillName,
+        filePath: match.filePath,
+      });
       this._onSkillPathTriggered.fire(match);
     }
   }

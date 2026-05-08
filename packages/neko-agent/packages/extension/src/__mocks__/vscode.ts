@@ -54,6 +54,7 @@ export const window = {
 export const workspace = {
   getConfiguration: vi.fn().mockImplementation(() => ({
     get: vi.fn(),
+    inspect: vi.fn().mockReturnValue({}),
     update: vi.fn().mockResolvedValue(undefined),
   })),
   workspaceFolders: [{ uri: { fsPath: '/mock/workspace' }, name: 'mock', index: 0 }],

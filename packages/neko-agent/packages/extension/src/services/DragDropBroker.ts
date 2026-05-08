@@ -38,7 +38,7 @@ export class DragDropBroker {
   /** Store the asset payload when a drag operation starts. */
   setPayload(asset: DndAssetPayload): void {
     this._payload = asset;
-    logger.info(`DnD payload set: ${asset.name} (${asset.mediaType})`);
+    logger.debug(`DnD payload set: ${asset.name} (${asset.mediaType})`);
   }
 
   /** Retrieve the current payload (returns null if none). */
@@ -49,7 +49,7 @@ export class DragDropBroker {
   /** Clear the stored payload (called after successful drop or drag cancel). */
   clearPayload(): void {
     if (this._payload) {
-      logger.info('DnD payload cleared');
+      logger.debug('DnD payload cleared');
     }
     this._payload = null;
   }

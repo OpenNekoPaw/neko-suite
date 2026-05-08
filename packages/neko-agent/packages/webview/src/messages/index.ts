@@ -14,6 +14,7 @@ import type {
   SendMessageWebviewMessage,
   WebviewToExtensionMessage,
 } from '@neko-agent/types';
+import type { AgentContextType } from '@neko/shared';
 
 // Re-export for backward compatibility
 export { postRawMessage as postMessage, type VSCodeAPI };
@@ -380,6 +381,20 @@ export const VSCodeMessages = {
   /** Reveal a file in the OS file manager */
   revealFile: (filePath: string) => {
     postWebviewMessage({ type: 'revealFile', filePath });
+  },
+
+  /** Navigate to the source of a context reference (canvas node, file, etc.) */
+  revealContextSource: (
+    contextType: AgentContextType,
+    contextId: string,
+    navigationData?: Record<string, string>,
+  ) => {
+    postWebviewMessage({
+      type: 'revealContextSource',
+      contextType,
+      contextId,
+      ...(navigationData ? { navigationData } : {}),
+    });
   },
 
   /** Notify Extension Host that a drag operation started (DnD) */

@@ -28,7 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
     'Neko Puppet',
     'NekoPuppet',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));

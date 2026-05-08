@@ -99,7 +99,7 @@ export async function activate(
     'Neko Assets',
     'NekoAssets',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));

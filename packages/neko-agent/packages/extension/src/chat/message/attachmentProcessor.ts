@@ -100,7 +100,7 @@ export class AttachmentProcessor {
         .jpeg({ quality: plan.jpegQuality })
         .toBuffer();
 
-      logger.info(`Resized image: ${w}x${h} (${buffer.length}B) -> ${resized.length}B`);
+      logger.debug(`Resized image: ${w}x${h} (${buffer.length}B) -> ${resized.length}B`);
       return {
         type: 'base64',
         media_type: plan.outputMediaType,

@@ -96,7 +96,7 @@ export class PlanModeHandler {
     conversationId: string,
     filePath?: string,
   ): Promise<void> {
-    logger.info('Plan approved:', { planId, conversationId, filePath });
+    logger.debug('Plan approved:', { planId, conversationId, filePath });
     await this._runPlanReviewRuntime(() =>
       runPlanApprovalRuntime(
         { planId, conversationId, filePath },
@@ -111,7 +111,7 @@ export class PlanModeHandler {
     planId: string,
     conversationId: string,
   ): Promise<void> {
-    logger.info('Plan rejected:', { planId, conversationId });
+    logger.debug('Plan rejected:', { planId, conversationId });
     await this._runPlanReviewRuntime(() =>
       runPlanRejectionRuntime(
         { planId, conversationId },
@@ -128,7 +128,7 @@ export class PlanModeHandler {
     conversationId: string,
     action: PlanStepReviewAction,
   ): Promise<void> {
-    logger.info('Plan step action:', { planId, stepId, conversationId, action });
+    logger.debug('Plan step action:', { planId, stepId, conversationId, action });
     await this._runPlanReviewRuntime(() =>
       runPlanStepActionRuntime(
         { planId, stepId, conversationId, action },
@@ -145,7 +145,7 @@ export class PlanModeHandler {
     newDescription: string,
     conversationId: string,
   ): Promise<void> {
-    logger.info('Plan step modified:', { planId, stepId, newDescription, conversationId });
+    logger.debug('Plan step modified:', { planId, stepId, newDescription, conversationId });
     await this._runPlanReviewRuntime(() =>
       runPlanStepModificationRuntime(
         { planId, stepId, conversationId, newDescription },

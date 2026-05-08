@@ -10,7 +10,7 @@ import type {
 } from './types';
 
 export interface HookRuntimeLogger {
-  info(message: string, details?: unknown): void;
+  debug(message: string, details?: unknown): void;
   error(message: string, details?: unknown): void;
 }
 
@@ -70,7 +70,7 @@ export class HookRuntimeManager {
       this.options.loader.watchDirectory(this.options.hookDirectory, (hooks, errors) => {
         this.loadedHooks = [...hooks];
         this.loadErrors = [...errors];
-        this.options.logger?.info(`Reloaded ${hooks.length} hook(s)`);
+        this.options.logger?.debug(`Reloaded ${hooks.length} hook(s)`);
         this.emitReload();
       });
 
@@ -124,7 +124,7 @@ export class HookRuntimeManager {
 
   private logLoadResult(result: HookLoadResult): void {
     if (result.hooks.length > 0) {
-      this.options.logger?.info(
+      this.options.logger?.debug(
         `Loaded ${result.hooks.length} hook(s): ${result.hooks.map((hook) => hook.metadata.name).join(', ')}`,
       );
     }

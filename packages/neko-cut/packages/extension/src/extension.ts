@@ -36,7 +36,12 @@ export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<NekoCutAPI & ISkillProvider> {
   // Initialize logger → VSCode OutputChannel + Console
-  const logger = createVSCodeLogger('Neko Cut', 'NekoCut', context, resolveLogLevelSetting());
+  const logger = createVSCodeLogger(
+    'Neko Cut',
+    'NekoCut',
+    context,
+    resolveLogLevelSetting(context.extensionMode),
+  );
   setRootLogger(logger);
 
   // Initialize error handler

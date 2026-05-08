@@ -8,7 +8,7 @@ import {
 } from './puppet-face-runtime';
 
 export interface PuppetFaceToolsLogger {
-  info(message: string, metadata?: Record<string, unknown>): void;
+  debug(message: string, metadata?: Record<string, unknown>): void;
   warn?(message: string, metadata?: Record<string, unknown>): void;
 }
 
@@ -136,7 +136,7 @@ async function executeGenerateParams(
   );
   if (applyError) return applyError;
 
-  deps.logger?.info(`PuppetGenerateParams: generated ${result.modifiedCount} params`, {
+  deps.logger?.debug(`PuppetGenerateParams: generated ${result.modifiedCount} params`, {
     description: description.slice(0, 80),
     applied: shouldApply,
   });
@@ -176,7 +176,7 @@ async function executeFromImage(
   );
   if (applyError) return applyError;
 
-  deps.logger?.info(`PuppetFromImage: inferred ${result.modifiedCount} params`, {
+  deps.logger?.debug(`PuppetFromImage: inferred ${result.modifiedCount} params`, {
     imagePath,
     applied: shouldApply,
   });
@@ -216,7 +216,7 @@ async function executeAdjust(
   );
   if (applyError) return applyError;
 
-  deps.logger?.info(`PuppetAdjust: ${result.changedCount} params changed`, {
+  deps.logger?.debug(`PuppetAdjust: ${result.changedCount} params changed`, {
     instruction: instruction.slice(0, 80),
     applied: shouldApply,
   });

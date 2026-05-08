@@ -142,7 +142,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     'Neko Canvas',
     'NekoCanvas',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));

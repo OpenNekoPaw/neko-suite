@@ -102,7 +102,7 @@ export class MediaTurnBridge {
         });
       },
       onAlreadyTerminalTask: ({ taskId, sourceTask }) => {
-        logger.info(`Media task ${taskId} already in terminal state`, {
+        logger.debug(`Media task ${taskId} already in terminal state`, {
           sourceTask,
         });
       },

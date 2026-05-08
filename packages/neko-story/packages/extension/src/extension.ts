@@ -55,7 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
     'Neko Story',
     'NekoStory',
     context,
-    resolveLogLevelSetting(),
+    resolveLogLevelSetting(context.extensionMode),
   );
   setRootLogger(rootLogger);
   setErrorHandler(new VSCodeErrorHandler(rootLogger));

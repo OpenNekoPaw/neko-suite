@@ -13,6 +13,7 @@ export type { MessageAttachment, AttachmentType } from '@neko/shared';
 export type {
   // Message protocol
   Message,
+  MessageContextReference,
   ToolCall,
   ContentBlock,
   ContentBlockType,

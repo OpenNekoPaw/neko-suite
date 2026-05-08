@@ -63,10 +63,12 @@ export function readConfigFile(filePath: string): UnifiedConfig | null {
       return null;
     }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = fs.readFileSync(filePath, 'utf-8').trim();
+    if (!content) {
+      return null;
+    }
     return JSON.parse(content) as UnifiedConfig;
   } catch (error) {
-    // Log error but don't throw - return null for missing/invalid config
     logger.error(`Failed to read config from ${filePath}`, error);
     return null;
   }
@@ -167,31 +169,42 @@ export function watchConfigFile(
   callback: (config: UnifiedConfig | null) => void,
 ): () => void {
   let watcher: fs.FSWatcher | null = null;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const debouncedRead = () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      const config = readConfigFile(filePath);
+      callback(config);
+    }, 100);
+  };
 
   try {
-    // Try to watch the file directly
     watcher = fs.watch(filePath, (eventType) => {
       if (eventType === 'change') {
-        const config = readConfigFile(filePath);
-        callback(config);
+        debouncedRead();
       }
     });
   } catch {
-    // File doesn't exist yet, watch directory instead
     const dir = path.dirname(filePath);
     const filename = path.basename(filePath);
 
     if (fs.existsSync(dir)) {
       watcher = fs.watch(dir, (_eventType, changedFilename) => {
         if (changedFilename === filename) {
-          const config = readConfigFile(filePath);
-          callback(config);
+          debouncedRead();
         }
       });
     }
   }
 
   return () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
     if (watcher) {
       watcher.close();
     }

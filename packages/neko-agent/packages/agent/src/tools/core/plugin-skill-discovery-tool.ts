@@ -80,7 +80,7 @@ async function listPluginSkills(
     const catalogue = filterCatalogue(rawCatalogue, tagFilter);
     const totalSkills = catalogue.reduce((total, entry) => total + entry.skills.length, 0);
 
-    logger.info('ListPluginSkills completed', {
+    logger.debug('ListPluginSkills completed', {
       totalSkills,
       extensionCount: catalogue.length,
       tagFilter,

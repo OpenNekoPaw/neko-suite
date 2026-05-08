@@ -7,6 +7,7 @@
 
 import type {
   AgentContextPayload,
+  AgentContextType,
   CanvasStoryboardPayload,
   ChatModelOption,
   MessageAttachment,
@@ -217,6 +218,13 @@ export interface SsoLoginWebviewMessage {
   force?: boolean;
 }
 
+export interface RevealContextSourceWebviewMessage {
+  type: 'revealContextSource';
+  contextType: AgentContextType;
+  contextId: string;
+  navigationData?: Record<string, string>;
+}
+
 export type WebviewToExtensionMessage =
   | SendMessageWebviewMessage
   | SearchProjectFilesWebviewMessage
@@ -238,7 +246,8 @@ export type WebviewToExtensionMessage =
   | DownloadSvgWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
-  | SsoLoginWebviewMessage;
+  | SsoLoginWebviewMessage
+  | RevealContextSourceWebviewMessage;
 
 export interface ProjectFileMentionInfo {
   path: string;
@@ -737,6 +746,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'invokeSlashCommand',
   'invokePluginSlashCommand',
   'ssoLogin',
+  'revealContextSource',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 const PROMPT_MODES: readonly SetPromptModeWebviewMessage['mode'][] = ['default', 'plan'];
@@ -1028,6 +1038,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokePluginSlashCommandMessage(raw);
     case 'ssoLogin':
       return parseSsoLoginMessage(raw);
+    case 'revealContextSource':
+      return parseRevealContextSourceMessage(raw);
     default:
       return null;
   }
@@ -1501,6 +1513,23 @@ function parseSsoLoginMessage(raw: Record<string, unknown>): SsoLoginWebviewMess
   if (force === undefined) return { type: 'ssoLogin' };
   if (typeof force !== 'boolean') return null;
   return { type: 'ssoLogin', force };
+}
+
+function parseRevealContextSourceMessage(
+  raw: Record<string, unknown>,
+): RevealContextSourceWebviewMessage | null {
+  if (typeof raw.contextType !== 'string') return null;
+  if (typeof raw.contextId !== 'string') return null;
+  const navigationData =
+    raw.navigationData !== undefined && isRecord(raw.navigationData)
+      ? (raw.navigationData as Record<string, string>)
+      : undefined;
+  return {
+    type: 'revealContextSource',
+    contextType: raw.contextType as AgentContextType,
+    contextId: raw.contextId,
+    ...(navigationData ? { navigationData } : {}),
+  };
 }
 
 function parseAgentMediaModelSelections(value: unknown): AgentMediaModelSelections | null {

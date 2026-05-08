@@ -506,6 +506,13 @@ export class EngineClient {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeout);
+    const startTime = Date.now();
+
+    logger.debug(`dispatch ${req.group}/${req.action}`, {
+      source: resolvedSource,
+      hasBody: req.body != null,
+      hasOptions: Object.keys(options).length > 0,
+    });
 
     try {
       const res = await fetch(`${this.baseUrl}/v1/dispatch`, {
@@ -519,7 +526,19 @@ export class EngineClient {
         throw new Error(`Engine HTTP ${res.status}: ${res.statusText}`);
       }
 
-      return (await res.json()) as ActionResponse;
+      const response = (await res.json()) as ActionResponse;
+      logger.debug(`dispatch ${req.group}/${req.action} done`, {
+        status: response.status,
+        durationMs: Date.now() - startTime,
+        hasError: response.error != null,
+      });
+      return response;
+    } catch (error) {
+      logger.warn(`dispatch ${req.group}/${req.action} failed`, {
+        durationMs: Date.now() - startTime,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
       clearTimeout(timer);
     }

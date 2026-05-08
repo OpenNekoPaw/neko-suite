@@ -162,7 +162,7 @@ export class AgentMessageTurnHandler {
       },
       onReferencedMediaProcessed: ({ filePath, mediaType, metadata }) => {
         if (metadata) {
-          logger.info(`Preprocessed ${filePath}: ${mediaType}`, metadata);
+          logger.debug(`Preprocessed ${filePath}: ${mediaType}`, metadata);
         }
       },
       onReferencedMediaError: ({ filePath, error }) => {

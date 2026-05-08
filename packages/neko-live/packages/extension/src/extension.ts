@@ -11,7 +11,12 @@ import { setErrorHandler } from './utils/errorHandler';
 import { TrackingService, registerTrackingCommands } from './tracking/TrackingService';
 
 export function activate(context: vscode.ExtensionContext) {
-  const logger = createVSCodeLogger('Neko Live', 'NekoLive', context, resolveLogLevelSetting());
+  const logger = createVSCodeLogger(
+    'Neko Live',
+    'NekoLive',
+    context,
+    resolveLogLevelSetting(context.extensionMode),
+  );
   setErrorHandler(new VSCodeErrorHandler(logger));
   watchLogLevel(logger, context);
 

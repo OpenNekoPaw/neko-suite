@@ -29,6 +29,17 @@ export function tryHandleFileAndPluginRoute(
       deps.fileOperationHandler.handleOpenUrl(message.url);
       return true;
 
+    case 'revealContextSource': {
+      const nav = message.navigationData;
+      const filePath = nav?.['filePath'] ?? nav?.['path'];
+      if (filePath) {
+        deps.fileOperationHandler.handleOpenFile(filePath);
+      } else if (message.contextType === 'canvas-node' && nav?.['nodeId']) {
+        void vscode.commands.executeCommand('neko.canvas.selectNodeFromOutline', nav['nodeId']);
+      }
+      return true;
+    }
+
     case 'downloadSvg':
       deps.fileOperationHandler.handleDownloadSvg(message.svg, message.filename);
       return true;

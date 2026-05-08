@@ -252,7 +252,7 @@ export class TaskManager implements IRuntimeTaskManager {
     };
 
     await this.recoveryStorage.save(info);
-    logger.info('Saved recovery info', { taskId, externalTaskId, providerId });
+    logger.debug('Saved recovery info', { taskId, externalTaskId, providerId });
   }
 
   /**

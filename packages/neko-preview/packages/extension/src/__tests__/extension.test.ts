@@ -67,6 +67,7 @@ vi.mock('vscode', () => {
     workspace: {
       getConfiguration: vi.fn(() => ({
         get: vi.fn((_key: string, fallback: unknown) => fallback),
+        inspect: vi.fn(() => ({})),
       })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
     },

@@ -122,19 +122,19 @@ export class MediaTaskExecutor {
 
         if (result.status === 'completed') {
           // Task already completed, clean up
-          logger.info('Recovered task already completed', { taskId: info.taskId });
+          logger.debug('Recovered task already completed', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
           }
         } else if (result.status === 'failed' || result.status === 'cancelled') {
           // Task failed/cancelled, clean up
-          logger.info('Recovered task failed/cancelled', { taskId: info.taskId });
+          logger.debug('Recovered task failed/cancelled', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
           }
         } else {
           // Task still pending/processing, resume polling
-          logger.info('Resuming polling for task', { taskId: info.taskId });
+          logger.debug('Resuming polling for task', { taskId: info.taskId });
           this.resumePolling(taskManager, info, adapter, provider);
           resumed++;
         }

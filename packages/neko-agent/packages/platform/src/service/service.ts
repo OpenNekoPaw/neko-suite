@@ -163,7 +163,7 @@ export class Service implements IService {
         providerId: routing.providerId,
         modelId: routing.modelId,
       });
-      logger.info(
+      logger.debug(
         'neko.agent.llm.request',
         createModelCallRequestLog({
           requestId,
@@ -188,7 +188,7 @@ export class Service implements IService {
 
       const response = await adapter.chat(projectedMessages, chatOptions, model, provider);
       const responseMeta = this.buildResponseMeta(routing, startTime);
-      logger.info(
+      logger.debug(
         'neko.agent.llm.response',
         createModelCallResponseLog({
           requestId,
@@ -240,7 +240,7 @@ export class Service implements IService {
       providerId: routing.providerId,
       modelId: routing.modelId,
       onProjected: (projectedMessages) => {
-        logger.info(
+        logger.debug(
           'neko.agent.llm.request',
           createModelCallRequestLog({
             requestId,
@@ -278,7 +278,7 @@ export class Service implements IService {
       response: responsePromise
         .then((response) => {
           const responseMeta = this.buildResponseMeta(routing, startTime);
-          logger.info(
+          logger.debug(
             'neko.agent.llm.response',
             createModelCallResponseLog({
               requestId,

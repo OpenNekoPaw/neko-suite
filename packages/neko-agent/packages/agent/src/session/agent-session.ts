@@ -2347,7 +2347,7 @@ export class AgentSession implements IAgentSession {
 
     const promptSections = this._promptComposer.dumpSections();
     const promptLogger = getAgentSessionLogger();
-    promptLogger.info('neko.agent.prompt.composed', {
+    promptLogger.debug('neko.agent.prompt.composed', {
       sectionCount: promptSections.length,
       textChars: structured.text.length,
       sectionChars: structured.sections.map((section, index) => ({

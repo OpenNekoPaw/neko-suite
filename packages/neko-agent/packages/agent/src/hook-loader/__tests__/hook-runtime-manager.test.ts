@@ -38,7 +38,7 @@ describe('HookRuntimeManager', () => {
   it('loads hooks, tracks state, and starts watching the hook directory', async () => {
     const hook = createLoadedHook('audit');
     const loader = createLoader({ hooks: [hook], errors: [] });
-    const logger = { info: vi.fn(), error: vi.fn() };
+    const logger = { debug: vi.fn(), error: vi.fn() };
     const manager = new HookRuntimeManager({
       hookDirectory: '/repo/.hook',
       loader,
@@ -53,7 +53,7 @@ describe('HookRuntimeManager', () => {
     expect(manager.getHooks()).toEqual([hook.hooks]);
     expect(manager.getLoadedHooks()).toEqual([hook]);
     expect(manager.getErrors()).toEqual([]);
-    expect(logger.info).toHaveBeenCalledWith('Loaded 1 hook(s): audit');
+    expect(logger.debug).toHaveBeenCalledWith('Loaded 1 hook(s): audit');
   });
 
   it('updates state and emits reload events from the loader watcher', async () => {
@@ -105,7 +105,7 @@ describe('HookRuntimeManager', () => {
   it('does not throw initialization errors so host startup can continue', async () => {
     const loader = createLoader({ hooks: [], errors: [] });
     vi.mocked(loader.loadFromDirectory).mockRejectedValueOnce(new Error('read failed'));
-    const logger = { info: vi.fn(), error: vi.fn() };
+    const logger = { debug: vi.fn(), error: vi.fn() };
     const manager = new HookRuntimeManager({
       hookDirectory: '/repo/.hook',
       loader,

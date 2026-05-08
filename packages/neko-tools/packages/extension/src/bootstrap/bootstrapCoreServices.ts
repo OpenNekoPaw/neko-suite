@@ -119,7 +119,12 @@ export function bootstrapCoreServices(
   context: vscode.ExtensionContext,
 ): ICoreServicesBootstrapResult {
   const services = new ServiceCollection();
-  const logger = createVSCodeLogger('Neko Tools', 'NekoTools', context, resolveLogLevelSetting());
+  const logger = createVSCodeLogger(
+    'Neko Tools',
+    'NekoTools',
+    context,
+    resolveLogLevelSetting(context.extensionMode),
+  );
   watchLogLevel(logger, context);
   const errorHandler = new VSCodeErrorHandler(logger);
   const i18n = new VscodeExtensionI18n();
