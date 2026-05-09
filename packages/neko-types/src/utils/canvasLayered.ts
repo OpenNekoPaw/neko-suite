@@ -1,8 +1,7 @@
 // =============================================================================
 // Canvas Layered Model Helpers
 //
-// Pure compatibility helpers for the v1 legacy containment fields and the
-// v2 optional layered organization contracts.
+// Pure helpers for layered Canvas organization contracts.
 // =============================================================================
 
 import type { CanvasNode } from '../types/canvas';
@@ -54,12 +53,8 @@ export function getContainerChildReferences(node: CanvasNode): CanvasContainerCh
   return references;
 }
 
-export function getLegacyNodeParentId(_node: CanvasNode): string | undefined {
-  return undefined;
-}
-
 export function getNodeParentId(node: CanvasNode): string | undefined {
-  return node.parentId ?? getLegacyNodeParentId(node);
+  return node.parentId;
 }
 
 export function getNodeParentReferences(node: CanvasNode): CanvasParentReference[] {

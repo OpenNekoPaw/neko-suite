@@ -41,7 +41,6 @@ export {
   getContainerChildReferences,
   getContainerPolicyName,
   getLegacyContainerChildIds,
-  getLegacyNodeParentId,
   getNodeParentId,
   getNodeParentReferences,
   isContainerNode,
