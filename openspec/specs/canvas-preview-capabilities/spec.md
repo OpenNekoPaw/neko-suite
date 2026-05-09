@@ -4,7 +4,7 @@
 TBD - created by archiving change canvas-block-container-architecture. Update Purpose after archive.
 ## Requirements
 ### Requirement: Preview behavior is declared through composable capabilities
-The system SHALL represent Canvas preview behavior through composable block or node capabilities for asset identity, preview variants, playback, delegation, generation candidates, collection previews, and node summaries. Preview behavior MUST NOT depend solely on hardcoded node type branches.
+The system SHALL represent Canvas preview behavior through composable block or node capabilities for asset identity, preview variants, playback, delegation, generation candidates, collection previews, and node summaries. Preview behavior MUST NOT depend solely on hardcoded node type branches. Migrated Shot, Gallery, and Media presets MUST declare lightweight preview capabilities for their primary visual surfaces.
 
 #### Scenario: Image asset preview composes capabilities
 - **WHEN** an image asset block is rendered
@@ -13,6 +13,18 @@ The system SHALL represent Canvas preview behavior through composable block or n
 #### Scenario: Model asset delegates interaction
 - **WHEN** a 3D model asset block is rendered in Canvas
 - **THEN** it uses screenshot or turntable preview capabilities and delegates interactive editing to the model extension
+
+#### Scenario: Shot preview uses generation capabilities
+- **WHEN** a migrated Shot node displays generated image candidates
+- **THEN** it renders the selected candidate and candidate controls from generation preview capability metadata bound to Shot data
+
+#### Scenario: Gallery preview uses collection capabilities
+- **WHEN** a migrated Gallery node displays cells
+- **THEN** each cell preview is resolved from collection preview metadata and cell data rather than a Gallery-only preview branch
+
+#### Scenario: Media preview uses asset identity capability
+- **WHEN** a migrated Media node displays an image, video, or audio asset
+- **THEN** the preview source is resolved from asset identity and preview capability metadata bound to the media data fields
 
 ### Requirement: Preview variants are resolved through a resolver contract
 The system SHALL resolve previewable assets to typed preview variants through a resolver that can request host or engine-provided thumbnails, proxies, posters, waveforms, turntables, rotation clips, FOV crops, or fallback icons. Webview renderers MUST treat variant URLs and tokens as opaque runtime resources.
@@ -59,7 +71,7 @@ The system SHALL manage inline or hover playback through a preview runtime that 
 - **THEN** the preview runtime releases active players, object URLs, and engine-owned preview tokens
 
 ### Requirement: Node summary previews are separate from asset previews
-The system SHALL provide node summary descriptors for rendering compact previews of CanvasNodes inside containers, minimap-like summaries, Agent context, and child-node slots. Containers MUST NOT fully render child node components a second time to create summaries.
+The system SHALL provide node summary descriptors for rendering compact previews of CanvasNodes inside containers, minimap-like summaries, Agent context, and child-node slots. Containers MUST NOT fully render child node components a second time to create summaries. Migrated core presets MUST provide stable summary descriptors that can be consumed by child-node slots and structured extraction.
 
 #### Scenario: Scene displays Shot summary
 - **WHEN** a Scene content tree includes a child-node slot
@@ -68,6 +80,14 @@ The system SHALL provide node summary descriptors for rendering compact previews
 #### Scenario: Agent extracts node summary
 - **WHEN** Agent requests structured content for selected Canvas nodes
 - **THEN** the extraction can use node summary descriptors without requiring Webview-specific preview URLs to be persisted
+
+#### Scenario: Summary reflects selected candidate
+- **WHEN** a Shot or Gallery cell selected candidate changes
+- **THEN** the node summary descriptor updates from authoritative data and remains free of runtime-only preview URLs or engine tokens
+
+#### Scenario: Container summary supports heterogeneous children
+- **WHEN** a migrated Scene contains Shot, Media, Gallery, Text, or Group children
+- **THEN** the child-node slot can render compact summaries for each child through descriptor metadata
 
 ### Requirement: Generation previews support candidate browsing
 The system SHALL support preview capabilities that present generated candidates and selected candidate state from authoritative node data. Candidate navigation MUST update selected candidate state through normal node data updates.
@@ -79,4 +99,3 @@ The system SHALL support preview capabilities that present generated candidates 
 #### Scenario: Gallery cell candidate changes
 - **WHEN** a user selects another candidate for a Gallery cell
 - **THEN** the cell's candidate selection updates through the Gallery collection data path
-
