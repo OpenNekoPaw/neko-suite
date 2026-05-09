@@ -156,7 +156,6 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
         data: {
           sceneTitle: t('node.newScene'),
           sceneNumber: nodeCount + 1,
-          shotIds: [],
         },
       });
       reportAction('addNode', 'Add scene group');

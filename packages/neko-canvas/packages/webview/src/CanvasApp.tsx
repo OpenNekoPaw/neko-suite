@@ -19,10 +19,7 @@ import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
 import { buildCanvasNode } from './utils/nodeFactory';
-import {
-  appendSelectedGenerationCandidate,
-  selectGenerationCandidate,
-} from './utils/generationHistory';
+import { appendSelectedGenerationCandidate } from './utils/generationHistory';
 import { setGlobalVSCodeApi } from './utils/vscode';
 import {
   screenToCanvas as screenToCanvasMath,
@@ -101,9 +98,7 @@ export function CanvasApp() {
     rotateNode,
     rotateNodeEnd,
     assignShotsToScene,
-    reorderSceneShots,
     autoLayoutSceneShots,
-    detachShotFromScene,
     selectNodes,
     groupNodes,
     ungroupNodes,
@@ -608,50 +603,6 @@ export function CanvasApp() {
     [nodes],
   );
 
-  const handleReorderSceneShots = useCallback(
-    (sceneId: string, shotIds: string[]) => {
-      reorderSceneShots(sceneId, shotIds, true);
-    },
-    [reorderSceneShots],
-  );
-
-  const handleSelectShotCandidate = useCallback(
-    (nodeId: string, candidateId: string) => {
-      const target = nodes.find((node) => node.id === nodeId);
-      if (!target || target.type !== 'shot') return;
-
-      const nextHistory = selectGenerationCandidate(target.data.generationHistory, candidateId);
-      const selected = nextHistory.find((candidate) => candidate.selected);
-
-      updateNodeData(nodeId, {
-        generationHistory: nextHistory,
-        generatedImage: selected?.dataUrl,
-      });
-    },
-    [nodes, updateNodeData],
-  );
-
-  const handleSelectGalleryCellCandidate = useCallback(
-    (nodeId: string, cellId: string, candidateId: string) => {
-      const target = nodes.find((node) => node.id === nodeId);
-      if (!target || target.type !== 'gallery') return;
-
-      const cells = target.data.cells.map((cell) => {
-        if (cell.id !== cellId) return cell;
-        const nextHistory = selectGenerationCandidate(cell.generationHistory ?? [], candidateId);
-        const selected = nextHistory.find((candidate) => candidate.selected);
-        return {
-          ...cell,
-          generationHistory: nextHistory,
-          image: selected?.dataUrl ?? cell.image,
-        };
-      });
-
-      updateNodeData(nodeId, { cells });
-    },
-    [nodes, updateNodeData],
-  );
-
   // =========================================================================
   // Generation panel
   // =========================================================================
@@ -1050,13 +1001,9 @@ export function CanvasApp() {
             onDocumentOpen={handleDocumentOpen}
             onCanvasEmbedOpen={handleCanvasEmbedOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
-            onSelectShotCandidate={handleSelectShotCandidate}
-            onSelectGalleryCellCandidate={handleSelectGalleryCellCandidate}
             onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
             onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
             onBatchGenerateSceneShots={handleBatchGenerateSceneShots}
-            onReorderSceneShots={handleReorderSceneShots}
-            onDetachShotFromScene={detachShotFromScene}
             isPanMode={isPanMode}
           />
 

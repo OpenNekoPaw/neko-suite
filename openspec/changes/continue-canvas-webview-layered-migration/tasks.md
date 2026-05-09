@@ -1,9 +1,9 @@
 ## 1. Preset Contracts And Defaults
 
-- [x] 1.1 Add migrated preset names and metadata for `shot.basic`, `scene.basic`, `gallery.basic`, and `media.basic` while keeping all existing `*.legacy` presets registered.
+- [x] 1.1 Add migrated preset names and metadata for `shot.basic`, `scene.basic`, `gallery.basic`, and `media.basic`, and remove the old core `*.legacy` preset registrations.
 - [x] 1.2 Extend `canvasPresetRegistry.ts` so migrated presets can assemble `content`, `container`, `preview`, default data, ports, derive targets, and node summary metadata.
-- [x] 1.3 Update `nodeFactory.ts` to apply migrated presets without duplicating data ownership and to preserve legacy-compatible `node.data` fields.
-- [x] 1.4 Add preset validation tests for unknown preset rejection, legacy preset compatibility, and migrated preset output shape.
+- [x] 1.3 Update `nodeFactory.ts` to apply migrated presets without duplicating data ownership or writing Scene/Shot legacy membership mirrors.
+- [x] 1.4 Add preset validation tests for unknown preset rejection, removed core legacy preset rejection, and migrated preset output shape.
 
 ## 2. Composable Core Node Content
 
@@ -17,9 +17,9 @@
 
 - [x] 3.1 Refactor Scene rendering and shot ordering to use `getContainerChildIds` and `getNodeParentId` instead of direct `data.shotIds` and `data.sceneGroupId` reads.
 - [x] 3.2 Refactor top-level canvas filtering, minimap filtering, and child visibility rules to use organization helpers and container policy metadata.
-- [x] 3.3 Refactor PropertyPanel and clipboard child membership reads to use container helpers while preserving legacy mirror writes.
-- [x] 3.4 Ensure all Scene and Group membership mutations synchronize `container.childIds`, child `parentId`, and legacy mirror fields through generic container actions.
-- [x] 3.5 Add tests for migrated nested containers, heterogeneous Scene children, child release, copy/paste remapping, and legacy mirror synchronization.
+- [x] 3.3 Refactor PropertyPanel and clipboard child membership reads to use container helpers.
+- [x] 3.4 Ensure Scene membership mutations write canonical `container.childIds` and child `parentId` through generic container actions.
+- [x] 3.5 Add tests for migrated nested containers, heterogeneous Scene children, child release, copy/paste remapping, and canonical membership synchronization.
 
 ## 4. Preview And Summary Capabilities
 
@@ -38,15 +38,15 @@
 
 ## 6. Agent And API Migration
 
-- [x] 6.1 Update Canvas extension API and Agent tool metadata so migrated presets become defaults after parity while explicit legacy presets remain accepted.
-- [x] 6.2 Update derive and composite creation tests to assert migrated nodes include `content`, canonical organization fields, summaries, and legacy-compatible data.
+- [x] 6.1 Update Canvas extension API and Agent tool metadata so migrated presets are the core-node defaults and removed core legacy presets are not advertised.
+- [x] 6.2 Update derive and composite creation tests to assert migrated nodes include `content`, canonical organization fields, and summaries.
 - [x] 6.3 Update structured extraction so migrated Gallery collections, Shot bindings, Scene child order, and Media preview summaries are represented consistently.
-- [x] 6.4 Add mixed legacy/composable extraction tests and explicit legacy derive/composite compatibility tests.
+- [x] 6.4 Add extraction tests for composable core nodes and removed core legacy derive/composite rejection.
 
 ## 7. Rollout, Parity, And Quality Gates
 
 - [x] 7.1 Add snapshot or render parity coverage for each migrated preset before switching new-node defaults.
-- [x] 7.2 Add fixture-based compatibility tests proving existing `.nkc` files without `content` still load and render through legacy paths.
-- [x] 7.3 Add regression tests that migrated defaults can be rolled back to `*.legacy` without corrupting existing composable node data.
+- [x] 7.2 Add regression tests proving core nodes without composable content no longer rely on removed legacy renderers.
+- [x] 7.3 Add regression tests that removed core legacy presets are rejected without corrupting existing composable node data.
 - [x] 7.4 Run targeted Canvas Webview tests for presets, content rendering, container actions, property panel, preview runtime, and Agent operations.
 - [x] 7.5 Run package-level quality gates for affected modules, including `pnpm check`, relevant `pnpm test` targets, and Canvas package build checks.

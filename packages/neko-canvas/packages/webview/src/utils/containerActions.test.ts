@@ -5,7 +5,6 @@ import {
   createContainerComposite,
   deleteContainerSubtree,
   releaseContainerChildren,
-  reorderContainerChildren,
 } from './containerActions';
 import { autoArrangeContainer, findFreePosition } from './containerLayout';
 
@@ -88,7 +87,7 @@ describe('containerActions', () => {
     expect(result.nodes.find((node) => node.id === 'note-1')?.parentId).toBe('group-1');
   });
 
-  it('keeps Scene canonical child IDs and legacy mirrors synchronized', () => {
+  it('keeps Scene canonical child IDs and child parent IDs synchronized', () => {
     const scene = {
       id: 'scene-1',
       type: 'scene',
@@ -96,7 +95,7 @@ describe('containerActions', () => {
       size: { width: 400, height: 240 },
       zIndex: 1,
       container: { policy: 'scene' as const, childIds: [] },
-      data: { sceneTitle: 'Scene', sceneNumber: 1, shotIds: [] },
+      data: { sceneTitle: 'Scene', sceneNumber: 1 },
     } as CanvasNode;
     const shot = {
       id: 'shot-1',
@@ -123,46 +122,7 @@ describe('containerActions', () => {
     const nextShot = linked.nodes.find((node) => node.id === 'shot-1');
 
     expect(nextScene?.container?.childIds).toEqual(['shot-1']);
-    expect(nextScene?.type === 'scene' ? nextScene.data.shotIds : []).toEqual(['shot-1']);
     expect(nextShot?.parentId).toBe('scene-1');
-    expect(nextShot?.type === 'shot' ? nextShot.data.sceneGroupId : undefined).toBe('scene-1');
-  });
-
-  it('excludes missing Scene children from the legacy shotIds mirror when nodes are available', () => {
-    const scene = {
-      id: 'scene-1',
-      type: 'scene',
-      position: { x: 0, y: 0 },
-      size: { width: 400, height: 240 },
-      zIndex: 1,
-      container: { policy: 'scene' as const, childIds: ['shot-1', 'missing-shot', 'note-1'] },
-      data: { sceneTitle: 'Scene', sceneNumber: 1, shotIds: ['shot-1', 'missing-shot'] },
-    } as CanvasNode;
-    const shot = {
-      ...createNode('shot-1', 'shot'),
-      data: {
-        shotNumber: 1,
-        duration: 3,
-        visualDescription: '',
-        characters: [],
-        shotScale: 'MS',
-        characterAction: '',
-        emotion: [],
-        sceneTags: [],
-        generationStatus: 'idle',
-        generationHistory: [],
-      },
-    } as CanvasNode;
-    const note = createNode('note-1', 'annotation');
-
-    const result = reorderContainerChildren([scene, shot, note], 'scene-1', [
-      'shot-1',
-      'missing-shot',
-      'note-1',
-    ]);
-    const nextScene = result.nodes.find((node) => node.id === 'scene-1');
-
-    expect(nextScene?.type === 'scene' ? nextScene.data.shotIds : []).toEqual(['shot-1']);
   });
 
   it('rejects duplicate IDs within composite input', () => {

@@ -82,20 +82,12 @@ export interface InfiniteCanvasProps {
   // ── ModelNode callbacks ────────────────────────────────────────────────────
   /** Called to check if a model is installed */
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
-  /** Called when a ShotNode candidate is selected */
-  onSelectShotCandidate?: (nodeId: string, candidateId: string) => void;
-  /** Called when a Gallery cell candidate is selected */
-  onSelectGalleryCellCandidate?: (nodeId: string, cellId: string, candidateId: string) => void;
   /** Called when selected shots should be attached to a scene */
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   /** Called to auto-layout the shots inside a scene */
   onAutoLayoutSceneShots?: (sceneId: string) => void;
   /** Called to batch-generate all shots inside a scene */
   onBatchGenerateSceneShots?: (sceneId: string) => void;
-  /** Called to reorder the shots inside a scene */
-  onReorderSceneShots?: (sceneId: string, shotIds: string[]) => void;
-  /** Called to detach a shot from its parent scene (keep on canvas) */
-  onDetachShotFromScene?: (sceneId: string, shotId: string) => void;
 }
 
 // =============================================================================
@@ -131,13 +123,9 @@ export function InfiniteCanvas({
   onDocumentOpen,
   onCanvasEmbedOpen,
   onModelCheckInstalled,
-  onSelectShotCandidate,
-  onSelectGalleryCellCandidate,
   onAssignSelectedShotsToScene,
   onAutoLayoutSceneShots,
   onBatchGenerateSceneShots,
-  onReorderSceneShots,
-  onDetachShotFromScene,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -292,13 +280,9 @@ export function InfiniteCanvas({
               onDocumentOpen,
               onCanvasEmbedOpen,
               onModelCheckInstalled,
-              onSelectShotCandidate,
-              onSelectGalleryCellCandidate,
               onAssignSelectedShotsToScene,
               onAutoLayoutSceneShots,
               onBatchGenerateSceneShots,
-              onReorderSceneShots,
-              onDetachShotFromScene,
               selectedNodeIds,
             });
           })}

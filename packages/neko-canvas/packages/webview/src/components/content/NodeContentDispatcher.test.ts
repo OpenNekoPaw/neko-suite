@@ -144,7 +144,7 @@ describe('NodeContentDispatcher', () => {
         position: { x: 0, y: 0 },
         zIndex: 0,
         preset: 'scene.basic',
-        data: { sceneTitle: 'Arrival', sceneNumber: 1, shotIds: [] },
+        data: { sceneTitle: 'Arrival', sceneNumber: 1 },
       }),
       id: 'scene-1',
       container: { policy: 'scene', childIds: ['shot-1'] },

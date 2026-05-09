@@ -271,8 +271,6 @@ export interface ShotCanvasNode extends CanvasNodeBase {
   type: 'shot';
   data: {
     shotNumber: number;
-    /** Parent SceneGroupNode id */
-    sceneGroupId?: string;
     /** Estimated duration in seconds */
     duration: number;
     visualDescription: string;
@@ -328,8 +326,6 @@ export interface SceneGroupCanvasNode extends CanvasNodeBase {
     sceneNumber: number;
     location?: string;
     timeOfDay?: string;
-    /** Ordered shot node IDs (children remain in canvasData.nodes) */
-    shotIds: string[];
   };
 }
 

@@ -2,9 +2,6 @@
  * Canvas Nodes - Public exports
  */
 
-export { MediaNode } from './MediaNode';
-export type { MediaNodeProps } from './MediaNode';
-
 export { StoryboardNode } from './StoryboardNode';
 export type { StoryboardNodeProps } from './StoryboardNode';
 
@@ -19,15 +16,6 @@ export type { ArtboardNodeProps } from './ArtboardNode';
 
 export { GroupNode } from './GroupNode';
 export type { GroupNodeProps } from './GroupNode';
-
-export { ShotNode } from './ShotNode';
-export type { ShotNodeProps } from './ShotNode';
-
-export { SceneGroupNode } from './SceneGroupNode';
-export type { SceneGroupNodeProps } from './SceneGroupNode';
-
-export { GalleryNode } from './GalleryNode';
-export type { GalleryNodeProps } from './GalleryNode';
 
 export { ScriptNode } from './ScriptNode';
 export type { ScriptNodeProps } from './ScriptNode';

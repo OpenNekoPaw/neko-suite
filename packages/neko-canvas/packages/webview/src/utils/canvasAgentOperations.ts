@@ -291,7 +291,7 @@ function createDeriveData(
   }
 
   if (targetType === 'scene') {
-    return { sceneTitle: '', shotIds: [] };
+    return { sceneTitle: '' };
   }
 
   if (targetType === 'annotation') {

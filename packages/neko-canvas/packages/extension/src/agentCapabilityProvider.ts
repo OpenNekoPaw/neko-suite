@@ -35,6 +35,7 @@ import {
   buildStoryboardImportTimelineSyncPayload,
   createStoryboardPayload,
   extractCanvasNodeGenerationLineage,
+  getNodeParentId,
   resolveCharacterBindingsForNames,
 } from '@neko/shared';
 import { getRootLogger } from './utils/logger';
@@ -402,7 +403,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             containerPreset: {
               type: 'string',
               enum: [...CANVAS_AGENT_CONTAINER_PRESETS],
-              description: 'Registered container preset, such as scene.legacy or group.container.',
+              description: 'Registered container preset, such as scene.basic or group.container.',
             },
             x: { type: 'number', description: 'Container X position' },
             y: { type: 'number', description: 'Container Y position' },
@@ -751,7 +752,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             const manifestShots: ManifestShot[] = allShots.map((node) => {
               const d = node.data as Record<string, unknown>;
               const shotNumber = (d['shotNumber'] as number | undefined) ?? 0;
-              const sceneId = d['sceneGroupId'] as string | undefined;
+              const sceneId = getNodeParentId(node);
               const chars =
                 (d['characters'] as Array<{ characterName?: string }> | undefined) ?? [];
               const pad = String(shotNumber).padStart(3, '0');

@@ -619,33 +619,6 @@ export function GroupNodeProperties({ node, onUpdateData }: NodeSpecificProperti
   );
 }
 
-export function MediaNodeProperties({ node }: NodeSpecificPropertiesProps) {
-  const data = node.data as Record<string, unknown>;
-  return (
-    <CollapsibleSection title={t('panel.media')}>
-      <div className="space-y-1 text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
-        <div className="flex justify-between">
-          <span>{t('panel.type')}</span>
-          <span style={{ color: 'var(--neko-fg)' }}>{(data.mediaType as string) ?? 'unknown'}</span>
-        </div>
-        {typeof data.assetPath === 'string' && (
-          <div className="truncate" title={data.assetPath}>
-            {data.assetPath.split('/').pop()}
-          </div>
-        )}
-        {data.duration != null && (
-          <div className="flex justify-between">
-            <span>{t('panel.duration')}</span>
-            <span style={{ color: 'var(--neko-fg)' }}>
-              {formatDuration(data.duration as number)}
-            </span>
-          </div>
-        )}
-      </div>
-    </CollapsibleSection>
-  );
-}
-
 export function ComposableNodeProperties({
   node,
   onUpdateData,
@@ -900,14 +873,6 @@ export function createBuiltInNodePropertiesRendererRegistry(): NodePropertiesRen
     storyboard: StoryboardNodeProperties,
     text: TextNodeProperties,
     group: GroupNodeProperties,
-    media: MediaNodeProperties,
-    shot: ({ node, onUpdateData }) => (
-      <ShotProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
-    ),
-    scene: ({ node, onUpdateData }) => <SceneProperties node={node} onUpdateData={onUpdateData} />,
-    gallery: ({ node, onUpdateData }) => (
-      <GalleryProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
-    ),
   };
 }
 
@@ -921,70 +886,6 @@ export function renderNodeSpecificProperties(
 
 const NODE_PROPERTIES_RENDERERS = createBuiltInNodePropertiesRendererRegistry();
 const NODE_TYPE_DESCRIPTORS = createBuiltInNodeTypeDescriptors();
-
-// =============================================================================
-// Creator node property panels
-// =============================================================================
-
-function getShotScaleOptions() {
-  return [
-    { value: 'ECU', label: t('panel.shotScale.ecu') },
-    { value: 'CU', label: t('panel.shotScale.cu') },
-    { value: 'MCU', label: t('panel.shotScale.mcu') },
-    { value: 'MS', label: t('panel.shotScale.ms') },
-    { value: 'MLS', label: t('panel.shotScale.mls') },
-    { value: 'LS', label: t('panel.shotScale.ls') },
-    { value: 'VLS', label: t('panel.shotScale.vls') },
-    { value: 'ELS', label: t('panel.shotScale.els') },
-  ];
-}
-
-function getCameraMovementOptions() {
-  return [
-    { value: '', label: t('panel.none') },
-    { value: 'static', label: t('panel.cameraMovement.static') },
-    { value: 'pan', label: t('panel.cameraMovement.pan') },
-    { value: 'tilt', label: t('panel.cameraMovement.tilt') },
-    { value: 'zoom-in', label: t('panel.cameraMovement.zoomIn') },
-    { value: 'zoom-out', label: t('panel.cameraMovement.zoomOut') },
-    { value: 'dolly', label: t('panel.cameraMovement.dolly') },
-    { value: 'handheld', label: t('panel.cameraMovement.handheld') },
-  ];
-}
-
-function getCameraAngleOptions() {
-  return [
-    { value: '', label: t('panel.none') },
-    { value: 'eye-level', label: t('panel.cameraAngle.eyeLevel') },
-    { value: 'high-angle', label: t('panel.cameraAngle.highAngle') },
-    { value: 'low-angle', label: t('panel.cameraAngle.lowAngle') },
-    { value: 'bird-eye', label: t('panel.cameraAngle.birdEye') },
-    { value: 'dutch', label: t('panel.cameraAngle.dutch') },
-  ];
-}
-
-function getTimeOfDayOptions() {
-  return [
-    { value: '', label: t('panel.timeOfDay.any') },
-    { value: 'dawn', label: t('panel.timeOfDay.dawn') },
-    { value: 'morning', label: t('panel.timeOfDay.morning') },
-    { value: 'noon', label: t('panel.timeOfDay.noon') },
-    { value: 'afternoon', label: t('panel.timeOfDay.afternoon') },
-    { value: 'dusk', label: t('panel.timeOfDay.dusk') },
-    { value: 'night', label: t('panel.timeOfDay.night') },
-  ];
-}
-
-function getGalleryPresetOptions() {
-  return [
-    { value: 'character-3view', label: t('panel.galleryPreset.character3View') },
-    { value: 'character-4view', label: t('panel.galleryPreset.character4View') },
-    { value: 'expression-9', label: t('panel.galleryPreset.expression9') },
-    { value: 'turnaround-8', label: t('panel.galleryPreset.turnaround8') },
-    { value: 'scene-views', label: t('panel.galleryPreset.sceneViews') },
-    { value: 'custom', label: t('panel.galleryPreset.custom') },
-  ];
-}
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -1096,166 +997,6 @@ function SelectField({
         ))}
       </select>
     </div>
-  );
-}
-
-export function ShotProperties({
-  data,
-  onUpdateData,
-}: {
-  data: Record<string, unknown>;
-  onUpdateData: (data: Record<string, unknown>) => void;
-}) {
-  return (
-    <>
-      <CollapsibleSection title={t('panel.shotVisual')}>
-        <div className="space-y-2">
-          <TextareaField
-            label={t('panel.visualDescription')}
-            value={(data.visualDescription as string) ?? ''}
-            onChange={(v) => onUpdateData({ visualDescription: v })}
-            minHeight={72}
-          />
-          <div className="grid grid-cols-3 gap-1.5">
-            <SelectField
-              label={t('panel.shotScale')}
-              value={(data.shotScale as string) ?? 'MS'}
-              options={getShotScaleOptions()}
-              onChange={(v) => onUpdateData({ shotScale: v })}
-            />
-            <SelectField
-              label={t('panel.cameraMovement')}
-              value={(data.cameraMovement as string) ?? ''}
-              options={getCameraMovementOptions()}
-              onChange={(v) => onUpdateData({ cameraMovement: v || undefined })}
-            />
-            <SelectField
-              label={t('panel.cameraAngle')}
-              value={(data.cameraAngle as string) ?? ''}
-              options={getCameraAngleOptions()}
-              onChange={(v) => onUpdateData({ cameraAngle: v || undefined })}
-            />
-          </div>
-          <div>
-            <FieldLabel>{t('panel.durationSeconds')}</FieldLabel>
-            <input
-              type="number"
-              min={0.5}
-              step={0.5}
-              className="w-full text-xs px-2 py-1 rounded border outline-none"
-              style={{
-                backgroundColor: 'var(--control-bg)',
-                borderColor: 'var(--control-border)',
-                color: 'var(--control-fg)',
-              }}
-              value={(data.duration as number) ?? 3}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!isNaN(v) && v > 0) onUpdateData({ duration: v });
-              }}
-            />
-          </div>
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title={t('panel.dialogueAndSound')} defaultExpanded={false}>
-        <div className="space-y-2">
-          <TextareaField
-            label={t('panel.dialogue')}
-            value={(data.dialogue as string) ?? ''}
-            onChange={(v) => onUpdateData({ dialogue: v || undefined })}
-          />
-          <TextareaField
-            label={t('panel.voiceOver')}
-            value={(data.voiceOver as string) ?? ''}
-            onChange={(v) => onUpdateData({ voiceOver: v || undefined })}
-          />
-          <TextField
-            label={t('panel.soundCue')}
-            value={(data.soundCue as string) ?? ''}
-            onChange={(v) => onUpdateData({ soundCue: v || undefined })}
-            placeholder={t('panel.soundCuePlaceholder')}
-          />
-        </div>
-      </CollapsibleSection>
-    </>
-  );
-}
-
-export function SceneProperties({
-  node,
-  onUpdateData,
-}: {
-  node: CanvasNode;
-  onUpdateData: (data: Record<string, unknown>) => void;
-}) {
-  const data = node.data as Record<string, unknown>;
-  const childIds = getContainerChildIds(node);
-
-  return (
-    <CollapsibleSection title={t('panel.sceneInfo')}>
-      <div className="space-y-2">
-        <TextField
-          label={t('panel.sceneTitle')}
-          value={(data.sceneTitle as string) ?? ''}
-          onChange={(v) => onUpdateData({ sceneTitle: v })}
-          placeholder={t('panel.sceneTitlePlaceholder')}
-        />
-        <div className="grid grid-cols-2 gap-1.5">
-          <TextField
-            label={t('panel.location')}
-            value={(data.location as string) ?? ''}
-            onChange={(v) => onUpdateData({ location: v || undefined })}
-            placeholder={t('panel.locationPlaceholder')}
-          />
-          <SelectField
-            label={t('panel.timeOfDay')}
-            value={(data.timeOfDay as string) ?? ''}
-            options={getTimeOfDayOptions()}
-            onChange={(v) => onUpdateData({ timeOfDay: v || undefined })}
-          />
-        </div>
-        <div>
-          <FieldLabel>{t('panel.includedShotCount')}</FieldLabel>
-          <span className="text-xs" style={{ color: 'var(--neko-fg)' }}>
-            {childIds.length}
-          </span>
-        </div>
-      </div>
-    </CollapsibleSection>
-  );
-}
-
-export function GalleryProperties({
-  data,
-  onUpdateData,
-}: {
-  data: Record<string, unknown>;
-  onUpdateData: (data: Record<string, unknown>) => void;
-}) {
-  return (
-    <CollapsibleSection title={t('panel.gallerySettings')}>
-      <div className="space-y-2">
-        <TextField
-          label={t('panel.characterName')}
-          value={(data.characterName as string) ?? ''}
-          onChange={(v) => onUpdateData({ characterName: v || undefined })}
-          placeholder={t('panel.characterNamePlaceholder')}
-        />
-        <SelectField
-          label={t('panel.galleryPreset')}
-          value={(data.preset as string) ?? 'character-3view'}
-          options={getGalleryPresetOptions()}
-          onChange={(v) => onUpdateData({ preset: v })}
-        />
-        <TextareaField
-          label={t('panel.globalPromptPrefix')}
-          value={(data.globalPromptPrefix as string) ?? ''}
-          onChange={(v) => onUpdateData({ globalPromptPrefix: v || undefined })}
-          minHeight={48}
-        />
-      </div>
-    </CollapsibleSection>
   );
 }
 
@@ -1592,10 +1333,4 @@ function readShallowPath(entry: Record<string, unknown>, path: JsonPointerPath):
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }

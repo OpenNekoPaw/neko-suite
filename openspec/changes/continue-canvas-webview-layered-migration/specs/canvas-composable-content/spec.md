@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Presets assemble node capabilities
-The system SHALL define presets that assemble content, data defaults, ports, preview capabilities, container capability, and behavior metadata for new nodes. Presets MUST be registered by name and MUST NOT require adding a monolithic React node component for every new asset format. Migrated core presets MUST provide production-ready content trees for new Shot, Scene, Gallery, and Media nodes while keeping explicit legacy presets available.
+The system SHALL define presets that assemble content, data defaults, ports, preview capabilities, container capability, and behavior metadata for new nodes. Presets MUST be registered by name and MUST NOT require adding a monolithic React node component for every new asset format. Migrated core presets MUST provide production-ready content trees for new Shot, Scene, Gallery, and Media nodes, and removed core legacy presets MUST NOT remain registered.
 
 #### Scenario: Shot preset creates content and data defaults
 - **WHEN** the Shot preset is used to create a node
@@ -24,14 +24,14 @@ The system SHALL define presets that assemble content, data defaults, ports, pre
 - **THEN** the created node renders asset information and lightweight preview through composable blocks bound to existing media data fields
 
 ### Requirement: Property panels can derive editors from composable content
-The system SHALL allow property panels to enumerate content blocks, bindings, collections, and preview capabilities to generate appropriate editors for composable nodes. Legacy nodes without content MUST continue using existing per-type property panel branches. Migrated core presets MUST expose enough binding metadata for property panels to edit their visible fields without duplicating type-specific branches.
+The system SHALL allow property panels to enumerate content blocks, bindings, collections, and preview capabilities to generate appropriate editors for composable nodes. Non-core nodes without content MAY continue using existing per-type property panel branches. Migrated core presets MUST expose enough binding metadata for property panels to edit their visible fields without duplicating type-specific branches.
 
 #### Scenario: Bound input appears in property panel
 - **WHEN** a composable node has an InputBlock bound to `/duration`
 - **THEN** the property panel can render a duration editor using the block binding metadata
 
-#### Scenario: Legacy branch remains available
-- **WHEN** an existing node lacks composable content
+#### Scenario: Non-core branch remains available
+- **WHEN** a non-core node lacks composable content
 - **THEN** the property panel uses the existing type-specific editing branch
 
 #### Scenario: Migrated Shot panel is generated from bindings

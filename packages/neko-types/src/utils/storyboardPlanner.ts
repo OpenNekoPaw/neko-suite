@@ -9,7 +9,7 @@ import type {
   StoryScenePlan,
   StoryShotPlan,
 } from '../types/storyboard-planner';
-import type { CanvasNodeType, ShotCharacter } from '../types/canvas';
+import type { ShotCharacter } from '../types/canvas';
 
 const DEFAULT_START_X = 100;
 const DEFAULT_START_Y = 100;
@@ -73,57 +73,57 @@ export async function applyStoryboardPayloadToCanvas(
     if (!scene) continue;
 
     const sceneX = startX + sceneIndex * (SCENE_WIDTH + SCENE_GAP);
-    const sceneNodeId = await api.nodes.create(
-      'scene' as CanvasNodeType,
-      { x: sceneX, y: startY },
-      {
+    const composite = await api.nodes.createComposite({
+      containerType: 'scene',
+      position: { x: sceneX, y: startY },
+      data: {
         sceneId: scene.sceneId,
         sceneTitle: scene.sceneTitle,
         sceneNumber: scene.sceneNumber,
         location: scene.location,
         timeOfDay: scene.timeOfDay ?? undefined,
-        shotIds: [] as string[],
       },
-    );
+      children: scene.shotPlans.flatMap((shot, shotIndex) => {
+        if (!shot) return [];
 
-    const shotIds: string[] = [];
-    for (let shotIndex = 0; shotIndex < scene.shotPlans.length; shotIndex++) {
-      const shot = scene.shotPlans[shotIndex];
-      if (!shot) continue;
+        const shotX = sceneX + shotIndex * (SHOT_WIDTH + SHOT_GAP);
+        const shotY = startY + 240;
+        return [
+          {
+            type: 'shot',
+            position: { x: shotX, y: shotY },
+            data: {
+              shotNumber: shot.shotNumber,
+              duration: shot.duration,
+              visualDescription: shot.visualDescription,
+              shotScale: shot.shotScale,
+              characters: [...shot.characters],
+              cameraMovement: shot.cameraMovement,
+              cameraAngle: shot.cameraAngle,
+              characterAction: shot.characterAction,
+              emotion: [...shot.emotion],
+              sceneTags: [...shot.sceneTags],
+              generationStatus: 'idle' as const,
+              generationHistory: [] as unknown[],
+              dialogue: shot.dialogue,
+              voiceOver: shot.voiceOver,
+              soundCue: shot.soundCue,
+              // Phase 6.3 — stamp plan provenance when orchestrated
+              ...(options.workflowPlanId !== undefined && {
+                workflowPlanId: options.workflowPlanId,
+              }),
+            },
+          },
+        ];
+      }),
+      autoLayout: false,
+    });
 
-      const shotX = sceneX + shotIndex * (SHOT_WIDTH + SHOT_GAP);
-      const shotY = startY + 240;
-      const shotNodeId = await api.nodes.create(
-        'shot' as CanvasNodeType,
-        { x: shotX, y: shotY },
-        {
-          shotNumber: shot.shotNumber,
-          sceneGroupId: sceneNodeId,
-          duration: shot.duration,
-          visualDescription: shot.visualDescription,
-          shotScale: shot.shotScale,
-          characters: [...shot.characters],
-          cameraMovement: shot.cameraMovement,
-          cameraAngle: shot.cameraAngle,
-          characterAction: shot.characterAction,
-          emotion: [...shot.emotion],
-          sceneTags: [...shot.sceneTags],
-          generationStatus: 'idle' as const,
-          generationHistory: [] as unknown[],
-          dialogue: shot.dialogue,
-          voiceOver: shot.voiceOver,
-          soundCue: shot.soundCue,
-          // Phase 6.3 — stamp plan provenance when orchestrated
-          ...(options.workflowPlanId !== undefined && {
-            workflowPlanId: options.workflowPlanId,
-          }),
-        },
-      );
-      shotIds.push(shotNodeId);
-    }
-
-    await api.nodes.update(sceneNodeId, { shotIds });
-    createdScenes.push({ sourceSceneId: scene.sceneId, sceneNodeId, shotIds });
+    createdScenes.push({
+      sourceSceneId: scene.sceneId,
+      sceneNodeId: composite.containerId,
+      shotIds: composite.childIds,
+    });
   }
 
   return {

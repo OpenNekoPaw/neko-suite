@@ -141,17 +141,6 @@ function remapClonedNode(node: CanvasNode, options: RemapClonedNodeOptions): Can
   };
 
   switch (node.type) {
-    case 'scene':
-      return {
-        ...base,
-        type: 'scene',
-        data: {
-          ...node.data,
-          shotIds: getContainerChildIds(node)
-            .map((shotId) => options.idMap.get(shotId))
-            .filter((shotId): shotId is string => Boolean(shotId)),
-        },
-      };
     case 'group':
       return {
         ...base,
@@ -163,32 +152,9 @@ function remapClonedNode(node: CanvasNode, options: RemapClonedNodeOptions): Can
             .filter((childId): childId is string => Boolean(childId)),
         },
       };
-    case 'shot': {
-      const nextSceneGroupId = getRemappedParentId(node, options);
-      return {
-        ...base,
-        type: 'shot',
-        data: {
-          ...node.data,
-          sceneGroupId: nextSceneGroupId,
-        },
-      };
-    }
     default:
       return base;
   }
-}
-
-function getRemappedParentId(
-  node: CanvasNode,
-  options: Pick<RemapClonedNodeOptions, 'idMap' | 'originalNodeIds'>,
-): string | undefined {
-  const parentId = getNodeParentId(node);
-  if (!parentId || !options.originalNodeIds.has(parentId)) {
-    return undefined;
-  }
-
-  return options.idMap.get(parentId);
 }
 
 // =============================================================================

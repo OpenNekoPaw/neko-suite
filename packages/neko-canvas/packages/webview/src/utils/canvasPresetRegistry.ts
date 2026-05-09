@@ -539,8 +539,7 @@ function getMediaPreviewRole(node: CanvasNodeDraft): CanvasPreviewRole {
 }
 
 function getDraftContainerChildIds(node: CanvasNodeDraft): string[] {
-  const legacyChildIds =
-    node.type === 'scene' ? node.data.shotIds : node.type === 'group' ? node.data.childIds : [];
+  const legacyChildIds = node.type === 'group' ? node.data.childIds : [];
 
   return uniqueStrings([...(node.container?.childIds ?? []), ...legacyChildIds]);
 }

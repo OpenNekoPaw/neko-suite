@@ -58,7 +58,7 @@ describe('nodeFactory gallery normalization', () => {
 });
 
 describe('nodeFactory composable presets', () => {
-  it('registers migrated core presets while keeping legacy presets available', () => {
+  it('registers migrated core presets without legacy core escape hatches', () => {
     expect(getBuiltInCanvasNodePresetMetadata('shot.basic')).toMatchObject({
       nodeType: 'shot',
       creationMode: 'composable',
@@ -75,11 +75,12 @@ describe('nodeFactory composable presets', () => {
       nodeType: 'media',
       creationMode: 'composable',
     });
-    expect(getBuiltInCanvasNodePresetMetadata('shot.legacy')).toMatchObject({
-      nodeType: 'shot',
-      creationMode: 'legacy',
-    });
+    expect(getBuiltInCanvasNodePresetMetadata('shot.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('scene.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('gallery.legacy')).toBeUndefined();
+    expect(getBuiltInCanvasNodePresetMetadata('media.legacy')).toBeUndefined();
     expect(CANVAS_AGENT_NODE_PRESETS).toContain('shot.basic');
+    expect(CANVAS_AGENT_NODE_PRESETS).not.toContain('shot.legacy');
     expect(CANVAS_AGENT_CHILD_PRESETS).toContain('gallery.basic');
     expect(CANVAS_AGENT_CONTAINER_PRESETS).toContain('scene.basic');
   });
@@ -98,65 +99,16 @@ describe('nodeFactory composable presets', () => {
     expect(node.content?.blocks?.[0]?.binding?.path).toBe('/content');
   });
 
-  it('keeps explicit legacy presets on the legacy rendering path', () => {
-    const node = buildCanvasNode({
-      type: 'shot',
-      position: { x: 0, y: 0 },
-      zIndex: 0,
-      preset: 'shot.legacy',
-      data: { visualDescription: 'Legacy shot' },
-    });
-
-    expect(node.type).toBe('shot');
-    expect(node.preset).toBeUndefined();
-    expect(node.content).toBeUndefined();
-    expect(node.preview).toBeUndefined();
-    if (node.type !== 'shot') {
-      throw new Error('Expected shot node');
-    }
-    expect(node.data.visualDescription).toBe('Legacy shot');
-  });
-
-  it('allows rollback to explicit legacy defaults without corrupting existing composable data', () => {
-    const composable = buildCanvasNode({
-      type: 'shot',
-      position: { x: 0, y: 0 },
-      zIndex: 0,
-      preset: 'shot.basic',
-      data: {
-        shotNumber: 9,
-        visualDescription: 'Composable shot',
-        generationHistory: [
-          {
-            id: 'candidate-1',
-            dataUrl: 'assets/shot.png',
-            prompt: 'shot',
-            timestamp: 1,
-            selected: true,
-          },
-        ],
-      },
-    });
-    const rollbackDefault = buildCanvasNode({
-      type: 'shot',
-      position: { x: 260, y: 0 },
-      zIndex: 1,
-      preset: 'shot.legacy',
-      data: {
-        shotNumber: 10,
-        visualDescription: 'Legacy rollback shot',
-      },
-    });
-
-    expect(composable.preset).toBe('shot.basic');
-    expect(composable.content).toBeDefined();
-    expect(composable.preview?.thumbnailVariantId).toBe('candidate-1');
-    expect(rollbackDefault.preset).toBeUndefined();
-    expect(rollbackDefault.content).toBeUndefined();
-    expect(rollbackDefault.preview).toBeUndefined();
-    expect(rollbackDefault.type === 'shot' ? rollbackDefault.data.visualDescription : '').toBe(
-      'Legacy rollback shot',
-    );
+  it('rejects removed core legacy presets', () => {
+    expect(() =>
+      buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.legacy',
+        data: { visualDescription: 'Legacy shot' },
+      }),
+    ).toThrow(/Unsupported preset/);
   });
 
   it('applies the migrated shot preset without moving authored data out of node.data', () => {
@@ -213,7 +165,6 @@ describe('nodeFactory composable presets', () => {
         sceneNumber: 2,
         location: 'Station',
         timeOfDay: 'Night',
-        shotIds: ['shot-1'],
       },
     });
 

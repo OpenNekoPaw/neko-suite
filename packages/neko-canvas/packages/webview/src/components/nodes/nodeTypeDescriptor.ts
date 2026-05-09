@@ -2,7 +2,6 @@
  * Node Type Descriptor — unified metadata for each canvas node type.
  *
  * Converges three previously scattered definitions into a single source of truth:
- *   - Renderer function      (was in nodeRendererRegistry.tsx)
  *   - Display label i18n key (was in PropertyPanel.tsx:getNodeTypeLabel)
  *   - Toolbar icon           (was in CanvasToolbar.tsx inline emoji)
  *   - Default creation size  (was in nodeFactory.ts switch cases)
@@ -12,7 +11,6 @@
  */
 
 import type { CanvasNodeType } from '@neko/shared';
-import type { NodeRenderer } from './nodeRendererTypes';
 
 // =============================================================================
 // Types
@@ -32,8 +30,6 @@ export interface NodeTypeDescriptor {
   icon: string;
   /** Default size when creating a new node of this type */
   defaultSize: NodeDefaultSize;
-  /** Canvas node renderer function */
-  renderer: NodeRenderer;
 }
 
 /**

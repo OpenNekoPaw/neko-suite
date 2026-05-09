@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Agent can derive successor nodes through Canvas contracts
-The system SHALL expose an Agent-accessible derive operation that creates a successor node from a source node using registered presets, placement utilities, and connection contracts. The operation MUST use the same derivation rules available to the Webview UI. After a core preset is migrated and marked as the default, Agent derive MUST prefer the migrated preset while still accepting explicit legacy target presets.
+The system SHALL expose an Agent-accessible derive operation that creates a successor node from a source node using registered presets, placement utilities, and connection contracts. The operation MUST use the same derivation rules available to the Webview UI. Agent derive MUST use migrated presets for Shot, Scene, Gallery, and Media core nodes.
 
 #### Scenario: Derive same-type successor
 - **WHEN** Agent requests a successor for a Shot node without specifying a target preset
@@ -12,12 +12,12 @@ The system SHALL expose an Agent-accessible derive operation that creates a succ
 - **THEN** the Canvas API creates a Gallery node using the registered preset if the source preset allows that derive target
 
 #### Scenario: Migrated default derive returns composable node
-- **WHEN** Agent derives a same-type successor from a migrated Shot, Scene, Gallery, or Media node without specifying a legacy target
-- **THEN** the returned node includes the migrated preset name, `content` tree, binding metadata, and legacy-compatible data shape
+- **WHEN** Agent derives a same-type successor from a migrated Shot, Scene, Gallery, or Media node without specifying a target preset
+- **THEN** the returned node includes the migrated preset name, `content` tree, binding metadata, and canonical organization fields when applicable
 
-#### Scenario: Explicit legacy derive remains available
-- **WHEN** Agent derives a node with an explicit `*.legacy` target preset
-- **THEN** the Canvas API creates the legacy-compatible node if the preset is registered and allowed by derive rules
+#### Scenario: Removed core legacy derive is rejected
+- **WHEN** Agent derives a node with an explicit removed core `*.legacy` target preset
+- **THEN** the Canvas API rejects the request without creating a node
 
 ### Requirement: Agent composite creation is atomic
 The system SHALL expose an Agent-accessible composite creation operation that creates a container node and child nodes in one logical mutation. The operation MUST validate container policy, child presets, layout, and membership consistency before committing the mutation. Migrated container presets MUST create composable containers and composable children by default when those presets are the registered defaults.
@@ -34,9 +34,9 @@ The system SHALL expose an Agent-accessible composite creation operation that cr
 - **WHEN** Agent creates a Scene composite using migrated presets
 - **THEN** the returned Scene includes container capability and child-node slot content, and each returned child includes `parentId`, composable content, and node summary metadata
 
-#### Scenario: Legacy composite remains explicit
-- **WHEN** Agent creates a composite with explicit legacy container or child presets
-- **THEN** Canvas preserves legacy node data compatibility while still validating membership through container policy
+#### Scenario: Removed core legacy composite presets are rejected
+- **WHEN** Agent creates a composite with explicit removed core legacy container or child presets
+- **THEN** Canvas rejects the request without creating partial nodes
 
 ### Requirement: Agent structured content extraction follows layer boundaries
 The system SHALL expose structured Canvas content extraction that can return JSON, markdown, or prompt-oriented content for selected nodes or explicit node IDs. Extraction MUST preserve layer boundaries and MUST NOT serialize runtime-only preview state. For migrated nodes, extraction MUST include binding summaries, container order, preview summaries, and collection/projection summaries without embedding Webview runtime resources.
@@ -53,6 +53,6 @@ The system SHALL expose structured Canvas content extraction that can return JSO
 - **WHEN** Agent extracts a migrated Gallery node
 - **THEN** the response includes Gallery-level data, collection summaries for cells, selected candidate references, and binding paths needed for follow-up updates
 
-#### Scenario: Extract mixed legacy and composable nodes
-- **WHEN** Agent extracts a selection containing both legacy nodes and migrated composable nodes
+#### Scenario: Extract mixed composable and non-composable nodes
+- **WHEN** Agent extracts a selection containing migrated core nodes and non-core nodes that have not been migrated
 - **THEN** the response preserves common node summaries and only includes binding metadata for nodes that declare composable content

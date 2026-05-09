@@ -47,7 +47,7 @@ describe('canvasAgentOperations', () => {
 
     const result = deriveCanvasNode(
       { nodes: [source, occupied], connections: [], generateId: ids() },
-      { sourceNodeId: 'shot-1', targetPreset: 'shot.legacy' },
+      { sourceNodeId: 'shot-1', targetPreset: 'shot.basic' },
     );
 
     expect(result.result.nodeId).toBe('generated-1');
@@ -62,7 +62,7 @@ describe('canvasAgentOperations', () => {
     });
   });
 
-  it('derives migrated defaults while keeping explicit legacy targets available', () => {
+  it('derives migrated defaults for core node types', () => {
     const source = {
       ...node('shot-1', 'shot', 0, 0),
       preset: 'shot.basic',
@@ -79,13 +79,6 @@ describe('canvasAgentOperations', () => {
       nodeId: 'generated-1',
       role: 'generation-candidate',
     });
-
-    const legacy = deriveCanvasNode(
-      { nodes: [source], connections: [], generateId: ids() },
-      { sourceNodeId: 'shot-1', targetPreset: 'shot.legacy' },
-    );
-    expect(legacy.result.node?.preset).toBeUndefined();
-    expect(legacy.result.node?.content).toBeUndefined();
   });
 
   it('rejects unknown derive presets without mutating inputs', () => {
@@ -103,10 +96,10 @@ describe('canvasAgentOperations', () => {
     const result = createCanvasComposite(
       { nodes: [], connections: [], generateId: ids() },
       {
-        containerPreset: 'scene.legacy',
+        containerPreset: 'scene.basic',
         position: { x: 100, y: 100 },
         children: [
-          { preset: 'shot.legacy', data: { visualDescription: 'First beat' } },
+          { preset: 'shot.basic', data: { visualDescription: 'First beat' } },
           { preset: 'annotation.basic', data: { content: 'note' } },
         ],
       },
@@ -144,30 +137,10 @@ describe('canvasAgentOperations', () => {
     expect(scene?.content?.childSlots?.[0]?.id).toBe('scene-children');
     expect(scene?.container?.policy).toBe('scene');
     expect(getContainerChildIds(scene as CanvasNode)).toEqual(result.result.childIds);
-    expect(scene?.type === 'scene' ? scene.data.shotIds : []).toEqual([shot?.id]);
     expect(shot?.preset).toBe('shot.basic');
     expect(shot?.parentId).toBe(scene?.id);
-    expect(shot?.type === 'shot' ? shot.data.sceneGroupId : undefined).toBe(scene?.id);
     expect(media?.preset).toBe('media.basic');
     expect(media?.parentId).toBe(scene?.id);
-  });
-
-  it('keeps explicit legacy composite presets available', () => {
-    const result = createCanvasComposite(
-      { nodes: [], connections: [], generateId: ids() },
-      {
-        containerPreset: 'scene.legacy',
-        children: [{ preset: 'shot.legacy', data: { visualDescription: 'Legacy beat' } }],
-      },
-    );
-
-    const scene = result.nodes.find((item) => item.id === result.result.containerId);
-    const shot = result.nodes.find((item) => item.type === 'shot');
-
-    expect(scene?.preset).toBeUndefined();
-    expect(scene?.content).toBeUndefined();
-    expect(shot?.preset).toBeUndefined();
-    expect(shot?.content).toBeUndefined();
   });
 
   it('rejects invalid child presets before returning partial nodes', () => {
@@ -175,7 +148,7 @@ describe('canvasAgentOperations', () => {
       createCanvasComposite(
         { nodes: [], connections: [], generateId: ids() },
         {
-          containerPreset: 'scene.legacy',
+          containerPreset: 'scene.basic',
           children: [{ preset: 'missing.preset' }],
         },
       ),
@@ -215,7 +188,6 @@ describe('canvasAgentOperations', () => {
       data: {
         sceneTitle: 'Arrival',
         sceneNumber: 1,
-        shotIds: ['shot-1'],
         engineToken: 'runtime-token',
       },
     } as unknown as CanvasNode;
@@ -276,7 +248,7 @@ describe('canvasAgentOperations', () => {
     expect(serialized).not.toContain('currentTime');
   });
 
-  it('extracts mixed legacy and composable nodes with bindings only for composable content', () => {
+  it('extracts composable nodes with binding summaries', () => {
     const migratedGallery = hydrateCanvasNodePreview({
       ...buildCanvasNode({
         type: 'gallery',
@@ -307,19 +279,15 @@ describe('canvasAgentOperations', () => {
       }),
       id: 'gallery-1',
     } as CanvasNode);
-    const legacyShot = node('shot-legacy', 'shot', 240, 0);
-
-    const result = extractStructuredCanvasContent([migratedGallery, legacyShot], {
-      nodeIds: ['gallery-1', 'shot-legacy'],
+    const result = extractStructuredCanvasContent([migratedGallery], {
+      nodeIds: ['gallery-1'],
       includeChildren: false,
       format: 'json',
     });
 
     const gallerySummary = result.nodes.find((summary) => summary.id === 'gallery-1');
-    const legacySummary = result.nodes.find((summary) => summary.id === 'shot-legacy');
     expect(gallerySummary?.bindings?.some((binding) => binding.path === '/cells')).toBe(true);
     expect(gallerySummary?.preview?.thumbnailVariantId).toBe('front-v1');
-    expect(legacySummary?.bindings).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain('blob:runtime-front');
   });
 });

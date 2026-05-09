@@ -162,7 +162,7 @@ describe('clipboardStore', () => {
     ]);
   });
 
-  it('paste should remap migrated Scene canonical children and legacy mirrors', () => {
+  it('paste should remap migrated Scene canonical children', () => {
     const scene: CanvasNode = {
       id: 'scene-1',
       type: 'scene',
@@ -171,7 +171,7 @@ describe('clipboardStore', () => {
       zIndex: 0,
       preset: 'scene.basic',
       container: { policy: 'scene', childIds: ['shot-1'] },
-      data: { sceneTitle: 'Scene', sceneNumber: 1, shotIds: ['shot-1'] },
+      data: { sceneTitle: 'Scene', sceneNumber: 1 },
     };
     const shot: CanvasNode = {
       id: 'shot-1',
@@ -182,7 +182,6 @@ describe('clipboardStore', () => {
       parentId: 'scene-1',
       data: {
         shotNumber: 1,
-        sceneGroupId: 'scene-1',
         duration: 3,
         visualDescription: '',
         characters: [],
@@ -202,11 +201,7 @@ describe('clipboardStore', () => {
     const pastedShot = result?.nodes.find((node) => node.type === 'shot');
 
     expect(pastedScene?.container?.childIds).toEqual([pastedShot?.id]);
-    expect(pastedScene?.type === 'scene' ? pastedScene.data.shotIds : []).toEqual([pastedShot?.id]);
     expect(pastedShot?.parentId).toBe(pastedScene?.id);
-    expect(pastedShot?.type === 'shot' ? pastedShot.data.sceneGroupId : undefined).toBe(
-      pastedScene?.id,
-    );
   });
 
   it('duplicate should create copies with small offset', () => {

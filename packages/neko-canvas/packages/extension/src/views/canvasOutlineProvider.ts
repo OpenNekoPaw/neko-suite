@@ -24,8 +24,8 @@ interface CanvasNodeInfo {
   label: string;
   detail?: string;
   locked?: boolean;
-  /** For scene nodes: ordered shot ids contained in this scene */
-  shotIds?: string[];
+  /** For container nodes: ordered child node ids contained in this node */
+  childIds?: string[];
 }
 
 interface CanvasConnectionInfo {
@@ -71,7 +71,7 @@ const CATEGORY_META: Record<OutlineCategory, { label: string; icon: string }> = 
 type OutlineElement =
   | { kind: 'category'; category: OutlineCategory; count: number }
   | { kind: 'node'; node: CanvasNodeInfo }
-  | { kind: 'shot-child'; node: CanvasNodeInfo; parentSceneId: string }
+  | { kind: 'scene-child'; node: CanvasNodeInfo; parentSceneId: string }
   | { kind: 'connection'; connection: CanvasConnectionInfo };
 
 // =============================================================================
@@ -99,22 +99,24 @@ const NODE_ICONS: Record<string, vscode.ThemeIcon> = {
 // =============================================================================
 
 export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, CanvasOutlineData> {
-  /** Shot IDs that belong to a scene (computed on data update) */
-  private containedShotIds = new Set<string>();
+  /** Node IDs that belong to a scene (computed on data update) */
+  private containedSceneChildIds = new Set<string>();
   /** Quick lookup: nodeId → CanvasNodeInfo */
   private nodeMap = new Map<string, CanvasNodeInfo>();
 
   // Recompute grouping data when outline data is updated
   protected override onDataUpdated(_data: CanvasOutlineData | null): void {
-    this.containedShotIds.clear();
+    this.containedSceneChildIds.clear();
     this.nodeMap.clear();
     const data = this.data;
     if (!data) return;
     for (const n of data.nodes) {
       this.nodeMap.set(n.id, n);
-      if (n.type === 'scene' && n.shotIds) {
-        for (const sid of n.shotIds) {
-          this.containedShotIds.add(sid);
+    }
+    for (const n of data.nodes) {
+      if (n.type === 'scene' && n.childIds) {
+        for (const childId of n.childIds) {
+          this.containedSceneChildIds.add(childId);
         }
       }
     }
@@ -136,9 +138,9 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
       }
 
       case 'node':
-      case 'shot-child': {
+      case 'scene-child': {
         const { node } = element;
-        const hasChildren = node.type === 'scene' && (node.shotIds?.length ?? 0) > 0;
+        const hasChildren = node.type === 'scene' && (node.childIds?.length ?? 0) > 0;
         const item = new vscode.TreeItem(
           node.label,
           hasChildren
@@ -148,11 +150,11 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
         item.iconPath = NODE_ICONS[node.type] ?? new vscode.ThemeIcon('circle-outline');
         item.description = node.detail;
         item.tooltip = `${node.type}: ${node.label}${node.locked ? ' 🔒' : ''}`;
-        item.contextValue = element.kind === 'shot-child' ? 'shotChild' : 'canvasNode';
+        item.contextValue = element.kind === 'scene-child' ? 'sceneChild' : 'canvasNode';
         item.command = {
           command: 'neko.canvas.selectNodeFromOutline',
           title: 'Select Node',
-          arguments: element.kind === 'shot-child' ? [node.id, element.parentSceneId] : [node.id],
+          arguments: element.kind === 'scene-child' ? [node.id, element.parentSceneId] : [node.id],
         };
         return item;
       }
@@ -183,7 +185,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
       const nodes = this.data.nodes;
       const scenes = nodes.filter((n) => n.type === 'scene');
       const standaloneShots = nodes.filter(
-        (n) => n.type === 'shot' && !this.containedShotIds.has(n.id),
+        (n) => n.type === 'shot' && !this.containedSceneChildIds.has(n.id),
       );
       const galleries = nodes.filter((n) => n.type === 'gallery');
       const media = nodes.filter((n) => n.type === 'media');
@@ -219,7 +221,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
             .map((node) => ({ kind: 'node' as const, node }));
         case 'shots':
           return nodes
-            .filter((n) => n.type === 'shot' && !this.containedShotIds.has(n.id))
+            .filter((n) => n.type === 'shot' && !this.containedSceneChildIds.has(n.id))
             .map((node) => ({ kind: 'node' as const, node }));
         case 'galleries':
           return nodes
@@ -247,17 +249,17 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
       }
     }
 
-    // Scene node → child shots
+    // Scene node → container children
     if (
-      (element.kind === 'node' || element.kind === 'shot-child') &&
+      (element.kind === 'node' || element.kind === 'scene-child') &&
       element.node.type === 'scene'
     ) {
-      const shotIds = element.node.shotIds ?? [];
-      return shotIds
-        .map((sid) => this.nodeMap.get(sid))
+      const childIds = element.node.childIds ?? [];
+      return childIds
+        .map((childId) => this.nodeMap.get(childId))
         .filter((n): n is CanvasNodeInfo => n !== undefined)
         .map((node) => ({
-          kind: 'shot-child' as const,
+          kind: 'scene-child' as const,
           node,
           parentSceneId: element.node.id,
         }));

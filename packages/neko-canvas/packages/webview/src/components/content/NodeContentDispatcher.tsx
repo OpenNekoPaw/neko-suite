@@ -10,14 +10,14 @@ export type LegacyNodeRenderer = (context: NodeRendererContext) => React.ReactNo
 
 export interface NodeContentDispatcherProps {
   context: NodeRendererContext;
-  renderLegacy: LegacyNodeRenderer;
+  renderLegacy?: LegacyNodeRenderer;
 }
 
 export function NodeContentDispatcher({ context, renderLegacy }: NodeContentDispatcherProps) {
   const { node } = context;
 
   if (!node.content) {
-    return <>{renderLegacy(context)}</>;
+    return renderLegacy ? <>{renderLegacy(context)}</> : null;
   }
 
   return <ComposableNodeContent context={context} node={node} content={node.content} />;

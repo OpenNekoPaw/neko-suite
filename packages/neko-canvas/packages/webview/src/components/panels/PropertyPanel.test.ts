@@ -16,10 +16,10 @@ describe('PropertyPanel node properties registry', () => {
     expect(registry.storyboard).toBeTypeOf('function');
     expect(registry.text).toBeTypeOf('function');
     expect(registry.group).toBeTypeOf('function');
-    expect(registry.media).toBeTypeOf('function');
-    expect(registry.shot).toBeTypeOf('function');
-    expect(registry.scene).toBeTypeOf('function');
-    expect(registry.gallery).toBeTypeOf('function');
+    expect(registry.media).toBeUndefined();
+    expect(registry.shot).toBeUndefined();
+    expect(registry.scene).toBeUndefined();
+    expect(registry.gallery).toBeUndefined();
   });
 
   it('enumerates migrated Shot bindings before legacy branches', () => {
@@ -139,7 +139,6 @@ describe('PropertyPanel node properties registry', () => {
       ...createMigratedNode('scene', {
         sceneTitle: 'Arrival',
         sceneNumber: 1,
-        shotIds: ['shot-1'],
       }),
       container: { policy: 'scene', childIds: ['shot-1'] },
     } as CanvasNode;

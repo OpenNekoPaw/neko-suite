@@ -14,10 +14,10 @@ const sceneNode: SceneGroupCanvasNode = {
   position: { x: 0, y: 0 },
   size: { width: 640, height: 360 },
   zIndex: 1,
+  container: { policy: 'scene', childIds: ['shot-1', 'shot-2'] },
   data: {
     sceneTitle: 'Opening',
     sceneNumber: 1,
-    shotIds: ['shot-1', 'shot-2'],
   },
 };
 
@@ -27,9 +27,9 @@ const shotOne: ShotCanvasNode = {
   position: { x: 40, y: 80 },
   size: { width: 240, height: 160 },
   zIndex: 2,
+  parentId: 'scene-1',
   data: {
     shotNumber: 1,
-    sceneGroupId: 'scene-1',
     duration: 3,
     visualDescription: 'Wide establishing frame',
     characters: [],
@@ -49,7 +49,6 @@ const shotTwo: ShotCanvasNode = {
   data: {
     ...shotOne.data,
     shotNumber: 2,
-    sceneGroupId: 'scene-1',
     visualDescription: 'Cut to reaction',
   },
 };
@@ -71,7 +70,7 @@ const validV1Canvas: CanvasData = {
 };
 
 describe('NKC layered migration', () => {
-  it('mirrors v1 Scene/Shot organization into v2 optional fields', () => {
+  it('keeps Scene/Shot organization in layered fields', () => {
     const migration = migrateNkc(validV1Canvas);
 
     expect(migration.migrated).toBe(true);
@@ -105,20 +104,6 @@ describe('NKC layered migration', () => {
     expect(result.data.version).toBe('2.0');
   });
 
-  it('keeps legacy v1 nodes content-free so Webview legacy renderers remain available', () => {
-    const result = loadNkc(JSON.stringify(validV1Canvas));
-    const scene = result.data.nodes.find((node) => node.id === 'scene-1');
-    const shot = result.data.nodes.find((node) => node.id === 'shot-1');
-
-    expect(result.validation.valid).toBe(true);
-    expect(scene?.content).toBeUndefined();
-    expect(scene?.preset).toBeUndefined();
-    expect(shot?.content).toBeUndefined();
-    expect(shot?.preset).toBeUndefined();
-    expect(scene?.type === 'scene' ? scene.data.shotIds : []).toEqual(['shot-1', 'shot-2']);
-    expect(shot?.type === 'shot' ? shot.data.sceneGroupId : undefined).toBe('scene-1');
-  });
-
   it('mirrors legacy group child IDs without removing legacy data', () => {
     const group: GroupCanvasNode = {
       id: 'group-1',
@@ -133,7 +118,7 @@ describe('NKC layered migration', () => {
     };
     const canvas: CanvasData = {
       ...validV1Canvas,
-      nodes: [group, { ...shotOne, data: { ...shotOne.data, sceneGroupId: undefined } }],
+      nodes: [group, { ...shotOne, parentId: undefined }],
     };
 
     const migration = migrateNkc(canvas);
@@ -184,7 +169,12 @@ describe('NKC layered validator', () => {
     expect(result.valid).toBe(false);
     expect(result.errors).toContainEqual(
       expect.objectContaining({
-        message: expect.stringContaining('multiple parents'),
+        message: expect.stringContaining('references missing parent "missing-scene"'),
+      }),
+    );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        message: expect.stringContaining('child "shot-1" does not reference this parent'),
       }),
     );
   });

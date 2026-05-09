@@ -209,7 +209,6 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
           zIndex,
           data: {
             shotNumber: asNumber(data.shotNumber, zIndex + 1),
-            sceneGroupId: asString(data.sceneGroupId) || undefined,
             duration: asNumber(data.duration, 3),
             visualDescription: asString(data.visualDescription, ''),
             characters: asObjectArray<ShotCharacter>(data.characters) ?? DEFAULT_EMPTY_CHARACTERS,
@@ -285,7 +284,6 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             sceneNumber: asNumber(data.sceneNumber, zIndex + 1),
             location: asString(data.location) || undefined,
             timeOfDay: asString(data.timeOfDay) || undefined,
-            shotIds: asStringArray(data.shotIds),
           },
         },
         preset,

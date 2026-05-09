@@ -18,10 +18,10 @@ function createSceneNode(): SceneGroupCanvasNode {
     position: { x: 100, y: 100 },
     size: { width: 720, height: 420 },
     zIndex: 0,
+    container: { policy: 'scene', childIds: [] },
     data: {
       sceneTitle: 'Scene 1',
       sceneNumber: 1,
-      shotIds: [],
     },
   };
 }
@@ -71,7 +71,7 @@ describe('canvasStore scene container actions', () => {
     useHistoryStore.setState({ undoStack: [], redoStack: [], maxHistory: 50 });
   });
 
-  it('assigns selected shots into a scene and auto-layouts them in shotIds order', () => {
+  it('assigns selected shots into a scene and auto-layouts them in container order', () => {
     useCanvasStore
       .getState()
       .setCanvasData(
@@ -95,11 +95,9 @@ describe('canvasStore scene container actions', () => {
       (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-2',
     );
 
-    expect(scene?.data.shotIds).toEqual(['shot-2', 'shot-1']);
     expect(scene?.container?.childIds).toEqual(['shot-2', 'shot-1']);
     expect(shot1?.parentId).toBe('scene-1');
-    expect(shot1?.data.sceneGroupId).toBe('scene-1');
-    expect(shot2?.data.sceneGroupId).toBe('scene-1');
+    expect(shot2?.parentId).toBe('scene-1');
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
     expect(shot1?.position.y).toBe(shot2?.position.y);
   });
@@ -119,9 +117,8 @@ describe('canvasStore scene container actions', () => {
       (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-1',
     );
 
-    expect(shot?.data.sceneGroupId).toBe('scene-1');
     expect(shot?.parentId).toBe('scene-1');
-    expect(scene?.data.shotIds).toEqual(['shot-1']);
+    expect(scene?.container?.childIds).toEqual(['shot-1']);
 
     useCanvasStore.getState().moveNodeEnd('shot-1', { x: 980, y: 980 });
 
@@ -133,34 +130,24 @@ describe('canvasStore scene container actions', () => {
       (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-1',
     );
 
-    expect(shot?.data.sceneGroupId).toBeUndefined();
     expect(shot?.parentId).toBeUndefined();
-    expect(scene?.data.shotIds).toEqual([]);
+    expect(scene?.container?.childIds).toEqual([]);
   });
 
-  it('reorders managed shots within a scene and preserves shotIds order', () => {
+  it('reorders managed shots within a scene and preserves container order', () => {
     useCanvasStore.getState().setCanvasData(
       createCanvasData([
         {
           ...createSceneNode(),
-          data: {
-            ...createSceneNode().data,
-            shotIds: ['shot-1', 'shot-2'],
-          },
+          container: { policy: 'scene', childIds: ['shot-1', 'shot-2'] },
         },
         {
           ...createShotNode('shot-1', 160, 220),
-          data: {
-            ...createShotNode('shot-1', 160, 220).data,
-            sceneGroupId: 'scene-1',
-          },
+          parentId: 'scene-1',
         },
         {
           ...createShotNode('shot-2', 420, 220),
-          data: {
-            ...createShotNode('shot-2', 420, 220).data,
-            sceneGroupId: 'scene-1',
-          },
+          parentId: 'scene-1',
         },
       ]),
     );
@@ -178,7 +165,6 @@ describe('canvasStore scene container actions', () => {
       (node): node is ShotCanvasNode => isShotNode(node) && node.id === 'shot-2',
     );
 
-    expect(scene?.data.shotIds).toEqual(['shot-2', 'shot-1']);
     expect(scene?.container?.childIds).toEqual(['shot-2', 'shot-1']);
     expect(shot2?.position.x).toBeLessThan(shot1?.position.x ?? 0);
   });
@@ -188,24 +174,15 @@ describe('canvasStore scene container actions', () => {
       createCanvasData([
         {
           ...createSceneNode(),
-          data: {
-            ...createSceneNode().data,
-            shotIds: ['shot-1', 'shot-2'],
-          },
+          container: { policy: 'scene', childIds: ['shot-1', 'shot-2'] },
         },
         {
           ...createShotNode('shot-1', 120, 360),
-          data: {
-            ...createShotNode('shot-1', 120, 360).data,
-            sceneGroupId: 'scene-1',
-          },
+          parentId: 'scene-1',
         },
         {
           ...createShotNode('shot-2', 140, 620),
-          data: {
-            ...createShotNode('shot-2', 140, 620).data,
-            sceneGroupId: 'scene-1',
-          },
+          parentId: 'scene-1',
         },
       ]),
     );
@@ -231,7 +208,6 @@ describe('canvasStore scene container actions', () => {
     expect(group?.type).toBe('group');
     expect(group?.container?.childIds).toEqual(['shot-1', 'shot-2']);
     expect(shot1?.parentId).toBe(groupId);
-    expect(shot1?.data.sceneGroupId).toBeUndefined();
 
     useCanvasStore.getState().ungroupNodes(groupId);
 

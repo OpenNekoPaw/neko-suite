@@ -144,8 +144,6 @@ function getDefaultPolicyForNode(node: CanvasNode): ContainerCapability['policy'
 
 function getLegacyContainerChildIds(node: CanvasNode): string[] {
   switch (node.type) {
-    case 'scene':
-      return node.data.shotIds;
     case 'group':
       return node.data.childIds;
     default:

@@ -8,10 +8,7 @@
 import type { CanvasNode } from '../types/canvas';
 import type { ContainerPolicyName } from '../types/canvas-layered';
 
-export type CanvasContainerChildSource =
-  | 'container'
-  | 'legacy-scene-shotIds'
-  | 'legacy-group-childIds';
+export type CanvasContainerChildSource = 'container' | 'legacy-group-childIds';
 
 export interface CanvasContainerChildReference {
   parentId: string;
@@ -19,7 +16,7 @@ export interface CanvasContainerChildReference {
   source: CanvasContainerChildSource;
 }
 
-export type CanvasParentReferenceSource = 'parentId' | 'legacy-shot-sceneGroupId';
+export type CanvasParentReferenceSource = 'parentId';
 
 export interface CanvasParentReference {
   nodeId: string;
@@ -29,8 +26,6 @@ export interface CanvasParentReference {
 
 export function getLegacyContainerChildIds(node: CanvasNode): string[] {
   switch (node.type) {
-    case 'scene':
-      return node.data.shotIds;
     case 'group':
       return node.data.childIds;
     default:
@@ -59,11 +54,7 @@ export function getContainerChildReferences(node: CanvasNode): CanvasContainerCh
   return references;
 }
 
-export function getLegacyNodeParentId(node: CanvasNode): string | undefined {
-  if (node.type === 'shot') {
-    return node.data.sceneGroupId;
-  }
-
+export function getLegacyNodeParentId(_node: CanvasNode): string | undefined {
   return undefined;
 }
 
@@ -76,15 +67,6 @@ export function getNodeParentReferences(node: CanvasNode): CanvasParentReference
 
   if (node.parentId) {
     references.push({ nodeId: node.id, parentId: node.parentId, source: 'parentId' });
-  }
-
-  const legacyParentId = getLegacyNodeParentId(node);
-  if (legacyParentId) {
-    references.push({
-      nodeId: node.id,
-      parentId: legacyParentId,
-      source: 'legacy-shot-sceneGroupId',
-    });
   }
 
   return references;
@@ -113,8 +95,6 @@ export function getContainerPolicyName(node: CanvasNode): ContainerPolicyName | 
 
 function getLegacyContainerChildSource(node: CanvasNode): CanvasContainerChildSource | undefined {
   switch (node.type) {
-    case 'scene':
-      return 'legacy-scene-shotIds';
     case 'group':
       return 'legacy-group-childIds';
     default:

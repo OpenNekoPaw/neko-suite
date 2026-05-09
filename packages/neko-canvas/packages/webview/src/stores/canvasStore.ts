@@ -244,10 +244,6 @@ function relinkSceneShotIds(nodes: CanvasNode[]): CanvasNode[] {
         ...(node.container ?? {}),
         childIds: nextShotIds,
       },
-      data: {
-        ...node.data,
-        shotIds: nextShotIds,
-      },
     };
   });
 }
@@ -255,17 +251,6 @@ function relinkSceneShotIds(nodes: CanvasNode[]): CanvasNode[] {
 function detachNodeFromParent(node: CanvasNode, parentId: string): CanvasNode {
   if (getNodeParentId(node) !== parentId) {
     return node;
-  }
-
-  if (isShotNode(node)) {
-    return {
-      ...node,
-      parentId: undefined,
-      data: {
-        ...node.data,
-        sceneGroupId: undefined,
-      },
-    };
   }
 
   return {

@@ -1,15 +1,9 @@
-import type {
-  CanvasNode,
-  GroupCanvasNode,
-  SceneGroupCanvasNode,
-  ShotCanvasNode,
-} from '@neko/shared';
+import type { CanvasNode, GroupCanvasNode } from '@neko/shared';
 import {
   getContainerChildIds,
   getContainerPolicyName,
   isGroupNode,
   isSceneGroupNode,
-  isShotNode,
 } from '@neko/shared';
 import {
   canContainerAcceptChild,
@@ -52,8 +46,7 @@ export function addContainerChild(
   }
 
   let nextNodes = nodes;
-  const previousParentId =
-    child.parentId ?? (isShotNode(child) ? child.data.sceneGroupId : undefined);
+  const previousParentId = child.parentId;
   if (previousParentId && previousParentId !== containerId) {
     nextNodes = removeContainerChild(nextNodes, previousParentId, childId).nodes;
   }
@@ -61,7 +54,7 @@ export function addContainerChild(
   const nextChildIds = insertChildId(getContainerChildIds(container), childId, insertIndex);
   nextNodes = nextNodes.map((node) => {
     if (node.id === containerId) {
-      return withContainerChildIds(node, nextChildIds, nextNodes);
+      return withContainerChildIds(node, nextChildIds);
     }
 
     if (node.id === childId) {
@@ -122,7 +115,7 @@ export function reorderContainerChildren(
 
   return {
     nodes: nodes.map((node) =>
-      node.id === containerId ? withContainerChildIds(node, dedupedIds, nodes) : node,
+      node.id === containerId ? withContainerChildIds(node, dedupedIds) : node,
     ),
     changed: true,
   };
@@ -242,11 +235,7 @@ export function translateContainerSubtree(
   });
 }
 
-function withContainerChildIds(
-  node: CanvasNode,
-  childIds: string[],
-  allNodes?: readonly CanvasNode[],
-): CanvasNode {
+function withContainerChildIds(node: CanvasNode, childIds: string[]): CanvasNode {
   const nextContainer = {
     policy: getContainerPolicyName(node) ?? 'group',
     ...(node.container ?? {}),
@@ -254,17 +243,10 @@ function withContainerChildIds(
   };
 
   if (isSceneGroupNode(node)) {
-    const childById = allNodes ? new Map(allNodes.map((child) => [child.id, child])) : undefined;
-    const legacyShotIds = new Set(node.data.shotIds);
-    const shotIds = childIds.filter((childId) => {
-      const child = childById?.get(childId);
-      return childById ? Boolean(child && isShotNode(child)) : legacyShotIds.has(childId);
-    });
     return {
       ...node,
       container: { ...nextContainer, policy: 'scene' },
-      data: { ...node.data, shotIds },
-    } satisfies SceneGroupCanvasNode;
+    };
   }
 
   if (isGroupNode(node)) {
@@ -279,29 +261,12 @@ function withContainerChildIds(
 }
 
 function withParentId(node: CanvasNode, parent: CanvasNode): CanvasNode {
-  if (isShotNode(node)) {
-    const sceneGroupId = isSceneGroupNode(parent) ? parent.id : node.data.sceneGroupId;
-    return {
-      ...node,
-      parentId: parent.id,
-      data: { ...node.data, sceneGroupId },
-    } satisfies ShotCanvasNode;
-  }
-
   return { ...node, parentId: parent.id };
 }
 
 function withoutParentId(node: CanvasNode, parentId: string): CanvasNode {
-  if (node.parentId !== parentId && !(isShotNode(node) && node.data.sceneGroupId === parentId)) {
+  if (node.parentId !== parentId) {
     return node;
-  }
-
-  if (isShotNode(node)) {
-    return {
-      ...node,
-      parentId: undefined,
-      data: { ...node.data, sceneGroupId: undefined },
-    } satisfies ShotCanvasNode;
   }
 
   return { ...node, parentId: undefined };

@@ -129,6 +129,18 @@ function extractReferenceRefs(node: CanvasNode): string[] | undefined {
   return refs.size > 0 ? Array.from(refs) : undefined;
 }
 
+function readCanvasNodeContainerChildIds(node: Record<string, unknown>): string[] {
+  const container = node.container;
+  if (typeof container !== 'object' || container === null || Array.isArray(container)) {
+    return [];
+  }
+
+  const childIds = (container as { childIds?: unknown }).childIds;
+  return Array.isArray(childIds)
+    ? childIds.filter((childId): childId is string => typeof childId === 'string')
+    : [];
+}
+
 function mapStoryScriptIndexToCanvasScenes(index: NekoStoryScriptIndex | undefined): ScriptScene[] {
   if (!index) {
     return [];
@@ -1980,9 +1992,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         label,
         detail,
         locked: Boolean(n.locked),
-        ...(type === 'scene' && Array.isArray(data.shotIds)
-          ? { shotIds: data.shotIds as string[] }
-          : {}),
+        ...(type === 'scene' ? { childIds: readCanvasNodeContainerChildIds(n) } : {}),
       };
     });
 

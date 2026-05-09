@@ -1,6 +1,6 @@
 ## Context
 
-The previous `canvas-block-container-architecture` change established the optional four-layer Canvas foundation: `content`, `container`, `parentId`, preview capabilities, field bindings, container policies, dual-path rendering, and Agent derive/composite operations. The current Webview still uses the legacy production path for most high-value nodes:
+The previous `canvas-block-container-architecture` change established the four-layer Canvas foundation: `content`, `container`, `parentId`, preview capabilities, field bindings, container policies, composable rendering, and Agent derive/composite operations. The current Webview still uses the legacy production path for most high-value nodes:
 
 - `annotation.basic` and `text.basic` are the only low-risk composable presets.
 - Shot, Scene, Gallery, and Media creation still mostly produces legacy nodes without `content`.
@@ -8,22 +8,22 @@ The previous `canvas-block-container-architecture` change established the option
 - Property editing is still dominated by type-specific branches.
 - Preview behavior for core nodes remains tied to monolithic node components.
 
-This change continues the migration without changing the flat Canvas model or breaking existing `.nkc` files.
+This change continues the migration without changing the flat Canvas model. The product has not launched, so compatibility with old core-node `.nkc` shapes is not a constraint for Shot, Scene, Gallery, or Media.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Make new Shot, Scene, Gallery, and Media nodes use composable presets once parity is covered.
-- Keep existing nodes without `content` rendering through legacy components.
+- Make Shot, Scene, Gallery, and Media nodes use composable presets as their only built-in core-node path.
+- Remove legacy Shot, Scene, Gallery, and Media renderer components and removed `*.legacy` preset metadata.
 - Move Scene and Group behavior to canonical organization helpers and generic container actions.
 - Render migrated Scene children through child-node slots and node preview descriptors rather than mounting full child nodes twice.
 - Allow property panels and Agent tools to operate on migrated nodes through field bindings and preset metadata.
-- Preserve legacy data mirrors during this phase so rollback and old-file compatibility remain simple.
+- Remove Scene/Shot membership mirrors so `container.childIds` and child `parentId` are the only organization source of truth.
 
 **Non-Goals:**
 
-- Removing `data.shotIds`, `data.childIds`, or `data.sceneGroupId` from saved files.
+- Migrating arbitrary pre-launch local `.nkc` files that still contain removed core-node legacy shapes.
 - Rewriting every Canvas node type in one pass.
 - Introducing parent-local coordinates.
 - Replacing top-level `CanvasData.connections`.
@@ -31,13 +31,13 @@ This change continues the migration without changing the flat Canvas model or br
 
 ## Decisions
 
-### Decision 1: Migrate By Preset, Not By Node Type Rewrite
+### Decision 1: Migrate Core Nodes By Preset And Remove Core Legacy Presets
 
 New composable presets will be introduced for `shot.basic`, `scene.basic`, `gallery.basic`, and `media.basic`. Each preset assembles the content tree, preview capabilities, node summary descriptor, default data, container capability, ports, and derive targets for its node type.
 
-Rationale: preset-level rollout lets the Webview keep `*.legacy` compatibility while moving new production creation to composable nodes after parity tests pass.
+Rationale: preset-level composition keeps extension and Agent creation contract-driven while removing the old core React component path. Because the product has not launched, keeping `shot.legacy`, `scene.legacy`, `gallery.legacy`, and `media.legacy` would only preserve duplicate behavior and test burden.
 
-Alternative considered: converting all existing nodes of a type on load. Rejected because it increases file migration risk and makes rollback harder.
+Alternative considered: keeping dual-path compatibility for core nodes. Rejected because it keeps the same coupling and data mirror risks the four-layer design is intended to remove.
 
 ### Decision 2: Keep `node.data` Authoritative
 
@@ -49,9 +49,9 @@ Alternative considered: storing full block-local values in `content`. Rejected b
 
 ### Decision 3: Treat `container.childIds` As Canonical For Migrated Nodes
 
-For migrated Scene and Group behavior, reads and writes must go through `getContainerChildIds`, `getNodeParentId`, `addContainerChild`, `removeContainerChild`, and `reorderContainerChildren`. Legacy mirrors remain writable, but new UI logic must not branch directly on `scene.data.shotIds` or `shot.data.sceneGroupId` unless it is inside a compatibility helper.
+For migrated Scene behavior, reads and writes must go through `getContainerChildIds`, `getNodeParentId`, `addContainerChild`, `removeContainerChild`, and `reorderContainerChildren`. UI, store, clipboard, outline, and Agent paths must not branch on `scene.data.shotIds` or `shot.data.sceneGroupId`.
 
-Rationale: this is the minimum step that makes nested and heterogeneous containers real without breaking legacy files.
+Rationale: this is the minimum step that makes nested and heterogeneous containers real without carrying divergent membership sources.
 
 Alternative considered: keeping Scene-specific code and only adding mirrors. Rejected because it preserves the same coupling the four-layer design is intended to remove.
 
@@ -65,42 +65,42 @@ Alternative considered: rendering full children inside Scene content. Rejected b
 
 ### Decision 5: Property Panel Becomes Binding-Aware For Composable Nodes
 
-The property panel will first inspect `node.content` for bindings, collections, child slots, and preview capabilities. It will render generated editors for composable nodes and continue using legacy type branches for nodes without `content`.
+The property panel will first inspect `node.content` for bindings, collections, child slots, and preview capabilities. It will render generated editors for composable core nodes and keep type-specific branches only for node types that have not been migrated.
 
 Rationale: this reduces duplicate property-panel branches while keeping migration incremental.
 
 Alternative considered: keeping property panel entirely type-specific until all node renderers migrate. Rejected because it would keep a second major source of type explosion.
 
-### Decision 6: Agent Defaults Follow Migrated Presets With Legacy Escape Hatches
+### Decision 6: Agent Defaults Follow Migrated Core Presets
 
-Once a preset reaches parity, Agent derive and composite defaults should prefer composable presets. Explicit `*.legacy` presets remain valid for compatibility tests, rollback, and legacy workflows.
+Agent derive and composite defaults should use composable presets for Shot, Scene, Gallery, and Media. Explicit removed core `*.legacy` presets are invalid.
 
-Rationale: Agent-created composites are the highest leverage path for reducing multi-call Scene/Shot setup cost, but compatibility must remain explicit.
+Rationale: Agent-created composites are the highest leverage path for reducing multi-call Scene/Shot setup cost, and there is no shipped legacy workflow to preserve.
 
-Alternative considered: forcing all Agent creation through composable presets immediately. Rejected because older workflows may depend on legacy node shapes during migration.
+Alternative considered: preserving explicit core legacy presets for rollback. Rejected because it would keep two authoring contracts before launch.
 
 ## Risks / Trade-offs
 
-- [Risk] Visual or interaction drift between legacy and composable Shot/Gallery nodes -> Mitigation: add snapshot and behavior parity tests before switching defaults.
-- [Risk] Legacy mirrors and canonical container fields diverge -> Mitigation: centralize all membership mutations in container actions and add validator coverage.
+- [Risk] Local pre-launch `.nkc` files with removed core legacy shapes stop rendering -> Mitigation: acceptable before launch; new creation paths produce composable nodes.
+- [Risk] Canonical container fields drift between parent and children -> Mitigation: centralize all membership mutations in container actions and add validator coverage.
 - [Risk] Property-panel generated editors miss node-specific behavior -> Mitigation: migrate property panels per preset and keep targeted escape hatches for specialized actions.
 - [Risk] Composable content trees increase saved file size -> Mitigation: keep content declarative and avoid persisting preview runtime URLs, tokens, and player state.
-- [Risk] Agent tools create mixed legacy/composable scenes -> Mitigation: validate preset compatibility and structured extraction across both paths.
+- [Risk] Agent tools request removed legacy core presets -> Mitigation: reject unsupported presets and keep tests for that failure mode.
 
 ## Migration Plan
 
-1. Add migrated preset metadata and content builders for Shot, Scene, Gallery, and Media while keeping legacy presets registered.
+1. Add migrated preset metadata and content builders for Shot, Scene, Gallery, and Media.
 2. Implement missing block renderers and preview descriptors needed by those presets.
-3. Switch toolbar, derive, create-node, and composite defaults to migrated presets only after per-preset parity tests pass.
+3. Switch toolbar, derive, create-node, and composite defaults to migrated presets.
 4. Refactor Scene/Group reads in rendering, minimap, viewport filtering, store actions, clipboard, and property panels to use organization helpers.
-5. Add generated property-panel support for composable nodes with legacy fallbacks.
+5. Add generated property-panel support for composable core nodes.
 6. Update Agent tool metadata and structured extraction to expose migrated bindings and summaries.
-7. Run targeted Webview tests and full Canvas package checks.
+7. Remove core legacy renderer components, core legacy preset metadata, and Scene/Shot membership mirrors.
+8. Run targeted Webview tests and full Canvas package checks.
 
-Rollback strategy: restore default preset mapping to `*.legacy` while preserving existing nodes with `content`. Legacy nodes remain renderable, and composable nodes keep their authoritative `data` bags so they can still be inspected or downgraded by a future repair tool.
+Rollback strategy: this is a breaking pre-launch cleanup. Runtime rollback to core `*.legacy` is not supported; source rollback remains possible through version control if product direction changes.
 
 ## Open Questions
 
-- Should existing nodes gain an explicit user-facing "Upgrade to composable" action in this change, or remain legacy until edited or recreated?
-- Should `canvas_create_node` with only `type: "shot"` switch to `shot.basic` immediately after parity, or should Agent callers pass preset names explicitly for one release?
-- How much of the current Shot candidate browser should become reusable preview capability behavior in this phase versus remain a preset-specific renderer wrapper?
+- Should Group be migrated from its remaining type-specific renderer to a fully composable container preset in a follow-up?
+- Should non-core legacy node presets keep `creationMode: "legacy"` or be renamed to an explicit non-composable mode?

@@ -89,18 +89,17 @@ describe('storyboardPlanner', () => {
   });
 
   it('applies a storyboard payload to canvas via unified helper', async () => {
-    const create = vi
-      .fn<NekoCanvasAPI['nodes']['create']>()
-      .mockResolvedValueOnce('scene-node-1')
-      .mockResolvedValueOnce('shot-node-1')
-      .mockResolvedValueOnce('shot-node-2');
-    const update = vi.fn<NekoCanvasAPI['nodes']['update']>().mockResolvedValue(undefined);
+    const createComposite = vi
+      .fn<NekoCanvasAPI['nodes']['createComposite']>()
+      .mockResolvedValueOnce({
+        containerId: 'scene-node-1',
+        childIds: ['shot-node-1', 'shot-node-2'],
+      });
 
     const result = await applyStoryboardPayloadToCanvas(
       {
         nodes: {
-          create,
-          update,
+          createComposite,
         },
       } as Pick<NekoCanvasAPI, 'nodes'>,
       createStoryboardPayload(scriptIndex, { scenesLimit: 1 }),
@@ -110,9 +109,16 @@ describe('storyboardPlanner', () => {
       scenesCreated: 1,
       totalShots: 2,
     });
-    expect(create).toHaveBeenCalledTimes(3);
-    expect(update).toHaveBeenCalledWith('scene-node-1', {
-      shotIds: ['shot-node-1', 'shot-node-2'],
+    expect(createComposite).toHaveBeenCalledTimes(1);
+    const request = createComposite.mock.calls[0]?.[0];
+    expect(request).toBeDefined();
+    expect(request).toMatchObject({
+      containerType: 'scene',
+      position: { x: 100, y: 100 },
+      data: expect.objectContaining({ sceneTitle: 'INT. OFFICE - DAY' }),
+      autoLayout: false,
     });
+    expect(request?.children).toHaveLength(2);
+    expect(request?.children.every((child) => child.type === 'shot')).toBe(true);
   });
 });
