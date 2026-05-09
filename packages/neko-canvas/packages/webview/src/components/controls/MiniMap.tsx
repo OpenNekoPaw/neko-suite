@@ -5,7 +5,7 @@
 
 import { useMemo, useCallback, useRef } from 'react';
 import type { CanvasNode, CanvasNodeType, CanvasViewport } from '@neko/shared';
-import { isShotNode } from '@neko/shared';
+import { getTopLevelCanvasNodes } from '../../utils/canvasOrganization';
 
 // =============================================================================
 // Types
@@ -136,11 +136,8 @@ export function MiniMap({
 }: MiniMapProps) {
   const miniMapRef = useRef<HTMLDivElement>(null);
 
-  // Filter out managed shots — they are rendered inside their parent SceneGroupNode
-  const visibleNodes = useMemo(
-    () => nodes.filter((n) => !(isShotNode(n) && n.data.sceneGroupId)),
-    [nodes],
-  );
+  // Filter out container-managed children; containers expose compact summaries.
+  const visibleNodes = useMemo(() => getTopLevelCanvasNodes(nodes), [nodes]);
 
   // Calculate content bounds
   const bounds = useMemo(() => calculateBounds(visibleNodes), [visibleNodes]);

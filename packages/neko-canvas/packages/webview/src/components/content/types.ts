@@ -12,6 +12,7 @@ export interface NodeContentRenderContext {
   depth: number;
   onUpdateBinding?: (update: FieldBindingUpdate) => void;
   onSelectNode?: (nodeId: string, multi: boolean) => void;
+  onAction?: (action: string, payload?: Record<string, unknown>) => void;
 }
 
 export interface ContainerRendererProps {

@@ -47,6 +47,7 @@ import {
   StoryboardNode,
   TextNode,
 } from './index';
+import { getSceneShotNodes } from '../../utils/canvasOrganization';
 
 /**
  * Create the built-in descriptor registry for all 13 canvas node types.
@@ -166,24 +167,16 @@ export function createBuiltInNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
               (candidate) => selectedNodeIds.includes(candidate.id) && candidate.type === 'shot',
             ).length
           }
-          shots={allNodes
-            .filter((candidate): candidate is ShotCanvasNode => candidate.type === 'shot')
-            .filter((candidate) => candidate.data.sceneGroupId === node.id)
-            .sort(
-              (a, b) =>
-                (node as SceneGroupCanvasNode).data.shotIds.indexOf(a.id) -
-                (node as SceneGroupCanvasNode).data.shotIds.indexOf(b.id),
-            )
-            .map((shot) => ({
-              id: shot.id,
-              shotNumber: shot.data.shotNumber,
-              shotScale: shot.data.shotScale,
-              generatedImage:
-                shot.data.generatedImage ??
-                shot.data.generationHistory.find((v) => v.selected)?.dataUrl,
-              generationStatus: shot.data.generationStatus,
-              visualDescription: shot.data.visualDescription,
-            }))}
+          shots={getSceneShotNodes(node, allNodes).map((shot) => ({
+            id: shot.id,
+            shotNumber: shot.data.shotNumber,
+            shotScale: shot.data.shotScale,
+            generatedImage:
+              shot.data.generatedImage ??
+              shot.data.generationHistory.find((v) => v.selected)?.dataUrl,
+            generationStatus: shot.data.generationStatus,
+            visualDescription: shot.data.visualDescription,
+          }))}
           onShotThumbnailClick={(shotId) => onSelect?.(shotId, false)}
           onAssignSelectedShots={onAssignSelectedShotsToScene}
           onAutoLayoutShots={onAutoLayoutSceneShots}

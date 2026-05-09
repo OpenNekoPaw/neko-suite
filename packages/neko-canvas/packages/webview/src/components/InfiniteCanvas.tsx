@@ -5,7 +5,6 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { CanvasNode, CanvasConnection, CanvasViewport as ViewportType } from '@neko/shared';
-import { isShotNode } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
 import { createBuiltInNodeRendererRegistry, renderCanvasNode } from './nodes';
@@ -14,6 +13,7 @@ import { useViewportTransform } from '../hooks/useViewportTransform';
 import { useViewportCulling } from '../hooks/useViewportCulling';
 import { useConnectionDrag } from '../hooks/useConnectionDrag';
 import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
+import { isNodeDrawnInsideContainer } from '../utils/canvasOrganization';
 
 // =============================================================================
 // Types
@@ -265,9 +265,9 @@ export function InfiniteCanvas({
           onConnectionSelect={onConnectionSelect}
         />
 
-        {/* Node layer - 使用裁剪后的可见节点; managed shots rendered inside SceneGroupNode */}
+        {/* Node layer - 使用裁剪后的可见节点; container-managed children are summarized by containers */}
         {visibleNodes
-          .filter((node) => !(isShotNode(node) && node.data.sceneGroupId))
+          .filter((node) => !isNodeDrawnInsideContainer(node))
           .map((node) => {
             const isSelected = selectedNodeIds.includes(node.id);
 

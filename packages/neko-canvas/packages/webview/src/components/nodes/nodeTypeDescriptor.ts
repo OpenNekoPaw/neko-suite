@@ -12,7 +12,7 @@
  */
 
 import type { CanvasNodeType } from '@neko/shared';
-import type { NodeRenderer } from './nodeRendererRegistry';
+import type { NodeRenderer } from './nodeRendererTypes';
 
 // =============================================================================
 // Types

@@ -61,7 +61,7 @@ export function addContainerChild(
   const nextChildIds = insertChildId(getContainerChildIds(container), childId, insertIndex);
   nextNodes = nextNodes.map((node) => {
     if (node.id === containerId) {
-      return withContainerChildIds(node, nextChildIds);
+      return withContainerChildIds(node, nextChildIds, nextNodes);
     }
 
     if (node.id === childId) {
@@ -122,7 +122,7 @@ export function reorderContainerChildren(
 
   return {
     nodes: nodes.map((node) =>
-      node.id === containerId ? withContainerChildIds(node, dedupedIds) : node,
+      node.id === containerId ? withContainerChildIds(node, dedupedIds, nodes) : node,
     ),
     changed: true,
   };
@@ -242,7 +242,11 @@ export function translateContainerSubtree(
   });
 }
 
-function withContainerChildIds(node: CanvasNode, childIds: string[]): CanvasNode {
+function withContainerChildIds(
+  node: CanvasNode,
+  childIds: string[],
+  allNodes?: readonly CanvasNode[],
+): CanvasNode {
   const nextContainer = {
     policy: getContainerPolicyName(node) ?? 'group',
     ...(node.container ?? {}),
@@ -250,10 +254,16 @@ function withContainerChildIds(node: CanvasNode, childIds: string[]): CanvasNode
   };
 
   if (isSceneGroupNode(node)) {
+    const childById = allNodes ? new Map(allNodes.map((child) => [child.id, child])) : undefined;
+    const legacyShotIds = new Set(node.data.shotIds);
+    const shotIds = childIds.filter((childId) => {
+      const child = childById?.get(childId);
+      return childById ? Boolean(child && isShotNode(child)) : legacyShotIds.has(childId);
+    });
     return {
       ...node,
       container: { ...nextContainer, policy: 'scene' },
-      data: { ...node.data, shotIds: childIds },
+      data: { ...node.data, shotIds },
     } satisfies SceneGroupCanvasNode;
   }
 

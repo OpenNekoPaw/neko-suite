@@ -4,7 +4,7 @@ import { writeFieldBinding } from '@neko/shared';
 import { BaseNode } from '../nodes/BaseNode';
 import { ContainerRenderer } from './ContainerRenderer';
 import type { FieldBindingUpdate, NodeContentRenderContext } from './types';
-import type { NodeRendererContext } from '../nodes/nodeRendererRegistry';
+import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 
 export type LegacyNodeRenderer = (context: NodeRendererContext) => React.ReactNode;
 
@@ -43,6 +43,25 @@ function ComposableNodeContent({
     [context, node],
   );
 
+  const handleAction = useCallback(
+    (action: string) => {
+      switch (action) {
+        case 'assignSelectedShots':
+          context.onAssignSelectedShotsToScene?.(node.id);
+          return;
+        case 'autoLayoutShots':
+          context.onAutoLayoutSceneShots?.(node.id);
+          return;
+        case 'batchGenerateShots':
+          context.onBatchGenerateSceneShots?.(node.id);
+          return;
+        default:
+          return;
+      }
+    },
+    [context, node.id],
+  );
+
   const renderContext: NodeContentRenderContext = {
     node,
     allNodes: context.allNodes,
@@ -50,6 +69,7 @@ function ComposableNodeContent({
     depth: 0,
     onUpdateBinding: handleUpdateBinding,
     onSelectNode: context.onSelect,
+    onAction: handleAction,
   };
 
   return (

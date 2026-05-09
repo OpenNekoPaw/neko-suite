@@ -47,7 +47,29 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
     nodeType: 'shot',
     creationMode: 'legacy',
     label: 'Shot',
-    deriveTargets: ['shot.legacy', 'gallery.legacy', 'annotation.basic', 'text.basic'],
+    deriveTargets: [
+      'shot.legacy',
+      'shot.basic',
+      'gallery.legacy',
+      'gallery.basic',
+      'annotation.basic',
+      'text.basic',
+    ],
+  },
+  {
+    name: 'shot.basic',
+    nodeType: 'shot',
+    creationMode: 'composable',
+    label: 'Shot Basic',
+    description: 'Composable storyboard shot with bound controls and generation preview.',
+    deriveTargets: [
+      'shot.basic',
+      'shot.legacy',
+      'gallery.basic',
+      'gallery.legacy',
+      'annotation.basic',
+      'text.basic',
+    ],
   },
   {
     name: 'scene.legacy',
@@ -57,7 +79,28 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
     containerPolicy: 'scene',
     deriveTargets: [
       'scene.legacy',
+      'scene.basic',
       'shot.legacy',
+      'shot.basic',
+      'gallery.legacy',
+      'gallery.basic',
+      'annotation.basic',
+      'text.basic',
+    ],
+  },
+  {
+    name: 'scene.basic',
+    nodeType: 'scene',
+    creationMode: 'composable',
+    label: 'Scene Basic',
+    description: 'Composable Scene container with metadata controls and child-node slot.',
+    containerPolicy: 'scene',
+    deriveTargets: [
+      'scene.basic',
+      'scene.legacy',
+      'shot.basic',
+      'shot.legacy',
+      'gallery.basic',
       'gallery.legacy',
       'annotation.basic',
       'text.basic',
@@ -68,21 +111,57 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
     nodeType: 'gallery',
     creationMode: 'legacy',
     label: 'Gallery',
-    deriveTargets: ['gallery.legacy', 'shot.legacy', 'annotation.basic', 'text.basic'],
+    deriveTargets: [
+      'gallery.legacy',
+      'gallery.basic',
+      'shot.legacy',
+      'shot.basic',
+      'annotation.basic',
+      'text.basic',
+    ],
+  },
+  {
+    name: 'gallery.basic',
+    nodeType: 'gallery',
+    creationMode: 'composable',
+    label: 'Gallery Basic',
+    description: 'Composable Gallery collection bound to cell data and candidate previews.',
+    deriveTargets: [
+      'gallery.basic',
+      'gallery.legacy',
+      'shot.basic',
+      'shot.legacy',
+      'annotation.basic',
+      'text.basic',
+    ],
   },
   {
     name: 'media.legacy',
     nodeType: 'media',
     creationMode: 'legacy',
     label: 'Media',
-    deriveTargets: ['media.legacy', 'annotation.basic', 'text.basic'],
+    deriveTargets: ['media.legacy', 'media.basic', 'annotation.basic', 'text.basic'],
+  },
+  {
+    name: 'media.basic',
+    nodeType: 'media',
+    creationMode: 'composable',
+    label: 'Media Basic',
+    description: 'Composable Media asset card with lightweight preview capability.',
+    deriveTargets: ['media.basic', 'media.legacy', 'annotation.basic', 'text.basic'],
   },
   {
     name: 'storyboard.legacy',
     nodeType: 'storyboard',
     creationMode: 'legacy',
     label: 'Storyboard',
-    deriveTargets: ['storyboard.legacy', 'shot.legacy', 'annotation.basic', 'text.basic'],
+    deriveTargets: [
+      'storyboard.legacy',
+      'shot.legacy',
+      'shot.basic',
+      'annotation.basic',
+      'text.basic',
+    ],
   },
   {
     name: 'group.container',
@@ -105,7 +184,14 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
     nodeType: 'script',
     creationMode: 'legacy',
     label: 'Script',
-    deriveTargets: ['script.legacy', 'scene.legacy', 'shot.legacy', 'annotation.basic'],
+    deriveTargets: [
+      'script.legacy',
+      'scene.legacy',
+      'scene.basic',
+      'shot.legacy',
+      'shot.basic',
+      'annotation.basic',
+    ],
   },
   {
     name: 'document.legacy',
@@ -155,8 +241,13 @@ export function getBuiltInCanvasNodePresetMetadata(
 }
 
 export function getDefaultCanvasNodePresetName(nodeType: CanvasNodeType): string | undefined {
-  return BUILT_IN_CANVAS_NODE_PRESETS.find(
-    (preset) => preset.nodeType === nodeType && preset.creationMode === 'legacy',
+  return (
+    BUILT_IN_CANVAS_NODE_PRESETS.find(
+      (preset) => preset.nodeType === nodeType && preset.creationMode === 'composable',
+    ) ??
+    BUILT_IN_CANVAS_NODE_PRESETS.find(
+      (preset) => preset.nodeType === nodeType && preset.creationMode === 'legacy',
+    )
   )?.name;
 }
 

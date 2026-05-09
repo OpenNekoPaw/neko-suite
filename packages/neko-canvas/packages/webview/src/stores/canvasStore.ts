@@ -22,6 +22,7 @@ import {
   isSceneGroupNode,
   isShotNode,
   getContainerChildIds,
+  getNodeParentId,
   isContainerNode,
 } from '@neko/shared';
 import { useHistoryStore } from './historyStore';
@@ -34,6 +35,7 @@ import {
   translateContainerSubtree,
 } from '../utils/containerActions';
 import { autoArrangeContainer } from '../utils/containerLayout';
+import { hydrateCanvasNodePreview, refreshCanvasNodePreview } from '../utils/canvasPresetRegistry';
 import {
   createCanvasComposite,
   deriveCanvasNode,
@@ -211,9 +213,7 @@ function isShotInsideScene(scene: SceneGroupCanvasNode, shot: ShotCanvasNode): b
 }
 
 function getSceneOwnedShots(nodes: CanvasNode[], sceneId: string): ShotCanvasNode[] {
-  return nodes
-    .filter(isShotNode)
-    .filter((node) => node.parentId === sceneId || node.data.sceneGroupId === sceneId);
+  return nodes.filter(isShotNode).filter((node) => getNodeParentId(node) === sceneId);
 }
 
 function sortShotsByCanvasOrder(shots: ShotCanvasNode[]): ShotCanvasNode[] {
@@ -252,6 +252,28 @@ function relinkSceneShotIds(nodes: CanvasNode[]): CanvasNode[] {
   });
 }
 
+function detachNodeFromParent(node: CanvasNode, parentId: string): CanvasNode {
+  if (getNodeParentId(node) !== parentId) {
+    return node;
+  }
+
+  if (isShotNode(node)) {
+    return {
+      ...node,
+      parentId: undefined,
+      data: {
+        ...node.data,
+        sceneGroupId: undefined,
+      },
+    };
+  }
+
+  return {
+    ...node,
+    parentId: undefined,
+  } as CanvasNode;
+}
+
 function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
   return autoArrangeContainer(relinkSceneShotIds(nodes), {
     containerId: sceneId,
@@ -276,7 +298,7 @@ function syncShotSceneMembership(nodes: CanvasNode[], shotId: string): CanvasNod
     return relinkSceneShotIds(addContainerChild(nodes, targetScene.id, shotId).nodes);
   }
 
-  const currentParent = shot.parentId ?? shot.data.sceneGroupId;
+  const currentParent = getNodeParentId(shot);
   if (currentParent) {
     return relinkSceneShotIds(removeContainerChild(nodes, currentParent, shotId).nodes);
   }
@@ -367,7 +389,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     recordHistory(canvasData);
 
     const id = generateId();
-    const newNode = { ...node, id } as CanvasNode;
+    const newNode = hydrateCanvasNodePreview({ ...node, id } as CanvasNode);
 
     set({
       canvasData: {
@@ -422,7 +444,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? ({ ...node, data: { ...node.data, ...data } } as CanvasNode) : node,
+          node.id === id
+            ? refreshCanvasNodePreview({
+                ...node,
+                data: { ...node.data, ...data },
+              } as CanvasNode)
+            : node,
         ),
       },
     });
@@ -446,17 +473,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const filteredNodes = canvasData.nodes.filter((node) => node.id !== id);
     const nodesWithDetachedShots =
       removedNode && isSceneGroupNode(removedNode)
-        ? filteredNodes.map((node) =>
-            isShotNode(node) && node.data.sceneGroupId === id
-              ? {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    sceneGroupId: undefined,
-                  },
-                }
-              : node,
-          )
+        ? filteredNodes.map((node) => detachNodeFromParent(node, id))
         : filteredNodes;
     const relinkedNodes = relinkSceneShotIds(nodesWithDetachedShots);
 
@@ -660,8 +677,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     }
 
     if (
-      scene.data.shotIds.length === dedupedShotIds.length &&
-      scene.data.shotIds.every((shotId, index) => shotId === dedupedShotIds[index])
+      getContainerChildIds(scene).length === dedupedShotIds.length &&
+      getContainerChildIds(scene).every((shotId, index) => shotId === dedupedShotIds[index])
     ) {
       return;
     }
@@ -712,7 +729,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const scene = canvasData.nodes.find(
       (node): node is SceneGroupCanvasNode => isSceneGroupNode(node) && node.id === sceneId,
     );
-    if (!scene || !scene.data.shotIds.includes(shotId)) return;
+    if (!scene || !getContainerChildIds(scene).includes(shotId)) return;
 
     recordHistory(canvasData);
 
@@ -1102,7 +1119,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((candidate) =>
-          candidate.id === request.nodeId ? result.node : candidate,
+          candidate.id === request.nodeId ? refreshCanvasNodePreview(result.node) : candidate,
         ),
       },
     });

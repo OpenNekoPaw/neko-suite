@@ -47,4 +47,4 @@ export type {
   NodeRendererCommonProps,
   NodeRendererContext,
   NodeRendererRegistry,
-} from './nodeRendererRegistry';
+} from './nodeRendererTypes';

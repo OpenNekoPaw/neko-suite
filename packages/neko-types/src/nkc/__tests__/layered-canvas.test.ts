@@ -105,6 +105,20 @@ describe('NKC layered migration', () => {
     expect(result.data.version).toBe('2.0');
   });
 
+  it('keeps legacy v1 nodes content-free so Webview legacy renderers remain available', () => {
+    const result = loadNkc(JSON.stringify(validV1Canvas));
+    const scene = result.data.nodes.find((node) => node.id === 'scene-1');
+    const shot = result.data.nodes.find((node) => node.id === 'shot-1');
+
+    expect(result.validation.valid).toBe(true);
+    expect(scene?.content).toBeUndefined();
+    expect(scene?.preset).toBeUndefined();
+    expect(shot?.content).toBeUndefined();
+    expect(shot?.preset).toBeUndefined();
+    expect(scene?.type === 'scene' ? scene.data.shotIds : []).toEqual(['shot-1', 'shot-2']);
+    expect(shot?.type === 'shot' ? shot.data.sceneGroupId : undefined).toBe('scene-1');
+  });
+
   it('mirrors legacy group child IDs without removing legacy data', () => {
     const group: GroupCanvasNode = {
       id: 'group-1',

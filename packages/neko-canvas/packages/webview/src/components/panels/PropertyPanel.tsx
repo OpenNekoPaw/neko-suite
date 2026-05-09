@@ -9,7 +9,17 @@
  */
 
 import { useCallback } from 'react';
-import type { CanvasNode, CanvasConnection, CanvasNodeType, ConnectionType } from '@neko/shared';
+import type {
+  CanvasBlock,
+  CanvasConnection,
+  CanvasNode,
+  CanvasNodeType,
+  CollectionView,
+  ConnectionType,
+  FieldBinding,
+  JsonPointerPath,
+} from '@neko/shared';
+import { getContainerChildIds, readFieldBinding, writeFieldBinding } from '@neko/shared';
 import { CollapsibleSection } from '@neko/shared/components';
 import { t } from '../../i18n';
 import { PortEditor } from './PortEditor';
@@ -29,16 +39,49 @@ export interface PropertyPanelProps {
   onUpdatePorts?: (id: string, ports: import('@neko/shared').PortDefinition[]) => void;
   onDeleteNode: (id: string) => void;
   onToggleLock: (id: string) => void;
+  onAction?: (nodeId: string, action: string, payload?: Record<string, unknown>) => void;
   width?: number;
 }
 
 interface NodeSpecificPropertiesProps {
   node: CanvasNode;
   onUpdateData: (data: Record<string, unknown>) => void;
+  onAction?: (action: string, payload?: Record<string, unknown>) => void;
 }
 
 type NodePropertiesRenderer = (props: NodeSpecificPropertiesProps) => React.ReactNode;
 type NodePropertiesRendererRegistry = Partial<Record<CanvasNodeType, NodePropertiesRenderer>>;
+
+type ComposablePropertyItem =
+  | {
+      kind: 'field';
+      blockId: string;
+      label: string;
+      blockKind: CanvasBlock['kind'];
+      binding: FieldBinding;
+      value: unknown;
+      options?: string[];
+      readOnly: boolean;
+    }
+  | {
+      kind: 'collection';
+      blockId: string;
+      label: string;
+      collection: CollectionView;
+      items: unknown[];
+    }
+  | {
+      kind: 'action';
+      blockId: string;
+      label: string;
+      action: string;
+    }
+  | {
+      kind: 'preview';
+      blockId: string;
+      label: string;
+      role: string;
+    };
 
 // =============================================================================
 // Component
@@ -53,6 +96,7 @@ export function PropertyPanel({
   onUpdatePorts,
   onDeleteNode,
   onToggleLock,
+  onAction,
   width = 240,
 }: PropertyPanelProps) {
   // Show connection properties when a connection is selected and no nodes
@@ -126,6 +170,7 @@ export function PropertyPanel({
           <NodeSpecificProperties
             node={node}
             onUpdateData={(data) => onUpdateNodeData(node.id, data)}
+            onAction={(action, payload) => onAction?.(node.id, action, payload)}
           />
 
           {/* Technical sections — hidden for creator nodes */}
@@ -328,8 +373,12 @@ function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {
   );
 }
 
-function NodeSpecificProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
-  return renderNodeSpecificProperties(NODE_PROPERTIES_RENDERERS, { node, onUpdateData });
+function NodeSpecificProperties({ node, onUpdateData, onAction }: NodeSpecificPropertiesProps) {
+  if (node.content) {
+    return <ComposableNodeProperties node={node} onUpdateData={onUpdateData} onAction={onAction} />;
+  }
+
+  return renderNodeSpecificProperties(NODE_PROPERTIES_RENDERERS, { node, onUpdateData, onAction });
 }
 
 export function AnnotationNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
@@ -509,7 +558,7 @@ export function TextNodeProperties({ node, onUpdateData }: NodeSpecificPropertie
 
 export function GroupNodeProperties({ node, onUpdateData }: NodeSpecificPropertiesProps) {
   const data = node.data as Record<string, unknown>;
-  const childIds = (data.childIds as string[]) ?? [];
+  const childIds = getContainerChildIds(node);
   return (
     <CollapsibleSection title={t('panel.group')}>
       <div className="space-y-2">
@@ -597,6 +646,254 @@ export function MediaNodeProperties({ node }: NodeSpecificPropertiesProps) {
   );
 }
 
+export function ComposableNodeProperties({
+  node,
+  onUpdateData,
+  onAction,
+}: NodeSpecificPropertiesProps) {
+  const items = enumerateComposablePropertyItems(node);
+  const fieldItems = items.filter((item) => item.kind === 'field');
+  const collectionItems = items.filter((item) => item.kind === 'collection');
+  const previewItems = items.filter((item) => item.kind === 'preview');
+  const actionItems = items.filter((item) => item.kind === 'action');
+
+  return (
+    <>
+      {fieldItems.length > 0 && (
+        <CollapsibleSection title={t('panel.content')}>
+          <div className="space-y-2">
+            {fieldItems.map((item) => (
+              <ComposableFieldEditor
+                key={`${item.blockId}:${item.binding.path}`}
+                item={item}
+                onChange={(value) =>
+                  onUpdateData(writeComposablePropertyBinding(node, item.binding, value))
+                }
+              />
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {collectionItems.map((item) => (
+        <ComposableCollectionEditor
+          key={item.blockId}
+          node={node}
+          item={item}
+          onUpdateData={onUpdateData}
+        />
+      ))}
+
+      {previewItems.length > 0 && (
+        <CollapsibleSection title="Preview" defaultExpanded={false}>
+          <div className="space-y-1 text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {previewItems.map((item) => (
+              <div key={item.blockId} className="flex justify-between gap-2">
+                <span>{item.label}</span>
+                <span className="truncate" style={{ color: 'var(--neko-fg)' }}>
+                  {item.role}
+                </span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {actionItems.length > 0 && (
+        <CollapsibleSection title={t('panel.actions')} defaultExpanded={false}>
+          <div className="space-y-1">
+            {actionItems.map((item) => (
+              <button
+                key={item.blockId}
+                type="button"
+                className="w-full rounded border px-2 py-1 text-xs"
+                style={{
+                  borderColor: 'var(--control-border)',
+                  backgroundColor: 'var(--control-bg)',
+                  color: 'var(--control-fg)',
+                }}
+                onClick={() => onAction?.(item.action, { blockId: item.blockId })}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+    </>
+  );
+}
+
+function ComposableFieldEditor({
+  item,
+  onChange,
+}: {
+  item: Extract<ComposablePropertyItem, { kind: 'field' }>;
+  onChange: (value: unknown) => void;
+}) {
+  if (item.blockKind === 'textarea') {
+    return (
+      <TextareaField
+        label={item.label}
+        value={toEditableString(item.value)}
+        onChange={(value) => onChange(value)}
+        minHeight={72}
+      />
+    );
+  }
+
+  if (item.blockKind === 'select') {
+    return (
+      <SelectField
+        label={item.label}
+        value={toEditableString(item.value)}
+        options={(item.options ?? []).map((option) => ({ value: option, label: option }))}
+        onChange={(value) => onChange(value || undefined)}
+      />
+    );
+  }
+
+  if (item.blockKind === 'number' || item.binding.valueType === 'number') {
+    return (
+      <div>
+        <FieldLabel>{item.label}</FieldLabel>
+        <input
+          type="number"
+          className="w-full text-xs px-2 py-1 rounded border outline-none"
+          style={{
+            backgroundColor: 'var(--control-bg)',
+            borderColor: 'var(--control-border)',
+            color: 'var(--control-fg)',
+          }}
+          value={typeof item.value === 'number' ? item.value : Number(item.value) || 0}
+          disabled={item.readOnly}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+      </div>
+    );
+  }
+
+  if (
+    item.blockKind === 'tag-list' ||
+    item.blockKind === 'list' ||
+    item.binding.valueType === 'array'
+  ) {
+    return (
+      <TextField
+        label={item.label}
+        value={arrayToEditableString(item.value)}
+        onChange={(value) => onChange(splitEditableList(value))}
+      />
+    );
+  }
+
+  if (item.readOnly || item.blockKind === 'status' || item.blockKind === 'asset-preview') {
+    return (
+      <div>
+        <FieldLabel>{item.label}</FieldLabel>
+        <div
+          className="truncate rounded border px-2 py-1 text-xs"
+          style={{
+            backgroundColor: 'var(--control-bg)',
+            borderColor: 'var(--control-border)',
+            color: 'var(--neko-fg-secondary)',
+          }}
+        >
+          {toEditableString(item.value)}
+        </div>
+      </div>
+    );
+  }
+
+  return <TextField label={item.label} value={toEditableString(item.value)} onChange={onChange} />;
+}
+
+function ComposableCollectionEditor({
+  node,
+  item,
+  onUpdateData,
+}: {
+  node: CanvasNode;
+  item: Extract<ComposablePropertyItem, { kind: 'collection' }>;
+  onUpdateData: (data: Record<string, unknown>) => void;
+}) {
+  const editorBlocks = getCollectionItemEditorBlocks(item.collection);
+
+  return (
+    <CollapsibleSection title={item.label} defaultExpanded={false}>
+      <div className="space-y-2">
+        {item.items.length === 0 ? (
+          <span className="text-[10px] italic" style={{ color: 'var(--neko-fg-secondary)' }}>
+            {item.collection.emptyLabel ?? 'Empty'}
+          </span>
+        ) : (
+          item.items.map((entry, index) => (
+            <div key={readCollectionKey(entry, item.collection, index)} className="space-y-1">
+              <FieldLabel>{readCollectionLabel(entry, item.collection, index)}</FieldLabel>
+              {editorBlocks.map((block) => (
+                <CollectionItemField
+                  key={block.id}
+                  node={node}
+                  collection={item.collection}
+                  entry={entry}
+                  itemIndex={index}
+                  block={block}
+                  onUpdateData={onUpdateData}
+                />
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function CollectionItemField({
+  node,
+  collection,
+  entry,
+  itemIndex,
+  block,
+  onUpdateData,
+}: {
+  node: CanvasNode;
+  collection: CollectionView;
+  entry: unknown;
+  itemIndex: number;
+  block: CanvasBlock;
+  onUpdateData: (data: Record<string, unknown>) => void;
+}) {
+  const binding = block.binding;
+  if (!binding) {
+    return null;
+  }
+
+  const path = joinCollectionItemPath(collection.source.path, itemIndex, binding.path);
+  const value = readCollectionPathString(entry, binding.path);
+  const handleChange = (nextValue: string) =>
+    onUpdateData(
+      writeComposablePropertyPath(
+        node,
+        path,
+        normalizeCollectionEditorValue(nextValue, binding, collection),
+      ),
+    );
+
+  if (block.kind === 'textarea') {
+    return (
+      <TextareaField
+        label={block.label ?? block.id}
+        value={value}
+        onChange={handleChange}
+        minHeight={48}
+      />
+    );
+  }
+
+  return <TextField label={block.label ?? block.id} value={value} onChange={handleChange} />;
+}
+
 export function createBuiltInNodePropertiesRendererRegistry(): NodePropertiesRendererRegistry {
   return {
     annotation: AnnotationNodeProperties,
@@ -607,9 +904,7 @@ export function createBuiltInNodePropertiesRendererRegistry(): NodePropertiesRen
     shot: ({ node, onUpdateData }) => (
       <ShotProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
     ),
-    scene: ({ node, onUpdateData }) => (
-      <SceneProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
-    ),
+    scene: ({ node, onUpdateData }) => <SceneProperties node={node} onUpdateData={onUpdateData} />,
     gallery: ({ node, onUpdateData }) => (
       <GalleryProperties data={node.data as Record<string, unknown>} onUpdateData={onUpdateData} />
     ),
@@ -888,12 +1183,15 @@ export function ShotProperties({
 }
 
 export function SceneProperties({
-  data,
+  node,
   onUpdateData,
 }: {
-  data: Record<string, unknown>;
+  node: CanvasNode;
   onUpdateData: (data: Record<string, unknown>) => void;
 }) {
+  const data = node.data as Record<string, unknown>;
+  const childIds = getContainerChildIds(node);
+
   return (
     <CollapsibleSection title={t('panel.sceneInfo')}>
       <div className="space-y-2">
@@ -920,7 +1218,7 @@ export function SceneProperties({
         <div>
           <FieldLabel>{t('panel.includedShotCount')}</FieldLabel>
           <span className="text-xs" style={{ color: 'var(--neko-fg)' }}>
-            {((data.shotIds as string[]) ?? []).length}
+            {childIds.length}
           </span>
         </div>
       </div>
@@ -1039,6 +1337,262 @@ function ConnectionProperties({
 // =============================================================================
 
 // getNodeTypeLabel removed — now sourced from NodeTypeDescriptorRegistry via getNodeLabel()
+
+export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePropertyItem[] {
+  if (!node.content) {
+    return [];
+  }
+
+  const items: ComposablePropertyItem[] = [];
+
+  for (const block of collectComposableBlocks(node.content)) {
+    if (block.binding) {
+      const value = readFieldBinding(node.data, block.binding).value;
+      items.push({
+        kind: 'field',
+        blockId: block.id,
+        label: block.label ?? block.id,
+        blockKind: block.kind,
+        binding: block.binding,
+        value,
+        options: getStringArrayMetadata(block, 'options'),
+        readOnly: block.binding.mode === 'read',
+      });
+    }
+
+    if (block.collection) {
+      const value = readFieldBinding(node.data, block.collection.source).value;
+      items.push({
+        kind: 'collection',
+        blockId: block.id,
+        label: block.label ?? block.collection.id,
+        collection: block.collection,
+        items: Array.isArray(value) ? value : [],
+      });
+    }
+
+    if (block.kind === 'button') {
+      const action = getStringMetadata(block, 'action');
+      if (action) {
+        items.push({
+          kind: 'action',
+          blockId: block.id,
+          label: block.label ?? action,
+          action,
+        });
+      }
+    }
+
+    for (const capability of block.capabilities ?? []) {
+      if (capability.kind === 'delegate') {
+        for (const action of capability.actions) {
+          items.push({
+            kind: 'action',
+            blockId: `${block.id}:${action.id}`,
+            label: action.label,
+            action: action.id,
+          });
+        }
+      }
+
+      if (
+        capability.kind === 'preview' ||
+        capability.kind === 'generation-preview' ||
+        capability.kind === 'collection-preview' ||
+        capability.kind === 'asset-identity'
+      ) {
+        items.push({
+          kind: 'preview',
+          blockId: `${block.id}:${capability.kind}`,
+          label: block.label ?? block.id,
+          role: capability.kind,
+        });
+      }
+    }
+  }
+
+  return items;
+}
+
+export function writeComposablePropertyBinding(
+  node: CanvasNode,
+  binding: FieldBinding,
+  value: unknown,
+): Record<string, unknown> {
+  const written = writeFieldBinding(node.data, binding, value);
+  return isRecord(written.data) ? written.data : (node.data as Record<string, unknown>);
+}
+
+export function writeComposablePropertyPath(
+  node: CanvasNode,
+  path: JsonPointerPath,
+  value: unknown,
+): Record<string, unknown> {
+  return writeComposablePropertyBinding(node, { path, mode: 'readwrite' }, value);
+}
+
+function collectComposableBlocks(content: NonNullable<CanvasNode['content']>): CanvasBlock[] {
+  const blocks: CanvasBlock[] = [];
+  const sections = [content];
+
+  while (sections.length > 0) {
+    const section = sections.shift();
+    if (!section) continue;
+
+    for (const block of section.blocks ?? []) {
+      blocks.push(block);
+      blocks.push(...collectNestedBlocks(block));
+    }
+
+    for (const slot of section.childSlots ?? []) {
+      blocks.push({
+        id: slot.id,
+        kind: 'child-node-slot',
+        label: slot.emptyLabel ?? slot.id,
+        childSlot: slot,
+      });
+    }
+
+    sections.push(...(section.sections ?? []));
+  }
+
+  return blocks;
+}
+
+function collectNestedBlocks(block: CanvasBlock): CanvasBlock[] {
+  const nested: CanvasBlock[] = [];
+  for (const child of block.children ?? []) {
+    nested.push(child, ...collectNestedBlocks(child));
+  }
+  return nested;
+}
+
+function getStringArrayMetadata(block: CanvasBlock, key: string): string[] | undefined {
+  const value = block.metadata?.[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function getStringMetadata(block: CanvasBlock, key: string): string | undefined {
+  const value = block.metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function toEditableString(value: unknown): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return arrayToEditableString(value);
+  }
+
+  return JSON.stringify(value);
+}
+
+function arrayToEditableString(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return toEditableString(value);
+  }
+
+  return value.map((entry) => toEditableString(entry)).join(', ');
+}
+
+function splitEditableList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function readCollectionKey(entry: unknown, collection: CollectionView, index: number): string {
+  const keyPath = collection.itemKeyPath ?? '/id';
+  const value = isRecord(entry) ? readShallowPath(entry, keyPath) : undefined;
+  return typeof value === 'string' && value.length > 0 ? value : String(index);
+}
+
+function readCollectionLabel(entry: unknown, collection: CollectionView, index: number): string {
+  const labelPath = collection.itemLabelPath ?? '/label';
+  const value = isRecord(entry) ? readShallowPath(entry, labelPath) : undefined;
+  return typeof value === 'string' && value.length > 0 ? value : `Item ${index + 1}`;
+}
+
+function getCollectionItemEditorBlocks(collection: CollectionView): CanvasBlock[] {
+  if (collection.itemBlocks && collection.itemBlocks.length > 0) {
+    return collection.itemBlocks.filter((block) => block.binding);
+  }
+
+  const blocks: CanvasBlock[] = [];
+  if (collection.itemLabelPath) {
+    blocks.push({
+      id: `${collection.id}-label`,
+      kind: 'input',
+      label: 'Label',
+      binding: { path: collection.itemLabelPath, valueType: 'string' },
+    });
+  }
+
+  if (collection.itemPreviewPath) {
+    blocks.push({
+      id: `${collection.id}-preview`,
+      kind: 'input',
+      label: 'Preview',
+      binding: { path: collection.itemPreviewPath, valueType: 'asset' },
+    });
+  }
+
+  return blocks;
+}
+
+function joinCollectionItemPath(
+  collectionPath: JsonPointerPath,
+  index: number,
+  itemPath: JsonPointerPath,
+): JsonPointerPath {
+  const itemSuffix = itemPath.startsWith('/') ? itemPath : `/${itemPath}`;
+  return `${collectionPath}/${index}${itemSuffix}` as JsonPointerPath;
+}
+
+function normalizeCollectionEditorValue(
+  value: string,
+  binding: FieldBinding,
+  collection: CollectionView,
+): string | undefined {
+  if (value.length > 0 || binding.required || binding.path === collection.itemLabelPath) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function readCollectionPathString(entry: unknown, path: JsonPointerPath): string {
+  if (!isRecord(entry)) {
+    return '';
+  }
+
+  const value = readShallowPath(entry, path);
+  return typeof value === 'string' ? value : '';
+}
+
+function readShallowPath(entry: Record<string, unknown>, path: JsonPointerPath): unknown {
+  const key = path.startsWith('/') ? path.slice(1) : path;
+  return entry[key];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);

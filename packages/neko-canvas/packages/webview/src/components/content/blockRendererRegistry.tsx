@@ -148,7 +148,7 @@ function renderTagListBlock(context: BlockRendererContext): React.ReactNode {
 }
 
 function renderAssetPreviewBlock(context: BlockRendererContext): React.ReactNode {
-  const value = getBlockValue(context);
+  const value = getAssetPreviewValue(context);
   const source = createPreviewSource(context, value);
   const delegateActions = context.block.capabilities
     ?.filter((capability) => capability.kind === 'delegate')
@@ -158,11 +158,18 @@ function renderAssetPreviewBlock(context: BlockRendererContext): React.ReactNode
 }
 
 function renderButtonBlock(context: BlockRendererContext): React.ReactNode {
+  const action = getStringMetadata(context.block, 'action');
   return (
     <button
       type="button"
       className="self-start rounded border border-[var(--node-border)] px-2 py-1 text-xs text-[var(--node-fg)] hover:border-[var(--node-selected)]"
       onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (action) {
+          context.onAction?.(action, { blockId: context.block.id });
+        }
+      }}
     >
       {context.block.label ?? context.block.id}
     </button>
@@ -206,13 +213,16 @@ function renderCollectionBlock(context: BlockRendererContext): React.ReactNode {
   const { value } = readNodeBinding(context.node, context.block.collection.source);
   const items = Array.isArray(value) ? value : [];
   return (
-    <div className="space-y-1 text-xs text-[var(--node-fg-secondary)]">
+    <div className={getCollectionClassName(context.block.collection.layout)}>
       {items.length === 0 ? (
         <span className="opacity-60">{context.block.collection.emptyLabel ?? 'Empty'}</span>
       ) : (
         items.map((item, index) => (
-          <div key={getCollectionItemKey(item, index)} className="rounded bg-black/20 px-2 py-1">
-            {stringifyValue(item, `Item ${index + 1}`)}
+          <div
+            key={getCollectionItemKey(item, index)}
+            className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 p-1.5"
+          >
+            {renderCollectionItem(context.block, item, index)}
           </div>
         ))
       )}
@@ -229,9 +239,33 @@ function renderProjectionBlock(context: BlockRendererContext): React.ReactNode {
 }
 
 function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNode {
+  const slot = context.block.childSlot;
+  const childIds = slot?.childIds ?? context.node.container?.childIds ?? [];
   return (
-    <div className="rounded border border-dashed border-[var(--node-border)] px-2 py-1 text-xs text-[var(--node-fg-secondary)]">
-      {context.block.label ?? context.block.childSlot?.emptyLabel ?? 'Children'}
+    <div className="space-y-1 rounded border border-dashed border-[var(--node-border)] p-1.5 text-xs text-[var(--node-fg-secondary)]">
+      {childIds.length === 0 ? (
+        <span>{context.block.label ?? slot?.emptyLabel ?? 'Children'}</span>
+      ) : (
+        childIds.map((childId) => {
+          const child = context.allNodes.find((candidate) => candidate.id === childId);
+          return child ? (
+            <button
+              key={child.id}
+              type="button"
+              className="flex w-full items-center justify-between gap-2 rounded border border-[var(--node-border)] px-2 py-1 text-left text-[var(--node-fg)] hover:border-[var(--node-selected)]"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => context.onSelectNode?.(child.id, event.shiftKey || event.metaKey)}
+            >
+              <span className="min-w-0 truncate">
+                {child.preview?.title ?? child.preview?.subtitle ?? child.id}
+              </span>
+              <span className="flex-shrink-0 text-[var(--node-fg-secondary)]">
+                {child.preview?.role ?? child.type}
+              </span>
+            </button>
+          ) : null;
+        })
+      )}
     </div>
   );
 }
@@ -252,6 +286,26 @@ function getBlockValue(context: BlockRendererContext): unknown {
   return readNodeBinding(context.node, context.block.binding).value;
 }
 
+function getAssetPreviewValue(context: BlockRendererContext): unknown {
+  const generationCapability = context.block.capabilities?.find(
+    (capability) => capability.kind === 'generation-preview',
+  );
+  if (generationCapability) {
+    const { value } = readNodeBinding(context.node, generationCapability.candidates);
+    const selected = Array.isArray(value)
+      ? value.find(
+          (candidate): candidate is { id?: string; dataUrl?: string; selected?: boolean } =>
+            isRecord(candidate) && candidate['selected'] === true,
+        )
+      : undefined;
+    if (selected?.dataUrl) {
+      return selected.dataUrl;
+    }
+  }
+
+  return getBlockValue(context);
+}
+
 function createPreviewSource(
   context: BlockRendererContext,
   value: unknown,
@@ -267,7 +321,7 @@ function createPreviewSource(
   return {
     id: `${context.node.id}:${context.block.id}`,
     asset: assetCapability
-      ? { ...assetCapability, path: assetCapability.path ?? path }
+      ? { ...assetCapability, path: assetCapability.path ?? path, uri: assetCapability.uri ?? path }
       : { kind: 'asset-identity', path },
     role: previewCapability?.preferredRole ?? previewCapability?.roles[0] ?? 'fallback',
     variants: previewCapability?.variants,
@@ -321,6 +375,56 @@ function getStringArrayMetadata(block: CanvasBlock, key: string): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
+}
+
+function getStringMetadata(block: CanvasBlock, key: string): string | undefined {
+  const value = block.metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function renderCollectionItem(block: CanvasBlock, item: unknown, index: number): React.ReactNode {
+  const label =
+    readCollectionItemPath(item, block.collection?.itemLabelPath) ?? `Item ${index + 1}`;
+  const preview = readCollectionItemPath(item, block.collection?.itemPreviewPath);
+  const status = isRecord(item) ? stringifyValue(item['generationStatus'], undefined) : undefined;
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      {preview ? (
+        <img src={preview} alt={label} className="h-10 w-10 flex-shrink-0 rounded object-cover" />
+      ) : (
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-black/30 text-[10px]">
+          {index + 1}
+        </div>
+      )}
+      <div className="min-w-0">
+        <div className="truncate text-xs text-[var(--node-fg)]">{label}</div>
+        {status ? (
+          <div className="truncate text-[10px] text-[var(--node-fg-secondary)]">{status}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function readCollectionItemPath(item: unknown, path: string | undefined): string | undefined {
+  if (!path || !isRecord(item)) {
+    return undefined;
+  }
+
+  const key = path.startsWith('/') ? path.slice(1) : path;
+  const value = item[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getCollectionClassName(layout: string | undefined): string {
+  switch (layout) {
+    case 'gallery':
+    case 'grid':
+      return 'grid grid-cols-2 gap-1 text-xs text-[var(--node-fg-secondary)]';
+    default:
+      return 'space-y-1 text-xs text-[var(--node-fg-secondary)]';
+  }
 }
 
 function getCollectionItemKey(item: unknown, index: number): string {

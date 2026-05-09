@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import type { CanvasNode, CanvasConnection } from '@neko/shared';
+import { getContainerChildIds, getNodeParentId } from '@neko/shared';
 
 // =============================================================================
 // Types
@@ -85,13 +86,13 @@ function cloneWithNewIds(
       return cloned;
     }
 
-    const nextChildIds =
-      cloned.container?.childIds
-        ?.map((childId) => idMap.get(childId))
-        .filter((childId): childId is string => Boolean(childId)) ?? [];
+    const nextChildIds = getContainerChildIds(cloned)
+      .map((childId) => idMap.get(childId))
+      .filter((childId): childId is string => Boolean(childId));
+    const currentParentId = getNodeParentId(cloned);
     const nextParentId =
-      cloned.parentId && originalNodeIds.has(cloned.parentId)
-        ? idMap.get(cloned.parentId)
+      currentParentId && originalNodeIds.has(currentParentId)
+        ? idMap.get(currentParentId)
         : undefined;
 
     return remapClonedNode(cloned, {
@@ -146,7 +147,7 @@ function remapClonedNode(node: CanvasNode, options: RemapClonedNodeOptions): Can
         type: 'scene',
         data: {
           ...node.data,
-          shotIds: node.data.shotIds
+          shotIds: getContainerChildIds(node)
             .map((shotId) => options.idMap.get(shotId))
             .filter((shotId): shotId is string => Boolean(shotId)),
         },
@@ -157,26 +158,37 @@ function remapClonedNode(node: CanvasNode, options: RemapClonedNodeOptions): Can
         type: 'group',
         data: {
           ...node.data,
-          childIds: node.data.childIds
+          childIds: getContainerChildIds(node)
             .map((childId) => options.idMap.get(childId))
             .filter((childId): childId is string => Boolean(childId)),
         },
       };
-    case 'shot':
+    case 'shot': {
+      const nextSceneGroupId = getRemappedParentId(node, options);
       return {
         ...base,
         type: 'shot',
         data: {
           ...node.data,
-          sceneGroupId:
-            node.data.sceneGroupId && options.originalNodeIds.has(node.data.sceneGroupId)
-              ? options.idMap.get(node.data.sceneGroupId)
-              : undefined,
+          sceneGroupId: nextSceneGroupId,
         },
       };
+    }
     default:
       return base;
   }
+}
+
+function getRemappedParentId(
+  node: CanvasNode,
+  options: Pick<RemapClonedNodeOptions, 'idMap' | 'originalNodeIds'>,
+): string | undefined {
+  const parentId = getNodeParentId(node);
+  if (!parentId || !options.originalNodeIds.has(parentId)) {
+    return undefined;
+  }
+
+  return options.idMap.get(parentId);
 }
 
 // =============================================================================

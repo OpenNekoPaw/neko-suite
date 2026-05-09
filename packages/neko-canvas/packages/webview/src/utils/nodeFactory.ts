@@ -1,5 +1,4 @@
 import type {
-  CanvasNode,
   CanvasNodeType,
   GalleryCell,
   GalleryPreset,
@@ -9,15 +8,13 @@ import type {
   ShotCharacter,
 } from '@neko/shared';
 import { GALLERY_PRESET_CONFIGS, getBuiltInCanvasNodePresetMetadata } from '@neko/shared';
-import { createBuiltInNodeTypeDescriptors } from '../components/nodes/nodeTypeDescriptors';
-import { getNodeDefaultSize } from '../components/nodes/nodeTypeDescriptor';
 import {
   applyCanvasNodePreset,
   createBuiltInCanvasNodePresetRegistry,
   getCanvasNodePreset,
 } from './canvasPresetRegistry';
+import type { CanvasNodeDraft } from './canvasPresetRegistry';
 
-const NODE_DESCRIPTORS = createBuiltInNodeTypeDescriptors();
 const NODE_PRESETS = createBuiltInCanvasNodePresetRegistry();
 
 interface BuildCanvasNodeOptions {
@@ -27,6 +24,24 @@ interface BuildCanvasNodeOptions {
   zIndex: number;
   preset?: string;
 }
+
+type NodeDefaultSize = { width: number; height: number };
+
+const NODE_DEFAULT_SIZES: Record<CanvasNodeType, NodeDefaultSize> = {
+  media: { width: 280, height: 200 },
+  storyboard: { width: 240, height: 160 },
+  annotation: { width: 200, height: 100 },
+  group: { width: 320, height: 220 },
+  text: { width: 260, height: 120 },
+  artboard: { width: 640, height: 360 },
+  shot: { width: 220, height: 200 },
+  scene: { width: 640, height: 400 },
+  gallery: { width: 290, height: 360 },
+  script: { width: 280, height: 220 },
+  document: { width: 220, height: 280 },
+  model: { width: 240, height: 160 },
+  'canvas-embed': { width: 260, height: 180 },
+};
 
 const DEFAULT_EMPTY_HISTORY: GeneratedImageVersion[] = [];
 const DEFAULT_EMPTY_CHARACTERS: ShotCharacter[] = [];
@@ -87,6 +102,10 @@ function inferGalleryPreset(value: unknown): GalleryPreset {
   return 'character-3view';
 }
 
+function getNodeDefaultSize(type: CanvasNodeType): NodeDefaultSize {
+  return NODE_DEFAULT_SIZES[type] ?? { width: 200, height: 100 };
+}
+
 function inferGenerationStatus(value: unknown): GalleryCell['generationStatus'] {
   if (value === 'pending' || value === 'generating' || value === 'done' || value === 'error') {
     return value;
@@ -94,7 +113,7 @@ function inferGenerationStatus(value: unknown): GalleryCell['generationStatus'] 
   return 'idle';
 }
 
-export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNode, 'id'> {
+export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraft {
   const { type, position, data, zIndex } = options;
   if (options.preset && !getBuiltInCanvasNodePresetMetadata(options.preset)) {
     throw new Error(`Unsupported preset "${options.preset}"`);
@@ -107,7 +126,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
         {
           type,
           position,
-          size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+          size: getNodeDefaultSize(type),
           zIndex,
           data: {
             content: asString(data.content, ''),
@@ -117,23 +136,26 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
         preset,
       );
     case 'media':
-      return {
-        type,
-        position,
-        size: { width: 280, height: inferMediaType(data.mediaType) === 'audio' ? 80 : 200 },
-        zIndex,
-        data: {
-          assetPath: asString(data.assetPath, ''),
-          thumbnailPath: asString(data.thumbnailPath) || undefined,
-          mediaType: inferMediaType(data.mediaType),
-          duration: typeof data.duration === 'number' ? data.duration : undefined,
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: { width: 280, height: inferMediaType(data.mediaType) === 'audio' ? 80 : 200 },
+          zIndex,
+          data: {
+            assetPath: asString(data.assetPath, ''),
+            thumbnailPath: asString(data.thumbnailPath) || undefined,
+            mediaType: inferMediaType(data.mediaType),
+            duration: typeof data.duration === 'number' ? data.duration : undefined,
+          },
         },
-      };
+        preset,
+      );
     case 'storyboard':
       return {
         type,
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+        size: getNodeDefaultSize(type),
         zIndex,
         data: {
           title: asString(data.title, ''),
@@ -147,7 +169,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
         {
           type,
           position,
-          size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+          size: getNodeDefaultSize(type),
           zIndex,
           data: {
             content: asString(data.content, ''),
@@ -161,7 +183,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+        size: getNodeDefaultSize(type),
         zIndex,
         data: {
           name: asString(data.name, 'Artboard'),
@@ -179,91 +201,98 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
         },
       };
     case 'shot':
-      return {
-        type,
-        position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
-        zIndex,
-        data: {
-          shotNumber: asNumber(data.shotNumber, zIndex + 1),
-          sceneGroupId: asString(data.sceneGroupId) || undefined,
-          duration: asNumber(data.duration, 3),
-          visualDescription: asString(data.visualDescription, ''),
-          characters: asObjectArray<ShotCharacter>(data.characters) ?? DEFAULT_EMPTY_CHARACTERS,
-          shotScale:
-            data.shotScale === 'ECU' ||
-            data.shotScale === 'CU' ||
-            data.shotScale === 'MCU' ||
-            data.shotScale === 'MS' ||
-            data.shotScale === 'MLS' ||
-            data.shotScale === 'LS' ||
-            data.shotScale === 'VLS' ||
-            data.shotScale === 'ELS'
-              ? data.shotScale
-              : 'MS',
-          cameraMovement:
-            data.cameraMovement === 'static' ||
-            data.cameraMovement === 'pan' ||
-            data.cameraMovement === 'tilt' ||
-            data.cameraMovement === 'zoom-in' ||
-            data.cameraMovement === 'zoom-out' ||
-            data.cameraMovement === 'dolly' ||
-            data.cameraMovement === 'dolly-in' ||
-            data.cameraMovement === 'dolly-out' ||
-            data.cameraMovement === 'handheld' ||
-            data.cameraMovement === 'crane'
-              ? data.cameraMovement
-              : undefined,
-          cameraAngle:
-            data.cameraAngle === 'eye-level' ||
-            data.cameraAngle === 'high-angle' ||
-            data.cameraAngle === 'low-angle' ||
-            data.cameraAngle === 'bird-eye' ||
-            data.cameraAngle === 'dutch'
-              ? data.cameraAngle
-              : undefined,
-          characterAction: asString(data.characterAction, ''),
-          emotion: asStringArray(data.emotion),
-          sceneTags: asStringArray(data.sceneTags),
-          referenceNodeId: asString(data.referenceNodeId) || undefined,
-          generatedImage: asString(data.generatedImage) || undefined,
-          generatedVideo: asString(data.generatedVideo) || undefined,
-          generationStatus:
-            data.generationStatus === 'pending' ||
-            data.generationStatus === 'generating' ||
-            data.generationStatus === 'done' ||
-            data.generationStatus === 'error'
-              ? data.generationStatus
-              : 'idle',
-          generationHistory:
-            asObjectArray<GeneratedImageVersion>(data.generationHistory) ?? DEFAULT_EMPTY_HISTORY,
-          dialogue: asString(data.dialogue) || undefined,
-          voiceOver: asString(data.voiceOver) || undefined,
-          soundCue: asString(data.soundCue) || undefined,
-          lastImportedToTimelineAt:
-            typeof data.lastImportedToTimelineAt === 'number'
-              ? data.lastImportedToTimelineAt
-              : undefined,
-          lastImportedToTimelineProject: asString(data.lastImportedToTimelineProject) || undefined,
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: getNodeDefaultSize(type),
+          zIndex,
+          data: {
+            shotNumber: asNumber(data.shotNumber, zIndex + 1),
+            sceneGroupId: asString(data.sceneGroupId) || undefined,
+            duration: asNumber(data.duration, 3),
+            visualDescription: asString(data.visualDescription, ''),
+            characters: asObjectArray<ShotCharacter>(data.characters) ?? DEFAULT_EMPTY_CHARACTERS,
+            shotScale:
+              data.shotScale === 'ECU' ||
+              data.shotScale === 'CU' ||
+              data.shotScale === 'MCU' ||
+              data.shotScale === 'MS' ||
+              data.shotScale === 'MLS' ||
+              data.shotScale === 'LS' ||
+              data.shotScale === 'VLS' ||
+              data.shotScale === 'ELS'
+                ? data.shotScale
+                : 'MS',
+            cameraMovement:
+              data.cameraMovement === 'static' ||
+              data.cameraMovement === 'pan' ||
+              data.cameraMovement === 'tilt' ||
+              data.cameraMovement === 'zoom-in' ||
+              data.cameraMovement === 'zoom-out' ||
+              data.cameraMovement === 'dolly' ||
+              data.cameraMovement === 'dolly-in' ||
+              data.cameraMovement === 'dolly-out' ||
+              data.cameraMovement === 'handheld' ||
+              data.cameraMovement === 'crane'
+                ? data.cameraMovement
+                : undefined,
+            cameraAngle:
+              data.cameraAngle === 'eye-level' ||
+              data.cameraAngle === 'high-angle' ||
+              data.cameraAngle === 'low-angle' ||
+              data.cameraAngle === 'bird-eye' ||
+              data.cameraAngle === 'dutch'
+                ? data.cameraAngle
+                : undefined,
+            characterAction: asString(data.characterAction, ''),
+            emotion: asStringArray(data.emotion),
+            sceneTags: asStringArray(data.sceneTags),
+            referenceNodeId: asString(data.referenceNodeId) || undefined,
+            generatedImage: asString(data.generatedImage) || undefined,
+            generatedVideo: asString(data.generatedVideo) || undefined,
+            generationStatus:
+              data.generationStatus === 'pending' ||
+              data.generationStatus === 'generating' ||
+              data.generationStatus === 'done' ||
+              data.generationStatus === 'error'
+                ? data.generationStatus
+                : 'idle',
+            generationHistory:
+              asObjectArray<GeneratedImageVersion>(data.generationHistory) ?? DEFAULT_EMPTY_HISTORY,
+            dialogue: asString(data.dialogue) || undefined,
+            voiceOver: asString(data.voiceOver) || undefined,
+            soundCue: asString(data.soundCue) || undefined,
+            lastImportedToTimelineAt:
+              typeof data.lastImportedToTimelineAt === 'number'
+                ? data.lastImportedToTimelineAt
+                : undefined,
+            lastImportedToTimelineProject:
+              asString(data.lastImportedToTimelineProject) || undefined,
+          },
         },
-      };
+        preset,
+      );
     case 'scene':
-      return {
-        type,
-        position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
-        zIndex,
-        data: {
-          sceneTitle: asString(data.sceneTitle, 'Scene'),
-          sceneNumber: asNumber(data.sceneNumber, zIndex + 1),
-          location: asString(data.location) || undefined,
-          timeOfDay: asString(data.timeOfDay) || undefined,
-          shotIds: asStringArray(data.shotIds),
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: getNodeDefaultSize(type),
+          zIndex,
+          data: {
+            sceneTitle: asString(data.sceneTitle, 'Scene'),
+            sceneNumber: asNumber(data.sceneNumber, zIndex + 1),
+            location: asString(data.location) || undefined,
+            timeOfDay: asString(data.timeOfDay) || undefined,
+            shotIds: asStringArray(data.shotIds),
+          },
         },
-      };
+        preset,
+      );
     case 'gallery': {
-      const preset = inferGalleryPreset(data.preset);
-      const presetConfig = GALLERY_PRESET_CONFIGS[preset];
+      const galleryPreset = inferGalleryPreset(data.preset);
+      const presetConfig = GALLERY_PRESET_CONFIGS[galleryPreset];
       const defaultCells = presetConfig.labels.map((label, index) => ({
         id: `cell-${Date.now()}-${index}`,
         label,
@@ -293,30 +322,33 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
             };
           })
         : defaultCells;
-      return {
-        type,
-        position,
-        size: {
-          width: Math.max(240, presetConfig.cols * 90 + 20),
-          height: presetConfig.rows * 100 + 60,
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: {
+            width: Math.max(240, presetConfig.cols * 90 + 20),
+            height: presetConfig.rows * 100 + 60,
+          },
+          zIndex,
+          data: {
+            preset: galleryPreset,
+            rows: asNumber(data.rows, presetConfig.rows),
+            cols: asNumber(data.cols, presetConfig.cols),
+            cells: normalizedCells,
+            globalPromptPrefix: asString(data.globalPromptPrefix) || undefined,
+            characterId: asString(data.characterId) || undefined,
+            characterName: asString(data.characterName) || undefined,
+          },
         },
-        zIndex,
-        data: {
-          preset,
-          rows: asNumber(data.rows, presetConfig.rows),
-          cols: asNumber(data.cols, presetConfig.cols),
-          cells: normalizedCells,
-          globalPromptPrefix: asString(data.globalPromptPrefix) || undefined,
-          characterId: asString(data.characterId) || undefined,
-          characterName: asString(data.characterName) || undefined,
-        },
-      };
+        preset,
+      );
     }
     case 'script':
       return {
         type,
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+        size: getNodeDefaultSize(type),
         zIndex,
         data: {
           scriptPath: asString(data.scriptPath, ''),
@@ -329,7 +361,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+        size: getNodeDefaultSize(type),
         zIndex,
         data: {
           docPath: asString(data.docPath, ''),
@@ -342,7 +374,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+        size: getNodeDefaultSize(type),
         zIndex,
         ports:
           inferModelRole(data.role) === 'workflow'
@@ -368,7 +400,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+        size: getNodeDefaultSize(type),
         zIndex,
         data: {
           canvasPath: asString(data.canvasPath, ''),
@@ -380,7 +412,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type,
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, type),
+        size: getNodeDefaultSize(type),
         zIndex,
         data: {
           childIds: asStringArray(data.childIds),
@@ -392,7 +424,7 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): Omit<CanvasNod
       return {
         type: 'annotation',
         position,
-        size: getNodeDefaultSize(NODE_DESCRIPTORS, 'annotation'),
+        size: getNodeDefaultSize('annotation'),
         zIndex,
         data: { content: '' },
       };

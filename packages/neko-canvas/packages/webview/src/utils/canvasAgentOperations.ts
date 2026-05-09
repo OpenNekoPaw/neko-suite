@@ -26,6 +26,7 @@ import {
 } from '@neko/shared';
 import { createContainerComposite } from './containerActions';
 import { autoArrangeContainer, findFreePosition } from './containerLayout';
+import { hydrateCanvasNodePreview, refreshCanvasNodePreview } from './canvasPresetRegistry';
 import { buildCanvasNode } from './nodeFactory';
 
 export interface CanvasAgentOperationContext {
@@ -81,11 +82,11 @@ export function deriveCanvasNode(
     },
   });
   const nodeId = context.generateId();
-  const nextNode = {
+  const nextNode = hydrateCanvasNodePreview({
     ...nodeSpec,
     id: nodeId,
     zIndex: (context.nodes.length + 1) * 10,
-  } as CanvasNode;
+  } as CanvasNode);
   const nextNodes = [...context.nodes, nextNode];
 
   let nextConnections = context.connections;
@@ -129,7 +130,7 @@ export function createCanvasComposite(
   }
 
   const containerId = context.generateId();
-  const containerNode = {
+  const containerNode = hydrateCanvasNodePreview({
     ...createNodeSpec({
       type: containerPreset.nodeType,
       preset: containerPresetName,
@@ -144,7 +145,7 @@ export function createCanvasComposite(
     }),
     id: containerId,
     zIndex: (context.nodes.length + 1) * 10,
-  } as CanvasNode;
+  } as CanvasNode);
 
   const children = request.children.map((child, index) => {
     const childPresetName =
@@ -157,7 +158,7 @@ export function createCanvasComposite(
     const childId = child.id ?? context.generateId();
     const childPosition =
       child.position ?? defaultChildPosition(containerNode, index, childPreset.nodeType);
-    return {
+    return hydrateCanvasNodePreview({
       ...createNodeSpec({
         ...child,
         type: childPreset.nodeType,
@@ -166,7 +167,7 @@ export function createCanvasComposite(
       }),
       id: childId,
       zIndex: (context.nodes.length + index + 2) * 10,
-    } as CanvasNode;
+    } as CanvasNode);
   });
 
   const composite = createContainerComposite(context.nodes, {
@@ -203,7 +204,10 @@ export function updateCanvasBlock(
   const binding = resolveUpdateBinding(node, request);
   const written = writeFieldBinding(node.data, binding, request.value);
   const nextNode = written.changed
-    ? ({ ...node, data: written.data as Record<string, unknown> } as CanvasNode)
+    ? refreshCanvasNodePreview({
+        ...node,
+        data: written.data as Record<string, unknown>,
+      } as CanvasNode)
     : node;
 
   return {
@@ -446,7 +450,25 @@ function collectBlockBinding(
       blockId: block.id,
       label: block.label,
       path: block.binding.path,
-      value: readFieldBinding(node.data, block.binding).value,
+      value: sanitizeRuntimeValue(readFieldBinding(node.data, block.binding).value),
+    });
+  }
+  if (block.collection) {
+    bindings.push({
+      blockId: block.id,
+      label: block.label,
+      path: block.collection.source.path,
+      value: sanitizeRuntimeValue(readFieldBinding(node.data, block.collection.source).value),
+    });
+  }
+  if (block.projection?.sourceBinding) {
+    bindings.push({
+      blockId: block.id,
+      label: block.label,
+      path: block.projection.sourceBinding.path,
+      value: sanitizeRuntimeValue(
+        readFieldBinding(node.data, block.projection.sourceBinding).value,
+      ),
     });
   }
   for (const child of block.children ?? []) {
@@ -535,6 +557,23 @@ function pickPromptFields(data: Record<string, unknown>): string[] {
 }
 
 function sanitizeData(data: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = sanitizeRuntimeValue(data);
+  return isRecord(sanitized) ? sanitized : {};
+}
+
+function sanitizeRuntimeValue(value: unknown): unknown {
+  if (isRuntimeUrl(value)) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(sanitizeRuntimeValue);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
   const runtimeKeys = new Set([
     'blobUrl',
     'blobURL',
@@ -545,7 +584,27 @@ function sanitizeData(data: Record<string, unknown>): Record<string, unknown> {
     'hoverTime',
     'activePlayback',
   ]);
-  return Object.fromEntries(Object.entries(data).filter(([key]) => !runtimeKeys.has(key)));
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entryValue]) => {
+      if (runtimeKeys.has(key)) {
+        return [];
+      }
+
+      if (isRuntimeUrl(entryValue)) {
+        return [];
+      }
+
+      const sanitizedValue = sanitizeRuntimeValue(entryValue);
+      return [[key, sanitizedValue]];
+    }),
+  );
+}
+
+function isRuntimeUrl(value: unknown): value is string {
+  return (
+    typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('mediastream:'))
+  );
 }
 
 function readString(data: Record<string, unknown>, key: string): string | undefined {
@@ -569,4 +628,8 @@ function formatValue(value: unknown): string {
     return JSON.stringify(value);
   }
   return String(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

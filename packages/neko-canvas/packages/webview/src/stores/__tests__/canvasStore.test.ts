@@ -6,6 +6,8 @@ import {
   type SceneGroupCanvasNode,
   type ShotCanvasNode,
 } from '@neko/shared';
+import { buildCanvasNode } from '../../utils/nodeFactory';
+import { hydrateCanvasNodePreview } from '../../utils/canvasPresetRegistry';
 import { useCanvasStore } from '../canvasStore';
 import { useHistoryStore } from '../historyStore';
 
@@ -240,5 +242,68 @@ describe('canvasStore scene container actions', () => {
 
     expect(state?.nodes.some((node) => node.id === groupId)).toBe(false);
     expect(releasedShot?.parentId).toBeUndefined();
+  });
+
+  it('refreshes migrated node previews after data and block updates', () => {
+    const shot = hydrateCanvasNodePreview({
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 4,
+          visualDescription: 'Old description',
+          generationHistory: [
+            {
+              id: 'candidate-1',
+              dataUrl: 'blob:runtime-old',
+              prompt: 'old',
+              timestamp: 1,
+              selected: true,
+              assetId: 'asset-old',
+            },
+          ],
+        },
+      }),
+      id: 'shot-4',
+    } as CanvasData['nodes'][number]);
+
+    useCanvasStore.getState().setCanvasData(createCanvasData([shot]));
+    useCanvasStore.getState().updateNodeData('shot-4', {
+      visualDescription: 'Updated description',
+      generationHistory: [
+        {
+          id: 'candidate-2',
+          dataUrl: 'blob:runtime-new',
+          prompt: 'new',
+          timestamp: 2,
+          selected: true,
+          assetId: 'asset-new',
+        },
+      ],
+    });
+
+    let state = useCanvasStore.getState().canvasData;
+    let nextShot = state?.nodes.find((node) => node.id === 'shot-4');
+    expect(nextShot?.preview).toMatchObject({
+      nodeId: 'shot-4',
+      subtitle: 'Updated description',
+      thumbnailVariantId: 'candidate-2',
+      metadata: {
+        selectedAssetId: 'asset-new',
+      },
+    });
+
+    useCanvasStore.getState().updateBlock({
+      nodeId: 'shot-4',
+      blockId: 'shot-visual-description',
+      value: 'Block edit',
+    });
+
+    state = useCanvasStore.getState().canvasData;
+    nextShot = state?.nodes.find((node) => node.id === 'shot-4');
+    expect(nextShot?.preview?.subtitle).toBe('Block edit');
+    expect(JSON.stringify(nextShot?.preview)).not.toContain('blob:runtime');
   });
 });

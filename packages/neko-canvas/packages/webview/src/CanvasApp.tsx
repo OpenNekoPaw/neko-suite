@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { CanvasData, CanvasDroppedAsset, CanvasViewport } from '@neko/shared';
+import { getContainerChildIds } from '@neko/shared';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
@@ -596,10 +597,11 @@ export function CanvasApp() {
   const handleBatchGenerateSceneShots = useCallback(
     (sceneId: string) => {
       const target = nodes.find((node) => node.id === sceneId);
-      if (!target || target.type !== 'scene' || target.data.shotIds.length === 0) return;
+      const childIds = target ? getContainerChildIds(target) : [];
+      if (!target || target.type !== 'scene' || childIds.length === 0) return;
       vscode?.postMessage({
         type: 'sendToAgent',
-        nodeIds: target.data.shotIds,
+        nodeIds: childIds,
         action: 'batch',
       });
     },
