@@ -284,7 +284,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   // Track active streams per panel for cleanup
   private _activeStreams = new Map<
     vscode.WebviewPanel,
-    { videoStreamId: string | null; audioStreamId: string | null }
+    Map<string, { videoStreamId: string | null; audioStreamId: string | null }>
   >();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -346,10 +346,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
     webviewPanel.onDidDispose(async () => {
       // Stop active media streams for this panel
-      const streams = this._activeStreams.get(webviewPanel);
-      if (streams) {
+      const panelStreams = this._activeStreams.get(webviewPanel);
+      if (panelStreams && panelStreams.size > 0) {
         const api = await this.getPreviewApi();
-        await api?.stopStreams(streams.videoStreamId, streams.audioStreamId).catch(() => {});
+        for (const streams of panelStreams.values()) {
+          await api?.stopStreams(streams.videoStreamId, streams.audioStreamId).catch(() => {});
+        }
         this._activeStreams.delete(webviewPanel);
       }
       if (this.activeWebviewPanel === webviewPanel) {
@@ -1115,6 +1117,86 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
 
+      case 'pickFile': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'],
+            Videos: ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'],
+            Audio: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'],
+            Scripts: ['fountain', 'nks', 'story'],
+            Documents: ['pdf', 'docx', 'epub', 'cbz'],
+            Models: ['safetensors', 'ckpt', 'pt', 'pth', 'bin'],
+            'Neko Canvas': ['nkc'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'file';
+          const assetKind = inferCanvasDroppedAssetKind(fileName);
+          if (!assetKind) break;
+
+          let asset: CanvasDroppedAsset | undefined;
+          const baseName = fileName.replace(/\.[^.]+$/, '');
+
+          if (assetKind === 'media') {
+            const mediaType = inferCanvasMediaType(fileName);
+            if (mediaType) {
+              const webviewUri = webviewPanel.webview.asWebviewUri(uri);
+              asset = { kind: 'media', path: webviewUri.toString(), name: fileName, mediaType };
+            }
+          } else {
+            const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+
+            if (assetKind === 'script') {
+              asset = {
+                kind: 'script',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Script',
+              };
+            } else if (assetKind === 'document') {
+              const docType = inferCanvasDocumentType(fileName);
+              if (docType) {
+                asset = {
+                  kind: 'document',
+                  path: contractedPath,
+                  name: fileName,
+                  title: baseName || 'Document',
+                  docType,
+                };
+              }
+            } else if (assetKind === 'model') {
+              const modelType = inferCanvasModelType(fileName);
+              if (modelType) {
+                asset = {
+                  kind: 'model',
+                  path: contractedPath,
+                  name: fileName,
+                  modelName: baseName || 'Model',
+                  modelType,
+                  role: 'reference',
+                };
+              }
+            } else if (assetKind === 'canvas') {
+              asset = {
+                kind: 'canvas',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Canvas',
+              };
+            }
+          }
+
+          if (asset) {
+            webviewPanel.webview.postMessage({ type: 'dropAssets', assets: [asset] });
+          }
+        }
+        break;
+      }
+
       case 'canvasChanged':
         this._onDidChangeCanvas.fire({
           type: message.changeType as 'add' | 'update' | 'delete',
@@ -1219,13 +1301,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             });
             break;
           }
-          // Stop previous streams for this panel if any
-          const prev = this._activeStreams.get(webviewPanel);
+          const nodeId = (message.nodeId as string) ?? assetPath;
+          let panelStreams = this._activeStreams.get(webviewPanel);
+          if (!panelStreams) {
+            panelStreams = new Map();
+            this._activeStreams.set(webviewPanel, panelStreams);
+          }
+          const prev = panelStreams.get(nodeId);
           if (prev) {
             await api.stopStreams(prev.videoStreamId, prev.audioStreamId).catch(() => {});
           }
           const result = await api.startPlayback(filePath, mediaInfo, startTime, speed);
-          this._activeStreams.set(webviewPanel, result);
+          panelStreams.set(nodeId, result);
           webviewPanel.webview.postMessage({
             type: 'media:streamReady',
             nodeId: message.nodeId,
@@ -1250,39 +1337,47 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'media:seek': {
-        const streams = this._activeStreams.get(webviewPanel);
-        if (!streams) break;
+        const seekNodeId = (message.nodeId as string) ?? '';
+        const seekStreams = this._activeStreams.get(webviewPanel)?.get(seekNodeId);
+        if (!seekStreams) break;
         const api = await this.getPreviewApi();
         await api?.seekStreams(
-          streams.videoStreamId,
-          streams.audioStreamId,
+          seekStreams.videoStreamId,
+          seekStreams.audioStreamId,
           message.time as number,
         );
         break;
       }
 
       case 'media:pause': {
-        const streams = this._activeStreams.get(webviewPanel);
-        if (!streams) break;
+        const pauseNodeId = (message.nodeId as string) ?? '';
+        const pauseStreams = this._activeStreams.get(webviewPanel)?.get(pauseNodeId);
+        if (!pauseStreams) break;
         const api = await this.getPreviewApi();
-        await api?.pauseStreams(streams.videoStreamId, streams.audioStreamId);
+        await api?.pauseStreams(pauseStreams.videoStreamId, pauseStreams.audioStreamId);
         break;
       }
 
       case 'media:resume': {
-        const streams = this._activeStreams.get(webviewPanel);
-        if (!streams) break;
+        const resumeNodeId = (message.nodeId as string) ?? '';
+        const resumeStreams = this._activeStreams.get(webviewPanel)?.get(resumeNodeId);
+        if (!resumeStreams) break;
         const api = await this.getPreviewApi();
-        await api?.resumeStreams(streams.videoStreamId, streams.audioStreamId);
+        await api?.resumeStreams(resumeStreams.videoStreamId, resumeStreams.audioStreamId);
         break;
       }
 
       case 'media:stop': {
-        const streams = this._activeStreams.get(webviewPanel);
-        if (!streams) break;
+        const stopNodeId = (message.nodeId as string) ?? '';
+        const stopPanelStreams = this._activeStreams.get(webviewPanel);
+        const stopStreams = stopPanelStreams?.get(stopNodeId);
+        if (!stopStreams) break;
         const api = await this.getPreviewApi();
-        await api?.stopStreams(streams.videoStreamId, streams.audioStreamId);
-        this._activeStreams.delete(webviewPanel);
+        await api?.stopStreams(stopStreams.videoStreamId, stopStreams.audioStreamId);
+        stopPanelStreams?.delete(stopNodeId);
+        if (stopPanelStreams?.size === 0) {
+          this._activeStreams.delete(webviewPanel);
+        }
         break;
       }
 

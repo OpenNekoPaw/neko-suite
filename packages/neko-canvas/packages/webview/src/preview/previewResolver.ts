@@ -2,6 +2,12 @@ import type { CanvasPreviewRole, PreviewVariantRole } from '@neko/shared';
 import { getGlobalVSCodeApi } from '../utils/vscode';
 import type { PreviewResolveRequest, PreviewResolver, RuntimePreviewVariant } from './types';
 
+const SAFE_URL_RE = /^(data:|blob:|https?:)/;
+
+export function isSafeWebviewUrl(url: string): boolean {
+  return SAFE_URL_RE.test(url);
+}
+
 const ROLE_TO_ENGINE_ROLE: Partial<Record<CanvasPreviewRole, PreviewVariantRole>> = {
   image: 'thumbnail',
   'document-cover': 'thumbnail',
@@ -41,7 +47,7 @@ export class WebviewPreviewResolver implements PreviewResolver {
       role: request.role ?? request.source.role,
       assetId: request.source.asset?.assetId,
       sourcePath,
-      runtimeUrl: runtimeUrl ?? sourcePath,
+      runtimeUrl,
       mimeType: request.source.asset?.mediaType,
     };
   }
@@ -109,7 +115,7 @@ function createRuntimeVariantRequest(
 
   if (!vscode) {
     return {
-      promise: Promise.resolve(assetPath).finally(onSettled),
+      promise: Promise.resolve(undefined as string | undefined).finally(onSettled),
       dispose: () => {},
     };
   }

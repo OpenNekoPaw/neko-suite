@@ -565,7 +565,7 @@ function getMediaPreviewRole(node: CanvasNodeDraft): CanvasPreviewRole {
 
   switch (node.data.mediaType) {
     case 'video':
-      return 'video-poster';
+      return 'video-proxy';
     case 'audio':
       return 'audio-waveform';
     case 'image':

@@ -1,4 +1,5 @@
 export { PreviewSurface } from './PreviewRendererRegistry';
+export { isSafeWebviewUrl } from './previewResolver';
 export type {
   PreviewRenderer,
   PreviewRendererProps,

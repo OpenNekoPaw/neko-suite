@@ -206,38 +206,6 @@ export function CanvasApp() {
     addGalleryAt(getViewportCenter());
   }, [addGalleryAt, getViewportCenter]);
 
-  const handleAddScript = useCallback(() => {
-    if (vscode) {
-      vscode.postMessage({ type: 'pickScriptDocument' });
-    } else {
-      addScriptAt(getViewportCenter());
-    }
-  }, [addScriptAt, getViewportCenter]);
-
-  const handleAddDocument = useCallback(() => {
-    if (vscode) {
-      vscode.postMessage({ type: 'pickReferenceDocument' });
-    } else {
-      addDocumentAt(getViewportCenter());
-    }
-  }, [addDocumentAt, getViewportCenter]);
-
-  const handleAddModel = useCallback(() => {
-    if (vscode) {
-      vscode.postMessage({ type: 'pickModelReference' });
-    } else {
-      addModelAt(getViewportCenter());
-    }
-  }, [addModelAt, getViewportCenter]);
-
-  const handleAddCanvasEmbed = useCallback(() => {
-    if (vscode) {
-      vscode.postMessage({ type: 'pickCanvasDocument' });
-    } else {
-      addCanvasEmbedAt(getViewportCenter());
-    }
-  }, [addCanvasEmbedAt, getViewportCenter]);
-
   const handleAddMediaFromExtension = useCallback(
     (mediaType: string, uri: string, name: string) => {
       addMediaAt(getViewportCenter(), mediaType as 'image' | 'video' | 'audio', uri, name);
@@ -245,16 +213,11 @@ export function CanvasApp() {
     [addMediaAt, getViewportCenter],
   );
 
-  const handleAddMedia = useCallback(
-    (type: 'image' | 'video' | 'audio') => {
-      if (vscode) {
-        vscode.postMessage({ type: 'pickMedia', mediaType: type });
-      } else {
-        addMediaAt(getViewportCenter(), type);
-      }
-    },
-    [addMediaAt, getViewportCenter],
-  );
+  const handleImportFile = useCallback(() => {
+    if (vscode) {
+      vscode.postMessage({ type: 'pickFile' });
+    }
+  }, []);
 
   // =========================================================================
   // Drag & Drop
@@ -678,7 +641,7 @@ export function CanvasApp() {
     addSceneGroupAt,
     addShotAt,
     addGalleryAt,
-    handleAddMedia,
+    handleImportFile,
     deleteSelected,
     handleFitContent,
     handleResetViewport,
@@ -952,16 +915,12 @@ export function CanvasApp() {
       <div ref={rootRef} className="flex-1 flex overflow-hidden">
         <CanvasToolbar
           onAddText={handleAddText}
-          onAddMedia={handleAddMedia}
           onUndo={undo}
           onRedo={redo}
           onAddShot={handleAddShot}
           onAddSceneGroup={handleAddSceneGroup}
           onAddGallery={handleAddGallery}
-          onAddScript={handleAddScript}
-          onAddDocument={handleAddDocument}
-          onAddModel={handleAddModel}
-          onAddCanvasEmbed={handleAddCanvasEmbed}
+          onImportFile={handleImportFile}
           isPanMode={isPanMode}
           onTogglePanMode={() => setIsPanMode((prev) => !prev)}
         />

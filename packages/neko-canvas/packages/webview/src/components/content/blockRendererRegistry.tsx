@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { CanvasBlock, CanvasNode, FieldBinding } from '@neko/shared';
 import { readNodeBinding } from './fieldBinding';
 import type { BlockRendererContext, BlockRendererRegistry } from './types';
-import { PreviewSurface, type PreviewSourceDescriptor } from '../../preview';
+import { PreviewSurface, isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../preview';
+import { WebviewPreviewResolver } from '../../preview/previewResolver';
 import { t } from '../../i18n';
 
 export function createBuiltInBlockRendererRegistry(): BlockRendererRegistry {
@@ -249,7 +250,9 @@ export function ChildNodeCard({
   onSelect?: (id: string, multi: boolean) => void;
 }): React.ReactNode {
   const preview = child.preview;
-  const thumbnailUrl = getChildThumbnailUrl(child);
+  const inlineUrl = getChildInlinePreview(child);
+  const resolvedUrl = useChildResolvedThumbnail(inlineUrl ? undefined : child);
+  const thumbnailUrl = inlineUrl ?? resolvedUrl;
 
   return (
     <button
@@ -285,7 +288,7 @@ export function ChildNodeCard({
   );
 }
 
-function getChildThumbnailUrl(child: CanvasNode): string | undefined {
+function getChildInlinePreview(child: CanvasNode): string | undefined {
   if (child.type === 'shot') {
     const data = child.data as Record<string, unknown>;
     const history = data['generationHistory'];
@@ -303,21 +306,58 @@ function getChildThumbnailUrl(child: CanvasNode): string | undefined {
       return generatedImage;
     }
   }
+  return undefined;
+}
 
-  if (child.type === 'media') {
-    const data = child.data as Record<string, unknown>;
-    const thumbnailPath = data['thumbnailPath'];
-    if (typeof thumbnailPath === 'string' && thumbnailPath) {
-      return thumbnailPath;
-    }
-    const assetPath = data['assetPath'];
-    const mediaType = data['mediaType'];
-    if (typeof assetPath === 'string' && assetPath && mediaType === 'image') {
-      return assetPath;
-    }
-  }
+function getChildAssetPath(child: CanvasNode): string | undefined {
+  if (child.type !== 'media') return undefined;
+  const data = child.data as Record<string, unknown>;
+  const thumbnailPath = data['thumbnailPath'];
+  if (typeof thumbnailPath === 'string' && thumbnailPath) return thumbnailPath;
+  const assetPath = data['assetPath'];
+  if (typeof assetPath === 'string' && assetPath) return assetPath;
+  return undefined;
+}
 
-  return child.preview?.thumbnailVariantId;
+function useChildResolvedThumbnail(child: CanvasNode | undefined): string | undefined {
+  const assetPath = child ? getChildAssetPath(child) : undefined;
+  const resolver = useMemo(
+    () => (assetPath ? new WebviewPreviewResolver() : undefined),
+    [assetPath],
+  );
+  const [url, setUrl] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!resolver || !child || !assetPath) {
+      setUrl(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    const mediaType =
+      child.type === 'media'
+        ? ((child.data as Record<string, unknown>)['mediaType'] as string | undefined)
+        : undefined;
+
+    const source: PreviewSourceDescriptor = {
+      id: `child-thumb:${child.id}`,
+      asset: { kind: 'asset-identity', path: assetPath, mediaType },
+      role: 'image',
+    };
+
+    resolver.resolve({ source }).then((variant) => {
+      if (!cancelled && variant.runtimeUrl) {
+        setUrl(variant.runtimeUrl);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      resolver.dispose();
+    };
+  }, [resolver, child, assetPath]);
+
+  return url;
 }
 
 function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNode {
@@ -390,14 +430,20 @@ function createPreviewSource(
     (capability) => capability.kind === 'preview',
   );
   const path = typeof value === 'string' ? value : assetCapability?.path;
+  const role = previewCapability?.preferredRole ?? previewCapability?.roles[0] ?? 'fallback';
+
+  const variants = previewCapability?.variants ? [...previewCapability.variants] : [];
+  if (typeof path === 'string' && isSafeWebviewUrl(path)) {
+    variants.push({ id: 'inline', role, sourcePath: path });
+  }
 
   return {
     id: `${context.node.id}:${context.block.id}`,
     asset: assetCapability
       ? { ...assetCapability, path: assetCapability.path ?? path, uri: assetCapability.uri ?? path }
       : { kind: 'asset-identity', path },
-    role: previewCapability?.preferredRole ?? previewCapability?.roles[0] ?? 'fallback',
-    variants: previewCapability?.variants,
+    role,
+    variants: variants.length > 0 ? variants : undefined,
     title: resolveLabel(context.block.label),
   };
 }
@@ -458,7 +504,8 @@ function getStringMetadata(block: CanvasBlock, key: string): string | undefined 
 function renderCollectionItem(block: CanvasBlock, item: unknown, index: number): React.ReactNode {
   const label =
     readCollectionItemPath(item, block.collection?.itemLabelPath) ?? `Item ${index + 1}`;
-  const preview = readCollectionItemPath(item, block.collection?.itemPreviewPath);
+  const rawPreview = readCollectionItemPath(item, block.collection?.itemPreviewPath);
+  const preview = rawPreview && isSafeWebviewUrl(rawPreview) ? rawPreview : undefined;
   const status = isRecord(item) ? stringifyValue(item['generationStatus'], undefined) : undefined;
 
   return (

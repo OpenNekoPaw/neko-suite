@@ -65,7 +65,7 @@ describe('WebviewPreviewResolver', () => {
 
     await expect(promise).resolves.toMatchObject({
       id: 'node:video:runtime',
-      runtimeUrl: 'clip.mp4',
+      runtimeUrl: undefined,
     });
     expect(fakeWindow.removeEventListener).toHaveBeenCalledWith('message', expect.any(Function));
   });

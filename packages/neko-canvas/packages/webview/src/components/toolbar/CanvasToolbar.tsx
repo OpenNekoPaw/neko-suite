@@ -14,7 +14,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { ToolbarButton, ToolbarSeparator } from '@neko/shared/components';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
-import { PlusIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
+import { PlusIcon, UploadIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
 
 // =============================================================================
 // Types
@@ -22,17 +22,14 @@ import { PlusIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
 
 export interface CanvasToolbarProps {
   onAddText: () => void;
-  onAddMedia: (type: 'image' | 'video' | 'audio') => void;
   onUndo: () => void;
   onRedo: () => void;
   /** Storyboard node creation callbacks */
   onAddShot?: () => void;
   onAddSceneGroup?: () => void;
   onAddGallery?: () => void;
-  onAddScript?: () => void;
-  onAddDocument?: () => void;
-  onAddModel?: () => void;
-  onAddCanvasEmbed?: () => void;
+  /** Unified file import — opens file picker, auto-detects type */
+  onImportFile?: () => void;
   /** Hand tool (drag-to-pan) mode */
   isPanMode?: boolean;
   onTogglePanMode?: () => void;
@@ -46,16 +43,12 @@ type ExpandedPanel = 'add' | null;
 
 export function CanvasToolbar({
   onAddText,
-  onAddMedia,
   onUndo,
   onRedo,
   onAddShot,
   onAddSceneGroup,
   onAddGallery,
-  onAddScript,
-  onAddDocument,
-  onAddModel,
-  onAddCanvasEmbed,
+  onImportFile,
   isPanMode = false,
   onTogglePanMode,
 }: CanvasToolbarProps) {
@@ -64,7 +57,6 @@ export function CanvasToolbar({
   const canRedo = useHistoryStore((s) => s.canRedo());
   const toolbarRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     if (!expandedPanel) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -114,6 +106,16 @@ export function CanvasToolbar({
         onClick={() => togglePanel('add')}
       />
 
+      {/* Import File Button */}
+      <ToolbarButton
+        icon={<UploadIcon size={18} />}
+        title={t('toolbar.importFile')}
+        onClick={() => {
+          setExpandedPanel(null);
+          onImportFile?.();
+        }}
+      />
+
       <ToolbarSeparator />
 
       {/* Undo */}
@@ -133,14 +135,14 @@ export function CanvasToolbar({
       />
 
       {/* ============================================================= */}
-      {/* Expanded Panels (positioned to the right of the toolbar)      */}
+      {/* Add Node Panel                                                */}
       {/* ============================================================= */}
 
       {expandedPanel === 'add' && (
         <div
           className="absolute left-full top-0 ml-1.5"
           style={{
-            minWidth: 210,
+            minWidth: 180,
             padding: '5px',
             background: 'var(--neko-glass-bg)',
             backdropFilter: 'var(--neko-glass-blur)',
@@ -151,7 +153,6 @@ export function CanvasToolbar({
             color: 'var(--neko-fg)',
           }}
         >
-          {/* Primary storyboard tools (shown first when available) */}
           {onAddShot && (
             <AddPanelItem
               icon={<span className="text-[13px]">🎬</span>}
@@ -171,34 +172,6 @@ export function CanvasToolbar({
               icon={<span className="text-[13px]">🖼</span>}
               label={t('toolbar.gallery')}
               onClick={() => handleAddAndClose(onAddGallery)}
-            />
-          )}
-          {onAddScript && (
-            <AddPanelItem
-              icon={<span className="text-[13px]">📄</span>}
-              label={t('toolbar.scriptReference')}
-              onClick={() => handleAddAndClose(onAddScript)}
-            />
-          )}
-          {onAddDocument && (
-            <AddPanelItem
-              icon={<span className="text-[13px]">📚</span>}
-              label={t('toolbar.documentReference')}
-              onClick={() => handleAddAndClose(onAddDocument)}
-            />
-          )}
-          {onAddModel && (
-            <AddPanelItem
-              icon={<span className="text-[13px]">🧠</span>}
-              label={t('toolbar.modelReference')}
-              onClick={() => handleAddAndClose(onAddModel)}
-            />
-          )}
-          {onAddCanvasEmbed && (
-            <AddPanelItem
-              icon={<span className="text-[13px]">🗂</span>}
-              label={t('toolbar.canvasEmbed')}
-              onClick={() => handleAddAndClose(onAddCanvasEmbed)}
             />
           )}
 
@@ -221,24 +194,6 @@ export function CanvasToolbar({
             }
             label={t('toolbar.annotation')}
             onClick={() => handleAddAndClose(onAddText)}
-          />
-
-          <div className="neko-menu-sep" />
-
-          <AddPanelItem
-            icon={<span className="text-[13px]">🖼️</span>}
-            label={t('toolbar.image')}
-            onClick={() => handleAddAndClose(() => onAddMedia('image'))}
-          />
-          <AddPanelItem
-            icon={<span className="text-[13px]">🎥</span>}
-            label={t('toolbar.video')}
-            onClick={() => handleAddAndClose(() => onAddMedia('video'))}
-          />
-          <AddPanelItem
-            icon={<span className="text-[13px]">🎵</span>}
-            label={t('toolbar.audio')}
-            onClick={() => handleAddAndClose(() => onAddMedia('audio'))}
           />
         </div>
       )}

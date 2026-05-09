@@ -31,7 +31,7 @@ export interface CanvasMenuContext {
   onAddScene: (pos: { x: number; y: number }) => void;
   onAddShot?: (pos: { x: number; y: number }) => void;
   onAddGallery?: (pos: { x: number; y: number }) => void;
-  onAddMedia: (type: 'image' | 'video' | 'audio') => void;
+  onImportFile?: () => void;
   onDelete: () => void;
   onSelectAll: () => void;
   onFitContent: () => void;
@@ -68,18 +68,35 @@ export interface CanvasMenuContext {
  */
 export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
   return [
-    { label: t('menu.addText'), icon: '📝', onClick: () => ctx.onAddText(ctx.canvasPosition) },
-    { label: t('menu.addScene'), icon: '🎬', onClick: () => ctx.onAddScene(ctx.canvasPosition) },
-    { label: t('menu.addShot'), icon: '🎬', onClick: () => ctx.onAddShot?.(ctx.canvasPosition) },
     {
-      label: t('menu.addGallery'),
-      icon: '🖼',
-      onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
+      label: t('toolbar.addNode'),
+      icon: '✚',
+      onClick: () => {},
+      submenu: [
+        {
+          label: t('menu.addShot'),
+          icon: '🎬',
+          onClick: () => ctx.onAddShot?.(ctx.canvasPosition),
+        },
+        {
+          label: t('menu.addScene'),
+          icon: '🎞',
+          onClick: () => ctx.onAddScene(ctx.canvasPosition),
+        },
+        {
+          label: t('menu.addGallery'),
+          icon: '🖼',
+          onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
+        },
+        { separator: true },
+        { label: t('menu.addText'), icon: '📝', onClick: () => ctx.onAddText(ctx.canvasPosition) },
+      ],
     },
-    { separator: true },
-    { label: t('menu.addImage'), icon: '🖼️', onClick: () => ctx.onAddMedia('image') },
-    { label: t('menu.addVideo'), icon: '🎥', onClick: () => ctx.onAddMedia('video') },
-    { label: t('menu.addAudio'), icon: '🎵', onClick: () => ctx.onAddMedia('audio') },
+    {
+      label: t('menu.importFile'),
+      icon: '📂',
+      onClick: () => ctx.onImportFile?.(),
+    },
     { separator: true },
     {
       label: t('menu.paste'),
@@ -145,15 +162,6 @@ export function buildNodeMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
     { separator: true },
     { label: t('menu.bringToFront'), icon: '⬆', onClick: () => {} },
     { label: t('menu.sendToBack'), icon: '⬇', onClick: () => {} },
-    { separator: true },
-    { label: t('menu.addText'), icon: '📝', onClick: () => ctx.onAddText(ctx.canvasPosition) },
-    { label: t('menu.addScene'), icon: '🎬', onClick: () => ctx.onAddScene(ctx.canvasPosition) },
-    { label: t('menu.addShot'), icon: '🎬', onClick: () => ctx.onAddShot?.(ctx.canvasPosition) },
-    {
-      label: t('menu.addGallery'),
-      icon: '🖼',
-      onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
-    },
     // ── AI section (unified shell) ──
     ...buildAIMenuSection({
       quickActions: [

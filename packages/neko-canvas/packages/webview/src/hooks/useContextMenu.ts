@@ -31,7 +31,7 @@ export interface UseContextMenuOptions {
   addSceneGroupAt: (pos: { x: number; y: number }) => void;
   addShotAt: (pos: { x: number; y: number }) => void;
   addGalleryAt: (pos: { x: number; y: number }) => void;
-  handleAddMedia: (type: 'image' | 'video' | 'audio') => void;
+  handleImportFile: () => void;
   deleteSelected: () => void;
   handleFitContent: () => void;
   handleResetViewport: () => void;
@@ -72,7 +72,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     addSceneGroupAt,
     addShotAt,
     addGalleryAt,
-    handleAddMedia,
+    handleImportFile,
     deleteSelected,
     handleFitContent,
     handleResetViewport,
@@ -115,7 +115,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         onAddScene: addSceneGroupAt,
         onAddShot: addShotAt,
         onAddGallery: addGalleryAt,
-        onAddMedia: handleAddMedia,
+        onImportFile: handleImportFile,
         onDelete: deleteSelected,
         onSelectAll: () => {
           const { selectNodes } = useCanvasStore.getState();
@@ -164,7 +164,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       addSceneGroupAt,
       addShotAt,
       addGalleryAt,
-      handleAddMedia,
+      handleImportFile,
       deleteSelected,
       handleFitContent,
       handleResetViewport,

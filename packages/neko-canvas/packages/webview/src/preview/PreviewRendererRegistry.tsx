@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DelegateAction } from '@neko/shared';
 import { dispatchPreviewDelegate } from './previewDelegates';
-import { WebviewPreviewResolver } from './previewResolver';
+import { isSafeWebviewUrl, WebviewPreviewResolver } from './previewResolver';
 import { PreviewRuntime } from './previewRuntime';
 import type { PreviewSourceDescriptor, RuntimePreviewVariant } from './types';
+import { InlineMediaPlayer } from '../components/media/InlineMediaPlayer';
+import { getGlobalVSCodeApi } from '../utils/vscode';
 
 export interface PreviewRendererProps {
   source: PreviewSourceDescriptor;
@@ -35,8 +37,8 @@ function createPreviewRendererRegistry(): PreviewRendererRegistry {
 
 export function PreviewSurface(props: PreviewRendererProps) {
   const registry = useMemo(() => createPreviewRendererRegistry(), []);
-  const renderer = registry[props.source.role] ?? renderFallbackPreview;
-  return <>{renderer(props)}</>;
+  const Renderer = registry[props.source.role] ?? renderFallbackPreview;
+  return <Renderer {...props} />;
 }
 
 function useResolvedVariant(source: PreviewSourceDescriptor): RuntimePreviewVariant | undefined {
@@ -59,48 +61,177 @@ function useResolvedVariant(source: PreviewSourceDescriptor): RuntimePreviewVari
   return variant;
 }
 
-function renderVisualPreview({ source, delegateActions }: PreviewRendererProps): React.ReactNode {
+function renderVisualPreview({ source }: PreviewRendererProps): React.ReactNode {
   const variant = useResolvedVariant(source);
-  const url = variant?.runtimeUrl ?? variant?.sourcePath ?? source.asset?.path;
+  const url = variant?.runtimeUrl ?? getStableSafeUrl(source);
 
   if (!url) {
-    return renderFallbackPreview({ source, delegateActions });
+    return renderFallbackPreview({ source });
   }
 
   return (
     <div className="relative flex min-h-[80px] items-center justify-center overflow-hidden rounded border border-[var(--node-border)] bg-black/20">
       <img src={url} alt={source.title ?? source.id} className="h-full w-full object-cover" />
-      {delegateActions && delegateActions.length > 0 && (
-        <button
-          type="button"
-          className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white"
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            dispatchPreviewDelegate({ action: delegateActions[0]!, asset: source.asset });
-          }}
-        >
-          Open
-        </button>
-      )}
     </div>
   );
 }
 
-function renderVideoPreview(props: PreviewRendererProps): React.ReactNode {
-  const variant = useResolvedVariant(props.source);
-  const url = variant?.runtimeUrl ?? variant?.sourcePath ?? props.source.asset?.path;
+interface MediaStreamState {
+  videoStreamUrl: string | null;
+  audioStreamUrl: string | null;
+  width: number;
+  height: number;
+  fps: number;
+  duration: number;
+}
+
+function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'audio') {
+  const [stream, setStream] = useState<MediaStreamState | null>(null);
+  const [probing, setProbing] = useState(false);
+  const listenerRef = useRef<((e: MessageEvent) => void) | null>(null);
+
+  const startPlayback = useCallback(() => {
+    const vscode = getGlobalVSCodeApi();
+    if (!vscode || !assetPath) return;
+
+    setProbing(true);
+
+    const handleMessage = (event: MessageEvent) => {
+      const msg = event.data as Record<string, unknown>;
+      if (msg.type === 'media:probeResult' && msg.nodeId === assetPath) {
+        if (msg.error) {
+          setProbing(false);
+          return;
+        }
+        const mediaInfo = msg.mediaInfo as Record<string, unknown>;
+        vscode.postMessage({
+          type: 'media:play',
+          nodeId: assetPath,
+          assetPath,
+          mediaInfo,
+          startTime: 0,
+          speed: 1.0,
+        });
+      }
+      if (msg.type === 'media:streamReady' && msg.nodeId === assetPath) {
+        setProbing(false);
+        if (msg.error) return;
+        const mediaInfo = msg.mediaInfo as Record<string, unknown>;
+        setStream({
+          videoStreamUrl: (msg.videoStreamUrl as string) ?? null,
+          audioStreamUrl: (msg.audioStreamUrl as string) ?? null,
+          width: (mediaInfo?.width as number) ?? 640,
+          height: (mediaInfo?.height as number) ?? 360,
+          fps: (mediaInfo?.fps as number) ?? 30,
+          duration: (mediaInfo?.duration as number) ?? 0,
+        });
+      }
+    };
+
+    listenerRef.current = handleMessage;
+    window.addEventListener('message', handleMessage);
+    vscode.postMessage({
+      type: 'media:probe',
+      nodeId: assetPath,
+      assetPath,
+      mediaType,
+    });
+  }, [assetPath, mediaType]);
+
+  const stopPlayback = useCallback(
+    (currentTime: number) => {
+      if (listenerRef.current) {
+        window.removeEventListener('message', listenerRef.current);
+        listenerRef.current = null;
+      }
+      const vscode = getGlobalVSCodeApi();
+      if (vscode && assetPath) {
+        vscode.postMessage({ type: 'media:stop', nodeId: assetPath });
+      }
+      setStream(null);
+      void currentTime;
+    },
+    [assetPath],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (listenerRef.current) {
+        window.removeEventListener('message', listenerRef.current);
+      }
+    };
+  }, []);
+
+  return { stream, probing, startPlayback, stopPlayback };
+}
+
+function renderVideoPreview({ source }: PreviewRendererProps): React.ReactNode {
+  const variant = useResolvedVariant(source);
+  const thumbnailUrl = variant?.runtimeUrl ?? getStableSafeUrl(source);
+  const assetPath = source.asset?.path;
+  const { stream, probing, startPlayback, stopPlayback } = useMediaStream(assetPath, 'video');
+
+  if (stream) {
+    return (
+      <div className="relative min-h-[90px] overflow-hidden rounded border border-[var(--node-border)] bg-black">
+        <InlineMediaPlayer
+          videoStreamUrl={stream.videoStreamUrl}
+          audioStreamUrl={stream.audioStreamUrl}
+          width={stream.width}
+          height={stream.height}
+          fps={stream.fps}
+          duration={stream.duration}
+          onStop={stopPlayback}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-[90px] overflow-hidden rounded border border-[var(--node-border)] bg-black/30">
-      {url ? <video src={url} className="h-full w-full object-cover" muted playsInline /> : null}
-      <div className="absolute inset-0 flex items-center justify-center text-white/80">Play</div>
+      {thumbnailUrl ? (
+        <img
+          src={thumbnailUrl}
+          alt={source.title ?? source.id}
+          className="h-full w-full object-cover"
+        />
+      ) : null}
+      <button
+        type="button"
+        className="absolute inset-0 flex items-center justify-center text-white/80 hover:text-white"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          startPlayback();
+        }}
+        disabled={probing || !assetPath}
+      >
+        {probing ? '...' : '▶'}
+      </button>
     </div>
   );
 }
 
-function renderAudioPreview(props: PreviewRendererProps): React.ReactNode {
-  const variant = useResolvedVariant(props.source);
-  const url = variant?.runtimeUrl ?? variant?.sourcePath ?? props.source.asset?.path;
+function renderAudioPreview({ source, delegateActions }: PreviewRendererProps): React.ReactNode {
+  const assetPath = source.asset?.path;
+  const { stream, probing, startPlayback, stopPlayback } = useMediaStream(assetPath, 'audio');
+
+  if (stream) {
+    return (
+      <div className="rounded border border-[var(--node-border)] bg-black/20 p-2">
+        <InlineMediaPlayer
+          videoStreamUrl={null}
+          audioStreamUrl={stream.audioStreamUrl}
+          width={0}
+          height={0}
+          fps={30}
+          duration={stream.duration}
+          onStop={stopPlayback}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="rounded border border-[var(--node-border)] bg-black/20 p-2">
       <div className="mb-2 flex h-8 items-end gap-0.5">
@@ -112,9 +243,44 @@ function renderAudioPreview(props: PreviewRendererProps): React.ReactNode {
           />
         ))}
       </div>
-      {url ? <audio src={url} controls className="w-full" /> : null}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="rounded bg-[var(--node-selected)] px-2 py-1 text-xs text-white"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            startPlayback();
+          }}
+          disabled={probing || !assetPath}
+        >
+          {probing ? '...' : '▶ Play'}
+        </button>
+        <span className="truncate text-xs text-[var(--node-fg-secondary)]">
+          {source.title ?? source.asset?.path ?? source.id}
+        </span>
+        {delegateActions && delegateActions.length > 0 && (
+          <button
+            type="button"
+            className="ml-auto flex-shrink-0 rounded border border-[var(--node-border)] px-2 py-1 text-xs"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              dispatchPreviewDelegate({ action: delegateActions[0]!, asset: source.asset });
+            }}
+          >
+            Open
+          </button>
+        )}
+      </div>
     </div>
   );
+}
+
+function getStableSafeUrl(source: PreviewSourceDescriptor): string | undefined {
+  const variant = source.variants?.find((v) => v.role === source.role);
+  const url = variant?.sourcePath;
+  return url && isSafeWebviewUrl(url) ? url : undefined;
 }
 
 function renderFallbackPreview({ source, delegateActions }: PreviewRendererProps): React.ReactNode {
