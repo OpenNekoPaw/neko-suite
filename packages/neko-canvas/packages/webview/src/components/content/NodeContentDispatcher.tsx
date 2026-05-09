@@ -1,10 +1,15 @@
-import React, { useCallback } from 'react';
-import type { CanvasNode, FieldBinding } from '@neko/shared';
-import { writeFieldBinding } from '@neko/shared';
+import React, { useCallback, useMemo } from 'react';
+import type { CanvasNode, ContainerSection, FieldBinding } from '@neko/shared';
+import { getDefaultCanvasNodePresetName, writeFieldBinding } from '@neko/shared';
 import { BaseNode } from '../nodes/BaseNode';
-import { ContainerRenderer } from './ContainerRenderer';
+import { NodeShell } from './NodeShell';
 import type { FieldBindingUpdate, NodeContentRenderContext } from './types';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
+import {
+  createBuiltInCanvasNodePresetRegistry,
+  getCanvasNodePreset,
+} from '../../utils/canvasPresetRegistry';
+import type { CanvasNodeDraft } from '../../utils/canvasPresetRegistry';
 
 export type LegacyNodeRenderer = (context: NodeRendererContext) => React.ReactNode;
 
@@ -13,14 +18,30 @@ export interface NodeContentDispatcherProps {
   renderLegacy?: LegacyNodeRenderer;
 }
 
+const PRESET_REGISTRY = createBuiltInCanvasNodePresetRegistry();
+
 export function NodeContentDispatcher({ context, renderLegacy }: NodeContentDispatcherProps) {
   const { node } = context;
 
-  if (!node.content) {
+  const content = useMemo(() => resolveContent(node), [node]);
+
+  if (!content) {
     return renderLegacy ? <>{renderLegacy(context)}</> : null;
   }
 
-  return <ComposableNodeContent context={context} node={node} content={node.content} />;
+  return <ComposableNodeContent context={context} node={node} content={content} />;
+}
+
+function resolveContent(node: CanvasNode): ContainerSection | undefined {
+  const presetName = node.preset ?? getDefaultCanvasNodePresetName(node.type);
+  const preset = getCanvasNodePreset(PRESET_REGISTRY, presetName);
+  if (preset && preset.nodeType === node.type) {
+    return preset.createContent(node as CanvasNodeDraft);
+  }
+
+  if (node.content) return node.content;
+
+  return undefined;
 }
 
 function ComposableNodeContent({
@@ -87,7 +108,7 @@ function ComposableNodeContent({
       onRotateEnd={context.onRotateEnd}
       onConnectionStart={context.onConnectionStart}
     >
-      <ContainerRenderer section={content} context={renderContext} />
+      <NodeShell section={content} context={renderContext} />
     </BaseNode>
   );
 }

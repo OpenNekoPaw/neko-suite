@@ -368,17 +368,16 @@ export function BaseNode({
     sideList.push({ port, index: sideList.length });
   }
 
-  // Auto-height: detect content overflow and expand node height
+  // Auto-height: sync node height to content (expand or shrink)
   const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = contentRef.current;
     if (!el || isResizing) return;
-    // Use RAF to measure after layout settles
     const raf = requestAnimationFrame(() => {
       const scrollH = el.scrollHeight;
-      // Only expand, never shrink below stored size
-      if (scrollH > currentSize.height + 4) {
-        onResizeEnd?.(node.id, { width: currentSize.width, height: scrollH + 4 }, currentPosition);
+      const targetH = scrollH + 4;
+      if (Math.abs(targetH - currentSize.height) > 4) {
+        onResizeEnd?.(node.id, { width: currentSize.width, height: targetH }, currentPosition);
       }
     });
     return () => cancelAnimationFrame(raf);

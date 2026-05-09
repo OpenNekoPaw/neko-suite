@@ -840,6 +840,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoPreview');
           } else if (audioExts.includes(ext) || mediaTypeHint === 'audio') {
             await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.audioPreview');
+          } else {
+            await vscode.commands.executeCommand('vscode.open', fileUri);
           }
         } catch (error) {
           logger.error(`Failed to open media preview: ${error}`);

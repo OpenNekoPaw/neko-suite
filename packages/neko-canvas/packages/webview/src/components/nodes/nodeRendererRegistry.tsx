@@ -1,16 +1,13 @@
 import React from 'react';
 import type {
-  AnnotationCanvasNode,
   CanvasEmbedCanvasNode,
   DocumentCanvasNode,
   GroupCanvasNode,
   ModelCanvasNode,
   ScriptCanvasNode,
   StoryboardCanvasNode,
-  TextCanvasNode,
   ArtboardCanvasNode,
 } from '@neko/shared';
-import { AnnotationNode } from './AnnotationNode';
 import { ArtboardNode } from './ArtboardNode';
 import { CanvasEmbedNode } from './CanvasEmbedNode';
 import { DocumentNode } from './DocumentNode';
@@ -18,7 +15,6 @@ import { GroupNode } from './GroupNode';
 import { ModelNode } from './ModelNode';
 import { ScriptNode } from './ScriptNode';
 import { StoryboardNode } from './StoryboardNode';
-import { TextNode } from './TextNode';
 import { NodeContentDispatcher } from '../content/NodeContentDispatcher';
 import type { NodeRendererContext, NodeRendererRegistry } from './nodeRendererTypes';
 
@@ -26,18 +22,6 @@ export function createBuiltInNodeRendererRegistry(): NodeRendererRegistry {
   return {
     storyboard: ({ node, ...commonProps }) => (
       <StoryboardNode key={node.id} node={node as StoryboardCanvasNode} {...commonProps} />
-    ),
-    annotation: ({ node, ...commonProps }) => (
-      <AnnotationNode key={node.id} node={node as AnnotationCanvasNode} {...commonProps} />
-    ),
-    text: ({ node, onUpdateData, ...commonProps }) => (
-      <TextNode
-        key={node.id}
-        node={node as TextCanvasNode}
-        {...commonProps}
-        onContentChange={(nodeId, content) => onUpdateData?.(nodeId, { content })}
-        onStyleChange={(nodeId, style) => onUpdateData?.(nodeId, { style })}
-      />
     ),
     artboard: ({ node, ...commonProps }) => (
       <ArtboardNode key={node.id} node={node as ArtboardCanvasNode} {...commonProps} />

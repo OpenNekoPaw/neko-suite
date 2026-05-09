@@ -28,6 +28,10 @@ export interface NodeTypeDescriptor {
   labelKey: string;
   /** Toolbar icon emoji string */
   icon: string;
+  /** Short uppercase tag label for the node header (e.g. "SHOT", "SCENE") */
+  tagLabel: string;
+  /** Hex color for the type tag in the node header */
+  tagColor: string;
   /** Default size when creating a new node of this type */
   defaultSize: NodeDefaultSize;
 }

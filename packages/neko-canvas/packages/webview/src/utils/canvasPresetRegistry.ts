@@ -45,7 +45,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
         {
           id: 'annotation-content',
           kind: 'textarea',
-          label: 'Note',
+          label: 'preset.annotation.note',
           binding: { path: '/content', valueType: 'string' },
         },
       ],
@@ -61,7 +61,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
         {
           id: 'text-content',
           kind: 'textarea',
-          label: 'Text',
+          label: 'preset.text.content',
           binding: { path: '/content', valueType: 'string' },
         },
       ],
@@ -77,12 +77,23 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
         {
           id: 'shot-controls',
           layout: 'row',
+          visibleWhen: 'selected',
           blocks: [
-            fieldBlock('shot-status', 'status', '/generationStatus', 'Status'),
-            selectBlock('shot-scale', '/shotScale', SHOT_SCALE_OPTIONS, 'Scale'),
-            selectBlock('camera-movement', '/cameraMovement', CAMERA_MOVEMENT_OPTIONS, 'Move'),
-            selectBlock('camera-angle', '/cameraAngle', CAMERA_ANGLE_OPTIONS, 'Angle'),
-            fieldBlock('shot-duration', 'number', '/duration', 'Duration'),
+            fieldBlock('shot-status', 'status', '/generationStatus', 'preset.shot.status'),
+            selectBlock('shot-scale', '/shotScale', SHOT_SCALE_OPTIONS, 'preset.shot.scale'),
+            selectBlock(
+              'camera-movement',
+              '/cameraMovement',
+              CAMERA_MOVEMENT_OPTIONS,
+              'preset.shot.cameraMovement',
+            ),
+            selectBlock(
+              'camera-angle',
+              '/cameraAngle',
+              CAMERA_ANGLE_OPTIONS,
+              'preset.shot.cameraAngle',
+            ),
+            fieldBlock('shot-duration', 'number', '/duration', 'preset.shot.duration'),
           ],
         },
         {
@@ -92,7 +103,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
             {
               id: 'shot-generated-preview',
               kind: 'asset-preview',
-              label: 'Generated Image',
+              label: 'preset.shot.generatedImage',
               binding: { path: '/generatedImage', valueType: 'asset' },
               capabilities: [
                 {
@@ -113,22 +124,34 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           id: 'shot-metadata',
           layout: 'stack',
           blocks: [
-            fieldBlock('shot-visual-description', 'textarea', '/visualDescription', 'Visual'),
-            fieldBlock('shot-character-action', 'textarea', '/characterAction', 'Action'),
-            fieldBlock('shot-characters', 'list', '/characters', 'Characters'),
-            fieldBlock('shot-emotion', 'tag-list', '/emotion', 'Emotion'),
-            fieldBlock('shot-scene-tags', 'tag-list', '/sceneTags', 'Tags'),
+            fieldBlock(
+              'shot-visual-description',
+              'textarea',
+              '/visualDescription',
+              'preset.shot.visual',
+            ),
+            fieldBlock(
+              'shot-character-action',
+              'textarea',
+              '/characterAction',
+              'preset.shot.action',
+            ),
+            fieldBlock('shot-characters', 'list', '/characters', 'preset.shot.characters'),
+            fieldBlock('shot-emotion', 'tag-list', '/emotion', 'preset.shot.emotion'),
+            fieldBlock('shot-scene-tags', 'tag-list', '/sceneTags', 'preset.shot.tags'),
           ],
         },
         {
           id: 'shot-detail',
-          title: 'Detail',
+          title: 'preset.shot.detail',
           layout: 'stack',
           visibleWhen: 'selected',
+          collapsible: true,
+          defaultCollapsed: true,
           blocks: [
-            fieldBlock('shot-dialogue', 'textarea', '/dialogue', 'Dialogue'),
-            fieldBlock('shot-voice-over', 'textarea', '/voiceOver', 'Voice-over'),
-            fieldBlock('shot-sound-cue', 'input', '/soundCue', 'Sound'),
+            fieldBlock('shot-dialogue', 'textarea', '/dialogue', 'preset.shot.dialogue'),
+            fieldBlock('shot-voice-over', 'textarea', '/voiceOver', 'preset.shot.voiceOver'),
+            fieldBlock('shot-sound-cue', 'input', '/soundCue', 'preset.shot.sound'),
           ],
         },
       ],
@@ -171,10 +194,10 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           id: 'scene-header',
           layout: 'row',
           blocks: [
-            fieldBlock('scene-number', 'number', '/sceneNumber', 'Scene'),
-            fieldBlock('scene-title', 'input', '/sceneTitle', 'Title'),
-            fieldBlock('scene-location', 'input', '/location', 'Location'),
-            fieldBlock('scene-time-of-day', 'input', '/timeOfDay', 'Time'),
+            fieldBlock('scene-number', 'number', '/sceneNumber', 'preset.scene.number'),
+            fieldBlock('scene-title', 'input', '/sceneTitle', 'preset.scene.title'),
+            fieldBlock('scene-location', 'input', '/location', 'preset.scene.location'),
+            fieldBlock('scene-time-of-day', 'input', '/timeOfDay', 'preset.scene.time'),
           ],
         },
         {
@@ -182,9 +205,13 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           layout: 'row',
           visibleWhen: 'selected',
           blocks: [
-            actionBlock('scene-assign-selected', 'Assign selected', 'assignSelectedShots'),
-            actionBlock('scene-auto-layout', 'Auto layout', 'autoLayoutShots'),
-            actionBlock('scene-batch-generate', 'Batch generate', 'batchGenerateShots'),
+            actionBlock(
+              'scene-assign-selected',
+              'preset.scene.assignSelected',
+              'assignSelectedShots',
+            ),
+            actionBlock('scene-auto-layout', 'preset.scene.autoLayout', 'autoLayoutShots'),
+            actionBlock('scene-batch-generate', 'preset.scene.batchGenerate', 'batchGenerateShots'),
           ],
         },
       ],
@@ -193,7 +220,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           id: 'scene-children',
           layout: 'grid',
           summaryRole: 'node-summary',
-          emptyLabel: 'No children',
+          emptyLabel: 'preset.scene.noChildren',
         },
       ],
     }),
@@ -230,8 +257,18 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           id: 'gallery-header',
           layout: 'row',
           blocks: [
-            selectBlock('gallery-preset', '/preset', GALLERY_PRESET_OPTIONS, 'Preset'),
-            fieldBlock('gallery-character-name', 'input', '/characterName', 'Character'),
+            selectBlock(
+              'gallery-preset',
+              '/preset',
+              GALLERY_PRESET_OPTIONS,
+              'preset.gallery.preset',
+            ),
+            fieldBlock(
+              'gallery-character-name',
+              'input',
+              '/characterName',
+              'preset.gallery.character',
+            ),
           ],
         },
         {
@@ -239,7 +276,12 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           layout: 'stack',
           visibleWhen: 'selected',
           blocks: [
-            fieldBlock('gallery-global-prompt', 'textarea', '/globalPromptPrefix', 'Prompt Prefix'),
+            fieldBlock(
+              'gallery-global-prompt',
+              'textarea',
+              '/globalPromptPrefix',
+              'preset.gallery.promptPrefix',
+            ),
           ],
         },
         {
@@ -249,7 +291,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
             {
               id: 'gallery-cell-collection',
               kind: 'collection',
-              label: 'Cells',
+              label: 'preset.gallery.cells',
               collection: {
                 id: 'gallery-cells',
                 source: { path: '/cells', valueType: 'array' },
@@ -257,12 +299,17 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                 itemLabelPath: '/label',
                 itemPreviewPath: '/image',
                 itemBlocks: [
-                  fieldBlock('gallery-cell-label', 'input', '/label', 'Label'),
-                  fieldBlock('gallery-cell-prompt', 'textarea', '/prompt', 'Prompt'),
-                  fieldBlock('gallery-cell-image', 'input', '/image', 'Preview'),
+                  fieldBlock('gallery-cell-label', 'input', '/label', 'preset.gallery.cellLabel'),
+                  fieldBlock(
+                    'gallery-cell-prompt',
+                    'textarea',
+                    '/prompt',
+                    'preset.gallery.cellPrompt',
+                  ),
+                  fieldBlock('gallery-cell-image', 'input', '/image', 'preset.gallery.cellPreview'),
                 ],
                 layout: 'gallery',
-                emptyLabel: 'No cells',
+                emptyLabel: 'preset.gallery.noCells',
               },
               capabilities: [
                 {
@@ -325,7 +372,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
               {
                 id: 'media-asset-preview',
                 kind: 'asset-preview',
-                label: 'Preview',
+                label: 'preset.media.preview',
                 binding: { path: '/assetPath', valueType: 'asset' },
                 capabilities: [
                   {
@@ -350,16 +397,6 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                   },
                 ],
               },
-            ],
-          },
-          {
-            id: 'media-info',
-            layout: 'stack',
-            visibleWhen: 'selected',
-            blocks: [
-              fieldBlock('media-path', 'input', '/assetPath', 'Path'),
-              fieldBlock('media-type', 'input', '/mediaType', 'Type'),
-              fieldBlock('media-duration', 'number', '/duration', 'Duration'),
             ],
           },
         ],

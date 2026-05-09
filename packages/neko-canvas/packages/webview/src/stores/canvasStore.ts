@@ -76,6 +76,8 @@ export interface CanvasStore {
   activePlayingNodeId: string | null;
   /** Generation prompt panel state */
   generationPanelState: GenerationPanelState;
+  /** Content overlay state (fullscreen node content viewer) */
+  contentOverlayState: { visible: boolean; nodeId: string | null };
 
   // ==================== Generation Panel Actions ====================
   openGenerationPanel: (
@@ -85,6 +87,10 @@ export interface CanvasStore {
     opts?: { controlMode?: string; generateVideo?: boolean },
   ) => void;
   closeGenerationPanel: () => void;
+
+  // ==================== Content Overlay Actions ====================
+  openContentOverlay: (nodeId: string) => void;
+  closeContentOverlay: () => void;
 
   // ==================== Data Actions ====================
   setCanvasData: (data: CanvasData) => void;
@@ -339,6 +345,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   pendingConnectionSource: null,
   activePlayingNodeId: null,
   generationPanelState: { visible: false, nodeId: null, cellId: null },
+  contentOverlayState: { visible: false, nodeId: null },
 
   openGenerationPanel: (nodeId, cellId, initialPrompt, opts) =>
     set({
@@ -354,6 +361,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   closeGenerationPanel: () =>
     set({ generationPanelState: { visible: false, nodeId: null, cellId: null } }),
+
+  openContentOverlay: (nodeId) => set({ contentOverlayState: { visible: true, nodeId } }),
+
+  closeContentOverlay: () => set({ contentOverlayState: { visible: false, nodeId: null } }),
 
   // ==================== Data Actions ====================
   setCanvasData: (data) => {

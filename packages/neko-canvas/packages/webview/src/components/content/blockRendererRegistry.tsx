@@ -1,8 +1,9 @@
 import React from 'react';
-import type { CanvasBlock, FieldBinding } from '@neko/shared';
+import type { CanvasBlock, CanvasNode, FieldBinding } from '@neko/shared';
 import { readNodeBinding } from './fieldBinding';
 import type { BlockRendererContext, BlockRendererRegistry } from './types';
 import { PreviewSurface, type PreviewSourceDescriptor } from '../../preview';
+import { t } from '../../i18n';
 
 export function createBuiltInBlockRendererRegistry(): BlockRendererRegistry {
   return {
@@ -37,7 +38,7 @@ function renderTextBlock(context: BlockRendererContext): React.ReactNode {
   const value = getBlockValue(context);
   return (
     <div className="text-xs leading-snug text-[var(--node-fg)] whitespace-pre-wrap break-words">
-      {stringifyValue(value, context.block.label)}
+      {stringifyValue(value, resolveLabel(context.block.label))}
     </div>
   );
 }
@@ -50,7 +51,7 @@ function renderInputBlock(context: BlockRendererContext): React.ReactNode {
   const value = getBlockValue(context);
   return (
     <label className="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
-      {context.block.label && <span>{context.block.label}</span>}
+      {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <input
         className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
         value={toInputValue(value)}
@@ -66,7 +67,7 @@ function renderTextareaBlock(context: BlockRendererContext): React.ReactNode {
   const value = getBlockValue(context);
   return (
     <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
-      {context.block.label && <span>{context.block.label}</span>}
+      {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <textarea
         className="min-h-[64px] resize-none rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
         value={toInputValue(value)}
@@ -82,7 +83,7 @@ function renderNumberBlock(context: BlockRendererContext): React.ReactNode {
   const value = getBlockValue(context);
   return (
     <label className="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
-      {context.block.label && <span>{context.block.label}</span>}
+      {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <input
         type="number"
         className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
@@ -100,7 +101,7 @@ function renderSelectBlock(context: BlockRendererContext): React.ReactNode {
   const options = getStringArrayMetadata(context.block, 'options');
   return (
     <label className="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
-      {context.block.label && <span>{context.block.label}</span>}
+      {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <select
         className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
         value={toInputValue(value)}
@@ -119,7 +120,7 @@ function renderSelectBlock(context: BlockRendererContext): React.ReactNode {
 }
 
 function renderStatusBlock(context: BlockRendererContext): React.ReactNode {
-  const value = stringifyValue(getBlockValue(context), context.block.label);
+  const value = stringifyValue(getBlockValue(context), resolveLabel(context.block.label));
   return (
     <span className="inline-flex max-w-full items-center self-start rounded border border-[var(--node-border)] px-2 py-0.5 text-xs text-[var(--node-fg-secondary)]">
       <span className="truncate">{value}</span>
@@ -171,7 +172,7 @@ function renderButtonBlock(context: BlockRendererContext): React.ReactNode {
         }
       }}
     >
-      {context.block.label ?? context.block.id}
+      {resolveLabel(context.block.label) ?? context.block.id}
     </button>
   );
 }
@@ -215,7 +216,9 @@ function renderCollectionBlock(context: BlockRendererContext): React.ReactNode {
   return (
     <div className={getCollectionClassName(context.block.collection.layout)}>
       {items.length === 0 ? (
-        <span className="opacity-60">{context.block.collection.emptyLabel ?? 'Empty'}</span>
+        <span className="opacity-60">
+          {resolveLabel(context.block.collection.emptyLabel) ?? 'Empty'}
+        </span>
       ) : (
         items.map((item, index) => (
           <div
@@ -238,33 +241,103 @@ function renderProjectionBlock(context: BlockRendererContext): React.ReactNode {
   );
 }
 
+export function ChildNodeCard({
+  child,
+  onSelect,
+}: {
+  child: CanvasNode;
+  onSelect?: (id: string, multi: boolean) => void;
+}): React.ReactNode {
+  const preview = child.preview;
+  const thumbnailUrl = getChildThumbnailUrl(child);
+
+  return (
+    <button
+      type="button"
+      className="flex w-full flex-col overflow-hidden rounded border border-[var(--node-border)] bg-black/10 text-left hover:border-[var(--node-selected)]"
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => onSelect?.(child.id, event.shiftKey || event.metaKey)}
+    >
+      {thumbnailUrl ? (
+        <div className="flex h-16 w-full items-center justify-center overflow-hidden bg-black/20">
+          <img
+            src={thumbnailUrl}
+            alt={preview?.title ?? child.id}
+            className="h-full w-full object-cover"
+          />
+        </div>
+      ) : (
+        <div className="flex h-10 w-full items-center justify-center bg-black/20 text-[10px] text-[var(--node-fg-secondary)]">
+          {preview?.role ?? child.type}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-1 px-1.5 py-1">
+        <span className="min-w-0 truncate text-[10px] text-[var(--node-fg)]">
+          {preview?.title ?? child.id}
+        </span>
+        {preview?.badges?.[0] && (
+          <span className="flex-shrink-0 rounded bg-black/20 px-1 text-[9px] text-[var(--node-fg-secondary)]">
+            {preview.badges[0].label}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function getChildThumbnailUrl(child: CanvasNode): string | undefined {
+  if (child.type === 'shot') {
+    const data = child.data as Record<string, unknown>;
+    const history = data['generationHistory'];
+    if (Array.isArray(history)) {
+      const selected = history.find(
+        (candidate): candidate is { dataUrl?: string; selected?: boolean } =>
+          isRecord(candidate) && candidate['selected'] === true,
+      );
+      if (selected && typeof selected['dataUrl'] === 'string') {
+        return selected['dataUrl'];
+      }
+    }
+    const generatedImage = data['generatedImage'];
+    if (typeof generatedImage === 'string' && generatedImage) {
+      return generatedImage;
+    }
+  }
+
+  if (child.type === 'media') {
+    const data = child.data as Record<string, unknown>;
+    const thumbnailPath = data['thumbnailPath'];
+    if (typeof thumbnailPath === 'string' && thumbnailPath) {
+      return thumbnailPath;
+    }
+    const assetPath = data['assetPath'];
+    const mediaType = data['mediaType'];
+    if (typeof assetPath === 'string' && assetPath && mediaType === 'image') {
+      return assetPath;
+    }
+  }
+
+  return child.preview?.thumbnailVariantId;
+}
+
 function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNode {
   const slot = context.block.childSlot;
   const childIds = slot?.childIds ?? context.node.container?.childIds ?? [];
   return (
-    <div className="space-y-1 rounded border border-dashed border-[var(--node-border)] p-1.5 text-xs text-[var(--node-fg-secondary)]">
+    <div className="rounded border border-dashed border-[var(--node-border)] p-1.5 text-xs text-[var(--node-fg-secondary)]">
       {childIds.length === 0 ? (
-        <span>{context.block.label ?? slot?.emptyLabel ?? 'Children'}</span>
+        <span>
+          {resolveLabel(context.block.label) ?? resolveLabel(slot?.emptyLabel) ?? 'Children'}
+        </span>
       ) : (
-        childIds.map((childId) => {
-          const child = context.allNodes.find((candidate) => candidate.id === childId);
-          return child ? (
-            <button
-              key={child.id}
-              type="button"
-              className="flex w-full items-center justify-between gap-2 rounded border border-[var(--node-border)] px-2 py-1 text-left text-[var(--node-fg)] hover:border-[var(--node-selected)]"
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={(event) => context.onSelectNode?.(child.id, event.shiftKey || event.metaKey)}
-            >
-              <span className="min-w-0 truncate">
-                {child.preview?.title ?? child.preview?.subtitle ?? child.id}
-              </span>
-              <span className="flex-shrink-0 text-[var(--node-fg-secondary)]">
-                {child.preview?.role ?? child.type}
-              </span>
-            </button>
-          ) : null;
-        })
+        <div className={slot?.layout === 'grid' ? 'grid grid-cols-3 gap-1.5' : 'space-y-1'}>
+          {childIds.map((childId) => {
+            const child = context.allNodes.find((candidate) => candidate.id === childId);
+            return child ? (
+              <ChildNodeCard key={child.id} child={child} onSelect={context.onSelectNode} />
+            ) : null;
+          })}
+        </div>
       )}
     </div>
   );
@@ -273,7 +346,7 @@ function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNod
 function renderFallbackBlock(context: BlockRendererContext): React.ReactNode {
   return (
     <div className="rounded border border-[var(--node-border)] px-2 py-1 text-xs text-[var(--node-fg-secondary)]">
-      {context.block.label ?? context.block.kind}
+      {resolveLabel(context.block.label) ?? context.block.kind}
     </div>
   );
 }
@@ -325,7 +398,7 @@ function createPreviewSource(
       : { kind: 'asset-identity', path },
     role: previewCapability?.preferredRole ?? previewCapability?.roles[0] ?? 'fallback',
     variants: previewCapability?.variants,
-    title: context.block.label,
+    title: resolveLabel(context.block.label),
   };
 }
 
@@ -433,6 +506,12 @@ function getCollectionItemKey(item: unknown, index: number): string {
   }
 
   return String(index);
+}
+
+function resolveLabel(label: string | undefined): string | undefined {
+  if (!label) return label;
+  if (label.startsWith('preset.')) return t(label);
+  return label;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,13 +1,19 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { CanvasBlock } from '@neko/shared';
 import { getContainerChildIds } from '@neko/shared';
-import { createBuiltInBlockRendererRegistry, renderCanvasBlock } from './blockRendererRegistry';
+import {
+  createBuiltInBlockRendererRegistry,
+  renderCanvasBlock,
+  ChildNodeCard,
+} from './blockRendererRegistry';
 import type { BlockRendererRegistry, ContainerRendererProps } from './types';
+import { t } from '../../i18n';
 
 const MAX_CONTENT_DEPTH = 8;
 
 export function ContainerRenderer({ section, context }: ContainerRendererProps) {
   const blockRendererRegistry = useMemo(() => createBuiltInBlockRendererRegistry(), []);
+  const [isCollapsed, setIsCollapsed] = useState(() => section.defaultCollapsed ?? false);
 
   if (!isSectionVisible(section.visibleWhen, context.isSelected)) {
     return null;
@@ -17,49 +23,65 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
     return <div className="p-2 text-xs text-red-300">Content depth limit reached</div>;
   }
 
+  const sectionCollapsible = section.collapsible === true;
+
   return (
     <div className={getSectionClassName(section.layout)}>
-      {section.title && (
-        <div className="text-xs font-medium text-[var(--node-fg-secondary)]">{section.title}</div>
-      )}
-      {section.blocks?.map((block) =>
-        renderContentBlock(blockRendererRegistry, block, {
-          ...context,
-          depth: context.depth + 1,
-        }),
-      )}
-      {section.childSlots?.map((slot) => (
-        <div key={slot.id} className="space-y-1">
-          {resolveSlotChildIds(context.node, slot.childIds).map((childId) => {
-            const child = context.allNodes.find((candidate) => candidate.id === childId);
-            return child ? (
-              <button
-                key={child.id}
-                type="button"
-                className="flex w-full items-center justify-between rounded border border-[var(--node-border)] px-2 py-1 text-left text-xs text-[var(--node-fg)] hover:border-[var(--node-selected)]"
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) =>
-                  context.onSelectNode?.(child.id, event.shiftKey || event.metaKey)
-                }
+      {section.title &&
+        (sectionCollapsible ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-1 text-xs font-medium text-[var(--node-fg-secondary)] hover:text-[var(--node-fg)]"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => setIsCollapsed((prev) => !prev)}
+          >
+            <span className="text-[10px]">{isCollapsed ? '▶' : '▼'}</span>
+            {resolveLabel(section.title)}
+          </button>
+        ) : (
+          <div className="text-xs font-medium text-[var(--node-fg-secondary)]">
+            {resolveLabel(section.title)}
+          </div>
+        ))}
+      {(!sectionCollapsible || !isCollapsed) && (
+        <>
+          {section.blocks?.map((block) =>
+            renderContentBlock(blockRendererRegistry, block, {
+              ...context,
+              depth: context.depth + 1,
+            }),
+          )}
+          {section.childSlots?.map((slot) => {
+            const childIds = resolveSlotChildIds(context.node, slot.childIds);
+            return (
+              <div
+                key={slot.id}
+                className={slot.layout === 'grid' ? 'grid grid-cols-3 gap-1.5' : 'space-y-1'}
               >
-                <span className="min-w-0 truncate">
-                  {child.preview?.title ?? child.preview?.subtitle ?? child.id}
-                </span>
-                <span className="ml-2 flex-shrink-0 text-[var(--node-fg-secondary)]">
-                  {child.preview?.role ?? child.type}
-                </span>
-              </button>
-            ) : null;
+                {childIds.length === 0 ? (
+                  <span className="px-2 py-1 text-xs text-[var(--node-fg-secondary)]">
+                    {resolveLabel(slot.emptyLabel) ?? 'Children'}
+                  </span>
+                ) : (
+                  childIds.map((childId) => {
+                    const child = context.allNodes.find((candidate) => candidate.id === childId);
+                    return child ? (
+                      <ChildNodeCard key={child.id} child={child} onSelect={context.onSelectNode} />
+                    ) : null;
+                  })
+                )}
+              </div>
+            );
           })}
-        </div>
-      ))}
-      {section.sections?.map((childSection) => (
-        <ContainerRenderer
-          key={childSection.id}
-          section={childSection}
-          context={{ ...context, depth: context.depth + 1 }}
-        />
-      ))}
+          {section.sections?.map((childSection) => (
+            <ContainerRenderer
+              key={childSection.id}
+              section={childSection}
+              context={{ ...context, depth: context.depth + 1 }}
+            />
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -78,6 +100,12 @@ function renderContentBlock(
       {renderCanvasBlock(registry, { ...context, block })}
     </div>
   );
+}
+
+function resolveLabel(label: string | undefined): string | undefined {
+  if (!label) return label;
+  if (label.startsWith('preset.')) return t(label);
+  return label;
 }
 
 function resolveSlotChildIds(

@@ -5,11 +5,12 @@ describe('nodeRendererRegistry', () => {
   it('registers built-in canvas node renderers', () => {
     const registry = createBuiltInNodeRendererRegistry();
 
-    expect(registry.annotation).toBeTypeOf('function');
     expect(registry.script).toBeTypeOf('function');
     expect(registry.document).toBeTypeOf('function');
     expect(registry['canvas-embed']).toBeTypeOf('function');
     expect(registry.model).toBeTypeOf('function');
+    expect(registry.annotation).toBeUndefined();
+    expect(registry.text).toBeUndefined();
     expect(registry.media).toBeUndefined();
     expect(registry.shot).toBeUndefined();
     expect(registry.scene).toBeUndefined();

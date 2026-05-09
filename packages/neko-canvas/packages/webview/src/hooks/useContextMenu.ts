@@ -28,7 +28,7 @@ export interface UseContextMenuOptions {
   nodes: CanvasNode[];
   screenToCanvas: (screenX: number, screenY: number) => { x: number; y: number };
   addTextAt: (pos: { x: number; y: number }) => void;
-  addSceneAt: (pos: { x: number; y: number }) => void;
+  addSceneGroupAt: (pos: { x: number; y: number }) => void;
   addShotAt: (pos: { x: number; y: number }) => void;
   addGalleryAt: (pos: { x: number; y: number }) => void;
   handleAddMedia: (type: 'image' | 'video' | 'audio') => void;
@@ -69,7 +69,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     nodes,
     screenToCanvas,
     addTextAt,
-    addSceneAt,
+    addSceneGroupAt,
     addShotAt,
     addGalleryAt,
     handleAddMedia,
@@ -112,7 +112,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         hasSelection: showNodeMenu,
         selectedCount: selectedNodeIds.length,
         onAddText: addTextAt,
-        onAddScene: addSceneAt,
+        onAddScene: addSceneGroupAt,
         onAddShot: addShotAt,
         onAddGallery: addGalleryAt,
         onAddMedia: handleAddMedia,
@@ -161,7 +161,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       selectedNodeIds,
       nodes,
       addTextAt,
-      addSceneAt,
+      addSceneGroupAt,
       addShotAt,
       addGalleryAt,
       handleAddMedia,

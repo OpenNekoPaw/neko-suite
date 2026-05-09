@@ -9,6 +9,7 @@ import {
   type GenerationPanelTarget,
   type GenerationParams,
 } from './components/panels/GenerationPromptPanel';
+import { ContentOverlay } from './components/panels/ContentOverlay';
 import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
@@ -105,6 +106,8 @@ export function CanvasApp() {
     generationPanelState,
     openGenerationPanel,
     closeGenerationPanel,
+    contentOverlayState,
+    closeContentOverlay,
   } = useCanvasStore();
 
   // Derive computed values from canvasData
@@ -158,7 +161,6 @@ export function CanvasApp() {
 
   const {
     addTextAt,
-    addSceneAt,
     addMediaAt,
     addShotAt,
     addSceneGroupAt,
@@ -673,7 +675,7 @@ export function CanvasApp() {
     nodes,
     screenToCanvas,
     addTextAt,
-    addSceneAt,
+    addSceneGroupAt,
     addShotAt,
     addGalleryAt,
     handleAddMedia,
@@ -1070,6 +1072,10 @@ export function CanvasApp() {
             onClose={closeGenerationPanel}
             onRequestAutoPrompt={handlePanelAutoPrompt}
           />
+
+          {contentOverlayState.visible && contentOverlayState.nodeId && (
+            <ContentOverlay nodeId={contentOverlayState.nodeId} onClose={closeContentOverlay} />
+          )}
 
           {isDragOver && (
             <div
