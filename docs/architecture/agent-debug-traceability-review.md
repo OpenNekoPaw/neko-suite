@@ -1,12 +1,89 @@
 # neko-agent Debug Logging & Call Chain Traceability Review
 
 > **Date**: 2026-05-09
-> **Status**: Review
+> **Status**: Review with implementation update
 > **Scope**: Debug logging coverage, correlation ID tracing, call chain visibility across all neko-agent sub-packages
 
 ---
 
-## 1. Overall Assessment: C+
+## 0. 2026-05-09 Implementation Update
+
+The traceability gaps identified in this review have been addressed by the
+`improve-agent-traceability-and-session-boundaries` change. The original review
+sections below remain as the baseline problem statement; this section records
+the current architecture after the implementation.
+
+### 0.1 Trace Contract
+
+- `AgentTraceContext` is defined in `packages/neko-types/src/types/agent-trace.ts`.
+- Trace data is always attached under `LogEntry.data.trace` through
+  `withAgentTrace()`. The generic `LogEntry` shape is unchanged.
+- `createAgentTraceContext()` creates the turn-level trace at session entry, and
+  `deriveAgentTraceContext()` derives phase/request traces for session, think,
+  act, observe, hook, LLM, tool, compaction, workflow, approval, feedback, and
+  subagent paths.
+- `turnId` is an agent-level identity generated with `createAgentTurnId()` and is
+  independent from Journal `eventId`.
+
+### 0.2 Trace Propagation Boundaries
+
+- `AgentSession.execute()` creates the initial trace from `conversationId`,
+  active `runId`, execution mode, and a stable turn identity.
+- `AgentExecutor`, think phase, act phase, hook runner, ReAct workflow runner,
+  approval engine, feedback bridge, context compaction, and subagent task tools
+  receive trace explicitly through typed context/options.
+- Platform LLM calls use `ServiceCallContext.trace`; trace is deliberately not
+  part of `ServiceOptions`, so provider-specific chat options and projected
+  messages remain free of observability metadata.
+- Tool execution uses `ToolExecuteOptions.trace`; model-authored tool arguments
+  remain unchanged and never receive a synthetic `trace` argument.
+- Tests cover provider payload isolation, tool argument isolation, and
+  reconstruction of one turn from session/executor/LLM/tool/debug logs.
+
+### 0.3 Logger / EventBus / Journal Separation
+
+Logger, EventBus, and Journal are complementary channels:
+
+| Channel | Responsibility | Payload Shape |
+|---------|----------------|---------------|
+| Logger | Real-time developer debugging: how/why a decision happened | `data.trace`, summary counts, durations, decisions, error summaries |
+| EventBus | Runtime milestone fan-out and in-process subscribers | Domain events such as stage activation, apply committed, autoheal, run ended |
+| JournalWriter | Durable audit/replay trail | High-level persisted events; replay does not depend on debug logs |
+
+Key workflow milestones may be written to both EventBus and Logger, but with
+different semantics. For example, IDC stage activation still emits the workflow
+event while Logger records `neko.agent.workflow.stage_activation.decided` with
+trace, task shape, entry signal, activated stages, terminal stage, and decision
+duration.
+
+### 0.4 Current Debug Coverage
+
+The execution hot path now emits structured debug summaries for:
+
+- session start, done, error, and end;
+- ReAct iteration start/end and think/act/observe phase summaries;
+- hook entry/exit, duration, mutation status, and failure/skip reasons;
+- LLM request/response summaries with linked request trace;
+- tool request/result/partition summaries with linked tool request trace;
+- context compaction check, skip, manual start, completed, and failed;
+- IDC stage activation decisions;
+- approval evaluation, confirmation request/fallback, and decision summaries;
+- feedback cycle skipped/captured and tool-result observation summaries;
+- subagent spawn, resume, completed, output, and failure lifecycle summaries.
+
+Raw prompts, full provider messages, full model responses, raw tool arguments,
+and raw tool results remain restricted to existing `.raw` debug log messages.
+
+### 0.5 Validation Anchors
+
+- `packages/neko-types/src/types/__tests__/agent-trace.test.ts`
+- `packages/neko-types/src/logger/__tests__/captured-log-transport.test.ts`
+- `packages/neko-agent/packages/agent/src/__tests__/execution-traceability.integration.test.ts`
+- `packages/neko-agent/packages/agent/src/__tests__/execution-runtime-summary-trace.test.ts`
+- `packages/neko-agent/packages/agent/src/tools/__tests__/tool-registry-trace.test.ts`
+- `packages/neko-agent/packages/platform/src/service/__tests__/service.test.ts`
+
+## 1. Original Overall Assessment: C+
 
 | Dimension | Grade | Summary |
 |-----------|-------|---------|

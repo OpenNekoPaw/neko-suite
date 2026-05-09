@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { createAgentTraceContext } from '@neko/shared';
 import { Service, ServiceConfig } from '../service';
 import { ConfigManager } from '../../config/config-manager';
 import { ProviderRegistry } from '../../provider/provider-registry';
@@ -163,6 +164,33 @@ describe('Service', () => {
         expect.objectContaining({ id: 'gpt-4' }),
         expect.objectContaining({ id: 'openai' }),
       );
+    });
+
+    it('keeps trace context out of provider adapter payloads', async () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      await service.chat(
+        [{ role: 'user', content: 'Hello' }],
+        { modelId: 'gpt-4' },
+        {
+          trace: createAgentTraceContext({
+            conversationId: 'conv-1',
+            runId: 'run-1',
+            turnId: 'turn-1',
+            phase: 'llm',
+          }),
+        },
+      );
+
+      expect(adapter.chat).toHaveBeenCalledTimes(1);
+      const [messages, options] = (adapter.chat as ReturnType<typeof vi.fn>).mock.calls[0]!;
+      expect(messages).toEqual([{ role: 'user', content: 'Hello' }]);
+      expect(options).toEqual(expect.objectContaining({ model: 'gpt-4' }));
+      expect(options).not.toHaveProperty('trace');
+      expect(JSON.stringify(messages)).not.toContain('conv-1');
+      expect(JSON.stringify(options)).not.toContain('conv-1');
     });
 
     it('should throw when no model available', async () => {

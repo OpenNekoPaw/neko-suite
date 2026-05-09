@@ -15,11 +15,13 @@ import type {
 } from '../types/adapter';
 import type {
   ServiceOptions,
+  ServiceCallContext,
   ServiceResponse,
   ServiceStreamResponse,
   EmbeddingOptions,
   EmbeddingResponse,
 } from '../types/service';
+import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
 import type { IService } from '../types/interfaces';
 import { ConfigManager } from '../config/config-manager';
 import { ProviderRegistry } from '../provider/provider-registry';
@@ -150,10 +152,18 @@ export class Service implements IService {
   /**
    * Send a chat request
    */
-  async chat(messages: ChatMessage[], options: ServiceOptions = {}): Promise<ServiceResponse> {
+  async chat(
+    messages: ChatMessage[],
+    options: ServiceOptions = {},
+    context?: ServiceCallContext,
+  ): Promise<ServiceResponse> {
     const startTime = Date.now();
     const requestId = createModelCallRequestId(startTime);
     const logger = getServiceLogger();
+    const trace = deriveAgentTraceContext(context?.trace, {
+      phase: 'llm',
+      llmRequestId: requestId,
+    });
     const routing = this.resolveRouting(options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
@@ -165,59 +175,74 @@ export class Service implements IService {
       });
       logger.debug(
         'neko.agent.llm.request',
-        createModelCallRequestLog({
-          requestId,
-          stream: false,
-          routing,
-          options: chatOptions,
-          originalMessages: messages,
-          projectedMessages,
-        }),
+        withAgentTrace(
+          trace,
+          createModelCallRequestLog({
+            requestId,
+            stream: false,
+            routing,
+            options: chatOptions,
+            originalMessages: messages,
+            projectedMessages,
+          }),
+        ),
       );
       logger.debug(
         'neko.agent.llm.request.raw',
-        createModelCallRequestDebugLog({
-          requestId,
-          stream: false,
-          routing,
-          options: chatOptions,
-          originalMessages: messages,
-          projectedMessages,
-        }),
+        withAgentTrace(
+          trace,
+          createModelCallRequestDebugLog({
+            requestId,
+            stream: false,
+            routing,
+            options: chatOptions,
+            originalMessages: messages,
+            projectedMessages,
+          }),
+        ),
       );
 
       const response = await adapter.chat(projectedMessages, chatOptions, model, provider);
       const responseMeta = this.buildResponseMeta(routing, startTime);
       logger.debug(
         'neko.agent.llm.response',
-        createModelCallResponseLog({
-          requestId,
-          stream: false,
-          routing,
-          durationMs: responseMeta.timing.duration,
-          response,
-        }),
+        withAgentTrace(
+          trace,
+          createModelCallResponseLog({
+            requestId,
+            stream: false,
+            routing,
+            durationMs: responseMeta.timing.duration,
+            response,
+          }),
+        ),
       );
       logger.debug(
         'neko.agent.llm.response.raw',
-        createModelCallResponseDebugLog({
-          requestId,
-          stream: false,
-          routing,
-          response,
-        }),
+        withAgentTrace(
+          trace,
+          createModelCallResponseDebugLog({
+            requestId,
+            stream: false,
+            routing,
+            response,
+          }),
+        ),
       );
       return { ...response, ...responseMeta };
     } catch (error) {
       logger.warn(
         'neko.agent.llm.failed',
-        createModelCallFailureLog({
-          requestId,
-          stream: false,
-          routing,
-          durationMs: Date.now() - startTime,
-          error,
-        }),
+        withAgentTrace(
+          trace,
+          createModelCallFailureLog({
+            requestId,
+            stream: false,
+            routing,
+            durationMs: Date.now() - startTime,
+            error,
+          }),
+        ),
       );
       throw error;
     }
@@ -226,10 +251,18 @@ export class Service implements IService {
   /**
    * Send a streaming chat request
    */
-  chatStream(messages: ChatMessage[], options: ServiceOptions = {}): ServiceStreamResponse {
+  chatStream(
+    messages: ChatMessage[],
+    options: ServiceOptions = {},
+    context?: ServiceCallContext,
+  ): ServiceStreamResponse {
     const startTime = Date.now();
     const requestId = createModelCallRequestId(startTime);
     const logger = getServiceLogger();
+    const trace = deriveAgentTraceContext(context?.trace, {
+      phase: 'llm',
+      llmRequestId: requestId,
+    });
     const routing = this.resolveRouting(options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
@@ -242,25 +275,31 @@ export class Service implements IService {
       onProjected: (projectedMessages) => {
         logger.debug(
           'neko.agent.llm.request',
-          createModelCallRequestLog({
-            requestId,
-            stream: true,
-            routing,
-            options: chatOptions,
-            originalMessages: messages,
-            projectedMessages,
-          }),
+          withAgentTrace(
+            trace,
+            createModelCallRequestLog({
+              requestId,
+              stream: true,
+              routing,
+              options: chatOptions,
+              originalMessages: messages,
+              projectedMessages,
+            }),
+          ),
         );
         logger.debug(
           'neko.agent.llm.request.raw',
-          createModelCallRequestDebugLog({
-            requestId,
-            stream: true,
-            routing,
-            options: chatOptions,
-            originalMessages: messages,
-            projectedMessages,
-          }),
+          withAgentTrace(
+            trace,
+            createModelCallRequestDebugLog({
+              requestId,
+              stream: true,
+              routing,
+              options: chatOptions,
+              originalMessages: messages,
+              projectedMessages,
+            }),
+          ),
         );
       },
       start: (projectedMessages) =>
@@ -280,22 +319,28 @@ export class Service implements IService {
           const responseMeta = this.buildResponseMeta(routing, startTime);
           logger.debug(
             'neko.agent.llm.response',
-            createModelCallResponseLog({
-              requestId,
-              stream: true,
-              routing,
-              durationMs: responseMeta.timing.duration,
-              response,
-            }),
+            withAgentTrace(
+              trace,
+              createModelCallResponseLog({
+                requestId,
+                stream: true,
+                routing,
+                durationMs: responseMeta.timing.duration,
+                response,
+              }),
+            ),
           );
           logger.debug(
             'neko.agent.llm.response.raw',
-            createModelCallResponseDebugLog({
-              requestId,
-              stream: true,
-              routing,
-              response,
-            }),
+            withAgentTrace(
+              trace,
+              createModelCallResponseDebugLog({
+                requestId,
+                stream: true,
+                routing,
+                response,
+              }),
+            ),
           );
           return {
             ...response,
@@ -305,13 +350,16 @@ export class Service implements IService {
         .catch((error: unknown) => {
           logger.warn(
             'neko.agent.llm.failed',
-            createModelCallFailureLog({
-              requestId,
-              stream: true,
-              routing,
-              durationMs: Date.now() - startTime,
-              error,
-            }),
+            withAgentTrace(
+              trace,
+              createModelCallFailureLog({
+                requestId,
+                stream: true,
+                routing,
+                durationMs: Date.now() - startTime,
+                error,
+              }),
+            ),
           );
           throw error;
         }),

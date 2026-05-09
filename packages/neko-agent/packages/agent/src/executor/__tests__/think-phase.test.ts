@@ -22,6 +22,7 @@ import type {
   ChatMessage,
   StreamChunk,
 } from '@neko/shared';
+import { createAgentTraceContext } from '@neko/shared';
 
 // =============================================================================
 // Helpers
@@ -266,6 +267,63 @@ describe('thinkStream', () => {
     expect(final.toolCalls).toHaveLength(1);
     expect(final.toolCalls![0]!.name).toBe('Read');
     expect(final.toolCalls![0]!.arguments).toEqual({ path: '/tmp' });
+  });
+
+  it('passes the derived think trace to streaming afterThink hooks', async () => {
+    vi.resetModules();
+    const runHooksWithTrace = vi.fn(async () => {});
+    vi.doMock('../hook-runner', () => ({ runHooksWithTrace }));
+
+    try {
+      const { thinkStream: isolatedThinkStream } = await import('../think-phase');
+      const deps = createDeps({
+        hooks: [{ name: 'trace-hook', afterThink: vi.fn() }],
+      });
+
+      async function* mockStream(): AsyncIterable<StreamChunk> {
+        yield { type: 'content', content: 'Hello' };
+        yield {
+          type: 'done',
+          finishReason: 'stop',
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        };
+      }
+
+      (deps.service.chatStream as ReturnType<typeof vi.fn>).mockReturnValue(mockStream());
+      const context = createContext();
+      context.trace = createAgentTraceContext({
+        conversationId: 'conv-stream-trace',
+        turnId: 'turn-stream-trace',
+      });
+      const thinkTrace = createAgentTraceContext({
+        conversationId: 'conv-stream-trace',
+        turnId: 'turn-stream-trace',
+        iteration: 3,
+        phase: 'think',
+      });
+
+      const steps = [];
+      for await (const step of isolatedThinkStream(deps, context, thinkTrace)) {
+        steps.push(step);
+      }
+
+      expect(steps.at(-1)?.type).toBe('think');
+      expect(runHooksWithTrace).toHaveBeenCalledWith(
+        deps.hooks,
+        'afterThink',
+        expect.objectContaining({
+          conversationId: 'conv-stream-trace',
+          turnId: 'turn-stream-trace',
+          iteration: 3,
+          phase: 'think',
+        }),
+        expect.objectContaining({ type: 'think' }),
+        context,
+      );
+    } finally {
+      vi.doUnmock('../hook-runner');
+      vi.resetModules();
+    }
   });
 });
 

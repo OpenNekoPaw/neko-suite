@@ -24,11 +24,15 @@ import type {
   IToolGroupRegistry,
   IToolInjectionManager,
 } from '@neko/shared';
+import { createAgentTraceContext, deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
 import { AgentError } from '../errors';
 
-import { runHooks } from './hook-runner';
+import { runHooksWithTrace } from './hook-runner';
 import { think, thinkStream, type ThinkDeps } from './think-phase';
 import { act, observe, buildToolResultMessages, type ActDeps } from './act-phase';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('Executor');
 
 /**
  * Agent executor options
@@ -119,17 +123,35 @@ export class AgentExecutor implements IAgentExecutor {
 
     this.abortController = new AbortController();
     const agentContext = this.initContext(input, context);
+    const trace = deriveAgentTraceContext(agentContext.trace, { phase: 'session' });
+    logger.debug(
+      'neko.agent.execute.start',
+      withAgentTrace(trace, {
+        mode: 'non-stream',
+        inputLength: input.length,
+        maxIterations: this.config.maxIterations,
+      }),
+    );
 
     // Hook: onExecuteStart
-    await runHooks(this.hooks, 'onExecuteStart', input, agentContext);
+    await runHooksWithTrace(this.hooks, 'onExecuteStart', trace, input, agentContext);
 
     this.setState('think');
 
     try {
       const result = await this.runLoop(agentContext, steps, startTime);
+      logger.debug(
+        'neko.agent.execute.end',
+        withAgentTrace(trace, {
+          success: result.success,
+          iterations: result.iterations,
+          durationMs: result.timing.duration,
+          stepCount: result.steps.length,
+        }),
+      );
 
       // Hook: onExecuteEnd
-      await runHooks(this.hooks, 'onExecuteEnd', result);
+      await runHooksWithTrace(this.hooks, 'onExecuteEnd', trace, result);
 
       return result;
     } catch (error) {
@@ -148,12 +170,20 @@ export class AgentExecutor implements IAgentExecutor {
           duration: endTime - startTime,
         },
       };
+      logger.debug(
+        'neko.agent.execute.error',
+        withAgentTrace(trace, {
+          iterations: agentContext.iteration,
+          durationMs: endTime - startTime,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
 
       // Hook: onExecuteEnd (even on error)
-      await runHooks(this.hooks, 'onExecuteEnd', result);
+      await runHooksWithTrace(this.hooks, 'onExecuteEnd', trace, result);
 
       // Hook: onError
-      await runHooks(this.hooks, 'onError', error as Error, agentContext);
+      await runHooksWithTrace(this.hooks, 'onError', trace, error as Error, agentContext);
 
       return result;
     }
@@ -167,9 +197,18 @@ export class AgentExecutor implements IAgentExecutor {
     const steps: AgentStep[] = [];
     this.abortController = new AbortController();
     const agentContext = this.initContext(input, context);
+    const trace = deriveAgentTraceContext(agentContext.trace, { phase: 'session' });
+    logger.debug(
+      'neko.agent.execute.start',
+      withAgentTrace(trace, {
+        mode: 'stream',
+        inputLength: input.length,
+        maxIterations: this.config.maxIterations,
+      }),
+    );
 
     // Hook: onExecuteStart
-    await runHooks(this.hooks, 'onExecuteStart', input, agentContext);
+    await runHooksWithTrace(this.hooks, 'onExecuteStart', trace, input, agentContext);
 
     this.setState('think');
 
@@ -184,12 +223,27 @@ export class AgentExecutor implements IAgentExecutor {
       }
 
       agentContext.iteration++;
+      const iterationTrace = deriveAgentTraceContext(trace, {
+        iteration: agentContext.iteration,
+      });
+      const thinkTrace = deriveAgentTraceContext(iterationTrace, {
+        phase: 'think',
+      });
+      logger.debug(
+        'neko.agent.iteration.start',
+        withAgentTrace(thinkTrace, {
+          iteration: agentContext.iteration,
+          maxIterations: this.config.maxIterations,
+          messageCount: agentContext.messages.length,
+        }),
+      );
 
       try {
         // THINK (streaming — yields content_delta then final think step)
         this.setState('think');
+        const thinkStartedAt = Date.now();
         let thinkStep: AgentStep | undefined;
-        for await (const step of thinkStream(this.thinkDeps, agentContext)) {
+        for await (const step of thinkStream(this.thinkDeps, agentContext, thinkTrace)) {
           if (step.type === 'content_delta') {
             yield step; // Stream delta to consumer
           } else {
@@ -200,29 +254,77 @@ export class AgentExecutor implements IAgentExecutor {
         }
 
         if (!thinkStep) {
+          logger.debug(
+            'neko.agent.think.end',
+            withAgentTrace(thinkTrace, {
+              durationMs: Date.now() - thinkStartedAt,
+              toolCallCount: 0,
+              result: 'empty',
+            }),
+          );
           yield { type: 'respond', content: 'No response from model', timestamp: Date.now() };
           return;
         }
+        logger.debug(
+          'neko.agent.think.end',
+          withAgentTrace(thinkTrace, {
+            durationMs: Date.now() - thinkStartedAt,
+            toolCallCount: thinkStep.toolCalls?.length ?? 0,
+            contentLength: thinkStep.content.length,
+            usage: thinkStep.usage,
+          }),
+        );
 
         if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
           // ACT
           this.setState('act');
-          const actStep = await act(this.getActDeps(agentContext), thinkStep.toolCalls);
+          const actTrace = deriveAgentTraceContext(iterationTrace, {
+            phase: 'act',
+          });
+          const actStartedAt = Date.now();
+          const actStep = await act(this.getActDeps(agentContext, actTrace), thinkStep.toolCalls);
           steps.push(actStep);
           yield actStep;
+          const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
+          logger.debug(
+            'neko.agent.act.end',
+            withAgentTrace(actTrace, {
+              durationMs: Date.now() - actStartedAt,
+              toolCallCount: thinkStep.toolCalls.length,
+              successCount: toolResults.filter((result) => result.success).length,
+              failureCount: toolResults.filter((result) => !result.success).length,
+            }),
+          );
 
           // OBSERVE
           this.setState('observe');
+          const observeTrace = deriveAgentTraceContext(iterationTrace, {
+            phase: 'observe',
+          });
           const observeStep = observe((actStep.toolResults as ToolResultWithMeta[]) || []);
           steps.push(observeStep);
           yield observeStep;
 
           // Add tool results to context
-          const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
           agentContext.messages.push(...buildToolResultMessages(toolResults));
 
           // Hook: onIterationComplete
-          await runHooks(this.hooks, 'onIterationComplete', agentContext.iteration, agentContext);
+          await runHooksWithTrace(
+            this.hooks,
+            'onIterationComplete',
+            observeTrace,
+            agentContext.iteration,
+            agentContext,
+          );
+          logger.debug(
+            'neko.agent.iteration.end',
+            withAgentTrace(observeTrace, {
+              iteration: agentContext.iteration,
+              stepCount: steps.length,
+              messageCount: agentContext.messages.length,
+              continued: true,
+            }),
+          );
         } else {
           // Final response - thinkStep already contains the response content
           this.setState('respond');
@@ -235,7 +337,16 @@ export class AgentExecutor implements IAgentExecutor {
             iterations: agentContext.iteration,
             timing: { startTime, endTime, duration: endTime - startTime },
           };
-          await runHooks(this.hooks, 'onExecuteEnd', result);
+          await runHooksWithTrace(this.hooks, 'onExecuteEnd', trace, result);
+          logger.debug(
+            'neko.agent.execute.end',
+            withAgentTrace(trace, {
+              success: result.success,
+              iterations: result.iterations,
+              durationMs: result.timing.duration,
+              stepCount: result.steps.length,
+            }),
+          );
 
           return;
         }
@@ -269,7 +380,16 @@ export class AgentExecutor implements IAgentExecutor {
       error: new Error('Max iterations reached'),
       timing: { startTime, endTime, duration: endTime - startTime },
     };
-    await runHooks(this.hooks, 'onExecuteEnd', result);
+    await runHooksWithTrace(this.hooks, 'onExecuteEnd', trace, result);
+    logger.debug(
+      'neko.agent.execute.end',
+      withAgentTrace(trace, {
+        success: result.success,
+        iterations: result.iterations,
+        durationMs: result.timing.duration,
+        error: result.error?.message,
+      }),
+    );
 
     yield {
       type: 'respond',
@@ -356,12 +476,13 @@ export class AgentExecutor implements IAgentExecutor {
   }
 
   /** Build ActDeps from current instance state and turn metadata */
-  private getActDeps(context: AgentContext): ActDeps {
+  private getActDeps(context: AgentContext, trace?: NonNullable<AgentContext['trace']>): ActDeps {
     return {
       toolRegistry: this.toolRegistry,
       hooks: this.hooks,
       abortController: this.abortController,
       metadata: context.metadata,
+      trace: trace ?? context.trace,
     };
   }
 
@@ -375,6 +496,17 @@ export class AgentExecutor implements IAgentExecutor {
       iteration: 0,
       toolResults: [],
       metadata: context?.metadata || {},
+      trace:
+        context?.trace ??
+        createAgentTraceContext({
+          conversationId:
+            typeof context?.metadata?.conversationId === 'string'
+              ? context.metadata.conversationId
+              : undefined,
+          turnId:
+            typeof context?.metadata?.turnId === 'string' ? context.metadata.turnId : undefined,
+          runId: typeof context?.metadata?.runId === 'string' ? context.metadata.runId : undefined,
+        }),
     };
 
     if (!context?.skipUserMessage) {
@@ -399,38 +531,102 @@ export class AgentExecutor implements IAgentExecutor {
       }
 
       context.iteration++;
+      const iterationTrace = deriveAgentTraceContext(context.trace, {
+        iteration: context.iteration,
+      });
+      const thinkTrace = deriveAgentTraceContext(iterationTrace, {
+        phase: 'think',
+      });
+      logger.debug(
+        'neko.agent.iteration.start',
+        withAgentTrace(thinkTrace, {
+          iteration: context.iteration,
+          maxIterations: this.config.maxIterations,
+          messageCount: context.messages.length,
+        }),
+      );
 
       // THINK: Get model response
       this.setState('think');
-      const thinkStep = await think(this.thinkDeps, context);
+      const thinkStartedAt = Date.now();
+      const thinkStep = await think(this.thinkDeps, context, thinkTrace);
       steps.push(thinkStep);
       this.onStep?.(thinkStep);
+      logger.debug(
+        'neko.agent.think.end',
+        withAgentTrace(thinkTrace, {
+          durationMs: Date.now() - thinkStartedAt,
+          toolCallCount: thinkStep.toolCalls?.length ?? 0,
+          contentLength: thinkStep.content.length,
+          usage: thinkStep.usage,
+        }),
+      );
 
       // Check if we have tool calls
       if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
         // ACT: Execute tools
         this.setState('act');
-        const actStep = await act(this.getActDeps(context), thinkStep.toolCalls);
+        const actTrace = deriveAgentTraceContext(iterationTrace, {
+          phase: 'act',
+        });
+        const actStartedAt = Date.now();
+        const actStep = await act(this.getActDeps(context, actTrace), thinkStep.toolCalls);
         steps.push(actStep);
         this.onStep?.(actStep);
+        const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
+        logger.debug(
+          'neko.agent.act.end',
+          withAgentTrace(actTrace, {
+            durationMs: Date.now() - actStartedAt,
+            toolCallCount: thinkStep.toolCalls.length,
+            successCount: toolResults.filter((result) => result.success).length,
+            failureCount: toolResults.filter((result) => !result.success).length,
+          }),
+        );
 
         // OBSERVE: Process results
         this.setState('observe');
+        const observeTrace = deriveAgentTraceContext(iterationTrace, {
+          phase: 'observe',
+        });
         const observeStep = observe((actStep.toolResults as ToolResultWithMeta[]) || []);
         steps.push(observeStep);
         this.onStep?.(observeStep);
 
         // Add tool results to context
-        const toolResults = (actStep.toolResults as ToolResultWithMeta[]) || [];
         context.messages.push(...buildToolResultMessages(toolResults));
 
         // Hook: onIterationComplete
-        await runHooks(this.hooks, 'onIterationComplete', context.iteration, context);
+        await runHooksWithTrace(
+          this.hooks,
+          'onIterationComplete',
+          observeTrace,
+          context.iteration,
+          context,
+        );
+        logger.debug(
+          'neko.agent.iteration.end',
+          withAgentTrace(observeTrace, {
+            iteration: context.iteration,
+            stepCount: steps.length,
+            messageCount: context.messages.length,
+            continued: true,
+          }),
+        );
       } else {
         // No tool calls, we have the final response
         this.setState('respond');
 
         const endTime = Date.now();
+        logger.debug(
+          'neko.agent.iteration.end',
+          withAgentTrace(thinkTrace, {
+            iteration: context.iteration,
+            stepCount: steps.length,
+            messageCount: context.messages.length,
+            continued: false,
+          }),
+        );
         return {
           success: true,
           response: thinkStep.content,

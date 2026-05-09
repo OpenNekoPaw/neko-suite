@@ -2,6 +2,7 @@
  * Service Types - Unified service interface
  */
 
+import type { AgentTraceContext } from '@neko/shared';
 import type { ChatOptions, ChatResponse, ChatChunk } from './adapter';
 
 /**
@@ -14,6 +15,10 @@ export interface ServiceOptions extends ChatOptions {
   timeout?: number;
   /** Abort signal */
   signal?: AbortSignal;
+}
+
+export interface ServiceCallContext {
+  readonly trace?: AgentTraceContext;
 }
 
 /**

@@ -16,9 +16,14 @@ import type {
   ToolResultWithMeta,
   ToolResultAttachment,
   ToolProgress,
+  AgentTraceContext,
 } from '@neko/shared';
-import { runHooks } from './hook-runner';
+import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
+import { runHooksWithTrace } from './hook-runner';
 import { partitionToolCalls } from './partition-tool-calls';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('ActPhase');
 
 // =============================================================================
 // Types
@@ -39,6 +44,7 @@ export interface ActDeps {
   hooks: ExecutorHooks[];
   abortController: AbortController | null;
   metadata?: Record<string, unknown>;
+  trace?: AgentTraceContext;
 }
 
 // =============================================================================
@@ -52,15 +58,27 @@ export async function act(
   deps: ActDeps,
   toolCalls: Array<{ id?: string; name: string; arguments: Record<string, unknown> }>,
 ): Promise<AgentStep> {
+  const actTrace = deriveAgentTraceContext(deps.trace, { phase: 'act' });
   const toolCallInfos: ToolCallInfo[] = toolCalls.map((tc, i) => ({
     id: tc.id || `call_${Date.now()}_${i}`,
     name: tc.name,
     arguments: tc.arguments,
     index: i,
+    trace: deriveAgentTraceContext(actTrace, {
+      phase: 'tool',
+      parentRequestId: tc.id,
+    }),
   }));
 
   // Hook: beforeAct
-  await runHooks(deps.hooks, 'beforeAct', toolCallInfos);
+  logger.debug(
+    'neko.agent.act.start',
+    withAgentTrace(actTrace, {
+      toolCallCount: toolCallInfos.length,
+      toolNames: toolCallInfos.map((info) => info.name),
+    }),
+  );
+  await runHooksWithTrace(deps.hooks, 'beforeAct', actTrace, toolCallInfos);
 
   const signal = deps.abortController?.signal;
   const results: ToolResultWithMeta[] = [];
@@ -69,6 +87,13 @@ export async function act(
   // Partition tool calls: concurrency-safe tools run in parallel,
   // unsafe tools run sequentially after (Fail-Closed default).
   const { concurrent, serial } = partitionToolCalls(toolCallInfos, deps.toolRegistry);
+  logger.debug(
+    'neko.agent.act.partition',
+    withAgentTrace(actTrace, {
+      concurrent: concurrent.map((info) => info.name),
+      serial: serial.map((info) => info.name),
+    }),
+  );
 
   // Phase 1: Execute concurrency-safe tools in parallel
   if (concurrent.length > 0) {
@@ -107,7 +132,16 @@ export async function act(
   }
 
   // Hook: afterAct
-  await runHooks(deps.hooks, 'afterAct', results);
+  await runHooksWithTrace(deps.hooks, 'afterAct', actTrace, results);
+  logger.debug(
+    'neko.agent.act.results',
+    withAgentTrace(actTrace, {
+      resultCount: results.length,
+      successCount: results.filter((result) => result.success).length,
+      failureCount: results.filter((result) => !result.success).length,
+      progressEventCount: progressEvents.length,
+    }),
+  );
 
   return {
     type: 'act',
@@ -229,6 +263,7 @@ async function executeToolCall(
   const execute = () =>
     deps.toolRegistry.execute(info.name, info.arguments, {
       onProgress,
+      trace: info.trace,
       metadata:
         deps.metadata && Object.keys(deps.metadata).length > 0
           ? { ...deps.metadata, parentToolCallId: info.id }
@@ -238,8 +273,42 @@ async function executeToolCall(
   // Check if any hook wants to handle the tool call
   for (const hook of deps.hooks) {
     if (hook.onToolCall) {
-      const result = await hook.onToolCall(info, execute);
-      if (result !== null) return result;
+      const startedAt = Date.now();
+      const hookName = hook.name ?? 'anonymous';
+      logger.debug(
+        'neko.agent.hook.start',
+        withAgentTrace(info.trace, {
+          hookName,
+          event: 'onToolCall',
+          toolName: info.name,
+        }),
+      );
+      try {
+        const result = await hook.onToolCall(info, execute);
+        logger.debug(
+          'neko.agent.hook.end',
+          withAgentTrace(info.trace, {
+            hookName,
+            event: 'onToolCall',
+            toolName: info.name,
+            handled: result !== null,
+            durationMs: Date.now() - startedAt,
+          }),
+        );
+        if (result !== null) return result;
+      } catch (error) {
+        logger.warn(
+          'neko.agent.hook.error',
+          withAgentTrace(info.trace, {
+            hookName,
+            event: 'onToolCall',
+            toolName: info.name,
+            durationMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        throw error;
+      }
     }
   }
 

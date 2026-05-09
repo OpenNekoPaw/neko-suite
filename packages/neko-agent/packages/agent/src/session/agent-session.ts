@@ -17,6 +17,7 @@
 
 import type {
   AgentStep,
+  AgentTraceContext,
   ChatMessage,
   CompressedMessage,
   ConversationCompressionResult,
@@ -27,10 +28,15 @@ import type {
   Tool,
 } from '@neko/shared';
 import {
+  createAgentTraceContext,
+  createAgentTurnId,
+  deriveAgentTraceContext,
+  withAgentTrace,
+} from '@neko/shared';
+import {
   CREATION_CHANNELS,
   EXECUTION_CHANNELS,
   type Draft,
-  type ExecutionArtifactWrittenEvent,
   type ExecutionPlan,
   type IdcStage,
   type StageActivationDecision,
@@ -101,7 +107,6 @@ import { type ToolGroupRegistry } from '../skill';
 import { type ToolInjectionManager } from '../tools';
 import { type SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { ModuleOrchestrator } from '../prompt/composer/module-orchestrator';
-import type { PromptModule } from '../prompt/registry/module-manifest';
 import type { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
 import type { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
@@ -132,12 +137,16 @@ import {
 } from './working-memory';
 import { getLogger } from '../utils/logger';
 import { toSerializableErrorCause } from '../utils/serializable-error';
-import type { IdcProjectedTaskArtifactBinding } from '../task/idc-projected-task';
 import {
   initializeSession,
   createConfiguredExecutor,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
+import { SessionPersistence } from './session-persistence';
+import { IdcRunLifecycle } from './idc-run-lifecycle';
+import { SessionArtifactFacade } from './session-artifact-facade';
+import { FeedbackRuntimeBridge } from './feedback-runtime-bridge';
+import { PromptRuntimeFacade } from './prompt-runtime-facade';
 import {
   createWorkspaceArtifactService,
   type AnyArtifactRecord,
@@ -166,8 +175,6 @@ function getAgentSessionLogger() {
 const MAX_PERSISTED_STAGE_TRANSITIONS = 32;
 const MAX_FEEDBACK_CYCLES = 32;
 const IDC_RUNTIME_STATE_DEBOUNCE_MS = 200;
-
-type PersistedFeedbackGuidanceSnapshot = import('../workspace').PersistedFeedbackGuidanceSnapshot;
 
 // =============================================================================
 // AgentSession Implementation
@@ -226,6 +233,7 @@ export class AgentSession implements IAgentSession {
 
   // ReAct-loop stage-activation orchestrator.
   private _runStore: IIdcRunStore | null = null;
+  private _idcRunLifecycle: IdcRunLifecycle;
   private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
   private _reactLoopBaseHooks: import('@neko/shared').ExecutorHooks | null = null;
   private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
@@ -237,7 +245,10 @@ export class AgentSession implements IAgentSession {
   // JSONL event sink persisting bus events to `.neko/logs/events.jsonl`.
   private _eventSink: import('../workspace').INdjsonEventSink | null = null;
   // Mutable workspace snapshot for active IDC runtime state.
-  private _runtimeStateStore: import('../workspace').IIdcRuntimeStateStore | null = null;
+  private _sessionPersistence: SessionPersistence;
+  private _artifactFacade: SessionArtifactFacade;
+  private _feedbackRuntime: FeedbackRuntimeBridge;
+  private _promptRuntime!: PromptRuntimeFacade;
   // JSONL audits sink persisting approve.decided events to
   // `.neko/logs/audits.jsonl`. Filter-predicated sibling of _eventSink.
   private _auditsSink: import('../workspace').INdjsonEventSink | null = null;
@@ -256,16 +267,10 @@ export class AgentSession implements IAgentSession {
   private _operationToolAdapterRegistry:
     | import('@neko/shared').IOperationToolAdapterRegistry
     | null = null;
-  private _feedbackCycles: import('../feedback').FeedbackCycle[] = [];
-  private _feedbackGuidanceState: PersistedFeedbackGuidanceSnapshot | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
   // didn't provide readFile, or when both layers are absent.
   private _preferencesReady: Promise<void> | null = null;
   private _preferencesWarnings: readonly string[] = [];
-  private _stageTransitions: import('../workspace').IdcRuntimeStageTransition[] = [];
-  private _runtimeStateUnsubscribers: Array<() => void> = [];
-  private _runtimeStatePersistTimer: ReturnType<typeof setTimeout> | null = null;
-  private _runtimeStatePersistScheduled = false;
 
   // 5-level autoheal chain fed by afterAct.
   private _autohealChain: IAutohealChain | null = null;
@@ -303,13 +308,6 @@ export class AgentSession implements IAgentSession {
       request: ToolConfirmationRequest;
     }
   >();
-  private _runtimeStateRestoreReady: Promise<void> | null = null;
-  private _runtimeStateRestorePending = false;
-  private _artifactService: IArtifactService | null = null;
-  private _artifactRestoreReady: Promise<void> | null = null;
-  private _artifactSyncPending: Promise<void> = Promise.resolve();
-  private _idcTaskProjection: import('../task').IIdcTaskProjection | null = null;
-  private _idcTaskProjectionPending: Promise<void> = Promise.resolve();
 
   /**
    * Ablation marker (set when the session was constructed via
@@ -321,6 +319,84 @@ export class AgentSession implements IAgentSession {
   constructor(config: AgentSessionConfig) {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
+    this._sessionPersistence = new SessionPersistence({
+      debounceMs: IDC_RUNTIME_STATE_DEBOUNCE_MS,
+      buildSnapshot: () => this._buildIdcRuntimeStateSnapshot(),
+      onWarn: (message, data) => logger.warn(message, data),
+    });
+    this._artifactFacade = new SessionArtifactFacade({
+      ports: {
+        run: {
+          getActiveRun: () => this._runStore?.getActive() ?? null,
+          getCompletedRuns: () => this._runStore?.listCompleted() ?? [],
+          setDraft: (draft, binding) => this._runStore?.setDraft(draft, binding),
+          setPlan: (plan, binding) => this._runStore?.setPlan(plan, binding),
+          setTask: (task, binding) => this._runStore?.setTask(task, binding),
+          bindArtifact: (binding) => this._runStore?.bindArtifact(binding),
+        },
+        workspace: {
+          getWorkspaceReadFile: () => {
+            const readFile = this._config.workspace?.fsOps.readFile;
+            return readFile
+              ? (path: string) => readFile.call(this._config.workspace!.fsOps, path, 'utf-8')
+              : null;
+          },
+          isDisposed: () => this._disposed,
+        },
+        persistence: {
+          onPersist: () => this._persistIdcRuntimeState(),
+          onWarn: (message, data) => logger.warn(message, data),
+        },
+      },
+    });
+    this._feedbackRuntime = new FeedbackRuntimeBridge({
+      maxCycles: MAX_FEEDBACK_CYCLES,
+      ports: {
+        feedback: {
+          getCoordinator: () => this._feedbackCoordinator,
+          isRecoveryGuidanceDisabled: () =>
+            this._ablationMarker?.disableAgentFirstRecoveryGuidance === true,
+        },
+        control: {
+          getControlPlane: () => this._controlPlane,
+          getCurrentStage: () => this._stageTracker?.current ?? null,
+          getActiveRun: () => this._runStore?.getActive() ?? null,
+          recordStageTransition: (input) => this._recordFeedbackStageTransition(input),
+        },
+        prompt: {
+          setGuidanceContent: (content) => this._promptRuntime.setFeedbackGuidanceContent(content),
+          syncSystemPrompt: () => this._syncSystemPrompt(),
+        },
+        diagnostics: {
+          debug: (message, data) => logger.debug(message, data),
+        },
+      },
+    });
+    this._idcRunLifecycle = new IdcRunLifecycle({
+      maxPersistedStageTransitions: MAX_PERSISTED_STAGE_TRANSITIONS,
+      ports: {
+        runtime: {
+          getRunStore: () => this._runStore,
+          getStageTracker: () => this._stageTracker,
+          getStageGuardian: () => this._stageGuardian,
+          onPersist: () => this._persistIdcRuntimeState(),
+        },
+        artifacts: {
+          hasArtifactService: () => this._artifactFacade.hasArtifactService,
+          listArtifactsByRunId: (runId) => this._artifactFacade.getRecordsForRun(runId),
+          hydrateRunArtifacts: (runId) => this._artifactFacade.hydrateRunArtifacts(runId),
+          queueTaskProjectionClear: (runId, runStartedAt) =>
+            this._artifactFacade.queueTaskProjectionClear(runId, runStartedAt),
+          replayRestoredTaskProjection: (run) =>
+            this._artifactFacade.replayRestoredTaskProjection(run),
+        },
+        restore: {
+          restoreRunFromSnapshot: restoreIdcRunFromSnapshot,
+          isActiveRunStatus,
+          isTerminalRunStatus,
+        },
+      },
+    });
 
     // Delegate component creation to initializer (SRP: init logic separate from runtime)
     const components = initializeSession(config, {
@@ -358,6 +434,30 @@ export class AgentSession implements IAgentSession {
       getLocale: () => 'en',
       getProjectPath: () => this._config.workspace?.root ?? '',
     });
+    this._promptRuntime = new PromptRuntimeFacade({
+      ports: {
+        composer: {
+          promptComposer: this._promptComposer,
+          promptModuleOrchestrator: this._promptModuleOrchestrator,
+          promptContextProvider: this._promptContextProvider,
+        },
+        modules: {
+          artifactSchemaModule: this._artifactSchemaModule,
+          feedbackGuidanceModule: this._feedbackGuidanceModule,
+          memoryRecallModule: this._memoryRecallModule,
+          creativeVersionLogModule: this._creativeVersionLogModule,
+          subpackageFragmentsModule: this._subpackageFragmentsModule,
+        },
+        executor: {
+          getExecutor: () => this._executor,
+          getCreativeVersionSummary: () =>
+            this._versionLog.size > 0 ? this._versionLog.toSummary() : null,
+        },
+        diagnostics: {
+          debug: (message, data) => getAgentSessionLogger().debug(message, data),
+        },
+      },
+    });
     this._refreshMemoryRuntime();
     if (components.ablationMarker) {
       this._ablationMarker = components.ablationMarker;
@@ -370,9 +470,9 @@ export class AgentSession implements IAgentSession {
     this._controlPlane = config.controlPlane ?? createDefaultControlPlane();
     this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
 
-    this._artifactService = resolveArtifactService(config);
-    this._idcTaskProjection = config.idcTaskProjection ?? null;
-    this._scheduleArtifactRestore();
+    this._artifactFacade.setArtifactService(resolveArtifactService(config));
+    this._artifactFacade.setTaskProjection(config.idcTaskProjection ?? null);
+    this._artifactFacade.scheduleRestore();
 
     // SkillInjectionCoordinator requires closures over Session fields
     // (e.g. _permissionHooks changes on configure()), so created here.
@@ -442,13 +542,15 @@ export class AgentSession implements IAgentSession {
         config.workspace &&
         typeof config.workspace.fsOps.writeFile === 'function'
       ) {
-        this._runtimeStateStore = createIdcRuntimeStateStore({
-          filePath: this._nekoPaths.state('idcRuntime'),
-          fsOps: {
-            mkdir: config.workspace.fsOps.mkdir,
-            writeFile: config.workspace.fsOps.writeFile.bind(config.workspace.fsOps),
-          },
-        });
+        this._sessionPersistence.setStore(
+          createIdcRuntimeStateStore({
+            filePath: this._nekoPaths.state('idcRuntime'),
+            fsOps: {
+              mkdir: config.workspace.fsOps.mkdir,
+              writeFile: config.workspace.fsOps.writeFile.bind(config.workspace.fsOps),
+            },
+          }),
+        );
       }
 
       if (
@@ -456,30 +558,23 @@ export class AgentSession implements IAgentSession {
         config.workspace &&
         typeof config.workspace.fsOps.readFile === 'function'
       ) {
-        this._runtimeStateRestorePending = true;
         const runtimeStateRead = readIdcRuntimeState({
           filePath: this._nekoPaths.state('idcRuntime'),
           fsOps: {
             readFile: config.workspace.fsOps.readFile.bind(config.workspace.fsOps),
           },
         });
-        this._runtimeStateRestoreReady = Promise.all([
-          this._artifactRestoreReady ?? Promise.resolve(),
-          runtimeStateRead,
-        ])
-          .then(([, restored]) => {
-            if (this._disposed || !restored) {
-              return;
-            }
-            this._restoreIdcRuntimeState(restored);
-          })
-          .then(() => undefined)
-          .finally(() => {
-            this._runtimeStateRestorePending = false;
+        this._sessionPersistence.restoreFrom(
+          Promise.all([this._artifactFacade.whenRestoreReady(), runtimeStateRead]).then(
+            ([, restored]) => restored,
+          ),
+          (restored) => {
             if (!this._disposed) {
-              this._persistIdcRuntimeState();
+              this._restoreIdcRuntimeState(restored);
             }
-          });
+          },
+          () => !this._disposed,
+        );
       }
 
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
@@ -652,17 +747,13 @@ export class AgentSession implements IAgentSession {
 
   configure(config: Partial<AgentSessionConfig>): void {
     // Update config
-    const previousArtifactService = this._artifactService;
     this._config = { ...this._config, ...config };
     if (config.artifactService !== undefined || config.workspace !== undefined) {
-      this._artifactService = resolveArtifactService(this._config);
-      if (previousArtifactService && previousArtifactService !== this._artifactService) {
-        void previousArtifactService.dispose?.();
-      }
-      this._scheduleArtifactRestore();
+      this._artifactFacade.setArtifactService(resolveArtifactService(this._config));
+      this._artifactFacade.scheduleRestore();
     }
     if (config.idcTaskProjection !== undefined) {
-      this._idcTaskProjection = config.idcTaskProjection ?? null;
+      this._artifactFacade.setTaskProjection(config.idcTaskProjection ?? null);
     }
     if (config.controlPlane !== undefined) {
       this._controlPlane = config.controlPlane ?? null;
@@ -678,7 +769,7 @@ export class AgentSession implements IAgentSession {
 
     // Update system prompt in history if changed
     if (config.systemPrompt !== undefined) {
-      this._promptComposer.setBase(config.systemPrompt);
+      this._promptRuntime.setBasePrompt(config.systemPrompt);
     }
 
     this._rebuildFeedbackCoordinator();
@@ -714,26 +805,21 @@ export class AgentSession implements IAgentSession {
 
   setPromptFragments(fragments: readonly PromptFragment[] | undefined): void {
     this._config.promptFragments = fragments ? [...fragments] : undefined;
-    this._subpackageFragmentsModule.setFragments(fragments);
-    this._applyPromptModuleSync(this._subpackageFragmentsModule);
+    this._promptRuntime.setPromptFragments(fragments);
     this._syncSystemPrompt();
   }
 
   getArtifactsForRun(runId?: string): readonly ArtifactRecord[] {
-    if (!this._artifactService) {
-      return [];
-    }
-
     const targetRunId = runId ?? this._runStore?.getActive()?.id ?? null;
     if (!targetRunId) {
       return [];
     }
 
-    return this._artifactService.listByRunId(targetRunId);
+    return this._artifactFacade.getRecordsForRun(targetRunId);
   }
 
   listArtifactRunIds(): readonly string[] {
-    return this._artifactService?.listRunIds() ?? [];
+    return this._artifactFacade.listRunIds();
   }
 
   getIdcRun(runId: string): IdcRun | null {
@@ -760,7 +846,7 @@ export class AgentSession implements IAgentSession {
   }
 
   getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[] {
-    return this._feedbackCycles;
+    return this._feedbackRuntime.cycles;
   }
 
   getOperationToolAdapterRegistry(): import('@neko/shared').IOperationToolAdapterRegistry | null {
@@ -788,18 +874,18 @@ export class AgentSession implements IAgentSession {
   }
 
   writeDraftArtifact(draft: Draft, options?: { runId?: string }): Promise<ArtifactRecord<'draft'>> {
-    return this._writeDraftArtifact(draft, options?.runId);
+    return this._artifactFacade.writeDraft(draft, options?.runId);
   }
 
   writePlanArtifact(
     plan: ExecutionPlan,
     options?: { runId?: string },
   ): Promise<ArtifactRecord<'plan'>> {
-    return this._writePlanArtifact(plan, options?.runId);
+    return this._artifactFacade.writePlan(plan, options?.runId);
   }
 
   writeTaskArtifact(task: Task, options?: { runId?: string }): Promise<ArtifactRecord<'task'>> {
-    return this._writeTaskArtifact(task, options?.runId);
+    return this._artifactFacade.writeTask(task, options?.runId);
   }
 
   setExecutionMode(mode: ExecutionMode): void {
@@ -828,9 +914,16 @@ export class AgentSession implements IAgentSession {
     }
 
     this._isRunning = true;
+    const turnStartedAt = Date.now();
     let runCompletionStatus: 'completed' | 'failed' = 'completed';
     let runCompletionError: IdcRun['error'] | undefined;
-    const hadPendingFeedbackGuidance = this._feedbackGuidanceState !== null;
+    let trace = createAgentTraceContext({
+      conversationId: this._config.conversationId,
+      turnId: createAgentTurnId(this._config.conversationId ?? 'unknown', turnStartedAt),
+      phase: 'session',
+    });
+    let iteration = 0;
+    const hadPendingFeedbackGuidance = this._feedbackRuntime.hasGuidance();
     let feedbackGuidanceAdjustedThisTurn = false;
 
     try {
@@ -865,7 +958,6 @@ export class AgentSession implements IAgentSession {
       }
 
       const maxIterations = this._config.maxIterations ?? DEFAULT_MAX_ITERATIONS;
-      let iteration = 0;
 
       // Accumulate real token usage from LLM API responses
       const totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -886,6 +978,19 @@ export class AgentSession implements IAgentSession {
       if (this._runStore && !this._runStore.getActive()) {
         this.startIdcRun(resolveIdcRunKind(this._currentTurnPlanningContext));
       }
+      trace = deriveAgentTraceContext(trace, {
+        runId: this._runStore?.getActive()?.id ?? null,
+        phase: 'session',
+      });
+      logger.debug(
+        'neko.agent.session.execute.start',
+        withAgentTrace(trace, {
+          executionMode: this._executionMode,
+          inputLength: input.length,
+          processedInputLength: processedInput.length,
+          hasSettingsHookLoader: this._config.settingsHookLoader !== undefined,
+        }),
+      );
 
       // Add user message to history first, then pass snapshot (including user message)
       // to executor with skipUserMessage flag so it doesn't duplicate
@@ -903,7 +1008,7 @@ export class AgentSession implements IAgentSession {
       }
 
       feedbackGuidanceAdjustedThisTurn =
-        (await this._captureFeedbackCycle()) || feedbackGuidanceAdjustedThisTurn;
+        (await this._captureFeedbackCycle(trace)) || feedbackGuidanceAdjustedThisTurn;
       await this._updateMemoryRecall(memoryQueryInput);
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
@@ -916,7 +1021,11 @@ export class AgentSession implements IAgentSession {
           projectType: context?.projectType,
           activeFile: context?.activeFile,
           ...context?.metadata,
+          conversationId: trace.conversationId,
+          runId: trace.runId,
+          turnId: trace.turnId,
         },
+        trace,
       })) {
         ++iteration;
 
@@ -946,9 +1055,9 @@ export class AgentSession implements IAgentSession {
             }
           }
 
-          this._observeToolFeedback(step);
+          this._observeToolFeedback(step, trace);
           feedbackGuidanceAdjustedThisTurn =
-            (await this._captureFeedbackCycle()) || feedbackGuidanceAdjustedThisTurn;
+            (await this._captureFeedbackCycle(trace)) || feedbackGuidanceAdjustedThisTurn;
         }
 
         const yieldedEvents = Array.from(
@@ -988,6 +1097,16 @@ export class AgentSession implements IAgentSession {
         // Auto-compact: check if context compression is needed after each step
         if (this._compressor) {
           const tokens = this._compressor.estimateTokens(this._history);
+          const compactionTrace = deriveAgentTraceContext(trace, { phase: 'compaction' });
+          logger.debug(
+            'neko.agent.context_compaction.check',
+            withAgentTrace(compactionTrace, {
+              tokens,
+              historyLength: this._history.length,
+              consecutiveFailures: this._compactState.consecutiveFailures,
+              circuitOpen: this._compactState.isCircuitOpen,
+            }),
+          );
           const compactResult = await autoCompactIfNeeded(
             this._compressor,
             this._history,
@@ -1002,6 +1121,7 @@ export class AgentSession implements IAgentSession {
             await this._applyCompressionResult(
               compactResult.compressionResult,
               compactResult.trigger,
+              compactionTrace,
             );
           } else if (
             compactResult.trigger &&
@@ -1012,6 +1132,18 @@ export class AgentSession implements IAgentSession {
               compactResult.trigger,
               compactResult.errorMessage ?? compactResult.skipReason,
               compactResult.failureCount ?? this._compactState.consecutiveFailures,
+              compactionTrace,
+            );
+          } else if (compactResult.trigger) {
+            logger.debug(
+              'neko.agent.context_compaction.skipped',
+              withAgentTrace(compactionTrace, {
+                trigger: compactResult.trigger,
+                skipReason: compactResult.skipReason,
+                tokens,
+                consecutiveFailures: this._compactState.consecutiveFailures,
+                circuitOpen: this._compactState.isCircuitOpen,
+              }),
             );
           }
         }
@@ -1019,7 +1151,7 @@ export class AgentSession implements IAgentSession {
 
       await this._extractProjectMemory(turnPersistedEvents);
       feedbackGuidanceAdjustedThisTurn =
-        (await this._captureFeedbackCycle()) || feedbackGuidanceAdjustedThisTurn;
+        (await this._captureFeedbackCycle(trace)) || feedbackGuidanceAdjustedThisTurn;
 
       // Emit done event with real accumulated usage
       const doneEvent = {
@@ -1031,6 +1163,15 @@ export class AgentSession implements IAgentSession {
         },
       };
       yield doneEvent;
+      logger.debug(
+        'neko.agent.session.execute.done',
+        withAgentTrace(trace, {
+          iterations: iteration,
+          inputTokens: totalUsage.promptTokens,
+          outputTokens: totalUsage.completionTokens,
+          totalTokens: totalUsage.totalTokens,
+        }),
+      );
 
       // Write state snapshot and flush journal
       if (this._journalWriter) {
@@ -1050,6 +1191,13 @@ export class AgentSession implements IAgentSession {
         message: normalizedError.message,
         cause: toSerializableErrorCause(normalizedError),
       };
+      logger.debug(
+        'neko.agent.session.execute.error',
+        withAgentTrace(trace, {
+          message: normalizedError.message,
+          iterations: iteration,
+        }),
+      );
       yield {
         type: 'error',
         error: normalizedError,
@@ -1057,13 +1205,20 @@ export class AgentSession implements IAgentSession {
     } finally {
       this._closeActiveRun(runCompletionStatus, runCompletionError);
       this._currentTurnPlanningContext = null;
-      this._memoryRecallModule.setContent(null);
+      this._promptRuntime.setMemoryRecallContent(null);
       if (!feedbackGuidanceAdjustedThisTurn && hadPendingFeedbackGuidance) {
-        this._setFeedbackGuidanceContent(null);
+        this._feedbackRuntime.clearGuidance();
       }
       this._syncSystemPrompt();
       this._persistIdcRuntimeState();
       this._isRunning = false;
+      logger.debug(
+        'neko.agent.session.execute.end',
+        withAgentTrace(trace, {
+          status: runCompletionStatus,
+          durationMs: Date.now() - turnStartedAt,
+        }),
+      );
     }
   }
 
@@ -1214,11 +1369,7 @@ export class AgentSession implements IAgentSession {
    * run is already active (the runner closes it on onExecuteEnd).
    */
   startIdcRun(runKind: string, runId?: string): string | null {
-    if (!this._runStore) return null;
-    const nextRunId = this._runStore.startRun({ runKind, runId });
-    this._hydrateRunArtifacts(nextRunId);
-    this._persistIdcRuntimeState();
-    return nextRunId;
+    return this._idcRunLifecycle.startRun(runKind, runId);
   }
 
   /**
@@ -1288,21 +1439,15 @@ export class AgentSession implements IAgentSession {
    * disabled.
    */
   async flushWorkspaceSink(): Promise<void> {
-    if (this._artifactRestoreReady) {
-      await this._artifactRestoreReady;
-    }
-    if (this._runtimeStateRestoreReady) {
-      await this._runtimeStateRestoreReady;
-    }
-    await this._artifactSyncPending;
-    await this._idcTaskProjectionPending;
-    this._flushPendingRuntimeStatePersist();
+    await this._artifactFacade.whenRestoreReady();
+    await this._sessionPersistence.whenRestoreReady();
+    this._sessionPersistence.flushPending();
     await Promise.all([
       this._eventSink ? this._eventSink.flush() : Promise.resolve(),
-      this._runtimeStateStore ? this._runtimeStateStore.flush() : Promise.resolve(),
+      this._sessionPersistence.flush(),
       this._auditsSink ? this._auditsSink.flush() : Promise.resolve(),
       this._stepsSink ? this._stepsSink.flush() : Promise.resolve(),
-      this._artifactService?.flush?.() ?? Promise.resolve(),
+      this._artifactFacade.flush(),
     ]);
   }
 
@@ -1332,12 +1477,11 @@ export class AgentSession implements IAgentSession {
 
   clearHistory(): void {
     this._processedMemoryEventIds.clear();
-    this._feedbackCycles = [];
-    this._setFeedbackGuidanceContent(null);
-    this._memoryRecallModule.setContent(null);
+    this._feedbackRuntime.reset();
+    this._promptRuntime.setMemoryRecallContent(null);
     this._syncSystemPrompt();
     // Rebuild from composer to preserve current prompt composition
-    this._history = [{ role: 'system', content: this._promptComposer.compose() }];
+    this._history = [{ role: 'system', content: this._promptRuntime.composeText() }];
     this._historyEventIds = [[]];
     this._persistIdcRuntimeState();
   }
@@ -1346,8 +1490,7 @@ export class AgentSession implements IAgentSession {
     this._history = [...messages];
     this._historyEventIds = normalizeMessageEventIds(this._history, messageEventIds);
     this._processedMemoryEventIds = new Set();
-    this._feedbackCycles = [];
-    this._setFeedbackGuidanceContent(null);
+    this._feedbackRuntime.reset();
     this._markMessageEventIdsAsProcessed(this._historyEventIds);
     // Ensure system prompt is present
     if (this._history.length === 0 || this._history[0].role !== 'system') {
@@ -1369,9 +1512,22 @@ export class AgentSession implements IAgentSession {
 
   async compressContext(): Promise<CompressionResult> {
     const originalTokens = this.getTokenCount();
+    const trace = createAgentTraceContext({
+      conversationId: this._config.conversationId,
+      runId: this._runStore?.getActive()?.id ?? null,
+      turnId: createAgentTurnId(this._config.conversationId ?? 'unknown'),
+      phase: 'compaction',
+    });
+    logger.debug(
+      'neko.agent.context_compaction.manual.start',
+      withAgentTrace(trace, {
+        originalTokens,
+        historyLength: this._history.length,
+      }),
+    );
 
     const result = await this._compressor.compress(this._history);
-    await this._applyCompressionResult(result, 'manual');
+    await this._applyCompressionResult(result, 'manual', trace);
     const compressedTokens = this._compressor.estimateTokens(this._history);
 
     const ratio = originalTokens > 0 ? compressedTokens / originalTokens : 1;
@@ -1410,11 +1566,8 @@ export class AgentSession implements IAgentSession {
     }
     this._pendingConfirmations.clear();
     this._persistIdcRuntimeState();
-    this._flushPendingRuntimeStatePersist();
-    for (const unsubscribe of this._runtimeStateUnsubscribers) {
-      unsubscribe();
-    }
-    this._runtimeStateUnsubscribers = [];
+    this._sessionPersistence.flushPending();
+    this._sessionPersistence.dispose();
     this._stagePersonaBinding = null;
     this._stageGuardian = null;
     this._stageTracker = null;
@@ -1444,19 +1597,7 @@ export class AgentSession implements IAgentSession {
     this._autohealChain = null;
     this._approvalEngine = null;
     this._reactLoopBaseHooks = null;
-    void this._artifactService?.dispose?.();
-    this._artifactService = null;
-    this._artifactRestoreReady = null;
-    this._artifactSyncPending = Promise.resolve();
-    this._idcTaskProjection = null;
-    this._idcTaskProjectionPending = Promise.resolve();
-    const runtimeStateStore = this._runtimeStateStore;
-    if (runtimeStateStore) {
-      void runtimeStateStore.dispose().catch((error) => {
-        logger.warn('Failed to dispose IDC runtime state store', { error });
-      });
-    }
-    this._runtimeStateStore = null;
+    this._artifactFacade.dispose();
   }
 
   // ---------------------------------------------------------------------------
@@ -1467,281 +1608,33 @@ export class AgentSession implements IAgentSession {
     status: 'completed' | 'failed' | 'aborted',
     error?: IdcRun['error'],
   ): void {
-    const activeRun = this._runStore?.getActive();
-    if (!activeRun) return;
-    this._runStore?.endRun(status, error);
-    this._queueIdcTaskProjectionClear(activeRun.id, activeRun.startedAt);
-  }
-
-  private _scheduleArtifactRestore(): void {
-    const readFile = this._config.workspace?.fsOps.readFile;
-    const artifactService = this._artifactService;
-    if (!readFile || !artifactService?.restore) {
-      this._artifactRestoreReady = null;
-      return;
-    }
-
-    this._artifactRestoreReady = artifactService
-      .restore()
-      .then((records) => {
-        if (this._disposed || this._artifactService !== artifactService) {
-          return;
-        }
-        for (const record of records) {
-          this._attachArtifactRecord(record);
-        }
-      })
-      .catch((error) => {
-        logger.warn('Failed to restore artifacts from workspace', { error });
-      });
-  }
-
-  private async _writeDraftArtifact(
-    draft: Draft,
-    runId?: string,
-  ): Promise<ArtifactRecord<'draft'>> {
-    const { artifactService, targetRunId } = this._resolveArtifactWriteContext(runId);
-    const record = await artifactService.writeDraft(targetRunId, draft);
-    this._attachArtifactRecord(record);
-    this._persistIdcRuntimeState();
-    return record;
-  }
-
-  private async _writePlanArtifact(
-    plan: ExecutionPlan,
-    runId?: string,
-  ): Promise<ArtifactRecord<'plan'>> {
-    const { artifactService, targetRunId } = this._resolveArtifactWriteContext(runId);
-    const record = await artifactService.writePlan(targetRunId, plan);
-    this._attachArtifactRecord(record);
-    this._persistIdcRuntimeState();
-    return record;
-  }
-
-  private async _writeTaskArtifact(task: Task, runId?: string): Promise<ArtifactRecord<'task'>> {
-    const { artifactService, targetRunId } = this._resolveArtifactWriteContext(runId);
-    const record = await artifactService.writeTask(targetRunId, task);
-    this._attachArtifactRecord(record);
-    this._persistIdcRuntimeState();
-    return record;
-  }
-
-  private _resolveArtifactWriteContext(runId?: string): {
-    artifactService: IArtifactService;
-    targetRunId: string;
-  } {
-    const artifactService = this._artifactService;
-    if (!artifactService) {
-      throw new Error('ArtifactService is not configured for this session');
-    }
-
-    const targetRunId = runId ?? this._runStore?.getActive()?.id ?? null;
-    if (!targetRunId) {
-      throw new Error('writeArtifact requires an active IDC run or an explicit runId');
-    }
-
-    return { artifactService, targetRunId };
-  }
-
-  private _attachArtifactRecord(record: AnyArtifactRecord): void {
-    const binding = toIdcRunArtifactBinding(record);
-
-    if (record.kind === 'task') {
-      this._queueIdcTaskProjection(
-        record.runId,
-        record.value,
-        {
-          kind: 'task',
-          artifactId: binding.artifactId,
-          path: binding.path,
-          updatedAt: binding.updatedAt,
-        },
-        this._getKnownRunStartedAt(record.runId),
-      );
-    }
-
-    const activeRun = this._runStore?.getActive();
-    if (!activeRun || activeRun.id !== record.runId) {
-      return;
-    }
-
-    switch (record.kind) {
-      case 'draft':
-        this._runStore?.setDraft(record.value, binding);
-        return;
-      case 'plan':
-        this._runStore?.setPlan(record.value, binding);
-        return;
-      case 'task':
-        this._runStore?.setTask(record.value, binding);
-        return;
-    }
-  }
-
-  private _hydrateRunArtifacts(runId: string): void {
-    if (!this._artifactService) {
-      return;
-    }
-
-    for (const record of this._artifactService.listByRunId(runId)) {
-      this._attachArtifactRecord(record);
-    }
-  }
-
-  private _getKnownRunStartedAt(runId: string): number | undefined {
-    const activeRun = this._runStore?.getActive();
-    if (activeRun?.id === runId) {
-      return activeRun.startedAt;
-    }
-
-    const completedRun = this._runStore?.listCompleted().find((run) => run.id === runId);
-    return completedRun?.startedAt;
-  }
-
-  private _queueArtifactSync(event: ExecutionArtifactWrittenEvent): void {
-    this._artifactSyncPending = this._artifactSyncPending
-      .then(async () => {
-        await this._syncObservedArtifact(event);
-      })
-      .catch((error) => {
-        logger.warn(`artifact sync failed for ${event.path}: ${String(error)}`);
-      });
-  }
-
-  private _queueIdcTaskProjection(
-    runId: string,
-    task: Task,
-    artifact?: IdcProjectedTaskArtifactBinding,
-    runStartedAt?: number,
-  ): void {
-    const projection = this._idcTaskProjection;
-    if (!projection) {
-      return;
-    }
-
-    this._idcTaskProjectionPending = this._idcTaskProjectionPending
-      .then(async () => {
-        await projection.syncTask({
-          runId,
-          ...(runStartedAt !== undefined ? { runStartedAt } : {}),
-          task,
-          ...(artifact ? { artifact } : {}),
-        });
-      })
-      .catch((error) => {
-        logger.warn(`IDC task projection failed for ${runId}: ${String(error)}`);
-      });
-  }
-
-  private _queueIdcTaskProjectionClear(runId: string, runStartedAt?: number): void {
-    const projection = this._idcTaskProjection;
-    if (!projection) {
-      return;
-    }
-
-    this._idcTaskProjectionPending = this._idcTaskProjectionPending
-      .then(async () => {
-        await projection.clearRun(runId, runStartedAt);
-      })
-      .catch((error) => {
-        logger.warn(`IDC task projection cleanup failed for ${runId}: ${String(error)}`);
-      });
-  }
-
-  private async _syncObservedArtifact(event: ExecutionArtifactWrittenEvent): Promise<void> {
-    if (this._disposed || event.runId === 'unknown') {
-      return;
-    }
-
-    const artifactService = this._artifactService;
-    const existing =
-      artifactService === null
-        ? null
-        : event.kind === 'draft'
-          ? artifactService.getByRunId(event.runId, 'draft')
-          : event.kind === 'plan'
-            ? artifactService.getByRunId(event.runId, 'plan')
-            : artifactService.getByRunId(event.runId, 'task');
-    const binding = {
-      kind: event.kind,
-      artifactId: event.artifactId,
-      path: event.path,
-      updatedAt: existing && existing.path === event.path ? existing.updatedAt : event.at,
-    } as const;
-    this._runStore?.bindArtifact(binding);
-
-    const workspace = this._config.workspace;
-    if (!workspace || typeof workspace.fsOps.readFile !== 'function' || !artifactService) {
-      this._persistIdcRuntimeState();
-      return;
-    }
-
-    const content = await workspace.fsOps.readFile(event.path, 'utf-8');
-    if (existing && existing.path === event.path && existing.content === content) {
-      this._persistIdcRuntimeState();
-      return;
-    }
-
-    const record =
-      event.kind === 'draft'
-        ? artifactService.ingestObservedArtifact({
-            kind: 'draft',
-            runId: event.runId,
-            path: event.path,
-            content,
-          })
-        : event.kind === 'plan'
-          ? artifactService.ingestObservedArtifact({
-              kind: 'plan',
-              runId: event.runId,
-              path: event.path,
-              content,
-            })
-          : artifactService.ingestObservedArtifact({
-              kind: 'task',
-              runId: event.runId,
-              path: event.path,
-              content,
-            });
-    this._attachArtifactRecord(record);
-    this._persistIdcRuntimeState();
+    this._idcRunLifecycle.closeActiveRun(status, error);
   }
 
   private _installRuntimeStatePersistence(): void {
-    const shouldPersistRuntimeState = this._runtimeStateStore !== null;
+    const shouldPersistRuntimeState = this._sessionPersistence.hasStore;
 
     if (this._stageTracker && shouldPersistRuntimeState) {
-      this._runtimeStateUnsubscribers.push(
+      this._sessionPersistence.addUnsubscriber(
         this._stageTracker.onEntered((event) => {
-          this._stageTransitions.push({
-            from: event.previous,
-            to: event.stage,
-            at: event.at,
-          });
-          if (this._stageTransitions.length > MAX_PERSISTED_STAGE_TRANSITIONS) {
-            this._stageTransitions.splice(
-              0,
-              this._stageTransitions.length - MAX_PERSISTED_STAGE_TRANSITIONS,
-            );
-          }
-          this._persistIdcRuntimeState();
+          this._idcRunLifecycle.recordStageTransition(event);
         }),
       );
     }
 
     if (this._eventBus) {
-      this._runtimeStateUnsubscribers.push(
+      this._sessionPersistence.addUnsubscriber(
         this._eventBus.on(EXECUTION_CHANNELS.ARTIFACT_WRITTEN, (event) => {
-          this._queueArtifactSync(event);
+          this._artifactFacade.queueObservedArtifactSync(event);
         }),
       );
       if (shouldPersistRuntimeState) {
-        this._runtimeStateUnsubscribers.push(
+        this._sessionPersistence.addUnsubscriber(
           this._eventBus.on(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED, () => {
             this._persistIdcRuntimeState();
           }),
         );
-        this._runtimeStateUnsubscribers.push(
+        this._sessionPersistence.addUnsubscriber(
           this._eventBus.on(CREATION_CHANNELS.RUN_ENDED, () => {
             this._persistIdcRuntimeState();
           }),
@@ -1749,50 +1642,27 @@ export class AgentSession implements IAgentSession {
       }
     }
 
-    if (shouldPersistRuntimeState && !this._runtimeStateRestorePending) {
+    if (shouldPersistRuntimeState && !this._sessionPersistence.isRestorePending) {
       this._persistIdcRuntimeState();
     }
   }
 
   private _persistIdcRuntimeState(): void {
-    if (!this._runtimeStateStore) return;
-    if (this._runtimeStateRestorePending) return;
-    if (this._runtimeStatePersistScheduled) return;
-
-    this._runtimeStatePersistScheduled = true;
-    this._runtimeStatePersistTimer = setTimeout(() => {
-      this._runtimeStatePersistTimer = null;
-      this._runtimeStatePersistScheduled = false;
-      this._persistIdcRuntimeStateNow();
-    }, IDC_RUNTIME_STATE_DEBOUNCE_MS);
+    this._sessionPersistence.schedule();
   }
 
-  private _flushPendingRuntimeStatePersist(): void {
-    if (!this._runtimeStatePersistScheduled) return;
-
-    if (this._runtimeStatePersistTimer) {
-      clearTimeout(this._runtimeStatePersistTimer);
-      this._runtimeStatePersistTimer = null;
-    }
-    this._runtimeStatePersistScheduled = false;
-    this._persistIdcRuntimeStateNow();
-  }
-
-  private _persistIdcRuntimeStateNow(): void {
-    if (!this._runtimeStateStore) return;
-    if (this._runtimeStateRestorePending) return;
-
+  private _buildIdcRuntimeStateSnapshot(): import('../workspace').IdcRuntimeStateInput | null {
     const activeRun = this._runStore?.getActive() ?? null;
     const completedRuns = this._runStore?.listCompleted() ?? [];
     const lastCompletedRun =
       completedRuns.length > 0 ? (completedRuns[completedRuns.length - 1] ?? null) : null;
 
-    this._runtimeStateStore.update({
+    return {
       ...(this._config.conversationId ? { conversationId: this._config.conversationId } : {}),
       stage: {
         current: this._stageTracker?.current ?? null,
         ...(this._stageTracker?.current ? { enteredAt: this._stageTracker.enteredAt } : {}),
-        transitions: [...this._stageTransitions],
+        transitions: [...this._idcRunLifecycle.stageTransitions],
       },
       run: {
         ...(activeRun ? { active: snapshotIdcRun(activeRun) } : {}),
@@ -1804,161 +1674,18 @@ export class AgentSession implements IAgentSession {
         ),
       },
       feedback: {
-        pendingGuidance: this._feedbackGuidanceState ? { ...this._feedbackGuidanceState } : null,
+        pendingGuidance: this._feedbackRuntime.guidanceSnapshot,
       },
-    });
+    };
   }
 
   private _restoreIdcRuntimeState(state: import('../workspace').IdcRuntimeRestoreState): void {
-    this._restoreStageRuntimeState(state.stage);
-    this._restoreRunState(state.run);
+    this._idcRunLifecycle.restore(state);
     this._restorePendingApprovals(state.approval);
-    this._restoreFeedbackRuntimeState(state.feedback);
+    this._feedbackRuntime.restore(state.feedback);
     if (this._stagePersonaBinding) {
       void this._stagePersonaBinding.syncCurrent();
     }
-  }
-
-  private _restoreStageRuntimeState(
-    state: import('../workspace').IdcRuntimeRestoreState['stage'],
-  ): void {
-    if (!this._stageTracker) {
-      return;
-    }
-    if (
-      this._stageTransitions.length > 0 ||
-      this._runStore?.getActive() ||
-      (this._runStore?.listCompleted().length ?? 0) > 0
-    ) {
-      return;
-    }
-
-    this._stageTransitions = [...state.transitions].slice(-MAX_PERSISTED_STAGE_TRANSITIONS);
-    this._stageTracker.restore({
-      current: state.current,
-      ...(state.enteredAt !== undefined ? { enteredAt: state.enteredAt } : {}),
-    });
-    this._stageGuardian?.restore({
-      current: state.current,
-      ...(state.enteredAt !== undefined ? { enteredAt: state.enteredAt } : {}),
-      visitedStages: collectVisitedStages(state.transitions, state.current),
-    });
-  }
-
-  private _restoreRunState(state: import('../workspace').IdcRuntimeRestoreState['run']): void {
-    if (!this._runStore) {
-      return;
-    }
-    if (this._runStore.getActive() || this._runStore.listCompleted().length > 0) {
-      return;
-    }
-
-    const activeCandidate = restoreIdcRunFromSnapshot(
-      state.active,
-      state.active ? (this._artifactService?.listByRunId(state.active.id) ?? []) : [],
-      { markMissingArtifactsStale: Boolean(this._artifactService) },
-    );
-    const lastCompletedCandidate = restoreIdcRunFromSnapshot(
-      state.lastCompleted,
-      state.lastCompleted ? (this._artifactService?.listByRunId(state.lastCompleted.id) ?? []) : [],
-      { markMissingArtifactsStale: Boolean(this._artifactService) },
-    );
-
-    this._runStore.restore({
-      ...(activeCandidate && isActiveRunStatus(activeCandidate.status)
-        ? { active: activeCandidate }
-        : {}),
-      completed: [
-        ...(lastCompletedCandidate && isTerminalRunStatus(lastCompletedCandidate.status)
-          ? [lastCompletedCandidate]
-          : []),
-        ...(!lastCompletedCandidate &&
-        activeCandidate &&
-        isTerminalRunStatus(activeCandidate.status)
-          ? [activeCandidate]
-          : []),
-      ],
-    });
-
-    this._replayRestoredTaskProjection(activeCandidate);
-    this._replayRestoredTaskProjection(lastCompletedCandidate);
-
-    if (lastCompletedCandidate && isTerminalRunStatus(lastCompletedCandidate.status)) {
-      this._queueIdcTaskProjectionClear(
-        lastCompletedCandidate.id,
-        lastCompletedCandidate.startedAt,
-      );
-    } else if (activeCandidate && isTerminalRunStatus(activeCandidate.status)) {
-      this._queueIdcTaskProjectionClear(activeCandidate.id, activeCandidate.startedAt);
-    }
-  }
-
-  private _restoreFeedbackRuntimeState(
-    state: import('../workspace').IdcRuntimeRestoreState['feedback'],
-  ): void {
-    if (this._ablationMarker?.disableAgentFirstRecoveryGuidance) {
-      this._applyFeedbackGuidanceSnapshot(null);
-      this._syncSystemPrompt();
-      return;
-    }
-
-    const activeRun = this._runStore?.getActive() ?? null;
-    if (!shouldRestorePersistedFeedbackGuidance(state.pendingGuidance, activeRun)) {
-      this._applyFeedbackGuidanceSnapshot(null);
-      this._syncSystemPrompt();
-      return;
-    }
-
-    this._applyFeedbackGuidanceSnapshot(state.pendingGuidance);
-    this._syncSystemPrompt();
-  }
-
-  private _applyFeedbackGuidanceSnapshot(snapshot: PersistedFeedbackGuidanceSnapshot | null): void {
-    this._feedbackGuidanceState = snapshot ? { ...snapshot } : null;
-    this._feedbackGuidanceModule.setContent(snapshot?.content ?? null);
-  }
-
-  private _setFeedbackGuidanceContent(
-    content: string | null,
-    sourceRun?: Pick<IdcRun, 'id' | 'startedAt'> | null,
-  ): void {
-    if (this._ablationMarker?.disableAgentFirstRecoveryGuidance && content !== null) {
-      this._applyFeedbackGuidanceSnapshot(null);
-      return;
-    }
-
-    const trimmed = content?.trim();
-    if (!trimmed) {
-      this._applyFeedbackGuidanceSnapshot(null);
-      return;
-    }
-
-    this._applyFeedbackGuidanceSnapshot({
-      content: trimmed,
-      ...(sourceRun?.id ? { sourceRunId: sourceRun.id } : {}),
-      ...(sourceRun?.startedAt !== undefined ? { sourceRunStartedAt: sourceRun.startedAt } : {}),
-    });
-  }
-
-  private _replayRestoredTaskProjection(run: IdcRun | null): void {
-    if (!run?.task) {
-      return;
-    }
-
-    const artifactBinding = run.artifactBindings?.find((binding) => binding.kind === 'task');
-    this._queueIdcTaskProjection(
-      run.id,
-      run.task,
-      artifactBinding
-        ? {
-            kind: 'task',
-            artifactId: artifactBinding.artifactId,
-            path: artifactBinding.path,
-            updatedAt: artifactBinding.updatedAt,
-          }
-        : undefined,
-      run.startedAt,
-    );
   }
 
   private _restorePendingApprovals(
@@ -2053,12 +1780,12 @@ export class AgentSession implements IAgentSession {
       projectMemory && this._config.memoryRecall !== false
         ? new MemoryRecall({ projectMemory })
         : null;
-    this._memoryRecallModule.setContent(null);
+    this._promptRuntime.setMemoryRecallContent(null);
   }
 
   private async _updateMemoryRecall(query: string): Promise<void> {
     if (!this._memoryRecall) {
-      this._memoryRecallModule.setContent(null);
+      this._promptRuntime.setMemoryRecallContent(null);
       return;
     }
 
@@ -2073,9 +1800,9 @@ export class AgentSession implements IAgentSession {
               })
               .join('\n');
 
-      this._memoryRecallModule.setContent(body);
+      this._promptRuntime.setMemoryRecallContent(body);
     } catch (error) {
-      this._memoryRecallModule.setContent(null);
+      this._promptRuntime.setMemoryRecallContent(null);
       logger.warn('Failed to update memory recall', { error });
     }
   }
@@ -2120,12 +1847,19 @@ export class AgentSession implements IAgentSession {
     }
   }
 
-  private _observeToolFeedback(step: AgentStep): void {
+  private _observeToolFeedback(step: AgentStep, trace?: AgentTraceContext): void {
     if (!this._feedbackCoordinator || step.type !== 'act' || !step.toolResults) {
       return;
     }
 
     const activeRunId = this._runStore?.getActive()?.id ?? null;
+    const feedbackTrace = deriveAgentTraceContext(trace, {
+      ...(activeRunId ? { runId: activeRunId } : {}),
+      phase: 'feedback',
+    });
+    let failureSignals = 0;
+    let qualitySignals = 0;
+    let providerExpressionSignals = 0;
     for (let i = 0; i < step.toolResults.length; i++) {
       const result = step.toolResults[i] as ObservedToolResult;
       const toolCall = step.toolCalls?.find((candidate) => candidate.id === result.callId);
@@ -2140,6 +1874,7 @@ export class AgentSession implements IAgentSession {
           error: result.error ?? 'Tool execution failed',
           ...(activeRunId ? { runId: activeRunId } : {}),
         });
+        failureSignals += 1;
         continue;
       }
 
@@ -2153,6 +1888,7 @@ export class AgentSession implements IAgentSession {
       });
       if (qualityCheckSignal) {
         this._feedbackCoordinator.observe(qualityCheckSignal);
+        qualitySignals += 1;
         if (
           'evidence' in qualityCheckSignal &&
           qualityCheckSignal.evidence &&
@@ -2171,8 +1907,19 @@ export class AgentSession implements IAgentSession {
       });
       if (providerExpressionSignal) {
         this._feedbackCoordinator.observe(providerExpressionSignal);
+        providerExpressionSignals += 1;
       }
     }
+
+    logger.debug(
+      'neko.agent.feedback.observe.summary',
+      withAgentTrace(feedbackTrace, {
+        toolResultCount: step.toolResults.length,
+        failureSignals,
+        qualitySignals,
+        providerExpressionSignals,
+      }),
+    );
   }
 
   private async _recordAgentEvidence(
@@ -2212,52 +1959,8 @@ export class AgentSession implements IAgentSession {
     return typeof id === 'string' ? id : undefined;
   }
 
-  private async _captureFeedbackCycle(): Promise<boolean> {
-    if (!this._feedbackCoordinator) {
-      return false;
-    }
-
-    const cycle = this._feedbackCoordinator.evaluatePending({
-      currentStage: this._stageTracker?.current ?? null,
-      activeRunId: this._runStore?.getActive()?.id ?? null,
-    });
-    if (!cycle) {
-      return false;
-    }
-
-    this._feedbackCycles.push(cycle);
-    if (this._feedbackCycles.length > MAX_FEEDBACK_CYCLES) {
-      this._feedbackCycles.splice(0, this._feedbackCycles.length - MAX_FEEDBACK_CYCLES);
-    }
-    const stageGuidance = await this._adviseControlPlane(cycle);
-    this._applyFeedbackFlowActions(cycle.actions, stageGuidance);
-    return cycle.actions.length > 0 || stageGuidance.length > 0;
-  }
-
-  private async _adviseControlPlane(
-    cycle: import('../feedback').FeedbackCycle,
-  ): Promise<readonly StageTransitionGuidance[]> {
-    if (!this._controlPlane) {
-      return [];
-    }
-
-    const guidance: StageTransitionGuidance[] = [];
-    for (const decision of cycle.decisions) {
-      const controlDecision = this._controlPlane.advise({
-        ...(cycle.currentStage ? { currentStageId: cycle.currentStage } : {}),
-        decision,
-      });
-      if (controlDecision.guidance) {
-        guidance.push(controlDecision.guidance);
-        await this._recordFeedbackStageTransition({
-          cycle,
-          decision,
-          guidance: controlDecision.guidance,
-          timestamp: controlDecision.createdAt,
-        });
-      }
-    }
-    return guidance;
+  private async _captureFeedbackCycle(trace?: AgentTraceContext): Promise<boolean> {
+    return this._feedbackRuntime.captureCycle(trace);
   }
 
   private async _recordFeedbackStageTransition(input: {
@@ -2319,95 +2022,10 @@ export class AgentSession implements IAgentSession {
 
   /** Sync the composed system prompt into _history[0] */
   private _syncSystemPrompt(): void {
-    this._applyPromptModuleSync(this._artifactSchemaModule);
-    this._applyPromptModuleSync(this._feedbackGuidanceModule);
-    this._applyPromptModuleSync(this._memoryRecallModule);
-
-    this._creativeVersionLogModule.setSummary(
-      this._versionLog.size > 0 ? this._versionLog.toSummary() : null,
-    );
-    this._applyPromptModuleSync(this._creativeVersionLogModule);
-
-    // Compose both flat text and structured sections
-    const structured = this._promptComposer.composeStructured();
-    if (this._history.length > 0 && this._history[0]?.role === 'system') {
-      this._history[0].content = structured.text;
-      if (this._historyEventIds.length === 0) {
-        this._historyEventIds = this._history.map(() => []);
-      }
-      this._historyEventIds[0] = [];
-    }
-
-    // Push cache-boundary sections to executor for provider-specific caching
-    if (this._executor && structured.sections.length > 0) {
-      this._executor.updateServiceOptions({
-        systemPromptSections: structured.sections,
-      });
-    }
-
-    const promptSections = this._promptComposer.dumpSections();
-    const promptLogger = getAgentSessionLogger();
-    promptLogger.debug('neko.agent.prompt.composed', {
-      sectionCount: promptSections.length,
-      textChars: structured.text.length,
-      sectionChars: structured.sections.map((section, index) => ({
-        index,
-        chars: section.content.length,
-        cacheControl: section.cacheControl,
-      })),
-      sections: promptSections,
-      layerUsage: this._promptComposer.getLayerUsage(),
+    this._historyEventIds = this._promptRuntime.syncSystemPrompt({
+      history: this._history,
+      historyEventIds: this._historyEventIds,
     });
-    promptLogger.debug('neko.agent.prompt.composed.raw', {
-      text: structured.text,
-      sections: structured.sections.map((section, index) => ({
-        index,
-        cacheControl: section.cacheControl,
-        content: section.content,
-      })),
-      dump: promptSections,
-    });
-  }
-
-  private _applyPromptModuleSync(module: PromptModule): void {
-    this._promptModuleOrchestrator.applyOneSync(module, this._promptContextProvider());
-  }
-
-  private _applyFeedbackFlowActions(
-    actions: readonly import('../feedback').FeedbackFlowAction[],
-    stageGuidance: readonly StageTransitionGuidance[] = [],
-  ): void {
-    if (actions.length === 0 && stageGuidance.length === 0) {
-      return;
-    }
-
-    const activeRun = this._runStore?.getActive() ?? null;
-    const guidanceBlocks: string[] = [];
-    let requestedClear = false;
-    for (const guidance of stageGuidance) {
-      guidanceBlocks.push(formatStageTransitionGuidance(guidance));
-    }
-    for (const action of actions) {
-      if (action.kind === 'set-guidance') {
-        guidanceBlocks.push(action.guidance);
-        continue;
-      }
-      if (action.kind === 'escalate-user') {
-        guidanceBlocks.push(
-          `- Escalate to the user: ${action.message} ` + `(repeat count: ${action.repeatCount}).`,
-        );
-        continue;
-      }
-      if (action.kind === 'clear-guidance') {
-        requestedClear = true;
-      }
-    }
-
-    if (guidanceBlocks.length > 0) {
-      this._setFeedbackGuidanceContent(guidanceBlocks.join('\n'), activeRun);
-    } else if (requestedClear) {
-      this._setFeedbackGuidanceContent(null);
-    }
   }
 
   private _rebuildExecutor(): void {
@@ -2434,6 +2052,14 @@ export class AgentSession implements IAgentSession {
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): void {
     const toolCallId = request.toolCall.id;
+    logger.debug(
+      'neko.agent.approval.confirmation.requested',
+      withAgentTrace(deriveAgentTraceContext(request.toolCall.trace, { phase: 'approval' }), {
+        toolCallId,
+        toolName: request.toolCall.name,
+        confirmationToken: request.confirmationToken,
+      }),
+    );
     // Store pending confirmation (resolve is handled by onConfirmTool callback)
     this._pendingConfirmations.set(toolCallId, { source: 'live', request });
     this._persistIdcRuntimeState();
@@ -2449,6 +2075,10 @@ export class AgentSession implements IAgentSession {
    */
   private async _resolveToolConfirmation(request: ToolConfirmationRequest): Promise<void> {
     const toolCallId = request.toolCall.id;
+    const trace = deriveAgentTraceContext(request.toolCall.trace, {
+      phase: 'approval',
+      parentRequestId: request.confirmationToken,
+    });
 
     // Consult the approval engine if wired. Permission-channel requests
     // always belong to the imperative paradigm (Implement-stage tool calls).
@@ -2467,6 +2097,7 @@ export class AgentSession implements IAgentSession {
           },
           id: request.confirmationToken ?? `${toolCallId}-${Date.now()}`,
           at: Date.now(),
+          trace,
         });
         if (decision.resolution === 'auto-accept' || decision.resolution === 'user-accept') {
           this.confirmTool(toolCallId, true);
@@ -2495,11 +2126,29 @@ export class AgentSession implements IAgentSession {
     // Fallback: existing user callback path.
     if (!this._config.onConfirmTool) {
       // No user prompt + no decisive engine answer → safe default: reject.
+      logger.debug(
+        'neko.agent.approval.confirmation.fallback',
+        withAgentTrace(trace, {
+          toolCallId,
+          toolName: request.toolCall.name,
+          decision: 'reject',
+          reason: 'missing-user-callback',
+        }),
+      );
       this.confirmTool(toolCallId, false);
       return;
     }
     try {
       const approved = await this._config.onConfirmTool(request);
+      logger.debug(
+        'neko.agent.approval.confirmation.fallback',
+        withAgentTrace(trace, {
+          toolCallId,
+          toolName: request.toolCall.name,
+          decision: approved ? 'accept' : 'reject',
+          reason: 'user-callback',
+        }),
+      );
       this.confirmTool(toolCallId, approved);
     } catch (err) {
       this.confirmTool(toolCallId, false);
@@ -2510,6 +2159,7 @@ export class AgentSession implements IAgentSession {
   private async _applyCompressionResult(
     result: ConversationCompressionResult,
     trigger: 'token_threshold' | 'turn_threshold' | 'manual',
+    trace?: AgentTraceContext,
   ): Promise<void> {
     const summaryMessages = result.messages.filter((message) => message.isSummary);
     let compactionEventId: string | undefined;
@@ -2564,13 +2214,37 @@ export class AgentSession implements IAgentSession {
     this._history = nextHistory;
     this._historyEventIds = nextHistoryEventIds;
     this._syncSystemPrompt();
+    logger.debug(
+      'neko.agent.context_compaction.completed',
+      withAgentTrace(deriveAgentTraceContext(trace, { phase: 'compaction' }), {
+        trigger,
+        originalTokens: result.originalTokens,
+        compressedTokens: result.compressedTokens,
+        compressionRatio: result.compressionRatio,
+        messagesRemoved: result.messagesRemoved,
+        summaryMessageCount: summaryMessages.length,
+        replacedEventCount: replacedEventIds.length,
+        circuitOpen: this._compactState.isCircuitOpen,
+        consecutiveFailures: this._compactState.consecutiveFailures,
+      }),
+    );
   }
 
   private async _logCompactionFailure(
     trigger: 'token_threshold' | 'turn_threshold' | 'manual',
     reason: string,
     failureCount: number,
+    trace?: AgentTraceContext,
   ): Promise<void> {
+    logger.debug(
+      'neko.agent.context_compaction.failed',
+      withAgentTrace(deriveAgentTraceContext(trace, { phase: 'compaction' }), {
+        trigger,
+        reason,
+        failureCount,
+        circuitOpen: this._compactState.isCircuitOpen,
+      }),
+    );
     if (!this._journalWriter || !this._shouldLogCompaction()) {
       return;
     }
@@ -2785,43 +2459,6 @@ function stripRestoredPendingApprovalDetails(
   return next;
 }
 
-function formatStageTransitionGuidance(guidance: StageTransitionGuidance): string {
-  const fromStage = guidance.fromStageId ?? 'current stage';
-  const transition = formatStageTransitionAction(guidance, fromStage);
-  const approval = guidance.requiresUserApproval ? ' User approval is required.' : '';
-  return `- ControlPlane: ${transition}. ${guidance.reason}${approval}`;
-}
-
-function formatStageTransitionAction(guidance: StageTransitionGuidance, fromStage: string): string {
-  if (guidance.transitionAction === 'restart-run') {
-    return `restart the IDC run from ${fromStage}`;
-  }
-  if (guidance.transitionAction === 'regress-to') {
-    return `regress from ${fromStage} to ${guidance.toStageId ?? 'an earlier stage'}`;
-  }
-  return `retry ${guidance.toStageId ?? fromStage}`;
-}
-
-function shouldRestorePersistedFeedbackGuidance(
-  guidance: PersistedFeedbackGuidanceSnapshot | null,
-  activeRun: Pick<IdcRun, 'id' | 'startedAt'> | null,
-): boolean {
-  if (!guidance) {
-    return false;
-  }
-  if (!guidance.sourceRunId) {
-    return true;
-  }
-  if (!activeRun || activeRun.id !== guidance.sourceRunId) {
-    return false;
-  }
-  if (guidance.sourceRunStartedAt === undefined) {
-    return true;
-  }
-
-  return activeRun.startedAt === guidance.sourceRunStartedAt;
-}
-
 function restoreIdcRunFromSnapshot(
   snapshot: import('../workspace').PersistedIdcRunSnapshot | undefined,
   records: readonly AnyArtifactRecord[],
@@ -2915,27 +2552,6 @@ function restoredArtifactKindOrder(
     case 'task':
       return 2;
   }
-}
-
-function collectVisitedStages(
-  transitions: readonly import('../workspace').IdcRuntimeStageTransition[],
-  current: IdcStage | null,
-): readonly IdcStage[] {
-  const visited: IdcStage[] = [];
-  const push = (stage: IdcStage | null) => {
-    if (!stage || visited.includes(stage)) {
-      return;
-    }
-    visited.push(stage);
-  };
-
-  for (const transition of transitions) {
-    push(transition.from);
-    push(transition.to);
-  }
-  push(current);
-
-  return visited;
 }
 
 function isActiveRunStatus(status: IdcRun['status']): status is 'pending' | 'running' {

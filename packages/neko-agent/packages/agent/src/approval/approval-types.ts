@@ -16,6 +16,7 @@
  * packs can route decisions without inspecting channel strings.
  */
 
+import type { AgentTraceContext } from '@neko/shared';
 import type { Paradigm } from '@neko-agent/types';
 
 // =============================================================================
@@ -67,6 +68,8 @@ export interface ApprovalRequest {
   id: string;
   /** ms epoch. */
   at: number;
+  /** Runtime trace context for structured debug logs. */
+  trace?: AgentTraceContext;
 }
 
 // =============================================================================

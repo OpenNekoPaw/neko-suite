@@ -1,10 +1,83 @@
 # neko-agent Architecture Review
 
 > **Date**: 2026-05-09
-> **Status**: Review
+> **Status**: Review with implementation update
 > **Scope**: Abstraction / Composition / Decoupling / Reuse across all neko-agent sub-packages
 
 ---
+
+## 0. 2026-05-09 Implementation Update
+
+The `improve-agent-traceability-and-session-boundaries` change has converted the
+highest-risk `AgentSession` state ownership into focused runtime collaborators
+while preserving `IAgentSession` as the CLI/Extension/TUI facade. The original
+review remains below as the baseline assessment; this section records the
+current boundary after the first extraction pass.
+
+### 0.1 Current AgentSession Facade Boundary
+
+`AgentSession` still owns the public session API and the turn-level execution
+entry point, but the following subdomains now have explicit collaborators:
+
+| Collaborator | Responsibility |
+|--------------|----------------|
+| `SessionPersistence` | Runtime state restore, persist debounce, flush, subscriptions, and dispose cleanup |
+| `IdcRunLifecycle` | IDC run start/restore/close and stage transition buffering |
+| `SessionArtifactFacade` | Artifact service access, artifact restore, write context, observed artifact sync queue, and IDC task projection queue |
+| `FeedbackRuntimeBridge` | Feedback cycle capture, feedback guidance snapshot, control-plane guidance application, and trace-aware feedback summaries |
+| `PromptRuntimeFacade` | Prompt module sync, system prompt composition, and executor prompt-cache updates |
+
+This keeps the facade source-compatible while removing persistence sinks,
+timers, artifact queues, feedback cycle state, and IDC stage transition buffers
+from direct session ownership.
+
+### 0.2 Boundary Guards
+
+`packages/neko-agent/packages/agent/src/__tests__/architecture-boundary-guards.test.ts`
+now guards the most important architectural constraints:
+
+- Webview must not import runtime, platform, ai-sdk, or `vscode` modules.
+- Runtime/session collaborators must not import VSCode, React, Webview, or
+  Extension-only modules.
+- Extension remains a host adapter and must not implement the runtime
+  collaborators.
+- New private fields in `AgentSession` must be allowlisted, which makes direct
+  ownership of persistence sinks, timers, feedback state, artifact sync queues,
+  or stage transition buffers visible during tests.
+- New `AgentSession` private fields are also classified by high-risk ownership
+  category. The guard reports new timer, sink, queue, feedback guidance state,
+  stage transition buffer, and prompt module instance fields unless they are an
+  approved collaborator reference or explicitly listed as legacy migration debt.
+
+Current legacy field debt is intentionally visible rather than silently accepted:
+
+| Category | Legacy Fields | Target Owner |
+|----------|---------------|--------------|
+| Prompt module instances | `_memoryProjectModule`, `_memoryRecallModule`, `_creativeVersionLogModule`, `_feedbackGuidanceModule`, `_skillInjectionModule`, `_agentsMdModule`, `_artifactSchemaModule`, `_subpackageFragmentsModule` | `PromptRuntimeFacade` / prompt orchestrator |
+| Persistent sinks | `_eventSink`, `_auditsSink`, `_stepsSink`, `_journalWriter` | persistence / event sink facade |
+| Pending runtime queue | `_pendingConfirmations` | approval / confirmation bridge |
+
+Approved collaborator references remain allowed: `_sessionPersistence`,
+`_artifactFacade`, `_feedbackRuntime`, `_promptRuntime`, and
+`_idcRunLifecycle`.
+
+### 0.3 Remaining Risks
+
+This extraction is intentionally incremental. `AgentSession` is still a large
+facade and still contains the main execution loop plus some observation,
+approval fallback, compaction, history, and feedback parsing logic. The next
+natural extractions are:
+
+- `ExecutionOrchestrator` for the remaining execute-loop sequencing;
+- `FeedbackObserver` for tool-result observation and quality/consistency parsing;
+- a smaller approval/confirmation bridge if confirmation fallback logic grows;
+- additional prompt/runtime composition cleanup once prompt module ownership is
+  fully stabilized.
+
+The current guard strategy focuses on state ownership and forbidden imports
+rather than a hard line-count target. That avoids blocking legitimate facade
+code while still preventing the previous pattern of adding new runtime
+subdomain state directly to `AgentSession`.
 
 ## 1. Package Structure Overview
 

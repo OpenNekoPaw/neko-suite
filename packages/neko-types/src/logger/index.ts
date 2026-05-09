@@ -9,6 +9,7 @@
 export { LogLevel } from './types';
 export type { ILogger, ILogTransport, LogEntry, LoggerFactory } from './types';
 export { ConsoleLogger, ConsoleTransport } from './console-logger';
+export { CapturedLogTransport } from './captured-log-transport';
 export {
   emitDiagnostic,
   classifyCommonFailureReason,

@@ -18,8 +18,10 @@ import type {
   ToolFilterOptions,
   IToolGroupRegistry,
   IToolInjectionManager,
+  AgentTraceContext,
 } from '@neko/shared';
-import { runHooks } from './hook-runner';
+import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
+import { runHooksWithTrace } from './hook-runner';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ThinkPhase');
@@ -46,10 +48,15 @@ export interface ThinkDeps {
 /**
  * Think step — non-streaming. Calls service.chat() and returns a single AgentStep.
  */
-export async function think(deps: ThinkDeps, context: AgentContext): Promise<AgentStep> {
-  const { modifiedContext, options } = await prepareThinkContext(deps, context);
+export async function think(
+  deps: ThinkDeps,
+  context: AgentContext,
+  phaseTrace?: AgentTraceContext,
+): Promise<AgentStep> {
+  const trace = deriveAgentTraceContext(phaseTrace ?? context.trace, { phase: 'think' });
+  const { modifiedContext, options } = await prepareThinkContext(deps, context, trace);
 
-  const response = await deps.service.chat(modifiedContext.messages, options);
+  const response = await deps.service.chat(modifiedContext.messages, options, { trace });
 
   // Warn if response was truncated
   if (response.finishReason === 'length') {
@@ -98,7 +105,7 @@ export async function think(deps: ThinkDeps, context: AgentContext): Promise<Age
   };
 
   // Hook: afterThink
-  await runHooks(deps.hooks, 'afterThink', step, context);
+  await runHooksWithTrace(deps.hooks, 'afterThink', trace, step, context);
 
   return step;
 }
@@ -111,8 +118,10 @@ export async function think(deps: ThinkDeps, context: AgentContext): Promise<Age
 export async function* thinkStream(
   deps: ThinkDeps,
   context: AgentContext,
+  phaseTrace?: AgentTraceContext,
 ): AsyncGenerator<AgentStep> {
-  const { modifiedContext, options } = await prepareThinkContext(deps, context);
+  const trace = deriveAgentTraceContext(phaseTrace ?? context.trace, { phase: 'think' });
+  const { modifiedContext, options } = await prepareThinkContext(deps, context, trace);
 
   // Accumulate streaming response
   let content = '';
@@ -122,7 +131,7 @@ export async function* thinkStream(
   let finishReason: string | undefined;
   let streamUsage: AgentStep['usage'] | undefined;
 
-  for await (const chunk of deps.service.chatStream(modifiedContext.messages, options)) {
+  for await (const chunk of deps.service.chatStream(modifiedContext.messages, options, { trace })) {
     if (deps.abortController?.signal.aborted) break;
 
     switch (chunk.type) {
@@ -227,7 +236,7 @@ export async function* thinkStream(
   };
 
   // Hook: afterThink
-  await runHooks(deps.hooks, 'afterThink', step, context);
+  await runHooksWithTrace(deps.hooks, 'afterThink', trace, step, context);
 
   yield step;
 }
@@ -427,6 +436,7 @@ function getToolFilter(deps: ThinkDeps, input?: string): ToolFilterOptions | und
 async function prepareThinkContext(
   deps: ThinkDeps,
   context: AgentContext,
+  phaseTrace: AgentTraceContext,
 ): Promise<{
   modifiedContext: AgentContext;
   tools: ReturnType<IToolRegistry['toToolDefinitions']>;
@@ -434,9 +444,29 @@ async function prepareThinkContext(
 }> {
   // Hook: beforeThink - can modify context
   let modifiedContext = context;
+  const trace = deriveAgentTraceContext(phaseTrace, { phase: 'hook' });
+  logger.debug(
+    'neko.agent.think.prepare.start',
+    withAgentTrace(trace, {
+      hookCount: deps.hooks.filter((hook) => hook.beforeThink).length,
+      messageCount: context.messages.length,
+    }),
+  );
   for (const hook of deps.hooks) {
     if (hook.beforeThink) {
+      const startedAt = Date.now();
+      const beforeMessageCount = modifiedContext.messages.length;
       modifiedContext = (await hook.beforeThink(modifiedContext)) || modifiedContext;
+      logger.debug(
+        'neko.agent.hook.beforeThink',
+        withAgentTrace(trace, {
+          hookName: hook.name ?? 'anonymous',
+          durationMs: Date.now() - startedAt,
+          beforeMessageCount,
+          afterMessageCount: modifiedContext.messages.length,
+          modified: modifiedContext.messages.length !== beforeMessageCount,
+        }),
+      );
     }
   }
 
@@ -445,6 +475,15 @@ async function prepareThinkContext(
   const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
   const toolFilter = getToolFilter(deps, userInput);
   const tools = deps.toolRegistry.toToolDefinitions(toolFilter);
+  logger.debug(
+    'neko.agent.think.prepare.end',
+    withAgentTrace(phaseTrace, {
+      messageCount: modifiedContext.messages.length,
+      toolCount: tools.length,
+      toolNames: tools.map((tool) => tool.function.name),
+      toolFilter,
+    }),
+  );
 
   const options = {
     ...deps.config.serviceOptions,

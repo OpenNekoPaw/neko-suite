@@ -111,7 +111,7 @@ export async function autoCompactIfNeeded(
   if (state.isCircuitOpen) {
     // Check if cooldown has elapsed (half-open)
     if (now - state.circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
-      return { compressed: false, skipReason: 'circuit_open' };
+      return { compressed: false, trigger, skipReason: 'circuit_open' };
     }
     // Half-open: allow one retry
     logger.debug('Circuit breaker half-open, allowing retry');
@@ -124,7 +124,7 @@ export async function autoCompactIfNeeded(
 
   // 3. Minimum interval check
   if (now - state.lastCompactTimestamp < MIN_COMPACT_INTERVAL_MS) {
-    return { compressed: false, skipReason: 'too_soon' };
+    return { compressed: false, trigger, skipReason: 'too_soon' };
   }
 
   // 4. Attempt compression

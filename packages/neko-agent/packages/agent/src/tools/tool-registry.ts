@@ -20,6 +20,7 @@ import type {
   ToolFilterOptions,
   IToolRegistry,
 } from '@neko/shared';
+import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
 import { AgentError } from '../errors';
 import { getLogger } from '../utils/logger';
 import { validateSchema, formatValidationErrors } from './schema-validator';
@@ -123,28 +124,38 @@ export class ToolRegistry implements IToolRegistry {
     const requestId = createToolExecutionRequestId();
     const startedAt = Date.now();
     const logger = getToolRegistryLogger();
+    const trace = deriveAgentTraceContext(options?.trace, {
+      phase: 'tool',
+      toolRequestId: requestId,
+    });
     logger.debug('neko.agent.tool.execute.request', {
-      requestId,
-      toolName: name,
-      argSummary: summarizeRecordShape(args),
-      hasOptions: options !== undefined,
-      metadataSummary: summarizeRecordShape(options?.metadata),
+      ...withAgentTrace(trace, {
+        requestId,
+        toolName: name,
+        argSummary: summarizeRecordShape(args),
+        hasOptions: options !== undefined,
+        metadataSummary: summarizeRecordShape(options?.metadata),
+      }),
     });
     logger.debug('neko.agent.tool.execute.request.raw', {
-      requestId,
-      toolName: name,
-      args,
-      options: summarizeToolExecuteOptionsForDebug(options),
+      ...withAgentTrace(trace, {
+        requestId,
+        toolName: name,
+        args,
+        options: summarizeToolExecuteOptionsForDebug(options),
+      }),
     });
 
     const tool = this.get(name);
 
     if (!tool) {
       logger.warn('neko.agent.tool.execute.failed', {
-        requestId,
-        toolName: name,
-        durationMs: Date.now() - startedAt,
-        reason: 'not-found',
+        ...withAgentTrace(trace, {
+          requestId,
+          toolName: name,
+          durationMs: Date.now() - startedAt,
+          reason: 'not-found',
+        }),
       });
       return {
         success: false,
@@ -157,13 +168,15 @@ export class ToolRegistry implements IToolRegistry {
       const validationErrors = validateSchema(args, tool.parameters);
       if (validationErrors.length > 0) {
         logger.warn('neko.agent.tool.execute.failed', {
-          requestId,
-          toolName: name,
-          category: tool.category,
-          durationMs: Date.now() - startedAt,
-          reason: 'validation',
-          validationErrorCount: validationErrors.length,
-          validationErrors,
+          ...withAgentTrace(trace, {
+            requestId,
+            toolName: name,
+            category: tool.category,
+            durationMs: Date.now() - startedAt,
+            reason: 'validation',
+            validationErrorCount: validationErrors.length,
+            validationErrors,
+          }),
         });
         return {
           success: false,
@@ -182,31 +195,37 @@ export class ToolRegistry implements IToolRegistry {
       };
 
       logger.debug('neko.agent.tool.execute.result', {
-        requestId,
-        toolName: name,
-        category: tool.category,
-        kind: tool.kind,
-        durationMs: duration,
-        success: resultWithDuration.success,
-        resultSummary: summarizeToolResult(resultWithDuration),
+        ...withAgentTrace(trace, {
+          requestId,
+          toolName: name,
+          category: tool.category,
+          kind: tool.kind,
+          durationMs: duration,
+          success: resultWithDuration.success,
+          resultSummary: summarizeToolResult(resultWithDuration),
+        }),
       });
       logger.debug('neko.agent.tool.execute.result.raw', {
-        requestId,
-        toolName: name,
-        result: resultWithDuration,
+        ...withAgentTrace(trace, {
+          requestId,
+          toolName: name,
+          result: resultWithDuration,
+        }),
       });
 
       return resultWithDuration;
     } catch (error) {
       const duration = Date.now() - startedAt;
       logger.warn('neko.agent.tool.execute.failed', {
-        requestId,
-        toolName: name,
-        category: tool.category,
-        kind: tool.kind,
-        durationMs: duration,
-        reason: 'exception',
-        error: summarizeUnknownError(error),
+        ...withAgentTrace(trace, {
+          requestId,
+          toolName: name,
+          category: tool.category,
+          kind: tool.kind,
+          durationMs: duration,
+          reason: 'exception',
+          error: summarizeUnknownError(error),
+        }),
       });
       if (error instanceof AgentError) {
         return {

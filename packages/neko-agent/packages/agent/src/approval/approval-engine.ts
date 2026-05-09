@@ -15,6 +15,7 @@
  * The engine itself is async to accommodate (3).
  */
 
+import { deriveAgentTraceContext, withAgentTrace, type AgentTraceContext } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 import type {
   ApprovalRequest,
@@ -108,29 +109,65 @@ class ApprovalEngine implements IApprovalEngine {
   }
 
   async evaluate(request: ApprovalRequest): Promise<ApprovalResponse> {
+    const startedAt = Date.now();
+    const trace = deriveAgentTraceContext(request.trace, {
+      phase: 'approval',
+      parentRequestId: request.id,
+    });
+    logger.debug(
+      'neko.agent.approval.evaluate.start',
+      withAgentTrace(trace, {
+        requestId: request.id,
+        channel: request.channel,
+        paradigm: request.paradigm,
+        subjectKind: request.subject.kind,
+        subjectDestructive: request.subject.destructive === true,
+      }),
+    );
+
     // 1. Paradigm-specific packs.
     for (const pack of this._packs) {
       if (pack.scope !== request.paradigm) continue;
       const decision = this._safeEvaluate(pack, request);
-      if (decision) return this._finalise(request, this._stamp(decision));
+      if (decision) {
+        return this._finaliseWithLog(request, this._stamp(decision), {
+          trace,
+          startedAt,
+          source: 'strategy',
+          strategyPack: pack.name,
+        });
+      }
     }
     // 2. Shared packs.
     for (const pack of this._packs) {
       if (pack.scope !== 'shared') continue;
       const decision = this._safeEvaluate(pack, request);
-      if (decision) return this._finalise(request, this._stamp(decision));
+      if (decision) {
+        return this._finaliseWithLog(request, this._stamp(decision), {
+          trace,
+          startedAt,
+          source: 'strategy',
+          strategyPack: pack.name,
+        });
+      }
     }
     // 3. User prompt.
     if (this._userPrompt) {
       try {
         const response = await this._userPrompt(request);
-        if (response) return this._finalise(request, this._stamp(response));
+        if (response) {
+          return this._finaliseWithLog(request, this._stamp(response), {
+            trace,
+            startedAt,
+            source: 'user-prompt',
+          });
+        }
       } catch (err) {
         logger.warn(`User prompt threw on request ${request.id}: ${String(err)}`);
       }
     }
     // 4. No decision → auto-reject.
-    return this._finalise(
+    return this._finaliseWithLog(
       request,
       this._stamp({
         requestId: request.id,
@@ -138,6 +175,11 @@ class ApprovalEngine implements IApprovalEngine {
         reason: 'no-decision',
         decidedAt: this._now(),
       }),
+      {
+        trace,
+        startedAt,
+        source: 'no-decision',
+      },
     );
   }
 
@@ -175,6 +217,34 @@ class ApprovalEngine implements IApprovalEngine {
       }
     }
     return response;
+  }
+
+  private _finaliseWithLog(
+    request: ApprovalRequest,
+    response: ApprovalResponse,
+    logContext: {
+      readonly trace: AgentTraceContext;
+      readonly startedAt: number;
+      readonly source: 'strategy' | 'user-prompt' | 'no-decision';
+      readonly strategyPack?: string;
+    },
+  ): ApprovalResponse {
+    const finalized = this._finalise(request, response);
+    logger.debug(
+      'neko.agent.approval.decision',
+      withAgentTrace(logContext.trace, {
+        requestId: request.id,
+        channel: request.channel,
+        paradigm: request.paradigm,
+        subjectKind: request.subject.kind,
+        resolution: finalized.resolution,
+        reason: finalized.reason,
+        source: logContext.source,
+        ...(logContext.strategyPack ? { strategyPack: logContext.strategyPack } : {}),
+        durationMs: Date.now() - logContext.startedAt,
+      }),
+    );
+    return finalized;
   }
 }
 

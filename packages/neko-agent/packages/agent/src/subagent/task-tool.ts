@@ -6,7 +6,14 @@
  * - task_output: Get results from background SubAgents
  */
 
-import type { Tool, ToolResult, ToolCategory, ToolExecuteOptions } from '@neko/shared';
+import {
+  deriveAgentTraceContext,
+  withAgentTrace,
+  type Tool,
+  type ToolResult,
+  type ToolCategory,
+  type ToolExecuteOptions,
+} from '@neko/shared';
 import type {
   ISubAgentManager,
   SubAgentConfig,
@@ -15,6 +22,9 @@ import type {
   TaskToolArgs,
   TaskOutputToolArgs,
 } from './types';
+import { getLogger } from '../utils/logger';
+
+const logger = getLogger('SubAgentTaskTool');
 
 // =============================================================================
 // ID Generation
@@ -164,6 +174,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
       args: Record<string, unknown>,
       options?: ToolExecuteOptions,
     ): Promise<ToolResult> {
+      const trace = deriveAgentTraceContext(options?.trace, { phase: 'subagent' });
       const typedArgs = args as unknown as TaskToolArgs;
       const {
         description,
@@ -183,6 +194,10 @@ Launch multiple SubAgents in a single turn for independent tasks:
 
       // Handle resume case
       if (resume) {
+        logger.debug(
+          'neko.agent.subagent.resume.request',
+          withAgentTrace(trace, { subAgentId: resume }),
+        );
         const status = subAgentManager.getStatus(resume);
         if (!status) {
           return {
@@ -264,8 +279,27 @@ Launch multiple SubAgents in a single turn for independent tasks:
       };
 
       try {
+        logger.debug(
+          'neko.agent.subagent.spawn.request',
+          withAgentTrace(trace, {
+            parentAgentId: parentId,
+            subagentType: config.type,
+            runMode: config.runMode,
+            modelTier: config.modelTier,
+            inheritContext: config.inheritContext === true,
+          }),
+        );
         const subAgentId = await subAgentManager.spawn(parentId, conversationId, config);
         const resultMetadata = buildSubAgentToolResultMetadata(parentId, config);
+        logger.debug(
+          'neko.agent.subagent.spawned',
+          withAgentTrace(trace, {
+            parentAgentId: parentId,
+            subAgentId,
+            subagentType: config.type,
+            runMode: config.runMode,
+          }),
+        );
 
         if (run_in_background) {
           return {
@@ -281,6 +315,16 @@ Launch multiple SubAgents in a single turn for independent tasks:
 
         // Foreground mode: wait for result
         const result = await subAgentManager.getResult(subAgentId);
+        logger.debug(
+          'neko.agent.subagent.completed',
+          withAgentTrace(trace, {
+            parentAgentId: parentId,
+            subAgentId,
+            status: result.status,
+            duration: result.duration,
+            iterations: result.iterations,
+          }),
+        );
         return {
           success: result.status === 'completed',
           data: {
@@ -291,6 +335,12 @@ Launch multiple SubAgents in a single turn for independent tasks:
           error: result.error,
         };
       } catch (error) {
+        logger.debug(
+          'neko.agent.subagent.failed',
+          withAgentTrace(trace, {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
         return {
           success: false,
           error: error instanceof Error ? error.message : String(error),
@@ -338,7 +388,11 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
     category: 'system' as ToolCategory,
     requiresConfirmation: false,
 
-    async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    async execute(
+      args: Record<string, unknown>,
+      options?: ToolExecuteOptions,
+    ): Promise<ToolResult> {
+      const trace = deriveAgentTraceContext(options?.trace, { phase: 'subagent' });
       const typedArgs = args as unknown as TaskOutputToolArgs;
       const { task_id, block = true, timeout = 30000 } = typedArgs;
 
@@ -351,6 +405,10 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
 
       const status = subAgentManager.getStatus(task_id);
       if (!status) {
+        logger.debug(
+          'neko.agent.subagent.output.missing',
+          withAgentTrace(trace, { subAgentId: task_id }),
+        );
         return {
           success: false,
           error: `SubAgent not found: ${task_id}`,
@@ -359,6 +417,14 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
 
       // Non-blocking mode
       if (!block && status === 'running') {
+        logger.debug(
+          'neko.agent.subagent.output.pending',
+          withAgentTrace(trace, {
+            subAgentId: task_id,
+            status,
+            block,
+          }),
+        );
         return {
           success: true,
           data: {
@@ -373,6 +439,16 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
       // Blocking mode or task already complete
       try {
         const result = await subAgentManager.getResult(task_id, timeout);
+        logger.debug(
+          'neko.agent.subagent.output.result',
+          withAgentTrace(trace, {
+            subAgentId: task_id,
+            status: result.status,
+            block,
+            duration: result.duration,
+            iterations: result.iterations,
+          }),
+        );
         return {
           success: result.status === 'completed',
           data: {
@@ -382,6 +458,13 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
           error: result.error,
         };
       } catch (error) {
+        logger.debug(
+          'neko.agent.subagent.output.failed',
+          withAgentTrace(trace, {
+            subAgentId: task_id,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
         return {
           success: false,
           error: error instanceof Error ? error.message : String(error),

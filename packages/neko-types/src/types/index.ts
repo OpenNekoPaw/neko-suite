@@ -96,6 +96,9 @@ export * from './platform';
 // Agent interface types
 export * from './agent';
 
+// Agent execution trace contracts
+export * from './agent-trace';
+
 // Memory types (for agent context management)
 export * from './memory';
 

@@ -3,6 +3,7 @@
  */
 
 import type { ToolDefinition } from './platform';
+import type { AgentTraceContext } from './agent-trace';
 
 /**
  * Tool category
@@ -160,6 +161,8 @@ export interface ToolExecuteOptions {
   onProgress?: (progress: ToolProgress) => void;
   /** Host/runtime metadata that should not be exposed as model-authored tool arguments */
   metadata?: Record<string, unknown>;
+  /** Runtime trace context for structured debug logging */
+  trace?: AgentTraceContext;
 }
 
 /**

@@ -26,7 +26,14 @@
  *   - Does not write autoheal rounds — autoheal chain owns that.
  */
 
-import type { AgentContext, AgentResult, ExecutorHooks, ToolResultWithMeta } from '@neko/shared';
+import {
+  deriveAgentTraceContext,
+  withAgentTrace,
+  type AgentContext,
+  type AgentResult,
+  type ExecutorHooks,
+  type ToolResultWithMeta,
+} from '@neko/shared';
 import type { IdcStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
 import { CREATION_CHANNELS, EXECUTION_CHANNELS } from '@neko-agent/types';
 
@@ -180,6 +187,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
     },
 
     async beforeThink(_ctx: AgentContext) {
+      const startedAt = clock();
       const signals: TaskShapeSignals = {
         round: state.round,
         lastToolResults,
@@ -207,14 +215,32 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
       deps.runStore.recordRound(decision, state.nextObserveHint);
       state.lastDecision = decision;
+      const activeRunId = deps.runStore.getActive()?.id;
+      const trace = deriveAgentTraceContext(_ctx.trace, {
+        ...(activeRunId ? { runId: activeRunId } : {}),
+        phase: 'workflow',
+      });
 
       // Tell the tracker which stage this round terminated in — persona
       // bindings subscribe to `stage.entered` to swap Skills. We pick the
       // terminal activated stage (already DAG-sorted by the planner).
+      const terminal = terminalStage(decision.activated);
       if (deps.stageTracker) {
-        const terminal = terminalStage(decision.activated);
         if (terminal) deps.stageTracker.enter(terminal);
       }
+      logger.debug(
+        'neko.agent.workflow.stage_activation.decided',
+        withAgentTrace(trace, {
+          round: state.round,
+          mode: deps.getMode(),
+          taskShape,
+          entrySignal,
+          observeHint: state.nextObserveHint,
+          activatedStages: decision.activated,
+          terminalStage: terminal,
+          durationMs: Math.max(0, clock() - startedAt),
+        }),
+      );
 
       // P5 — compacted round event per plan v2 R9.
       if (deps.eventBus) {

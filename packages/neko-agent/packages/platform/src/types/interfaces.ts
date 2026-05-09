@@ -9,6 +9,7 @@
 import type { ChatMessage, ModelInfo } from './adapter';
 import type {
   ServiceOptions,
+  ServiceCallContext,
   ServiceResponse,
   ServiceStreamResponse,
   EmbeddingOptions,
@@ -38,12 +39,20 @@ export interface IService {
   /**
    * Send a chat request and get a complete response
    */
-  chat(messages: ChatMessage[], options?: ServiceOptions): Promise<ServiceResponse>;
+  chat(
+    messages: ChatMessage[],
+    options?: ServiceOptions,
+    context?: ServiceCallContext,
+  ): Promise<ServiceResponse>;
 
   /**
    * Send a chat request and get a streaming response
    */
-  chatStream(messages: ChatMessage[], options?: ServiceOptions): ServiceStreamResponse;
+  chatStream(
+    messages: ChatMessage[],
+    options?: ServiceOptions,
+    context?: ServiceCallContext,
+  ): ServiceStreamResponse;
 
   /**
    * Generate embeddings for text

@@ -9,6 +9,8 @@
 // Note: Tool type is in ./tool.ts for simpler tool definitions
 // ToolDefinition is used for function calling with full schema
 
+import type { AgentTraceContext } from './agent-trace';
+
 /**
  * Chat message format
  */
@@ -120,6 +122,17 @@ export interface ServiceOptions {
 }
 
 /**
+ * Runtime-only call context for service invocations.
+ *
+ * This is intentionally separate from ServiceOptions because ServiceOptions is
+ * projected into provider chat options. Trace data must stay in runtime logs
+ * and must not leak into provider payloads.
+ */
+export interface ServiceCallContext {
+  readonly trace?: AgentTraceContext;
+}
+
+/**
  * Service response
  */
 export interface ServiceResponse {
@@ -164,12 +177,20 @@ export interface IService {
   /**
    * Send a chat request and get a complete response
    */
-  chat(messages: ChatMessage[], options?: ServiceOptions): Promise<ServiceResponse>;
+  chat(
+    messages: ChatMessage[],
+    options?: ServiceOptions,
+    context?: ServiceCallContext,
+  ): Promise<ServiceResponse>;
 
   /**
    * Send a chat request and get a streaming response
    */
-  chatStream(messages: ChatMessage[], options?: ServiceOptions): AsyncIterable<StreamChunk>;
+  chatStream(
+    messages: ChatMessage[],
+    options?: ServiceOptions,
+    context?: ServiceCallContext,
+  ): AsyncIterable<StreamChunk>;
 
   /**
    * Generate embeddings for text

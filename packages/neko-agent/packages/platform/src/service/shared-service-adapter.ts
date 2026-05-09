@@ -19,6 +19,7 @@ import type {
   PerceptionCard,
   ServiceOptions as SharedServiceOptions,
   ServiceResponse as SharedServiceResponse,
+  ServiceCallContext as SharedServiceCallContext,
   StreamChunk,
 } from '@neko/shared';
 import {
@@ -49,8 +50,13 @@ export class SharedServiceAdapter implements SharedIService {
   async chat(
     messages: ChatMessage[],
     options?: SharedServiceOptions,
+    context?: SharedServiceCallContext,
   ): Promise<SharedServiceResponse> {
-    const response = await this._service.chat(messages, this.withMessageProjector(options));
+    const projectedOptions = this.withMessageProjector(options);
+    const response =
+      context === undefined
+        ? await this._service.chat(messages, projectedOptions)
+        : await this._service.chat(messages, projectedOptions, context);
     return {
       id: response.id,
       model: response.model,
@@ -64,11 +70,13 @@ export class SharedServiceAdapter implements SharedIService {
   async *chatStream(
     messages: ChatMessage[],
     options?: SharedServiceOptions,
+    context?: SharedServiceCallContext,
   ): AsyncIterable<StreamChunk> {
-    const { stream, response } = this._service.chatStream(
-      messages,
-      this.withMessageProjector(options),
-    );
+    const projectedOptions = this.withMessageProjector(options);
+    const { stream, response } =
+      context === undefined
+        ? this._service.chatStream(messages, projectedOptions)
+        : this._service.chatStream(messages, projectedOptions, context);
 
     // Prevent unhandled rejection from the response Promise.
     // The error is already propagated via the stream iterator (re-thrown from AI SDK error parts).

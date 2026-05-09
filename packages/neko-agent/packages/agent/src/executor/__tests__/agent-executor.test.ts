@@ -8,11 +8,13 @@ import type {
   IService,
   IToolRegistry,
   AgentStep,
+  AgentTraceContext,
   ServiceResponse,
   ChatMessage,
   StreamChunk,
   ExecutorHooks,
 } from '@neko/shared';
+import { createAgentTraceContext } from '@neko/shared';
 
 // =============================================================================
 // Helpers
@@ -156,6 +158,72 @@ describe('AgentExecutor', () => {
       expect(result.response).toBe('Hello!');
       expect(result.iterations).toBe(1);
     });
+  });
+
+  it('keeps turn trace stable while passing explicit phase traces to LLM, tool, and hooks', async () => {
+    const baseTrace = createAgentTraceContext({
+      conversationId: 'conv-executor-trace',
+      turnId: 'turn-executor-trace',
+    });
+    const serviceTraces: Array<AgentTraceContext | undefined> = [];
+    const toolTraces: Array<AgentTraceContext | undefined> = [];
+    const hookContextTraces: Array<AgentTraceContext | undefined> = [];
+
+    let chatCall = 0;
+    (service.chat as ReturnType<typeof vi.fn>).mockImplementation(
+      async (
+        _messages: ChatMessage[],
+        _options: Record<string, unknown>,
+        context?: { trace?: AgentTraceContext },
+      ) => {
+        serviceTraces.push(context?.trace);
+        chatCall += 1;
+        return chatCall === 1
+          ? toolCallResponse('TestTool', { path: 'file.txt' }, 'call-trace')
+          : textResponse('done');
+      },
+    );
+    (toolRegistry.execute as ReturnType<typeof vi.fn>).mockImplementation(
+      async (
+        _name: string,
+        _args: Record<string, unknown>,
+        options?: { trace?: AgentTraceContext },
+      ) => {
+        toolTraces.push(options?.trace);
+        return { success: true, data: 'ok' };
+      },
+    );
+
+    const hooks: ExecutorHooks[] = [
+      {
+        name: 'trace-probe',
+        onIterationComplete: async (_iteration, context) => {
+          hookContextTraces.push(context.trace);
+        },
+      },
+    ];
+    const executor = new AgentExecutor(createOptions({ service, toolRegistry, hooks }));
+
+    await executor.execute('Use a tool', { trace: baseTrace });
+
+    expect(serviceTraces[0]).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-executor-trace',
+        turnId: 'turn-executor-trace',
+        iteration: 1,
+        phase: 'think',
+      }),
+    );
+    expect(toolTraces[0]).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-executor-trace',
+        turnId: 'turn-executor-trace',
+        iteration: 1,
+        phase: 'tool',
+        parentRequestId: 'call-trace',
+      }),
+    );
+    expect(hookContextTraces[0]).toEqual(baseTrace);
   });
 
   // -------------------------------------------------------------------------

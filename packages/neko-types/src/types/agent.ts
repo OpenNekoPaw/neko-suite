@@ -9,6 +9,7 @@ import type { IMCPManager } from './mcp';
 import type { MCPServerConfig } from './config';
 import type { IToolRegistry, ToolResult } from './tool';
 import type { ISkillService } from './skill';
+import type { AgentTraceContext } from './agent-trace';
 import type {
   IPlatform,
   IService,
@@ -57,6 +58,8 @@ export interface AgentContext {
   toolResults: ToolResult[];
   /** Accumulated metadata */
   metadata: Record<string, unknown>;
+  /** Runtime trace context for structured debug logging */
+  trace?: AgentTraceContext;
   /**
    * When true, executor should skip adding user message to context.messages
    * because the caller (e.g. AgentSession) already included it in the snapshot.
@@ -240,6 +243,8 @@ export interface ToolCallInfo {
   arguments: Record<string, unknown>;
   /** Index in batch */
   index: number;
+  /** Runtime trace context for structured debug logging */
+  trace?: AgentTraceContext;
 }
 
 /**
