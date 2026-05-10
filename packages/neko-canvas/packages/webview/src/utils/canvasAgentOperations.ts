@@ -178,7 +178,12 @@ export function createCanvasComposite(
     throw new Error(composite.error ?? 'Composite creation failed');
   }
 
-  const layoutMode = containerPreset.containerPolicy === 'scene' ? 'sequence' : 'grid';
+  const layoutMode =
+    containerPreset.containerPolicy === 'scene'
+      ? 'sequence'
+      : containerPreset.containerPolicy === 'table'
+        ? 'table'
+        : 'grid';
   const nextNodes =
     request.autoLayout === false
       ? composite.nodes

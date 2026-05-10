@@ -9,7 +9,7 @@ export interface ContainerPolicy {
   name: ContainerPolicyName;
   acceptedNodeTypes?: CanvasNodeType[];
   deleteBehavior: ContainerDeleteBehavior;
-  layoutMode: 'manual' | 'grid' | 'sequence';
+  layoutMode: 'manual' | 'grid' | 'sequence' | 'table';
   allowNestedContainers: boolean;
 }
 
@@ -33,6 +33,12 @@ const BUILT_IN_CONTAINER_POLICIES: ContainerPolicy[] = [
     name: 'artboard',
     deleteBehavior: 'release-children',
     layoutMode: 'grid',
+    allowNestedContainers: true,
+  },
+  {
+    name: 'table',
+    deleteBehavior: 'release-children',
+    layoutMode: 'table',
     allowNestedContainers: true,
   },
 ];

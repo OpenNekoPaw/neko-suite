@@ -6,6 +6,7 @@ import type {
   PortDefinition,
   ScriptScene,
   ShotCharacter,
+  TableColumnDef,
 } from '@neko/shared';
 import { GALLERY_PRESET_CONFIGS, getBuiltInCanvasNodePresetMetadata } from '@neko/shared';
 import {
@@ -34,6 +35,7 @@ const NODE_DEFAULT_SIZES: Record<CanvasNodeType, NodeDefaultSize> = {
   group: { width: 320, height: 220 },
   text: { width: 260, height: 120 },
   artboard: { width: 640, height: 360 },
+  table: { width: 660, height: 400 },
   shot: { width: 220, height: 200 },
   scene: { width: 640, height: 400 },
   gallery: { width: 290, height: 360 },
@@ -208,6 +210,32 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
               : 'custom',
         },
       };
+    case 'table': {
+      const columnCount = asNumber(data.columnCount, 3);
+      const defaultColumns: TableColumnDef[] = Array.from({ length: columnCount }, (_, i) => ({
+        id: `col-${Date.now()}-${i}`,
+        label: `Column ${i + 1}`,
+        width: 200,
+      }));
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: getNodeDefaultSize(type),
+          zIndex,
+          data: {
+            label: asString(data.label) || undefined,
+            columns: Array.isArray(data.columns)
+              ? (data.columns as TableColumnDef[])
+              : defaultColumns,
+            rowCount: asNumber(data.rowCount, 3),
+            columnCount,
+            showHeader: typeof data.showHeader === 'boolean' ? data.showHeader : true,
+          },
+        },
+        preset,
+      );
+    }
     case 'shot':
       return applyCanvasNodePreset(
         {

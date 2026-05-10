@@ -22,6 +22,7 @@ export type CanvasNodeType =
   // Rich content nodes
   | 'text'
   | 'artboard'
+  | 'table'
   // Storyboard system
   | 'shot'
   | 'scene'
@@ -207,6 +208,29 @@ export interface ArtboardCanvasNode extends CanvasNodeBase {
     backgroundColor?: string;
     showBorder?: boolean;
     preset?: ArtboardPreset;
+  };
+}
+
+/**
+ * Table column definition
+ */
+export interface TableColumnDef {
+  id: string;
+  label: string;
+  width: number;
+}
+
+/**
+ * Table node - grid container for organizing mixed content in rows and columns
+ */
+export interface TableCanvasNode extends CanvasNodeBase {
+  type: 'table';
+  data: {
+    label?: string;
+    columns: TableColumnDef[];
+    rowCount: number;
+    columnCount: number;
+    showHeader: boolean;
   };
 }
 
@@ -461,6 +485,7 @@ export type CanvasNode =
   | GroupCanvasNode
   | TextCanvasNode
   | ArtboardCanvasNode
+  | TableCanvasNode
   | ShotCanvasNode
   | SceneGroupCanvasNode
   | GalleryCanvasNode

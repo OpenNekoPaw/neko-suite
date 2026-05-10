@@ -120,6 +120,15 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
     deriveTargets: ['artboard.container', 'annotation.basic', 'text.basic'],
   },
   {
+    name: 'table.basic',
+    nodeType: 'table',
+    creationMode: 'composable',
+    label: 'Table',
+    description: 'Table container with rows and columns for organizing mixed content.',
+    containerPolicy: 'table',
+    deriveTargets: ['table.basic', 'annotation.basic', 'text.basic', 'media.basic'],
+  },
+  {
     name: 'script.legacy',
     nodeType: 'script',
     creationMode: 'legacy',

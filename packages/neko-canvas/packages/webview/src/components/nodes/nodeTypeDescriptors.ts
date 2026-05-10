@@ -56,6 +56,14 @@ export function createBuiltInNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
       tagColor: '#a855f7',
       defaultSize: { width: 640, height: 360 },
     },
+    table: {
+      type: 'table',
+      labelKey: 'node.table',
+      icon: '\u{1F4CA}',
+      tagLabel: 'TABLE',
+      tagColor: '#0ea5e9',
+      defaultSize: { width: 660, height: 400 },
+    },
     shot: {
       type: 'shot',
       labelKey: 'node.shot',

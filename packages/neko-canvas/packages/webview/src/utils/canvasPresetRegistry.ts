@@ -426,6 +426,54 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     createPorts: () => MEDIA_NODE_PORTS,
   },
   {
+    name: 'table.basic',
+    nodeType: 'table',
+    createContent: () => ({
+      id: 'table-root',
+      layout: 'stack',
+      sections: [
+        {
+          id: 'table-header',
+          layout: 'row',
+          blocks: [
+            fieldBlock('table-label', 'input', '/label', 'preset.table.label'),
+            fieldBlock('table-columns', 'number', '/columnCount', 'preset.table.columns'),
+            fieldBlock('table-rows', 'number', '/rowCount', 'preset.table.rows'),
+          ],
+        },
+      ],
+      childSlots: [
+        {
+          id: 'table-children',
+          layout: 'table',
+          summaryRole: 'node-summary',
+          emptyLabel: 'preset.table.noChildren',
+        },
+      ],
+    }),
+    createContainer: () => ({
+      policy: 'table',
+      childIds: [],
+      layout: {
+        mode: 'table',
+        columns: 3,
+        columnWidth: 200,
+        rowHeight: 120,
+      },
+      deleteBehavior: 'release-children',
+    }),
+    createPreview: (node) => {
+      const data = node.type === 'table' ? node.data : undefined;
+      return {
+        title: data?.label ?? 'Table',
+        role: 'node-summary',
+        badges: data
+          ? [{ label: `${data.columnCount}×${data.rowCount}`, tone: 'info' }]
+          : undefined,
+      };
+    },
+  },
+  {
     name: 'project.basic',
     nodeType: 'project',
     createContent: () => ({

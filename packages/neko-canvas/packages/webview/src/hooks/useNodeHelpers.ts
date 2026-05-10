@@ -32,6 +32,7 @@ export interface UseNodeHelpersReturn {
   addShotAt: (pos: { x: number; y: number }) => void;
   addSceneGroupAt: (pos: { x: number; y: number }) => void;
   addGalleryAt: (pos: { x: number; y: number }) => void;
+  addTableAt: (pos: { x: number; y: number }) => void;
   addScriptAt: (pos: { x: number; y: number }, scriptPath?: string, scriptTitle?: string) => void;
   addDocumentAt: (
     pos: { x: number; y: number },
@@ -178,6 +179,27 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     [addNode, nodeCount, reportAction],
   );
 
+  const addTableAt = useCallback(
+    (pos: { x: number; y: number }) => {
+      addNode(
+        buildCanvasNode({
+          type: 'table',
+          position: pos,
+          zIndex: nodeCount,
+          data: {
+            label: t('node.newTable'),
+            columnCount: 3,
+            rowCount: 3,
+            showHeader: true,
+          },
+          preset: 'table.basic',
+        }),
+      );
+      reportAction('addNode', 'Add table');
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
   const addScriptAt = useCallback(
     (pos: { x: number; y: number }, scriptPath = '', scriptTitle = 'Script') => {
       const w = 280,
@@ -300,6 +322,7 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     addShotAt,
     addSceneGroupAt,
     addGalleryAt,
+    addTableAt,
     addScriptAt,
     addDocumentAt,
     addModelAt,

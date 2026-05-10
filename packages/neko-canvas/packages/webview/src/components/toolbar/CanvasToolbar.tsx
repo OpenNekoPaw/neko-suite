@@ -28,6 +28,7 @@ export interface CanvasToolbarProps {
   onAddShot?: () => void;
   onAddSceneGroup?: () => void;
   onAddGallery?: () => void;
+  onAddTable?: () => void;
   /** Unified file import — opens file picker, auto-detects type */
   onImportFile?: () => void;
   /** Hand tool (drag-to-pan) mode */
@@ -48,6 +49,7 @@ export function CanvasToolbar({
   onAddShot,
   onAddSceneGroup,
   onAddGallery,
+  onAddTable,
   onImportFile,
   isPanMode = false,
   onTogglePanMode,
@@ -172,6 +174,29 @@ export function CanvasToolbar({
               icon={<span className="text-[13px]">🖼</span>}
               label={t('toolbar.gallery')}
               onClick={() => handleAddAndClose(onAddGallery)}
+            />
+          )}
+
+          {onAddTable && (
+            <AddPanelItem
+              icon={
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M3 9h18" />
+                  <path d="M3 15h18" />
+                  <path d="M9 3v18" />
+                  <path d="M15 3v18" />
+                </svg>
+              }
+              label={t('toolbar.table')}
+              onClick={() => handleAddAndClose(onAddTable)}
             />
           )}
 

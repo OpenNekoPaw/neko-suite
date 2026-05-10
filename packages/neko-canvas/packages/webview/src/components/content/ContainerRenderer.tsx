@@ -53,10 +53,22 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
           )}
           {section.childSlots?.map((slot) => {
             const childIds = resolveSlotChildIds(context.node, slot.childIds);
+            const tableColumns = context.node.container?.layout?.columns;
             return (
               <div
                 key={slot.id}
-                className={slot.layout === 'grid' ? 'grid grid-cols-3 gap-1.5' : 'space-y-1'}
+                className={
+                  slot.layout === 'table'
+                    ? 'grid gap-1.5'
+                    : slot.layout === 'grid'
+                      ? 'grid grid-cols-3 gap-1.5'
+                      : 'space-y-1'
+                }
+                style={
+                  slot.layout === 'table'
+                    ? { gridTemplateColumns: `repeat(${tableColumns ?? 3}, 1fr)` }
+                    : undefined
+                }
               >
                 {childIds.length === 0 ? (
                   <span className="px-2 py-1 text-xs text-[var(--node-fg-secondary)]">

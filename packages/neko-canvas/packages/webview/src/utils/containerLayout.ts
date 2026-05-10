@@ -19,7 +19,7 @@ export interface FindFreePositionOptions {
 
 export interface AutoArrangeContainerOptions {
   containerId: string;
-  mode?: 'grid' | 'sequence' | 'stack';
+  mode?: 'grid' | 'sequence' | 'stack' | 'table';
   paddingX?: number;
   paddingTop?: number;
   gapX?: number;
@@ -108,28 +108,35 @@ export function autoArrangeContainer(
     return nodes;
   }
 
+  const layout = container.container?.layout;
   const availableWidth = Math.max(container.size.width - paddingX * 2, minColumnWidth);
   const maxChildWidth = Math.max(...orderedChildren.map((child) => child.size.width));
-  // Phase 0 keeps grid and sequence on the same deterministic row-major placement.
-  // Future grid layout can replace this branch with aspect-ratio-aware packing.
+
   const columns =
-    mode === 'sequence'
-      ? Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)))
-      : mode === 'stack'
-        ? 1
-        : Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)));
+    mode === 'table'
+      ? Math.max(1, layout?.columns ?? 3)
+      : mode === 'sequence'
+        ? Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)))
+        : mode === 'stack'
+          ? 1
+          : Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)));
+
+  const cellWidth = mode === 'table' ? (layout?.columnWidth ?? 200) : undefined;
+  const cellHeight = mode === 'table' ? (layout?.rowHeight ?? 120) : undefined;
 
   const positionById = new Map<string, { x: number; y: number }>();
   orderedChildren.forEach((child, index) => {
-    if (container.container?.layout?.lockedChildIds?.includes(child.id)) {
+    if (layout?.lockedChildIds?.includes(child.id)) {
       return;
     }
 
     const col = index % columns;
     const row = Math.floor(index / columns);
+    const stepX = cellWidth ?? child.size.width;
+    const stepY = cellHeight ?? child.size.height;
     const preferred = {
-      x: container.position.x + paddingX + col * (child.size.width + gapX),
-      y: container.position.y + paddingTop + row * (child.size.height + gapY),
+      x: container.position.x + paddingX + col * (stepX + gapX),
+      y: container.position.y + paddingTop + row * (stepY + gapY),
     };
     positionById.set(child.id, preferred);
   });

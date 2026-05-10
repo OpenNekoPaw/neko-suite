@@ -165,6 +165,7 @@ export function CanvasApp() {
     addShotAt,
     addSceneGroupAt,
     addGalleryAt,
+    addTableAt,
     addScriptAt,
     addDocumentAt,
     addModelAt,
@@ -206,6 +207,10 @@ export function CanvasApp() {
   const handleAddGallery = useCallback(() => {
     addGalleryAt(getViewportCenter());
   }, [addGalleryAt, getViewportCenter]);
+
+  const handleAddTable = useCallback(() => {
+    addTableAt(getViewportCenter());
+  }, [addTableAt, getViewportCenter]);
 
   const handleAddMediaFromExtension = useCallback(
     (mediaType: string, uri: string, name: string) => {
@@ -924,6 +929,7 @@ export function CanvasApp() {
           onAddShot={handleAddShot}
           onAddSceneGroup={handleAddSceneGroup}
           onAddGallery={handleAddGallery}
+          onAddTable={handleAddTable}
           onImportFile={handleImportFile}
           isPanMode={isPanMode}
           onTogglePanMode={() => setIsPanMode((prev) => !prev)}
