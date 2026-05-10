@@ -12,6 +12,7 @@ import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
 import { useEffectsChain } from '../hooks/useEffectsChain';
 import { useDragDrop } from '../hooks/useDragDrop';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { EditableWaveform } from '../components/EditableWaveform';
 import { TransportBar } from '../components/TransportBar';
 import { Toolbar } from '../components/Toolbar';
@@ -52,6 +53,8 @@ export function AudioEditor() {
   const editorRef = useRef<HTMLDivElement>(null);
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(editorRef);
 
+  useKeyboardShortcuts({ onTogglePlay: togglePlay, onStop: stop });
+
   // Keep ref to latest effects/markers for serialization in save handler
   const effectsRef = useRef(effectsChain.effects);
   effectsRef.current = effectsChain.effects;
@@ -61,7 +64,6 @@ export function AudioEditor() {
 
   // v2 multi-track project state (must be before any early returns)
   const isV2 = useAudioProjectStore((s) => s.audioProjectData !== null);
-  const v2HasTracks = useAudioProjectStore((s) => (s.audioProjectData?.tracks.length ?? 0) > 0);
 
   // Handle messages from Extension Host
   const handleMessage = useCallback(
@@ -241,8 +243,9 @@ export function AudioEditor() {
     );
   }
 
-  // Empty project — no audio source yet
-  if (projectMode && !audioInfo && !v2HasTracks) {
+  // Single-file mode with no audio — show import prompt
+  // .nka projects always show the timeline (even when empty)
+  if (!isV2 && projectMode && !audioInfo) {
     return <EmptyProject />;
   }
 

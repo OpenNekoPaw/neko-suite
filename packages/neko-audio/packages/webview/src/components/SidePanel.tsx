@@ -11,6 +11,7 @@ import type { SidePanelType } from '../stores/audioStore';
 import { EffectsPanel } from './EffectsPanel';
 import { RecordingPanel } from './RecordingPanel';
 import { ExportPanel } from './ExportPanel';
+import { PresetBrowser } from './PresetBrowser';
 import { useEffectsChain } from '../hooks/useEffectsChain';
 import { MacIconButton } from '@neko/shared/components';
 import { t } from '../i18n';
@@ -19,6 +20,7 @@ const PANEL_TITLES: Record<SidePanelType, string> = {
   effects: 'audio.effects.title',
   recording: 'audio.recording.title',
   export: 'audio.export.title',
+  presets: 'audio.presets.title',
 };
 
 const MIN_WIDTH = 200;
@@ -80,6 +82,7 @@ export function SidePanel() {
           {activeSidePanel === 'effects' && <EffectsPanel chain={effectsChain} />}
           {activeSidePanel === 'recording' && <RecordingPanel />}
           {activeSidePanel === 'export' && <ExportPanel />}
+          {activeSidePanel === 'presets' && <PresetBrowser />}
         </div>
       </div>
     </>

@@ -1,0 +1,49 @@
+{
+  "name": "Podcast",
+  "description": "Clean vocal chain for podcast recording: noise gate, compressor, parametric EQ, limiter",
+  "category": "voice-over",
+  "effectChain": [
+    {
+      "effectType": "noise_gate",
+      "enabled": true,
+      "params": {
+        "threshold": -40,
+        "attack": 0.001,
+        "hold": 0.05,
+        "release": 0.1
+      }
+    },
+    {
+      "effectType": "parametric_eq",
+      "enabled": true,
+      "params": {
+        "bands": [
+          { "type": "highpass", "freq": 80, "q": 0.7 },
+          { "type": "peaking", "freq": 3000, "gain": 2.0, "q": 1.0 },
+          { "type": "highshelf", "freq": 8000, "gain": -1.5 }
+        ]
+      }
+    },
+    {
+      "effectType": "compressor",
+      "enabled": true,
+      "params": {
+        "threshold": -18,
+        "ratio": 3.0,
+        "attack": 0.01,
+        "release": 0.15,
+        "knee": 6,
+        "makeupGain": 4
+      }
+    },
+    {
+      "effectType": "limiter",
+      "enabled": true,
+      "params": {
+        "threshold": -1.0,
+        "ceiling": -0.5,
+        "release": 0.05
+      }
+    }
+  ]
+}

@@ -152,6 +152,31 @@ export const TOOL_NAMES_TRANSCRIBE = {
 } as const;
 
 // =============================================================================
+// Audio — neko-audio DAW operations
+// =============================================================================
+
+export const TOOL_NAMES_AUDIO = {
+  GET_AUDIO_PROJECT_INFO: 'GetAudioProjectInfo',
+  LIST_AUDIO_TRACKS: 'ListAudioTracks',
+  ADD_AUDIO_TRACK: 'AddAudioTrack',
+  REMOVE_AUDIO_TRACK: 'RemoveAudioTrack',
+  SET_TRACK_PROPERTIES: 'SetTrackProperties',
+  IMPORT_AUDIO: 'ImportAudio',
+  SET_TRACK_VOLUME: 'SetTrackVolume',
+  SET_TRACK_PAN: 'SetTrackPan',
+  APPLY_TRACK_EFFECT: 'ApplyTrackEffect',
+  REMOVE_TRACK_EFFECT: 'RemoveTrackEffect',
+  APPLY_MASTER_EFFECT: 'ApplyMasterEffect',
+  MIX_EXPORT: 'MixExport',
+  GENERATE_MUSIC: 'GenerateMusic',
+  GENERATE_SFX: 'GenerateSFX',
+  GENERATE_VOICE: 'GenerateVoice',
+  STEM_SEPARATION: 'StemSeparation',
+  AUDIO_DENOISE: 'AudioDenoise',
+  ANALYZE_AUDIO_LOUDNESS: 'AnalyzeAudioLoudness',
+} as const;
+
+// =============================================================================
 // Perception — Optional Evidence Tools
 // =============================================================================
 
@@ -223,6 +248,7 @@ export const TOOL_NAMES = {
   ...TOOL_NAMES_SKETCH,
   ...TOOL_NAMES_ASSETS,
   ...TOOL_NAMES_TRANSCRIBE,
+  ...TOOL_NAMES_AUDIO,
   ...TOOL_NAMES_PERCEPTION,
   ...TOOL_NAMES_SYSTEM,
   ...TOOL_NAMES_CREATION,

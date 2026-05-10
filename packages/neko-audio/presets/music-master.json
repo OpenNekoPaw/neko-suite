@@ -1,0 +1,39 @@
+{
+  "name": "Music Master",
+  "description": "Transparent mastering chain: EQ, compressor, limiter for balanced output",
+  "category": "music",
+  "effectChain": [
+    {
+      "effectType": "parametric_eq",
+      "enabled": true,
+      "params": {
+        "bands": [
+          { "type": "highpass", "freq": 30, "q": 0.7 },
+          { "type": "peaking", "freq": 250, "gain": -1.0, "q": 0.8 },
+          { "type": "highshelf", "freq": 12000, "gain": 1.5 }
+        ]
+      }
+    },
+    {
+      "effectType": "compressor",
+      "enabled": true,
+      "params": {
+        "threshold": -12,
+        "ratio": 2.0,
+        "attack": 0.03,
+        "release": 0.2,
+        "knee": 8,
+        "makeupGain": 2
+      }
+    },
+    {
+      "effectType": "limiter",
+      "enabled": true,
+      "params": {
+        "threshold": -0.5,
+        "ceiling": -0.1,
+        "release": 0.03
+      }
+    }
+  ]
+}

@@ -20,6 +20,12 @@ import {
   type ElementSplitOperation,
 } from '@neko/shared';
 import type { TimelineTrack, TimelineElement } from '@neko/shared';
+import type {
+  AudioEffectConfig,
+  MixStreamConfig,
+  MixTrackConfig,
+  MixElementConfig,
+} from '@neko/shared';
 import type { WaveformData } from '../shared/types';
 import { syncOperationToExtension } from './utils/extension-sync';
 import { createMeta } from './utils/operation-helpers';
@@ -29,10 +35,43 @@ const logger = getLogger('AudioProjectStore');
 
 const MAX_OP_HISTORY_SIZE = 200;
 
+const DEFAULT_TRACK_COLORS = [
+  '#3b82f6',
+  '#22c55e',
+  '#ef4444',
+  '#f59e0b',
+  '#8b5cf6',
+  '#06b6d4',
+  '#ec4899',
+  '#14b8a6',
+];
+
+/** Per-track UI state (local, not serialized to .nka) */
+export interface AudioTrackUIState {
+  solo: boolean;
+  volume: number;
+  pan: number;
+  color: string;
+  height: number;
+  effectChain: AudioEffectConfig[];
+}
+
+function createDefaultTrackUIState(index: number): AudioTrackUIState {
+  return {
+    solo: false,
+    volume: 1.0,
+    pan: 0.0,
+    color: DEFAULT_TRACK_COLORS[index % DEFAULT_TRACK_COLORS.length]!,
+    height: 80,
+    effectChain: [],
+  };
+}
+
 export interface AudioProjectStore {
   // State
   audioProjectData: AudioProjectData | null;
   waveforms: Record<string, WaveformData>; // elementId → waveform
+  trackUIState: Record<string, AudioTrackUIState>; // trackId → UI state
   opUndoStack: EditOperation[];
   opRedoStack: EditOperation[];
 
@@ -76,20 +115,63 @@ export interface AudioProjectStore {
   addElement: (trackId: string, element: TimelineElement) => void;
   removeElement: (trackId: string, elementId: string) => void;
   updateElement: (trackId: string, elementId: string, updates: Partial<TimelineElement>) => void;
+
+  // Track UI state (local, not in .nka)
+  toggleSolo: (trackId: string) => void;
+  setTrackVolume: (trackId: string, volume: number) => void;
+  setTrackPan: (trackId: string, pan: number) => void;
+  setTrackColor: (trackId: string, color: string) => void;
+  setTrackHeight: (trackId: string, height: number) => void;
+  addTrackEffect: (trackId: string, effect: AudioEffectConfig) => void;
+  removeTrackEffect: (trackId: string, effectId: string) => void;
+  updateTrackEffect: (
+    trackId: string,
+    effectId: string,
+    updates: Partial<AudioEffectConfig>,
+  ) => void;
+  getTrackUIState: (trackId: string) => AudioTrackUIState;
+
+  // Mix config builder
+  buildMixStreamConfig: () => MixStreamConfig | null;
 }
 
 export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
   audioProjectData: null,
   waveforms: {},
+  trackUIState: {},
   opUndoStack: [],
   opRedoStack: [],
 
   initProject: (data, waveforms = {}) => {
-    set({ audioProjectData: data, waveforms, opUndoStack: [], opRedoStack: [] });
+    const trackUI: Record<string, AudioTrackUIState> = {};
+    data.tracks.forEach((track, i) => {
+      const saved = data.trackMix?.[track.id];
+      trackUI[track.id] = {
+        solo: saved?.solo ?? false,
+        volume: saved?.volume ?? 1.0,
+        pan: saved?.pan ?? 0.0,
+        color: DEFAULT_TRACK_COLORS[i % DEFAULT_TRACK_COLORS.length]!,
+        height: 80,
+        effectChain: saved?.effectChain ?? [],
+      };
+    });
+    set({
+      audioProjectData: data,
+      waveforms,
+      trackUIState: trackUI,
+      opUndoStack: [],
+      opRedoStack: [],
+    });
   },
 
   reset: () => {
-    set({ audioProjectData: null, waveforms: {}, opUndoStack: [], opRedoStack: [] });
+    set({
+      audioProjectData: null,
+      waveforms: {},
+      trackUIState: {},
+      opUndoStack: [],
+      opRedoStack: [],
+    });
   },
 
   dispatch: (op) => {
@@ -398,5 +480,181 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
       payload: { trackId, elementId, updates },
       before: { updates: before },
     } as any);
+  },
+
+  // =========================================================================
+  // Track UI state (local, not persisted to .nka directly)
+  // =========================================================================
+
+  getTrackUIState: (trackId) => {
+    const state = get().trackUIState[trackId];
+    if (state) return state;
+    const data = get().audioProjectData;
+    const index = data?.tracks.findIndex((t) => t.id === trackId) ?? 0;
+    return createDefaultTrackUIState(Math.max(0, index));
+  },
+
+  toggleSolo: (trackId) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: { ...current, solo: !current.solo },
+        },
+      };
+    });
+  },
+
+  setTrackVolume: (trackId, volume) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: { ...current, volume: Math.max(0, Math.min(2, volume)) },
+        },
+      };
+    });
+  },
+
+  setTrackPan: (trackId, pan) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: { ...current, pan: Math.max(-1, Math.min(1, pan)) },
+        },
+      };
+    });
+  },
+
+  setTrackColor: (trackId, color) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: { ...current, color },
+        },
+      };
+    });
+  },
+
+  setTrackHeight: (trackId, height) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: { ...current, height: Math.max(40, Math.min(200, height)) },
+        },
+      };
+    });
+  },
+
+  addTrackEffect: (trackId, effect) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: { ...current, effectChain: [...current.effectChain, effect] },
+        },
+      };
+    });
+  },
+
+  removeTrackEffect: (trackId, effectId) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: {
+            ...current,
+            effectChain: current.effectChain.filter((e) => e.id !== effectId),
+          },
+        },
+      };
+    });
+  },
+
+  updateTrackEffect: (trackId, effectId, updates) => {
+    set((s) => {
+      const current = s.trackUIState[trackId] ?? createDefaultTrackUIState(0);
+      return {
+        trackUIState: {
+          ...s.trackUIState,
+          [trackId]: {
+            ...current,
+            effectChain: current.effectChain.map((e) =>
+              e.id === effectId ? { ...e, ...updates } : e,
+            ),
+          },
+        },
+      };
+    });
+  },
+
+  // =========================================================================
+  // Mix config builder — assembles MixStreamConfig from project + UI state
+  // =========================================================================
+
+  buildMixStreamConfig: () => {
+    const { audioProjectData, trackUIState } = get();
+    if (!audioProjectData) return null;
+
+    const tracks: MixTrackConfig[] = audioProjectData.tracks.map((track) => {
+      const ui = trackUIState[track.id] ?? createDefaultTrackUIState(0);
+
+      const elements: MixElementConfig[] = track.elements
+        .filter((el) => el.type === 'audio' && 'src' in el)
+        .map((el) => {
+          const src = (el as unknown as Record<string, unknown>).src as string;
+          const audio = el as unknown as Record<string, unknown>;
+          return {
+            id: el.id,
+            src,
+            startTime: el.startTime,
+            duration: el.duration,
+            trimStart: el.trimStart ?? 0,
+            volume: (audio.volume as number) ?? 1.0,
+            pan: (audio.pan as number) ?? 0.0,
+            muted: el.muted ?? false,
+            fadeIn: (audio.fadeIn as number) ?? 0,
+            fadeOut: (audio.fadeOut as number) ?? 0,
+            gain: (audio.gain as number) ?? 0,
+          };
+        });
+
+      return {
+        id: track.id,
+        muted: track.muted,
+        solo: ui.solo,
+        volume: ui.volume,
+        pan: ui.pan,
+        effectChain: ui.effectChain,
+        elements,
+      };
+    });
+
+    const masterEffects: AudioEffectConfig[] = audioProjectData.masterEffectsChain.map((e) => ({
+      id: e.id,
+      effectType: e.type,
+      enabled: e.enabled,
+      params: e.params,
+    }));
+
+    const config: MixStreamConfig = {
+      tracks,
+      masterEffects,
+      masterVolume: audioProjectData.masterVolume ?? 1.0,
+      sampleRate: audioProjectData.sampleRate,
+      channels: audioProjectData.channels,
+    };
+
+    return config;
   },
 }));

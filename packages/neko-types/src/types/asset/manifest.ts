@@ -345,6 +345,8 @@ export interface PresetMetadata {
     | 'theme'
     | 'keybinding'
     | 'convention'
+    | 'audio-effect'
+    | 'audio-ir'
     | string;
   targetApp?: string;
   parameters?: Record<string, unknown>;

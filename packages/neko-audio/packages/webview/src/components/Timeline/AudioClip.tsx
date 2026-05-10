@@ -7,6 +7,8 @@ import { useMemo, useState, useCallback } from 'react';
 import type { TimelineElement } from '@neko/shared';
 import type { WaveformData } from '../../shared/types';
 import { useAudioProjectStore } from '../../stores/audioProjectStore';
+import { useAudioStore } from '../../stores/audioStore';
+import { useClipInteraction } from '../../hooks/useClipInteraction';
 import { ContextMenu } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
 import { t } from '../../i18n';
@@ -17,8 +19,10 @@ interface AudioClipProps {
   left: number;
   width: number;
   height: number;
+  pps: number;
   waveform?: WaveformData;
   locked?: boolean;
+  color?: string;
 }
 
 /** Downsample peaks to fit the clip width */
@@ -78,8 +82,10 @@ export function AudioClip({
   left,
   width,
   height,
+  pps,
   waveform,
   locked,
+  color,
 }: AudioClipProps) {
   const clipName = element.name || 'Untitled';
   const isMuted = element.muted;
@@ -87,6 +93,18 @@ export function AudioClip({
   const updateElement = useAudioProjectStore((s) => s.updateElement);
   const removeElement = useAudioProjectStore((s) => s.removeElement);
   const addElement = useAudioProjectStore((s) => s.addElement);
+
+  const interaction = useClipInteraction({
+    trackId,
+    elementId: element.id,
+    left,
+    width,
+    pixelsPerSecond: pps,
+    locked,
+    startTime: element.startTime,
+    duration: element.duration ?? 0,
+    trimStart: element.trimStart ?? 0,
+  });
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -98,6 +116,11 @@ export function AudioClip({
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+
+      const currentTime = useAudioStore.getState().currentTime;
+      const clipEnd = element.startTime + (element.duration ?? 0);
+      const canSplit = currentTime > element.startTime + 0.01 && currentTime < clipEnd - 0.01;
+
       const items: MenuItem[] = [
         {
           label: isMuted ? t('audio.clip.unmute') : t('audio.clip.mute'),
@@ -109,8 +132,28 @@ export function AudioClip({
             addElement(trackId, {
               ...element,
               id: crypto.randomUUID(),
-              startTime: element.startTime + (element.duration ?? 0) + 0.1,
+              startTime: clipEnd + 0.1,
             }),
+        },
+        {
+          label: t('audio.clip.split'),
+          disabled: !canSplit,
+          onClick: () => {
+            if (!canSplit) return;
+            const splitOffset = currentTime - element.startTime;
+            const origDuration = element.duration ?? 0;
+            const origTrimStart = element.trimStart ?? 0;
+
+            updateElement(trackId, element.id, { duration: splitOffset });
+
+            addElement(trackId, {
+              ...element,
+              id: crypto.randomUUID(),
+              startTime: currentTime,
+              duration: origDuration - splitOffset,
+              trimStart: origTrimStart + splitOffset,
+            });
+          },
         },
         { separator: true },
         {
@@ -135,16 +178,27 @@ export function AudioClip({
         borderRadius: 5,
         background: isMuted
           ? 'var(--clip-muted-bg)'
-          : `color-mix(in srgb, var(--accent, #0A84FF) 80%, #000 20%)`,
-        border: `1px solid ${isMuted ? 'var(--clip-muted-border)' : 'color-mix(in srgb, var(--accent, #0A84FF) 60%, #000 40%)'}`,
+          : color
+            ? `color-mix(in srgb, ${color} 80%, #000 20%)`
+            : `color-mix(in srgb, var(--accent, #0A84FF) 80%, #000 20%)`,
+        border: `1px solid ${isMuted ? 'var(--clip-muted-border)' : color ? `color-mix(in srgb, ${color} 60%, #000 40%)` : 'color-mix(in srgb, var(--accent, #0A84FF) 60%, #000 40%)'}`,
         boxShadow: isMuted ? 'none' : 'var(--clip-shadow)',
-        cursor: locked ? 'not-allowed' : 'grab',
+        cursor: interaction.cursor,
         opacity: isMuted ? 0.4 : 1,
       }}
       title={clipName}
+      onMouseDown={locked ? undefined : interaction.onMouseDown}
+      onMouseMove={locked ? undefined : interaction.onMouseMove}
       onContextMenu={locked ? undefined : handleContextMenu}
     >
-      {/* Clip label — white on colored bg; theme-aware on muted (semi-transparent) bg */}
+      {/* Resize edge indicators */}
+      {!locked && (
+        <>
+          <div className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/20" />
+          <div className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/20" />
+        </>
+      )}
+
       <div
         className="text-[10px] px-1.5 py-0.5 truncate leading-[14px] font-medium"
         style={{ color: isMuted ? 'var(--activity-fg)' : 'var(--clip-text)' }}
@@ -152,7 +206,6 @@ export function AudioClip({
         {clipName}
       </div>
 
-      {/* Waveform */}
       {waveform && width > 10 && (
         <div className="absolute top-3.5 left-0 right-0 bottom-0">
           <WaveformThumbnail

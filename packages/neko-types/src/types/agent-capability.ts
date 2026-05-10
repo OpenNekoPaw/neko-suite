@@ -114,6 +114,13 @@ export interface ICapabilityMediaService {
    */
   generateImage(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
   generateVideo(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
+  generateMusic?(request: {
+    prompt: string;
+    duration?: number;
+    style?: string;
+  }): Promise<{ id: string }>;
+  generateSFX?(request: { prompt: string; duration?: number }): Promise<{ id: string }>;
+  generateVoice?(request: { text: string; voiceId?: string }): Promise<{ id: string }>;
   waitForTask(
     taskId: string,
     timeout?: number,

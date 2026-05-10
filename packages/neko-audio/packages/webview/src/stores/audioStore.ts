@@ -26,7 +26,7 @@ export interface Marker {
   color?: string;
 }
 
-export type SidePanelType = 'effects' | 'recording' | 'export';
+export type SidePanelType = 'effects' | 'recording' | 'export' | 'presets';
 
 export interface AudioStoreState {
   // File info
@@ -52,6 +52,11 @@ export interface AudioStoreState {
   activeSidePanel: SidePanelType | null;
   isLoading: boolean;
   error: string | null;
+  /** Timeline zoom level (independent from playback speed) */
+  zoom: number;
+
+  // Loop
+  isLooping: boolean;
 
   // Project mode (.nka)
   projectMode: boolean;
@@ -106,6 +111,8 @@ export interface AudioStoreActions {
   closeSidePanel(): void;
   setLoading(loading: boolean): void;
   setError(error: string | null): void;
+  setZoom(zoom: number): void;
+  toggleLoop(): void;
 
   // Project
   setProjectMode(mode: boolean): void;
@@ -149,6 +156,9 @@ const initialState: AudioStoreState = {
   activeSidePanel: null,
   isLoading: true,
   error: null,
+  zoom: 1.0,
+
+  isLooping: false,
 
   projectMode: false,
   markers: [],
@@ -186,6 +196,8 @@ export const useAudioStore = create<AudioStoreState & AudioStoreActions>()((set)
   closeSidePanel: () => set({ activeSidePanel: null }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error, isLoading: false }),
+  setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(10, zoom)) }),
+  toggleLoop: () => set((s) => ({ isLooping: !s.isLooping })),
 
   // Project
   setProjectMode: (projectMode) => set({ projectMode }),

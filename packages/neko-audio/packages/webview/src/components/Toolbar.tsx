@@ -176,6 +176,27 @@ function IconDenoise() {
   );
 }
 
+function IconPresets() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4"
+    >
+      <rect x="3" y="3" width="14" height="4" rx="1" />
+      <rect x="3" y="8.5" width="14" height="4" rx="1" />
+      <rect x="3" y="14" width="14" height="4" rx="1" opacity="0.5" />
+      <circle cx="7" cy="5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="10.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="16" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function IconNormalize() {
   return (
     <svg
@@ -244,6 +265,12 @@ export function Toolbar() {
         title={t('audio.export.toggle')}
         active={activeSidePanel === 'export'}
         onClick={handleTogglePanel('export')}
+      />
+      <ToolbarButton
+        icon={<IconPresets />}
+        title={t('audio.presets.title')}
+        active={activeSidePanel === 'presets'}
+        onClick={handleTogglePanel('presets')}
       />
 
       <ToolbarSeparator />

@@ -14,6 +14,8 @@ import * as vscode from 'vscode';
 import { AudioEditorProvider } from './providers/AudioEditorProvider';
 import { AudioProjectProvider } from './providers/AudioProjectProvider';
 import { AudioService } from './services/AudioService';
+import { AudioToolBridge } from './services/audioToolBridge';
+import { createNekoAudioCapabilityProvider } from './agentCapabilityProvider';
 import { AudioOutlineProvider } from './views/audioOutlineProvider';
 import { AudioStatusBar } from './views/audioStatusBar';
 import type { NekoAudioAPI } from './types/api';
@@ -126,6 +128,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
   statusBar = new AudioStatusBar();
   context.subscriptions.push(statusBar);
   audioProvider.setStatusBar(statusBar);
+
+  // Register agent capability provider
+  if (sharedAudioService) {
+    const toolBridge = new AudioToolBridge(sharedAudioService, () => projectProvider);
+    const capabilityProvider = createNekoAudioCapabilityProvider(toolBridge);
+    void vscode.commands.executeCommand('neko.agent.registerCapabilities', capabilityProvider);
+  }
 
   // Helper: forward command to active audio webview
   const forwardCommand = (command: string): boolean => {

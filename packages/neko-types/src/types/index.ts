@@ -43,6 +43,7 @@ export * from './keyframe';
 
 // Audio
 export * from './audio';
+export * from './audioMix';
 
 // Speed
 export * from './speed';

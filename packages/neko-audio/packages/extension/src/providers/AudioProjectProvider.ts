@@ -69,6 +69,20 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
     this._audioService = service;
   }
 
+  /** Get project data from the first active panel's cache */
+  getProjectData(): AudioProjectData | null {
+    for (const [uri] of this._activePanels) {
+      const data = this._projectDataCache.get(uri);
+      if (data) return data;
+    }
+    return null;
+  }
+
+  /** Post message to all active webview panels */
+  postMessage(message: Record<string, unknown>): void {
+    this.postToActivePanels(message);
+  }
+
   /** Forward a command message to all active webview panels */
   postToActivePanels(message: Record<string, unknown>): boolean {
     if (this._activePanels.size === 0) return false;
@@ -576,6 +590,76 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
                 type: 'editor:importSourceFailed',
                 payload: { error: errMsg },
               });
+            }
+            break;
+          }
+
+          case 'project:mixStreamStart': {
+            const config = msg.config as Record<string, unknown> | undefined;
+            if (!config) break;
+            try {
+              await stopPanelStream();
+              const result = await this._audioService?.startMixStream(config);
+              if (result) {
+                activeStreamId = result.streamId;
+                await webviewPanel.webview.postMessage({
+                  type: 'project:mixStreamReady',
+                  payload: { streamId: result.streamId, streamUrl: result.streamUrl },
+                });
+              }
+            } catch (error) {
+              logger.error('Failed to start mix stream:', error);
+            }
+            break;
+          }
+
+          case 'project:mixStreamStop': {
+            await stopPanelStream();
+            break;
+          }
+
+          case 'project:mixExport': {
+            const config = msg.config as Record<string, unknown> | undefined;
+            if (!config) break;
+            const outputPath = msg.outputPath as string | undefined;
+            if (!outputPath) {
+              const saveUri = await vscode.window.showSaveDialog({
+                filters: { 'Audio Files': ['wav', 'mp3', 'flac', 'aac', 'opus'] },
+                title: 'Export Mix',
+              });
+              if (!saveUri) break;
+              try {
+                const format = msg.format as string | undefined;
+                const bitrate = msg.bitrate as number | undefined;
+                await this._audioService?.mixExport(config, saveUri.fsPath, format, bitrate);
+                await webviewPanel.webview.postMessage({
+                  type: 'project:mixExportResult',
+                  payload: { success: true, output: saveUri.fsPath },
+                });
+                await vscode.commands.executeCommand('vscode.open', saveUri);
+              } catch (error) {
+                const errMsg = error instanceof Error ? error.message : String(error);
+                await webviewPanel.webview.postMessage({
+                  type: 'project:mixExportResult',
+                  payload: { success: false, error: errMsg },
+                });
+              }
+            } else {
+              try {
+                const format = msg.format as string | undefined;
+                const bitrate = msg.bitrate as number | undefined;
+                await this._audioService?.mixExport(config, outputPath, format, bitrate);
+                await webviewPanel.webview.postMessage({
+                  type: 'project:mixExportResult',
+                  payload: { success: true, output: outputPath },
+                });
+              } catch (error) {
+                const errMsg = error instanceof Error ? error.message : String(error);
+                await webviewPanel.webview.postMessage({
+                  type: 'project:mixExportResult',
+                  payload: { success: false, error: errMsg },
+                });
+              }
             }
             break;
           }

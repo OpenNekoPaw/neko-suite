@@ -249,6 +249,60 @@ export class AudioService implements vscode.Disposable {
   }
 
   // =========================================================================
+  // Mix Stream (Multi-Track Playback)
+  // =========================================================================
+
+  async startMixStream(
+    config: Record<string, unknown>,
+  ): Promise<{ streamId: string; streamUrl: string } | null> {
+    const result = await this.dispatch({
+      group: 'audios',
+      action: 'mix_stream',
+      options: {
+        config,
+        sessionId: `mix-stream-${Date.now()}`,
+      },
+    });
+
+    if (result.status === 'error') {
+      logger.error('Failed to start mix stream:', result.error);
+      return null;
+    }
+
+    const data = result.data as Record<string, unknown> | undefined;
+    const streamId = (data?.streamId as string) ?? '';
+    const streamUrl = this.getStreamWebSocketUrl(streamId);
+
+    if (!streamUrl) return null;
+    return { streamId, streamUrl };
+  }
+
+  async mixExport(
+    config: Record<string, unknown>,
+    outputPath: string,
+    format?: string,
+    bitrate?: number,
+  ): Promise<{ output: string }> {
+    const result = await this.dispatch({
+      group: 'audios',
+      action: 'mix_export',
+      options: {
+        config,
+        output: outputPath,
+        ...(format && { format }),
+        ...(bitrate && { bitrate }),
+      },
+    });
+
+    if (result.status === 'error') {
+      throw new Error(result.error?.message ?? 'Mix export failed');
+    }
+
+    const data = result.data as Record<string, unknown> | undefined;
+    return { output: (data?.output as string) ?? outputPath };
+  }
+
+  // =========================================================================
   // Transcoding (Trim, Effects, Export)
   // =========================================================================
 

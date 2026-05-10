@@ -1,0 +1,31 @@
+{
+  "name": "Voice Over",
+  "description": "Warm voice-over chain: low-cut, presence boost, gentle compression",
+  "category": "voice-over",
+  "effectChain": [
+    {
+      "effectType": "parametric_eq",
+      "enabled": true,
+      "params": {
+        "bands": [
+          { "type": "highpass", "freq": 100, "q": 0.7 },
+          { "type": "peaking", "freq": 2500, "gain": 3.0, "q": 1.2 },
+          { "type": "peaking", "freq": 5000, "gain": 1.5, "q": 1.0 },
+          { "type": "lowpass", "freq": 16000, "q": 0.7 }
+        ]
+      }
+    },
+    {
+      "effectType": "compressor",
+      "enabled": true,
+      "params": {
+        "threshold": -20,
+        "ratio": 2.5,
+        "attack": 0.005,
+        "release": 0.12,
+        "knee": 4,
+        "makeupGain": 3
+      }
+    }
+  ]
+}

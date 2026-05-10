@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react';
 import { useAudioStore } from '../stores/audioStore';
+import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { postMessage } from '../shared/useVscodeMessage';
 import { MacButton, MacIconButton } from '@neko/shared/components';
 import { t } from '../i18n';
@@ -15,6 +16,7 @@ interface TransportBarProps {
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   onStop: () => void;
+  onRecord?: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -26,7 +28,7 @@ function formatTime(seconds: number): string {
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
 
-export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps) {
+export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: TransportBarProps) {
   const {
     fileName,
     audioInfo,
@@ -34,16 +36,36 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
     currentTime,
     volume,
     speed,
+    zoom,
     isMuted,
     selection,
+    projectMode,
     setVolume,
     setSpeed,
+    setZoom,
     toggleMute,
+    toggleLoop,
+    isLooping,
     setSelection,
   } = useAudioStore();
 
+  const projectData = useAudioProjectStore((s) => s.audioProjectData);
+
   const duration = audioInfo?.duration ?? 0;
   const isPlaying = playbackState === 'playing';
+
+  const handleToggleLoop = useCallback(() => {
+    toggleLoop();
+    postMessage({ type: 'editor:loop', enabled: !isLooping });
+  }, [toggleLoop, isLooping]);
+
+  const handleBpmChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const bpm = Math.max(20, Math.min(300, parseInt(e.target.value, 10) || 120));
+    useAudioProjectStore.setState((s) => {
+      if (!s.audioProjectData) return {};
+      return { audioProjectData: { ...s.audioProjectData, bpm } };
+    });
+  }, []);
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -164,9 +186,63 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
         </svg>
       </MacIconButton>
 
+      {onRecord && (
+        <MacIconButton size="sm" onClick={onRecord} title={t('audio.controls.record')}>
+          <svg viewBox="0 0 20 20" className="w-3.5 h-3.5">
+            <circle cx="10" cy="10" r="6" fill="#ff453a" />
+          </svg>
+        </MacIconButton>
+      )}
+
+      <MacIconButton
+        size="sm"
+        active={isLooping}
+        onClick={handleToggleLoop}
+        title={t('audio.controls.loop')}
+      >
+        <svg
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="w-3.5 h-3.5"
+          opacity={isLooping ? 1 : 0.5}
+        >
+          <path
+            d="M14 4l2 2-2 2M6 16l-2-2 2-2"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M16 6H8a4 4 0 000 8h0M4 14h8a4 4 0 000-8h0"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+      </MacIconButton>
+
       <span className="text-[12px] font-mono text-[var(--activity-fg)] opacity-75 whitespace-nowrap tabular-nums">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
+
+      {projectMode && (
+        <>
+          <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
+          <label className="text-[11px] text-[var(--activity-inactive)]">
+            {t('audio.controls.bpm')}
+          </label>
+          <input
+            type="number"
+            min="20"
+            max="300"
+            value={projectData?.bpm ?? 120}
+            onChange={handleBpmChange}
+            className="w-12 text-[11px] px-1 py-0.5 bg-[var(--btn-bg)] text-[var(--activity-fg)] border border-[var(--btn-border)] rounded-md text-center tabular-nums"
+          />
+        </>
+      )}
 
       {/* Selection info + trim */}
       {selection && (
@@ -259,6 +335,26 @@ export function TransportBar({ onTogglePlay, onSeek, onStop }: TransportBarProps
           </option>
         ))}
       </select>
+
+      <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
+
+      {/* Zoom */}
+      <label className="text-[11px] text-[var(--activity-inactive)]">
+        {t('audio.controls.zoom')}
+      </label>
+      <input
+        type="range"
+        className="neko-slider w-16"
+        min="0.1"
+        max="10"
+        step="0.1"
+        value={zoom}
+        onChange={(e) => setZoom(parseFloat(e.target.value))}
+        title={`${Math.round(zoom * 100)}%`}
+      />
+      <span className="text-[10px] text-[var(--activity-inactive)] w-8 text-right tabular-nums">
+        {zoom.toFixed(1)}x
+      </span>
     </div>
   );
 }

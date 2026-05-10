@@ -165,6 +165,43 @@ export interface EditorRecordStopResultMessage {
   };
 }
 
+/** Mix stream ready (multi-track playback) */
+export interface ProjectMixStreamReadyMessage {
+  type: 'project:mixStreamReady';
+  payload: {
+    streamId: string;
+    streamUrl: string;
+  };
+}
+
+/** Mix export completed */
+export interface ProjectMixExportResultMessage {
+  type: 'project:mixExportResult';
+  payload: {
+    success: boolean;
+    output?: string;
+    error?: string;
+  };
+}
+
+/** Preset list response */
+export interface PresetListMessage {
+  type: 'presets:list';
+  payload: PresetEntry[];
+}
+
+export interface PresetEntry {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  effectChain: Array<{
+    effectType: string;
+    enabled: boolean;
+    params: Record<string, unknown>;
+  }>;
+}
+
 export type ExtensionMessage =
   | EditorInitMessage
   | EditorWaveformMessage
@@ -178,9 +215,12 @@ export type ExtensionMessage =
   | EditorRecordStartResultMessage
   | EditorRecordStopResultMessage
   | ProjectInitMessage
+  | ProjectMixStreamReadyMessage
+  | ProjectMixExportResultMessage
   | ProjectSaveRequestMessage
   | ProjectSaveAsRequestMessage
   | ProjectRevertMessage
+  | PresetListMessage
   | CommandMessage;
 
 // =============================================================================
@@ -216,6 +256,11 @@ export interface SeekMessage {
 export interface SpeedMessage {
   type: 'editor:speed';
   speed: number;
+}
+
+export interface LoopMessage {
+  type: 'editor:loop';
+  enabled: boolean;
 }
 
 export interface TrimMessage {
@@ -334,6 +379,39 @@ export interface ProjectDropImportSourceMessage {
   uris: string[];
 }
 
+/** Request to start multi-track mix stream */
+export interface ProjectMixStreamStartMessage {
+  type: 'project:mixStreamStart';
+  config: Record<string, unknown>;
+}
+
+/** Request to stop mix stream */
+export interface ProjectMixStreamStopMessage {
+  type: 'project:mixStreamStop';
+  streamId: string;
+}
+
+/** Request to export mix to file */
+export interface ProjectMixExportMessage {
+  type: 'project:mixExport';
+  config: Record<string, unknown>;
+  outputPath: string;
+  format?: string;
+  bitrate?: number;
+}
+
+/** Request preset list from extension */
+export interface PresetListRequestMessage {
+  type: 'presets:listRequest';
+}
+
+/** Apply a preset to a track or master */
+export interface PresetApplyMessage {
+  type: 'presets:apply';
+  presetId: string;
+  trackId?: string;
+}
+
 export type WebviewMessage =
   | ReadyMessage
   | PlayMessage
@@ -342,6 +420,7 @@ export type WebviewMessage =
   | StopMessage
   | SeekMessage
   | SpeedMessage
+  | LoopMessage
   | TrimMessage
   | SaveRecordingMessage
   | AnalyzeLoudnessMessage
@@ -356,4 +435,9 @@ export type WebviewMessage =
   | ProjectSaveDataMessage
   | ProjectChangedMessage
   | ProjectImportSourceMessage
-  | ProjectDropImportSourceMessage;
+  | ProjectDropImportSourceMessage
+  | ProjectMixStreamStartMessage
+  | ProjectMixStreamStopMessage
+  | ProjectMixExportMessage
+  | PresetListRequestMessage
+  | PresetApplyMessage;

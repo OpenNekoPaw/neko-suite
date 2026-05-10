@@ -11,6 +11,7 @@ import type { AgentTraceContext } from './agent-trace';
 export type ToolCategory =
   | 'timeline'
   | 'media'
+  | 'audio'
   | 'project'
   | 'file'
   | 'mcp'

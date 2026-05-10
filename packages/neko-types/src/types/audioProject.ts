@@ -6,6 +6,15 @@
 
 import type { TimelineTrack } from './timelineTrack';
 import type { AudioEffectSnapshot, AudioMarkerSnapshot } from '../operations/types';
+import type { AudioEffectConfig } from './audioMix';
+
+/** Per-track mix state persisted in project (v2.1) */
+export interface AudioTrackMixState {
+  volume: number;
+  pan: number;
+  solo: boolean;
+  effectChain: AudioEffectConfig[];
+}
 
 /** Audio project data — .nka file format */
 export interface AudioProjectData {
@@ -21,4 +30,10 @@ export interface AudioProjectData {
   masterEffectsChain: AudioEffectSnapshot[];
   /** Project-level markers */
   markers: AudioMarkerSnapshot[];
+  /** Project tempo in BPM (v2.1) */
+  bpm?: number;
+  /** Per-track mix state keyed by track ID (v2.1) */
+  trackMix?: Record<string, AudioTrackMixState>;
+  /** Master bus volume (v2.1, default 1.0) */
+  masterVolume?: number;
 }

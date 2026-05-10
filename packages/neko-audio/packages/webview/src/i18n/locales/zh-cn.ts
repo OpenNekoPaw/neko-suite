@@ -19,6 +19,9 @@ const audio: MessageBundle = {
   'audio.controls.mute': '静音',
   'audio.controls.speed': '速度',
   'audio.controls.loop': '循环',
+  'audio.controls.record': '录制',
+  'audio.controls.bpm': 'BPM',
+  'audio.controls.zoom': '缩放',
 
   // Waveform
   'audio.waveform.loading': '正在生成波形...',
@@ -128,6 +131,15 @@ const audio: MessageBundle = {
   'audioEffects.distortionType.tube': '电子管',
   'audioEffects.distortionType.fuzz': '毛绒',
 
+  // Presets
+  'audio.presets.title': '预设',
+  'audio.presets.empty': '暂无可用预设',
+  'audio.presets.apply': '应用',
+  'audio.presets.applyMaster': '主总线',
+  'audio.presets.category.voiceOver': '旁白',
+  'audio.presets.category.music': '音乐',
+  'audio.presets.category.soundDesign': '音效设计',
+
   // Common UI
   'audio.common.close': '关闭',
   'audio.common.mono': '单声道',
@@ -197,6 +209,7 @@ const audio: MessageBundle = {
   'audio.clip.mute': '静音片段',
   'audio.clip.unmute': '取消静音',
   'audio.clip.duplicate': '复制片段',
+  'audio.clip.split': '在播放头处分割',
   'audio.clip.delete': '删除片段',
 
   // Export

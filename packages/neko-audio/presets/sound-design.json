@@ -1,0 +1,67 @@
+{
+  "name": "Sound Design",
+  "description": "Creative sound design chain: distortion, chorus, reverb, delay for textured sounds",
+  "category": "sound-design",
+  "effectChain": [
+    {
+      "effectType": "parametric_eq",
+      "enabled": true,
+      "params": {
+        "bands": [
+          { "type": "highpass", "freq": 60, "q": 0.7 },
+          { "type": "peaking", "freq": 800, "gain": 2.0, "q": 1.5 }
+        ]
+      }
+    },
+    {
+      "effectType": "distortion",
+      "enabled": true,
+      "params": {
+        "drive": 0.4,
+        "outputGain": -3.0,
+        "type": "tanh"
+      }
+    },
+    {
+      "effectType": "chorus",
+      "enabled": true,
+      "params": {
+        "rate": 0.8,
+        "depth": 0.5,
+        "delay": 0.01,
+        "feedback": 0.3,
+        "wetDry": 0.4
+      }
+    },
+    {
+      "effectType": "reverb",
+      "enabled": true,
+      "params": {
+        "roomSize": 0.7,
+        "damping": 0.5,
+        "wetDry": 0.35,
+        "width": 1.0,
+        "preDelay": 0.02
+      }
+    },
+    {
+      "effectType": "delay",
+      "enabled": true,
+      "params": {
+        "time": 0.25,
+        "feedback": 0.3,
+        "wetDry": 0.2,
+        "pingPong": true
+      }
+    },
+    {
+      "effectType": "limiter",
+      "enabled": true,
+      "params": {
+        "threshold": -1.0,
+        "ceiling": -0.3,
+        "release": 0.05
+      }
+    }
+  ]
+}

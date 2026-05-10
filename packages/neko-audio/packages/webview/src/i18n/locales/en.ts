@@ -19,6 +19,9 @@ const audio: MessageBundle = {
   'audio.controls.mute': 'Mute',
   'audio.controls.speed': 'Speed',
   'audio.controls.loop': 'Loop',
+  'audio.controls.record': 'Record',
+  'audio.controls.bpm': 'BPM',
+  'audio.controls.zoom': 'Zoom',
 
   // Waveform
   'audio.waveform.loading': 'Generating waveform...',
@@ -128,6 +131,15 @@ const audio: MessageBundle = {
   'audioEffects.distortionType.tube': 'Tube',
   'audioEffects.distortionType.fuzz': 'Fuzz',
 
+  // Presets
+  'audio.presets.title': 'Presets',
+  'audio.presets.empty': 'No presets available',
+  'audio.presets.apply': 'Apply',
+  'audio.presets.applyMaster': 'Master Bus',
+  'audio.presets.category.voiceOver': 'Voice Over',
+  'audio.presets.category.music': 'Music',
+  'audio.presets.category.soundDesign': 'Sound Design',
+
   // Common UI
   'audio.common.close': 'Close',
   'audio.common.mono': 'Mono',
@@ -197,6 +209,7 @@ const audio: MessageBundle = {
   'audio.clip.mute': 'Mute Clip',
   'audio.clip.unmute': 'Unmute Clip',
   'audio.clip.duplicate': 'Duplicate Clip',
+  'audio.clip.split': 'Split at Playhead',
   'audio.clip.delete': 'Delete Clip',
 
   // Export
