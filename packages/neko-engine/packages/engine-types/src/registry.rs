@@ -92,6 +92,8 @@ pub mod actions {
         "record_start",
         "record_stop",
         "mixdown",
+        "mix_stream",
+        "mix_export",
     ];
 
     pub const IMAGES: &[&str] = &["probe", "capture", "encode", "diff"];

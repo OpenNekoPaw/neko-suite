@@ -69,6 +69,11 @@ impl AudioService {
     pub fn mic_capture(&self) -> &MicCaptureService {
         &self.mic_capture
     }
+
+    /// Get active streams handle (for mix_stream to register its loop)
+    pub fn active_streams(&self) -> Arc<ActiveStreams> {
+        self.active_streams.clone()
+    }
 }
 
 impl IStreamPlayback for AudioService {

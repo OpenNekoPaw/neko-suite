@@ -4,6 +4,7 @@
 //! wrapping the infrastructure layer (gpu, decoder, encoder, etc.).
 
 mod audio;
+pub mod audio_mix_stream;
 pub(crate) mod common;
 mod effects;
 mod export;

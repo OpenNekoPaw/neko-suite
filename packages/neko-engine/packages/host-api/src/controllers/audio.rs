@@ -149,6 +149,34 @@ struct MixdownRequestOptions {
     time: Option<f64>,
 }
 
+/// Options for audios:mix_stream
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct MixStreamOptions {
+    /// Full mixdown config (tracks, master effects, master volume, sample rate, channels)
+    config: Option<Value>,
+    /// Session ID for the stream
+    session_id: Option<String>,
+    /// Sub-action: "start" (default) | "update"
+    action: Option<String>,
+    /// Stream ID (required for "update" sub-action)
+    stream_id: Option<String>,
+}
+
+/// Options for audios:mix_export
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct MixExportOptions {
+    /// Full mixdown config
+    config: Option<Value>,
+    /// Output file path
+    output: Option<String>,
+    /// Output format: wav, mp3, flac, aac, opus (default: wav)
+    format: Option<String>,
+    /// Target bitrate in bps (for lossy codecs)
+    bitrate: Option<u64>,
+}
+
 impl Controller for AudioController {
     async fn handle(
         &self,
@@ -517,12 +545,19 @@ impl Controller for AudioController {
                 let time = opts.time.unwrap_or(0.0);
 
                 use base64::Engine;
-                use neko_engine_kernel::services::audio_mixdown::{AudioMixdown, MixdownTrack};
+                use neko_engine_kernel::services::audio_mixdown::{AudioMixdown, MixdownConfig, MixdownTrack};
 
                 let mixdown_tracks: Vec<MixdownTrack> = serde_json::from_value(tracks)
                     .map_err(|e| ApiError::InvalidRequest(format!("invalid tracks: {}", e)))?;
 
-                let mut mixer = AudioMixdown::new(mixdown_tracks, sample_rate, channels);
+                let config = MixdownConfig {
+                    tracks: mixdown_tracks,
+                    master_effects: vec![],
+                    master_volume: 1.0,
+                    sample_rate,
+                    channels,
+                };
+                let mut mixer = AudioMixdown::new(config);
                 mixer.initialize()?;
 
                 let buf = mixer.mix_buffer(time)?;
@@ -535,6 +570,207 @@ impl Controller for AudioController {
                     "samples": buf.samples,
                     "timestamp": buf.timestamp,
                     "dataBase64": base64::engine::general_purpose::STANDARD.encode(&s16_bytes),
+                });
+
+                Ok(ActionResponse::ok("", response))
+            }
+            "mix_stream" => {
+                let opts: MixStreamOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let sub_action = opts.action.as_deref().unwrap_or("start");
+
+                match sub_action {
+                    "update" => {
+                        let stream_id_str = opts.stream_id.ok_or_else(|| {
+                            ApiError::InvalidRequest(
+                                "streamId required for mix_stream update".to_string(),
+                            )
+                        })?;
+                        let config_value = opts.config.ok_or_else(|| {
+                            ApiError::InvalidRequest(
+                                "config required for mix_stream update".to_string(),
+                            )
+                        })?;
+
+                        let _config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
+                            serde_json::from_value(config_value).map_err(|e| {
+                                ApiError::InvalidRequest(format!("invalid config: {}", e))
+                            })?;
+
+                        // TODO(P1): implement hot-update via stream state channel
+                        // For now, the client should stop + restart with new config
+                        let response = serde_json::json!({
+                            "streamId": stream_id_str,
+                            "status": "update_not_yet_supported",
+                        });
+
+                        Ok(ActionResponse::ok("", response))
+                    }
+                    _ => {
+                        // "start" (default)
+                        let config_value = opts.config.ok_or_else(|| {
+                            ApiError::InvalidRequest(
+                                "config required for audios:mix_stream".to_string(),
+                            )
+                        })?;
+
+                        let config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
+                            serde_json::from_value(config_value).map_err(|e| {
+                                ApiError::InvalidRequest(format!("invalid config: {}", e))
+                            })?;
+
+                        let session_id = opts
+                            .session_id
+                            .unwrap_or_else(|| "mix-default".to_string());
+
+                        use neko_engine_kernel::services::impls::audio_mix_stream::start_mix_stream;
+
+                        let active_streams = self.audio_service.active_streams();
+                        let (stream_id, rx) =
+                            start_mix_stream(config, &session_id, active_streams).await?;
+
+                        let cancel_token = CancellationToken::new();
+                        self.stream_registry
+                            .register_external_stream(
+                                stream_id.clone(),
+                                &session_id,
+                                "mix",
+                                StreamConfig::default(),
+                                rx,
+                                cancel_token,
+                            )
+                            .await;
+
+                        let response = serde_json::json!({
+                            "streamId": stream_id.as_str(),
+                            "status": "active",
+                        });
+
+                        Ok(ActionResponse::ok("", response))
+                    }
+                }
+            }
+            "mix_export" => {
+                let opts: MixExportOptions =
+                    serde_json::from_value(options).unwrap_or_default();
+
+                let config_value = opts.config.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "config required for audios:mix_export".to_string(),
+                    )
+                })?;
+                let output_path = opts.output.ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "output path required for audios:mix_export".to_string(),
+                    )
+                })?;
+
+                let config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
+                    serde_json::from_value(config_value).map_err(|e| {
+                        ApiError::InvalidRequest(format!("invalid config: {}", e))
+                    })?;
+
+                let format_str = opts.format.unwrap_or_else(|| "wav".to_string());
+                let bitrate = opts.bitrate;
+                let output = output_path.clone();
+
+                tokio::task::spawn_blocking(move || {
+                    use neko_engine_kernel::audio::{
+                        AudioCodec as InternalAudioCodec, AudioEncoder, AudioEncoderConfig,
+                        FfmpegAudioEncoder,
+                    };
+                    use neko_engine_kernel::services::audio_mixdown::AudioMixdown;
+                    use std::fs::File;
+                    use std::io::Write;
+
+                    let sample_rate = config.sample_rate;
+                    let channels = config.channels;
+
+                    let mut mixdown = AudioMixdown::new(config);
+                    mixdown.initialize()?;
+
+                    let total_duration = mixdown.total_duration();
+                    let buf_duration =
+                        mixdown.buffer_size() as f64 / sample_rate as f64;
+
+                    let codec = match format_str.to_lowercase().as_str() {
+                        "mp3" => InternalAudioCodec::Mp3,
+                        "flac" => InternalAudioCodec::Flac,
+                        "aac" | "m4a" => InternalAudioCodec::Aac,
+                        "opus" | "ogg" => InternalAudioCodec::Opus,
+                        _ => InternalAudioCodec::Pcm,
+                    };
+
+                    let mut enc_config =
+                        AudioEncoderConfig::new(sample_rate, channels, codec);
+                    if let Some(br) = bitrate {
+                        enc_config = enc_config.with_bitrate(br);
+                    }
+
+                    let mut encoder = FfmpegAudioEncoder::new();
+                    encoder.open(&enc_config)?;
+
+                    let mut output_file = File::create(&output).map_err(|e| {
+                        neko_engine_kernel::error::Error::Other(format!(
+                            "Failed to create output file: {}",
+                            e
+                        ))
+                    })?;
+
+                    let mut current_time = 0.0;
+                    while current_time < total_duration {
+                        let buf = mixdown.mix_buffer(current_time)?;
+                        let pcm_bytes: Vec<u8> = buf
+                            .data
+                            .iter()
+                            .flat_map(|&s| s.to_le_bytes())
+                            .collect();
+
+                        let packets = encoder.encode_frame(
+                            &pcm_bytes,
+                            buf.samples,
+                        )?;
+                        for packet in packets {
+                            output_file.write_all(&packet.data).map_err(|e| {
+                                neko_engine_kernel::error::Error::Other(format!(
+                                    "Failed to write output: {}",
+                                    e
+                                ))
+                            })?;
+                        }
+
+                        current_time += buf_duration;
+                    }
+
+                    let remaining = encoder.flush()?;
+                    for packet in remaining {
+                        output_file.write_all(&packet.data).map_err(|e| {
+                            neko_engine_kernel::error::Error::Other(format!(
+                                "Failed to write output: {}",
+                                e
+                            ))
+                        })?;
+                    }
+
+                    output_file.flush().map_err(|e| {
+                        neko_engine_kernel::error::Error::Other(format!(
+                            "Failed to flush output: {}",
+                            e
+                        ))
+                    })?;
+
+                    mixdown.close();
+                    Ok::<_, neko_engine_kernel::error::Error>(total_duration)
+                })
+                .await
+                .map_err(|e| {
+                    ApiError::ServiceError(format!("Mix export task failed: {}", e))
+                })??;
+
+                let response = serde_json::json!({
+                    "output": output_path,
+                    "status": "complete",
                 });
 
                 Ok(ActionResponse::ok("", response))
