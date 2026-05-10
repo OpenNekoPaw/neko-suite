@@ -112,8 +112,8 @@ function createMockPreviewService(overrides: Record<string, unknown> = {}): Prev
     setStreamSpeed: vi.fn(),
     captureFrame: vi.fn(),
     getStreamWebSocketUrl: vi.fn((id: string) => `ws://127.0.0.1:8080/v1/streams/${id}`),
+    getAudioWebSocketUrl: vi.fn((id: string) => `ws://127.0.0.1:8080/v1/audio/${id}`),
     getWaveform: vi.fn(),
-    dispatch: vi.fn(),
     dispose: vi.fn(),
     ...overrides,
   } as unknown as PreviewService;
@@ -292,9 +292,9 @@ describe('AudioPreviewProvider', () => {
         duration: 240,
         sampleRate: 44100,
       });
-      (mockService.dispatch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        status: 'ok',
-        data: { streamId: 'audio-stream-1' },
+      (mockService.startVideoPlayback as ReturnType<typeof vi.fn>).mockResolvedValue({
+        videoStreamId: null,
+        audioStreamId: 'audio-stream-1',
       });
       provider.setPreviewService(mockService);
 
@@ -335,22 +335,22 @@ describe('AudioPreviewProvider', () => {
       );
     });
 
-    it('should handle "preview:play" by dispatching audio stream', async () => {
+    it('should handle "preview:play" by starting playback via startVideoPlayback', async () => {
       const { mockService, panel, messageHandler } = await setupWithMessageHandler();
 
       await messageHandler({ type: 'preview:play' });
 
-      expect(mockService.dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          group: 'audios',
-          action: 'stream',
-        }),
+      expect(mockService.startVideoPlayback).toHaveBeenCalledWith(
+        '/path/to/song.mp3',
+        mockAudioInfo,
+        0,
       );
       expect(panel.webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'preview:streamReady',
           payload: expect.objectContaining({
-            streamId: 'audio-stream-1',
+            audioStreamId: 'audio-stream-1',
+            audioStreamUrl: 'ws://127.0.0.1:8080/v1/audio/audio-stream-1',
           }),
         }),
       );
@@ -427,13 +427,16 @@ describe('AudioPreviewProvider', () => {
       expect(mockService.resumeStreams).toHaveBeenCalledWith(null, 'audio-stream-1');
     });
 
-    it('should seek to startTime when provided in play message', async () => {
+    it('should pass startTime to startVideoPlayback when provided in play message', async () => {
       const { mockService, messageHandler } = await setupWithMessageHandler();
 
       await messageHandler({ type: 'preview:play', startTime: 45 });
 
-      // Should call seekStreams after stream creation (not dispatch a separate seek action)
-      expect(mockService.seekStreams).toHaveBeenCalledWith(null, 'audio-stream-1', 45);
+      expect(mockService.startVideoPlayback).toHaveBeenCalledWith(
+        '/path/to/song.mp3',
+        mockAudioInfo,
+        45,
+      );
     });
   });
 
@@ -441,9 +444,9 @@ describe('AudioPreviewProvider', () => {
     it('should clean up on panel dispose', async () => {
       const mockService = createMockPreviewService();
       (mockService.probeMedia as ReturnType<typeof vi.fn>).mockResolvedValue(mockAudioInfo);
-      (mockService.dispatch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        status: 'ok',
-        data: { streamId: 'audio-1' },
+      (mockService.startVideoPlayback as ReturnType<typeof vi.fn>).mockResolvedValue({
+        videoStreamId: null,
+        audioStreamId: 'audio-1',
       });
       provider.setPreviewService(mockService);
 

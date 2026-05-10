@@ -173,42 +173,33 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
           case 'preview:play': {
             streamEof = false;
             if (activeAudioStreamId) {
-              // Resume existing stream
               const startTime = (msg.startTime as number) ?? 0;
               if (startTime > 0) {
                 await this._previewService?.seekStreams(null, activeAudioStreamId, startTime);
               }
               await this._previewService?.resumeStreams(null, activeAudioStreamId);
             } else {
-              // First play or stream lost — create new stream
               try {
-                const result = await this._previewService?.dispatch({
-                  group: 'audios',
-                  action: 'stream',
-                  options: {
-                    source: filePath,
-                    sessionId: `audio-preview-${Date.now()}`,
-                  },
-                });
+                const mediaInfo = await mediaInfoPromise;
+                if (!mediaInfo || !this._previewService) break;
 
-                if (result?.status === 'ok') {
-                  const data = result.data as Record<string, unknown> | undefined;
-                  const streamId = data?.streamId as string;
-                  activeAudioStreamId = streamId;
-                  const streamUrl = this._previewService?.getStreamWebSocketUrl(streamId);
+                const startTime = (msg.startTime as number) ?? 0;
+                const { audioStreamId } = await this._previewService.startVideoPlayback(
+                  filePath,
+                  mediaInfo,
+                  startTime,
+                );
+                activeAudioStreamId = audioStreamId;
 
-                  const startTime = (msg.startTime as number) ?? 0;
-                  if (startTime > 0 && streamId) {
-                    await this._previewService?.seekStreams(null, streamId, startTime);
-                  }
-
+                if (audioStreamId) {
+                  const audioStreamUrl = this._previewService.getAudioWebSocketUrl(audioStreamId);
                   await webviewPanel.webview.postMessage({
                     type: 'preview:streamReady',
                     payload: {
-                      streamId,
-                      streamUrl,
-                      audioStreamId: streamId,
-                      audioStreamUrl: streamUrl,
+                      streamId: audioStreamId,
+                      streamUrl: audioStreamUrl,
+                      audioStreamId,
+                      audioStreamUrl,
                     },
                   });
                 }
@@ -248,12 +239,13 @@ export class AudioPreviewProvider implements vscode.CustomReadonlyEditorProvider
               // Only reconnect WebSocket if EOF closed it
               if (streamEof && activeAudioStreamId) {
                 streamEof = false;
-                const streamUrl = this._previewService?.getStreamWebSocketUrl(activeAudioStreamId);
+                const audioStreamUrl =
+                  this._previewService?.getAudioWebSocketUrl(activeAudioStreamId);
                 await webviewPanel.webview.postMessage({
                   type: 'preview:streamReconnect',
                   payload: {
                     streamId: activeAudioStreamId,
-                    audioStreamUrl: streamUrl,
+                    audioStreamUrl,
                   },
                 });
               }

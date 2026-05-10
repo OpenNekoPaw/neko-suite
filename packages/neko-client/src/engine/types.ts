@@ -445,6 +445,14 @@ export interface StreamHandle {
   audioWsUrl?: string;
 }
 
+/** Paired video + audio stream handle returned by MediaPlaybackService.startPlayback() */
+export interface PlaybackHandle {
+  videoStreamId: string | null;
+  audioStreamId: string | null;
+  videoStreamUrl: string | null;
+  audioStreamUrl: string | null;
+}
+
 // =============================================================================
 // Audio Input / Recording Types
 // =============================================================================

@@ -15,7 +15,12 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
+import {
+  EngineClient,
+  MediaPlaybackService,
+  type ActionRequest,
+  type ActionResponse,
+} from '@neko/neko-client';
 import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
 import type {
   MediaRequest,
@@ -42,6 +47,7 @@ const logger = getLogger('MediaService');
 
 export class MediaService implements vscode.Disposable {
   private readonly documentDir: string | undefined;
+  private readonly mediaPlayback: MediaPlaybackService;
   private disposed = false;
 
   // Stream state (editor-level lifecycle)
@@ -55,6 +61,7 @@ export class MediaService implements vscode.Disposable {
     documentUri?: vscode.Uri,
   ) {
     this.documentDir = documentUri ? path.dirname(documentUri.fsPath) : undefined;
+    this.mediaPlayback = new MediaPlaybackService(this.client);
   }
 
   // =========================================================================
@@ -171,58 +178,34 @@ export class MediaService implements vscode.Disposable {
     this.sendResponse(response);
   }
 
-  /**
-   * media:getVideoFrame → videos:capture
-   */
   private async handleVideoCapture(request: GetVideoFrameRequest): Promise<MediaResponse> {
     const { videoPath, timeInSeconds, quality, scale } = request.payload;
     const absolutePath = await this.resolveMediaPath(videoPath);
 
-    // Build capture options, converting scale (0-1) to pixel dimensions if provided
-    const captureOptions: Record<string, unknown> = {
-      source: absolutePath,
-      time: timeInSeconds,
-      quality: quality ?? 85,
-      format: 'jpeg',
-    };
-
-    // If scale is provided, we need the video dimensions to compute target size.
-    // Probe is cheap (cached in Rust), so the overhead is negligible.
+    let width: number | undefined;
+    let height: number | undefined;
     if (scale && scale > 0 && scale < 1) {
       try {
-        const probeResult = await this.dispatch({
-          group: 'videos',
-          action: 'probe',
-          id: absolutePath,
-        });
-        const probeData = probeResult.data as Record<string, unknown>;
-        const srcWidth = probeData.width as number;
-        const srcHeight = probeData.height as number;
-        if (srcWidth && srcHeight) {
-          captureOptions.width = Math.round(srcWidth * scale);
-          captureOptions.height = Math.round(srcHeight * scale);
+        const probe = await this.mediaPlayback.probeMedia(absolutePath);
+        if (probe.width && probe.height) {
+          width = Math.round(probe.width * scale);
+          height = Math.round(probe.height * scale);
         }
       } catch (probeError) {
         logger.warn('probe failed, using full resolution:', probeError);
-        // Continue without scale — full resolution fallback
       }
     }
 
-    const result = await this.dispatch({
-      group: 'videos',
-      action: 'capture',
-      id: absolutePath,
-      options: captureOptions,
+    const dataUrl = await this.mediaPlayback.captureFrame(absolutePath, timeInSeconds, {
+      quality: quality ?? 85,
+      width,
+      height,
     });
 
-    // result.data should contain { data (base64), width, height, format }
-    const data = result.data as Record<string, unknown>;
     return {
       requestId: request.requestId,
       type: 'media:response:getVideoFrame' as never,
-      payload: {
-        imageDataUrl: `data:image/jpeg;base64,${data.data as string}`,
-      } as never,
+      payload: { imageDataUrl: dataUrl } as never,
     };
   }
 

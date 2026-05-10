@@ -6,6 +6,7 @@
  *   const api = ext?.exports as NekoPreviewAPI;
  */
 
+import type { ProbeResult } from '@neko/neko-client';
 import type {
   PreviewManifest,
   PreviewVariant,
@@ -13,19 +14,7 @@ import type {
   RegisterPreviewAssetRequest,
 } from '@neko/shared';
 
-export interface MediaInfo {
-  duration: number;
-  width: number;
-  height: number;
-  fps: number;
-  codec: string;
-  format: string;
-  bitrate?: number;
-  hasAudio: boolean;
-  audioCodec?: string;
-  audioSampleRate?: number;
-  audioChannels?: number;
-}
+export type MediaInfo = ProbeResult;
 
 export interface PlaybackResult {
   videoStreamId: string | null;

@@ -21,12 +21,34 @@ vi.mock('vscode', () => ({
 // Mock @neko/neko-client
 // ============================================================================
 
-const mockDispatch = vi.fn();
+const mockProbeMedia = vi.fn();
+const mockStartPlayback = vi.fn();
+const mockStopPlayback = vi.fn();
+const mockSeekPlayback = vi.fn();
+const mockPausePlayback = vi.fn();
+const mockResumePlayback = vi.fn();
+const mockSetPlaybackSpeed = vi.fn();
+const mockCaptureFrame = vi.fn();
+const mockGetWaveform = vi.fn();
+const mockGetStreamWebSocketUrl = vi.fn();
+const mockGetAudioWebSocketUrl = vi.fn();
 
 vi.mock('@neko/neko-client', () => ({
   EngineClient: vi.fn().mockImplementation(function (this: Record<string, unknown>, port: number) {
     this.port = port;
-    this.dispatch = mockDispatch;
+  }),
+  MediaPlaybackService: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.probeMedia = mockProbeMedia;
+    this.startPlayback = mockStartPlayback;
+    this.stopPlayback = mockStopPlayback;
+    this.seekPlayback = mockSeekPlayback;
+    this.pausePlayback = mockPausePlayback;
+    this.resumePlayback = mockResumePlayback;
+    this.setPlaybackSpeed = mockSetPlaybackSpeed;
+    this.captureFrame = mockCaptureFrame;
+    this.getWaveform = mockGetWaveform;
+    this.getStreamWebSocketUrl = mockGetStreamWebSocketUrl;
+    this.getAudioWebSocketUrl = mockGetAudioWebSocketUrl;
   }),
 }));
 
@@ -43,6 +65,12 @@ async function createService(port = 8080): Promise<PreviewService> {
     activate: vi.fn(),
   });
   mockExecuteCommand.mockResolvedValue({ port });
+  mockGetStreamWebSocketUrl.mockImplementation(
+    (id: string) => `ws://127.0.0.1:${port}/v1/streams/${id}`,
+  );
+  mockGetAudioWebSocketUrl.mockImplementation(
+    (id: string) => `ws://127.0.0.1:${port}/v1/audio/${id}`,
+  );
 
   const service = await PreviewService.tryCreate();
   expect(service).not.toBeNull();
@@ -135,32 +163,41 @@ describe('PreviewService', () => {
     });
   });
 
+  describe('getAudioWebSocketUrl()', () => {
+    it('should build correct audio WebSocket URL', async () => {
+      const service = await createService(3000);
+
+      const url = service.getAudioWebSocketUrl('audio-abc');
+
+      expect(url).toBe('ws://127.0.0.1:3000/v1/audio/audio-abc');
+    });
+
+    it('should return null after disposal', async () => {
+      const service = await createService(3000);
+      await service.dispose();
+
+      const url = service.getAudioWebSocketUrl('audio-abc');
+
+      expect(url).toBeNull();
+    });
+  });
+
   describe('probeMedia()', () => {
-    it('should parse probe response into MediaInfo', async () => {
+    it('should delegate to MediaPlaybackService and return MediaInfo', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          duration: 120.5,
-          format: 'mp4',
-          videoStreams: [
-            {
-              codec: 'h264',
-              width: 1920,
-              height: 1080,
-              fps: 30,
-              bitrate: 5000000,
-            },
-          ],
-          audioStreams: [
-            {
-              codec: 'aac',
-              sampleRate: 44100,
-              channels: 2,
-            },
-          ],
-        },
+      mockProbeMedia.mockResolvedValue({
+        duration: 120.5,
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        codec: 'h264',
+        format: 'mp4',
+        bitrate: 5000000,
+        hasAudio: true,
+        audioCodec: 'aac',
+        audioSampleRate: 44100,
+        audioChannels: 2,
       });
 
       const info = await service.probeMedia('/path/to/video.mp4');
@@ -178,25 +215,23 @@ describe('PreviewService', () => {
         audioSampleRate: 44100,
         audioChannels: 2,
       });
+      expect(mockProbeMedia).toHaveBeenCalledWith('/path/to/video.mp4');
     });
 
     it('should handle audio-only files', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          duration: 240,
-          format: 'mp3',
-          videoStreams: [],
-          audioStreams: [
-            {
-              codec: 'mp3',
-              sampleRate: 48000,
-              channels: 2,
-            },
-          ],
-        },
+      mockProbeMedia.mockResolvedValue({
+        duration: 240,
+        width: 0,
+        height: 0,
+        fps: 0,
+        codec: '',
+        format: 'mp3',
+        hasAudio: true,
+        audioCodec: 'mp3',
+        audioSampleRate: 48000,
+        audioChannels: 2,
       });
 
       const info = await service.probeMedia('/path/to/song.mp3');
@@ -208,13 +243,10 @@ describe('PreviewService', () => {
       expect(info.audioCodec).toBe('mp3');
     });
 
-    it('should throw on error response', async () => {
+    it('should throw on error', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'error',
-        error: { code: 'PROBE_FAILED', message: 'Unsupported format' },
-      });
+      mockProbeMedia.mockRejectedValue(new Error('Unsupported format'));
 
       await expect(service.probeMedia('/path/to/bad.file')).rejects.toThrow('Unsupported format');
     });
@@ -237,90 +269,92 @@ describe('PreviewService', () => {
     it('should start video and audio streams', async () => {
       const service = await createService();
 
-      // Video stream response
-      mockDispatch.mockResolvedValueOnce({
-        status: 'ok',
-        data: { streamId: 'video-1' },
-      });
-      // Audio stream response
-      mockDispatch.mockResolvedValueOnce({
-        status: 'ok',
-        data: { streamId: 'audio-1' },
+      mockStartPlayback.mockResolvedValue({
+        videoStreamId: 'video-1',
+        audioStreamId: 'audio-1',
+        videoStreamUrl: null,
+        audioStreamUrl: null,
       });
 
       const result = await service.startVideoPlayback('/path/to/video.mp4', mediaInfo);
 
       expect(result.videoStreamId).toBe('video-1');
       expect(result.audioStreamId).toBe('audio-1');
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
+      expect(mockStartPlayback).toHaveBeenCalledWith('/path/to/video.mp4', {
+        hasAudio: true,
+        startTime: 0,
+        speed: 1.0,
+      });
     });
 
     it('should skip audio stream if media has no audio', async () => {
       const service = await createService();
-
       const noAudioInfo = { ...mediaInfo, hasAudio: false };
 
-      mockDispatch.mockResolvedValueOnce({
-        status: 'ok',
-        data: { streamId: 'video-1' },
+      mockStartPlayback.mockResolvedValue({
+        videoStreamId: 'video-1',
+        audioStreamId: null,
+        videoStreamUrl: null,
+        audioStreamUrl: null,
       });
 
       const result = await service.startVideoPlayback('/path/to/video.mp4', noAudioInfo);
 
       expect(result.videoStreamId).toBe('video-1');
       expect(result.audioStreamId).toBeNull();
-      // Only 1 dispatch call (video only)
-      expect(mockDispatch).toHaveBeenCalledTimes(1);
+      expect(mockStartPlayback).toHaveBeenCalledWith('/path/to/video.mp4', {
+        hasAudio: false,
+        startTime: 0,
+        speed: 1.0,
+      });
     });
 
-    it('should seek to startTime when not zero', async () => {
+    it('should pass startTime when not zero', async () => {
       const service = await createService();
 
-      // Video stream
-      mockDispatch.mockResolvedValueOnce({ status: 'ok', data: { streamId: 'video-1' } });
-      // Audio stream
-      mockDispatch.mockResolvedValueOnce({ status: 'ok', data: { streamId: 'audio-1' } });
-      // Seek video
-      mockDispatch.mockResolvedValueOnce({ status: 'ok' });
-      // Seek audio
-      mockDispatch.mockResolvedValueOnce({ status: 'ok' });
+      mockStartPlayback.mockResolvedValue({
+        videoStreamId: 'video-1',
+        audioStreamId: 'audio-1',
+        videoStreamUrl: null,
+        audioStreamUrl: null,
+      });
 
       await service.startVideoPlayback('/path/to/video.mp4', mediaInfo, 30);
 
-      // 2 stream starts + 2 seeks = 4 dispatches
-      expect(mockDispatch).toHaveBeenCalledTimes(4);
+      expect(mockStartPlayback).toHaveBeenCalledWith('/path/to/video.mp4', {
+        hasAudio: true,
+        startTime: 30,
+        speed: 1.0,
+      });
     });
 
-    it('should set speed when not 1.0', async () => {
+    it('should pass speed when not 1.0', async () => {
       const service = await createService();
 
-      // Video stream
-      mockDispatch.mockResolvedValueOnce({ status: 'ok', data: { streamId: 'video-1' } });
-      // Audio stream
-      mockDispatch.mockResolvedValueOnce({ status: 'ok', data: { streamId: 'audio-1' } });
-      // Speed video
-      mockDispatch.mockResolvedValueOnce({ status: 'ok' });
-      // Speed audio
-      mockDispatch.mockResolvedValueOnce({ status: 'ok' });
+      mockStartPlayback.mockResolvedValue({
+        videoStreamId: 'video-1',
+        audioStreamId: 'audio-1',
+        videoStreamUrl: null,
+        audioStreamUrl: null,
+      });
 
       await service.startVideoPlayback('/path/to/video.mp4', mediaInfo, 0, 2.0);
 
-      // 2 stream starts + 2 speed sets = 4 dispatches
-      expect(mockDispatch).toHaveBeenCalledTimes(4);
+      expect(mockStartPlayback).toHaveBeenCalledWith('/path/to/video.mp4', {
+        hasAudio: true,
+        startTime: 0,
+        speed: 2.0,
+      });
     });
 
     it('should return null stream IDs on error', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValueOnce({
-        status: 'error',
-        error: { code: 'STREAM_FAILED', message: 'Cannot start stream' },
-      });
+      mockStartPlayback.mockRejectedValue(new Error('Cannot start stream'));
 
-      const result = await service.startVideoPlayback('/path/to/video.mp4', mediaInfo);
-
-      expect(result.videoStreamId).toBeNull();
-      expect(result.audioStreamId).toBeNull();
+      await expect(service.startVideoPlayback('/path/to/video.mp4', mediaInfo)).rejects.toThrow(
+        'Cannot start stream',
+      );
     });
   });
 
@@ -328,28 +362,39 @@ describe('PreviewService', () => {
     it('should stop both video and audio streams', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({ status: 'ok' });
+      mockStopPlayback.mockResolvedValue(undefined);
 
       await service.stopStreams('video-1', 'audio-1');
 
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
+      expect(mockStopPlayback).toHaveBeenCalledWith({
+        videoStreamId: 'video-1',
+        audioStreamId: 'audio-1',
+        videoStreamUrl: null,
+        audioStreamUrl: null,
+      });
     });
 
     it('should handle null stream IDs gracefully', async () => {
       const service = await createService();
 
+      mockStopPlayback.mockResolvedValue(undefined);
+
       await service.stopStreams(null, null);
 
-      expect(mockDispatch).not.toHaveBeenCalled();
+      expect(mockStopPlayback).toHaveBeenCalledWith({
+        videoStreamId: null,
+        audioStreamId: null,
+        videoStreamUrl: null,
+        audioStreamUrl: null,
+      });
     });
 
-    it('should ignore stop errors', async () => {
+    it('should propagate stop errors from MediaPlaybackService', async () => {
       const service = await createService();
 
-      mockDispatch.mockRejectedValue(new Error('Stream not found'));
+      mockStopPlayback.mockRejectedValue(new Error('Stream not found'));
 
-      // Should not throw
-      await expect(service.stopStreams('video-1', 'audio-1')).resolves.toBeUndefined();
+      await expect(service.stopStreams('video-1', 'audio-1')).rejects.toThrow('Stream not found');
     });
   });
 
@@ -357,21 +402,18 @@ describe('PreviewService', () => {
     it('should seek both streams to the specified time', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({ status: 'ok' });
+      mockSeekPlayback.mockResolvedValue(undefined);
 
       await service.seekStreams('video-1', 'audio-1', 42.5);
 
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
-      // Verify the seek request
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          group: 'videos',
-          action: 'seek',
-          options: expect.objectContaining({
-            streamId: 'video-1',
-            time: 42.5,
-          }),
-        }),
+      expect(mockSeekPlayback).toHaveBeenCalledWith(
+        {
+          videoStreamId: 'video-1',
+          audioStreamId: 'audio-1',
+          videoStreamUrl: null,
+          audioStreamUrl: null,
+        },
+        42.5,
       );
     });
   });
@@ -380,17 +422,16 @@ describe('PreviewService', () => {
     it('should pause both streams', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({ status: 'ok' });
+      mockPausePlayback.mockResolvedValue(undefined);
 
       await service.pauseStreams('video-1', 'audio-1');
 
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ group: 'videos', action: 'pause' }),
-      );
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ group: 'audios', action: 'pause' }),
-      );
+      expect(mockPausePlayback).toHaveBeenCalledWith({
+        videoStreamId: 'video-1',
+        audioStreamId: 'audio-1',
+        videoStreamUrl: null,
+        audioStreamUrl: null,
+      });
     });
   });
 
@@ -398,17 +439,16 @@ describe('PreviewService', () => {
     it('should resume both streams', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({ status: 'ok' });
+      mockResumePlayback.mockResolvedValue(undefined);
 
       await service.resumeStreams('video-1', 'audio-1');
 
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ group: 'videos', action: 'resume' }),
-      );
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ group: 'audios', action: 'resume' }),
-      );
+      expect(mockResumePlayback).toHaveBeenCalledWith({
+        videoStreamId: 'video-1',
+        audioStreamId: 'audio-1',
+        videoStreamUrl: null,
+        audioStreamUrl: null,
+      });
     });
   });
 
@@ -416,197 +456,70 @@ describe('PreviewService', () => {
     it('should set speed on both streams', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({ status: 'ok' });
+      mockSetPlaybackSpeed.mockResolvedValue(undefined);
 
       await service.setStreamSpeed('video-1', 'audio-1', 1.5);
 
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          group: 'videos',
-          action: 'speed',
-          options: expect.objectContaining({ speed: 1.5 }),
-        }),
+      expect(mockSetPlaybackSpeed).toHaveBeenCalledWith(
+        {
+          videoStreamId: 'video-1',
+          audioStreamId: 'audio-1',
+          videoStreamUrl: null,
+          audioStreamUrl: null,
+        },
+        1.5,
       );
     });
   });
 
   describe('getWaveform()', () => {
-    it('should mix multi-channel peaks to mono', async () => {
+    it('should delegate to MediaPlaybackService', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          resourceId: 'res-1',
-          waveform: {
-            sampleRate: 44100,
-            channels: 2,
-            peaksPerSecond: 100,
-            duration: 0.03,
-            peaks: [
-              [0.5, 0.3, 0.8],
-              [0.2, 0.9, 0.1],
-            ],
-          },
-        },
+      mockGetWaveform.mockResolvedValue({
+        peaks: [0.5, 0.9, 0.8],
+        duration: 0.03,
+        sampleRate: 44100,
       });
 
       const result = await service.getWaveform('/path/to/audio.mp3');
 
-      // Max across channels: max(0.5,0.2)=0.5, max(0.3,0.9)=0.9, max(0.8,0.1)=0.8
       expect(result.peaks).toEqual([0.5, 0.9, 0.8]);
       expect(result.duration).toBe(0.03);
       expect(result.sampleRate).toBe(44100);
+      expect(mockGetWaveform).toHaveBeenCalledWith('/path/to/audio.mp3');
     });
 
-    it('should return single channel as-is', async () => {
+    it('should throw when service is not available', async () => {
       const service = await createService();
+      await service.dispose();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          resourceId: 'res-1',
-          waveform: {
-            sampleRate: 48000,
-            channels: 1,
-            peaksPerSecond: 100,
-            duration: 0.02,
-            peaks: [[0.4, 0.7]],
-          },
-        },
-      });
-
-      const result = await service.getWaveform('/path/to/mono.wav');
-
-      expect(result.peaks).toEqual([0.4, 0.7]);
-    });
-
-    it('should return empty array for no peaks', async () => {
-      const service = await createService();
-
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          resourceId: 'res-1',
-          waveform: {
-            sampleRate: 44100,
-            channels: 0,
-            peaksPerSecond: 100,
-            duration: 0,
-            peaks: [],
-          },
-        },
-      });
-
-      const result = await service.getWaveform('/path/to/silent.wav');
-
-      expect(result.peaks).toEqual([]);
-    });
-
-    it('should throw on error response', async () => {
-      const service = await createService();
-
-      mockDispatch.mockResolvedValue({
-        status: 'error',
-        error: {
-          code: 'WAVEFORM_FAILED',
-          message: 'Cannot generate waveform',
-        },
-      });
-
-      await expect(service.getWaveform('/path/to/bad.mp3')).rejects.toThrow(
-        'Cannot generate waveform',
+      await expect(service.getWaveform('/path/to/audio.mp3')).rejects.toThrow(
+        'PreviewService not available',
       );
     });
   });
 
   describe('captureFrame()', () => {
-    it('should return base64 encoded frame data', async () => {
+    it('should delegate to MediaPlaybackService', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: { data: 'base64encodeddata' },
-      });
+      mockCaptureFrame.mockResolvedValue('data:image/jpeg;base64,abc123');
 
       const result = await service.captureFrame('/path/to/video.mp4', 5.0);
 
-      expect(result).toBe('base64encodeddata');
+      expect(result).toBe('data:image/jpeg;base64,abc123');
+      expect(mockCaptureFrame).toHaveBeenCalledWith('/path/to/video.mp4', 5.0, { quality: 80 });
     });
 
-    it('should throw on error response', async () => {
+    it('should throw on error', async () => {
       const service = await createService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'error',
-        error: { code: 'CAPTURE_FAILED', message: 'No frame at time' },
-      });
+      mockCaptureFrame.mockRejectedValue(new Error('No frame at time'));
 
       await expect(service.captureFrame('/path/to/video.mp4', -1)).rejects.toThrow(
         'No frame at time',
       );
-    });
-  });
-
-  describe('dispatch()', () => {
-    it('should throw when service is not available', async () => {
-      const service = await createService();
-      await service.dispose();
-
-      await expect(service.dispatch({ group: 'videos', action: 'probe' })).rejects.toThrow(
-        'PreviewService not available',
-      );
-    });
-
-    it('should forward request to EngineClient.dispatch()', async () => {
-      const service = await createService();
-
-      mockDispatch.mockResolvedValue({ status: 'ok' });
-
-      await service.dispatch({
-        group: 'videos',
-        action: 'stream',
-        id: 'test-id',
-        options: { quality: 'high' },
-        body: { key: 'value' },
-      });
-
-      expect(mockDispatch).toHaveBeenCalledWith({
-        group: 'videos',
-        action: 'stream',
-        id: 'test-id',
-        options: { quality: 'high' },
-        body: { key: 'value' },
-      });
-    });
-
-    it('should merge legacy top-level fields into options', async () => {
-      const service = await createService();
-
-      mockDispatch.mockResolvedValue({ status: 'ok' });
-
-      await service.dispatch({
-        group: 'videos',
-        action: 'stream',
-        source: '/path/to/file',
-        sessionId: 'session-1',
-        streamId: 'stream-1',
-        options: { quality: 'high' },
-      });
-
-      expect(mockDispatch).toHaveBeenCalledWith({
-        group: 'videos',
-        action: 'stream',
-        id: undefined,
-        options: {
-          quality: 'high',
-          source: '/path/to/file',
-          sessionId: 'session-1',
-          streamId: 'stream-1',
-        },
-        body: undefined,
-      });
     });
   });
 

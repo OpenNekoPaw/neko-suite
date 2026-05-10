@@ -112,6 +112,13 @@ export {
   type TranscribeResponse,
 } from './EngineClient';
 
+// High-level media playback (paired video + audio streams)
+export {
+  MediaPlaybackService,
+  type StartPlaybackOptions,
+  type CaptureFrameOptions,
+} from './MediaPlaybackService';
+
 export type {
   PreviewManifest,
   PreviewVariant,
@@ -154,6 +161,7 @@ export type {
   ProbeResult,
   WaveformResult,
   StreamHandle,
+  PlaybackHandle,
   LoudnessAnalysis,
   // Silence detection
   SilenceAnalysis,

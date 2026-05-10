@@ -1,8 +1,8 @@
 /**
  * Canvas Editor Provider - Custom editor for .nkc files
  *
- * Supports inline media playback by sharing neko-preview's
- * NativeEngine and frame server via NekoPreviewAPI.
+ * Supports inline media playback via MediaPlaybackService
+ * from @neko/neko-client (direct engine connection).
  */
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
@@ -41,6 +41,8 @@ import type {
 import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
+import { EngineClient, MediaPlaybackService } from '@neko/neko-client';
+import type { PlaybackHandle } from '@neko/neko-client';
 import { getLogger } from '../utils/logger';
 import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
@@ -201,34 +203,6 @@ function mapOperationToCanvasChangeEvent(operation: {
   };
 }
 
-// NekoPreviewAPI type (matches neko-preview/src/types/api.ts)
-interface NekoPreviewAPI {
-  readonly isAvailable: boolean;
-  readonly port: number | null;
-  getStreamWebSocketUrl(streamId: string): string | null;
-  probeMedia(filePath: string): Promise<Record<string, unknown>>;
-  startPlayback(
-    filePath: string,
-    mediaInfo: Record<string, unknown>,
-    startTime?: number,
-    speed?: number,
-  ): Promise<{ videoStreamId: string | null; audioStreamId: string | null }>;
-  stopStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void>;
-  seekStreams(
-    videoStreamId: string | null,
-    audioStreamId: string | null,
-    time: number,
-  ): Promise<void>;
-  pauseStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void>;
-  resumeStreams(videoStreamId: string | null, audioStreamId: string | null): Promise<void>;
-  setStreamSpeed(
-    videoStreamId: string | null,
-    audioStreamId: string | null,
-    speed: number,
-  ): Promise<void>;
-  captureFrame(filePath: string, time: number, quality?: number): Promise<string>;
-}
-
 interface NekoPreviewVariantAPI {
   registerPreviewAsset(request: {
     source: string;
@@ -246,10 +220,8 @@ interface NekoPreviewVariantAPI {
   unregisterPreviewAsset(assetIdOrToken: string): Promise<void>;
 }
 
-function hasPreviewVariantAPI(
-  api: NekoPreviewAPI | null,
-): api is NekoPreviewAPI & NekoPreviewVariantAPI {
-  const candidate = api as (NekoPreviewAPI & Partial<NekoPreviewVariantAPI>) | null;
+function isPreviewVariantAPI(api: unknown): api is NekoPreviewVariantAPI {
+  const candidate = api as Partial<NekoPreviewVariantAPI> | null;
   return (
     typeof candidate?.registerPreviewAsset === 'function' &&
     typeof candidate.requestPreviewVariant === 'function' &&
@@ -278,34 +250,43 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private outlineProvider: CanvasOutlineProvider | undefined;
   private statusBar: CanvasStatusBar | undefined;
 
-  // Shared neko-preview API for media playback
-  private _previewApi: NekoPreviewAPI | null = null;
+  // Direct media playback via neko-client (no cross-extension dependency)
+  private _engineClient: EngineClient | null = null;
+  private _mediaPlayback: MediaPlaybackService | null = null;
   // Batch image generation scheduler
   private readonly scheduler = new BatchGenerationScheduler();
   // Track active streams per panel for cleanup
-  private _activeStreams = new Map<
-    vscode.WebviewPanel,
-    Map<string, { videoStreamId: string | null; audioStreamId: string | null }>
-  >();
+  private _activeStreams = new Map<vscode.WebviewPanel, Map<string, PlaybackHandle>>();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
-  /** Lazily acquire neko-preview API */
-  private async getPreviewApi(): Promise<NekoPreviewAPI | null> {
-    if (this._previewApi?.isAvailable) return this._previewApi;
+  private async getMediaPlayback(): Promise<MediaPlaybackService | null> {
+    if (this._mediaPlayback) return this._mediaPlayback;
     try {
-      const ext = vscode.extensions.getExtension('neko.neko-preview');
-      if (!ext) {
-        logger.warn('neko-preview extension not found');
+      const result = await vscode.commands.executeCommand<{ port: number } | null>(
+        'neko.engine.ensureFrameServer',
+      );
+      if (!result) {
+        logger.warn('ensureFrameServer returned null');
         return null;
       }
-      if (!ext.isActive) {
-        await ext.activate();
-      }
-      this._previewApi = ext.exports as NekoPreviewAPI;
-      return this._previewApi?.isAvailable ? this._previewApi : null;
+      this._engineClient = new EngineClient(result.port);
+      this._mediaPlayback = new MediaPlaybackService(this._engineClient);
+      return this._mediaPlayback;
     } catch (error) {
-      logger.error(`Failed to get preview API: ${error}`);
+      logger.error(`Failed to init media playback: ${error}`);
+      return null;
+    }
+  }
+
+  private async getPreviewVariantApi(): Promise<NekoPreviewVariantAPI | null> {
+    try {
+      const ext = vscode.extensions.getExtension('neko.neko-preview');
+      if (!ext) return null;
+      if (!ext.isActive) await ext.activate();
+      const api = ext.exports;
+      return isPreviewVariantAPI(api) ? api : null;
+    } catch {
       return null;
     }
   }
@@ -346,12 +327,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     );
 
     webviewPanel.onDidDispose(async () => {
-      // Stop active media streams for this panel
       const panelStreams = this._activeStreams.get(webviewPanel);
       if (panelStreams && panelStreams.size > 0) {
-        const api = await this.getPreviewApi();
-        for (const streams of panelStreams.values()) {
-          await api?.stopStreams(streams.videoStreamId, streams.audioStreamId).catch(() => {});
+        const playback = await this.getMediaPlayback();
+        for (const handle of panelStreams.values()) {
+          await playback?.stopPlayback(handle).catch(() => {});
         }
         this._activeStreams.delete(webviewPanel);
       }
@@ -870,13 +850,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         try {
           const fsPath = await this.resolveAssetPath(assetPath, document.uri);
-          const api = await this.getPreviewApi();
-          if (hasPreviewVariantAPI(api)) {
+          const variantApi = await this.getPreviewVariantApi();
+          if (variantApi) {
             const panoramicRoute = getPanoramicPreviewRoute({
               filePath: fsPath,
               mediaType: mediaTypeHint,
             });
-            const manifest = await api.registerPreviewAsset({
+            const manifest = await variantApi.registerPreviewAsset({
               source: fsPath,
               kind:
                 panoramicRoute?.kind ??
@@ -885,7 +865,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
                   : 'unknown'),
               expectedProjection: panoramicRoute ? 'equirectangular' : undefined,
             });
-            const variant = await api.requestPreviewVariant(manifest.assetId, {
+            const variant = await variantApi.requestPreviewVariant(manifest.assetId, {
               role: role ?? 'thumbnail',
               width: 640,
               height: 360,
@@ -1272,33 +1252,29 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       // =================================================================
-      // Media playback via shared neko-preview API
+      // Media playback via MediaPlaybackService (direct engine)
       // =================================================================
 
       case 'media:probe': {
         const assetPath = message.assetPath as string;
-        logger.debug(`media:probe received, assetPath: ${assetPath}, nodeId: ${message.nodeId}`);
         if (!assetPath) break;
         try {
           const filePath = await this.resolveAssetPath(assetPath, document.uri);
-          logger.debug(`Resolved filePath: ${filePath}`);
-          const api = await this.getPreviewApi();
-          logger.debug(`Preview API available: ${!!api}, isAvailable: ${api?.isAvailable}`);
-          if (!api) {
+          const playback = await this.getMediaPlayback();
+          if (!playback) {
             webviewPanel.webview.postMessage({
               type: 'media:probeResult',
               nodeId: message.nodeId,
-              error: 'Preview engine not available',
+              error: 'Media engine not available',
             });
             break;
           }
-          const mediaInfo = await api.probeMedia(filePath);
-          logger.debug(`Probe result: ${JSON.stringify(mediaInfo)}`);
+          const mediaInfo = await playback.probeMedia(filePath);
           webviewPanel.webview.postMessage({
             type: 'media:probeResult',
             nodeId: message.nodeId,
             mediaInfo,
-            port: api.port,
+            port: playback.port,
           });
         } catch (error) {
           logger.error(`Probe failed: ${error}`);
@@ -1319,12 +1295,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!assetPath || !mediaInfo) break;
         try {
           const filePath = await this.resolveAssetPath(assetPath, document.uri);
-          const api = await this.getPreviewApi();
-          if (!api) {
+          const playback = await this.getMediaPlayback();
+          if (!playback) {
             webviewPanel.webview.postMessage({
               type: 'media:streamReady',
               nodeId: message.nodeId,
-              error: 'Preview engine not available',
+              error: 'Media engine not available',
             });
             break;
           }
@@ -1336,21 +1312,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           }
           const prev = panelStreams.get(nodeId);
           if (prev) {
-            await api.stopStreams(prev.videoStreamId, prev.audioStreamId).catch(() => {});
+            await playback.stopPlayback(prev).catch(() => {});
           }
-          const result = await api.startPlayback(filePath, mediaInfo, startTime, speed);
-          panelStreams.set(nodeId, result);
+          const hasAudio = (mediaInfo.hasAudio as boolean) ?? true;
+          const handle = await playback.startPlayback(filePath, {
+            hasAudio,
+            startTime,
+            speed,
+          });
+          panelStreams.set(nodeId, handle);
           webviewPanel.webview.postMessage({
             type: 'media:streamReady',
             nodeId: message.nodeId,
-            videoStreamUrl: result.videoStreamId
-              ? api.getStreamWebSocketUrl(result.videoStreamId)
-              : null,
-            audioStreamUrl: result.audioStreamId
-              ? api.getStreamWebSocketUrl(result.audioStreamId)
-              : null,
-            videoStreamId: result.videoStreamId,
-            audioStreamId: result.audioStreamId,
+            videoStreamUrl: handle.videoStreamUrl,
+            audioStreamUrl: handle.audioStreamUrl,
+            videoStreamId: handle.videoStreamId,
+            audioStreamId: handle.audioStreamId,
             mediaInfo,
           });
         } catch (error) {
@@ -1365,42 +1342,38 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       case 'media:seek': {
         const seekNodeId = (message.nodeId as string) ?? '';
-        const seekStreams = this._activeStreams.get(webviewPanel)?.get(seekNodeId);
-        if (!seekStreams) break;
-        const api = await this.getPreviewApi();
-        await api?.seekStreams(
-          seekStreams.videoStreamId,
-          seekStreams.audioStreamId,
-          message.time as number,
-        );
+        const seekHandle = this._activeStreams.get(webviewPanel)?.get(seekNodeId);
+        if (!seekHandle) break;
+        const seekPlayback = await this.getMediaPlayback();
+        await seekPlayback?.seekPlayback(seekHandle, message.time as number);
         break;
       }
 
       case 'media:pause': {
         const pauseNodeId = (message.nodeId as string) ?? '';
-        const pauseStreams = this._activeStreams.get(webviewPanel)?.get(pauseNodeId);
-        if (!pauseStreams) break;
-        const api = await this.getPreviewApi();
-        await api?.pauseStreams(pauseStreams.videoStreamId, pauseStreams.audioStreamId);
+        const pauseHandle = this._activeStreams.get(webviewPanel)?.get(pauseNodeId);
+        if (!pauseHandle) break;
+        const pausePlayback = await this.getMediaPlayback();
+        await pausePlayback?.pausePlayback(pauseHandle);
         break;
       }
 
       case 'media:resume': {
         const resumeNodeId = (message.nodeId as string) ?? '';
-        const resumeStreams = this._activeStreams.get(webviewPanel)?.get(resumeNodeId);
-        if (!resumeStreams) break;
-        const api = await this.getPreviewApi();
-        await api?.resumeStreams(resumeStreams.videoStreamId, resumeStreams.audioStreamId);
+        const resumeHandle = this._activeStreams.get(webviewPanel)?.get(resumeNodeId);
+        if (!resumeHandle) break;
+        const resumePlayback = await this.getMediaPlayback();
+        await resumePlayback?.resumePlayback(resumeHandle);
         break;
       }
 
       case 'media:stop': {
         const stopNodeId = (message.nodeId as string) ?? '';
         const stopPanelStreams = this._activeStreams.get(webviewPanel);
-        const stopStreams = stopPanelStreams?.get(stopNodeId);
-        if (!stopStreams) break;
-        const api = await this.getPreviewApi();
-        await api?.stopStreams(stopStreams.videoStreamId, stopStreams.audioStreamId);
+        const stopHandle = stopPanelStreams?.get(stopNodeId);
+        if (!stopHandle) break;
+        const stopPlayback = await this.getMediaPlayback();
+        await stopPlayback?.stopPlayback(stopHandle);
         stopPanelStreams?.delete(stopNodeId);
         if (stopPanelStreams?.size === 0) {
           this._activeStreams.delete(webviewPanel);
@@ -1414,18 +1387,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!assetPath) break;
         try {
           const filePath = await this.resolveAssetPath(assetPath, document.uri);
-          const api = await this.getPreviewApi();
-          if (!api) {
+          const playback = await this.getMediaPlayback();
+          if (!playback) {
             webviewPanel.webview.postMessage({
               type: 'media:captureFrameResult',
               nodeId: message.nodeId,
-              error: 'Preview engine not available',
+              error: 'Media engine not available',
             });
             break;
           }
-          const base64 = await api.captureFrame(filePath, time);
-          // Ensure it's a proper data URL
-          const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+          const dataUrl = await playback.captureFrame(filePath, time);
           webviewPanel.webview.postMessage({
             type: 'media:captureFrameResult',
             nodeId: message.nodeId,
@@ -1452,8 +1423,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             mediaType: message.mediaType as string | undefined,
           });
           if (!route) break;
-          const api = await this.getPreviewApi();
-          if (!hasPreviewVariantAPI(api)) {
+          const variantApi = await this.getPreviewVariantApi();
+          if (!variantApi) {
             webviewPanel.webview.postMessage({
               type: 'media:panoramicThumbnailResult',
               nodeId: message.nodeId,
@@ -1461,13 +1432,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             });
             break;
           }
-          const manifest = await api.registerPreviewAsset({
+          const manifest = await variantApi.registerPreviewAsset({
             source: filePath,
             kind: route.kind,
             expectedProjection: 'equirectangular',
           });
           assetId = manifest.assetId;
-          const variant = await api.requestPreviewVariant(manifest.assetId, {
+          const variant = await variantApi.requestPreviewVariant(manifest.assetId, {
             role: route.kind === 'image' ? 'proxy' : 'thumbnail',
             width: 640,
             height: 320,
@@ -1485,10 +1456,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           });
         } finally {
           if (assetId) {
-            const api = await this.getPreviewApi();
-            if (hasPreviewVariantAPI(api)) {
-              await api.unregisterPreviewAsset(assetId).catch(() => {});
-            }
+            const variantApi = await this.getPreviewVariantApi();
+            await variantApi?.unregisterPreviewAsset(assetId).catch(() => {});
           }
         }
         break;
@@ -1535,18 +1504,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             ? assetSrc
             : `${projectDir}/${assetSrc}`;
 
-          const api = await this.getPreviewApi();
-          if (!api) {
+          const playback = await this.getMediaPlayback();
+          if (!playback) {
             webviewPanel.webview.postMessage({
               type: 'project:thumbnailResult',
               nodeId,
-              error: 'Preview engine not available',
+              error: 'Media engine not available',
             });
             break;
           }
 
-          const base64 = await api.captureFrame(resolvedAssetPath, 1);
-          const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+          const dataUrl = await playback.captureFrame(resolvedAssetPath, 1);
           webviewPanel.webview.postMessage({
             type: 'project:thumbnailResult',
             nodeId,
