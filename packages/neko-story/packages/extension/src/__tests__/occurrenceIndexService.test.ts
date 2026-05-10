@@ -1,16 +1,23 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type {
+  AnnotationCanvasNode,
   CanvasNode,
   GalleryCanvasNode,
+  GroupCanvasNode,
   ShotCanvasNode,
+  TextCanvasNode,
   AssetEntity,
   GeneratedAsset,
 } from '@neko/shared';
-import { OccurrenceIndexService } from '../services/OccurrenceIndexService';
+import {
+  CharacterRegistryTextOccurrenceResolver,
+  OccurrenceIndexService,
+} from '../services/OccurrenceIndexService';
 import type {
   CrossModalDataProvider,
   CrossModalDataSnapshot,
 } from '../services/CrossModalDataProvider';
+import type { ICharacterWorkspaceIndex } from '../services/types';
 
 const mockVscode = vi.hoisted(() => {
   const emitters: Array<{ fire: (...args: any[]) => void }> = [];
@@ -97,6 +104,43 @@ function createShotNode(
   } as unknown as ShotCanvasNode;
 }
 
+function createAnnotationNode(id: string, content: string): CanvasNode {
+  return {
+    id,
+    type: 'annotation',
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 100 },
+    data: { content },
+  } as unknown as AnnotationCanvasNode;
+}
+
+function createTextNode(id: string, content: string): CanvasNode {
+  return {
+    id,
+    type: 'text',
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 100 },
+    data: { content, format: 'plain' },
+  } as unknown as TextCanvasNode;
+}
+
+function createGroupNode(id: string, label: string, sectionTitle?: string): CanvasNode {
+  return {
+    id,
+    type: 'group',
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 100 },
+    data: { childIds: [], label },
+    content: sectionTitle
+      ? {
+          id: 'section-1',
+          title: sectionTitle,
+          blocks: [{ id: 'block-1', kind: 'text', label: 'Bob beat' }],
+        }
+      : undefined,
+  } as unknown as GroupCanvasNode;
+}
+
 function createAssetEntity(id: string, name: string, registryId?: string): AssetEntity {
   const now = Date.now();
   return {
@@ -139,6 +183,42 @@ function createMockDataProvider(snapshot: CrossModalDataSnapshot): CrossModalDat
     onDidUpdate: emitter.event,
     dispose: vi.fn(),
   } as unknown as CrossModalDataProvider;
+}
+
+function createMockCharacterIndex(): ICharacterWorkspaceIndex {
+  return {
+    ensureInitialized: vi.fn().mockResolvedValue(undefined),
+    getRegistry: vi.fn().mockReturnValue({
+      version: 1,
+      characters: [
+        {
+          id: 'char_alice',
+          canonicalName: 'Alice',
+          aliases: ['A.'],
+          status: 'confirmed',
+          bindings: { scriptNames: ['ALICE'] },
+        },
+        {
+          id: 'char_linxia',
+          canonicalName: '林夏',
+          aliases: ['小夏'],
+          status: 'confirmed',
+        },
+        {
+          id: 'char_bob',
+          canonicalName: 'Bob',
+          aliases: [],
+          status: 'confirmed',
+        },
+      ],
+    }),
+    resolveCharacter: vi.fn(),
+    getDefinition: vi.fn(),
+    getReferenceNames: vi.fn().mockReturnValue([]),
+    getAllCompletionNames: vi.fn().mockReturnValue([]),
+    searchCharacters: vi.fn().mockReturnValue([]),
+    dispose: vi.fn(),
+  } as unknown as ICharacterWorkspaceIndex;
 }
 
 // -- Tests --
@@ -278,6 +358,53 @@ describe('OccurrenceIndexService', () => {
 
     it('returns all sources when no filter', () => {
       expect(service.queryOccurrences('character', 'char_alice')).toHaveLength(3);
+    });
+  });
+
+  describe('with canvas text surfaces', () => {
+    it('indexes annotation, text, and container mentions through an injected resolver', async () => {
+      const snapshot: CrossModalDataSnapshot = {
+        canvasNodes: [
+          createAnnotationNode('note-1', 'Alice waits by the window.'),
+          createTextNode('text-1', '林夏站在窗边。'),
+          createGroupNode('group-1', 'Alice references', '小夏 and Bob notes'),
+        ],
+        assetEntities: [],
+        generatedAssets: [],
+      };
+      const service = new OccurrenceIndexService(createMockDataProvider(snapshot), {
+        textResolver: new CharacterRegistryTextOccurrenceResolver(createMockCharacterIndex()),
+      });
+      await service.ensureInitialized();
+
+      expect(service.countBySource('character', 'char_alice')).toEqual({
+        'canvas-comment': 1,
+        'canvas-container': 1,
+      });
+      expect(service.countBySource('character', 'char_linxia')).toEqual({
+        'canvas-container': 1,
+        'canvas-text': 1,
+      });
+      expect(service.queryOccurrences('character', 'char_bob')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'canvas-container',
+            detail: 'Container block: Bob',
+          }),
+        ]),
+      );
+    });
+
+    it('does not treat ASCII names as substrings inside longer words', async () => {
+      const resolver = new CharacterRegistryTextOccurrenceResolver(createMockCharacterIndex());
+
+      expect(resolver.resolveText('Malice is not Alice')).toEqual([
+        expect.objectContaining({
+          entityId: 'char_alice',
+          matchedText: 'Alice',
+        }),
+      ]);
+      expect(resolver.resolveText('Malice only')).toEqual([]);
     });
   });
 });

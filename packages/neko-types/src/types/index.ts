@@ -246,3 +246,6 @@ export * from './provider-card';
 
 // Creative entity graph types (cross-modal relationship graph, ADR Phase 3)
 export * from './creative-entity-graph';
+
+// Creative entity asset composition contracts
+export * from './creative-entity-asset-composition';

@@ -29,6 +29,18 @@ export {
   projectMarketAssetInstalls,
   type MarketAssetProjection,
 } from './MarketAssetProjection';
+export {
+  buildAssetBindingCandidate,
+  buildCancelEntityBindingPlan,
+  buildDeleteAssetPlan,
+  buildRepresentationPackageDetail,
+  parseProjectAssetEntityId,
+  toProjectAssetRef,
+  type AssetBindingCandidate,
+  type CancelEntityBindingPlan,
+  type DeleteAssetPlan,
+  type RepresentationPackageDetail,
+} from './EntityAssetCompositionService';
 export { PathResolver } from './PathResolver';
 export type {
   FileAccessChecker,

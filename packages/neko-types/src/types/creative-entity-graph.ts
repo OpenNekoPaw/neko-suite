@@ -32,6 +32,7 @@ export interface CreativeGraphNode {
 
 export type CreativeRelationEdgeType =
   | 'alias-of'
+  | 'bound-to-representation'
   | 'depicts-character'
   | 'depicts-object'
   | 'set-in-scene'

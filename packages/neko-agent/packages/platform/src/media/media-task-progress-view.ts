@@ -13,6 +13,7 @@ import {
   type MediaTaskView,
   type MediaTaskProgressView,
 } from './media-task-view';
+import { buildMediaTaskCreativeEntityContext } from './media-task-creative-entity';
 import type { GeneratedMediaTaskType } from './media-generated-asset';
 import type { MediaTask } from './types';
 
@@ -44,6 +45,11 @@ export async function buildMediaTaskViewDelivery(
 ): Promise<MediaTaskViewDelivery> {
   const deliveryPlan = await buildMediaTaskDeliveryPlan(input);
   const { urls, thumbnailUrl, assets } = projectDeliveryPresentation(input, deliveryPlan);
+  const creativeEntity = buildMediaTaskCreativeEntityContext({
+    task: input.task,
+    taskType: input.taskType,
+    assets,
+  });
 
   return {
     view: createMediaTaskView(input.task, {
@@ -51,6 +57,7 @@ export async function buildMediaTaskViewDelivery(
       thumbnailUrl,
       localPaths: deliveryPlan.localPaths,
       assets,
+      creativeEntity,
     }),
     deliveryPlan,
   };
@@ -61,6 +68,11 @@ export async function buildMediaTaskProgressViewDelivery(
 ): Promise<MediaTaskProgressViewDelivery> {
   const deliveryPlan = await buildMediaTaskDeliveryPlan(input);
   const { urls, thumbnailUrl, assets } = projectDeliveryPresentation(input, deliveryPlan);
+  const creativeEntity = buildMediaTaskCreativeEntityContext({
+    task: input.task,
+    taskType: input.taskType,
+    assets,
+  });
 
   return {
     view: createMediaTaskProgressView({
@@ -69,6 +81,7 @@ export async function buildMediaTaskProgressViewDelivery(
       thumbnailUrl,
       localPaths: deliveryPlan.localPaths,
       assets,
+      creativeEntity,
       now: input.now,
     }),
     deliveryPlan,

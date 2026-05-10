@@ -80,6 +80,14 @@ export {
   type MediaTaskViewOptions,
 } from './media-task-view';
 export {
+  buildMediaTaskCreativeEntityContext,
+  type BuildMediaTaskCreativeEntityContextInput,
+  type MediaTaskCreativeEntityAction,
+  type MediaTaskCreativeEntityActionKind,
+  type MediaTaskCreativeEntityBindingCandidate,
+  type MediaTaskCreativeEntityContext,
+} from './media-task-creative-entity';
+export {
   finalizeCompletedMediaTaskOutputs,
   getMediaTaskPrimaryOutputUrl,
   type FinalizeCompletedMediaTaskOutputsInput,

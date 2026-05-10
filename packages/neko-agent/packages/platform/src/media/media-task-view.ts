@@ -1,4 +1,8 @@
 import type { WebviewGeneratedAsset } from '@neko/shared';
+import {
+  buildMediaTaskCreativeEntityContext,
+  type MediaTaskCreativeEntityContext,
+} from './media-task-creative-entity';
 import type { MediaGenerationType, MediaOutput, MediaTask, MediaTaskStatus } from './types';
 
 export type MediaBackgroundTaskType = 'image' | 'video' | 'audio';
@@ -51,6 +55,7 @@ export interface MediaTaskActionCandidate {
   id: string;
   conversationId?: string;
   resultUrl?: string;
+  creativeEntity?: MediaTaskCreativeEntityContext;
 }
 
 export function createMediaTaskActionCandidate(
@@ -60,10 +65,12 @@ export function createMediaTaskActionCandidate(
 
   const conversationId = getMediaTaskConversationId(task);
   const resultUrl = task.outputs?.find((output) => output.url.length > 0)?.url;
+  const creativeEntity = buildMediaTaskCreativeEntityContext({ task });
   return {
     id: task.id,
     ...(conversationId ? { conversationId } : {}),
     ...(resultUrl ? { resultUrl } : {}),
+    ...(creativeEntity ? { creativeEntity } : {}),
   };
 }
 
@@ -73,6 +80,7 @@ export interface MediaTaskProgressViewInput {
   thumbnailUrl?: string;
   localPaths?: readonly string[];
   assets?: readonly WebviewGeneratedAsset[];
+  creativeEntity?: MediaTaskCreativeEntityContext;
   now?: () => Date;
 }
 
@@ -86,6 +94,7 @@ export interface MediaTaskProgressView {
     thumbnailUrl?: string;
     localPaths?: string[];
     assets?: WebviewGeneratedAsset[];
+    creativeEntity?: MediaTaskCreativeEntityContext;
   };
   error?: string;
   updatedAt: string;
@@ -104,6 +113,7 @@ export interface MediaTaskResultView {
   localPaths?: string[];
   thumbnailUrl?: string;
   assets?: WebviewGeneratedAsset[];
+  creativeEntity?: MediaTaskCreativeEntityContext;
 }
 
 export interface MediaTaskViewOptions {
@@ -111,6 +121,7 @@ export interface MediaTaskViewOptions {
   thumbnailUrl?: string;
   localPaths?: readonly string[];
   assets?: readonly WebviewGeneratedAsset[];
+  creativeEntity?: MediaTaskCreativeEntityContext;
 }
 
 export interface MediaTaskView {
@@ -140,7 +151,7 @@ export function createMediaTaskView(
   const outputs = task.outputs
     ?.map(toMediaTaskOutputView)
     .filter((output) => output.url.length > 0);
-  const result = createMediaTaskResultView(options);
+  const result = createMediaTaskResultView(task, options);
 
   return {
     id: task.id,
@@ -167,18 +178,28 @@ export function createMediaTaskView(
   };
 }
 
-function createMediaTaskResultView(options: MediaTaskViewOptions): MediaTaskResultView | undefined {
+function createMediaTaskResultView(
+  task: MediaTask,
+  options: MediaTaskViewOptions,
+): MediaTaskResultView | undefined {
   const urls = options.urls?.filter((url) => url.length > 0) ?? [];
   const localPaths = options.localPaths?.filter((filePath) => filePath.length > 0) ?? [];
   const assets = options.assets ?? [];
+  const creativeEntity =
+    options.creativeEntity ??
+    buildMediaTaskCreativeEntityContext({
+      task,
+      assets,
+    });
 
-  if (urls.length === 0) return undefined;
+  if (urls.length === 0 && !creativeEntity) return undefined;
 
   return {
     urls: [...urls],
     ...(options.thumbnailUrl ? { thumbnailUrl: options.thumbnailUrl } : {}),
     ...(localPaths.length > 0 ? { localPaths: [...localPaths] } : {}),
     ...(assets.length > 0 ? { assets: [...assets] } : {}),
+    ...(creativeEntity ? { creativeEntity } : {}),
   };
 }
 
@@ -188,6 +209,12 @@ export function createMediaTaskProgressView(
   const urls = input.urls?.filter((url) => url.length > 0) ?? [];
   const localPaths = input.localPaths?.filter((filePath) => filePath.length > 0) ?? [];
   const assets = input.assets ?? [];
+  const creativeEntity =
+    input.creativeEntity ??
+    buildMediaTaskCreativeEntityContext({
+      task: input.task,
+      assets,
+    });
 
   return {
     id: input.task.id,
@@ -195,12 +222,13 @@ export function createMediaTaskProgressView(
     status: toMediaBackgroundTaskStatus(input.task.status),
     progress: input.task.progress,
     result:
-      urls.length > 0
+      urls.length > 0 || creativeEntity
         ? {
             urls: [...urls],
             ...(input.thumbnailUrl ? { thumbnailUrl: input.thumbnailUrl } : {}),
             ...(localPaths.length > 0 ? { localPaths: [...localPaths] } : {}),
             ...(assets.length > 0 ? { assets: [...assets] } : {}),
+            ...(creativeEntity ? { creativeEntity } : {}),
           }
         : undefined,
     error: input.task.error?.message,

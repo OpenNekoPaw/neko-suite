@@ -37,6 +37,29 @@ export {
   resolveCharacterRegistryPath,
 } from './character-registry';
 
+// Creative entity facade + Git-tracked entity/asset binding storage
+export {
+  CharacterRecordAdapter,
+  CreativeEntityRegistryService,
+  DefaultAssetRefResolver,
+  EntityAssetBindingService,
+  EntityAssetRequirementService,
+  RepresentationResolver,
+  VisualIdentityDraftService,
+  characterRecordToCreativeEntity,
+  createEmptyEntityAssetBindingFile,
+  createEmptyEntityAssetRequirementFile,
+  createEmptyVisualIdentityDraftFile,
+  resolveEntityAssetRequirementsPath,
+  resolveEntityAssetBindingsPath,
+  resolveVisualIdentityDraftsPath,
+} from './creative-entity-composition';
+export type {
+  AssetRefBackendResolver,
+  CreativeEntityAdapter,
+  RepresentationResolverOptions,
+} from './creative-entity-composition';
+
 // New-file UX (unique name → write → reveal → rename)
 export { createNewFile } from './create-new-file';
 export type { CreateNewFileOptions, TemplateChoice } from './create-new-file';

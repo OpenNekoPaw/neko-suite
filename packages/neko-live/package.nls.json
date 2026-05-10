@@ -7,6 +7,7 @@
   "neko.live.cmd.start": "Start Live Session",
   "neko.live.cmd.stop": "Stop Live Session",
   "neko.live.cmd.selectAvatar": "Select Avatar",
+  "neko.live.cmd.selectCreativeEntity": "Select Creative Entity",
   "neko.live.cmd.calibrate": "Calibrate Tracking",
   "neko.live.cmd.startRecording": "Start Recording",
   "neko.live.cmd.startStreaming": "Start Streaming",

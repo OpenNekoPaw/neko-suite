@@ -197,6 +197,24 @@
         "category": "Neko Assets"
       },
       {
+        "command": "neko.assets.entity.showBindingCandidates",
+        "title": "%neko.assets.entity.showBindingCandidates%",
+        "category": "Neko Assets",
+        "icon": "$(link)"
+      },
+      {
+        "command": "neko.assets.entity.showRepresentationPackage",
+        "title": "%neko.assets.entity.showRepresentationPackage%",
+        "category": "Neko Assets",
+        "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "neko.assets.entity.cancelBinding",
+        "title": "%neko.assets.entity.cancelBinding%",
+        "category": "Neko Assets",
+        "icon": "$(debug-disconnect)"
+      },
+      {
         "command": "neko.assets.entity.delete",
         "title": "%neko.assets.entity.delete%",
         "category": "Neko Assets",
@@ -338,6 +356,21 @@
           "command": "neko.assets.entity.addVariant",
           "when": "viewItem == entity",
           "group": "2_modify@2"
+        },
+        {
+          "command": "neko.assets.entity.showBindingCandidates",
+          "when": "viewItem == entity",
+          "group": "2_modify@3"
+        },
+        {
+          "command": "neko.assets.entity.showRepresentationPackage",
+          "when": "viewItem == entity",
+          "group": "2_modify@4"
+        },
+        {
+          "command": "neko.assets.entity.cancelBinding",
+          "when": "viewItem == entity",
+          "group": "2_modify@5"
         },
         {
           "command": "neko.assets.entity.delete",

@@ -249,6 +249,14 @@ export {
   type MediaTaskView,
   type MediaTaskViewOptions,
 } from './media/media-task-view';
+export {
+  buildMediaTaskCreativeEntityContext,
+  type BuildMediaTaskCreativeEntityContextInput,
+  type MediaTaskCreativeEntityAction,
+  type MediaTaskCreativeEntityActionKind,
+  type MediaTaskCreativeEntityBindingCandidate,
+  type MediaTaskCreativeEntityContext,
+} from './media/media-task-creative-entity';
 export { isTerminalMediaTaskStatus } from './media/media-task-progress-plan';
 export {
   buildMediaTaskViewDelivery,

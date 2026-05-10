@@ -8,5 +8,10 @@
   "neko.story.startVideoCreation.title": "开始视频创作",
   "neko.story.sendToAgent.title": "→ Agent",
   "neko.story.applyInlineDiff.title": "应用 AI 行内差异",
-  "neko.story.scriptTableView.title": "打开拆分表"
+  "neko.story.scriptTableView.title": "打开拆分表",
+  "neko.story.showCreativeEntityDetail.title": "查看创作实体详情",
+  "neko.story.setCreativeEntityDefaultBinding.title": "设置实体默认素材绑定",
+  "neko.story.reviewVisualDrafts.title": "审核 AI 形象草稿",
+  "neko.story.showMissingMaterialQueue.title": "查看待补素材队列",
+  "neko.story.showRepresentationPackageDetail.title": "查看表现包详情"
 }

@@ -45,13 +45,39 @@ describe('media task view helpers', () => {
     expect(
       createMediaTaskActionCandidate({
         id: 'task-1',
-        request: { prompt: 'cat', metadata: { conversationId: 'conv-1' } },
+        request: {
+          prompt: 'cat',
+          metadata: {
+            conversationId: 'conv-1',
+            characterIds: ['char_linxia'],
+            sourceNodeId: 'node-1',
+          },
+        },
         outputs: [{ type: 'image', url: 'https://example.test/image.png' }],
       } as any),
-    ).toEqual({
+    ).toMatchObject({
       id: 'task-1',
       conversationId: 'conv-1',
       resultUrl: 'https://example.test/image.png',
+      creativeEntity: {
+        characterIds: ['char_linxia'],
+        sourceNodeId: 'node-1',
+        generatedAssetIds: [],
+        actions: [
+          {
+            kind: 'generate-missing-representation',
+            entityId: 'char_linxia',
+            entityKind: 'character',
+            requiredKinds: ['portrait', 'reference'],
+          },
+          {
+            kind: 'bind-existing',
+            entityId: 'char_linxia',
+            entityKind: 'character',
+            requiredKinds: ['portrait', 'reference'],
+          },
+        ],
+      },
     });
   });
 
@@ -67,7 +93,10 @@ describe('media task view helpers', () => {
           modelId: 'gen-3',
           createdAt: new Date('2026-01-01T00:00:00.000Z'),
           updatedAt: new Date('2026-01-01T00:00:01.000Z'),
-          request: { prompt: 'cat' },
+          request: {
+            prompt: 'cat',
+            metadata: { characterIds: ['char_linxia'], sourceNodeId: 'node-1' },
+          },
           error: undefined,
         } as any,
         urls: ['webview://video.mp4'],
@@ -78,6 +107,10 @@ describe('media task view helpers', () => {
             id: 'asset-1',
             type: 'generated-video',
             path: '/tmp/video.mp4',
+            mimeType: 'video/mp4',
+            generatedAt: '2026-01-01T00:00:00.000Z',
+            characterIds: ['char_linxia'],
+            sourceNodeId: 'node-1',
             webviewUri: 'webview://video.mp4',
           } as any,
         ],
@@ -97,9 +130,25 @@ describe('media task view helpers', () => {
             id: 'asset-1',
             type: 'generated-video',
             path: '/tmp/video.mp4',
+            mimeType: 'video/mp4',
+            generatedAt: '2026-01-01T00:00:00.000Z',
+            characterIds: ['char_linxia'],
+            sourceNodeId: 'node-1',
             webviewUri: 'webview://video.mp4',
           },
         ],
+        creativeEntity: expect.objectContaining({
+          characterIds: ['char_linxia'],
+          sourceNodeId: 'node-1',
+          generatedAssetIds: ['asset-1'],
+          bindingCandidates: [
+            expect.objectContaining({
+              entityId: 'char_linxia',
+              generatedAssetId: 'asset-1',
+              roles: ['motion'],
+            }),
+          ],
+        }),
       },
       error: undefined,
       updatedAt: '2026-01-01T00:00:02.000Z',
@@ -175,6 +224,9 @@ describe('media task view helpers', () => {
               id: 'asset-1',
               type: 'generated-image',
               path: '/tmp/local-image.png',
+              mimeType: 'image/png',
+              generatedAt: '2026-01-01T00:00:00.000Z',
+              characterIds: ['char_linxia'],
               webviewUri: 'webview://local-image.png',
             } as any,
           ],
@@ -192,6 +244,23 @@ describe('media task view helpers', () => {
             webviewUri: 'webview://local-image.png',
           },
         ],
+        creativeEntity: expect.objectContaining({
+          characterIds: ['char_linxia'],
+          generatedAssetIds: ['asset-1'],
+          visualDrafts: [
+            expect.objectContaining({
+              characterId: 'char_linxia',
+              generatedAssetIds: ['asset-1'],
+            }),
+          ],
+          bindingCandidates: [
+            expect.objectContaining({
+              entityId: 'char_linxia',
+              generatedAssetId: 'asset-1',
+              roles: ['portrait', 'reference'],
+            }),
+          ],
+        }),
       },
     });
   });

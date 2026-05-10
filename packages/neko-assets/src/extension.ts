@@ -20,6 +20,11 @@ import {
   RuleClassifier,
   AssetDiffService,
   PathResolver,
+  buildAssetBindingCandidate,
+  buildCancelEntityBindingPlan,
+  buildDeleteAssetPlan,
+  buildRepresentationPackageDetail,
+  parseProjectAssetEntityId,
 } from '@neko/asset';
 import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
@@ -44,6 +49,7 @@ import { MediaLibraryTreeProvider } from './providers/MediaLibraryTreeProvider';
 import { VscodeGitService } from './services/VscodeGitService';
 import {
   createVSCodeLogger,
+  EntityAssetBindingService,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
@@ -399,6 +405,16 @@ export async function activate(
       }
       return undefined;
     },
+    getBindingCandidate: async (entityId) => {
+      if (!library) return undefined;
+      const entity = await library.getEntity(entityId);
+      return entity ? buildAssetBindingCandidate(entity) : undefined;
+    },
+    getRepresentationPackageDetail: async (entityId) => {
+      if (!library) return undefined;
+      const entity = await library.getEntity(entityId);
+      return entity ? buildRepresentationPackageDetail(entity) : undefined;
+    },
     onDidChangeEntities: _onDidChangeEntities.event,
   };
 
@@ -454,6 +470,18 @@ function registerAssetManagerCommands(
     const storedPath = entity.variants[0]?.files[0]?.path;
     if (!storedPath) return null;
     return lib.resolvePath(storedPath);
+  }
+
+  function getBindingService(): EntityAssetBindingService | undefined {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    return workspaceRoot ? EntityAssetBindingService.fromWorkspaceRoot(workspaceRoot) : undefined;
+  }
+
+  async function listBindingsForAsset(entityId: string) {
+    const bindingService = getBindingService();
+    if (!bindingService) return [];
+    const bindings = await bindingService.list();
+    return bindings.filter((binding) => parseProjectAssetEntityId(binding.assetRef) === entityId);
   }
 
   // --- entity commands -------------------------------------------------------
@@ -520,11 +548,105 @@ function registerAssetManagerCommands(
       }
     }),
 
+    vscode.commands.registerCommand(
+      'neko.assets.entity.showBindingCandidates',
+      async (item?: unknown) => {
+        const entity = getEntity(item);
+        if (!entity) return;
+        const candidate = buildAssetBindingCandidate(entity);
+        await vscode.window.showQuickPick(
+          candidate.suggestedRoles.map((role) => ({
+            label: `$(link) ${role}`,
+            description: candidate.assetRef,
+            detail: `${Math.round(candidate.confidence * 100)}% · ${candidate.reason}`,
+          })),
+          {
+            title: `Binding candidates for ${entity.name}`,
+            placeHolder:
+              candidate.suggestedRoles.length > 0
+                ? 'Select a representation role to inspect'
+                : candidate.reason,
+          },
+        );
+      },
+    ),
+
+    vscode.commands.registerCommand(
+      'neko.assets.entity.showRepresentationPackage',
+      async (item?: unknown) => {
+        const entity = getEntity(item);
+        if (!entity) return;
+        const detail = buildRepresentationPackageDetail(entity);
+        const fileItems = detail.files.map((file) => ({
+          label: `$(${file.role === 'thumbnail' ? 'file-media' : 'file'}) ${file.role}`,
+          description: file.path,
+          detail: `${file.mediaType ?? 'unknown'} · ${file.assetRef}`,
+        }));
+        const summary = {
+          label: '$(symbol-structure) Package summary',
+          description: detail.representationKinds.join(', ') || 'unknown representation',
+          detail: [
+            `Capabilities: ${detail.capabilities.join(', ') || 'none'}`,
+            `Missing: ${detail.missingRoles.join(', ') || 'none'}`,
+          ].join('\n'),
+        };
+        await vscode.window.showQuickPick([summary, ...fileItems], {
+          title: `Representation package: ${entity.name}`,
+          placeHolder: 'Component files, capabilities, and missing roles',
+        });
+      },
+    ),
+
+    vscode.commands.registerCommand('neko.assets.entity.cancelBinding', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const bindingService = getBindingService();
+      if (!bindingService) return;
+      const bindings = await listBindingsForAsset(entity.id);
+      if (bindings.length === 0) {
+        vscode.window.showInformationMessage(`No entity binding points to "${entity.name}".`);
+        return;
+      }
+
+      const picked = await vscode.window.showQuickPick(
+        bindings.map((binding) => ({
+          label: `$(debug-disconnect) ${binding.entityId} · ${binding.role}`,
+          description: binding.assetRef,
+          detail: 'Cancels the binding only. The asset entity and files remain in the library.',
+          binding,
+        })),
+        { title: `Cancel binding for ${entity.name}` },
+      );
+      if (!picked) return;
+
+      const plan = buildCancelEntityBindingPlan(picked.binding);
+      const confirm = await vscode.window.showWarningMessage(
+        `Cancel binding ${plan.bindingId}? This will not delete "${entity.name}".`,
+        { modal: true },
+        'Cancel Binding',
+      );
+      if (confirm !== 'Cancel Binding') return;
+
+      try {
+        await bindingService.remove(plan.bindingId);
+        entityChangeEmitter?.fire();
+        refresh();
+      } catch (error) {
+        await handleError(error, { showToUser: true });
+      }
+    }),
+
     vscode.commands.registerCommand('neko.assets.entity.delete', async (item?: unknown) => {
       const entity = getEntity(item);
       if (!entity) return;
+      const bindings = await listBindingsForAsset(entity.id);
+      const plan = buildDeleteAssetPlan(entity, bindings);
+      const bindingNote =
+        plan.bindingIds.length > 0
+          ? ` It has ${plan.bindingIds.length} entity binding(s); cancel bindings separately if you only want to unlink.`
+          : '';
       const confirm = await vscode.window.showWarningMessage(
-        `Delete "${entity.name}"? This cannot be undone.`,
+        `Delete "${entity.name}"? This removes the asset entity and does not mean "cancel binding."${bindingNote}`,
         { modal: true },
         'Delete',
       );

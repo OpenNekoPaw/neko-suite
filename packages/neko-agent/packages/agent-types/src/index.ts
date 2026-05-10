@@ -89,6 +89,9 @@ export type {
 } from './context-state-contract';
 export type {
   AgentBackgroundTask,
+  AgentMediaTaskCreativeEntityAction,
+  AgentMediaTaskCreativeEntityBindingCandidate,
+  AgentMediaTaskCreativeEntityContext,
   AgentMediaTaskError,
   AgentMediaTaskOutput,
   AgentMediaTaskView,

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type {
   CharacterEntityQuery,
+  CandidateEntityAssetRequirementView,
   CreativeEntityOccurrence,
   IAssetLinker,
   ICharacterWorkspaceIndex,
@@ -76,6 +77,7 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
     const scriptReferences = scriptOccurrences.map(
       (occurrence) => new vscode.Location(occurrence.uri, occurrence.range),
     );
+    const candidate = !resolved && scriptReferences.length > 0;
     const occurrences: CreativeEntityOccurrence[] = [];
 
     if (registryDefinition) {
@@ -123,6 +125,10 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
       scriptDefinition,
       scriptReferences,
       occurrences,
+      candidate,
+      missingRequirements: candidate
+        ? buildCandidateMissingRequirements(query, scriptOccurrences)
+        : undefined,
       stats: {
         totalScriptReferences: scriptReferences.length,
         fileCount: countDistinctFiles(scriptOccurrences),
@@ -253,6 +259,26 @@ export class CreativeEntityWorkspaceIndexService implements ICreativeEntityWorks
     // No subscriptions owned. Keep Disposable symmetry so backing services
     // can attach cleanup here without changing provider call sites.
   }
+}
+
+function buildCandidateMissingRequirements(
+  query: string,
+  occurrences: readonly SymbolLocation[],
+): readonly CandidateEntityAssetRequirementView[] {
+  const firstOccurrence = occurrences[0];
+  if (!firstOccurrence) {
+    return [];
+  }
+
+  return [
+    {
+      entityKind: 'character',
+      source: 'story',
+      sourceRef: `story://${firstOccurrence.uri.toString()}#${firstOccurrence.range.start.line}`,
+      requiredKinds: ['portrait', 'reference'],
+      suggestedActions: ['generate', 'import', 'bind-existing', 'dismiss'],
+    },
+  ];
 }
 
 function pickCharacterDefinition(

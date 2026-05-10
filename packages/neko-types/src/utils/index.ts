@@ -37,6 +37,12 @@ export {
   type CanvasGenerationLineage,
 } from './canvasGeneration';
 export {
+  buildEntityAssetRequirementsFromGeneratedMediaLineage,
+  buildVisualIdentityDraftsFromGeneratedMediaLineage,
+  type BuildEntityAssetRequirementsFromGeneratedMediaInput,
+  type BuildVisualIdentityDraftsFromGeneratedMediaInput,
+} from './creativeEntityLineage';
+export {
   getContainerChildIds,
   getContainerChildReferences,
   getContainerPolicyName,

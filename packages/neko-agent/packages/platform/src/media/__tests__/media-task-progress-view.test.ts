@@ -38,9 +38,30 @@ describe('buildMediaTaskProgressViewDelivery', () => {
             expect.objectContaining({
               id: 'asset-1',
               path: '/repo/.neko/generated/video.mp4',
+              characterIds: ['char_linxia'],
+              sourceNodeId: 'node-shot-1',
               webviewUri: 'webview:///repo/.neko/generated/video.mp4',
             }),
           ],
+          creativeEntity: expect.objectContaining({
+            characterIds: ['char_linxia'],
+            sourceNodeId: 'node-shot-1',
+            generatedAssetIds: ['asset-1'],
+            requirements: [
+              expect.objectContaining({
+                entityId: 'char_linxia',
+                requiredKinds: ['motion'],
+                status: 'generated',
+              }),
+            ],
+            bindingCandidates: [
+              expect.objectContaining({
+                entityId: 'char_linxia',
+                generatedAssetId: 'asset-1',
+                roles: ['motion'],
+              }),
+            ],
+          }),
         },
         error: undefined,
         updatedAt: '2026-01-01T00:00:02.000Z',
@@ -88,9 +109,22 @@ describe('buildMediaTaskProgressViewDelivery', () => {
           assets: [
             expect.objectContaining({
               id: 'asset-1',
+              characterIds: ['char_linxia'],
               webviewUri: 'webview:///repo/.neko/generated/video.mp4',
             }),
           ],
+          creativeEntity: expect.objectContaining({
+            characterIds: ['char_linxia'],
+            generatedAssetIds: ['asset-1'],
+            actions: expect.arrayContaining([
+              expect.objectContaining({
+                kind: 'confirm-binding',
+                entityId: 'char_linxia',
+                generatedAssetId: 'asset-1',
+                role: 'motion',
+              }),
+            ]),
+          }),
         },
       }),
       deliveryPlan: expect.objectContaining({
@@ -112,7 +146,10 @@ function createMediaTask(): MediaTask {
     modelId: 'gen-4',
     createdAt: now,
     updatedAt: now,
-    request: { prompt: 'city flythrough' },
+    request: {
+      prompt: 'city flythrough',
+      metadata: { characterIds: ['char_linxia'], sourceNodeId: 'node-shot-1' },
+    },
     outputs: [
       {
         type: 'video',

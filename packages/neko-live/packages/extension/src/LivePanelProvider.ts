@@ -19,6 +19,7 @@ import type {
 import { EngineClient } from '@neko/neko-client/EngineClient';
 import { EngineDeviceManager, type DeviceManager } from '@neko/neko-client/device';
 import { LiveSessionService } from './LiveSessionService';
+import { LiveRepresentationService } from './LiveRepresentationService';
 import { handleError } from './utils/errorHandler';
 
 export class LivePanelProvider implements vscode.WebviewViewProvider {
@@ -28,6 +29,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
   private engineClient?: EngineClient;
   private deviceManager?: DeviceManager;
   private readonly sessionService: LiveSessionService;
+  private readonly representationService?: LiveRepresentationService;
   private puppetStreamWs?: { close: () => void };
   private readonly disposables: vscode.Disposable[] = [];
   private readonly logger: ILogger;
@@ -38,6 +40,16 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     private readonly trackingService: TrackingServiceApi,
   ) {
     this.logger = logger.child('LivePanel');
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    this.representationService = workspaceRoot
+      ? new LiveRepresentationService({
+          workspaceRoot,
+          getAssetsApi: () =>
+            vscode.extensions.getExtension('neko.neko-assets')?.exports as
+              | import('@neko/shared').NekoAssetsAPI
+              | undefined,
+        })
+      : undefined;
     this.sessionService = new LiveSessionService({
       logger: this.logger,
       getEngineClient: () => this.ensureEngineClient(),
@@ -134,6 +146,55 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
     if (!result?.[0]) return;
     await this.loadAvatarFromFile(result[0].fsPath);
+  }
+
+  public async selectCreativeEntity(): Promise<void> {
+    if (!this.representationService) {
+      void handleError(new Error('Open a workspace before selecting a creative entity.'), {
+        showToUser: true,
+        severity: 'warning',
+      });
+      return;
+    }
+
+    const entities = await this.representationService.listCharacters();
+    const picked = await vscode.window.showQuickPick(
+      entities.map((entity) => ({
+        label: entity.displayName ?? entity.canonicalName,
+        description: entity.id,
+        detail: entity.status,
+        entity,
+      })),
+      {
+        title: 'Select Live creative entity',
+        placeHolder: 'Live will use live3d → live2d and will not fall back to portrait',
+      },
+    );
+    if (!picked) return;
+
+    const avatar = await this.representationService.resolveAvatar(picked.entity.id);
+    if (avatar.status === 'missing-representation') {
+      const action = await vscode.window.showWarningMessage(
+        `${picked.label} has no Live2D/Live3D representation.`,
+        'Generate',
+        'Import',
+        'Bind Existing',
+      );
+      if (action === 'Generate' || action === 'Import' || action === 'Bind Existing') {
+        await vscode.commands.executeCommand('neko.assets.importFile');
+      }
+      return;
+    }
+
+    if (avatar.avatarPath) {
+      await this.loadAvatarFromFile(avatar.avatarPath);
+      return;
+    }
+
+    void handleError(
+      new Error(`Resolved ${picked.label}, but no loadable avatar file was found in the package.`),
+      { showToUser: true, severity: 'warning' },
+    );
   }
 
   /** Resolve project files (.nkm/.nkp) to actual model paths, then load */

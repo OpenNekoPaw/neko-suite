@@ -19,6 +19,8 @@ import type {
   CreativeRelationEdge,
   CreativeRelationEdgeType,
   CreativeRelationProvenance,
+  EntityAssetBinding,
+  EntityAssetBindingSource,
   GeneratedAsset,
   GalleryCanvasNode,
   SceneGroupCanvasNode,
@@ -131,6 +133,7 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
     this.buildCanvasNodesAndEdges(snapshot.canvasNodes);
     this.buildAssetNodesAndEdges(snapshot.assetEntities);
     this.buildGeneratedAssetNodesAndEdges(snapshot.generatedAssets);
+    this.buildEntityAssetBindingEdges(snapshot.entityAssetBindings ?? []);
 
     this.markDirty();
     this.onDidUpdateEmitter.fire();
@@ -280,6 +283,30 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
     }
   }
 
+  private buildEntityAssetBindingEdges(bindings: readonly EntityAssetBinding[]): void {
+    for (const binding of bindings) {
+      if (binding.status !== 'confirmed') {
+        continue;
+      }
+
+      const nodeId = `asset-ref:${binding.assetRef}`;
+      this.addNode({
+        id: nodeId,
+        kind: 'asset',
+        refId: binding.assetRef,
+        label: binding.role,
+      });
+
+      this.addEdge(
+        binding.entityId,
+        nodeId,
+        'bound-to-representation',
+        toBindingProvenance(binding.source),
+        binding.confidence,
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
@@ -293,12 +320,14 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
     to: string,
     type: CreativeRelationEdgeType,
     provenance: CreativeRelationProvenance,
+    confidence?: number,
   ): void {
     this.edges.push({
       from,
       to,
       type,
       strength: 'confirmed',
+      confidence,
       provenance,
     });
   }
@@ -370,6 +399,21 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
     } catch {
       // No snapshot on disk or corrupt — full rebuild will happen in initialize()
     }
+  }
+}
+
+function toBindingProvenance(source: EntityAssetBindingSource): CreativeRelationProvenance {
+  switch (source) {
+    case 'user':
+      return 'user';
+    case 'importer':
+      return 'import';
+    case 'agent':
+    case 'matcher':
+      return 'ai';
+    case 'story':
+    case 'canvas':
+      return 'lineage';
   }
 }
 

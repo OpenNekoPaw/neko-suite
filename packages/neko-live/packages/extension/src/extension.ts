@@ -43,6 +43,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('neko.live.selectAvatar', () => {
       provider.selectAvatar();
     }),
+    vscode.commands.registerCommand('neko.live.selectCreativeEntity', () => {
+      provider.selectCreativeEntity();
+    }),
     vscode.commands.registerCommand('neko.live.calibrate', () => {
       vscode.window.showInformationMessage(vscode.l10n.t('neko.live.calibrating'));
     }),

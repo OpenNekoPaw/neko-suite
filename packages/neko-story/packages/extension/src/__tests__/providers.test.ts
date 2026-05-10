@@ -940,9 +940,19 @@ describe('CreativeEntityWorkspaceIndexService', () => {
 
     expect(result).toBeDefined();
     expect(result?.resolved).toBeUndefined();
+    expect(result?.candidate).toBe(true);
     expect(result?.registryDefinition).toBeUndefined();
     expect(result?.scriptDefinition?.uri.fsPath).toBe('/project/b.fountain');
     expect(result?.scriptReferences).toHaveLength(3);
+    expect(result?.missingRequirements).toEqual([
+      {
+        entityKind: 'character',
+        source: 'story',
+        sourceRef: 'story://file:///project/b.fountain#4',
+        requiredKinds: ['portrait', 'reference'],
+        suggestedActions: ['generate', 'import', 'bind-existing', 'dismiss'],
+      },
+    ]);
     expect(result?.stats.fileCount).toBe(2);
   });
 });

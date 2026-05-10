@@ -71,6 +71,11 @@
         "category": "Neko Live"
       },
       {
+        "command": "neko.live.selectCreativeEntity",
+        "title": "%neko.live.cmd.selectCreativeEntity%",
+        "category": "Neko Live"
+      },
+      {
         "command": "neko.live.calibrate",
         "title": "%neko.live.cmd.calibrate%",
         "category": "Neko Live"

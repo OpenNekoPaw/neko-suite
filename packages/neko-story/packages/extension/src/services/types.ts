@@ -218,6 +218,9 @@ export type CreativeEntityOccurrenceSource =
   | 'registry'
   | 'script'
   | 'canvas'
+  | 'canvas-comment'
+  | 'canvas-container'
+  | 'canvas-text'
   | 'asset'
   | 'generated-asset';
 export type CreativeEntityOccurrenceRole = 'definition' | 'reference';
@@ -240,15 +243,25 @@ export interface CharacterEntityStats {
   readonly generatedAssetCount?: number;
 }
 
+export interface CandidateEntityAssetRequirementView {
+  readonly entityKind: 'character';
+  readonly source: 'story';
+  readonly sourceRef: string;
+  readonly requiredKinds: readonly ('portrait' | 'reference')[];
+  readonly suggestedActions: readonly ('generate' | 'import' | 'bind-existing' | 'dismiss')[];
+}
+
 export interface CharacterEntityQuery {
   readonly kind: 'character';
   readonly query: string;
+  readonly candidate?: boolean;
   readonly resolved?: ResolvedCharacterMatch;
   readonly referenceNames: readonly string[];
   readonly registryDefinition?: vscode.Location;
   readonly scriptDefinition?: vscode.Location;
   readonly scriptReferences: readonly vscode.Location[];
   readonly occurrences: readonly CreativeEntityOccurrence[];
+  readonly missingRequirements?: readonly CandidateEntityAssetRequirementView[];
   readonly stats: CharacterEntityStats;
 }
 

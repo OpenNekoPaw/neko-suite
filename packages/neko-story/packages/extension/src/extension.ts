@@ -31,9 +31,13 @@ import { AssetLinkingService } from './services/AssetLinkingService';
 import { CharacterWorkspaceIndexService } from './services/CharacterWorkspaceIndexService';
 import { CreativeEntityWorkspaceIndexService } from './services/CreativeEntityWorkspaceIndexService';
 import { CrossModalDataProvider } from './services/CrossModalDataProvider';
-import { OccurrenceIndexService } from './services/OccurrenceIndexService';
+import {
+  CharacterRegistryTextOccurrenceResolver,
+  OccurrenceIndexService,
+} from './services/OccurrenceIndexService';
 import { CreativeEntityGraphService } from './services/CreativeEntityGraphService';
 import { SceneWorkspaceIndexService } from './services/SceneWorkspaceIndexService';
+import { registerCreativeEntityCommands } from './commands/creativeEntityCommands';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 import {
@@ -73,7 +77,9 @@ export function activate(context: vscode.ExtensionContext) {
   // Phase 3: cross-modal data provider, occurrence index, and entity graph
   const crossModalDataProvider = new CrossModalDataProvider();
   context.subscriptions.push(crossModalDataProvider);
-  const occurrenceIndexService = new OccurrenceIndexService(crossModalDataProvider);
+  const occurrenceIndexService = new OccurrenceIndexService(crossModalDataProvider, {
+    textResolver: new CharacterRegistryTextOccurrenceResolver(characterIndexService),
+  });
   context.subscriptions.push(occurrenceIndexService);
 
   const graphPath = resolveGraphPath();
@@ -198,6 +204,11 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(diagnosticsProvider);
 
   // Register commands
+  registerCreativeEntityCommands(context, {
+    creativeEntityIndex: creativeEntityIndexService,
+    entityGraph: entityGraphService,
+  });
+
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.story.preview', () => {
       PreviewPanel.create(

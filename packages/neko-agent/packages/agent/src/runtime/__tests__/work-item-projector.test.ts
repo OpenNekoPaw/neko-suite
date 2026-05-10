@@ -112,6 +112,29 @@ describe('work-item-projector', () => {
           urls: ['webview://local-image.png'],
           localPaths: ['/tmp/local-image.png'],
           thumbnailUrl: 'webview://local-image.png',
+          creativeEntity: {
+            characterIds: ['char_linxia'],
+            generatedAssetIds: ['asset-1'],
+            visualDrafts: [],
+            requirements: [],
+            bindingCandidates: [
+              {
+                entityId: 'char_linxia',
+                entityKind: 'character',
+                generatedAssetId: 'asset-1',
+                roles: ['portrait', 'reference'],
+              },
+            ],
+            actions: [
+              {
+                kind: 'confirm-binding',
+                entityId: 'char_linxia',
+                entityKind: 'character',
+                generatedAssetId: 'asset-1',
+                role: 'portrait',
+              },
+            ],
+          },
           assets: [
             {
               id: 'asset-1',
@@ -128,6 +151,22 @@ describe('work-item-projector', () => {
         urls: ['webview://local-image.png'],
         localPaths: ['/tmp/local-image.png'],
         thumbnailUrl: 'webview://local-image.png',
+        creativeEntity: {
+          characterIds: ['char_linxia'],
+          generatedAssetIds: ['asset-1'],
+          bindingCandidates: [
+            {
+              entityId: 'char_linxia',
+              generatedAssetId: 'asset-1',
+            },
+          ],
+          actions: [
+            {
+              kind: 'confirm-binding',
+              role: 'portrait',
+            },
+          ],
+        },
         assets: [
           {
             id: 'asset-1',

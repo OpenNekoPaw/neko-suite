@@ -173,6 +173,56 @@ describe('CreativeEntityGraphService', () => {
       const depictsEdges = edges.filter((e) => e.type === 'depicts-character');
       expect(depictsEdges).toHaveLength(2);
     });
+
+    it('creates confirmed binding edges from entity asset bindings', async () => {
+      const charIndex = createMockCharacterIndex([{ id: 'char_alice', canonicalName: 'ALICE' }]);
+      const snapshot: CrossModalDataSnapshot = {
+        ...EMPTY_SNAPSHOT,
+        entityAssetBindings: [
+          {
+            id: 'bind-portrait',
+            entityId: 'char_alice',
+            entityKind: 'character',
+            assetRef: 'project://assets/alice-portrait',
+            role: 'portrait',
+            status: 'confirmed',
+            source: 'user',
+            updatedAt: '2026-05-10T00:00:00.000Z',
+          },
+          {
+            id: 'bind-live2d-suggestion',
+            entityId: 'char_alice',
+            entityKind: 'character',
+            assetRef: 'project://assets/alice-live2d',
+            role: 'live2d',
+            status: 'suggested',
+            source: 'agent',
+            updatedAt: '2026-05-10T00:00:00.000Z',
+          },
+        ],
+      };
+      const service = new CreativeEntityGraphService(createMockDataProvider(snapshot), charIndex);
+      await service.ensureInitialized();
+
+      const bindingEdges = service
+        .getEdgesForEntity('char_alice')
+        .filter((edge) => edge.type === 'bound-to-representation');
+      expect(bindingEdges).toEqual([
+        expect.objectContaining({
+          from: 'char_alice',
+          to: 'asset-ref:project://assets/alice-portrait',
+          provenance: 'user',
+          strength: 'confirmed',
+        }),
+      ]);
+      expect(service.getNodesByKind('asset')).toEqual([
+        expect.objectContaining({
+          id: 'asset-ref:project://assets/alice-portrait',
+          refId: 'project://assets/alice-portrait',
+          label: 'portrait',
+        }),
+      ]);
+    });
   });
 
   describe('canvas edges', () => {

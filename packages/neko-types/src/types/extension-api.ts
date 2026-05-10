@@ -688,6 +688,31 @@ export interface NekoAssetsAPI {
   /** Resolve a character name to its thumbnail absolute path via CharacterRegistry → AssetEntity. */
   getCharacterThumbnail(name: string): Promise<string | undefined>;
 
+  /** Project an asset entity into binding candidate roles without persisting bindings. */
+  getBindingCandidate(entityId: string): Promise<
+    | {
+        assetEntityId: string;
+        assetRef: string;
+        suggestedRoles: readonly import('./creative-entity-asset-composition').EntityAssetBindingRole[];
+        confidence: number;
+        reason: string;
+      }
+    | undefined
+  >;
+
+  /** Project an asset entity into representation package component details. */
+  getRepresentationPackageDetail(entityId: string): Promise<
+    | {
+        assetEntityId: string;
+        assetRef: string;
+        representationKinds: readonly import('./creative-entity-asset-composition').RepresentationKind[];
+        files: readonly import('./creative-entity-asset-composition').ResolvedRepresentationFile[];
+        capabilities: readonly string[];
+        missingRoles: readonly import('./creative-entity-asset-composition').RepresentationFileRole[];
+      }
+    | undefined
+  >;
+
   /** Fired when asset entities are added, removed, or modified. */
   onDidChangeEntities: { (listener: () => void): { dispose(): void } };
 }

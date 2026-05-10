@@ -108,6 +108,36 @@
         "title": "%neko.story.scriptTableView.title%",
         "icon": "$(table)",
         "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.showCreativeEntityDetail",
+        "title": "%neko.story.showCreativeEntityDetail.title%",
+        "icon": "$(account)",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.setCreativeEntityDefaultBinding",
+        "title": "%neko.story.setCreativeEntityDefaultBinding.title%",
+        "icon": "$(link)",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.reviewVisualDrafts",
+        "title": "%neko.story.reviewVisualDrafts.title%",
+        "icon": "$(sparkle)",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.showMissingMaterialQueue",
+        "title": "%neko.story.showMissingMaterialQueue.title%",
+        "icon": "$(warning)",
+        "category": "Neko Story"
+      },
+      {
+        "command": "neko.story.showRepresentationPackageDetail",
+        "title": "%neko.story.showRepresentationPackageDetail.title%",
+        "icon": "$(symbol-structure)",
+        "category": "Neko Story"
       }
     ],
     "menus": {

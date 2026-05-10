@@ -177,4 +177,28 @@ describe('neko-story protocol', () => {
       expect(capabilityProviderSource).toContain('buildShotPlansForScene(scene');
     });
   });
+
+  describe('creative entity management commands', () => {
+    const commands = (packageJson.contributes?.commands as Array<{ command: string }>).map(
+      (command) => command.command,
+    );
+
+    it('declares entity detail, binding, draft, requirement, and package commands', () => {
+      expect(commands).toEqual(
+        expect.arrayContaining([
+          'neko.story.showCreativeEntityDetail',
+          'neko.story.setCreativeEntityDefaultBinding',
+          'neko.story.reviewVisualDrafts',
+          'neko.story.showMissingMaterialQueue',
+          'neko.story.showRepresentationPackageDetail',
+        ]),
+      );
+    });
+
+    it('registers creative entity command handlers during activation', () => {
+      expect(extensionSource).toContain('registerCreativeEntityCommands(context');
+      expect(extensionSource).toContain('creativeEntityIndex: creativeEntityIndexService');
+      expect(extensionSource).toContain('entityGraph: entityGraphService');
+    });
+  });
 });

@@ -7,6 +7,7 @@
   "neko.live.cmd.start": "开始 Live 会话",
   "neko.live.cmd.stop": "停止 Live 会话",
   "neko.live.cmd.selectAvatar": "选择头像",
+  "neko.live.cmd.selectCreativeEntity": "选择创作实体",
   "neko.live.cmd.calibrate": "校准追踪",
   "neko.live.cmd.startRecording": "开始录制",
   "neko.live.cmd.startStreaming": "开始推流",
