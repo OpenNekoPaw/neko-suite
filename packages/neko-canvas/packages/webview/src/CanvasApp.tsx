@@ -169,6 +169,7 @@ export function CanvasApp() {
     addDocumentAt,
     addModelAt,
     addCanvasEmbedAt,
+    addProjectAt,
   } = useNodeHelpers({
     addNode,
     nodeCount: nodes.length,
@@ -269,6 +270,9 @@ export function CanvasApp() {
             break;
           case 'canvas':
             addCanvasEmbedAt(dropPos, asset.path, asset.title);
+            break;
+          case 'project':
+            addProjectAt(dropPos, asset.path, asset.title, asset.projectType);
             break;
         }
       });

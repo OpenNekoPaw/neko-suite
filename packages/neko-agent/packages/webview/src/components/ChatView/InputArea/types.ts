@@ -102,4 +102,6 @@ export interface MentionItem {
   filePath?: string;
   /** For canvas-node / character / scene: payload for AgentContextChip */
   contextPayload?: import('@neko/shared').AgentContextPayload;
+  /** Optional thumbnail for visual enrichment (webview-safe URI or base64) */
+  thumbnailUri?: string;
 }

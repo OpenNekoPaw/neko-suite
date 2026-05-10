@@ -119,15 +119,18 @@ export async function checkReferences(
   jviDir: string,
   fileExists: (absolutePath: string) => Promise<boolean>,
   probe: (absolutePath: string) => Promise<ProbeResultLike | null>,
+  resolveSrc?: (jviDir: string, src: string) => Promise<string>,
 ): Promise<DiagnosticEntry[]> {
   const entries: DiagnosticEntry[] = [];
+  const resolve =
+    resolveSrc ?? ((dir: string, src: string) => Promise.resolve(path.resolve(dir, src)));
 
   // Collect all elements with src paths
   const srcElements: { el: JviParsedElement; absolutePath: string }[] = [];
   for (const track of project.tracks) {
     for (const el of track.elements) {
       if (el.src && el.srcRange) {
-        const absolutePath = path.resolve(jviDir, el.src);
+        const absolutePath = await resolve(jviDir, el.src);
         srcElements.push({ el, absolutePath });
       }
     }

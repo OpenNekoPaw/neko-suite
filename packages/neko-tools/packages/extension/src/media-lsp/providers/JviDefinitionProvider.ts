@@ -14,6 +14,7 @@ import {
   findElementIdRange,
 } from '../services/JviParser';
 import type { IMediaWorkspaceIndex } from '../services/types';
+import { resolveMediaSrcPath } from '../services/resolveMediaSrcPath';
 
 export class JviDefinitionProvider implements vscode.DefinitionProvider {
   constructor(private readonly workspaceIndex: IMediaWorkspaceIndex) {}
@@ -32,7 +33,7 @@ export class JviDefinitionProvider implements vscode.DefinitionProvider {
     const srcNode = findSrcNodeAtOffset(text, offset);
     if (srcNode) {
       const jviDir = path.dirname(document.uri.fsPath);
-      const absolutePath = path.resolve(jviDir, srcNode.value);
+      const absolutePath = await resolveMediaSrcPath(jviDir, srcNode.value);
       return new vscode.Location(vscode.Uri.file(absolutePath), new vscode.Position(0, 0));
     }
 

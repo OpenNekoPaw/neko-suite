@@ -263,6 +263,7 @@ export interface ProjectMentionExtra {
   id: string;
   label: string;
   summary: string;
+  thumbnailUri?: string;
 }
 
 export interface ProjectFilesWebviewMessage {

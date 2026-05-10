@@ -425,6 +425,65 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     },
     createPorts: () => MEDIA_NODE_PORTS,
   },
+  {
+    name: 'project.basic',
+    nodeType: 'project',
+    createContent: () => ({
+      id: 'project-root',
+      layout: 'stack' as const,
+      sections: [
+        {
+          id: 'project-preview',
+          layout: 'stack' as const,
+          blocks: [
+            {
+              id: 'project-asset-preview',
+              kind: 'asset-preview' as const,
+              label: 'preset.project.preview',
+              binding: { path: '/projectPath' as JsonPointerPath, valueType: 'asset' as const },
+              capabilities: [
+                {
+                  kind: 'preview' as const,
+                  roles: ['project-thumbnail'] as CanvasPreviewRole[],
+                  preferredRole: 'project-thumbnail' as const,
+                },
+                {
+                  kind: 'delegate' as const,
+                  actions: [
+                    {
+                      id: 'open-project',
+                      label: 'Open',
+                      target: 'project',
+                      assetBinding: {
+                        path: '/projectPath' as JsonPointerPath,
+                        valueType: 'asset' as const,
+                      },
+                    },
+                  ],
+                },
+              ],
+            } satisfies CanvasBlock,
+          ],
+        },
+      ],
+    }),
+    createPreview: (node) => {
+      const data = node.type === 'project' ? node.data : undefined;
+      return {
+        title: data?.projectTitle ?? 'Project',
+        subtitle: data?.projectType,
+        role: 'project-thumbnail' as const,
+        thumbnailVariantId: data?.thumbnailData ? 'thumb' : undefined,
+        capabilities: [
+          {
+            kind: 'preview' as const,
+            roles: ['project-thumbnail'] as CanvasPreviewRole[],
+            preferredRole: 'project-thumbnail' as const,
+          },
+        ],
+      };
+    },
+  },
 ];
 
 export function createBuiltInCanvasNodePresetRegistry(): CanvasNodePresetRegistry {

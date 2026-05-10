@@ -21,7 +21,8 @@ type MessageToWebview =
       sceneStates: Record<string, StorySceneState>;
     }
   | { type: 'scrollTo'; line: number }
-  | { type: 'setView'; view: 'screenplay' | 'table' };
+  | { type: 'setView'; view: 'screenplay' | 'table' }
+  | { type: 'characterThumbnails'; data: Record<string, string> };
 
 type MessageFromWebview =
   | { type: 'ready' }
@@ -208,6 +209,36 @@ export class PreviewPanel implements vscode.Disposable {
       scriptIndex,
       sceneStates,
     });
+
+    void this.sendCharacterThumbnails(scriptIndex);
+  }
+
+  private async sendCharacterThumbnails(scriptIndex: NekoStoryScriptIndex): Promise<void> {
+    const names = scriptIndex.characters?.map((c) => c.name) ?? [];
+    if (names.length === 0) return;
+
+    try {
+      const thumbnails: Record<string, string> = {};
+      await Promise.allSettled(
+        names.slice(0, 30).map(async (name) => {
+          const thumbPath = await vscode.commands.executeCommand<string | undefined>(
+            'neko.assets.getCharacterThumbnail',
+            name,
+          );
+          if (thumbPath) {
+            thumbnails[name] = this.panel.webview
+              .asWebviewUri(vscode.Uri.file(thumbPath))
+              .toString();
+          }
+        }),
+      );
+
+      if (Object.keys(thumbnails).length > 0) {
+        this.postMessage({ type: 'characterThumbnails', data: thumbnails });
+      }
+    } catch {
+      // Best-effort
+    }
   }
 
   private async handleSceneAction(

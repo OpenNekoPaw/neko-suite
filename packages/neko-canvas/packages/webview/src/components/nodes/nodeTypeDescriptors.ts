@@ -112,5 +112,13 @@ export function createBuiltInNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
       tagColor: '#6366f1',
       defaultSize: { width: 260, height: 180 },
     },
+    project: {
+      type: 'project',
+      labelKey: 'node.project',
+      icon: '\u{1F4E6}',
+      tagLabel: 'PROJECT',
+      tagColor: '#d946ef',
+      defaultSize: { width: 260, height: 180 },
+    },
   };
 }

@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { findSrcNodeAtOffset } from '../services/JviParser';
 import type { IMediaWorkspaceIndex } from '../services/types';
+import { resolveMediaSrcPath } from '../services/resolveMediaSrcPath';
 
 export class JviReferenceProvider implements vscode.ReferenceProvider {
   constructor(private readonly workspaceIndex: IMediaWorkspaceIndex) {}
@@ -28,7 +29,7 @@ export class JviReferenceProvider implements vscode.ReferenceProvider {
     if (!srcNode) return null;
 
     const jviDir = path.dirname(document.uri.fsPath);
-    const absolutePath = path.resolve(jviDir, srcNode.value);
+    const absolutePath = await resolveMediaSrcPath(jviDir, srcNode.value);
 
     const references = this.workspaceIndex.findMediaReferences(absolutePath);
     if (references.length === 0) return null;

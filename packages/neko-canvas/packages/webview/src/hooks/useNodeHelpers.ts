@@ -6,7 +6,7 @@
  */
 
 import { useCallback } from 'react';
-import type { CanvasNode } from '@neko/shared';
+import type { CanvasNode, NkProjectType } from '@neko/shared';
 import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
 import { t } from '../i18n';
 import { buildCanvasNode } from '../utils/nodeFactory';
@@ -47,6 +47,12 @@ export interface UseNodeHelpersReturn {
     role?: 'reference' | 'workflow',
   ) => void;
   addCanvasEmbedAt: (pos: { x: number; y: number }, canvasPath?: string, title?: string) => void;
+  addProjectAt: (
+    pos: { x: number; y: number },
+    projectPath: string,
+    title: string,
+    projectType: NkProjectType,
+  ) => void;
 }
 
 // =============================================================================
@@ -263,6 +269,31 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     [addNode, nodeCount, reportAction],
   );
 
+  const addProjectAt = useCallback(
+    (
+      pos: { x: number; y: number },
+      projectPath: string,
+      title = 'Project',
+      projectType: NkProjectType,
+    ) => {
+      const w = 260,
+        h = 180;
+      addNode({
+        type: 'project',
+        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+        size: { width: w, height: h },
+        zIndex: nodeCount,
+        data: {
+          projectPath,
+          projectTitle: title,
+          projectType,
+        },
+      });
+      reportAction('addNode', 'Add project reference', title || undefined);
+    },
+    [addNode, nodeCount, reportAction],
+  );
+
   return {
     addTextAt,
     addMediaAt,
@@ -273,5 +304,6 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     addDocumentAt,
     addModelAt,
     addCanvasEmbedAt,
+    addProjectAt,
   };
 }

@@ -20,6 +20,7 @@ type TranslationFn = ReturnType<typeof useTranslation>['t'];
 interface ScriptTableViewProps {
   scriptIndex: NekoStoryScriptIndex | null;
   sceneStates: Record<string, StorySceneState>;
+  characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
 }
@@ -158,11 +159,13 @@ function StatusBadge({
   );
 }
 
-function CharacterBadge({ name }: { name: string }) {
+function CharacterBadge({ name, thumbnailUri }: { name: string; thumbnailUri?: string }) {
   return (
     <span
       style={{
-        display: 'inline-block',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
         padding: '1px 5px',
         borderRadius: 3,
         fontSize: 10,
@@ -174,6 +177,19 @@ function CharacterBadge({ name }: { name: string }) {
         marginBottom: 2,
       }}
     >
+      {thumbnailUri && (
+        <img
+          src={thumbnailUri}
+          alt=""
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: 2,
+            objectFit: 'cover',
+            flexShrink: 0,
+          }}
+        />
+      )}
       {name}
     </span>
   );
@@ -376,6 +392,7 @@ interface SceneRowProps {
   sceneIndex: number;
   isOdd: boolean;
   state: StorySceneState;
+  characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
   t: TranslationFn;
@@ -386,6 +403,7 @@ const SceneRow = memo(function SceneRow({
   sceneIndex,
   isOdd,
   state,
+  characterThumbnails,
   onNavigate,
   onSceneAction,
   t,
@@ -531,7 +549,7 @@ const SceneRow = memo(function SceneRow({
         {scene.sceneCharacters.length > 0 && (
           <div style={{ marginTop: 4 }}>
             {visibleChars.map((name) => (
-              <CharacterBadge key={name} name={name} />
+              <CharacterBadge key={name} name={name} thumbnailUri={characterThumbnails?.[name]} />
             ))}
             {overflowCount > 0 && (
               <span
@@ -612,6 +630,7 @@ const SceneRow = memo(function SceneRow({
 export function ScriptTableView({
   scriptIndex,
   sceneStates,
+  characterThumbnails,
   onNavigate,
   onSceneAction,
 }: ScriptTableViewProps) {
@@ -717,6 +736,7 @@ export function ScriptTableView({
                   ...DEFAULT_SCENE_STATE,
                 }
               }
+              characterThumbnails={characterThumbnails}
               onNavigate={onNavigate}
               onSceneAction={onSceneAction}
               t={t}

@@ -12,6 +12,7 @@ import type { IWorkspaceIO } from '../../contracts/IWorkspaceIO';
 import { findSrcNodeAtOffset } from '../services/JviParser';
 import type { IMediaProbeCache, ProbeResultLike } from '../services/types';
 import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
+import { resolveMediaSrcPath } from '../services/resolveMediaSrcPath';
 
 export class JviHoverProvider implements vscode.HoverProvider {
   constructor(
@@ -32,7 +33,7 @@ export class JviHoverProvider implements vscode.HoverProvider {
     if (!srcNode) return null;
 
     const jviDir = path.dirname(document.uri.fsPath);
-    const absolutePath = path.resolve(jviDir, srcNode.value);
+    const absolutePath = await resolveMediaSrcPath(jviDir, srcNode.value);
 
     // Build hover content
     const lines: string[] = [`**Media:** \`${srcNode.value}\``];

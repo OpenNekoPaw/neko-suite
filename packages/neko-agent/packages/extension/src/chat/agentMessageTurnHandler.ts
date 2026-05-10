@@ -277,6 +277,53 @@ export class AgentMessageTurnHandler {
       filter,
       searchProjectFiles: searchVSCodeProjectFiles,
       getCanvasNodes: (id) => getCanvasSelection(id),
+      getCharacters: async () => {
+        try {
+          const ext = vscode.extensions.getExtension<{
+            getCharacterRegistry?():
+              | {
+                  characters: readonly {
+                    id: string;
+                    canonicalName: string;
+                    metadata?: { role?: string };
+                  }[];
+                }
+              | undefined;
+          }>('neko.neko-story');
+          const registry = ext?.isActive ? ext.exports.getCharacterRegistry?.() : undefined;
+          if (!registry) return [];
+          return registry.characters.map((c) => ({
+            id: c.id,
+            name: c.canonicalName,
+            role: c.metadata?.role,
+          }));
+        } catch {
+          return [];
+        }
+      },
+      getScenes: async () => {
+        try {
+          const ext = vscode.extensions.getExtension<{
+            getScriptIndex?(
+              uri: string,
+            ):
+              | { scenes: readonly { sceneId: string; sceneTitle: string; heading: string }[] }
+              | undefined;
+          }>('neko.neko-story');
+          if (!ext?.isActive) return [];
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) return [];
+          const index = ext.exports.getScriptIndex?.(editor.document.uri.toString());
+          if (!index) return [];
+          return index.scenes.map((s) => ({
+            id: s.sceneId,
+            title: s.sceneTitle || s.heading,
+            heading: s.heading,
+          }));
+        } catch {
+          return [];
+        }
+      },
       onSearchError: (error) => {
         logger.error('Error searching project files:', error);
       },

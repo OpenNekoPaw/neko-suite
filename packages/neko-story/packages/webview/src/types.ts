@@ -185,7 +185,8 @@ export type MessageToWebview =
       sceneStates: Record<string, StorySceneState>;
     }
   | { type: 'scrollTo'; line: number }
-  | { type: 'setView'; view: StoryViewMode };
+  | { type: 'setView'; view: StoryViewMode }
+  | { type: 'characterThumbnails'; data: Record<string, string> };
 
 export type MessageToExtension =
   | { type: 'ready' }

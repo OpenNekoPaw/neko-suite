@@ -302,6 +302,10 @@ function createDeriveData(
     return { content: '', format: 'plain' };
   }
 
+  if (targetType === 'media') {
+    return { assetPath: '', mediaType: 'image' };
+  }
+
   return {};
 }
 

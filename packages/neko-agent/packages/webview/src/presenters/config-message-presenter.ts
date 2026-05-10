@@ -206,8 +206,16 @@ export function projectProjectFilesMessage(message: ProjectFilesMessage): Projec
       id: `${extra.type}:${extra.id}`,
       kind: extra.type,
       label: extra.label,
-      description: extra.type === 'canvas-node' ? 'Canvas node' : extra.type,
+      description:
+        extra.type === 'canvas-node'
+          ? 'Canvas node'
+          : extra.type === 'character'
+            ? 'Character'
+            : extra.type === 'scene'
+              ? 'Scene'
+              : extra.type,
       contextPayload: toAgentContextPayload(extra),
+      ...(extra.thumbnailUri ? { thumbnailUri: extra.thumbnailUri } : {}),
     }));
 
   return {

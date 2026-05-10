@@ -1,6 +1,14 @@
 import type { DocumentCanvasNode, ModelCanvasNode } from './canvas';
 
-export type CanvasDroppedAssetKind = 'media' | 'script' | 'document' | 'model' | 'canvas';
+export type CanvasDroppedAssetKind =
+  | 'media'
+  | 'script'
+  | 'document'
+  | 'model'
+  | 'canvas'
+  | 'project';
+
+export type NkProjectType = 'nkv' | 'nka' | 'nkm' | 'nkp';
 
 export interface DroppedMediaCanvasAsset {
   kind: 'media';
@@ -40,12 +48,21 @@ export interface DroppedCanvasEmbedAsset {
   title: string;
 }
 
+export interface DroppedProjectAsset {
+  kind: 'project';
+  name: string;
+  path: string;
+  title: string;
+  projectType: NkProjectType;
+}
+
 export type CanvasDroppedAsset =
   | DroppedMediaCanvasAsset
   | DroppedScriptCanvasAsset
   | DroppedDocumentCanvasAsset
   | DroppedModelCanvasAsset
-  | DroppedCanvasEmbedAsset;
+  | DroppedCanvasEmbedAsset
+  | DroppedProjectAsset;
 
 const MEDIA_EXTENSIONS: Record<string, DroppedMediaCanvasAsset['mediaType']> = {
   png: 'image',
@@ -78,6 +95,13 @@ const DOCUMENT_EXTENSIONS: Record<string, DroppedDocumentCanvasAsset['docType']>
 };
 const MODEL_EXTENSIONS = new Set(['safetensors', 'ckpt', 'pt', 'pth', 'bin']);
 const CANVAS_EXTENSIONS = new Set(['nkc']);
+
+const PROJECT_EXTENSIONS: Record<string, NkProjectType> = {
+  nkv: 'nkv',
+  nka: 'nka',
+  nkm: 'nkm',
+  nkp: 'nkp',
+};
 
 function getFileExtension(fileName: string): string {
   return fileName.split('.').pop()?.toLowerCase() ?? '';
@@ -116,6 +140,10 @@ export function inferCanvasModelType(
   return 'checkpoint';
 }
 
+export function inferNkProjectType(fileName: string): NkProjectType | null {
+  return PROJECT_EXTENSIONS[getFileExtension(fileName)] ?? null;
+}
+
 export function inferCanvasDroppedAssetKind(fileName: string): CanvasDroppedAssetKind | null {
   if (inferCanvasMediaType(fileName)) {
     return 'media';
@@ -131,6 +159,9 @@ export function inferCanvasDroppedAssetKind(fileName: string): CanvasDroppedAsse
   }
   if (CANVAS_EXTENSIONS.has(getFileExtension(fileName))) {
     return 'canvas';
+  }
+  if (inferNkProjectType(fileName)) {
+    return 'project';
   }
   return null;
 }

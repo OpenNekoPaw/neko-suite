@@ -250,11 +250,26 @@ export interface AgentProjectFileCandidate {
   readonly relativePath: string;
 }
 
+export interface AgentMentionCharacter {
+  readonly id: string;
+  readonly name: string;
+  readonly role?: string;
+  readonly thumbnailUri?: string;
+}
+
+export interface AgentMentionScene {
+  readonly id: string;
+  readonly title: string;
+  readonly heading?: string;
+}
+
 export interface AgentProjectFilesProjectionInput {
   readonly conversationId: string;
   readonly filter?: string;
   readonly files: readonly AgentProjectFileCandidate[];
   readonly canvasNodes?: readonly AgentAmbientCanvasNode[];
+  readonly characters?: readonly AgentMentionCharacter[];
+  readonly scenes?: readonly AgentMentionScene[];
 }
 
 export interface ExecuteAgentProjectFileSearchInput {
@@ -264,6 +279,8 @@ export interface ExecuteAgentProjectFileSearchInput {
     plan: AgentProjectFileSearchPlan,
   ) => Promise<readonly AgentProjectFileCandidate[]>;
   readonly getCanvasNodes?: (conversationId: string) => readonly AgentAmbientCanvasNode[];
+  readonly getCharacters?: () => Promise<readonly AgentMentionCharacter[]>;
+  readonly getScenes?: () => Promise<readonly AgentMentionScene[]>;
   readonly onSearchError?: (error: unknown) => void;
 }
 
@@ -749,11 +766,18 @@ export async function executeAgentProjectFileSearch(
     input.onSearchError?.(error);
   }
 
+  const [characters, scenes] = await Promise.all([
+    input.getCharacters?.().catch(() => [] as AgentMentionCharacter[]) ?? [],
+    input.getScenes?.().catch(() => [] as AgentMentionScene[]) ?? [],
+  ]);
+
   return projectAgentProjectFilesMessage({
     conversationId: input.conversationId,
     filter: input.filter,
     files,
     canvasNodes: input.getCanvasNodes?.(input.conversationId) ?? [],
+    characters,
+    scenes,
   });
 }
 
@@ -764,7 +788,12 @@ export function projectAgentProjectFilesMessage(
     type: 'projectFiles',
     conversationId: input.conversationId,
     files: projectAgentFileMentions(input.files),
-    mentionExtras: projectAgentMentionExtras(input.canvasNodes ?? [], input.filter),
+    mentionExtras: projectAgentMentionExtras(
+      input.canvasNodes ?? [],
+      input.filter,
+      input.characters,
+      input.scenes,
+    ),
   };
 }
 
@@ -784,16 +813,52 @@ export function projectAgentFileMentions(
 export function projectAgentMentionExtras(
   canvasNodes: readonly AgentAmbientCanvasNode[],
   filter?: string,
+  characters?: readonly AgentMentionCharacter[],
+  scenes?: readonly AgentMentionScene[],
 ): ProjectMentionExtra[] {
   const normalizedFilter = normalizeProjectFileFilter(filter).toLowerCase();
-  return canvasNodes
-    .filter((node) => !normalizedFilter || node.summary.toLowerCase().includes(normalizedFilter))
-    .map((node) => ({
-      type: 'canvas-node',
-      id: node.nodeId,
-      label: node.summary,
-      summary: `Canvas: ${node.summary}`,
-    }));
+  const extras: ProjectMentionExtra[] = [];
+
+  for (const node of canvasNodes) {
+    if (!normalizedFilter || node.summary.toLowerCase().includes(normalizedFilter)) {
+      extras.push({
+        type: 'canvas-node',
+        id: node.nodeId,
+        label: node.summary,
+        summary: `Canvas: ${node.summary}`,
+      });
+    }
+  }
+
+  if (characters) {
+    for (const c of characters) {
+      if (!normalizedFilter || c.name.toLowerCase().includes(normalizedFilter)) {
+        extras.push({
+          type: 'character',
+          id: c.id,
+          label: c.name,
+          summary: `Character: ${c.name}${c.role ? ` (${c.role})` : ''}`,
+          ...(c.thumbnailUri ? { thumbnailUri: c.thumbnailUri } : {}),
+        });
+      }
+    }
+  }
+
+  if (scenes) {
+    for (const s of scenes) {
+      const text = `${s.title} ${s.heading ?? ''}`.toLowerCase();
+      if (!normalizedFilter || text.includes(normalizedFilter)) {
+        extras.push({
+          type: 'scene',
+          id: s.id,
+          label: s.title,
+          summary: `Scene: ${s.heading ?? s.title}`,
+        });
+      }
+    }
+  }
+
+  return extras;
 }
 
 export function buildAgentAssistantMessageFromStream(

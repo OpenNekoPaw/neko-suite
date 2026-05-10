@@ -4,6 +4,7 @@ import type {
   ContainerSection,
   NodePreviewDescriptor,
 } from './canvas-layered';
+import type { NkProjectType } from './canvas-drop';
 
 // =============================================================================
 // Canvas Types - Infinite Canvas Editor Data Model
@@ -29,7 +30,8 @@ export type CanvasNodeType =
   | 'script'
   | 'document'
   | 'model'
-  | 'canvas-embed';
+  | 'canvas-embed'
+  | 'project';
 
 /**
  * Connection anchor position on a node
@@ -437,6 +439,19 @@ export interface CanvasEmbedCanvasNode extends CanvasNodeBase {
 }
 
 /**
+ * Project node — reference to a .nkv / .nka / .nkm / .nkp project file
+ */
+export interface ProjectCanvasNode extends CanvasNodeBase {
+  type: 'project';
+  data: {
+    projectPath: string;
+    projectTitle: string;
+    projectType: NkProjectType;
+    thumbnailData?: string;
+  };
+}
+
+/**
  * Union type of all canvas node types
  */
 export type CanvasNode =
@@ -452,7 +467,8 @@ export type CanvasNode =
   | ScriptCanvasNode
   | DocumentCanvasNode
   | ModelCanvasNode
-  | CanvasEmbedCanvasNode;
+  | CanvasEmbedCanvasNode
+  | ProjectCanvasNode;
 
 // =============================================================================
 // Connection Types

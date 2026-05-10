@@ -41,6 +41,7 @@ const NODE_DEFAULT_SIZES: Record<CanvasNodeType, NodeDefaultSize> = {
   document: { width: 220, height: 280 },
   model: { width: 240, height: 160 },
   'canvas-embed': { width: 260, height: 180 },
+  project: { width: 260, height: 180 },
 };
 
 const DEFAULT_EMPTY_HISTORY: GeneratedImageVersion[] = [];
@@ -86,6 +87,13 @@ function inferModelType(value: unknown): 'lora' | 'checkpoint' | 'controlnet' | 
 
 function inferModelRole(value: unknown): 'reference' | 'workflow' {
   return value === 'workflow' ? 'workflow' : 'reference';
+}
+
+function inferProjectType(value: unknown): 'nkv' | 'nka' | 'nkm' | 'nkp' {
+  if (value === 'nkv' || value === 'nka' || value === 'nkm' || value === 'nkp') {
+    return value;
+  }
+  return 'nkv';
 }
 
 function inferGalleryPreset(value: unknown): GalleryPreset {
@@ -403,6 +411,19 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
         data: {
           canvasPath: asString(data.canvasPath, ''),
           canvasTitle: asString(data.canvasTitle, ''),
+          thumbnailData: asString(data.thumbnailData) || undefined,
+        },
+      };
+    case 'project':
+      return {
+        type,
+        position,
+        size: getNodeDefaultSize(type),
+        zIndex,
+        data: {
+          projectPath: asString(data.projectPath, ''),
+          projectTitle: asString(data.projectTitle, ''),
+          projectType: inferProjectType(data.projectType),
           thumbnailData: asString(data.thumbnailData) || undefined,
         },
       };

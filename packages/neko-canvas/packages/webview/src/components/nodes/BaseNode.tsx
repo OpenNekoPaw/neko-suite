@@ -9,7 +9,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CanvasViewport, CanvasNodeType, PortDefinition } from '@neko/shared';
-import { getDefaultPorts } from '@neko/shared';
+import {
+  getDefaultPorts,
+  getBuiltInCanvasNodePresetMetadata,
+  getDefaultCanvasNodePresetName,
+} from '@neko/shared';
 import { useNodeDrag } from '../../hooks/useNodeDrag';
 import { useNodeResize, type ResizeHandle } from '../../hooks/useNodeResize';
 import { useNodeRotate } from '../../hooks/useNodeRotate';
@@ -108,6 +112,7 @@ const DERIVE_NODE_TYPES = [
   { type: 'shot', icon: '🎬', label: '镜头' },
   { type: 'scene', icon: '📋', label: '场景' },
   { type: 'gallery', icon: '🖼', label: '画廊' },
+  { type: 'media', icon: '📷', label: '素材' },
   { type: 'annotation', icon: '📝', label: '注释' },
 ] as const;
 
@@ -115,7 +120,20 @@ function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
+  const allowedTypes = useMemo(() => {
+    const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === sourceNodeId);
+    if (!node) return DERIVE_NODE_TYPES;
+    const presetName = node.preset ?? getDefaultCanvasNodePresetName(node.type);
+    const preset = getBuiltInCanvasNodePresetMetadata(presetName);
+    if (!preset) return DERIVE_NODE_TYPES;
+    const targetNodeTypes = new Set<string>();
+    for (const t of preset.deriveTargets) {
+      const p = getBuiltInCanvasNodePresetMetadata(t);
+      if (p) targetNodeTypes.add(p.nodeType);
+    }
+    return DERIVE_NODE_TYPES.filter(({ type }) => targetNodeTypes.has(type));
+  }, [sourceNodeId]);
+
   useEffect(() => {
     if (!open) return;
     const handleDown = (e: PointerEvent) => {
@@ -127,12 +145,13 @@ function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
     return () => document.removeEventListener('pointerdown', handleDown, true);
   }, [open]);
 
+  if (allowedTypes.length === 0) return null;
+
   return (
     <div
       className="absolute z-30 derive-btn"
       style={{ right: -16, top: '50%', transform: 'translateY(-50%)' }}
     >
-      {/* "+" trigger */}
       <button
         className="flex items-center justify-center rounded-full"
         style={{
@@ -155,7 +174,6 @@ function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
         +
       </button>
 
-      {/* Type picker popup */}
       {open && (
         <div
           ref={menuRef}
@@ -170,7 +188,7 @@ function DeriveButton({ sourceNodeId }: { sourceNodeId: string }) {
             minWidth: 100,
           }}
         >
-          {DERIVE_NODE_TYPES.map(({ type, icon, label }) => (
+          {allowedTypes.map(({ type, icon, label }) => (
             <button
               key={type}
               className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs hover:bg-white/10 transition-colors"

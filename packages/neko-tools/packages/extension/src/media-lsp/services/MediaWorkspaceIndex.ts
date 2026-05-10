@@ -10,6 +10,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { IWorkspaceIO } from '../../contracts/IWorkspaceIO';
+import { resolveMediaSrcPath } from './resolveMediaSrcPath';
 import { parseJviDocument } from './JviParser';
 import type {
   JviParsedProject,
@@ -143,7 +144,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
       this.workspaceIO.onDidChangeTextDocument((e) => {
         if (this.isRelevantDocument(e.document)) {
           this.parseAndCache(e.document.uri, e.document.getText());
-          this.rebuildDerivedIndices();
+          void this.rebuildDerivedIndices();
         }
       }),
     );
@@ -152,7 +153,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
       this.workspaceIO.onDidOpenTextDocument((doc) => {
         if (this.isRelevantDocument(doc)) {
           this.parseAndCache(doc.uri, doc.getText());
-          this.rebuildDerivedIndices();
+          void this.rebuildDerivedIndices();
         }
       }),
     );
@@ -170,20 +171,20 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
         this.parseAndCache(uri, content);
       }
     }
-    this.rebuildDerivedIndices();
+    await this.rebuildDerivedIndices();
   }
 
   private async onFileChanged(uri: vscode.Uri): Promise<void> {
     const content = await this.readFileContent(uri);
     if (content !== undefined) {
       this.parseAndCache(uri, content);
-      this.rebuildDerivedIndices();
+      await this.rebuildDerivedIndices();
     }
   }
 
   private onFileDeleted(uri: vscode.Uri): void {
     this.fileCache.delete(uri.toString());
-    this.rebuildDerivedIndices();
+    void this.rebuildDerivedIndices();
   }
 
   private async readFileContent(uri: vscode.Uri): Promise<string | undefined> {
@@ -216,7 +217,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
   /**
    * Rebuilds all derived indices from the file cache.
    */
-  private rebuildDerivedIndices(): void {
+  private async rebuildDerivedIndices(): Promise<void> {
     this.mediaRefIndex.clear();
     this.elementIdIndex.clear();
 
@@ -236,7 +237,7 @@ export class MediaWorkspaceIndex implements IMediaWorkspaceIndex, vscode.Disposa
 
           // Index media references by absolute path
           if (el.src && el.srcRange) {
-            const absolutePath = path.resolve(jviDir, el.src);
+            const absolutePath = await resolveMediaSrcPath(jviDir, el.src);
             const ref: MediaReference = {
               absolutePath,
               relativeSrc: el.src,

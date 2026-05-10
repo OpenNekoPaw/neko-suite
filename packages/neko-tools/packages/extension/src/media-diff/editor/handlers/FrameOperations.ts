@@ -95,10 +95,10 @@ export async function handleInspectElement(
 ): Promise<void> {
   if (!src) return;
 
-  // Resolve src relative to the project file directory
   const path = await import('path');
+  const { resolveMediaSrcPath } = await import('../../../media-lsp/services/resolveMediaSrcPath');
   const projectDir = path.dirname(ctx.fileUri.fsPath);
-  const absoluteSrc = path.isAbsolute(src) ? src : path.join(projectDir, src);
+  const absoluteSrc = await resolveMediaSrcPath(projectDir, src);
 
   try {
     // Extract a thumbnail frame at t=0 with low resolution

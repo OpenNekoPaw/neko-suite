@@ -24,7 +24,13 @@ import {
 import { LLMClassifier } from './services/LLMClassifier';
 import type { IFileSystem } from '@neko/asset';
 import * as os from 'os';
-import { detectMediaType, resolveStorageLayout, migrateStorageLayout } from '@neko/shared';
+import {
+  detectMediaType,
+  resolveStorageLayout,
+  migrateStorageLayout,
+  parseEntityUri,
+} from '@neko/shared';
+import type { ResolvedEntityRef } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
 import { ThumbnailService } from './services/ThumbnailService';
 import { MediaMetadataCache } from './services/MediaMetadataCache';
@@ -325,8 +331,82 @@ export async function activate(
       if (!thumbnailService) return undefined;
       return (await thumbnailService.getCached(filePath)) ?? undefined;
     },
+    resolveEntityUri: async (uri) => {
+      if (!library) return undefined;
+      const parsed = parseEntityUri(uri);
+      if (!parsed) return undefined;
+
+      const entities = await library.getAllEntities();
+      const entity = entities.find((e) => e.id === parsed.entityId);
+      if (!entity) return undefined;
+
+      for (const variant of entity.variants) {
+        const file = variant.files.find((f) => f.purpose === parsed.purpose);
+        if (file) {
+          return {
+            entityId: parsed.entityId,
+            variantId: variant.id,
+            filePath: file.path,
+            resolvedPath: library.resolvePath(file.path),
+            mediaType: file.mediaType,
+          };
+        }
+      }
+      if (parsed.purpose === 'thumbnail') {
+        const variant = entity.variants.find((v) => typeof v.thumbnailPath === 'string');
+        if (variant?.thumbnailPath) {
+          return {
+            entityId: parsed.entityId,
+            variantId: variant.id,
+            filePath: variant.thumbnailPath,
+            resolvedPath: variant.thumbnailPath,
+            mediaType: 'image' as const,
+          };
+        }
+      }
+      return undefined;
+    },
+    getCharacterThumbnail: async (name) => {
+      if (!library) return undefined;
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!wsRoot) return undefined;
+
+      try {
+        const { CharacterRegistryService, resolveCharacterRegistryPath } =
+          await import('@neko/shared/vscode/extension');
+        const registry = new CharacterRegistryService(resolveCharacterRegistryPath(wsRoot));
+        const record = await registry.resolveByName(name);
+        if (!record) return undefined;
+
+        const assetIds = [
+          ...(record.defaults?.assetEntityId ? [record.defaults.assetEntityId] : []),
+          ...(record.bindings?.assetEntityIds ?? []),
+        ];
+        if (assetIds.length === 0) return undefined;
+
+        const entities = await library.getAllEntities();
+        for (const id of assetIds) {
+          const entity = entities.find((e) => e.id === id);
+          if (!entity) continue;
+          for (const variant of entity.variants) {
+            if (variant.thumbnailPath) return variant.thumbnailPath;
+            const thumbFile = variant.files.find((f) => f.purpose === 'thumbnail');
+            if (thumbFile) return library.resolvePath(thumbFile.path);
+          }
+        }
+      } catch {
+        return undefined;
+      }
+      return undefined;
+    },
     onDidChangeEntities: _onDidChangeEntities.event,
   };
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.getCharacterThumbnail', (name: string) =>
+      api.getCharacterThumbnail(name),
+    ),
+  );
 
   logger.info('Extension activated, API exported');
   return api;

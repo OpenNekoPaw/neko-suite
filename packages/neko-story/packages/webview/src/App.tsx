@@ -72,6 +72,7 @@ export function App() {
   const [document, setDocument] = useState<FountainDocument | null>(null);
   const [scriptIndex, setScriptIndex] = useState<NekoStoryScriptIndex | null>(null);
   const [sceneStates, setSceneStates] = useState<Record<string, StorySceneState>>({});
+  const [characterThumbnails, setCharacterThumbnails] = useState<Record<string, string>>({});
   const [view, setView] = useState<StoryViewMode>('screenplay');
 
   const handleMessage = useCallback((message: MessageToWebview) => {
@@ -86,6 +87,9 @@ export function App() {
         break;
       case 'setView':
         setView(message.view);
+        break;
+      case 'characterThumbnails':
+        setCharacterThumbnails(message.data);
         break;
     }
   }, []);
@@ -119,6 +123,7 @@ export function App() {
           <ScriptTableView
             scriptIndex={scriptIndex}
             sceneStates={sceneStates}
+            characterThumbnails={characterThumbnails}
             onNavigate={handleNavigate}
             onSceneAction={handleSceneAction}
           />

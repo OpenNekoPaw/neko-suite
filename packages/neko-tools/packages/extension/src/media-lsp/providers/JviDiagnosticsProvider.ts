@@ -16,6 +16,7 @@ import { checkStructure, checkReferences } from '../services/JviDiagnosticAnalyz
 import type { DiagnosticEntry } from '../types';
 import type { IMediaProbeCache, ProbeResultLike } from '../services/types';
 import type { IEngineMediaService } from '../../contracts/IEngineMediaService';
+import { resolveMediaSrcPath } from '../services/resolveMediaSrcPath';
 
 const LANGUAGE_ID = 'nekotools-jvi';
 const DEBOUNCE_MS = 300;
@@ -104,6 +105,7 @@ export class JviDiagnosticsProvider implements vscode.Disposable {
           jviDir,
           this.fileExists.bind(this),
           this.probeFile.bind(this),
+          resolveMediaSrcPath,
         );
         entries.push(...refEntries);
       } catch {

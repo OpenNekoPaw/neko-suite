@@ -30,6 +30,9 @@ export * from './theme/index';
 // Path resolution (PathResolver + variable expansion)
 export * from './path/index';
 
+// Entity URI (entity:// protocol parsing + building)
+export * from './entity-uri/index';
+
 // Format SDKs (load/validate/migrate/save project files)
 export * from './nkv/index';
 export * from './nkc/index';

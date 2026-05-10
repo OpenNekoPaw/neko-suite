@@ -680,6 +680,14 @@ export interface NekoAssetsAPI {
   /** Get the thumbnail file path for a given asset file path. */
   getThumbnailPath(filePath: string): Promise<string | undefined>;
 
+  /** Resolve an entity:// URI to a concrete variant file and absolute path. */
+  resolveEntityUri(
+    uri: string,
+  ): Promise<import('../entity-uri/index').ResolvedEntityRef | undefined>;
+
+  /** Resolve a character name to its thumbnail absolute path via CharacterRegistry → AssetEntity. */
+  getCharacterThumbnail(name: string): Promise<string | undefined>;
+
   /** Fired when asset entities are added, removed, or modified. */
   onDidChangeEntities: { (listener: () => void): { dispose(): void } };
 }

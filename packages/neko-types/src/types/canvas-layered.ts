@@ -196,6 +196,7 @@ export type CanvasPreviewRole =
   | 'panorama-rotation'
   | 'generation-candidate'
   | 'collection'
+  | 'project-thumbnail'
   | 'node-summary'
   | 'fallback';
 
@@ -252,6 +253,7 @@ export type DelegateTarget =
   | 'document'
   | 'sketch'
   | 'puppet'
+  | 'project'
   | 'external';
 
 export interface DelegateAction {

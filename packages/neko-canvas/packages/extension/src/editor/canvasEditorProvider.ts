@@ -16,6 +16,7 @@ import {
   inferCanvasDroppedAssetKind,
   inferCanvasMediaType,
   inferCanvasModelType,
+  inferNkProjectType,
   loadNkc,
 } from '@neko/shared';
 import type {
@@ -777,6 +778,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               result.validation.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
             );
           }
+          if (data) {
+            await this.normalizeCanvasPathsForLoad(
+              data as Record<string, unknown>,
+              document.uri,
+              webviewPanel.webview,
+            );
+          }
           webviewPanel.webview.postMessage({ type: 'update', data });
           // Sync outline & status bar on initial load
           if (data) {
@@ -860,7 +868,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const mediaTypeHint = message.mediaType as string | undefined;
         if (!requestId || !assetPath) break;
 
-        let assetId: string | null = null;
         try {
           const fsPath = await this.resolveAssetPath(assetPath, document.uri);
           const api = await this.getPreviewApi();
@@ -878,7 +885,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
                   : 'unknown'),
               expectedProjection: panoramicRoute ? 'equirectangular' : undefined,
             });
-            assetId = manifest.assetId;
             const variant = await api.requestPreviewVariant(manifest.assetId, {
               role: role ?? 'thumbnail',
               width: 640,
@@ -904,13 +910,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             requestId,
             error: error instanceof Error ? error.message : 'Preview variant resolution failed',
           });
-        } finally {
-          if (assetId) {
-            const api = await this.getPreviewApi();
-            if (hasPreviewVariantAPI(api)) {
-              await api.unregisterPreviewAsset(assetId).catch(() => {});
-            }
-          }
         }
         break;
       }
@@ -930,7 +929,23 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         if (!assetPath) break;
 
-        if (
+        if (action?.target === 'project') {
+          const fsPath = await this.resolveAssetPath(assetPath, document.uri);
+          const fileUri = vscode.Uri.file(fsPath);
+          const ext = assetPath.split('.').pop()?.toLowerCase() ?? '';
+          const editorIdMap: Record<string, string> = {
+            nkv: 'neko.nekocut.editor',
+            nka: 'neko.nekocut.editor',
+            nkm: 'neko.nekomodel.editor',
+            nkp: 'neko.nekopuppet.editor',
+          };
+          const editorId = editorIdMap[ext];
+          if (editorId) {
+            await vscode.commands.executeCommand('vscode.openWith', fileUri, editorId);
+          } else {
+            await vscode.commands.executeCommand('vscode.open', fileUri);
+          }
+        } else if (
           action?.target === 'preview' ||
           action?.target === 'model' ||
           action?.target === 'cut' ||
@@ -1128,6 +1143,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             Documents: ['pdf', 'docx', 'epub', 'cbz'],
             Models: ['safetensors', 'ckpt', 'pt', 'pth', 'bin'],
             'Neko Canvas': ['nkc'],
+            'Neko Projects': ['nkv', 'nka', 'nkm', 'nkp'],
             'All Files': ['*'],
           },
         });
@@ -1187,6 +1203,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
                 name: fileName,
                 title: baseName || 'Canvas',
               };
+            } else if (assetKind === 'project') {
+              const projectType = inferNkProjectType(fileName);
+              if (projectType) {
+                asset = {
+                  kind: 'project',
+                  path: contractedPath,
+                  name: fileName,
+                  title: baseName || 'Project',
+                  projectType,
+                };
+              }
             }
           }
 
@@ -1467,6 +1494,99 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
 
+      case 'project:resolveThumbnail': {
+        const projectPath = message.projectPath as string;
+        const projectType = message.projectType as string;
+        const nodeId = message.nodeId as string;
+        if (!projectPath || !nodeId) break;
+        try {
+          const filePath = await this.resolveAssetPath(projectPath, document.uri);
+          const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+          const projectData = JSON.parse(Buffer.from(raw).toString('utf-8')) as Record<
+            string,
+            unknown
+          >;
+
+          let assetSrc: string | undefined;
+          if (projectType === 'nkv') {
+            const tracks = projectData['tracks'] as
+              | Array<{ elements?: Array<{ src?: string }> }>
+              | undefined;
+            assetSrc = tracks?.[0]?.elements?.[0]?.src;
+          } else if (projectType === 'nkm') {
+            const model = projectData['model'] as { src?: string } | undefined;
+            assetSrc = model?.src;
+          } else if (projectType === 'nkp') {
+            const puppet = projectData['puppet'] as { src?: string } | undefined;
+            assetSrc = puppet?.src;
+          }
+
+          if (!assetSrc) {
+            webviewPanel.webview.postMessage({
+              type: 'project:thumbnailResult',
+              nodeId,
+              error: 'No primary asset found in project file',
+            });
+            break;
+          }
+
+          const projectDir = filePath.replace(/[/\\][^/\\]+$/, '');
+          const resolvedAssetPath = assetSrc.startsWith('/')
+            ? assetSrc
+            : `${projectDir}/${assetSrc}`;
+
+          const api = await this.getPreviewApi();
+          if (!api) {
+            webviewPanel.webview.postMessage({
+              type: 'project:thumbnailResult',
+              nodeId,
+              error: 'Preview engine not available',
+            });
+            break;
+          }
+
+          const base64 = await api.captureFrame(resolvedAssetPath, 1);
+          const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+          webviewPanel.webview.postMessage({
+            type: 'project:thumbnailResult',
+            nodeId,
+            dataUrl,
+          });
+        } catch (error) {
+          webviewPanel.webview.postMessage({
+            type: 'project:thumbnailResult',
+            nodeId,
+            error: error instanceof Error ? error.message : 'Thumbnail generation failed',
+          });
+        }
+        break;
+      }
+
+      case 'project:openInEditor': {
+        const projectPath = message.projectPath as string;
+        const projectType = message.projectType as string;
+        if (!projectPath) break;
+        try {
+          const filePath = await this.resolveAssetPath(projectPath, document.uri);
+          const uri = vscode.Uri.file(filePath);
+          const editorIdMap: Record<string, string> = {
+            nkv: 'neko.nekocut.editor',
+            nka: 'neko.nekocut.editor',
+            nkm: 'neko.nekomodel.editor',
+            nkp: 'neko.nekopuppet.editor',
+          };
+          const editorId = editorIdMap[projectType];
+          if (editorId) {
+            await vscode.commands.executeCommand('vscode.openWith', uri, editorId);
+          } else {
+            await vscode.commands.executeCommand('vscode.open', uri);
+          }
+        } catch (error) {
+          logger.warn(`Failed to open project: ${error}`);
+        }
+        break;
+      }
+
       case 'resolveDroppedFiles': {
         // Webview dropped files from VSCode explorer - resolve them into node-ready asset DTOs.
         const droppedUris = message.uris as string[];
@@ -1525,6 +1645,19 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
                 path: contractedPath,
                 name: fileName,
                 title: baseName || 'Canvas',
+              });
+              continue;
+            }
+
+            if (assetKind === 'project') {
+              const projectType = inferNkProjectType(fileName);
+              if (!projectType) continue;
+              resolvedAssets.push({
+                kind: 'project',
+                path: contractedPath,
+                name: fileName,
+                title: baseName || 'Project',
+                projectType,
               });
               continue;
             }
@@ -1959,6 +2092,33 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     // Relative path — resolve against document's directory
     const docDir = vscode.Uri.joinPath(documentUri, '..');
     return vscode.Uri.joinPath(docDir, assetPath).fsPath;
+  }
+
+  /** Convert stored asset paths to webview URIs so the webview can display them */
+  private async normalizeCanvasPathsForLoad(
+    data: Record<string, unknown>,
+    documentUri: vscode.Uri,
+    webview: vscode.Webview,
+  ): Promise<void> {
+    const nodes = data['nodes'] as Array<Record<string, unknown>> | undefined;
+    if (!nodes) return;
+
+    for (const node of nodes) {
+      if (node['type'] !== 'media') continue;
+      const nodeData = node['data'] as Record<string, unknown> | undefined;
+      if (!nodeData) continue;
+
+      for (const key of ['assetPath', 'thumbnailPath'] as const) {
+        const value = nodeData[key];
+        if (typeof value !== 'string' || !value) continue;
+        try {
+          const fsPath = await this.resolveAssetPath(value, documentUri);
+          nodeData[key] = webview.asWebviewUri(vscode.Uri.file(fsPath)).toString();
+        } catch {
+          // leave as-is if resolution fails
+        }
+      }
+    }
   }
 
   /** Normalize all media node asset paths in canvas data for portable storage */

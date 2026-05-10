@@ -123,9 +123,18 @@ export function MentionMenu({
                     isSelected ? 'bg-[var(--vscode-list-hoverBackground)]' : ''
                   }`}
                 >
-                  <span aria-hidden="true" className="flex-shrink-0 text-[12px]">
-                    {icon}
-                  </span>
+                  {item.thumbnailUri ? (
+                    <img
+                      src={item.thumbnailUri}
+                      alt=""
+                      className="flex-shrink-0 rounded-sm object-cover"
+                      style={{ width: 14, height: 14 }}
+                    />
+                  ) : (
+                    <span aria-hidden="true" className="flex-shrink-0 text-[12px]">
+                      {icon}
+                    </span>
+                  )}
                   <span className="flex-1 truncate">{item.label}</span>
                   {item.description && item.description !== item.label && (
                     <span className="flex-shrink-0 text-[9px] text-[var(--vscode-descriptionForeground)] truncate max-w-[100px]">

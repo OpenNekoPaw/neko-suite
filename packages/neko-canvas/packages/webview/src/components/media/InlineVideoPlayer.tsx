@@ -1,23 +1,14 @@
-/**
- * InlineMediaPlayer - Lightweight H.264+PCM stream player for canvas nodes
- *
- * Uses neko-client's H264StreamClient + AudioStreamClient + FrameScheduler
- * to play media streams from the shared neko-preview frame server.
- *
- * Audio is muted by default to avoid conflicts with neko-preview.
- */
-
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { H264StreamClient, AudioStreamClient, FrameScheduler, formatTime } from '@neko/neko-client';
+import { ProgressBar } from '@neko/shared/components';
+import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/shared/icons';
 import { getLogger } from '../../utils/logger';
 
-const logger = getLogger('InlineMediaPlayer');
+const logger = getLogger('InlineVideoPlayer');
 
-// =============================================================================
-// Types
-// =============================================================================
+const DEFAULT_VOLUME = 0.8;
 
-export interface InlineMediaPlayerProps {
+export interface InlineVideoPlayerProps {
   videoStreamUrl: string | null;
   audioStreamUrl: string | null;
   width: number;
@@ -25,14 +16,13 @@ export interface InlineMediaPlayerProps {
   fps: number;
   duration: number;
   startTime?: number;
+  onPause: (currentTime: number) => void;
+  onResume: () => void;
+  onSeek: (time: number) => void;
   onStop: (currentTime: number) => void;
 }
 
-// =============================================================================
-// Component
-// =============================================================================
-
-export function InlineMediaPlayer({
+export function InlineVideoPlayer({
   videoStreamUrl,
   audioStreamUrl,
   width,
@@ -40,20 +30,28 @@ export function InlineMediaPlayer({
   fps,
   duration,
   startTime = 0,
+  onPause,
+  onResume,
+  onSeek,
   onStop,
-}: InlineMediaPlayerProps) {
+}: InlineVideoPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const clientRef = useRef<H264StreamClient | null>(null);
   const audioClientRef = useRef<AudioStreamClient | null>(null);
   const schedulerRef = useRef<FrameScheduler | null>(null);
   const animFrameRef = useRef<number>(0);
-  const playStartTimeRef = useRef(0);
+  const playStartTimeRef = useRef(startTime);
   const playWallTimeRef = useRef(0);
   const clockSourceRef = useRef<'wall' | 'audio'>('wall');
+  const currentTimeRef = useRef(startTime);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [currentTime, setCurrentTime] = useState(startTime);
   const [isMuted, setIsMuted] = useState(false);
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   // =========================================================================
   // Frame rendering
@@ -95,12 +93,10 @@ export function InlineMediaPlayer({
   // =========================================================================
 
   const updatePlaybackTime = useCallback(() => {
-    if (!isPlaying) return;
-
     let newTime: number;
     const audioClient = audioClientRef.current;
 
-    if (audioClient && audioClient.isClockReady) {
+    if (audioClient?.isClockReady) {
       if (clockSourceRef.current === 'wall') {
         clockSourceRef.current = 'audio';
         schedulerRef.current?.flush();
@@ -118,8 +114,10 @@ export function InlineMediaPlayer({
     }
 
     if (newTime >= duration) {
-      handleStop();
-      // Signal natural end — parent should reset position to 0
+      setIsPlaying(false);
+      setCurrentTime(duration);
+      schedulerRef.current?.flush();
+      onStop(duration);
       return;
     }
 
@@ -134,7 +132,7 @@ export function InlineMediaPlayer({
 
     setCurrentTime(newTime);
     animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [isPlaying, duration, renderFrame]);
+  }, [duration, renderFrame, onStop]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -167,7 +165,7 @@ export function InlineMediaPlayer({
     if (audioStreamUrl) {
       const audioClient = new AudioStreamClient({
         websocketUrl: audioStreamUrl,
-        volume: 0.8,
+        volume: DEFAULT_VOLUME,
         onError: (err) => logger.warn(`Audio error: ${err}`),
       });
       audioClientRef.current = audioClient;
@@ -192,95 +190,122 @@ export function InlineMediaPlayer({
       clientRef.current = null;
       audioClientRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startTime is only used for initial value; including it would restart streams on pause
   }, [videoStreamUrl, audioStreamUrl, width, height, fps, onFrame]);
 
   // =========================================================================
   // Controls
   // =========================================================================
 
-  const currentTimeRef = useRef(startTime);
-  // Keep ref in sync with state
-  useEffect(() => {
-    currentTimeRef.current = currentTime;
-  }, [currentTime]);
+  const handleTogglePlay = useCallback(
+    (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      if (isPlaying) {
+        setIsPlaying(false);
+        schedulerRef.current?.flush();
+        audioClientRef.current?.pause();
+        onPause(currentTimeRef.current);
+      } else {
+        setIsPlaying(true);
+        audioClientRef.current?.resume();
+        playStartTimeRef.current = currentTimeRef.current;
+        playWallTimeRef.current = performance.now();
+        clockSourceRef.current = 'wall';
+        onResume();
+      }
+    },
+    [isPlaying, onPause, onResume],
+  );
 
-  const handleStop = useCallback(() => {
-    setIsPlaying(false);
-    schedulerRef.current?.flush();
-    clientRef.current?.dispose();
-    clientRef.current = null;
-    const ac = audioClientRef.current;
-    if (ac) {
-      ac.setVolume(0);
-      ac.dispose();
-    }
-    audioClientRef.current = null;
-    onStop(currentTimeRef.current);
-  }, [onStop]);
+  const handleSeekCommit = useCallback(
+    (time: number) => {
+      setCurrentTime(time);
+      currentTimeRef.current = time;
+      playStartTimeRef.current = time;
+      playWallTimeRef.current = performance.now();
+      clockSourceRef.current = 'wall';
+      schedulerRef.current?.flush();
+      audioClientRef.current?.resetClock();
+      onSeek(time);
+    },
+    [onSeek],
+  );
+
+  const handleSeeking = useCallback((time: number) => {
+    setCurrentTime(time);
+  }, []);
 
   const handleToggleMute = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       const newMuted = !isMuted;
       setIsMuted(newMuted);
-      audioClientRef.current?.setVolume(newMuted ? 0 : 0.8);
+      audioClientRef.current?.setVolume(newMuted ? 0 : DEFAULT_VOLUME);
     },
     [isMuted],
-  );
-
-  const handleStopClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      handleStop();
-    },
-    [handleStop],
   );
 
   // =========================================================================
   // Render
   // =========================================================================
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   return (
-    <div className="flex-1 relative bg-black overflow-hidden group">
+    <div className="relative flex-1 bg-black overflow-hidden group">
       <canvas
         ref={canvasRef}
         className="w-full h-full object-contain"
         style={{ display: 'block' }}
       />
 
-      {/* Progress bar (bottom 2px) */}
-      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/20">
-        <div
-          className="h-full bg-blue-500 transition-[width] duration-100"
-          style={{ width: `${progress}%` }}
+      {/* Controls overlay — gradient background */}
+      <div
+        className="absolute bottom-0 left-0 right-0 flex flex-col gap-1 px-2 pb-2 pt-6 opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{
+          background: 'linear-gradient(transparent 0%, rgba(0,0,0,0.7) 100%)',
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* Progress bar */}
+        <ProgressBar
+          currentTime={currentTime}
+          duration={duration}
+          onSeekCommit={handleSeekCommit}
+          onSeeking={handleSeeking}
+          variant="video"
+          formatTooltip={formatTime}
         />
-      </div>
 
-      {/* Minimal controls overlay */}
-      <div className="absolute bottom-1 left-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {/* Time */}
-        <span className="text-[10px] text-white/80 tabular-nums">{formatTime(currentTime)}</span>
-        <div className="flex-1" />
-        {/* Mute toggle */}
-        {audioStreamUrl && (
+        {/* Button row */}
+        <div className="flex items-center gap-1.5">
+          {/* Play/Pause */}
           <button
-            className="p-0.5 text-[10px] text-white/80 hover:text-white"
-            onClick={handleToggleMute}
-            title={isMuted ? 'Unmute' : 'Mute'}
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded text-white/85 hover:text-white"
+            onClick={handleTogglePlay}
+            title={isPlaying ? 'Pause' : 'Play'}
           >
-            {isMuted ? '🔇' : '🔊'}
+            {isPlaying ? <PauseIcon size={14} /> : <PlayIcon size={14} />}
           </button>
-        )}
-        {/* Stop */}
-        <button
-          className="p-0.5 text-[10px] text-white/80 hover:text-white"
-          onClick={handleStopClick}
-          title="Stop"
-        >
-          ⏹
-        </button>
+
+          {/* Time display */}
+          <span className="text-[10px] tabular-nums text-white/80 whitespace-nowrap">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </span>
+
+          <div className="flex-1" />
+
+          {/* Mute toggle */}
+          {audioStreamUrl && (
+            <button
+              type="button"
+              className="flex h-5 w-5 items-center justify-center text-white/80 hover:text-white"
+              onClick={handleToggleMute}
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? <VolumeOffIcon size={12} /> : <VolumeIcon size={12} />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
