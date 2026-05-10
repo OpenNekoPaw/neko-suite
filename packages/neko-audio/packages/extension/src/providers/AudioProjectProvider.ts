@@ -130,11 +130,16 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
 
   async revertCustomDocument(document: vscode.CustomDocument): Promise<void> {
     const panel = this._activePanels.get(document.uri.toString());
-    if (!panel) return;
+    if (!panel || panel.visible === undefined) return;
 
-    await panel.webview.postMessage({ type: 'revert' });
-    // Re-send project:init with data from disk
-    await this.initializeWebview(panel, document.uri);
+    try {
+      await panel.webview.postMessage({ type: 'revert' });
+      // Re-send project:init with data from disk
+      await this.initializeWebview(panel, document.uri);
+    } catch (error) {
+      if ((error as Error).message?.includes('disposed')) return;
+      throw error;
+    }
   }
 
   async backupCustomDocument(

@@ -84,6 +84,7 @@ export function VideoPlayer() {
   const [speed, setSpeed] = useState(1.0);
   const [volume, setVolume] = useState(1.0);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const hasRenderedFrameRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [showStats, setShowStats] = useState(false);
@@ -182,6 +183,7 @@ export function VideoPlayer() {
     }
 
     ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+    hasRenderedFrameRef.current = true;
     frame.close();
   }, []);
 
@@ -671,18 +673,18 @@ export function VideoPlayer() {
         {/* Hidden video element for PiP */}
         <video ref={pipVideoRef} style={{ display: 'none' }} playsInline muted />
 
-        {/* Canvas for H.264 decoded frames */}
+        {/* Canvas for H.264 decoded frames — stays visible when paused to retain last frame */}
         <canvas
           ref={canvasRef}
           className="max-w-full max-h-full object-contain"
           style={{
-            display: isPlaying || !posterUrl ? 'block' : 'none',
+            display: hasRenderedFrameRef.current || isPlaying ? 'block' : 'none',
             visibility: isPiPActive ? 'hidden' : 'visible',
           }}
         />
 
-        {/* Poster image when paused */}
-        {!isPlaying && posterUrl && (
+        {/* Poster image — only shown before first frame is decoded */}
+        {!hasRenderedFrameRef.current && !isPlaying && posterUrl && (
           <img
             src={posterUrl}
             className="max-w-full max-h-full object-contain"

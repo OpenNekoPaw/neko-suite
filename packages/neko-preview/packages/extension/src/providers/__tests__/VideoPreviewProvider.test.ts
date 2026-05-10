@@ -487,7 +487,7 @@ describe('VideoPreviewProvider', () => {
     it('should handle "preview:captureFrame" message', async () => {
       const { mockService, panel, messageHandler } = await setupWithMessageHandler();
 
-      mockService.captureFrame = vi.fn().mockResolvedValue('base64data');
+      mockService.captureFrame = vi.fn().mockResolvedValue('data:image/jpeg;base64,base64data');
 
       await messageHandler({ type: 'preview:captureFrame', time: 5.0 });
 

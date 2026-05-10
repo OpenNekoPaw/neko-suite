@@ -187,7 +187,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
                 let audioStreamUrl: string | null = null;
                 if (result.audioStreamId) {
                   audioStreamUrl =
-                    this._previewService?.getStreamWebSocketUrl(result.audioStreamId) ?? null;
+                    this._previewService?.getAudioWebSocketUrl(result.audioStreamId) ?? null;
                 }
                 if (streamUrl) {
                   await webviewPanel.webview.postMessage({
@@ -270,7 +270,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
               const frameData = await this._previewService?.captureFrame(filePath, time);
               await webviewPanel.webview.postMessage({
                 type: 'preview:frameData',
-                payload: { imageDataUrl: `data:image/jpeg;base64,${frameData}` },
+                payload: { imageDataUrl: frameData },
               });
             } catch (error) {
               logger.error('Frame capture failed:', error);
