@@ -1,7 +1,7 @@
 /**
  * AudioService unit tests
  *
- * Tests AudioService methods with mocked EngineClient.dispatch().
+ * Tests AudioService methods with mocked EngineClient.
  * Verifies request construction, response parsing, and error handling.
  */
 
@@ -33,11 +33,28 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
-// Mock EngineClient — vitest v4 requires `function` syntax for constructor mocks
+// Mock EngineClient with all methods used by AudioService
 const mockDispatch = vi.fn();
+const mockProbe = vi.fn();
+const mockWaveform = vi.fn();
+const mockCreateStream = vi.fn();
+const mockControlStream = vi.fn();
+const mockAnalyzeLoudness = vi.fn();
+const mockDetectSilence = vi.fn();
+const mockGetStreamWsUrl = vi.fn((id: string) => `ws://127.0.0.1:9999/v1/streams/${id}`);
+
 vi.mock('@neko/neko-client', () => ({
   EngineClient: function MockEngineClient() {
-    return { dispatch: mockDispatch };
+    return {
+      dispatch: mockDispatch,
+      probe: mockProbe,
+      waveform: mockWaveform,
+      createStream: mockCreateStream,
+      controlStream: mockControlStream,
+      analyzeLoudness: mockAnalyzeLoudness,
+      detectSilence: mockDetectSilence,
+      getStreamWsUrl: mockGetStreamWsUrl,
+    };
   },
 }));
 
@@ -113,13 +130,13 @@ describe('AudioService', () => {
     it('parses probe response correctly', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          duration: 120.5,
-          format: 'mp3',
-          audioStreams: [{ codec: 'mp3', sampleRate: 44100, channels: 2, bitrate: 320000 }],
-        },
+      mockProbe.mockResolvedValue({
+        duration: 120.5,
+        format: 'mp3',
+        audioCodec: 'mp3',
+        audioSampleRate: 44100,
+        audioChannels: 2,
+        audioBitrate: 320000,
       });
 
       const info = await service.probeAudio('/test/audio.mp3');
@@ -132,19 +149,19 @@ describe('AudioService', () => {
         format: 'mp3',
       });
 
-      expect(mockDispatch).toHaveBeenCalledWith({
-        group: 'videos',
-        action: 'probe',
-        options: { source: '/test/audio.mp3' },
-      });
+      expect(mockProbe).toHaveBeenCalledWith('videos', '/test/audio.mp3');
     });
 
     it('handles missing audio streams gracefully', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: { duration: 10, format: 'wav', audioStreams: [] },
+      mockProbe.mockResolvedValue({
+        duration: 10,
+        format: 'wav',
+        audioCodec: undefined,
+        audioSampleRate: undefined,
+        audioChannels: undefined,
+        audioBitrate: undefined,
       });
 
       const info = await service.probeAudio('/test/empty.wav');
@@ -155,10 +172,7 @@ describe('AudioService', () => {
 
     it('throws on error response', async () => {
       const service = await createTestService();
-      mockDispatch.mockResolvedValue({
-        status: 'error',
-        error: { message: 'File not found' },
-      });
+      mockProbe.mockRejectedValue(new Error('File not found'));
 
       await expect(service.probeAudio('/bad/path')).rejects.toThrow('File not found');
     });
@@ -172,17 +186,12 @@ describe('AudioService', () => {
     it('returns mono peaks for single-channel audio', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          waveform: {
-            sampleRate: 44100,
-            channels: 1,
-            peaksPerSecond: 10,
-            duration: 2,
-            peaks: [[0.1, 0.5, 0.8, 0.3]],
-          },
-        },
+      mockWaveform.mockResolvedValue({
+        peaks: [0.1, 0.5, 0.8, 0.3],
+        sampleRate: 44100,
+        channels: 1,
+        duration: 2,
+        peaksPerSecond: 10,
       });
 
       const waveform = await service.getWaveform('/test/mono.wav');
@@ -190,37 +199,30 @@ describe('AudioService', () => {
       expect(waveform.duration).toBe(2);
     });
 
-    it('mixes multi-channel peaks to mono (max across channels)', async () => {
+    it('returns downmixed peaks from EngineClient', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          waveform: {
-            sampleRate: 44100,
-            channels: 2,
-            peaksPerSecond: 10,
-            duration: 1,
-            peaks: [
-              [0.1, 0.5],
-              [0.3, 0.2],
-            ],
-          },
-        },
+      mockWaveform.mockResolvedValue({
+        peaks: [0.3, 0.5],
+        sampleRate: 44100,
+        channels: 2,
+        duration: 1,
+        peaksPerSecond: 10,
       });
 
       const waveform = await service.getWaveform('/test/stereo.wav');
-      expect(waveform.peaks).toEqual([0.3, 0.5]); // max(|0.1|,|0.3|), max(|0.5|,|0.2|)
+      expect(waveform.peaks).toEqual([0.3, 0.5]);
     });
 
     it('handles empty peaks array', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          waveform: { sampleRate: 44100, channels: 0, peaksPerSecond: 0, duration: 0, peaks: [] },
-        },
+      mockWaveform.mockResolvedValue({
+        peaks: [],
+        sampleRate: 44100,
+        channels: 0,
+        duration: 0,
+        peaksPerSecond: 0,
       });
 
       const waveform = await service.getWaveform('/test/empty.wav');
@@ -300,9 +302,12 @@ describe('AudioService', () => {
     it('parses loudness response', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: { integratedLoudness: -14.2, truePeak: -1.1, loudnessRange: 8.5 },
+      mockAnalyzeLoudness.mockResolvedValue({
+        integratedLufs: -14.2,
+        truePeakDbfs: -1.1,
+        loudnessRange: 8.5,
+        recommendedGain: 0.2,
+        targetLufs: -14,
       });
 
       const result = await service.analyzeLoudness('/test/audio.mp3');
@@ -322,31 +327,34 @@ describe('AudioService', () => {
     it('returns silence regions', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: {
-          regions: [
-            { start: 0, end: 1.5 },
-            { start: 30, end: 31 },
-          ],
-        },
+      mockDetectSilence.mockResolvedValue({
+        totalDuration: 60,
+        silenceDuration: 2.5,
+        silenceRatio: 0.04,
+        regionCount: 2,
+        regions: [
+          { start: 0, end: 1.5, duration: 1.5 },
+          { start: 30, end: 31, duration: 1 },
+        ],
       });
 
       const regions = await service.detectSilence('/test/audio.mp3', -40, 0.5);
       expect(regions).toHaveLength(2);
-      expect(regions[0]).toEqual({ start: 0, end: 1.5 });
+      expect(regions[0]).toEqual({ start: 0, end: 1.5, duration: 1.5 });
     });
 
     it('passes threshold and minDuration options', async () => {
       const service = await createTestService();
-      mockDispatch.mockResolvedValue({ status: 'ok', data: { regions: [] } });
+      mockDetectSilence.mockResolvedValue({
+        totalDuration: 10,
+        silenceDuration: 0,
+        silenceRatio: 0,
+        regionCount: 0,
+        regions: [],
+      });
 
       await service.detectSilence('/test.wav', -35, 0.3);
-      expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          options: expect.objectContaining({ threshold: -35, minDuration: 0.3 }),
-        }),
-      );
+      expect(mockDetectSilence).toHaveBeenCalledWith('/test.wav', -35, 0.3);
     });
   });
 
@@ -358,9 +366,9 @@ describe('AudioService', () => {
     it('startStream returns streamId and WebSocket URL', async () => {
       const service = await createTestService();
 
-      mockDispatch.mockResolvedValue({
-        status: 'ok',
-        data: { streamId: 'stream-abc' },
+      mockCreateStream.mockResolvedValue({
+        streamId: 'stream-abc',
+        wsUrl: 'ws://127.0.0.1:9999/v1/streams/stream-abc',
       });
 
       const result = await service.startStream('/test/audio.mp3');
@@ -372,7 +380,7 @@ describe('AudioService', () => {
 
     it('startStream returns null on error', async () => {
       const service = await createTestService();
-      mockDispatch.mockResolvedValue({ status: 'error', error: { message: 'fail' } });
+      mockCreateStream.mockRejectedValue(new Error('fail'));
 
       const result = await service.startStream('/bad.mp3');
       expect(result).toBeNull();

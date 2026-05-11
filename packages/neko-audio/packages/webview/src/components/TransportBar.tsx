@@ -6,6 +6,7 @@
  */
 
 import { useCallback } from 'react';
+import { getTotalDuration } from '@neko/shared';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { postMessage } from '../shared/useVscodeMessage';
@@ -51,7 +52,9 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
 
   const projectData = useAudioProjectStore((s) => s.audioProjectData);
 
-  const duration = audioInfo?.duration ?? 0;
+  const duration = projectMode
+    ? getTotalDuration(projectData?.tracks ?? [])
+    : (audioInfo?.duration ?? 0);
   const isPlaying = playbackState === 'playing';
 
   const handleToggleLoop = useCallback(() => {

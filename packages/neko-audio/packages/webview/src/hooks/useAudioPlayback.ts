@@ -6,11 +6,14 @@
  * - requestAnimationFrame time tracking loop
  * - Playback end detection
  * - Volume/speed sync
+ * - Multi-track mix stream playback (project mode)
  */
 
 import { useRef, useEffect, useCallback } from 'react';
 import { AudioStreamClient } from '@neko/neko-client';
+import { getTotalDuration } from '@neko/shared';
 import { useAudioStore } from '../stores/audioStore';
+import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { postMessage } from '../shared/useVscodeMessage';
 import { getLogger } from '../utils/logger';
 
@@ -29,12 +32,18 @@ export function useAudioPlayback() {
     volume,
     streamUrl,
     isMuted,
+    projectMode,
     setPlaybackState,
     setCurrentTime,
     clearStreamInfo,
   } = useAudioStore();
 
-  const duration = audioInfo?.duration ?? 0;
+  const projectData = useAudioProjectStore((s) => s.audioProjectData);
+  const buildMixStreamConfig = useAudioProjectStore((s) => s.buildMixStreamConfig);
+
+  const duration = projectMode
+    ? getTotalDuration(projectData?.tracks ?? [])
+    : (audioInfo?.duration ?? 0);
 
   // =========================================================================
   // Time tracking during playback
@@ -52,10 +61,9 @@ export function useAudioPlayback() {
       newTime = playStartTimeRef.current + elapsed;
     }
 
-    if (newTime >= duration) {
+    if (duration > 0 && newTime >= duration) {
       setCurrentTime(duration);
       setPlaybackState('stopped');
-      // Fade out before disposing
       const client = audioClientRef.current;
       if (client) {
         client.fadeOut().then(() => {
@@ -143,7 +151,7 @@ export function useAudioPlayback() {
   // =========================================================================
 
   const play = useCallback(() => {
-    if (!audioInfo) return;
+    if (!audioInfo && !projectMode) return;
 
     const startTime = currentTime >= duration ? 0 : currentTime;
     setCurrentTime(startTime);
@@ -151,8 +159,23 @@ export function useAudioPlayback() {
     playStartTimeRef.current = startTime;
     playWallTimeRef.current = performance.now();
 
-    postMessage({ type: 'editor:play', startTime });
-  }, [audioInfo, currentTime, duration, setCurrentTime, setPlaybackState]);
+    if (projectMode) {
+      const config = buildMixStreamConfig();
+      if (config) {
+        postMessage({ type: 'project:mixStreamStart', config: { ...config }, startTime });
+      }
+    } else {
+      postMessage({ type: 'editor:play', startTime });
+    }
+  }, [
+    audioInfo,
+    projectMode,
+    currentTime,
+    duration,
+    setCurrentTime,
+    setPlaybackState,
+    buildMixStreamConfig,
+  ]);
 
   const pause = useCallback(() => {
     setPlaybackState('paused');

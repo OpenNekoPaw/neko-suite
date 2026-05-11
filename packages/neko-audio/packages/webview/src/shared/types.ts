@@ -383,6 +383,7 @@ export interface ProjectDropImportSourceMessage {
 export interface ProjectMixStreamStartMessage {
   type: 'project:mixStreamStart';
   config: Record<string, unknown>;
+  startTime?: number;
 }
 
 /** Request to stop mix stream */

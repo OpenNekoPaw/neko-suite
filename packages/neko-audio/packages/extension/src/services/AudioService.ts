@@ -15,7 +15,7 @@
 
 import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
-import type { ActionResponse } from '@neko/neko-client';
+
 import { getLogger } from '../utils/logger';
 import type { AudioInfo, WaveformData } from '../types/api';
 
@@ -103,27 +103,15 @@ export class AudioService implements vscode.Disposable {
   // =========================================================================
 
   async probeAudio(filePath: string): Promise<AudioInfo> {
-    const result = await this.dispatch({
-      group: 'videos',
-      action: 'probe',
-      options: { source: filePath },
-    });
-
-    if (result.status === 'error') {
-      throw new Error(result.error?.message ?? 'Probe failed');
-    }
-
-    const data = result.data as Record<string, unknown>;
-    const audioStreams = (data.audioStreams as Array<Record<string, unknown>>) ?? [];
-    const audio = audioStreams[0] ?? {};
-
+    if (!this._client) throw new Error('AudioService not available');
+    const probe = await this._client.probe('videos', filePath);
     return {
-      duration: (data.duration as number) ?? 0,
-      codec: (audio.codec as string) ?? '',
-      sampleRate: (audio.sampleRate as number) ?? 0,
-      channels: (audio.channels as number) ?? 0,
-      bitrate: audio.bitrate as number | undefined,
-      format: (data.format as string) ?? '',
+      duration: probe.duration,
+      codec: probe.audioCodec ?? '',
+      sampleRate: probe.audioSampleRate ?? 0,
+      channels: probe.audioChannels ?? 0,
+      bitrate: probe.audioBitrate,
+      format: probe.format,
     };
   }
 
@@ -132,48 +120,12 @@ export class AudioService implements vscode.Disposable {
   // =========================================================================
 
   async getWaveform(filePath: string): Promise<WaveformData> {
-    const result = await this.dispatch({
-      group: 'audios',
-      action: 'waveform',
-      options: { source: filePath },
-    });
-
-    if (result.status === 'error') {
-      throw new Error(result.error?.message ?? 'Waveform generation failed');
-    }
-
-    const data = result.data as Record<string, unknown>;
-    const waveform = data.waveform as {
-      sampleRate: number;
-      channels: number;
-      peaksPerSecond: number;
-      duration: number;
-      peaks: number[][];
-    };
-
-    // Mix multi-channel peaks down to mono (take max across channels)
-    let monoPeaks: number[];
-    if (waveform.peaks.length === 0) {
-      monoPeaks = [];
-    } else if (waveform.peaks.length === 1) {
-      monoPeaks = waveform.peaks[0] ?? [];
-    } else {
-      const len = waveform.peaks[0]?.length ?? 0;
-      monoPeaks = new Array<number>(len);
-      for (let i = 0; i < len; i++) {
-        let max = 0;
-        for (const ch of waveform.peaks) {
-          const v = Math.abs(ch[i] ?? 0);
-          if (v > max) max = v;
-        }
-        monoPeaks[i] = max;
-      }
-    }
-
+    if (!this._client) throw new Error('AudioService not available');
+    const wf = await this._client.waveform(filePath);
     return {
-      peaks: monoPeaks,
-      duration: waveform.duration,
-      sampleRate: waveform.sampleRate,
+      peaks: wf.peaks,
+      duration: wf.duration,
+      sampleRate: wf.sampleRate,
     };
   }
 
@@ -182,70 +134,45 @@ export class AudioService implements vscode.Disposable {
   // =========================================================================
 
   async startStream(filePath: string): Promise<{ streamId: string; streamUrl: string } | null> {
-    const result = await this.dispatch({
-      group: 'audios',
-      action: 'stream',
-      options: {
-        source: filePath,
+    if (!this._client) return null;
+    try {
+      const handle = await this._client.createStream('audios', filePath, {
         sessionId: `audio-editor-${Date.now()}`,
-      },
-    });
-
-    if (result.status === 'error') {
-      logger.error('Failed to start audio stream:', result.error);
+      });
+      return { streamId: handle.streamId, streamUrl: handle.wsUrl };
+    } catch (error) {
+      logger.error('Failed to start audio stream:', error);
       return null;
     }
-
-    const data = result.data as Record<string, unknown> | undefined;
-    const streamId = (data?.streamId as string) ?? '';
-    const streamUrl = this.getStreamWebSocketUrl(streamId);
-
-    if (!streamUrl) return null;
-    return { streamId, streamUrl };
   }
 
   async stopStream(streamId: string): Promise<void> {
+    if (!this._client) return;
     try {
-      await this.dispatch({
-        group: 'audios',
-        action: 'stop',
-        options: { streamId },
-      });
+      await this._client.controlStream('audios', streamId, 'stop');
     } catch {
       // Ignore stop errors
     }
   }
 
   async seekStream(streamId: string, time: number): Promise<void> {
-    await this.dispatch({
-      group: 'audios',
-      action: 'seek',
-      options: { streamId, time },
-    });
+    if (!this._client) return;
+    await this._client.controlStream('audios', streamId, 'seek', { time });
   }
 
   async pauseStream(streamId: string): Promise<void> {
-    await this.dispatch({
-      group: 'audios',
-      action: 'pause',
-      options: { streamId },
-    });
+    if (!this._client) return;
+    await this._client.controlStream('audios', streamId, 'pause');
   }
 
   async resumeStream(streamId: string): Promise<void> {
-    await this.dispatch({
-      group: 'audios',
-      action: 'resume',
-      options: { streamId },
-    });
+    if (!this._client) return;
+    await this._client.controlStream('audios', streamId, 'resume');
   }
 
   async setStreamSpeed(streamId: string, speed: number): Promise<void> {
-    await this.dispatch({
-      group: 'audios',
-      action: 'speed',
-      options: { streamId, speed },
-    });
+    if (!this._client) return;
+    await this._client.controlStream('audios', streamId, 'speed', { speed });
   }
 
   // =========================================================================
@@ -255,26 +182,30 @@ export class AudioService implements vscode.Disposable {
   async startMixStream(
     config: Record<string, unknown>,
   ): Promise<{ streamId: string; streamUrl: string } | null> {
-    const result = await this.dispatch({
-      group: 'audios',
-      action: 'mix_stream',
-      options: {
-        config,
-        sessionId: `mix-stream-${Date.now()}`,
-      },
-    });
+    if (!this._client) return null;
+    try {
+      const result = await this._client.dispatch({
+        group: 'audios',
+        action: 'mix_stream',
+        options: {
+          config,
+          sessionId: `mix-stream-${Date.now()}`,
+        },
+      });
 
-    if (result.status === 'error') {
-      logger.error('Failed to start mix stream:', result.error);
+      if (result.status === 'error') {
+        logger.error('Failed to start mix stream:', result.error);
+        return null;
+      }
+
+      const data = result.data as Record<string, unknown> | undefined;
+      const streamId = (data?.streamId as string) ?? '';
+      const streamUrl = this._client.getStreamWsUrl(streamId);
+      return { streamId, streamUrl };
+    } catch (error) {
+      logger.error('Failed to start mix stream:', error);
       return null;
     }
-
-    const data = result.data as Record<string, unknown> | undefined;
-    const streamId = (data?.streamId as string) ?? '';
-    const streamUrl = this.getStreamWebSocketUrl(streamId);
-
-    if (!streamUrl) return null;
-    return { streamId, streamUrl };
   }
 
   async mixExport(
@@ -283,7 +214,8 @@ export class AudioService implements vscode.Disposable {
     format?: string,
     bitrate?: number,
   ): Promise<{ output: string }> {
-    const result = await this.dispatch({
+    if (!this._client) throw new Error('AudioService not available');
+    const result = await this._client.dispatch({
       group: 'audios',
       action: 'mix_export',
       options: {
@@ -320,7 +252,8 @@ export class AudioService implements vscode.Disposable {
       effects?: Array<Record<string, unknown>>;
     },
   ): Promise<string> {
-    const result = await this.dispatch({
+    if (!this._client) throw new Error('AudioService not available');
+    const result = await this._client.dispatch({
       group: 'audios',
       action: 'transcode',
       options: {
@@ -345,21 +278,12 @@ export class AudioService implements vscode.Disposable {
   async analyzeLoudness(
     filePath: string,
   ): Promise<{ integratedLoudness: number; truePeak: number; loudnessRange: number }> {
-    const result = await this.dispatch({
-      group: 'audios',
-      action: 'loudness',
-      options: { source: filePath },
-    });
-
-    if (result.status === 'error') {
-      throw new Error(result.error?.message ?? 'Loudness analysis failed');
-    }
-
-    const data = result.data as Record<string, unknown>;
+    if (!this._client) throw new Error('AudioService not available');
+    const result = await this._client.analyzeLoudness(filePath);
     return {
-      integratedLoudness: (data.integratedLoudness as number) ?? -23,
-      truePeak: (data.truePeak as number) ?? 0,
-      loudnessRange: (data.loudnessRange as number) ?? 0,
+      integratedLoudness: result.integratedLufs ?? -23,
+      truePeak: result.truePeakDbfs ?? 0,
+      loudnessRange: result.loudnessRange ?? 0,
     };
   }
 
@@ -368,22 +292,9 @@ export class AudioService implements vscode.Disposable {
     threshold?: number,
     minDuration?: number,
   ): Promise<Array<{ start: number; end: number }>> {
-    const result = await this.dispatch({
-      group: 'audios',
-      action: 'silence',
-      options: {
-        source: filePath,
-        ...(threshold !== undefined && { threshold }),
-        ...(minDuration !== undefined && { minDuration }),
-      },
-    });
-
-    if (result.status === 'error') {
-      throw new Error(result.error?.message ?? 'Silence detection failed');
-    }
-
-    const data = result.data as Record<string, unknown>;
-    return (data.regions as Array<{ start: number; end: number }>) ?? [];
+    if (!this._client) throw new Error('AudioService not available');
+    const result = await this._client.detectSilence(filePath, threshold, minDuration);
+    return result.regions;
   }
 
   // =========================================================================
@@ -422,26 +333,6 @@ export class AudioService implements vscode.Disposable {
   }> {
     if (!this._client) throw new Error('AudioService not available');
     return this._client.recordStop(streamId);
-  }
-
-  // =========================================================================
-  // Dispatch
-  // =========================================================================
-
-  private async dispatch(request: {
-    group: string;
-    action: string;
-    options?: Record<string, unknown>;
-  }): Promise<ActionResponse> {
-    if (!this._client || this._disposed) {
-      throw new Error('AudioService not available');
-    }
-
-    return this._client.dispatch({
-      group: request.group,
-      action: request.action,
-      options: request.options,
-    });
   }
 
   // =========================================================================

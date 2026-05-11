@@ -602,8 +602,12 @@ export class AudioProjectProvider implements vscode.CustomEditorProvider {
           case 'project:mixStreamStart': {
             const config = msg.config as Record<string, unknown> | undefined;
             if (!config) break;
+            const startTime = (msg.startTime as number) ?? 0;
             try {
               await stopPanelStream();
+              if (startTime > 0) {
+                config.startTime = startTime;
+              }
               const result = await this._audioService?.startMixStream(config);
               if (result) {
                 activeStreamId = result.streamId;

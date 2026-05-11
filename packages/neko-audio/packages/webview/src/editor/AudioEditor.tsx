@@ -117,6 +117,7 @@ export function AudioEditor() {
           break;
 
         case 'editor:streamReady':
+        case 'project:mixStreamReady':
           setStreamInfo(message.payload.streamId, message.payload.streamUrl);
           break;
 
