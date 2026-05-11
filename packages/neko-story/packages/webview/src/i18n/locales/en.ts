@@ -18,6 +18,8 @@ export const en = {
   'table.characters': '{count} characters',
   'table.totalDuration': 'Est. total {duration}',
   'table.header.scene': 'Scene',
+  'table.header.duration': 'Duration',
+  'table.header.characters': 'Characters',
   'table.header.status': 'Status',
   'table.header.action': 'Action',
   'tab.screenplay': 'Screenplay',

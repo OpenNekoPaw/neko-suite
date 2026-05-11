@@ -18,6 +18,8 @@ export const zhCN = {
   'table.characters': '{count} 个角色',
   'table.totalDuration': '预计总时长 {duration}',
   'table.header.scene': '场景',
+  'table.header.duration': '时长',
+  'table.header.characters': '人物',
   'table.header.status': '状态',
   'table.header.action': '操作',
   'tab.screenplay': '剧本预览',

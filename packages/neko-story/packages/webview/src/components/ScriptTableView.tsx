@@ -23,6 +23,8 @@ interface ScriptTableViewProps {
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
+  onCharacterSendToAgent?: (name: string) => void;
+  onCharacterNavigate?: (name: string) => void;
 }
 
 const DEFAULT_SCENE_STATE: Omit<StorySceneState, 'sceneId'> = {
@@ -159,22 +161,42 @@ function StatusBadge({
   );
 }
 
-function CharacterBadge({ name, thumbnailUri }: { name: string; thumbnailUri?: string }) {
+function CharacterBadge({
+  name,
+  thumbnailUri,
+  onSendToAgent,
+  onNavigateToAsset,
+}: {
+  name: string;
+  thumbnailUri?: string;
+  onSendToAgent?: (name: string) => void;
+  onNavigateToAsset?: (name: string) => void;
+}) {
+  const [hoverVisible, setHoverVisible] = useState(false);
+  const badgeRef = useRef<HTMLSpanElement>(null);
+
   return (
     <span
+      ref={badgeRef}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
         gap: 3,
-        padding: '1px 5px',
+        padding: '2px 6px',
         borderRadius: 3,
-        fontSize: 10,
-        lineHeight: '14px',
+        fontSize: 11,
+        lineHeight: '16px',
         backgroundColor: 'var(--vscode-badge-background)',
         color: 'var(--vscode-badge-foreground)',
         whiteSpace: 'nowrap',
-        marginRight: 4,
-        marginBottom: 2,
+        cursor: onNavigateToAsset ? 'pointer' : 'default',
+        position: 'relative',
+      }}
+      onMouseEnter={() => setHoverVisible(true)}
+      onMouseLeave={() => setHoverVisible(false)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onNavigateToAsset?.(name);
       }}
     >
       {thumbnailUri && (
@@ -191,6 +213,79 @@ function CharacterBadge({ name, thumbnailUri }: { name: string; thumbnailUri?: s
         />
       )}
       {name}
+      {onSendToAgent && (
+        <span
+          role="button"
+          title="Send to Agent"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 14,
+            height: 14,
+            borderRadius: 2,
+            fontSize: 9,
+            cursor: 'pointer',
+            opacity: 0.6,
+            flexShrink: 0,
+            marginLeft: 1,
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLSpanElement).style.opacity = '1';
+            (e.currentTarget as HTMLSpanElement).style.backgroundColor =
+              'var(--vscode-list-hoverBackground)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLSpanElement).style.opacity = '0.6';
+            (e.currentTarget as HTMLSpanElement).style.backgroundColor = 'transparent';
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSendToAgent(name);
+          }}
+        >
+          ↗
+        </span>
+      )}
+      {/* Hover preview */}
+      {hoverVisible && thumbnailUri && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 6px)',
+            left: 0,
+            zIndex: 100,
+            padding: 6,
+            borderRadius: 6,
+            border: '1px solid var(--vscode-panel-border)',
+            backgroundColor: 'var(--vscode-editor-background)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            pointerEvents: 'none',
+          }}
+        >
+          <img
+            src={thumbnailUri}
+            alt={name}
+            style={{
+              width: 120,
+              height: 120,
+              borderRadius: 4,
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--vscode-foreground)',
+              marginTop: 4,
+              textAlign: 'center',
+            }}
+          >
+            {name}
+          </div>
+        </div>
+      )}
     </span>
   );
 }
@@ -382,7 +477,7 @@ function DropdownMenu({
 const MAX_VISIBLE_CHARACTERS = 3;
 
 const CELL_STYLE: React.CSSProperties = {
-  padding: '8px 12px',
+  padding: '10px 12px',
   verticalAlign: 'top',
   borderBottom: '1px solid var(--vscode-panel-border)',
 };
@@ -395,6 +490,8 @@ interface SceneRowProps {
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
+  onCharacterSendToAgent?: (name: string) => void;
+  onCharacterNavigate?: (name: string) => void;
   t: TranslationFn;
 }
 
@@ -406,6 +503,8 @@ const SceneRow = memo(function SceneRow({
   characterThumbnails,
   onNavigate,
   onSceneAction,
+  onCharacterSendToAgent,
+  onCharacterNavigate,
   t,
 }: SceneRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -510,32 +609,21 @@ const SceneRow = memo(function SceneRow({
         </span>
       </td>
 
-      {/* Scene info (merged: title·duration + summary + characters) */}
+      {/* Scene info (title + summary only) */}
       <td style={CELL_STYLE}>
-        {/* Title · Duration */}
-        <div style={{ lineHeight: '20px' }}>
-          <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--vscode-foreground)' }}>
+        <div style={{ lineHeight: '22px' }}>
+          <span style={{ fontWeight: 500, fontSize: 13, color: 'var(--vscode-foreground)' }}>
             {scene.sceneTitle}
           </span>
-          <span
-            style={{
-              fontSize: 10,
-              color: 'var(--vscode-descriptionForeground)',
-              opacity: 0.6,
-              marginLeft: 8,
-            }}
-          >
-            {formatDurationShort(scene.estimatedDuration)}
-          </span>
         </div>
-        {/* Summary */}
         {scene.actionSummary && (
           <div
             style={{
               fontSize: 11,
+              lineHeight: '18px',
               color: 'var(--vscode-descriptionForeground)',
               opacity: 0.6,
-              marginTop: 2,
+              marginTop: 3,
               overflow: 'hidden',
               display: '-webkit-box',
               WebkitLineClamp: 2,
@@ -545,15 +633,42 @@ const SceneRow = memo(function SceneRow({
             {scene.actionSummary}
           </div>
         )}
-        {/* Characters (inline) */}
+      </td>
+
+      {/* Duration */}
+      <td style={{ ...CELL_STYLE, width: 64, textAlign: 'right' }}>
+        <span
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 11,
+            color: 'var(--vscode-descriptionForeground)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {formatDurationShort(scene.estimatedDuration)}
+        </span>
+      </td>
+
+      {/* Characters */}
+      <td style={{ ...CELL_STYLE, width: 160 }}>
         {scene.sceneCharacters.length > 0 && (
-          <div style={{ marginTop: 4 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {visibleChars.map((name) => (
-              <CharacterBadge key={name} name={name} thumbnailUri={characterThumbnails?.[name]} />
+              <CharacterBadge
+                key={name}
+                name={name}
+                thumbnailUri={characterThumbnails?.[name]}
+                onSendToAgent={onCharacterSendToAgent}
+                onNavigateToAsset={onCharacterNavigate}
+              />
             ))}
             {overflowCount > 0 && (
               <span
-                style={{ fontSize: 10, color: 'var(--vscode-descriptionForeground)' }}
+                style={{
+                  fontSize: 10,
+                  lineHeight: '20px',
+                  color: 'var(--vscode-descriptionForeground)',
+                }}
                 title={scene.sceneCharacters.slice(MAX_VISIBLE_CHARACTERS).join(', ')}
               >
                 +{overflowCount}
@@ -633,6 +748,8 @@ export function ScriptTableView({
   characterThumbnails,
   onNavigate,
   onSceneAction,
+  onCharacterSendToAgent,
+  onCharacterNavigate,
 }: ScriptTableViewProps) {
   const { t } = useTranslation();
 
@@ -720,6 +837,8 @@ export function ScriptTableView({
           <tr>
             <Th width="52px">#</Th>
             <Th>{t('table.header.scene')}</Th>
+            <Th width="64px">{t('table.header.duration')}</Th>
+            <Th width="160px">{t('table.header.characters')}</Th>
             <Th width="180px">{t('table.header.status')}</Th>
           </tr>
         </thead>
@@ -739,6 +858,8 @@ export function ScriptTableView({
               characterThumbnails={characterThumbnails}
               onNavigate={onNavigate}
               onSceneAction={onSceneAction}
+              onCharacterSendToAgent={onCharacterSendToAgent}
+              onCharacterNavigate={onCharacterNavigate}
               t={t}
             />
           ))}

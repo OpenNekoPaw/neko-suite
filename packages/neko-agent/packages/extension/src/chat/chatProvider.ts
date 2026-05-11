@@ -128,6 +128,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   // the workflow/orchestrator layer. Pipeline intents now flow through the
   // Agent + Skill stack; no separate plan handler is needed.
   private readonly _dndBroker = new DragDropBroker();
+  private _webviewReady = false;
+  private _pendingContextPayload: import('@neko/shared').AgentContextPayload | null = null;
+  private _pendingExternalMessage: { message: string; autoSend: boolean } | null = null;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -396,15 +399,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     payload: import('@neko/shared').AgentContextPayload,
   ): Promise<void> {
     await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
-    if (!this._view?.webview) {
-      logger.warn('AI Assistant webview not available for sendContextPayload');
-      return;
+    if (this._webviewReady && this._view?.webview) {
+      this._view.webview.postMessage(
+        buildChatContextInjectionMessage(payload, {
+          conversationId: this._conversations.getActiveId(),
+        }),
+      );
+    } else {
+      this._pendingContextPayload = payload;
     }
-    this._view.webview.postMessage(
-      buildChatContextInjectionMessage(payload, {
-        conversationId: this._conversations.getActiveId(),
-      }),
-    );
   }
 
   /**
@@ -412,15 +415,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
    * Opens the assistant panel and prefills/sends the message
    */
   public async sendMessageToAssistant(message: string, autoSend: boolean = true): Promise<void> {
-    // Focus the AI Assistant panel
     await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
 
-    if (!this._view?.webview) {
-      logger.warn('AI Assistant webview not available');
-      return;
+    if (this._webviewReady && this._view?.webview) {
+      this._view.webview.postMessage(buildChatExternalInputMessage({ message, autoSend }));
+    } else {
+      this._pendingExternalMessage = { message, autoSend };
     }
-
-    this._view.webview.postMessage(buildChatExternalInputMessage({ message, autoSend }));
   }
 
   /**
@@ -468,6 +469,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
     this._webviewDisposables.push(
       webview.onDidReceiveMessage(async (raw: unknown) => {
+        if (!this._webviewReady) {
+          this._webviewReady = true;
+          this._flushPendingMessages();
+        }
+
         const message = parseWebviewToExtensionMessage(raw);
         if (!message) {
           logger.warn('Rejected invalid webview message payload');
@@ -712,7 +718,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
   }
 
+  private _flushPendingMessages(): void {
+    const webview = this._view?.webview;
+    if (!webview) return;
+
+    if (this._pendingContextPayload) {
+      const payload = this._pendingContextPayload;
+      this._pendingContextPayload = null;
+      webview.postMessage(
+        buildChatContextInjectionMessage(payload, {
+          conversationId: this._conversations.getActiveId(),
+        }),
+      );
+    }
+
+    if (this._pendingExternalMessage) {
+      const { message, autoSend } = this._pendingExternalMessage;
+      this._pendingExternalMessage = null;
+      webview.postMessage(buildChatExternalInputMessage({ message, autoSend }));
+    }
+  }
+
   private _disposeWebviewBindings(): void {
+    this._webviewReady = false;
     for (const disposable of this._webviewDisposables.splice(0)) {
       try {
         disposable.dispose();

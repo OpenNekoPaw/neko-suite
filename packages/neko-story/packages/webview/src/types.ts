@@ -192,4 +192,6 @@ export type MessageToExtension =
   | { type: 'ready' }
   | { type: 'navigate'; line: number; character: number }
   | { type: 'scroll'; line: number }
-  | { type: 'sceneAction'; sceneId: string; action: StorySceneAction };
+  | { type: 'sceneAction'; sceneId: string; action: StorySceneAction }
+  | { type: 'characterSendToAgent'; name: string }
+  | { type: 'characterNavigate'; name: string };

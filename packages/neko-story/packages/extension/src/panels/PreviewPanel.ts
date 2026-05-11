@@ -32,7 +32,9 @@ type MessageFromWebview =
       type: 'sceneAction';
       sceneId: string;
       action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip';
-    };
+    }
+  | { type: 'characterSendToAgent'; name: string }
+  | { type: 'characterNavigate'; name: string };
 
 type ResolveCharacterBindings = (
   names: readonly string[],
@@ -159,6 +161,44 @@ export class PreviewPanel implements vscode.Disposable {
       case 'sceneAction':
         void this.handleSceneAction(message.sceneId, message.action);
         break;
+      case 'characterSendToAgent':
+        void this.handleCharacterSendToAgent(message.name);
+        break;
+      case 'characterNavigate':
+        void this.handleCharacterNavigate(message.name);
+        break;
+    }
+  }
+
+  private async handleCharacterSendToAgent(name: string): Promise<void> {
+    const scriptPath = this.activeEditor?.document.uri.fsPath;
+    const payload: AgentContextPayload = {
+      type: 'story-selection',
+      id: `character:${name}`,
+      label: name,
+      summary: `Character: ${name}${scriptPath ? `\nFrom: ${path.basename(scriptPath)}` : ''}`,
+      data: { characterName: name, scriptPath: scriptPath ?? null },
+      intent: `请帮我完善角色「${name}」的形象设计：`,
+    };
+
+    try {
+      await vscode.commands.executeCommand('neko.agent.sendContext', payload);
+    } catch {
+      // neko-agent not installed or not activated
+    }
+  }
+
+  private async handleCharacterNavigate(name: string): Promise<void> {
+    try {
+      const assetPath = await vscode.commands.executeCommand<string | undefined>(
+        'neko.assets.getCharacterThumbnail',
+        name,
+      );
+      if (assetPath) {
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(assetPath));
+      }
+    } catch {
+      // neko-assets not available
     }
   }
 

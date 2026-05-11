@@ -110,6 +110,20 @@ export function App() {
     [postMessage],
   );
 
+  const handleCharacterSendToAgent = useCallback(
+    (name: string) => {
+      postMessage({ type: 'characterSendToAgent', name });
+    },
+    [postMessage],
+  );
+
+  const handleCharacterNavigate = useCallback(
+    (name: string) => {
+      postMessage({ type: 'characterNavigate', name });
+    },
+    [postMessage],
+  );
+
   return (
     <div
       className="flex flex-col h-screen overflow-hidden"
@@ -126,6 +140,8 @@ export function App() {
             characterThumbnails={characterThumbnails}
             onNavigate={handleNavigate}
             onSceneAction={handleSceneAction}
+            onCharacterSendToAgent={handleCharacterSendToAgent}
+            onCharacterNavigate={handleCharacterNavigate}
           />
         )}
       </div>
