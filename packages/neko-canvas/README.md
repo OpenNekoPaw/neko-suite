@@ -18,7 +18,7 @@
 - **激活依赖**：neko-engine、neko-tools、neko-preview
 - **节点类型（现有）**：Media / Storyboard / Annotation / Text / Artboard / Group / Shot / Scene / Gallery / Script / Document / Model / CanvasEmbed（13 种）
 - **核心功能**：富文本编辑、分组管理、连接标签、图层面板、画板导出（PNG/SVG）、原地粘贴、分镜候选审阅、场景容器排序、输入引用节点投放
-- **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`NekoCanvasAPI.storyboard.import()` + `neko.canvas.importStoryboard` 命令（story/agent 语义分镜导入）
+- **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`NekoCanvasAPI.storyboard.import()` + `neko.canvas.importStoryboard` 命令（story/agent 语义分镜导入）、`NekoCanvasAPI.storyboard.getExecutionSummary()` 只读执行摘要
 
 ## Architecture
 
@@ -84,3 +84,4 @@ Webview 端通过 `canvasOperationStore` 作为运行时桥接层生成 `EditOpe
 - **候选审阅闭环**：ShotNode / GalleryCell 均支持 N/M 切换，并把筛选结果写回节点状态
 - **cut 最小回流**：通过共享 `timelineSync` 契约仅回写 `lastImportedToTimeline*` 等操作元数据
 - **asset 代理边界**：`NekoCanvasAPI.asset` 仅代理 `neko-assets` 的 `import/list/getById`，不作为资产事实源
+- **执行摘要边界**：`storyboard.getExecutionSummary()` 与 `neko.canvas.getStoryboardExecutionSummary` 只投影 SceneGroup / ShotNode 的执行进度、选中资产引用、缩略图引用和 timeline import 元数据；它不是第二份 storyboard 数据源，也不暴露 Webview runtime URL、blob/data URL、播放状态或候选图墙 UI。

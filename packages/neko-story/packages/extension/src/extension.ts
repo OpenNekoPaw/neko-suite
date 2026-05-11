@@ -141,6 +141,16 @@ export function activate(context: vscode.ExtensionContext) {
     return bindings;
   };
 
+  const resolvePreviewCharacterRegistry = (uriOrPath?: string) => {
+    try {
+      const uri = uriOrPath ? resolveUriOrPath(uriOrPath) : undefined;
+      return characterIndexService.getRegistry(uri);
+    } catch (error) {
+      logger.warn(`Failed to resolve preview character registry: ${formatError(error)}`);
+      return undefined;
+    }
+  };
+
   // Register language providers
   context.subscriptions.push(
     // Outline view (per-file, no index needed)
@@ -215,6 +225,7 @@ export function activate(context: vscode.ExtensionContext) {
         context.extensionUri,
         sceneStateStore,
         resolveStoryboardCharacterBindings,
+        resolvePreviewCharacterRegistry,
       );
     }),
     vscode.commands.registerCommand('neko.story.toTimeline', async () => {
@@ -486,6 +497,7 @@ export function activate(context: vscode.ExtensionContext) {
         context.extensionUri,
         sceneStateStore,
         resolveStoryboardCharacterBindings,
+        resolvePreviewCharacterRegistry,
       );
       panel.postMessage({ type: 'setView', view: 'table' });
     }),

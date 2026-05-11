@@ -10,7 +10,14 @@
 
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { NekoStoryScriptIndex } from '@neko/shared';
+import type {
+  NekoStoryScriptIndex,
+  StoryCharacterVisualReadiness,
+  StoryCharacterVisualStatus,
+  StoryCreatorStatus,
+  StoryMissingInput,
+  StorySceneVideoReadiness,
+} from '@neko/shared';
 import type { StorySceneAction, StorySceneState } from '../types';
 import { formatDurationShort } from '../utils/sceneBreakdown';
 import { useTranslation } from '../i18n/I18nContext';
@@ -20,11 +27,12 @@ type TranslationFn = ReturnType<typeof useTranslation>['t'];
 interface ScriptTableViewProps {
   scriptIndex: NekoStoryScriptIndex | null;
   sceneStates: Record<string, StorySceneState>;
+  readinessRows?: readonly StorySceneVideoReadiness[];
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
-  onCharacterSendToAgent?: (name: string) => void;
-  onCharacterNavigate?: (name: string) => void;
+  onCharacterSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
+  onCharacterNavigate?: (name: string, sceneId?: string, characterId?: string) => void;
 }
 
 const DEFAULT_SCENE_STATE: Omit<StorySceneState, 'sceneId'> = {
@@ -36,7 +44,7 @@ const DEFAULT_SCENE_STATE: Omit<StorySceneState, 'sceneId'> = {
 // Unified status mapping (creator perspective)
 // =============================================================================
 
-type CreatorStatus = 'pending' | 'processing' | 'attention' | 'done' | 'skipped';
+type CreatorStatus = StoryCreatorStatus;
 
 function deriveCreatorStatus(state: StorySceneState): CreatorStatus {
   const { agentStatus, canvasStatus, generationStatus } = state;
@@ -98,6 +106,20 @@ function getStatusDetail(state: StorySceneState, t: TranslationFn): string | und
   return undefined;
 }
 
+function getReadinessStatusDetail(
+  readiness: StorySceneVideoReadiness | undefined,
+  state: StorySceneState,
+  t: TranslationFn,
+): string | undefined {
+  const missing = readiness?.missingInputs
+    .filter((input) => input.severity !== 'info')
+    .map((input) => translateMissingInputLabel(input, t));
+  if (missing && missing.length > 0) {
+    return missing.slice(0, 3).join('\n');
+  }
+  return getStatusDetail(state, t);
+}
+
 const STATUS_PALETTE = {
   pending: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
   processing: { bg: '#3b82f620', fg: '#3b82f6' },
@@ -105,6 +127,21 @@ const STATUS_PALETTE = {
   done: { bg: '#16a34a20', fg: '#16a34a' },
   skipped: { bg: 'var(--vscode-badge-background)', fg: 'var(--vscode-badge-foreground)' },
 } as const;
+
+const VISUAL_STATUS_PALETTE: Record<
+  StoryCharacterVisualStatus,
+  { bg: string; fg: string; border?: string }
+> = {
+  bound: { bg: '#16a34a20', fg: '#16a34a' },
+  generated: { bg: '#3b82f620', fg: '#3b82f6' },
+  missing: { bg: '#f59e0b20', fg: '#f59e0b' },
+  unresolved: { bg: '#ef444420', fg: '#ef4444' },
+  unknown: {
+    bg: 'var(--vscode-badge-background)',
+    fg: 'var(--vscode-descriptionForeground)',
+  },
+  stale: { bg: '#f9731620', fg: '#f97316' },
+};
 
 // =============================================================================
 // Primitives
@@ -162,22 +199,48 @@ function StatusBadge({
 }
 
 function CharacterBadge({
-  name,
+  character,
+  fallbackName,
+  fallbackThumbnailUri,
+  sceneId,
   thumbnailUri,
   onSendToAgent,
   onNavigateToAsset,
 }: {
-  name: string;
+  character?: StoryCharacterVisualReadiness;
+  fallbackName?: string;
+  fallbackThumbnailUri?: string;
+  sceneId: string;
   thumbnailUri?: string;
-  onSendToAgent?: (name: string) => void;
-  onNavigateToAsset?: (name: string) => void;
+  onSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
+  onNavigateToAsset?: (name: string, sceneId?: string, characterId?: string) => void;
 }) {
   const [hoverVisible, setHoverVisible] = useState(false);
   const badgeRef = useRef<HTMLSpanElement>(null);
+  const { t } = useTranslation();
+  const name = character?.name ?? fallbackName ?? '';
+  const visualStatus = character?.status;
+  const resolvedThumbnailUri = character?.thumbnailUri ?? thumbnailUri ?? fallbackThumbnailUri;
+  const palette = visualStatus ? VISUAL_STATUS_PALETTE[visualStatus] : undefined;
+  const title = character
+    ? [
+        name,
+        translateVisualStatus(visualStatus, t),
+        translateLocalizedText(
+          t,
+          character.missingReasonKey,
+          character.missingReasonParams,
+          character.missingReason,
+        ),
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : name;
 
   return (
     <span
       ref={badgeRef}
+      title={title}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -186,8 +249,9 @@ function CharacterBadge({
         borderRadius: 3,
         fontSize: 11,
         lineHeight: '16px',
-        backgroundColor: 'var(--vscode-badge-background)',
-        color: 'var(--vscode-badge-foreground)',
+        backgroundColor: palette?.bg ?? 'var(--vscode-badge-background)',
+        color: palette?.fg ?? 'var(--vscode-badge-foreground)',
+        border: palette?.border ? `1px solid ${palette.border}` : undefined,
         whiteSpace: 'nowrap',
         cursor: onNavigateToAsset ? 'pointer' : 'default',
         position: 'relative',
@@ -196,12 +260,12 @@ function CharacterBadge({
       onMouseLeave={() => setHoverVisible(false)}
       onClick={(e) => {
         e.stopPropagation();
-        onNavigateToAsset?.(name);
+        onNavigateToAsset?.(name, sceneId, character?.characterId);
       }}
     >
-      {thumbnailUri && (
+      {resolvedThumbnailUri && (
         <img
-          src={thumbnailUri}
+          src={resolvedThumbnailUri}
           alt=""
           style={{
             width: 14,
@@ -213,10 +277,22 @@ function CharacterBadge({
         />
       )}
       {name}
+      {visualStatus && (
+        <span
+          style={{
+            fontSize: 9,
+            lineHeight: '12px',
+            opacity: 0.85,
+            marginLeft: 1,
+          }}
+        >
+          {translateVisualStatus(visualStatus, t)}
+        </span>
+      )}
       {onSendToAgent && (
         <span
           role="button"
-          title="Send to Agent"
+          title={t('table.character.sendToAgent')}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -241,14 +317,14 @@ function CharacterBadge({
           }}
           onClick={(e) => {
             e.stopPropagation();
-            onSendToAgent(name);
+            onSendToAgent(name, sceneId, character?.characterId);
           }}
         >
           ↗
         </span>
       )}
       {/* Hover preview */}
-      {hoverVisible && thumbnailUri && (
+      {hoverVisible && resolvedThumbnailUri && (
         <div
           style={{
             position: 'absolute',
@@ -264,7 +340,7 @@ function CharacterBadge({
           }}
         >
           <img
-            src={thumbnailUri}
+            src={resolvedThumbnailUri}
             alt={name}
             style={{
               width: 120,
@@ -283,11 +359,53 @@ function CharacterBadge({
             }}
           >
             {name}
+            {visualStatus ? ` · ${translateVisualStatus(visualStatus, t)}` : ''}
           </div>
         </div>
       )}
     </span>
   );
+}
+
+function translateMissingInputLabel(input: StoryMissingInput, t: TranslationFn): string {
+  return translateLocalizedText(t, input.labelKey, input.labelParams, input.label);
+}
+
+function translateLocalizedText(
+  t: TranslationFn,
+  key: string | undefined,
+  params: Readonly<Record<string, string | number>> | undefined,
+  fallback: string | undefined,
+): string {
+  if (key) {
+    const translated = t(key, params ? { ...params } : undefined);
+    if (translated !== key) {
+      return translated;
+    }
+  }
+  return fallback ?? '';
+}
+
+function translateVisualStatus(
+  status: StoryCharacterVisualStatus | undefined,
+  t: TranslationFn,
+): string {
+  switch (status) {
+    case 'bound':
+      return t('table.visualStatus.bound');
+    case 'generated':
+      return t('table.visualStatus.generated');
+    case 'missing':
+      return t('table.visualStatus.missing');
+    case 'unresolved':
+      return t('table.visualStatus.unresolved');
+    case 'stale':
+      return t('table.visualStatus.stale');
+    case 'unknown':
+      return t('table.visualStatus.unknown');
+    default:
+      return '';
+  }
 }
 
 // =============================================================================
@@ -487,11 +605,12 @@ interface SceneRowProps {
   sceneIndex: number;
   isOdd: boolean;
   state: StorySceneState;
+  readiness?: StorySceneVideoReadiness;
   characterThumbnails?: Record<string, string>;
   onNavigate?: (line: number) => void;
   onSceneAction?: (sceneId: string, action: StorySceneAction) => void;
-  onCharacterSendToAgent?: (name: string) => void;
-  onCharacterNavigate?: (name: string) => void;
+  onCharacterSendToAgent?: (name: string, sceneId?: string, characterId?: string) => void;
+  onCharacterNavigate?: (name: string, sceneId?: string, characterId?: string) => void;
   t: TranslationFn;
 }
 
@@ -500,6 +619,7 @@ const SceneRow = memo(function SceneRow({
   sceneIndex,
   isOdd,
   state,
+  readiness,
   characterThumbnails,
   onNavigate,
   onSceneAction,
@@ -510,15 +630,26 @@ const SceneRow = memo(function SceneRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
 
-  const creatorStatus = deriveCreatorStatus(state);
-  const statusDetail = getStatusDetail(state, t);
+  const creatorStatus = readiness?.creatorStatus ?? deriveCreatorStatus(state);
+  const statusDetail = getReadinessStatusDetail(readiness, state, t);
   const isSkipped = creatorStatus === 'skipped';
 
   const displayNumber = scene.sceneNumber
     ? `#${scene.sceneNumber}`
     : `#${String(sceneIndex).padStart(2, '0')}`;
-  const visibleChars = scene.sceneCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
-  const overflowCount = scene.sceneCharacters.length - MAX_VISIBLE_CHARACTERS;
+  const readinessCharacters = readiness?.characters ?? [];
+  const fallbackCharacters =
+    readinessCharacters.length > 0
+      ? []
+      : scene.sceneCharacters.map((name) => ({
+          name,
+          thumbnailUri: characterThumbnails?.[name],
+        }));
+  const characterCount =
+    readinessCharacters.length > 0 ? readinessCharacters.length : fallbackCharacters.length;
+  const visibleReadinessChars = readinessCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
+  const visibleFallbackChars = fallbackCharacters.slice(0, MAX_VISIBLE_CHARACTERS);
+  const overflowCount = characterCount - MAX_VISIBLE_CHARACTERS;
 
   const rowBg = isOdd ? 'var(--vscode-list-hoverBackground)' : 'transparent';
 
@@ -526,47 +657,82 @@ const SceneRow = memo(function SceneRow({
     (action: StorySceneAction) => onSceneAction?.(scene.sceneId, action),
     [onSceneAction, scene.sceneId],
   );
+  const isActionAllowed = useCallback(
+    (action: StorySceneAction) => !readiness || readiness.allowedActions.includes(action),
+    [readiness],
+  );
 
   // Context-driven primary action
   const primaryAction = useMemo(() => {
+    if (readiness?.readinessStatus === 'needs-input' && isActionAllowed('analyze')) {
+      return { label: t('table.action.review'), action: 'analyze' as StorySceneAction };
+    }
+
     switch (creatorStatus) {
       case 'pending':
-        return { label: t('table.action.start'), action: 'startVideoCreation' as StorySceneAction };
+        return isActionAllowed('startVideoCreation')
+          ? { label: t('table.action.start'), action: 'startVideoCreation' as StorySceneAction }
+          : null;
       case 'attention':
         return state.agentStatus === 'failed' || state.generationStatus === 'partial-fail'
-          ? { label: t('table.action.retry'), action: 'retryFailed' as StorySceneAction }
-          : { label: t('table.action.review'), action: 'analyze' as StorySceneAction };
+          ? isActionAllowed('retryFailed')
+            ? { label: t('table.action.retry'), action: 'retryFailed' as StorySceneAction }
+            : null
+          : isActionAllowed('analyze')
+            ? { label: t('table.action.review'), action: 'analyze' as StorySceneAction }
+            : null;
       case 'done':
-        return { label: t('table.action.view'), action: 'openCanvas' as StorySceneAction };
+        return isActionAllowed('openCanvas')
+          ? { label: t('table.action.view'), action: 'openCanvas' as StorySceneAction }
+          : null;
       case 'skipped':
-        return { label: t('table.action.restore'), action: 'toggleSkip' as StorySceneAction };
+        return isActionAllowed('toggleSkip')
+          ? { label: t('table.action.restore'), action: 'toggleSkip' as StorySceneAction }
+          : null;
       case 'processing':
       default:
         return null;
     }
-  }, [creatorStatus, state.agentStatus, state.generationStatus, t]);
+  }, [
+    creatorStatus,
+    isActionAllowed,
+    readiness?.readinessStatus,
+    state.agentStatus,
+    state.generationStatus,
+    t,
+  ]);
 
   // Dropdown items vary by state
   const menuItems = useMemo<DropdownMenuItem[]>(() => {
     const items: DropdownMenuItem[] = [];
     if (creatorStatus !== 'skipped') {
-      items.push({ label: t('table.action.analyze'), onClick: () => fire('analyze') });
-      items.push({
-        label: t('table.action.storyboard'),
-        onClick: () => fire('generateStoryboard'),
-      });
-      items.push({ label: t('table.action.sendToCanvas'), onClick: () => fire('sendToCanvas') });
-      items.push({ label: t('table.action.openCanvas'), onClick: () => fire('openCanvas') });
+      if (isActionAllowed('analyze')) {
+        items.push({ label: t('table.action.analyze'), onClick: () => fire('analyze') });
+      }
+      if (isActionAllowed('generateStoryboard')) {
+        items.push({
+          label: t('table.action.storyboard'),
+          onClick: () => fire('generateStoryboard'),
+        });
+      }
+      if (isActionAllowed('sendToCanvas')) {
+        items.push({ label: t('table.action.sendToCanvas'), onClick: () => fire('sendToCanvas') });
+      }
+      if (isActionAllowed('openCanvas')) {
+        items.push({ label: t('table.action.openCanvas'), onClick: () => fire('openCanvas') });
+      }
     }
-    if (creatorStatus === 'done') {
+    if (creatorStatus === 'done' && isActionAllowed('startVideoCreation')) {
       items.push({ label: t('table.action.restart'), onClick: () => fire('startVideoCreation') });
     }
-    items.push({
-      label: isSkipped ? t('table.action.unskip') : t('table.action.skip'),
-      onClick: () => fire('toggleSkip'),
-    });
+    if (isActionAllowed('toggleSkip')) {
+      items.push({
+        label: isSkipped ? t('table.action.unskip') : t('table.action.skip'),
+        onClick: () => fire('toggleSkip'),
+      });
+    }
     return items;
-  }, [t, fire, creatorStatus, isSkipped]);
+  }, [t, fire, creatorStatus, isSkipped, isActionAllowed]);
 
   const handleCloseMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -651,13 +817,23 @@ const SceneRow = memo(function SceneRow({
 
       {/* Characters */}
       <td style={{ ...CELL_STYLE, width: 160 }}>
-        {scene.sceneCharacters.length > 0 && (
+        {characterCount > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {visibleChars.map((name) => (
+            {visibleReadinessChars.map((character) => (
               <CharacterBadge
-                key={name}
-                name={name}
-                thumbnailUri={characterThumbnails?.[name]}
+                key={character.characterId ?? character.name}
+                character={character}
+                sceneId={scene.sceneId}
+                onSendToAgent={onCharacterSendToAgent}
+                onNavigateToAsset={onCharacterNavigate}
+              />
+            ))}
+            {visibleFallbackChars.map((character) => (
+              <CharacterBadge
+                key={character.name}
+                fallbackName={character.name}
+                fallbackThumbnailUri={character.thumbnailUri}
+                sceneId={scene.sceneId}
                 onSendToAgent={onCharacterSendToAgent}
                 onNavigateToAsset={onCharacterNavigate}
               />
@@ -669,18 +845,33 @@ const SceneRow = memo(function SceneRow({
                   lineHeight: '20px',
                   color: 'var(--vscode-descriptionForeground)',
                 }}
-                title={scene.sceneCharacters.slice(MAX_VISIBLE_CHARACTERS).join(', ')}
+                title={[
+                  ...readinessCharacters.map((character) => character.name),
+                  ...fallbackCharacters.map((character) => character.name),
+                ]
+                  .slice(MAX_VISIBLE_CHARACTERS)
+                  .join(', ')}
               >
                 +{overflowCount}
               </span>
             )}
           </div>
+        ) : (
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--vscode-descriptionForeground)',
+              opacity: 0.65,
+            }}
+          >
+            —
+          </span>
         )}
       </td>
 
       {/* Status + Actions (merged column) */}
       <td style={{ ...CELL_STYLE, width: 180 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           {/* Unified status badge */}
           <StatusBadge status={creatorStatus} label={statusLabel} title={statusDetail} />
 
@@ -733,6 +924,41 @@ const SceneRow = memo(function SceneRow({
             <DropdownMenu items={menuItems} anchorRef={moreButtonRef} onClose={handleCloseMenu} />
           )}
         </div>
+        {readiness?.missingInputs.some((input) => input.severity !== 'info') && (
+          <div
+            style={{
+              marginTop: 5,
+              fontSize: 10,
+              lineHeight: '14px',
+              color: 'var(--vscode-descriptionForeground)',
+              maxWidth: 210,
+            }}
+            title={readiness.missingInputs
+              .map((input) => translateMissingInputLabel(input, t))
+              .join('\n')}
+          >
+            {readiness.missingInputs
+              .filter((input) => input.severity !== 'info')
+              .slice(0, 2)
+              .map((input) => translateMissingInputLabel(input, t))
+              .join(' · ')}
+          </div>
+        )}
+        {readiness?.canvasSummary && (
+          <div
+            style={{
+              marginTop: 5,
+              fontSize: 10,
+              lineHeight: '14px',
+              color: 'var(--vscode-descriptionForeground)',
+            }}
+          >
+            {t('table.canvasProgress', {
+              done: readiness.canvasSummary.generatedShotCount,
+              total: readiness.canvasSummary.shotCount,
+            })}
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -745,6 +971,7 @@ const SceneRow = memo(function SceneRow({
 export function ScriptTableView({
   scriptIndex,
   sceneStates,
+  readinessRows,
   characterThumbnails,
   onNavigate,
   onSceneAction,
@@ -752,6 +979,13 @@ export function ScriptTableView({
   onCharacterNavigate,
 }: ScriptTableViewProps) {
   const { t } = useTranslation();
+  const readinessByScene = useMemo(() => {
+    const rows = new Map<string, StorySceneVideoReadiness>();
+    for (const row of readinessRows ?? []) {
+      rows.set(row.sceneId, row);
+    }
+    return rows;
+  }, [readinessRows]);
 
   const { totalDuration, doneCount, hasCharacters } = useMemo(() => {
     if (!scriptIndex) return { totalDuration: 0, doneCount: 0, hasCharacters: false };
@@ -759,13 +993,15 @@ export function ScriptTableView({
     let done = 0;
     let chars = false;
     for (const scene of scriptIndex.scenes) {
-      duration += scene.estimatedDuration;
-      if (scene.sceneCharacters.length > 0) chars = true;
+      const readiness = readinessByScene.get(scene.sceneId);
+      duration += readiness?.estimatedDuration ?? scene.estimatedDuration;
+      if ((readiness?.characters.length ?? scene.sceneCharacters.length) > 0) chars = true;
       const st = sceneStates[scene.sceneId];
-      if (st && deriveCreatorStatus(st) === 'done') done++;
+      const creatorStatus = readiness?.creatorStatus ?? (st ? deriveCreatorStatus(st) : 'pending');
+      if (creatorStatus === 'done') done++;
     }
     return { totalDuration: duration, doneCount: done, hasCharacters: chars };
-  }, [scriptIndex, sceneStates]);
+  }, [scriptIndex, sceneStates, readinessByScene]);
 
   const handleBatchStart = useCallback(() => {
     if (!scriptIndex || !onSceneAction) return;
@@ -855,6 +1091,7 @@ export function ScriptTableView({
                   ...DEFAULT_SCENE_STATE,
                 }
               }
+              readiness={readinessByScene.get(scene.sceneId)}
               characterThumbnails={characterThumbnails}
               onNavigate={onNavigate}
               onSceneAction={onSceneAction}

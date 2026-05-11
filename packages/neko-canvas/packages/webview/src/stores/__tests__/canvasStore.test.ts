@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  createCanvasStoryboardExecutionSummary,
   isSceneGroupNode,
   isShotNode,
   type CanvasData,
@@ -66,7 +67,7 @@ describe('canvasStore scene container actions', () => {
       isConnecting: false,
       pendingConnectionSource: null,
       activePlayingNodeId: null,
-      generationPanelState: { visible: false, nodeId: null, cellId: null },
+      generationPanelState: { visible: false, nodeId: null, childNodeId: null },
     });
     useHistoryStore.setState({ undoStack: [], redoStack: [], maxHistory: 50 });
   });
@@ -281,5 +282,62 @@ describe('canvasStore scene container actions', () => {
     nextShot = state?.nodes.find((node) => node.id === 'shot-4');
     expect(nextShot?.preview?.subtitle).toBe('Block edit');
     expect(JSON.stringify(nextShot?.preview)).not.toContain('blob:runtime');
+  });
+
+  it('provides store node data for storyboard execution summary projection', () => {
+    useCanvasStore.getState().setCanvasData(
+      createCanvasData([
+        {
+          ...createSceneNode(),
+          data: {
+            ...createSceneNode().data,
+            sourceScriptUri: 'file:///project/demo.fountain',
+            sceneId: 'scene_1',
+          },
+          container: { policy: 'scene', childIds: ['shot-1'] },
+        },
+        {
+          ...createShotNode('shot-1', 160, 220),
+          parentId: 'scene-1',
+          data: {
+            ...createShotNode('shot-1', 160, 220).data,
+            generationStatus: 'done',
+            generationHistory: [
+              {
+                id: 'candidate-1',
+                dataUrl: 'blob:runtime-preview',
+                prompt: 'test',
+                timestamp: 1,
+                selected: true,
+                assetId: 'asset-shot-1',
+              },
+            ],
+            lastImportedToTimelineAt: 42,
+            lastImportedToTimelineProject: 'Demo Cut',
+          },
+        },
+      ]),
+    );
+
+    const nodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+    const summary = createCanvasStoryboardExecutionSummary({
+      nodes,
+      request: {
+        sourceScriptUri: 'file:///project/demo.fountain',
+        sceneId: 'scene_1',
+      },
+    });
+
+    expect(summary.scenes[0]).toMatchObject({
+      sceneId: 'scene_1',
+      shotCount: 1,
+      generatedShotCount: 1,
+      selectedThumbnailRef: 'asset-shot-1',
+    });
+    expect(summary.scenes[0]?.shots[0]).toMatchObject({
+      lastImportedToTimelineAt: 42,
+      lastImportedToTimelineProject: 'Demo Cut',
+    });
+    expect(JSON.stringify(summary)).not.toContain('blob:runtime-preview');
   });
 });

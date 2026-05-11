@@ -66,6 +66,7 @@ export const TOOL_NAMES_CANVAS = {
   CANVAS_CREATE_COMPOSITE: 'canvas_create_composite',
   CANVAS_UPDATE_BLOCK: 'canvas_update_block',
   CANVAS_EXTRACT_STRUCTURED_CONTENT: 'canvas_extract_structured_content',
+  CANVAS_GET_STORYBOARD_EXECUTION_SUMMARY: 'canvas_get_storyboard_execution_summary',
   CANVAS_GENERATE_IMAGE: 'canvas_generate_image',
   CANVAS_GENERATE_BATCH: 'canvas_generate_batch',
   CANVAS_GENERATE_VIDEO_WITH_KEYFRAMES: 'canvas_generate_video_with_keyframes',

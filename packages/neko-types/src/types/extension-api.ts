@@ -35,6 +35,10 @@ import type {
   CreatedCanvasStoryboard,
 } from './storyboard-planner';
 import type { StoryScenePlan, StoryShotPlan } from './storyboard-planner';
+import type {
+  CanvasStoryboardExecutionSummary,
+  CanvasStoryboardExecutionSummaryRequest,
+} from './storyboard-readiness';
 import type { CharacterRegistryFile, CharacterRecord } from './character-registry';
 import type {
   SketchAIContextSnapshot,
@@ -276,6 +280,13 @@ export interface NekoCanvasAPI {
       payload: CanvasStoryboardPayload,
       options?: ApplyCanvasStoryboardOptions,
     ): Promise<CreatedCanvasStoryboard>;
+
+    /**
+     * Return a read-only scene/shot execution summary for Story and Agent consumers.
+     */
+    getExecutionSummary(
+      request?: CanvasStoryboardExecutionSummaryRequest,
+    ): Promise<CanvasStoryboardExecutionSummary>;
   };
 
   nodes: {

@@ -10,6 +10,8 @@ import {
   applyStoryboardPayloadToCanvas,
   getPanoramicPreviewRoute,
   type ApplyCanvasStoryboardOptions,
+  type CanvasStoryboardExecutionSummary,
+  type CanvasStoryboardExecutionSummaryRequest,
   type CanvasStoryboardPayload,
   type CreatedCanvasStoryboard,
 } from '@neko/shared';
@@ -248,6 +250,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
         canvasEditorProvider.reportStoryboardImport(payload, created);
         return created;
       },
+      getExecutionSummary: (request) => canvasEditorProvider.getStoryboardExecutionSummary(request),
     },
     nodes: {
       list: (type) => canvasEditorProvider.listNodes(type),
@@ -259,7 +262,8 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       createComposite: (request) => canvasEditorProvider.createComposite(request),
       updateBlock: (request) => canvasEditorProvider.updateBlock(request),
       extractStructuredContent: (request) => canvasEditorProvider.extractStructuredContent(request),
-      generateImage: (nodeId, cellId) => canvasEditorProvider.generateImageForNode(nodeId, cellId),
+      generateImage: (nodeId, childNodeId) =>
+        canvasEditorProvider.generateImageForNode(nodeId, childNodeId),
       generateBatch: (nodeIds) => canvasEditorProvider.generateBatchForNodes(nodeIds),
       onSelectionChange: canvasEditorProvider.onSelectionChange,
     },
@@ -304,7 +308,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   };
 
   // Register commands
-  registerCommands(context, api.storyboard.import);
+  registerCommands(context, api.storyboard.import, api.storyboard.getExecutionSummary);
 
   // Register plugin slash commands into neko-agent chat panel
   registerAgentSlashCommands(context);
@@ -345,6 +349,9 @@ function registerCommands(
     payload: CanvasStoryboardPayload,
     options?: ApplyCanvasStoryboardOptions,
   ) => Promise<CreatedCanvasStoryboard>,
+  getExecutionSummary: (
+    request?: CanvasStoryboardExecutionSummaryRequest,
+  ) => Promise<CanvasStoryboardExecutionSummary>,
 ): void {
   // New Canvas - create file with inline rename (like neko-story)
   context.subscriptions.push(
@@ -465,6 +472,14 @@ function registerCommands(
     ),
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.getStoryboardExecutionSummary',
+      async (request?: CanvasStoryboardExecutionSummaryRequest) =>
+        getExecutionSummary(request ?? {}),
+    ),
+  );
+
   // Canvas keyboard shortcuts - forwarded to webview
   const keyboardActions = [
     'neko.canvas.deleteSelected',
@@ -539,9 +554,9 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.canvas.updateNodeImage',
-      (args: { nodeId: string; imageData: string; cellId?: string }) => {
-        const { nodeId, imageData, cellId } = args;
-        const delivered = canvasEditorProvider.postUpdateNodeImage(nodeId, imageData, cellId);
+      (args: { nodeId: string; imageData: string; childNodeId?: string }) => {
+        const { nodeId, imageData, childNodeId } = args;
+        const delivered = canvasEditorProvider.postUpdateNodeImage(nodeId, imageData, childNodeId);
         if (!delivered) {
           void handleError(
             new Error(

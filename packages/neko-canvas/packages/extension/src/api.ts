@@ -13,6 +13,8 @@ import type {
   CanvasChangeEvent as SharedCanvasChangeEvent,
   CanvasNode,
   CanvasNodeType,
+  CanvasStoryboardExecutionSummary,
+  CanvasStoryboardExecutionSummaryRequest,
   CanvasStoryboardPayload,
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
@@ -133,6 +135,13 @@ export interface NekoCanvasAPI {
       payload: CanvasStoryboardPayload,
       options?: ApplyCanvasStoryboardOptions,
     ): Promise<CreatedCanvasStoryboard>;
+
+    /**
+     * Read-only scene/shot execution summary for Story and Agent consumers.
+     */
+    getExecutionSummary(
+      request?: CanvasStoryboardExecutionSummaryRequest,
+    ): Promise<CanvasStoryboardExecutionSummary>;
   };
 
   /**
@@ -162,8 +171,8 @@ export interface NekoCanvasAPI {
     extractStructuredContent(
       request: CanvasExtractStructuredContentRequest,
     ): Promise<CanvasExtractStructuredContentResult>;
-    /** Trigger image generation for a ShotNode or a specific GalleryCell */
-    generateImage(nodeId: string, cellId?: string): Promise<void>;
+    /** Trigger image generation for a ShotNode or a gallery child node */
+    generateImage(nodeId: string, childNodeId?: string): Promise<void>;
     /** Trigger batch image generation for multiple nodes */
     generateBatch(nodeIds: string[]): Promise<void>;
     /** Fired whenever the canvas selection changes */

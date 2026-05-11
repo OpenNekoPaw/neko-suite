@@ -10,7 +10,7 @@
 
 ## Quick Reference
 
-- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、**分镜系统**（轻量分镜表 + ScenePlan/ShotPlan 规划器 + story→agent→canvas 语义流水线）
+- **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、**AI 视频准备度表**（scene-level readiness + 人物形象状态 + Canvas 摘要 + story→agent→canvas 语义流水线）
 - **入口**：`packages/extension/src/extension.ts`
 - **支持格式**：`.nks`（Neko Story）、`.story`（通用）、`.fountain`（Fountain 标准）
 - **子包**：`extension/`、`parser/`（`@neko-story/parser`）、`types/`、`webview/`
@@ -29,7 +29,7 @@ VSCode 原生编辑器（.nks / .fountain 文件）
         ├── storyScenePlanner → ScenePlan / ShotPlan 确定性规划
         ├── StorySceneStateStore → 场景工作流状态 + workspaceState 持久化
         └── 命令
-              ├── Preview Story          → 开启 Webview 预览面板（含轻量分镜表）
+              ├── Preview Story          → 开启 Webview 预览面板（含 AI 视频准备度表）
               ├── Convert to Timeline    → 生成 .nkv 项目文件 → neko-cut
               ├── Generate Storyboard    → 启动 Agent pipeline（规划 + canvas 导入）
               ├── Start Video Creation   → flowF 标准视频主流程（规划 → 生成 → 时间线）
@@ -46,7 +46,7 @@ packages/
 │     ├── services/scriptIndexBuilder.ts    # 稳定 sceneId + 场景元数据构建
 │     ├── services/storyScenePlanner.ts     # ScenePlan / ShotPlan 确定性规划
 │     └── services/storySceneStateStore.ts  # 场景工作流状态 + workspaceState 持久化
-└── webview/    # React 预览 UI（含轻量分镜表 ScriptTableView）
+└── webview/    # React 预览 UI（含 scene-level AI 视频准备度表 ScriptTableView）
 ```
 
 ## Deep Dive
@@ -56,12 +56,27 @@ packages/
 ```
 编写剧本 (.nks / .fountain)
   │
-  ├── 实时预览（Webview 预览面板 + 轻量分镜表）
+  ├── 实时预览（Webview 预览面板 + AI 视频准备度表）
   ├── ScenePlan / ShotPlan（确定性规划器 → 语义分镜数据）
   ├── Agent 流水线（story → agent → canvas 语义导入 + 批量视频生成）
   ├── Send to Canvas（场景级 storyboard payload → neko-canvas 节点）
   └── 转换为时间线（neko-cut）→ 自动摆放素材
 ```
+
+### AI 视频准备度表
+
+`ScriptTableView` 不是第二个 storyboard 编辑器，而是剧本阶段的 scene-level 准备度表。每一行对应一个 `ScriptIndex.scenes[]` 场景，展示场景标题、摘要、预计时长、人物形象准备度、缺失输入、Agent/Canvas 工作流状态和场景级动作。
+
+准备度由 Extension Host 聚合后发送给 Webview，输入包括：
+
+- `ScriptIndex` 与 `StorySceneStateStore`
+- `characters.json` 中的角色身份、别名和 script-facing names
+- `neko-assets.getCharacterThumbnail` 的缩略图解析结果
+- `NekoCanvasAPI.storyboard.getExecutionSummary()` 的只读 Canvas 执行摘要
+
+Extension 只输出结构化 readiness DTO；诸如人物形象状态、缺失项和 Canvas 进度这类可见文案由 Webview 通过 i18n 翻译。这样可以保留扩展侧的稳定契约，同时让界面文案按 locale 变化而不改动数据层。
+
+Story 表只展示小缩略图和 hover 预览作为 readiness 线索；大图审查、候选图比较、ShotNode 编辑、GalleryNode 候选切换和批量生成仍属于 `neko-canvas`。
 
 ### Fountain 语法示例
 

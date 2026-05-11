@@ -66,3 +66,7 @@ export {
   type FieldBindingWriteResult,
 } from './fieldBinding';
 export { createStoryboardPayload, applyStoryboardPayloadToCanvas } from './storyboardPlanner';
+export {
+  createCanvasStoryboardExecutionSummary,
+  type CreateCanvasStoryboardExecutionSummaryInput,
+} from './storyboardExecutionSummary';

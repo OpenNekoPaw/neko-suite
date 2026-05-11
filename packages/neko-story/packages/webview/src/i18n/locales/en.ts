@@ -38,6 +38,27 @@ export const en = {
   'table.status.detail.sending': 'Sending to canvas…',
   'table.status.detail.failed': 'Generation failed',
   'table.status.detail.review': 'Needs review',
+  'table.visualStatus.bound': 'Bound',
+  'table.visualStatus.generated': 'Generated',
+  'table.visualStatus.missing': 'Missing visual',
+  'table.visualStatus.unresolved': 'Unresolved',
+  'table.visualStatus.stale': 'Needs confirmation',
+  'table.visualStatus.unknown': 'Unknown',
+  'table.character.sendToAgent': 'Send to Agent',
+  'table.character.missingReason.assetsUnavailable':
+    'Asset service is unavailable, so the character visual cannot be confirmed yet',
+  'table.character.missingReason.missingVisual': 'No usable character visual is available',
+  'table.character.missingReason.unresolvedCharacter':
+    'Script character is not bound to characters.json',
+  'table.character.missingReason.staleVisual':
+    'Character record is outdated; confirm whether the visual is still valid',
+  'table.missingInput.unresolvedCharacter': '{name} is not bound to a character identity',
+  'table.missingInput.characterVisual': '{name} is missing a character visual',
+  'table.missingInput.characterVisualUnknown': '{name} character visual status is unknown',
+  'table.missingInput.location': 'Scene location is missing',
+  'table.missingInput.duration': 'Reliable scene duration is missing',
+  'table.missingInput.canvasHandoff': 'Not sent to Canvas yet',
+  'table.canvasProgress': 'Canvas {done}/{total}',
 
   // Context-driven primary action
   'table.action.start': 'Start',

@@ -46,7 +46,7 @@
 截至 2026-04-08，已落地：
 
 - `ScriptIndex` 已升级为稳定 `sceneId` + scene 元数据 + sceneCharacters + actionSummary + estimatedDuration
-- `ScriptTableView` 已升级为轻量分镜表，包含 Agent / Canvas 状态列与场景级动作入口
+- `ScriptTableView` 已升级为 scene-level AI 视频准备度表，包含时长、人物形象准备度、缺失输入、Agent / Canvas 状态列与场景级动作入口
 - `story` 的 `sendToCanvas` 已走 `neko.canvas.importStoryboard` 正式导入入口
 - `canvas` 已暴露 `NekoCanvasAPI.storyboard.import(...)` 与 `neko.canvas.importStoryboard`
 - `neko-story` 已提供 `GetScriptIndex` / `SearchScriptIndex` / `GenerateScenePlan` / `GenerateShotPlan`
@@ -57,6 +57,7 @@
 - `StartPipeline` 已支持 `importToCanvas` / `canvasStartX` / `canvasStartY` 参数，用于开启 semantic canvas handoff
 - 轻量分镜表状态已升级为 extension 侧统一事实源，并通过 `workspaceState` 做跨会话持久化
 - `story` 已提供 `neko.story.startVideoCreation`，作为从当前场景启动 `flowF` 标准视频主流程的正式入口
+- `canvas` 已提供 `NekoCanvasAPI.storyboard.getExecutionSummary()` / `neko.canvas.getStoryboardExecutionSummary`，用于向 Story 和 Agent 暴露只读 scene/shot 执行摘要
 
 仍未完全落地：
 
@@ -74,7 +75,8 @@
 story
   ├─ 剧本文本事实源
   ├─ 结构化索引（scene / character / line range）
-  ├─ 轻量分镜表（scene-level review）
+  ├─ AI 视频准备度表（scene-level readiness）
+  ├─ 人物形象准备度（角色身份 + 资产/缩略图状态）
   └─ 流程入口（发送给 Agent / 生成分镜 / 启动视频创作）
   ↓
 agent
@@ -88,6 +90,7 @@ canvas
   ├─ 正式 storyboard 工作台
   ├─ ShotNode / SceneGroupNode / GalleryNode 编辑
   ├─ 视觉候选审查与批量生成
+  ├─ 只读 execution summary 投影
   └─ 向 cut 输出确认后的分镜结构
 ```
 
@@ -217,7 +220,31 @@ canvas
 
 ### 它的正确定位
 
-> 轻量分镜表是“审阅和派发面板”，不是“第二个 storyboard 编辑器”。
+> 轻量分镜表现在的产品定位是“AI 视频准备度表”：它回答“这个场景是否准备好进入视频生成”，不是“这个镜头如何编辑”。
+
+### 7.1 Story 表必须展示的信息
+
+- 场景事实：标题、摘要、行范围、预计时长、推荐镜头数。
+- 人物准备度：角色名、可选 `characterId`、匹配来源、bound/generated/missing/unresolved/unknown/stale 状态、小缩略图和缺失原因。
+- 缺失输入：未解析角色、缺少人物形象、弱地点/环境信息、缺少时长置信、尚未 handoff 到 Canvas。
+- 下游状态：Agent 阶段、Canvas 摘要、Timeline 回流状态。
+- 场景级动作：分析、开始视频创作、生成分镜、发送到 Canvas、打开 Canvas、重试、跳过/恢复。
+
+### 7.2 Story 表不得复制的 Canvas 能力
+
+- 不显示可编辑 ShotNode 行。
+- 不提供镜头拖拽排序、候选图切换、Gallery cell 编辑或直接 Cut 导入。
+- 不渲染大图审查器；大图、候选比较和视觉迭代通过打开 Canvas 完成。
+
+### 7.3 Canvas execution summary 边界
+
+Canvas 暴露 `CanvasStoryboardExecutionSummary` 作为只读投影，字段包含 scene node、shot count、generated/failed count、选中资产引用、缩略图引用和 timeline import 元数据。Story 和 Agent 只能消费这个摘要，不读取 Canvas Webview 内部节点树、generation history 原始数组、blob/data URL、播放状态或候选审阅 UI 状态。
+
+Story 仍拥有剧本文本事实、场景标题、行范围和 duration 估算；Canvas 仍拥有 ShotNode 描述、生成结果、候选选择和视觉审查。
+
+Story 读取 Canvas 摘要时优先走 `neko.canvas.getStoryboardExecutionSummary` command 边界；Canvas API 的 `storyboard.getExecutionSummary()` 保持为同一只读能力的扩展 API 入口。Story Webview 不直接访问 Canvas、Assets 或 Agent API。
+
+Story readiness DTO 中的 `labelKey`、`labelParams`、`missingReasonKey` 等字段只表达语义和参数；用户可见文本由 Webview i18n 渲染。Extension Host 可以保留英文 fallback 作为兼容数据，但不应把固定中文文案写入跨层契约。
 
 ---
 

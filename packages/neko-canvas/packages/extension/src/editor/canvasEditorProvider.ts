@@ -10,6 +10,7 @@ import * as path from 'path';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import {
   buildStoryboardImportTimelineSyncPayload,
+  createCanvasStoryboardExecutionSummary,
   extractCanvasNodeGenerationLineage,
   getPanoramicPreviewRoute,
   inferCanvasDocumentType,
@@ -32,6 +33,8 @@ import type {
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
   CanvasTimelineSyncPayload,
+  CanvasStoryboardExecutionSummary,
+  CanvasStoryboardExecutionSummaryRequest,
   CanvasStoryboardPayload,
   CreatedCanvasStoryboard,
   NekoStoryAPI,
@@ -439,13 +442,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
    * Called by the `neko.canvas.updateNodeImage` command when Sketch sends back
    * an edited image via the round-trip workflow.
    */
-  postUpdateNodeImage(nodeId: string, imageData: string, cellId?: string): boolean {
+  postUpdateNodeImage(nodeId: string, imageData: string, childNodeId?: string): boolean {
     if (!this.activeWebviewPanel) return false;
     this.activeWebviewPanel.webview.postMessage({
       type: 'updateNodeImage',
       nodeId,
       imageData,
-      cellId,
+      childNodeId,
     });
     return true;
   }
@@ -581,7 +584,28 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     );
   }
 
-  async generateImageForNode(nodeId: string, cellId?: string): Promise<void> {
+  async getStoryboardExecutionSummary(
+    request: CanvasStoryboardExecutionSummaryRequest = {},
+  ): Promise<CanvasStoryboardExecutionSummary> {
+    if (!this.activeWebviewPanel) {
+      return {
+        sourceScriptUri: request.sourceScriptUri,
+        canvasFileUri: request.canvasFileUri,
+        status: 'not-available',
+        scenes: [],
+        error: 'No active canvas editor',
+      };
+    }
+
+    const nodes = await this.listNodes();
+    return createCanvasStoryboardExecutionSummary({
+      nodes,
+      request,
+      canvasFileUri: this.activeDocument?.uri.toString() ?? request.canvasFileUri,
+    });
+  }
+
+  async generateImageForNode(nodeId: string, childNodeId?: string): Promise<void> {
     const node = await this.getNode(nodeId);
     const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
     const referenceRefs = node ? extractReferenceRefs(node) : undefined;
@@ -589,7 +613,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
     this.scheduler.enqueue({
       nodeId,
-      cellId,
+      childNodeId,
       params: {
         prompt: shotFields?.prompt ?? '',
         shotScale: shotFields?.shotScale,
@@ -603,7 +627,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         this.activeWebviewPanel?.webview.postMessage({
           type: 'generationProgress',
           nodeId,
-          cellId,
+          childNodeId,
           status,
           dataUrl,
         });
@@ -1658,17 +1682,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'generateForNode': {
         // Delegate image generation to BatchGenerationScheduler → neko-agent
         const nodeId = message.nodeId as string;
-        const cellId = message.cellId as string | undefined;
+        const childNodeId = message.childNodeId as string | undefined;
         const rawParams = message.params as Record<string, unknown>;
         if (!nodeId || typeof rawParams['prompt'] !== 'string') break;
         const node = await this.getNode(nodeId);
         const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
-        // Strip any nodeId/cellId injected by webview — use trusted scheduler params only
+        // Strip any nodeId/childNodeId injected by webview — use trusted scheduler params only
         const {
           nodeId: _nId,
-          cellId: _cId,
+          childNodeId: _cId,
           ...sanitized
-        } = rawParams as Record<string, unknown> & { nodeId?: unknown; cellId?: unknown };
+        } = rawParams as Record<string, unknown> & { nodeId?: unknown; childNodeId?: unknown };
         const refsFromNode = node ? extractReferenceRefs(node) : undefined;
         const params = {
           ...sanitized,
@@ -1693,13 +1717,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         this.scheduler.enqueue({
           nodeId,
-          cellId,
+          childNodeId,
           params,
           onProgress: (status: string, dataUrl?: string) => {
             webviewPanel.webview.postMessage({
               type: 'generationProgress',
               nodeId,
-              cellId,
+              childNodeId,
               status,
               dataUrl,
             });
@@ -1989,7 +2013,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               sourceNodeId: nodeId,
               metadata: {
                 shotNumber: d['shotNumber'],
-                cellId: d['cellId'],
+                childNodeId: d['childNodeId'],
               },
             },
           });

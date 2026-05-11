@@ -6,11 +6,18 @@ import { createStoryboardPayload } from '@neko/shared';
 import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import type {
   AgentContextPayload,
+  CanvasStoryboardExecutionSummary,
+  CanvasStoryboardExecutionSummaryRequest,
+  CharacterRegistryFile,
   CreatedCanvasStoryboardScene,
   NekoStoryScriptIndex,
+  StoryCharacterAgentContextData,
+  StorySceneAgentContextData,
+  StorySceneVideoReadiness,
 } from '@neko/shared';
 import { buildScriptIndex } from '../services/scriptIndexBuilder';
 import { StorySceneStateStore, type StorySceneState } from '../services/storySceneStateStore';
+import { buildStorySceneVideoReadinessRows } from '../services/storyVideoReadinessService';
 import { handleError } from '../utils/errorHandler';
 
 type MessageToWebview =
@@ -19,6 +26,7 @@ type MessageToWebview =
       document: FountainDocument;
       scriptIndex: NekoStoryScriptIndex;
       sceneStates: Record<string, StorySceneState>;
+      readinessRows?: readonly StorySceneVideoReadiness[];
     }
   | { type: 'scrollTo'; line: number }
   | { type: 'setView'; view: 'screenplay' | 'table' }
@@ -31,15 +39,25 @@ type MessageFromWebview =
   | {
       type: 'sceneAction';
       sceneId: string;
-      action: 'analyze' | 'generateStoryboard' | 'sendToCanvas' | 'openCanvas' | 'toggleSkip';
+      action:
+        | 'analyze'
+        | 'generateStoryboard'
+        | 'sendToCanvas'
+        | 'openCanvas'
+        | 'toggleSkip'
+        | 'startVideoCreation'
+        | 'generateCurrentScene'
+        | 'retryFailed';
     }
-  | { type: 'characterSendToAgent'; name: string }
-  | { type: 'characterNavigate'; name: string };
+  | { type: 'characterSendToAgent'; name: string; sceneId?: string; characterId?: string }
+  | { type: 'characterNavigate'; name: string; sceneId?: string; characterId?: string };
 
 type ResolveCharacterBindings = (
   names: readonly string[],
   uriOrPath?: string,
 ) => Promise<Record<string, string>>;
+
+type ResolveCharacterRegistry = (uriOrPath?: string) => CharacterRegistryFile | undefined;
 
 export class PreviewPanel implements vscode.Disposable {
   private static readonly panels = new Set<PreviewPanel>();
@@ -49,6 +67,8 @@ export class PreviewPanel implements vscode.Disposable {
   private readonly extensionUri: vscode.Uri;
   private readonly sceneStateStore: StorySceneStateStore;
   private readonly resolveCharacterBindings: ResolveCharacterBindings;
+  private readonly resolveCharacterRegistry: ResolveCharacterRegistry;
+  private readonly readinessRowsByScene = new Map<string, StorySceneVideoReadiness>();
   private disposables: vscode.Disposable[] = [];
   private activeEditor: vscode.TextEditor | undefined;
   private updateTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -58,11 +78,13 @@ export class PreviewPanel implements vscode.Disposable {
     extensionUri: vscode.Uri,
     sceneStateStore: StorySceneStateStore,
     resolveCharacterBindings: ResolveCharacterBindings,
+    resolveCharacterRegistry: ResolveCharacterRegistry,
   ) {
     this.panel = panel;
     this.extensionUri = extensionUri;
     this.sceneStateStore = sceneStateStore;
     this.resolveCharacterBindings = resolveCharacterBindings;
+    this.resolveCharacterRegistry = resolveCharacterRegistry;
 
     // Set webview content
     this.panel.webview.html = this.getHtmlForWebview();
@@ -113,6 +135,7 @@ export class PreviewPanel implements vscode.Disposable {
     extensionUri: vscode.Uri,
     sceneStateStore: StorySceneStateStore,
     resolveCharacterBindings: ResolveCharacterBindings,
+    resolveCharacterRegistry: ResolveCharacterRegistry,
   ): PreviewPanel {
     const column = vscode.window.activeTextEditor
       ? vscode.ViewColumn.Beside
@@ -133,6 +156,7 @@ export class PreviewPanel implements vscode.Disposable {
       extensionUri,
       sceneStateStore,
       resolveCharacterBindings,
+      resolveCharacterRegistry,
     );
     PreviewPanel.panels.add(instance);
     return instance;
@@ -162,22 +186,44 @@ export class PreviewPanel implements vscode.Disposable {
         void this.handleSceneAction(message.sceneId, message.action);
         break;
       case 'characterSendToAgent':
-        void this.handleCharacterSendToAgent(message.name);
+        void this.handleCharacterSendToAgent(message.name, message.sceneId, message.characterId);
         break;
       case 'characterNavigate':
-        void this.handleCharacterNavigate(message.name);
+        void this.handleCharacterNavigate(message.name, message.sceneId, message.characterId);
         break;
     }
   }
 
-  private async handleCharacterSendToAgent(name: string): Promise<void> {
+  private async handleCharacterSendToAgent(
+    name: string,
+    sceneId?: string,
+    characterId?: string,
+  ): Promise<void> {
     const scriptPath = this.activeEditor?.document.uri.fsPath;
+    const readiness = this.findCharacterReadiness(name, sceneId, characterId);
+    const sceneReadiness = sceneId ? this.findSceneReadiness(sceneId) : undefined;
+    const missingInputs = sceneReadiness?.missingInputs.filter(
+      (input) => input.characterName === name || input.characterId === readiness?.characterId,
+    );
+    const data: StoryCharacterAgentContextData = {
+      characterName: name,
+      scriptPath: scriptPath ?? null,
+      sourceScriptUri: this.activeEditor?.document.uri.toString(),
+      sceneId,
+      characterId: readiness?.characterId,
+      assetEntityIds: readiness?.assetEntityIds,
+      generatedAssetIds: readiness?.generatedAssetIds,
+      galleryNodeIds: readiness?.galleryNodeIds,
+      thumbnailRef: readiness?.thumbnailUri,
+      readinessStatus: readiness?.status,
+      missingInputs,
+    };
     const payload: AgentContextPayload = {
       type: 'story-selection',
-      id: `character:${name}`,
+      id: sceneId ? `character:${sceneId}:${name}` : `character:${name}`,
       label: name,
       summary: `Character: ${name}${scriptPath ? `\nFrom: ${path.basename(scriptPath)}` : ''}`,
-      data: { characterName: name, scriptPath: scriptPath ?? null },
+      data,
       intent: `请帮我完善角色「${name}」的形象设计：`,
     };
 
@@ -188,8 +234,22 @@ export class PreviewPanel implements vscode.Disposable {
     }
   }
 
-  private async handleCharacterNavigate(name: string): Promise<void> {
+  private async handleCharacterNavigate(
+    name: string,
+    sceneId?: string,
+    characterId?: string,
+  ): Promise<void> {
     try {
+      const readiness = this.findCharacterReadiness(name, sceneId, characterId);
+      const assetRef = readiness?.assetEntityIds?.[0] ?? readiness?.generatedAssetIds?.[0];
+      if (assetRef) {
+        try {
+          await vscode.commands.executeCommand('neko.assets.openAsset', assetRef);
+          return;
+        } catch {
+          // Fall back to the thumbnail path when the assets command is unavailable.
+        }
+      }
       const assetPath = await vscode.commands.executeCommand<string | undefined>(
         'neko.assets.getCharacterThumbnail',
         name,
@@ -250,7 +310,46 @@ export class PreviewPanel implements vscode.Disposable {
       sceneStates,
     });
 
+    void this.updateReadinessRows(document, scriptIndex, sceneStates);
     void this.sendCharacterThumbnails(scriptIndex);
+  }
+
+  private async updateReadinessRows(
+    document: FountainDocument,
+    scriptIndex: NekoStoryScriptIndex,
+    sceneStates: Record<string, StorySceneState>,
+  ): Promise<void> {
+    if (!this.activeEditor) {
+      return;
+    }
+
+    const editor = this.activeEditor;
+    const readinessRows = await buildStorySceneVideoReadinessRows({
+      document,
+      scriptIndex,
+      sceneStates,
+      characterRegistry: this.resolveCharacterRegistry(editor.document.uri.toString()),
+      canvasSummary: await this.getCanvasSummary(scriptIndex.uri),
+      thumbnailResolver: async (name, record) =>
+        this.resolveCharacterThumbnail(name, record?.id, false),
+    });
+
+    if (this.activeEditor?.document.uri.toString() !== scriptIndex.uri) {
+      return;
+    }
+
+    this.readinessRowsByScene.clear();
+    for (const row of readinessRows) {
+      this.readinessRowsByScene.set(row.sceneId, row);
+    }
+
+    this.postMessage({
+      type: 'update',
+      document: this.resolveAssets(document),
+      scriptIndex,
+      sceneStates,
+      readinessRows,
+    });
   }
 
   private async sendCharacterThumbnails(scriptIndex: NekoStoryScriptIndex): Promise<void> {
@@ -261,14 +360,9 @@ export class PreviewPanel implements vscode.Disposable {
       const thumbnails: Record<string, string> = {};
       await Promise.allSettled(
         names.slice(0, 30).map(async (name) => {
-          const thumbPath = await vscode.commands.executeCommand<string | undefined>(
-            'neko.assets.getCharacterThumbnail',
-            name,
-          );
-          if (thumbPath) {
-            thumbnails[name] = this.panel.webview
-              .asWebviewUri(vscode.Uri.file(thumbPath))
-              .toString();
+          const thumbnailUri = await this.resolveCharacterThumbnail(name, undefined, true);
+          if (thumbnailUri) {
+            thumbnails[name] = thumbnailUri;
           }
         }),
       );
@@ -446,21 +540,27 @@ export class PreviewPanel implements vscode.Disposable {
     );
     const selectedText = this.activeEditor.document.getText(selection);
     const scriptPath = this.activeEditor.document.uri.fsPath;
+    const readiness = this.findSceneReadiness(scene.sceneId);
+    const data: StorySceneAgentContextData = {
+      scriptPath,
+      sourceScriptUri: this.activeEditor.document.uri.toString(),
+      sceneId: scene.sceneId,
+      selectedText,
+      range: {
+        start: { line: scene.line_start, character: 0 },
+        end: { line: scene.line_end, character: Number.MAX_SAFE_INTEGER },
+      },
+      readinessStatus: readiness?.readinessStatus,
+      missingInputs: readiness?.missingInputs,
+      canvasSummary: readiness?.canvasSummary,
+    };
 
     const payload: AgentContextPayload = {
       type: 'story-selection',
       id: `story:${scriptPath}:${scene.sceneId}`,
       label: scene.sceneTitle,
       summary: `Scene: ${scene.sceneTitle}\n\n${selectedText.slice(0, 400)}${selectedText.length > 400 ? '…' : ''}`,
-      data: {
-        scriptPath,
-        sceneId: scene.sceneId,
-        selectedText,
-        range: {
-          start: { line: scene.line_start, character: 0 },
-          end: { line: scene.line_end, character: Number.MAX_SAFE_INTEGER },
-        },
-      },
+      data,
       intent,
     };
 
@@ -511,6 +611,80 @@ export class PreviewPanel implements vscode.Disposable {
 
   public postMessage(message: MessageToWebview) {
     this.panel.webview.postMessage(message);
+  }
+
+  private async resolveCharacterThumbnail(
+    name: string,
+    characterId: string | undefined,
+    swallowErrors: boolean,
+  ): Promise<string | undefined> {
+    try {
+      const thumbPath = await vscode.commands.executeCommand<string | undefined>(
+        'neko.assets.getCharacterThumbnail',
+        name,
+      );
+      if (!thumbPath && characterId) {
+        const characterThumbPath = await vscode.commands.executeCommand<string | undefined>(
+          'neko.assets.getCharacterThumbnail',
+          characterId,
+        );
+        return characterThumbPath
+          ? this.panel.webview.asWebviewUri(vscode.Uri.file(characterThumbPath)).toString()
+          : undefined;
+      }
+      return thumbPath
+        ? this.panel.webview.asWebviewUri(vscode.Uri.file(thumbPath)).toString()
+        : undefined;
+    } catch (error) {
+      if (swallowErrors) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async getCanvasSummary(
+    sourceScriptUri: string,
+  ): Promise<CanvasStoryboardExecutionSummary | undefined> {
+    try {
+      const request: CanvasStoryboardExecutionSummaryRequest = { sourceScriptUri };
+      return await vscode.commands.executeCommand<CanvasStoryboardExecutionSummary>(
+        'neko.canvas.getStoryboardExecutionSummary',
+        request,
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  private findSceneReadiness(sceneId: string): StorySceneVideoReadiness | undefined {
+    return this.readinessRowsByScene.get(sceneId);
+  }
+
+  private findCharacterReadiness(
+    name: string,
+    sceneId?: string,
+    characterId?: string,
+  ): StorySceneVideoReadiness['characters'][number] | undefined {
+    const rows = sceneId
+      ? [this.findSceneReadiness(sceneId)].filter(
+          (row): row is StorySceneVideoReadiness => row !== undefined,
+        )
+      : [...this.readinessRowsByScene.values()];
+
+    for (const row of rows) {
+      const character = row.characters.find(
+        (candidate) =>
+          (characterId !== undefined && candidate.characterId === characterId) ||
+          candidate.name === name ||
+          candidate.characterId === name,
+      );
+      if (character) {
+        return character;
+      }
+    }
+
+    return undefined;
   }
 
   private getHtmlForWebview(): string {

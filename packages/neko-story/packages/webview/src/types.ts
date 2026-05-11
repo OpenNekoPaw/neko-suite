@@ -3,7 +3,7 @@
  * Simplified version of @neko-story/types for webview bundle size
  */
 
-import type { NekoStoryScriptIndex } from '@neko/shared';
+import type { NekoStoryScriptIndex, StorySceneVideoReadiness } from '@neko/shared';
 
 export interface Position {
   line: number;
@@ -183,6 +183,7 @@ export type MessageToWebview =
       document: FountainDocument;
       scriptIndex: NekoStoryScriptIndex;
       sceneStates: Record<string, StorySceneState>;
+      readinessRows?: readonly StorySceneVideoReadiness[];
     }
   | { type: 'scrollTo'; line: number }
   | { type: 'setView'; view: StoryViewMode }
@@ -193,5 +194,5 @@ export type MessageToExtension =
   | { type: 'navigate'; line: number; character: number }
   | { type: 'scroll'; line: number }
   | { type: 'sceneAction'; sceneId: string; action: StorySceneAction }
-  | { type: 'characterSendToAgent'; name: string }
-  | { type: 'characterNavigate'; name: string };
+  | { type: 'characterSendToAgent'; name: string; sceneId?: string; characterId?: string }
+  | { type: 'characterNavigate'; name: string; sceneId?: string; characterId?: string };

@@ -3,7 +3,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { ScriptTableView } from '../components/ScriptTableView';
 import { renderWithI18n } from './setup';
 import type { StorySceneState } from '../types';
-import type { NekoStoryScriptIndex } from '@neko/shared';
+import type { NekoStoryScriptIndex, StorySceneVideoReadiness } from '@neko/shared';
 
 const scriptIndex: NekoStoryScriptIndex = {
   uri: 'file:///project/demo.fountain',
@@ -158,5 +158,208 @@ describe('ScriptTableView', () => {
 
     expect(screen.getByText('0/1 done')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start All' })).toBeInTheDocument();
+  });
+
+  it('renders readiness character visual states and missing input indicators', () => {
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'not-requested',
+        canvasStatus: 'not-sent',
+      },
+    };
+    const readinessRows: StorySceneVideoReadiness[] = [
+      {
+        sceneId: 'scene_abc123',
+        sourceScriptUri: scriptIndex.uri,
+        sceneTitle: 'INT. OFFICE - DAY',
+        estimatedDuration: 18,
+        characters: [
+          {
+            name: 'ALICE',
+            characterId: 'char-alice',
+            matchSource: 'dialogue-character',
+            status: 'bound',
+            thumbnailUri: 'vscode-webview://thumb/alice.png',
+          },
+          {
+            name: 'BOB',
+            matchSource: 'dialogue-character',
+            status: 'missing',
+            missingReason: 'No usable character visual is available',
+            missingReasonKey: 'table.character.missingReason.missingVisual',
+          },
+        ],
+        missingInputs: [
+          {
+            kind: 'character-visual',
+            label: 'BOB is missing a character visual',
+            labelKey: 'table.missingInput.characterVisual',
+            labelParams: { name: 'BOB' },
+            severity: 'blocking',
+            characterName: 'BOB',
+          },
+        ],
+        readinessStatus: 'needs-input',
+        creatorStatus: 'attention',
+        allowedActions: ['analyze', 'toggleSkip'],
+      },
+    ];
+
+    renderWithI18n(
+      <ScriptTableView
+        scriptIndex={scriptIndex}
+        sceneStates={states}
+        readinessRows={readinessRows}
+      />,
+    );
+
+    expect(screen.getByText('Needs Attention')).toBeInTheDocument();
+    expect(screen.getByText('BOB is missing a character visual')).toBeInTheDocument();
+    expect(screen.getByText('Missing visual')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+  });
+
+  it('renders empty character states explicitly', () => {
+    const emptyCharacterIndex: NekoStoryScriptIndex = {
+      ...scriptIndex,
+      scenes: [{ ...scriptIndex.scenes[0]!, sceneCharacters: [] }],
+      characters: [],
+    };
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'not-requested',
+        canvasStatus: 'not-sent',
+      },
+    };
+
+    const { container } = renderWithI18n(
+      <ScriptTableView scriptIndex={emptyCharacterIndex} sceneStates={states} />,
+    );
+
+    expect(container.textContent).toContain('—');
+  });
+
+  it('renders Canvas progress summary from readiness rows', () => {
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'sent',
+        canvasStatus: 'opened',
+      },
+    };
+    const readinessRows: StorySceneVideoReadiness[] = [
+      {
+        sceneId: 'scene_abc123',
+        sourceScriptUri: scriptIndex.uri,
+        sceneTitle: 'INT. OFFICE - DAY',
+        estimatedDuration: 18,
+        characters: [],
+        missingInputs: [],
+        readinessStatus: 'in-progress',
+        creatorStatus: 'processing',
+        allowedActions: ['openCanvas', 'toggleSkip'],
+        canvasSummary: {
+          sourceScriptUri: scriptIndex.uri,
+          sceneId: 'scene_abc123',
+          sceneNodeId: 'scene-node-1',
+          shotCount: 2,
+          generatedShotCount: 1,
+          failedShotCount: 0,
+          status: 'partial',
+          shots: [],
+        },
+      },
+    ];
+
+    renderWithI18n(
+      <ScriptTableView
+        scriptIndex={scriptIndex}
+        sceneStates={states}
+        readinessRows={readinessRows}
+      />,
+    );
+
+    expect(screen.getByText('Canvas 1/2')).toBeInTheDocument();
+  });
+
+  it('keeps skipped readiness rows on restore-only action path', () => {
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'skipped',
+        canvasStatus: 'skipped',
+      },
+    };
+    const readinessRows: StorySceneVideoReadiness[] = [
+      {
+        sceneId: 'scene_abc123',
+        sourceScriptUri: scriptIndex.uri,
+        sceneTitle: 'INT. OFFICE - DAY',
+        estimatedDuration: 18,
+        characters: [],
+        missingInputs: [],
+        readinessStatus: 'skipped',
+        creatorStatus: 'skipped',
+        allowedActions: ['toggleSkip'],
+      },
+    ];
+
+    renderWithI18n(
+      <ScriptTableView
+        scriptIndex={scriptIndex}
+        sceneStates={states}
+        readinessRows={readinessRows}
+      />,
+    );
+
+    expect(screen.getByText('Skipped')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+  });
+
+  it('dispatches character actions with scene and character identifiers when readiness exists', () => {
+    const onCharacterSendToAgent = vi.fn();
+    const states: Record<string, StorySceneState> = {
+      scene_abc123: {
+        sceneId: 'scene_abc123',
+        agentStatus: 'not-requested',
+        canvasStatus: 'not-sent',
+      },
+    };
+    const readinessRows: StorySceneVideoReadiness[] = [
+      {
+        sceneId: 'scene_abc123',
+        sourceScriptUri: scriptIndex.uri,
+        sceneTitle: 'INT. OFFICE - DAY',
+        estimatedDuration: 18,
+        characters: [
+          {
+            name: 'ALICE',
+            characterId: 'char-alice',
+            matchSource: 'dialogue-character',
+            status: 'bound',
+          },
+        ],
+        missingInputs: [],
+        readinessStatus: 'ready',
+        creatorStatus: 'pending',
+        allowedActions: ['startVideoCreation', 'toggleSkip'],
+      },
+    ];
+
+    renderWithI18n(
+      <ScriptTableView
+        scriptIndex={scriptIndex}
+        sceneStates={states}
+        readinessRows={readinessRows}
+        onCharacterSendToAgent={onCharacterSendToAgent}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('Send to Agent'));
+    expect(onCharacterSendToAgent).toHaveBeenCalledWith('ALICE', 'scene_abc123', 'char-alice');
   });
 });

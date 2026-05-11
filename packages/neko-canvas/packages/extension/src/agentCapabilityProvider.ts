@@ -22,6 +22,7 @@ import type {
   NekoStoryAPI,
   StoryScenePlan,
   JsonPointerPath,
+  CanvasStoryboardExecutionSummaryRequest,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
@@ -553,6 +554,55 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         },
       },
       {
+        name: TOOL_NAMES_CANVAS.CANVAS_GET_STORYBOARD_EXECUTION_SUMMARY,
+        description:
+          'Get a read-only scene/shot storyboard execution summary for Story or Agent workflows. ' +
+          'Returns stable scene IDs, shot counts, generation status, selected asset references, and timeline import metadata without runtime preview URLs.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceScriptUri: {
+              type: 'string',
+              description: 'Optional source script URI used to correlate imported Story scenes.',
+            },
+            sceneId: {
+              type: 'string',
+              description: 'Optional Story scene ID.',
+            },
+            sceneNodeId: {
+              type: 'string',
+              description: 'Optional Canvas SceneGroup node ID.',
+            },
+            canvasFileUri: {
+              type: 'string',
+              description: 'Optional canvas file URI for consumers tracking bindings.',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const request: CanvasStoryboardExecutionSummaryRequest = {
+              sourceScriptUri:
+                typeof args.sourceScriptUri === 'string' ? args.sourceScriptUri : undefined,
+              sceneId: typeof args.sceneId === 'string' ? args.sceneId : undefined,
+              sceneNodeId: typeof args.sceneNodeId === 'string' ? args.sceneNodeId : undefined,
+              canvasFileUri:
+                typeof args.canvasFileUri === 'string' ? args.canvasFileUri : undefined,
+            };
+            const data = await api.storyboard.getExecutionSummary(request);
+            return { success: true, data };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to get storyboard execution summary: ${String(err)}`,
+            };
+          }
+        },
+      },
+      {
         name: TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE,
         description:
           'Trigger image generation for a ShotNode or a specific GalleryCell. ' +
@@ -564,9 +614,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           type: 'object',
           properties: {
             nodeId: { type: 'string', description: 'ShotNode or GalleryNode ID' },
-            cellId: {
+            childNodeId: {
               type: 'string',
-              description: 'GalleryCell ID (required when nodeId is a GalleryNode)',
+              description: 'Gallery child media node ID (required when nodeId is a GalleryNode)',
             },
           },
           required: ['nodeId'],
@@ -574,7 +624,10 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         async execute(args) {
           try {
             await ensureProjectModel(configManager, 'image');
-            await api.nodes.generateImage(args.nodeId as string, args.cellId as string | undefined);
+            await api.nodes.generateImage(
+              args.nodeId as string,
+              args.childNodeId as string | undefined,
+            );
             return { success: true };
           } catch (err) {
             return { success: false, error: `Failed to generate image: ${String(err)}` };

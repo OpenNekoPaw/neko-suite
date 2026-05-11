@@ -9,7 +9,7 @@ import type {
   StorySceneState,
   StoryViewMode,
 } from './types';
-import type { NekoStoryScriptIndex } from '@neko/shared';
+import type { NekoStoryScriptIndex, StorySceneVideoReadiness } from '@neko/shared';
 import { useTranslation } from './i18n/I18nContext';
 import './styles/screenplay.css';
 import './styles/print.css';
@@ -72,6 +72,7 @@ export function App() {
   const [document, setDocument] = useState<FountainDocument | null>(null);
   const [scriptIndex, setScriptIndex] = useState<NekoStoryScriptIndex | null>(null);
   const [sceneStates, setSceneStates] = useState<Record<string, StorySceneState>>({});
+  const [readinessRows, setReadinessRows] = useState<readonly StorySceneVideoReadiness[]>([]);
   const [characterThumbnails, setCharacterThumbnails] = useState<Record<string, string>>({});
   const [view, setView] = useState<StoryViewMode>('screenplay');
 
@@ -81,6 +82,11 @@ export function App() {
         setDocument(message.document);
         setScriptIndex(message.scriptIndex);
         setSceneStates(message.sceneStates);
+        if (message.readinessRows) {
+          setReadinessRows(message.readinessRows);
+        } else {
+          setReadinessRows([]);
+        }
         break;
       case 'scrollTo':
         scrollToLine(message.line);
@@ -111,15 +117,15 @@ export function App() {
   );
 
   const handleCharacterSendToAgent = useCallback(
-    (name: string) => {
-      postMessage({ type: 'characterSendToAgent', name });
+    (name: string, sceneId?: string, characterId?: string) => {
+      postMessage({ type: 'characterSendToAgent', name, sceneId, characterId });
     },
     [postMessage],
   );
 
   const handleCharacterNavigate = useCallback(
-    (name: string) => {
-      postMessage({ type: 'characterNavigate', name });
+    (name: string, sceneId?: string, characterId?: string) => {
+      postMessage({ type: 'characterNavigate', name, sceneId, characterId });
     },
     [postMessage],
   );
@@ -137,6 +143,7 @@ export function App() {
           <ScriptTableView
             scriptIndex={scriptIndex}
             sceneStates={sceneStates}
+            readinessRows={readinessRows}
             characterThumbnails={characterThumbnails}
             onNavigate={handleNavigate}
             onSceneAction={handleSceneAction}

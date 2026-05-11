@@ -348,6 +348,8 @@ export interface SceneGroupCanvasNode extends CanvasNodeBase {
   data: {
     /** Stable script scene ID binding (populated on storyboard import) */
     sceneId?: string;
+    /** Source script URI that produced this scene binding, when imported from Story. */
+    sourceScriptUri?: string;
     sceneTitle: string;
     sceneNumber: number;
     location?: string;
@@ -380,16 +382,24 @@ export interface GalleryCell {
 /**
  * Gallery node - multi-view character reference sheet (3-view, 9-expression, etc.)
  */
+export interface CharacterProfile {
+  description?: string;
+  tags?: string[];
+  referenceAssetId?: string;
+}
+
 export interface GalleryCanvasNode extends CanvasNodeBase {
   type: 'gallery';
   data: {
     preset: GalleryPreset;
     rows: number;
     cols: number;
-    cells: GalleryCell[];
+    /** @deprecated Migrated to child media nodes with container.childPlacements metadata. */
+    cells?: GalleryCell[];
     globalPromptPrefix?: string;
     characterId?: string;
     characterName?: string;
+    characterProfile?: CharacterProfile;
   };
 }
 

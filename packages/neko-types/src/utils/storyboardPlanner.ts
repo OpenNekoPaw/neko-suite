@@ -78,6 +78,7 @@ export async function applyStoryboardPayloadToCanvas(
       position: { x: sceneX, y: startY },
       data: {
         sceneId: scene.sceneId,
+        sourceScriptUri: payload.sourceScriptUri,
         sceneTitle: scene.sceneTitle,
         sceneNumber: scene.sceneNumber,
         location: scene.location,

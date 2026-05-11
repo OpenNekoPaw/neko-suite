@@ -166,6 +166,7 @@ export * from './canvas-agent-operations';
 export * from './canvas-drop';
 export * from './canvas-timeline-sync';
 export * from './storyboard-planner';
+export * from './storyboard-readiness';
 
 // Sketch types (.nks document format)
 export * from './sketch';
