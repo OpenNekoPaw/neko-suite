@@ -5,7 +5,6 @@ import {
   createBuiltInNodePropertiesRendererRegistry,
   enumerateComposablePropertyItems,
   writeComposablePropertyBinding,
-  writeComposablePropertyPath,
 } from './PropertyPanel';
 
 describe('PropertyPanel node properties registry', () => {
@@ -72,47 +71,21 @@ describe('PropertyPanel node properties registry', () => {
     );
   });
 
-  it('edits migrated Gallery collection cells without replacing sibling cell data', () => {
+  it('enumerates migrated Gallery as container without cells collection', () => {
     const node = createMigratedNode('gallery', {
       characterName: 'Mika',
-      cells: [
-        {
-          id: 'front',
-          label: 'front',
-          prompt: 'old prompt',
-          image: 'front.png',
-          generationStatus: 'done',
-          generationHistory: [
-            { id: 'v1', dataUrl: 'front.png', prompt: 'old', timestamp: 1, selected: true },
-          ],
-        },
-        {
-          id: 'side',
-          label: 'side',
-          prompt: 'side prompt',
-          image: 'side.png',
-          generationStatus: 'idle',
-        },
-      ],
+      preset: 'character-3view',
+      rows: 1,
+      cols: 3,
     });
 
     const items = enumerateComposablePropertyItems(node);
-    expect(items.some((item) => item.kind === 'collection' && item.items.length === 2)).toBe(true);
-
-    const nextData = writeComposablePropertyPath(node, '/cells/0/prompt', 'new prompt');
-
-    expect((nextData.cells as Array<Record<string, unknown>>)[0]).toMatchObject({
-      id: 'front',
-      label: 'front',
-      prompt: 'new prompt',
-      image: 'front.png',
-      generationHistory: (
-        (node.data as Record<string, unknown>).cells as Array<Record<string, unknown>>
-      )[0]?.generationHistory,
-    });
-    expect((nextData.cells as Array<Record<string, unknown>>)[1]).toEqual(
-      ((node.data as Record<string, unknown>).cells as Array<Record<string, unknown>>)[1],
+    const hasCollection = items.some((item) => item.kind === 'collection');
+    expect(hasCollection).toBe(false);
+    const hasPresetField = items.some(
+      (item) => item.kind === 'field' && item.blockId === 'gallery-preset',
     );
+    expect(hasPresetField).toBe(true);
   });
 
   it('enumerates migrated Media preview metadata as read-only property context', () => {

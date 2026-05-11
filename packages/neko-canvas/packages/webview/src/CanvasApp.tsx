@@ -85,6 +85,8 @@ export function CanvasApp() {
     clearSelection,
     moveNode,
     addNode,
+    createComposite,
+    updateNode,
     deleteSelected,
     updateNodeData,
     startConnection,
@@ -100,6 +102,7 @@ export function CanvasApp() {
     rotateNodeEnd,
     assignShotsToScene,
     autoLayoutSceneShots,
+    removeChildFromContainer,
     selectNodes,
     groupNodes,
     ungroupNodes,
@@ -173,6 +176,8 @@ export function CanvasApp() {
     addProjectAt,
   } = useNodeHelpers({
     addNode,
+    createComposite,
+    updateNode,
     nodeCount: nodes.length,
     reportAction,
   });
@@ -287,7 +292,7 @@ export function CanvasApp() {
       buildPromptResolverRef.current?.(prompt);
       buildPromptResolverRef.current = null;
     },
-    onGenerationProgress: ({ nodeId, cellId, status, dataUrl }) => {
+    onGenerationProgress: ({ nodeId, childNodeId, status, dataUrl }) => {
       const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === nodeId);
       if (!node) return;
 
@@ -309,14 +314,15 @@ export function CanvasApp() {
         } else {
           updateNodeData(nodeId, { generationStatus: status });
         }
-      } else if (node.type === 'gallery' && cellId) {
+      } else if (node.type === 'gallery' && childNodeId) {
+        // Legacy cells path — will be replaced by childPlacements metadata update
         const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
-        const cells = galleryNode.data.cells.map((c) =>
-          c.id === cellId
+        const cells = galleryNode.data.cells?.map((c) =>
+          c.id === childNodeId
             ? (() => {
                 if (status === 'done' && dataUrl) {
                   const history = appendSelectedGenerationCandidate(c.generationHistory ?? [], {
-                    id: `gallery-${cellId}-${Date.now()}`,
+                    id: `gallery-${childNodeId}-${Date.now()}`,
                     dataUrl,
                     prompt: '',
                     timestamp: Date.now(),
@@ -337,7 +343,7 @@ export function CanvasApp() {
               })()
             : c,
         );
-        updateNodeData(nodeId, { cells });
+        if (cells) updateNodeData(nodeId, { cells });
       }
     },
     onScriptIndexResult: (nodeId, scenes) => {
@@ -356,7 +362,7 @@ export function CanvasApp() {
         });
       });
     },
-    onUpdateNodeImage: (nodeId, imageData, cellId) => {
+    onUpdateNodeImage: (nodeId, imageData, childNodeId) => {
       // Sketch round-trip: update the shot node's generatedImage and append to history
       const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === nodeId);
       if (!node) return;
@@ -373,15 +379,16 @@ export function CanvasApp() {
           generatedImage: imageData,
           generationHistory: history,
         });
-      } else if (node.type === 'gallery' && cellId) {
+      } else if (node.type === 'gallery' && childNodeId) {
+        // Legacy cells path — will be replaced by childPlacements metadata update
         const galleryNode = node as import('@neko/shared').GalleryCanvasNode;
-        const cells = galleryNode.data.cells.map((c) =>
-          c.id === cellId
+        const cells = galleryNode.data.cells?.map((c) =>
+          c.id === childNodeId
             ? {
                 ...c,
                 image: imageData,
                 generationHistory: appendSelectedGenerationCandidate(c.generationHistory ?? [], {
-                  id: `gallery-sketch-${cellId}-${Date.now()}`,
+                  id: `gallery-sketch-${childNodeId}-${Date.now()}`,
                   dataUrl: imageData,
                   prompt: '',
                   timestamp: Date.now(),
@@ -390,7 +397,7 @@ export function CanvasApp() {
               }
             : c,
         );
-        updateNodeData(nodeId, { cells });
+        if (cells) updateNodeData(nodeId, { cells });
       }
     },
     getNodes: (type) => {
@@ -577,6 +584,13 @@ export function CanvasApp() {
     [nodes],
   );
 
+  const handleRemoveContainerChild = useCallback(
+    (containerId: string, childId: string) => {
+      removeChildFromContainer(containerId, childId);
+    },
+    [removeChildFromContainer],
+  );
+
   // =========================================================================
   // Generation panel
   // =========================================================================
@@ -585,7 +599,7 @@ export function CanvasApp() {
     generationPanelState.visible && generationPanelState.nodeId
       ? {
           nodeId: generationPanelState.nodeId,
-          cellId: generationPanelState.cellId ?? undefined,
+          childNodeId: generationPanelState.childNodeId ?? undefined,
           initialPrompt: generationPanelState.initialPrompt,
           initialControlMode: generationPanelState.initialControlMode,
           initialGenerateVideo: generationPanelState.initialGenerateVideo,
@@ -597,7 +611,7 @@ export function CanvasApp() {
       vscode?.postMessage({
         type: 'generateForNode',
         nodeId: target.nodeId,
-        cellId: target.cellId,
+        childNodeId: target.childNodeId,
         params,
       });
       closeGenerationPanel();
@@ -650,6 +664,7 @@ export function CanvasApp() {
     addSceneGroupAt,
     addShotAt,
     addGalleryAt,
+    addTableAt,
     handleImportFile,
     deleteSelected,
     handleFitContent,
@@ -975,6 +990,7 @@ export function CanvasApp() {
             onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
             onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
             onBatchGenerateSceneShots={handleBatchGenerateSceneShots}
+            onRemoveContainerChild={handleRemoveContainerChild}
             isPanMode={isPanMode}
           />
 

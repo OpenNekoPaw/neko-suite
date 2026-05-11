@@ -19,12 +19,13 @@ export interface FindFreePositionOptions {
 
 export interface AutoArrangeContainerOptions {
   containerId: string;
-  mode?: 'grid' | 'sequence' | 'stack' | 'table';
+  mode?: 'grid' | 'sequence' | 'stack' | 'table' | 'gallery';
   paddingX?: number;
   paddingTop?: number;
   gapX?: number;
   gapY?: number;
   minColumnWidth?: number;
+  resizeChildren?: boolean;
 }
 
 const DEFAULT_GAP = 24;
@@ -89,6 +90,7 @@ export function autoArrangeContainer(
     gapX = 24,
     gapY = 24,
     minColumnWidth = 220,
+    resizeChildren = false,
   }: AutoArrangeContainerOptions,
 ): CanvasNode[] {
   const container = nodes.find((node) => node.id === containerId);
@@ -112,19 +114,31 @@ export function autoArrangeContainer(
   const availableWidth = Math.max(container.size.width - paddingX * 2, minColumnWidth);
   const maxChildWidth = Math.max(...orderedChildren.map((child) => child.size.width));
 
-  const columns =
-    mode === 'table'
-      ? Math.max(1, layout?.columns ?? 3)
-      : mode === 'sequence'
-        ? Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)))
-        : mode === 'stack'
-          ? 1
-          : Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)));
+  const galleryData =
+    container.type === 'gallery' ? (container.data as { cols?: number }) : undefined;
 
-  const cellWidth = mode === 'table' ? (layout?.columnWidth ?? 200) : undefined;
-  const cellHeight = mode === 'table' ? (layout?.rowHeight ?? 120) : undefined;
+  const columns =
+    mode === 'gallery'
+      ? Math.max(1, galleryData?.cols ?? 3)
+      : mode === 'table'
+        ? Math.max(1, layout?.columns ?? 3)
+        : mode === 'sequence'
+          ? Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)))
+          : mode === 'stack'
+            ? 1
+            : Math.max(1, Math.floor((availableWidth + gapX) / (maxChildWidth + gapX)));
+
+  const computedCellWidth =
+    mode === 'table'
+      ? (layout?.columnWidth ?? 200)
+      : resizeChildren
+        ? Math.floor((availableWidth - (columns - 1) * gapX) / columns)
+        : undefined;
+  const computedCellHeight =
+    mode === 'table' ? (layout?.rowHeight ?? 120) : (computedCellWidth ?? undefined);
 
   const positionById = new Map<string, { x: number; y: number }>();
+  const sizeById = new Map<string, { width: number; height: number }>();
   orderedChildren.forEach((child, index) => {
     if (layout?.lockedChildIds?.includes(child.id)) {
       return;
@@ -132,19 +146,41 @@ export function autoArrangeContainer(
 
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const stepX = cellWidth ?? child.size.width;
-    const stepY = cellHeight ?? child.size.height;
+    const stepX = computedCellWidth ?? child.size.width;
+    const stepY = computedCellHeight ?? child.size.height;
     const preferred = {
       x: container.position.x + paddingX + col * (stepX + gapX),
       y: container.position.y + paddingTop + row * (stepY + gapY),
     };
     positionById.set(child.id, preferred);
+
+    if (resizeChildren && computedCellWidth !== undefined && computedCellHeight !== undefined) {
+      sizeById.set(child.id, { width: computedCellWidth, height: computedCellHeight });
+    }
   });
 
   return nodes.map((node) => {
     const position = positionById.get(node.id);
-    return position ? { ...node, position } : node;
+    const size = sizeById.get(node.id);
+    if (position && size) return { ...node, position, size };
+    if (position) return { ...node, position };
+    return node;
   });
+}
+
+export function computeContainerChildSize(
+  container: CanvasNode,
+  options?: { paddingX?: number; gapX?: number },
+): { width: number; height: number } | undefined {
+  const paddingX = options?.paddingX ?? 24;
+  const gapX = options?.gapX ?? 8;
+  const galleryData =
+    container.type === 'gallery' ? (container.data as { cols?: number }) : undefined;
+  const columns = Math.max(1, galleryData?.cols ?? container.container?.layout?.columns ?? 3);
+  const availableWidth = Math.max(container.size.width - paddingX * 2, 60);
+  const cellWidth = Math.floor((availableWidth - (columns - 1) * gapX) / columns);
+  const cellHeight = cellWidth;
+  return { width: cellWidth, height: cellHeight };
 }
 
 function overlapsAny(rect: Rect, occupied: Rect[], gap: number): boolean {

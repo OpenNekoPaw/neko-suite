@@ -88,6 +88,8 @@ export interface InfiniteCanvasProps {
   onAutoLayoutSceneShots?: (sceneId: string) => void;
   /** Called to batch-generate all shots inside a scene */
   onBatchGenerateSceneShots?: (sceneId: string) => void;
+  /** Called to remove a child node from its container */
+  onRemoveContainerChild?: (containerId: string, childId: string) => void;
 }
 
 // =============================================================================
@@ -126,6 +128,7 @@ export function InfiniteCanvas({
   onAssignSelectedShotsToScene,
   onAutoLayoutSceneShots,
   onBatchGenerateSceneShots,
+  onRemoveContainerChild,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -283,6 +286,7 @@ export function InfiniteCanvas({
               onAssignSelectedShotsToScene,
               onAutoLayoutSceneShots,
               onBatchGenerateSceneShots,
+              onRemoveContainerChild,
               selectedNodeIds,
             });
           })}

@@ -31,6 +31,7 @@ export interface UseContextMenuOptions {
   addSceneGroupAt: (pos: { x: number; y: number }) => void;
   addShotAt: (pos: { x: number; y: number }) => void;
   addGalleryAt: (pos: { x: number; y: number }) => void;
+  addTableAt: (pos: { x: number; y: number }) => void;
   handleImportFile: () => void;
   deleteSelected: () => void;
   handleFitContent: () => void;
@@ -72,6 +73,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
     addSceneGroupAt,
     addShotAt,
     addGalleryAt,
+    addTableAt,
     handleImportFile,
     deleteSelected,
     handleFitContent,
@@ -115,6 +117,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
         onAddScene: addSceneGroupAt,
         onAddShot: addShotAt,
         onAddGallery: addGalleryAt,
+        onAddTable: addTableAt,
         onImportFile: handleImportFile,
         onDelete: deleteSelected,
         onSelectAll: () => {
@@ -164,6 +167,7 @@ export function useContextMenu(options: UseContextMenuOptions): UseContextMenuRe
       addSceneGroupAt,
       addShotAt,
       addGalleryAt,
+      addTableAt,
       handleImportFile,
       deleteSelected,
       handleFitContent,

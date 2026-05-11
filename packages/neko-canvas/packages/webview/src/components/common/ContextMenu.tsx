@@ -31,6 +31,7 @@ export interface CanvasMenuContext {
   onAddScene: (pos: { x: number; y: number }) => void;
   onAddShot?: (pos: { x: number; y: number }) => void;
   onAddGallery?: (pos: { x: number; y: number }) => void;
+  onAddTable?: (pos: { x: number; y: number }) => void;
   onImportFile?: () => void;
   onDelete: () => void;
   onSelectAll: () => void;
@@ -87,6 +88,11 @@ export function buildCanvasMenuItems(ctx: CanvasMenuContext): MenuEntry[] {
           label: t('menu.addGallery'),
           icon: '🖼',
           onClick: () => ctx.onAddGallery?.(ctx.canvasPosition),
+        },
+        {
+          label: t('menu.addTable'),
+          icon: '📊',
+          onClick: () => ctx.onAddTable?.(ctx.canvasPosition),
         },
         { separator: true },
         { label: t('menu.addText'), icon: '📝', onClick: () => ctx.onAddText(ctx.canvasPosition) },

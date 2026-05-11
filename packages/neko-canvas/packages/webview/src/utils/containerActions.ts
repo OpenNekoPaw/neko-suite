@@ -292,3 +292,49 @@ function isDescendant(
 ): boolean {
   return getContainerDescendantIds(nodes, ancestorId).includes(candidateDescendantId);
 }
+
+// =============================================================================
+// Gallery-specific container helpers
+// =============================================================================
+
+export function addGalleryChild(
+  nodes: CanvasNode[],
+  galleryId: string,
+  childId: string,
+  metadata?: Record<string, unknown>,
+  insertIndex?: number,
+): ContainerActionResult {
+  const result = addContainerChild(nodes, galleryId, childId, insertIndex);
+  if (!result.changed) return result;
+
+  return {
+    ...result,
+    nodes: result.nodes.map((node) => {
+      if (node.id !== galleryId || !node.container) return node;
+      const placements = { ...(node.container.childPlacements ?? {}) };
+      placements[childId] = {
+        childId,
+        metadata: metadata ?? { label: '', generationStatus: 'idle' },
+      };
+      return { ...node, container: { ...node.container, childPlacements: placements } };
+    }),
+  };
+}
+
+export function removeGalleryChild(
+  nodes: CanvasNode[],
+  galleryId: string,
+  childId: string,
+): ContainerActionResult {
+  const result = removeContainerChild(nodes, galleryId, childId);
+  if (!result.changed) return result;
+
+  return {
+    ...result,
+    nodes: result.nodes.map((node) => {
+      if (node.id !== galleryId || !node.container?.childPlacements) return node;
+      const { [childId]: _, ...rest } = node.container.childPlacements;
+      return { ...node, container: { ...node.container, childPlacements: rest } };
+    }),
+  };
+}

@@ -1,6 +1,5 @@
 import type {
   CanvasNodeType,
-  GalleryCell,
   GalleryPreset,
   GeneratedImageVersion,
   PortDefinition,
@@ -28,7 +27,7 @@ interface BuildCanvasNodeOptions {
 
 type NodeDefaultSize = { width: number; height: number };
 
-const NODE_DEFAULT_SIZES: Record<CanvasNodeType, NodeDefaultSize> = {
+export const NODE_DEFAULT_SIZES: Record<CanvasNodeType, NodeDefaultSize> = {
   media: { width: 280, height: 200 },
   storyboard: { width: 240, height: 160 },
   annotation: { width: 200, height: 100 },
@@ -114,13 +113,6 @@ function inferGalleryPreset(value: unknown): GalleryPreset {
 
 function getNodeDefaultSize(type: CanvasNodeType): NodeDefaultSize {
   return NODE_DEFAULT_SIZES[type] ?? { width: 200, height: 100 };
-}
-
-function inferGenerationStatus(value: unknown): GalleryCell['generationStatus'] {
-  if (value === 'pending' || value === 'generating' || value === 'done' || value === 'error') {
-    return value;
-  }
-  return 'idle';
 }
 
 export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraft {
@@ -327,35 +319,6 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
     case 'gallery': {
       const galleryPreset = inferGalleryPreset(data.preset);
       const presetConfig = GALLERY_PRESET_CONFIGS[galleryPreset];
-      const defaultCells = presetConfig.labels.map((label, index) => ({
-        id: `cell-${Date.now()}-${index}`,
-        label,
-        generationStatus: 'idle' as const,
-      }));
-      const normalizedCells: GalleryCell[] = Array.isArray(data.cells)
-        ? data.cells.map((cell, index): GalleryCell => {
-            const raw = typeof cell === 'object' && cell !== null ? cell : {};
-            const generationHistory =
-              asObjectArray<GeneratedImageVersion>(
-                (raw as { generationHistory?: unknown }).generationHistory,
-              ) ?? DEFAULT_EMPTY_HISTORY;
-            const selectedCandidate = generationHistory.find((candidate) => candidate.selected);
-            return {
-              id: asString((raw as { id?: unknown }).id, `cell-${Date.now()}-${index}`),
-              label: asString((raw as { label?: unknown }).label, presetConfig.labels[index] ?? ''),
-              image:
-                asString((raw as { image?: unknown }).image) ||
-                selectedCandidate?.dataUrl ||
-                undefined,
-              prompt: asString((raw as { prompt?: unknown }).prompt) || undefined,
-              generationStatus: inferGenerationStatus(
-                (raw as { generationStatus?: unknown }).generationStatus,
-              ),
-              costumeLabel: asString((raw as { costumeLabel?: unknown }).costumeLabel) || undefined,
-              generationHistory,
-            };
-          })
-        : defaultCells;
       return applyCanvasNodePreset(
         {
           type,
@@ -369,10 +332,13 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             preset: galleryPreset,
             rows: asNumber(data.rows, presetConfig.rows),
             cols: asNumber(data.cols, presetConfig.cols),
-            cells: normalizedCells,
             globalPromptPrefix: asString(data.globalPromptPrefix) || undefined,
             characterId: asString(data.characterId) || undefined,
             characterName: asString(data.characterName) || undefined,
+            characterProfile:
+              typeof data.characterProfile === 'object' && data.characterProfile
+                ? data.characterProfile
+                : undefined,
           },
         },
         preset,

@@ -91,6 +91,7 @@ function ComposableNodeContent({
     onUpdateBinding: handleUpdateBinding,
     onSelectNode: context.onSelect,
     onAction: handleAction,
+    onRemoveChild: context.onRemoveContainerChild,
   };
 
   return (

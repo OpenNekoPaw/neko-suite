@@ -12,7 +12,7 @@
  * CSS classes injected by Tailwind preset plugin.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +35,8 @@ function isSeparator(item: MenuItem): item is MenuSeparator {
   return 'separator' in item && item.separator === true;
 }
 
+const MENU_GROUP_ATTR = 'data-neko-menu-group';
+
 // ── ContextMenu ──────────────────────────────────────────────────────────────
 
 export interface ContextMenuProps {
@@ -43,11 +45,16 @@ export interface ContextMenuProps {
   y: number;
   onClose: () => void;
   className?: string;
+  /** @internal Used to link parent and sub-menu portals for outside-click detection. */
+  menuGroupId?: string;
 }
 
-export function ContextMenu({ items, x, y, onClose, className }: ContextMenuProps) {
+export function ContextMenu({ items, x, y, onClose, className, menuGroupId }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
+  const ownId = useId();
+  const groupId = menuGroupId ?? ownId;
+  const isRoot = menuGroupId === undefined;
 
   // Adjust position to keep menu within viewport
   useEffect(() => {
@@ -62,12 +69,15 @@ export function ContextMenu({ items, x, y, onClose, className }: ContextMenuProp
     });
   }, [x, y]);
 
-  // Close on outside click (capture phase), Escape, scroll, blur
+  // Only the root menu registers outside-click / Escape / scroll listeners.
+  // Sub-menus are linked by the shared menuGroupId data attribute.
   useEffect(() => {
+    if (!isRoot) return;
+
     const handlePointerDown = (e: PointerEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
+      const target = e.target as Element | null;
+      if (target?.closest(`[${MENU_GROUP_ATTR}="${CSS.escape(groupId)}"]`)) return;
+      onClose();
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -86,7 +96,7 @@ export function ContextMenu({ items, x, y, onClose, className }: ContextMenuProp
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('blur', handleBlur);
     };
-  }, [onClose]);
+  }, [isRoot, groupId, onClose]);
 
   // Focus menu on mount for keyboard navigation
   useEffect(() => {
@@ -100,12 +110,13 @@ export function ContextMenu({ items, x, y, onClose, className }: ContextMenuProp
       style={{ left: pos.x, top: pos.y }}
       role="menu"
       tabIndex={-1}
+      {...{ [MENU_GROUP_ATTR]: groupId }}
     >
       {items.map((item, i) =>
         isSeparator(item) ? (
           <div key={i} className="neko-menu-sep" role="separator" />
         ) : (
-          <MenuItemRow key={i} item={item} onClose={onClose} />
+          <MenuItemRow key={i} item={item} onClose={onClose} menuGroupId={groupId} />
         ),
       )}
     </div>
@@ -119,9 +130,10 @@ export function ContextMenu({ items, x, y, onClose, className }: ContextMenuProp
 interface MenuItemRowProps {
   item: MenuAction;
   onClose: () => void;
+  menuGroupId: string;
 }
 
-function MenuItemRow({ item, onClose }: MenuItemRowProps) {
+function MenuItemRow({ item, onClose, menuGroupId }: MenuItemRowProps) {
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
@@ -190,7 +202,15 @@ function MenuItemRow({ item, onClose }: MenuItemRowProps) {
         hasSubmenu &&
         (() => {
           const { x, y } = getSubmenuPos();
-          return <ContextMenu items={item.submenu!} x={x} y={y} onClose={onClose} />;
+          return (
+            <ContextMenu
+              items={item.submenu!}
+              x={x}
+              y={y}
+              onClose={onClose}
+              menuGroupId={menuGroupId}
+            />
+          );
         })()}
     </div>
   );

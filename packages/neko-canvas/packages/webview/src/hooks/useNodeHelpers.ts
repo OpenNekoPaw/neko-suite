@@ -6,7 +6,13 @@
  */
 
 import { useCallback } from 'react';
-import type { CanvasNode, NkProjectType } from '@neko/shared';
+import type {
+  CanvasCreateCompositeRequest,
+  CanvasCreateCompositeResult,
+  CanvasNode,
+  ContainerChildPlacement,
+  NkProjectType,
+} from '@neko/shared';
 import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
 import { t } from '../i18n';
 import { buildCanvasNode } from '../utils/nodeFactory';
@@ -17,6 +23,8 @@ import { buildCanvasNode } from '../utils/nodeFactory';
 
 export interface UseNodeHelpersOptions {
   addNode: (node: Omit<CanvasNode, 'id'>) => string;
+  createComposite: (request: CanvasCreateCompositeRequest) => CanvasCreateCompositeResult | null;
+  updateNode: (id: string, updates: Partial<CanvasNode>) => void;
   nodeCount: number;
   reportAction: (action: string, label: string, detail?: string) => void;
 }
@@ -31,7 +39,7 @@ export interface UseNodeHelpersReturn {
   ) => void;
   addShotAt: (pos: { x: number; y: number }) => void;
   addSceneGroupAt: (pos: { x: number; y: number }) => void;
-  addGalleryAt: (pos: { x: number; y: number }) => void;
+  addGalleryAt: (pos: { x: number; y: number }, preset?: string) => void;
   addTableAt: (pos: { x: number; y: number }) => void;
   addScriptAt: (pos: { x: number; y: number }, scriptPath?: string, scriptTitle?: string) => void;
   addDocumentAt: (
@@ -61,7 +69,7 @@ export interface UseNodeHelpersReturn {
 // =============================================================================
 
 export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersReturn {
-  const { addNode, nodeCount, reportAction } = options;
+  const { addNode, createComposite, updateNode, nodeCount, reportAction } = options;
 
   const addTextAt = useCallback(
     (pos: { x: number; y: number }) => {
@@ -152,31 +160,57 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
   );
 
   const addGalleryAt = useCallback(
-    (pos: { x: number; y: number }) => {
-      const galleryPreset = 'character-3view' as const;
+    (pos: { x: number; y: number }, preset?: string) => {
+      const galleryPreset = (
+        preset && preset in GALLERY_PRESET_CONFIGS ? preset : 'character-3view'
+      ) as keyof typeof GALLERY_PRESET_CONFIGS;
       const config = GALLERY_PRESET_CONFIGS[galleryPreset];
-      const cells = config.labels.map((label, i) => ({
-        id: `cell-${Date.now()}-${i}`,
-        label,
-        generationStatus: 'idle' as const,
+
+      const children = config.labels.map((label) => ({
+        type: 'media' as const,
+        data: { assetPath: '', mediaType: 'image' },
+        _galleryMetadata: { label, generationStatus: 'idle' },
       }));
-      addNode(
-        buildCanvasNode({
-          type: 'gallery',
-          position: pos,
-          zIndex: nodeCount,
-          data: {
-            preset: galleryPreset,
-            rows: config.rows,
-            cols: config.cols,
-            cells,
+
+      const result = createComposite({
+        containerPreset: 'gallery.basic',
+        containerType: 'gallery',
+        position: pos,
+        data: {
+          preset: galleryPreset,
+          rows: config.rows,
+          cols: config.cols,
+        },
+        children: children.map(({ type, data }) => ({ type, data })),
+        autoLayout: true,
+      });
+
+      if (result) {
+        const placements: Record<string, ContainerChildPlacement> = {};
+        result.childIds.forEach((childId, i) => {
+          const meta = children[i];
+          if (meta) {
+            placements[childId] = {
+              childId,
+              metadata: meta._galleryMetadata,
+            };
+          }
+        });
+        updateNode(result.containerId, {
+          container: {
+            policy: 'gallery',
+            childIds: result.childIds,
+            layout: { mode: 'gallery' as const },
+            acceptedChildren: { nodeTypes: ['media'] },
+            deleteBehavior: 'delete-subtree' as const,
+            childPlacements: placements,
           },
-          preset: 'gallery.basic',
-        }),
-      );
+        });
+      }
+
       reportAction('addNode', 'Add gallery');
     },
-    [addNode, nodeCount, reportAction],
+    [createComposite, updateNode, reportAction],
   );
 
   const addTableAt = useCallback(

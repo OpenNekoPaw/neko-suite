@@ -37,6 +37,7 @@ export interface NodeRendererContext extends NodeRendererCommonProps {
   onAssignSelectedShotsToScene?: (sceneId: string) => void;
   onAutoLayoutSceneShots?: (sceneId: string) => void;
   onBatchGenerateSceneShots?: (sceneId: string) => void;
+  onRemoveContainerChild?: (containerId: string, childId: string) => void;
 }
 
 export type NodeRenderer = (context: NodeRendererContext) => React.ReactNode;

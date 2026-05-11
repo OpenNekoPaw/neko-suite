@@ -792,6 +792,36 @@ function ComposableCollectionEditor({
 }) {
   const editorBlocks = getCollectionItemEditorBlocks(item.collection);
 
+  const handleAddItem = useCallback(() => {
+    const newItem: Record<string, unknown> = {
+      id: `cell-${Date.now()}-${item.items.length}`,
+      label: '',
+      generationStatus: 'idle',
+    };
+    const nextArray = [...item.items, newItem];
+    onUpdateData(
+      writeComposablePropertyBinding(
+        node,
+        { path: item.collection.source.path, mode: 'readwrite' },
+        nextArray,
+      ),
+    );
+  }, [node, item, onUpdateData]);
+
+  const handleRemoveItem = useCallback(
+    (index: number) => {
+      const nextArray = item.items.filter((_, i) => i !== index);
+      onUpdateData(
+        writeComposablePropertyBinding(
+          node,
+          { path: item.collection.source.path, mode: 'readwrite' },
+          nextArray,
+        ),
+      );
+    },
+    [node, item, onUpdateData],
+  );
+
   return (
     <CollapsibleSection title={item.label} defaultExpanded={false}>
       <div className="space-y-2">
@@ -802,7 +832,18 @@ function ComposableCollectionEditor({
         ) : (
           item.items.map((entry, index) => (
             <div key={readCollectionKey(entry, item.collection, index)} className="space-y-1">
-              <FieldLabel>{readCollectionLabel(entry, item.collection, index)}</FieldLabel>
+              <div className="flex items-center justify-between">
+                <FieldLabel>{readCollectionLabel(entry, item.collection, index)}</FieldLabel>
+                <button
+                  type="button"
+                  className="text-[10px] px-1 rounded hover:bg-[var(--neko-bg-hover)]"
+                  style={{ color: 'var(--neko-fg-secondary)' }}
+                  onClick={() => handleRemoveItem(index)}
+                  title={t('collection.removeItem')}
+                >
+                  ✕
+                </button>
+              </div>
               {editorBlocks.map((block) => (
                 <CollectionItemField
                   key={block.id}
@@ -817,6 +858,14 @@ function ComposableCollectionEditor({
             </div>
           ))
         )}
+        <button
+          type="button"
+          className="w-full text-[10px] py-1 rounded border border-dashed hover:bg-[var(--neko-bg-hover)]"
+          style={{ color: 'var(--neko-fg-secondary)', borderColor: 'var(--neko-border)' }}
+          onClick={handleAddItem}
+        >
+          + {t('collection.addItem')}
+        </button>
       </div>
     </CollapsibleSection>
   );

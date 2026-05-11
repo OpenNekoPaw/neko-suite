@@ -25,7 +25,7 @@ export interface GenerationParams {
   shotScale?: ShotScale;
   cameraMovement?: CameraMovement;
   cameraAngle?: CameraAngle;
-  /** GalleryCell references for IP-Adapter: [nodeId:cellId, ...] */
+  /** Gallery child node references for IP-Adapter: [nodeId:childNodeId, ...] */
   referenceRefs?: string[];
   count?: number;
   /** ControlNet mode (E6: depth/canny/pose/...) */
@@ -42,8 +42,8 @@ export interface GenerationParams {
 
 export interface GenerationPanelTarget {
   nodeId: string;
-  /** cellId is set when generating for a GalleryNode cell */
-  cellId?: string;
+  /** childNodeId is set when generating for a gallery child node */
+  childNodeId?: string;
   /** Pre-filled values from shot data */
   initialPrompt?: string;
   initialShotScale?: ShotScale;
@@ -184,7 +184,7 @@ export function GenerationPromptPanel({
     setEditInstruction('');
     setControlStrength(0.7);
     setVideoDuration(5);
-  }, [target?.nodeId, target?.cellId]);
+  }, [target?.nodeId, target?.childNodeId]);
 
   // Focus prompt textarea when panel opens
   useEffect(() => {
@@ -263,7 +263,7 @@ export function GenerationPromptPanel({
         >
           <span className="font-medium text-sm" style={{ color: 'var(--neko-fg)' }}>
             生成图像
-            {target.cellId && (
+            {target.childNodeId && (
               <span className="ml-2 text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
                 · 单格模式
               </span>

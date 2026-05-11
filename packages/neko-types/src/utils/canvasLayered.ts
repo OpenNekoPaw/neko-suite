@@ -83,6 +83,8 @@ export function getContainerPolicyName(node: CanvasNode): ContainerPolicyName | 
       return 'group';
     case 'artboard':
       return 'artboard';
+    case 'table':
+      return 'table';
     default:
       return undefined;
   }

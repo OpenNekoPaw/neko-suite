@@ -248,8 +248,8 @@ describe('canvasAgentOperations', () => {
     expect(serialized).not.toContain('currentTime');
   });
 
-  it('extracts composable nodes with binding summaries', () => {
-    const migratedGallery = hydrateCanvasNodePreview({
+  it('extracts composable gallery container with binding summaries', () => {
+    const galleryContainer = hydrateCanvasNodePreview({
       ...buildCanvasNode({
         type: 'gallery',
         position: { x: 0, y: 0 },
@@ -257,37 +257,23 @@ describe('canvasAgentOperations', () => {
         preset: 'gallery.basic',
         data: {
           characterName: 'Mika',
-          cells: [
-            {
-              id: 'front',
-              label: 'front',
-              image: 'assets/front.png',
-              generationStatus: 'done',
-              generationHistory: [
-                {
-                  id: 'front-v1',
-                  dataUrl: 'blob:runtime-front',
-                  prompt: 'front',
-                  timestamp: 1,
-                  selected: true,
-                  assetId: 'asset-front',
-                },
-              ],
-            },
-          ],
+          preset: 'character-3view',
+          rows: 1,
+          cols: 3,
         },
       }),
       id: 'gallery-1',
     } as CanvasNode);
-    const result = extractStructuredCanvasContent([migratedGallery], {
+    const result = extractStructuredCanvasContent([galleryContainer], {
       nodeIds: ['gallery-1'],
       includeChildren: false,
       format: 'json',
     });
 
     const gallerySummary = result.nodes.find((summary) => summary.id === 'gallery-1');
-    expect(gallerySummary?.bindings?.some((binding) => binding.path === '/cells')).toBe(true);
-    expect(gallerySummary?.preview?.thumbnailVariantId).toBe('front-v1');
-    expect(JSON.stringify(result)).not.toContain('blob:runtime-front');
+    expect(gallerySummary).toBeDefined();
+    expect(gallerySummary?.bindings?.some((binding) => binding.path === '/characterName')).toBe(
+      true,
+    );
   });
 });

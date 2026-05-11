@@ -183,11 +183,17 @@ export function createCanvasComposite(
       ? 'sequence'
       : containerPreset.containerPolicy === 'table'
         ? 'table'
-        : 'grid';
+        : containerPreset.containerPolicy === 'gallery'
+          ? 'gallery'
+          : 'grid';
   const nextNodes =
     request.autoLayout === false
       ? composite.nodes
-      : autoArrangeContainer(composite.nodes, { containerId, mode: layoutMode });
+      : autoArrangeContainer(composite.nodes, {
+          containerId,
+          mode: layoutMode,
+          resizeChildren: layoutMode === 'gallery',
+        });
 
   return {
     result: {

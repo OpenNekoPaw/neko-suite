@@ -43,6 +43,7 @@ export const en = {
   'menu.addScene': 'Add Scene',
   'menu.addShot': 'Add Shot',
   'menu.addGallery': 'Add Gallery',
+  'menu.addTable': 'Add Table',
   'menu.importFile': 'Import File...',
   'menu.addImage': 'Add Image',
   'menu.addVideo': 'Add Video',
@@ -254,7 +255,11 @@ export const en = {
   'preset.gallery.character': 'Character',
   'preset.gallery.promptPrefix': 'Prompt Prefix',
   'preset.gallery.cells': 'Cells',
-  'preset.gallery.noCells': 'No cells',
+  'preset.gallery.noCells': 'No views (drag media here)',
+  'preset.gallery.characterProfile': 'Character Profile',
+  'preset.gallery.profileDescription': 'Description',
+  'preset.gallery.profileTags': 'Tags',
+  'preset.gallery.profileReference': 'Reference Image',
   'preset.gallery.cellLabel': 'Label',
   'preset.gallery.cellPrompt': 'Prompt',
   'preset.gallery.cellPreview': 'Preview',
@@ -274,4 +279,7 @@ export const en = {
   'gen.editInstruction': 'Edit instruction (optional)',
   'gen.generateVideo': 'Generate Video',
   'gen.videoDuration': 'Duration',
+  // Collection editor
+  'collection.addItem': 'Add',
+  'collection.removeItem': 'Remove',
 } as const satisfies MessageBundle;

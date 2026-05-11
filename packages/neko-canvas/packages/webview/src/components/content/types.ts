@@ -13,6 +13,7 @@ export interface NodeContentRenderContext {
   onUpdateBinding?: (update: FieldBindingUpdate) => void;
   onSelectNode?: (nodeId: string, multi: boolean) => void;
   onAction?: (action: string, payload?: Record<string, unknown>) => void;
+  onRemoveChild?: (containerId: string, childId: string) => void;
 }
 
 export interface ContainerRendererProps {

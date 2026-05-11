@@ -71,7 +71,8 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
     nodeType: 'gallery',
     creationMode: 'composable',
     label: 'Gallery Basic',
-    description: 'Composable Gallery collection bound to cell data and candidate previews.',
+    description: 'Composable Gallery container for character image management with media children.',
+    containerPolicy: 'gallery',
     deriveTargets: ['gallery.basic', 'shot.basic', 'media.basic', 'annotation.basic', 'text.basic'],
   },
   {

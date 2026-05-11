@@ -33,7 +33,7 @@ export interface GenerationParams {
 
 export interface EnqueueOptions {
   nodeId: string;
-  cellId?: string;
+  childNodeId?: string;
   params: GenerationParams;
   onProgress: (status: GenerationStatus, dataUrl?: string) => void;
 }
@@ -211,12 +211,12 @@ export class BatchGenerationScheduler implements vscode.Disposable {
 
     // Build generation context — spread all params so ControlNet/IP-Adapter
     // fields from the webview (controlMode, controlStrength, etc.) pass through.
-    // nodeId/cellId are applied AFTER the spread so params cannot redirect the
+    // nodeId/childNodeId are applied AFTER the spread so params cannot redirect the
     // request to a different target node.
     const generationInput = {
       ...task.params,
       nodeId: task.nodeId,
-      cellId: task.cellId,
+      childNodeId: task.childNodeId,
       count: task.params.count ?? 1,
     };
 

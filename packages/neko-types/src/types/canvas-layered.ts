@@ -138,7 +138,7 @@ export interface ChildNodeSlotFilter {
   roles?: string[];
 }
 
-export type ContainerPolicyName = 'scene' | 'group' | 'artboard' | (string & {});
+export type ContainerPolicyName = 'scene' | 'group' | 'artboard' | 'gallery' | (string & {});
 
 export type ContainerLayoutMode = 'manual' | 'grid' | 'sequence' | 'stack' | 'table' | 'gallery';
 

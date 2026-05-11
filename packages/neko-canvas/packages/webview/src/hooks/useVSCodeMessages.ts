@@ -27,6 +27,7 @@ import {
   normalizeImportedGeneratedAsset,
   type ImportedGeneratedAssetPayload,
 } from '../utils/importedGeneratedAsset';
+import { migrateGalleryV1ToContainer } from '../utils/galleryMigration';
 import { normalizeScriptScenes } from '../utils/scriptScenes';
 
 // =============================================================================
@@ -42,7 +43,7 @@ export type VSCodeAPI = {
 
 export interface GenerationProgressPayload {
   nodeId: string;
-  cellId?: string;
+  childNodeId?: string;
   status: 'pending' | 'generating' | 'done' | 'error';
   dataUrl?: string;
 }
@@ -82,7 +83,7 @@ export interface UseVSCodeMessagesOptions {
   updateBlock?: (request: CanvasUpdateBlockRequest) => unknown;
   extractStructuredContent?: (request: CanvasExtractStructuredContentRequest) => unknown;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
-  onUpdateNodeImage?: (nodeId: string, imageData: string, cellId?: string) => void;
+  onUpdateNodeImage?: (nodeId: string, imageData: string, childNodeId?: string) => void;
 }
 
 function withOperationSource<T>(source: OperationSource, run: () => T): T {
@@ -214,10 +215,19 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
       const handleMessage = (event: MessageEvent) => {
         const message = event.data;
         switch (message.type) {
-          case 'update':
-            setCanvasData(message.data ? (message.data as CanvasData) : defaultCanvasData);
+          case 'update': {
+            let canvasData = message.data ? (message.data as CanvasData) : defaultCanvasData;
+            const migrationResult = migrateGalleryV1ToContainer(
+              canvasData.nodes,
+              () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            );
+            if (migrationResult.migrated) {
+              canvasData = { ...canvasData, nodes: migrationResult.nodes };
+            }
+            setCanvasData(canvasData);
             setIsReady(true);
             break;
+          }
           case 'keyboardAction':
             keyboardActionRef.current(message.action as string);
             break;
@@ -268,7 +278,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           case 'generationProgress':
             onGenerationProgressRef.current?.({
               nodeId: message.nodeId as string,
-              cellId: message.cellId as string | undefined,
+              childNodeId: message.childNodeId as string | undefined,
               status: message.status as GenerationProgressPayload['status'],
               dataUrl: message.dataUrl as string | undefined,
             });
@@ -451,7 +461,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             onUpdateNodeImageRef.current?.(
               message.nodeId as string,
               message.imageData as string,
-              message.cellId as string | undefined,
+              message.childNodeId as string | undefined,
             );
             break;
         }

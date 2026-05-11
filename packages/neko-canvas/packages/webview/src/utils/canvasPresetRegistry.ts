@@ -285,73 +285,62 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           ],
         },
         {
-          id: 'gallery-cells',
-          layout: 'gallery',
+          id: 'gallery-profile',
+          layout: 'stack',
+          visibleWhen: 'selected',
+          collapsible: true,
+          defaultCollapsed: true,
+          title: 'preset.gallery.characterProfile',
           blocks: [
+            fieldBlock(
+              'gallery-profile-desc',
+              'textarea',
+              '/characterProfile/description',
+              'preset.gallery.profileDescription',
+            ),
+            fieldBlock(
+              'gallery-profile-tags',
+              'tag-list',
+              '/characterProfile/tags',
+              'preset.gallery.profileTags',
+            ),
+            fieldBlock(
+              'gallery-profile-ref',
+              'input',
+              '/characterProfile/referenceAssetId',
+              'preset.gallery.profileReference',
+            ),
+          ],
+        },
+        {
+          id: 'gallery-content',
+          layout: 'stack',
+          childSlots: [
             {
-              id: 'gallery-cell-collection',
-              kind: 'collection',
-              label: 'preset.gallery.cells',
-              collection: {
-                id: 'gallery-cells',
-                source: { path: '/cells', valueType: 'array' },
-                itemKeyPath: '/id',
-                itemLabelPath: '/label',
-                itemPreviewPath: '/image',
-                itemBlocks: [
-                  fieldBlock('gallery-cell-label', 'input', '/label', 'preset.gallery.cellLabel'),
-                  fieldBlock(
-                    'gallery-cell-prompt',
-                    'textarea',
-                    '/prompt',
-                    'preset.gallery.cellPrompt',
-                  ),
-                  fieldBlock('gallery-cell-image', 'input', '/image', 'preset.gallery.cellPreview'),
-                ],
-                layout: 'gallery',
-                emptyLabel: 'preset.gallery.noCells',
-              },
-              capabilities: [
-                {
-                  kind: 'collection-preview',
-                  collection: { path: '/cells', valueType: 'array' },
-                  itemPreview: { path: '/image', valueType: 'asset' },
-                },
-              ],
+              id: 'gallery-children',
+              layout: 'gallery',
+              summaryRole: 'generation-candidate',
+              emptyLabel: 'preset.gallery.noCells',
             },
           ],
         },
       ],
     }),
+    createContainer: () => ({
+      policy: 'gallery' as const,
+      childIds: [],
+      layout: { mode: 'gallery' as const },
+      acceptedChildren: { nodeTypes: ['media'] },
+      deleteBehavior: 'delete-subtree' as const,
+    }),
     createPreview: (node) => {
       const data = node.type === 'gallery' ? node.data : undefined;
-      const selectedCell =
-        data?.cells.find((cell) =>
-          cell.generationHistory?.some((candidate) => candidate.selected),
-        ) ?? data?.cells.find((cell) => cell.image);
-      const selectedCandidate = selectedCell?.generationHistory?.find(
-        (candidate) => candidate.selected,
-      );
+      const childCount = getDraftContainerChildIds(node).length;
       return {
         title: data?.characterName ?? 'Gallery',
         subtitle: data?.preset,
         role: 'collection',
-        thumbnailVariantId: selectedCandidate?.id ?? selectedCell?.id,
-        metadata: selectedCell
-          ? {
-              selectedCellId: selectedCell.id,
-              selectedAssetId: selectedCandidate?.assetId,
-            }
-          : undefined,
-        badges: data ? [{ label: `${data.cells.length} cells`, tone: 'info' }] : undefined,
-        capabilities: [
-          {
-            kind: 'collection-preview',
-            collection: { path: '/cells', valueType: 'array' },
-            itemPreview: { path: '/image', valueType: 'asset' },
-            selectedItem: { path: '/cells', valueType: 'array' },
-          },
-        ],
+        badges: [{ label: `${childCount} cells`, tone: 'info' as const }],
       };
     },
     createPorts: () => GALLERY_NODE_PORTS,
@@ -405,7 +394,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     createPreview: (node) => {
       const data = node.type === 'media' ? node.data : undefined;
       return {
-        title: data?.assetPath || 'Media',
+        title: extractBasename(data?.assetPath) || 'Media',
         subtitle: data?.mediaType,
         role: getMediaPreviewRole(node),
         thumbnailVariantId: data?.thumbnailPath,
@@ -739,4 +728,14 @@ function areValuesEqual(left: unknown, right: unknown): boolean {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function extractBasename(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  try {
+    const url = new URL(path);
+    return decodeURIComponent(url.pathname.split('/').pop() ?? path);
+  } catch {
+    return path.split('/').pop() ?? path;
+  }
 }

@@ -41,6 +41,13 @@ const BUILT_IN_CONTAINER_POLICIES: ContainerPolicy[] = [
     layoutMode: 'table',
     allowNestedContainers: true,
   },
+  {
+    name: 'gallery',
+    acceptedNodeTypes: ['media'],
+    deleteBehavior: 'delete-subtree',
+    layoutMode: 'grid',
+    allowNestedContainers: false,
+  },
 ];
 
 export function createBuiltInContainerPolicyRegistry(): ContainerPolicyRegistry {

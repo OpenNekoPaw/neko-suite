@@ -9,8 +9,8 @@ import {
 import { buildCanvasNode } from './nodeFactory';
 import { hydrateCanvasNodePreview, refreshCanvasNodePreview } from './canvasPresetRegistry';
 
-describe('nodeFactory gallery normalization', () => {
-  it('restores gallery cell generation history and selected candidate image', () => {
+describe('nodeFactory gallery container', () => {
+  it('creates gallery node without inline cells', () => {
     const node = buildCanvasNode({
       type: 'gallery',
       position: { x: 0, y: 0 },
@@ -18,42 +18,39 @@ describe('nodeFactory gallery normalization', () => {
       data: {
         preset: 'character-3view',
         rows: 1,
-        cols: 1,
-        cells: [
-          {
-            id: 'cell-1',
-            label: 'front',
-            generationStatus: 'done',
-            generationHistory: [
-              {
-                id: 'v-1',
-                dataUrl: 'data:image/png;base64,aaa',
-                prompt: 'first',
-                timestamp: 1,
-                selected: false,
-              },
-              {
-                id: 'v-2',
-                dataUrl: 'data:image/png;base64,bbb',
-                prompt: 'second',
-                timestamp: 2,
-                selected: true,
-              },
-            ],
-          },
-        ],
+        cols: 3,
       },
     });
 
     expect(node.type).toBe('gallery');
-    if (node.type !== 'gallery') {
-      throw new Error('Expected gallery node');
-    }
     const galleryNode = node as GalleryCanvasNode;
+    expect(galleryNode.data.preset).toBe('character-3view');
+    expect(galleryNode.data.cols).toBe(3);
+    expect(galleryNode.data.rows).toBe(1);
+    expect(galleryNode.data.cells).toBeUndefined();
+  });
 
-    expect(galleryNode.data.cells[0]?.generationHistory).toHaveLength(2);
-    expect(galleryNode.data.cells[0]?.image).toBe('data:image/png;base64,bbb');
-    expect(galleryNode.data.cells[0]?.generationHistory?.[1]?.selected).toBe(true);
+  it('preserves characterProfile data', () => {
+    const node = buildCanvasNode({
+      type: 'gallery',
+      position: { x: 0, y: 0 },
+      zIndex: 0,
+      data: {
+        preset: 'character-3view',
+        rows: 1,
+        cols: 3,
+        characterProfile: {
+          description: 'A tall elf',
+          tags: ['elf', 'tall'],
+        },
+      },
+    });
+
+    const galleryNode = node as GalleryCanvasNode;
+    expect(galleryNode.data.characterProfile).toEqual({
+      description: 'A tall elf',
+      tags: ['elf', 'tall'],
+    });
   });
 });
 
@@ -186,7 +183,7 @@ describe('nodeFactory composable presets', () => {
     });
   });
 
-  it('applies the migrated gallery preset with collection binding metadata', () => {
+  it('applies the migrated gallery preset with childSlots and container metadata', () => {
     const node = buildCanvasNode({
       type: 'gallery',
       position: { x: 0, y: 0 },
@@ -194,27 +191,22 @@ describe('nodeFactory composable presets', () => {
       preset: 'gallery.basic',
       data: {
         characterName: 'Mika',
-        cells: [
-          {
-            id: 'front',
-            label: 'front',
-            image: 'assets/front.png',
-            generationStatus: 'done',
-          },
-        ],
+        preset: 'character-3view',
+        rows: 1,
+        cols: 3,
       },
     });
 
     expect(node.type).toBe('gallery');
     expect(node.preset).toBe('gallery.basic');
-    const cellsBlock = node.content?.sections
-      ?.find((section) => section.id === 'gallery-cells')
-      ?.blocks?.find((block) => block.id === 'gallery-cell-collection');
-    expect(cellsBlock?.collection?.source.path).toBe('/cells');
+    const contentSection = node.content?.sections?.find((s) => s.id === 'gallery-content');
+    const childSlot = contentSection?.childSlots?.find((s) => s.id === 'gallery-children');
+    expect(childSlot).toBeDefined();
+    expect(childSlot?.layout).toBe('gallery');
+    expect(node.container?.policy).toBe('gallery');
     expect(node.preview).toMatchObject({
       title: 'Mika',
       role: 'collection',
-      thumbnailVariantId: 'front',
     });
   });
 
@@ -282,27 +274,19 @@ describe('nodeFactory composable presets', () => {
         preset: 'gallery.basic',
         data: {
           characterName: 'Mika',
-          cells: [
-            {
-              id: 'front',
-              label: 'front',
-              image: 'blob:runtime-cell',
-              generationHistory: [
-                {
-                  id: 'front-v2',
-                  dataUrl: 'blob:runtime-candidate',
-                  prompt: 'front',
-                  timestamp: 2,
-                  selected: true,
-                  assetId: 'asset-front',
-                },
-              ],
-              generationStatus: 'done',
-            },
-          ],
+          preset: 'character-3view',
+          rows: 1,
+          cols: 3,
         },
       }),
       id: 'gallery-1',
+      container: {
+        policy: 'gallery',
+        childIds: ['child-1', 'child-2'],
+        layout: { mode: 'gallery' },
+        acceptedChildren: { nodeTypes: ['media'] },
+        deleteBehavior: 'delete-subtree',
+      },
     } as CanvasNode);
     const media = hydrateCanvasNodePreview({
       ...buildCanvasNode({
@@ -321,19 +305,15 @@ describe('nodeFactory composable presets', () => {
 
     expect(gallery.preview).toMatchObject({
       nodeId: 'gallery-1',
-      thumbnailVariantId: 'front-v2',
-      metadata: {
-        selectedCellId: 'front',
-        selectedAssetId: 'asset-front',
-      },
+      title: 'Mika',
+      role: 'collection',
     });
     expect(media.preview).toMatchObject({
       nodeId: 'media-1',
-      title: 'assets/ref.png',
+      title: 'ref.png',
       thumbnailVariantId: 'assets/thumb.png',
       role: 'image',
     });
-    expect(JSON.stringify(gallery.preview)).not.toContain('blob:runtime');
     expect(JSON.stringify(media.preview)).not.toContain('blob:runtime');
   });
 
@@ -357,7 +337,7 @@ describe('nodeFactory composable presets', () => {
       binding: { path: '/assetPath' },
     });
     expect(node.preview).toMatchObject({
-      title: 'assets/ref.png',
+      title: 'ref.png',
       subtitle: 'image',
       role: 'image',
     });

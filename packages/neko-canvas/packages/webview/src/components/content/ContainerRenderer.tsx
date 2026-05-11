@@ -54,11 +54,15 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
           {section.childSlots?.map((slot) => {
             const childIds = resolveSlotChildIds(context.node, slot.childIds);
             const tableColumns = context.node.container?.layout?.columns;
+            const galleryCols =
+              slot.layout === 'gallery'
+                ? ((context.node.data as { cols?: number }).cols ?? 3)
+                : undefined;
             return (
               <div
                 key={slot.id}
                 className={
-                  slot.layout === 'table'
+                  slot.layout === 'table' || slot.layout === 'gallery'
                     ? 'grid gap-1.5'
                     : slot.layout === 'grid'
                       ? 'grid grid-cols-3 gap-1.5'
@@ -67,7 +71,9 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
                 style={
                   slot.layout === 'table'
                     ? { gridTemplateColumns: `repeat(${tableColumns ?? 3}, 1fr)` }
-                    : undefined
+                    : slot.layout === 'gallery'
+                      ? { gridTemplateColumns: `repeat(${galleryCols}, 1fr)` }
+                      : undefined
                 }
               >
                 {childIds.length === 0 ? (
@@ -78,7 +84,17 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
                   childIds.map((childId) => {
                     const child = context.allNodes.find((candidate) => candidate.id === childId);
                     return child ? (
-                      <ChildNodeCard key={child.id} child={child} onSelect={context.onSelectNode} />
+                      <ChildNodeCard
+                        key={child.id}
+                        child={child}
+                        parentNode={context.node}
+                        onSelect={context.onSelectNode}
+                        onRemove={
+                          context.onRemoveChild
+                            ? (id) => context.onRemoveChild?.(context.node.id, id)
+                            : undefined
+                        }
+                      />
                     ) : null;
                   })
                 )}
