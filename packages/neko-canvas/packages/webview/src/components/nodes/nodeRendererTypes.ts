@@ -34,9 +34,6 @@ export interface NodeRendererContext extends NodeRendererCommonProps {
   onDocumentOpen?: (docPath: string) => void;
   onCanvasEmbedOpen?: (canvasPath: string) => void;
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
-  onAssignSelectedShotsToScene?: (sceneId: string) => void;
-  onAutoLayoutSceneShots?: (sceneId: string) => void;
-  onBatchGenerateSceneShots?: (sceneId: string) => void;
   onRemoveContainerChild?: (containerId: string, childId: string) => void;
 }
 

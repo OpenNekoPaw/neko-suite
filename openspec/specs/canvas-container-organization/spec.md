@@ -1,7 +1,10 @@
 # canvas-container-organization Specification
 
 ## Purpose
-TBD - created by archiving change canvas-block-container-architecture. Update Purpose after archive.
+Defines Canvas container membership, policy-driven layout, validation
+invariants, and typed container actions for organizing nested and heterogeneous
+Canvas nodes without duplicating child business data.
+
 ## Requirements
 ### Requirement: Canvas containers use generic container capability
 The system SHALL represent Canvas organization through a generic container capability with child IDs, policy name, layout state, and accepted child constraints. Scene, Group, and Artboard MUST be built-in policies over this capability rather than separate containment models. Migrated Webview UI paths for Scene and Group MUST treat the generic container capability as canonical.
@@ -95,3 +98,37 @@ The system SHALL validate container invariants on migration, save, import, clipb
 #### Scenario: Dangling child ID is repaired or reported
 - **WHEN** a file loads with a container child ID that has no matching node
 - **THEN** migration or validation reports the dangling ID and prevents it from silently corrupting container behavior
+
+### Requirement: Container actions are declared and dispatched through typed descriptors
+The system SHALL declare container-specific UI actions through typed `ContainerActionDescriptor` metadata and dispatch them through a typed `ContainerActionContext`. Container rendering MUST NOT hardcode Scene, Gallery, or Table action button branches in the generic content dispatcher.
+
+#### Scenario: Scene action bar uses descriptors
+- **WHEN** a Scene container renders assign-selected, auto-layout, or batch-generate controls
+- **THEN** those controls are derived from `ContainerActionDescriptor` metadata and invoke the matching typed dispatcher action
+
+#### Scenario: Gallery batch generate reuses dispatcher
+- **WHEN** a Gallery container renders a generate-all control
+- **THEN** it uses the same `batch-generate` descriptor and dispatcher path as other compatible containers
+
+#### Scenario: Table actions update table data through declared IDs
+- **WHEN** a Table container renders add-row, add-column, remove-row, or remove-column controls
+- **THEN** each control maps to a typed `ContainerActionId` and updates table data through the container action dispatcher
+
+#### Scenario: Batch generate sends existing agent payload
+- **WHEN** a container `batch-generate` action is invoked
+- **THEN** the dispatcher sends `{ type: 'sendToAgent', nodeIds: child node ids, action: 'batch' }` through the existing Webview postMessage path
+
+### Requirement: Card and container actions share enum condition evaluation
+The system SHALL evaluate card and container action availability with the enum `ActionCondition` values `always`, `has-selection`, `has-preview`, `not-generating`, and `has-asset`. Action descriptors MUST NOT embed function predicates or untyped callbacks.
+
+#### Scenario: Container not-generating checks child nodes
+- **WHEN** a container action has `enabledWhen: 'not-generating'`
+- **THEN** the evaluator checks the container child nodes and disables the action while any child is generating
+
+#### Scenario: Card has-preview checks resolved preview source
+- **WHEN** a card action has `enabledWhen: 'has-preview'`
+- **THEN** the evaluator uses the card policy's resolved `CardPreviewSource` before falling back to legacy node preview metadata
+
+#### Scenario: Descriptor remains serializable
+- **WHEN** container or card action metadata is created by a preset or policy
+- **THEN** the descriptor contains only typed IDs, labels, visibility fields, enum conditions, and serializable metadata

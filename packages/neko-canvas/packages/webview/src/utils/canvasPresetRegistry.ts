@@ -200,20 +200,6 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
             fieldBlock('scene-time-of-day', 'input', '/timeOfDay', 'preset.scene.time'),
           ],
         },
-        {
-          id: 'scene-actions',
-          layout: 'row',
-          visibleWhen: 'selected',
-          blocks: [
-            actionBlock(
-              'scene-assign-selected',
-              'preset.scene.assignSelected',
-              'assignSelectedShots',
-            ),
-            actionBlock('scene-auto-layout', 'preset.scene.autoLayout', 'autoLayoutShots'),
-            actionBlock('scene-batch-generate', 'preset.scene.batchGenerate', 'batchGenerateShots'),
-          ],
-        },
       ],
       childSlots: [
         {
@@ -619,15 +605,6 @@ function selectBlock(
     label,
     binding: { path, valueType: 'string' },
     metadata: { options: [...options] },
-  };
-}
-
-function actionBlock(id: string, label: string, action: string): CanvasBlock {
-  return {
-    id,
-    kind: 'button',
-    label,
-    metadata: { action },
   };
 }
 

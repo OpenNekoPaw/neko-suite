@@ -82,12 +82,6 @@ export interface InfiniteCanvasProps {
   // ── ModelNode callbacks ────────────────────────────────────────────────────
   /** Called to check if a model is installed */
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
-  /** Called when selected shots should be attached to a scene */
-  onAssignSelectedShotsToScene?: (sceneId: string) => void;
-  /** Called to auto-layout the shots inside a scene */
-  onAutoLayoutSceneShots?: (sceneId: string) => void;
-  /** Called to batch-generate all shots inside a scene */
-  onBatchGenerateSceneShots?: (sceneId: string) => void;
   /** Called to remove a child node from its container */
   onRemoveContainerChild?: (containerId: string, childId: string) => void;
 }
@@ -125,9 +119,6 @@ export function InfiniteCanvas({
   onDocumentOpen,
   onCanvasEmbedOpen,
   onModelCheckInstalled,
-  onAssignSelectedShotsToScene,
-  onAutoLayoutSceneShots,
-  onBatchGenerateSceneShots,
   onRemoveContainerChild,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -283,9 +274,6 @@ export function InfiniteCanvas({
               onDocumentOpen,
               onCanvasEmbedOpen,
               onModelCheckInstalled,
-              onAssignSelectedShotsToScene,
-              onAutoLayoutSceneShots,
-              onBatchGenerateSceneShots,
               onRemoveContainerChild,
               selectedNodeIds,
             });

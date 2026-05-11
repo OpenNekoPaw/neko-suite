@@ -119,7 +119,7 @@ describe('PropertyPanel node properties registry', () => {
     const items = enumerateComposablePropertyItems(node);
     const actions = items.filter((item) => item.kind === 'action').map((item) => item.action);
 
-    expect(actions).toEqual(['assignSelectedShots', 'autoLayoutShots', 'batchGenerateShots']);
+    expect(actions).toEqual(['assign-selected-children', 'auto-layout', 'batch-generate']);
   });
 });
 

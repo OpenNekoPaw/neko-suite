@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { CanvasData, CanvasDroppedAsset, CanvasViewport } from '@neko/shared';
-import { getContainerChildIds } from '@neko/shared';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
@@ -100,8 +99,6 @@ export function CanvasApp() {
     resizeNodeEnd,
     rotateNode,
     rotateNodeEnd,
-    assignShotsToScene,
-    autoLayoutSceneShots,
     removeChildFromContainer,
     selectNodes,
     groupNodes,
@@ -552,38 +549,6 @@ export function CanvasApp() {
     vscode?.postMessage({ type: 'checkModelInstalled', nodeId, modelPath });
   }, []);
 
-  const handleAssignSelectedShotsToScene = useCallback(
-    (sceneId: string) => {
-      const shotIds = nodes
-        .filter((node) => selectedNodeIds.includes(node.id) && node.type === 'shot')
-        .map((node) => node.id);
-      if (shotIds.length === 0) return;
-      assignShotsToScene(sceneId, shotIds, true);
-    },
-    [assignShotsToScene, nodes, selectedNodeIds],
-  );
-
-  const handleAutoLayoutSceneShots = useCallback(
-    (sceneId: string) => {
-      autoLayoutSceneShots(sceneId);
-    },
-    [autoLayoutSceneShots],
-  );
-
-  const handleBatchGenerateSceneShots = useCallback(
-    (sceneId: string) => {
-      const target = nodes.find((node) => node.id === sceneId);
-      const childIds = target ? getContainerChildIds(target) : [];
-      if (!target || target.type !== 'scene' || childIds.length === 0) return;
-      vscode?.postMessage({
-        type: 'sendToAgent',
-        nodeIds: childIds,
-        action: 'batch',
-      });
-    },
-    [nodes],
-  );
-
   const handleRemoveContainerChild = useCallback(
     (containerId: string, childId: string) => {
       removeChildFromContainer(containerId, childId);
@@ -987,9 +952,6 @@ export function CanvasApp() {
             onDocumentOpen={handleDocumentOpen}
             onCanvasEmbedOpen={handleCanvasEmbedOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
-            onAssignSelectedShotsToScene={handleAssignSelectedShotsToScene}
-            onAutoLayoutSceneShots={handleAutoLayoutSceneShots}
-            onBatchGenerateSceneShots={handleBatchGenerateSceneShots}
             onRemoveContainerChild={handleRemoveContainerChild}
             isPanMode={isPanMode}
           />

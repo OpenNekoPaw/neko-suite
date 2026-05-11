@@ -3,6 +3,7 @@ import type { CanvasNode, ContainerSection, FieldBinding } from '@neko/shared';
 import { getDefaultCanvasNodePresetName, writeFieldBinding } from '@neko/shared';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { ContainerRenderer } from '../content/ContainerRenderer';
+import { ContainerActionBar } from '../content/node-card';
 import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 import {
   createBuiltInCanvasNodePresetRegistry,
@@ -28,6 +29,7 @@ export interface ContentOverlayProps {
 
 export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
   const nodes = useCanvasStore((s) => s.canvasData?.nodes ?? []);
+  const selectedNodeIds = useCanvasStore((s) => s.selection.nodeIds);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const node = useMemo(() => nodes.find((n) => n.id === nodeId), [nodes, nodeId]);
 
@@ -63,7 +65,13 @@ export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
         }}
       >
         <OverlayHeader node={node} onClose={onClose} />
-        <OverlayBody node={node} content={content} allNodes={nodes} onUpdateData={updateNodeData} />
+        <OverlayBody
+          node={node}
+          content={content}
+          allNodes={nodes}
+          selectedNodeIds={selectedNodeIds}
+          onUpdateData={updateNodeData}
+        />
       </div>
     </>
   );
@@ -111,11 +119,13 @@ function OverlayBody({
   node,
   content,
   allNodes,
+  selectedNodeIds,
   onUpdateData,
 }: {
   node: CanvasNode;
   content: ContainerSection;
   allNodes: CanvasNode[];
+  selectedNodeIds: readonly string[];
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
 }) {
   const handleUpdateBinding = useCallback(
@@ -129,36 +139,23 @@ function OverlayBody({
     [node, onUpdateData],
   );
 
-  const handleAction = useCallback(
-    (action: string) => {
-      const store = useCanvasStore.getState();
-      switch (action) {
-        case 'assignSelectedShots': {
-          const shotIds = store.selection.nodeIds.filter((id) => id !== node.id);
-          if (shotIds.length > 0) {
-            store.assignShotsToScene(node.id, shotIds);
-          }
-          return;
-        }
-        case 'autoLayoutShots':
-          store.autoLayoutSceneShots(node.id);
-          return;
-      }
-    },
-    [node.id],
-  );
-
   const renderContext: NodeContentRenderContext = {
     node,
     allNodes,
+    selectedNodeIds: [...selectedNodeIds],
     isSelected: true,
     depth: 0,
     onUpdateBinding: handleUpdateBinding,
-    onAction: handleAction,
   };
 
   return (
     <div className="flex-1 overflow-auto p-4">
+      <ContainerActionBar
+        node={node}
+        allNodes={allNodes}
+        selectedNodeIds={selectedNodeIds}
+        isSelected={true}
+      />
       <ContainerRenderer section={content} context={renderContext} />
     </div>
   );

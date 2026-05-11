@@ -8,11 +8,11 @@ export interface FieldBindingUpdate {
 export interface NodeContentRenderContext {
   node: CanvasNode;
   allNodes: CanvasNode[];
+  selectedNodeIds: string[];
   isSelected: boolean;
   depth: number;
   onUpdateBinding?: (update: FieldBindingUpdate) => void;
   onSelectNode?: (nodeId: string, multi: boolean) => void;
-  onAction?: (action: string, payload?: Record<string, unknown>) => void;
   onRemoveChild?: (containerId: string, childId: string) => void;
 }
 

@@ -1,0 +1,130 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import type { CanvasNode } from '@neko/shared';
+import { CardPreviewSlot, NodeCard } from './index';
+import type { CardPreviewSource } from './types';
+
+describe('NodeCard rendering', () => {
+  it('renders heterogeneous Scene child summaries through generic node cards', () => {
+    const shot = createNode('shot-1', 'shot', {
+      shotNumber: 1,
+      visualDescription: 'Train door',
+      generationStatus: 'done',
+      generationHistory: [
+        {
+          id: 'candidate-1',
+          dataUrl: 'data:image/png;base64,shot',
+          selected: true,
+        },
+      ],
+    });
+    const media = createNode('media-1', 'media', {
+      assetPath: 'assets/ref.png',
+      mediaType: 'image',
+    });
+    const text = createNode('text-1', 'text', { content: 'Pinned note' });
+
+    const markup = [shot, media, text]
+      .map((node) => renderToStaticMarkup(React.createElement(NodeCard, { node })))
+      .join('\n');
+
+    expect(markup).toContain('data-node-card-id="shot-1"');
+    expect(markup).toContain('Shot 1');
+    expect(markup).toContain('data:image/png;base64,shot');
+    expect(markup).toContain('ref.png');
+    expect(markup).toContain('Pinned note');
+  });
+
+  it('renders unknown node fallback cards', () => {
+    const node = createNode('storyboard-1', 'storyboard', { title: 'Legacy' });
+
+    const markup = renderToStaticMarkup(React.createElement(NodeCard, { node }));
+
+    expect(markup).toContain('data-node-card-id="storyboard-1"');
+    expect(markup).toContain('Storyboard');
+  });
+});
+
+describe('CardPreviewSlot rendering', () => {
+  it('uses safe inline variant for asset preview without persisting runtime fields', () => {
+    const source: CardPreviewSource = {
+      renderForm: 'asset-thumbnail',
+      aspectRatio: '3/2',
+      source: {
+        id: 'shot-preview',
+        role: 'generation-candidate',
+        variants: [
+          {
+            id: 'candidate-1',
+            role: 'generation-candidate',
+            sourcePath: 'data:image/png;base64,inline',
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, { source, title: 'Shot preview' }),
+    );
+
+    expect(markup).toContain('data:image/png;base64,inline');
+    expect(JSON.stringify(source)).not.toContain('runtimeUrl');
+  });
+
+  it('renders waveform, text, icon, and unsafe asset fallback forms', () => {
+    const waveform = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: { renderForm: 'waveform', waveformStyle: 'bars' } satisfies CardPreviewSource,
+        title: 'Audio',
+      }),
+    );
+    const text = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: { renderForm: 'text', textExcerpt: 'Caption' } satisfies CardPreviewSource,
+        title: 'Caption',
+      }),
+    );
+    const icon = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: { renderForm: 'icon', icon: 'N' } satisfies CardPreviewSource,
+        title: 'Fallback',
+      }),
+    );
+    const unsafe = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: {
+          renderForm: 'asset-thumbnail',
+          aspectRatio: '3/2',
+          source: {
+            id: 'unsafe',
+            role: 'image',
+            variants: [{ id: 'unsafe', role: 'image', sourcePath: 'javascript:alert(1)' }],
+          },
+        } satisfies CardPreviewSource,
+        title: 'Unsafe',
+      }),
+    );
+
+    expect(waveform).toContain('Play');
+    expect(text).toContain('Caption');
+    expect(icon).toContain('N');
+    expect(unsafe).toContain('IMG');
+    expect(unsafe).not.toContain('javascript:alert');
+  });
+});
+
+function createNode(
+  id: string,
+  type: CanvasNode['type'],
+  data: Record<string, unknown>,
+): CanvasNode {
+  return {
+    id,
+    type,
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 80 },
+    zIndex: 1,
+    data,
+  } as CanvasNode;
+}

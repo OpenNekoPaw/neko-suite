@@ -1,12 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import type { CanvasBlock } from '@neko/shared';
 import { getContainerChildIds } from '@neko/shared';
-import {
-  createBuiltInBlockRendererRegistry,
-  renderCanvasBlock,
-  ChildNodeCard,
-} from './blockRendererRegistry';
+import { createBuiltInBlockRendererRegistry, renderCanvasBlock } from './blockRendererRegistry';
 import type { BlockRendererRegistry, ContainerRendererProps } from './types';
+import { NodeCard } from './node-card';
 import { t } from '../../i18n';
 
 const MAX_CONTENT_DEPTH = 8;
@@ -84,16 +81,12 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
                   childIds.map((childId) => {
                     const child = context.allNodes.find((candidate) => candidate.id === childId);
                     return child ? (
-                      <ChildNodeCard
+                      <NodeCard
                         key={child.id}
-                        child={child}
+                        node={child}
                         parentNode={context.node}
+                        selection={{ nodeIds: context.selectedNodeIds }}
                         onSelect={context.onSelectNode}
-                        onRemove={
-                          context.onRemoveChild
-                            ? (id) => context.onRemoveChild?.(context.node.id, id)
-                            : undefined
-                        }
                       />
                     ) : null;
                   })

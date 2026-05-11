@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { CanvasBlock, CanvasNode, FieldBinding } from '@neko/shared';
+import React from 'react';
+import { type CanvasBlock, type FieldBinding } from '@neko/shared';
 import { readNodeBinding } from './fieldBinding';
 import type { BlockRendererContext, BlockRendererRegistry } from './types';
 import { PreviewSurface, isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../preview';
-import { WebviewPreviewResolver } from '../../preview/previewResolver';
+import { NodeCard } from './node-card';
 import { t } from '../../i18n';
 
 export function createBuiltInBlockRendererRegistry(): BlockRendererRegistry {
@@ -160,18 +160,12 @@ function renderAssetPreviewBlock(context: BlockRendererContext): React.ReactNode
 }
 
 function renderButtonBlock(context: BlockRendererContext): React.ReactNode {
-  const action = getStringMetadata(context.block, 'action');
   return (
     <button
       type="button"
       className="self-start rounded border border-[var(--node-border)] px-2 py-1 text-xs text-[var(--node-fg)] hover:border-[var(--node-selected)]"
       onMouseDown={(event) => event.stopPropagation()}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (action) {
-          context.onAction?.(action, { blockId: context.block.id });
-        }
-      }}
+      onClick={(event) => event.stopPropagation()}
     >
       {resolveLabel(context.block.label) ?? context.block.id}
     </button>
@@ -242,260 +236,6 @@ function renderProjectionBlock(context: BlockRendererContext): React.ReactNode {
   );
 }
 
-export function ChildNodeCard({
-  child,
-  parentNode,
-  onSelect,
-  onRemove,
-}: {
-  child: CanvasNode;
-  parentNode?: CanvasNode;
-  onSelect?: (id: string, multi: boolean) => void;
-  onRemove?: (childId: string) => void;
-}): React.ReactNode {
-  const preview = child.preview;
-  const childMediaType = getChildMediaType(child);
-  const inlineUrl = getChildInlinePreview(child);
-  const resolvedUrl = useChildResolvedThumbnail(
-    inlineUrl || childMediaType === 'audio' ? undefined : child,
-  );
-  const thumbnailUrl = inlineUrl ?? resolvedUrl;
-  const displayTitle = resolveChildDisplayTitle(child, parentNode);
-
-  return (
-    <div className="group relative">
-      <button
-        type="button"
-        className="flex w-full flex-col overflow-hidden rounded border border-[var(--node-border)] bg-black/10 text-left hover:border-[var(--node-selected)]"
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => onSelect?.(child.id, event.shiftKey || event.metaKey)}
-      >
-        {childMediaType === 'audio' ? (
-          <ChildAudioPreview />
-        ) : childMediaType === 'video' ? (
-          <ChildVideoPreview thumbnailUrl={thumbnailUrl} displayTitle={displayTitle} />
-        ) : thumbnailUrl ? (
-          <div
-            className="flex w-full items-center justify-center overflow-hidden bg-black/20"
-            style={{ aspectRatio: '3 / 2' }}
-          >
-            <img src={thumbnailUrl} alt={displayTitle} className="h-full w-full object-cover" />
-          </div>
-        ) : (
-          <div
-            className="flex w-full items-center justify-center bg-black/20 text-base text-[var(--node-fg-secondary)]"
-            style={{ aspectRatio: '3 / 2' }}
-          >
-            {getMediaTypeIcon(child)}
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-1 px-1.5 py-1">
-          <span className="min-w-0 truncate text-[10px] text-[var(--node-fg)]">{displayTitle}</span>
-          {preview?.badges?.[0] && (
-            <span className="flex-shrink-0 rounded bg-black/20 px-1 text-[9px] text-[var(--node-fg-secondary)]">
-              {preview.badges[0].label}
-            </span>
-          )}
-        </div>
-      </button>
-      {onRemove && (
-        <button
-          type="button"
-          className="absolute right-0.5 top-0.5 hidden items-center justify-center rounded-full bg-black/60 text-white group-hover:flex"
-          style={{ width: 16, height: 16, fontSize: 10, lineHeight: 1 }}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove(child.id);
-          }}
-        >
-          ×
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ChildAudioPreview(): React.ReactNode {
-  return (
-    <div className="flex w-full flex-col gap-1.5 bg-gradient-to-b from-black/30 to-black/10 px-2 py-2">
-      <div className="flex items-center gap-1.5">
-        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white/15">
-          <span style={{ fontSize: 9 }}>&#9654;</span>
-        </div>
-        <div className="h-0.5 flex-1 rounded bg-white/20" />
-      </div>
-      <div className="flex h-4 items-end gap-px">
-        {Array.from({ length: 16 }, (_, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-sm bg-white/20"
-            style={{ height: `${20 + Math.sin(i * 0.8) * 40 + Math.cos(i * 1.3) * 30}%` }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ChildVideoPreview({
-  thumbnailUrl,
-  displayTitle,
-}: {
-  thumbnailUrl: string | undefined;
-  displayTitle: string;
-}): React.ReactNode {
-  return (
-    <div className="relative w-full overflow-hidden bg-black/30" style={{ aspectRatio: '3 / 2' }}>
-      {thumbnailUrl ? (
-        <img src={thumbnailUrl} alt={displayTitle} className="h-full w-full object-cover" />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center text-lg text-[var(--node-fg-secondary)]">
-          🎬
-        </div>
-      )}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/50">
-          <span className="text-white" style={{ fontSize: 11 }}>
-            &#9654;
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function resolveChildDisplayTitle(child: CanvasNode, parentNode?: CanvasNode): string {
-  const placementLabel = parentNode?.container?.childPlacements?.[child.id]?.metadata?.['label'];
-  if (typeof placementLabel === 'string' && placementLabel) return placementLabel;
-
-  if (child.preview?.title) {
-    return child.type === 'media' ? extractFileBasename(child.preview.title) : child.preview.title;
-  }
-
-  if (child.type === 'media') {
-    const assetPath = (child.data as Record<string, unknown>)['assetPath'];
-    if (typeof assetPath === 'string' && assetPath) {
-      return extractFileBasename(assetPath);
-    }
-    const mediaType = (child.data as Record<string, unknown>)['mediaType'];
-    return mediaType === 'video'
-      ? 'Empty video'
-      : mediaType === 'audio'
-        ? 'Empty audio'
-        : 'Empty image';
-  }
-
-  if (child.type === 'shot') {
-    const shotNumber = (child.data as Record<string, unknown>)['shotNumber'];
-    return typeof shotNumber === 'number' ? `Shot ${shotNumber}` : 'Shot';
-  }
-
-  return child.type.charAt(0).toUpperCase() + child.type.slice(1);
-}
-
-function extractFileBasename(pathOrUrl: string): string {
-  try {
-    const url = new URL(pathOrUrl);
-    return decodeURIComponent(url.pathname.split('/').pop() ?? pathOrUrl);
-  } catch {
-    return pathOrUrl.split('/').pop() ?? pathOrUrl;
-  }
-}
-
-function getChildMediaType(child: CanvasNode): 'image' | 'video' | 'audio' | undefined {
-  if (child.type === 'media') {
-    const mediaType = (child.data as Record<string, unknown>)['mediaType'];
-    if (mediaType === 'video') return 'video';
-    if (mediaType === 'audio') return 'audio';
-    return 'image';
-  }
-  return undefined;
-}
-
-function getMediaTypeIcon(child: CanvasNode): string {
-  if (child.type === 'media') {
-    const mediaType = (child.data as Record<string, unknown>)['mediaType'];
-    if (mediaType === 'video') return '🎬';
-    if (mediaType === 'audio') return '🎵';
-    return '🖼';
-  }
-  if (child.type === 'shot') return '🎬';
-  return '📄';
-}
-
-function getChildInlinePreview(child: CanvasNode): string | undefined {
-  if (child.type === 'shot') {
-    const data = child.data as Record<string, unknown>;
-    const history = data['generationHistory'];
-    if (Array.isArray(history)) {
-      const selected = history.find(
-        (candidate): candidate is { dataUrl?: string; selected?: boolean } =>
-          isRecord(candidate) && candidate['selected'] === true,
-      );
-      if (selected && typeof selected['dataUrl'] === 'string') {
-        return selected['dataUrl'];
-      }
-    }
-    const generatedImage = data['generatedImage'];
-    if (typeof generatedImage === 'string' && generatedImage) {
-      return generatedImage;
-    }
-  }
-  return undefined;
-}
-
-function getChildAssetPath(child: CanvasNode): string | undefined {
-  if (child.type !== 'media') return undefined;
-  const data = child.data as Record<string, unknown>;
-  const thumbnailPath = data['thumbnailPath'];
-  if (typeof thumbnailPath === 'string' && thumbnailPath) return thumbnailPath;
-  const assetPath = data['assetPath'];
-  if (typeof assetPath === 'string' && assetPath) return assetPath;
-  return undefined;
-}
-
-function useChildResolvedThumbnail(child: CanvasNode | undefined): string | undefined {
-  const assetPath = child ? getChildAssetPath(child) : undefined;
-  const resolver = useMemo(
-    () => (assetPath ? new WebviewPreviewResolver() : undefined),
-    [assetPath],
-  );
-  const [url, setUrl] = useState<string | undefined>();
-
-  useEffect(() => {
-    if (!resolver || !child || !assetPath) {
-      setUrl(undefined);
-      return;
-    }
-
-    let cancelled = false;
-    const mediaType =
-      child.type === 'media'
-        ? ((child.data as Record<string, unknown>)['mediaType'] as string | undefined)
-        : undefined;
-
-    const source: PreviewSourceDescriptor = {
-      id: `child-thumb:${child.id}`,
-      asset: { kind: 'asset-identity', path: assetPath, mediaType },
-      role: 'image',
-    };
-
-    resolver.resolve({ source }).then((variant) => {
-      if (!cancelled && variant.runtimeUrl) {
-        setUrl(variant.runtimeUrl);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      resolver.dispose();
-    };
-  }, [resolver, child, assetPath]);
-
-  return url;
-}
-
 function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNode {
   const slot = context.block.childSlot;
   const childIds = slot?.childIds ?? context.node.container?.childIds ?? [];
@@ -510,16 +250,12 @@ function renderChildNodeSlotBlock(context: BlockRendererContext): React.ReactNod
           {childIds.map((childId) => {
             const child = context.allNodes.find((candidate) => candidate.id === childId);
             return child ? (
-              <ChildNodeCard
+              <NodeCard
                 key={child.id}
-                child={child}
+                node={child}
                 parentNode={context.node}
+                selection={{ nodeIds: context.selectedNodeIds }}
                 onSelect={context.onSelectNode}
-                onRemove={
-                  context.onRemoveChild
-                    ? (id) => context.onRemoveChild?.(context.node.id, id)
-                    : undefined
-                }
               />
             ) : null;
           })}
@@ -640,11 +376,6 @@ function getStringArrayMetadata(block: CanvasBlock, key: string): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
-}
-
-function getStringMetadata(block: CanvasBlock, key: string): string | undefined {
-  const value = block.metadata?.[key];
-  return typeof value === 'string' ? value : undefined;
 }
 
 function renderCollectionItem(block: CanvasBlock, item: unknown, index: number): React.ReactNode {

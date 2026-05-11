@@ -25,6 +25,7 @@ import { t } from '../../i18n';
 import { PortEditor } from './PortEditor';
 import { getNodeLabel } from '../nodes/nodeTypeDescriptor';
 import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
+import { getContainerActionDescriptors } from '../content/node-card';
 
 // =============================================================================
 // Types
@@ -1134,6 +1135,15 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
   }
 
   const items: ComposablePropertyItem[] = [];
+
+  for (const action of getContainerActionDescriptors(node)) {
+    items.push({
+      kind: 'action',
+      blockId: `container-action:${action.id}`,
+      label: action.label,
+      action: action.id,
+    });
+  }
 
   for (const block of collectComposableBlocks(node.content)) {
     if (block.binding) {

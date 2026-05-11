@@ -1,18 +1,48 @@
 # ADR: Canvas Generic Container & Card Abstraction
 
-- **Status**: Proposed
+- **Status**: Accepted / Implemented
 - **Date**: 2026-05-11
 - **Scope**: neko-canvas webview (`packages/neko-canvas/packages/webview/`); future `@neko/shared` promotion path documented in §5.3
 - **Refines**: `adr-canvas-block-container.md` (Block + Container primitive architecture)
 - **Related**: `adr-canvas-preview-boundary.md` (preview roles & runtime URL boundary), `canvas-agent-integration.md` (agent tool surface)
+- **OpenSpec Change**: `canvas-generic-container-card`
 
 ---
 
 ## 1. Context
 
+### 1.0 Implementation Status
+
+Implemented on 2026-05-11 in the Canvas webview through OpenSpec change
+`canvas-generic-container-card`. The implementation keeps the new card and action
+contracts webview-local and does not change `.nkc`, protobuf, or extension-host
+message contracts.
+
+Implemented outcomes:
+
+- Child-node slots render through `NodeCard` and `NodeCardPolicy` rather than the
+  previous monolithic `ChildNodeCard` branch in `blockRendererRegistry.tsx`.
+- Card previews use `CardPreviewSource` render forms and `PreviewSourceDescriptor`
+  resolution, including a role-matched safe variant fast path for inline shot
+  previews.
+- Card actions and Scene/Gallery/Table container actions dispatch through typed
+  descriptor IDs and dispatcher registries.
+- Scene preset action blocks were removed; legacy `button` blocks in
+  `blockRendererRegistry.tsx` are now render-only and no longer import canvas
+  stores, VSCode API access, or container action dispatchers.
+- `ContainerActionBar` derives child nodes from `node + allNodes` internally, so
+  external callers do not inject child-node lists.
+
+Verification completed:
+
+- `pnpm --dir packages/neko-canvas/packages/webview exec tsc --noEmit`
+- `pnpm --dir packages/neko-canvas/packages/webview test`
+- `pnpm --dir packages/neko-canvas/packages/webview build`
+
 ### 1.1 Current Architecture
 
-neko-canvas has two parallel abstractions for composable nodes:
+Before this ADR was implemented, neko-canvas had two parallel abstractions for
+composable nodes:
 
 - **ContainerPolicy** — constrains which children a container accepts, how children are deleted, and the layout mode. Five built-in policies: `scene`, `gallery`, `table`, `artboard`, `group`. Well-factored: policies are declarative, registered in a central registry (`containerPolicies.ts:8`), and evaluated at runtime by `canContainerAcceptChild()`.
 - **ChildNodeCard** — renders child nodes inside a container's content area. A single monolithic component (`blockRendererRegistry.tsx:245`) with `if/else` branches for every node type, mixing rendering logic for media (image/video/audio), shot (generation history), and fallback (icon).
@@ -26,7 +56,7 @@ The container-side abstraction is policy-driven; adding a new container type mea
 
 Scene, gallery, table, artboard, and group are all the same generic container with different constraints. Similarly, media card, shot card, annotation card, and text card are all the same generic card with different constraints.
 
-### 1.3 Problems with Current Card Rendering
+### 1.3 Problems with Previous Card Rendering
 
 | Problem | Symptom |
 |---------|---------|
@@ -829,4 +859,4 @@ All new types in this ADR (`NodeCardPolicy`, `CardPreviewSource`, `CardActionDes
 8. **Extensibility**: Adding a new card type (e.g., `model`) requires only a new `NodeCardPolicy` entry — no modification to `NodeCard`, `CardPreviewSlot`, or `ContainerRenderer`
 9. **Consistency**: All child nodes inside all container types render through the same `NodeCard` component
 10. **Container independence**: Container layout (grid/sequence/table) is orthogonal to card rendering — any card in any container
-11. **All existing tests pass**: `pnpm --filter @neko-canvas/webview exec vitest run` — all tests passing
+11. **All existing tests pass**: `pnpm --dir packages/neko-canvas/packages/webview exec tsc --noEmit`, `pnpm --dir packages/neko-canvas/packages/webview test`, and `pnpm --dir packages/neko-canvas/packages/webview build` — all passing

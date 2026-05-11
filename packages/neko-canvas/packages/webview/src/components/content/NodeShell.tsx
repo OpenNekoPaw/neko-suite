@@ -8,6 +8,7 @@ import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { getGlobalVSCodeApi } from '../../utils/vscode';
 import { t } from '../../i18n';
+import { ContainerActionBar } from './node-card';
 
 export interface NodeShellProps {
   section: ContainerSection;
@@ -63,6 +64,12 @@ export function NodeShell({ section, context }: NodeShellProps) {
       />
       {!isCollapsed && (
         <>
+          <ContainerActionBar
+            node={node}
+            allNodes={context.allNodes}
+            selectedNodeIds={context.selectedNodeIds}
+            isSelected={context.isSelected}
+          />
           {context.isSelected && controlSections.length > 0 && (
             <div style={{ borderBottom: '1px solid var(--node-divider)' }}>
               {controlSections.map((s) => (
