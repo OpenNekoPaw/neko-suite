@@ -258,8 +258,8 @@ export const HOOK_DIRECTORIES = {
  * Settings file locations (Claude Code compatible)
  */
 export const SETTINGS_FILES = {
-  /** Project-level settings: .neko/settings.json */
-  project: '.neko/settings.json',
+  /** Project-level settings: neko/settings.json (git-tracked) */
+  project: 'neko/settings.json',
   /** Personal settings: ~/.neko/settings.json */
   personal: '~/.neko/settings.json',
   /** Local project settings (not committed): .neko/settings.local.json */

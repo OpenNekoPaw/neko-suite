@@ -2,7 +2,7 @@
  * Media Library Settings Types
  *
  * Configuration types for external media library support.
- * Stored in .neko/settings.json (team-shared) and
+ * Stored in neko/settings.json (team-shared, git-tracked) and
  * .neko/settings.local.json (machine-specific overrides, gitignored).
  */
 
@@ -18,7 +18,7 @@ export interface MediaLibraryEntry {
   enabled?: boolean;
 }
 
-/** Media library settings (.neko/settings.json) */
+/** Media library settings (neko/settings.json) */
 export interface MediaLibrarySettings {
   /** Configured media libraries */
   mediaLibraries?: MediaLibraryEntry[];

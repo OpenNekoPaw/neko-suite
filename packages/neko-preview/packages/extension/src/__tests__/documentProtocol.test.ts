@@ -98,7 +98,7 @@ describe('getUnresolvedVariableHtml -- file path escaping', () => {
   it('renders setup instructions', () => {
     const html = getUnresolvedVariableHtml('ASSETS', '/x');
 
-    expect(html).toContain('.neko/settings.json');
+    expect(html).toContain('neko/settings.json');
     expect(html).toContain('neko-assets');
   });
 });
@@ -161,7 +161,7 @@ describe('PreviewFileServer path resolution fallback', () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
     executeCommand.mockResolvedValueOnce('/${A}/epub/book.epub');
     readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === '/workspace-a/.neko/settings.json') {
+      if (filePath === '/workspace-a/neko/settings.json') {
         return JSON.stringify({
           mediaLibraries: [{ variable: 'A', path: '/Volumes/LibraryA', enabled: true }],
         });
@@ -181,7 +181,7 @@ describe('PreviewFileServer path resolution fallback', () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
     executeCommand.mockResolvedValueOnce('/${A}/epub/book.epub');
     readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === '/workspace-a/.neko/settings.json') {
+      if (filePath === '/workspace-a/neko/settings.json') {
         return JSON.stringify({
           mediaLibraries: [{ variable: 'A', path: '/Volumes/LibraryA', enabled: true }],
         });

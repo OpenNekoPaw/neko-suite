@@ -195,7 +195,7 @@ export class CrossModalDataProvider implements vscode.Disposable {
   }
 
   private watchEntityAssetBindings(): void {
-    const watcher = vscode.workspace.createFileSystemWatcher('**/.neko/entity-bindings*.json');
+    const watcher = vscode.workspace.createFileSystemWatcher('**/neko/entity-bindings*.json');
     this.disposables.push(
       watcher,
       watcher.onDidChange(() => {

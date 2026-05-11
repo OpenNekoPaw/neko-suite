@@ -1343,7 +1343,7 @@ referenceChain:
 asset://characters/hero
   ↓ PathResolver.resolve()
 ${MEDIA_LIBRARY}/characters/hero/
-  ↓ 展开变量（从 .neko/settings.json 读取 MEDIA_LIBRARY）
+  ↓ 展开变量（从 neko/settings.json 读取 MEDIA_LIBRARY）
 /Users/{user}/MyNekoLibrary/characters/hero/
 ```
 

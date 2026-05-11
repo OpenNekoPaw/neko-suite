@@ -399,7 +399,7 @@ Workflow Orchestration 引入 `.nkproj` 顶层容器时曾纠结"为什么不复
 
 | `.nkproj` 字段 | `.neko/` 自然替代 |
 |--------------|---------------|
-| `workflow` prefs | `.neko/settings.json` |
+| `workflow` prefs | `neko/settings.json` |
 | `notes[]` | `.neko/memory.md` |
 | `parentProjectId` / `id` / `name` | `.neko/metadata.json`（未建） |
 | `artifacts[]` | glob `**/*.nk?` + `.neko/artifact-graph.json`（未建） |

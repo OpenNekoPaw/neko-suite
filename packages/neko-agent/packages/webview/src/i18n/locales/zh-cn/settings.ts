@@ -135,7 +135,7 @@ export const settings = {
   'settings.hooks.projectSettings': '项目配置',
   'settings.hooks.personalSettings': '用户配置',
   'settings.hooks.localSettings': '本地配置',
-  'settings.hooks.projectPath': '.neko/settings.json',
+  'settings.hooks.projectPath': 'neko/settings.json',
   'settings.hooks.personalPath': '~/.neko/settings.json',
   'settings.hooks.localPath': '.neko/settings.local.json (不提交到 Git)',
   'settings.hooks.priorityHint': '优先级：本地 > 项目 > 用户',

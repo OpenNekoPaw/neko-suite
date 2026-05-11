@@ -138,7 +138,7 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
   // =========================================================================
 
   private getSettingsPath(): string {
-    return path.join(this.workspaceRoot, '.neko', SETTINGS_FILE);
+    return path.join(this.workspaceRoot, 'neko', SETTINGS_FILE);
   }
 
   private getLocalSettingsPath(): string {
@@ -184,20 +184,32 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
   // =========================================================================
 
   private setupWatchers(): void {
-    const nekoDir = path.join(this.workspaceRoot, '.neko');
-    const pattern = new vscode.RelativePattern(nekoDir, 'settings*.json');
-    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-
     const handleChange = () => {
       if (this.reloadTimer) clearTimeout(this.reloadTimer);
       this.reloadTimer = setTimeout(() => this.reload(), DEBOUNCE_MS);
     };
 
+    // settings.json lives under neko/ (git-tracked)
+    const factsDir = path.join(this.workspaceRoot, 'neko');
+    const factsWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(factsDir, 'settings.json'),
+    );
+
+    // settings.local.json lives under .neko/ (gitignored)
+    const localDir = path.join(this.workspaceRoot, '.neko');
+    const localWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(localDir, 'settings.local.json'),
+    );
+
     this.disposables.push(
-      watcher,
-      watcher.onDidChange(handleChange),
-      watcher.onDidCreate(handleChange),
-      watcher.onDidDelete(handleChange),
+      factsWatcher,
+      factsWatcher.onDidChange(handleChange),
+      factsWatcher.onDidCreate(handleChange),
+      factsWatcher.onDidDelete(handleChange),
+      localWatcher,
+      localWatcher.onDidChange(handleChange),
+      localWatcher.onDidCreate(handleChange),
+      localWatcher.onDidDelete(handleChange),
     );
   }
 

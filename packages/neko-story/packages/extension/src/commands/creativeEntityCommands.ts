@@ -405,7 +405,7 @@ async function pickBindingOption(
     })),
     {
       title: `选择 ${role} 素材`,
-      placeHolder: options.length > 0 ? '确认后会写入 .neko/entity-bindings.json' : '没有匹配素材',
+      placeHolder: options.length > 0 ? '确认后会写入 neko/entity-bindings.json' : '没有匹配素材',
     },
   );
   return picked?.option;

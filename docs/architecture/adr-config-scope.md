@@ -6,7 +6,7 @@
 
 neko-agent needs to manage configuration at two levels:
 - **User level** (`~/.neko/config.json`): personal settings shared across all projects
-- **Workspace level** (`.neko/config.json`): project-specific settings
+- **Workspace level** (`neko/config.json`): project-specific settings
 
 The question is: which configuration types should be workspace-scoped?
 
@@ -44,7 +44,7 @@ Workspace MCP servers merge with user MCP servers by `id`:
 Currently user-level scalars in `~/.neko/config.json`. If workspace-level override is needed later:
 
 ```jsonc
-// .neko/config.json (workspace)
+// neko/config.json (workspace)
 {
   "temperature": 0.3,      // override for this project
   "maxTokens": 16384
@@ -66,7 +66,7 @@ Not yet implemented. When needed, follow Claude Code's model:
   }
 }
 
-// .neko/config.json (workspace)
+// neko/config.json (workspace)
 {
   "permissions": {
     "allow": ["mcp__filesystem__*"],
@@ -85,7 +85,7 @@ deny takes precedence over allow
 
 ## Consequences
 
-- Workspace `.neko/config.json` is minimal (MCP only), safe to commit to git
+- Workspace `neko/config.json` is minimal (MCP only), safe to commit to git
 - No risk of API key leakage through workspace config
 - Users manage providers/models in one place (`~/.neko/config.json`)
 - Projects can define project-specific MCP servers with `${workspaceFolder}` paths

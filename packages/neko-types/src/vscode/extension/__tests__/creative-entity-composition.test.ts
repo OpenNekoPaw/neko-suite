@@ -81,7 +81,7 @@ describe('creative entity composition extension utilities', () => {
 
   it('resolves binding storage outside cache', () => {
     expect(resolveEntityAssetBindingsPath('/workspace')).toBe(
-      '/workspace/.neko/entity-bindings.json',
+      '/workspace/neko/entity-bindings.json',
     );
     expect(
       () => new EntityAssetBindingService('/workspace/.neko/.cache/entity-bindings.json'),
@@ -101,7 +101,7 @@ describe('creative entity composition extension utilities', () => {
       persisted = staged;
     });
 
-    const service = new EntityAssetBindingService('/workspace/.neko/entity-bindings.json');
+    const service = new EntityAssetBindingService('/workspace/neko/entity-bindings.json');
 
     await service.upsert({
       id: 'bind-live2d',
@@ -132,9 +132,9 @@ describe('creative entity composition extension utilities', () => {
         expect.objectContaining({ id: 'bind-portrait' }),
       ],
     });
-    expect(fs.mkdir).toHaveBeenCalledWith('/workspace/.neko', { recursive: true });
+    expect(fs.mkdir).toHaveBeenCalledWith('/workspace/neko', { recursive: true });
     expect(fs.writeFile).toHaveBeenLastCalledWith(
-      '/workspace/.neko/entity-bindings.json.tmp',
+      '/workspace/neko/entity-bindings.json.tmp',
       expect.stringContaining('"bindings"'),
       'utf-8',
     );
@@ -153,7 +153,7 @@ describe('creative entity composition extension utilities', () => {
       persisted = staged;
     });
 
-    const service = new EntityAssetBindingService('/workspace/.neko/entity-bindings.json');
+    const service = new EntityAssetBindingService('/workspace/neko/entity-bindings.json');
     const base = {
       id: 'bind-portrait',
       entityId: 'char_linxia',
@@ -203,7 +203,7 @@ describe('creative entity composition extension utilities', () => {
       persisted = staged;
     });
 
-    const service = new EntityAssetBindingService('/workspace/.neko/entity-bindings.json');
+    const service = new EntityAssetBindingService('/workspace/neko/entity-bindings.json');
     await service.setDefault({
       id: 'bind-portrait-v2',
       entityId: 'char_linxia',
@@ -501,7 +501,7 @@ describe('creative entity composition extension utilities', () => {
       persisted = staged;
     });
 
-    const service = new VisualIdentityDraftService('/workspace/.neko/visual-identity-drafts.json');
+    const service = new VisualIdentityDraftService('/workspace/neko/visual-identity-drafts.json');
     await service.upsert({
       id: 'draft-1',
       characterId: 'char_linxia',
@@ -520,7 +520,7 @@ describe('creative entity composition extension utilities', () => {
       }),
     ]);
     expect(resolveVisualIdentityDraftsPath('/workspace')).toBe(
-      '/workspace/.neko/visual-identity-drafts.json',
+      '/workspace/neko/visual-identity-drafts.json',
     );
   });
 
@@ -538,7 +538,7 @@ describe('creative entity composition extension utilities', () => {
     });
 
     const service = new EntityAssetRequirementService(
-      '/workspace/.neko/entity-asset-requirements.json',
+      '/workspace/neko/entity-asset-requirements.json',
     );
     await service.upsert({
       id: 'req-portrait',
@@ -558,12 +558,12 @@ describe('creative entity composition extension utilities', () => {
       }),
     ]);
     expect(fs.writeFile).toHaveBeenCalledWith(
-      '/workspace/.neko/entity-asset-requirements.json.tmp',
+      '/workspace/neko/entity-asset-requirements.json.tmp',
       expect.stringContaining('"requirements"'),
       'utf-8',
     );
     expect(resolveEntityAssetRequirementsPath('/workspace')).toBe(
-      '/workspace/.neko/entity-asset-requirements.json',
+      '/workspace/neko/entity-asset-requirements.json',
     );
   });
 });

@@ -31,7 +31,7 @@ export class UnresolvedPathVariableError extends Error {
       `Media library variable "\${${variable}}" is not configured.\n\n` +
         `The file "${originalPath}" references a media library that is not set up on this machine.\n\n` +
         `To fix:\n` +
-        `1. Open neko-assets settings (.neko/settings.json)\n` +
+        `1. Open neko-assets settings (neko/settings.json)\n` +
         `2. Add a media library with variable name "${variable}"\n` +
         `3. Or check that the neko-assets extension is activated`,
     );

@@ -279,7 +279,7 @@ export function getUnresolvedVariableHtml(variable: string, filePath: string): s
     <div class="path">${filePath.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
     <p>To fix:</p>
     <ol>
-      <li>Open <strong>.neko/settings.json</strong> in your project</li>
+      <li>Open <strong>neko/settings.json</strong> in your project</li>
       <li>Add a media library entry with variable <span class="var">${variable}</span></li>
       <li>Set the path to the directory on this machine</li>
     </ol>

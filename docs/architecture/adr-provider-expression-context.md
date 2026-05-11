@@ -49,7 +49,7 @@ neko-suite 以生成模型（图像 / 视频 / 音频）为核心创作引擎，
 | [agent-unified-workflow.md](./agent-unified-workflow.md) §5.1 CapabilityKind | 新增 `providerCard` 作为第 4 种能力类型 |
 | [adr-control-plane-feedback-arbiter.md](./adr-control-plane-feedback-arbiter.md) | ProviderCard feedback 仍进入项目级 Card 演化；不再通过 beforeToolCall 做确定性 prompt 替换 |
 | [marketplace.md](./marketplace.md) | 新增 `provider-card` 分发品类 |
-| [agent-memory-unification.md](./agent-memory-unification.md) | Layer 2 项目级 Card override 写入 `.neko/providers/*.card.md`（扩展 ProjectMemoryRouter 目标） |
+| [agent-memory-unification.md](./agent-memory-unification.md) | Layer 2 项目级 Card override 写入 `neko/providers/*.card.md`（扩展 ProjectMemoryRouter 目标） |
 | [agent-evolution-capacity.md](./agent-evolution-capacity.md) | 新增 Provider 层评级（预期 A）——全 markdown + 自演化，符合最强演化锚点 |
 
 ## 决策
@@ -307,7 +307,7 @@ export function createProviderExpressionPromptFragments(
 ├──────────────────────────────────────────────┤
 │ Layer 2: Project Override                    │
 │   项目私有 / 企业内部 / 自动演化补丁          │
-│   位置：.neko/providers/*.card.md             │
+│   位置：neko/providers/*.card.md               │
 │   发布：项目内（可选入 git 共享给团队）        │
 │   更新：持续（AI 自动 + 人工编辑）             │
 ├──────────────────────────────────────────────┤
@@ -342,7 +342,7 @@ Evaluator 打分  ──►  ProjectMemoryRouter
   用户接受率            │    "Flux 对 cluttercore 命中率 30%"
   生成一致性            │    "本项目 MJ 需要 --s 750"
                       ▼
-                  .neko/providers/<providerId>.card.md（增量补丁）
+                  neko/providers/<providerId>.card.md（增量补丁）
                       ▼
                   下次 Router / Bridge 查表时合并
 ```
@@ -453,14 +453,14 @@ Evaluator 打分  ──►  ProjectMemoryRouter
 | **PR-P2** | ProviderRouter 骨架（styleFamily 路由 + Memory 加权） | ✅ 完成 | styleFamily affinity 路由、显式 providerId 优先、fallback chain metadata |
 | **PR-P3** | ProviderExpressionContext 骨架（ProviderCard → PromptFragment） | ✅ 完成 | ProviderCard 汇总为 AGENT 软提示上下文；工具层保持原生 prompt / Markdown-derived prompt |
 | **PR-P4** | 主流 Built-in Cards：Flux / SDXL / MJ / Runway / Sora / DALL-E 6 张 | ✅ 完成 | 4 张 image card + 2 张 video card |
-| **PR-P5** | neko-market `provider-card` 品类 + `.neko/providers/` Project Override 机制 | ✅ 完成 | market install target、global/project card loading、Project Override 写入 |
+| **PR-P5** | neko-market `provider-card` 品类 + `neko/providers/` Project Override 机制 | ✅ 完成 | market install target、global/project card loading、Project Override 写入 |
 | **PR-P6** | Memory 演化闭环：Evaluator → ProjectMemoryRouter → Layer 2 Override | ✅ 完成 | tool metadata → feedback signal → project card observations / concept coverage / anti-bias candidates |
 | **PR-P7** | 消融 toggle 接线 + 文档同步 | ✅ 完成 | 保留 `providerCardAutoEvolve` kill-switch；移除确定性 prompt 替换 kill-switch |
 
 剩余增强项：
 
 1. ProviderExpressionContext 已支持基础 token budget 裁剪与按 `taskStage` 调整摘要优先级；后续可继续按运行阶段动态分配预算。
-2. Project Override 已支持 `review-queue` 模式，把候选 patch 写入 `.neko/providers/review/*.patch.md` 等待人工确认；后续可在 UI 中提供 approve/reject 操作。
+2. Project Override 已支持 `review-queue` 模式，把候选 patch 写入 `neko/providers/review/*.patch.md` 等待人工确认；后续可在 UI 中提供 approve/reject 操作。
 3. Market `provider-card` 已接入基础 trustLevel / signature manifest 校验；后续可接入真实签名验签与服务端审核流水。
 
 ### 回滚策略
@@ -510,7 +510,7 @@ export interface AblationToggles {
 | **agent-tool-skill-enhancement.md** | 注明 Provider 与 Skill 的边界（M:N） |
 | **agent-media-architecture.md** | 标注 Send-to-Agent 工具调用由 AGENT 结合 ProviderExpressionContext 生成参数 |
 | **marketplace.md** | 新增 `provider-card` 品类 + 三层分发策略 |
-| **agent-memory-unification.md** | ProjectMemoryRouter 扩展目标：`.neko/memory.md` + `.neko/providers/*.card.md` |
+| **agent-memory-unification.md** | ProjectMemoryRouter 扩展目标：`.neko/memory.md` + `neko/providers/*.card.md` |
 | **ablation-experiment-framework.md** | ProviderCard 仅保留 `providerCardAutoEvolve` 消融开关 |
 | **agent-evolution-capacity.md** | §3 新增 Provider 层评级 A；§3.4 控制面表末追加 Provider 行 |
 | **adr-control-plane-feedback-arbiter.md** | 补充说明 ProviderCard feedback 进入 Project Override 演化，不再作为 beforeToolCall 替换 hook |

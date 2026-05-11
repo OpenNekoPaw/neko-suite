@@ -113,10 +113,17 @@ Media Diff: old.mp4 → new.mp4
 ├── auth.json                         #   认证令牌
 └── conversations/                    #   对话历史（按项目 hash 分片）
 
-<project>/.neko/                      # L1: 项目级（提交 Git）
+<project>/neko/                       # L1a: 项目事实（Git 跟踪，团队共享）
 ├── settings.json                     #   团队共享设置（媒体库路径等）
-├── settings.local.json               #   个人覆盖（.gitignore）
 ├── config.json                       #   MCP 服务器配置
+├── assets/library.json               #   素材库存
+├── providers/                        #   Provider Cards
+├── entity-bindings.json              #   实体-素材绑定
+├── visual-identity-drafts.json       #   视觉草案
+└── entity-asset-requirements.json    #   缺失素材需求
+
+<project>/.neko/                      # L1b: 项目本地（gitignore，机器级）
+├── settings.local.json               #   个人覆盖
 └── memory.md                         #   项目 Agent 记忆
 
 <project>/.neko/.cache/               # L2: 项目级缓存（不提交，可重建）
@@ -200,8 +207,8 @@ function resolveStorageLayout(workspaceRoot: string): IStorageLayout {
 
 | 域 | 存储位置 | 作用域 | 管理方式 |
 |---|---|---|---|
-| **AssetLibrary** | `<project>/.neko/assets/library.json` | 项目 | Entity→Variant→File 层级 |
-| **MediaLibraryPaths** | `<project>/.neko/settings.json` | 团队 | 路径变量（`${VARIABLE}`） |
+| **AssetLibrary** | `<project>/neko/assets/library.json` | 项目 | Entity→Variant→File 层级 |
+| **MediaLibraryPaths** | `<project>/neko/settings.json` | 团队 | 路径变量（`${VARIABLE}`） |
 | **GeneratedAssets** | `<project>/.neko/.cache/generated/` | 项目 | JSON index + 二进制文件 |
 | **Marketplace** | `~/.neko/market-installed.json` | 用户 | IAssetHandler 注册 |
 

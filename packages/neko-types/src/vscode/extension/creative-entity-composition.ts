@@ -131,15 +131,15 @@ export class CreativeEntityRegistryService implements CreativeEntityRegistry {
 }
 
 export function resolveEntityAssetBindingsPath(workspaceRoot: string): string {
-  return path.join(workspaceRoot, '.neko', 'entity-bindings.json');
+  return path.join(workspaceRoot, 'neko', 'entity-bindings.json');
 }
 
 export function resolveVisualIdentityDraftsPath(workspaceRoot: string): string {
-  return path.join(workspaceRoot, '.neko', 'visual-identity-drafts.json');
+  return path.join(workspaceRoot, 'neko', 'visual-identity-drafts.json');
 }
 
 export function resolveEntityAssetRequirementsPath(workspaceRoot: string): string {
-  return path.join(workspaceRoot, '.neko', 'entity-asset-requirements.json');
+  return path.join(workspaceRoot, 'neko', 'entity-asset-requirements.json');
 }
 
 export function createEmptyEntityAssetBindingFile(): EntityAssetBindingFile {

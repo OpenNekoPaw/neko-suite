@@ -39,6 +39,22 @@ describe('file operation plan', () => {
     );
   });
 
+  it('builds project settings file plan under neko/ (git-tracked)', () => {
+    expect(
+      buildSettingsFilePlan({
+        source: 'project',
+        homeDir: '/home/me',
+        workspaceRoot: '/repo',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        ok: true,
+        dirPath: '/repo/neko',
+        filePath: '/repo/neko/settings.json',
+      }),
+    );
+  });
+
   it('builds config file paths', () => {
     expect(buildConfigFilePath('/home/me')).toBe('/home/me/.neko/config.json');
   });

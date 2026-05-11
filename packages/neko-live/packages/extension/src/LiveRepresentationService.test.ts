@@ -60,9 +60,9 @@ describe('LiveRepresentationService', () => {
       }),
       'utf-8',
     );
-    await fs.mkdir(path.join(workspaceRoot, '.neko'), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, 'neko'), { recursive: true });
     await fs.writeFile(
-      path.join(workspaceRoot, '.neko', 'entity-bindings.json'),
+      path.join(workspaceRoot, 'neko', 'entity-bindings.json'),
       JSON.stringify({
         version: 1,
         bindings: [
@@ -135,9 +135,9 @@ describe('LiveRepresentationService', () => {
       }),
       'utf-8',
     );
-    await fs.mkdir(path.join(workspaceRoot, '.neko'), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, 'neko'), { recursive: true });
     await fs.writeFile(
-      path.join(workspaceRoot, '.neko', 'entity-bindings.json'),
+      path.join(workspaceRoot, 'neko', 'entity-bindings.json'),
       JSON.stringify({
         version: 1,
         bindings: [

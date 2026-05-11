@@ -19,7 +19,8 @@ interface MediaLibraryLocalSettings {
 }
 
 const logger = getLogger('WorkspacePathResolver');
-const NEKO_DIR = '.neko';
+const NEKO_FACTS_DIR = 'neko';
+const NEKO_LOCAL_DIR = '.neko';
 const SETTINGS_FILE = 'settings.json';
 const LOCAL_SETTINGS_FILE = 'settings.local.json';
 const PATH_VARIABLE_RE = /\/?\$\{([^}]+)\}/;
@@ -45,8 +46,8 @@ async function loadWorkspacePathVariables(): Promise<PathVariableMap> {
   const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
 
   for (const folder of workspaceFolders) {
-    const settingsPath = path.join(folder.uri.fsPath, NEKO_DIR, SETTINGS_FILE);
-    const localSettingsPath = path.join(folder.uri.fsPath, NEKO_DIR, LOCAL_SETTINGS_FILE);
+    const settingsPath = path.join(folder.uri.fsPath, NEKO_FACTS_DIR, SETTINGS_FILE);
+    const localSettingsPath = path.join(folder.uri.fsPath, NEKO_LOCAL_DIR, LOCAL_SETTINGS_FILE);
     const settings = await readJsonFile<MediaLibrarySettings>(settingsPath);
     const localSettings = await readJsonFile<MediaLibraryLocalSettings>(localSettingsPath);
     const overrides = localSettings?.mediaLibraryOverrides ?? {};

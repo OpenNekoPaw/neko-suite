@@ -60,7 +60,7 @@ Neko Suite 应采用“统一实体 + 素材实体 + 绑定组合 + 表现解析
 
 ```text
 EntityAssetBindingService
-  读写 .neko/entity-bindings*.json
+  读写 neko/entity-bindings*.json
   保存 entityId / role / assetRef / status / default
   不解析素材内部结构
 
@@ -571,9 +571,9 @@ Live 的 calibration、tracking profile 属于运行表现配置，可以作为�
 
 | 数据 | 建议位置 | 说明 |
 |---|---|---|
-| 实体身份 | `characters.json`，未来可扩展为 `.neko/entities/*.json` | 可 Git 跟踪，用户可审阅 |
-| 素材库存 | `.neko/assets/library.json` | 记录 AssetEntity / Variant / File |
-| 实体-素材绑定 | `.neko/entity-bindings.json` 或 `.neko/entity-bindings/*.json` | 当前确认态，依赖 Git 管版本 |
+| 实体身份 | `characters.json`，未来可扩展为 `neko/entities/*.json` | 可 Git 跟踪，用户可审阅 |
+| 素材库存 | `neko/assets/library.json` | 记录 AssetEntity / Variant / File |
+| 实体-素材绑定 | `neko/entity-bindings.json` 或 `neko/entity-bindings/*.json` | 当前确认态，依赖 Git 管版本 |
 | 生成资产索引 | `.neko/generated/` + generated index | 二进制在磁盘，JSON 只存引用 |
 | 关系图缓存 | `.neko/.cache/asset-graph.json` | 派生层，可重建 |
 | Live session preset | `.neko/live/*.json` 或表现包附属配置 | 运行配置，不是身份事实 |
@@ -793,7 +793,7 @@ public asset
 
 - `@neko/shared` 已新增 `CreativeEntity`、`EntityAssetBinding`、`AssetRefResolver`、`RepresentationResolver`、`VisualIdentityDraft`、`EntityAssetRequirement` 和表现包文件角色契约。
 - VSCode Extension Host 侧已提供 `CharacterRecordAdapter`、`CreativeEntityRegistryService`、`EntityAssetBindingService`、`DefaultAssetRefResolver`、`RepresentationResolver`、`VisualIdentityDraftService`、`EntityAssetRequirementService`。
-- 绑定当前态写入 `.neko/entity-bindings.json`，不写入 `.neko/.cache/`；绑定版本审计由 Git 负责。`EntityAssetBindingService.setDefault()` 会保证同一实体同一 role 的默认绑定唯一。
+- 绑定当前态写入 `neko/entity-bindings.json`，不写入 `.neko/.cache/`；绑定版本审计由 Git 负责。`EntityAssetBindingService.setDefault()` 会保证同一实体同一 role 的默认绑定唯一。
 - `RepresentationResolver` 已支持默认回退链、`fallbackOrder`、`allowFallback=false`、`resolvedKind` 和 `fallback`，并可通过窄口接入 Asset Federation 能力/组件文件语义。
 - 生成媒体血缘可从 `GeneratedAsset.characterIds` 和 `sourceNodeId` 投影为视觉草案与待补素材需求。
 - Story 的 `OccurrenceIndexService` 已索引 gallery、shot、生成资产、素材实体，以及 Canvas annotation/text/container 文本中的实体出现点。

@@ -55,7 +55,7 @@ async function loadWorkspacePathVariables(): Promise<PathVariableMap> {
   const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
 
   for (const folder of workspaceFolders) {
-    const settingsPath = path.join(folder.uri.fsPath, '.neko', 'settings.json');
+    const settingsPath = path.join(folder.uri.fsPath, 'neko', 'settings.json');
     const localSettingsPath = path.join(folder.uri.fsPath, '.neko', 'settings.local.json');
     const settings = await readJsonFile<MediaLibrarySettings>(settingsPath);
     const localSettings = await readJsonFile<MediaLibraryLocalSettings>(localSettingsPath);

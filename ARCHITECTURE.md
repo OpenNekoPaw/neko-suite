@@ -290,7 +290,7 @@ Extension Host
 | Agent Media Architecture | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story storyboard responsibility boundaries; Agent self-sufficiency; GeneratedAsset disk storage + JSON references; DragDropBroker cross-extension transfer; Send-to-Agent unified protocol (file-level + content-level, zero base64); MediaPreprocessor auto-scaling/frame-extraction |
 | Story-Agent-Canvas Boundary | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md) | Agent-first boundary convergence: story owns script facts + lightweight review table, agent owns orchestration, canvas owns storyboard workspace; dual-path (mechanical/semantic) import; StorySceneStateStore + workspaceState persistence |
 | Document Preview | [architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ/DOCX built-in previewer; waterfall virtual scroll + dual-column mode; Webview direct connection to neko-engine HTTP (no postMessage relay); epub.js fetchForEpub replaces XHR |
-| Path System | *Internalized* | Project files store only relative paths + `${VAR}/path`; PathResolver (@neko/shared L0) unified resolution; Rust ProjectContext (resolve/validate); EngineClient/PreviewFileServer auto-expand variables; variable sources: .neko/settings.json + settings.local.json |
+| Path System | *Internalized* | Project files store only relative paths + `${VAR}/path`; PathResolver (@neko/shared L0) unified resolution; Rust ProjectContext (resolve/validate); EngineClient/PreviewFileServer auto-expand variables; variable sources: neko/settings.json (git-tracked) + .neko/settings.local.json (gitignored) |
 
 ---
 

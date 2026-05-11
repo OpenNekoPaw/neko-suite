@@ -105,7 +105,7 @@ export interface AblationToggles {
 
   // === 外部集成 ===
 
-  /** 外部 shell hooks (PreToolUse/UserPromptSubmit from .neko/settings.json)
+  /** 外部 shell hooks (PreToolUse/UserPromptSubmit from neko/settings.json)
    *  false=禁用，不执行任何外部 hook */
   settingsHooks?: false;
   /** 项目记忆后端（`.neko/memory.md` 的 recall / injection / 写入目标）

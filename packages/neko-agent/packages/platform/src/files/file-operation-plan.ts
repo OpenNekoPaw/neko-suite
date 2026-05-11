@@ -115,7 +115,8 @@ export function buildSettingsFilePlan(input: {
   workspaceRoot?: string;
 }): EnsureFileOperationPlan {
   const basePath = resolveNekoBasePath({
-    source: input.source === 'personal' ? 'personal' : 'project',
+    source:
+      input.source === 'personal' ? 'personal' : input.source === 'local' ? 'local' : 'project',
     homeDir: input.homeDir,
     workspaceRoot: input.workspaceRoot,
   });
@@ -166,7 +167,7 @@ export function buildConfigFilePath(homeDir: string): string {
 }
 
 function resolveNekoBasePath(input: {
-  source: 'personal' | 'project';
+  source: 'personal' | 'project' | 'local';
   homeDir: string;
   workspaceRoot?: string;
 }): FileOperationPlan {
@@ -181,8 +182,15 @@ function resolveNekoBasePath(input: {
     return { ok: false, error: 'No workspace folder open' };
   }
 
+  if (input.source === 'local') {
+    return {
+      ok: true,
+      filePath: path.join(input.workspaceRoot, '.neko'),
+    };
+  }
+
   return {
     ok: true,
-    filePath: path.join(input.workspaceRoot, '.neko'),
+    filePath: path.join(input.workspaceRoot, 'neko'),
   };
 }
