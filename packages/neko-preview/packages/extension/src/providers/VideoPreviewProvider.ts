@@ -187,7 +187,7 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
                 let audioStreamUrl: string | null = null;
                 if (result.audioStreamId) {
                   audioStreamUrl =
-                    this._previewService?.getAudioWebSocketUrl(result.audioStreamId) ?? null;
+                    this._previewService?.getStreamWebSocketUrl(result.audioStreamId) ?? null;
                 }
                 if (streamUrl) {
                   await webviewPanel.webview.postMessage({
