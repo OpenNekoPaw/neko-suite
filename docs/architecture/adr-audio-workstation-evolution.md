@@ -1,7 +1,7 @@
 # ADR: neko-audio Architecture Evolution — Audio Post-Production Workstation → DAW-Ready
 
-- **Status**: Proposed (rev.3 — engine capability gap analysis + honest degradation)
-- **Date**: 2026-05-11
+- **Status**: Proposed (rev.5 — mix stream vs timeline comparison; path resolution context; agent execution model fix; AudioMixdown effect warnings; gateway layer separation; schema-strip downgrade; transcode cast/resample clarification)
+- **Date**: 2026-05-12
 - **Author**: Claude (Architect)
 - **Scope**: neko-audio (webview + extension + @neko/shared types + neko-engine audio DSP)
 
@@ -126,7 +126,7 @@ Domain Layer (@neko/shared + neko-engine)
 ├── types/audioAutomation.ts — IAutomationLane, AutomationPoint (P1)
 ├── types/audioPlugin.ts   — IPluginDescriptor, IPluginState (P2)
 ├── operations/            — EditOperation types including track.mix.* (NEW)
-├── nka/buildMixConfig.ts  — pure function: AudioProjectData → { config, warnings } (NEW)
+├── nka/buildMixConfig.ts  — pure function: (AudioProjectData, MixConfigContext) → { config, warnings } (NEW)
 └── neko-engine/           — Rust DSP, AudioMixdown, mix stream, NkaLoader (CLI)
 ```
 
@@ -154,13 +154,13 @@ Domain Layer (@neko/shared + neko-engine)
 
 ```
 入口 A — VSCode 在线编辑 (Extension 是 SSOT):
-  Extension 解析 .nka → 编辑 → buildMixStreamConfig()
+  Extension 解析 .nka → 编辑 → buildMixConfig(data, ctx)
     → HTTP POST audios:mix_stream { config }
     → Engine 渲染 (无状态，不缓存 config)
 
 入口 B — CLI 离线渲染 (Engine 独立运行):
   $ neko-engine export project.nka -o output.wav
-    → host-cli: NkaLoader 读 .nka JSON → 构建 MixdownConfig
+    → host-cli: NkaLoader 读 .nka JSON → resolve relative/${VAR} paths → 构建 MixdownConfig
     → engine-kernel: AudioMixdown.export(config, output)
     → 输出文件 (不需要 VSCode/Extension)
 ```
@@ -172,6 +172,195 @@ Domain Layer (@neko/shared + neko-engine)
 - 在线编辑时 Extension 仍是唯一 SSOT，Engine 不缓存工程状态
 
 **neko-cut 同理** — Engine 的 `host-cli` 也应该能 `neko-engine export project.nkv -o output.mp4`，使用同样的 NkvLoader → RenderConfig 模式。这是跨项目的统一 CLI 渲染入口。
+
+### Interface Architecture: IPC Control vs WS Data
+
+Engine 与 Extension 之间存在两条截然不同的通信通道，各自承载不同类型的数据：
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Webview (React + Zustand)                                           │
+│  audioStore ─── 单文件播放/分析/UI 状态                                │
+│  audioProjectStore ─── 工程结构 + undo/redo + EditOperation dispatch  │
+├──────────── postMessage (typed, audio:* namespace) ─────────────────┤
+│ Extension Host (Node.js)                                            │
+│  AudioEditorProvider ─── 单文件编辑桥接                                │
+│  AudioProjectProvider ─── 工程元数据管理 + _projectDataCache          │
+│  AudioService ─── EngineClient facade (HTTP/WS)                     │
+├──────────── IPC (N-API HTTP) ──────── WS (PCM stream) ─────────────┤
+│ Rust Engine                                                         │
+│  AudioController ─── 20 actions (audios:*)                          │
+│  AudioMixdown ─── 多轨混音引擎 + DSP effect chains                    │
+│  PlaybackState + ActiveStreams ─── 播放控制 / hot-update 状态            │
+│  MicCapture ─── cpal 录音 + 原子监控数据                               │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Two Channels
+
+| Dimension | IPC (N-API / HTTP POST) | WebSocket |
+|-----------|-------------------------|-----------|
+| **Responsibility** | Operation control + metadata query | Real-time binary stream |
+| **Direction** | Request-response (TS → Rust → TS) | Push (Rust → TS) |
+| **Data format** | JSON (ActionRequest / ActionResponse) | Binary (PCM f32le frames) |
+| **Typical actions** | `audios:probe`, `audios:transcode`, `audios:mix_export` | `/v1/streams/{id}` PCM frame stream |
+| **Latency** | Millisecond-level response is sufficient | Real-time (<10ms per frame) |
+| **State** | Stateless (each request self-contained) | Stateful (streamId binds session) |
+
+Additionally, a lightweight HTTP polling endpoint: `GET /v1/monitor/{stream_id}` returns atomic RMS/Peak/Clipping data. Webview polls at 60fps via `requestAnimationFrame` for level meters. Zero-lock reads via `AtomicU32` in the Rust recording thread (~0.1ms latency).
+
+#### Engine Action Surface (20 Actions)
+
+**Query (stateless, IPC):**
+
+| Action | Input | Output | Purpose |
+|--------|-------|--------|---------|
+| `audios:probe` | filePath | MediaInfo (duration/codec/sr/ch/bitrate) | File metadata |
+| `audios:waveform` | filePath, peaksPerSecond? | WaveformData (peaks[][], duration) | Waveform visualization |
+| `audios:diff` | pathA, pathB | AudioContentDiff (SNR/regions/peaks) | Audio comparison |
+| `audios:analyze_loudness` | filePath, targetLufs? | LoudnessAnalysis (LUFS/truePeak/LRA) | ITU-R BS.1770-4 loudness |
+| `audios:detect_silence` | filePath, threshold?, minDuration? | SilenceAnalysis (regions[]) | Silence detection |
+| `audios:list_input_devices` | — | InputDevice[] (id/name/sr/ch/isDefault) | Device enumeration |
+
+**Transform (stateless, IPC):**
+
+| Action | Input | Output | Purpose |
+|--------|-------|--------|---------|
+| `audios:transcode` | source, output, codec/sr/ch, effects?*, startTime?*, endTime?* | outputPath | Format convert + trim + effects (\*P0-PR1a) |
+| `audios:segment` | source, start, duration, format? | base64 data | Extract segment (returns bytes, not file) |
+| `audios:mixdown` | `config: MixdownConfig` | base64 PCM buffer (f32le→s16le) | Single-buffer mix snapshot. P0-PR1a adds `config` to `MixdownRequestOptions`, while temporarily accepting legacy `{ tracks, sampleRate, channels, time }` and normalizing it into `MixdownConfig`. Legacy input is removed in a dedicated P1 cleanup task after all TS callers have migrated. |
+| `audios:mix_export` | MixdownConfig + output, format?, bitrate? | outputPath | Full project export to file |
+
+**Streaming (stateful, IPC create + WS push):**
+
+| Action | Input | Output | Purpose |
+|--------|-------|--------|---------|
+| `audios:stream` | filePath, sessionId | streamId + wsUrl | Single-file PCM playback |
+| `audios:mix_stream` | MixdownConfig, sessionId, startTime? | streamId + wsUrl | Multi-track mix playback |
+| `audios:record_start` | outputPath?, deviceId?, sr?, ch? | streamId + monitorUrl | Start mic capture |
+| `audios:record_stop` | streamId | path + duration + format + sr + ch | Stop recording |
+
+**Playback control (stateful, IPC targeting existing streamId):**
+
+| Action | Input | Purpose |
+|--------|-------|---------|
+| `audios:stop` / `audios:pause` / `audios:resume` | streamId | Playback state toggle |
+| `audios:seek` | streamId, time | Jump to position |
+| `audios:speed` | streamId, speed | Playback speed |
+| `audios:loop` | streamId, enabled, start?, end? | Loop region |
+
+#### EditOperation Sync
+
+EditOperation is the most complex data flow — Webview initiates edits that must sync to the Extension cache. The Engine does **not** keep an editable `.nka` or `AudioProjectData` model. For playback, Extension derives a fresh `MixdownConfig` from project data and sends that render instruction to Engine.
+
+```
+ Webview                       Extension                         Engine
+   │                               │                                │
+   │ dispatch(op)                  │                                │
+   ├──[1] local apply ────────────►│                                │
+   │  (audioProjectStore           │                                │
+   │   + undo/redo stack)          │                                │
+   │                               │                                │
+   ├──[2] postMessage ────────────►│                                │
+   │  'operationApplied'           │                                │
+   │                               ├──[3] apply to cache            │
+   │                               │  _projectDataCache             │
+   │                               │  markDirty()                   │
+   │                               │                                │
+   │                               │  (save writes .nka)            │
+   │                               │                                │
+   │                               ├──[4*] if active mix stream: ──►│
+   │                               │  buildMixConfig(data, ctx)     │
+   │                               │  audios:mix_stream update      │
+   │                               │  (full config replacement)     │
+```
+
+**[4\*] Scope**: P0 does not hot-update playback; edits are heard on the next play/stop-restart. P1 wires `audios:mix_stream { action: 'update' }`, and any playback-affecting operation triggers a full `MixdownConfig` replacement. Unlike neko-cut video timeline preview, audio does **not** use Engine-side incremental `try_apply_operation_with_base_dir()` for `.nka` edits.
+
+**Operation type routing:**
+
+| Operation category | Persisted in .nka | Affects render config | Engine update behavior | Undo/Redo |
+|--------------------|-------------------|-----------------------|------------------------|-----------|
+| `track.mix.*` (volume/pan/solo/effect) | Yes (trackMix) | Yes | P0 next playback; P1 full `MixdownConfig` replacement if stream active | Yes |
+| `audio.effect.*` (master effects) | Yes (masterEffectsChain) | Yes | P0 next playback; P1 full `MixdownConfig` replacement if stream active | Yes |
+| `audio.marker.*` | Yes (markers) | No | None | Yes |
+| `element.*` (add/remove/update/move/split) | Yes (tracks[].elements) | Yes | P0 next playback; P1 full `MixdownConfig` replacement if stream active | Yes |
+| `track.*` (add/remove/update/reorder/toggle) | Yes (tracks[]) | Yes for playback-visible fields | P0 next playback; P1 full `MixdownConfig` replacement if stream active | Yes |
+
+#### MixdownConfig: Metadata → Binary Bridge
+
+`MixdownConfig` is the key contract that bridges Extension-side project metadata with Engine-side binary audio processing. Extension builds it from `AudioProjectData` plus path-resolution context:
+
+```
+AudioProjectData (.nka JSON)          MixdownConfig (Engine render instruction)
+┌──────────────────────────┐          ┌──────────────────────────────────┐
+│ tracks[].elements[] ─────┼────────► │ tracks[].elements[]              │
+│   .src (file path)       │          │   Engine reads binary via path   │
+│   .startTime / .duration │          │   Positions in timeline          │
+│   .trimStart             │          │   Offset from source start       │
+│                          │          │                                  │
+│ trackMix[trackId]        │          │ tracks[]                         │
+│   .volume / .pan / .solo │────────► │   .volume / .pan / .solo / .muted│
+│   .effectChain[]         │          │   .effectChain[] → DSP pipeline  │
+│                          │          │                                  │
+│ masterEffectsChain[] ────┼────────► │ masterEffects[] → master DSP     │
+│ masterVolume ────────────┼────────► │ masterVolume + SoftLimiter(0.95) │
+│ sampleRate / channels ───┼────────► │ sampleRate / channels            │
+└──────────────────────────┘          └──────────────────────────────────┘
+                                        │
+                                        ▼
+                                      Engine AudioMixdown:
+                                        FFmpeg decode → per-element gain/pan/fade
+                                        → per-track effect chain → track mix
+                                        → bus routing (P1) → master effects
+                                        → soft limiter → PCM output
+```
+
+**Conversion point**: `buildMixConfig(data, ctx)` (pure function in `@neko/shared/nka/buildMixConfig.ts`) performs this mapping. Returns `{ config: MixStreamConfig, warnings: string[] }` — planned-only effects are filtered with warnings.
+
+**Path resolution context**: `.nka` files store element `src` paths as relative paths or `${VAR}/path` variables (per the project's path system — see ADR: Path System). Engine reads `MixdownConfig.tracks[].elements[].src` as absolute file paths for FFmpeg decoding. Therefore `buildMixConfig()` requires a resolution context:
+
+```typescript
+// @neko/shared/nka/buildMixConfig.ts
+
+export interface MixConfigContext {
+  projectDir: string;
+  resolvePath: (rawPath: string) => string;
+}
+
+export function buildMixConfig(
+  data: AudioProjectData,
+  ctx: MixConfigContext
+): { config: MixStreamConfig; warnings: string[] }
+```
+
+- `resolvePath` expands `${VAR}/path` and resolves relative paths against `projectDir` → absolute paths
+- Extension provides `ctx` from `PathResolver` (which reads `neko/settings.json` + `.neko/settings.local.json`)
+- CLI does **not** call the TS `buildMixConfig()` function. Rust `host-cli` implements an equivalent `NkaLoader` mapping from `.nka` JSON to `MixdownConfig`, using `ProjectContext` for relative/${VAR} path resolution. Parity is enforced by shared schema examples/tests, not by sharing TS code across the Rust boundary.
+- Webview does **NOT** call `buildMixConfig` directly — it sends `audio:playback` intent to Extension, which builds the config from its own cache + PathResolver context
+
+**MixConfig ownership rule**: Extension is the sole builder of `MixStreamConfig` for both playback and export. Webview sends intents (`audio:playback`, `audio:export`), never configs.
+
+**Design principle**: Extension decides "what to render" (builds MixdownConfig from project metadata + path context); Engine decides "how to render" (FFmpeg decode, DSP, mixing). Engine receives MixdownConfig as a stateless render instruction — it does not cache or modify it.
+
+#### Known Interface Contract Gaps
+
+Three gaps exist between the current TS and Rust interfaces (partially overlapping with Defects 1–5 above):
+
+**Gap 1: Semantic Overload on `audios:transcode`**
+
+Trim, effects, denoise, normalize, and export all route through `audios:transcode` using option fields to differentiate semantics. The action was originally designed for format conversion only. This creates confusion in:
+- Agent tool routing (is "apply effects" a transcode?)
+- Error reporting (transcode failure could mean codec error or effect processing error)
+- The `audio:*` message protocol (P0-PR1b) partially addresses this by providing semantic message types (`audio:trim`, `audio:applyEffect`, `audio:export`) that all route to the same Engine action but with clear intent at the Extension level.
+
+**Gap 2: `mix_stream` Hot-Update Not Exposed**
+
+Engine `AudioMixdown::update_config()` exists but is not wired to the `audios:mix_stream update` action (currently returns `update_not_yet_supported` stub). This means every edit during playback requires stop → rebuild config → restart stream, causing audible gaps. P1 evolution section (below) details the fix.
+
+**Gap 3: `trackMix` Persistence Boundary**
+
+`trackMix` (volume/pan/solo/effectChain) in .nka v2.1 is an optional field, but `trackViewState` (height/color) is never persisted. The sync timing between `trackUIState` (old local Zustand) and `trackMix` (persisted) was inconsistent — P0-PR2 resolves this by promoting mix state to `AudioProjectData.trackMix` driven by `TrackMixOperation` EditOperations, and renaming the remainder to `trackViewState`.
 
 ### Agent Edit Execution Model (Extension-Side, matching neko-cut)
 
@@ -209,56 +398,89 @@ Webview (receives project:sync)
 
 ```
 P0 (current): stop + restart stream on every edit
-  edit → buildMixStreamConfig(newData) → stop stream → start new stream with new config
+  edit → buildMixConfig(data, ctx) → stop stream → start new stream with new config
 
 P1 (hot-update): edit reflects immediately in playing stream
-  edit → buildMixStreamConfig(newData) → HTTP POST mix_stream { action: 'update', streamId, config }
+  edit → buildMixConfig(data, ctx) → HTTP POST mix_stream { action: 'update', streamId, config }
   → Engine replaces in-memory config → next audio buffer uses new params
   → User hears change instantly (no gap)
+```
+
+#### Audio Mix Stream vs Video Timeline Stream — Comparison
+
+Both systems share the same infrastructure (`PlaybackState` watch channel, `ActiveStreams`, `WallClockPacer`, `spawn_blocking` loop), but differ in data model and update semantics:
+
+| Dimension | Video Timeline Stream | Audio Mix Stream |
+|-----------|----------------------|------------------|
+| **Data model** | `Timeline` (editable document, elements + tracks + effects) | `MixdownConfig` (render instruction, derived from `AudioProjectData`) |
+| **Loop file** | `timeline.rs` `start_stream()` | `audio_mix_stream.rs` `start_mix_stream()` |
+| **Renderer** | `PreviewPipeline` (GPU + FFmpeg video + audio) | `AudioMixdown` (FFmpeg audio decode + DSP) |
+| **Hot-update field** | `PlaybackState.timeline_update: Option<Arc<Timeline>>` + `timeline_seq` | **Missing** — needs `mixdown_update: Option<Arc<MixdownConfig>>` + `mixdown_seq` |
+| **Update method** | `StreamPlaybackDelegate::update_timeline()` | **Missing** — needs `update_mixdown()` |
+| **Loop detection** | `if state.timeline_seq != last_timeline_seq` → `pipeline.update_timeline()` | **Missing** — loop only reads seek/pause/speed/loop_region |
+| **Incremental apply** | `streams:applyOperation` → `timeline.try_apply_operation_with_base_dir()` → incremental Timeline edit → `update_timeline()` | **Not applicable** — `MixdownConfig` is a derived render instruction, not an editable model. Full config replacement only. |
+| **Controller action** | `streams:update` → `TimelineService::update_stream()` | `audios:mix_stream { action: 'update' }` → **Stub** (returns `update_not_yet_supported`) |
+| **Renderer update method** | `PreviewPipeline::update_timeline(timeline)` | `AudioMixdown::update_config(config)` — **Already implemented** (replaces tracks/effects/volume, opens decoders for new sources) |
+
+**Key architectural difference**: Video timeline uses two update paths (incremental `applyOperation` for small edits + full `streams:update` for bulk changes). Audio mix stream only needs one path — full `MixdownConfig` replacement — because:
+1. `MixdownConfig` is a stateless render instruction derived from `AudioProjectData` by `buildMixConfig()`
+2. Edits happen on `AudioProjectData` in TS Extension (EditOperations + undo/redo)
+3. After each edit, Extension rebuilds `MixdownConfig` and pushes it to Engine
+4. Engine has no independent edit state to maintain
+
+```
+Video edit path (two routes):
+  Fast: applyOperation → incremental Timeline mutation → update_timeline (Arc<Timeline>)
+  Full: streams:update → full Timeline replacement
+
+Audio edit path (one route):
+  TS edit AudioProjectData → buildMixConfig(data, ctx) → mix_stream update → full MixdownConfig replacement
 ```
 
 #### Engine-Side Readiness Analysis
 
 | Layer | Component | Status | Notes |
 |-------|-----------|--------|-------|
-| `engine-kernel` | `AudioMixdown::update_config(config)` | **Done** | Replaces tracks/effects/volume, opens decoders for new sources |
-| `engine-kernel` | `PlaybackState` (watch channel) | **Missing `mixdown_update` field** | Has `timeline_update` (neko-cut) and `config_update` (preview) as reference |
+| `engine-kernel` | `AudioMixdown::update_config(config)` | **Done** | Replaces tracks/effects/volume, opens decoders for new sources, closes removed sources |
+| `engine-kernel` | `PlaybackState` (watch channel) | **Missing `mixdown_update` field** | Has `timeline_update` (neko-cut) and `config_update` (preview) as reference patterns |
 | `engine-kernel` | `audio_mix_stream.rs` loop | **Does not read update field** | Only reads seek/pause/speed/loop_region |
 | `host-api` | `mix_stream update` action | **Stub** — parses config but returns `update_not_yet_supported` | TODO(P1) comment in code |
-| `host-api` | `ActiveStreams::update_timeline()` | **Done** (neko-cut reference) | Same pattern needed for mixdown |
+| `host-api` | `ActiveStreams::update_timeline()` | **Done** (neko-cut reference) | Same `update_state` closure pattern reusable for mixdown |
 
-#### Implementation (small delta — follow neko-cut `timeline_update` pattern)
+#### Implementation (~42 lines across 4 files — direct copy of neko-cut pattern)
 
 ```rust
 // 1. PlaybackState — add fields (engine-kernel/src/services/impls/stream_loop.rs)
 pub struct PlaybackState {
-    // ... existing fields ...
+    // ... existing fields (paused, speed, loop_region, seek_to/seq, timeline_update/seq, config_update/seq) ...
     pub mixdown_update: Option<Arc<MixdownConfig>>,
     pub mixdown_seq: u64,
 }
 
-// 2. audio_mix_stream.rs — read update in loop
+// 2. audio_mix_stream.rs — read update in loop (after seek/pause/speed handling)
 let mut last_mixdown_seq: u64 = 0;
-// ... inside loop, after seek/pause/speed handling:
+// ... inside loop:
 if state.mixdown_seq != last_mixdown_seq {
     last_mixdown_seq = state.mixdown_seq;
     if let Some(ref new_config) = state.mixdown_update {
+        tracing::info!("Audio mix loop: hot-updating config (seq={})", state.mixdown_seq);
         mixdown.update_config((*new_config).clone());
-        // Recalculate total_duration for EOF check
         total_duration = mixdown.total_duration();
     }
 }
 
-// 3. ActiveStreams — add method (or reuse update_state)
+// 3. StreamPlaybackDelegate — add method (reuse update_state closure)
 pub async fn update_mixdown(
     &self,
     stream_id: &StreamId,
     config: Arc<MixdownConfig>,
 ) -> Result<()> {
-    self.update_state(stream_id, |s| {
-        s.mixdown_update = Some(config);
-        s.mixdown_seq += 1;
-    }).await
+    self.active_streams
+        .update_state(stream_id, |s| {
+            s.mixdown_update = Some(config);
+            s.mixdown_seq += 1;
+        })
+        .await
 }
 
 // 4. host-api mix_stream update action — replace TODO stub
@@ -270,15 +492,17 @@ pub async fn update_mixdown(
 }
 ```
 
-#### neko-cut Reference (already working)
+#### update_config() Behavior (already implemented in AudioMixdown)
 
-neko-cut's video preview stream uses the identical pattern:
-- `PlaybackState.timeline_update: Option<Arc<Timeline>>` + `timeline_seq`
-- `ActiveStreams::update_timeline(stream_id, timeline)` sets the field
-- Video stream loop detects `timeline_seq` change → calls `pipeline.update_timeline()`
-- `host-api` `videos:preview update` action triggers it
+`AudioMixdown::update_config()` performs a diff between old and new config:
+- **New sources**: opens `FfmpegAudioDecoder` for files not in the current source map
+- **Removed sources**: closes decoders for files no longer referenced
+- **Retained sources**: keeps existing decoders (preserving decode position and residual buffer)
+- **Track/master config**: replaces volume/pan/solo/mute/effectChain, rebuilds effect chains
+- **Master effects**: rebuilds master effect chain from new config
+- **Cost**: proportional to number of source changes, not total config size. If only volume/pan changes, no decoders are touched.
 
-The audio mix stream implementation is a direct copy of this pattern with `MixdownConfig` replacing `Timeline`.
+This is heavier than video's `pipeline.update_timeline()` (which only swaps an Arc reference), but still sub-millisecond for typical edits (volume/pan/effect parameter changes without new source files).
 
 ---
 
@@ -308,6 +532,8 @@ export type TrackMixOperation =
 interface ProjectSyncMessage {
   type: 'project:sync';
   projectData: AudioProjectData;
+  /** Present for Agent/tool edits so Webview can record undo metadata without executing the op. */
+  operation?: EditOperation;
 }
 
 // Webview → Extension: user UI edits (unchanged)
@@ -344,9 +570,9 @@ export const PLANNED_EFFECT_TYPES: Set<string> = new Set(['noise-reduction', 'pi
 
 // Runtime rejection points (ALL must reject planned types before they reach the engine):
 // 1. AudioToolBridge.applyTrackEffect() — check effectType against PLANNED_EFFECT_TYPES → return error with message
-// 2. audioProjectStore.buildMixStreamConfig() — returns { config, warnings } tuple.
-//    Caller (playback/export) decides how to surface warnings (toast on export, ignore on playback).
-//    buildMixStreamConfig itself is a PURE builder — no side effects, no toast.
+// 2. buildMixConfig(data, ctx) — returns { config, warnings } tuple.
+//    Extension caller (playback/export/MixExport tool) decides how to surface warnings.
+//    buildMixConfig itself is a PURE builder — no side effects, no toast.
 // 3. AudioProjectProvider 'editor:applyEffects' handler — reject planned types with user-facing toast
 // 4. AudioProjectProvider 'editor:denoise' handler — see P0-PR1b (changed to noise-gate or disabled)
 // 5. Rust factory fallback changed from passthrough Gain(0) to Err() in P0-PR1a — hard rejection
@@ -363,7 +589,7 @@ export const PLANNED_EFFECT_TYPES: Set<string> = new Set(['noise-reduction', 'pi
 //
 // This split already exists in the codebase and P0 does NOT unify them (too large a migration).
 // Conversion points:
-//   - buildMixStreamConfig(): maps masterEffectsChain snapshot.type → config.effectType for master bus
+//   - buildMixConfig(data, ctx): maps masterEffectsChain snapshot.type → config.effectType for master bus
 //   - TrackMixOperation payloads use AudioEffectConfig directly (track effects are engine-facing)
 //   - loadNka() normalizes BOTH: masterEffectsChain[].type AND trackMix[].effectChain[].effectType
 //
@@ -533,6 +759,11 @@ Reverb, delay, chorus, compressor, and noise-gate all maintain internal state (f
 
 **Tail drain limitation (P0 scope)**: The `AudioEffect` trait has no `flush()`/`tail_length()` method. After input EOF, reverb/delay tails are truncated. P0 does NOT extend output duration for tails — this is acceptable for post-production (user can add silence at end if needed). A future PR can add `fn tail_samples(&self) -> usize` to the trait and feed zero-buffers after EOF.
 
+**Sample format and resampling boundary**: The current `FfmpegAudioDecoder` is initialized with `SampleFormat::F32` output (`audio.rs:126`), so decoded frames are `Vec<u8>` containing interleaved f32le bytes. The `bytemuck::cast_slice::<u8, f32>()` conversion is zero-copy (reinterpretation, not conversion). Decoder also accepts target `sample_rate` and `channels` — FFmpeg performs resampling internally via `swr_context`. Therefore:
+- Effects always process at the decoder's output sample rate and channel count
+- If `opts.sample_rate` or `opts.channels` differ from source, decoder resamples **before** effects
+- Encoder receives already-resampled f32 buffers — no further conversion needed (except f32→target codec sample format, handled by FFmpeg encoder)
+
 ```rust
 // CORRECT: deserialize Vec<Value> → Vec<AudioEffectConfig>, build chain once, process per-frame
 let mut chain = if let Some(effect_values) = &opts.effects {
@@ -547,12 +778,13 @@ let mut chain = if let Some(effect_values) = &opts.effects {
 
 // In decode loop:
 loop {
-    let samples = decoder.next_frame()?;
+    let frame = decoder.next_frame()?;             // frame.data: Vec<u8> (f32le bytes)
+    let buffer: &mut [f32] = bytemuck::cast_slice_mut(&mut frame.data);  // zero-copy reinterpret
     // ... time_range slice if needed ...
     if let Some(chain) = &mut chain {
-        chain.process(&mut buffer, channels, sample_rate);
+        chain.process(buffer, channels, sample_rate);  // in-place DSP at decoder output rate
     }
-    encoder.write_frame(&buffer)?;
+    encoder.write_frame(buffer)?;
 }
 // NOTE: reverb/delay tails are truncated at EOF (no tail drain in P0)
 ```
@@ -585,19 +817,28 @@ HTTP request JSON → host-api controller (normalize legacy format) → domain o
 - `host-api/src/controllers/audio.rs`:
   - `TranscodeRequestOptions` add: `effects: Option<Vec<serde_json::Value>>`, `start_time: Option<f64>`, `end_time: Option<f64>`
   - Controller: normalize legacy format (if entry has `type` but no `effectType`, rename; add default `id`/`enabled`); map `start_time`/`end_time` → `time_range`; pass normalized `Vec<Value>` into `AudioTranscodeOptions.effects`
+  - `MixdownRequestOptions` add: `config: Option<serde_json::Value>` for `audios:mixdown`. Handler accepts new `{ config: MixdownConfig, time? }` input first; if absent, falls back to legacy `{ tracks, sampleRate, channels, time }` and constructs the same `MixdownConfig`. Emit a deprecation warning for legacy input so P1 cleanup can remove it safely.
 - `engine-kernel/src/services/impls/audio.rs` (transcode impl):
   - Before decode loop: if `effects.is_some()`, `serde_json::from_value::<Vec<AudioEffectConfig>>()` then `build_effect_chain()`
   - In decode loop: call `chain.process(&mut buffer, channels, sample_rate)` per frame
   - Chain lives for the entire transcode operation (stateful effects work correctly)
   - No tail drain after EOF (P0 limitation — documented above)
-- `engine-kernel/src/audio/dsp/effect_factory.rs` — **change unknown effect fallback from passthrough Gain(0) to `Err()`**. Current behavior (line ~146) silently creates a no-op gain for unknown types. P0 changes this to return an error so callers (transcode, mix_export) can surface "unsupported effect type: X" rather than succeeding with no audible change. `build_effect_chain()` propagates the error. **Also add underscored aliases** as a migration safety net: `"noise_gate"` → same as `"noise-gate"`, `"parametric_eq"` → same as `"parametric-eq"`, etc. This ensures old presets/projects that slip past TS normalization don't hard-fail at the engine level. The aliases are deprecated (TS layer should always send hyphenated) but prevent data loss.
+- `engine-kernel/src/audio/dsp/effect_factory.rs` — **change unknown effect fallback from passthrough Gain(0) to `Err()`**. Current behavior (line ~146) silently creates a no-op gain for unknown types. P0 changes this to return an error so callers (transcode, mix_export) can surface "unsupported effect type: X" rather than succeeding with no audible change. `build_effect_chain()` propagates the error. **Also add underscored aliases** as a migration safety net: `"noise_gate"` → same as `"noise-gate"`, `"parametric_eq"` → same as `"parametric-eq"`, etc. This ensures old presets/projects that slip past TS normalization don't hard-fail at the engine level. The aliases are deprecated (TS layer should always send hyphenated) but prevent data loss. **Defense-in-depth note**: P0-PR1b also adds TS-side normalization in `loadNka()` (underscored → hyphenated on load). The two layers are intentionally redundant — TS normalization catches `.nka` files and presets at load time; Rust aliases catch any value that bypasses TS (CLI direct load, malformed JSON, future callers). Neither layer alone is sufficient.
 - `host-api/src/controllers/audio.rs` — also add `format: Option<String>` as alias for `codec` in `TranscodeRequestOptions`. TS sends `format` (via `AudioService.transcode()`), Rust currently only has `codec`. Accept both: `let codec = opts.codec.or(opts.format);`. This fixes the format/codec field drift between TS and Rust without breaking existing callers.
+- `engine-kernel/src/services/audio_mixdown.rs` — **change `build_effect_chain` error handling from silent skip to explicit warning collection**. Current code builds master/track effect chains in `AudioMixdown::new()` with `unwrap_or_default()` / `if let Ok(chain)` and rebuilds them in `update_config()` with the same silent-skip behavior. P0 changes this lifecycle explicitly:
+  - `AudioMixdown::new(config)` stores raw config only and does not build effect chains, or delegates to a shared `rebuild_effect_chains()` helper that records warnings instead of dropping errors.
+  - `AudioMixdown::initialize()` builds initial master/track chains via that helper and collects `Vec<String>` warnings while still allowing playback if one effect is unsupported.
+  - `AudioMixdown::update_config(config)` returns warnings (e.g. `Result<Vec<String>>`) or stores them for the caller; it must not silently retain/drop old chains on error.
+  - `MixdownBuffer`/`mix_export` response surfaces warnings in JSON. Mix preview may log or forward warnings through the existing control response, but export must return them to Extension.
+  This ensures the "never silently drop" principle applies to mix paths, not just transcode.
 
 **Verification:**
 - `cargo test` — unit test: transcode with `[{ "id": "g1", "effectType": "gain", "enabled": true, "params": { "gainDb": -6.0 } }]` → output is 6dB quieter
 - `cargo test` — unit test: transcode with `start_time: 1.0, end_time: 3.0` → output is approximately 2s (P0 uses frame-level trim, not sample-accurate; output duration may vary by ±1 frame depending on codec frame size. Output timestamps are rebased to 0.)
 - `cargo test` — unit test: transcode with reverb effect on input that has trailing silence (impulse at t=0, 3s of silence after) → reverb tail audible in the silence region (proves chain state persists across frames without relying on tail drain)
 - TS integration: `audioService.transcode(file, out, { effects: [{ type: 'gain', params: { gainDb: -6 } }], startTime: 0, endTime: 5 })` → engine applies both trim and gain
+- `cargo test` — unit test: `AudioMixdown::initialize()` with track containing `noise-reduction` effect → mix still plays (effect skipped) + warnings include `"Unsupported effect type: noise-reduction"`; also verify `update_config()` returns/stores warnings for the same unsupported effect
+- `cargo test` — unit test: `mix_export` with unsupported effect → export succeeds + response includes `warnings` array
 
 #### P0-PR1b: TS Contract Alignment + Unified Message Protocol
 
@@ -632,7 +873,7 @@ Flow for `audio:playback { action: 'play' }`:
 
 | Current (remove) | Unified (new) | Extension routing |
 |-----------------|---------------|-------------------|
-| `editor:play` / `project:mixStreamStart` | `audio:playback { action: 'play', startTime? }` | single-file → `audioService.startStream(filePath)`; project → Extension calls `buildMixStreamConfig(projectData)` internally then `audioService.startMixStream(config)`. Webview does NOT send config — Extension owns the project data via cache and builds config on demand. |
+| `editor:play` / `project:mixStreamStart` | `audio:playback { action: 'play', startTime? }` | single-file → `audioService.startStream(filePath)`; project → Extension calls `buildMixConfig(projectData, ctx)` internally then `audioService.startMixStream(config)`. Webview does NOT send config — Extension owns the project data via cache and builds config on demand. |
 | `editor:pause` | `audio:playback { action: 'pause' }` | `audioService.pauseStream()` |
 | `editor:resume` | `audio:playback { action: 'resume' }` | `audioService.resumeStream()` |
 | `editor:stop` / `project:mixStreamStop` | `audio:playback { action: 'stop' }` | `audioService.stopStream()` |
@@ -644,7 +885,7 @@ Flow for `audio:playback { action: 'play' }`:
 | `editor:applyEffects` | `audio:applyEffect { effects: [...] }` | `audioService.transcode(... { effects })` |
 | `editor:analyzeLoudness` | `audio:analyze { type: 'loudness' }` | `audioService.analyzeLoudness()` |
 | `editor:detectSilence` | `audio:analyze { type: 'silence', threshold?, minDuration? }` | `audioService.detectSilence()` |
-| `editor:exportAs` / `project:mixExport` | `audio:export { format, bitrate?, sampleRate?, channels?, outputPath? }` | single-file → transcode; project → buildMixStreamConfig → mixExport |
+| `editor:exportAs` / `project:mixExport` | `audio:export { format, bitrate?, sampleRate?, channels?, outputPath? }` | single-file → transcode; project → buildMixConfig(data, ctx) → mixExport |
 | `editor:listInputDevices` | `audio:recording { action: 'listDevices' }` | `audioService.listInputDevices()` |
 | `editor:recordStart` | `audio:recording { action: 'start', deviceId?, sampleRate?, channels? }` | `audioService.recordStart()` |
 | `editor:recordStop` | `audio:recording { action: 'stop', streamId }` | `audioService.recordStop()` |
@@ -652,10 +893,10 @@ Flow for `audio:playback { action: 'play' }`:
 **Response messages** follow the same pattern: `audio:playbackReady`, `audio:trimResult`, `audio:effectResult`, `audio:analyzeResult`, `audio:exportResult`, `audio:recordingResult`.
 
 **Benefits:**
-- Agent and webview use the same semantic namespace
+- Webview user actions use one semantic namespace
 - Extension is the single routing decision point (mode-aware)
 - New operations (e.g. `audio:stemSeparate`) naturally fit the namespace
-- Agent project-edit tools (`ApplyTrackEffect`, `SetTrackVolume`, etc.) do NOT go through `audio:*` messages — they use `agent:*` typed messages and the Extension dispatches EditOperations to webview via `postToDocument()` (fire-and-forget, confirmed via `operationApplied` back-channel). Agent engine tools (`AudioDenoise`, `MixExport`, `AnalyzeAudioLoudness`) call `audioService` directly in Extension. Only webview user actions send `audio:*` messages.
+- Agent project-edit tools (`ApplyTrackEffect`, `SetTrackVolume`, etc.) do NOT go through `audio:*` or `agent:*` postMessage. They execute in Extension against `_projectDataCache`, then notify the targeted Webview with `project:sync`. Agent engine tools (`AudioDenoise`, `MixExport`, `AnalyzeAudioLoudness`) call `audioService` directly in Extension. Only Webview user actions send `audio:*` messages.
 
 **Migration strategy**: P0-PR1b introduces the new `audio:*` handlers in Provider alongside existing `editor:*`/`project:*` handlers (both work). P0-PR4 (Mixer) uses only `audio:*`. Existing `editor:*`/`project:*` handlers are deprecated and removed in P1.
 
@@ -663,7 +904,7 @@ Flow for `audio:playback { action: 'play' }`:
 
 - `@neko/shared/types/audioEffectTypes.ts` (new) — define `EngineAudioEffectType` (13 types), `PlannedAudioEffectType` (3 types), `AudioEffectType` union (see contract above)
 - `@neko/shared/types/audioMix.ts` — update `AudioEffectType` to use hyphenated names matching Rust factory; remove underscored aliases (`parametric_eq` → `parametric-eq`, `noise_gate` → `noise-gate`, etc.)
-- `@neko/shared/types/audioMessages.ts` (new) — define `AudioMessage` union type for all `audio:*` request/response messages. Shared between webview and extension (both import from `@neko/shared`) to ensure type-safe message contracts on both sides of the postMessage boundary.
+- `@neko/shared/types/audioMessages.ts` (new) — define `AudioRequestMessage`, `AudioResponseMessage`, and `ProjectSyncMessage` serializable DTOs. Shared between webview and extension (both import from `@neko/shared`) to ensure type-safe message contracts on both sides of the postMessage boundary.
 - `webview/src/types/audioEffects.ts` — change `AudioEffectType` to hyphenated names; import from shared types; mark `noise-reduction`/`pitch-shift`/`time-stretch` as `planned: true` in `AUDIO_EFFECT_DEFINITIONS`; **remove `fade-in`/`fade-out` from effect types** (fades are not DSP effects — they are envelope params on `MixElementConfig.fadeIn/fadeOut`)
 - `extension/src/agentCapabilityProvider.ts` — fix effectType enum from underscored to hyphenated; add description note for planned-only types
 - `extension/src/providers/AudioProjectProvider.ts`:
@@ -717,14 +958,16 @@ Flow for `audio:playback { action: 'play' }`:
     - `addTrackEffect/removeTrackEffect/updateTrackEffect` → dispatch `track.mix.*`
     - `setTrackColor/setTrackHeight` → update local `trackViewState` (no dispatch)
   - Derived getter: `getTrackMix(trackId)` reads from `audioProjectData.trackMix[trackId]`
-- `audioProjectStore.ts` :: `buildMixStreamConfig()` — read from `audioProjectData.trackMix` instead of `trackUIState`; **return type changes to `{ config: MixStreamConfig; warnings: string[] }`** (pure builder, no side effects). Planned effects filtered out with warning messages.
-- **Extract `buildMixStreamConfig()` as pure function to `@neko/shared/nka/buildMixConfig.ts`** — takes `AudioProjectData` as input, returns `{ config, warnings }`. No Zustand dependency. Both webview store and Extension bridge import the same function. Store action wraps it; Extension calls it directly for Agent MixExport.
-- **Callers of `buildMixStreamConfig()` must migrate:**
-  - `hooks/useAudioPlayback.ts` (~line 163) — destructure `{ config }`, ignore `warnings` (playback is preview, no need to warn)
-  - `ExportPanel.tsx` — sends `audio:export { format, ... }`. Extension handles mode routing internally.
-  - `hooks/useAudioPlayback.ts` — sends `audio:playback { action: 'play', startTime? }`. Extension builds mix config from its own project cache (webview no longer sends config). Playback hook only needs to track streamId/state from the `audio:playbackReady` response.
-  - `AudioToolBridge.mixExport()` — calls `buildMixStreamConfig(session.data)` directly in Extension (see P0-PR3)
-  - Tests — verify tuple return shape
+- **Extract `buildMixConfig(data, ctx)` as pure function to `@neko/shared/nka/buildMixConfig.ts`** — takes `AudioProjectData` + `MixConfigContext` (path resolver), returns `{ config: MixStreamConfig, warnings: string[] }`. No Zustand dependency. No Webview dependency. Planned effects filtered out with warning messages.
+- **Webview does NOT call `buildMixConfig`** — it sends intent messages only:
+  - `hooks/useAudioPlayback.ts` — sends `audio:playback { action: 'play', startTime? }`. Extension builds config from its own `_projectDataCache` + `PathResolver`. Playback hook only tracks `streamId`/`state` from the `audio:playbackReady` response.
+  - `ExportPanel.tsx` — sends `audio:export { format, ... }`. Extension builds config internally and routes to `audioService.mixExport()`.
+- **Extension callers of `buildMixConfig()`:**
+  - `AudioProjectProvider` `audio:playback` handler — `buildMixConfig(cache, { projectDir, resolvePath })` → `audioService.startMixStream(config)`
+  - `AudioProjectProvider` `audio:export` handler — `buildMixConfig(cache, ctx)` → `audioService.mixExport(config, output, format)`
+  - `AudioToolBridge.mixExport()` — `buildMixConfig(session.data, ctx)` directly in Extension (see P0-PR3)
+- **Remove `buildMixConfig(data, ctx)` from `audioProjectStore.ts`** — store no longer has this method. All config building happens in Extension.
+- Tests — verify `buildMixConfig()` path resolution (relative → absolute, `${VAR}` expansion)
 - `extension/src/providers/AudioProjectProvider.ts` — `operationApplied` handler: add `track.mix.*` to the operation router; `audio:export` handler routes per mode (see P0-PR1b protocol table)
 - `components/Timeline/TrackHeader.tsx` — update volume/pan/solo handlers to use new dispatch-based actions
 - `stores/audioStore.ts` — keep only genuinely non-persisted UI state: `showMixer`, `showSpectrum`, `activeSidePanel`, `zoom`, selection, playback state
@@ -740,7 +983,7 @@ export interface AudioTrackViewState {
 **Verification:**
 - Open .nka → change volume in TrackHeader → Save → Reopen → volume preserved
 - Undo after volume change → reverts correctly
-- `buildMixStreamConfig()` returns correct volume/pan/effectChain from project model
+- `buildMixConfig(data, ctx)` returns correct volume/pan/effectChain from project model
 
 #### P0-PR3: Agent Tool Bridge Completion + Extension-Side Execution
 
@@ -753,15 +996,15 @@ export interface AudioTrackViewState {
 ```
 Agent → AudioToolBridge.applyTrackEffect(args)
   → session = gateway.resolveProjectSession(args.documentUri)
-  → newData = applyTrackMixOperation(session.data, operation)  // pure function, @neko/shared
-  → gateway.updateProjectData(session.documentUri, newData)    // update Extension cache + fire dirty
-  → gateway.notifyWebview(session.documentUri, newData)        // postMessage project:sync to refresh UI
+  → newData = applyOperation(session.data, operation)           // pure function, @neko/shared
+  → gateway.updateProjectData(session.documentUri, newData, operation)  // update Extension cache + fire dirty
+  → gateway.notifyWebview(session.documentUri, newData, operation)      // postMessage project:sync to refresh UI + undo metadata
   → return { success: true }                                   // real result — operation already applied
 ```
 
 **Why no correlationId / ack needed:**
 - Operation is applied in Extension (same process as bridge) — result is deterministic
-- `applyTrackMixOperation()` is a pure function that either succeeds or throws
+- `applyOperation()` is the pure operation router that either returns updated project data or throws
 - Webview is notified to sync its state, but the source of truth is Extension cache
 - This matches neko-cut's proven pattern (`TimelineToolExecutor`)
 - No postMessage round-trip, no timeout, no race condition
@@ -793,51 +1036,68 @@ Both paths converge on the same cache. Webview and Extension stay in sync.
 
 ```typescript
 // @neko/shared/types/audioMessages.ts (shared between webview + extension)
+// Contains ONLY serializable DTOs that cross the postMessage boundary.
 
-/** Atomic project session snapshot — guarantees data and URI are from the same document */
+/** All audio:* request message types (Webview → Extension) */
+export type AudioRequestMessage =
+  | { type: 'audio:playback'; action: 'play' | 'pause' | 'resume' | 'stop' | 'seek' | 'speed'; time?: number; speed?: number; startTime?: number }
+  | { type: 'audio:trim'; startTime: number; endTime: number }
+  | { type: 'audio:applyEffect'; effects: AudioEffectConfig[] }
+  | { type: 'audio:analyze'; analyzeType: 'loudness' | 'silence'; threshold?: number; minDuration?: number }
+  | { type: 'audio:export'; format: string; bitrate?: number; sampleRate?: number; channels?: number }
+  | { type: 'audio:recording'; action: 'listDevices' | 'start' | 'stop'; deviceId?: string; sampleRate?: number; channels?: number; streamId?: string };
+
+/** All audio:* response message types (Extension → Webview) */
+export type AudioResponseMessage =
+  | { type: 'audio:playbackReady'; streamId: string; wsUrl: string }
+  | { type: 'audio:trimResult'; success: boolean; outputPath?: string; error?: string }
+  | { type: 'audio:effectResult'; success: boolean; outputPath?: string; error?: string }
+  | { type: 'audio:analyzeResult'; analyzeType: 'loudness' | 'silence'; data: unknown }
+  | { type: 'audio:exportResult'; success: boolean; output?: string; error?: string; warnings?: string[] }
+  | { type: 'audio:recordingResult'; action: string; data: unknown };
+
+/** Project sync notification (Extension → Webview, after Agent edit or revert) */
+export interface ProjectSyncMessage {
+  type: 'project:sync';
+  projectData: AudioProjectData;
+  /** Present when sync is caused by an Agent/tool edit; lets Webview add an undo entry without executing the op. */
+  operation?: EditOperation;
+}
+```
+
+```typescript
+// extension/src/services/types.ts (Extension-only, NOT in @neko/shared)
+// Gateway interface involves Extension-specific concerns (document cache, dirty events, focused panel).
+
+/** Atomic project session snapshot */
 export interface ProjectSession {
   documentUri: string;
   data: AudioProjectData;
 }
 
-/** Gateway interface for AudioToolBridge — single dependency for all project access */
+/** Gateway interface for AudioToolBridge — Extension-side dependency injection port */
 export interface AudioProjectSessionGateway {
-  /**
-   * Atomically resolve a project session.
-   * If documentUri is provided, returns that document's data.
-   * If omitted, returns the focused document's data.
-   * Returns null if no matching document is open.
-   */
   resolveProjectSession(documentUri?: string): ProjectSession | null;
-  /**
-   * Apply an operation to the project data cache and fire dirty event.
-   * Returns the updated data, or throws if operation fails.
-   */
-  updateProjectData(documentUri: string, newData: AudioProjectData): void;
-  /**
-   * Notify webview to sync its state from the updated project data.
-   * Fire-and-forget — webview replaces its local state.
-   */
-  notifyWebview(documentUri: string, data: AudioProjectData): void;
+  updateProjectData(documentUri: string, newData: AudioProjectData, operation?: EditOperation): void;
+  notifyWebview(documentUri: string, data: AudioProjectData, operation?: EditOperation): void;
 }
 ```
 
 **Responsibility split:**
 - `AudioProjectProvider` **implements** `AudioProjectSessionGateway`:
   - `resolveProjectSession(uri?)` — if uri provided, looks up `_projectDataCache.get(uri)` and returns `{ documentUri: uri, data }`; if omitted, uses focused panel URI (tracked via `onDidChangeViewState`). Atomic: data and URI always from same document.
-  - `updateProjectData(docUri, newData)` — sets `_projectDataCache.set(docUri, newData)` + fires `onDidChangeCustomDocument` (dirty event)
-  - `notifyWebview(docUri, data)` — sends `{ type: 'project:sync', projectData: data }` to the target panel. Webview replaces its store state.
+  - `updateProjectData(docUri, newData, op?)` — sets `_projectDataCache.set(docUri, newData)` + fires `onDidChangeCustomDocument` (dirty event)
+  - `notifyWebview(docUri, data, op?)` — sends `{ type: 'project:sync', projectData: data, operation: op }` to the target panel. Webview replaces its store state and, if `operation` exists, records it for undo without executing it.
 - `AudioToolBridge` constructor takes `gateway: AudioProjectSessionGateway` + `audioService: AudioService` — clean dependency injection, no direct Provider access
 
 **Modified files:**
-- `@neko/shared/types/audioMessages.ts` — define `AudioMessage` union (for `audio:*`), `AgentEditMessage` type (for agent→webview project edits), `ProjectSession`, `AudioProjectSessionGateway` interface. Both webview and extension import from here.
-- `extension/src/types/api.ts` — re-export gateway interface from `@neko/shared`
+- `@neko/shared/types/audioMessages.ts` — define `AudioRequestMessage`, `AudioResponseMessage`, and `ProjectSyncMessage` serializable message types. Both webview and extension import from here for type-safe postMessage contracts.
+- `extension/src/services/types.ts` — define `ProjectSession`, `AudioProjectSessionGateway` interface (Extension-only port, not shared)
 - `extension/src/services/audioToolBridge.ts`:
   - Constructor: `constructor(private gateway: AudioProjectSessionGateway, private audioService: AudioService)`
   - Read tools (`GetAudioProjectInfo`, `ListAudioTracks`) → `gateway.resolveProjectSession(args.documentUri?)`. Returns `{ documentUri, data }` atomically — response includes both project info AND the resolved `documentUri` for subsequent calls.
-  - Project-edit tools: `const session = gateway.resolveProjectSession(args.documentUri)` → if `!session` return `{ success: false, error: 'No audio project open' }` → `const newData = applyTrackMixOperation(session.data, operation)` (pure function, may throw) → `gateway.updateProjectData(session.documentUri, newData)` → `gateway.notifyWebview(session.documentUri, newData)` → return `{ success: true }`
-  - `MixExport` tool: resolves project session → calls `buildMixStreamConfig(session.data)` **in Extension** (pure function, moved to shared layer or duplicated as Extension-side helper) → gets `{ config, warnings }` → calls `audioService.mixExport(config, outputPath, format)` → returns `{ output, warnings }` to Agent. This avoids the round-trip to webview for export — Extension has the project data via gateway and can build the config directly.
-    - **Note**: `buildMixStreamConfig()` must be extractable as a pure function that takes `AudioProjectData` as input (no Zustand dependency). P0-PR2 refactors it accordingly: the store action calls the pure function, and the Extension can import the same function from `@neko/shared`.
+  - Project-edit tools: `const session = gateway.resolveProjectSession(args.documentUri)` → if `!session` return `{ success: false, error: 'No audio project open' }` → `const newData = applyOperation(session.data, operation)` (pure function, may throw) → `gateway.updateProjectData(session.documentUri, newData, operation)` → `gateway.notifyWebview(session.documentUri, newData, operation)` → return `{ success: true }`
+  - `MixExport` tool: resolves project session → calls `buildMixConfig(session.data, ctx)` **in Extension** (pure function from `@neko/shared/nka/buildMixConfig.ts`, with `MixConfigContext` providing path resolution) → gets `{ config, warnings }` → calls `audioService.mixExport(config, outputPath, format)` → returns `{ output, warnings }` to Agent.
   - Engine tools → call `audioService` directly
   - `AudioDenoise` → `audioService.transcode(input, output, { effects: [{ type: 'noise-gate', params: { threshold: -40, attack: 1, hold: 50, release: 100 } }] })`. Returns `{ success: true, data: { output, note: 'Applied noise-gate (threshold-based). Spectral noise reduction not available.' } }`
   - `StemSeparation` → `{ success: false, error: 'Stem separation requires ML model not yet available in engine' }` (honest failure)
@@ -848,10 +1108,11 @@ export interface AudioProjectSessionGateway {
 - `extension/src/providers/AudioProjectProvider.ts`:
   - Implement `AudioProjectSessionGateway` interface
   - Add `audio:*` message handlers (new unified protocol)
-  - Implement `postToDocument()` for targeted agent messages
+  - Implement `postToDocument()` for targeted sync notifications
   - Keep `postToActivePanels()` for broadcast events (project:init, etc.) — NOT for agent operations
 - `webview/src/editor/AudioEditor.tsx`:
-  - Handle `agent:*` messages → execute store dispatch (EditOperation)
+  - Handle `project:sync` message → replace `audioProjectData` in store + push op to undo stack (notification only, no execution)
+  - **No `agent:*` handler** — Agent edits are executed in Extension, not Webview. Webview only receives the sync notification.
 - `extension/src/agentCapabilityProvider.ts`:
   - Expand `getPromptFragments()`:
     - Effect types are **hyphenated** (parametric-eq, not parametric_eq)
@@ -875,7 +1136,7 @@ export interface AudioProjectSessionGateway {
 | 9 | `ApplyTrackEffect` | project-edit | Extension applies `track.mix.addEffect` to cache → notify webview | `{ success }` or `{ success: false, error }` |
 | 10 | `RemoveTrackEffect` | project-edit | Extension applies `track.mix.removeEffect` to cache → notify webview | `{ success }` or `{ success: false, error }` |
 | 11 | `ApplyMasterEffect` | project-edit | Extension applies `audio.effect.add` to cache → notify webview | `{ success }` or `{ success: false, error }` |
-| 12 | `MixExport` | engine | `resolveProjectSession` → `buildMixStreamConfig(data)` → `audioService.mixExport(config, outputPath, format)` | `{ output, warnings }` |
+| 12 | `MixExport` | engine | `resolveProjectSession` → `buildMixConfig(data, ctx)` → `audioService.mixExport(config, outputPath, format)` | `{ output, warnings }` |
 | 13 | `AnalyzeAudioLoudness` | engine | `audioService.analyzeLoudness(filePath)` | `{ integratedLoudness, truePeak, loudnessRange }` |
 | 14 | `AudioDenoise` | engine | `audioService.transcode(input, output, { effects: [{ type: 'noise-gate', params: { threshold: -40, attack: 1, hold: 50, release: 100 } }] })` | `{ output, note: 'Applied noise-gate. Spectral noise reduction not available.' }` |
 | 15 | `StemSeparation` | engine | Not available in P0 | `{ success: false, error: 'Stem separation requires ML model not yet available' }` |
@@ -946,7 +1207,7 @@ Mixer Layout:
 - `@neko/shared/types/audioMix.ts` — add `effectChain?: AudioEffectConfig[]` to `MixElementConfig`
 - `audioProjectStore.ts` — add `addClipEffect` / `removeClipEffect` / `updateClipEffect` as `element.effect.*` operations
 - `AudioClip.tsx` — add FX badge, click opens effect editor
-- `buildMixStreamConfig()` — pass clip effects into MixElementConfig
+- `buildMixConfig(data, ctx)` — pass clip effects into MixElementConfig
 - **Engine**: `AudioMixdown` add per-element effect chain (apply after decode, before track mix)
 
 #### P1-PR2: Automation Lanes
@@ -987,6 +1248,14 @@ New `TOOL_NAMES_AUDIO` entries:
 - `SetClipEffect` — apply effect to specific clip
 - `CreateBus` — create send/return bus
 - `SetSendLevel` — configure send routing
+
+#### P1 Cleanup: Remove Legacy Mixdown Input
+
+After P0-PR1b has migrated Webview playback/export and Agent MixExport to Extension-built `MixdownConfig`, remove the temporary legacy `audios:mixdown` request shape:
+- Delete `tracks`, `sampleRate`, and `channels` fallback parsing from `MixdownRequestOptions`
+- Require `{ config: MixdownConfig, time? }`
+- Remove legacy deprecation warnings and tests
+- Keep one regression test proving missing `config` returns a clear invalid-request error
 
 ---
 
@@ -1037,6 +1306,12 @@ Step sequencer is more relevant to music creation than audio post-production. De
 - `saveCustomDocument()` calls `saveNka(data)` (not raw `JSON.stringify`) — ensures version stamp and validation
 - This is a **Save with destructive confirm**, not forced Save As. Rationale: forcing Save As for every future-version file is too disruptive for the common case where the user just wants to edit and save back.
 
+**Schema-strip behavior on downgrade save**: `saveNka()` performs **schema-strip** — it serializes only the fields defined in `CURRENT_NKA_VERSION`'s schema. Unknown fields from future versions (loaded via `JSON.parse` but not mapped to typed `AudioProjectData` properties) are **not preserved**. This is by design:
+- TypeScript's typed deserialization (`loadNka` → `AudioProjectData`) already drops unknown fields at load time — they never enter the in-memory model
+- Writing back "version 2.0" with stray future fields would produce a file that claims v2.0 but contains unrecognized content, confusing both the current and future parsers
+- The destructive confirm dialog explicitly warns "may lose unsupported features" — the user opts in knowing fields will be stripped
+- If lossless round-tripping of future files is needed later, `loadNka` must preserve a `_rawExtensions: Record<string, unknown>` sidecar and `saveNka` must merge it back. This is deferred — P0 prioritizes correctness over losslessness.
+
 ---
 
 ## Key Design Decisions
@@ -1055,6 +1330,12 @@ Step sequencer is more relevant to music creation than audio post-production. De
 | D10 | P0-PR1a: Engine `audios:transcode` must support effects | Current TS→Engine effects pipeline is completely broken (silently ignored). Minimal Rust change: add optional `effects` field + process loop. Without this, all single-file effect operations are fake. |
 | D11 | Effect types split: `EngineAudioEffectType` (13 renderable) vs `PlannedAudioEffectType` (3 UI-only) | Prevents Agent from assuming noise-reduction/pitch-shift/time-stretch can be rendered. Agent prompt fragments document which effects are engine-supported. |
 | D12 | AudioDenoise applies noise-gate (honest), not spectral denoising | Engine has no spectral noise reduction. Noise-gate is the closest available primitive. Tool response clearly states what was applied. True denoising deferred to P2+ (ONNX ML model). |
+| D13 | `buildMixConfig(data, ctx)` requires `MixConfigContext` with path resolver | `.nka` stores relative/variable paths; Engine needs absolute paths. Pure data-only builder cannot reliably produce Engine-readable paths. Extension provides `PathResolver` context. Rust CLI uses an equivalent `NkaLoader` + `ProjectContext` mapper rather than importing TS code. |
+| D14 | Agent edits execute in Extension only — no `agent:*` Webview handler | Eliminates fire-and-forget gap. Webview receives `project:sync` notification, never executes agent operations. Matches neko-cut `TimelineToolExecutor` pattern. |
+| D15 | `AudioProjectSessionGateway` lives in Extension, not `@neko/shared` | Gateway involves Extension-specific concerns (document cache, dirty events, focused panel). Shared layer only contains serializable DTOs (`AudioRequestMessage`, `AudioResponseMessage`). |
+| D16 | Unsupported effects in mix paths produce warnings, not hard failures | Mix must still play even if one effect is unsupported. `AudioMixdown` collects warnings during initial chain build and hot-update chain rebuild; `mix_export` surfaces them in response. Differs from transcode (which can hard-fail because it's a one-shot operation). |
+| D17 | `.nka` downgrade save performs schema-strip (drops unknown future fields) | Typed deserialization already drops unknowns at load time. Writing v2.0 with stray future fields would produce inconsistent files. Explicit user opt-in via destructive confirm dialog. |
+| D18 | Mix stream hot-update uses full `MixdownConfig` replacement (no incremental apply) | `MixdownConfig` is a derived render instruction, not an editable model. Edits happen on `AudioProjectData` in TS, then full config is rebuilt and pushed. Unlike video's `applyOperation` which incrementally mutates `Timeline`. |
 
 ---
 
@@ -1086,10 +1367,11 @@ Step sequencer is more relevant to music creation than audio post-production. De
 **P0-PR2 (State Model):**
 - Open .nka → change volume → Save → Reopen → volume preserved
 - Undo after volume change → reverts
-- `buildMixStreamConfig()` reads from `trackMix` correctly
+- `buildMixConfig(data, ctx)` reads from `trackMix` correctly
 
 **P0-PR3 (Agent Tools):**
-- Agent calls ApplyTrackEffect → webview ack → tool returns real result
+- Agent calls ApplyTrackEffect → Extension applies to cache → notifies webview via `project:sync` → tool returns `{ success: true }`
+- Agent calls ApplyTrackEffect with invalid trackId → `applyOperation` throws → tool returns `{ success: false, error }`
 - Agent calls AudioDenoise → engine transcodes → output path returned
 - All 18 TOOL_NAMES_AUDIO entries have an execution path (15 via bridge, 3 via provider-direct media generation)
 
