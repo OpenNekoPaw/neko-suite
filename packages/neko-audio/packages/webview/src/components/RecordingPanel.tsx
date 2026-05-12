@@ -30,9 +30,10 @@ export function RecordingPanel() {
     const base64Data = await stopRecording();
     if (base64Data) {
       postMessage({
-        type: 'editor:saveRecording',
+        type: 'audio:recording',
+        action: 'saveBlob',
         data: base64Data,
-        format: 'audio/webm',
+        mimeType: 'audio/webm',
       });
     }
   }, [stopRecording]);

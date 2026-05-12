@@ -15,6 +15,7 @@ import type {
   CanvasOperation,
   SketchOperation,
   AudioOperation,
+  TrackMixOperation,
 } from './types';
 import { applyTrackOperation } from './apply-track';
 import { applyElementOperation, applyElementSplitOperation } from './apply-element';
@@ -23,6 +24,7 @@ import { applyKeyframeOperation } from './apply-keyframe';
 import { applyCanvasOperation } from './apply-canvas';
 import { applySketchOperation, type SketchDocumentData } from './apply-sketch';
 import { applyAudioOperation, type AudioProjectData } from './apply-audio';
+import { applyTrackMixOperation } from './apply-track-mix';
 import { updateTrackInProject } from './helpers';
 import { OperationError } from './errors';
 
@@ -41,7 +43,13 @@ export function applyOperation(data: CanvasData, op: CanvasOperation): CanvasDat
 export function applyOperation(data: SketchDocumentData, op: SketchOperation): SketchDocumentData;
 export function applyOperation(
   data: AudioProjectData,
-  op: AudioOperation | TrackOperation | ElementOperation | ElementSplitOperation,
+  op:
+    | AudioOperation
+    | TrackMixOperation
+    | TrackOperation
+    | ElementOperation
+    | ElementSplitOperation
+    | BatchOperation,
 ): AudioProjectData;
 export function applyOperation(data: unknown, op: EditOperation): unknown {
   switch (op.type) {
@@ -127,7 +135,18 @@ export function applyOperation(data: unknown, op: EditOperation): unknown {
     case 'audio.marker.add':
     case 'audio.marker.remove':
     case 'audio.marker.update':
+    case 'audio.setBpm':
       return applyAudioOperation(data as AudioProjectData, op);
+
+    // Track mix operations
+    case 'track.mix.setVolume':
+    case 'track.mix.setPan':
+    case 'track.mix.setSolo':
+    case 'track.mix.effect.add':
+    case 'track.mix.effect.remove':
+    case 'track.mix.effect.update':
+    case 'track.mix.effect.move':
+      return applyTrackMixOperation(data as AudioProjectData, op);
 
     // Batch
     case 'batch':

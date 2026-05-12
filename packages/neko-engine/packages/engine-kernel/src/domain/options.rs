@@ -4,7 +4,8 @@
 //! They are consumed only by the Service layer.
 
 use neko_engine_types::{
-    AudioCodec, EncoderPreset, FrameFormat, HwEncoderType, Resolution, VideoCodec, WaveformFormat,
+    AudioCodec, AudioEffectConfig, EncoderPreset, FrameFormat, HwEncoderType, Resolution,
+    VideoCodec, WaveformFormat,
 };
 
 /// Options for single frame capture (videos:capture / images:capture)
@@ -213,7 +214,15 @@ pub struct AudioTranscodeOptions {
     pub format: Option<AudioOutputFormat>,
     /// Target bitrate in bps (None = codec default)
     pub bitrate: Option<u64>,
+    /// Engine-facing effect chain as serializable render instructions.
+    ///
+    /// The domain layer intentionally carries only normalized data and does not
+    /// depend on DSP factory types.
+    pub effects: Vec<AudioRenderEffectConfig>,
 }
+
+/// Serializable audio effect instruction carried by domain options.
+pub type AudioRenderEffectConfig = AudioEffectConfig;
 
 /// Audio output format
 #[derive(Debug, Clone, Copy)]

@@ -120,7 +120,11 @@ mod tests {
         let mut buf = vec![0.01; 1000];
         let orig = buf.clone();
         comp.process(&mut buf, 1, 44100);
-        let diff: f32 = buf.iter().zip(orig.iter()).map(|(a, b)| (a - b).abs()).sum::<f32>()
+        let diff: f32 = buf
+            .iter()
+            .zip(orig.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
             / buf.len() as f32;
         assert!(diff < 0.01, "Quiet signals should pass nearly unchanged");
     }

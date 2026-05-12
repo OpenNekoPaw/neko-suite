@@ -39,6 +39,7 @@ tracing.workspace = true
 # Utilities
 uuid.workspace = true
 semver = { workspace = true }
+bytemuck.workspace = true
 
 # Math (for CameraParams construction)
 glam.workspace = true

@@ -92,6 +92,9 @@ mod tests {
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
             / buf.len() as f32;
-        assert!(diff_rms.sqrt() < 0.01, "0dB peaking EQ should be near-passthrough");
+        assert!(
+            diff_rms.sqrt() < 0.01,
+            "0dB peaking EQ should be near-passthrough"
+        );
     }
 }

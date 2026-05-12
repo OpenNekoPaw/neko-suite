@@ -6,6 +6,7 @@
 // =============================================================================
 
 import type { ValidationResult, ValidationError } from '../config/config-adapter';
+import { isEngineAudioEffectType, isKnownAudioEffectType } from '../types/audioMix';
 
 // =============================================================================
 // Type Guards (internal helpers)
@@ -120,6 +121,26 @@ function validateRoot(
   // markers — required array
   if (!isArray(data['markers'])) {
     errors.push({ field: 'markers', message: 'must be an array', severity: 'error' });
+  }
+
+  if (data['bpm'] !== undefined) {
+    if (!isNumber(data['bpm'])) {
+      errors.push({ field: 'bpm', message: 'must be a number', severity: 'error' });
+    } else if (data['bpm'] < 20 || data['bpm'] > 300) {
+      errors.push({ field: 'bpm', message: 'must be between 20 and 300', severity: 'error' });
+    }
+  }
+
+  if (data['masterVolume'] !== undefined) {
+    if (!isNumber(data['masterVolume'])) {
+      errors.push({ field: 'masterVolume', message: 'must be a number', severity: 'error' });
+    } else if (data['masterVolume'] < 0 || data['masterVolume'] > 2) {
+      errors.push({
+        field: 'masterVolume',
+        message: 'must be between 0 and 2',
+        severity: 'error',
+      });
+    }
   }
 }
 
@@ -249,6 +270,12 @@ function validateEffect(effect: unknown, path: string, errors: ValidationError[]
   // type — required string
   if (!isString(effect['type'])) {
     errors.push({ field: `${path}.type`, message: 'must be a string', severity: 'error' });
+  } else if (!isKnownAudioEffectType(effect['type'])) {
+    errors.push({
+      field: `${path}.type`,
+      message: `invalid audio effect type: "${effect['type']}"`,
+      severity: 'error',
+    });
   }
 
   // name — required string
@@ -264,6 +291,92 @@ function validateEffect(effect: unknown, path: string, errors: ValidationError[]
   // params — required object
   if (!isRecord(effect['params'])) {
     errors.push({ field: `${path}.params`, message: 'must be an object', severity: 'error' });
+  }
+}
+
+function validateMixEffect(effect: unknown, path: string, errors: ValidationError[]): void {
+  if (!isRecord(effect)) {
+    errors.push({ field: path, message: 'must be an object', severity: 'error' });
+    return;
+  }
+
+  if (!isString(effect['id'])) {
+    errors.push({ field: `${path}.id`, message: 'must be a string', severity: 'error' });
+  }
+
+  if (!isString(effect['effectType'])) {
+    errors.push({ field: `${path}.effectType`, message: 'must be a string', severity: 'error' });
+  } else if (!isEngineAudioEffectType(effect['effectType'])) {
+    errors.push({
+      field: `${path}.effectType`,
+      message: `invalid renderable effect type: "${effect['effectType']}"`,
+      severity: 'error',
+    });
+  }
+
+  if (!isBoolean(effect['enabled'])) {
+    errors.push({ field: `${path}.enabled`, message: 'must be a boolean', severity: 'error' });
+  }
+
+  if (!isRecord(effect['params'])) {
+    errors.push({ field: `${path}.params`, message: 'must be an object', severity: 'error' });
+  }
+}
+
+function validateTrackMix(data: Record<string, unknown>, errors: ValidationError[]): void {
+  const trackMix = data['trackMix'];
+  if (trackMix === undefined) {
+    return;
+  }
+
+  if (!isRecord(trackMix)) {
+    errors.push({ field: 'trackMix', message: 'must be an object', severity: 'error' });
+    return;
+  }
+
+  for (const [trackId, state] of Object.entries(trackMix)) {
+    const statePath = `trackMix.${trackId}`;
+    if (!isRecord(state)) {
+      errors.push({ field: statePath, message: 'must be an object', severity: 'error' });
+      continue;
+    }
+
+    if (!isNumber(state['volume'])) {
+      errors.push({ field: `${statePath}.volume`, message: 'must be a number', severity: 'error' });
+    } else if (state['volume'] < 0 || state['volume'] > 2) {
+      errors.push({
+        field: `${statePath}.volume`,
+        message: 'must be between 0 and 2',
+        severity: 'error',
+      });
+    }
+
+    if (!isNumber(state['pan'])) {
+      errors.push({ field: `${statePath}.pan`, message: 'must be a number', severity: 'error' });
+    } else if (state['pan'] < -1 || state['pan'] > 1) {
+      errors.push({
+        field: `${statePath}.pan`,
+        message: 'must be between -1 and 1',
+        severity: 'error',
+      });
+    }
+
+    if (!isBoolean(state['solo'])) {
+      errors.push({ field: `${statePath}.solo`, message: 'must be a boolean', severity: 'error' });
+    }
+
+    if (!isArray(state['effectChain'])) {
+      errors.push({
+        field: `${statePath}.effectChain`,
+        message: 'must be an array',
+        severity: 'error',
+      });
+      continue;
+    }
+
+    for (let i = 0; i < state['effectChain'].length; i++) {
+      validateMixEffect(state['effectChain'][i], `${statePath}.effectChain[${i}]`, errors);
+    }
   }
 }
 
@@ -338,11 +451,16 @@ export function validateNka(data: unknown, options: NkaValidateOptions = {}): Va
     }
   }
 
-  const effectiveErrors = options.strict ? [...errors, ...warnings] : errors;
+  validateTrackMix(data, errors);
+
+  const promotedWarnings: ValidationError[] = options.strict
+    ? warnings.map((warning) => ({ ...warning, severity: 'error' as const }))
+    : [];
+  const effectiveErrors = options.strict ? [...errors, ...promotedWarnings] : errors;
 
   return {
     valid: effectiveErrors.length === 0,
-    errors: effectiveErrors.filter((e) => e.severity === 'error'),
+    errors: effectiveErrors,
     warnings: options.strict ? [] : warnings,
   };
 }

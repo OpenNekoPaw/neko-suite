@@ -1,18 +1,18 @@
 //! AudioController - handles audios:* actions
 
-use crate::controllers::utils::{handle_stream_control, resolve_resource};
 use crate::controllers::Controller;
+use crate::controllers::utils::{handle_stream_control, resolve_resource};
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
-use neko_engine_kernel::domain::StreamConfig;
+use neko_engine_kernel::domain::{AudioOutputFormat, AudioRenderEffectConfig, StreamConfig};
 use neko_engine_kernel::media_service::{
-    diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory,
+    AudioDiffOptions, DiffCategory, diff_audio_content_with_options, diff_media,
 };
 use neko_engine_kernel::services::{AudioService, IAudioService};
 use neko_engine_types::registry;
-use neko_engine_types::ActionResponse;
+use neko_engine_types::{ActionResponse, SUPPORTED_AUDIO_EFFECT_TYPES};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::path::Path;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -61,12 +61,21 @@ struct TranscodeRequestOptions {
     output: Option<String>,
     /// Force codec (overrides output extension inference)
     codec: Option<String>,
+    /// Output format alias. Kept compatible with callers that use format
+    /// instead of codec.
+    format: Option<String>,
     /// Target bitrate in bps
     bitrate: Option<u64>,
     /// Target sample rate
     sample_rate: Option<u32>,
     /// Target channels
     channels: Option<u16>,
+    /// Trim start time in seconds
+    start_time: Option<f64>,
+    /// Trim end time in seconds
+    end_time: Option<f64>,
+    /// Optional canonical effect chain.
+    effects: Option<Value>,
 }
 
 /// Options for audios:segment
@@ -139,12 +148,8 @@ struct DetectSilenceOptions {
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct MixdownRequestOptions {
-    /// Track data as JSON array of MixdownTrack
-    tracks: Option<Value>,
-    /// Sample rate (default: 48000)
-    sample_rate: Option<u32>,
-    /// Channels (default: 2)
-    channels: Option<u16>,
+    /// Full mixdown config.
+    config: Option<Value>,
     /// Timeline time to mix at (default: 0.0)
     time: Option<f64>,
 }
@@ -175,6 +180,111 @@ struct MixExportOptions {
     format: Option<String>,
     /// Target bitrate in bps (for lossy codecs)
     bitrate: Option<u64>,
+}
+
+fn parse_audio_output_format(format: Option<&str>) -> Option<AudioOutputFormat> {
+    format.map(|value| match value.to_lowercase().as_str() {
+        "aac" | "m4a" => AudioOutputFormat::Aac,
+        "mp3" => AudioOutputFormat::Mp3,
+        "opus" | "ogg" => AudioOutputFormat::Opus,
+        "flac" => AudioOutputFormat::Flac,
+        "pcm" | "wav" => AudioOutputFormat::Pcm,
+        _ => AudioOutputFormat::Aac,
+    })
+}
+
+fn normalize_audio_effect_type(effect_type: &str) -> Option<&'static str> {
+    SUPPORTED_AUDIO_EFFECT_TYPES
+        .iter()
+        .copied()
+        .find(|supported| *supported == effect_type)
+}
+
+fn normalize_audio_effects(effects: Option<Value>) -> ApiResult<Vec<AudioRenderEffectConfig>> {
+    let items = match effects {
+        None => return Ok(Vec::new()),
+        Some(Value::Array(items)) => items,
+        Some(_) => {
+            return Err(ApiError::InvalidRequest(
+                "effects must be an array".to_string(),
+            ));
+        }
+    };
+
+    let mut normalized = Vec::with_capacity(items.len());
+    for (index, item) in items.into_iter().enumerate() {
+        let Value::Object(mut map) = item else {
+            return Err(ApiError::InvalidRequest(format!(
+                "effects[{}] must be an object",
+                index
+            )));
+        };
+
+        let raw_type = map
+            .remove("effectType")
+            .and_then(|value| value.as_str().map(str::to_string))
+            .ok_or_else(|| {
+                ApiError::InvalidRequest(format!("effects[{}].effectType is required", index))
+            })?;
+
+        let effect_type = normalize_audio_effect_type(&raw_type).ok_or_else(|| {
+            ApiError::InvalidRequest(format!(
+                "unsupported audio effect type for transcode: {}",
+                raw_type
+            ))
+        })?;
+
+        let id = map
+            .remove("id")
+            .and_then(|value| value.as_str().map(str::to_string))
+            .ok_or_else(|| {
+                ApiError::InvalidRequest(format!("effects[{}].id is required", index))
+            })?;
+        let enabled = map
+            .remove("enabled")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(true);
+        let params = map
+            .remove("params")
+            .unwrap_or_else(|| Value::Object(Map::new()));
+
+        normalized.push(AudioRenderEffectConfig {
+            id,
+            effect_type: effect_type.to_string(),
+            enabled,
+            params,
+        });
+    }
+
+    Ok(normalized)
+}
+
+fn build_time_range(
+    start_time: Option<f64>,
+    end_time: Option<f64>,
+) -> ApiResult<Option<(f64, f64)>> {
+    match (start_time, end_time) {
+        (None, None) => Ok(None),
+        (Some(start), Some(end))
+            if start.is_finite() && end.is_finite() && start >= 0.0 && end > start =>
+        {
+            Ok(Some((start, end)))
+        }
+        (Some(start), None) if start.is_finite() && start >= 0.0 => {
+            Ok(Some((start, f64::INFINITY)))
+        }
+        _ => Err(ApiError::InvalidRequest(
+            "startTime/endTime require startTime >= 0 and endTime > startTime".to_string(),
+        )),
+    }
+}
+
+fn mix_export_response(output: &str, warnings: Vec<String>) -> Value {
+    serde_json::json!({
+        "output": output,
+        "status": "complete",
+        "warnings": warnings,
+    })
 }
 
 impl Controller for AudioController {
@@ -225,26 +335,20 @@ impl Controller for AudioController {
                 })?;
 
                 // Build AudioTranscodeOptions from request
-                use neko_engine_kernel::domain::{AudioOutputFormat, AudioTranscodeOptions};
+                use neko_engine_kernel::domain::AudioTranscodeOptions;
 
-                let format = opts
-                    .codec
-                    .as_deref()
-                    .map(|c| match c.to_lowercase().as_str() {
-                        "aac" | "m4a" => AudioOutputFormat::Aac,
-                        "mp3" => AudioOutputFormat::Mp3,
-                        "opus" | "ogg" => AudioOutputFormat::Opus,
-                        "flac" => AudioOutputFormat::Flac,
-                        "pcm" | "wav" => AudioOutputFormat::Pcm,
-                        _ => AudioOutputFormat::Aac,
-                    });
+                let requested_format = opts.codec.as_deref().or(opts.format.as_deref());
+                let format = parse_audio_output_format(requested_format);
+                let effects = normalize_audio_effects(opts.effects)?;
+                let time_range = build_time_range(opts.start_time, opts.end_time)?;
 
                 let transcode_opts = AudioTranscodeOptions {
+                    time_range,
                     format,
                     bitrate: opts.bitrate,
                     sample_rate: opts.sample_rate,
                     channels: opts.channels,
-                    ..Default::default()
+                    effects,
                 };
 
                 self.audio_service
@@ -537,27 +641,22 @@ impl Controller for AudioController {
                 let opts: MixdownRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let tracks = opts.tracks.ok_or_else(|| {
-                    ApiError::InvalidRequest("tracks required for audios:mixdown".to_string())
-                })?;
-                let sample_rate = opts.sample_rate.unwrap_or(48000);
-                let channels = opts.channels.unwrap_or(2);
                 let time = opts.time.unwrap_or(0.0);
 
                 use base64::Engine;
-                use neko_engine_kernel::services::audio_mixdown::{AudioMixdown, MixdownConfig, MixdownTrack};
+                use neko_engine_kernel::services::audio_mixdown::{AudioMixdown, MixdownConfig};
 
-                let mixdown_tracks: Vec<MixdownTrack> = serde_json::from_value(tracks)
-                    .map_err(|e| ApiError::InvalidRequest(format!("invalid tracks: {}", e)))?;
+                let config_value = opts.config.ok_or_else(|| {
+                    ApiError::InvalidRequest("config required for audios:mixdown".to_string())
+                })?;
+                let config: MixdownConfig = serde_json::from_value(config_value)
+                    .map_err(|e| ApiError::InvalidRequest(format!("invalid config: {}", e)))?;
+                let mut warnings = Vec::new();
 
-                let config = MixdownConfig {
-                    tracks: mixdown_tracks,
-                    master_effects: vec![],
-                    master_volume: 1.0,
-                    sample_rate,
-                    channels,
-                };
+                let sample_rate = config.sample_rate;
+                let channels = config.channels;
                 let mut mixer = AudioMixdown::new(config);
+                warnings.extend(mixer.take_warnings());
                 mixer.initialize()?;
 
                 let buf = mixer.mix_buffer(time)?;
@@ -569,14 +668,14 @@ impl Controller for AudioController {
                     "channels": channels,
                     "samples": buf.samples,
                     "timestamp": buf.timestamp,
+                    "warnings": warnings,
                     "dataBase64": base64::engine::general_purpose::STANDARD.encode(&s16_bytes),
                 });
 
                 Ok(ActionResponse::ok("", response))
             }
             "mix_stream" => {
-                let opts: MixStreamOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: MixStreamOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let sub_action = opts.action.as_deref().unwrap_or("start");
 
@@ -593,16 +692,21 @@ impl Controller for AudioController {
                             )
                         })?;
 
-                        let _config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
+                        let config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
                             serde_json::from_value(config_value).map_err(|e| {
                                 ApiError::InvalidRequest(format!("invalid config: {}", e))
                             })?;
 
-                        // TODO(P1): implement hot-update via stream state channel
-                        // For now, the client should stop + restart with new config
+                        let stream_id = neko_engine_types::StreamId::from_string(stream_id_str);
+                        let warnings = self
+                            .audio_service
+                            .update_mixdown(&stream_id, config)
+                            .await?;
+
                         let response = serde_json::json!({
-                            "streamId": stream_id_str,
-                            "status": "update_not_yet_supported",
+                            "streamId": stream_id.as_str(),
+                            "status": "updated",
+                            "warnings": warnings,
                         });
 
                         Ok(ActionResponse::ok("", response))
@@ -620,15 +724,13 @@ impl Controller for AudioController {
                                 ApiError::InvalidRequest(format!("invalid config: {}", e))
                             })?;
 
-                        let session_id = opts
-                            .session_id
-                            .unwrap_or_else(|| "mix-default".to_string());
+                        let session_id =
+                            opts.session_id.unwrap_or_else(|| "mix-default".to_string());
 
-                        use neko_engine_kernel::services::impls::audio_mix_stream::start_mix_stream;
-
-                        let active_streams = self.audio_service.active_streams();
-                        let (stream_id, rx) =
-                            start_mix_stream(config, &session_id, active_streams).await?;
+                        let (stream_id, rx) = self
+                            .audio_service
+                            .start_mix_stream(config, &session_id)
+                            .await?;
 
                         let cancel_token = CancellationToken::new();
                         self.stream_registry
@@ -652,13 +754,10 @@ impl Controller for AudioController {
                 }
             }
             "mix_export" => {
-                let opts: MixExportOptions =
-                    serde_json::from_value(options).unwrap_or_default();
+                let opts: MixExportOptions = serde_json::from_value(options).unwrap_or_default();
 
                 let config_value = opts.config.ok_or_else(|| {
-                    ApiError::InvalidRequest(
-                        "config required for audios:mix_export".to_string(),
-                    )
+                    ApiError::InvalidRequest("config required for audios:mix_export".to_string())
                 })?;
                 let output_path = opts.output.ok_or_else(|| {
                     ApiError::InvalidRequest(
@@ -667,15 +766,14 @@ impl Controller for AudioController {
                 })?;
 
                 let config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
-                    serde_json::from_value(config_value).map_err(|e| {
-                        ApiError::InvalidRequest(format!("invalid config: {}", e))
-                    })?;
+                    serde_json::from_value(config_value)
+                        .map_err(|e| ApiError::InvalidRequest(format!("invalid config: {}", e)))?;
 
                 let format_str = opts.format.unwrap_or_else(|| "wav".to_string());
                 let bitrate = opts.bitrate;
                 let output = output_path.clone();
 
-                tokio::task::spawn_blocking(move || {
+                let (_total_duration, warnings) = tokio::task::spawn_blocking(move || {
                     use neko_engine_kernel::audio::{
                         AudioCodec as InternalAudioCodec, AudioEncoder, AudioEncoderConfig,
                         FfmpegAudioEncoder,
@@ -688,11 +786,14 @@ impl Controller for AudioController {
                     let channels = config.channels;
 
                     let mut mixdown = AudioMixdown::new(config);
+                    let warnings = mixdown.take_warnings();
+                    for warning in &warnings {
+                        tracing::warn!("Mix export warning: {}", warning);
+                    }
                     mixdown.initialize()?;
 
                     let total_duration = mixdown.total_duration();
-                    let buf_duration =
-                        mixdown.buffer_size() as f64 / sample_rate as f64;
+                    let buf_duration = mixdown.buffer_size() as f64 / sample_rate as f64;
 
                     let codec = match format_str.to_lowercase().as_str() {
                         "mp3" => InternalAudioCodec::Mp3,
@@ -702,8 +803,7 @@ impl Controller for AudioController {
                         _ => InternalAudioCodec::Pcm,
                     };
 
-                    let mut enc_config =
-                        AudioEncoderConfig::new(sample_rate, channels, codec);
+                    let mut enc_config = AudioEncoderConfig::new(sample_rate, channels, codec);
                     if let Some(br) = bitrate {
                         enc_config = enc_config.with_bitrate(br);
                     }
@@ -721,16 +821,9 @@ impl Controller for AudioController {
                     let mut current_time = 0.0;
                     while current_time < total_duration {
                         let buf = mixdown.mix_buffer(current_time)?;
-                        let pcm_bytes: Vec<u8> = buf
-                            .data
-                            .iter()
-                            .flat_map(|&s| s.to_le_bytes())
-                            .collect();
+                        let pcm_bytes: &[u8] = bytemuck::cast_slice(&buf.data);
 
-                        let packets = encoder.encode_frame(
-                            &pcm_bytes,
-                            buf.samples,
-                        )?;
+                        let packets = encoder.encode_frame(pcm_bytes, buf.samples)?;
                         for packet in packets {
                             output_file.write_all(&packet.data).map_err(|e| {
                                 neko_engine_kernel::error::Error::Other(format!(
@@ -761,17 +854,12 @@ impl Controller for AudioController {
                     })?;
 
                     mixdown.close();
-                    Ok::<_, neko_engine_kernel::error::Error>(total_duration)
+                    Ok::<_, neko_engine_kernel::error::Error>((total_duration, warnings))
                 })
                 .await
-                .map_err(|e| {
-                    ApiError::ServiceError(format!("Mix export task failed: {}", e))
-                })??;
+                .map_err(|e| ApiError::ServiceError(format!("Mix export task failed: {}", e)))??;
 
-                let response = serde_json::json!({
-                    "output": output_path,
-                    "status": "complete",
-                });
+                let response = mix_export_response(&output_path, warnings);
 
                 Ok(ActionResponse::ok("", response))
             }
@@ -853,6 +941,53 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[test]
+    fn test_normalize_canonical_transcode_effect() {
+        let effects = normalize_audio_effects(Some(serde_json::json!([
+            {
+                "id": "eq-1",
+                "effectType": "parametric-eq",
+                "params": { "bands": [] }
+            }
+        ])))
+        .unwrap();
+
+        assert_eq!(effects.len(), 1);
+        assert_eq!(effects[0].id, "eq-1");
+        assert_eq!(effects[0].effect_type, "parametric-eq");
+        assert!(effects[0].enabled);
+    }
+
+    #[test]
+    fn test_normalize_transcode_effect_requires_canonical_shape() {
+        let result = normalize_audio_effects(Some(serde_json::json!([
+            { "type": "spectral-cleanup", "params": {} }
+        ])));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_time_range_validates_trim() {
+        assert_eq!(
+            build_time_range(Some(1.0), Some(2.0)).unwrap(),
+            Some((1.0, 2.0))
+        );
+        assert!(build_time_range(Some(2.0), Some(1.0)).is_err());
+    }
+
+    #[test]
+    fn test_mix_export_response_includes_warnings() {
+        let response = mix_export_response(
+            "/tmp/out.wav",
+            vec!["Unsupported audio effect 'noise-reduction' skipped".to_string()],
+        );
+
+        assert_eq!(response["output"], "/tmp/out.wav");
+        assert_eq!(response["status"], "complete");
+        assert_eq!(response["warnings"].as_array().unwrap().len(), 1);
+    }
+
     #[tokio::test]
     async fn test_audio_controller_segment_missing_duration() {
         let controller = create_test_controller();
@@ -885,6 +1020,154 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[tokio::test]
+    async fn test_audio_controller_mixdown_accepts_empty_config() {
+        let controller = create_test_controller();
+        let opts = serde_json::json!({
+            "config": {
+                "tracks": [],
+                "masterEffects": [],
+                "masterVolume": 1.0,
+                "sampleRate": 48000,
+                "channels": 2
+            },
+            "time": 0.0
+        });
+
+        let response = controller
+            .handle("mixdown", None, opts, None)
+            .await
+            .unwrap();
+        let data = response.data.unwrap();
+
+        assert_eq!(data["sampleRate"], 48000);
+        assert_eq!(data["channels"], 2);
+        assert!(data["warnings"].as_array().unwrap().is_empty());
+        assert!(data["dataBase64"].as_str().unwrap().len() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_audio_controller_mixdown_missing_config_fails() {
+        let controller = create_test_controller();
+        let opts = serde_json::json!({
+            "tracks": [],
+            "sampleRate": 44100,
+            "channels": 1,
+            "time": 0.0
+        });
+
+        let error = controller
+            .handle("mixdown", None, opts, None)
+            .await
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("config required for audios:mixdown")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_audio_controller_mixdown_config_warning_for_unsupported_effect() {
+        let controller = create_test_controller();
+        let opts = serde_json::json!({
+            "config": {
+                "tracks": [
+                    {
+                        "id": "track-1",
+                        "effectChain": [
+                            {
+                                "id": "fx-1",
+                                "effectType": "noise-reduction",
+                                "enabled": true,
+                                "params": {}
+                            }
+                        ],
+                        "elements": []
+                    }
+                ],
+                "masterEffects": [],
+                "masterVolume": 1.0,
+                "sampleRate": 48000,
+                "channels": 2
+            },
+            "time": 0.0
+        });
+
+        let response = controller
+            .handle("mixdown", None, opts, None)
+            .await
+            .unwrap();
+        let data = response.data.unwrap();
+        let warnings = data["warnings"].as_array().unwrap();
+
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].as_str().unwrap().contains("noise-reduction"));
+    }
+
+    #[tokio::test]
+    async fn test_audio_controller_mix_stream_update_replaces_config() {
+        let controller = create_test_controller();
+        let start_opts = serde_json::json!({
+            "action": "start",
+            "sessionId": "mix-test-update",
+            "config": {
+                "tracks": [],
+                "masterEffects": [],
+                "masterVolume": 1.0,
+                "sampleRate": 48000,
+                "channels": 2
+            }
+        });
+        let start_response = controller
+            .handle("mix_stream", None, start_opts, None)
+            .await;
+        let start_data = start_response.unwrap().data.unwrap();
+        let stream_id = start_data["streamId"].as_str().unwrap().to_string();
+
+        let opts = serde_json::json!({
+            "action": "update",
+            "streamId": stream_id,
+            "config": {
+                "tracks": [],
+                "masterEffects": [
+                    {
+                        "id": "master-noise",
+                        "effectType": "noise-reduction",
+                        "enabled": true,
+                        "params": {}
+                    }
+                ],
+                "masterVolume": 0.75,
+                "sampleRate": 44100,
+                "channels": 1
+            }
+        });
+
+        let response = controller
+            .handle("mix_stream", None, opts, None)
+            .await
+            .unwrap();
+
+        let data = response.data.unwrap();
+        assert_eq!(data["streamId"], stream_id);
+        assert_eq!(data["status"], "updated");
+        let warnings = data["warnings"].as_array().unwrap();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].as_str().unwrap().contains("noise-reduction"));
+
+        controller
+            .handle(
+                "stop",
+                None,
+                serde_json::json!({ "streamId": stream_id }),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
     #[test]
     fn test_audio_controller_actions() {
         let controller = create_test_controller();
@@ -908,6 +1191,8 @@ mod tests {
         assert!(actions.contains(&"record_start"));
         assert!(actions.contains(&"record_stop"));
         assert!(actions.contains(&"mixdown"));
-        assert_eq!(actions.len(), 18);
+        assert!(actions.contains(&"mix_stream"));
+        assert!(actions.contains(&"mix_export"));
+        assert_eq!(actions.len(), 20);
     }
 }

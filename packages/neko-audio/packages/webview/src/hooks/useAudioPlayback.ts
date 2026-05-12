@@ -39,7 +39,6 @@ export function useAudioPlayback() {
   } = useAudioStore();
 
   const projectData = useAudioProjectStore((s) => s.audioProjectData);
-  const buildMixStreamConfig = useAudioProjectStore((s) => s.buildMixStreamConfig);
 
   const duration = projectMode
     ? getTotalDuration(projectData?.tracks ?? [])
@@ -71,13 +70,17 @@ export function useAudioPlayback() {
         });
         audioClientRef.current = null;
       }
-      postMessage({ type: 'editor:stop' });
+      postMessage({
+        type: 'audio:playback',
+        action: 'stop',
+        mode: projectMode ? 'project' : 'single-file',
+      });
       return;
     }
 
     setCurrentTime(newTime);
     animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [playbackState, duration, setCurrentTime, setPlaybackState]);
+  }, [playbackState, duration, projectMode, setCurrentTime, setPlaybackState]);
 
   useEffect(() => {
     if (playbackState === 'playing') {
@@ -160,36 +163,33 @@ export function useAudioPlayback() {
     playWallTimeRef.current = performance.now();
 
     if (projectMode) {
-      const config = buildMixStreamConfig();
-      if (config) {
-        postMessage({ type: 'project:mixStreamStart', config: { ...config }, startTime });
-      }
+      postMessage({ type: 'audio:playback', action: 'play', mode: 'project', startTime });
     } else {
-      postMessage({ type: 'editor:play', startTime });
+      postMessage({ type: 'audio:playback', action: 'play', mode: 'single-file', startTime });
     }
-  }, [
-    audioInfo,
-    projectMode,
-    currentTime,
-    duration,
-    setCurrentTime,
-    setPlaybackState,
-    buildMixStreamConfig,
-  ]);
+  }, [audioInfo, projectMode, currentTime, duration, setCurrentTime, setPlaybackState]);
 
   const pause = useCallback(() => {
     setPlaybackState('paused');
     audioClientRef.current?.pause();
-    postMessage({ type: 'editor:pause' });
-  }, [setPlaybackState]);
+    postMessage({
+      type: 'audio:playback',
+      action: 'pause',
+      mode: projectMode ? 'project' : 'single-file',
+    });
+  }, [projectMode, setPlaybackState]);
 
   const resume = useCallback(() => {
     setPlaybackState('playing');
     playStartTimeRef.current = currentTime;
     playWallTimeRef.current = performance.now();
     audioClientRef.current?.resume();
-    postMessage({ type: 'editor:resume' });
-  }, [currentTime, setPlaybackState]);
+    postMessage({
+      type: 'audio:playback',
+      action: 'resume',
+      mode: projectMode ? 'project' : 'single-file',
+    });
+  }, [currentTime, projectMode, setPlaybackState]);
 
   const togglePlay = useCallback(() => {
     if (playbackState === 'playing') {
@@ -209,9 +209,14 @@ export function useAudioPlayback() {
         playWallTimeRef.current = performance.now();
       }
       audioClientRef.current?.resetClock();
-      postMessage({ type: 'editor:seek', time });
+      postMessage({
+        type: 'audio:playback',
+        action: 'seek',
+        mode: projectMode ? 'project' : 'single-file',
+        time,
+      });
     },
-    [playbackState, setCurrentTime],
+    [playbackState, projectMode, setCurrentTime],
   );
 
   const stop = useCallback(() => {
@@ -223,8 +228,12 @@ export function useAudioPlayback() {
       client.fadeOut().then(() => client.dispose());
       audioClientRef.current = null;
     }
-    postMessage({ type: 'editor:stop' });
-  }, [setPlaybackState, setCurrentTime, clearStreamInfo]);
+    postMessage({
+      type: 'audio:playback',
+      action: 'stop',
+      mode: projectMode ? 'project' : 'single-file',
+    });
+  }, [projectMode, setPlaybackState, setCurrentTime, clearStreamInfo]);
 
   return {
     play,

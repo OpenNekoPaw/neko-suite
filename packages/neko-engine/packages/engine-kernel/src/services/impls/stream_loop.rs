@@ -7,16 +7,18 @@ use crate::domain::{FrameData, Timeline};
 use crate::encoder::EncodedPacket;
 use crate::error::{Error, Result};
 use crate::preview::PreviewPipelineConfig;
+use crate::services::audio_mixdown::MixdownConfig;
 use neko_engine_types::{FrameFormat, LoopRegion, StreamId};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::{broadcast, watch, RwLock};
+use tokio::sync::{broadcast, oneshot, watch, RwLock};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+pub type MixdownUpdateAck = Arc<Mutex<Option<oneshot::Sender<Vec<String>>>>>;
+
 /// Playback state (controlled externally via watch channel)
-#[derive(Debug, Clone)]
 pub struct PlaybackState {
     pub paused: bool,
     pub speed: f64,
@@ -36,6 +38,12 @@ pub struct PlaybackState {
     pub config_update: Option<PreviewPipelineConfig>,
     /// Monotonically increasing config update sequence counter.
     pub config_seq: u64,
+    /// Hot-update: new audio mixdown config to apply without recreating the stream.
+    pub mixdown_update: Option<Arc<MixdownConfig>>,
+    /// One-shot response channel for warnings emitted by the actual mix stream update.
+    pub mixdown_update_ack: Option<MixdownUpdateAck>,
+    /// Monotonically increasing mixdown update sequence counter.
+    pub mixdown_seq: u64,
 }
 
 impl Default for PlaybackState {
@@ -50,7 +58,51 @@ impl Default for PlaybackState {
             timeline_seq: 0,
             config_update: None,
             config_seq: 0,
+            mixdown_update: None,
+            mixdown_update_ack: None,
+            mixdown_seq: 0,
         }
+    }
+}
+
+impl Clone for PlaybackState {
+    fn clone(&self) -> Self {
+        Self {
+            paused: self.paused,
+            speed: self.speed,
+            loop_region: self.loop_region.clone(),
+            seek_to: self.seek_to,
+            seek_seq: self.seek_seq,
+            timeline_update: self.timeline_update.clone(),
+            timeline_seq: self.timeline_seq,
+            config_update: self.config_update.clone(),
+            config_seq: self.config_seq,
+            mixdown_update: self.mixdown_update.clone(),
+            mixdown_update_ack: self.mixdown_update_ack.clone(),
+            mixdown_seq: self.mixdown_seq,
+        }
+    }
+}
+
+impl std::fmt::Debug for PlaybackState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PlaybackState")
+            .field("paused", &self.paused)
+            .field("speed", &self.speed)
+            .field("loop_region", &self.loop_region)
+            .field("seek_to", &self.seek_to)
+            .field("seek_seq", &self.seek_seq)
+            .field("timeline_update", &self.timeline_update)
+            .field("timeline_seq", &self.timeline_seq)
+            .field("config_update", &self.config_update)
+            .field("config_seq", &self.config_seq)
+            .field("mixdown_update", &self.mixdown_update)
+            .field(
+                "mixdown_update_ack",
+                &self.mixdown_update_ack.as_ref().map(|_| "<ack>"),
+            )
+            .field("mixdown_seq", &self.mixdown_seq)
+            .finish()
     }
 }
 
@@ -102,6 +154,27 @@ impl ActiveStreams {
 
         handle.state_tx.send_modify(f);
         Ok(())
+    }
+
+    /// Hot-update mixdown data for a running audio mix stream.
+    pub async fn update_mixdown(
+        &self,
+        stream_id: &StreamId,
+        config: Arc<MixdownConfig>,
+    ) -> Result<Vec<String>> {
+        let (ack_tx, ack_rx) = oneshot::channel();
+        let ack = Arc::new(Mutex::new(Some(ack_tx)));
+        self.update_state(stream_id, |s| {
+            s.mixdown_update = Some(config);
+            s.mixdown_update_ack = Some(ack);
+            s.mixdown_seq += 1;
+        })
+        .await?;
+
+        tokio::time::timeout(Duration::from_secs(5), ack_rx)
+            .await
+            .map_err(|_| Error::Other("Mix stream update acknowledgement timed out".to_string()))?
+            .map_err(|_| Error::Other("Mix stream update acknowledgement dropped".to_string()))
     }
 
     /// Insert a paired video+audio stream (sets linked_stream_id on both handles)
@@ -269,6 +342,16 @@ impl StreamPlaybackDelegate {
                 s.config_seq += 1;
             })
             .await
+    }
+
+    /// Hot-update mixdown data for a running audio mix stream.
+    /// The mix stream loop will pick up the new config on the next buffer iteration.
+    pub async fn update_mixdown(
+        &self,
+        stream_id: &StreamId,
+        config: Arc<MixdownConfig>,
+    ) -> Result<Vec<String>> {
+        self.active_streams.update_mixdown(stream_id, config).await
     }
 }
 
@@ -487,6 +570,8 @@ mod tests {
         assert!((state.speed - 1.0).abs() < f64::EPSILON);
         assert!(state.loop_region.is_none());
         assert!(state.seek_to.is_none());
+        assert!(state.mixdown_update.is_none());
+        assert_eq!(state.mixdown_seq, 0);
     }
 
     #[tokio::test]
@@ -558,6 +643,110 @@ mod tests {
         assert!((state_rx.borrow().speed - 2.0).abs() < f64::EPSILON);
 
         // Cleanup
+        cancel.cancel();
+        streams.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_stream_playback_delegate_update_mixdown() {
+        let streams = Arc::new(ActiveStreams::new());
+        let delegate = StreamPlaybackDelegate::new(streams.clone());
+        let cancel = CancellationToken::new();
+        let (state_tx, mut state_rx) = watch::channel(PlaybackState::default());
+        let cancel_clone = cancel.clone();
+        let join_handle = tokio::spawn(async move {
+            cancel_clone.cancelled().await;
+        });
+
+        let stream_id = StreamId::new("test");
+        let handle = StreamLoopHandle {
+            stream_id: stream_id.clone(),
+            cancel: cancel.clone(),
+            state_tx,
+            join_handle,
+            linked_stream_id: None,
+        };
+        streams.insert(handle).await;
+
+        let ack_task = tokio::spawn({
+            let stream_id = stream_id.clone();
+            let config = Arc::new(MixdownConfig {
+                tracks: vec![],
+                master_effects: vec![],
+                master_volume: 0.5,
+                sample_rate: 44100,
+                channels: 1,
+            });
+            async move { delegate.update_mixdown(&stream_id, config).await }
+        });
+
+        state_rx.changed().await.unwrap();
+        let ack = {
+            let state = state_rx.borrow();
+            assert_eq!(state.mixdown_seq, 1);
+            let update = state.mixdown_update.as_ref().unwrap();
+            assert_eq!(update.sample_rate, 44100);
+            assert_eq!(update.channels, 1);
+            assert!((update.master_volume - 0.5).abs() < f32::EPSILON);
+            state.mixdown_update_ack.as_ref().unwrap().clone()
+        };
+
+        let sender = ack.lock().unwrap().take().unwrap();
+        sender.send(vec!["updated".to_string()]).unwrap();
+        let warnings = ack_task.await.unwrap().unwrap();
+        assert_eq!(warnings, vec!["updated".to_string()]);
+
+        cancel.cancel();
+        streams.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn test_active_streams_update_mixdown_times_out_without_ack() {
+        let streams = Arc::new(ActiveStreams::new());
+        let cancel = CancellationToken::new();
+        let (state_tx, mut state_rx) = watch::channel(PlaybackState::default());
+        let cancel_clone = cancel.clone();
+        let join_handle = tokio::spawn(async move {
+            cancel_clone.cancelled().await;
+        });
+
+        let stream_id = StreamId::new("test-timeout");
+        let handle = StreamLoopHandle {
+            stream_id: stream_id.clone(),
+            cancel: cancel.clone(),
+            state_tx,
+            join_handle,
+            linked_stream_id: None,
+        };
+        streams.insert(handle).await;
+
+        let config = Arc::new(MixdownConfig {
+            tracks: vec![],
+            master_effects: vec![],
+            master_volume: 0.5,
+            sample_rate: 44100,
+            channels: 1,
+        });
+
+        let update_task = tokio::spawn({
+            let streams = streams.clone();
+            let stream_id = stream_id.clone();
+            async move { streams.update_mixdown(&stream_id, config).await }
+        });
+
+        state_rx.changed().await.unwrap();
+        let ack = state_rx
+            .borrow()
+            .mixdown_update_ack
+            .as_ref()
+            .unwrap()
+            .clone();
+        drop(ack.lock().unwrap().take());
+        let err = update_task.await.unwrap().unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Mix stream update acknowledgement dropped"));
+
         cancel.cancel();
         streams.stop_all().await;
     }

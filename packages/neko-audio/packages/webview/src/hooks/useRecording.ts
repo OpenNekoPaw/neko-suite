@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
+import { t } from '../i18n';
 
 export type RecordingState = 'idle' | 'recording' | 'paused';
 
@@ -40,28 +41,28 @@ export function useRecording(): RecordingResult {
   const startTimeRef = useRef(0);
   const durationTimerRef = useRef(0);
   const resolveStopRef = useRef<((data: string | null) => void) | null>(null);
+  const levelDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
-  // Enumerate audio input devices
-  useEffect(() => {
-    async function enumerate() {
-      try {
-        // Request permission first to get device labels
-        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        tempStream.getTracks().forEach((t) => t.stop());
-
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        const audioInputs = allDevices.filter((d) => d.kind === 'audioinput');
-        setDevices(audioInputs);
-        if (audioInputs.length > 0 && !selectedDeviceId) {
-          setSelectedDeviceId(audioInputs[0]?.deviceId ?? null);
+  const refreshDevices = useCallback(async () => {
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = allDevices.filter((device) => device.kind === 'audioinput');
+      setDevices(audioInputs);
+      setSelectedDeviceId((current) => {
+        if (current && audioInputs.some((device) => device.deviceId === current)) {
+          return current;
         }
-      } catch {
-        // Permission denied or no devices
-      }
+        return audioInputs[0]?.deviceId ?? null;
+      });
+    } catch {
+      // Permission denied or no devices
     }
-    enumerate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Enumerate devices without triggering a microphone permission prompt.
+  useEffect(() => {
+    void refreshDevices();
+  }, [refreshDevices]);
 
   // Level meter animation
   const updateLevel = useCallback(() => {
@@ -71,7 +72,10 @@ export function useRecording(): RecordingResult {
       return;
     }
 
-    const data = new Uint8Array(analyser.fftSize);
+    if (levelDataRef.current?.length !== analyser.fftSize) {
+      levelDataRef.current = new Uint8Array(analyser.fftSize);
+    }
+    const data = levelDataRef.current;
     analyser.getByteTimeDomainData(data);
 
     // RMS level
@@ -95,6 +99,7 @@ export function useRecording(): RecordingResult {
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
+      void refreshDevices();
 
       // Setup analyser for level meter
       const audioCtx = new AudioContext();
@@ -104,6 +109,7 @@ export function useRecording(): RecordingResult {
       analyser.fftSize = 256;
       source.connect(analyser);
       analyserRef.current = analyser;
+      levelDataRef.current = new Uint8Array(analyser.fftSize);
 
       // Start level meter
       animFrameRef.current = requestAnimationFrame(updateLevel);
@@ -144,9 +150,9 @@ export function useRecording(): RecordingResult {
       }, 100);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(`Recording failed: ${msg}`);
+      setError(t('audio.toast.recordingStartError', { error: msg }));
     }
-  }, [selectedDeviceId, updateLevel]);
+  }, [refreshDevices, selectedDeviceId, updateLevel]);
 
   const stopRecording = useCallback(async (): Promise<string | null> => {
     return new Promise((resolve) => {
@@ -162,7 +168,7 @@ export function useRecording(): RecordingResult {
       // Cleanup
       cancelAnimationFrame(animFrameRef.current);
       clearInterval(durationTimerRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
 
       try {
@@ -171,6 +177,7 @@ export function useRecording(): RecordingResult {
         // May already be disconnected
       }
       analyserRef.current = null;
+      levelDataRef.current = null;
 
       try {
         void audioCtxRef.current?.close();
@@ -209,12 +216,13 @@ export function useRecording(): RecordingResult {
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       clearInterval(durationTimerRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       try {
         analyserRef.current?.disconnect();
       } catch {
         // ignore
       }
+      levelDataRef.current = null;
       try {
         void audioCtxRef.current?.close();
       } catch {

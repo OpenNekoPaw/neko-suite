@@ -22,6 +22,7 @@ const audio: MessageBundle = {
   'audio.controls.record': 'Record',
   'audio.controls.bpm': 'BPM',
   'audio.controls.zoom': 'Zoom',
+  'audio.controls.solo': 'Solo',
 
   // Waveform
   'audio.waveform.loading': 'Generating waveform...',
@@ -190,15 +191,21 @@ const audio: MessageBundle = {
   'audio.toast.trimError': 'Trim failed: {error}',
   'audio.toast.effectsSuccess': 'Effects applied',
   'audio.toast.effectsError': 'Effects failed: {error}',
+  'audio.toast.exportSuccess': 'Exported {path}',
+  'audio.toast.exportSuccessNoPath': 'Export complete',
+  'audio.toast.exportError': 'Export failed',
   'audio.toast.recordingSaved': 'Recording saved: {path}',
   'audio.toast.recordingError': 'Save recording failed: {error}',
+  'audio.toast.recordingStartError': 'Recording failed: {error}',
   'audio.toast.denoiseStarted': 'Denoise processing...',
   'audio.toast.normalizeStarted': 'Normalizing...',
   'audio.toast.exportStarted': 'Exporting...',
+  'audio.toast.trimmed': 'Audio trimmed',
 
   // Track operations (context menu)
   'audio.track.mute': 'Mute Track',
   'audio.track.unmute': 'Unmute Track',
+  'audio.track.solo': 'Solo Track',
   'audio.track.lock': 'Lock Track',
   'audio.track.unlock': 'Unlock Track',
   'audio.track.moveUp': 'Move Up',
@@ -223,6 +230,14 @@ const audio: MessageBundle = {
   'audio.export.stereo': 'Stereo',
   'audio.export.export': 'Export',
   'audio.export.toggle': 'Export As...',
+
+  // Mixer
+  'audio.mixer.volumeShort': 'Vol',
+  'audio.mixer.panShort': 'Pan',
+  'audio.mixer.center': 'Center',
+  'audio.mixer.levelDb': 'Level {value} dB',
+  'audio.mixer.volumePercent': 'Volume: {value}%',
+  'audio.mixer.panValue': 'Pan: {value}',
 };
 
 export const bundles: Record<string, MessageBundle> = { audio };

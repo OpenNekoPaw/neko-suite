@@ -2,24 +2,27 @@
 //!
 //! Provides audio-related operations: probing, transcoding, streaming, and waveform generation.
 
+use crate::audio::dsp::AudioEffect;
 use crate::audio::mic_capture::{
     AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult,
 };
 use crate::audio::{
     AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
-    FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
+    FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat, dsp,
 };
 use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::{Error, Result};
 use crate::gpu::GpuContext;
 use crate::media_service::global_probe_cache;
+use crate::services::audio_mixdown::MixdownConfig;
+use crate::services::impls::audio_mix_stream::start_mix_stream;
 use crate::services::impls::common::{
     analyze_loudness_blocking, convert_media_info, detect_silence_blocking,
     generate_waveform_blocking,
 };
 use crate::services::impls::stream_loop::{
-    create_stream_channels, eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams,
-    StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
+    ActiveStreams, EOF_IDLE_TIMEOUT, StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer,
+    create_stream_channels, eof_idle_wait, pack_pcm_f32le_stream_frame,
 };
 use crate::services::{IAudioService, IStreamPlayback, ITaskService};
 use neko_engine_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
@@ -28,6 +31,53 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+
+fn trim_frame_to_time_range(
+    data: &[f32],
+    frame_timestamp: f64,
+    frame_samples: usize,
+    sample_rate: u32,
+    channels: u16,
+    start: f64,
+    end: f64,
+) -> Option<(Vec<f32>, usize)> {
+    let frame_duration = frame_samples as f64 / sample_rate as f64;
+    let frame_end = frame_timestamp + frame_duration;
+    if frame_end <= start || frame_timestamp >= end {
+        return None;
+    }
+
+    const SAMPLE_TIME_EPSILON: f64 = 1e-9;
+    let sample_start = if frame_timestamp < start {
+        (((start - frame_timestamp) * sample_rate as f64) - SAMPLE_TIME_EPSILON).ceil() as usize
+    } else {
+        0
+    };
+    let sample_end = if frame_end > end {
+        (((end - frame_timestamp) * sample_rate as f64) + SAMPLE_TIME_EPSILON).floor() as usize
+    } else {
+        frame_samples
+    }
+    .min(frame_samples);
+
+    if sample_start >= sample_end {
+        return None;
+    }
+
+    let ch = channels as usize;
+    let data_start = sample_start * ch;
+    if data_start >= data.len() {
+        return None;
+    }
+    let data_end = (sample_end * ch).min(data.len());
+    if data_start >= data_end {
+        return None;
+    }
+    Some((
+        data[data_start..data_end].to_vec(),
+        (data_end - data_start) / ch,
+    ))
+}
 
 /// AudioService implementation
 ///
@@ -70,9 +120,15 @@ impl AudioService {
         &self.mic_capture
     }
 
-    /// Get active streams handle (for mix_stream to register its loop)
-    pub fn active_streams(&self) -> Arc<ActiveStreams> {
-        self.active_streams.clone()
+    /// Hot-update a running mix stream with a full replacement mixdown config.
+    pub async fn update_mixdown(
+        &self,
+        stream_id: &StreamId,
+        config: MixdownConfig,
+    ) -> Result<Vec<String>> {
+        self.playback
+            .update_mixdown(stream_id, Arc::new(config))
+            .await
     }
 }
 
@@ -124,6 +180,12 @@ impl IAudioService for AudioService {
         tokio::task::spawn_blocking(move || {
             // Open decoder
             let mut decoder = FfmpegAudioDecoder::new().with_output_format(SampleFormat::F32);
+            if let Some(sample_rate) = options.sample_rate {
+                decoder = decoder.with_output_sample_rate(sample_rate);
+            }
+            if let Some(channels) = options.channels {
+                decoder = decoder.with_output_channels(channels);
+            }
             let audio_info = decoder.open(&input_path)?;
 
             // Determine codec: options.format > output extension > default
@@ -163,23 +225,63 @@ impl IAudioService for AudioService {
             let mut encoder = FfmpegAudioEncoder::new();
             encoder.open(&config)?;
 
+            let mut effect_chain = if options.effects.is_empty() {
+                None
+            } else {
+                Some(dsp::build_effect_chain(&options.effects)?)
+            };
+
+            if let Some((start, end)) = options.time_range {
+                let valid_open_end = end.is_infinite() && end.is_sign_positive();
+                if !start.is_finite()
+                    || !(end.is_finite() || valid_open_end)
+                    || start < 0.0
+                    || end <= start
+                {
+                    return Err(Error::InvalidParameter(
+                        "audio transcode time range requires start >= 0 and end > start"
+                            .to_string(),
+                    ));
+                }
+                if start > 0.0 {
+                    decoder.seek(start)?;
+                }
+            }
+
             // Create output file
             let mut output_file = File::create(&output_path)
                 .map_err(|e| Error::Other(format!("Failed to create output file: {}", e)))?;
 
             // Decode → encode → write loop
             while let Some(frame) = decoder.decode_next()? {
-                // Skip frames outside time range if specified
-                if let Some((start, end)) = options.time_range {
-                    if frame.timestamp < start {
-                        continue;
-                    }
-                    if frame.timestamp > end {
+                let (mut samples, sample_count) = if let Some((start, end)) = options.time_range {
+                    if frame.timestamp >= end {
                         break;
                     }
+                    let decoded: &[f32] = bytemuck::cast_slice(&frame.data);
+                    match trim_frame_to_time_range(
+                        decoded,
+                        frame.timestamp,
+                        frame.samples,
+                        sample_rate,
+                        channels,
+                        start,
+                        end,
+                    ) {
+                        Some(trimmed) => trimmed,
+                        None => continue,
+                    }
+                } else {
+                    (bytemuck::cast_slice(&frame.data).to_vec(), frame.samples)
+                };
+
+                if let Some(chain) = effect_chain.as_mut() {
+                    chain.process(&mut samples, channels, sample_rate);
                 }
 
-                let packets = encoder.encode_frame(&frame.data, frame.samples)?;
+                let frame_data: &[u8] = bytemuck::cast_slice(&samples);
+
+                let packets = encoder.encode_frame(frame_data, sample_count)?;
                 for packet in packets {
                     output_file
                         .write_all(&packet.data)
@@ -370,6 +472,14 @@ impl IAudioService for AudioService {
         Ok((stream_id, rx))
     }
 
+    async fn start_mix_stream(
+        &self,
+        config: MixdownConfig,
+        session_id: &str,
+    ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
+        start_mix_stream(config, session_id, self.active_streams.clone()).await
+    }
+
     async fn generate_waveform(&self, source: &Path) -> Result<WaveformData> {
         let path = source.to_string_lossy().to_string();
 
@@ -420,11 +530,20 @@ impl IAudioService for AudioService {
     fn monitor_data(&self, stream_id: &str) -> Option<MonitorData> {
         self.mic_capture.get_monitor_data(stream_id)
     }
+
+    async fn update_mixdown(
+        &self,
+        stream_id: &StreamId,
+        config: MixdownConfig,
+    ) -> Result<Vec<String>> {
+        AudioService::update_mixdown(self, stream_id, config).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::dsp::AudioEffect;
     use crate::services::TaskService;
 
     fn create_test_service() -> AudioService {
@@ -506,6 +625,73 @@ mod tests {
     fn test_audio_service_trait_object() {
         fn _assert_impl<T: IAudioService>() {}
         _assert_impl::<AudioService>();
+    }
+
+    #[test]
+    fn test_trim_frame_to_time_range_keeps_partial_samples() {
+        let data = vec![0.0, 0.1, 0.2, 0.3, 0.4];
+        let (trimmed, samples) = trim_frame_to_time_range(&data, 1.0, 5, 10, 1, 1.1, 1.4).unwrap();
+
+        assert_eq!(samples, 3);
+        assert_eq!(trimmed, vec![0.1, 0.2, 0.3]);
+    }
+
+    #[test]
+    fn test_trim_frame_to_time_range_skips_outside_frame() {
+        let data = vec![0.0, 0.1, 0.2, 0.3, 0.4];
+        let trimmed = trim_frame_to_time_range(&data, 1.0, 5, 10, 1, 2.0, 3.0);
+
+        assert!(trimmed.is_none());
+    }
+
+    #[test]
+    fn test_trim_frame_to_time_range_handles_truncated_frame() {
+        let data = vec![0.0, 0.1, 0.2];
+        let (trimmed, samples) = trim_frame_to_time_range(&data, 1.0, 5, 10, 1, 1.1, 1.5).unwrap();
+
+        assert_eq!(samples, 2);
+        assert_eq!(trimmed, vec![0.1, 0.2]);
+    }
+
+    #[test]
+    fn test_transcode_effect_chain_gain_processing() {
+        let mut chain = dsp::build_effect_chain(&[dsp::AudioEffectConfig {
+            id: "gain".into(),
+            effect_type: "gain".into(),
+            enabled: true,
+            params: serde_json::json!({ "gainDb": 6.0 }),
+        }])
+        .unwrap();
+        let mut samples = vec![0.25f32, -0.25f32];
+
+        chain.process(&mut samples, 1, 48_000);
+
+        assert!((samples[0] - 0.5).abs() < 0.01);
+        assert!((samples[1] + 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_stateful_effect_processing_persists_across_frames() {
+        let mut chain = dsp::build_effect_chain(&[dsp::AudioEffectConfig {
+            id: "delay".into(),
+            effect_type: "delay".into(),
+            enabled: true,
+            params: serde_json::json!({
+                "delayMs": 1.0,
+                "feedback": 0.0,
+                "wetDry": 1.0
+            }),
+        }])
+        .unwrap();
+        let sample_rate = 1_000u32;
+        let mut first = vec![1.0f32];
+        let mut second = vec![0.0f32];
+
+        chain.process(&mut first, 1, sample_rate);
+        chain.process(&mut second, 1, sample_rate);
+
+        assert!(first[0].abs() < 0.001);
+        assert!(second[0] > 0.9);
     }
 
     /// Integration test: start audio stream with real mp3 file and verify PCM f32le frames

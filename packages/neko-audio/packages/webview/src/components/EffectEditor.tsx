@@ -23,6 +23,10 @@ interface EffectEditorProps {
   onMoveDown?: () => void;
 }
 
+function readEffectParam(params: AudioEffectParams, key: string): unknown {
+  return key in params ? params[key as keyof AudioEffectParams] : undefined;
+}
+
 export function EffectEditor({
   effect,
   onUpdateParams,
@@ -41,7 +45,7 @@ export function EffectEditor({
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-1.5">
         <button
-          className="w-5 h-5 flex items-center justify-center rounded-full text-[10px] bg-transparent text-[var(--editor-fg)] border-none cursor-pointer hover:bg-neko-surface transition-colors"
+          className="w-5 h-5 flex items-center justify-center rounded-full text-[10px] bg-transparent text-[var(--editor-fg)] border-none cursor-pointer hover:bg-[var(--audio-hover)] transition-colors"
           onClick={() => onToggle(effect.id)}
           title={t('audio.effects.bypass')}
         >
@@ -74,7 +78,7 @@ export function EffectEditor({
           <ParameterControl
             key={paramDef.key}
             paramDef={paramDef}
-            value={(effect.params as unknown as Record<string, unknown>)[paramDef.key]}
+            value={readEffectParam(effect.params, paramDef.key)}
             onChange={(val) =>
               onUpdateParams(effect.id, { [paramDef.key]: val } as Partial<AudioEffectParams>)
             }

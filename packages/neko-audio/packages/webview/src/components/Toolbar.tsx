@@ -223,16 +223,37 @@ export function Toolbar() {
   );
 
   const handleAnalyzeLoudness = useCallback(() => {
-    postMessage({ type: 'editor:analyzeLoudness' });
+    postMessage({ type: 'audio:analyze', kind: 'loudness' });
   }, []);
   const handleDetectSilence = useCallback(() => {
-    postMessage({ type: 'editor:detectSilence' });
+    postMessage({ type: 'audio:analyze', kind: 'silence' });
   }, []);
   const handleDenoise = useCallback(() => {
-    postMessage({ type: 'editor:denoise' });
+    postMessage({
+      type: 'audio:effects',
+      effects: [
+        {
+          id: crypto.randomUUID(),
+          effectType: 'noise-gate',
+          enabled: true,
+          params: { threshold: -40, attack: 1, hold: 50, release: 100 },
+        },
+      ],
+    });
   }, []);
   const handleNormalize = useCallback(() => {
-    postMessage({ type: 'editor:normalize' });
+    // TODO(P1): Replace this placeholder gain effect with Extension-side loudness analysis.
+    postMessage({
+      type: 'audio:effects',
+      effects: [
+        {
+          id: crypto.randomUUID(),
+          effectType: 'gain',
+          enabled: true,
+          params: { gainDb: 0 },
+        },
+      ],
+    });
   }, []);
 
   return (

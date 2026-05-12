@@ -66,11 +66,11 @@ export function SidePanel() {
       {/* Panel */}
       <div
         ref={rootRef}
-        className="flex flex-col shrink-0 bg-[var(--neko-surface)] border-l border-[var(--neko-border)] overflow-hidden"
+        className="flex flex-col shrink-0 bg-[var(--toolbar-bg)] border-l border-[var(--editor-border)] overflow-hidden"
         style={{ width }}
       >
         {/* Header */}
-        <div className="neko-panel-header flex items-center">
+        <div className="flex items-center gap-2 px-3 py-2 min-h-9 text-xs font-medium border-b border-[var(--editor-border)]">
           <span className="flex-1">{t(PANEL_TITLES[activeSidePanel])}</span>
           <MacIconButton size="sm" onClick={closeSidePanel} title={t('audio.common.close')}>
             ✕

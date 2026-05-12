@@ -51,7 +51,12 @@ export function useKeyboardShortcuts({ onTogglePlay, onStop }: ShortcutCallbacks
           e.preventDefault();
           const store = useAudioStore.getState();
           store.toggleLoop();
-          postMessage({ type: 'editor:loop', enabled: !store.isLooping });
+          postMessage({
+            type: 'audio:playback',
+            action: 'setLoop',
+            loop: !store.isLooping,
+            mode: store.projectMode ? 'project' : 'single-file',
+          });
           break;
         }
 
@@ -77,18 +82,7 @@ export function useKeyboardShortcuts({ onTogglePlay, onStop }: ShortcutCallbacks
             for (const el of track.elements) {
               const elEnd = el.startTime + (el.duration ?? 0);
               if (currentTime > el.startTime + 0.01 && currentTime < elEnd - 0.01) {
-                const splitOffset = currentTime - el.startTime;
-                const origDuration = el.duration ?? 0;
-                const origTrimStart = el.trimStart ?? 0;
-
-                projStore.updateElement(track.id, el.id, { duration: splitOffset });
-                projStore.addElement(track.id, {
-                  ...el,
-                  id: crypto.randomUUID(),
-                  startTime: currentTime,
-                  duration: origDuration - splitOffset,
-                  trimStart: origTrimStart + splitOffset,
-                });
+                projStore.splitElementAt(track.id, el.id, currentTime);
                 break;
               }
             }

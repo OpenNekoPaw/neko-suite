@@ -28,7 +28,13 @@ pub struct BiquadCoeffs {
 }
 
 impl BiquadCoeffs {
-    pub fn compute(filter_type: FilterType, sample_rate: f64, freq: f64, q: f64, gain_db: f64) -> Self {
+    pub fn compute(
+        filter_type: FilterType,
+        sample_rate: f64,
+        freq: f64,
+        q: f64,
+        gain_db: f64,
+    ) -> Self {
         let freq = freq.clamp(20.0, sample_rate * 0.499);
         let w0 = 2.0 * PI * freq / sample_rate;
         let cos_w0 = w0.cos();
@@ -154,7 +160,8 @@ impl BiquadFilter {
     fn ensure_channels(&mut self, channels: u16, sample_rate: u32) {
         let sr = sample_rate as f64;
         if self.states.len() != channels as usize || (sr - self.last_sample_rate).abs() > 1.0 {
-            self.states.resize(channels as usize, ChannelState::default());
+            self.states
+                .resize(channels as usize, ChannelState::default());
             self.coeffs =
                 BiquadCoeffs::compute(self.filter_type, sr, self.frequency, self.q, self.gain_db);
             self.last_sample_rate = sr;
@@ -210,7 +217,10 @@ mod tests {
         lpf.process(&mut buf, 1, sr);
         let output_rms: f32 = (buf.iter().map(|s| s * s).sum::<f32>() / buf.len() as f32).sqrt();
 
-        assert!(output_rms < input_rms * 0.1, "LPF should attenuate 10kHz significantly");
+        assert!(
+            output_rms < input_rms * 0.1,
+            "LPF should attenuate 10kHz significantly"
+        );
     }
 
     #[test]

@@ -6,7 +6,13 @@
  */
 
 import { useCallback, useState } from 'react';
+import {
+  isEngineAudioEffectType,
+  normalizeRenderableAudioEffectType,
+  type RenderableAudioEffectType,
+} from '@neko/shared';
 import type { AudioEffectType, AudioEffectCategory } from '../types/audioEffects';
+import type { AudioEffectParams } from '../types/audioEffects';
 import { AUDIO_EFFECT_DEFINITIONS } from '../types/audioEffects';
 import type { EffectsChain } from '../hooks/useEffectsChain';
 import { EffectEditor } from './EffectEditor';
@@ -58,6 +64,15 @@ function getEffectsByCategory(): Map<
 
 const effectsByCategory = getEffectsByCategory();
 
+function toRenderableEffectType(type: AudioEffectType): RenderableAudioEffectType | null {
+  const canonical = normalizeRenderableAudioEffectType(type);
+  return canonical && isEngineAudioEffectType(canonical) ? canonical : null;
+}
+
+function toEffectParamRecord(params: AudioEffectParams): Record<string, unknown> {
+  return { ...params };
+}
+
 export function EffectsPanel({ chain }: EffectsPanelProps) {
   const [showAddMenu, setShowAddMenu] = useState(false);
 
@@ -75,13 +90,20 @@ export function EffectsPanel({ chain }: EffectsPanelProps) {
     // Send enabled effects to extension for transcode
     const enabledEffects = chain.effects
       .filter((e) => e.enabled)
-      .map((e) => ({
-        type: e.type as string,
-        params: e.params as unknown as Record<string, unknown>,
-      }));
+      .map((e, index) => {
+        const effectType = toRenderableEffectType(e.type);
+        if (!effectType) return null;
+        return {
+          id: e.id || `fx-${index}`,
+          effectType,
+          enabled: true,
+          params: toEffectParamRecord(e.params),
+        };
+      })
+      .filter((effect): effect is NonNullable<typeof effect> => effect !== null);
 
     postMessage({
-      type: 'editor:applyEffects',
+      type: 'audio:effects',
       effects: enabledEffects,
     });
   }, [chain.effects]);

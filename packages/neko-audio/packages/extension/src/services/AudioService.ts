@@ -15,6 +15,7 @@
 
 import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
+import type { AudioEffectConfig, MixStreamConfig } from '@neko/shared';
 
 import { getLogger } from '../utils/logger';
 import type { AudioInfo, WaveformData } from '../types/api';
@@ -175,12 +176,27 @@ export class AudioService implements vscode.Disposable {
     await this._client.controlStream('audios', streamId, 'speed', { speed });
   }
 
+  async setStreamLoop(
+    streamId: string,
+    region: { inPoint: number; outPoint: number } | null,
+  ): Promise<void> {
+    if (!this._client) return;
+    if (!region) {
+      await this._client.controlStream('audios', streamId, 'loop', { clear: true });
+      return;
+    }
+    await this._client.controlStream('audios', streamId, 'loop', {
+      inPoint: region.inPoint,
+      outPoint: region.outPoint,
+    });
+  }
+
   // =========================================================================
   // Mix Stream (Multi-Track Playback)
   // =========================================================================
 
   async startMixStream(
-    config: Record<string, unknown>,
+    config: MixStreamConfig,
   ): Promise<{ streamId: string; streamUrl: string } | null> {
     if (!this._client) return null;
     try {
@@ -208,12 +224,41 @@ export class AudioService implements vscode.Disposable {
     }
   }
 
+  async updateMixStream(
+    streamId: string,
+    config: MixStreamConfig,
+  ): Promise<{ streamId: string; warnings: string[] }> {
+    if (!this._client) throw new Error('AudioService not available');
+    const result = await this._client.dispatch({
+      group: 'audios',
+      action: 'mix_stream',
+      options: {
+        action: 'update',
+        streamId,
+        config,
+      },
+    });
+
+    if (result.status === 'error') {
+      throw new Error(result.error?.message ?? 'Mix stream update failed');
+    }
+
+    const data = result.data as Record<string, unknown> | undefined;
+    const warnings = Array.isArray(data?.warnings)
+      ? data.warnings.filter((item): item is string => typeof item === 'string')
+      : [];
+    return {
+      streamId: (data?.streamId as string | undefined) ?? streamId,
+      warnings,
+    };
+  }
+
   async mixExport(
-    config: Record<string, unknown>,
+    config: MixStreamConfig,
     outputPath: string,
     format?: string,
     bitrate?: number,
-  ): Promise<{ output: string }> {
+  ): Promise<{ output: string; warnings: string[] }> {
     if (!this._client) throw new Error('AudioService not available');
     const result = await this._client.dispatch({
       group: 'audios',
@@ -231,7 +276,10 @@ export class AudioService implements vscode.Disposable {
     }
 
     const data = result.data as Record<string, unknown> | undefined;
-    return { output: (data?.output as string) ?? outputPath };
+    const warnings = Array.isArray(data?.warnings)
+      ? data.warnings.filter((item): item is string => typeof item === 'string')
+      : [];
+    return { output: (data?.output as string) ?? outputPath, warnings };
   }
 
   // =========================================================================
@@ -249,7 +297,7 @@ export class AudioService implements vscode.Disposable {
       sampleRate?: number;
       bitrate?: number;
       channels?: number;
-      effects?: Array<Record<string, unknown>>;
+      effects?: AudioEffectConfig[];
     },
   ): Promise<string> {
     if (!this._client) throw new Error('AudioService not available');

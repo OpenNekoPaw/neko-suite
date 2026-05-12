@@ -16,7 +16,7 @@ export function EmptyProject() {
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(containerRef);
 
   const handleImport = () => {
-    postMessage({ type: 'project:importSource' });
+    postMessage({ type: 'project:importAudio' });
   };
 
   return (

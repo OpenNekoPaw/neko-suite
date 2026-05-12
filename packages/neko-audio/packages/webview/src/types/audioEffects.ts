@@ -3,26 +3,30 @@
  * 音频特效类型定义
  */
 
+import type { AudioEffectType as SharedAudioEffectType } from '@neko/shared';
+
 // =============================================================================
 // Audio Effect Types
 // =============================================================================
 
 /**
- * Audio effect types
+ * UI-visible audio effect types backed by the shared audio contract.
  */
-export type AudioEffectType =
-  | 'noise-reduction' // 降噪
-  | 'compressor' // 压缩器
-  | 'limiter' // 限制器
-  | 'reverb' // 混响
-  | 'delay' // 延迟/回声
-  | 'chorus' // 合唱
-  | 'distortion' // 失真
-  | 'pitch-shift' // 音高调整
-  | 'time-stretch' // 时间拉伸
-  | 'high-pass' // 高通滤波器
-  | 'low-pass' // 低通滤波器
-  | 'band-pass'; // 带通滤波器
+export type AudioEffectType = Extract<
+  SharedAudioEffectType,
+  | 'noise-reduction'
+  | 'compressor'
+  | 'limiter'
+  | 'reverb'
+  | 'delay'
+  | 'chorus'
+  | 'distortion'
+  | 'pitch-shift'
+  | 'time-stretch'
+  | 'high-pass'
+  | 'low-pass'
+  | 'band-pass'
+>;
 
 /**
  * Audio effect category
@@ -288,7 +292,7 @@ export function createAudioEffectInstance(
   }
 
   return {
-    id: `audio-effect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `audio-effect-${crypto.randomUUID()}`,
     type,
     name: name || type,
     enabled: true,

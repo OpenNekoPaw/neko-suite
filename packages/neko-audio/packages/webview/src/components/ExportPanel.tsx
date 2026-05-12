@@ -2,10 +2,11 @@
  * ExportPanel - Audio export configuration UI
  *
  * Allows users to select output format, sample rate, bitrate, and channels
- * before exporting audio. Sends editor:exportAs message to extension.
+ * before exporting audio. Sends audio:export intent messages to extension.
  */
 
 import { useState, useCallback } from 'react';
+import type { AudioExportFormat } from '@neko/shared';
 import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
 import { MacButton } from '@neko/shared/components';
@@ -16,7 +17,7 @@ import { t } from '../i18n';
 // =============================================================================
 
 interface FormatOption {
-  value: string;
+  value: AudioExportFormat;
   label: string;
   lossy: boolean;
 }
@@ -40,9 +41,9 @@ const selectClass =
 // =============================================================================
 
 export function ExportPanel() {
-  const { audioInfo } = useAudioStore();
+  const { audioInfo, projectMode } = useAudioStore();
 
-  const [format, setFormat] = useState('wav');
+  const [format, setFormat] = useState<AudioExportFormat>('wav');
   const [sampleRate, setSampleRate] = useState(audioInfo?.sampleRate ?? 44100);
   const [bitrate, setBitrate] = useState(192);
   const [channels, setChannels] = useState(audioInfo?.channels ?? 2);
@@ -52,20 +53,25 @@ export function ExportPanel() {
 
   const handleExport = useCallback(() => {
     postMessage({
-      type: 'editor:exportAs',
+      type: 'audio:export',
+      mode: projectMode ? 'project' : 'single-file',
       format,
       sampleRate,
       ...(isLossy ? { bitrate: bitrate * 1000 } : {}),
       channels,
     });
-  }, [format, sampleRate, bitrate, channels, isLossy]);
+  }, [format, projectMode, sampleRate, bitrate, channels, isLossy]);
 
   return (
     <div className="flex flex-col gap-2 p-2">
       {/* Format */}
       <div className="flex flex-col gap-1">
         <label className="text-[10px] opacity-70">{t('audio.export.format')}</label>
-        <select className={selectClass} value={format} onChange={(e) => setFormat(e.target.value)}>
+        <select
+          className={selectClass}
+          value={format}
+          onChange={(e) => setFormat(e.target.value as AudioExportFormat)}
+        >
           {FORMATS.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}

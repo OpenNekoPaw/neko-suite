@@ -51,6 +51,7 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
   } = useAudioStore();
 
   const projectData = useAudioProjectStore((s) => s.audioProjectData);
+  const setBpm = useAudioProjectStore((s) => s.setBpm);
 
   const duration = projectMode
     ? getTotalDuration(projectData?.tracks ?? [])
@@ -59,16 +60,21 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
 
   const handleToggleLoop = useCallback(() => {
     toggleLoop();
-    postMessage({ type: 'editor:loop', enabled: !isLooping });
-  }, [toggleLoop, isLooping]);
-
-  const handleBpmChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const bpm = Math.max(20, Math.min(300, parseInt(e.target.value, 10) || 120));
-    useAudioProjectStore.setState((s) => {
-      if (!s.audioProjectData) return {};
-      return { audioProjectData: { ...s.audioProjectData, bpm } };
+    postMessage({
+      type: 'audio:playback',
+      action: 'setLoop',
+      loop: !isLooping,
+      mode: projectMode ? 'project' : 'single-file',
     });
-  }, []);
+  }, [toggleLoop, isLooping, projectMode]);
+
+  const handleBpmChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const bpm = Math.max(20, Math.min(300, parseInt(e.target.value, 10) || 120));
+      setBpm(bpm);
+    },
+    [setBpm],
+  );
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -76,61 +82,70 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
       switch (e.key) {
         case ' ':
         case 'k':
+          e.stopPropagation();
           e.preventDefault();
           onTogglePlay();
           break;
         case 'ArrowLeft':
+          e.stopPropagation();
           e.preventDefault();
           onSeek(Math.max(0, currentTime - 5));
           break;
         case 'ArrowRight':
+          e.stopPropagation();
           e.preventDefault();
           onSeek(Math.min(duration, currentTime + 5));
           break;
         case 'Home':
+          e.stopPropagation();
           e.preventDefault();
           onSeek(0);
           break;
         case 'End':
+          e.stopPropagation();
           e.preventDefault();
           onSeek(duration);
           break;
         case 'Escape':
+          e.stopPropagation();
           e.preventDefault();
           setSelection(null);
           break;
         case 'a':
           if (e.ctrlKey || e.metaKey) {
+            e.stopPropagation();
             e.preventDefault();
             setSelection({ start: 0, end: duration });
           }
           break;
-        case 's':
-          e.preventDefault();
-          onStop();
-          break;
       }
     },
-    [onTogglePlay, onSeek, onStop, currentTime, duration, setSelection],
+    [onTogglePlay, onSeek, currentTime, duration, setSelection],
   );
 
   const handleSpeedChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newSpeed = parseFloat(e.target.value);
       setSpeed(newSpeed);
-      postMessage({ type: 'editor:speed', speed: newSpeed });
+      postMessage({
+        type: 'audio:playback',
+        action: 'setSpeed',
+        mode: projectMode ? 'project' : 'single-file',
+        speed: newSpeed,
+      });
     },
-    [setSpeed],
+    [projectMode, setSpeed],
   );
 
   const handleTrim = useCallback(() => {
     if (!selection) return;
     postMessage({
-      type: 'editor:trim',
+      type: 'audio:trim',
       startTime: selection.start,
       endTime: selection.end,
+      mode: projectMode ? 'project' : 'single-file',
     });
-  }, [selection]);
+  }, [projectMode, selection]);
 
   return (
     <div

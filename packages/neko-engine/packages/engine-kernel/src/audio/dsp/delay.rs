@@ -107,6 +107,9 @@ mod tests {
         d.process(&mut buf, 2, sr);
 
         let echo_pos = (100.0 * sr as f32 / 1000.0) as usize * 2;
-        assert!(buf[echo_pos].abs() > 0.1, "Echo should appear at delay time");
+        assert!(
+            buf[echo_pos].abs() > 0.1,
+            "Echo should appear at delay time"
+        );
     }
 }

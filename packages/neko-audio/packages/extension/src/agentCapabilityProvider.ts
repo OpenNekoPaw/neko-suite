@@ -13,8 +13,16 @@ import type {
   ToolParameters,
   PromptFragment,
 } from '@neko/shared';
-import { TOOL_NAMES_AUDIO } from '@neko/shared';
+import { ENGINE_AUDIO_EFFECT_TYPES, TOOL_NAMES_AUDIO } from '@neko/shared';
 import type { AudioToolBridge, ToolResult } from './services/audioToolBridge';
+
+const DOCUMENT_URI_PROPERTY = {
+  type: 'string',
+  description:
+    'Target audio project document URI from GetAudioProjectInfo/ListAudioTracks. Uses the focused project if omitted.',
+} as const;
+
+const RENDERABLE_EFFECT_ENUM = [...ENGINE_AUDIO_EFFECT_TYPES];
 
 export function createNekoAudioCapabilityProvider(
   bridge: AudioToolBridge,
@@ -56,7 +64,7 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         bridge,
         TOOL_NAMES_AUDIO.GET_AUDIO_PROJECT_INFO,
         'Get information about the current audio project (tracks, BPM, sample rate, effects)',
-        { type: 'object', properties: {} },
+        { type: 'object', properties: { documentUri: DOCUMENT_URI_PROPERTY } },
         { isReadOnly: true, isConcurrencySafe: true },
       ),
 
@@ -64,7 +72,7 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         bridge,
         TOOL_NAMES_AUDIO.LIST_AUDIO_TRACKS,
         'List all tracks in the audio project with their properties',
-        { type: 'object', properties: {} },
+        { type: 'object', properties: { documentUri: DOCUMENT_URI_PROPERTY } },
         { isReadOnly: true, isConcurrencySafe: true },
       ),
 
@@ -75,6 +83,8 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
+            trackId: { type: 'string', description: 'Optional ID for the new track' },
             name: { type: 'string', description: 'Track name' },
             trackType: { type: 'string', enum: ['audio'], description: 'Track type' },
           },
@@ -88,6 +98,7 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
             trackId: { type: 'string', description: 'ID of the track to remove' },
           },
           required: ['trackId'],
@@ -98,11 +109,13 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
       createAudioTool(bridge, TOOL_NAMES_AUDIO.IMPORT_AUDIO, 'Import an audio file into a track', {
         type: 'object',
         properties: {
+          documentUri: DOCUMENT_URI_PROPERTY,
           filePath: { type: 'string', description: 'Path to the audio file' },
           trackId: {
             type: 'string',
             description: 'Target track ID (optional, creates new track if omitted)',
           },
+          name: { type: 'string', description: 'Name for the created track if trackId is omitted' },
         },
         required: ['filePath'],
       }),
@@ -114,6 +127,7 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
             trackId: { type: 'string', description: 'Track ID' },
             volume: { type: 'number', description: 'Volume (0.0–2.0)' },
           },
@@ -128,10 +142,30 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
             trackId: { type: 'string', description: 'Track ID' },
             pan: { type: 'number', description: 'Pan (-1.0 to 1.0)' },
           },
           required: ['trackId', 'pan'],
+        },
+      ),
+
+      createAudioTool(
+        bridge,
+        TOOL_NAMES_AUDIO.SET_TRACK_PROPERTIES,
+        'Update audio track metadata such as name, mute, lock, hidden, or main-track flag',
+        {
+          type: 'object',
+          properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
+            trackId: { type: 'string', description: 'Track ID' },
+            name: { type: 'string', description: 'Track name' },
+            muted: { type: 'boolean', description: 'Whether the track is muted' },
+            locked: { type: 'boolean', description: 'Whether the track is locked' },
+            hidden: { type: 'boolean', description: 'Whether the track is hidden' },
+            isMain: { type: 'boolean', description: 'Whether this is the main track' },
+          },
+          required: ['trackId'],
         },
       ),
 
@@ -142,23 +176,15 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
             trackId: { type: 'string', description: 'Track ID' },
             effectType: {
               type: 'string',
-              enum: [
-                'parametric_eq',
-                'compressor',
-                'noise_gate',
-                'limiter',
-                'reverb',
-                'delay',
-                'chorus',
-                'distortion',
-                'gain',
-              ],
+              enum: RENDERABLE_EFFECT_ENUM,
               description: 'Effect type',
             },
             params: { type: 'object', description: 'Effect parameters' },
+            enabled: { type: 'boolean', description: 'Whether the effect is enabled' },
           },
           required: ['trackId', 'effectType'],
         },
@@ -171,6 +197,7 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
             trackId: { type: 'string', description: 'Track ID' },
             effectId: { type: 'string', description: 'Effect ID to remove' },
           },
@@ -185,12 +212,15 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
             effectType: {
               type: 'string',
-              enum: ['parametric_eq', 'compressor', 'limiter', 'reverb'],
+              enum: RENDERABLE_EFFECT_ENUM,
               description: 'Effect type',
             },
+            name: { type: 'string', description: 'Effect display name' },
             params: { type: 'object', description: 'Effect parameters' },
+            enabled: { type: 'boolean', description: 'Whether the effect is enabled' },
           },
           required: ['effectType'],
         },
@@ -203,6 +233,7 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           type: 'object',
           properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
             outputPath: { type: 'string', description: 'Output file path' },
             format: {
               type: 'string',
@@ -227,9 +258,40 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
         },
         { isReadOnly: true },
       ),
+
+      createAudioTool(
+        bridge,
+        TOOL_NAMES_AUDIO.AUDIO_DENOISE,
+        'Apply available threshold-based cleanup to an audio file. Provide inputPath or filePath.',
+        {
+          type: 'object',
+          properties: {
+            inputPath: { type: 'string', description: 'Input audio file path. Preferred.' },
+            filePath: { type: 'string', description: 'Alias for inputPath' },
+            outputPath: { type: 'string', description: 'Output file path' },
+          },
+          anyOf: [{ required: ['inputPath'] }, { required: ['filePath'] }],
+          required: ['outputPath'],
+        },
+      ),
+
+      createAudioTool(
+        bridge,
+        TOOL_NAMES_AUDIO.STEM_SEPARATION,
+        'Separate audio stems when a supported engine model is available',
+        {
+          type: 'object',
+          properties: {
+            inputPath: { type: 'string', description: 'Input audio file path' },
+            outputDir: { type: 'string', description: 'Directory for separated stems' },
+          },
+          required: ['inputPath', 'outputDir'],
+        },
+        { isReadOnly: true },
+      ),
     ];
 
-    // AI generation tools — only if media service is available
+    // Provider-direct media generation tools bypass project state because they do not edit .nka.
     if (media) {
       tools.push({
         name: TOOL_NAMES_AUDIO.GENERATE_MUSIC,
@@ -334,10 +396,12 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
           '- Audio projects use .nka format with multi-track timeline',
           '- Each track has volume (0–2), pan (-1 to 1), solo, mute, and effect chain',
           '- Master bus has its own effect chain and volume',
-          '- Available effects: parametric_eq, compressor, noise_gate, limiter, reverb, delay, chorus, distortion, gain',
-          '- Use GetAudioProjectInfo to understand the current project before making changes',
-          '- Use ListAudioTracks to see track structure',
+          `- Renderable effects use canonical hyphenated names: ${RENDERABLE_EFFECT_ENUM.join(', ')}`,
+          '- Planned effects noise-reduction, pitch-shift, and time-stretch are UI-only and are not renderable yet',
+          '- Call GetAudioProjectInfo first to obtain documentUri, then pass it to later project edit tools',
+          '- Use ListAudioTracks to see track structure and current persisted mix values',
           '- Mix export renders all tracks with effects to a single file',
+          '- GenerateMusic, GenerateSFX, and GenerateVoice are provider-direct media tools and do not mutate .nka project state',
         ].join('\n'),
       },
     ];

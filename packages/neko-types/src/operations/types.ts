@@ -16,6 +16,7 @@ import type { EffectParameterKeyframe } from '../types/effects';
 import type { MaskPropertyKeyframe, MaskShapeKeyframe } from '../types/mask';
 import type { ProjectData } from '../types/project';
 import type { CanvasNode, CanvasConnection } from '../types/canvas';
+import type { AudioEffectConfig, AudioEffectType } from '../types/audioMix';
 
 // =============================================================================
 // Operation Meta — 操作元数据
@@ -716,7 +717,7 @@ export type SketchOperation =
 /** 音频效果实例快照 */
 export interface AudioEffectSnapshot {
   id: string;
-  type: string;
+  type: AudioEffectType;
   name: string;
   enabled: boolean;
   params: Record<string, unknown>;
@@ -754,6 +755,14 @@ export interface AudioEffectToggleOperation {
   type: 'audio.effect.toggle';
   meta: OperationMeta;
   payload: { effectId: string; field: 'enabled' };
+  before: { value: boolean };
+}
+
+export interface AudioSetBpmOperation {
+  type: 'audio.setBpm';
+  meta: OperationMeta;
+  payload: { bpm?: number };
+  before: { bpm?: number };
 }
 
 export interface AudioEffectMoveOperation {
@@ -790,7 +799,72 @@ export type AudioOperation =
   | AudioEffectMoveOperation
   | AudioMarkerAddOperation
   | AudioMarkerRemoveOperation
-  | AudioMarkerUpdateOperation;
+  | AudioMarkerUpdateOperation
+  | AudioSetBpmOperation;
+
+// =============================================================================
+// Track Mix Operations — persisted per-track mix state
+// =============================================================================
+
+export interface TrackMixSetVolumeOperation {
+  type: 'track.mix.setVolume';
+  meta: OperationMeta;
+  payload: { trackId: string; volume: number };
+  before: { volume: number };
+}
+
+export interface TrackMixSetPanOperation {
+  type: 'track.mix.setPan';
+  meta: OperationMeta;
+  payload: { trackId: string; pan: number };
+  before: { pan: number };
+}
+
+export interface TrackMixSetSoloOperation {
+  type: 'track.mix.setSolo';
+  meta: OperationMeta;
+  payload: { trackId: string; solo: boolean };
+  before: { solo: boolean };
+}
+
+export interface TrackMixEffectAddOperation {
+  type: 'track.mix.effect.add';
+  meta: OperationMeta;
+  payload: { trackId: string; effect: AudioEffectConfig; index: number };
+}
+
+export interface TrackMixEffectRemoveOperation {
+  type: 'track.mix.effect.remove';
+  meta: OperationMeta;
+  payload: { trackId: string; effectId: string };
+  before: { effect: AudioEffectConfig; index: number };
+}
+
+export interface TrackMixEffectUpdateOperation {
+  type: 'track.mix.effect.update';
+  meta: OperationMeta;
+  payload: {
+    trackId: string;
+    effectId: string;
+    updates: Partial<Omit<AudioEffectConfig, 'id'>>;
+  };
+  before: { updates: Partial<Omit<AudioEffectConfig, 'id'>> };
+}
+
+export interface TrackMixEffectMoveOperation {
+  type: 'track.mix.effect.move';
+  meta: OperationMeta;
+  payload: { trackId: string; effectId: string; fromIndex: number; toIndex: number };
+}
+
+export type TrackMixOperation =
+  | TrackMixSetVolumeOperation
+  | TrackMixSetPanOperation
+  | TrackMixSetSoloOperation
+  | TrackMixEffectAddOperation
+  | TrackMixEffectRemoveOperation
+  | TrackMixEffectUpdateOperation
+  | TrackMixEffectMoveOperation;
 
 // =============================================================================
 // EditOperation 联合类型
@@ -807,6 +881,7 @@ export type EditOperation =
   | CanvasOperation
   | SketchOperation
   | AudioOperation
+  | TrackMixOperation
   | BatchOperation;
 
 /**

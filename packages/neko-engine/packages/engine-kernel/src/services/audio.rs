@@ -11,6 +11,7 @@ use std::path::Path;
 use tokio::sync::broadcast;
 
 use super::super::domain::FrameData;
+use super::audio_mixdown::MixdownConfig;
 
 /// Audio service interface
 ///
@@ -34,6 +35,13 @@ pub trait IAudioService: IStreamPlayback {
     async fn start_stream(
         &self,
         source: &Path,
+        session_id: &str,
+    ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
+
+    /// Start a project mix stream from a full mixdown render config.
+    async fn start_mix_stream(
+        &self,
+        config: MixdownConfig,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
 
@@ -72,4 +80,11 @@ pub trait IAudioService: IStreamPlayback {
 
     /// Get real-time monitor data for level meters
     fn monitor_data(&self, stream_id: &str) -> Option<MonitorData>;
+
+    /// Hot-update a running project mix stream with a full replacement config.
+    async fn update_mixdown(
+        &self,
+        stream_id: &StreamId,
+        config: MixdownConfig,
+    ) -> Result<Vec<String>>;
 }

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { loadNka, saveNka, isValidNka } from '../codec';
+import { CURRENT_NKA_VERSION, loadNka, saveNka, isValidNka } from '../codec';
 import type { AudioProjectData } from '../../types/audioProject';
 
 // =============================================================================
@@ -11,7 +11,7 @@ import type { AudioProjectData } from '../../types/audioProject';
 // =============================================================================
 
 const VALID_AUDIO_PROJECT: AudioProjectData = {
-  version: '1.0',
+  version: CURRENT_NKA_VERSION,
   name: 'Test Audio Project',
   sampleRate: 48000,
   channels: 2,
@@ -43,6 +43,22 @@ const VALID_AUDIO_PROJECT: AudioProjectData = {
       label: 'Chorus Start',
     },
   ],
+  trackMix: {
+    'track-1': {
+      volume: 0.75,
+      pan: -0.1,
+      solo: false,
+      effectChain: [
+        {
+          id: 'track-fx-1',
+          effectType: 'noise-gate',
+          enabled: true,
+          params: { threshold: -40 },
+        },
+      ],
+    },
+  },
+  masterVolume: 0.9,
 };
 
 // =============================================================================
@@ -57,6 +73,8 @@ describe('loadNka', () => {
     expect(result.validation.valid).toBe(true);
     expect(result.data.name).toBe('Test Audio Project');
     expect(result.data.sampleRate).toBe(48000);
+    expect(result.compatibility.mode).toBe('current');
+    expect(result.compatibility.readOnly).toBe(false);
   });
 
   it('should return error result for invalid JSON', () => {
@@ -89,7 +107,7 @@ describe('loadNka', () => {
   });
 
   it('should return validation errors for missing required fields', () => {
-    const result = loadNka(JSON.stringify({ version: '1.0' }));
+    const result = loadNka(JSON.stringify({ version: CURRENT_NKA_VERSION }));
 
     expect(result.validation.valid).toBe(false);
     expect(result.validation.errors.some((e) => e.field === 'name')).toBe(true);
@@ -119,6 +137,90 @@ describe('loadNka', () => {
     expect(result.validation.valid).toBe(false);
     expect(result.validation.errors.some((e) => e.field === 'markers[0].time')).toBe(true);
   });
+
+  it('should reject non-current project versions', () => {
+    const data = {
+      ...VALID_AUDIO_PROJECT,
+      version: '2.0',
+    };
+    const result = loadNka(JSON.stringify(data));
+
+    expect(result.compatibility.mode).toBe('invalid');
+    expect(result.compatibility.readOnly).toBe(true);
+    expect(result.validation.valid).toBe(false);
+    expect(result.validation.errors).toContainEqual(
+      expect.objectContaining({
+        field: 'version',
+        message: 'unsupported NKA version: "2.0"',
+      }),
+    );
+    expect(result.validation.warnings).toHaveLength(0);
+  });
+
+  it('should reject unknown effect names', () => {
+    const data = {
+      ...VALID_AUDIO_PROJECT,
+      masterEffectsChain: [
+        {
+          id: 'effect-1',
+          type: 'spectral-cleanup',
+          name: 'Unknown Effect',
+          enabled: true,
+          params: {},
+        },
+      ],
+    };
+    const result = loadNka(JSON.stringify(data));
+
+    expect(result.validation.valid).toBe(false);
+    expect(result.validation.errors).toContainEqual(
+      expect.objectContaining({
+        field: 'masterEffectsChain[0].type',
+        message: 'invalid audio effect type: "spectral-cleanup"',
+      }),
+    );
+  });
+
+  it('should mark future-version projects as read-only with warnings', () => {
+    const data = { ...VALID_AUDIO_PROJECT, version: '99.0' };
+    const result = loadNka(JSON.stringify(data));
+
+    expect(result.compatibility.mode).toBe('future');
+    expect(result.compatibility.readOnly).toBe(true);
+    expect(result.validation.warnings.some((warning) => warning.field === 'version')).toBe(true);
+  });
+
+  it('should return an empty project when validation fails without critical root errors', () => {
+    const data = {
+      ...VALID_AUDIO_PROJECT,
+      trackMix: {
+        'track-1': {
+          volume: 'loud',
+          pan: 0,
+          solo: false,
+          effectChain: [],
+        },
+      },
+    };
+    const result = loadNka(JSON.stringify(data));
+
+    expect(result.validation.valid).toBe(false);
+    expect(result.validation.errors).toContainEqual(
+      expect.objectContaining({
+        field: 'trackMix.track-1.volume',
+        message: 'must be a number',
+      }),
+    );
+    expect(result.data).toEqual({
+      version: CURRENT_NKA_VERSION,
+      name: '',
+      sampleRate: 48000,
+      channels: 2,
+      tracks: [],
+      masterEffectsChain: [],
+      markers: [],
+    });
+  });
 });
 
 // =============================================================================
@@ -130,7 +232,7 @@ describe('saveNka', () => {
     const json = saveNka(VALID_AUDIO_PROJECT);
     const parsed = JSON.parse(json) as unknown;
 
-    expect(parsed).toEqual(VALID_AUDIO_PROJECT);
+    expect(parsed).toEqual({ ...VALID_AUDIO_PROJECT, version: CURRENT_NKA_VERSION });
     // Check indent: second line should start with 2 spaces
     const lines = json.split('\n');
     expect(lines.length).toBeGreaterThan(1);
@@ -145,7 +247,7 @@ describe('saveNka', () => {
 
   it('should skip validation when validate=false', () => {
     // Invalid audio project data (missing required fields)
-    const invalidProject = { version: '1.0' } as unknown as AudioProjectData;
+    const invalidProject = { version: CURRENT_NKA_VERSION } as unknown as AudioProjectData;
 
     // With validation enabled, should throw
     expect(() => saveNka(invalidProject)).toThrow();
@@ -156,9 +258,56 @@ describe('saveNka', () => {
   });
 
   it('should throw on validation failure with error details', () => {
-    const invalidProject = { version: '1.0' } as unknown as AudioProjectData;
+    const invalidProject = { version: CURRENT_NKA_VERSION } as unknown as AudioProjectData;
 
     expect(() => saveNka(invalidProject)).toThrow('NKA validation failed');
+  });
+
+  it('should write the current version and strip unknown future fields', () => {
+    const futureProject = {
+      ...VALID_AUDIO_PROJECT,
+      version: '99.0',
+      futureOnlyField: { should: 'be stripped' },
+      tracks: [
+        {
+          ...VALID_AUDIO_PROJECT.tracks[0]!,
+          futureTrackField: true,
+          elements: [
+            {
+              id: 'element-1',
+              name: 'Clip',
+              type: 'audio',
+              src: 'clip.wav',
+              duration: 1,
+              startTime: 0,
+              trimStart: 0,
+              trimEnd: 0,
+              transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+              opacity: 1,
+              blendMode: 'normal',
+              effects: [],
+              muted: false,
+              hidden: false,
+              locked: false,
+              futureElementField: true,
+            },
+          ],
+        },
+      ],
+    } as unknown as AudioProjectData;
+
+    const json = saveNka(futureProject);
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+
+    expect(parsed['version']).toBe(CURRENT_NKA_VERSION);
+    expect(parsed['futureOnlyField']).toBeUndefined();
+    expect(
+      (parsed['tracks'] as Array<Record<string, unknown>>)[0]!['futureTrackField'],
+    ).toBeUndefined();
+    const parsedTrack = (parsed['tracks'] as Array<Record<string, unknown>>)[0]!;
+    const parsedElement = (parsedTrack['elements'] as Array<Record<string, unknown>>)[0]!;
+    expect(parsedElement['futureElementField']).toBeUndefined();
+    expect(parsedElement['src']).toBe('clip.wav');
   });
 });
 

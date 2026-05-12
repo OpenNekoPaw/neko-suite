@@ -4,13 +4,13 @@
   "category": "music",
   "effectChain": [
     {
-      "effectType": "parametric_eq",
+      "effectType": "parametric-eq",
       "enabled": true,
       "params": {
         "bands": [
-          { "type": "highpass", "freq": 30, "q": 0.7 },
+          { "type": "high-pass", "freq": 30, "q": 0.7 },
           { "type": "peaking", "freq": 250, "gain": -1.0, "q": 0.8 },
-          { "type": "highshelf", "freq": 12000, "gain": 1.5 }
+          { "type": "high-shelf", "freq": 12000, "gain": 1.5 }
         ]
       }
     },

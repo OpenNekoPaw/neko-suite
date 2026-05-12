@@ -6,16 +6,74 @@
 // Used by both the extension bridge and webview to build mix configs.
 // =============================================================================
 
+/** Engine-supported audio effect types accepted by render paths. */
+export const ENGINE_AUDIO_EFFECT_TYPES = [
+  'gain',
+  'high-pass',
+  'low-pass',
+  'band-pass',
+  'notch',
+  'peaking',
+  'low-shelf',
+  'high-shelf',
+  'parametric-eq',
+  'compressor',
+  'noise-gate',
+  'limiter',
+  'reverb',
+  'delay',
+  'chorus',
+  'distortion',
+] as const;
+
+/** Planned UI-visible effect types that are not renderable by Engine yet. */
+export const PLANNED_AUDIO_EFFECT_TYPES = [
+  'noise-reduction',
+  'pitch-shift',
+  'time-stretch',
+] as const;
+
+export type EngineAudioEffectType = (typeof ENGINE_AUDIO_EFFECT_TYPES)[number];
+export type PlannedAudioEffectType = (typeof PLANNED_AUDIO_EFFECT_TYPES)[number];
+export type AudioEffectType = EngineAudioEffectType | PlannedAudioEffectType;
+
+export type RenderableAudioEffectType = EngineAudioEffectType;
+
+const ENGINE_AUDIO_EFFECT_TYPE_SET = new Set<string>(ENGINE_AUDIO_EFFECT_TYPES);
+const PLANNED_AUDIO_EFFECT_TYPE_SET = new Set<string>(PLANNED_AUDIO_EFFECT_TYPES);
+
+export function isEngineAudioEffectType(value: string): value is EngineAudioEffectType {
+  return ENGINE_AUDIO_EFFECT_TYPE_SET.has(value);
+}
+
+export function isPlannedAudioEffectType(value: string): value is PlannedAudioEffectType {
+  return PLANNED_AUDIO_EFFECT_TYPE_SET.has(value);
+}
+
+export function isKnownAudioEffectType(value: string): value is AudioEffectType {
+  return isEngineAudioEffectType(value) || isPlannedAudioEffectType(value);
+}
+
+export function normalizeAudioEffectType(value: string): AudioEffectType | undefined {
+  return isKnownAudioEffectType(value) ? value : undefined;
+}
+
+export function normalizeRenderableAudioEffectType(
+  value: string,
+): RenderableAudioEffectType | undefined {
+  const normalized = normalizeAudioEffectType(value);
+  return normalized && isEngineAudioEffectType(normalized) ? normalized : undefined;
+}
+
 /**
  * Audio effect configuration — matches Rust AudioEffectConfig.
  *
- * This is the engine-facing type. The UI-facing type is AudioEffectSnapshot
- * (operations/types.ts) which adds a `name` field for display.
+ * This is the engine-facing type. UI-facing snapshots may include planned-only
+ * effects, but render configs only carry Engine-supported canonical names.
  */
 export interface AudioEffectConfig {
   id: string;
-  /** Effect type key: 'compressor' | 'reverb' | 'delay' | 'chorus' | etc. */
-  effectType: string;
+  effectType: RenderableAudioEffectType;
   enabled: boolean;
   params: Record<string, unknown>;
 }
@@ -71,25 +129,6 @@ export interface MixStreamConfig {
   /** Output channels (default 2) */
   channels: number;
 }
-
-/** Known audio effect types supported by the engine DSP library. */
-export type AudioEffectType =
-  | 'lowpass'
-  | 'highpass'
-  | 'bandpass'
-  | 'notch'
-  | 'peaking'
-  | 'low_shelf'
-  | 'high_shelf'
-  | 'parametric_eq'
-  | 'compressor'
-  | 'noise_gate'
-  | 'limiter'
-  | 'reverb'
-  | 'delay'
-  | 'chorus'
-  | 'distortion'
-  | 'gain';
 
 /** Helper: create a default MixStreamConfig. */
 export function createDefaultMixStreamConfig(tracks: MixTrackConfig[] = []): MixStreamConfig {

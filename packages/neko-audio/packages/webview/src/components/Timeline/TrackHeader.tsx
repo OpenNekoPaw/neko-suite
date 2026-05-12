@@ -2,7 +2,7 @@
  * TrackHeader — Track label panel with Solo/Mute/Lock, volume fader, pan knob, color bar.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioProjectStore, type AudioTrackUIState } from '../../stores/audioProjectStore';
 import type { TimelineTrack } from '@neko/shared';
 import { t } from '../../i18n';
@@ -21,6 +21,20 @@ export function TrackHeader({ track, uiState, width, height, onContextMenu }: Tr
   const setTrackVolume = useAudioProjectStore((s) => s.setTrackVolume);
   const setTrackPan = useAudioProjectStore((s) => s.setTrackPan);
   const removeTrack = useAudioProjectStore((s) => s.removeTrack);
+  const [draftVolume, setDraftVolume] = useState(uiState.volume);
+  const [draftPan, setDraftPan] = useState(uiState.pan);
+  const committedVolumeRef = useRef(uiState.volume);
+  const committedPanRef = useRef(uiState.pan);
+
+  useEffect(() => {
+    committedVolumeRef.current = uiState.volume;
+    setDraftVolume(uiState.volume);
+  }, [uiState.volume]);
+
+  useEffect(() => {
+    committedPanRef.current = uiState.pan;
+    setDraftPan(uiState.pan);
+  }, [uiState.pan]);
 
   const handleToggleMute = useCallback(() => {
     toggleTrackField(track.id, 'muted');
@@ -38,19 +52,27 @@ export function TrackHeader({ track, uiState, width, height, onContextMenu }: Tr
     removeTrack(track.id);
   }, [track.id, removeTrack]);
 
-  const handleVolumeChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setTrackVolume(track.id, parseFloat(e.target.value));
-    },
-    [track.id, setTrackVolume],
-  );
+  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setDraftVolume(parseFloat(e.target.value));
+  }, []);
 
-  const handlePanChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setTrackPan(track.id, parseFloat(e.target.value));
-    },
-    [track.id, setTrackPan],
-  );
+  const handleVolumeCommit = useCallback(() => {
+    if (draftVolume !== committedVolumeRef.current) {
+      committedVolumeRef.current = draftVolume;
+      setTrackVolume(track.id, draftVolume);
+    }
+  }, [draftVolume, track.id, setTrackVolume]);
+
+  const handlePanChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setDraftPan(parseFloat(e.target.value));
+  }, []);
+
+  const handlePanCommit = useCallback(() => {
+    if (draftPan !== committedPanRef.current) {
+      committedPanRef.current = draftPan;
+      setTrackPan(track.id, draftPan);
+    }
+  }, [draftPan, track.id, setTrackPan]);
 
   const fxCount = uiState.effectChain.filter((e) => e.enabled).length;
 
@@ -70,7 +92,7 @@ export function TrackHeader({ track, uiState, width, height, onContextMenu }: Tr
             {track.name}
           </span>
           {fxCount > 0 && (
-            <span className="text-[9px] px-1 rounded bg-[var(--neko-accent)] text-white leading-tight">
+            <span className="text-[9px] px-1 rounded bg-[var(--accent)] text-white leading-tight">
               FX {fxCount}
             </span>
           )}
@@ -115,20 +137,31 @@ export function TrackHeader({ track, uiState, width, height, onContextMenu }: Tr
             min="0"
             max="2"
             step="0.01"
-            value={uiState.volume}
+            value={draftVolume}
             onChange={handleVolumeChange}
+            onPointerUp={handleVolumeCommit}
+            onBlur={handleVolumeCommit}
             className="neko-fader flex-1 h-3"
-            title={`Vol: ${Math.round(uiState.volume * 100)}%`}
+            title={t('audio.mixer.volumePercent', { value: Math.round(draftVolume * 100) })}
           />
           <input
             type="range"
             min="-1"
             max="1"
             step="0.01"
-            value={uiState.pan}
+            value={draftPan}
             onChange={handlePanChange}
+            onPointerUp={handlePanCommit}
+            onBlur={handlePanCommit}
             className="neko-pan-knob w-8 h-3"
-            title={`Pan: ${uiState.pan > 0 ? `R${Math.round(uiState.pan * 100)}` : uiState.pan < 0 ? `L${Math.round(-uiState.pan * 100)}` : 'C'}`}
+            title={t('audio.mixer.panValue', {
+              value:
+                draftPan > 0
+                  ? `R${Math.round(draftPan * 100)}`
+                  : draftPan < 0
+                    ? `L${Math.round(-draftPan * 100)}`
+                    : t('audio.mixer.center'),
+            })}
           />
         </div>
       </div>

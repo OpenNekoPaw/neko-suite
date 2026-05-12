@@ -269,6 +269,118 @@
   }
   .neko-resize-handle:hover { background: var(--accent); }
 
+  /* Project workstation — timeline with a persistent bottom mixer band */
+  .neko-project-workstation {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--timeline-bg);
+  }
+
+  .neko-mixer-panel {
+    height: 148px;
+    min-height: 148px;
+    max-height: 148px;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-top: 1px solid var(--editor-border);
+    background: var(--track-header-bg);
+  }
+
+  .neko-mixer-strip-row {
+    display: flex;
+    align-items: stretch;
+    min-width: max-content;
+    height: 100%;
+  }
+
+  .neko-mixer-empty {
+    width: 100%;
+    height: 100%;
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent 95px,
+      var(--editor-border) 95px,
+      var(--editor-border) 96px
+    );
+    opacity: 0.45;
+  }
+
+  .neko-channel-strip {
+    display: grid;
+    grid-template-rows: 4px 32px 22px 34px 34px;
+    gap: 3px;
+    width: 116px;
+    min-width: 116px;
+    height: 100%;
+    padding: 6px 8px 7px;
+    border-right: 1px solid var(--editor-border);
+    color: var(--activity-fg);
+  }
+
+  .neko-channel-color {
+    height: 4px;
+    border-radius: 2px;
+  }
+
+  .neko-channel-head {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .neko-channel-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 14px;
+  }
+
+  .neko-channel-meter {
+    color: var(--activity-inactive);
+    font-size: 10px;
+    line-height: 12px;
+  }
+
+  .neko-channel-buttons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .neko-channel-fx {
+    min-width: 0;
+    margin-left: auto;
+    color: var(--activity-inactive);
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .neko-channel-control {
+    display: grid;
+    grid-template-rows: 13px 14px;
+    gap: 3px;
+    min-width: 0;
+    color: var(--activity-inactive);
+    font-size: 10px;
+    line-height: 13px;
+  }
+
+  .neko-channel-control input {
+    width: 100%;
+    min-width: 0;
+  }
+
   /* Drop overlay */
   .neko-drop-overlay-bg {
     background: color-mix(in srgb, var(--editor-bg) 85%, transparent);

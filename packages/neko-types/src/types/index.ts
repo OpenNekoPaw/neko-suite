@@ -44,6 +44,7 @@ export * from './keyframe';
 // Audio
 export * from './audio';
 export * from './audioMix';
+export * from './audioProtocol';
 
 // Speed
 export * from './speed';

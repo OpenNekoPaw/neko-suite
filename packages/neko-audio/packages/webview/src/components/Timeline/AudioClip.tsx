@@ -93,17 +93,25 @@ export function AudioClip({
   const updateElement = useAudioProjectStore((s) => s.updateElement);
   const removeElement = useAudioProjectStore((s) => s.removeElement);
   const addElement = useAudioProjectStore((s) => s.addElement);
+  const splitElementAt = useAudioProjectStore((s) => s.splitElementAt);
+  const [previewUpdates, setPreviewUpdates] = useState<Partial<TimelineElement> | null>(null);
+  const previewElement = previewUpdates
+    ? ({ ...element, ...previewUpdates } as TimelineElement)
+    : element;
+  const previewLeft = previewElement.startTime * pps;
+  const previewWidth = (previewElement.duration ?? 0) * pps;
 
   const interaction = useClipInteraction({
     trackId,
     elementId: element.id,
-    left,
-    width,
+    left: previewLeft,
+    width: previewWidth,
     pixelsPerSecond: pps,
     locked,
     startTime: element.startTime,
     duration: element.duration ?? 0,
     trimStart: element.trimStart ?? 0,
+    onPreview: setPreviewUpdates,
   });
 
   const [contextMenu, setContextMenu] = useState<{
@@ -140,19 +148,7 @@ export function AudioClip({
           disabled: !canSplit,
           onClick: () => {
             if (!canSplit) return;
-            const splitOffset = currentTime - element.startTime;
-            const origDuration = element.duration ?? 0;
-            const origTrimStart = element.trimStart ?? 0;
-
-            updateElement(trackId, element.id, { duration: splitOffset });
-
-            addElement(trackId, {
-              ...element,
-              id: crypto.randomUUID(),
-              startTime: currentTime,
-              duration: origDuration - splitOffset,
-              trimStart: origTrimStart + splitOffset,
-            });
+            splitElementAt(trackId, element.id, currentTime);
           },
         },
         { separator: true },
@@ -164,16 +160,16 @@ export function AudioClip({
       ];
       setContextMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [trackId, element, isMuted, updateElement, removeElement, addElement],
+    [trackId, element, isMuted, updateElement, removeElement, addElement, splitElementAt],
   );
 
   return (
     <div
       className="absolute overflow-hidden transition-opacity"
       style={{
-        left,
+        left: previewLeft,
         top: 3,
-        width: Math.max(width, 4),
+        width: Math.max(previewWidth, 4),
         height: height - 5,
         borderRadius: 5,
         background: isMuted
@@ -206,11 +202,11 @@ export function AudioClip({
         {clipName}
       </div>
 
-      {waveform && width > 10 && (
+      {waveform && previewWidth > 10 && (
         <div className="absolute top-3.5 left-0 right-0 bottom-0">
           <WaveformThumbnail
             peaks={waveform.peaks}
-            width={Math.max(width - 2, 1)}
+            width={Math.max(previewWidth - 2, 1)}
             height={Math.max(height - 16, 1)}
             color={isMuted ? 'var(--activity-inactive)' : 'var(--clip-waveform)'}
           />

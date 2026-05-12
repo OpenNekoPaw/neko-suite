@@ -25,7 +25,9 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
   const containerRef = useRef<HTMLDivElement>(null);
   const logicalSizeRef = useRef({ width: 0, height: 0 });
 
-  const { frequencyData, binCount } = useSpectrum(audioClientRef, enabled);
+  const { analyserRef, binCount } = useSpectrum(audioClientRef, enabled);
+  const frequencyDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const drawFrameRef = useRef(0);
 
   // =========================================================================
   // Drawing
@@ -47,6 +49,14 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
     ctx.fillStyle = getCssVar('--spectrum-bg');
     ctx.fillRect(0, 0, width, height);
 
+    const analyser = analyserRef.current;
+    if (analyser && frequencyDataRef.current?.length !== analyser.frequencyBinCount) {
+      frequencyDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+    }
+    const frequencyData = frequencyDataRef.current;
+    if (analyser && frequencyData) {
+      analyser.getByteFrequencyData(frequencyData);
+    }
     if (!frequencyData || frequencyData.length === 0) {
       // No data — draw empty state
       ctx.fillStyle = getCssVar('--spectrum-empty');
@@ -82,7 +92,7 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
       const x = i * barWidth;
       ctx.fillRect(x + barGap / 2, height - barHeight, barWidth - barGap, barHeight);
     }
-  }, [frequencyData, binCount]);
+  }, [analyserRef, binCount]);
 
   const drawRef = useRef(draw);
   drawRef.current = draw;
@@ -108,7 +118,7 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
         canvas.style.height = `${height}px`;
 
         const ctx = canvas.getContext('2d');
-        if (ctx) ctx.scale(dpr, dpr);
+        if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         drawRef.current();
       }
@@ -119,10 +129,24 @@ export function SpectrumAnalyzer({ audioClientRef, enabled }: SpectrumAnalyzerPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Redraw on data changes
+  // Redraw from the analyser buffer without React state churn.
   useEffect(() => {
-    draw();
-  }, [draw]);
+    if (!enabled) {
+      draw();
+      return;
+    }
+
+    const render = () => {
+      draw();
+      drawFrameRef.current = requestAnimationFrame(render);
+    };
+    drawFrameRef.current = requestAnimationFrame(render);
+    return () => {
+      if (drawFrameRef.current) {
+        cancelAnimationFrame(drawFrameRef.current);
+      }
+    };
+  }, [draw, enabled]);
 
   // =========================================================================
   // Render

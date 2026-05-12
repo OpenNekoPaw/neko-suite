@@ -1,12 +1,13 @@
 //! Factory for creating audio effects from JSON configuration.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
+pub use neko_engine_types::{AudioEffectConfig, SUPPORTED_AUDIO_EFFECT_TYPES};
 
 use super::biquad::{BiquadFilter, FilterType};
 use super::chorus::Chorus;
 use super::compressor::Compressor;
 use super::delay::Delay;
-use super::distortion::{parse_distortion_type, Distortion};
+use super::distortion::{Distortion, parse_distortion_type};
 use super::effect_chain::EffectChain;
 use super::gain::Gain;
 use super::limiter::LimiterEffect;
@@ -15,24 +16,13 @@ use super::parametric_eq::{EqBand, ParametricEq};
 use super::reverb::Reverb;
 use super::traits::AudioEffect;
 
-/// Configuration for a single audio effect, deserialized from JSON.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AudioEffectConfig {
-    pub id: String,
-    pub effect_type: String,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default)]
-    pub params: serde_json::Value,
-}
-
-fn default_true() -> bool {
-    true
-}
+pub use neko_engine_types::SUPPORTED_AUDIO_EFFECT_TYPES as SUPPORTED_EFFECT_TYPES;
 
 fn f(v: &serde_json::Value, key: &str, default: f32) -> f32 {
-    v.get(key).and_then(|v| v.as_f64()).map(|v| v as f32).unwrap_or(default)
+    v.get(key)
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32)
+        .unwrap_or(default)
 }
 
 fn f64v(v: &serde_json::Value, key: &str, default: f64) -> f64 {
@@ -51,26 +41,26 @@ fn b(v: &serde_json::Value, key: &str, default: bool) -> bool {
 pub fn create_effect(config: &AudioEffectConfig) -> Result<Box<dyn AudioEffect>> {
     let p = &config.params;
     let effect: Box<dyn AudioEffect> = match config.effect_type.as_str() {
-        "gain" => Box::new(Gain::new(f(p, "gainDb", 0.0))),
+        "gain" => Box::new(Gain::new(f(p, "gainDb", f(p, "gain", 0.0)))),
 
-        "high-pass" | "highpass" => Box::new(BiquadFilter::new(
+        "high-pass" => Box::new(BiquadFilter::new(
             FilterType::HighPass,
             f64v(p, "frequency", 80.0),
-            f64v(p, "q", 0.707),
+            f64v(p, "q", f64v(p, "resonance", 0.707)),
             0.0,
         )),
 
-        "low-pass" | "lowpass" => Box::new(BiquadFilter::new(
+        "low-pass" => Box::new(BiquadFilter::new(
             FilterType::LowPass,
             f64v(p, "frequency", 8000.0),
-            f64v(p, "q", 0.707),
+            f64v(p, "q", f64v(p, "resonance", 0.707)),
             0.0,
         )),
 
-        "band-pass" | "bandpass" => Box::new(BiquadFilter::new(
+        "band-pass" => Box::new(BiquadFilter::new(
             FilterType::BandPass,
             f64v(p, "frequency", 1000.0),
-            f64v(p, "q", 1.0),
+            f64v(p, "q", f64v(p, "bandwidth", 1.0)),
             0.0,
         )),
 
@@ -81,7 +71,28 @@ pub fn create_effect(config: &AudioEffectConfig) -> Result<Box<dyn AudioEffect>>
             0.0,
         )),
 
-        "parametric-eq" | "eq" => {
+        "peaking" => Box::new(BiquadFilter::new(
+            FilterType::Peaking,
+            f64v(p, "frequency", 1000.0),
+            f64v(p, "q", 1.0),
+            f64v(p, "gainDb", f64v(p, "gain", 0.0)),
+        )),
+
+        "low-shelf" => Box::new(BiquadFilter::new(
+            FilterType::LowShelf,
+            f64v(p, "frequency", 200.0),
+            f64v(p, "q", 0.707),
+            f64v(p, "gainDb", f64v(p, "gain", 0.0)),
+        )),
+
+        "high-shelf" => Box::new(BiquadFilter::new(
+            FilterType::HighShelf,
+            f64v(p, "frequency", 4000.0),
+            f64v(p, "q", 0.707),
+            f64v(p, "gainDb", f64v(p, "gain", 0.0)),
+        )),
+
+        "parametric-eq" => {
             let bands: Vec<EqBand> = p
                 .get("bands")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -98,7 +109,7 @@ pub fn create_effect(config: &AudioEffectConfig) -> Result<Box<dyn AudioEffect>>
             f(p, "makeupGain", 0.0),
         )),
 
-        "noise-gate" | "gate" => Box::new(NoiseGateEffect::new(NoiseGateConfig {
+        "noise-gate" => Box::new(NoiseGateEffect::new(NoiseGateConfig {
             threshold_db: f(p, "threshold", -40.0),
             attack_ms: f(p, "attack", 1.0),
             hold_ms: f(p, "hold", 50.0),
@@ -120,7 +131,7 @@ pub fn create_effect(config: &AudioEffectConfig) -> Result<Box<dyn AudioEffect>>
         )),
 
         "delay" => Box::new(Delay::new(
-            f(p, "delayMs", 250.0),
+            f(p, "delayMs", f(p, "delayTime", 250.0)),
             f(p, "feedback", 0.4),
             f(p, "wetDry", 0.3),
             b(p, "pingPong", false),
@@ -144,8 +155,10 @@ pub fn create_effect(config: &AudioEffectConfig) -> Result<Box<dyn AudioEffect>>
         }
 
         other => {
-            tracing::warn!("Unknown audio effect type: {}", other);
-            Box::new(Gain::new(0.0)) // passthrough fallback
+            return Err(Error::InvalidParameter(format!(
+                "Unsupported audio effect type: {}",
+                other
+            )));
         }
     };
     Ok(effect)
@@ -167,21 +180,7 @@ mod tests {
 
     #[test]
     fn test_create_all_builtin_effects() {
-        let types = [
-            "gain",
-            "high-pass",
-            "low-pass",
-            "band-pass",
-            "notch",
-            "compressor",
-            "noise-gate",
-            "limiter",
-            "reverb",
-            "delay",
-            "chorus",
-            "distortion",
-        ];
-        for t in &types {
+        for t in SUPPORTED_EFFECT_TYPES {
             let config = AudioEffectConfig {
                 id: format!("test-{}", t),
                 effect_type: t.to_string(),
@@ -217,5 +216,22 @@ mod tests {
         ];
         let chain = build_effect_chain(&configs).unwrap();
         assert_eq!(chain.len(), 3);
+    }
+
+    #[test]
+    fn test_unknown_effect_returns_error() {
+        let config = AudioEffectConfig {
+            id: "missing".into(),
+            effect_type: "spectral-wizard".into(),
+            enabled: true,
+            params: serde_json::json!({}),
+        };
+
+        let message = match create_effect(&config) {
+            Ok(_) => panic!("unknown effect should fail"),
+            Err(err) => err.to_string(),
+        };
+
+        assert!(message.contains("Unsupported audio effect type"));
     }
 }

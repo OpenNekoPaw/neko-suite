@@ -42,7 +42,20 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
       return { ...data, masterEffectsChain: chain };
     }
 
+    case 'audio.setBpm': {
+      if (op.payload.bpm === undefined) {
+        const { bpm: _bpm, ...rest } = data;
+        return rest;
+      }
+      return { ...data, bpm: op.payload.bpm };
+    }
+
     case 'audio.effect.move': {
+      if (data.masterEffectsChain[op.payload.fromIndex]?.id !== op.payload.effectId) {
+        throw OperationError.invalidOperation(
+          `Audio effect not found at index ${op.payload.fromIndex}: ${op.payload.effectId}`,
+        );
+      }
       return {
         ...data,
         masterEffectsChain: arrayMove(

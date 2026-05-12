@@ -49,6 +49,9 @@ pub use neko_engine_kernel::export::{
     ExportHwEncoder, ExportJobConfig, ExportPreset, ExportSettings, ExportVideoCodec,
 };
 pub use neko_engine_kernel::jvi::JviLoader;
+pub use neko_engine_kernel::services::audio_mixdown::{
+    MixdownConfig, MixdownElement, MixdownTrack,
+};
 
 // Re-export puppet types needed by host-http for the WS stream endpoint
 pub use neko_engine_kernel::services::IPuppetService;

@@ -22,6 +22,7 @@ const audio: MessageBundle = {
   'audio.controls.record': '录制',
   'audio.controls.bpm': 'BPM',
   'audio.controls.zoom': '缩放',
+  'audio.controls.solo': '独奏',
 
   // Waveform
   'audio.waveform.loading': '正在生成波形...',
@@ -190,15 +191,21 @@ const audio: MessageBundle = {
   'audio.toast.trimError': '裁剪失败：{error}',
   'audio.toast.effectsSuccess': '效果已应用',
   'audio.toast.effectsError': '效果应用失败：{error}',
+  'audio.toast.exportSuccess': '已导出 {path}',
+  'audio.toast.exportSuccessNoPath': '导出完成',
+  'audio.toast.exportError': '导出失败',
   'audio.toast.recordingSaved': '录音已保存：{path}',
   'audio.toast.recordingError': '保存录音失败：{error}',
+  'audio.toast.recordingStartError': '录音失败：{error}',
   'audio.toast.denoiseStarted': '正在降噪处理…',
   'audio.toast.normalizeStarted': '正在标准化…',
   'audio.toast.exportStarted': '正在导出…',
+  'audio.toast.trimmed': '音频已裁剪',
 
   // Track operations (context menu)
   'audio.track.mute': '静音轨道',
   'audio.track.unmute': '取消静音',
+  'audio.track.solo': '独奏轨道',
   'audio.track.lock': '锁定轨道',
   'audio.track.unlock': '解锁轨道',
   'audio.track.moveUp': '上移',
@@ -223,6 +230,14 @@ const audio: MessageBundle = {
   'audio.export.stereo': '立体声',
   'audio.export.export': '导出',
   'audio.export.toggle': '导出为…',
+
+  // Mixer
+  'audio.mixer.volumeShort': '音量',
+  'audio.mixer.panShort': '声像',
+  'audio.mixer.center': '居中',
+  'audio.mixer.levelDb': '电平 {value} dB',
+  'audio.mixer.volumePercent': '音量：{value}%',
+  'audio.mixer.panValue': '声像：{value}',
 };
 
 export const bundles: Record<string, MessageBundle> = { audio };

@@ -6,5 +6,5 @@ import { postMessage } from '../../shared/useVscodeMessage';
 import type { EditOperation } from '@neko/shared';
 
 export function syncOperationToExtension(op: EditOperation): void {
-  postMessage({ type: 'operationApplied', operation: op } as any);
+  postMessage({ type: 'operationApplied', operation: op });
 }

@@ -36,7 +36,7 @@ export function useDragDrop(_containerRef: React.RefObject<HTMLElement | null>):
       // URI list already filtered by accept option, but double-check audio
       const audioUris = result.uris.filter((u) => isAudioUri(u));
       if (audioUris.length > 0) {
-        postMessage({ type: 'project:dropImportSource', uris: audioUris });
+        postMessage({ type: 'project:dropImportAudio', uris: audioUris });
       }
     } else if (result.type === 'asset-json' && result.assetData) {
       const data = result.assetData as { files?: { path?: string }[] };
@@ -45,7 +45,7 @@ export function useDragDrop(_containerRef: React.RefObject<HTMLElement | null>):
         .filter((p): p is string => !!p && isAudioUri(p));
       if (files.length > 0) {
         postMessage({
-          type: 'project:dropImportSource',
+          type: 'project:dropImportAudio',
           uris: files.map((f) => `file://${f}`),
         });
       }

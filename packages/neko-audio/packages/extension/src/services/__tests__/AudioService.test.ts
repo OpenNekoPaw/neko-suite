@@ -60,6 +60,15 @@ vi.mock('@neko/neko-client', () => ({
 
 import { AudioService } from '../AudioService';
 import * as vscode from 'vscode';
+import type { MixStreamConfig } from '@neko/shared';
+
+const EMPTY_MIX_CONFIG: MixStreamConfig = {
+  tracks: [],
+  masterEffects: [],
+  masterVolume: 1,
+  sampleRate: 48000,
+  channels: 2,
+};
 
 // =============================================================================
 // Helper: create an initialized AudioService
@@ -248,7 +257,14 @@ describe('AudioService', () => {
         sampleRate: 48000,
         bitrate: 192000,
         channels: 1,
-        effects: [{ type: 'compressor', params: { threshold: -20 } }],
+        effects: [
+          {
+            id: 'fx-1',
+            effectType: 'compressor',
+            enabled: true,
+            params: { threshold: -20 },
+          },
+        ],
       });
 
       expect(result).toBe('/out/result.mp3');
@@ -262,7 +278,14 @@ describe('AudioService', () => {
           sampleRate: 48000,
           bitrate: 192000,
           channels: 1,
-          effects: [{ type: 'compressor', params: { threshold: -20 } }],
+          effects: [
+            {
+              id: 'fx-1',
+              effectType: 'compressor',
+              enabled: true,
+              params: { threshold: -20 },
+            },
+          ],
         },
       });
     });
@@ -389,6 +412,83 @@ describe('AudioService', () => {
     it('getStreamWebSocketUrl returns correct URL', async () => {
       const service = await createTestService();
       expect(service.getStreamWebSocketUrl('s1')).toBe('ws://127.0.0.1:9999/v1/streams/s1');
+    });
+
+    it('setStreamLoop sends loop region and clear commands', async () => {
+      const service = await createTestService();
+
+      await service.setStreamLoop('stream-abc', { inPoint: 1.25, outPoint: 4.5 });
+      await service.setStreamLoop('stream-abc', null);
+
+      expect(mockControlStream).toHaveBeenNthCalledWith(1, 'audios', 'stream-abc', 'loop', {
+        inPoint: 1.25,
+        outPoint: 4.5,
+      });
+      expect(mockControlStream).toHaveBeenNthCalledWith(2, 'audios', 'stream-abc', 'loop', {
+        clear: true,
+      });
+    });
+
+    it('updateMixStream dispatches full config replacement and returns warnings', async () => {
+      const service = await createTestService();
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: {
+          streamId: 'stream-abc',
+          status: 'updated',
+          warnings: ['unsupported effect skipped'],
+        },
+      });
+
+      const result = await service.updateMixStream('stream-abc', EMPTY_MIX_CONFIG);
+
+      expect(result).toEqual({
+        streamId: 'stream-abc',
+        warnings: ['unsupported effect skipped'],
+      });
+      expect(mockDispatch).toHaveBeenCalledWith({
+        group: 'audios',
+        action: 'mix_stream',
+        options: {
+          action: 'update',
+          streamId: 'stream-abc',
+          config: EMPTY_MIX_CONFIG,
+        },
+      });
+    });
+  });
+
+  // =========================================================================
+  // Mix export
+  // =========================================================================
+
+  describe('mixExport', () => {
+    it('returns output and warnings from mix export', async () => {
+      const service = await createTestService();
+      mockDispatch.mockResolvedValue({
+        status: 'ok',
+        data: {
+          output: '/out/mix.wav',
+          warnings: ['unsupported effect skipped'],
+        },
+      });
+
+      const result = await service.mixExport(EMPTY_MIX_CONFIG, '/out/mix.wav', 'wav', 192000);
+
+      expect(result).toEqual({
+        output: '/out/mix.wav',
+        warnings: ['unsupported effect skipped'],
+      });
+      expect(mockDispatch).toHaveBeenCalledWith({
+        group: 'audios',
+        action: 'mix_export',
+        options: {
+          config: EMPTY_MIX_CONFIG,
+          output: '/out/mix.wav',
+          format: 'wav',
+          bitrate: 192000,
+        },
+      });
     });
   });
 

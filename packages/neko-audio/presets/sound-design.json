@@ -4,11 +4,11 @@
   "category": "sound-design",
   "effectChain": [
     {
-      "effectType": "parametric_eq",
+      "effectType": "parametric-eq",
       "enabled": true,
       "params": {
         "bands": [
-          { "type": "highpass", "freq": 60, "q": 0.7 },
+          { "type": "high-pass", "freq": 60, "q": 0.7 },
           { "type": "peaking", "freq": 800, "gain": 2.0, "q": 1.5 }
         ]
       }

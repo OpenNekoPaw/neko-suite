@@ -2,7 +2,7 @@
  * useSpectrum - Real-time FFT spectrum data from Web Audio API
  *
  * Creates an AnalyserNode connected to the AudioStreamClient's AudioContext.
- * Provides frequency data array updated via requestAnimationFrame.
+ * Owns the analyser lifecycle. Callers read frequency data in their own render loop.
  *
  * NOTE: Requires AudioStreamClient to expose its AudioContext.
  * Currently connects via the audioClientRef passed from useAudioPlayback.
@@ -10,7 +10,7 @@
  * to share the AudioContext.
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import type { AudioStreamClient } from '@neko/neko-client';
 
 const FFT_SIZE = 256; // 128 frequency bins
@@ -21,9 +21,6 @@ export function useSpectrum(
   enabled: boolean,
 ) {
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
-  const animFrameRef = useRef(0);
-  const [frequencyData, setFrequencyData] = useState<Uint8Array | null>(null);
 
   // Setup analyser when enabled and audio client is available
   const setupAnalyser = useCallback(() => {
@@ -47,38 +44,17 @@ export function useSpectrum(
       gainNode.connect(analyser);
 
       analyserRef.current = analyser;
-      dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
     } catch {
       // AudioStreamClient may not be connected yet
     }
   }, [audioClientRef, enabled]);
 
-  // Animation loop for frequency data
-  const updateSpectrum = useCallback(() => {
-    const analyser = analyserRef.current;
-    const dataArray = dataArrayRef.current;
-
-    if (analyser && dataArray) {
-      analyser.getByteFrequencyData(dataArray);
-      // Create a new Uint8Array to trigger React re-render
-      setFrequencyData(new Uint8Array(dataArray.buffer.slice(0)));
-    }
-
-    if (enabled) {
-      animFrameRef.current = requestAnimationFrame(updateSpectrum);
-    }
-  }, [enabled]);
-
   useEffect(() => {
     if (enabled) {
       setupAnalyser();
-      animFrameRef.current = requestAnimationFrame(updateSpectrum);
     }
 
     return () => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
       // Disconnect analyser
       if (analyserRef.current) {
         try {
@@ -89,7 +65,7 @@ export function useSpectrum(
         analyserRef.current = null;
       }
     };
-  }, [enabled, setupAnalyser, updateSpectrum]);
+  }, [enabled, setupAnalyser]);
 
-  return { frequencyData, binCount: FFT_SIZE / 2 };
+  return { analyserRef, binCount: FFT_SIZE / 2 };
 }

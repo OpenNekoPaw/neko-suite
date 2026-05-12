@@ -4,7 +4,7 @@
   "category": "voice-over",
   "effectChain": [
     {
-      "effectType": "noise_gate",
+      "effectType": "noise-gate",
       "enabled": true,
       "params": {
         "threshold": -40,
@@ -14,13 +14,13 @@
       }
     },
     {
-      "effectType": "parametric_eq",
+      "effectType": "parametric-eq",
       "enabled": true,
       "params": {
         "bands": [
-          { "type": "highpass", "freq": 80, "q": 0.7 },
+          { "type": "high-pass", "freq": 80, "q": 0.7 },
           { "type": "peaking", "freq": 3000, "gain": 2.0, "q": 1.0 },
-          { "type": "highshelf", "freq": 8000, "gain": -1.5 }
+          { "type": "high-shelf", "freq": 8000, "gain": -1.5 }
         ]
       }
     },

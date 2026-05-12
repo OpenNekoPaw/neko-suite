@@ -257,6 +257,8 @@ define_actions!(AudioAction {
     Probe => "probe",
     /// Transcode audio file
     Transcode => "transcode",
+    /// Return an encoded audio segment as base64
+    Segment => "segment",
     /// Start audio streaming
     Stream => "stream",
     /// Generate audio waveform
@@ -287,6 +289,10 @@ define_actions!(AudioAction {
     RecordStop => "record_stop",
     /// Mix down multi-track audio into a single output
     Mixdown => "mixdown",
+    /// Start or update a multi-track audio mix stream
+    MixStream => "mix_stream",
+    /// Export a .nka project file by mapping it to MixdownConfig
+    MixExport => "mix_export",
 });
 
 define_actions!(ImageAction {

@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
+import { shallow } from 'zustand/shallow';
 import { useAudioProjectStore } from '../../stores/audioProjectStore';
 import { AudioClip } from './AudioClip';
 import { TrackHeader } from './TrackHeader';
@@ -33,7 +34,7 @@ export function TrackLane({
   const removeTrack = useAudioProjectStore((s) => s.removeTrack);
   const reorderTrack = useAudioProjectStore((s) => s.reorderTrack);
   const tracks = useAudioProjectStore((s) => s.audioProjectData?.tracks ?? []);
-  const uiState = useAudioProjectStore((s) => s.getTrackUIState(track.id));
+  const uiState = useAudioProjectStore((s) => s.getTrackUIState(track.id), shallow);
 
   const pps = pixelsPerSecond * zoomLevel;
   const trackIndex = tracks.findIndex((tr) => tr.id === track.id);
@@ -119,7 +120,7 @@ export function TrackLane({
         <div className="flex-1 relative bg-[var(--timeline-bg)]" style={{ width: timelineWidth }}>
           {track.elements.map((element) => {
             const left = element.startTime * pps;
-            const width = element.duration * pps;
+            const width = (element.duration ?? 0) * pps;
             const waveform = waveforms[element.id];
 
             return (

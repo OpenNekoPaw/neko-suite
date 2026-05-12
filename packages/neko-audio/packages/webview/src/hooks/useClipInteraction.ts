@@ -7,6 +7,7 @@
 
 import { useRef, useCallback, useMemo } from 'react';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
+import type { TimelineElement } from '@neko/shared';
 
 type Edge = 'left' | 'right' | null;
 
@@ -22,6 +23,7 @@ interface UseClipInteractionOptions {
   startTime: number;
   duration: number;
   trimStart: number;
+  onPreview?: (updates: Partial<TimelineElement> | null) => void;
 }
 
 interface ClipInteractionResult {
@@ -40,6 +42,7 @@ export function useClipInteraction({
   startTime,
   duration,
   trimStart,
+  onPreview,
 }: UseClipInteractionOptions): ClipInteractionResult {
   const updateElement = useAudioProjectStore((s) => s.updateElement);
 
@@ -86,34 +89,39 @@ export function useClipInteraction({
         origTrimStart: trimStart,
       };
 
-      const onMove = (me: MouseEvent) => {
+      const computeUpdates = (clientX: number): Partial<TimelineElement> | null => {
         const state = dragState.current;
-        if (!state) return;
+        if (!state) return null;
 
-        const dx = me.clientX - state.startX;
+        const dx = clientX - state.startX;
         const dt = dx / pixelsPerSecond;
 
         if (state.type === 'move') {
           const newStart = Math.max(0, state.origStartTime + dt);
-          updateElement(trackId, elementId, { startTime: newStart });
+          return { startTime: newStart };
         } else if (state.type === 'resize-left') {
-          const maxShift = Math.min(
-            state.origDuration - 0.01,
-            state.origTrimStart + dt >= 0 ? Infinity : Infinity,
-          );
           const clampedDt = Math.max(-state.origTrimStart, Math.min(state.origDuration - 0.01, dt));
-          updateElement(trackId, elementId, {
+          return {
             startTime: state.origStartTime + clampedDt,
             duration: state.origDuration - clampedDt,
             trimStart: state.origTrimStart + clampedDt,
-          });
+          };
         } else {
           const newDuration = Math.max(0.01, state.origDuration + dt);
-          updateElement(trackId, elementId, { duration: newDuration });
+          return { duration: newDuration };
         }
       };
 
-      const onUp = () => {
+      const onMove = (me: MouseEvent) => {
+        onPreview?.(computeUpdates(me.clientX));
+      };
+
+      const onUp = (me: MouseEvent) => {
+        const updates = computeUpdates(me.clientX);
+        if (updates) {
+          updateElement(trackId, elementId, updates);
+        }
+        onPreview?.(null);
         dragState.current = null;
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
@@ -132,6 +140,7 @@ export function useClipInteraction({
       trackId,
       elementId,
       updateElement,
+      onPreview,
     ],
   );
 

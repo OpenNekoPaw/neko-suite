@@ -165,6 +165,42 @@ fn default_true() -> bool {
     true
 }
 
+/// Canonical engine-supported audio effect type names.
+pub const SUPPORTED_AUDIO_EFFECT_TYPES: &[&str] = &[
+    "gain",
+    "high-pass",
+    "low-pass",
+    "band-pass",
+    "notch",
+    "peaking",
+    "low-shelf",
+    "high-shelf",
+    "parametric-eq",
+    "compressor",
+    "noise-gate",
+    "limiter",
+    "reverb",
+    "delay",
+    "chorus",
+    "distortion",
+];
+
+/// Canonical audio effect render instruction shared across engine layers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioEffectConfig {
+    /// Unique effect instance ID.
+    pub id: String,
+    /// Canonical engine-supported effect type, e.g. "noise-gate".
+    pub effect_type: String,
+    /// Whether the effect should process audio.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Effect-specific parameter object.
+    #[serde(default)]
+    pub params: serde_json::Value,
+}
+
 impl Default for EffectParams {
     fn default() -> Self {
         Self {

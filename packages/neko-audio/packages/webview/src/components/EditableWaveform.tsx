@@ -189,9 +189,10 @@ export function EditableWaveform({ onSeek }: EditableWaveformProps) {
           onClick: () => {
             if (selection) {
               postMessage({
-                type: 'editor:trim',
+                type: 'audio:trim',
                 startTime: selection.start,
                 endTime: selection.end,
+                mode: 'single-file',
               });
             }
           },

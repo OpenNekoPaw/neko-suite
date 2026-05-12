@@ -18,6 +18,9 @@ export * from './core/index';
 // Operations (EditOperation 指令序列系统)
 export * from './operations';
 
+// Audio helpers
+export * from './audio';
+
 // Logger (ILogger + ConsoleLogger)
 export * from './logger/index';
 

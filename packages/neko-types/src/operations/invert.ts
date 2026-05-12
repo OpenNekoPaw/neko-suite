@@ -65,11 +65,15 @@ import type {
   AudioEffectAddOperation,
   AudioEffectRemoveOperation,
   AudioEffectUpdateOperation,
+  AudioEffectToggleOperation,
   AudioEffectMoveOperation,
   AudioMarkerAddOperation,
   AudioMarkerRemoveOperation,
   AudioMarkerUpdateOperation,
+  AudioSetBpmOperation,
+  TrackMixOperation,
 } from './types';
+import { invertTrackMixOperation } from './apply-track-mix';
 
 /**
  * 创建逆操作的 meta（标记来源为 undo）
@@ -166,6 +170,15 @@ export function invertOperation(op: EditOperation): EditOperation {
         before: { value: !toggleOp.before.value },
       };
     }
+
+    case 'track.mix.setVolume':
+    case 'track.mix.setPan':
+    case 'track.mix.setSolo':
+    case 'track.mix.effect.add':
+    case 'track.mix.effect.remove':
+    case 'track.mix.effect.update':
+    case 'track.mix.effect.move':
+      return invertTrackMixOperation(op as TrackMixOperation, meta);
 
     // =========================================================================
     // Element Operations
@@ -823,7 +836,10 @@ export function invertOperation(op: EditOperation): EditOperation {
         type: 'audio.effect.remove',
         meta,
         payload: { effectId: addOp.payload.effect.id },
-        before: { effect: addOp.payload.effect, index: addOp.payload.index ?? 0 },
+        before: {
+          effect: addOp.payload.effect,
+          index: addOp.payload.index ?? Number.MAX_SAFE_INTEGER,
+        },
       };
     }
 
@@ -847,8 +863,13 @@ export function invertOperation(op: EditOperation): EditOperation {
     }
 
     case 'audio.effect.toggle': {
-      // toggle 自身即逆操作
-      return { ...op, meta };
+      const toggleOp = op as AudioEffectToggleOperation;
+      return {
+        type: 'audio.effect.toggle',
+        meta,
+        payload: toggleOp.payload,
+        before: { value: !toggleOp.before.value },
+      };
     }
 
     case 'audio.effect.move': {
@@ -861,6 +882,16 @@ export function invertOperation(op: EditOperation): EditOperation {
           fromIndex: moveOp.payload.toIndex,
           toIndex: moveOp.payload.fromIndex,
         },
+      };
+    }
+
+    case 'audio.setBpm': {
+      const bpmOp = op as AudioSetBpmOperation;
+      return {
+        type: 'audio.setBpm',
+        meta,
+        payload: bpmOp.before.bpm === undefined ? {} : { bpm: bpmOp.before.bpm },
+        before: { bpm: bpmOp.payload.bpm },
       };
     }
 

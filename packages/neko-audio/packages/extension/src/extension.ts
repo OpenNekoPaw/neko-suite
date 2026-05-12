@@ -26,6 +26,7 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
+import { CURRENT_NKA_VERSION } from '@neko/shared/nka';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 
@@ -35,10 +36,10 @@ const logger = getLogger('Extension');
 // Template
 // =============================================================================
 
-/** Default .nka project template for new audio projects (v2 multi-track) */
+/** Default .nka project template for new audio projects. */
 function getAudioProjectTemplate(name: string): string {
   const data = {
-    version: '2.0',
+    version: CURRENT_NKA_VERSION,
     name,
     sampleRate: 48000,
     channels: 2,
@@ -130,8 +131,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
   audioProvider.setStatusBar(statusBar);
 
   // Register agent capability provider
-  if (sharedAudioService) {
-    const toolBridge = new AudioToolBridge(sharedAudioService, () => projectProvider);
+  if (sharedAudioService && projectProvider) {
+    const toolBridge = new AudioToolBridge(projectProvider, sharedAudioService);
     const capabilityProvider = createNekoAudioCapabilityProvider(toolBridge);
     void vscode.commands.executeCommand('neko.agent.registerCapabilities', capabilityProvider);
   }

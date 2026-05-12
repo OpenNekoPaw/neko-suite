@@ -10,7 +10,6 @@ import { useExtensionMessage, useVscodeReady, postMessage } from '../shared/useV
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
-import { useEffectsChain } from '../hooks/useEffectsChain';
 import { useDragDrop } from '../hooks/useDragDrop';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { EditableWaveform } from '../components/EditableWaveform';
@@ -21,8 +20,10 @@ import { SpectrumAnalyzer } from '../components/SpectrumAnalyzer';
 import { LoudnessPanel } from '../components/LoudnessPanel';
 import { EmptyProject } from '../components/EmptyProject';
 import { AudioTimeline } from '../components/Timeline/AudioTimeline';
+import { MixerPanel } from '../components/MixerPanel';
 import { Toast } from '../components/Toast';
 import type { ExtensionMessage } from '../shared/types';
+import { handleAudioResponseMessage } from '../shared/audioProtocolHandler';
 import { t } from '../i18n';
 import '../styles/editor.css';
 
@@ -38,7 +39,6 @@ export function AudioEditor() {
     setFileInfo,
     setWaveform,
     setStreamInfo,
-    setError,
     setSilenceRegions,
     setProjectMode,
     setMarkers,
@@ -47,7 +47,6 @@ export function AudioEditor() {
   } = useAudioStore();
 
   const { togglePlay, seek, stop, audioClientRef } = useAudioPlayback();
-  const effectsChain = useEffectsChain();
 
   // Drag-drop support for importing audio into project
   const editorRef = useRef<HTMLDivElement>(null);
@@ -55,116 +54,58 @@ export function AudioEditor() {
 
   useKeyboardShortcuts({ onTogglePlay: togglePlay, onStop: stop });
 
-  // Keep ref to latest effects/markers for serialization in save handler
-  const effectsRef = useRef(effectsChain.effects);
-  effectsRef.current = effectsChain.effects;
-
-  const markersRef = useRef(useAudioStore.getState().markers);
-  markersRef.current = useAudioStore.getState().markers;
-
   // v2 multi-track project state (must be before any early returns)
   const isV2 = useAudioProjectStore((s) => s.audioProjectData !== null);
 
   // Handle messages from Extension Host
   const handleMessage = useCallback(
     (message: ExtensionMessage) => {
-      switch (message.type) {
-        case 'editor:init':
-          setFileInfo(
-            message.payload.filePath,
-            message.payload.fileName,
-            message.payload.audioInfo,
-          );
-          break;
+      if (message.type.startsWith('audio:')) {
+        const handled = handleAudioResponseMessage(
+          message as Extract<ExtensionMessage, { type: `audio:${string}` }>,
+          {
+            setFileInfo,
+            setWaveform,
+            setStreamInfo,
+            setSilenceRegions,
+            setLoudness,
+            showToast,
+          },
+        );
+        if (handled) return;
+      }
 
+      switch (message.type) {
         case 'project:init': {
-          const { projectData, waveforms } = message.payload as any;
+          const { projectData, waveforms } = message.payload;
           setProjectMode(true);
           setFileInfo(null, projectData.name ?? '', null);
-          useAudioProjectStore.getState().initProject(projectData as any, waveforms);
+          useAudioProjectStore.getState().initProject(projectData, waveforms);
           if (projectData.markers) {
-            setMarkers(projectData.markers as any);
+            setMarkers(projectData.markers);
           }
           break;
         }
+
+        case 'project:sync':
+          setProjectMode(true);
+          setFileInfo(null, message.projectData.name ?? '', null);
+          useAudioProjectStore.getState().syncProject(message.projectData, message.operation);
+          setMarkers(message.projectData.markers);
+          if (message.warnings?.length) {
+            showToast(message.warnings.join('\n'), 'info');
+          }
+          break;
+
+        case 'project:importAudioResult':
+          if (!message.payload.success && message.payload.error) {
+            showToast(t('audio.import.failed', { error: message.payload.error }), 'error');
+          }
+          break;
 
         case 'save':
-        case 'saveAs': {
-          const store = useAudioStore.getState();
-          const saveData = {
-            effectsChain: effectsRef.current.map((e) => ({
-              id: e.id,
-              type: e.type,
-              name: e.name,
-              enabled: e.enabled,
-              params: e.params as unknown as Record<string, unknown>,
-            })),
-            markers: store.markers,
-          };
-          postMessage({
-            type: 'project:saveData',
-            data: saveData,
-            ...(message.type === 'saveAs' ? { path: (message as { path?: string }).path } : {}),
-          });
-          break;
-        }
-
+        case 'saveAs':
         case 'revert':
-          break;
-
-        case 'editor:waveform':
-          setWaveform(message.payload);
-          break;
-
-        case 'editor:streamReady':
-        case 'project:mixStreamReady':
-          setStreamInfo(message.payload.streamId, message.payload.streamUrl);
-          break;
-
-        case 'editor:silenceResult':
-          setSilenceRegions(message.payload.regions);
-          break;
-
-        case 'editor:trimResult':
-          if (message.payload.success) {
-            showToast(t('audio.toast.trimSuccess'), 'success');
-          } else {
-            showToast(t('audio.toast.trimError', { error: message.payload.error ?? '' }), 'error');
-          }
-          break;
-
-        case 'editor:effectsResult':
-          if (message.payload.success) {
-            showToast(t('audio.toast.effectsSuccess'), 'success');
-          } else {
-            showToast(
-              t('audio.toast.effectsError', { error: message.payload.error ?? '' }),
-              'error',
-            );
-          }
-          break;
-
-        case 'editor:loudnessResult':
-          setLoudness(message.payload);
-          break;
-
-        case 'editor:recordingSaved':
-          if (message.payload.success) {
-            showToast(
-              t('audio.toast.recordingSaved', { path: message.payload.path ?? '' }),
-              'success',
-            );
-          } else {
-            showToast(
-              t('audio.toast.recordingError', { error: message.payload.error ?? '' }),
-              'error',
-            );
-          }
-          break;
-
-        case 'editor:inputDevices':
-        case 'editor:recordStartResult':
-        case 'editor:recordStopResult':
           break;
 
         case 'command': {
@@ -181,28 +122,67 @@ export function AudioEditor() {
               store.toggleSidePanel('export');
               break;
             case 'denoise':
-              postMessage({ type: 'editor:denoise' });
+              postMessage({
+                type: 'audio:effects',
+                effects: [
+                  {
+                    id: crypto.randomUUID(),
+                    effectType: 'noise-gate',
+                    enabled: true,
+                    params: { threshold: -40, attack: 1, hold: 50, release: 100 },
+                  },
+                ],
+              });
               break;
             case 'normalize':
-              postMessage({ type: 'editor:normalize' });
+              postMessage({
+                type: 'audio:effects',
+                effects: [
+                  {
+                    id: crypto.randomUUID(),
+                    effectType: 'gain',
+                    enabled: true,
+                    params: { gainDb: 0 },
+                  },
+                ],
+              });
               break;
             case 'trim': {
               const sel = store.selection;
               if (sel) {
-                postMessage({ type: 'editor:trim', startTime: sel.start, endTime: sel.end });
+                postMessage({
+                  type: 'audio:trim',
+                  startTime: sel.start,
+                  endTime: sel.end,
+                  mode: store.projectMode ? 'project' : 'single-file',
+                });
               }
               break;
             }
             case 'fadeIn':
               postMessage({
-                type: 'editor:applyEffects',
-                effects: [{ type: 'fade-in', params: { duration: 1.0 } }],
+                type: 'audio:effects',
+                effects: [
+                  {
+                    id: crypto.randomUUID(),
+                    effectType: 'gain',
+                    enabled: true,
+                    params: { gainDb: 0, automation: 'fadeIn', duration: 1.0 },
+                  },
+                ],
               });
               break;
             case 'fadeOut':
               postMessage({
-                type: 'editor:applyEffects',
-                effects: [{ type: 'fade-out', params: { duration: 1.0 } }],
+                type: 'audio:effects',
+                effects: [
+                  {
+                    id: crypto.randomUUID(),
+                    effectType: 'gain',
+                    enabled: true,
+                    params: { gainDb: 0, automation: 'fadeOut', duration: 1.0 },
+                  },
+                ],
               });
               break;
           }
@@ -214,13 +194,11 @@ export function AudioEditor() {
       setFileInfo,
       setWaveform,
       setStreamInfo,
-      setError,
       setSilenceRegions,
       setProjectMode,
       setMarkers,
       setLoudness,
       showToast,
-      effectsChain,
     ],
   );
 
@@ -269,7 +247,10 @@ export function AudioEditor() {
           <div className="flex flex-1 overflow-hidden">
             <div className="flex flex-col flex-1 overflow-hidden">
               {isV2 ? (
-                <AudioTimeline />
+                <div className="neko-project-workstation">
+                  <AudioTimeline />
+                  <MixerPanel />
+                </div>
               ) : (
                 <>
                   <EditableWaveform onSeek={seek} />

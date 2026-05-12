@@ -17,11 +17,32 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
+import type {
+  AudioAnalyzeRequestMessage,
+  AudioEffectsRequestMessage,
+  AudioExportRequestMessage,
+  AudioPlaybackRequestMessage,
+  AudioRecordingRequestMessage,
+  AudioRequestMessage,
+  AudioTrimRequestMessage,
+} from '@neko/shared';
 import type { AudioService } from '../services/AudioService';
 import type { AudioOutlineProvider } from '../views/audioOutlineProvider';
 import type { AudioStatusBar } from '../views/audioStatusBar';
 import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
+import { exportAudioExtension, generateAudioOutputPath } from './audioFilePaths';
+import {
+  isAudioAnalyzeRequestMessage,
+  isAudioEffectsRequestMessage,
+  isAudioExportRequestMessage,
+  isAudioPlaybackRequestMessage,
+  isAudioRecordingRequestMessage,
+  isAudioTrimRequestMessage,
+  postInvalidAudioMessage,
+  type AudioRequestGuard,
+} from './audioMessageGuards';
 
 const logger = getLogger('AudioEditor');
 
@@ -29,20 +50,13 @@ const logger = getLogger('AudioEditor');
 // AudioEditorProvider
 // =============================================================================
 
-export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
+export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<vscode.CustomDocument> {
   static readonly viewType = 'neko.audioEditor';
 
-  private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
-    vscode.CustomDocumentEditEvent<vscode.CustomDocument>
-  >();
-  public readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
-
-  private readonly _disposables: vscode.Disposable[] = [];
   private _audioService: AudioService | null = null;
   private _outlineProvider: AudioOutlineProvider | null = null;
   private _statusBar: AudioStatusBar | null = null;
   private readonly _activePanels = new Set<vscode.WebviewPanel>();
-  private activeWebviewPanel: vscode.WebviewPanel | undefined;
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -89,7 +103,6 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
   ): Promise<void> {
     // Track active panels for command forwarding
     this._activePanels.add(webviewPanel);
-    this.activeWebviewPanel = webviewPanel;
 
     // Configure webview
     webviewPanel.webview.options = {
@@ -101,7 +114,7 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
     vscode.commands.executeCommand('workbench.action.pinEditor');
 
     const filePath = document.uri.fsPath;
-    const fileName = filePath.split('/').pop() ?? filePath;
+    const fileName = path.basename(filePath);
 
     // Set webview HTML early so it can start loading while we probe
     webviewPanel.webview.html = getWebviewHtml({
@@ -136,6 +149,318 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
       }
     };
 
+    const postAudioError = async (request: AudioRequestMessage, error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      await webviewPanel.webview.postMessage({
+        type: 'audio:error',
+        requestId: request.requestId,
+        documentUri: document.uri.toString(),
+        success: false,
+        error: message,
+      });
+    };
+
+    const parseAudioRequest = async <T extends AudioRequestMessage>(
+      message: Record<string, unknown>,
+      guard: AudioRequestGuard<T>,
+    ): Promise<T | null> => {
+      if (guard(message)) {
+        return message;
+      }
+      await postInvalidAudioMessage(message, webviewPanel, document.uri);
+      return null;
+    };
+
+    const handleAudioPlayback = async (request: AudioPlaybackRequestMessage) => {
+      try {
+        switch (request.action) {
+          case 'play': {
+            await stopPanelStream();
+            const result = await this._audioService?.startStream(filePath);
+            if (!result) {
+              throw new Error('Unable to start audio stream');
+            }
+            activeStreamId = result.streamId;
+            const startTime = request.startTime ?? 0;
+            if (startTime > 0) {
+              await this._audioService?.seekStream(result.streamId, startTime);
+            }
+            await webviewPanel.webview.postMessage({
+              type: 'audio:playbackReady',
+              requestId: request.requestId,
+              documentUri: document.uri.toString(),
+              streamId: result.streamId,
+              wsUrl: result.streamUrl,
+            });
+            break;
+          }
+          case 'pause':
+            if (activeStreamId) await this._audioService?.pauseStream(activeStreamId);
+            await webviewPanel.webview.postMessage({
+              type: 'audio:playbackResult',
+              requestId: request.requestId,
+              documentUri: document.uri.toString(),
+              success: true,
+              streamId: activeStreamId ?? undefined,
+            });
+            break;
+          case 'resume':
+            if (activeStreamId) await this._audioService?.resumeStream(activeStreamId);
+            await webviewPanel.webview.postMessage({
+              type: 'audio:playbackResult',
+              requestId: request.requestId,
+              documentUri: document.uri.toString(),
+              success: true,
+              streamId: activeStreamId ?? undefined,
+            });
+            break;
+          case 'stop':
+            await stopPanelStream();
+            await webviewPanel.webview.postMessage({
+              type: 'audio:playbackResult',
+              requestId: request.requestId,
+              documentUri: document.uri.toString(),
+              success: true,
+            });
+            break;
+          case 'seek':
+            if (typeof request.time === 'number' && activeStreamId) {
+              await this._audioService?.seekStream(activeStreamId, request.time);
+            }
+            await webviewPanel.webview.postMessage({
+              type: 'audio:playbackResult',
+              requestId: request.requestId,
+              documentUri: document.uri.toString(),
+              success: true,
+              streamId: activeStreamId ?? undefined,
+            });
+            break;
+          case 'setSpeed':
+            if (typeof request.speed === 'number' && activeStreamId) {
+              await this._audioService?.setStreamSpeed(activeStreamId, request.speed);
+            }
+            await webviewPanel.webview.postMessage({
+              type: 'audio:playbackResult',
+              requestId: request.requestId,
+              documentUri: document.uri.toString(),
+              success: true,
+              streamId: activeStreamId ?? undefined,
+            });
+            break;
+          case 'setLoop':
+            if (activeStreamId) {
+              const region =
+                request.loop &&
+                typeof request.startTime === 'number' &&
+                typeof request.time === 'number'
+                  ? { inPoint: request.startTime, outPoint: request.time }
+                  : null;
+              await this._audioService?.setStreamLoop(activeStreamId, region);
+            }
+            await webviewPanel.webview.postMessage({
+              type: 'audio:playbackResult',
+              requestId: request.requestId,
+              documentUri: document.uri.toString(),
+              success: true,
+              streamId: activeStreamId ?? undefined,
+            });
+            break;
+        }
+      } catch (error) {
+        await postAudioError(request, error);
+      }
+    };
+
+    const handleAudioTrim = async (request: AudioTrimRequestMessage) => {
+      try {
+        const output = request.outputPath ?? generateAudioOutputPath(filePath, 'trimmed');
+        const result = await this._audioService?.transcode(filePath, output, {
+          startTime: request.startTime,
+          endTime: request.endTime,
+        });
+        await webviewPanel.webview.postMessage({
+          type: 'audio:trimResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: true,
+          outputPath: result,
+        });
+      } catch (error) {
+        await webviewPanel.webview.postMessage({
+          type: 'audio:trimResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    const handleAudioEffects = async (request: AudioEffectsRequestMessage) => {
+      try {
+        const output = request.outputPath ?? generateAudioOutputPath(filePath, 'fx');
+        const result = await this._audioService?.transcode(filePath, output, {
+          effects: request.effects,
+        });
+        await webviewPanel.webview.postMessage({
+          type: 'audio:effectsResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: true,
+          outputPath: result,
+        });
+        if (result) {
+          await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(result));
+        }
+      } catch (error) {
+        await webviewPanel.webview.postMessage({
+          type: 'audio:effectsResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    const handleAudioAnalyze = async (request: AudioAnalyzeRequestMessage) => {
+      try {
+        const result =
+          request.kind === 'silence'
+            ? { regions: await this._audioService?.detectSilence(filePath) }
+            : await this._audioService?.analyzeLoudness(filePath);
+        await webviewPanel.webview.postMessage({
+          type: 'audio:analysisResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          kind: request.kind,
+          result: (result ?? {}) as Record<string, unknown>,
+        });
+      } catch (error) {
+        await postAudioError(request, error);
+      }
+    };
+
+    const handleAudioExport = async (request: AudioExportRequestMessage) => {
+      try {
+        const format = request.format ?? request.codec ?? 'wav';
+        const outputUri = request.outputPath
+          ? vscode.Uri.file(request.outputPath)
+          : await vscode.window.showSaveDialog({
+              filters: { 'Audio Files': [exportAudioExtension(format)] },
+              title: 'Export Audio',
+            });
+        if (!outputUri) return;
+        const result = await this._audioService?.transcode(filePath, outputUri.fsPath, {
+          format,
+          sampleRate: request.sampleRate,
+          bitrate: request.bitrate,
+          channels: request.channels,
+        });
+        await webviewPanel.webview.postMessage({
+          type: 'audio:exportResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: true,
+          outputPath: result,
+        });
+        await vscode.commands.executeCommand('vscode.open', outputUri);
+      } catch (error) {
+        await webviewPanel.webview.postMessage({
+          type: 'audio:exportResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    const handleAudioRecording = async (request: AudioRecordingRequestMessage) => {
+      try {
+        if (request.action === 'saveBlob') {
+          if (!request.data) {
+            throw new Error('data is required to save recording');
+          }
+          const ext = request.mimeType === 'audio/webm' ? 'webm' : 'wav';
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const suggestedName = `recording-${timestamp}.${ext}`;
+          const saveUri = request.outputPath
+            ? vscode.Uri.file(request.outputPath)
+            : await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file(suggestedName),
+                filters: { 'Audio Files': [ext] },
+                title: 'Save Recording',
+              });
+          if (!saveUri) return;
+          await vscode.workspace.fs.writeFile(saveUri, Buffer.from(request.data, 'base64'));
+          await webviewPanel.webview.postMessage({
+            type: 'audio:recordingResult',
+            requestId: request.requestId,
+            documentUri: document.uri.toString(),
+            success: true,
+            action: request.action,
+            outputPath: saveUri.fsPath,
+          });
+          return;
+        }
+        if (request.action === 'listDevices') {
+          const devices = await this._audioService?.listInputDevices();
+          await webviewPanel.webview.postMessage({
+            type: 'audio:recordingResult',
+            requestId: request.requestId,
+            documentUri: document.uri.toString(),
+            success: true,
+            action: request.action,
+            devices: devices ?? [],
+          });
+          return;
+        }
+        if (request.action === 'start') {
+          const outputDir = path.dirname(filePath);
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const outputPath =
+            request.outputPath ?? path.join(outputDir, `recording-${timestamp}.wav`);
+          const result = await this._audioService?.recordStart({
+            outputPath,
+            deviceId: request.deviceId,
+          });
+          await webviewPanel.webview.postMessage({
+            type: 'audio:recordingResult',
+            requestId: request.requestId,
+            documentUri: document.uri.toString(),
+            success: true,
+            action: request.action,
+            streamId: result?.streamId,
+            monitorUrl: result?.monitorUrl,
+          });
+          return;
+        }
+        if (!request.streamId) {
+          throw new Error('streamId is required to stop recording');
+        }
+        const result = await this._audioService?.recordStop(request.streamId);
+        await webviewPanel.webview.postMessage({
+          type: 'audio:recordingResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: true,
+          action: request.action,
+          outputPath: result?.path,
+          durationSeconds: result?.durationSeconds,
+        });
+      } catch (error) {
+        await webviewPanel.webview.postMessage({
+          type: 'audio:recordingResult',
+          requestId: request.requestId,
+          documentUri: document.uri.toString(),
+          success: false,
+          action: request.action,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
     // Handle messages from webview — registered early so no messages are lost
     const messageDisposable = webviewPanel.webview.onDidReceiveMessage(
       async (msg: Record<string, unknown>) => {
@@ -146,8 +471,11 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
             const audioInfo = await audioInfoPromise;
             if (!audioInfo) return;
             await webviewPanel.webview.postMessage({
-              type: 'editor:init',
-              payload: { filePath, fileName, audioInfo },
+              type: 'audio:init',
+              documentUri: document.uri.toString(),
+              filePath,
+              fileName,
+              audioInfo,
             });
 
             // Update outline view with audio metadata
@@ -190,8 +518,9 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
               const waveform = await this._audioService?.getWaveform(filePath);
               if (waveform) {
                 await webviewPanel.webview.postMessage({
-                  type: 'editor:waveform',
-                  payload: waveform,
+                  type: 'audio:waveform',
+                  documentUri: document.uri.toString(),
+                  waveform,
                 });
               }
             } catch (error) {
@@ -200,302 +529,39 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
             break;
           }
 
-          case 'editor:play': {
-            try {
-              await stopPanelStream();
-
-              const result = await this._audioService?.startStream(filePath);
-              if (result) {
-                activeStreamId = result.streamId;
-
-                const startTime = (msg.startTime as number) ?? 0;
-                if (startTime > 0) {
-                  await this._audioService?.seekStream(result.streamId, startTime);
-                }
-
-                await webviewPanel.webview.postMessage({
-                  type: 'editor:streamReady',
-                  payload: {
-                    streamId: result.streamId,
-                    streamUrl: result.streamUrl,
-                  },
-                });
-              }
-            } catch (error) {
-              logger.error('Failed to start audio stream:', error);
-            }
+          case 'audio:playback': {
+            const request = await parseAudioRequest(msg, isAudioPlaybackRequestMessage);
+            if (request) await handleAudioPlayback(request);
             break;
           }
 
-          case 'editor:pause':
-            if (activeStreamId) await this._audioService?.pauseStream(activeStreamId);
-            break;
-
-          case 'editor:resume':
-            if (activeStreamId) await this._audioService?.resumeStream(activeStreamId);
-            break;
-
-          case 'editor:stop':
-            await stopPanelStream();
-            break;
-
-          case 'editor:seek': {
-            const time = msg.time as number;
-            if (typeof time === 'number' && activeStreamId) {
-              await this._audioService?.seekStream(activeStreamId, time);
-            }
+          case 'audio:trim': {
+            const request = await parseAudioRequest(msg, isAudioTrimRequestMessage);
+            if (request) await handleAudioTrim(request);
             break;
           }
 
-          case 'editor:speed': {
-            const speed = (msg.speed as number) ?? 1.0;
-            if (activeStreamId) await this._audioService?.setStreamSpeed(activeStreamId, speed);
+          case 'audio:effects': {
+            const request = await parseAudioRequest(msg, isAudioEffectsRequestMessage);
+            if (request) await handleAudioEffects(request);
             break;
           }
 
-          case 'editor:trim': {
-            const { startTime, endTime, outputPath } = msg as {
-              startTime: number;
-              endTime: number;
-              outputPath?: string;
-            };
-            try {
-              const output = outputPath ?? this.generateOutputPath(filePath, 'trimmed');
-              const result = await this._audioService?.transcode(filePath, output, {
-                startTime,
-                endTime,
-              });
-              await webviewPanel.webview.postMessage({
-                type: 'editor:trimResult',
-                payload: { success: true, outputPath: result },
-              });
-            } catch (error) {
-              const msg = error instanceof Error ? error.message : String(error);
-              await webviewPanel.webview.postMessage({
-                type: 'editor:trimResult',
-                payload: { success: false, error: msg },
-              });
-            }
+          case 'audio:analyze': {
+            const request = await parseAudioRequest(msg, isAudioAnalyzeRequestMessage);
+            if (request) await handleAudioAnalyze(request);
             break;
           }
 
-          case 'editor:saveRecording': {
-            const { data, format } = msg as { data: string; format: string };
-            try {
-              const ext = format === 'audio/webm' ? 'webm' : 'wav';
-              const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-              const suggestedName = `recording-${timestamp}.${ext}`;
-
-              const saveUri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file(suggestedName),
-                filters: { 'Audio Files': [ext] },
-                title: 'Save Recording',
-              });
-
-              if (saveUri) {
-                const buffer = Buffer.from(data, 'base64');
-                await vscode.workspace.fs.writeFile(saveUri, buffer);
-                await webviewPanel.webview.postMessage({
-                  type: 'editor:recordingSaved',
-                  payload: { success: true, path: saveUri.fsPath },
-                });
-              }
-            } catch (error) {
-              const errMsg = error instanceof Error ? error.message : String(error);
-              await webviewPanel.webview.postMessage({
-                type: 'editor:recordingSaved',
-                payload: { success: false, error: errMsg },
-              });
-            }
+          case 'audio:export': {
+            const request = await parseAudioRequest(msg, isAudioExportRequestMessage);
+            if (request) await handleAudioExport(request);
             break;
           }
 
-          case 'editor:analyzeLoudness': {
-            try {
-              const result = await this._audioService?.analyzeLoudness(filePath);
-              await webviewPanel.webview.postMessage({
-                type: 'editor:loudnessResult',
-                payload: result,
-              });
-            } catch (error) {
-              logger.error('Loudness analysis failed:', error);
-            }
-            break;
-          }
-
-          case 'editor:applyEffects': {
-            const effects = msg.effects as Array<{
-              type: string;
-              params: Record<string, unknown>;
-            }>;
-            try {
-              const output = this.generateOutputPath(filePath, 'fx');
-              await this._audioService?.transcode(filePath, output, { effects });
-              await webviewPanel.webview.postMessage({
-                type: 'editor:effectsResult',
-                payload: { success: true, outputPath: output },
-              });
-              // Open the new file
-              const uri = vscode.Uri.file(output);
-              await vscode.commands.executeCommand('vscode.open', uri);
-            } catch (error) {
-              const errMsg = error instanceof Error ? error.message : String(error);
-              await webviewPanel.webview.postMessage({
-                type: 'editor:effectsResult',
-                payload: { success: false, error: errMsg },
-              });
-            }
-            break;
-          }
-
-          case 'editor:detectSilence': {
-            try {
-              const threshold = msg.threshold as number | undefined;
-              const minDuration = msg.minDuration as number | undefined;
-              const regions = await this._audioService?.detectSilence(
-                filePath,
-                threshold,
-                minDuration,
-              );
-              await webviewPanel.webview.postMessage({
-                type: 'editor:silenceResult',
-                payload: { regions: regions ?? [] },
-              });
-            } catch (error) {
-              logger.error('Silence detection failed:', error);
-            }
-            break;
-          }
-
-          case 'editor:denoise': {
-            try {
-              const amount = (msg.amount as number) ?? 0.5;
-              const output = this.generateOutputPath(filePath, 'denoised');
-              await this._audioService?.transcode(filePath, output, {
-                effects: [
-                  { type: 'noise-reduction', params: { amount, threshold: 1000, smoothing: 0.5 } },
-                ],
-              });
-              const uri = vscode.Uri.file(output);
-              await vscode.commands.executeCommand('vscode.open', uri);
-            } catch (error) {
-              logger.error('Denoise failed:', error);
-            }
-            break;
-          }
-
-          case 'editor:normalize': {
-            try {
-              const targetLoudness = (msg.targetLoudness as number) ?? -14;
-              // First analyze loudness
-              const loudness = await this._audioService?.analyzeLoudness(filePath);
-              if (loudness) {
-                const gainDb = targetLoudness - loudness.integratedLoudness;
-                const output = this.generateOutputPath(filePath, 'normalized');
-                await this._audioService?.transcode(filePath, output, {
-                  effects: [{ type: 'gain', params: { gain: gainDb } }],
-                });
-                const uri = vscode.Uri.file(output);
-                await vscode.commands.executeCommand('vscode.open', uri);
-              }
-            } catch (error) {
-              logger.error('Normalize failed:', error);
-            }
-            break;
-          }
-
-          case 'editor:exportAs': {
-            const format = msg.format as string;
-            const quality = msg.quality as number | undefined;
-            const sampleRate = msg.sampleRate as number | undefined;
-            const bitrate = msg.bitrate as number | undefined;
-            const channels = msg.channels as number | undefined;
-            try {
-              const ext =
-                format === 'wav'
-                  ? 'wav'
-                  : format === 'mp3'
-                    ? 'mp3'
-                    : format === 'aac'
-                      ? 'aac'
-                      : format === 'flac'
-                        ? 'flac'
-                        : format === 'opus'
-                          ? 'opus'
-                          : 'wav';
-
-              const saveUri = await vscode.window.showSaveDialog({
-                filters: { 'Audio Files': [ext] },
-                title: 'Export Audio',
-              });
-
-              if (saveUri) {
-                await this._audioService?.transcode(filePath, saveUri.fsPath, {
-                  format,
-                  quality,
-                  sampleRate,
-                  bitrate,
-                  channels,
-                });
-                await vscode.commands.executeCommand('vscode.open', saveUri);
-              }
-            } catch (error) {
-              logger.error('Export failed:', error);
-            }
-            break;
-          }
-
-          case 'editor:listInputDevices': {
-            try {
-              const devices = await this._audioService?.listInputDevices();
-              await webviewPanel.webview.postMessage({
-                type: 'editor:inputDevices',
-                payload: devices ?? [],
-              });
-            } catch (error) {
-              logger.error('List input devices failed:', error);
-            }
-            break;
-          }
-
-          case 'editor:recordStart': {
-            const outputDir = require('path').dirname(filePath);
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const outputPath =
-              (msg.outputPath as string) ??
-              require('path').join(outputDir, `recording-${timestamp}.wav`);
-            try {
-              const result = await this._audioService?.recordStart({
-                outputPath,
-                deviceId: msg.deviceId as string | undefined,
-                sampleRate: msg.sampleRate as number | undefined,
-                channels: msg.channels as number | undefined,
-              });
-              if (result) {
-                await webviewPanel.webview.postMessage({
-                  type: 'editor:recordStartResult',
-                  payload: result,
-                });
-              }
-            } catch (error) {
-              logger.error('Record start failed:', error);
-            }
-            break;
-          }
-
-          case 'editor:recordStop': {
-            const streamId = msg.streamId as string;
-            try {
-              const result = await this._audioService?.recordStop(streamId);
-              if (result) {
-                await webviewPanel.webview.postMessage({
-                  type: 'editor:recordStopResult',
-                  payload: result,
-                });
-              }
-            } catch (error) {
-              logger.error('Record stop failed:', error);
-            }
+          case 'audio:recording': {
+            const request = await parseAudioRequest(msg, isAudioRecordingRequestMessage);
+            if (request) await handleAudioRecording(request);
             break;
           }
 
@@ -503,8 +569,6 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
             break;
         }
       },
-      undefined,
-      this._disposables,
     );
 
     // Cleanup on dispose
@@ -517,67 +581,11 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
     });
   }
 
-  // =====================
-  // CustomEditorProvider Methods
-  // =============
-
-  async saveCustomDocument(
-    document: vscode.CustomDocument,
-    _cancellation: vscode.CancellationToken,
-  ): Promise<void> {
-    // Notify webview to save
-    this.activeWebviewPanel?.webview.postMessage({ type: 'save' });
-  }
-
-  async saveCustomDocumentAs(
-    document: vscode.CustomDocument,
-    destination: vscode.Uri,
-    _cancellation: vscode.CancellationToken,
-  ): Promise<void> {
-    // Notify webview to save as
-    this.activeWebviewPanel?.webview.postMessage({
-      type: 'saveAs',
-      path: destination.fsPath,
-    });
-  }
-
-  async revertCustomDocument(
-    document: vscode.CustomDocument,
-    _cancellation: vscode.CancellationToken,
-  ): Promise<void> {
-    // Notify webview to revert
-    this.activeWebviewPanel?.webview.postMessage({ type: 'revert' });
-  }
-
-  async backupCustomDocument(
-    document: vscode.CustomDocument,
-    context: vscode.CustomDocumentBackupContext,
-    _cancellation: vscode.CancellationToken,
-  ): Promise<vscode.CustomDocumentBackup> {
-    // For now, return a simple backup that does nothing
-    return {
-      id: context.destination.toString(),
-      delete: async () => {
-        try {
-          await vscode.workspace.fs.delete(context.destination);
-        } catch {
-          // Ignore errors
-        }
-      },
-    };
-  }
-
   // =========================================================================
   // Helpers
   // =========================================================================
-
-  private generateOutputPath(inputPath: string, suffix: string): string {
-    const lastDot = inputPath.lastIndexOf('.');
-    if (lastDot === -1) return `${inputPath}_${suffix}`;
-    return `${inputPath.substring(0, lastDot)}_${suffix}${inputPath.substring(lastDot)}`;
-  }
-
   private getErrorHtml(message: string): string {
+    const escapedMessage = escapeHtml(message);
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -600,7 +608,7 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
 </head>
 <body>
 	<div>
-		<p>${message}</p>
+		<p>${escapedMessage}</p>
 	</div>
 </body>
 </html>`;
@@ -611,6 +619,15 @@ export class AudioEditorProvider implements vscode.CustomEditorProvider<vscode.C
   // =========================================================================
 
   dispose(): void {
-    this._disposables.forEach((d) => d.dispose());
+    this._activePanels.clear();
   }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

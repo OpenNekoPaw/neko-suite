@@ -4,14 +4,14 @@
   "category": "voice-over",
   "effectChain": [
     {
-      "effectType": "parametric_eq",
+      "effectType": "parametric-eq",
       "enabled": true,
       "params": {
         "bands": [
-          { "type": "highpass", "freq": 100, "q": 0.7 },
+          { "type": "high-pass", "freq": 100, "q": 0.7 },
           { "type": "peaking", "freq": 2500, "gain": 3.0, "q": 1.2 },
           { "type": "peaking", "freq": 5000, "gain": 1.5, "q": 1.0 },
-          { "type": "lowpass", "freq": 16000, "q": 0.7 }
+          { "type": "low-pass", "freq": 16000, "q": 0.7 }
         ]
       }
     },

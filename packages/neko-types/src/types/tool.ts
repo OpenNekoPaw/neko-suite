@@ -122,6 +122,7 @@ export interface ToolParameters {
   type: 'object';
   properties: Record<string, ToolParameterProperty>;
   required?: string[];
+  anyOf?: Array<{ required: string[] }>;
 }
 
 /**

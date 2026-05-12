@@ -71,7 +71,10 @@ mod tests {
         let mut dist = Distortion::new(30.0, 0.0, DistortionType::Soft);
         let mut buf = vec![1.0; 100];
         dist.process(&mut buf, 1, 44100);
-        assert!(buf.iter().all(|s| s.abs() <= 1.0), "Soft clip should never exceed +-1");
+        assert!(
+            buf.iter().all(|s| s.abs() <= 1.0),
+            "Soft clip should never exceed +-1"
+        );
     }
 
     #[test]
