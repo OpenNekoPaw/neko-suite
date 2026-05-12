@@ -1,6 +1,6 @@
 # Neko Suite
 
-> All-in-One Creative IDE - A Video Editing Workstation Deeply Integrated into VS Code
+> AIGC IDE + AIGC Agent — An Agent-Driven Multimodal Creation Workspace in VS Code
 
 [中文](./README_CN.md) | [Nya~](./README_NYA.md)
 
@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)]()
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-blue)]()
 
-**Neko Suite** is an all-in-one creative workstation deeply integrated into VS Code. It breaks through editor performance limitations via a **Rust Sidecar architecture**, enabling a complete workflow from screenplay writing to 4K video compositing.
+**Neko Suite** is an AIGC-native IDE deeply integrated into VS Code. A first-class **AIGC Agent** sits at the core and drives the full multimodal creation loop — screenplay, video, 3D, 2D, audio — through natural language. **Skills** orchestrate reusable workflows, a **unified asset library** feeds every surface, and a **Rust Sidecar engine** keeps the editor responsive.
 
 📋 **[View Roadmap →](./ROADMAP.md)**
 
@@ -16,14 +16,14 @@
 
 ## Highlights
 
-- **AI-Driven Creation** - Transform natural language into editing operations via Agent Skills + MCP protocol, with Pipeline workflows for storyboard → batch video → timeline
-- **Professional Timeline** - Multi-track, keyframe animation, color correction, effect masks, frame-precise editing, 29 EditOperations
-- **Rust GPU Rendering** - wgpu PBR + IBL + post-processing + particle system, 25+ WGSL shaders, 4K real-time preview and export
-- **3D/2D Creation** - glTF/VRM 3D editing + pressure-sensitive drawing (7 brushes) + skeletal animation + filters/particles/scene system
-- **Audio Workstation** - Waveform editing + 12 effect chains + spectrum analysis + AI denoising + microphone recording
-- **Asset Marketplace** - Search, install, and manage Skills/shaders/models/presets with local model deployment support
-- **Git-Native** - .nkv project files are text-based, supporting version control and collaboration
-- **Modular Architecture** - 18 packages, mix and match as needed, independently upgradable
+- **AIGC Agent at the Core** - Natural-language driven creation across video / 3D / 2D / audio / screenplay; multi-LLM (Claude / OpenAI / Google) + MCP protocol + multimodal perception + rich content delivery
+- **Skills Orchestrate Workflows** - Composable Skills bundle prompts, tools, permissions, and context-item budgets; tiered lazy loading keeps the baseline at ~8K tokens and grows on demand
+- **Multimodal Creation Surfaces** - Screenplay (Fountain LSP) → infinite canvas storyboarding → timeline editing → 3D modeling / 2D painting / 2D skeletal animation → audio workstation
+- **Unified Asset Library** - Cross-module registry with thumbnails, persistent search index, external media libraries, and path variable resolution (`${VAR}/path`)
+- **Asset Marketplace** - Install and version Skills, shaders, models, and presets; local model deployment (ONNX / GGUF) with upstream proxy (HF / Civitai)
+- **Rust GPU Engine** - wgpu PBR + IBL + post-processing + particles (20+ WGSL shaders), 3D scene & 2D skeletal ECS, ONNX ML inference, 4K real-time preview
+- **Git-Native Projects** - `.nkv` / `.nkc` / `.nka` / `.nkm` / `.nks` files are text-based, versionable, and collaboration-friendly
+- **Modular Architecture** - 19 packages, mix and match as needed, independently upgradable
 
 ---
 
@@ -35,16 +35,10 @@
 pnpm install
 ```
 
-### Build & Package
+### Build
 
 ```bash
 ./build.sh
-```
-
-### Install to VS Code
-
-```bash
-./install.sh
 ```
 
 ### Development Mode
@@ -57,50 +51,46 @@ pnpm run dev
 
 ## Module Architecture
 
-Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 18 packages:
+Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 19 packages:
 
 ### Core Triangle (Development Focus)
 
-| Module          | Role                                                                                                                                   | Status    | Scale                              |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------------- |
-| **neko-engine** | Rust GPU media engine - wgpu PBR rendering + codec + export + particles/post-processing + 3D scene/2D skeletal ECS + ONNX ML inference | Alpha 90% | 76.6K Rust + TS, 236 files         |
-| **neko-cut**    | Video editor - timeline + preview + color correction + effects + 29 EditOperations                                                     | Alpha 82% | 63.4K TS/TSX (293 files), 21 tests |
-| **neko-agent**  | AI Agent - multi-LLM + MCP + Skills + CLI + Pipeline workflows + AI subtitles + auto-scoring                                           | Alpha 95% | 99.6K TS/TSX (540 files), 79 tests |
+| Module          | Role                                                                                                                            | Status    | Scale                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------- |
+| **neko-engine** | Rust GPU media engine - wgpu PBR rendering + codec + export + DSP effects + 3D scene/2D skeletal ECS + ONNX ML inference        | Alpha 99% | ~108K Rust (293 files, 980 tests) + 4.6K TS (22 files) |
+| **neko-cut**    | Video editor - timeline + preview + color correction + effects + 56 EditOperations                                              | Alpha 95% | 63K TS/TSX (292 files, 658 tests), 52 commands        |
+| **neko-agent**  | AI Agent - multi-LLM + MCP + Skills + IDC unified workflow + multimodal perception + rich content delivery                      | Alpha 99% | 228K TS (1166 files, 3463 tests)  |
 
 ### Infrastructure
 
-| Module          | Role                                                                                      | Status      | Scale                          |
-| --------------- | ----------------------------------------------------------------------------------------- | ----------- | ------------------------------ |
-| **neko-types**  | Shared types + cross-cutting concerns (Logger/i18n/Theme/Errors) + Operations type safety | Alpha 92%   | 34.5K TS (187 files), 20 tests |
-| **neko-client** | Streaming client - H264/fMP4/PCM + EngineClient HTTP dispatch                             | Alpha 80%   | 4.9K TS (17 files), 3 tests    |
-| **neko-proto**  | Protocol definitions (timeline.proto + diff.proto full IDL)                               | Stable 100% | 2 proto                        |
-| **neko-auth**   | Unified auth - OAuth 2.0 + PKCE SSO + token refresh + VSCode SecretStorage / file storage | Alpha 80%   | 1.4K TS (14 files), 3 tests    |
-| **neko-suite**  | Extension Pack portal + Release workflow                                                  | Stable 90%  | Config package                 |
+| Module          | Role                                                                                      | Status      | Scale                            |
+| --------------- | ----------------------------------------------------------------------------------------- | ----------- | -------------------------------- |
+| **neko-types**  | Shared types + cross-cutting concerns (Logger/i18n/Theme/Errors) + Operations type safety | Alpha 94%   | 55.7K TS (296 files, 519 tests)  |
+| **neko-client** | Streaming client - H264/fMP4/PCM + EngineClient HTTP dispatch + MediaPlaybackService      | Alpha 85%   | 10K TS (39 files, 95 tests)      |
+| **neko-proto**  | Protocol definitions (timeline.proto + diff.proto full IDL)                               | Stable 100% | 2 proto                          |
+| **neko-auth**   | Unified auth - OAuth 2.0 + PKCE SSO + token refresh + VSCode SecretStorage / file storage | Alpha 90%   | 1.7K TS (15 files, 54 tests)     |
+| **neko-suite**  | Extension Pack portal                                                                     | Stable 90%  | Config package                   |
 
 ### Feature Modules
 
-| Module           | Role                                                                                                      | Status    | Scale                            |
-| ---------------- | --------------------------------------------------------------------------------------------------------- | --------- | -------------------------------- |
-| **neko-preview** | Media preview - Video/Audio Provider + WebCodecs player + Apple Music-style waveform                      | Alpha 85% | 7.2K TS/TSX (42 files), 5 tests  |
-| **neko-story**   | Screenplay editor - Fountain LSP + preview + timeline generation + ScenePlan/ShotPlan + story→agent→canvas pipeline | Alpha 88% | 8.0K TS/TSX (50 files), 10 tests |
-| **neko-market**  | Asset marketplace - Skills/shaders/models/presets search + install + versioning + local model deployment  | Alpha 97% | 4.4K TS/TSX (47 files), 9 tests  |
-| **neko-assets**  | Asset management - registry + thumbnails + external media libraries + Document + PathVariable full format | Alpha 92% | 9.2K TS (47 files), 7 tests      |
-| **neko-tools**   | Media tools - Diff comparison + parallel optimization + protocol enhancement                              | WIP 62%   | 14.9K TS (69 files), 6 tests     |
-| **neko-canvas**  | Infinite canvas - 6 node types + grouping + artboard export + Port UI + EditOperation                     | Alpha 87% | 14.1K TS/TSX (79 files), 4 tests |
+| Module           | Role                                                                                                         | Status    | Scale                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ | --------- | ---------------------------------- |
+| **neko-preview** | Media preview - Video/Audio/Panoramic Provider + WebCodecs player + engine-first HDR routing                 | Alpha 91% | 15.4K TS/TSX (86 files, 152 tests) |
+| **neko-story**   | Screenplay editor - Fountain LSP + 5-column storyboard table + video readiness + story→agent→canvas pipeline | Alpha 97% | 18.7K TS/TSX (75 files, 217 tests) |
+| **neko-market**  | Asset marketplace - Skills/shaders/models/presets search + install + versioning + local model deployment     | Alpha 90% | 13.7K TS/TSX (64 files, 198 tests) |
+| **neko-assets**  | Asset management - registry + thumbnails + persistent search index + external media libraries                | Alpha 88% | 11.3K TS (56 files, 167 tests)     |
+| **neko-tools**   | Media tools - Diff comparison + JVI LSP + silence detection + metadata viewer                                | Alpha 72% | 17.5K TS (120 files, 112 tests)    |
+| **neko-canvas**  | Infinite canvas - 15 node types + block containers + composable presets + batch generation + MCP Tools       | Alpha 95% | 30.8K TS/TSX (145 files, 204 tests)|
 
 ### Creative Modules
 
-| Module          | Role                                                                                                                                                                                                           | Status    | Scale                             |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------- |
-| **neko-model**  | 3D creation - glTF/VRM viewport + PBR/IBL + particles/post-processing + CSG/text/geometry + skeletal expressions + timeline integration                | Alpha 65% | 3.5K TS/TSX (39 files)            |
-| **neko-sketch** | 2D creation - pressure-sensitive drawing (7 brushes) + filters/particles/scene/pixel/vector + frame-by-frame/skeletal animation + sprite sheets + i18n | Alpha 87% | 13.9K TS/TSX (126 files), 7 tests |
-| **neko-audio**  | Audio workstation - waveform editing + 12 effect chains + spectrum analysis + AI denoising + microphone recording + export                                                                                     | Alpha 95% | 9.2K TS/TSX (54 files), 3 tests   |
-
-### Planned
-
-| Module        | Role                                                                                              | Status     |
-| ------------- | ------------------------------------------------------------------------------------------------- | ---------- |
-| **neko-live** | Virtual production - MediaPipe/VMC motion capture + VRM avatar + RTMP streaming + OBS integration | Planned 5% |
+| Module          | Role                                                                                                                          | Status    | Scale                                         |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------- |
+| **neko-model**  | 3D creation - glTF/VRM viewport + PBR/IBL + CSG + face sculpting + particles + keyframe animation + IK solver                 | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests  |
+| **neko-sketch** | 2D creation - pressure-sensitive drawing (8 brushes) + layers + selection + AI tools + PSD import + .nks format + 2D lighting | Alpha 68% | 31.9K TS/TSX (178 files, 185 tests)           |
+| **neko-audio**  | Audio workstation - DAW UI (TrackHeader/TrackLane/AudioClip) + 12 effect types + spectrum + AI denoising + Agent tools        | Alpha 82% | 11.1K TS/TSX (60 files, 52 tests)             |
+| **neko-puppet** | 2D skeletal animation - Live2D MOC3 clean-room parser + deformers + expressions + motions + physics + 60fps streaming         | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests |
+| **neko-live**   | Virtual production - VMC/VRM real-time driving + 2D puppet integration + recording + device management                        | Alpha 58% | 4.4K TS (34 files, 37 tests)                  |
 
 ---
 
@@ -108,61 +98,120 @@ Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 18 packag
 
 ### 1. Rust Sidecar Engine
 
-Core computation resides in the **neko-engine** Rust standalone process (7 crates), communicating with VS Code via unified HTTP/WS + NAPI, completely solving editor lag issues.
+Core computation resides in the **neko-engine** Rust standalone process (11 crates), communicating with VS Code via unified HTTP/WS + NAPI, completely solving editor lag issues.
 
 ```
 VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
                                                 │
-                                                ├─ wgpu GPU Rendering (25+ WGSL shaders, PBR + IBL + particles + post-processing)
+                                                ├─ wgpu GPU Rendering (20+ WGSL shaders, PBR + IBL + particles + post-processing)
                                                 ├─ FFmpeg Codec (hardware-accelerated VideoToolbox/NVENC/VAAPI)
-                                                ├─ Keyframe Cache + Preloading Optimization
+                                                ├─ DSP Effect Library (mix pipeline with solo/pan)
                                                 ├─ Export Pipeline (GPU export + audio mixer + loudness normalization)
-                                                ├─ runtime-scene 3D Scene (bevy_ecs + glTF/VRM + PBR + physics)
-                                                ├─ runtime-puppet 2D Skeletal (bevy_ecs + inox2d + 60fps WS stream)
-                                                └─ ONNX ML Inference (macOS CoreML acceleration)
+                                                ├─ runtime-scene 3D Scene (bevy_ecs + glTF/VRM + PBR + IK + animation blend)
+                                                ├─ runtime-puppet 2D Skeletal (bevy_ecs + MOC3 + 60fps WS stream)
+                                                ├─ runtime-device Device I/O (cpal + midir + gilrs)
+                                                ├─ runtime-media Media Logic (probe + diff + subtitle)
+                                                └─ runtime-ml ONNX Inference (macOS CoreML acceleration)
 ```
 
-### 2. AI Agent Skills
+### 2. AIGC Agent as the Creation Driver
 
-Users transform natural language into operational commands via **neko-agent**. Supports Claude/OpenAI/Google multi-provider, MCP protocol, Pipeline workflows, sub-agents, AOP hooks, with complete CLI and React UI.
-
-```
-User Intent → neko-agent (LLM + Skills + MCP + Pipeline) → neko-cut/canvas Execution
-```
-
-### 3. WebGPU Rendering Pipeline
-
-Uses wgpu compositor to directly composite video frames, effects, transitions, and color correction in GPU memory. Supports blend modes, custom shaders, and keyframe animation.
+The **neko-agent** is the central nervous system of the IDE. It turns natural language into multimodal creation actions across every surface — timeline, canvas, 3D viewport, 2D sketch, audio workstation — through multi-LLM providers (Claude / OpenAI / Google), MCP tool protocol, multimodal perception, and rich content delivery. Every sub-package exposes its tools via `AgentCapabilityProvider`, so the Agent discovers capabilities dynamically instead of hard-coding them.
 
 ```
-Video Frames + Effects + Transitions → wgpu Compositor → Real-time Preview / GPU Export
+User Intent
+   │
+   ▼
+┌────────────────────────────────────────────────────────────────┐
+│  neko-agent  (LLM + MCP + Perception + Skills + Capability     │
+│               Discovery + Context/Memory)                      │
+└────────────────────────────────────────────────────────────────┘
+   │          │          │          │          │          │
+   ▼          ▼          ▼          ▼          ▼          ▼
+ story     canvas       cut       model     sketch      audio
+(script) (storyboard) (timeline)  (3D)     (2D paint) (DAW)
+```
+
+### 3. Skills Orchestrate Workflows
+
+**Skills** are composable, reusable workflow units — each one bundles a prompt fragment, a set of allowed tools, permission rules, and context budgets. The Agent activates Skills based on intent (via `ActivateSkill` / `DeactivateSkill` meta-tools), and `SkillInjectionCoordinator` atomically injects or removes all four tracks: Prompt → Permission → Guard → ToolSet. Tiered lazy loading (`resident` / `eager` / `lazy`) keeps the baseline at ~8K tokens and grows on demand.
+
+```
+Intent → SkillRegistry → activate(skill)
+                           ├─ Prompt fragment (system prompt section)
+                           ├─ ToolSet (always / dynamic layer)
+                           ├─ Permission rules
+                           └─ Context budget
+                         execute → deactivate → atomic rollback
+```
+
+### 4. Unified Asset Library
+
+A single **asset registry** (neko-assets) feeds every surface: video clips, audio, images, 3D models, 2D puppets, generated AI outputs, and project files. Persistent search index, thumbnails, external media library mounting, and path variable resolution (`${VAR}/path` via `PathResolver` in `@neko/shared`) make the library portable across machines and collaborators. Generated assets from the Agent land on disk as `GeneratedAsset` with JSON references — no base64 bloat, no lost provenance.
+
+```
+Local files / External libraries / Agent-generated
+   │
+   ▼
+┌────────────────────────────────────────────────────────────────┐
+│  neko-assets  (Registry + Thumbnails + Search Index + PathResolver)│
+└────────────────────────────────────────────────────────────────┘
+   │           │          │          │          │          │
+   ▼           ▼          ▼          ▼          ▼          ▼
+ canvas      cut       model     sketch     puppet      audio
+```
+
+### 5. WebGPU Rendering Pipeline
+
+Uses the wgpu compositor to directly composite video frames, effects, transitions, and color correction in GPU memory. Supports blend modes, custom shaders, and keyframe animation.
+
+```
+Video Frames + Effects + Transitions → wgpu Compositor → Real-time Preview
 ```
 
 ---
 
 ## Workflow
 
+Not a linear pipeline — an **Agent-driven closed creation loop** where every turn flows through five planes and feeds the next iteration:
+
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Write → Think → Draw → Sound → Publish                            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  1. Write: Draft screenplays in Fountain format with neko-story     │
-│            ↓                                                        │
-│  2. Think: neko-agent parses scripts via ScenePlan/ShotPlan,        │
-│            orchestrates storyboard → canvas → timeline pipeline     │
-│            ↓                                                        │
-│  3. Draw:  Semantic storyboard import into neko-canvas, edit        │
-│            visuals in neko-sketch in real-time                       │
-│            ↓                                                        │
-│  4. Sound: Record voiceovers in neko-audio, AI auto-denoise         │
-│            and align                                                │
-│            ↓                                                        │
-│  5. Publish: Git commit triggers CI/CD auto-render and publish      │
-│              via neko-assets                                        │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+           ┌──────────────────────────────────────────────────┐
+           │                                                  │
+           ▼                                                  │
+  ① Intent Authoring          Prompt + selected asset + ref  │
+     (user / AGENTS.md /      constraints                    │
+      resident skill)                                        │
+           │                                                  │
+           ▼                                                  │
+  ② Dynamic Orchestration     SkillRegistry activates        │
+     (neko-agent)             Prompt / Tools / Permissions / │
+                              Context; IDC Draft→Plan→Apply  │
+           │                                                  │
+           ▼                                                  │
+  ③ Content Generation        story / canvas / cut / model / │
+     (multimodal surfaces)    sketch / puppet / audio execute│
+                              via MCP + AgentCapabilityProvider
+           │                                                  │
+           ▼                                                  │
+  ④ Quality Check             Pipeline QC: LUFS, multi-frame │
+     (automated review)       visual eval, format validation,│
+                              schema lint, confidence gate   │
+           │                                                  │
+           ▼                                                  │
+  ⑤ Perception Feedback       PerceptionCard (structural /   │
+     (re-grounding)           semantic / perceptual) feeds   │
+                              next intent; evaluator writes  │
+                              to memory / project cards      │
+           │                                                  │
+           └──────────────► back to ① (closed loop)
 ```
+
+- **Intent Authoring** — user prompt, conversation context, resident skills, AGENTS.md overlay, project-level memory
+- **Dynamic Orchestration** — Skill activation atomically injects Prompt / ToolSet / Permission / Guard; IDC 3-stage (Draft → Plan → Apply) for non-trivial work
+- **Content Generation** — cross-surface execution (timeline / canvas / 3D / 2D / audio) via MCP and `AgentCapabilityProvider`
+- **Quality Check** — Pipeline adapters verify audio loudness, visual consistency across frames, schema validity, and confidence thresholds; failures trigger retry or human review
+- **Perception Feedback** — `PerceptionCard` re-grounds the Agent on actual artifact state (not assumed state); results close the loop into the next Intent
 
 ---
 
@@ -174,15 +223,18 @@ neko-suite/
 │   ├── neko-suite/            # Extension Pack portal
 │   ├── neko-engine/           # Rust Sidecar media engine
 │   │   └── packages/
-│   │       ├── engine-kernel/   # Rust core (wgpu/codec/export/ONNX ML)
-│   │       ├── host-api/    # HTTP API routing layer
-│   │       ├── host-http/   # Axum HTTP service
-│   │       ├── host-napi/   # Node.js NAPI bindings
-│   │       ├── host-cli/    # CLI entry point
-│   │       ├── runtime-scene/  # Rust 3D scene ECS (bevy_ecs + glTF)
-│   │       ├── runtime-puppet/ # Rust 2D skeletal ECS (bevy_ecs + inox2d + bevy_animation)
-│   │       ├── types/         # Rust shared types
-│   │       └── extension/     # TS VSCode extension side
+│   │       ├── engine-kernel/   # Rust core (wgpu/codec/DSP/export)
+│   │       ├── engine-types/    # Shared Rust DTO types
+│   │       ├── host-api/        # HTTP API routing layer
+│   │       ├── host-http/       # Axum HTTP service
+│   │       ├── host-napi/       # Node.js NAPI bindings
+│   │       ├── host-cli/        # CLI entry point
+│   │       ├── runtime-scene/   # 3D scene ECS (bevy_ecs + glTF + IK)
+│   │       ├── runtime-puppet/  # 2D skeletal ECS (bevy_ecs + MOC3)
+│   │       ├── runtime-device/  # Device I/O (cpal/midir/gilrs)
+│   │       ├── runtime-media/   # Media logic (probe/diff/subtitle)
+│   │       ├── runtime-ml/      # ML inference (ONNX Runtime)
+│   │       └── extension/       # TS VSCode extension side
 │   ├── neko-cut/              # Video editor
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side
@@ -238,12 +290,12 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nks)
 │   │       └── webview/       # React 18 + WebGL2 UI
-│   ├── neko-puppet/           # 2D skeletal animation (Inochi2D puppet editor)
+│   ├── neko-puppet/           # 2D skeletal animation (Live2D MOC3 + INP puppet editor)
 │   │   └── packages/
-│   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nkp/.inp)
+│   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nkp/.inp/.moc3)
 │   │       └── webview/       # React 18 + EngineClient UI
-│   ├── neko-live/             # Virtual production (Planned)
-│   ├── neko-types/            # Shared types + Logger + i18n + Theme
+│   ├── neko-live/             # Virtual production (VMC + VRM + recording)
+│   ├── neko-types/            # Shared types + Logger + i18n + Theme + entity-uri
 │   └── neko-proto/            # Protocol definitions (Protobuf IDL)
 ├── docs/                      # Architecture documentation
 ├── package.json               # Root package.json (pnpm workspaces)
@@ -272,35 +324,14 @@ neko-suite/
 
 ## Supported Media Formats
 
-| Type             | Formats                                     |
-| ---------------- | ------------------------------------------- |
-| **Video**        | MP4, MOV, AVI, MKV, WebM, M4V               |
-| **Audio**        | MP3, WAV, OGG, FLAC, AAC, M4A               |
-| **Image**        | PNG, JPG, JPEG, GIF, WebP, BMP, SVG         |
-| **3D Model**     | glTF, GLB, VRM, .nkm                        |
-| **2D Animation** | INP (Inochi2D), .nks (Neko Sketch)          |
-| **Project**      | .nkv (Video project), .nkc (Canvas project) |
-
----
-
-## Installation
-
-### Option 1: Full Installation (Recommended)
-
-Install `Neko Suite` to get all features:
-
-```
-ext install neko.neko-suite
-```
-
-### Option 2: Install Individually
-
-Install sub-extensions based on your needs:
-
-- **Editing only**: `neko-cut` + `neko-engine`
-- **AI only**: `neko-agent`
-- **Preview only**: `neko-preview` + `neko-engine`
-- **Audio only**: `neko-audio` + `neko-engine`
+| Type             | Formats                                                                   |
+| ---------------- | ------------------------------------------------------------------------- |
+| **Video**        | MP4, MOV, AVI, MKV, WebM, M4V                                             |
+| **Audio**        | MP3, WAV, OGG, FLAC, AAC, M4A                                             |
+| **Image**        | PNG, JPG, JPEG, GIF, WebP, BMP, SVG                                       |
+| **3D Model**     | glTF, GLB, VRM, .nkm                                                      |
+| **2D Animation** | MOC3 (Live2D), INP (Inochi2D), .nkp (Neko Puppet)                         |
+| **Project**      | .nkv (Video), .nkc (Canvas), .nka (Audio), .nkm (3D Model), .nks (Sketch) |
 
 ---
 

@@ -11,123 +11,62 @@
 
 > Goal: Stability + core experience + AI capability completion
 
-### ✅ Sprint 1 Complete (2026-04-06)
+<details>
+<summary>✅ Sprint 1-3 Complete (2026-04-06 → 2026-05-07)</summary>
 
-- [x] **neko-agent**: `puppetFaceTools.ts` `readFileSync` → `fs.promises.readFile`
-- [x] **neko-engine**: HTTP global admission `Semaphore(8)` + codec `Semaphore(4)` + GPU `Semaphore(2)` + `ServiceOverloaded` 503 error code
-- [x] **neko-assets**: Search L0 persistent index (`.neko/.cache/search-index.json` + FileSystemWatcher incremental updates) + QuickPick type filter buttons (5 categories) + MAX_RESULTS 50→200
-- [x] **neko-preview**: EPUB outline TreeView (`EpubOutlineProvider` depth→hierarchical tree + Explorer sidebar + `neko.epubEditorActive` context-controlled visibility)
-- [x] **neko-cut**: AI actions `ai-background-remove` + `ai-smart-crop` (delegated to neko-agent cloud AI, reusing the `generateForNode` pattern)
-- [x] **Cross-module**: DragDropBroker (Agent `dnd:start` → Extension payload staging → Canvas/Cut `dnd:drop` → `importAsset`/`importGeneratedClip`; `ImageGridCard` draggable)
+**Sprint 1** (2026-04-06): Agent async I/O + Engine Semaphore + Assets search index + EPUB outline + Cut AI actions + DragDropBroker
 
-### ✅ Sprint 2 Complete (2026-04-09)
+**Sprint 2** (2026-04-09): Canvas P0-1~P0-5 convergence + CanvasEmbedNode + NodeRendererRegistry + Story scene state + Agent Fountain pipeline
 
-- [x] **neko-canvas**: P0-1~P0-5 fully converged — `nodes.update`/`nodes.create` protocol unified + message channel encapsulation + result review closed loop (`generationHistory.selected`) + `SceneGroupNode` upgraded to semantic container (shot management/ordering/auto-layout/batch generation) + creation entries covered (script/document/model/canvas-embed picker + drag-in)
-- [x] **neko-canvas**: P1-1 `CanvasEmbedNode` minimal landing (type + outline + webview rendering + picker entry)
-- [x] **neko-canvas**: P1-4 `NodeRendererRegistry` first round landing (replaced core render dispatch hardcoding; new node types extensible via registry)
-- [x] **neko-canvas**: Asset proxy boundary converged (restricted proxy impl + `timelineSync` minimal write-back contract)
-- [x] **neko-story**: Scene workflow state persistence (`StorySceneStateStore` + `workspaceState` cross-session) + semantic storyboard pipeline entry `neko.story.startVideoCreation` + scene/shot planning tools + canvas handoff
-- [x] **neko-agent**: Fountain pipeline routed through scene planning + semantic storyboard canvas import pipeline
+**Sprint 3** (2026-05-07): Agent perception/delivery/hardening/dead-code/restructuring + Canvas thumbnails + Model 3D fixes + Sketch PSD + Market governance + Engine log levels + Types contracts + Client perception facade
 
-### ✅ Sprint 3 Complete (2026-05-07)
-
-- [x] **neko-agent**: Multimodal perception pipeline — PerceptionCard three-layer intermediary + Agent-first feedback signals + perception tools + persona + observation recorder + journal events + ControlPlane wiring + EngineClient perception facade
-- [x] **neko-agent**: Rich content delivery to creative tools (Canvas/Cut/Model/Puppet/Explorer structured payload projection)
-- [x] **neko-agent**: Runtime workflow hardening — boundary guards + evaluation harness + feedback loops closure + runner boundary adapter hardening + capability injection state bounding + video quality evidence foundation
-- [x] **neko-agent**: Dead code cleanup — 13 commits removing unused bridges/routes/messages (marketplace opener, config bridge, MCP test protocol, generation progress bridge, connection state bridge, skill task actions, webview control protocols)
-- [x] **neko-agent**: Domain logic restructuring — runtime modules + platform services + webview/runtime contract separation + shared presenter/helper consolidation
-- [x] **neko-canvas**: Scene-shot thumbnail mode + management UI; managed shots hidden from minimap
-- [x] **neko-model**: 3D rendering pipeline fixes (multi-mesh models, GPU validation, stream lifecycle) + viewport orbit/pan/zoom controls + quality flickering fix + full i18n
-- [x] **neko-model**: 3D engine rendering control plane implementation
-- [x] **neko-sketch**: PSD import (`extension` PSD import + AI bridge) + webview AI painting tools + shared sketch contracts + `.nks` migration
-- [x] **neko-market**: Plugin governance hardening + registry contract alignment
-- [x] **neko-types**: Shared contracts: `device.ts` + `tracking.ts` + `preview.ts`
-- [x] **neko-client**: EngineClient perception facade + capture helpers
-- [x] **neko-engine**: Configurable log level via `neko.logLevel` VSCode setting + `audios:segment` action for time-range audio export
-- [x] **neko-shared**: File drop overlay fix (prevent internal node drag from triggering file drop overlay)
+</details>
 
 ### ⏳ Sprint 4 — Active (WIP in working tree)
 
 - [ ] **Device Management System** ([ADR](./docs/architecture/adr-device-management.md)):
-  - [ ] TS device clients in `neko-client/src/device/` (GamepadClient / MidiClient / MicrophoneClient / CameraClient)
   - [ ] Engine device binding service (`device_binding.rs`)
   - [ ] Extension-level device providers (`neko-engine/packages/extension/src/device/`)
   - [ ] neko-live TrackingService extraction + LiveSessionService
   - [ ] neko-puppet Live Mode (`packages/extension/src/live/`)
   - [ ] neko-model Live Mode (`packages/extension/src/live/`)
   - [ ] Native VSCode UI (TreeView / QuickPick / StatusBar)
-- [ ] **Panoramic Image Preview** ([ADR](./docs/architecture/adr-panoramic-image-preview.md)):
-  - [ ] `PanoramicImagePreviewProvider` + `PanoramicVideoPreviewProvider`
-  - [ ] Panoramic routing (equirectangular detection + projection type)
-  - [ ] Panorama webview (sphere mesh + equirect shader + orbit controls)
-  - [ ] Preview manifest client
-  - [ ] Engine-first routing for HDR/EXR files
-  - [ ] Shared preview types (`@neko/shared/types/preview.ts`)
+- [ ] **neko-engine**: Interface + pipeline decoupling ([ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md) — in progress)
 
 ### To Do
 
-### neko-cut (Video Editing) — P0-1: Field Consistency
+### neko-cut (Video Editing)
 
-> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — Scores: basic editing 8/10, complete workflow 6.5/10.
+> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — Scores: basic editing 8/10, complete workflow 6.5/10. P0-1 field consistency closed.
 
-- [x] **Transition field naming unification**: `transitionIn/transitionOut` as canonical fields; legacy `inTransition/outTransition` retained for read-compat
-- [x] **Effects export chain**: `effects / colorCorrection / masks` export conversion complete (EffectInstance→EffectParams + mask shape validation + animation baseValue fallback)
-- [x] **Edit/Preview/Export field consistency**: element `speed/reverse/timeRemap` consistent across pause/playback/export; global `playbackSpeed` vs element-level `speed` layering clarified
 - [ ] Export round-trip test suite: edit → preview → export → reimport consistency check
 
-### neko-canvas (Storyboard) — Convergence Enhancements
+### neko-canvas (Storyboard) — P2 Enhancements
 
-> [ADR](./docs/architecture/canvas-role-boundary.md) — P0 fully converged; entering P1 enhancement phase.
+> [ADR](./docs/architecture/canvas-role-boundary.md) — P0 fully converged; P1 complete (block container + composable presets + video container + node cards).
 
-- [x] Scene-shot thumbnail mode + management UI; managed shots hidden from minimap
 - [ ] Continue converging peripheral bridge interfaces (keep `nodes.update/create` unified contract stable)
 - [ ] Message semantic refinement (new message types extend tool layer first, not direct global object access)
 - [ ] Batch candidate comparator + stronger review UI experience
-- [x] `NodeRendererRegistry` extension: metadata, icons, default sizes, property panel schema converge into registry
 - [ ] `asset` namespace boundary cleanup: push `neko-assets` to provide formal extension API, replace command-level proxy
 - [ ] **Block + Container Phase 2 layout**: upgrade the current deterministic row-major/grid layout to aspect-ratio-aware packing while preserving policy-driven layout, `lockedChildIds` avoidance, absolute coordinates, and container-boundary semantics
 
-### neko-agent (AI Assistant) — P0-2: Webview Architecture
+### neko-agent — IDC Unified Workflow (Remaining)
 
-> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — Score 7.5/10. Top-level controller bloat + weak message contracts.
+> [ADR](./docs/architecture/agent-unified-workflow.md) — Phase A + B + B-closure + §11.6 six-plane + §11.6.9 evaluator boundary all complete ✅. See archive for details.
 
-- [x] **Decompose `AIAssistant` component** (~589 lines) → `AppShell` + `ConversationController` + `ChatWorkspace`
-- [x] **Unify outbound message gateway**: all Webview→Extension through `VSCodeMessages` builder; prohibit direct `vscode?.postMessage(...)` in component code; retrofit `SendToMenu.tsx`, `TaskCard.tsx`, etc.
-- [x] **Strengthen inbound message types**: define `ExtensionToWebviewMessage` discriminated union; update `MessageHandler`/`MessageHandlerRegistry` signatures for compile-time safety
+- [ ] **P1** — AI 自评三件套落地（§11.6.9）：① 可见性 ② 引导（persona 补"可选自评"章节）③ 积累（`CreativeMemoryHooks` self-eval 条目）
+- [ ] **P1** — `ExecutionMode 'ask'` vs `StageMode 'ask'` decoupling (permission/IDC boundary redesign)
+- [ ] **P1** — `git rm --cached packages/neko-agent/neko` (65MB arm64 binary tracked by accident)
+- [ ] **P2** — `.nksession.md` session summary (requires Journal/ConversationRecord/compact/memory unification)
+- [ ] **P2** — `.neko/cache/*.json` derived indices (gated by UI-side query need)
+- [ ] **P3** — 154 pre-existing TS errors (MCPTool/BashTool parameters mismatch)
+- [ ] **P3** — 5 pre-existing `fileOperationHandler.test.ts` failures (vscode mock divergence)
 
-### neko-agent — IDC Unified Workflow (Phase A + B + B-closure complete ✅, 2026-04-22)
+### neko-agent — Workflow Orchestration (Remaining)
 
-> [ADR §4 revision](./docs/architecture/agent-unified-workflow.md) — 4-stage (specify/plan/tasks/implement) collapsed to 3-stage (draft/plan/apply); dedicated DraftWrite/PlanWrite/TaskWrite tools replaced by generic Write + ArtifactValidator + ArtifactWatcher.
+> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md) — Phase 1-6 + R1-R6 decoupling all complete ✅. See archive for details.
 
-- [x] **Phase A** — stage rename (specify/implement→draft/apply; tasks merged into plan); artifact rename (Proposal→Draft, TodoList→Task); file convention (`.nkproposal.md`/`.nktodo.md` extensions → `<kind>-<runId>.md` prefix under `.neko/drafts|plans|tasks/`); ExecutionPlan.proposalId→draftId; EventBus channel proposal-review→draft-review, creation.proposal.presented→creation.draft.presented, execution.todo.updated→execution.task.updated (commit c5d6f993)
-- [x] **Phase B** — delete DraftWriteTool/PlanWriteTool/TaskWriteTool; AI uses generic Write against `.neko/drafts|plans|tasks/*.md`; add `artifact/artifact-validator.ts` (pure frontmatter schema check) + `artifact-watcher.ts` (fs.watch + 300ms debounce + EventBus emit); new events `execution.artifact.written` / `execution.artifact.invalid`; AgentSession constructor + dispose wired (commit c5d6f993)
-- [x] **Phase B closure** — `artifact-observation-hooks.ts` (ExecutorHooks subscribes to `artifact.invalid`, buffers issues, drains into system message on `beforeThink` — closes the AI self-correct loop); narrator `milestone-tracker.defaultClassify` + progress-narrator icons cover artifact.\*; `StagePersonaBinding.getRunId` substitutes `{runId}`/`{stage}` in persona systemPrompt at activation (commit b1cc3f71)
-- [x] **End-to-end integration test** — `artifact-loop.integration.test.ts` (4 cases: bad→injection / good→silent / kind-mismatch / rewrite-cycle) proves Write→Watcher→Validator→Bus→ObservationHooks→beforeThink on real fs with cross-platform fallback (commit af66f456)
-- [x] **§11.6 约束分级原则** — ADR formalises four-tier constraint spectrum (Schema/Prompt/Runtime/Evaluator) + Tool/Operation sub-division of Schema + 6 anti-patterns + 5-step decision checklist. Future intent / validator / drift work all classify against this taxonomy
-- [x] **§2 双视角重构（2026-04-23，方案 B 彻底倒置）** — original §2 "Four-layer integrated architecture" opened with L3/L2/L1/L0 implementation details, unfriendly to PM / user / newcomer audiences. Restructured to **"Architecture Overview (Dual View)"**: §2.1 responsibility view (intent/orchestration/execution/control) becomes the primary entry point, §2.2 implementation view (L3/L2/L1/L0) moved down, §2.3 18-component cross-reference table spanning three views (implementation / responsibility / constraint from §11.6), §2.4 decision guide for which view to use in which discussion. Fixed stale "SDD 4 阶段" → "IDC 3 阶段 (Draft → Plan → Apply)" in the stack diagram and collapsed L1 capability listing from 8 historical kinds to `Skill / Tool / Operation` per §5.1 CapabilityKind union. Readers now encounter "what the Agent does" before "how the code is stacked"
-- [x] **§11.6 六层扩展（2026-04-23）** — taxonomy expanded from 4 to 6 layers. Added **Memory** (`~/.claude/.../memory/`, `.neko/memory.md`, CreativeMemoryHooks, 7-tier compression, SharedMemoryStore) and **Policy** (preferences.md, preferencesStrategyPack, Skill.compliance, allowedTools, requiredSubpackages, Operation.costProfile) as first-class control planes. Mnemonics: Prompt "说什么" / Schema "长什么样" / Runtime "什么时候做" / Policy "能不能做" / Memory "记得什么" / Evaluator "做得好不好". Added trigger-order timing diagram (Policy gate → Memory I/O → Prompt·Schema·Runtime pipeline → Evaluator), 5 more anti-patterns (11 total), 7-question decision checklist, compliance audit extended to cover Memory/Policy rows, dedicated Memory-vs-Prompt and Policy-vs-Runtime disambiguation tables
-- [x] **§11.6.9 Evaluator 建设边界（2026-04-23，AI 原生自评优先）** — withdrew previously-proposed `IntentValidator` / explicit `DraftToPlanCompiler` / `IntentDriftDetector` components. All three embody **subjective creative judgment** (intent fulfilment, compile strategy, drift impact). AI in persona context is already the judgment engine; wrapping another LLM-as-judge duplicates native capability and violates §11.5 "AI-native execution". §11.6.9 defines the build/don't-build line: **deterministic metrics** (CLIP similarity, FPS, resolution, duration, format, consistency IoU) → build Evaluator components; **subjective judgment** (intent fulfilment, aesthetics, pacing, style match, intent drift, Plan recompile) → delegate to the Agent self-evaluation triad: ① visibility (`.neko/drafts/` versions + outputs + steps.jsonl + Memory all reachable in context), ② guidance (persona prompt describes evaluation timing as optional, not mandatory), ③ accumulation (`CreativeMemoryHooks.afterAct` captures self-eval conclusions; next turn's `beforeThink` replays them). Follow-on work lives under P1 below ("AI self-evaluation triad")
-- [ ] **P1** — AI 自评三件套落地（§11.6.9）：① 可见性（确保 `.neko/drafts/` 历史版本可 Glob 发现、当前产物路径被 persona prompt 引导可读 + steps.jsonl observation 摘要注入）② 引导（creation-persona / execution-persona 补"可选自评"章节：读 Draft.intent 对照产物，发现偏离时主动报告）③ 积累（`CreativeMemoryHooks` 新增 self-eval 条目类型，afterAct 抽取、beforeThink 注入）。不新建 Evaluator 组件
-- [ ] **P1** — `ExecutionMode 'ask'` vs `StageMode 'ask'` decoupling (current: StageMode shadows ExecutionMode which has per-tool-confirm UX; need permission/IDC boundary redesign)
-- [ ] **P1** — `git rm --cached packages/neko-agent/neko` (65MB arm64 binary tracked by accident; .gitignore rule already added)
-- [ ] **P2** — `.nksession.md` session summary (§7.4 ⏳) — requires E wave: Journal/ConversationRecord/compact/memory unification
-- [ ] **P2** — `.neko/cache/*.json` derived indices (draft-index.json consuming `artifact.written` events) — gated by UI-side query need
-- [ ] **P3** — 154 pre-existing TS errors (MCPTool/BashTool parameters mismatch, ToolParameters shape drift — predates the IDC refactor, independent cleanup)
-- [ ] **P3** — 5 pre-existing `fileOperationHandler.test.ts` failures (vscode mock divergence, unrelated to IDC refactor)
-
-### neko-agent — Workflow Orchestration (Phase 1-6 complete ✅; 6 rounds of decoupling review ✅)
-
-> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md) · progress see ROADMAP neko-agent section
-
-- [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5
-- [x] **Phase 2** `.nkplan` persistence + Plan state machine + ConsistencyChecker v1
-- [x] **Phase 2.5** Fork + Diff + Checkpoint pause + PlanBrowser
-- [x] **Phase 3 + 3.5** LLM Router + ask_user broker + router-memory inspector UI
-- [x] **Phase 4.1 + 4.3a** L3/L4 TS stubs + NodeEmbeddingCache
-- [x] **Phase 5.1-5.4b, 5.4c-stub, 5.4d** Reference chain end-to-end (builder → nkplan → canvas → pipeline → batch-generate + render-engine stage)
-- [x] **Phase 6.1/6.2/6.3a/6.3b** `.nkproj` Format SDK + Lossless Upgrade primitives + Clip.lineage (proto) + ShotNode.workflowPlanId (canvas) + bootstrap wiring
-- [x] **Governance C1/C2** orchestrator flag default on + legacy `@deprecated` markers
-- [x] **R1-R6 Decoupling** (6 review rounds, 2026-04-19): approve dispatches user-reviewed plan; plan.input + plan.matchingShots persisted for self-sufficient fork/reload; WorkflowPlanCapabilities contract; legacy-fork clean rejection; WorkflowPlanHandler split into 4 sub-controllers + plan-wire/; ReviewOrchestrator narrow port + Shot/NkplanShot compile-time compat check
 - [ ] **P2 Rust milestone**: Phase 4.2 CLIP napi + 4.3b model distribution + 5.4c-rust Puppet/Scene adapters + 5.4e bootstrap registration (~8-12 person-days; requires Rust toolchain)
 - [ ] **P2 Governance C3/C4**: `.nkproj` observation telemetry + legacy command usage funnel
 - [ ] **P2 Governance C5**: Plan Diff viewer webview menu entry
@@ -142,6 +81,9 @@
 - [x] **3D rendering control plane** — engine-side rendering control implementation
 - [x] **`audios:segment` action** — time-range audio export for perception pipeline
 - [x] **Configurable log level** — `neko.logLevel` VSCode setting
+- [x] **DSP effect library** — AudioEffect trait + EffectChain + EffectFactory + 14 effects (biquad/parametric EQ/compressor/noise gate/limiter/reverb/delay/chorus/distortion/gain)
+- [x] **Mix pipeline upgrade** — MixdownTrack (pan/solo/volume/effect_chain) + MixdownElement (pan/fade/gain) + solo-aware mix + master effects
+- [ ] **Interface + pipeline decoupling** ([ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md)) — PipelineSink output adapters + effect registry + GPU budget control + ML bridge
 - [ ] **Device binding service** (WIP) — `device_binding.rs` for unified device I/O
 - [ ] New actions: `documents:text-extract` / `models:clip-embed` / `text:stats` (not yet in the action registry)
 - [ ] Integrate `effects:register` / `models:register` into unified plugin lifecycle (PluginManager P1 follow-up)
@@ -252,7 +194,6 @@
 
 ### neko-cut
 
-- [x] **PuppetElement + puppet track**: PuppetElement 类型 (src/animationClip/expression/parameterOverrides) + 'puppet' TrackType + Rust ElementType::Puppet + TimelineElementContent UI
 - [ ] **runtime-puppet → GpuLayer 桥接**: engine-kernel 中 runtime-puppet 渲染到 RGBA 纹理 → GpuLayer, 插入 gpu_export_pipeline ③④ 之间 — 实现 2D+3D+视频同管线合成
 - [ ] **Camera Keyframe Track**: 摄像机关键帧轨道 (position/target/fov 随时间插值) + 预设运镜模板 (推拉摇移跟升降) — 支持 3D 场景运镜直出视频
 - [ ] **NPR 后处理 (3 渲 2)**: Cel Shading (色阶化光照) + Outline (描边, 法线/深度边缘检测) compute shader — 支持 3D 人物 + 2D 场景风格统一
@@ -260,33 +201,18 @@
 - [ ] AI action `ai-match-music`: FFT 峰值检测 + onset strength 节拍分析 → 剪辑点自动对齐音乐节拍 — [技术路径](./docs/architecture/ai-technology-landscape.md#neko-cut-video-editing)
 - [ ] **Slip / Slide / Roll edit**: professional-grade ripple editing (cross-track rules + mode toggle)
 - [ ] **Native composite protocol**: text / subtitle / shape currently use Webview overlay; migrate to engine composite pipeline
-- [x] **Subtitle system consolidation**: subtitle track/element unified data model; PropertyPanel + inline SubtitlePanel dual entry; .srt/.vtt/.ass drag-in creates subtitle track
-- [x] **Pause-time composite expansion**: text/subtitle/shape via Webview overlay; scene3d retains engine seek frame
-- [x] **Asset library integration**: main workspace left dock panel (Assets + Subtitles tabs)
-- [x] **Ripple editing completeness**: ripple covers delete/insert/paste/trim(trimToPlayhead)/split/same-track drag; remaining: multi-select combo + insert/overwrite mode toggle + left-trim/cross-track drag edge rules
 - [ ] **Advanced time editing**: visual speed curve / time remap UI / slip-slide-roll edit
 
 ### neko-story
 
-> [ADR](./docs/architecture/story-agent-canvas-boundary.md) — Story-Agent-Canvas Pipeline
+> [ADR](./docs/architecture/story-agent-canvas-boundary.md) — Story-Agent-Canvas Pipeline. All P0/P1 complete (ScriptIndex + storyboard table + scene planning + video readiness).
 
-- [x] **ScriptIndex upgrade**: stable `sceneId` + `sceneTitle`/`location`/`timeOfDay` + `sceneCharacters[]` + `actionSummary` + `estimatedDuration`
-- [x] **Lightweight storyboard table**: `ScriptTableView` with Agent/Canvas status columns + scene-level action buttons
-- [x] **Two code paths**: Path A mechanical + Path B semantic (story→agent→canvas ShotPlan); `flowF` standard entry via `neko.story.startVideoCreation`
-- [x] Agent tools: `GetScriptIndex` + `SearchScriptIndex` + `GenerateScenePlan` / `GenerateShotPlan`
-- [x] Upgrade `import_script_to_canvas` to semantic ShotPlan import via `createStoryboardPayload` / `applyStoryboardPayloadToCanvas`
-- [x] **Scene workflow state persistence**: `StorySceneStateStore` as unified source of truth + `workspaceState` cross-session persistence + pipeline event state write-back
 - [ ] Upgrade `canvasStatus = opened` from button-driven to canvas real-time event write-back
 
 ### neko-agent
 
 - [ ] MCP reconnection backoff (exponential backoff + circuit breaker)
 - [ ] **P1-1: Pipeline media landing unification** — `MediaGeneratorAdapter` returns remote URLs; chat main path saves locally + indexes assets. Need shared `MediaPersistenceService` or adapter-level alignment
-- [x] **CapabilityProvider context extension** — extended `AgentCapabilityContext` with `mediaService`/`configManager`/`embedFn`; all sub-packages migrated
-- [x] **Multimodal perception pipeline** — PerceptionCard + Agent-first feedback signals + perception tools + observation recorder + journal events + ControlPlane
-- [x] **Rich content delivery** — structured payload projection to Canvas/Cut/Model/Puppet/Explorer
-- [x] **Runtime workflow hardening** — boundary guards + evaluation harness + feedback loops + runner boundary adapters + capability injection bounding + video quality evidence
-- [x] **Dead code cleanup** — 13 unused bridge/route/message removals + domain logic restructuring into runtime modules
 - [ ] **4 TODO(P1) Generation Tools** — remaining model capabilities: `GenerateCharacter` / `TransferStyle` / `EnhanceVideo` / `OptimizeAudio`
 - [ ] **Zustand state management migration**: replace hook/ref architecture with Zustand stores (conversation, UI, config, resources, skills, context); align with neko-cut/canvas/model Webview pattern
 - [ ] **Subdivide `InputAreaContext`** → `ModelContext` + `MentionContext` + `GenerationContext` to reduce re-render blast radius
@@ -379,18 +305,22 @@
 
 ### neko-audio (Audio Workstation)
 
+- [x] DAW UI overhaul: TrackHeader (solo/mute/volume/pan/color) + TrackLane (resize) + AudioClip (drag/resize/split) + TransportBar (record/loop/BPM/zoom)
+- [x] Agent integration: TOOL_NAMES_AUDIO (18 tools) + AgentCapabilityProvider + AudioToolBridge
+- [x] Presets + keyboard shortcuts
 - [ ] Enhanced test coverage (currently 78 tests; core features complete)
 
-### neko-audio — P0 Multi-Track Editing
+### neko-audio — P0 Multi-Track Editing (Remaining)
 
 > [ADR](./docs/architecture/neko-audio-workstation-assessment.md)
 
+- [x] Clip drag / move / trim handles
+- [x] Track Header Strip (solo / mute / volume / pan)
+- [x] Split at playhead
 - [ ] Marker lane UI and editing
-- [ ] Clip drag / move / trim handles
 - [ ] Inspector panel integration
-- [ ] Track Header Strip (arm / solo / monitor / meter / routing)
 - [ ] Recording closure (auto-insert to track with review dialog)
-- [ ] Split / range selection / fade handles
+- [ ] Range selection / fade handles
 - [ ] Snap / grid / loop controls
 
 ### neko-audio — P1 Light Workstation
@@ -412,7 +342,8 @@
 
 ### neko-sketch (2D Painting)
 
-- [x] **PSD Import + AI Bridge** — extension PSD import + webview AI painting tools + shared sketch contracts + `.nks` format migration
+> PSD Import + AI Bridge complete ✅. See archive.
+
 - [ ] **Transform tool implementation**: rotation/scale/skew (currently UI shell only)
 - [ ] S.4 P2: `style_transfer` / enhanced cross-module integration
 
@@ -455,33 +386,23 @@
 
 ### neko-puppet (2D Skeletal Animation)
 
-- [x] **Live2D (.moc3) import support** — clean-room implementation (Phase 0-5 complete, 2026-04-14)
-  - [x] Phase 0: Remove inox2d ghost dependency (RUSTSEC-2022-0081 resolved)
-  - [x] Phase 1: Self-built MOC3 binary parser + loader + 1D key form interpolation
-  - [x] Phase 2: WarpDeformer (bilinear grid) + RotationDeformer (pivot rotation)
-  - [x] Phase 3: Expression (.exp3.json) + Motion (.motion3.json → AnimationClip) + Physics (.physics3.json → SimplePhysics)
-  - [x] Phase 4: Extension .moc3 file type registration + webview drag-drop + i18n
-  - [x] Phase 5: Face tracking mapping enhancement (ParamBody/Breath/Cheek/EyeSmile + LIVE2D_PARAM_ALIASES)
+> MOC3 Phase 0-5 complete ✅ (clean-room parser/deformers/expressions/motions/physics + motion3/exp3 export). See archive.
+
 - [ ] **Phase 6**: AI-assisted puppet creation — `PuppetListExpressions` + `PuppetSetExpression` agent tools, template import UI ([plan](./docs/development/neko-puppet-moc3-support.md#phase-6))
 - [ ] **Phase 7**: VTube Studio API compatibility — WebSocket endpoint for VTS plugin interop ([plan](./docs/development/neko-puppet-moc3-support.md#phase-7))
 - [ ] Export functionality: MOC3 writer (currently read-only editor; INP format deprecated — legacy read-only support retained)
-- [x] **motion3/exp3 标准格式导出**: `serialize_motion3()` + `serialize_expression3()` + `export_motion3`/`export_expression3` API actions (round-trip tested)
 - [ ] **2D 可复用动作资产**: 独立表情/动作预设集 (存 Live2D 标准参数名) — 支持跨 MOC3 模型复用 + marketplace 分享
 - [ ] Advanced physics: cloth constraints + collision detection
 - [ ] × neko-live deep integration: Puppet as real-time VTuber avatar driver
 
 ### neko-model (3D Editing)
 
-- [x] **3D rendering pipeline fixes** — multi-mesh models, GPU validation, stream lifecycle
-- [x] **Viewport orbit/pan/zoom controls** + quality flickering fix
-- [x] **Full i18n** — all hardcoded strings replaced with vscode.l10n.t()
-- [x] **3D engine rendering control plane** — engine-side rendering control implementation
+> 3D rendering pipeline + viewport + i18n + control plane + glTF animation export + VRM BlendShape export all complete ✅. See archive.
+
 - [ ] IK UI exposure: backend 482-line FABRIK is complete; needs frontend TransformGizmo interaction
 - [ ] Undo/Redo state machine
 - [ ] AI MCP Tools: `face.generate_params` / `face.from_image` / `face.adjust`
 - [ ] Phase 3.5: Blender MCP bridge / 3DGS loader / rapier3d physics
-- [x] **glTF animation 回写**: `exporter.rs` animation channel 导出 (samplers + channels + accessors, 覆盖 Translation/Rotation/Scale/MorphWeights)
-- [x] **VRM BlendShape preset 元数据导出**: `build_vrm_extensions()` VRMC_vrm 1.0 (preset/custom 分类 + extras.defaultWeight); morphTargetBinds 为空 — 需 loader 扩展存储 morph target name→index 映射后补全
 - [ ] **3D 可复用动作资产**: 独立动画资产格式 (存 VRM Humanoid bone name 而非 node ID) + 骨骼重定向 retargeting — 支持动作跨 VRM 模型复用 + marketplace 分享
 - [ ] **PBR 材质体系完善**: `CharacterBundle.textures` 字段支持 albedo/normal/roughness/emission/subsurface 通道；`materialOverrides` 运行时参数覆盖（不修改原始文件）
 - [ ] **PBD 布料 compute shader** (Stage 4+): engine-kernel wgpu compute pass，distance + bend + collision constraints，mesh vertices GPU buffer 直接更新，插在 GPU Skinning pass 之前
@@ -747,8 +668,21 @@
 - **neko-types**: device.ts + tracking.ts + preview.ts shared contracts
 - **neko-client**: EngineClient perception facade + capture helpers
 
+### ✅ Sprint 4 (2026-05-08 → 2026-05-12, in progress)
+
+- **neko-engine**: DSP effect library (14 effects) + mix pipeline with effects/solo/pan
+- **neko-audio**: DAW UI overhaul (TrackHeader/TrackLane/AudioClip/TransportBar) + Agent tools (18 tools) + presets + keyboard shortcuts
+- **neko-canvas**: Block container architecture + composable presets migration + video container type + generic container node cards + content overlay + legacy node path removal
+- **neko-story**: 5-column storyboard table + character badge interactions + StoryVideoReadinessService + storyboard execution summary
+- **neko-client**: MediaPlaybackService (unified playback) + device clients (GamepadClient/MidiClient/CameraClient/DeviceManager)
+- **neko-types**: entity-uri module + storyboard-readiness types + storyboard execution summary + remove legacy nkplan/nkproj
+- **neko-agent**: Traceability + session boundaries hardening + creative entity asset composition
+- **neko-preview**: Engine-first panoramic preview + fix pause black screen + fix double data-URL prefix
+- **Storage**: Split project facts (neko/) from local data (.neko/)
+- **neko-tools**: JVI LSP provider fixes (definition/hover/reference/diagnostics)
+
 </details>
 
 ---
 
-_Last updated: 2026-05-07 (Sprint 3 complete: Agent perception/delivery/hardening + Canvas thumbnails + Model 3D fixes + Sketch PSD + Market governance. Sprint 4 active: Device management + Panoramic preview.)_
+_Last updated: 2026-05-12 (Sprint 4 progress: Engine DSP library + Audio DAW UI/Agent tools + Canvas block container/composable presets/video container/generic node cards + Story 5-column table/video readiness + MediaPlaybackService + Panoramic preview complete + Device clients + Storage split + Agent traceability/entity composition + Engine interface decoupling ADR in progress.)_

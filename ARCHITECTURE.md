@@ -36,9 +36,12 @@ Neko Suite is a creative work suite deeply integrated into VS Code. The core cha
 ┌──────────▼──────────────────────────────────────────────────────┐
 │                   neko-engine (Rust Sidecar)                    │
 │                                                                 │
-│  engine-kernel:   wgpu GPU · FFmpeg codec · Animation · GPU Skinning · Export · Cache │
+│  engine-kernel:   wgpu GPU · FFmpeg codec · DSP effects · Animation · GPU Skinning · Export │
 │  runtime-scene:  3D Scene ECS (bevy_ecs + glTF/VRM + IK + Blend)  │
-│  runtime-puppet: 2D Skeletal ECS (bevy_ecs + inox2d + Blend/Crossfade) │
+│  runtime-puppet: 2D Skeletal ECS (bevy_ecs + MOC3 + Blend/Crossfade) │
+│  runtime-device: Device I/O (cpal + midir + gilrs)             │
+│  runtime-media:  Media logic (probe + diff + subtitle)         │
+│  runtime-ml:     ONNX inference (CoreML acceleration)          │
 │  host-http:   axum HTTP/WebSocket server (unified port)        │
 │  host-napi:   Node.js N-API bindings                           │
 └─────────────────────────────────────────────────────────────────┘
@@ -101,7 +104,7 @@ Streaming goes over WebSocket directly, bypassing the Extension Host to avoid re
 @neko/proto (single source of truth for IDL)
      ↓ generates
 @neko/shared (neko-types)    ←── all packages depend on this (Logger/i18n/Theme/Errors, zero internal deps)
-@neko/neko-client            ←── EngineClient + streaming client (zero internal deps)
+@neko/neko-client            ←── EngineClient + streaming client + MediaPlaybackService + device clients (zero internal deps)
      ↑
 neko-engine/host-napi      ←── N-API bindings (independently compiled)
      ↑
@@ -111,9 +114,10 @@ neko-preview  →  @neko/neko-client
 neko-cut      →  @neko/neko-client + neko-tools + neko-preview
 neko-agent    →  @neko/neko-client + neko-tools + neko-preview
 neko-tools    →  @neko/neko-client
-neko-canvas   →  neko-engine + neko-tools + neko-preview
-neko-model    →  neko-engine + @neko/neko-client + neko-tools + neko-preview
-neko-sketch   →  neko-engine + @neko/neko-client + @neko/shared
+neko-canvas   →  @neko/neko-client + neko-tools
+neko-model    →  @neko/neko-client + neko-tools + neko-preview
+neko-sketch   →  @neko/neko-client + @neko/shared
+neko-audio    →  @neko/neko-client + @neko/shared
 neko-story    →  @neko-story/parser + @neko/shared
 neko-assets   →  @neko/asset + @neko/shared
 ```
@@ -202,7 +206,10 @@ neko-canvas
 | `script` | Script node (TOC directory + getScriptIndex → click to jump to SceneGroupNode) |
 | `document` | Document node (PDF/DOCX/EPUB cover thumbnail + openDocument → vscode.open) |
 | `model` | AI model node (reference/workflow dual mode + checkModelInstalled) |
-| `canvas-embed` | Nested canvas reference (P3 planned, .nkc thumbnail + double-click to open) |
+| `canvas-embed` | Nested canvas reference (.nkc thumbnail + double-click to open) |
+| `video` | Video container (multi-stream layout + InlineVideoPlayer) |
+| `audio` | Audio container (InlineAudioPlayer + waveform) |
+| `container` | Generic container (policy-driven layout + NodeCard rendering) |
 
 ### AI Agent Workflow
 
@@ -241,13 +248,11 @@ Extension Host
 
 | Mechanism | Implementation | Injection Timing | Reversible | Context-Aware |
 |-----------|---------------|-----------------|------------|---------------|
-| **① Skill System Prompt** | `applySkillInjection()` appends to `_history[0]` | One-time write per session | ❌ No removal path | ❌ Not governed by token budget |
+| **① Skill System Prompt** | `SkillInjectionCoordinator` 4-track atomic inject/remove | Session-level, Composer section management | ✅ 4-track atomic removal | ⚠️ Composer has no global token cap |
 | **② ToolSet Tool List** | `getToolsForTurn()` recalculated each time | Dynamic per turn | ✅ Real-time activate/deactivate | ✅ Two-tier token budget (always/dynamic) |
 | **③ ContextItem** | `ContextManager` (used by MemoryHooks) | Injected as separate message per turn | ✅ LRU eviction | ✅ Three-tier size budget (turn/session/persistent) |
 
-> **Note ①**: `applySkillInjection()` directly mutates `_history[0].content`. Multiple calls (from multiple slash commands) accumulate without limit. `compressContext()` does not compress `_history[0]`, so the system prompt may grow linearly over the session. The only reset path: `configure({ systemPrompt })` for full replacement.
->
-> **Note ②**: `SkillService.clearActiveSkill()` deactivates associated ToolSets (②), but **does not** remove already-injected prompt text from `_history[0]` (①). The two mechanisms have asymmetric lifecycles.
+> **Note**: Phase 4 refactor (2026-03) fixed the historical design gaps: `SkillInjectionCoordinator` now auto-cleans old injections + Composer section management; `remove()` performs complete reverse across 3 tracks (prompt section + permission rules + state). The `SystemPromptComposer` still lacks a global token budget — base + multi-layer sections total may grow large.
 
 **neko-agent Internal Subsystems**:
 

@@ -11,120 +11,63 @@
 
 > 目标：稳定性 + 核心体验 + AI 能力补全
 
-### ✅ Sprint 1 已完成（2026-04-06）
+<details>
+<summary>✅ Sprint 1-3 已完成（2026-04-06 → 2026-05-07）</summary>
 
-- [x] **neko-agent**: `puppetFaceTools.ts` `readFileSync` → `fs.promises.readFile`
-- [x] **neko-engine**: HTTP 全局准入 `Semaphore(8)` + codec `Semaphore(4)` + GPU `Semaphore(2)` + `ServiceOverloaded` 503 错误码
-- [x] **neko-assets**: 搜索 L0 持久化索引（`.neko/.cache/search-index.json` + FileSystemWatcher 增量更新）+ QuickPick 类型筛选按钮（5 类）+ MAX_RESULTS 50→200
-- [x] **neko-preview**: EPUB 大纲 TreeView（`EpubOutlineProvider` depth→层级树 + Explorer 侧边栏 + `neko.epubEditorActive` context 控制显隐）
-- [x] **neko-cut**: AI action `ai-background-remove` + `ai-smart-crop`（委托 neko-agent 云端 AI，复用 `generateForNode` 模式）
-- [x] **跨模块**: DragDropBroker（Agent `dnd:start` → Extension payload 暂存 → Canvas/Cut `dnd:drop` → `importAsset`/`importGeneratedClip`；`ImageGridCard` draggable）
+**Sprint 1**（2026-04-06）：Agent 异步 I/O + Engine Semaphore + Assets 搜索索引 + EPUB 大纲 + Cut AI actions + DragDropBroker
 
-### ✅ Sprint 2 已完成（2026-04-09）
+**Sprint 2**（2026-04-09）：Canvas P0-1~P0-5 收敛 + CanvasEmbedNode + NodeRendererRegistry + Story 场景状态 + Agent Fountain 管道
 
-- [x] **neko-canvas**: P0-1~P0-5 全部收敛 — `nodes.update`/`nodes.create` 协议统一 + 消息通道封装 + 结果审查闭环（`generationHistory.selected`）+ `SceneGroupNode` 升级为语义容器（镜头纳管/排序/自动布局/批量生成）+ 创作入口覆盖（script/document/model/canvas-embed picker + 拖入）
-- [x] **neko-canvas**: P1-1 `CanvasEmbedNode` 最小落地（类型 + outline + webview 渲染 + picker 入口）
-- [x] **neko-canvas**: P1-4 `NodeRendererRegistry` 首轮落地（替代核心渲染分发硬编码，新节点可通过注册表扩展）
-- [x] **neko-canvas**: asset 代理边界收敛（受限代理实现 + `timelineSync` 最小回流契约）
-- [x] **neko-story**: 场景工作流状态持久化（`StorySceneStateStore` + `workspaceState` 跨会话）+ 语义分镜流水线入口 `neko.story.startVideoCreation` + 场景/镜头规划工具 + canvas 移交
-- [x] **neko-agent**: Fountain 流水线接入场景规划 + 语义分镜导入 canvas 管道
+**Sprint 3**（2026-05-07）：Agent 感知/投递/加固/死代码/重构 + Canvas 缩略图 + Model 3D 修复 + Sketch PSD + Market 治理 + Engine 日志 + Types 契约 + Client 感知门面
 
-### ✅ Sprint 3 已完成（2026-05-07）
-
-- [x] **neko-agent**: 多模态感知管线 — PerceptionCard 三层感知中间体 + Agent-first 反馈信号 + 感知工具 + persona + 观察记录器 + 日志事件 + ControlPlane 接线 + EngineClient 感知门面
-- [x] **neko-agent**: 富内容投递到创作工具（Canvas/Cut/Model/Puppet/Explorer 结构化负载投射）
-- [x] **neko-agent**: 运行时工作流加固 — 边界保护 + 评估框架 + 反馈闭环 + runner 边界适配器加固 + 能力注入状态约束 + 视频质量证据基础
-- [x] **neko-agent**: 死代码清理 — 13 提交移除未使用桥接/路由/消息（市场打开器、配置桥接、MCP 测试协议、生成进度桥接、连接状态桥接、技能任务动作、webview 控制协议）
-- [x] **neko-agent**: 领域逻辑重构 — 运行时模块 + 平台服务 + webview/runtime 契约分离 + 共享 presenter/helper 合并
-- [x] **neko-canvas**: 场景-镜头缩略图模式 + 管理 UI；纳管镜头从小地图隐藏
-- [x] **neko-model**: 3D 渲染管线修复（多网格模型、GPU 校验、流生命周期）+ 视口轨道/平移/缩放控制 + 质量闪烁修复 + 完整 i18n
-- [x] **neko-model**: 3D 引擎渲染控制面实现
-- [x] **neko-sketch**: PSD 导入（`extension` PSD 导入 + AI 桥接）+ webview AI 绘画工具 + 共享 sketch 契约 + `.nks` 迁移
-- [x] **neko-market**: 插件治理加固 + 注册表契约对齐
-- [x] **neko-types**: 共享契约：`device.ts` + `tracking.ts` + `preview.ts`
-- [x] **neko-client**: EngineClient 感知门面 + 捕获辅助方法
-- [x] **neko-engine**: 可配置日志级别 `neko.logLevel` + `audios:segment` 时间范围音频导出 action
-- [x] **neko-shared**: 文件放置遮罩修复（防止内部节点拖拽触发文件放置遮罩）
+</details>
 
 ### ⏳ Sprint 4 — 活跃（工作树中进行中）
 
 - [ ] **设备管理系统**（[ADR](./docs/architecture/adr-device-management.md)）：
-  - [ ] TS 设备客户端 `neko-client/src/device/`（GamepadClient / MidiClient / MicrophoneClient / CameraClient）
   - [ ] 引擎设备绑定服务（`device_binding.rs`）
   - [ ] 扩展级设备提供者（`neko-engine/packages/extension/src/device/`）
   - [ ] neko-live TrackingService 提取 + LiveSessionService
   - [ ] neko-puppet Live Mode（`packages/extension/src/live/`）
   - [ ] neko-model Live Mode（`packages/extension/src/live/`）
   - [ ] 原生 VSCode UI（TreeView / QuickPick / StatusBar）
-- [ ] **全景图片预览**（[ADR](./docs/architecture/adr-panoramic-image-preview.md)）：
-  - [ ] `PanoramicImagePreviewProvider` + `PanoramicVideoPreviewProvider`
-  - [ ] 全景路由（等距矩形投影检测 + 投影类型识别）
-  - [ ] 全景 webview（球面网格 + 等距矩形着色器 + 轨道控制）
-  - [ ] 预览清单客户端
-  - [ ] HDR/EXR 文件引擎优先路由
-  - [ ] 共享预览类型（`@neko/shared/types/preview.ts`）
+- [ ] **neko-engine**：接口与管线解耦（[ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md) — 进行中）
 
 ### 待做
 
-### neko-cut（视频编辑）— P0-1：字段一致性
+### neko-cut（视频编辑）
 
-> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 8/10，完整创作 6.5/10。
+> [ADR](./docs/architecture/neko-cut-timeline-creation-assessment.md) — 评分：基础编辑 8/10，完整创作 6.5/10。P0-1 字段一致性已关闭。
 
-- [x] **Transition 字段命名统一**：`transitionIn/transitionOut` 为主字段，保留 `inTransition/outTransition` legacy 兼容读取
-- [x] **Effects 导出链**：`effects / colorCorrection / masks` 已补齐导出转换（EffectInstance→EffectParams + 蒙版形状验证 + 动画 baseValue fallback）
-- [x] **编辑/预览/导出字段一致性**：元素 `speed/reverse/timeRemap` 在暂停态/播放态/导出态一致；全局 `playbackSpeed` 与元素级 `speed` 分层明确
 - [ ] 导出往返测试套件：编辑 → 预览 → 导出 → 重新导入一致性验证
 
-### neko-canvas（故事板）— 收敛增强
+### neko-canvas（故事板）— P2 增强
 
-> [ADR](./docs/architecture/canvas-role-boundary.md) — P0 全部收敛，进入 P1 增强阶段。
+> [ADR](./docs/architecture/canvas-role-boundary.md) — P0 全部收敛；P1 完成（Block 容器 + 组合预设 + 视频容器 + 节点卡片）。
 
 - [ ] 继续收敛周边桥接接口（保持 `nodes.update/create` 统一契约不分叉）
 - [ ] 消息语义细化（新增消息类型优先扩展工具层，而非直接访问全局对象）
 - [ ] 批量候选对比器 + 更强的审阅 UI 体验
-- [x] `NodeRendererRegistry` 扩展：metadata、图标、默认尺寸、属性面板 schema 收敛到注册表
 - [ ] `asset` 命名空间边界清理：推动 `neko-assets` 提供正式扩展 API，替代 command 级代理
-- [ ] **Block + Container Phase 2 布局**：将当前确定性 row-major/grid 布局升级为 aspect-ratio-aware packing；保持 policy-driven layout、`lockedChildIds` 避让、绝对坐标与容器边界语义
+- [ ] **Block + Container Phase 2 布局**：将当前确定性 row-major/grid 布局升级为 aspect-ratio-aware packing
 
-### neko-agent（AI 助手）— P0-2：Webview 架构（P0 完成 ✅）
+### neko-agent — IDC 统一工作流（剩余）
 
-> [ADR](./docs/architecture/neko-agent-webview-optimization.md) — 评分 7.5/10 → P0 已解决。
+> [ADR](./docs/architecture/agent-unified-workflow.md) — Phase A + B + B 闭环 + §11.6 六层 + §11.6.9 评估边界全部完成 ✅。详见归档。
 
-- [x] **拆分 `AIAssistant` 组件**（~589 行）→ `AppShell` + `ConversationController` + `ChatWorkspace`
-- [x] **统一出站消息网关**：所有 Webview→Extension 通过 `VSCodeMessages` 构建器；禁止组件直接 `vscode?.postMessage(...)`；改造 `SendToMenu.tsx`、`TaskCard.tsx` 等
-- [x] **强化入站消息类型**：定义 `ExtensionToWebviewMessage` 区分联合类型；更新 `MessageHandler`/`MessageHandlerRegistry` 签名实现编译时安全
+- [ ] **P1** — AI 自评三件套落地（§11.6.9）：① 可见性 ② 引导（persona 补"可选自评"章节）③ 积累（`CreativeMemoryHooks` self-eval 条目）
+- [ ] **P1** — `ExecutionMode 'ask'` 与 `StageMode 'ask'` 解耦（permission/IDC 边界重设计）
+- [ ] **P1** — `git rm --cached packages/neko-agent/neko`（65MB arm64 二进制历史误提交）
+- [ ] **P2** — `.nksession.md` 会话摘要（依赖 Journal/memory 四合一）
+- [ ] **P2** — `.neko/cache/*.json` 派生索引（UI 侧有查询需求时再做）
+- [ ] **P3** — 154 个 pre-existing TS 错误（MCPTool/BashTool 参数不匹配）
+- [ ] **P3** — 5 个 pre-existing `fileOperationHandler.test.ts` 失败（vscode mock 不一致）
 
-### neko-agent — IDC 统一工作流（Phase A + B + B 闭环完成 ✅，2026-04-22）
+### neko-agent — 工作流编排（剩余）
 
-> [ADR §4 revision](./docs/architecture/agent-unified-workflow.md) — 四阶段（specify/plan/tasks/implement）精简为三阶段（draft/plan/apply）；专用 DraftWrite/PlanWrite/TaskWrite 下线，由通用 Write + ArtifactValidator + ArtifactWatcher 取代。
+> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md) — Phase 1-6 + R1-R6 解耦全部完成 ✅。详见归档。
 
-- [x] **Phase A** — 阶段重命名（specify/implement→draft/apply；tasks 并入 plan）；产物重命名（Proposal→Draft、TodoList→Task）；文件约定（`.nkproposal.md`/`.nktodo.md` 扩展名 → `.neko/drafts|plans|tasks/` 下的 `<kind>-<runId>.md` 前缀）；ExecutionPlan.proposalId→draftId；EventBus 频道 proposal-review→draft-review、creation.proposal.presented→creation.draft.presented、execution.todo.updated→execution.task.updated（commit c5d6f993）
-- [x] **Phase B** — 删除 DraftWriteTool/PlanWriteTool/TaskWriteTool；AI 改用通用 Write 对 `.neko/drafts|plans|tasks/*.md` 直写；新增 `artifact/artifact-validator.ts`（纯 frontmatter schema 校验）+ `artifact-watcher.ts`（fs.watch + 300ms 防抖 + EventBus emit）；新增事件 `execution.artifact.written` / `execution.artifact.invalid`；AgentSession 构造 + dispose 接线（commit c5d6f993）
-- [x] **Phase B 闭环** — `artifact-observation-hooks.ts`（ExecutorHooks 订阅 `artifact.invalid`，缓冲 issues，在 `beforeThink` 时注入 system message——闭合 AI 自修复循环）；narrator `milestone-tracker.defaultClassify` + progress-narrator 图标覆盖 artifact.\*；`StagePersonaBinding.getRunId` 激活 persona 时把 systemPrompt 里的 `{runId}`/`{stage}` 替换为真实值（commit b1cc3f71）
-- [x] **端到端集成测试** — `artifact-loop.integration.test.ts`（4 case：bad→注入 / good→静默 / kind-mismatch / 重写循环）在真实 fs 上验证 Write→Watcher→Validator→Bus→ObservationHooks→beforeThink，含跨平台降级（commit af66f456）
-- [x] **§11.6 约束分级原则** — ADR 形式化四级约束谱系（Schema / 提示词 / Runtime / Evaluator）+ Schema 内部 Tool/Operation 二分 + 6 条反模式 + 5 步决策清单。后续意图 / validator / drift 检测等工作按本 taxonomy 分类
-- [x] **§2 双视角重构（2026-04-23，方案 B 彻底倒置）** — 原 §2 "四层整合架构" 直接讲 L3/L2/L1/L0 实现细节，对 PM / 用户 / 新人不友好。重构为 **"架构总览（双视角）"**：§2.1 **职责视角**（意图/编排/执行/控制）前置为主入口，§2.2 **实现视角**（L3/L2/L1/L0）下移，§2.3 新增 **18 个关键组件的三视角交叉引用表**（实现 / 职责 / 约束 §11.6 并排），§2.4 **选视角指南**（按讨论场景判定）。同步修订 §2 实现视角图中的 "SDD 4 阶段" 纠正为 "IDC 3 阶段"，L1 能力层从历史 8 类收敛为 `Skill / Tool / Operation` 三类（与 §5.1 CapabilityKind 一致）。读者第一眼看到的是"Agent 做什么事"而非"代码如何分层"
-- [x] **§11.6 六层扩展（2026-04-23）** — 从四级扩展为六层，补齐代码里长期存在但未正式命名的 **Memory**（`~/.claude/.../memory/`、`.neko/memory.md`、CreativeMemoryHooks、7 级压缩、SharedMemoryStore）和 **Policy**（preferences.md、preferencesStrategyPack、Skill.compliance、allowedTools、requiredSubpackages、Operation.costProfile）两层。四字口诀：Prompt 说什么 / Schema 长什么样 / Runtime 什么时候做 / Policy 能不能做 / Memory 记得什么 / Evaluator 做得好不好。新增六层触发时序图（Policy 前置门 → Memory 双端 → Prompt·Schema·Runtime 流水 → Evaluator 出口）、反模式补 5 条（合计 11 条）、决策清单扩到 7 问、合规度审计表补 Memory/Policy 两块、新增 §11.6.7 Memory vs Prompt 辨析表 + §11.6.8 Policy vs Runtime 辨析表
-- [x] **§11.6.9 Evaluator 建设边界（2026-04-23，AI 原生自评优先）** — 撤销先前提议的 `IntentValidator` / 显式 `DraftToPlanCompiler` / `IntentDriftDetector` 三个组件。理由：它们承担的都是**主观创作判断**（intent 达成度 / 编译策略 / 漂移影响），AI 在 persona 上下文里已经是判断引擎，再包一层 LLM-as-judge 是重复原生能力，违反 §11.5 "AI 原生执行"。§11.6.9 明确**建 / 不建分界线**：**确定性指标**（CLIP 相似度 / FPS / 分辨率 / 时长 / 格式 / 一致性 IoU）→ 建 Evaluator 组件；**主观创作判断**（intent 达成 / 审美 / 节奏 / 风格 / 漂移 / Plan 重编译）→ 交 Agent **自评三件套**：① 可见性（context 里看得到 `.neko/drafts/` 历史 + 当前产物 + steps.jsonl + 相关 Memory）② 引导（persona prompt "可选自评" 而非"强制校验"）③ 积累（`CreativeMemoryHooks.afterAct` 抽取自评结论入 memory，下次 beforeThink 注入回来）。后续落地见下方 P1 "AI 自评三件套"
-- [ ] **P1** — AI 自评三件套落地（§11.6.9）：① 可见性（确保 `.neko/drafts/` 历史版本可 Glob 发现、当前产物路径被 persona prompt 引导可读 + steps.jsonl observation 摘要注入）② 引导（creation-persona / execution-persona 补"可选自评"章节：读 Draft.intent 对照产物，发现偏离时主动报告）③ 积累（`CreativeMemoryHooks` 新增 self-eval 条目类型，afterAct 抽取、beforeThink 注入）。不新建 Evaluator 组件
-- [ ] **P1** — `ExecutionMode 'ask'` 与 `StageMode 'ask'` 解耦（当前 StageMode 映射自 ExecutionMode，后者有 per-tool-confirm UX 语义；需要 permission/IDC 边界重设计）
-- [ ] **P1** — `git rm --cached packages/neko-agent/neko`（65MB arm64 二进制历史误提交；.gitignore 规则已添加）
-- [ ] **P2** — `.nksession.md` 会话摘要（§7.4 ⏳）— 依赖 E 波：Journal/ConversationRecord/compact/memory 四合一
-- [ ] **P2** — `.neko/cache/*.json` 派生索引（draft-index.json 消费 `artifact.written` 事件重建）— UI 侧有查询需求时再做
-- [ ] **P3** — 154 个 pre-existing TS 错误（MCPTool/BashTool 参数不匹配、ToolParameters 形状漂移；先于 IDC 重构存在，独立清理）
-- [ ] **P3** — 5 个 pre-existing `fileOperationHandler.test.ts` 失败（vscode mock 不一致；与 IDC 重构无关）
-
-### neko-agent — 工作流编排（Phase 1-6 完成 ✅；六轮解耦评审 ✅）
-
-> [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md)
-
-- [x] **Phase 1** Router + LitePlan + AssetLibrary + Matching L1/L2/L5
-- [x] **Phase 2 + 2.5** `.nkplan` 持久化 + 状态机 + ConsistencyChecker v1 + Fork/Diff/Checkpoint + PlanBrowser
-- [x] **Phase 3 + 3.5** LLM Router + ask_user broker + router-memory 审查 UI
-- [x] **Phase 4.1 + 4.3a** L3/L4 TS stub + NodeEmbeddingCache（JSON+base64 Float32+LRU）
-- [x] **Phase 5.1-5.4b, 5.4c-stub, 5.4d** Reference chain 端到端（builder → nkplan → canvas → pipeline → batch-generate + render-engine stage）
-- [x] **Phase 6.1/6.2/6.3a/6.3b** `.nkproj` Format SDK + Lossless Upgrade + Clip.lineage (proto) + ShotNode.workflowPlanId + bootstrap 接线
-- [x] **治理 C1/C2** orchestrator flag 默认开 + legacy `@deprecated` 标记
+- [ ] **P2 Rust 里程碑**：Phase 4.2 CLIP napi + 4.3b 模型分发 + 5.4c-rust Puppet/Scene 适配器 + 5.4e 启动注册（~8-12 人天）
 - [x] **R1-R6 解耦评审**（2026-04-19，六轮）：approve 派发用户审过的 plan；plan.input + plan.matchingShots 持久化让 fork/reload 完全自足；WorkflowPlanCapabilities 契约；Legacy fork 明确拒绝；WorkflowPlanHandler 拆为 facade + 4 sub-controllers + plan-wire/；ReviewOrchestrator 窄端口 + Shot/NkplanShot 编译期形状断言
 - [ ] **P2 Rust milestone**：Phase 4.2 CLIP napi + 4.3b 模型分发 + 5.4c-rust Puppet/Scene adapters + 5.4e bootstrap（~8-12 人天；需 Rust toolchain）
 - [ ] **P2 治理 C3/C4**：`.nkproj` 观察 telemetry + legacy 命令使用漏斗
@@ -513,4 +456,4 @@
 
 ---
 
-_最后更新：2026-05-07（Sprint 3 完成：Agent 感知/投递/加固 + Canvas 缩略图 + Model 3D 修复 + Sketch PSD + Market 治理。Sprint 4 活跃：设备管理 + 全景预览。）_
+_最后更新：2026-05-12（Sprint 4 进展：Engine DSP 效果库 + Audio DAW UI/Agent 工具 + Canvas Block 容器/组合预设/视频容器/通用节点卡片 + Story 5 列表/视频就绪 + MediaPlaybackService + 全景预览完成 + 设备客户端 + 存储拆分 + Agent 可追溯性/实体组合 + Engine 接口解耦 ADR 进行中。）_
