@@ -87,6 +87,10 @@ function applyAudioProjectOperation(
   return applyOperation(data, op);
 }
 
+function cloneEditOperation<T extends EditOperation>(operation: T): T {
+  return structuredClone(operation);
+}
+
 function getPersistedTrackMixState(
   data: AudioProjectData | null,
   trackId: string,
@@ -209,7 +213,7 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
         audioProjectData: data,
         trackViewState: trackView,
         opUndoStack: operation
-          ? [...state.opUndoStack.slice(-(MAX_OP_HISTORY_SIZE - 1)), operation]
+          ? [...state.opUndoStack.slice(-(MAX_OP_HISTORY_SIZE - 1)), cloneEditOperation(operation)]
           : state.opUndoStack,
         opRedoStack: operation ? [] : state.opRedoStack,
       };
@@ -231,13 +235,17 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
     if (!audioProjectData) return;
 
     try {
-      const newData = applyAudioProjectOperation(audioProjectData, op as AudioProjectEditOperation);
+      const operation = cloneEditOperation(op);
+      const newData = applyAudioProjectOperation(
+        audioProjectData,
+        operation as AudioProjectEditOperation,
+      );
       set({
         audioProjectData: newData,
-        opUndoStack: [...opUndoStack.slice(-(MAX_OP_HISTORY_SIZE - 1)), op],
+        opUndoStack: [...opUndoStack.slice(-(MAX_OP_HISTORY_SIZE - 1)), operation],
         opRedoStack: [],
       });
-      syncOperationToExtension(op);
+      syncOperationToExtension(operation);
     } catch (e) {
       logger.error('dispatch failed', e);
     }
@@ -247,17 +255,14 @@ export const useAudioProjectStore = create<AudioProjectStore>()((set, get) => ({
     const { audioProjectData, opUndoStack } = get();
     if (!audioProjectData || ops.length === 0) return;
 
-    const batchOp: EditOperation = {
+    const batchOp = cloneEditOperation<BatchOperation>({
       type: 'batch',
       meta: createMeta('user'),
       payload: { operations: ops },
-    };
+    });
 
     try {
-      let data = audioProjectData;
-      for (const op of ops) {
-        data = applyAudioProjectOperation(data, op as AudioProjectEditOperation);
-      }
+      const data = applyAudioProjectOperation(audioProjectData, batchOp);
       set({
         audioProjectData: data,
         opUndoStack: [...opUndoStack.slice(-(MAX_OP_HISTORY_SIZE - 1)), batchOp],

@@ -277,4 +277,24 @@ describe('audioProjectStore track mix state', () => {
     getState().opUndo();
     expect(getState().audioProjectData?.tracks[0]?.elements).toEqual([createAudioElement()]);
   });
+
+  it('stores a cloned batch operation for undo history', () => {
+    getState().initProject(
+      createProject({
+        tracks: [createTrack({ elements: [createAudioElement()] })],
+      }),
+    );
+    const op = {
+      type: 'element.update' as const,
+      meta: { id: 'op-1', timestamp: 1, source: 'user' as const },
+      payload: { trackId: 'track-1', elementId: 'clip-1', updates: { duration: 4 } },
+      before: { updates: { duration: 10 } },
+    };
+
+    getState().dispatchBatch([op]);
+    op.before.updates.duration = 99;
+
+    getState().opUndo();
+    expect(getState().audioProjectData?.tracks[0]?.elements[0]?.duration).toBe(10);
+  });
 });

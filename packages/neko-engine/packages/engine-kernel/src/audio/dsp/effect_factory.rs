@@ -1,7 +1,8 @@
 //! Factory for creating audio effects from JSON configuration.
 
 use crate::error::{Error, Result};
-pub use neko_engine_types::{AudioEffectConfig, SUPPORTED_AUDIO_EFFECT_TYPES};
+pub use neko_engine_types::AudioEffectConfig;
+use neko_engine_types::SUPPORTED_AUDIO_EFFECT_TYPES;
 
 use super::biquad::{BiquadFilter, FilterType};
 use super::chorus::Chorus;
@@ -15,8 +16,6 @@ use super::noise_gate::{NoiseGateConfig, NoiseGateEffect};
 use super::parametric_eq::{EqBand, ParametricEq};
 use super::reverb::Reverb;
 use super::traits::AudioEffect;
-
-pub use neko_engine_types::SUPPORTED_AUDIO_EFFECT_TYPES as SUPPORTED_EFFECT_TYPES;
 
 fn f(v: &serde_json::Value, key: &str, default: f32) -> f32 {
     v.get(key)
@@ -180,7 +179,7 @@ mod tests {
 
     #[test]
     fn test_create_all_builtin_effects() {
-        for t in SUPPORTED_EFFECT_TYPES {
+        for t in SUPPORTED_AUDIO_EFFECT_TYPES {
             let config = AudioEffectConfig {
                 id: format!("test-{}", t),
                 effect_type: t.to_string(),

@@ -57,6 +57,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
   private _outlineProvider: AudioOutlineProvider | null = null;
   private _statusBar: AudioStatusBar | null = null;
   private readonly _activePanels = new Set<vscode.WebviewPanel>();
+  private readonly _stopPanelStreams = new WeakMap<vscode.WebviewPanel, () => Promise<void>>();
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -148,6 +149,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
         activeStreamId = null;
       }
     };
+    this._stopPanelStreams.set(webviewPanel, stopPanelStream);
 
     const postAudioError = async (request: AudioRequestMessage, error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -575,6 +577,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
     webviewPanel.onDidDispose(async () => {
       messageDisposable.dispose();
       this._activePanels.delete(webviewPanel);
+      this._stopPanelStreams.delete(webviewPanel);
       await stopPanelStream();
       this._statusBar?.hide();
       this._outlineProvider?.updateData(null);
@@ -619,6 +622,14 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
   // =========================================================================
 
   dispose(): void {
+    for (const panel of this._activePanels) {
+      this._stopPanelStreams
+        .get(panel)?.()
+        .catch((error: unknown) => {
+          logger.warn('Failed to stop audio stream during provider dispose', error);
+        });
+      this._stopPanelStreams.delete(panel);
+    }
     this._activePanels.clear();
   }
 }

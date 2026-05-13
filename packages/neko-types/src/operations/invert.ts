@@ -838,7 +838,7 @@ export function invertOperation(op: EditOperation): EditOperation {
         payload: { effectId: addOp.payload.effect.id },
         before: {
           effect: addOp.payload.effect,
-          index: addOp.payload.index ?? Number.MAX_SAFE_INTEGER,
+          index: addOp.payload.index ?? -1,
         },
       };
     }

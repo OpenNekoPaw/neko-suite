@@ -19,6 +19,17 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger('useAudioPlayback');
 
+function fadeOutAndDispose(client: AudioStreamClient): void {
+  client
+    .fadeOut()
+    .catch((error: unknown) => {
+      logger.warn('Stream fade-out failed before dispose:', error);
+    })
+    .finally(() => {
+      client.dispose();
+    });
+}
+
 export function useAudioPlayback() {
   const audioClientRef = useRef<AudioStreamClient | null>(null);
   const playStartTimeRef = useRef(0);
@@ -65,10 +76,8 @@ export function useAudioPlayback() {
       setPlaybackState('stopped');
       const client = audioClientRef.current;
       if (client) {
-        client.fadeOut().then(() => {
-          client.dispose();
-        });
         audioClientRef.current = null;
+        fadeOutAndDispose(client);
       }
       postMessage({
         type: 'audio:playback',
@@ -225,8 +234,8 @@ export function useAudioPlayback() {
     clearStreamInfo();
     const client = audioClientRef.current;
     if (client) {
-      client.fadeOut().then(() => client.dispose());
       audioClientRef.current = null;
+      fadeOutAndDispose(client);
     }
     postMessage({
       type: 'audio:playback',

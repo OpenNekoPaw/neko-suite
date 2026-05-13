@@ -154,6 +154,21 @@ describe('applyAudioOperation', () => {
         'fx-3',
       ]);
     });
+
+    it('should reject missing effect IDs', () => {
+      const project = createAudioProject({
+        masterEffectsChain: [createEffect({ id: 'fx-1' })],
+      });
+
+      expect(() =>
+        applyAudioOperation(project, {
+          type: 'audio.effect.remove',
+          meta: meta(),
+          payload: { effectId: 'missing' },
+          before: { effect: createEffect({ id: 'missing' }), index: 0 },
+        }),
+      ).toThrow('Audio effect not found: missing');
+    });
   });
 
   describe('audio.effect.update', () => {
@@ -169,6 +184,21 @@ describe('applyAudioOperation', () => {
       });
 
       expect(result.masterEffectsChain[0]!.params).toEqual({ frequency: 2000, gain: 3 });
+    });
+
+    it('should reject missing effect IDs', () => {
+      const project = createAudioProject({
+        masterEffectsChain: [createEffect({ id: 'fx-1' })],
+      });
+
+      expect(() =>
+        applyAudioOperation(project, {
+          type: 'audio.effect.update',
+          meta: meta(),
+          payload: { effectId: 'missing', updates: { enabled: false } },
+          before: { updates: { enabled: true } },
+        }),
+      ).toThrow('Audio effect not found: missing');
     });
   });
 
@@ -234,6 +264,28 @@ describe('applyAudioOperation', () => {
 
       expect(updated.bpm).toBe(140);
       expect(Object.hasOwn(restored, 'bpm')).toBe(false);
+    });
+
+    it('rejects BPM outside the persisted range', () => {
+      const project = createAudioProject({ bpm: 120 });
+
+      expect(() =>
+        applyAudioOperation(project, {
+          type: 'audio.setBpm',
+          meta: meta(),
+          payload: { bpm: Number.NaN },
+          before: { bpm: 120 },
+        }),
+      ).toThrow('audio BPM out of range');
+
+      expect(() =>
+        applyAudioOperation(project, {
+          type: 'audio.setBpm',
+          meta: meta(),
+          payload: { bpm: 301 },
+          before: { bpm: 120 },
+        }),
+      ).toThrow('audio BPM out of range');
     });
   });
 
@@ -326,6 +378,19 @@ describe('applyAudioOperation', () => {
       expect(result.markers).toHaveLength(1);
       expect(result.markers[0]!.id).toBe('m-2');
     });
+
+    it('should reject missing marker IDs', () => {
+      const project = createAudioProject({ markers: [createMarker({ id: 'm-1' })] });
+
+      expect(() =>
+        applyAudioOperation(project, {
+          type: 'audio.marker.remove',
+          meta: meta(),
+          payload: { markerId: 'missing' },
+          before: { marker: createMarker({ id: 'missing' }) },
+        }),
+      ).toThrow('Audio marker not found: missing');
+    });
   });
 
   describe('audio.marker.update', () => {
@@ -342,6 +407,19 @@ describe('applyAudioOperation', () => {
 
       expect(result.markers[0]!.label).toBe('New');
       expect(result.markers[0]!.time).toBe(10.0);
+    });
+
+    it('should reject missing marker IDs', () => {
+      const project = createAudioProject({ markers: [createMarker({ id: 'm-1' })] });
+
+      expect(() =>
+        applyAudioOperation(project, {
+          type: 'audio.marker.update',
+          meta: meta(),
+          payload: { markerId: 'missing', updates: { label: 'New' } },
+          before: { updates: { label: 'Old' } },
+        }),
+      ).toThrow('Audio marker not found: missing');
     });
   });
 

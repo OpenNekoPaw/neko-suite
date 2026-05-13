@@ -25,20 +25,39 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
 
     case 'audio.effect.remove': {
       const chain = data.masterEffectsChain.filter((e) => e.id !== op.payload.effectId);
+      if (chain.length === data.masterEffectsChain.length) {
+        throw OperationError.invalidOperation(`Audio effect not found: ${op.payload.effectId}`);
+      }
       return { ...data, masterEffectsChain: chain };
     }
 
     case 'audio.effect.update': {
-      const chain = data.masterEffectsChain.map((e) =>
-        e.id === op.payload.effectId ? { ...e, ...op.payload.updates } : e,
-      );
+      let didUpdate = false;
+      const chain = data.masterEffectsChain.map((e) => {
+        if (e.id !== op.payload.effectId) {
+          return e;
+        }
+        didUpdate = true;
+        return { ...e, ...op.payload.updates };
+      });
+      if (!didUpdate) {
+        throw OperationError.invalidOperation(`Audio effect not found: ${op.payload.effectId}`);
+      }
       return { ...data, masterEffectsChain: chain };
     }
 
     case 'audio.effect.toggle': {
-      const chain = data.masterEffectsChain.map((e) =>
-        e.id === op.payload.effectId ? { ...e, enabled: !e.enabled } : e,
-      );
+      let didToggle = false;
+      const chain = data.masterEffectsChain.map((e) => {
+        if (e.id !== op.payload.effectId) {
+          return e;
+        }
+        didToggle = true;
+        return { ...e, enabled: !e.enabled };
+      });
+      if (!didToggle) {
+        throw OperationError.invalidOperation(`Audio effect not found: ${op.payload.effectId}`);
+      }
       return { ...data, masterEffectsChain: chain };
     }
 
@@ -47,6 +66,7 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
         const { bpm: _bpm, ...rest } = data;
         return rest;
       }
+      assertFiniteRange('audio BPM', op.payload.bpm, 20, 300);
       return { ...data, bpm: op.payload.bpm };
     }
 
@@ -71,13 +91,25 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
     }
 
     case 'audio.marker.remove': {
-      return { ...data, markers: data.markers.filter((m) => m.id !== op.payload.markerId) };
+      const markers = data.markers.filter((m) => m.id !== op.payload.markerId);
+      if (markers.length === data.markers.length) {
+        throw OperationError.invalidOperation(`Audio marker not found: ${op.payload.markerId}`);
+      }
+      return { ...data, markers };
     }
 
     case 'audio.marker.update': {
-      const markers = data.markers.map((m) =>
-        m.id === op.payload.markerId ? { ...m, ...op.payload.updates } : m,
-      );
+      let didUpdate = false;
+      const markers = data.markers.map((m) => {
+        if (m.id !== op.payload.markerId) {
+          return m;
+        }
+        didUpdate = true;
+        return { ...m, ...op.payload.updates };
+      });
+      if (!didUpdate) {
+        throw OperationError.invalidOperation(`Audio marker not found: ${op.payload.markerId}`);
+      }
       return { ...data, markers };
     }
 
@@ -85,5 +117,11 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
       throw OperationError.invalidOperation(
         `Unknown audio operation: ${(op as unknown as Record<string, unknown>).type}`,
       );
+  }
+}
+
+function assertFiniteRange(label: string, value: number, min: number, max: number): void {
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw OperationError.invalidOperation(`${label} out of range [${min}, ${max}]: ${value}`);
   }
 }

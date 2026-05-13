@@ -19,7 +19,5 @@ pub mod reverb;
 pub mod traits;
 
 pub use effect_chain::EffectChain;
-pub use effect_factory::{
-    build_effect_chain, create_effect, AudioEffectConfig, SUPPORTED_EFFECT_TYPES,
-};
+pub use effect_factory::{AudioEffectConfig, build_effect_chain, create_effect};
 pub use traits::AudioEffect;
