@@ -1,10 +1,11 @@
 import { useEffect, useReducer } from 'react';
 import type { DashboardTask } from '@neko/shared';
-import { ContextStrip } from './components/ContextStrip';
+import { useTranslation } from './i18n/I18nContext';
+import { MetricCards } from './components/MetricCards';
+import { WorkflowCards } from './components/WorkflowCards';
 import { ProjectTable } from './components/ProjectTable';
-import { QuickActions } from './components/QuickActions';
-import { RecentActivity } from './components/RecentActivity';
 import { TaskTable } from './components/TaskTable';
+import { RecentActivity } from './components/RecentActivity';
 import { postMessage } from './services/messenger';
 import { applyTaskChange } from './taskState';
 import type { DashboardData, ExtensionToWebviewMessage } from './types';
@@ -29,6 +30,7 @@ const initialState: DashboardState = {
 };
 
 export function App() {
+  const { t } = useTranslation();
   const [state, dispatch] = useReducer(reducer, initialState);
 
   useEffect(() => {
@@ -65,9 +67,9 @@ export function App() {
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
-        <h1>Neko Dashboard</h1>
+        <h1>{t('dashboard.title')}</h1>
         <button type="button" onClick={() => postMessage({ type: 'refresh' })}>
-          Refresh
+          {t('common.refresh')}
         </button>
       </header>
 
@@ -80,18 +82,29 @@ export function App() {
           <WorkView data={data} />
         )
       ) : (
-        <div className="panel">Loading workspace...</div>
+        <div className="panel">{t('common.loading')}</div>
       )}
     </main>
   );
 }
 
+function handleCreateProject(projectType: DashboardData['projects'][number]['type']) {
+  postMessage({ type: 'createProject', projectType });
+}
+
+function handleCommand(_command: string) {
+  // Workflow-specific commands (e.g., open agent) can be dispatched here in the future.
+  // For now, workflow actions use createProject.
+}
+
 function WelcomeView({ data }: { readonly data: DashboardData }) {
   return (
     <>
-      <ContextStrip runtime={data.runtime} />
-      <QuickActions
-        onCreateProject={(projectType) => postMessage({ type: 'createProject', projectType })}
+      <MetricCards runtime={data.runtime} projectCount={0} taskCount={data.tasks.length} />
+      <WorkflowCards
+        workflows={data.workflows}
+        onCreateProject={handleCreateProject}
+        onCommand={handleCommand}
       />
     </>
   );
@@ -100,9 +113,15 @@ function WelcomeView({ data }: { readonly data: DashboardData }) {
 function WorkView({ data }: { readonly data: DashboardData }) {
   return (
     <>
-      <ContextStrip runtime={data.runtime} />
-      <QuickActions
-        onCreateProject={(projectType) => postMessage({ type: 'createProject', projectType })}
+      <MetricCards
+        runtime={data.runtime}
+        projectCount={data.projects.length}
+        taskCount={data.tasks.length}
+      />
+      <WorkflowCards
+        workflows={data.workflows}
+        onCreateProject={handleCreateProject}
+        onCommand={handleCommand}
       />
       <ProjectTable
         projects={data.projects}

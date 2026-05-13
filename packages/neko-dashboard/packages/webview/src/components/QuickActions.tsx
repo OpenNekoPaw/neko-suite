@@ -1,12 +1,13 @@
+import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardProjectType } from '../types';
 
-const ACTIONS: ReadonlyArray<{ readonly type: DashboardProjectType; readonly label: string }> = [
-  { type: 'video', label: 'New Video' },
-  { type: 'canvas', label: 'New Canvas' },
-  { type: 'sketch', label: 'New Sketch' },
-  { type: 'audio', label: 'New Audio' },
-  { type: 'model', label: 'New Model' },
-  { type: 'puppet', label: 'New Puppet' },
+const ACTION_TYPES: readonly DashboardProjectType[] = [
+  'video',
+  'canvas',
+  'sketch',
+  'audio',
+  'model',
+  'puppet',
 ];
 
 export interface QuickActionsProps {
@@ -14,13 +15,15 @@ export interface QuickActionsProps {
 }
 
 export function QuickActions({ onCreateProject }: QuickActionsProps) {
+  const { t } = useTranslation();
+
   return (
-    <section className="panel quick-actions" aria-label="Quick actions">
-      <h2>Quick Start</h2>
+    <section className="panel quick-actions" aria-label={t('dashboard.quickStart')}>
+      <h2>{t('dashboard.quickStart')}</h2>
       <div className="button-row">
-        {ACTIONS.map((action) => (
-          <button key={action.type} type="button" onClick={() => onCreateProject(action.type)}>
-            {action.label}
+        {ACTION_TYPES.map((type) => (
+          <button key={type} type="button" onClick={() => onCreateProject(type)}>
+            {t(`dashboard.quickStart.${type}`)}
           </button>
         ))}
       </div>

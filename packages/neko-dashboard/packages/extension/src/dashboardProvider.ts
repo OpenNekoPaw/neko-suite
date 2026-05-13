@@ -130,13 +130,18 @@ export class DashboardProvider implements vscode.Disposable {
 
   private async doRefresh(): Promise<void> {
     await this.taskAggregator.refreshSources();
-    const [projects, runtime] = await Promise.all([this.scanner.scan(), this.statusReader.read()]);
+    const [projects, runtime, workflows] = await Promise.all([
+      this.scanner.scan(),
+      this.statusReader.read(),
+      this.statusReader.readWorkflows(),
+    ]);
     const data: DashboardData = {
       mode: projects.length > 0 ? 'work' : 'welcome',
       projects,
       recent: createRecentActivity(projects),
       tasks: this.taskAggregator.getSnapshot(),
       runtime,
+      workflows,
     };
     this.post({ type: 'update', data });
   }

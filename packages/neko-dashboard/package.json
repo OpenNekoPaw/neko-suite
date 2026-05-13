@@ -36,6 +36,7 @@
       {
         "command": "neko.dashboard.show",
         "title": "%neko.dashboard.show.title%",
+        "icon": "$(dashboard)",
         "category": "Neko"
       }
     ],
@@ -50,6 +51,12 @@
       }
     },
     "menus": {
+      "editor/title": [
+        {
+          "command": "neko.dashboard.show",
+          "group": "navigation"
+        }
+      ],
       "commandPalette": [
         {
           "command": "neko.dashboard.show"

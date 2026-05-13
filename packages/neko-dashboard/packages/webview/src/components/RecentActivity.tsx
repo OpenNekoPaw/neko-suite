@@ -1,3 +1,4 @@
+import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardRecentActivity } from '../types';
 
 export interface RecentActivityProps {
@@ -6,15 +7,17 @@ export interface RecentActivityProps {
 }
 
 export function RecentActivity({ items, onOpen }: RecentActivityProps) {
+  const { t } = useTranslation();
+
   return (
-    <section className="panel" aria-label="Recent activity">
-      <h2>Recent Activity</h2>
+    <section className="panel" aria-label={t('recent.title')}>
+      <h2>{t('recent.title')}</h2>
       <table>
         <thead>
           <tr>
-            <th>File</th>
-            <th>Action</th>
-            <th>Time</th>
+            <th>{t('recent.column.file')}</th>
+            <th>{t('recent.column.action')}</th>
+            <th>{t('recent.column.time')}</th>
           </tr>
         </thead>
         <tbody>
@@ -38,7 +41,7 @@ export function RecentActivity({ items, onOpen }: RecentActivityProps) {
           {items.length === 0 ? (
             <tr>
               <td colSpan={3} className="empty-cell">
-                No recent project activity.
+                {t('recent.empty')}
               </td>
             </tr>
           ) : null}

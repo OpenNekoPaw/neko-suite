@@ -1,5 +1,22 @@
 import * as vscode from 'vscode';
-import type { DashboardRuntimeStatus, RuntimeSourceStatus } from './protocol';
+import type {
+  DashboardRuntimeStatus,
+  RuntimeSourceStatus,
+  WorkflowAvailability,
+  WorkflowId,
+} from './protocol';
+
+const WORKFLOW_PROBE_COMMANDS: ReadonlyArray<{
+  readonly id: WorkflowId;
+  readonly command: string;
+}> = [
+  { id: 'filmmaking', command: 'neko.newProject' },
+  { id: 'screenwriting', command: 'neko.story.newFile' },
+  { id: 'visual', command: 'neko.sketch.new' },
+  { id: 'modeling', command: 'neko.model.new' },
+  { id: 'animation', command: 'neko.puppet.new' },
+  { id: 'ai', command: 'neko.ai.chat' },
+];
 
 export class StatusReader {
   async read(): Promise<DashboardRuntimeStatus> {
@@ -12,6 +29,14 @@ export class StatusReader {
     ]);
 
     return { engine, agent, assets };
+  }
+
+  async readWorkflows(): Promise<readonly WorkflowAvailability[]> {
+    const commands = await vscode.commands.getCommands(true);
+    return WORKFLOW_PROBE_COMMANDS.map(({ id, command }) => ({
+      id,
+      available: commands.includes(command),
+    }));
   }
 }
 

@@ -74,6 +74,7 @@ function createScanner(): ProjectScanner {
 function createStatusReader(): StatusReader {
   return {
     read: vi.fn(async () => ({})),
+    readWorkflows: vi.fn(async () => []),
   } as unknown as StatusReader;
 }
 

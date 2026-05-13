@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
@@ -18,7 +22,7 @@ button {
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 4px;
+  border-radius: var(--neko-radius-md);
   padding: 4px 8px;
   cursor: pointer;
 }
@@ -32,7 +36,7 @@ select {
   color: var(--vscode-input-foreground);
   background: var(--vscode-input-background);
   border: 1px solid var(--vscode-input-border);
-  border-radius: 4px;
+  border-radius: var(--neko-radius-md);
   padding: 4px 8px;
 }
 
@@ -44,14 +48,14 @@ table {
 
 th,
 td {
-  border-bottom: 1px solid var(--vscode-panel-border);
+  border-bottom: 1px solid var(--neko-divider);
   padding: 8px;
   text-align: left;
   vertical-align: middle;
 }
 
 th {
-  color: var(--vscode-descriptionForeground);
+  color: var(--neko-fg-secondary);
   font-weight: 600;
 }
 
@@ -80,9 +84,9 @@ progress {
 }
 
 .panel {
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 6px;
-  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--neko-border);
+  border-radius: var(--neko-radius-lg);
+  background: var(--neko-surface);
   padding: 12px;
 }
 
@@ -95,10 +99,10 @@ progress {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 6px;
+  border: 1px solid var(--neko-border);
+  border-radius: var(--neko-radius-lg);
   padding: 8px 12px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--neko-fg-secondary);
 }
 
 .table-toolbar {
@@ -114,9 +118,8 @@ progress {
 .badge {
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--vscode-badge-background);
   border-radius: 999px;
-  padding: 2px 6px;
+  padding: 2px 8px;
   color: var(--vscode-badge-foreground);
   background: var(--vscode-badge-background);
   font-size: 12px;
@@ -126,7 +129,7 @@ progress {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--vscode-descriptionForeground);
+  color: var(--neko-fg-muted);
 }
 
 .actions-cell,
@@ -145,14 +148,179 @@ progress {
 }
 
 .empty-cell {
-  color: var(--vscode-descriptionForeground);
+  color: var(--neko-fg-secondary);
   text-align: center;
 }
 
 .error-banner {
   border: 1px solid var(--vscode-inputValidation-errorBorder);
-  border-radius: 6px;
+  border-radius: var(--neko-radius-lg);
   padding: 8px 12px;
   color: var(--vscode-inputValidation-errorForeground);
   background: var(--vscode-inputValidation-errorBackground);
+}
+
+/* ── Metric Cards ───────────────────────────────────────── */
+
+.metric-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metric-card {
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--neko-border);
+  border-radius: var(--neko-radius-lg);
+  background: var(--neko-surface);
+  padding: 10px 12px;
+}
+
+.metric-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--neko-fg-secondary);
+}
+
+.metric-card-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.metric-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.metric-indicator.online {
+  background: #34c759;
+  box-shadow: 0 0 6px rgba(52, 199, 89, 0.5);
+}
+
+.metric-indicator.offline {
+  background: var(--neko-fg-muted);
+}
+
+/* ── Workflow Cards ─────────────────────────────────────── */
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.workflow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--neko-border);
+  border-radius: var(--neko-radius-lg);
+  background: var(--neko-surface);
+  padding: 14px;
+  transition: border-color 150ms ease;
+}
+
+.workflow-card:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.workflow-card--disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.workflow-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.workflow-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--neko-fg-secondary);
+  line-height: 1.5;
+}
+
+.workflow-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.workflow-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.workflow-card-unavailable {
+  font-size: 12px;
+  color: var(--neko-fg-muted);
+  font-style: italic;
+  margin-top: auto;
+}
+
+/* ── Task Board ─────────────────────────────────────────── */
+
+.task-board {
+  display: flex;
+  gap: 12px;
+}
+
+.task-lane {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-lane-header {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--neko-fg-secondary);
+  margin-bottom: 8px;
+}
+
+.task-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-card {
+  border: 1px solid var(--neko-border);
+  border-radius: var(--neko-radius-md);
+  background: var(--neko-surface);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-card-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.task-card-meta {
+  font-size: 11px;
+  color: var(--neko-fg-muted);
+}
+
+.task-card-actions {
+  display: flex;
+  gap: 4px;
 }

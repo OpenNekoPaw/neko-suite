@@ -91,6 +91,9 @@ const vscode = {
     })),
   },
   ViewColumn: { One: 1 },
+  env: {
+    language: 'en',
+  },
   window: {
     createWebviewPanel,
   },

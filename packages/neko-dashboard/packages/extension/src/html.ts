@@ -9,12 +9,13 @@ export interface DashboardHtmlOptions {
 export function getDashboardHtml(options: DashboardHtmlOptions): string {
   const { webview, extensionUri } = options;
   const nonce = getNonce();
+  const locale = vscode.env.language;
   const distUri = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'index.js'));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, 'assets', 'index.css'));
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale}" data-vscode-locale="${locale}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />

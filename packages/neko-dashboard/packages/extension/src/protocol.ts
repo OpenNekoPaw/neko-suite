@@ -41,12 +41,26 @@ export interface RuntimeSourceStatus<TValue> {
   readonly error?: string;
 }
 
+export type WorkflowId =
+  | 'filmmaking'
+  | 'screenwriting'
+  | 'visual'
+  | 'modeling'
+  | 'animation'
+  | 'ai';
+
+export interface WorkflowAvailability {
+  readonly id: WorkflowId;
+  readonly available: boolean;
+}
+
 export interface DashboardData {
   readonly mode: DashboardMode;
   readonly projects: readonly DashboardProject[];
   readonly recent: readonly DashboardRecentActivity[];
   readonly tasks: readonly DashboardTask[];
   readonly runtime: DashboardRuntimeStatus;
+  readonly workflows: readonly WorkflowAvailability[];
 }
 
 export type WebviewToExtensionMessage =

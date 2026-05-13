@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { DASHBOARD_PROJECT_TYPES } from '@neko/shared/types/dashboard-project';
+import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardProject, DashboardProjectType } from '../types';
 import { filterAndSortProjects, type ProjectSortKey } from '../projectTableState';
 
@@ -10,6 +11,7 @@ export interface ProjectTableProps {
 }
 
 export function ProjectTable({ projects, onOpen, onReveal }: ProjectTableProps) {
+  const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<ProjectSortKey>('lastModified');
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<DashboardProjectType | 'all'>('all');
@@ -19,20 +21,20 @@ export function ProjectTable({ projects, onOpen, onReveal }: ProjectTableProps) 
   }, [projects, query, sortKey, typeFilter]);
 
   return (
-    <section className="panel" aria-label="Projects">
+    <section className="panel" aria-label={t('projects.column.name')}>
       <div className="table-toolbar">
         <input
-          aria-label="Search projects"
-          placeholder="Search projects"
+          aria-label={t('projects.search')}
+          placeholder={t('projects.search')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
         <select
-          aria-label="Filter by type"
+          aria-label={t('projects.filterByType')}
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value as DashboardProjectType | 'all')}
         >
-          <option value="all">All types</option>
+          <option value="all">{t('common.allTypes')}</option>
           {DASHBOARD_PROJECT_TYPES.map((type) => (
             <option key={type} value={type}>
               {type}
@@ -43,17 +45,32 @@ export function ProjectTable({ projects, onOpen, onReveal }: ProjectTableProps) 
       <table>
         <thead>
           <tr>
-            <ColumnHeader label="Name" sortKey="name" active={sortKey} onSort={setSortKey} />
-            <ColumnHeader label="Type" sortKey="type" active={sortKey} onSort={setSortKey} />
             <ColumnHeader
-              label="Last Modified"
+              label={t('projects.column.name')}
+              sortKey="name"
+              active={sortKey}
+              onSort={setSortKey}
+            />
+            <ColumnHeader
+              label={t('projects.column.type')}
+              sortKey="type"
+              active={sortKey}
+              onSort={setSortKey}
+            />
+            <ColumnHeader
+              label={t('projects.column.lastModified')}
               sortKey="lastModified"
               active={sortKey}
               onSort={setSortKey}
             />
-            <ColumnHeader label="Size" sortKey="size" active={sortKey} onSort={setSortKey} />
-            <th>Path</th>
-            <th>Actions</th>
+            <ColumnHeader
+              label={t('projects.column.size')}
+              sortKey="size"
+              active={sortKey}
+              onSort={setSortKey}
+            />
+            <th>{t('projects.column.path')}</th>
+            <th>{t('projects.column.actions')}</th>
           </tr>
         </thead>
         <tbody>
@@ -68,10 +85,10 @@ export function ProjectTable({ projects, onOpen, onReveal }: ProjectTableProps) 
               <td className="path-cell">{project.relativePath}</td>
               <td className="actions-cell">
                 <button type="button" onClick={() => onOpen(project.relativePath)}>
-                  Open
+                  {t('common.open')}
                 </button>
                 <button type="button" onClick={() => onReveal(project.relativePath)}>
-                  Reveal
+                  {t('common.reveal')}
                 </button>
               </td>
             </tr>
@@ -79,7 +96,7 @@ export function ProjectTable({ projects, onOpen, onReveal }: ProjectTableProps) 
           {rows.length === 0 ? (
             <tr>
               <td colSpan={6} className="empty-cell">
-                No projects match the current filters.
+                {t('projects.empty')}
               </td>
             </tr>
           ) : null}
