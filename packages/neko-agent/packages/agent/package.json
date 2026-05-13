@@ -10,6 +10,7 @@
     "./runtime": "./src/runtime/index.ts",
     "./tools": "./src/tools/index.ts",
     "./workspace": "./src/workspace/index.ts",
+    "./skill": "./src/skill/index.ts",
     "./*": "./src/*"
   },
   "scripts": {

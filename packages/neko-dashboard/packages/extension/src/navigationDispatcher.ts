@@ -29,7 +29,7 @@ export class NavigationDispatcher {
       throw new Error('No workspace folder is open.');
     }
 
-    return vscode.Uri.joinPath(folders[0].uri, ...relativePath.split('/'));
+    return vscode.Uri.joinPath(folders[0]!.uri, ...relativePath.split('/'));
   }
 
   async resolveExistingWorkspacePath(relativePath: string): Promise<vscode.Uri> {
@@ -53,6 +53,6 @@ export class NavigationDispatcher {
       }
     }
 
-    return vscode.Uri.joinPath(folders[0].uri, ...segments);
+    return vscode.Uri.joinPath(folders[0]!.uri, ...segments);
   }
 }

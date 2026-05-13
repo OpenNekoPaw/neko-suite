@@ -48,6 +48,20 @@ export function registerAgentCoreCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
+      'neko.agent.invokeSkill',
+      async (args?: { skillName?: string; intent?: string }) => {
+        await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+        if (args?.intent) {
+          await chatViewProvider.sendMessageToAssistant(args.intent, true);
+        } else if (args?.skillName) {
+          await chatViewProvider.sendMessageToAssistant(`/${args.skillName}`, true);
+        }
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
       'neko.agent.sendContext',
       async (payload: AgentContextPayload) => {
         await chatViewProvider.sendContextPayload(payload);

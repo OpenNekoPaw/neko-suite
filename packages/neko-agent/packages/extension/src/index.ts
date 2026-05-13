@@ -20,7 +20,8 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
-import { withTimeout } from '@neko/shared';
+import { withTimeout, type ISkillProvider, type SkillDef } from '@neko/shared';
+import { builtinSkills } from '@neko/agent/skill';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
 import { setPlatformRootLogger } from '@neko/platform';
@@ -44,7 +45,7 @@ import { registerMarketInstallTargets } from './market/registerMarketInstallTarg
 /**
  * Activate the extension
  */
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<ISkillProvider> {
   // Initialize logger
   const logger = createVSCodeLogger(
     'Neko Agent',
@@ -137,6 +138,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await registerMarketInstallTargets(context);
 
   getRootLogger().info('Extension activated');
+
+  const PERSONA_SKILL_NAMES = new Set([
+    'creation-persona',
+    'execution-persona',
+    'iteration-persona',
+  ]);
+
+  return {
+    getSkills(): SkillDef[] {
+      return builtinSkills
+        .filter((s) => s.enabled && !PERSONA_SKILL_NAMES.has(s.name))
+        .map((s) => ({
+          id: s.name,
+          name: s.name
+            .split('-')
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' '),
+          description: s.description.split('.')[0] ?? s.description,
+          icon: s.icon,
+          command: 'neko.agent.invokeSkill',
+          tags: s.allowedTools?.length ? ['ai', ...(s.command ? ['slash-command'] : [])] : ['ai'],
+        }));
+    },
+  };
 }
 
 /**
