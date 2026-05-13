@@ -18,7 +18,8 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-market",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-cut",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-canvas",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-story"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-story",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-dashboard"
       ],
       "outFiles": ["${workspaceFolder}/packages/*/dist/**/*.js"],
       "preLaunchTask": "build:pack-video"
@@ -80,6 +81,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-sketch",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-puppet",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-dashboard",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-suite"
       ],
       "outFiles": ["${workspaceFolder}/packages/*/dist/**/*.js"],
@@ -103,6 +105,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-sketch",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-puppet",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-dashboard",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-suite"

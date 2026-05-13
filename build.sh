@@ -25,6 +25,7 @@ RELEASE_PACKAGES=(
   "neko-assets"
   "neko-auth"
   "neko-market"
+  "neko-dashboard"
 )
 
 # Development-only extensions
