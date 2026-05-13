@@ -54,6 +54,16 @@ export class DashboardProvider implements vscode.Disposable {
 
     this.disposables.push(this.taskAggregator);
     this.disposables.push(
+      vscode.extensions.onDidChange(() => {
+        if (this.panel) void this.refresh();
+      }),
+    );
+    this.disposables.push(
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        if (this.panel) void this.refresh();
+      }),
+    );
+    this.disposables.push(
       this.taskAggregator.onDidChangeTask((event) => {
         this.post({ type: 'taskProgress', event });
         if (event.task.status === 'done' || event.task.status === 'error') {

@@ -35,6 +35,7 @@ export class SkillReader {
             name: def.name,
             description: def.description,
             icon: def.icon,
+            command: def.command,
             tags: def.tags,
           });
         }

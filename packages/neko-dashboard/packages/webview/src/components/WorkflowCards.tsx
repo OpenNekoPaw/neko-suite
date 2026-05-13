@@ -22,7 +22,7 @@ const WORKFLOWS: readonly WorkflowDef[] = [
   },
   {
     id: 'screenwriting',
-    actions: [{ labelKey: 'dashboard.quickStart.canvas', projectType: 'canvas' }],
+    actions: [{ labelKey: 'dashboard.quickStart.screenplay', command: 'neko.story.newFile' }],
   },
   {
     id: 'visual',

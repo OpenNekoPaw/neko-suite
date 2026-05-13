@@ -12,6 +12,7 @@ export const dashboard = {
   'dashboard.status.files': '{count} files',
 
   'dashboard.quickStart': 'Quick Start',
+  'dashboard.quickStart.screenplay': 'New Script',
   'dashboard.quickStart.video': 'New Video',
   'dashboard.quickStart.canvas': 'New Canvas',
   'dashboard.quickStart.sketch': 'New Sketch',
@@ -20,7 +21,7 @@ export const dashboard = {
   'dashboard.quickStart.puppet': 'New Puppet',
   'dashboard.quickStart.ai': 'Open Chat',
 
-  'dashboard.workflows': 'Creative Workflows',
+  'dashboard.workflows': 'Creative Suite',
 
   'dashboard.workflow.filmmaking': 'Film & Video',
   'dashboard.workflow.filmmaking.desc':
@@ -57,4 +58,5 @@ export const dashboard = {
   'dashboard.skills': 'Installed Skills',
   'dashboard.skills.empty':
     'No skills available. Install Neko suite extensions to unlock AI capabilities.',
+  'dashboard.skills.run': 'Run',
 } as const satisfies MessageBundle;

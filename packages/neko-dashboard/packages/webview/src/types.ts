@@ -60,6 +60,7 @@ export interface DashboardSkill {
   readonly name: string;
   readonly description: string;
   readonly icon?: string;
+  readonly command?: string;
   readonly tags?: readonly string[];
 }
 

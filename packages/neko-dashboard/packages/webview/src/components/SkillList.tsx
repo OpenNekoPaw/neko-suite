@@ -3,9 +3,10 @@ import type { DashboardSkill } from '../types';
 
 export interface SkillListProps {
   readonly skills: readonly DashboardSkill[];
+  readonly onCommand: (command: string) => void;
 }
 
-export function SkillList({ skills }: SkillListProps) {
+export function SkillList({ skills, onCommand }: SkillListProps) {
   const { t } = useTranslation();
 
   return (
@@ -16,7 +17,11 @@ export function SkillList({ skills }: SkillListProps) {
       ) : (
         <div className="skill-grid">
           {skills.map((skill) => (
-            <SkillCard key={`${skill.extensionId}:${skill.id}`} skill={skill} />
+            <SkillCard
+              key={`${skill.extensionId}:${skill.id}`}
+              skill={skill}
+              onCommand={onCommand}
+            />
           ))}
         </div>
       )}
@@ -24,7 +29,14 @@ export function SkillList({ skills }: SkillListProps) {
   );
 }
 
-function SkillCard({ skill }: { readonly skill: DashboardSkill }) {
+interface SkillCardProps {
+  readonly skill: DashboardSkill;
+  readonly onCommand: (command: string) => void;
+}
+
+function SkillCard({ skill, onCommand }: SkillCardProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="skill-card">
       {skill.icon ? <span className="skill-card-icon">{skill.icon}</span> : null}
@@ -40,6 +52,11 @@ function SkillCard({ skill }: { readonly skill: DashboardSkill }) {
             </span>
           ))}
         </div>
+      ) : null}
+      {skill.command ? (
+        <button type="button" className="skill-card-run" onClick={() => onCommand(skill.command!)}>
+          {t('dashboard.skills.run')}
+        </button>
       ) : null}
     </div>
   );

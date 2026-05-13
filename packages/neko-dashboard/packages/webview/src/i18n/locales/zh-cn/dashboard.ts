@@ -12,6 +12,7 @@ export const dashboard = {
   'dashboard.status.files': '{count} 个文件',
 
   'dashboard.quickStart': '快速开始',
+  'dashboard.quickStart.screenplay': '新建剧本',
   'dashboard.quickStart.video': '新建视频',
   'dashboard.quickStart.canvas': '新建画布',
   'dashboard.quickStart.sketch': '新建绘画',
@@ -20,7 +21,7 @@ export const dashboard = {
   'dashboard.quickStart.puppet': '新建动画',
   'dashboard.quickStart.ai': '打开对话',
 
-  'dashboard.workflows': '创作工作流',
+  'dashboard.workflows': '创作套件',
 
   'dashboard.workflow.filmmaking': '影视制作',
   'dashboard.workflow.filmmaking.desc': '视频剪辑、音频混音、AI 生成与增强',
@@ -50,4 +51,5 @@ export const dashboard = {
 
   'dashboard.skills': '已安装技能',
   'dashboard.skills.empty': '暂无可用技能。安装 Neko 套件扩展以解锁 AI 能力。',
+  'dashboard.skills.run': '执行',
 } as const satisfies MessageBundle;

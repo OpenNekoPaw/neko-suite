@@ -104,7 +104,7 @@ function WelcomeView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
-      <SkillList skills={data.skills} />
+      <SkillList skills={data.skills} onCommand={handleCommand} />
     </>
   );
 }
@@ -122,7 +122,7 @@ function WorkView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
-      <SkillList skills={data.skills} />
+      <SkillList skills={data.skills} onCommand={handleCommand} />
       <TaskTable
         tasks={data.tasks}
         onCancel={(taskId) => postMessage({ type: 'cancelTask', taskId })}

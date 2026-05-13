@@ -100,6 +100,7 @@ const vscode = {
     findFiles: vi.fn(),
     getWorkspaceFolder: vi.fn(),
     getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+    onDidChangeWorkspaceFolders: vi.fn(() => ({ dispose: vi.fn() })),
     fs: vscodeWorkspaceFs,
     workspaceFolders: undefined,
   },
@@ -111,6 +112,7 @@ const vscode = {
   ViewColumn: { One: 1 },
   extensions: {
     getExtension: vi.fn((id: string) => installedExtensions.get(id)),
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
   },
   env: {
     language: 'en',
