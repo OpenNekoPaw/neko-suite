@@ -125,7 +125,6 @@ export class AudioProjectProvider
 {
   static readonly viewType = 'neko.audioProject';
 
-  private readonly _disposables: vscode.Disposable[] = [];
   private _audioService: AudioService | null = null;
 
   // In-memory project data cache for incremental operation sync (v2 format)
@@ -267,7 +266,7 @@ export class AudioProjectProvider
 
   async revertCustomDocument(document: vscode.CustomDocument): Promise<void> {
     const panel = this._activePanels.get(document.uri.toString());
-    if (!panel || panel.visible === undefined) return;
+    if (!panel) return;
 
     try {
       await panel.webview.postMessage({ type: 'revert' });
@@ -1327,7 +1326,6 @@ export class AudioProjectProvider
 
   dispose(): void {
     this._onDidChangeCustomDocument.dispose();
-    this._disposables.forEach((d) => d.dispose());
     this._activePanels.clear();
     this._projectDataCache.clear();
     this._projectCompatibilityCache.clear();

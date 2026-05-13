@@ -310,7 +310,8 @@ function toTimelineElement(element: unknown): TimelineElement | undefined {
           ? { linkedVideoId: element['linkedVideoId'] }
           : {}),
       };
-    case 'text':
+    case 'text': {
+      const shadow = toTextShadow(element['shadow']);
       return {
         ...base,
         type: 'text',
@@ -335,8 +336,9 @@ function toTimelineElement(element: unknown): TimelineElement | undefined {
         ...(typeof element['strokeWidth'] === 'number'
           ? { strokeWidth: element['strokeWidth'] }
           : {}),
-        ...(toTextShadow(element['shadow']) ? { shadow: toTextShadow(element['shadow']) } : {}),
+        ...(shadow ? { shadow } : {}),
       };
+    }
     case 'shape':
       return {
         ...base,
@@ -346,7 +348,8 @@ function toTimelineElement(element: unknown): TimelineElement | undefined {
         stroke: readString(element, 'stroke', 'transparent'),
         strokeWidth: readNumber(element, 'strokeWidth', 0),
       };
-    case 'subtitle':
+    case 'subtitle': {
+      const shadow = toTextShadow(element['shadow']);
       return {
         ...base,
         type: 'subtitle',
@@ -358,8 +361,9 @@ function toTimelineElement(element: unknown): TimelineElement | undefined {
         textAlign: readString(element, 'textAlign', 'center'),
         strokeColor: readString(element, 'strokeColor', 'transparent'),
         strokeWidth: readNumber(element, 'strokeWidth', 0),
-        ...(toTextShadow(element['shadow']) ? { shadow: toTextShadow(element['shadow']) } : {}),
+        ...(shadow ? { shadow } : {}),
       };
+    }
     case 'scene3d':
       return {
         ...base,
@@ -752,14 +756,14 @@ function stripTimelineElement(element: AudioProjectData['tracks'][number]['eleme
       ...effect,
       parameters: { ...effect.parameters },
       ...(effect.animatedParameters !== undefined
-        ? { animatedParameters: { ...effect.animatedParameters } }
+        ? { animatedParameters: structuredClone(effect.animatedParameters) }
         : {}),
     })),
     muted: element.muted,
     hidden: element.hidden,
     locked: element.locked,
-    ...(element.audio !== undefined ? { audio: { ...element.audio } } : {}),
-    ...(element.speed !== undefined ? { speed: { ...element.speed } } : {}),
+    ...(element.audio !== undefined ? { audio: structuredClone(element.audio) } : {}),
+    ...(element.speed !== undefined ? { speed: structuredClone(element.speed) } : {}),
     ...(element.transitionIn !== undefined ? { transitionIn: { ...element.transitionIn } } : {}),
     ...(element.transitionOut !== undefined ? { transitionOut: { ...element.transitionOut } } : {}),
     ...(element.lineage !== undefined ? { lineage: { ...element.lineage } } : {}),
