@@ -27,6 +27,7 @@ import type { NekoCutAPI, ISkillProvider, SkillDef } from '@neko/shared';
 import { createNekoCutCapabilityProvider } from './agentCapabilityProvider';
 import { TimelineToolExecutor } from './services/TimelineToolExecutor';
 import { TimelineToolBridge } from './services/timelineToolBridge';
+import { NekoCutDashboardTaskSource } from './services/dashboardTaskSource';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 
 /**
@@ -78,6 +79,12 @@ export async function activate(
 
   // Register commands
   registerCommands(context, bootstrapResult.outlineProvider, videoEditorProvider);
+
+  const dashboardTaskSource = new NekoCutDashboardTaskSource(videoEditorProvider);
+  context.subscriptions.push(
+    dashboardTaskSource,
+    vscode.commands.registerCommand('neko.cut.getDashboardTaskSource', () => dashboardTaskSource),
+  );
 
   // Register media preview command (opens in neko-preview's customEditor)
   context.subscriptions.push(

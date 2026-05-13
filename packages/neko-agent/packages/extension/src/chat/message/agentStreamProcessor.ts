@@ -25,6 +25,7 @@ import { type AgentPhase, type ContentBlock } from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
+import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -73,6 +74,8 @@ export interface AgentStreamProcessorDeps {
     readonly perceptionPipeline?: IPerceptionPipeline;
     readonly backfillSink?: BackfillSink;
   };
+  /** Extension-host mirror for Dashboard task aggregation. */
+  dashboardWorkItems?: AgentDashboardWorkItemSource;
 }
 
 /**
@@ -110,6 +113,7 @@ export class AgentStreamProcessor {
       conversationId,
       events,
       postMessage: (message) => {
+        this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         void webview.postMessage(message);
       },
       onPhaseChange: callbacks.onPhaseChange,

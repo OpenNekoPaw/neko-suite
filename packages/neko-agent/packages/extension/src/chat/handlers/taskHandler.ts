@@ -28,6 +28,7 @@ import {
 } from '@neko/platform/media/media-task-view';
 import type { ITaskManager as TaskManager } from '@neko/shared';
 import { getLogger } from '../../base';
+import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 
 const logger = getLogger('TaskHandler');
 
@@ -37,6 +38,7 @@ const logger = getLogger('TaskHandler');
 export interface TaskHandlerDeps {
   platform?: Platform;
   taskManager?: TaskManager;
+  dashboardWorkItems?: AgentDashboardWorkItemSource;
 }
 
 /**
@@ -123,6 +125,7 @@ export class TaskHandler {
   private _createTaskRuntimeEffects(webview?: vscode.Webview): TaskRuntimeEffects {
     return {
       postMessage: async (message: TaskRuntimeMessage): Promise<void> => {
+        this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         await webview?.postMessage(message);
       },
       resolveLocalPath: webview ? (path) => this.toWebviewUri(webview, path) : undefined,

@@ -32,6 +32,7 @@
     "neko.neko-preview"
   ],
   "activationEvents": [
+    "onCommand:neko.cut.getDashboardTaskSource",
     "onInstallType:shader"
   ],
   "main": "./dist/extension.js",

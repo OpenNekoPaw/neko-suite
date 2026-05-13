@@ -1,0 +1,4 @@
+{
+  "neko.dashboard.show.title": "Show Dashboard",
+  "neko.dashboard.showOnStartup.description": "Automatically show the Neko Dashboard when a workspace contains Neko project files or a .neko directory."
+}

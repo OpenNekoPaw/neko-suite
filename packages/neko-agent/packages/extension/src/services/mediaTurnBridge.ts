@@ -12,12 +12,14 @@ import type { MediaModelCategory, ModelRef } from '@neko-agent/types';
 import { runAgentMediaTurnForWebview } from '@neko/agent/runtime';
 import { getLogger } from '../base';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
+import type { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
 
 const logger = getLogger('MediaTurnBridge');
 
 export interface MediaTurnBridgeDeps {
   platform?: Platform;
   mediaDeliveryHost: MediaTaskDeliveryHost;
+  dashboardWorkItems?: AgentDashboardWorkItemSource;
 }
 
 export interface ExecuteMediaTurnForWebviewInput {
@@ -38,6 +40,7 @@ export class MediaTurnBridge {
       prompt: input.prompt,
       mediaModel: input.mediaModel,
       postMessage: (message) => {
+        this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         void input.webview.postMessage(message);
       },
       ...(media

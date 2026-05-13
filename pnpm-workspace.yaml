@@ -4,6 +4,7 @@ packages:
   - packages/neko-agent/packages/*
   - packages/neko-assets/packages/*
   - packages/neko-canvas/packages/*
+  - packages/neko-dashboard/packages/*
   - packages/neko-cut/packages/*
   - packages/neko-engine/packages/*
   - packages/neko-live/packages/*

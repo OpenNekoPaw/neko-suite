@@ -1,0 +1,251 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+  AgentBackgroundTask,
+  AgentWorkItem,
+  SubAgentWorkItem,
+  TaskWorkItem,
+} from '@neko-agent/types';
+import { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
+
+vi.mock('vscode', () => ({
+  workspace: {
+    workspaceFolders: [{ uri: { fsPath: '/workspace' }, name: 'workspace', index: 0 }],
+  },
+  EventEmitter: class EventEmitter<T> {
+    private readonly listeners = new Set<(event: T) => void>();
+
+    readonly event = (listener: (event: T) => void) => {
+      this.listeners.add(listener);
+      return {
+        dispose: () => this.listeners.delete(listener),
+      };
+    };
+
+    fire(event: T): void {
+      for (const listener of this.listeners) {
+        listener(event);
+      }
+    }
+
+    dispose(): void {
+      this.listeners.clear();
+    }
+  },
+}));
+
+describe('AgentDashboardWorkItemSource', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('maps media task work items to dashboard tasks with safe outputs', async () => {
+    const source = new AgentDashboardWorkItemSource();
+    source.acceptWebviewMessage({
+      type: 'mediaTaskProgress',
+      conversationId: 'conv-1',
+      workItem: createTaskWorkItem({
+        id: 'media-1',
+        kind: 'media-task',
+        status: 'processing',
+        progress: 45,
+        result: {
+          urls: ['https://example.test/out.png'],
+          localPaths: ['/workspace/generated/out.png'],
+          assets: [],
+        },
+      }),
+    });
+
+    await expect(source.getSnapshot()).resolves.toEqual([
+      expect.objectContaining({
+        taskId: 'neko-agent:media-1',
+        kind: 'media-task',
+        status: 'running',
+        progress: 45,
+        actions: ['cancel', 'reveal-output'],
+        outputs: expect.arrayContaining([
+          { kind: 'file', ref: 'generated/out.png', label: 'out.png' },
+          { kind: 'url', ref: 'https://example.test/out.png', label: 'Generated output' },
+        ]),
+      }),
+    ]);
+    source.dispose();
+  });
+
+  it('clamps progress and drops unsafe relative local outputs', async () => {
+    const source = new AgentDashboardWorkItemSource();
+    source.acceptWebviewMessage({
+      type: 'mediaTaskProgress',
+      conversationId: 'conv-1',
+      workItem: createTaskWorkItem({
+        id: 'media-unsafe',
+        kind: 'media-task',
+        status: 'processing',
+        progress: 150,
+        result: {
+          urls: [],
+          localPaths: ['../outside.png', 'nested\\safe.png'],
+          assets: [],
+        },
+      }),
+    });
+
+    const snapshot = await source.getSnapshot();
+    expect(snapshot[0]).toEqual(
+      expect.objectContaining({
+        progress: 100,
+        outputs: [{ kind: 'file', ref: 'nested/safe.png', label: 'safe.png' }],
+      }),
+    );
+    source.dispose();
+  });
+
+  it('maps tool-background failures to retryable dashboard tasks', async () => {
+    const source = new AgentDashboardWorkItemSource();
+    source.acceptWebviewMessage({
+      type: 'taskUpdated',
+      conversationId: 'conv-1',
+      workItem: createTaskWorkItem({
+        id: 'tool-1',
+        kind: 'tool-background-task',
+        status: 'failed',
+        progress: 100,
+        error: 'failed',
+      }),
+    });
+
+    const snapshot = await source.getSnapshot();
+    expect(snapshot[0]).toEqual(
+      expect.objectContaining({
+        taskId: 'neko-agent:tool-1',
+        kind: 'tool-background-task',
+        status: 'error',
+        actions: ['retry'],
+        error: 'failed',
+      }),
+    );
+    source.dispose();
+  });
+
+  it('maps subagent work items without source actions', async () => {
+    const source = new AgentDashboardWorkItemSource();
+    source.acceptWebviewMessage({
+      type: 'subagentEvent',
+      conversationId: 'conv-1',
+      event: {
+        type: 'progress',
+        subAgentId: 'sub-1',
+        parentAgentId: 'agent-1',
+        conversationId: 'conv-1',
+        timestamp: Date.parse('2026-01-01T00:00:00.000Z'),
+      },
+      workItem: createSubAgentWorkItem(),
+    });
+
+    const snapshot = await source.getSnapshot();
+    expect(snapshot[0]).toEqual(
+      expect.objectContaining({
+        taskId: 'neko-agent:sub-1',
+        kind: 'subagent',
+        status: 'running',
+        actions: [],
+        workItemKind: 'subagent',
+      }),
+    );
+    source.dispose();
+  });
+
+  it('delegates cancel and retry to owning agent services', async () => {
+    const platform = { media: { cancelTask: vi.fn(async () => true) } };
+    const taskManager = {
+      get: vi.fn(async () => ({ input: { type: 'tool', payload: {} } })),
+      cancel: vi.fn(async () => undefined),
+      submit: vi.fn(async () => 'retry-1'),
+    };
+    const source = new AgentDashboardWorkItemSource({
+      platform: platform as never,
+      taskManager: taskManager as never,
+    });
+
+    source.acceptWebviewMessage({
+      type: 'mediaTaskCreated',
+      conversationId: 'conv-1',
+      workItem: createTaskWorkItem({ id: 'media-1', kind: 'media-task' }),
+    });
+    source.acceptWebviewMessage({
+      type: 'taskUpdated',
+      conversationId: 'conv-1',
+      workItem: createTaskWorkItem({
+        id: 'tool-1',
+        kind: 'tool-background-task',
+        status: 'failed',
+      }),
+    });
+
+    await source.cancel({ source: 'neko-agent', sourceTaskId: 'media-1' });
+    await source.retry({ source: 'neko-agent', sourceTaskId: 'tool-1' });
+
+    expect(platform.media.cancelTask).toHaveBeenCalledWith('media-1');
+    expect(taskManager.get).toHaveBeenCalledWith('tool-1');
+    expect(taskManager.submit).toHaveBeenCalledWith({ type: 'tool', payload: {} });
+    source.dispose();
+  });
+});
+
+function createTaskWorkItem(
+  overrides: Partial<TaskWorkItem> & {
+    id: string;
+    kind: TaskWorkItem['kind'];
+    result?: AgentBackgroundTask['result'];
+  },
+): TaskWorkItem {
+  const task: AgentBackgroundTask = {
+    id: overrides.id,
+    type: 'image',
+    name: 'Generate image',
+    prompt: 'Generate image',
+    providerId: 'provider',
+    providerName: 'model',
+    status: overrides.status ?? 'processing',
+    progress: overrides.progress ?? 10,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    ...(overrides.result ? { result: overrides.result } : {}),
+    ...(overrides.error ? { error: overrides.error } : {}),
+  };
+
+  return {
+    id: overrides.id,
+    conversationId: 'conv-1',
+    kind: overrides.kind,
+    parentMessageId: null,
+    parentToolCallId: null,
+    title: task.name,
+    summary: task.prompt,
+    status: task.status,
+    progress: task.progress,
+    result: task.result,
+    error: task.error,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    task,
+  };
+}
+
+function createSubAgentWorkItem(): SubAgentWorkItem {
+  return {
+    id: 'sub-1',
+    conversationId: 'conv-1',
+    kind: 'subagent',
+    parentMessageId: null,
+    parentToolCallId: null,
+    title: 'Subagent',
+    status: 'processing',
+    progress: 25,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    subAgent: {
+      parentAgentId: 'agent-1',
+    },
+  } satisfies AgentWorkItem as SubAgentWorkItem;
+}

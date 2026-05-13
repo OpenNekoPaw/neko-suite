@@ -79,6 +79,10 @@ export * from './task';
 // Task Views (Extension ↔ Webview DTO)
 export * from './task-view';
 
+// Dashboard task monitoring contracts
+export * from './dashboard-task';
+export * from './dashboard-project';
+
 // SubAgent UI Types
 export * from './subagent';
 

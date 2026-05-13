@@ -60,6 +60,7 @@ import {
 import { getSkillFileService } from '../services/SkillFileService';
 import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
 import { postPluginsAvailable } from '../services/pluginTransferBridge';
+import { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
 import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
   getCapabilityDiscoveryService,
@@ -124,6 +125,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _taskManager?: IRuntimeTaskManager;
   private _configBridge?: ConfigBridge;
   private _capabilityRefreshRuntime?: CapabilityRuntimeRefreshRuntime;
+  private readonly _dashboardWorkItems = new AgentDashboardWorkItemSource();
   // Note: _routerAskBroker and _workflowPlanHandler were removed alongside
   // the workflow/orchestrator layer. Pipeline intents now flow through the
   // Agent + Skill stack; no separate plan handler is needed.
@@ -161,6 +163,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       promptModeCleanup: this._systemPrompt,
       getWebview: () => this._view?.webview,
     });
+    this._context.subscriptions.push(
+      this._dashboardWorkItems,
+      vscode.commands.registerCommand(
+        'neko.agent.getDashboardTaskSource',
+        () => this._dashboardWorkItems,
+      ),
+    );
     this._slashCommandHandler = new SlashCommandHandler({
       conversations: this._conversations,
       settings: this._settings,
@@ -247,7 +256,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           this._platform,
           this._taskManager,
           (conversationId) => this._skillHandler.getActiveSkill(conversationId),
+          undefined,
+          this._dashboardWorkItems,
         );
+        this._dashboardWorkItems.updateDeps({
+          platform: this._platform,
+          taskManager: this._taskManager,
+        });
 
         const skillLazySync = createRuntimeSkillLazySync({
           scanLazy: () => skillFileService.scanSkillsLazy(),
@@ -290,6 +305,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         this._taskHandler.updateDeps({
           platform: this._platform,
           taskManager: this._taskManager,
+          dashboardWorkItems: this._dashboardWorkItems,
         });
         this._fileOperationHandler.updateDeps({ platform: this._platform });
         this._planModeHandler.updateDeps({

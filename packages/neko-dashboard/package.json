@@ -1,0 +1,78 @@
+{
+  "name": "neko-dashboard",
+  "displayName": "Neko Dashboard",
+  "description": "Table-centric project control panel for Neko Suite workspaces",
+  "version": "0.0.1",
+  "publisher": "neko",
+  "l10n": "./l10n",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neko/creative-suite"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "dashboard",
+    "workspace",
+    "projects",
+    "tasks"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onCommand:neko.dashboard.show",
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "neko.dashboard.show",
+        "title": "%neko.dashboard.show.title%",
+        "category": "Neko"
+      }
+    ],
+    "configuration": {
+      "title": "Neko Dashboard",
+      "properties": {
+        "neko.dashboard.showOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "%neko.dashboard.showOnStartup.description%"
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "neko.dashboard.show"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "pnpm run compile:extension && pnpm run compile:webview && pnpm run copy:extension && pnpm run copy:webview",
+    "compile:extension": "cd packages/extension && pnpm run build",
+    "compile:webview": "cd packages/webview && pnpm run build",
+    "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
+    "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview/assets && cp packages/webview/dist/*.html dist/webview/ 2>/dev/null || true && cp -R packages/webview/dist/assets/* dist/webview/assets/ 2>/dev/null || true",
+    "watch": "pnpm run compile:extension -- --watch",
+    "test": "pnpm exec vitest --passWithNoTests",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.2",
+    "vitest": "^4.1.2"
+  }
+}

@@ -50,6 +50,11 @@
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },
+    "neko-dashboard#compile": {
+      "dependsOn": ["@neko-dashboard/webview#build"],
+      "outputs": ["dist/**", "out/**"],
+      "cache": true
+    },
     "neko-model#compile": {
       "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
       "outputs": ["dist/**", "out/**"],

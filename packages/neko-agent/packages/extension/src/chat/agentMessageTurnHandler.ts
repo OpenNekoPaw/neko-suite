@@ -44,6 +44,7 @@ import {
 } from '../services/engineClientProvider';
 import { MediaTaskDeliveryHost } from '../services/mediaTaskDeliveryHost';
 import { MediaTurnBridge } from '../services/mediaTurnBridge';
+import type { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
 import { createVSCodeWorkspaceFileReader } from '../services/workspaceFileReader';
 import { searchVSCodeProjectFiles } from '../services/workspaceProjectSearch';
 import { AgentTurnBridge } from './message/agentTurnBridge';
@@ -82,6 +83,7 @@ export class AgentMessageTurnHandler {
       conversationId: string,
     ) => ActiveSkillState | undefined,
     private readonly _engineClientProvider: IEngineClientProvider = getEngineClientProvider(),
+    private readonly _dashboardWorkItems?: AgentDashboardWorkItemSource,
   ) {
     this._attachmentProcessor = new AttachmentProcessor();
 
@@ -93,6 +95,7 @@ export class AgentMessageTurnHandler {
     this._mediaTurnBridge = new MediaTurnBridge({
       platform: this._platform,
       mediaDeliveryHost: this._mediaDeliveryHost,
+      dashboardWorkItems: this._dashboardWorkItems,
     });
 
     this._streamProcessor = new AgentStreamProcessor({
@@ -101,6 +104,7 @@ export class AgentMessageTurnHandler {
       transcodeFile: (inputPath, outputPath, mediaType) =>
         this._engineClientProvider.transcodeFile(inputPath, outputPath, mediaType),
       mediaDeliveryHost: this._mediaDeliveryHost,
+      dashboardWorkItems: this._dashboardWorkItems,
     });
     this._agentTurnBridge = new AgentTurnBridge({
       settings: this._settings,
@@ -247,6 +251,7 @@ export class AgentMessageTurnHandler {
       if (!message) {
         return;
       }
+      this._dashboardWorkItems?.acceptWebviewMessage(message);
       webview.postMessage(message);
     });
 

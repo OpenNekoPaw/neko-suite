@@ -49,6 +49,13 @@ interface ExportJobInfo {
   startedAt: number;
 }
 
+/** Read-only export job metadata for source-owned dashboard adapters */
+export interface ExportJobSnapshot {
+  readonly jobId: string;
+  readonly config: ExportConfig;
+  readonly startedAt: number;
+}
+
 /** Progress reported by Rust export pipeline */
 export interface ExportProgress {
   jobId: string;
@@ -299,6 +306,17 @@ export class ExportService implements vscode.Disposable {
    */
   getQueueStatus(): ExportQueueStatus {
     return this.buildQueueStatus();
+  }
+
+  /**
+   * Return active export jobs without exposing the mutable internal registry.
+   */
+  getActiveExportJobs(): ExportJobSnapshot[] {
+    return [...this._activeJobs.entries()].map(([jobId, info]) => ({
+      jobId,
+      config: { ...info.config },
+      startedAt: info.startedAt,
+    }));
   }
 
   /**

@@ -11,6 +11,7 @@ import { MessageHandler } from './messageHandler';
 import { MediaService } from '../../services/MediaService';
 import { EngineConnection } from '../../services/EngineConnection';
 import { ExportService } from '../../services/ExportService';
+import type { DashboardExportServiceEntry } from '../../services/dashboardTaskSource';
 import { ExportPresetService } from '../../services/ExportPresetService';
 import { getService, getLogger } from '../../base';
 import { isAssetMessage, handleAssetMessage } from '../../handlers/assetHandlers';
@@ -27,10 +28,15 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
   private engineConnection: EngineConnection = new EngineConnection();
   private exportServices: Map<string, ExportService> = new Map();
   private presetService: ExportPresetService | null = null;
+  private readonly onDidRegisterExportServiceEmitter =
+    new vscode.EventEmitter<DashboardExportServiceEntry>();
+  readonly onDidRegisterExportService = this.onDidRegisterExportServiceEmitter.event;
   /** Deferred cleanup subscriptions (cancelled when editor is reopened during export) */
   private deferredCleanupSubs: Map<string, vscode.Disposable[]> = new Map();
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.context.subscriptions.push(this.onDidRegisterExportServiceEmitter);
+  }
 
   /**
    * Pin the editor tab for the given document URI to prevent accidental closure during export
@@ -172,6 +178,16 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
    */
   public getExportService(documentUri: string): ExportService | undefined {
     return this.exportServices.get(documentUri);
+  }
+
+  /**
+   * Return export services for source-owned dashboard task monitoring.
+   */
+  public getExportServices(): DashboardExportServiceEntry[] {
+    return [...this.exportServices.entries()].map(([documentUri, service]) => ({
+      documentUri,
+      service,
+    }));
   }
 
   /**
@@ -336,6 +352,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       const jviDir = path.dirname(document.uri.fsPath);
       exportService = new ExportService(client, jviDir);
       this.exportServices.set(docUri, exportService);
+      this.onDidRegisterExportServiceEmitter.fire({ documentUri: docUri, service: exportService });
     }
     if (reusingExport) {
       logger.info('Reusing ExportService with active export');

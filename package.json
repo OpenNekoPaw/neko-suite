@@ -8,8 +8,8 @@
   ],
   "scripts": {
     "build": "turbo run build",
-    "build:ui": "turbo run build --filter=@neko/webview --filter=@neko-agent/webview --filter=@neko-canvas/webview",
-    "build:release": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-cut --filter=neko-canvas --filter=neko-story --filter=neko-sketch --filter=neko-puppet --filter=neko-audio",
+    "build:ui": "turbo run build --filter=@neko/webview --filter=@neko-agent/webview --filter=@neko-canvas/webview --filter=@neko-dashboard/webview",
+    "build:release": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-cut --filter=neko-canvas --filter=neko-dashboard --filter=neko-story --filter=neko-sketch --filter=neko-puppet --filter=neko-audio",
     "build:dev": "turbo run compile --filter='neko-*'",
     "build:pack-video": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-cut --filter=neko-canvas --filter=neko-story",
     "build:pack-2d": "turbo run compile --filter=neko-engine --filter=neko-tools --filter=neko-preview --filter=neko-assets --filter=neko-auth --filter=neko-agent --filter=neko-market --filter=neko-sketch --filter=neko-puppet",

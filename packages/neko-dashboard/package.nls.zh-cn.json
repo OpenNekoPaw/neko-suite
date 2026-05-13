@@ -1,0 +1,4 @@
+{
+  "neko.dashboard.show.title": "显示仪表盘",
+  "neko.dashboard.showOnStartup.description": "当工作区包含 Neko 项目文件或 .neko 目录时自动显示 Neko 仪表盘。"
+}

@@ -1,10 +1,10 @@
 # ADR: Neko Dashboard — Table-Centric Project Control Panel
 
-- **Status**: Proposed (pending contract revision)
+- **Status**: Accepted / Implemented baseline (automated gates passed; VSCode manual verification pending)
 - **Date**: 2026-05-12
-- **Scope**: new package `neko-dashboard` (extension + webview), `@neko/shared` (shared types + task contract)
-- **Related**: `adr-canvas-block-container.md` (canvas node architecture), `format-strategy.md` (project file formats), `vscode-constraints.md`
-- **Prerequisite**: Cross-extension task event contract (§2.3.1) must be defined in `@neko/shared` before P1 implementation
+- **Scope**: new package `neko-dashboard` (extension + webview), `@neko/shared` (`packages/neko-types`, shared types + task contract)
+- **Related**: `adr-canvas-block-container.md` (canvas node architecture), `format-strategy.md` (project file formats), `vscode-constraints.md`, `openspec/specs/dashboard-project-overview/spec.md`, `openspec/specs/dashboard-runtime-context/spec.md`, `openspec/specs/dashboard-task-monitoring/spec.md`
+- **Implementation**: `openspec/changes/archive/2026-05-13-add-neko-dashboard-control-panel/`
 
 ---
 
@@ -154,12 +154,15 @@ Task sources and event contracts:
 
 #### 2.3.1 Shared Task Contract (`@neko/shared`)
 
-All task contract types live in `@neko/shared/types/dashboard-task.ts` as Layer 0 zero-dependency DTOs. See §2.3.2 for the full type definitions (`DashboardTask`, `DashboardTaskStatus`, `DashboardTaskEvent`, `DashboardTaskSource`, `DisposableLike`).
+All task contract types live in `@neko/shared/types/dashboard-task.ts` (`packages/neko-types/src/types/dashboard-task.ts`) as Layer 0 zero-dependency DTOs. See §2.3.2 for the full type definitions (`DashboardTask`, `DashboardTaskStatus`, `DashboardTaskEvent`, `DashboardTaskSource`, `DashboardDisposableLike`).
 
 Key invariants:
-- **No absolute paths**: `outputRef` stores workspace-relative paths or `${VAR}/path` placeholders (per project path system rules); extension host resolves them when user clicks "reveal output"
-- **No VSCode type leakage**: `DisposableLike` replaces `vscode.Disposable` in the shared interface
+- **No absolute paths**: output refs store workspace-relative paths or `${VAR}/path` placeholders (per project path system rules); extension host resolves them when user clicks "reveal output"
+- **No VSCode type leakage**: `DashboardDisposableLike` replaces `vscode.Disposable` in the shared interface
 - **Agent extension fields are optional**: `conversationId` / `workItemKind` only present for agent-sourced tasks
+- **Stable task identity**: Dashboard owns display-level `taskId`, while each source owns `sourceTaskId`; cancel/retry calls use a typed task reference so aggregation IDs are never confused with source-local IDs
+- **Explicit progress semantics**: `progress` is a percentage in the inclusive range `0..100`; unknown progress is represented by omitting the field
+- **Runtime validation required**: Dashboard treats command results as `unknown` at the boundary and accepts a source only after structural validation
 
 #### 2.3.2 Task Source Adapter Interface
 
@@ -169,18 +172,33 @@ Split into two layers per `@neko/shared` three-layer isolation rule:
 // @neko/shared/types/dashboard-task.ts — Layer 0 (zero-dep DTO)
 
 export type DashboardTaskStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+export type DashboardTaskAction = 'cancel' | 'retry' | 'reveal-output';
+export type DashboardTaskOutputKind = 'file' | 'folder' | 'url' | 'asset';
 
-export interface DashboardTask {
-  readonly taskId: string;
+export interface DashboardTaskRef {
   readonly source: string;
   readonly sourceTaskId: string;
+}
+
+export interface DashboardTaskOutputRef {
+  readonly kind: DashboardTaskOutputKind;
+  readonly ref: string;          // workspace-relative path OR ${VAR}/path for local refs — never absolute
+  readonly label?: string;
+}
+
+export interface DashboardTask {
+  readonly taskId: string;       // dashboard aggregation id: `${source}:${sourceTaskId}`
+  readonly source: string;       // stable extension source id, e.g. `neko-cut`
+  readonly sourceDisplayName?: string;
+  readonly sourceTaskId: string;
+  readonly kind: string;         // export / generate-image / generate-video / tts / batch / render / inference
   readonly title: string;
   readonly status: DashboardTaskStatus;
-  readonly progress: number;
-  readonly canCancel: boolean;
-  readonly canRetry: boolean;
+  readonly progress?: number;    // percentage, 0..100 inclusive; omitted when unknown
+  readonly actions: readonly DashboardTaskAction[];
   readonly startedAt: number;
-  readonly outputRef?: string;       // workspace-relative path OR ${VAR}/path — never absolute
+  readonly completedAt?: number;
+  readonly outputs?: readonly DashboardTaskOutputRef[];
   readonly currentStep?: string;
   readonly error?: string;
   readonly conversationId?: string;  // agent-specific optional
@@ -192,21 +210,32 @@ export interface DashboardTaskEvent {
   readonly type: 'added' | 'updated' | 'removed';
 }
 
+export interface DashboardTaskSourceCapabilities {
+  readonly cancel?: boolean;
+  readonly retry?: boolean;
+  readonly revealOutput?: boolean;
+}
+
 // Local disposable shape — avoids leaking vscode.Disposable into Layer 0
-export interface DisposableLike {
+export interface DashboardDisposableLike {
   dispose(): void;
 }
 
 export interface DashboardTaskSource {
+  readonly contractVersion: 1;
   readonly source: string;
+  readonly sourceDisplayName?: string;
+  readonly capabilities?: DashboardTaskSourceCapabilities;
   getSnapshot(): Promise<DashboardTask[]>;
-  onDidChangeTask(listener: (event: DashboardTaskEvent) => void): DisposableLike;
-  cancel?(taskId: string): Promise<void>;
-  retry?(taskId: string): Promise<void>;
+  onDidChangeTask(listener: (event: DashboardTaskEvent) => void): DashboardDisposableLike;
+  cancel?(task: DashboardTaskRef): Promise<void>;
+  retry?(task: DashboardTaskRef): Promise<void>;
 }
 ```
 
-Note: `DashboardTaskSource` is a pure structural interface. Source extensions may implement it using `vscode.EventEmitter` (whose `Event.dispose` satisfies `DisposableLike`). Dashboard does not need to know about VSCode types when consuming the interface.
+Note: `DashboardTaskSource` is a pure structural interface. Source extensions may implement it using `vscode.EventEmitter` (whose `Event.dispose` satisfies `DashboardDisposableLike`). Dashboard does not need to know about VSCode types when consuming the interface.
+
+The adapter implementation belongs inside the source extension. For example, `neko-cut` owns the export-to-dashboard mapping and exposes it through `neko.cut.getDashboardTaskSource`; `neko-dashboard` must not import `neko-cut`, `neko-agent`, `neko-canvas`, or `neko-engine` packages directly.
 
 #### 2.3.3 Source Discovery: Pull-First, Push-Optional
 
@@ -220,7 +249,7 @@ vscode.commands.registerCommand('neko.canvas.getDashboardTaskSource', () => canv
 vscode.commands.registerCommand('neko.engine.getDashboardTaskSource', () => engineTaskSource);
 ```
 
-On Dashboard open, `TaskAggregator` iterates over a **known source list** and calls each `get*TaskSource` command. Missing extensions simply return `undefined` — Dashboard degrades gracefully.
+On Dashboard open, `TaskAggregator` iterates over a **known source list** and calls each `get*TaskSource` command. Missing extensions simply return `undefined` — Dashboard degrades gracefully. The known list is an MVP bootstrap mechanism, not a permanent extension registry; future sources should be discoverable through a contribution point or optional push registration without changing dashboard core code.
 
 Push registration (`neko.dashboard.registerTaskSource`) remains as an **optimization** for source extensions that want to announce themselves proactively (e.g. to update an already-open Dashboard), but is never the source of truth for discovery.
 
@@ -230,6 +259,18 @@ Push registration (`neko.dashboard.registerTaskSource`) remains as an **optimiza
 | Push (optional) | Source extension activates | Dashboard not yet open → queued or dropped; not required for correctness |
 
 Dashboard degrades gracefully — if a source extension is not installed or hasn't registered, its task list is simply empty.
+
+Boundary handling:
+- Command return values are treated as `unknown` and validated before subscription.
+- Invalid sources are ignored and logged through the shared logger; they must not break the Dashboard panel.
+- Duplicate sources are keyed by `source`; the latest valid registration replaces the previous one after disposing the old subscription.
+- All task updates are normalized by `taskId = ${source}:${sourceTaskId}` before entering webview state.
+
+Initial snapshot race handling:
+- Dashboard subscribes to `onDidChangeTask` before awaiting `getSnapshot()` so events emitted during initial load are not missed.
+- During registration, any task id observed from an event is protected from being overwritten by the later initial snapshot. This keeps a stale snapshot from rolling progress back when a source emits `updated` before `getSnapshot()` resolves.
+- Snapshot rows still fill gaps for tasks that did not emit an event during the registration window. After registration, source events remain the authority for live task state.
+- If a source needs stronger conflict resolution later, it should emit monotonic `updatedAt` or sequence metadata in a future contract revision; contract v1 intentionally keeps the merge rule simple and keyed by `${source}:${sourceTaskId}`.
 
 #### Agent Task Integration Detail
 
@@ -246,29 +287,40 @@ Dashboard subscribes to WorkItem state changes (not raw LLM streaming). The agen
 ```typescript
 // neko-agent adapter example
 class AgentDashboardTaskSource implements DashboardTaskSource {
+  readonly contractVersion = 1;
   readonly source = 'neko-agent';
+  readonly sourceDisplayName = 'Neko Agent';
+  readonly capabilities = { cancel: true, retry: true, revealOutput: true };
 
   async getSnapshot(): Promise<DashboardTask[]> {
     return Array.from(workItemStore.values())
       .flatMap(map => Array.from(map.values()))
       .map(workItem => ({
-        taskId: `agent-${workItem.id}`,
+        taskId: `neko-agent:${workItem.id}`,
         source: 'neko-agent',
+        sourceDisplayName: 'Neko Agent',
         sourceTaskId: workItem.id,
+        kind: workItem.kind === 'media-task' ? workItem.task.type : workItem.kind,
         title: workItem.title,
         status: mapStatus(workItem.status),
         progress: workItem.progress,
-        canCancel: workItem.status === 'processing',
-        canRetry: workItem.status === 'failed',
+        actions: [
+          ...(workItem.status === 'processing' ? ['cancel' as const] : []),
+          ...(workItem.status === 'failed' ? ['retry' as const] : []),
+          ...(workItem.result?.localPaths?.length ? ['reveal-output' as const] : []),
+        ],
         startedAt: new Date(workItem.createdAt).getTime(),
-        outputRef: toWorkspaceRelative(workItem.result?.localPaths?.[0]),
+        completedAt: isTerminalStatus(workItem.status)
+          ? new Date(workItem.updatedAt).getTime()
+          : undefined,
+        outputs: toDashboardOutputs(workItem.result?.localPaths),
         conversationId: workItem.conversationId,
         workItemKind: workItem.kind,
       }));
   }
 
   onDidChangeTask(listener) { /* subscribe to AgentWorkItemStore changes */ }
-  async cancel(taskId) { /* delegate to AgentManager.cancel() */ }
+  async cancel(task) { /* delegate to AgentManager.cancel(task.sourceTaskId) */ }
 }
 ```
 
@@ -290,8 +342,8 @@ Design notes:
 
 **Task persistence strategy**:
 - **Active tasks** (queued/running): in-memory only, lost on VSCode restart — acceptable because the tasks themselves are also lost
-- **Completed tasks** (done/error): persisted to `.neko/dashboard-activity.json` (lightweight index: taskId, title, source, status, `outputRef`, completedAt). Capped at 50 entries, FIFO eviction. `outputRef` stores only workspace-relative paths or `${VAR}/path` placeholders — never absolute paths. Extension host resolves refs via `PathResolver` when the user clicks "reveal output"
-- This enables the "What did the AI produce while I was away?" use case (§8.1 P2) without requiring full task state persistence
+- **Completed tasks** (done/error): persisted to `.neko/dashboard-activity.json` (lightweight index: taskId, title, source, status, `outputs`, completedAt). Capped at 50 entries, FIFO eviction. Local output refs store only workspace-relative paths or `${VAR}/path` placeholders — never absolute paths. Extension host resolves refs via `PathResolver` when the user clicks "reveal output"
+- This enables the "What did the AI produce while I was away?" use case (§9.1 P2) without requiring full task state persistence
 - The activity index is **append-only from Dashboard's perspective** — source extensions own task lifecycle, Dashboard only records completion events
 
 #### RecentActivityTable (secondary view)
@@ -371,7 +423,7 @@ This hybrid approach avoids two failure modes:
 
 Activation triggers:
 1. Command palette: `Neko: Show Dashboard`
-2. Auto-show on workspace open (if workspace contains `.neko/` directory), configurable via `neko.dashboard.showOnStartup`
+2. Auto-show on workspace open only when `neko.dashboard.showOnStartup` is enabled and the workspace contains `.neko/` or `.nk*` files; default is `false` to avoid interrupting existing VSCode workflows
 3. Activity Bar welcome view (when no editor is open)
 
 ### 2.6 Communication Protocol
@@ -396,6 +448,8 @@ update(dashboardData)          — Full state push (projects + status + recent +
 taskProgress(taskEvent)        — Incremental task status/progress update
 taskCompleted(taskId, result)  — Task finished (success or error)
 ```
+
+`taskId` in webview messages is always the dashboard aggregation id. Extension-host code resolves it back to `DashboardTaskRef` before invoking `DashboardTaskSource.cancel()` or `retry()`.
 
 ### 2.7 What Dashboard Does NOT Do
 
@@ -451,11 +505,15 @@ Shown when the workspace has no creative project files, or on first use. Purpose
 
 | Section | Content |
 |---------|---------|
-| **Creative Workflow Cards** | Visual flow diagrams: Video (script→storyboard→edit→export), 2D (sketch→layer→animate), 3D (model→rig→animate), Audio (record→mix→master) |
 | **Quick Start** | "Create New..." buttons for each project type (.nkv/.nkc/.nks/.nka/.nkm) with one-line descriptions |
-| **Installed Skills** | List of active Agent skills with short descriptions — helps users understand AI capabilities |
-| **Recommended Skills** | Top 3-5 skills from marketplace relevant to installed extensions — discovery entry point |
 | **Provider Status** | "Claude + DALL-E 3 ready" — confirms AI is configured and usable |
+
+P0 Welcome Mode is intentionally sparse: quick project creation plus provider readiness. Rich onboarding content is deferred so the dashboard stays an operational surface rather than a marketing or marketplace discovery page.
+
+Deferred Welcome content:
+- **Creative Workflow Cards** (P2): visual flow diagrams for Video / 2D / 3D / Audio workflows
+- **Installed Skills** (P2): active Agent skills with short descriptions
+- **Recommended Skills** (P3): marketplace recommendations, shown only when marketplace data is available
 
 #### Work Mode (workspace has `.nk*` files)
 
@@ -537,10 +595,10 @@ Estimated size: ~3-4K LOC total (extension ~800, webview ~2500).
 | Dependency | Direction | Purpose |
 |------------|-----------|---------|
 | `@neko/shared` | import | Logger, i18n, theme, `DashboardTask` / `DashboardTaskSource` contracts |
-| neko-engine | `DashboardTaskSource` adapter | Render/ML job progress; `neko.engine.getStatus` (programmatic, no UI) |
-| neko-agent | `DashboardTaskSource` adapter | WorkItem progress; `neko.agent.getSessionCount` (programmatic, no UI) |
-| neko-cut | `DashboardTaskSource` adapter | Export progress |
-| neko-canvas | `DashboardTaskSource` adapter | Batch generation progress |
+| neko-engine | command boundary | Render/ML job progress through source-owned adapter; `neko.engine.getStatus` (programmatic, no UI) |
+| neko-agent | command boundary | WorkItem progress through source-owned adapter; `neko.agent.getSessionCount` (programmatic, no UI) |
+| neko-cut | command boundary | Export progress through source-owned adapter |
+| neko-canvas | command boundary | Batch generation progress through source-owned adapter |
 | neko-assets | command query | `neko.assets.getSummary` (programmatic, no UI) |
 
 **Command naming convention**: Dashboard calls only programmatic commands (suffix `get*` / `query*`) that return data silently. It must NOT call interactive commands (e.g. `neko.engine.status` which shows a QuickPick UI). New programmatic commands needed:
@@ -556,7 +614,7 @@ Estimated size: ~3-4K LOC total (extension ~800, webview ~2500).
 | `neko.engine.getDashboardTaskSource` | `DashboardTaskSource \| undefined` | neko-engine |
 | `neko.dashboard.registerTaskSource` | void (optional push registration) | neko-dashboard |
 
-No hard extension dependencies — dashboard degrades gracefully if other extensions are not installed (shows "not available" for missing status, empty task list for missing sources).
+No hard extension dependencies — dashboard degrades gracefully if other extensions are not installed (shows "not available" for missing status, empty task list for missing sources). In implementation terms, `packages/neko-dashboard` may import `@neko/shared` and VSCode APIs, but must not import source extension packages. Source packages own their adapters and expose them only through programmatic commands.
 
 ---
 
@@ -565,23 +623,57 @@ No hard extension dependencies — dashboard degrades gracefully if other extens
 | Phase | Scope | Effort | Blocked by |
 |-------|-------|--------|------------|
 | P0 | ProjectTable + file scanning + open navigation + minimal RecentActivity (top 5 recent files via fs.stat mtime) + Welcome/Work mode | ~3 days | — |
-| P1a | Define `DashboardTask` + `DashboardTaskSource` + `DisposableLike` in `@neko/shared` | ~0.5 day | — |
+| P1a | Define `DashboardTask` + `DashboardTaskSource` + `DashboardDisposableLike` in `@neko/shared`; add source validation helpers; reserve `getDashboardTaskSource` command names | ~0.75 day | — |
 | P1b | TaskTable UI + TaskAggregator (pull-first discovery) + first adapter (neko-cut export) | ~2 days | P1a |
 | P1c | Agent adapter + Canvas adapter (validate contract generality) + `.neko/dashboard-activity.json` persistence | ~1.5 days | P1b |
-| P2 | ContextStrip + QuickActions + programmatic commands + full RecentActivity (with action type + extension icon) | ~1 day | — |
+| P2 | ContextStrip + QuickActions + status/summary programmatic commands + full RecentActivity (with action type + extension icon) + deferred Welcome content | ~1.5 days | — |
 | P3 | AccountBadge + auth status integration | ~0.5 day | neko-hub backend |
 | P4 | Card view toggle + Explorer TreeView companion | ~1 day | — |
 | P5 | SyncStatus + QuotaIndicator (cloud features) | ~1 day | neko-assets sync + neko-hub quota API |
 
-Total: ~10.5 engineering days. P0+P2+P4 independent (~5 days). P1 requires cross-extension contract work (~4 days). P3+P5 blocked by neko-hub.
+Total: ~11.25 engineering days. P0+P2+P4 independent (~5.5 days). P1 requires cross-extension contract work (~4.25 days). P3+P5 blocked by neko-hub.
 
 **Critical path**: P0 → P1a → P1b → P1c. The shared contract (P1a) must land before any adapter implementation.
 
-**P0 RecentActivity scope**: P0 ships a minimal version — just the 5 most-recently-modified `.nk*` files shown as a list, matching the §8.1 P0 priority "Where did I leave off?". P2 expands it to a full table with action type (opened/edited/created) and extension-specific icons.
+**P0 RecentActivity scope**: P0 ships a minimal version — just the 5 most-recently-modified `.nk*` files shown as a list, matching the §9.1 P0 priority "Where did I leave off?". P2 expands it to a full table with action type (opened/edited/created) and extension-specific icons.
 
 ---
 
-## 7. Relationship to neko-canvas
+## 7. Quality Gates
+
+Dashboard ships only after the affected slice has focused tests. The goal is not broad end-to-end coverage in P0, but clear contract and boundary protection before cross-extension task monitoring lands.
+
+### 7.1 P0 Tests
+
+| Area | Required coverage |
+|------|-------------------|
+| ProjectScanner | Finds supported `.nk*` files across workspace folders; ignores `node_modules`, `.git`, and `.neko/.cache`; reports workspace-relative paths only |
+| ProjectTable state | Sort by name/type/mtime/size; text search; type filter; empty-state behavior |
+| RecentActivity minimal view | Selects the five most-recently-modified `.nk*` files; handles missing/deleted files without throwing |
+| NavigationDispatcher | Opens project files through VSCode commands; rejects absolute or out-of-workspace paths from webview messages |
+| Welcome/Work mode | Switches by workspace content; default startup does not auto-open unless setting allows it |
+
+### 7.2 P1 Contract Tests
+
+| Area | Required coverage |
+|------|-------------------|
+| Shared contract guards | Accept valid `DashboardTaskSource`; reject missing `contractVersion`, invalid `source`, invalid `progress`, absolute local output refs, and non-disposable listeners |
+| TaskAggregator | Handles missing commands, commands that throw, commands that return invalid objects, duplicate sources, and dispose lifecycle |
+| Task event merge | Applies `added` / `updated` / `removed` idempotently by `${source}:${sourceTaskId}` |
+| Task actions | Resolves dashboard `taskId` back to `DashboardTaskRef` before cancel/retry; surfaces source errors without corrupting table state |
+| Activity persistence | Appends terminal task results, caps at 50 entries, survives missing/corrupt `.neko/dashboard-activity.json`, and never writes absolute paths |
+
+### 7.3 Manual Verification
+
+Minimum manual checks before enabling P1 by default:
+1. Open a workspace with no `.nk*` files: Dashboard stays in Welcome Mode and does not auto-open unless configured.
+2. Open a workspace with mixed `.nkv`, `.nkc`, `.nks`, `.nka`, `.nkm`, `.nkp` files: ProjectTable shows relative paths and sortable metadata.
+3. Start a fake or real export task: TaskTable updates progress without polling and cancel delegates to the source extension.
+4. Restart VSCode after a completed task: completed output appears from `.neko/dashboard-activity.json` and reveal resolves through `PathResolver`.
+
+---
+
+## 8. Relationship to neko-canvas
 
 ```
 neko-dashboard                          neko-canvas
@@ -601,11 +693,11 @@ Dashboard links to canvas (and all other editors). Canvas can link back to dashb
 
 ---
 
-## 8. Creator Information Needs Analysis
+## 9. Creator Information Needs Analysis
 
 What does a creative professional need to see when they open their workspace?
 
-### 8.1 Information Priority (by frequency of need)
+### 9.1 Information Priority (by frequency of need)
 
 | Priority | Question | Dashboard answer | Update frequency |
 |----------|----------|-----------------|-----------------|
@@ -617,7 +709,7 @@ What does a creative professional need to see when they open their workspace?
 | **P2** | "How big is my project?" | ProjectTable — file sizes, asset count | On open |
 | **P3** | "What's changed since last session?" | RecentActivity — mtime-based change indicators (P3 optional: SCM adapter for git-aware status, default off) | On open |
 
-### 8.2 Creator Workflow Patterns
+### 9.2 Creator Workflow Patterns
 
 | Workflow | Dashboard touchpoint | Action |
 |----------|---------------------|--------|
@@ -627,7 +719,7 @@ What does a creative professional need to see when they open their workspace?
 | **Multi-project overview** | ProjectTable → sort by last modified → scan status | Read |
 | **Waiting for export** | TaskTable → see progress bar → continue other work | Monitor |
 
-### 8.3 What Creators Do NOT Need in Dashboard
+### 9.3 What Creators Do NOT Need in Dashboard
 
 | Information | Why excluded | Where it lives |
 |-------------|-------------|----------------|
@@ -639,7 +731,7 @@ What does a creative professional need to see when they open their workspace?
 | Engine configuration (GPU, memory, threads) | Belongs in settings | VSCode settings |
 | Detailed error logs | Belongs in output channel | Output panel |
 
-### 8.4 Design Implication
+### 9.4 Design Implication
 
 The analysis confirms: Dashboard is a **triage surface** — it helps creators decide "what to do next" in under 5 seconds. It is not a workspace for doing the work itself.
 
@@ -651,13 +743,13 @@ Key UX principles:
 
 ---
 
-## 9. Future Slots: Account & Cloud State
+## 10. Future Slots: Account & Cloud State
 
-### 9.1 Rationale for Pre-Planning
+### 10.1 Rationale for Pre-Planning
 
 neko-auth (OAuth 2.0 + PKCE) is implemented but pending backend integration. Cloud storage sync (`neko.assets.cloudProvider`) is configured but not operational. These features will become available incrementally. Dashboard should reserve UI slots now to avoid layout redesign later.
 
-### 9.2 Planned Slots
+### 10.2 Planned Slots
 
 | Slot | Location | Trigger | Priority | Blocked by |
 |------|----------|---------|----------|------------|
@@ -666,7 +758,7 @@ neko-auth (OAuth 2.0 + PKCE) is implemented but pending backend integration. Clo
 | **QuotaIndicator** | ContextStrip (tooltip or expandable) | Usage API available | P3 | neko-hub billing/quota API |
 | **SubscriptionTier** | Welcome mode header | Commercial model decided | Unplanned | Business decision |
 
-### 9.3 AccountBadge Design (P2)
+### 10.3 AccountBadge Design (P2)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -682,7 +774,7 @@ States:
 
 Data source: `neko.auth.getStatus` command (one-shot read, same as engine status).
 
-### 9.4 SyncStatus Design (P3)
+### 10.4 SyncStatus Design (P3)
 
 Two possible placements (decide when implementing):
 
@@ -701,7 +793,7 @@ Cloud: offline
 
 Option B is more granular (per-file sync state) but adds complexity. Defer decision until sync is operational.
 
-### 9.5 QuotaIndicator Design (P3)
+### 10.5 QuotaIndicator Design (P3)
 
 Relevant when cloud generation APIs have usage limits:
 
@@ -714,7 +806,7 @@ Relevant when cloud generation APIs have usage limits:
 
 Shown as tooltip on ContextStrip or as a collapsible section. Only visible when quota API is available and usage > 50%.
 
-### 9.6 Implementation Strategy
+### 10.6 Implementation Strategy
 
 ```
 P0-P1 (now):     Build Dashboard without account/cloud — slots are empty/hidden
@@ -728,4 +820,3 @@ All slots use the same hybrid strategy as §2.4:
 - **Actively-changing state** (sync progress, quota approaching limit) → event-driven push
 
 No slot requires Dashboard to manage authentication flows or sync operations — it only displays status and links to the responsible extension's UI for actions.
-

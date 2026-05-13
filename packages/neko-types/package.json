@@ -18,6 +18,8 @@
     "./nkplan": "./src/nkplan/index.ts",
     "./nkproj": "./src/nkproj/index.ts",
     "./config/config-reader": "./src/config/config-reader.ts",
+    "./types/dashboard-task": "./src/types/dashboard-task.ts",
+    "./types/dashboard-project": "./src/types/dashboard-project.ts",
     "./vscode/extension/command-args": "./src/vscode/extension/command-args.ts",
     "./vscode/extension": "./src/vscode/extension/index.ts",
     "./*": "./src/*"
