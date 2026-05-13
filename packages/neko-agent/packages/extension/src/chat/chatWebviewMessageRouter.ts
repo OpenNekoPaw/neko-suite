@@ -44,6 +44,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'revealFile',
   'openConfigFile',
   'openUrl',
+  'revealContextSource',
   'downloadSvg',
   'sendToPlugin',
   'dnd:start',

@@ -4,7 +4,16 @@
  * Handles async media generation tasks with polling and recovery support
  */
 
-import type { TaskInput, TaskOutput, TaskRecoveryInfo, TaskExecutor } from '@neko/shared';
+import type {
+  TaskInput,
+  TaskOutput,
+  TaskRecoveryInfo,
+  TaskExecutor,
+  TaskExecutionContext,
+  SerializableTask,
+  ITaskRecoveryStorage,
+} from '@neko/shared';
+import { sleepWithAbort } from '@neko/shared';
 import type { Provider, Model } from '../types/provider';
 import type {
   MediaAdapter,
@@ -86,9 +95,7 @@ export class MediaTaskExecutor {
     if (!taskManager.getRecoveryStorage) {
       return 0;
     }
-    const recoveryStorage = taskManager.getRecoveryStorage() as
-      | { loadAll(): Promise<TaskRecoveryInfo[]> }
-      | undefined;
+    const recoveryStorage: ITaskRecoveryStorage | undefined = taskManager.getRecoveryStorage();
     if (!recoveryStorage) {
       return 0;
     }
@@ -97,6 +104,15 @@ export class MediaTaskExecutor {
 
     for (const info of recoveryInfos) {
       try {
+        const task = await taskManager.get(info.taskId);
+        if (task?.lifecycle?.recoverPolicy && task.lifecycle.recoverPolicy !== 'resume-polling') {
+          logger.debug('Skipping recovery polling for task recover policy', {
+            taskId: info.taskId,
+            recoverPolicy: task.lifecycle.recoverPolicy,
+          });
+          continue;
+        }
+
         // Get provider
         const provider = this.configManager.getProvider(info.providerId);
         if (!provider) {
@@ -121,13 +137,23 @@ export class MediaTaskExecutor {
         const result = await adapter.getTaskStatus(info.externalTaskId, provider);
 
         if (result.status === 'completed') {
-          // Task already completed, clean up
+          await this.completeRecoveredTask(taskManager, info, {
+            data: {
+              outputs: result.outputs,
+              metadata: result.metadata,
+            },
+          });
           logger.debug('Recovered task already completed', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
           }
         } else if (result.status === 'failed' || result.status === 'cancelled') {
-          // Task failed/cancelled, clean up
+          await this.completeRecoveredTask(taskManager, info, {
+            error:
+              result.status === 'cancelled'
+                ? 'Generation was cancelled'
+                : result.error?.message || 'Generation failed',
+          });
           logger.debug('Recovered task failed/cancelled', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
             await taskManager.deleteRecoveryInfo(info.taskId);
@@ -168,7 +194,8 @@ export class MediaTaskExecutor {
       taskManager,
       () => {}, // No progress callback for resumed tasks
     )
-      .then(() => {
+      .then((output) => {
+        void this.completeRecoveredTask(taskManager, info, output);
         // Clean up recovery info on completion
         if (taskManager.deleteRecoveryInfo) {
           taskManager.deleteRecoveryInfo(info.taskId).catch((err) => {
@@ -191,6 +218,7 @@ export class MediaTaskExecutor {
     return async (
       input: TaskInput,
       onProgress: (progress: number) => void,
+      context?: TaskExecutionContext,
     ): Promise<TaskOutput> => {
       const payload = input.payload as unknown as MediaTaskPayload & { __taskId?: string };
       const { generationType, providerId, modelId, request, __taskId } = payload;
@@ -208,6 +236,8 @@ export class MediaTaskExecutor {
       // Get legacy adapter for bridge fallback
       const legacyAdapter = getMediaAdapterRegistry().getForType(provider.type);
 
+      throwIfAborted(context?.signal);
+
       // All generation goes through AI SDK (native providers or legacy bridge)
       const aiSdkResult = await this.tryAISDK(
         generationType,
@@ -216,6 +246,8 @@ export class MediaTaskExecutor {
         provider,
         onProgress,
         legacyAdapter ?? undefined,
+        context,
+        __taskId,
       );
       if (aiSdkResult) return aiSdkResult;
 
@@ -236,6 +268,8 @@ export class MediaTaskExecutor {
     provider: Provider,
     onProgress: (progress: number) => void,
     legacyAdapter?: MediaAdapter,
+    context?: TaskExecutionContext,
+    taskId?: string,
   ): Promise<TaskOutput | null> {
     // Infer image generation mode from model capabilities:
     // Models with both 'chat' and 'image_generation' use chat completions (Gemini, GPT-image)
@@ -249,13 +283,29 @@ export class MediaTaskExecutor {
 
     const resolved = resolveProvider(
       provider.type,
-      { apiUrl: provider.apiUrl, apiKey: provider.apiKey ?? '' },
+      {
+        apiUrl: provider.apiUrl,
+        apiKey: provider.apiKey ?? '',
+        onExternalTaskId: async (externalTaskId) => {
+          if (taskId && this.taskManager?.saveRecoveryInfo) {
+            await this.taskManager.saveRecoveryInfo(taskId, externalTaskId, provider.id);
+          }
+          context?.reportLifecycle({
+            lifecycle: {
+              costPhase: 'external-wait',
+              recoverPolicy: 'resume-polling',
+              interruptPolicy: 'detach-and-continue',
+            },
+          });
+        },
+      },
       legacyAdapter as import('@neko/ai-sdk').LegacyMediaAdapter | undefined,
       { imageMode },
     );
     if (!resolved) return null;
 
     try {
+      context?.reportLifecycle({ lifecycle: { costPhase: 'token-active' } });
       // Image generation via AI SDK
       if (generationType === 'text-to-image' || generationType === 'image-to-image') {
         const imageModel = resolved.image(model.name);
@@ -298,6 +348,7 @@ export class MediaTaskExecutor {
           prompt: imgReq.prompt,
           n: imgReq.count ?? 1,
           size: size as `${number}x${number}` | undefined,
+          abortSignal: context?.signal,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...(Object.keys(nekoProviderOptions).length > 0
             ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -305,7 +356,9 @@ export class MediaTaskExecutor {
             : {}),
         });
 
+        throwIfAborted(context?.signal);
         onProgress(100);
+        context?.reportLifecycle({ lifecycle: { costPhase: 'local-finalize' } });
         return {
           data: {
             outputs: result.images.map((img) => ({
@@ -337,9 +390,12 @@ export class MediaTaskExecutor {
           resolution,
           duration: vidReq.duration,
           fps: vidReq.fps,
+          abortSignal: context?.signal,
         });
 
+        throwIfAborted(context?.signal);
         onProgress(100);
+        context?.reportLifecycle({ lifecycle: { costPhase: 'local-finalize' } });
         const video = result.video;
         // Handle both base64 (file type) and URL (url type) responses
         const videoUrl = video.base64
@@ -370,9 +426,12 @@ export class MediaTaskExecutor {
           voice: audioReq.metadata?.voice as string | undefined,
           speed: audioReq.metadata?.speed as number | undefined,
           outputFormat: audioReq.format,
+          abortSignal: context?.signal,
         });
 
+        throwIfAborted(context?.signal);
         onProgress(100);
+        context?.reportLifecycle({ lifecycle: { costPhase: 'local-finalize' } });
         const audio = result.audio;
         return {
           data: {
@@ -390,7 +449,7 @@ export class MediaTaskExecutor {
       return null;
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error);
-      const context = `[${provider.type}/${model.name}] ${rawMessage}`;
+      const errorContext = `[${provider.type}/${model.name}] ${rawMessage}`;
       logger.error('AI SDK generation failed', {
         error,
         provider: provider.type,
@@ -400,11 +459,11 @@ export class MediaTaskExecutor {
       // Determine if the error is retryable (network, rate limit, server errors)
       if (this.isRetryableError(error)) {
         // Throw to let TaskManager's retry loop handle it
-        throw new Error(context);
+        throw new Error(errorContext);
       }
 
       // Non-retryable errors (auth, invalid request, content filter) — fail immediately
-      return { error: context };
+      return { error: errorContext };
     }
   }
 
@@ -415,18 +474,13 @@ export class MediaTaskExecutor {
     if (!(error instanceof Error)) return false;
     const message = error.message.toLowerCase();
     const name = error.name;
+    const status = getHttpStatus(error);
 
-    // Rate limit errors
-    if (name === 'AI_APICallError' || message.includes('rate limit') || message.includes('429')) {
-      return true;
+    if (status !== undefined) {
+      return status === 429 || (status >= 500 && status < 600);
     }
-    // Server errors (5xx)
-    if (
-      message.includes('500') ||
-      message.includes('502') ||
-      message.includes('503') ||
-      message.includes('504')
-    ) {
+    // Rate limit errors
+    if (message.includes('rate limit')) {
       return true;
     }
     // Network errors
@@ -473,6 +527,7 @@ export class MediaTaskExecutor {
     externalTaskId: string,
     provider: Provider,
     onProgress: (progress: number) => void,
+    signal?: AbortSignal,
   ): Promise<TaskOutput> {
     const config = {
       initialIntervalMs: 5000,
@@ -484,7 +539,7 @@ export class MediaTaskExecutor {
     let currentInterval = config.initialIntervalMs;
 
     while (Date.now() - startTime < config.timeoutMs) {
-      await new Promise((resolve) => setTimeout(resolve, currentInterval));
+      await sleepWithAbort(currentInterval, signal);
 
       try {
         const result = await adapter.getTaskStatus(externalTaskId, provider);
@@ -541,9 +596,26 @@ export class MediaTaskExecutor {
     taskId: string,
     taskManager: MediaTaskManagerDeps,
     onProgress: (progress: number) => void,
+    signal?: AbortSignal,
   ): Promise<TaskOutput> {
     try {
-      const output = await this.pollForCompletion(adapter, externalTaskId, provider, onProgress);
+      if (taskManager.updateLifecycle) {
+        await taskManager.updateLifecycle(taskId, {
+          costPhase: 'external-wait',
+          recoverPolicy: 'resume-polling',
+          interruptPolicy: 'detach-and-continue',
+        });
+      }
+      const output = await this.pollForCompletion(
+        adapter,
+        externalTaskId,
+        provider,
+        onProgress,
+        signal,
+      );
+      if (taskManager.updateLifecycle) {
+        await taskManager.updateLifecycle(taskId, { costPhase: 'local-finalize' });
+      }
 
       // Clean up recovery info on completion
       if (taskManager.deleteRecoveryInfo) {
@@ -561,6 +633,71 @@ export class MediaTaskExecutor {
       throw error;
     }
   }
+
+  private async completeRecoveredTask(
+    taskManager: MediaTaskManagerDeps,
+    info: TaskRecoveryInfo,
+    output: TaskOutput,
+  ): Promise<void> {
+    const existing = await taskManager.get(info.taskId);
+    if (!existing || !taskManager.upsertExternalTask) {
+      return;
+    }
+
+    const terminalStatus = output.error ? 'failed' : 'completed';
+    const nextTask: SerializableTask = {
+      ...existing,
+      status: terminalStatus,
+      progress: output.error ? existing.progress : 100,
+      output,
+      ...(output.error ? { error: output.error } : {}),
+      lifecycle: {
+        ...(existing.lifecycle ?? {
+          runMode: 'background',
+          costPhase: 'idle',
+          interruptPolicy: 'detach-and-continue',
+          recoverPolicy: 'resume-polling',
+        }),
+        costPhase: 'idle',
+      },
+      updatedAt: Date.now(),
+    };
+
+    await taskManager.upsertExternalTask(nextTask);
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error('Task aborted');
+  }
+}
+
+function getHttpStatus(error: Error): number | undefined {
+  for (const key of ['statusCode', 'status', 'responseStatus']) {
+    const value = getObjectField(error, key);
+    if (typeof value === 'number' && Number.isInteger(value)) {
+      return value;
+    }
+  }
+  const response = getObjectField(error, 'response');
+  if (isRecord(response)) {
+    const status = response['status'];
+    if (typeof status === 'number' && Number.isInteger(status)) {
+      return status;
+    }
+  }
+  return undefined;
+}
+
+function getObjectField(value: object, key: string): unknown {
+  return Object.prototype.hasOwnProperty.call(value, key)
+    ? Object.getOwnPropertyDescriptor(value, key)?.value
+    : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -584,6 +721,12 @@ export function createMediaTaskInput(
 
   return {
     type: typeMap[generationType] || 'image_generation',
+    lifecycle: {
+      runMode: 'background',
+      costPhase: 'idle',
+      interruptPolicy: 'detach-and-continue',
+      recoverPolicy: 'resume-polling',
+    },
     payload: {
       generationType,
       providerId,

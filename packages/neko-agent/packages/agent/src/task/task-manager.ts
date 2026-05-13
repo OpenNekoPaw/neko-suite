@@ -18,8 +18,16 @@ import type {
   TaskRecoveryInfo,
   SerializableTask,
   TaskExecutor,
+  TaskLifecycleMetadata,
 } from '@neko/shared';
-import { BaseError, ConcurrencyPool, KeyedConcurrencyPool } from '@neko/shared';
+import {
+  BaseError,
+  ConcurrencyPool,
+  KeyedConcurrencyPool,
+  createTaskLifecycleMetadata,
+  sleepWithAbort,
+  withTimeout,
+} from '@neko/shared';
 import { MemoryTaskStorage } from './task-storage';
 import { MemoryTaskRecoveryStorage } from './task-recovery-storage';
 import {
@@ -40,11 +48,12 @@ export interface IIdcProjectedTaskStore {
 export interface IRuntimeTaskManager extends ITaskManager, IIdcProjectedTaskStore {
   initialize(): Promise<void>;
   resumePendingTasks(): Promise<string[]>;
-  dispose(): void;
+  dispose(): Promise<void>;
   registerExecutor(type: TaskType, executor: TaskExecutor): void;
   saveRecoveryInfo(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
   deleteRecoveryInfo(taskId: string): Promise<void>;
   getRecoveryStorage(): ITaskRecoveryStorage;
+  updateLifecycle(id: string, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean>;
   updateOutputData(id: string, outputData: Record<string, unknown>): Promise<boolean>;
   upsertExternalTask(task: SerializableTask): Promise<void>;
 }
@@ -75,7 +84,15 @@ export interface TaskManagerOptions {
   retentionPeriodMs?: number;
   /** Concurrency configuration */
   concurrency?: ConcurrencyConfig;
+  /** Bounded shutdown timeout in ms (default: 2500) */
+  shutdownTimeoutMs?: number;
 }
+
+type CompletionWaiter = {
+  resolve: (task: Task) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 /**
  * Task manager implementation with optional persistence
@@ -89,6 +106,11 @@ export class TaskManager implements IRuntimeTaskManager {
   private recoveryStorage: ITaskRecoveryStorage;
   private cleanupTimer?: ReturnType<typeof setInterval>;
   private retentionPeriodMs: number;
+  private shutdownTimeoutMs: number;
+  private executionControllers: Map<string, AbortController> = new Map();
+  private completionWaiters: Map<string, Set<CompletionWaiter>> = new Map();
+  /** Blocks abort-driven task updates from racing with shutdown persistence snapshots. */
+  private isDisposing = false;
 
   // Concurrency control
   private globalPool: ConcurrencyPool;
@@ -99,6 +121,7 @@ export class TaskManager implements IRuntimeTaskManager {
     this.storage = options.storage ?? new MemoryTaskStorage();
     this.recoveryStorage = options.recoveryStorage ?? new MemoryTaskRecoveryStorage();
     this.retentionPeriodMs = options.retentionPeriodMs ?? 7 * 24 * 60 * 60 * 1000; // 7 days
+    this.shutdownTimeoutMs = options.shutdownTimeoutMs ?? 2500;
 
     // Initialize concurrency control
     this.concurrencyConfig = options.concurrency ?? {};
@@ -164,6 +187,13 @@ export class TaskManager implements IRuntimeTaskManager {
       // Update in-memory state
       this.tasks.set(task.id, task);
 
+      const recoveryInfo = await this.recoveryStorage.load(task.id).catch(() => undefined);
+      const lifecycle = createTaskLifecycleMetadata(task.lifecycle);
+      if (recoveryInfo && lifecycle.recoverPolicy === 'resume-polling') {
+        resumedIds.push(task.id);
+        continue;
+      }
+
       // Re-execute the task
       this.executeTask(task).catch((error) => {
         this.updateTask(task.id, {
@@ -200,13 +230,46 @@ export class TaskManager implements IRuntimeTaskManager {
   /**
    * Dispose resources
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
+    this.isDisposing = true;
+
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = undefined;
     }
+
+    for (const controller of this.executionControllers.values()) {
+      controller.abort();
+    }
+
+    const snapshots: SerializableTask[] = [];
+    const now = Date.now();
+    for (const [id, task] of this.tasks) {
+      if (task.status === 'pending' || task.status === 'running') {
+        const snapshot: Task = {
+          ...task,
+          status: 'pending',
+          updatedAt: now,
+        };
+        this.tasks.set(id, snapshot);
+        snapshots.push(snapshot as SerializableTask);
+        this.rejectCompletionWaiters(id, new Error('Task manager disposed before completion'));
+      }
+    }
+
+    await withTimeout(
+      Promise.allSettled([
+        ...snapshots.map((task) => this.storage.save(task)),
+        ...getFlushPromises(this.recoveryStorage),
+      ]),
+      this.shutdownTimeoutMs,
+    ).catch((error) => {
+      logger.warn('Timed out while flushing task state during dispose', { error });
+    });
+
     this.globalPool.dispose();
     this.typePools.dispose();
+    this.executionControllers.clear();
   }
 
   /**
@@ -298,6 +361,9 @@ export class TaskManager implements IRuntimeTaskManager {
       type: input.type,
       status: 'pending',
       input,
+      lifecycle: input.lifecycle
+        ? createTaskLifecycleMetadata(input.lifecycle)
+        : createTaskLifecycleMetadata(),
       progress: 0,
       createdAt: now,
       updatedAt: now,
@@ -317,6 +383,10 @@ export class TaskManager implements IRuntimeTaskManager {
 
     // Start execution asynchronously
     this.executeTask(task).catch((error) => {
+      // Aborted executions can reject after dispose has already snapshotted pending tasks.
+      if (this.isDisposing) {
+        return;
+      }
       logger.error('Task execution failed', {
         id,
         error: error instanceof Error ? error.message : String(error),
@@ -345,6 +415,7 @@ export class TaskManager implements IRuntimeTaskManager {
     if (!task) return false;
 
     if (task.status === 'pending' || task.status === 'running') {
+      this.executionControllers.get(id)?.abort();
       this.updateTask(id, { status: 'cancelled' });
       return true;
     }
@@ -356,34 +427,41 @@ export class TaskManager implements IRuntimeTaskManager {
    * Wait for task completion
    */
   async waitForCompletion(id: string, timeoutMs: number = 300000): Promise<Task> {
-    const startTime = Date.now();
-
-    while (true) {
-      const task = this.tasks.get(id);
-      if (!task) {
-        throw new BaseError({
-          category: 'not_found',
-          code: 'TASK_NOT_FOUND',
-          message: `Task ${id} not found`,
-          retryable: false,
-        });
-      }
-
-      if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
-        return task;
-      }
-
-      if (Date.now() - startTime > timeoutMs) {
-        throw new BaseError({
-          category: 'timeout',
-          code: 'TASK_TIMEOUT',
-          message: `Task ${id} timed out after ${timeoutMs}ms`,
-          retryable: false,
-        });
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    const task = this.tasks.get(id);
+    if (!task) {
+      throw new BaseError({
+        category: 'not_found',
+        code: 'TASK_NOT_FOUND',
+        message: `Task ${id} not found`,
+        retryable: false,
+      });
     }
+
+    if (isTerminalStatus(task.status)) {
+      return task;
+    }
+
+    return new Promise<Task>((resolve, reject) => {
+      const waiter: CompletionWaiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          this.removeCompletionWaiter(id, waiter);
+          reject(
+            new BaseError({
+              category: 'timeout',
+              code: 'TASK_TIMEOUT',
+              message: `Task ${id} timed out after ${timeoutMs}ms`,
+              retryable: false,
+            }),
+          );
+        }, timeoutMs),
+      };
+
+      const waiters = this.completionWaiters.get(id) ?? new Set<CompletionWaiter>();
+      waiters.add(waiter);
+      this.completionWaiters.set(id, waiters);
+    });
   }
 
   /**
@@ -412,6 +490,15 @@ export class TaskManager implements IRuntimeTaskManager {
 
     // Clean up callbacks
     this.progressCallbacks.delete(id);
+    this.rejectCompletionWaiters(
+      id,
+      new BaseError({
+        category: 'not_found',
+        code: 'TASK_DELETED',
+        message: `Task ${id} was deleted`,
+        retryable: false,
+      }),
+    );
 
     return true;
   }
@@ -433,6 +520,19 @@ export class TaskManager implements IRuntimeTaskManager {
     };
 
     this.updateTask(id, { output: updatedOutput });
+    return true;
+  }
+
+  async updateLifecycle(id: string, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean> {
+    const task = this.tasks.get(id);
+    if (!task) return false;
+
+    this.updateTask(id, {
+      lifecycle: createTaskLifecycleMetadata({
+        ...task.lifecycle,
+        ...lifecycle,
+      }),
+    });
     return true;
   }
 
@@ -561,6 +661,9 @@ export class TaskManager implements IRuntimeTaskManager {
       return;
     }
 
+    const controller = new AbortController();
+    this.executionControllers.set(task.id, controller);
+
     this.updateTask(task.id, { status: 'running' });
 
     // Inject taskId into payload for recovery support
@@ -584,9 +687,27 @@ export class TaskManager implements IRuntimeTaskManager {
       }
 
       try {
-        const output = await executor(inputWithTaskId, (progress) => {
-          this.updateTask(task.id, { progress });
-        });
+        const output = await executor(
+          inputWithTaskId,
+          (progress) => {
+            if (!controller.signal.aborted) {
+              this.updateTask(task.id, { progress });
+            }
+          },
+          {
+            taskId: task.id,
+            signal: controller.signal,
+            reportLifecycle: (update) => {
+              if (update.lifecycle) {
+                void this.updateLifecycle(task.id, update.lifecycle);
+              }
+            },
+          },
+        );
+
+        if (controller.signal.aborted || this.tasks.get(task.id)?.status === 'cancelled') {
+          return;
+        }
 
         const endTime = Date.now();
 
@@ -624,24 +745,41 @@ export class TaskManager implements IRuntimeTaskManager {
 
         return;
       } catch (error) {
+        if (controller.signal.aborted || this.tasks.get(task.id)?.status === 'cancelled') {
+          return;
+        }
         retries++;
         if (retries > maxRetries) {
           throw error;
         }
 
         const backoff = task.input.options?.retry?.backoffMs || 1000;
-        await new Promise((resolve) => setTimeout(resolve, backoff * retries));
+        await sleepWithAbort(backoff * retries, controller.signal);
       }
     }
+
+    this.executionControllers.delete(task.id);
   }
 
   private updateTask(id: string, updates: Partial<Task>): void {
     const task = this.tasks.get(id);
     if (!task) return;
 
+    const nextUpdates =
+      updates.status !== undefined && isTerminalStatus(updates.status)
+        ? {
+            ...updates,
+            lifecycle: createTaskLifecycleMetadata({
+              ...task.lifecycle,
+              ...updates.lifecycle,
+              costPhase: 'idle',
+            }),
+          }
+        : updates;
+
     const updatedTask: Task = {
       ...task,
-      ...updates,
+      ...nextUpdates,
       updatedAt: Date.now(),
     };
 
@@ -653,6 +791,13 @@ export class TaskManager implements IRuntimeTaskManager {
     });
 
     this._notifyProgress(updatedTask);
+    if (isTerminalStatus(updatedTask.status)) {
+      this.resolveCompletionWaiters(id, updatedTask);
+      this.executionControllers.delete(id);
+      this.recoveryStorage.delete(id).catch((err) => {
+        logger.error('Failed to delete recovery info for terminal task', { error: err });
+      });
+    }
   }
 
   private generateTaskId(): string {
@@ -661,6 +806,10 @@ export class TaskManager implements IRuntimeTaskManager {
   }
 
   private _notifyProgress(task: Task): void {
+    if (this.isDisposing) {
+      return;
+    }
+
     const callbacks = this.progressCallbacks.get(task.id);
     if (!callbacks) {
       return;
@@ -674,6 +823,57 @@ export class TaskManager implements IRuntimeTaskManager {
       }
     }
   }
+
+  private removeCompletionWaiter(id: string, waiter: CompletionWaiter): void {
+    const waiters = this.completionWaiters.get(id);
+    if (!waiters) {
+      return;
+    }
+    waiters.delete(waiter);
+    clearTimeout(waiter.timer);
+    if (waiters.size === 0) {
+      this.completionWaiters.delete(id);
+    }
+  }
+
+  private resolveCompletionWaiters(id: string, task: Task): void {
+    const waiters = this.completionWaiters.get(id);
+    if (!waiters) {
+      return;
+    }
+    this.completionWaiters.delete(id);
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve(task);
+    }
+  }
+
+  private rejectCompletionWaiters(id: string, error: Error): void {
+    const waiters = this.completionWaiters.get(id);
+    if (!waiters) {
+      return;
+    }
+    this.completionWaiters.delete(id);
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+  }
+}
+
+function isTerminalStatus(status: TaskStatus): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
+}
+
+function getFlushPromises(storage: ITaskRecoveryStorage): Promise<unknown>[] {
+  const maybeFlushable = storage as { flush?: () => Promise<void>; dispose?: () => Promise<void> };
+  if (typeof maybeFlushable.flush === 'function') {
+    return [maybeFlushable.flush()];
+  }
+  if (typeof maybeFlushable.dispose === 'function') {
+    return [maybeFlushable.dispose()];
+  }
+  return [];
 }
 
 function isIdcProjectedTaskBoundToRun(

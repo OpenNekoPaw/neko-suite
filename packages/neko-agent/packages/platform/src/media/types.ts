@@ -5,7 +5,8 @@
  */
 
 import type { Model, Provider } from '../types/provider';
-import type { ITaskManager } from '@neko/shared';
+import type { ITaskManager, ITaskRecoveryStorage, SerializableTask } from '@neko/shared';
+import type { TaskLifecycleMetadata } from '@neko/shared';
 
 // =============================================================================
 // Generation Types
@@ -383,7 +384,11 @@ export interface MediaTaskManagerDeps extends ITaskManager {
   /** Delete recovery info after completion */
   deleteRecoveryInfo?(taskId: string): Promise<void>;
   /** Get recovery storage */
-  getRecoveryStorage?(): unknown;
+  getRecoveryStorage?(): ITaskRecoveryStorage | undefined;
+  /** Update task lifecycle metadata */
+  updateLifecycle?(id: string, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean>;
   /** Update task output data */
   updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+  /** Upsert an externally resumed task result into the shared task plane */
+  upsertExternalTask?(task: SerializableTask): Promise<void>;
 }

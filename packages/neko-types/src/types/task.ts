@@ -17,10 +17,92 @@ export type TaskType =
   | 'mcp'
   | 'custom';
 
+export const TASK_TYPES = [
+  'image_generation',
+  'video_generation',
+  'audio_generation',
+  'embedding',
+  'workflow',
+  'mcp',
+  'custom',
+] as const satisfies readonly TaskType[];
+
+export function isTaskType(value: unknown): value is TaskType {
+  return typeof value === 'string' && TASK_TYPES.includes(value as TaskType);
+}
+
 /**
  * Task status
  */
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * Task run mode.
+ *
+ * Foreground tasks belong to the active user turn. Background tasks are
+ * intentionally detached and must remain visible through task surfaces.
+ */
+export type TaskRunMode = 'foreground' | 'background';
+
+/**
+ * Task cost phase.
+ *
+ * This describes where cost is currently being incurred. Provider adapters and
+ * executors own transitions because they are closest to token/provider cost
+ * boundaries.
+ */
+export type TaskCostPhase = 'idle' | 'token-active' | 'external-wait' | 'local-finalize';
+
+/**
+ * Task interruption policy used when the owning Agent conversation is stopped.
+ */
+export type TaskInterruptPolicy =
+  | 'cancel-with-agent'
+  | 'detach-and-continue'
+  | 'finish-critical-step';
+
+/**
+ * Recovery policy used after Extension Host restart or process interruption.
+ */
+export type TaskRecoverPolicy = 'resume-polling' | 'retry-executor' | 'snapshot-only' | 'none';
+
+/**
+ * Serializable task lifecycle metadata.
+ *
+ * This is a Layer 0 DTO. It must not reference VSCode, React, AbortSignal, or
+ * other process-local runtime handles.
+ */
+export interface TaskLifecycleMetadata {
+  /** Owning conversation for UI replay, Dashboard grouping, and auditing */
+  readonly ownerConversationId?: string;
+  /** Whether the task is foreground turn work or detached background work */
+  readonly runMode: TaskRunMode;
+  /** Current cost phase */
+  readonly costPhase: TaskCostPhase;
+  /** How this task reacts to Agent conversation interruption */
+  readonly interruptPolicy: TaskInterruptPolicy;
+  /** How this task recovers after restart */
+  readonly recoverPolicy: TaskRecoverPolicy;
+}
+
+/**
+ * Conservative lifecycle defaults for tasks that predate lifecycle metadata.
+ */
+export const DEFAULT_TASK_LIFECYCLE_METADATA: TaskLifecycleMetadata = {
+  runMode: 'foreground',
+  costPhase: 'idle',
+  interruptPolicy: 'cancel-with-agent',
+  recoverPolicy: 'retry-executor',
+};
+
+export function createTaskLifecycleMetadata(
+  overrides: Partial<TaskLifecycleMetadata> = {},
+): TaskLifecycleMetadata {
+  return {
+    ...DEFAULT_TASK_LIFECYCLE_METADATA,
+    ...overrides,
+  };
+}
 
 /**
  * Task input
@@ -30,6 +112,8 @@ export interface TaskInput {
   type: TaskType;
   /** Task-specific payload */
   payload: Record<string, unknown>;
+  /** Optional lifecycle metadata for Agent-owned async tasks */
+  lifecycle?: Partial<TaskLifecycleMetadata>;
   /** Task options */
   options?: {
     /** Priority (higher = more urgent) */
@@ -87,6 +171,10 @@ export interface Task {
   updatedAt: number;
   /** Error message if failed */
   error?: string;
+  /** Retry count for recovery */
+  retryCount?: number;
+  /** Optional lifecycle metadata for Agent-owned async tasks */
+  lifecycle?: TaskLifecycleMetadata;
 }
 
 /**
@@ -144,6 +232,8 @@ export interface SerializableTask {
   error?: string;
   /** Retry count for recovery */
   retryCount?: number;
+  /** Optional lifecycle metadata for Agent-owned async tasks */
+  lifecycle?: TaskLifecycleMetadata;
 }
 
 /**
@@ -211,10 +301,24 @@ export interface ITaskRecoveryStorage {
   clear(): Promise<void>;
 }
 
+export interface TaskLifecycleReport {
+  readonly lifecycle?: Partial<TaskLifecycleMetadata>;
+}
+
+export interface TaskExecutionContext {
+  /** Internal task id for runtime-only coordination */
+  readonly taskId: string;
+  /** Runtime-only cancellation signal. Never persist this object. */
+  readonly signal: AbortSignal;
+  /** Report lifecycle changes from executor/provider boundaries */
+  reportLifecycle(update: TaskLifecycleReport): void;
+}
+
 /**
  * Task executor function type
  */
 export type TaskExecutor = (
   input: TaskInput,
   onProgress: (progress: number) => void,
+  context?: TaskExecutionContext,
 ) => Promise<TaskOutput>;

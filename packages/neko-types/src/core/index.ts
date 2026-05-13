@@ -9,3 +9,4 @@ export {
   type ConcurrencyPoolOptions,
   type PoolStats,
 } from './concurrency-pool';
+export { sleepWithAbort, withTimeout, type WithTimeoutOptions } from './async';

@@ -6,6 +6,7 @@
  */
 
 import type { ITaskRecoveryStorage, TaskRecoveryInfo } from '@neko/shared';
+import { isTaskType } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('TaskRecoveryStorage');
@@ -37,6 +38,74 @@ export class MemoryTaskRecoveryStorage implements ITaskRecoveryStorage {
   async clear(): Promise<void> {
     this.infos.clear();
   }
+}
+
+export interface StateTaskRecoveryStorageAdapter {
+  load(key: string): readonly TaskRecoveryInfo[] | PromiseLike<readonly TaskRecoveryInfo[]>;
+  save(key: string, infos: readonly TaskRecoveryInfo[]): void | PromiseLike<void>;
+}
+
+export interface StateTaskRecoveryStorageOptions {
+  storageKey: string;
+  adapter: StateTaskRecoveryStorageAdapter;
+}
+
+export class StateTaskRecoveryStorage implements ITaskRecoveryStorage {
+  constructor(private readonly options: StateTaskRecoveryStorageOptions) {}
+
+  async save(info: TaskRecoveryInfo): Promise<void> {
+    const infos = await this.loadAll();
+    const index = infos.findIndex((item) => item.taskId === info.taskId);
+    if (index >= 0) {
+      infos[index] = { ...info };
+    } else {
+      infos.push({ ...info });
+    }
+    await this.writeAll(infos);
+  }
+
+  async load(taskId: string): Promise<TaskRecoveryInfo | undefined> {
+    const infos = await this.loadAll();
+    const info = infos.find((item) => item.taskId === taskId);
+    return info ? { ...info } : undefined;
+  }
+
+  async loadAll(): Promise<TaskRecoveryInfo[]> {
+    try {
+      const infos = await this.options.adapter.load(this.options.storageKey);
+      const parsed = parseTaskRecoveryInfoArray(infos);
+      return parsed ? parsed.map((info) => ({ ...info })) : [];
+    } catch (error) {
+      logger.warn('Failed to load state recovery storage', { error });
+      return [];
+    }
+  }
+
+  async delete(taskId: string): Promise<void> {
+    const infos = await this.loadAll();
+    await this.writeAll(infos.filter((info) => info.taskId !== taskId));
+  }
+
+  async clear(): Promise<void> {
+    await this.writeAll([]);
+  }
+
+  async flush(): Promise<void> {
+    // State-backed storage writes eagerly through the adapter.
+  }
+
+  private async writeAll(infos: readonly TaskRecoveryInfo[]): Promise<void> {
+    await this.options.adapter.save(
+      this.options.storageKey,
+      infos.map((info) => ({ ...info })),
+    );
+  }
+}
+
+export function createStateTaskRecoveryStorage(
+  options: StateTaskRecoveryStorageOptions,
+): StateTaskRecoveryStorage {
+  return new StateTaskRecoveryStorage(options);
 }
 
 /**
@@ -134,7 +203,10 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
       const exists = await this.options.exists(this.options.filePath);
       if (exists) {
         const content = await this.options.readFile(this.options.filePath);
-        const data = JSON.parse(content) as TaskRecoveryInfo[];
+        const data = parseTaskRecoveryInfoArray(JSON.parse(content));
+        if (!data) {
+          throw new Error('Recovery file does not contain valid task recovery records');
+        }
         for (const info of data) {
           this.cache.set(info.taskId, info);
         }
@@ -180,4 +252,51 @@ export function createFileRecoveryStorage(
     filePath,
     ...fs,
   });
+}
+
+function parseTaskRecoveryInfoArray(value: unknown): TaskRecoveryInfo[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const infos: TaskRecoveryInfo[] = [];
+  for (const item of value) {
+    const info = parseTaskRecoveryInfo(item);
+    if (!info) {
+      return null;
+    }
+    infos.push(info);
+  }
+  return infos;
+}
+
+function parseTaskRecoveryInfo(value: unknown): TaskRecoveryInfo | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  if (
+    typeof value.taskId !== 'string' ||
+    typeof value.externalTaskId !== 'string' ||
+    typeof value.providerId !== 'string' ||
+    !isTaskType(value.taskType) ||
+    !isRecord(value.payload) ||
+    typeof value.createdAt !== 'number' ||
+    !Number.isFinite(value.createdAt) ||
+    typeof value.updatedAt !== 'number' ||
+    !Number.isFinite(value.updatedAt)
+  ) {
+    return null;
+  }
+  return {
+    taskId: value.taskId,
+    externalTaskId: value.externalTaskId,
+    providerId: value.providerId,
+    taskType: value.taskType,
+    payload: { ...value.payload },
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

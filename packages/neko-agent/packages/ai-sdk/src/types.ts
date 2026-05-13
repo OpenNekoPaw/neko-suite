@@ -14,6 +14,8 @@ export interface ProviderConfig {
   apiUrl: string;
   /** API key for authentication */
   apiKey: string;
+  /** Optional task callback for providers that expose external task IDs */
+  onExternalTaskId?: (externalTaskId: string) => void | Promise<void>;
 }
 
 /**

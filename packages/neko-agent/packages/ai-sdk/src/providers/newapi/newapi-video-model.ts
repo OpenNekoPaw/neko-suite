@@ -128,6 +128,8 @@ export class NewAPIVideoModel implements VideoModelV3 {
       throw new Error('NewAPI video generation: no video id returned');
     }
 
+    await this.config.onExternalTaskId?.(createData.id);
+
     // Poll for completion
     const videoData = await this.pollForCompletion(createData.id, baseUrl, options.abortSignal);
 

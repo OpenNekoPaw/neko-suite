@@ -34,6 +34,7 @@ import type {
   SubAgentWorkItemEvent,
   TaskWorkItem,
 } from './work-item';
+import type { DashboardTask } from '@neko/shared/types/dashboard-task';
 import type { AgentWorkflowRun } from './workflow';
 import type {
   PluginTransferAssetRef,
@@ -593,6 +594,12 @@ export interface MediaTaskProgressMessage {
   workItem: TaskWorkItem;
 }
 
+export interface TaskDeliveryReplayMessage {
+  type: 'taskDeliveryReplay';
+  conversationId: string;
+  task: DashboardTask;
+}
+
 export interface WorkflowProjectionMessage {
   type: 'workflowProjection';
   conversationId: string;
@@ -666,6 +673,7 @@ export type ExtensionToWebviewMessage =
   | CompressionErrorMessage
   | MediaTaskCreatedMessage
   | MediaTaskProgressMessage
+  | TaskDeliveryReplayMessage
   | WorkflowProjectionMessage
   | ExternalMessage
   | PrefillInputMessage
@@ -958,6 +966,17 @@ export function buildMediaTaskProgressMessage(input: {
     type: 'mediaTaskProgress',
     conversationId: input.conversationId,
     workItem: input.workItem,
+  };
+}
+
+export function buildTaskDeliveryReplayMessage(input: {
+  readonly conversationId: string;
+  readonly task: DashboardTask;
+}): TaskDeliveryReplayMessage {
+  return {
+    type: 'taskDeliveryReplay',
+    conversationId: input.conversationId,
+    task: input.task,
   };
 }
 
@@ -1519,7 +1538,7 @@ function parseSsoLoginMessage(raw: Record<string, unknown>): SsoLoginWebviewMess
 function parseRevealContextSourceMessage(
   raw: Record<string, unknown>,
 ): RevealContextSourceWebviewMessage | null {
-  if (typeof raw.contextType !== 'string') return null;
+  if (!isAgentContextType(raw.contextType)) return null;
   if (typeof raw.contextId !== 'string') return null;
   const navigationData =
     raw.navigationData !== undefined && isRecord(raw.navigationData)
@@ -1527,10 +1546,26 @@ function parseRevealContextSourceMessage(
       : undefined;
   return {
     type: 'revealContextSource',
-    contextType: raw.contextType as AgentContextType,
+    contextType: raw.contextType,
     contextId: raw.contextId,
     ...(navigationData ? { navigationData } : {}),
   };
+}
+
+function isAgentContextType(value: unknown): value is AgentContextType {
+  return (
+    value === 'canvas-node' ||
+    value === 'cut-clip' ||
+    value === 'story-selection' ||
+    value === 'character' ||
+    value === 'scene' ||
+    value === 'sketch-layer' ||
+    value === 'model-scene' ||
+    value === 'audio-clip' ||
+    value === 'file' ||
+    value === 'image' ||
+    value === 'document-selection'
+  );
 }
 
 function parseAgentMediaModelSelections(value: unknown): AgentMediaModelSelections | null {

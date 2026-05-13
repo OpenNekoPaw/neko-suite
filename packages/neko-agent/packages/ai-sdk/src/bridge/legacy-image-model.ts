@@ -67,6 +67,7 @@ export class LegacyImageModel implements ImageModelV3 {
 
     // Handle async polling
     if (result.externalTaskId && result.status !== 'completed' && result.status !== 'failed') {
+      await this.config.onExternalTaskId?.(result.externalTaskId);
       result = await this.pollForCompletion(result.externalTaskId, provider, options.abortSignal);
     }
 

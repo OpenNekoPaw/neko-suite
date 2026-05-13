@@ -108,8 +108,12 @@ export {
 export {
   MemoryTaskRecoveryStorage,
   FileTaskRecoveryStorage,
+  StateTaskRecoveryStorage,
   createFileRecoveryStorage,
+  createStateTaskRecoveryStorage,
   type FileTaskRecoveryStorageOptions,
+  type StateTaskRecoveryStorageAdapter,
+  type StateTaskRecoveryStorageOptions,
 } from './task-recovery-storage';
 
 // Re-export types from shared for convenience
@@ -126,4 +130,10 @@ export type {
   TaskRecoveryInfo,
   SerializableTask,
   TaskExecutor,
+  TaskExecutionContext,
+  TaskLifecycleMetadata,
+  TaskCostPhase,
+  TaskInterruptPolicy,
+  TaskRecoverPolicy,
+  TaskRunMode,
 } from '@neko/shared';

@@ -160,6 +160,28 @@ describe('TaskManager', () => {
       expect(cancelledTask?.status).toBe('cancelled');
     });
 
+    it('should propagate abort to running executor', async () => {
+      const aborted = vi.fn();
+      const executor: TaskExecutor = vi.fn().mockImplementation(
+        (_input, _onProgress, context) =>
+          new Promise(() => {
+            context?.signal.addEventListener('abort', aborted);
+          }),
+      );
+      manager.registerExecutor('audio_generation', executor);
+
+      const taskId = await manager.submit({
+        type: 'audio_generation',
+        payload: {},
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      await manager.cancel(taskId);
+
+      expect(aborted).toHaveBeenCalledTimes(1);
+      expect((await manager.get(taskId))?.status).toBe('cancelled');
+    });
+
     it('should return false for non-existent task', async () => {
       const cancelled = await manager.cancel('non-existent');
       expect(cancelled).toBe(false);
@@ -595,6 +617,49 @@ describe('TaskManager', () => {
       expect(progressUpdates).toContain(100);
     });
 
+    it('should persist lifecycle updates reported by executor context', async () => {
+      const executor: TaskExecutor = vi
+        .fn()
+        .mockImplementation(async (_input, _onProgress, context) => {
+          context?.reportLifecycle({
+            lifecycle: {
+              ownerConversationId: 'conversation-1',
+              runMode: 'background',
+              costPhase: 'external-wait',
+              interruptPolicy: 'detach-and-continue',
+              recoverPolicy: 'resume-polling',
+            },
+          });
+          return { data: 'done' };
+        });
+      manager.registerExecutor('video_generation', executor);
+
+      const taskId = await manager.submit({
+        type: 'video_generation',
+        payload: {},
+        lifecycle: {
+          ownerConversationId: 'conversation-1',
+          runMode: 'background',
+          interruptPolicy: 'detach-and-continue',
+          recoverPolicy: 'resume-polling',
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      const task = await manager.get(taskId);
+      expect(task?.status).toBe('completed');
+      expect(task?.lifecycle).toEqual(
+        expect.objectContaining({
+          ownerConversationId: 'conversation-1',
+          runMode: 'background',
+          costPhase: 'idle',
+          interruptPolicy: 'detach-and-continue',
+          recoverPolicy: 'resume-polling',
+        }),
+      );
+    });
+
     it('should stop processing when cancelled during execution', async () => {
       // The cancel check happens at the start of retry loop, so we need
       // to test that cancelled status is set correctly
@@ -795,5 +860,48 @@ describe('TaskManager', () => {
       const task = await manager.waitForCompletion(taskId, 5000);
       expect(task.status).toBe('cancelled');
     });
+
+    it('should resolve multiple waiters from one terminal update', async () => {
+      vi.useRealTimers();
+
+      let finish!: () => void;
+      const executor: TaskExecutor = vi.fn().mockImplementation(
+        () =>
+          new Promise<{ data: string }>((resolve) => {
+            finish = () => resolve({ data: 'done' });
+          }),
+      );
+      manager.registerExecutor('workflow', executor);
+
+      const taskId = await manager.submit({ type: 'workflow', payload: {} });
+      await waitFor(() => expect(finish).toBeTypeOf('function'));
+
+      const waiter1 = manager.waitForCompletion(taskId, 5000);
+      const waiter2 = manager.waitForCompletion(taskId, 5000);
+
+      finish();
+
+      await expect(waiter1).resolves.toEqual(expect.objectContaining({ status: 'completed' }));
+      await expect(waiter2).resolves.toEqual(expect.objectContaining({ status: 'completed' }));
+    });
   });
 });
+
+async function waitFor(assertion: () => void, timeoutMs = 1000): Promise<void> {
+  const startedAt = Date.now();
+  let lastError: unknown;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+}

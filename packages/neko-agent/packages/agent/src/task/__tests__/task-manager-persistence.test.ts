@@ -5,24 +5,28 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TaskManager } from '../task-manager';
 import { MemoryTaskStorage } from '../task-storage';
+import { MemoryTaskRecoveryStorage } from '../task-recovery-storage';
 import { toSerializableIdcProjectedTask } from '../idc-projected-task';
 import type { ITaskStorage, SerializableTask, TaskExecutor } from '@neko/shared';
 
 describe('TaskManager Persistence', () => {
   let manager: TaskManager;
   let storage: MemoryTaskStorage;
+  let recoveryStorage: MemoryTaskRecoveryStorage;
 
   beforeEach(() => {
     storage = new MemoryTaskStorage();
+    recoveryStorage = new MemoryTaskRecoveryStorage();
     manager = new TaskManager({
       storage,
+      recoveryStorage,
       cleanupIntervalMs: 0, // Disable auto-cleanup for tests
     });
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
-    manager.dispose();
+  afterEach(async () => {
+    await manager.dispose();
     vi.useRealTimers();
   });
 
@@ -334,6 +338,48 @@ describe('TaskManager Persistence', () => {
       expect(resumed).toEqual([]);
       expect(executor).not.toHaveBeenCalled();
     });
+
+    it('should not re-execute tasks that have external recovery info and resume-polling policy', async () => {
+      const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'duplicated' });
+      manager.registerExecutor('custom', executor);
+
+      await storage.save({
+        id: 'external_wait_task',
+        type: 'custom',
+        status: 'running',
+        input: {
+          type: 'custom',
+          payload: { prompt: 'recover external task' },
+          lifecycle: {
+            recoverPolicy: 'resume-polling',
+          },
+        },
+        progress: 50,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        lifecycle: {
+          runMode: 'background',
+          costPhase: 'external-wait',
+          interruptPolicy: 'detach-and-continue',
+          recoverPolicy: 'resume-polling',
+        },
+      });
+      await recoveryStorage.save({
+        taskId: 'external_wait_task',
+        externalTaskId: 'provider-task-1',
+        providerId: 'provider-1',
+        taskType: 'custom',
+        payload: { prompt: 'recover external task' },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      await manager.initialize();
+      const resumed = await manager.resumePendingTasks();
+
+      expect(resumed).toEqual(['external_wait_task']);
+      expect(executor).not.toHaveBeenCalled();
+    });
   });
 
   describe('cleanupOldTasks', () => {
@@ -366,7 +412,7 @@ describe('TaskManager Persistence', () => {
       const task = await manager2.get('old_task');
       expect(task).toBeUndefined();
 
-      manager2.dispose();
+      await manager2.dispose();
     });
 
     it('should remove from both storage and memory', async () => {
@@ -401,21 +447,82 @@ describe('TaskManager Persistence', () => {
       const memTask = await manager2.get('old_task');
       expect(memTask).toBeUndefined();
 
-      manager2.dispose();
+      await manager2.dispose();
     });
   });
 
   describe('dispose', () => {
-    it('should clear cleanup timer', () => {
+    it('should clear cleanup timer', async () => {
       const manager2 = new TaskManager({
         storage,
         cleanupIntervalMs: 1000,
       });
 
       const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
-      manager2.dispose();
+      await manager2.dispose();
 
       expect(clearIntervalSpy).toHaveBeenCalled();
+    });
+
+    it('should abort running tasks and snapshot them as pending', async () => {
+      const abortListener = vi.fn();
+      const executor: TaskExecutor = vi.fn().mockImplementation(
+        (_input, _onProgress, context) =>
+          new Promise(() => {
+            context?.signal.addEventListener('abort', abortListener);
+          }),
+      );
+      manager.registerExecutor('custom', executor);
+
+      const taskId = await manager.submit({
+        type: 'custom',
+        payload: {},
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect((await manager.get(taskId))?.status).toBe('running');
+
+      await manager.dispose();
+
+      const persisted = await storage.load(taskId);
+      expect(abortListener).toHaveBeenCalledTimes(1);
+      expect(persisted?.status).toBe('pending');
+    });
+
+    it('should not notify progress callbacks for dispose snapshots', async () => {
+      const progress = vi.fn();
+      const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
+      manager.registerExecutor('custom', executor);
+
+      const taskId = await manager.submit({
+        type: 'custom',
+        payload: {},
+      });
+      const unsubscribe = manager.onProgress(taskId, progress);
+
+      await vi.advanceTimersByTimeAsync(0);
+      progress.mockClear();
+
+      await manager.dispose();
+
+      expect(progress).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it('should reject completion waiters during dispose snapshots', async () => {
+      const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
+      manager.registerExecutor('custom', executor);
+
+      const taskId = await manager.submit({
+        type: 'custom',
+        payload: {},
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      const waiter = manager.waitForCompletion(taskId, 5000);
+      await manager.dispose();
+
+      await expect(waiter).rejects.toThrow('Task manager disposed before completion');
     });
   });
 });
@@ -442,6 +549,6 @@ describe('TaskManager with custom storage', () => {
     await manager.submit({ type: 'custom', payload: {} });
 
     expect(customStorage.save).toHaveBeenCalled();
-    manager.dispose();
+    await manager.dispose();
   });
 });

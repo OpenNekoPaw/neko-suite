@@ -197,6 +197,7 @@ export interface MediaPlatform {
   routingManager: MediaRoutingManager;
   taskExecutor: MediaTaskExecutor;
   service: MediaGenerationService;
+  resumeFromRecovery(): Promise<number>;
 }
 
 /**
@@ -247,5 +248,6 @@ export function createMediaPlatform(deps: MediaPlatformDeps): MediaPlatform {
     routingManager,
     taskExecutor,
     service,
+    resumeFromRecovery: () => taskExecutor.resumeFromRecovery(deps.taskManager),
   };
 }

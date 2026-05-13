@@ -190,6 +190,30 @@ describe('AgentDashboardWorkItemSource', () => {
     expect(taskManager.submit).toHaveBeenCalledWith({ type: 'tool', payload: {} });
     source.dispose();
   });
+
+  it('uses the shared projection source for Dashboard and Chat delivery snapshots', async () => {
+    const source = new AgentDashboardWorkItemSource();
+    source.acceptWebviewMessage({
+      type: 'mediaTaskProgress',
+      conversationId: 'conv-1',
+      workItem: createTaskWorkItem({
+        id: 'media-1',
+        kind: 'media-task',
+        status: 'completed',
+        progress: 100,
+        result: {
+          urls: ['https://example.test/out.png'],
+          localPaths: ['/workspace/generated/out.png'],
+          assets: [],
+        },
+      }),
+    });
+
+    await expect(source.projectionSource.getSnapshot()).resolves.toEqual(
+      await source.getSnapshot(),
+    );
+    source.dispose();
+  });
 });
 
 function createTaskWorkItem(

@@ -11,6 +11,7 @@ export {
   IMCPManager,
   ITaskManager,
   IAgentManager,
+  ITaskLifecycleCoordinator,
   IEditorRegistry,
   type IServiceBootstrapResult,
 } from './serviceBootstrap';

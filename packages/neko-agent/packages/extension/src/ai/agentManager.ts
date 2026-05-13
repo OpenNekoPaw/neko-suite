@@ -67,6 +67,11 @@ export interface IAgentManager extends vscode.Disposable {
   cancelAll(): void;
 
   /**
+   * Agent 会话中断事件。只暴露 conversation id 和原因，由 bridge 层决定如何协调任务。
+   */
+  readonly onDidConversationInterrupted: vscode.Event<AgentConversationInterruptedEvent>;
+
+  /**
    * 确认工具执行
    */
   confirmTool(conversationId: string, toolCallId: string, approved: boolean): void;
@@ -157,6 +162,13 @@ export interface IAgentManager extends vscode.Disposable {
   refreshCapabilityRuntime(): void;
 }
 
+export type AgentConversationInterruptionReason = 'user-stop' | 'remove' | 'cancel-all';
+
+export interface AgentConversationInterruptedEvent {
+  readonly conversationId: string;
+  readonly reason: AgentConversationInterruptionReason;
+}
+
 // =============================================================================
 // Implementation
 // =============================================================================
@@ -168,6 +180,8 @@ export class AgentManager implements IAgentManager {
   /** 事件发射器 */
   private readonly _onDidAgentStart = new vscode.EventEmitter<{ conversationId: string }>();
   private readonly _onDidAgentStop = new vscode.EventEmitter<{ conversationId: string }>();
+  private readonly _onDidConversationInterrupted =
+    new vscode.EventEmitter<AgentConversationInterruptedEvent>();
   private readonly _runtime: AgentRuntimeManager<AgentRunner>;
 
   constructor() {
@@ -189,6 +203,10 @@ export class AgentManager implements IAgentManager {
 
   get onDidAgentStop(): vscode.Event<{ conversationId: string }> {
     return this._onDidAgentStop.event;
+  }
+
+  get onDidConversationInterrupted(): vscode.Event<AgentConversationInterruptedEvent> {
+    return this._onDidConversationInterrupted.event;
   }
 
   // -------------------------------------------------------------------------
@@ -221,14 +239,20 @@ export class AgentManager implements IAgentManager {
 
   remove(conversationId: string): void {
     this._runtime.remove(conversationId);
+    this._onDidConversationInterrupted.fire({ conversationId, reason: 'remove' });
   }
 
   cancel(conversationId: string): void {
     this._runtime.cancel(conversationId);
+    this._onDidConversationInterrupted.fire({ conversationId, reason: 'user-stop' });
   }
 
   cancelAll(): void {
+    const conversationIds = this._runtime.getRunningConversations();
     this._runtime.cancelAll();
+    for (const conversationId of conversationIds) {
+      this._onDidConversationInterrupted.fire({ conversationId, reason: 'cancel-all' });
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -312,5 +336,6 @@ export class AgentManager implements IAgentManager {
     // 释放事件发射器
     this._onDidAgentStart.dispose();
     this._onDidAgentStop.dispose();
+    this._onDidConversationInterrupted.dispose();
   }
 }

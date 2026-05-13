@@ -2,11 +2,12 @@
  * Task Recovery Storage Unit Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   MemoryTaskRecoveryStorage,
   FileTaskRecoveryStorage,
   createFileRecoveryStorage,
+  createStateTaskRecoveryStorage,
 } from '../task-recovery-storage';
 import type { TaskRecoveryInfo } from '@neko/shared';
 
@@ -183,6 +184,25 @@ describe('FileTaskRecoveryStorage', () => {
       const all = await storage.loadAll();
       expect(all).toEqual([]);
     });
+
+    it('should reject recovery files with invalid record shapes', async () => {
+      fileExists = true;
+      fileContent = JSON.stringify([
+        createInfo({ taskId: 'valid' }),
+        {
+          taskId: 'invalid',
+          externalTaskId: 123,
+          providerId: 'runway',
+          taskType: 'video_generation',
+          payload: {},
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ]);
+
+      const all = await storage.loadAll();
+      expect(all).toEqual([]);
+    });
   });
 
   describe('save and load', () => {
@@ -278,5 +298,63 @@ describe('FileTaskRecoveryStorage', () => {
 
       expect(mockFs.writeFile).toHaveBeenCalled();
     });
+  });
+});
+
+describe('StateTaskRecoveryStorage', () => {
+  const createInfo = (overrides: Partial<TaskRecoveryInfo> = {}): TaskRecoveryInfo => ({
+    taskId: 'task_1',
+    externalTaskId: 'ext_123',
+    providerId: 'runway',
+    taskType: 'video_generation',
+    payload: { prompt: 'test' },
+    createdAt: 1,
+    updatedAt: 2,
+    ...overrides,
+  });
+
+  it('persists recovery info through a state adapter', async () => {
+    const state = new Map<string, TaskRecoveryInfo[]>();
+    const storage = createStateTaskRecoveryStorage({
+      storageKey: 'neko.agent.taskRecovery',
+      adapter: {
+        load: (key) => state.get(key) ?? [],
+        save: (key, infos) => state.set(key, [...infos]),
+      },
+    });
+
+    await storage.save(createInfo({ taskId: 'task_1' }));
+    await storage.save(createInfo({ taskId: 'task_2', externalTaskId: 'ext_456' }));
+
+    expect(await storage.load('task_1')).toEqual(
+      expect.objectContaining({ taskId: 'task_1', externalTaskId: 'ext_123' }),
+    );
+    expect(await storage.loadAll()).toHaveLength(2);
+
+    const restored = createStateTaskRecoveryStorage({
+      storageKey: 'neko.agent.taskRecovery',
+      adapter: {
+        load: (key) => state.get(key) ?? [],
+        save: (key, infos) => state.set(key, [...infos]),
+      },
+    });
+
+    expect(await restored.load('task_2')).toEqual(
+      expect.objectContaining({ taskId: 'task_2', externalTaskId: 'ext_456' }),
+    );
+  });
+
+  it('degrades corrupt state adapter loads to empty recovery info', async () => {
+    const storage = createStateTaskRecoveryStorage({
+      storageKey: 'neko.agent.taskRecovery',
+      adapter: {
+        load: () => {
+          throw new Error('corrupt state');
+        },
+        save: vi.fn(),
+      },
+    });
+
+    await expect(storage.loadAll()).resolves.toEqual([]);
   });
 });

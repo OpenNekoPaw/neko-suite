@@ -15,15 +15,17 @@ import {
   DEFAULT_TASK_RETENTION_PERIOD_MS,
   DEFAULT_TASK_STORAGE_KEY,
   connectMCPServersRuntime,
+  createStateTaskRecoveryStorage,
   createStateTaskStorage,
   type IRuntimeTaskManager,
 } from '@neko/agent';
-import type { SerializableTask } from '@neko/shared';
+import type { SerializableTask, TaskRecoveryInfo } from '@neko/shared';
 import { ServiceCollection, createServiceId, getLogger } from '../base';
 
 const logger = getLogger('ServiceBootstrap');
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/agentManager';
+import { TaskLifecycleCoordinator } from '../services/taskLifecycleCoordinator';
 
 // =============================================================================
 // Service Identifiers
@@ -34,6 +36,11 @@ export const IToolRegistry = createServiceId<ToolRegistry>('toolRegistry');
 export const IMCPManager = createServiceId<MCPManager>('mcpManager');
 export const ITaskManager = createServiceId<IRuntimeTaskManager>('taskManager');
 export const IAgentManager = createServiceId<IAgentManagerInterface>('agentManager');
+export const ITaskLifecycleCoordinator = createServiceId<TaskLifecycleCoordinator>(
+  'taskLifecycleCoordinator',
+);
+
+const DEFAULT_TASK_RECOVERY_STORAGE_KEY = 'neko.agent.taskRecovery';
 
 // Re-export IEditorRegistry
 export { IEditorRegistry };
@@ -48,6 +55,7 @@ export interface IServiceBootstrapResult {
   mcpManager: MCPManager;
   taskManager: IRuntimeTaskManager;
   agentManager: AgentManager;
+  taskLifecycleCoordinator: TaskLifecycleCoordinator;
   editorRegistry: EditorRegistry;
 }
 
@@ -72,8 +80,16 @@ export async function bootstrapCoreServices(
       save: (key, tasks) => context.globalState.update(key, [...tasks]),
     },
   });
+  const recoveryStorage = createStateTaskRecoveryStorage({
+    storageKey: DEFAULT_TASK_RECOVERY_STORAGE_KEY,
+    adapter: {
+      load: (key) => context.globalState.get<TaskRecoveryInfo[]>(key, []),
+      save: (key, infos) => context.globalState.update(key, [...infos]),
+    },
+  });
   const taskManager = new TaskManager({
     storage: taskStorage,
+    recoveryStorage,
     cleanupIntervalMs: DEFAULT_TASK_CLEANUP_INTERVAL_MS,
     retentionPeriodMs: DEFAULT_TASK_RETENTION_PERIOD_MS,
   });
@@ -127,6 +143,17 @@ export async function bootstrapCoreServices(
   const agentManager = new AgentManager();
   services.set(IAgentManager, agentManager);
 
+  const taskLifecycleCoordinator = new TaskLifecycleCoordinator({
+    interruptions: agentManager,
+    tasks: {
+      list: () => taskManager.list(),
+    },
+    taskCancellation: {
+      cancel: (taskId) => taskManager.cancel(taskId),
+    },
+  });
+  services.set(ITaskLifecycleCoordinator, taskLifecycleCoordinator);
+
   // ==========================================================================
   // 6. Editor Registry
   // ==========================================================================
@@ -139,6 +166,7 @@ export async function bootstrapCoreServices(
     mcpManager,
     taskManager,
     agentManager,
+    taskLifecycleCoordinator,
     editorRegistry,
   };
 }

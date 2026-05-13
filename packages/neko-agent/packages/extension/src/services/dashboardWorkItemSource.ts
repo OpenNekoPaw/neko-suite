@@ -1,21 +1,14 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   DASHBOARD_TASK_CONTRACT_VERSION,
-  clampDashboardTaskProgress,
-  normalizeDashboardLocalRef,
-  toDashboardTaskId,
   type DashboardTask,
-  type DashboardTaskAction,
   type DashboardTaskEvent,
-  type DashboardTaskOutputRef,
   type DashboardTaskRef,
   type DashboardTaskSource,
 } from '@neko/shared/types/dashboard-task';
 import {
   isTaskWorkItem,
   type AgentWorkItem,
-  type AgentWorkItemTaskStatus,
   type MediaTaskCreatedMessage,
   type MediaTaskProgressMessage,
   type SubAgentEventMessage,
@@ -27,6 +20,7 @@ import {
 } from '@neko-agent/types';
 import type { Platform } from '@neko/platform';
 import type { IRuntimeTaskManager } from '@neko/agent';
+import { AgentTaskProjectionSource } from './taskProjectionSource';
 
 const SOURCE_ID = 'neko-agent';
 const SOURCE_NAME = 'Neko Agent';
@@ -56,6 +50,16 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
   };
 
   private readonly emitter = new vscode.EventEmitter<DashboardTaskEvent>();
+  private readonly projection = new AgentTaskProjectionSource({
+    host: {
+      get workspaceFolders() {
+        return vscode.workspace.workspaceFolders;
+      },
+    },
+  });
+  readonly projectionSource = {
+    getSnapshot: async (): Promise<DashboardTask[]> => this.getProjectionSnapshot(),
+  };
   private readonly workItemsByConversation = new Map<string, Map<string, AgentWorkItem>>();
   private deps: AgentDashboardWorkItemSourceDeps;
 
@@ -94,7 +98,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
   }
 
   async getSnapshot(): Promise<DashboardTask[]> {
-    return this.toTasks().sort((a, b) => b.startedAt - a.startedAt);
+    return this.getProjectionSnapshot();
   }
 
   onDidChangeTask(listener: (event: DashboardTaskEvent) => void): vscode.Disposable {
@@ -155,7 +159,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
         conversationItems.delete(itemId);
         this.emitter.fire({
           type: 'removed',
-          task: toDashboardTask(item),
+          task: this.projection.toDashboardTask(item),
         });
       }
     }
@@ -187,25 +191,29 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
     conversationItems.delete(taskId);
     this.emitter.fire({
       type: 'removed',
-      task: toDashboardTask(item),
+      task: this.projection.toDashboardTask(item),
     });
   }
 
   private emitUpsert(item: AgentWorkItem, previous?: AgentWorkItem): void {
     this.emitter.fire({
       type: previous ? 'updated' : 'added',
-      task: toDashboardTask(item),
+      task: this.projection.toDashboardTask(item),
     });
   }
 
   private toTasks(): DashboardTask[] {
-    const tasks: DashboardTask[] = [];
+    return this.getProjectionSnapshot();
+  }
+
+  private getProjectionSnapshot(): DashboardTask[] {
+    return this.projection.getSnapshot(this.iterWorkItems());
+  }
+
+  private *iterWorkItems(): Iterable<AgentWorkItem> {
     for (const conversationItems of this.workItemsByConversation.values()) {
-      for (const item of conversationItems.values()) {
-        tasks.push(toDashboardTask(item));
-      }
+      yield* conversationItems.values();
     }
-    return tasks;
   }
 
   private getWorkItem(ref: DashboardTaskRef): AgentWorkItem | undefined {
@@ -222,111 +230,6 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
 
     return undefined;
   }
-}
-
-function toDashboardTask(item: AgentWorkItem): DashboardTask {
-  const sourceTaskId = item.id;
-  const status = toDashboardStatus(item.status);
-  const outputs = toOutputRefs(item);
-
-  return {
-    taskId: toDashboardTaskId({ source: SOURCE_ID, sourceTaskId }),
-    source: SOURCE_ID,
-    sourceDisplayName: SOURCE_NAME,
-    sourceTaskId,
-    kind: item.kind,
-    title: item.title,
-    status,
-    progress: clampDashboardTaskProgress(item.progress),
-    actions: toActions(item, status, outputs),
-    startedAt: Date.parse(item.createdAt) || 0,
-    ...(isTerminalStatus(status) ? { completedAt: Date.parse(item.updatedAt) || Date.now() } : {}),
-    ...(outputs.length > 0 ? { outputs } : {}),
-    ...(item.currentStepId ? { currentStep: item.currentStepId } : {}),
-    ...(item.error ? { error: item.error } : {}),
-    conversationId: item.conversationId,
-    workItemKind: item.kind,
-  };
-}
-
-function toDashboardStatus(status: AgentWorkItemTaskStatus): DashboardTask['status'] {
-  switch (status) {
-    case 'queued':
-      return 'queued';
-    case 'processing':
-      return 'running';
-    case 'completed':
-      return 'done';
-    case 'failed':
-      return 'error';
-    case 'cancelled':
-      return 'cancelled';
-  }
-}
-
-function toActions(
-  item: AgentWorkItem,
-  status: DashboardTask['status'],
-  outputs: readonly DashboardTaskOutputRef[],
-): DashboardTaskAction[] {
-  const actions: DashboardTaskAction[] = [];
-  if ((status === 'queued' || status === 'running') && item.kind !== 'subagent') {
-    actions.push('cancel');
-  }
-  if (status === 'error' && item.kind === 'tool-background-task') {
-    actions.push('retry');
-  }
-  if (outputs.some((output) => output.kind === 'file' || output.kind === 'folder')) {
-    actions.push('reveal-output');
-  }
-  return actions;
-}
-
-function toOutputRefs(item: AgentWorkItem): DashboardTaskOutputRef[] {
-  if (!isTaskWorkItem(item)) {
-    return [];
-  }
-
-  const outputs: DashboardTaskOutputRef[] = [];
-  for (const localPath of item.task.result?.localPaths ?? []) {
-    const ref = toWorkspaceRelativeRef(localPath);
-    if (ref) {
-      outputs.push({ kind: 'file', ref, label: path.basename(ref) });
-    }
-  }
-
-  for (const url of item.task.result?.urls ?? []) {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      outputs.push({ kind: 'url', ref: url, label: 'Generated output' });
-    }
-  }
-
-  for (const asset of item.task.result?.assets ?? []) {
-    outputs.push({ kind: 'asset', ref: asset.id, label: asset.id });
-  }
-
-  return dedupeOutputs(outputs);
-}
-
-function toWorkspaceRelativeRef(localPath: string): string | undefined {
-  if (!localPath) return undefined;
-  if (!path.isAbsolute(localPath)) {
-    return normalizeDashboardLocalRef(localPath);
-  }
-
-  const folders = vscode.workspace.workspaceFolders ?? [];
-  for (const folder of folders) {
-    const relative = path.relative(folder.uri.fsPath, localPath);
-    if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
-      return normalizeDashboardLocalRef(relative);
-    }
-  }
-
-  return undefined;
-}
-
-function isTerminalStatus(status: DashboardTask['status']): boolean {
-  return status === 'done' || status === 'error' || status === 'cancelled';
 }
 
 function isMirroredWorkItemMessage(message: unknown): message is MirroredWorkItemMessage {
@@ -378,18 +281,6 @@ function mergeWorkItem(existing: AgentWorkItem, incoming: AgentWorkItem): AgentW
   }
 
   return incoming;
-}
-
-function dedupeOutputs(outputs: DashboardTaskOutputRef[]): DashboardTaskOutputRef[] {
-  const seen = new Set<string>();
-  return outputs.filter((output) => {
-    const key = `${output.kind}:${output.ref}`;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
 }
 
 function assertNever(value: never): never {

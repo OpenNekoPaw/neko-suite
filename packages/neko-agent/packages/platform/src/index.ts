@@ -356,12 +356,13 @@ export interface PlatformOptions {
   taskManager?: ITaskManager & {
     initialize?(): Promise<void>;
     resumePendingTasks?(): Promise<string[]>;
-    dispose?(): void;
+    dispose?(): void | Promise<void>;
     registerExecutor?(type: string, executor: unknown): void;
     saveRecoveryInfo?(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
     deleteRecoveryInfo?(taskId: string): Promise<void>;
-    getRecoveryStorage?(): unknown;
+    getRecoveryStorage?(): import('@neko/shared').ITaskRecoveryStorage | undefined;
     updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+    upsertExternalTask?(task: import('@neko/shared').SerializableTask): Promise<void>;
     delete?(id: string): Promise<boolean>;
   };
   /**
@@ -423,6 +424,7 @@ export function createPlatform(options: PlatformOptions): Platform {
   // ==========================================================================
   const mediaTaskManager = options.taskManager;
   let mediaGenerationService: MediaGenerationService | undefined;
+  let resumeMediaRecovery: (() => Promise<number>) | undefined;
 
   if (mediaTaskManager) {
     // Initialize media platform with all components
@@ -433,11 +435,12 @@ export function createPlatform(options: PlatformOptions): Platform {
     });
 
     mediaGenerationService = mediaPlatform.service;
+    resumeMediaRecovery = mediaPlatform.resumeFromRecovery;
 
     // Register media generation tools so agents can call GenerateImage, GenerateVideo, etc.
     registerMediaAgentTools(toolRegistry, mediaGenerationService);
 
-    startPlatformTaskManager(mediaTaskManager);
+    startPlatformTaskManager(mediaTaskManager, resumeMediaRecovery);
   } else {
     logger.debug('taskManager not provided — media generation disabled');
     mediaGenerationService = undefined;
@@ -473,9 +476,16 @@ export function createPlatform(options: PlatformOptions): Platform {
   };
 }
 
-function startPlatformTaskManager(taskManager: NonNullable<PlatformOptions['taskManager']>): void {
+function startPlatformTaskManager(
+  taskManager: NonNullable<PlatformOptions['taskManager']>,
+  resumeMediaRecovery?: () => Promise<number>,
+): void {
   void (async () => {
     await taskManager.initialize?.();
+    const recoveryResumed = await resumeMediaRecovery?.();
+    if (recoveryResumed && recoveryResumed > 0) {
+      logger.info(`Resumed ${recoveryResumed} external media task(s)`);
+    }
     const resumed = await taskManager.resumePendingTasks?.();
     if (resumed && resumed.length > 0) {
       logger.info(`Resumed ${resumed.length} pending task(s)`);

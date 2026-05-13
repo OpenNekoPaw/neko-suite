@@ -381,6 +381,28 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
+  it('validates reveal context source contextType against the agent context union', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'revealContextSource',
+        contextType: 'canvas-node',
+        contextId: 'node-1',
+      }),
+    ).toEqual({
+      type: 'revealContextSource',
+      contextType: 'canvas-node',
+      contextId: 'node-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'revealContextSource',
+        contextType: 'unknown-context',
+        contextId: 'node-1',
+      }),
+    ).toBeNull();
+  });
+
   it('parses structured send-to-plugin payloads', () => {
     expect(
       parseWebviewToExtensionMessage({

@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import {
   ServiceCollection,
   setGlobalServices,
+  getService,
   setRootLogger,
   setErrorHandler,
   getRootLogger,
@@ -19,7 +20,9 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
+import { withTimeout } from '@neko/shared';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
+import { ITaskManager } from './bootstrap';
 import { setPlatformRootLogger } from '@neko/platform';
 import { setRootLogger as setAgentRootLogger } from '@neko/agent';
 import { ChatViewProvider } from './chat';
@@ -139,6 +142,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 /**
  * Deactivate the extension
  */
-export function deactivate(): void {
-  getRootLogger().info('Deactivating extension...');
+export async function deactivate(): Promise<void> {
+  const logger = getRootLogger();
+  logger.info('Deactivating extension...');
+
+  const taskManager = getService(ITaskManager);
+  if (!taskManager) {
+    return;
+  }
+
+  await withTimeout(taskManager.dispose(), 3000).catch((error) => {
+    logger.warn('Timed out while disposing task manager during deactivate', { error });
+  });
 }

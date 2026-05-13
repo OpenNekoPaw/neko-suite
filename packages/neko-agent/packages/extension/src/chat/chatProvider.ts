@@ -61,6 +61,7 @@ import { getSkillFileService } from '../services/SkillFileService';
 import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
 import { postPluginsAvailable } from '../services/pluginTransferBridge';
 import { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
+import { StateTaskDeliveryCursorStorage, TaskDeliveryBridge } from '../services/taskDeliveryBridge';
 import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
   getCapabilityDiscoveryService,
@@ -126,6 +127,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _configBridge?: ConfigBridge;
   private _capabilityRefreshRuntime?: CapabilityRuntimeRefreshRuntime;
   private readonly _dashboardWorkItems = new AgentDashboardWorkItemSource();
+  private readonly _taskDeliveryBridge: TaskDeliveryBridge;
   // Note: _routerAskBroker and _workflowPlanHandler were removed alongside
   // the workflow/orchestrator layer. Pipeline intents now flow through the
   // Agent + Skill stack; no separate plan handler is needed.
@@ -145,6 +147,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
     // Load persisted tab state
     this._loadTabState();
+
+    this._taskDeliveryBridge = new TaskDeliveryBridge({
+      projectionSource: this._dashboardWorkItems.projectionSource,
+      cursorStorage: new StateTaskDeliveryCursorStorage(
+        'neko.agent.taskDeliveryCursors',
+        this._context.globalState,
+      ),
+    });
 
     // Initialize handlers with empty deps (will be updated after service init)
     this._taskHandler = new TaskHandler({});
@@ -371,9 +381,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       webviewView.onDidChangeVisibility(() => {
         if (webviewView.visible) {
           this._restoreState();
+          this._replayUndeliveredTasks();
         }
       }),
     );
+
+    this._replayUndeliveredTasks();
   }
 
   /**
@@ -488,6 +501,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         if (!this._webviewReady) {
           this._webviewReady = true;
           this._flushPendingMessages();
+          this._replayUndeliveredTasks();
         }
 
         const message = parseWebviewToExtensionMessage(raw);
@@ -753,6 +767,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       this._pendingExternalMessage = null;
       webview.postMessage(buildChatExternalInputMessage({ message, autoSend }));
     }
+  }
+
+  private _replayUndeliveredTasks(): void {
+    const webview = this._view?.webview;
+    const conversationId = this._conversations.getActiveId();
+    if (!webview || !conversationId) {
+      return;
+    }
+
+    this._taskDeliveryBridge.replayConversation(conversationId, webview).catch((error) => {
+      logger.warn('Failed to replay undelivered task results', error);
+    });
   }
 
   private _disposeWebviewBindings(): void {
