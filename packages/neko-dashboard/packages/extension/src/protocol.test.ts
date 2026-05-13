@@ -8,6 +8,9 @@ describe('dashboard webview protocol guards', () => {
     expect(isWebviewToExtensionMessage({ type: 'openProject', path: 'scene.nkv' })).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'cancelTask', taskId: 'neko-cut:1' })).toBe(true);
     expect(isWebviewToExtensionMessage({ type: 'createProject', projectType: 'video' })).toBe(true);
+    expect(isWebviewToExtensionMessage({ type: 'executeCommand', command: 'neko.ai.chat' })).toBe(
+      true,
+    );
   });
 
   it('rejects invalid messages', () => {

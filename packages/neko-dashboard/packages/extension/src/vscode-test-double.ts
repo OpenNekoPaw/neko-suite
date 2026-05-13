@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 type CommandHandler = (...args: unknown[]) => unknown;
 
 const commandHandlers = new Map<string, CommandHandler>();
+const installedExtensions = new Map<string, { isActive: boolean; exports: unknown }>();
 const createWebviewPanel = vi.fn();
 const vscodeWorkspaceFs = {
   stat: vi.fn(),
@@ -17,6 +18,23 @@ export const vscodeCommandState = {
     commandHandlers.clear();
   },
 };
+
+export const vscodeExtensionState = {
+  installedExtensions,
+  reset() {
+    installedExtensions.clear();
+  },
+};
+
+export function installExtension(
+  id: string,
+  options: { isActive?: boolean; exports?: unknown } = {},
+): void {
+  installedExtensions.set(id, {
+    isActive: options.isActive ?? true,
+    exports: options.exports ?? {},
+  });
+}
 
 export const vscodeWindowState = {
   createWebviewPanel,
@@ -91,6 +109,9 @@ const vscode = {
     })),
   },
   ViewColumn: { One: 1 },
+  extensions: {
+    getExtension: vi.fn((id: string) => installedExtensions.get(id)),
+  },
   env: {
     language: 'en',
   },

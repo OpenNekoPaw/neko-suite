@@ -4,8 +4,10 @@ export const dashboard = {
   'dashboard.title': 'Neko 工作台',
 
   'dashboard.status.engine': '引擎',
+  'dashboard.status.projects': '项目',
   'dashboard.status.agent': '智能体',
   'dashboard.status.assets': '素材',
+  'dashboard.status.ready': '就绪',
   'dashboard.status.running': '{running}/{total} 运行中',
   'dashboard.status.files': '{count} 个文件',
 
@@ -16,6 +18,7 @@ export const dashboard = {
   'dashboard.quickStart.audio': '新建音频',
   'dashboard.quickStart.model': '新建模型',
   'dashboard.quickStart.puppet': '新建动画',
+  'dashboard.quickStart.ai': '打开对话',
 
   'dashboard.workflows': '创作工作流',
 
@@ -44,4 +47,7 @@ export const dashboard = {
   'dashboard.workflow.ai.tags': '对话, 生成, 分析',
 
   'dashboard.workflow.unavailable': '扩展未安装',
+
+  'dashboard.skills': '已安装技能',
+  'dashboard.skills.empty': '暂无可用技能。安装 Neko 套件扩展以解锁 AI 能力。',
 } as const satisfies MessageBundle;

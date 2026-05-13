@@ -4,8 +4,10 @@ export const dashboard = {
   'dashboard.title': 'Neko Dashboard',
 
   'dashboard.status.engine': 'Engine',
+  'dashboard.status.projects': 'Projects',
   'dashboard.status.agent': 'Agent',
   'dashboard.status.assets': 'Assets',
+  'dashboard.status.ready': 'Ready',
   'dashboard.status.running': '{running}/{total} running',
   'dashboard.status.files': '{count} files',
 
@@ -16,6 +18,7 @@ export const dashboard = {
   'dashboard.quickStart.audio': 'New Audio',
   'dashboard.quickStart.model': 'New Model',
   'dashboard.quickStart.puppet': 'New Puppet',
+  'dashboard.quickStart.ai': 'Open Chat',
 
   'dashboard.workflows': 'Creative Workflows',
 
@@ -50,4 +53,8 @@ export const dashboard = {
   'dashboard.workflow.ai.tags': 'Chat, Generate, Analyze',
 
   'dashboard.workflow.unavailable': 'Extension not installed',
+
+  'dashboard.skills': 'Installed Skills',
+  'dashboard.skills.empty':
+    'No skills available. Install Neko suite extensions to unlock AI capabilities.',
 } as const satisfies MessageBundle;

@@ -16,14 +16,18 @@ export function MetricCards({ runtime, projectCount, taskCount }: MetricCardsPro
   const engineOnline = runtime.engine?.available && runtime.engine.value?.state === 'ready';
 
   const agentText = runtime.agent?.available
-    ? t('dashboard.status.running', {
-        running: runtime.agent.value?.running ?? 0,
-        total: runtime.agent.value?.total ?? 0,
-      })
+    ? runtime.agent.value
+      ? t('dashboard.status.running', {
+          running: runtime.agent.value.running,
+          total: runtime.agent.value.total,
+        })
+      : t('dashboard.status.ready')
     : t('common.na');
 
   const assetText = runtime.assets?.available
-    ? t('dashboard.status.files', { count: runtime.assets.value?.fileCount ?? 0 })
+    ? runtime.assets.value
+      ? t('dashboard.status.files', { count: runtime.assets.value.fileCount })
+      : t('dashboard.status.ready')
     : t('common.na');
 
   return (
@@ -33,7 +37,7 @@ export function MetricCards({ runtime, projectCount, taskCount }: MetricCardsPro
         value={engineState}
         indicator={engineOnline ? 'online' : 'offline'}
       />
-      <MetricCard label={t('projects.column.name')} value={String(projectCount)} />
+      <MetricCard label={t('dashboard.status.projects')} value={String(projectCount)} />
       <MetricCard label={t('tasks.title')} value={String(taskCount)} />
       <MetricCard label={t('dashboard.status.agent')} value={agentText} />
       <MetricCard label={t('dashboard.status.assets')} value={assetText} />

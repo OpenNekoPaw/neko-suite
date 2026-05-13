@@ -5,6 +5,7 @@ import { vscodeCommandState, vscodeWindowState } from './vscode-test-double';
 import type { ActivityStore } from './activityStore';
 import { DashboardProvider } from './dashboardProvider';
 import type { ProjectScanner } from './projectScanner';
+import type { SkillReader } from './skillReader';
 import type { StatusReader } from './statusReader';
 import type { TaskAggregator } from './taskAggregator';
 
@@ -25,10 +26,12 @@ describe('DashboardProvider', () => {
     });
     const scanner = createScanner();
     const statusReader = createStatusReader();
+    const skillReader = createSkillReader();
 
     const provider = new DashboardProvider(createContext(), {
       scanner,
       statusReader,
+      skillReader,
       taskAggregator,
       activityStore: createActivityStore(),
     });
@@ -76,6 +79,12 @@ function createStatusReader(): StatusReader {
     read: vi.fn(async () => ({})),
     readWorkflows: vi.fn(async () => []),
   } as unknown as StatusReader;
+}
+
+function createSkillReader(): SkillReader {
+  return {
+    read: vi.fn(async () => []),
+  } as unknown as SkillReader;
 }
 
 function createActivityStore(): ActivityStore {

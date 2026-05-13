@@ -18,7 +18,7 @@ const PROJECT_CREATE_COMMANDS = {
   video: 'neko.newProject',
   canvas: 'neko.canvas.new',
   sketch: 'neko.sketch.new',
-  audio: 'neko.audio.newProject',
+  audio: 'neko.audio.new',
   model: 'neko.model.new',
   puppet: 'neko.puppet.new',
 } satisfies Record<DashboardProjectType, string>;

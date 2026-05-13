@@ -7,6 +7,7 @@ import { NavigationDispatcher } from './navigationDispatcher';
 import { isSafeDashboardLocalRef } from './pathGuards';
 import { createRecentActivity } from './projectHelpers';
 import { ProjectScanner } from './projectScanner';
+import { SkillReader } from './skillReader';
 import { StatusReader } from './statusReader';
 import { TaskAggregator } from './taskAggregator';
 import {
@@ -20,6 +21,7 @@ export interface DashboardProviderOptions {
   readonly logger?: DashboardLogger;
   readonly scanner?: ProjectScanner;
   readonly statusReader?: StatusReader;
+  readonly skillReader?: SkillReader;
   readonly navigation?: NavigationDispatcher;
   readonly taskAggregator?: TaskAggregator;
   readonly activityStore?: ActivityStore;
@@ -31,6 +33,7 @@ export class DashboardProvider implements vscode.Disposable {
   private readonly logger: DashboardLogger;
   private readonly scanner: ProjectScanner;
   private readonly statusReader: StatusReader;
+  private readonly skillReader: SkillReader;
   private readonly navigation: NavigationDispatcher;
   private readonly taskAggregator: TaskAggregator;
   private readonly activityStore: ActivityStore;
@@ -43,6 +46,7 @@ export class DashboardProvider implements vscode.Disposable {
     this.logger = options.logger ?? NOOP_DASHBOARD_LOGGER;
     this.scanner = options.scanner ?? new ProjectScanner();
     this.statusReader = options.statusReader ?? new StatusReader();
+    this.skillReader = options.skillReader ?? new SkillReader();
     this.navigation = options.navigation ?? new NavigationDispatcher();
     this.taskAggregator =
       options.taskAggregator ?? new TaskAggregator({ logger: this.logger.child('TaskAggregator') });
@@ -130,10 +134,11 @@ export class DashboardProvider implements vscode.Disposable {
 
   private async doRefresh(): Promise<void> {
     await this.taskAggregator.refreshSources();
-    const [projects, runtime, workflows] = await Promise.all([
+    const [projects, runtime, workflows, skills] = await Promise.all([
       this.scanner.scan(),
       this.statusReader.read(),
       this.statusReader.readWorkflows(),
+      this.skillReader.read(),
     ]);
     const data: DashboardData = {
       mode: projects.length > 0 ? 'work' : 'welcome',
@@ -142,6 +147,7 @@ export class DashboardProvider implements vscode.Disposable {
       tasks: this.taskAggregator.getSnapshot(),
       runtime,
       workflows,
+      skills,
     };
     this.post({ type: 'update', data });
   }
@@ -179,6 +185,9 @@ export class DashboardProvider implements vscode.Disposable {
         return;
       case 'revealTaskOutput':
         await this.revealTaskOutput(message.taskId);
+        return;
+      case 'executeCommand':
+        await vscode.commands.executeCommand(message.command);
         return;
       default:
         assertNever(message);

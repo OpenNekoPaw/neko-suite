@@ -54,6 +54,15 @@ export interface WorkflowAvailability {
   readonly available: boolean;
 }
 
+export interface DashboardSkill {
+  readonly id: string;
+  readonly extensionId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly icon?: string;
+  readonly tags?: readonly string[];
+}
+
 export interface DashboardData {
   readonly mode: DashboardMode;
   readonly projects: readonly DashboardProject[];
@@ -61,6 +70,7 @@ export interface DashboardData {
   readonly tasks: readonly DashboardTask[];
   readonly runtime: DashboardRuntimeStatus;
   readonly workflows: readonly WorkflowAvailability[];
+  readonly skills: readonly DashboardSkill[];
 }
 
 export type WebviewToExtensionMessage =
@@ -71,7 +81,8 @@ export type WebviewToExtensionMessage =
   | { readonly type: 'revealInExplorer'; readonly path: string }
   | { readonly type: 'cancelTask'; readonly taskId: string }
   | { readonly type: 'retryTask'; readonly taskId: string }
-  | { readonly type: 'revealTaskOutput'; readonly taskId: string };
+  | { readonly type: 'revealTaskOutput'; readonly taskId: string }
+  | { readonly type: 'executeCommand'; readonly command: string };
 
 export type ExtensionToWebviewMessage =
   | { readonly type: 'update'; readonly data: DashboardData }
@@ -95,6 +106,8 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
       return typeof value.taskId === 'string';
     case 'createProject':
       return isDashboardProjectType(value.projectType);
+    case 'executeCommand':
+      return typeof value.command === 'string';
     default:
       return false;
   }

@@ -2,10 +2,9 @@ import { useEffect, useReducer } from 'react';
 import type { DashboardTask } from '@neko/shared';
 import { useTranslation } from './i18n/I18nContext';
 import { MetricCards } from './components/MetricCards';
+import { SkillList } from './components/SkillList';
 import { WorkflowCards } from './components/WorkflowCards';
-import { ProjectTable } from './components/ProjectTable';
 import { TaskTable } from './components/TaskTable';
-import { RecentActivity } from './components/RecentActivity';
 import { postMessage } from './services/messenger';
 import { applyTaskChange } from './taskState';
 import type { DashboardData, ExtensionToWebviewMessage } from './types';
@@ -92,9 +91,8 @@ function handleCreateProject(projectType: DashboardData['projects'][number]['typ
   postMessage({ type: 'createProject', projectType });
 }
 
-function handleCommand(_command: string) {
-  // Workflow-specific commands (e.g., open agent) can be dispatched here in the future.
-  // For now, workflow actions use createProject.
+function handleCommand(command: string) {
+  postMessage({ type: 'executeCommand', command });
 }
 
 function WelcomeView({ data }: { readonly data: DashboardData }) {
@@ -106,6 +104,7 @@ function WelcomeView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
+      <SkillList skills={data.skills} />
     </>
   );
 }
@@ -123,20 +122,12 @@ function WorkView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
-      <ProjectTable
-        projects={data.projects}
-        onOpen={(path) => postMessage({ type: 'openProject', path })}
-        onReveal={(path) => postMessage({ type: 'revealInExplorer', path })}
-      />
+      <SkillList skills={data.skills} />
       <TaskTable
         tasks={data.tasks}
         onCancel={(taskId) => postMessage({ type: 'cancelTask', taskId })}
         onRetry={(taskId) => postMessage({ type: 'retryTask', taskId })}
         onRevealOutput={(taskId) => postMessage({ type: 'revealTaskOutput', taskId })}
-      />
-      <RecentActivity
-        items={data.recent}
-        onOpen={(path) => postMessage({ type: 'openProject', path })}
       />
     </>
   );

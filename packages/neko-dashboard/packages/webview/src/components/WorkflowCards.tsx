@@ -41,7 +41,7 @@ const WORKFLOWS: readonly WorkflowDef[] = [
   },
   {
     id: 'ai',
-    actions: [],
+    actions: [{ labelKey: 'dashboard.quickStart.ai', command: 'neko.ai.chat' }],
   },
 ];
 

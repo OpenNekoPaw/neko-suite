@@ -69,6 +69,7 @@ Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 19 packag
 | **neko-client** | Streaming client - H264/fMP4/PCM + EngineClient HTTP dispatch + MediaPlaybackService      | Alpha 85%   | 10K TS (39 files, 95 tests)      |
 | **neko-proto**  | Protocol definitions (timeline.proto + diff.proto full IDL)                               | Stable 100% | 2 proto                          |
 | **neko-auth**   | Unified auth - OAuth 2.0 + PKCE SSO + token refresh + VSCode SecretStorage / file storage | Alpha 90%   | 1.7K TS (15 files, 54 tests)     |
+| **neko-dashboard** | Creative workspace hub - runtime status + workflow launcher + skill browser + task monitor | Alpha 90%   | 3.5K TS/TSX (30 files, 29 tests) |
 | **neko-suite**  | Extension Pack portal                                                                     | Stable 90%  | Config package                   |
 
 ### Feature Modules
@@ -277,6 +278,10 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── core/          # @neko/auth-core (Layer 0)
 │   │       └── extension/     # neko.neko-auth VSCode extension
+│   ├── neko-dashboard/         # Creative workspace hub (dashboard)
+│   │   └── packages/
+│   │       ├── extension/     # VSCode extension side
+│   │       └── webview/       # React UI
 │   ├── neko-audio/            # Audio workstation
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side

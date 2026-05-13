@@ -324,3 +324,49 @@ progress {
   display: flex;
   gap: 4px;
 }
+
+/* ── Skill List ───────────────────────────────────────── */
+
+.skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--neko-border);
+  border-radius: var(--neko-radius-lg);
+  background: var(--neko-surface);
+  padding: 12px;
+}
+
+.skill-card-icon {
+  font-size: 16px;
+}
+
+.skill-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.skill-card-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.skill-card-desc {
+  font-size: 12px;
+  color: var(--neko-fg-secondary);
+  line-height: 1.4;
+}
+
+.skill-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: auto;
+}
