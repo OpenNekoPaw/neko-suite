@@ -29,8 +29,10 @@ mod middleware;
 pub mod routes;
 
 use neko_host_api::EngineApi;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::watch;
+
+const LOOPBACK_BIND_ADDR: [u8; 4] = [127, 0, 0, 1];
 
 /// Start the HTTP server on the given port
 ///
@@ -39,7 +41,7 @@ pub async fn start_server(engine: Arc<EngineApi>, port: u16) -> std::io::Result<
     let app = routes::build_router(engine);
     let app = middleware::apply_middleware(app);
 
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = loopback_addr(port);
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     tracing::info!("Neko HTTP server started on http://{}", addr);
@@ -54,10 +56,19 @@ pub async fn start_server_with_shutdown(
     engine: Arc<EngineApi>,
     port: u16,
 ) -> std::io::Result<(std::net::SocketAddr, watch::Sender<()>)> {
-    let app = routes::build_router(engine);
+    start_server_with_shutdown_and_preview_roots(engine, port, Vec::new()).await
+}
+
+/// Start the HTTP server with a shutdown signal and preview file allow-list roots.
+pub async fn start_server_with_shutdown_and_preview_roots(
+    engine: Arc<EngineApi>,
+    port: u16,
+    preview_allowed_roots: Vec<PathBuf>,
+) -> std::io::Result<(std::net::SocketAddr, watch::Sender<()>)> {
+    let app = routes::build_router_with_preview_roots(engine, preview_allowed_roots);
     let app = middleware::apply_middleware(app);
 
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = loopback_addr(port);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let local_addr = listener.local_addr()?;
 
@@ -76,4 +87,18 @@ pub async fn start_server_with_shutdown(
     });
 
     Ok((local_addr, shutdown_tx))
+}
+
+fn loopback_addr(port: u16) -> std::net::SocketAddr {
+    std::net::SocketAddr::from((LOOPBACK_BIND_ADDR, port))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn server_bind_addr_is_loopback_only() {
+        let addr = super::loopback_addr(8765);
+        assert_eq!(addr.ip(), std::net::IpAddr::from([127, 0, 0, 1]));
+        assert_eq!(addr.port(), 8765);
+    }
 }

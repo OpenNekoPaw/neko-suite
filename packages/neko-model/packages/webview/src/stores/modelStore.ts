@@ -14,7 +14,7 @@ import type {
   TransformMode,
 } from '../types';
 import type { EditorKeyframeTrack } from '@neko/shared';
-import type { RenderFrameMeta } from '@neko/shared';
+import type { EnvironmentPlacement, RenderFrameMeta } from '@neko/shared';
 import {
   AuthoringPerformanceMetrics,
   type AuthoringMetricsSnapshot,
@@ -71,6 +71,7 @@ export interface ModelState {
   modelUrl: string | null;
   isLoading: boolean;
   qualityPreviewDataUrl: string | null;
+  environmentPlacement: EnvironmentPlacement | null;
 
   // Face Editor
   faceParams: Record<string, number>;
@@ -140,6 +141,7 @@ export interface ModelState {
   setModelUrl: (url: string | null) => void;
   setLoading: (loading: boolean) => void;
   setQualityPreview: (dataUrl: string | null) => void;
+  setEnvironmentPlacement: (placement: EnvironmentPlacement | null) => void;
 
   // Actions — Bulk update
   updateNodeTransform: (
@@ -216,6 +218,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   modelUrl: null,
   isLoading: false,
   qualityPreviewDataUrl: null,
+  environmentPlacement: null,
   faceParams: {},
   isFaceEditorOpen: false,
   isLatencyTesterOpen: false,
@@ -509,6 +512,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   setQualityPreview: (dataUrl) => set({ qualityPreviewDataUrl: dataUrl }),
 
+  setEnvironmentPlacement: (placement) => set({ environmentPlacement: placement }),
+
   // Bulk update: update a single node's transform in the scene graph
   updateNodeTransform: (nodeId, position, rotation, scale) =>
     set((state) => ({
@@ -644,6 +649,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       faceParams: s.faceParams,
       keyframeTracks: s.keyframeTracks,
       currentTimeMs: s.currentTimeMs,
+      environmentPlacement: s.environmentPlacement,
       isKeyframeEditorOpen: s.isKeyframeEditorOpen,
       cameraTheta: s.cameraTheta,
       cameraPhi: s.cameraPhi,
@@ -665,6 +671,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
       faceParams: (state['faceParams'] as Record<string, number>) ?? {},
       keyframeTracks: (state['keyframeTracks'] as EditorKeyframeTrack[]) ?? [],
       currentTimeMs: (state['currentTimeMs'] as number) ?? 0,
+      environmentPlacement:
+        parseEnvironmentPlacementState(state['environmentPlacement']) ?? get().environmentPlacement,
       isKeyframeEditorOpen: (state['isKeyframeEditorOpen'] as boolean) ?? false,
       cameraTheta: (state['cameraTheta'] as number) ?? 0,
       cameraPhi: (state['cameraPhi'] as number) ?? Math.PI / 4,
@@ -672,6 +680,41 @@ export const useModelStore = create<ModelState>((set, get) => ({
       cameraTarget: (state['cameraTarget'] as [number, number, number]) ?? [0, 0.9, 0],
     }),
 }));
+
+function parseEnvironmentPlacementState(value: unknown): EnvironmentPlacement | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const mode = record['mode'];
+  if (mode !== 'skybox' && mode !== 'ibl' && mode !== 'background-and-ibl') return null;
+  const sourceAssetId = record['sourceAssetId'];
+  const sourceUri = record['sourceUri'];
+  const rotationDeg = finiteNumber(record['rotationDeg']);
+  const intensity = finiteNumber(record['intensity']);
+  const exposure = finiteNumber(record['exposure']);
+  const visibleAsBackground = record['visibleAsBackground'];
+  if (
+    typeof sourceAssetId !== 'string' ||
+    rotationDeg === null ||
+    intensity === null ||
+    exposure === null ||
+    typeof visibleAsBackground !== 'boolean'
+  ) {
+    return null;
+  }
+  return {
+    sourceAssetId,
+    sourceUri: typeof sourceUri === 'string' ? sourceUri : undefined,
+    mode,
+    rotationDeg,
+    intensity,
+    exposure,
+    visibleAsBackground,
+  };
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
 
 function collectRemovedNodeIds(
   nodes: readonly SceneNodeSnapshot[],

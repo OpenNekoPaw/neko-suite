@@ -136,12 +136,10 @@ impl NativeEngine {
         stream_id: Option<String>,
         body: Option<String>,
     ) -> napi::Result<String> {
-        let options_value: serde_json::Value = options
-            .map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null))
+        let options_value: serde_json::Value = parse_json_arg(options, "options")?
             .unwrap_or(serde_json::Value::Null);
 
-        let body_value: Option<serde_json::Value> =
-            body.map(|s| serde_json::from_str(&s).unwrap_or(serde_json::Value::Null));
+        let body_value: Option<serde_json::Value> = parse_json_arg(body, "body")?;
 
         let request = ActionRequest {
             group,
@@ -342,6 +340,16 @@ impl NativeEngine {
     /// Returns the actual bound port (useful when port=0 for auto-assign).
     #[napi]
     pub async fn start_frame_server(&self, port: Option<u16>) -> napi::Result<u16> {
+        self.start_frame_server_with_preview_roots(port, None).await
+    }
+
+    /// Start the embedded HTTP/WebSocket server with preview file allow-list roots.
+    #[napi]
+    pub async fn start_frame_server_with_preview_roots(
+        &self,
+        port: Option<u16>,
+        preview_allowed_roots: Option<Vec<String>>,
+    ) -> napi::Result<u16> {
         // Check if already running
         {
             let guard = self
@@ -356,13 +364,19 @@ impl NativeEngine {
         }
 
         let bind_port = port.unwrap_or(0);
+        let preview_allowed_roots = preview_allowed_roots
+            .unwrap_or_default()
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .collect();
 
-        let (addr, shutdown_tx) =
-            neko_host_http::start_server_with_shutdown(self.engine.clone(), bind_port)
-                .await
-                .map_err(|e| {
-                    napi::Error::from_reason(format!("Failed to start frame server: {}", e))
-                })?;
+        let (addr, shutdown_tx) = neko_host_http::start_server_with_shutdown_and_preview_roots(
+            self.engine.clone(),
+            bind_port,
+            preview_allowed_roots,
+        )
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("Failed to start frame server: {}", e)))?;
 
         let actual_port = addr.port();
 
@@ -409,8 +423,37 @@ impl NativeEngine {
     }
 }
 
+fn parse_json_arg(
+    value: Option<String>,
+    label: &str,
+) -> napi::Result<Option<serde_json::Value>> {
+    value
+        .map(|s| {
+            serde_json::from_str(&s).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid {} JSON: {}", label, e))
+            })
+        })
+        .transpose()
+}
+
 #[cfg(test)]
 mod tests {
+    use super::parse_json_arg;
+
+    #[test]
+    fn parse_json_arg_rejects_malformed_json() {
+        let result = parse_json_arg(Some("{broken".to_string()), "options");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_json_arg_accepts_valid_json() {
+        let result = parse_json_arg(Some("{\"quality\":\"high\"}".to_string()), "options")
+            .expect("valid json")
+            .expect("some value");
+        assert_eq!(result["quality"], "high");
+    }
+
     #[tokio::test]
     async fn test_native_engine_creation() {
         // Note: This test requires GPU, may fail in CI

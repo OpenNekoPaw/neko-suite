@@ -104,4 +104,66 @@ describe('EngineClient preview manifest surface', () => {
 
     fetchMock.mockRestore();
   });
+
+  it('throws typed errors for failed preview register and variant requests', async () => {
+    const registerMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('missing', {
+        status: 404,
+        statusText: 'Not Found',
+      }),
+    );
+    const client = new EngineClient(3456);
+
+    await expect(
+      client.registerPreviewAsset({ source: '/missing.jpg', kind: 'image' }),
+    ).rejects.toThrow('preview:registerAsset failed: 404 Not Found');
+    registerMock.mockRestore();
+
+    const variantMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('missing', {
+        status: 404,
+        statusText: 'Not Found',
+      }),
+    );
+    await expect(
+      client.requestPreviewVariant('asset-1', { role: 'thumbnail', width: 320, height: 180 }),
+    ).rejects.toThrow('preview:requestVariant failed: 404 Not Found');
+    variantMock.mockRestore();
+  });
+
+  it('persists preview asset metadata through the manifest endpoint', async () => {
+    const manifest: PreviewManifest = {
+      manifestVersion: 1,
+      assetId: 'asset-1',
+      token: 'token-1',
+      kind: 'image',
+      status: 'ready',
+      sourceName: 'pano.jpg',
+      sourceUrl: '/v1/preview/file/token-1',
+      projection: { type: 'flat', confidence: 'manual', source: 'manual' },
+      media: {
+        dimensions: { width: 1000, height: 500 },
+        fileSizeBytes: 42,
+        mimeType: 'image/jpeg',
+        dynamicRange: 'sdr',
+      },
+      variants: [],
+      createdAt: '2026-05-07T00:00:00.000Z',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(createResponse(manifest));
+    const client = new EngineClient(3456);
+
+    await expect(
+      client.updatePreviewAssetMetadata('asset-1', { projectionType: 'flat' }),
+    ).resolves.toEqual(manifest);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:3456/v1/preview/assets/asset-1/metadata',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ projectionType: 'flat' }),
+      }),
+    );
+
+    fetchMock.mockRestore();
+  });
 });

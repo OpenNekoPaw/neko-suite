@@ -69,6 +69,57 @@ describe('WebviewPreviewResolver', () => {
     });
     expect(fakeWindow.removeEventListener).toHaveBeenCalledWith('message', expect.any(Function));
   });
+
+  it('requests panoramic FOV variants without persisting returned runtime URLs', async () => {
+    vi.useFakeTimers();
+    installFakeWindow();
+    const postMessage = vi.fn();
+    let messageHandler: ((event: MessageEvent) => void) | undefined;
+    window.addEventListener = vi.fn(
+      (_type: string, listener: EventListenerOrEventListenerObject) => {
+        messageHandler =
+          typeof listener === 'function'
+            ? (listener as (event: MessageEvent) => void)
+            : (event: MessageEvent) => listener.handleEvent(event);
+      },
+    );
+    setGlobalVSCodeApi({
+      postMessage,
+      getState: () => undefined,
+      setState: () => {},
+    });
+    const resolver = new WebviewPreviewResolver();
+    const source = {
+      id: 'node:pano',
+      role: 'panorama-fov-crop' as const,
+      asset: { kind: 'asset-identity' as const, path: 'skybox_360.jpg', mediaType: 'image' },
+    };
+
+    const promise = resolver.resolve({ source });
+    const request = postMessage.mock.calls[0]?.[0] as { requestId: string };
+    messageHandler?.({
+      data: {
+        type: 'preview:variantResolved',
+        requestId: request.requestId,
+        url: 'http://127.0.0.1:3456/v1/preview/file/token',
+      },
+    } as MessageEvent);
+
+    await expect(promise).resolves.toMatchObject({
+      role: 'panorama-fov-crop',
+      sourcePath: 'skybox_360.jpg',
+      runtimeUrl: 'http://127.0.0.1:3456/v1/preview/file/token',
+    });
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'preview:resolveVariant',
+        role: 'fov-crop',
+        mediaType: 'image',
+      }),
+    );
+    expect(JSON.stringify(source)).not.toContain('127.0.0.1');
+    expect(JSON.stringify(source)).not.toContain('token');
+  });
 });
 
 function installFakeWindow(): {

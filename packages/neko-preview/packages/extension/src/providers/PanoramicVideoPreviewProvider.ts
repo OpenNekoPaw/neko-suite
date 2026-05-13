@@ -1,9 +1,13 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import type { PreviewManifest } from '@neko/shared';
 import { PreviewService } from '../services/PreviewService';
 import type { StatusBarManager } from '../ui/StatusBarManager';
 import { getWebviewHtml } from '../utils/html';
+import { getLogger } from '../utils/logger';
 import { PANORAMIC_VIDEO_VIEW_TYPE } from '../types/panoramic-api';
+
+const logger = getLogger('PanoramicVideoPreview');
 
 export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEditorProvider {
   static readonly viewType = PANORAMIC_VIDEO_VIEW_TYPE;
@@ -43,7 +47,7 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
     });
 
     const filePath = document.uri.fsPath;
-    const fileName = filePath.split('/').pop() ?? filePath;
+    const fileName = basenameForDisplay(filePath);
     this._statusBar.show({ fileName, duration: 0 });
     const manifestPromise = this.registerManifest(filePath, fileName);
     let activeManifest: PreviewManifest | null = null;
@@ -73,9 +77,17 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
             break;
           }
           case 'preview:play': {
+            await stopStreams();
+            const startTime = finiteNumber(message.startTime) ?? 0;
+            const speed = finiteNumber(message.speed) ?? 1;
             const mediaInfo = await this._previewService?.probeMedia(filePath);
             if (!mediaInfo) return;
-            const result = await this._previewService?.startVideoPlayback(filePath, mediaInfo);
+            const result = await this._previewService?.startVideoPlayback(
+              filePath,
+              mediaInfo,
+              startTime,
+              speed,
+            );
             activeVideoStreamId = result?.videoStreamId ?? null;
             activeAudioStreamId = result?.audioStreamId ?? null;
             if (activeVideoStreamId) {
@@ -86,10 +98,38 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
                   streamUrl: this._previewService?.getStreamWebSocketUrl(activeVideoStreamId),
                   audioStreamId: activeAudioStreamId,
                   audioStreamUrl: activeAudioStreamId
-                    ? this._previewService?.getStreamWebSocketUrl(activeAudioStreamId)
+                    ? this._previewService?.getAudioWebSocketUrl(activeAudioStreamId)
                     : null,
                 },
               });
+            }
+            break;
+          }
+          case 'preview:pause':
+            await this._previewService?.pauseStreams(activeVideoStreamId, activeAudioStreamId);
+            break;
+          case 'preview:resume':
+            await this._previewService?.resumeStreams(activeVideoStreamId, activeAudioStreamId);
+            break;
+          case 'preview:seek': {
+            const time = finiteNumber(message.time);
+            if (time !== null) {
+              await this._previewService?.seekStreams(
+                activeVideoStreamId,
+                activeAudioStreamId,
+                time,
+              );
+            }
+            break;
+          }
+          case 'preview:speed': {
+            const speed = finiteNumber(message.speed);
+            if (speed !== null) {
+              await this._previewService?.setStreamSpeed(
+                activeVideoStreamId,
+                activeAudioStreamId,
+                speed,
+              );
             }
             break;
           }
@@ -110,7 +150,9 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
           await this._previewService?.unregisterPreviewAsset(manifest.assetId);
         }
         this._statusBar.hide();
-      })();
+      })().catch((error) => {
+        logger.error('Failed to dispose panoramic video preview resources:', error);
+      });
     });
   }
 
@@ -140,4 +182,12 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
     });
     return manifest;
   }
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function basenameForDisplay(filePath: string): string {
+  return path.basename(filePath.replaceAll('\\', path.sep));
 }

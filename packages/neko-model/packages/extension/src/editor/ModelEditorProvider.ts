@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
+import type { EnvironmentPlacement } from '@neko/shared';
 import {
   generateMinimalGlb,
   generateHumanoidGlb,
@@ -106,6 +107,15 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       type: 'liveExpressions',
       expressions,
     });
+  }
+
+  useEnvironment(placement: EnvironmentPlacement): boolean {
+    if (!this.activeWebviewPanel) return false;
+    void this.activeWebviewPanel.webview.postMessage({
+      type: 'environmentPlacement',
+      placement,
+    });
+    return true;
   }
 
   isActive(): boolean {

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import type {
   EnvironmentPlacement,
   PanoramaViewState,
@@ -17,7 +18,6 @@ const logger = getLogger('PanoramicImagePreview');
 export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEditorProvider {
   static readonly viewType = PANORAMIC_IMAGE_VIEW_TYPE;
 
-  private readonly _disposables: vscode.Disposable[] = [];
   private _previewService: PreviewService | null = null;
 
   constructor(
@@ -48,7 +48,7 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
     };
 
     const filePath = document.uri.fsPath;
-    const fileName = filePath.split('/').pop() ?? filePath;
+    const fileName = basenameForDisplay(filePath);
     this._statusBar.show({ fileName, duration: 0 });
 
     webviewPanel.webview.html = getWebviewHtml({
@@ -81,7 +81,12 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
             if (!manifest) return;
             const projectionType = parseProjectionType(message.projectionType);
             if (!projectionType) return;
-            await this.persistProjectionDecision(document.uri, manifest.assetId, projectionType);
+            const updated = await this.persistProjectionDecision(
+              webviewPanel,
+              manifest.assetId,
+              projectionType,
+            );
+            if (updated) activeManifest = updated;
             break;
           }
           case 'panorama:saveDefaultView': {
@@ -89,7 +94,12 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
             if (!manifest) return;
             const viewState = parsePanoramaViewState(message.viewState);
             if (!viewState) return;
-            await this.persistDefaultView(document.uri, manifest.assetId, viewState);
+            const updated = await this.persistDefaultView(
+              webviewPanel,
+              manifest.assetId,
+              viewState,
+            );
+            if (updated) activeManifest = updated;
             break;
           }
           case 'panorama:requestVariant': {
@@ -121,33 +131,64 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
     };
 
     webviewPanel.onDidDispose(() => {
-      void disposePanelResources();
+      void disposePanelResources().catch((error) => {
+        logger.error('Failed to dispose panoramic image preview resources:', error);
+      });
     });
-    this._disposables.push(messageDisposable);
   }
 
   private async persistProjectionDecision(
-    uri: vscode.Uri,
+    webviewPanel: vscode.WebviewPanel,
     assetId: string,
     projectionType: PreviewProjectionType,
-  ): Promise<void> {
-    await vscode.commands.executeCommand('setContext', 'neko.preview.panoramaProjectionConfirmed', {
-      uri: uri.toString(),
-      assetId,
-      projectionType,
-    });
+  ): Promise<PreviewManifest | null> {
+    try {
+      const manifest = await this._previewService?.updatePreviewAssetMetadata(assetId, {
+        projectionType,
+      });
+      if (!manifest) return null;
+      await webviewPanel.webview.postMessage({
+        type: 'panorama:init',
+        payload: {
+          manifest,
+          engineBaseUrl: this._previewService?.getPreviewBaseUrl() ?? null,
+        },
+      });
+      return manifest;
+    } catch (error) {
+      await webviewPanel.webview.postMessage({
+        type: 'panorama:error',
+        payload: { message: error instanceof Error ? error.message : String(error) },
+      });
+      return null;
+    }
   }
 
   private async persistDefaultView(
-    uri: vscode.Uri,
+    webviewPanel: vscode.WebviewPanel,
     assetId: string,
     viewState: PanoramaViewState,
-  ): Promise<void> {
-    await vscode.commands.executeCommand('setContext', 'neko.preview.panoramaDefaultView', {
-      uri: uri.toString(),
-      assetId,
-      viewState,
-    });
+  ): Promise<PreviewManifest | null> {
+    try {
+      const manifest = await this._previewService?.updatePreviewAssetMetadata(assetId, {
+        defaultViewState: viewState,
+      });
+      if (!manifest) return null;
+      await webviewPanel.webview.postMessage({
+        type: 'panorama:init',
+        payload: {
+          manifest,
+          engineBaseUrl: this._previewService?.getPreviewBaseUrl() ?? null,
+        },
+      });
+      return manifest;
+    } catch (error) {
+      await webviewPanel.webview.postMessage({
+        type: 'panorama:error',
+        payload: { message: error instanceof Error ? error.message : String(error) },
+      });
+      return null;
+    }
   }
 
   private async requestVariant(
@@ -187,12 +228,7 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
     await vscode.commands.executeCommand('neko.model.useEnvironment', placement);
   }
 
-  dispose(): void {
-    for (const disposable of this._disposables) {
-      disposable.dispose();
-    }
-    this._disposables.length = 0;
-  }
+  dispose(): void {}
 
   private async registerManifest(
     filePath: string,
@@ -319,4 +355,8 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function basenameForDisplay(filePath: string): string {
+  return path.basename(filePath.replaceAll('\\', path.sep));
 }

@@ -32,10 +32,18 @@ const mockCaptureFrame = vi.fn();
 const mockGetWaveform = vi.fn();
 const mockGetStreamWebSocketUrl = vi.fn();
 const mockGetAudioWebSocketUrl = vi.fn();
+const mockRegisterPreviewAsset = vi.fn();
+const mockRequestPreviewVariant = vi.fn();
+const mockUpdatePreviewAssetMetadata = vi.fn();
+const mockUnregisterPreviewAsset = vi.fn();
 
 vi.mock('@neko/neko-client', () => ({
   EngineClient: vi.fn().mockImplementation(function (this: Record<string, unknown>, port: number) {
     this.port = port;
+    this.registerPreviewAsset = mockRegisterPreviewAsset;
+    this.requestPreviewVariant = mockRequestPreviewVariant;
+    this.updatePreviewAssetMetadata = mockUpdatePreviewAssetMetadata;
+    this.unregisterPreviewAsset = mockUnregisterPreviewAsset;
   }),
   MediaPlaybackService: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
     this.probeMedia = mockProbeMedia;
@@ -179,6 +187,14 @@ describe('PreviewService', () => {
       const url = service.getAudioWebSocketUrl('audio-abc');
 
       expect(url).toBeNull();
+    });
+  });
+
+  describe('getPreviewBaseUrl()', () => {
+    it('should build the engine preview HTTP base URL', async () => {
+      const service = await createService(3000);
+
+      expect(service.getPreviewBaseUrl()).toBe('http://127.0.0.1:3000');
     });
   });
 
@@ -520,6 +536,94 @@ describe('PreviewService', () => {
       await expect(service.captureFrame('/path/to/video.mp4', -1)).rejects.toThrow(
         'No frame at time',
       );
+    });
+  });
+
+  describe('preview manifests', () => {
+    it('delegates preview asset registration to EngineClient', async () => {
+      const service = await createService();
+      const manifest = {
+        manifestVersion: 1,
+        assetId: 'asset-1',
+        token: 'token-1',
+        kind: 'image',
+        status: 'ready',
+        sourceName: 'pano.jpg',
+        projection: { type: 'equirectangular', confidence: 'explicit', source: 'metadata' },
+        media: { fileSizeBytes: 1, mimeType: 'image/jpeg', dynamicRange: 'sdr' },
+        variants: [],
+        createdAt: '1',
+      };
+      mockRegisterPreviewAsset.mockResolvedValue(manifest);
+
+      await expect(
+        service.registerPreviewAsset({ source: '/project/pano.jpg', kind: 'image' }),
+      ).resolves.toEqual(manifest);
+      expect(mockRegisterPreviewAsset).toHaveBeenCalledWith({
+        source: '/project/pano.jpg',
+        kind: 'image',
+      });
+    });
+
+    it('delegates preview variant requests to EngineClient', async () => {
+      const service = await createService();
+      const variant = {
+        id: 'asset-1:thumbnail',
+        assetId: 'asset-1',
+        role: 'thumbnail',
+        url: '/v1/preview/file/variant-token',
+        token: 'variant-token',
+      };
+      mockRequestPreviewVariant.mockResolvedValue(variant);
+
+      await expect(
+        service.requestPreviewVariant('asset-1', { role: 'thumbnail', width: 256, height: 128 }),
+      ).resolves.toEqual(variant);
+      expect(mockRequestPreviewVariant).toHaveBeenCalledWith('asset-1', {
+        role: 'thumbnail',
+        width: 256,
+        height: 128,
+      });
+    });
+
+    it('delegates preview asset metadata persistence to EngineClient', async () => {
+      const service = await createService();
+      const manifest = {
+        manifestVersion: 1,
+        assetId: 'asset-1',
+        token: 'token-1',
+        kind: 'image',
+        status: 'ready',
+        sourceName: 'pano.jpg',
+        projection: { type: 'flat', confidence: 'manual', source: 'manual' },
+        media: { fileSizeBytes: 1, mimeType: 'image/jpeg', dynamicRange: 'sdr' },
+        variants: [],
+        createdAt: '1',
+      };
+      mockUpdatePreviewAssetMetadata.mockResolvedValue(manifest);
+
+      await expect(
+        service.updatePreviewAssetMetadata('asset-1', { projectionType: 'flat' }),
+      ).resolves.toEqual(manifest);
+      expect(mockUpdatePreviewAssetMetadata).toHaveBeenCalledWith('asset-1', {
+        projectionType: 'flat',
+      });
+    });
+
+    it('throws when preview metadata persistence is unavailable', async () => {
+      const service = await createService();
+      await service.dispose();
+
+      await expect(
+        service.updatePreviewAssetMetadata('asset-1', { projectionType: 'flat' }),
+      ).rejects.toThrow('PreviewService not available');
+    });
+
+    it('delegates preview asset unregister to EngineClient', async () => {
+      const service = await createService();
+
+      await expect(service.unregisterPreviewAsset('asset-1')).resolves.toBeUndefined();
+      expect(mockUnregisterPreviewAsset).toHaveBeenCalledWith('asset-1');
     });
   });
 

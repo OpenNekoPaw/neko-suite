@@ -101,6 +101,7 @@ const mockPreviewService = {
   captureFrame: vi.fn(),
   registerPreviewAsset: vi.fn(),
   requestPreviewVariant: vi.fn(),
+  updatePreviewAssetMetadata: vi.fn(),
   unregisterPreviewAsset: vi.fn(),
   getStreamWebSocketUrl: vi.fn((id: string) => `ws://127.0.0.1:9090/v1/streams/${id}`),
   dispose: vi.fn(),
@@ -295,6 +296,7 @@ describe('extension', () => {
       expect(typeof api.isAvailable).toBe('boolean');
       expect(typeof api.port).toBe('number');
       expect(typeof api.getStreamWebSocketUrl).toBe('function');
+      expect(typeof api.getPreviewBaseUrl).toBe('function');
       expect(typeof api.probeMedia).toBe('function');
       expect(typeof api.startPlayback).toBe('function');
       expect(typeof api.stopStreams).toBe('function');
@@ -305,6 +307,7 @@ describe('extension', () => {
       expect(typeof api.captureFrame).toBe('function');
       expect(typeof api.registerPreviewAsset).toBe('function');
       expect(typeof api.requestPreviewVariant).toBe('function');
+      expect(typeof api.updatePreviewAssetMetadata).toBe('function');
       expect(typeof api.unregisterPreviewAsset).toBe('function');
     });
 

@@ -1,6 +1,6 @@
 # ADR: 全景图片与视频预览能力 (Panoramic Image And Video Preview)
 
-> 状态：**Proposed (2026-04-25)**；实现收敛更新：**2026-05-07**
+> 状态：**Implemented (2026-05-13)**；首次提出：**2026-04-25**
 > 关联：[document-preview.md](./document-preview.md) · [format-strategy.md](./format-strategy.md) · [agent-media-architecture.md](./agent-media-architecture.md) · [model-runtime.md](./model-runtime.md)
 
 ---
@@ -383,7 +383,9 @@ local file path
 
 Webview 不维护 Direct Webview Fast Path。`asWebviewUri` 仍可用于 webview bundle 资源（JS/CSS/icon），但不作为 Neko 媒体内容读取路径。这样小文件、大文件、HDR、tile、Range、缓存、转码和生命周期都由同一个入口治理，避免长期维护两套内容路径。
 
-实现状态（2026-05-08）：Phase 1 已落地 manifest 注册、token URL、路由、图片/视频 custom editor、viewer-local 视角控制、跨扩展委托和 variant API。真实 proxy / FOV crop / screenshot 文件生成仍是 P1 后续；当前 `requestPreviewVariant` 返回 manifest-linked passthrough descriptor，并在 Rust 侧保留 variant token 归属清理能力，确保后续生成独立派生文件时生命周期不泄漏。
+实现状态（2026-05-13）：Phase 1 图片链路已从 passthrough descriptor 升级为 engine 生成派生文件。`proxy`、`thumbnail`、`fov-crop`、`screenshot` 通过 `PreviewVariant` 返回 engine-managed token URL，`unregisterPreviewAsset` 会释放源 token、派生 token 和临时文件；大图按尺寸/文件大小策略生成 proxy，`.hdr` 生成 tone-mapped SDR proxy，`.exr` 保持 typed unsupported。投影探测优先级为 sidecar manual > explicit request > bounded GPano/XMP metadata > trusted filename > 2:1 heuristic，默认视角和投影确认写入 `<asset>.nkmeta.json`。
+
+实现状态（2026-05-13）：全景视频 custom editor 已替换占位页，Webview 通过 `preview:play` 请求 Extension Host 启动 engine H.264/PCM stream，随后直接连接 stream URL；Decoded `VideoFrame` 在 Webview 本地用 WebGL2 球面采样呈现，WebGL 不可用时降级为 2D canvas。Extension Host 仅 broker manifest、stream descriptor、低频控制和 cleanup，不承载视频帧。
 
 ### 6.4 视角控制分层
 

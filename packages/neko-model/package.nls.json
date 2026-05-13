@@ -6,5 +6,7 @@
   "neko.model.selectAll.title": "Select All",
   "neko.model.undo.title": "Undo",
   "neko.model.redo.title": "Redo",
-  "neko.model.resetView.title": "Reset View"
+  "neko.model.resetView.title": "Reset View",
+  "neko.model.useEnvironment.invalidPlacement": "Invalid environment placement request.",
+  "neko.model.useEnvironment.noActiveEditor": "Open a model editor before using a panoramic environment."
 }

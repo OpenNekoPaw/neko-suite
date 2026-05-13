@@ -28,8 +28,8 @@ uuid.workspace = true
 # ZIP archive reading (for EPUB on-demand entry serving)
 zip.workspace = true
 
-# Image metadata probing for preview manifests
-image.workspace = true
+# Image metadata probing and preview variant generation
+image = { workspace = true, features = ["hdr"] }
 
 # Serialization
 serde.workspace = true

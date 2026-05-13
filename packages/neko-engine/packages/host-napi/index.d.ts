@@ -243,6 +243,8 @@ export declare class NativeEngine {
    * Returns the actual bound port (useful when port=0 for auto-assign).
    */
   startFrameServer(port?: number | undefined | null): Promise<number>
+  /** Start the embedded HTTP/WebSocket server with preview file allow-list roots. */
+  startFrameServerWithPreviewRoots(port?: number | undefined | null, previewAllowedRoots?: Array<string> | undefined | null): Promise<number>
   /** Stop the embedded HTTP/WebSocket server */
   stopFrameServer(): Promise<void>
   /** Get the frame server port, or null if not running */

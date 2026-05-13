@@ -11,7 +11,12 @@ export type PreviewManifestStatus = 'ready' | 'requires-proxy' | 'stream-require
 
 export type PreviewProjectionType = 'flat' | 'equirectangular' | 'cubemap' | 'fisheye' | 'unknown';
 
-export type PreviewProjectionConfidence = 'explicit' | 'trusted-filename' | 'heuristic' | 'none';
+export type PreviewProjectionConfidence =
+  | 'explicit'
+  | 'manual'
+  | 'trusted-filename'
+  | 'heuristic'
+  | 'none';
 
 export type PreviewDynamicRange = 'sdr' | 'hdr' | 'unknown';
 
@@ -143,6 +148,11 @@ export interface RegisterPreviewAssetRequest {
   readonly kind?: PreviewAssetKind;
   readonly expectedProjection?: PreviewProjectionType;
   readonly explicitOpen?: boolean;
+}
+
+export interface UpdatePreviewAssetMetadataRequest {
+  readonly projectionType?: PreviewProjectionType;
+  readonly defaultViewState?: PanoramaViewState;
 }
 
 export interface PreviewVariantRequest {

@@ -404,6 +404,32 @@ describe('work-item-presenter', () => {
     });
   });
 
+  it('does not serialize runtime preview state into panoramic delegated cards', () => {
+    const projection = projectBackgroundTaskResultContent({
+      ...createBackgroundTask('image-360-runtime', 'Render skybox'),
+      result: {
+        urls: ['blob:runtime-preview'],
+        localPaths: ['/tmp/skybox_360.jpg'],
+        thumbnailUrl: 'webview://skybox-fov.jpg',
+      },
+    });
+    const serialized = JSON.stringify(projection.contentData);
+
+    expect(serialized).not.toContain('blob:runtime-preview');
+    expect(serialized).not.toContain('streamId');
+    expect(serialized).not.toContain('yawDeg');
+    expect(serialized).not.toContain('pitchDeg');
+    expect(serialized).not.toContain('fovDeg');
+    expect(projection).toMatchObject({
+      contentKind: 'panoramic-image',
+      contentData: {
+        src: 'webview://skybox-fov.jpg',
+        localPath: '/tmp/skybox_360.jpg',
+        kind: 'image',
+      },
+    });
+  });
+
   it('projects subagent card display semantics', () => {
     const item: SubAgentWorkItem = {
       ...createSubAgentWorkItem('sub-1', 'tool-1'),

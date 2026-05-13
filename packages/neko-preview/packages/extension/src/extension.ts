@@ -492,6 +492,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
     getStreamWebSocketUrl(streamId: string) {
       return sharedPreviewService?.getStreamWebSocketUrl(streamId) ?? null;
     },
+    getPreviewBaseUrl() {
+      return sharedPreviewService?.getPreviewBaseUrl() ?? null;
+    },
     probeMedia(filePath: string) {
       if (!sharedPreviewService?.isAvailable) {
         return Promise.reject(new Error('PreviewService not available'));
@@ -551,6 +554,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
         return Promise.reject(new Error('PreviewService not available'));
       }
       return sharedPreviewService.requestPreviewVariant(assetId, request);
+    },
+    updatePreviewAssetMetadata(assetId, request) {
+      if (!sharedPreviewService?.isAvailable) {
+        return Promise.reject(new Error('PreviewService not available'));
+      }
+      return sharedPreviewService.updatePreviewAssetMetadata(assetId, request);
     },
     unregisterPreviewAsset(assetIdOrToken) {
       if (!sharedPreviewService?.isAvailable) {

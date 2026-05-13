@@ -9,11 +9,16 @@ import type {
   PreviewVariant,
   PreviewVariantRequest,
   RegisterPreviewAssetRequest,
+  UpdatePreviewAssetMetadataRequest,
 } from '@neko/shared';
 
 export interface PanoramicPreviewApi {
   registerPreviewAsset(request: RegisterPreviewAssetRequest): Promise<PreviewManifest>;
   requestPreviewVariant(assetId: string, request: PreviewVariantRequest): Promise<PreviewVariant>;
+  updatePreviewAssetMetadata(
+    assetId: string,
+    request: UpdatePreviewAssetMetadataRequest,
+  ): Promise<PreviewManifest>;
   unregisterPreviewAsset(assetIdOrToken: string): Promise<void>;
   openPanoramicPreview(sourceUri: string, kind?: 'image' | 'video'): Promise<void>;
   saveDefaultPanoramaView(assetId: string, viewState: PanoramaViewState): Promise<void>;

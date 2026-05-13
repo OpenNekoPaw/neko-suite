@@ -12,6 +12,11 @@
 //!   DELETE /v1/preview/unregister/:token — release a token
 //!   GET    /v1/preview/file/:token       — serve file, supports Range
 
+use super::preview_asset::{
+    cleanup_generated_file, contains_gpano_metadata, default_panorama_view_state,
+    generate_initial_proxy, generate_preview_variant, is_exr_path, is_hdr_path,
+    manual_projection_metadata, read_sidecar, write_sidecar_update,
+};
 use axum::{
     body::Body,
     extract::{Extension, Path},
@@ -24,28 +29,61 @@ use std::{
     collections::HashMap,
     path::{Path as StdPath, PathBuf},
     sync::{Arc, RwLock},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
+const PREVIEW_TOKEN_TTL_SECS: u64 = 60 * 60;
+const MAX_PREVIEW_TOKENS: usize = 4096;
+const MAX_PREVIEW_ASSETS: usize = 1024;
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 /// Thread-safe map of opaque tokens → registered file paths.
-#[derive(Default)]
 pub struct PreviewFileRegistry {
-    inner: RwLock<HashMap<String, PathBuf>>,
+    inner: RwLock<HashMap<String, PreviewTokenRecord>>,
     assets: RwLock<HashMap<String, PreviewAssetRecord>>,
+    allowed_roots: Vec<PathBuf>,
 }
 
 impl PreviewFileRegistry {
     pub fn new() -> Self {
-        Self::default()
+        let roots = std::env::current_dir().ok().into_iter().collect();
+        Self::with_allowed_roots(roots)
+    }
+
+    pub fn with_allowed_roots(allowed_roots: Vec<PathBuf>) -> Self {
+        let mut canonical_roots: Vec<PathBuf> = allowed_roots
+            .into_iter()
+            .filter_map(|path| match path.canonicalize() {
+                Ok(canonical) => Some(canonical),
+                Err(error) => {
+                    tracing::warn!(
+                        "Ignoring invalid preview allowed root {:?}: {}",
+                        path,
+                        error
+                    );
+                    None
+                }
+            })
+            .collect();
+        if canonical_roots.is_empty() {
+            if let Ok(current_dir) = std::env::current_dir().and_then(|path| path.canonicalize()) {
+                canonical_roots.push(current_dir);
+            }
+        }
+        Self {
+            inner: RwLock::new(HashMap::new()),
+            assets: RwLock::new(HashMap::new()),
+            allowed_roots: canonical_roots,
+        }
     }
 
     /// Register a path and return a fresh UUID token.
     pub fn register(&self, path: PathBuf) -> Result<String, StatusCode> {
+        let path = self.authorize_source_path(path)?;
         let token = Uuid::new_v4().to_string();
         self.register_token(token, path)
     }
@@ -55,7 +93,18 @@ impl PreviewFileRegistry {
             tracing::error!("PreviewFileRegistry write lock poisoned: {}", error);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-        guard.insert(token.clone(), path);
+        prune_expired_tokens(&mut guard);
+        if guard.len() >= MAX_PREVIEW_TOKENS {
+            tracing::warn!("Preview token registry is full");
+            return Err(StatusCode::TOO_MANY_REQUESTS);
+        }
+        guard.insert(
+            token.clone(),
+            PreviewTokenRecord {
+                path,
+                expires_at: Some(SystemTime::now() + Duration::from_secs(PREVIEW_TOKEN_TTL_SECS)),
+            },
+        );
         Ok(token)
     }
 
@@ -75,18 +124,43 @@ impl PreviewFileRegistry {
         body: &RegisterPreviewAssetRequest,
     ) -> Result<PreviewAssetRecord, StatusCode> {
         let asset_id = Uuid::new_v4().to_string();
+        let path = self.authorize_source_path(path)?;
         let token = self.register_token(asset_id.clone(), path.clone())?;
-        let manifest = build_preview_manifest(&asset_id, &token, &path, body)?;
+        let mut manifest = build_preview_manifest(&asset_id, &token, &path, body)?;
+        let initial_proxy = generate_initial_proxy(&asset_id, &path, &manifest);
+        let mut variant_tokens = Vec::new();
+        let mut generated_variant_paths = Vec::new();
+        if let Some(generated) = &initial_proxy {
+            self.register_token(generated.token.clone(), generated.path.clone())?;
+            if matches!(manifest.status, PreviewManifestStatus::RequiresProxy) {
+                manifest.source_url = generated.variant.url.clone();
+            }
+            manifest.variants.push(generated.variant.clone());
+            variant_tokens.push(generated.token.clone());
+            generated_variant_paths.push(generated.path.clone());
+        }
         let record = PreviewAssetRecord {
             path,
-            token,
+            token: token.clone(),
             manifest,
-            variant_tokens: Vec::new(),
+            variant_tokens,
+            generated_variant_paths,
         };
         let mut guard = self.assets.write().map_err(|error| {
             tracing::error!("Preview asset registry write lock poisoned: {}", error);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+        if guard.len() >= MAX_PREVIEW_ASSETS {
+            drop(guard);
+            self.unregister(&token)?;
+            for token in &record.variant_tokens {
+                self.unregister(&token)?;
+            }
+            for path in &record.generated_variant_paths {
+                cleanup_generated_file(&path);
+            }
+            return Err(StatusCode::TOO_MANY_REQUESTS);
+        }
         guard.insert(asset_id, record.clone());
         Ok(record)
     }
@@ -105,19 +179,6 @@ impl PreviewFileRegistry {
         token: String,
         path: PathBuf,
     ) -> Result<(), StatusCode> {
-        {
-            let guard = self.assets.read().map_err(|error| {
-                tracing::error!("Preview asset registry read lock poisoned: {}", error);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-            let Some(record) = guard.get(asset_id) else {
-                return Err(StatusCode::NOT_FOUND);
-            };
-            if record.token == token {
-                return Ok(());
-            }
-        }
-
         self.register_token(token.clone(), path)?;
         let mut guard = self.assets.write().map_err(|error| {
             tracing::error!("Preview asset registry write lock poisoned: {}", error);
@@ -128,10 +189,96 @@ impl PreviewFileRegistry {
             self.unregister(&token)?;
             return Err(StatusCode::NOT_FOUND);
         };
-        if record.token != token && !record.variant_tokens.iter().any(|item| item == &token) {
+        if record.token == token || record.variant_tokens.iter().any(|item| item == &token) {
+            return Ok(());
+        }
+        record.variant_tokens.push(token);
+        Ok(())
+    }
+
+    fn register_asset_generated_variant(
+        &self,
+        asset_id: &str,
+        token: String,
+        path: PathBuf,
+    ) -> Result<(), StatusCode> {
+        self.register_token(token.clone(), path.clone())?;
+        let mut guard = self.assets.write().map_err(|error| {
+            tracing::error!("Preview asset registry write lock poisoned: {}", error);
+            let _ = self.unregister(&token);
+            cleanup_generated_file(&path);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let Some(record) = guard.get_mut(asset_id) else {
+            self.unregister(&token)?;
+            cleanup_generated_file(&path);
+            return Err(StatusCode::NOT_FOUND);
+        };
+        if record.token == token {
+            return Ok(());
+        }
+        if !record.variant_tokens.iter().any(|item| item == &token) {
             record.variant_tokens.push(token);
         }
+        if !record
+            .generated_variant_paths
+            .iter()
+            .any(|item| item == &path)
+        {
+            record.generated_variant_paths.push(path);
+        }
         Ok(())
+    }
+
+    fn update_asset_metadata(
+        &self,
+        asset_id: &str,
+        body: &UpdatePreviewAssetMetadataRequest,
+    ) -> Result<PreviewManifest, StatusCode> {
+        let mut guard = self.assets.write().map_err(|error| {
+            tracing::error!("Preview asset registry write lock poisoned: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let Some(record) = guard.get_mut(asset_id) else {
+            return Err(StatusCode::NOT_FOUND);
+        };
+        write_sidecar_update(
+            &record.path,
+            body.projection_type.clone(),
+            body.default_view_state.clone(),
+        )?;
+        let existing_variants: Vec<PreviewVariant> = record
+            .manifest
+            .variants
+            .iter()
+            .filter(|variant| {
+                !matches!(
+                    variant.role,
+                    PreviewVariantRole::Source | PreviewVariantRole::Unsupported
+                )
+            })
+            .cloned()
+            .collect();
+        let mut manifest = build_preview_manifest(
+            &record.manifest.asset_id,
+            &record.token,
+            &record.path,
+            &RegisterPreviewAssetRequest {
+                source: record.path.to_string_lossy().to_string(),
+                kind: Some(record.manifest.kind.clone()),
+                expected_projection: None,
+                explicit_open: None,
+            },
+        )?;
+        if matches!(manifest.status, PreviewManifestStatus::RequiresProxy) {
+            manifest.source_url = existing_variants
+                .iter()
+                .find(|variant| matches!(variant.role, PreviewVariantRole::Proxy))
+                .and_then(|variant| variant.url.clone());
+        }
+        manifest.variants.extend(existing_variants);
+        record.manifest = manifest;
+        Ok(record.manifest.clone())
     }
 
     fn unregister_asset(&self, asset_id_or_token: &str) -> Result<(), StatusCode> {
@@ -164,6 +311,9 @@ impl PreviewFileRegistry {
             for token in record.variant_tokens {
                 self.unregister(&token)?;
             }
+            for path in record.generated_variant_paths {
+                cleanup_generated_file(&path);
+            }
         } else {
             self.unregister(asset_id_or_token)?;
         }
@@ -171,12 +321,48 @@ impl PreviewFileRegistry {
     }
 
     fn lookup(&self, token: &str) -> Result<Option<PathBuf>, StatusCode> {
-        let guard = self.inner.read().map_err(|error| {
-            tracing::error!("PreviewFileRegistry read lock poisoned: {}", error);
+        let mut guard = self.inner.write().map_err(|error| {
+            tracing::error!("PreviewFileRegistry write lock poisoned: {}", error);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-        Ok(guard.get(token).cloned())
+        prune_expired_tokens(&mut guard);
+        Ok(guard.get(token).map(|record| record.path.clone()))
     }
+
+    fn authorize_source_path(&self, path: PathBuf) -> Result<PathBuf, StatusCode> {
+        let canonical = path.canonicalize().map_err(|error| {
+            tracing::warn!("Rejected preview path {:?}: {}", path, error);
+            StatusCode::NOT_FOUND
+        })?;
+        if !canonical.is_file() {
+            tracing::warn!("Rejected non-file preview path {:?}", canonical);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        if self.allowed_roots.is_empty()
+            || self
+                .allowed_roots
+                .iter()
+                .any(|allowed_root| canonical.starts_with(allowed_root))
+        {
+            return Ok(canonical);
+        }
+        tracing::warn!(
+            "Rejected preview path outside allowed roots: {:?}",
+            canonical
+        );
+        Err(StatusCode::FORBIDDEN)
+    }
+}
+
+#[derive(Clone)]
+struct PreviewTokenRecord {
+    path: PathBuf,
+    expires_at: Option<SystemTime>,
+}
+
+fn prune_expired_tokens(tokens: &mut HashMap<String, PreviewTokenRecord>) {
+    let now = SystemTime::now();
+    tokens.retain(|_, record| record.expires_at.is_none_or(|expires_at| expires_at > now));
 }
 
 // ── Wire-types ────────────────────────────────────────────────────────────────
@@ -198,6 +384,7 @@ struct PreviewAssetRecord {
     token: String,
     manifest: PreviewManifest,
     variant_tokens: Vec<String>,
+    generated_variant_paths: Vec<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -218,6 +405,13 @@ pub struct PreviewVariantRequest {
     pub height: Option<u32>,
     pub quality: Option<u8>,
     pub format: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePreviewAssetMetadataRequest {
+    pub projection_type: Option<PreviewProjectionType>,
+    pub default_view_state: Option<PanoramaViewState>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -272,6 +466,7 @@ pub enum PreviewProjectionType {
 #[serde(rename_all = "kebab-case")]
 pub enum PreviewProjectionConfidence {
     Explicit,
+    Manual,
     TrustedFilename,
     Heuristic,
     None,
@@ -403,9 +598,15 @@ pub async fn handle_register(
     Extension(registry): Extension<Arc<PreviewFileRegistry>>,
     Json(body): Json<RegisterRequest>,
 ) -> impl IntoResponse {
-    match registry.register(PathBuf::from(body.file_path)) {
-        Ok(token) => Json(RegisterResponse { token }).into_response(),
-        Err(status) => status.into_response(),
+    let result =
+        tokio::task::spawn_blocking(move || registry.register(PathBuf::from(body.file_path))).await;
+    match result {
+        Ok(Ok(token)) => Json(RegisterResponse { token }).into_response(),
+        Ok(Err(status)) => status.into_response(),
+        Err(error) => {
+            tracing::error!("Preview register task failed: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
@@ -425,9 +626,15 @@ pub async fn handle_register_asset(
     Extension(registry): Extension<Arc<PreviewFileRegistry>>,
     Json(body): Json<RegisterPreviewAssetRequest>,
 ) -> impl IntoResponse {
-    match registry.register_asset(PathBuf::from(&body.source), &body) {
-        Ok(record) => Json(record.manifest).into_response(),
-        Err(status) => status.into_response(),
+    let path = PathBuf::from(&body.source);
+    let result = tokio::task::spawn_blocking(move || registry.register_asset(path, &body)).await;
+    match result {
+        Ok(Ok(record)) => Json(record.manifest).into_response(),
+        Ok(Err(status)) => status.into_response(),
+        Err(error) => {
+            tracing::error!("Preview asset register task failed: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
@@ -437,20 +644,47 @@ pub async fn handle_request_variant(
     Path(asset_id): Path<String>,
     Json(body): Json<PreviewVariantRequest>,
 ) -> impl IntoResponse {
-    let Some(record) = (match registry.lookup_asset(&asset_id) {
-        Ok(record) => record,
-        Err(status) => return status.into_response(),
-    }) else {
-        return (StatusCode::NOT_FOUND, "asset not found").into_response();
-    };
+    let result = tokio::task::spawn_blocking(move || {
+        let Some(record) = registry.lookup_asset(&asset_id)? else {
+            return Err(StatusCode::NOT_FOUND);
+        };
 
-    let build_result = build_preview_variant(&record, &body);
-    if let Some((token, path)) = build_result.token_registration.clone() {
-        if let Err(status) = registry.register_asset_variant_token(&asset_id, token, path) {
-            return status.into_response();
+        let build_result = build_preview_variant(&record, &body)?;
+        if let Some((token, path)) = build_result.token_registration.clone() {
+            registry.register_asset_generated_variant(&asset_id, token, path)?;
+        }
+        Ok(build_result.variant)
+    })
+    .await;
+    match result {
+        Ok(Ok(variant)) => Json(variant).into_response(),
+        Ok(Err(StatusCode::NOT_FOUND)) => {
+            (StatusCode::NOT_FOUND, "asset not found").into_response()
+        }
+        Ok(Err(status)) => status.into_response(),
+        Err(error) => {
+            tracing::error!("Preview variant task failed: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
-    Json(build_result.variant).into_response()
+}
+
+/// PUT /v1/preview/assets/:asset_id/metadata
+pub async fn handle_update_asset_metadata(
+    Extension(registry): Extension<Arc<PreviewFileRegistry>>,
+    Path(asset_id): Path<String>,
+    Json(body): Json<UpdatePreviewAssetMetadataRequest>,
+) -> impl IntoResponse {
+    let result =
+        tokio::task::spawn_blocking(move || registry.update_asset_metadata(&asset_id, &body)).await;
+    match result {
+        Ok(Ok(manifest)) => Json(manifest).into_response(),
+        Ok(Err(status)) => status.into_response(),
+        Err(error) => {
+            tracing::error!("Preview metadata update task failed: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 /// DELETE /v1/preview/assets/:asset_id_or_token
@@ -458,9 +692,15 @@ pub async fn handle_unregister_asset(
     Extension(registry): Extension<Arc<PreviewFileRegistry>>,
     Path(asset_id_or_token): Path<String>,
 ) -> impl IntoResponse {
-    match registry.unregister_asset(&asset_id_or_token) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(status) => status.into_response(),
+    let result =
+        tokio::task::spawn_blocking(move || registry.unregister_asset(&asset_id_or_token)).await;
+    match result {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Err(status)) => status.into_response(),
+        Err(error) => {
+            tracing::error!("Preview asset unregister task failed: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
@@ -594,6 +834,8 @@ fn mime_for_path(path: &std::path::Path) -> String {
         Some("xml") | Some("opf") | Some("ncx") => "application/xml; charset=utf-8".to_string(),
         Some("jpg") | Some("jpeg") => "image/jpeg".to_string(),
         Some("png") => "image/png".to_string(),
+        Some("hdr") => "image/vnd.radiance".to_string(),
+        Some("exr") => "image/x-exr".to_string(),
         Some("gif") => "image/gif".to_string(),
         Some("svg") => "image/svg+xml".to_string(),
         Some("webp") => "image/webp".to_string(),
@@ -628,10 +870,7 @@ fn build_preview_manifest(
     let dynamic_range = infer_dynamic_range(path);
     let status = preview_manifest_status(path, &kind, &dynamic_range, file_size);
     let error = manifest_error(path, &status, &dynamic_range);
-    let source_url = if matches!(
-        status,
-        PreviewManifestStatus::Ready | PreviewManifestStatus::RequiresProxy
-    ) {
+    let source_url = if matches!(status, PreviewManifestStatus::Ready) {
         Some(preview_file_url(token))
     } else {
         None
@@ -685,7 +924,9 @@ fn build_preview_manifest(
                 has_audio: None,
             }),
         },
-        default_view_state: Some(default_panorama_view_state()),
+        default_view_state: read_sidecar(path)
+            .and_then(|sidecar| sidecar.default_view_state)
+            .or_else(|| Some(default_panorama_view_state())),
         variants: vec![source_variant],
         error,
         created_at: unix_timestamp_string(),
@@ -701,44 +942,50 @@ struct PreviewVariantBuildResult {
 fn build_preview_variant(
     record: &PreviewAssetRecord,
     request: &PreviewVariantRequest,
-) -> PreviewVariantBuildResult {
-    let dimensions = match (request.width, request.height) {
-        (Some(width), Some(height)) => Some(PreviewDimensions { width, height }),
-        _ => record.manifest.media.dimensions.clone(),
-    };
-    let mime_type = request
-        .format
-        .as_deref()
-        .map(mime_for_variant_format)
-        .unwrap_or_else(|| record.manifest.media.mime_type.clone());
-    let variant_id = format!("{}:{:?}", record.manifest.asset_id, request.role);
-    let _quality = request.quality;
-
-    // TODO(P1): Generate role-specific proxy/FOV-crop/screenshot files and return
-    // their own registered tokens. Phase 1 keeps variants as manifest-linked
-    // passthrough descriptors so Webviews never load local files directly.
-    let variant = PreviewVariant {
-        id: variant_id,
-        asset_id: record.manifest.asset_id.clone(),
-        role: request.role.clone(),
-        url: record.manifest.source_url.clone(),
-        token: Some(record.token.clone()),
-        mime_type: Some(mime_type),
-        dimensions,
-        file_size_bytes: std::fs::metadata(&record.path)
-            .map(|metadata| metadata.len())
-            .ok()
-            .or(Some(record.manifest.media.file_size_bytes)),
-        tile_template: None,
-        stream: None,
-        view_state: request.view_state.clone(),
-        error: record.manifest.error.clone(),
-    };
-
-    PreviewVariantBuildResult {
-        variant,
-        token_registration: None,
+) -> Result<PreviewVariantBuildResult, StatusCode> {
+    if matches!(request.role, PreviewVariantRole::Source) {
+        let variant = record
+            .manifest
+            .variants
+            .iter()
+            .find(|variant| matches!(variant.role, PreviewVariantRole::Source))
+            .cloned()
+            .unwrap_or_else(|| PreviewVariant {
+                id: format!("{}:source", record.manifest.asset_id),
+                asset_id: record.manifest.asset_id.clone(),
+                role: PreviewVariantRole::Source,
+                url: record.manifest.source_url.clone(),
+                token: Some(record.token.clone()),
+                mime_type: Some(record.manifest.media.mime_type.clone()),
+                dimensions: record.manifest.media.dimensions.clone(),
+                file_size_bytes: Some(record.manifest.media.file_size_bytes),
+                tile_template: None,
+                stream: None,
+                view_state: None,
+                error: record.manifest.error.clone(),
+            });
+        return Ok(PreviewVariantBuildResult {
+            variant,
+            token_registration: None,
+        });
     }
+
+    let generated = generate_preview_variant(
+        &record.manifest.asset_id,
+        &record.path,
+        &record.manifest,
+        request,
+    )?;
+    let token_registration = generated
+        .variant
+        .token
+        .as_ref()
+        .map(|token| (token.clone(), generated.path.clone()));
+
+    Ok(PreviewVariantBuildResult {
+        variant: generated.variant,
+        token_registration,
+    })
 }
 
 fn infer_asset_kind(path: &StdPath, mime_type: &str) -> PreviewAssetKind {
@@ -770,6 +1017,20 @@ fn probe_projection(
     path: &StdPath,
     request: &RegisterPreviewAssetRequest,
 ) -> PreviewProjectionMetadata {
+    if let Some((projection_type, confidence, source)) = read_sidecar(path)
+        .and_then(|sidecar| sidecar.projection_type)
+        .map(manual_projection_metadata)
+    {
+        return PreviewProjectionMetadata {
+            projection_type,
+            confidence,
+            source,
+            requires_confirmation: Some(false),
+            cropped_area_pixels: None,
+            full_pano_pixels: probe_dimensions(path),
+        };
+    }
+
     if let Some(expected) = &request.expected_projection {
         return PreviewProjectionMetadata {
             projection_type: expected.clone(),
@@ -778,6 +1039,18 @@ fn probe_projection(
             requires_confirmation: Some(false),
             cropped_area_pixels: None,
             full_pano_pixels: None,
+        };
+    }
+
+    let dimensions = probe_dimensions(path);
+    if contains_gpano_metadata(path) {
+        return PreviewProjectionMetadata {
+            projection_type: PreviewProjectionType::Equirectangular,
+            confidence: PreviewProjectionConfidence::Explicit,
+            source: "metadata".to_string(),
+            requires_confirmation: Some(false),
+            cropped_area_pixels: None,
+            full_pano_pixels: dimensions,
         };
     }
 
@@ -801,13 +1074,12 @@ fn probe_projection(
             source: "filename".to_string(),
             requires_confirmation: Some(false),
             cropped_area_pixels: None,
-            full_pano_pixels: None,
+            full_pano_pixels: dimensions,
         };
     }
 
-    let dimensions = probe_dimensions(path);
     if let Some(dimensions) = dimensions {
-        if dimensions.height > 0 && dimensions.width == dimensions.height.saturating_mul(2) {
+        if is_near_equirectangular_aspect(dimensions.width, dimensions.height) {
             return PreviewProjectionMetadata {
                 projection_type: PreviewProjectionType::Equirectangular,
                 confidence: PreviewProjectionConfidence::Heuristic,
@@ -835,6 +1107,14 @@ fn probe_dimensions(path: &StdPath) -> Option<PreviewDimensions> {
         .map(|(width, height)| PreviewDimensions { width, height })
 }
 
+fn is_near_equirectangular_aspect(width: u32, height: u32) -> bool {
+    if height == 0 {
+        return false;
+    }
+    let ratio = width as f64 / height as f64;
+    (ratio - 2.0).abs() <= 0.02
+}
+
 fn infer_dynamic_range(path: &StdPath) -> PreviewDynamicRange {
     match path
         .extension()
@@ -853,7 +1133,7 @@ fn infer_dynamic_range(path: &StdPath) -> PreviewDynamicRange {
 fn preview_manifest_status(
     path: &StdPath,
     kind: &PreviewAssetKind,
-    dynamic_range: &PreviewDynamicRange,
+    _dynamic_range: &PreviewDynamicRange,
     file_size: u64,
 ) -> PreviewManifestStatus {
     let extension = path
@@ -863,8 +1143,8 @@ fn preview_manifest_status(
     if matches!(extension.as_deref(), Some("exr")) {
         return PreviewManifestStatus::Unsupported;
     }
-    if matches!(dynamic_range, PreviewDynamicRange::Hdr) {
-        return PreviewManifestStatus::Unsupported;
+    if is_hdr_path(path) {
+        return PreviewManifestStatus::RequiresProxy;
     }
     if matches!(kind, PreviewAssetKind::Video) {
         return PreviewManifestStatus::StreamRequired;
@@ -879,7 +1159,7 @@ fn preview_manifest_status(
 fn manifest_error(
     path: &StdPath,
     status: &PreviewManifestStatus,
-    dynamic_range: &PreviewDynamicRange,
+    _dynamic_range: &PreviewDynamicRange,
 ) -> Option<PreviewErrorState> {
     if !matches!(status, PreviewManifestStatus::Unsupported) {
         return None;
@@ -888,8 +1168,8 @@ fn manifest_error(
         .extension()
         .and_then(|extension| extension.to_str())
         .unwrap_or("unknown");
-    let message = if matches!(dynamic_range, PreviewDynamicRange::Hdr) {
-        format!("HDR/EXR preview requires an engine proxy that is not available for .{extension}")
+    let message = if is_exr_path(path) {
+        format!("EXR preview requires a decoder that is not available for .{extension}")
     } else {
         format!("Unsupported preview format .{extension}")
     };
@@ -914,27 +1194,6 @@ fn image_format_for_path(path: &StdPath) -> Option<String> {
         Some("hdr") => Some("hdr".to_string()),
         Some("exr") => Some("exr".to_string()),
         _ => None,
-    }
-}
-
-fn mime_for_variant_format(format: &str) -> String {
-    match format {
-        "jpeg" | "jpg" => "image/jpeg".to_string(),
-        "png" => "image/png".to_string(),
-        "webp" => "image/webp".to_string(),
-        _ => "application/octet-stream".to_string(),
-    }
-}
-
-fn default_panorama_view_state() -> PanoramaViewState {
-    PanoramaViewState {
-        mode: PanoramaViewMode::Sphere,
-        yaw_deg: 0.0,
-        pitch_deg: 0.0,
-        roll_deg: 0.0,
-        fov_deg: 75.0,
-        exposure: 0.0,
-        tone_mapping: PreviewToneMapping::Aces,
     }
 }
 
@@ -1030,7 +1289,8 @@ pub async fn handle_epub_entry(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::{ImageBuffer, Rgb};
+    use image::{codecs::hdr::HdrEncoder, ImageBuffer, Rgb};
+    use std::fs::File;
     use tempfile::tempdir;
 
     #[test]
@@ -1046,19 +1306,38 @@ mod tests {
 
     #[test]
     fn test_preview_file_registry_register_lookup_unregister() {
-        let registry = PreviewFileRegistry::new();
-        let file_path = PathBuf::from("/tmp/preview.pdf");
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("preview.pdf");
+        std::fs::write(&file_path, b"%PDF").expect("write preview");
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
 
         let token = registry
             .register(file_path.clone())
             .expect("register token");
         assert_eq!(
             registry.lookup(&token).expect("lookup token"),
-            Some(file_path)
+            Some(file_path.canonicalize().expect("canonical file"))
         );
 
         registry.unregister(&token).expect("unregister token");
         assert_eq!(registry.lookup(&token).expect("lookup removed token"), None);
+    }
+
+    #[test]
+    fn test_preview_file_registry_rejects_path_outside_allowed_roots() {
+        let allowed = tempdir().expect("allowed tempdir");
+        let outside = tempdir().expect("outside tempdir");
+        let outside_file = outside.path().join("secret.txt");
+        std::fs::write(&outside_file, b"secret").expect("write outside file");
+
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![allowed.path().to_path_buf()]);
+
+        assert_eq!(
+            registry
+                .register(outside_file)
+                .expect_err("outside root rejected"),
+            StatusCode::FORBIDDEN
+        );
     }
 
     #[test]
@@ -1068,7 +1347,7 @@ mod tests {
         let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(4, 2, Rgb([20, 40, 60]));
         image.save(&image_path).expect("save image");
 
-        let registry = PreviewFileRegistry::new();
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
         let record = registry
             .register_asset(
                 image_path.clone(),
@@ -1106,7 +1385,7 @@ mod tests {
         );
         assert_eq!(
             registry.lookup(&record.token).expect("lookup token"),
-            Some(image_path)
+            Some(image_path.canonicalize().expect("canonical image"))
         );
     }
 
@@ -1142,34 +1421,142 @@ mod tests {
     }
 
     #[test]
-    fn test_preview_asset_hdr_and_exr_return_typed_unsupported_state() {
+    fn test_preview_asset_manual_sidecar_projection_takes_priority() {
+        let dir = tempdir().expect("tempdir");
+        let image_path = dir.path().join("ordinary-wide.png");
+        let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(8, 4, Rgb([10, 10, 10]));
+        image.save(&image_path).expect("save image");
+        write_sidecar_update(
+            &image_path,
+            Some(PreviewProjectionType::Flat),
+            Some(PanoramaViewState {
+                yaw_deg: 42.0,
+                ..default_panorama_view_state()
+            }),
+        )
+        .expect("write sidecar");
+
+        let manifest = build_preview_manifest(
+            "asset",
+            "token",
+            &image_path,
+            &RegisterPreviewAssetRequest {
+                source: image_path.to_string_lossy().to_string(),
+                kind: Some(PreviewAssetKind::Image),
+                expected_projection: None,
+                explicit_open: Some(false),
+            },
+        )
+        .expect("manifest");
+
+        assert_eq!(
+            manifest.projection.projection_type,
+            PreviewProjectionType::Flat
+        );
+        assert_eq!(
+            manifest.projection.confidence,
+            PreviewProjectionConfidence::Manual
+        );
+        assert_eq!(manifest.projection.requires_confirmation, Some(false));
+        assert_eq!(
+            manifest
+                .default_view_state
+                .as_ref()
+                .map(|state| state.yaw_deg),
+            Some(42.0)
+        );
+    }
+
+    #[test]
+    fn test_preview_asset_gpano_metadata_is_explicit() {
+        let dir = tempdir().expect("tempdir");
+        let image_path = dir.path().join("ordinary.jpg");
+        std::fs::write(
+            &image_path,
+            b"<x:xmpmeta><GPano:ProjectionType>equirectangular</GPano:ProjectionType><GPano:FullPanoWidthPixels>4000</GPano:FullPanoWidthPixels></x:xmpmeta>",
+        )
+        .expect("write metadata marker");
+
+        let manifest = build_preview_manifest(
+            "asset",
+            "token",
+            &image_path,
+            &RegisterPreviewAssetRequest {
+                source: image_path.to_string_lossy().to_string(),
+                kind: Some(PreviewAssetKind::Image),
+                expected_projection: None,
+                explicit_open: None,
+            },
+        )
+        .expect("manifest");
+
+        assert_eq!(
+            manifest.projection.projection_type,
+            PreviewProjectionType::Equirectangular
+        );
+        assert_eq!(
+            manifest.projection.confidence,
+            PreviewProjectionConfidence::Explicit
+        );
+        assert_eq!(manifest.projection.source, "metadata");
+    }
+
+    #[test]
+    fn test_preview_asset_hdr_proxy_and_exr_typed_unsupported_state() {
         let dir = tempdir().expect("tempdir");
         let hdr_path = dir.path().join("studio.hdr");
-        std::fs::write(&hdr_path, b"#?RADIANCE\n").expect("write hdr");
+        write_test_hdr(&hdr_path);
         let exr_path = dir.path().join("studio.exr");
         std::fs::write(&exr_path, b"v/1\x01").expect("write exr");
 
-        for path in [hdr_path, exr_path] {
-            let manifest = build_preview_manifest(
-                "asset",
-                "token",
-                &path,
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
+        let hdr_record = registry
+            .register_asset(
+                hdr_path.clone(),
                 &RegisterPreviewAssetRequest {
-                    source: path.to_string_lossy().to_string(),
+                    source: hdr_path.to_string_lossy().to_string(),
                     kind: Some(PreviewAssetKind::Image),
                     expected_projection: None,
                     explicit_open: None,
                 },
             )
-            .expect("manifest");
+            .expect("register hdr asset");
+        assert_eq!(
+            hdr_record.manifest.status,
+            PreviewManifestStatus::RequiresProxy
+        );
+        assert_eq!(
+            hdr_record.manifest.media.dynamic_range,
+            PreviewDynamicRange::Hdr
+        );
+        assert!(hdr_record.manifest.error.is_none());
+        let proxy = hdr_record
+            .manifest
+            .variants
+            .iter()
+            .find(|variant| matches!(variant.role, PreviewVariantRole::Proxy))
+            .expect("hdr proxy variant");
+        assert_eq!(proxy.mime_type.as_deref(), Some("image/jpeg"));
+        assert_eq!(hdr_record.manifest.source_url, proxy.url);
 
-            assert_eq!(manifest.status, PreviewManifestStatus::Unsupported);
-            assert_eq!(manifest.media.dynamic_range, PreviewDynamicRange::Hdr);
-            assert_eq!(
-                manifest.error.as_ref().map(|error| error.code.as_str()),
-                Some("unsupported-format")
-            );
-        }
+        let exr_manifest = build_preview_manifest(
+            "asset",
+            "token",
+            &exr_path,
+            &RegisterPreviewAssetRequest {
+                source: exr_path.to_string_lossy().to_string(),
+                kind: Some(PreviewAssetKind::Image),
+                expected_projection: None,
+                explicit_open: None,
+            },
+        )
+        .expect("exr manifest");
+        assert_eq!(exr_manifest.status, PreviewManifestStatus::Unsupported);
+        assert_eq!(exr_manifest.media.dynamic_range, PreviewDynamicRange::Hdr);
+        assert_eq!(
+            exr_manifest.error.as_ref().map(|error| error.code.as_str()),
+            Some("unsupported-format")
+        );
     }
 
     #[test]
@@ -1179,7 +1566,7 @@ mod tests {
         let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(2, 2, Rgb([0, 0, 0]));
         image.save(&image_path).expect("save image");
 
-        let registry = PreviewFileRegistry::new();
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
         let record = registry
             .register_asset(
                 image_path,
@@ -1206,12 +1593,12 @@ mod tests {
     }
 
     #[test]
-    fn test_preview_variant_uses_manifest_token_and_view_state() {
+    fn test_preview_variant_generates_file_token_and_view_state() {
         let dir = tempdir().expect("tempdir");
         let image_path = dir.path().join("preview.jpg");
         let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(2, 2, Rgb([0, 0, 0]));
         image.save(&image_path).expect("save image");
-        let registry = PreviewFileRegistry::new();
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
         let record = registry
             .register_asset(
                 image_path,
@@ -1235,11 +1622,17 @@ mod tests {
                 quality: Some(80),
                 format: Some("jpeg".to_string()),
             },
-        );
+        )
+        .expect("build variant");
         let variant = build_result.variant;
 
         assert_eq!(variant.asset_id, record.manifest.asset_id);
-        assert_eq!(variant.token.as_deref(), Some(record.token.as_str()));
+        assert_ne!(variant.token.as_deref(), Some(record.token.as_str()));
+        assert!(variant
+            .url
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("/v1/preview/file/"));
         assert_eq!(variant.mime_type.as_deref(), Some("image/jpeg"));
         assert_eq!(
             variant.dimensions.as_ref().map(|d| (d.width, d.height)),
@@ -1249,6 +1642,63 @@ mod tests {
             variant.view_state.as_ref().map(|state| state.fov_deg),
             Some(75.0)
         );
+        let (token, path) = build_result
+            .token_registration
+            .expect("variant token registration");
+        assert_eq!(variant.token.as_deref(), Some(token.as_str()));
+        assert!(path.exists());
+        cleanup_generated_file(&path);
+    }
+
+    #[test]
+    fn test_unregister_asset_cleans_generated_variant_files() {
+        let dir = tempdir().expect("tempdir");
+        let image_path = dir.path().join("preview.jpg");
+        let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(4, 2, Rgb([20, 20, 20]));
+        image.save(&image_path).expect("save image");
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
+        let record = registry
+            .register_asset(
+                image_path,
+                &RegisterPreviewAssetRequest {
+                    source: "preview.jpg".to_string(),
+                    kind: Some(PreviewAssetKind::Image),
+                    expected_projection: None,
+                    explicit_open: None,
+                },
+            )
+            .expect("register asset");
+        let build_result = build_preview_variant(
+            &record,
+            &PreviewVariantRequest {
+                role: PreviewVariantRole::Thumbnail,
+                view_state: None,
+                width: Some(128),
+                height: Some(64),
+                quality: Some(80),
+                format: Some("png".to_string()),
+            },
+        )
+        .expect("build thumbnail");
+        let (token, path) = build_result
+            .token_registration
+            .expect("variant token registration");
+        registry
+            .register_asset_generated_variant(
+                &record.manifest.asset_id,
+                token.clone(),
+                path.clone(),
+            )
+            .expect("register generated variant");
+        assert!(path.exists());
+        assert!(registry.lookup(&token).expect("lookup token").is_some());
+
+        registry
+            .unregister_asset(&record.manifest.asset_id)
+            .expect("unregister asset");
+
+        assert!(!path.exists());
+        assert_eq!(registry.lookup(&token).expect("lookup removed token"), None);
     }
 
     #[test]
@@ -1260,7 +1710,7 @@ mod tests {
         image.save(&source_path).expect("save source image");
         image.save(&variant_path).expect("save variant image");
 
-        let registry = PreviewFileRegistry::new();
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
         let record = registry
             .register_asset(
                 source_path,
@@ -1310,7 +1760,7 @@ mod tests {
         image.save(&source_path).expect("save source image");
         image.save(&variant_path).expect("save variant image");
 
-        let registry = PreviewFileRegistry::new();
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
         let record = registry
             .register_asset(
                 source_path,
@@ -1342,5 +1792,22 @@ mod tests {
             .lookup_asset(&record.manifest.asset_id)
             .expect("lookup asset")
             .is_none());
+    }
+
+    fn write_test_hdr(path: &StdPath) {
+        let file = File::create(path).expect("create hdr");
+        let pixels = vec![
+            Rgb([0.25_f32, 0.5, 1.0]),
+            Rgb([1.5, 0.2, 0.1]),
+            Rgb([0.1, 1.0, 0.2]),
+            Rgb([2.0, 2.0, 2.0]),
+            Rgb([0.25_f32, 0.5, 1.0]),
+            Rgb([1.5, 0.2, 0.1]),
+            Rgb([0.1, 1.0, 0.2]),
+            Rgb([2.0, 2.0, 2.0]),
+        ];
+        HdrEncoder::new(file)
+            .encode(&pixels, 4, 2)
+            .expect("encode hdr");
     }
 }

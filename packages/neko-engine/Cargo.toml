@@ -85,7 +85,7 @@ zip = "2"
 base64 = "0.22"
 
 # Image encoding - pure Rust JPEG encoder
-image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["hdr", "jpeg", "png"] }
 
 # ML inference - ONNX Runtime (dynamic linking)
 ort = { version = "2.0.0-rc.12", features = ["load-dynamic", "ndarray"] }

@@ -56,4 +56,15 @@ describe('Route A webview boundaries', () => {
       expect(readSource(file), file).not.toMatch(/expressionManager|morphTargetInfluences/);
     }
   });
+
+  it('keeps model environment placement separate from preview view orientation', () => {
+    const store = readSource('stores/modelStore.ts');
+    const app = readSource('App.tsx');
+
+    expect(app).toMatch(/case 'environmentPlacement'/);
+    expect(store).toMatch(/environmentPlacement: EnvironmentPlacement \| null/);
+    expect(store).toMatch(/setEnvironmentPlacement/);
+    expect(store).not.toMatch(/yawDeg/);
+    expect(store).not.toMatch(/pitchDeg/);
+  });
 });

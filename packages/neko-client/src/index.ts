@@ -124,6 +124,7 @@ export type {
   PreviewVariant,
   PreviewVariantRequest,
   RegisterPreviewAssetRequest,
+  UpdatePreviewAssetMetadataRequest,
 } from '@neko/shared';
 
 export type {

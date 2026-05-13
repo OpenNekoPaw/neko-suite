@@ -1,6 +1,6 @@
 # ADR: Canvas Preview Boundary
 
-- **Status**: Proposed
+- **Status**: Implemented
 - **Date**: 2026-05-07
 - **Scope**: neko-canvas, neko-preview, neko-model, neko-agent, @neko/neko-client, neko-engine
 - **Refines**: `adr-panoramic-image-preview.md` q2 reuse decision (line 378) and NFR reusability (line 140)
@@ -225,7 +225,7 @@ Canvas/Agent preview variant lifecycle is request-scoped:
 
 This mirrors the engine-first preview rule: Canvas and Agent may display engine-issued URLs, but they do not create a direct local media loading path for panoramic content.
 
-Implementation note (2026-05-08): the Phase 1 engine variant path is contract-complete but role-specific rendering is still incremental. `proxy`, `thumbnail`, and `fov-crop` requests are routed through `PreviewManifest` / `PreviewVariant` and engine-managed tokens; until the P1 renderer generates distinct files, variants may be passthrough descriptors over the registered source URL. Consumers must treat those URLs as opaque and short-lived. Canvas delegates panoramic nodes with double-click or the explicit preview button, while Agent panoramic cards remain idle thumbnails that open `neko-preview` on click.
+Implementation note (2026-05-13): the Phase 1 engine variant path now generates role-specific runtime files for `proxy`, `thumbnail`, `fov-crop`, and `screenshot` instead of returning passthrough source descriptors. Generated files are registered behind engine-managed tokens and are released with the owning preview asset. Canvas and Agent still treat variant URLs as opaque, short-lived runtime state; they persist only stable asset identity and preview descriptors. Canvas delegates panoramic nodes with double-click or the explicit preview button, while Agent panoramic cards remain idle thumbnails that open `neko-preview` on click.
 
 Implementation note (2026-05-08): Canvas composable content consumes this boundary through preview
 capabilities, not node-type preview branches. The Canvas Block + Container rollout in

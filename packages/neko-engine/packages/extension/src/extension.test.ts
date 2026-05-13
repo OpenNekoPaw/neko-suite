@@ -25,6 +25,7 @@ const mockState = vi.hoisted(() => {
     groups: vi.fn(() => ['nodes', 'videos']),
     getFrameServerPort: vi.fn(() => null as number | null),
     startFrameServer: vi.fn(async () => 0),
+    startFrameServerWithPreviewRoots: vi.fn(async () => 0),
     stopFrameServer: vi.fn(async () => undefined),
     dispatchAction: vi.fn(async () => '{"status":"ok"}'),
   };
@@ -109,6 +110,15 @@ vi.mock('vscode', () => ({
   },
   env: {
     openExternal: vi.fn(),
+  },
+  workspace: {
+    workspaceFolders: [
+      {
+        uri: {
+          fsPath: '/workspace',
+        },
+      },
+    ],
   },
   Uri: {
     file: (fsPath: string) => ({ fsPath }),
@@ -234,6 +244,8 @@ describe('neko-engine extension command bridge', () => {
     mockState.nativeEngine.getFrameServerPort.mockReturnValue(null);
     mockState.nativeEngine.startFrameServer.mockReset();
     mockState.nativeEngine.startFrameServer.mockResolvedValue(1234);
+    mockState.nativeEngine.startFrameServerWithPreviewRoots.mockReset();
+    mockState.nativeEngine.startFrameServerWithPreviewRoots.mockResolvedValue(1234);
     mockState.nativeEngine.stopFrameServer.mockReset();
     mockState.nativeEngine.stopFrameServer.mockResolvedValue(undefined);
     mockState.nativeEngine.dispatchAction.mockReset();
@@ -252,13 +264,16 @@ describe('neko-engine extension command bridge', () => {
 
     expect(result).toEqual({ port: 4321 });
     expect(mockState.nativeEngine.startFrameServer).not.toHaveBeenCalled();
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).not.toHaveBeenCalled();
     expect(mockState.fetch).toHaveBeenCalledWith('http://127.0.0.1:4321/health', {
       signal: expect.any(AbortSignal),
     });
   });
 
   it('restarts the embedded frame server when the cached port is stale', async () => {
-    mockState.nativeEngine.startFrameServer.mockResolvedValueOnce(1234).mockResolvedValueOnce(5678);
+    mockState.nativeEngine.startFrameServerWithPreviewRoots
+      .mockResolvedValueOnce(1234)
+      .mockResolvedValueOnce(5678);
     mockState.fetch.mockResolvedValue({ ok: false });
 
     await activateExtension();
@@ -269,7 +284,10 @@ describe('neko-engine extension command bridge', () => {
     expect(first).toEqual({ port: 1234 });
     expect(second).toEqual({ port: 5678 });
     expect(mockState.nativeEngine.stopFrameServer).toHaveBeenCalledTimes(1);
-    expect(mockState.nativeEngine.startFrameServer).toHaveBeenCalledTimes(2);
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledTimes(2);
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledWith(0, [
+      '/workspace',
+    ]);
   });
 
   it('forwards generic dispatch commands through NativeEngine.dispatchAction', async () => {

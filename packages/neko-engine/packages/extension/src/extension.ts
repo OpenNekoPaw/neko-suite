@@ -42,6 +42,14 @@ let outputChannel: vscode.OutputChannel;
 /** Cached frame server port for the current extension session (null = not connected) */
 let frameServerPort: number | null = null;
 
+type NativeEngineWithPreviewRoots = {
+  startFrameServerWithPreviewRoots?: (
+    port?: number,
+    previewAllowedRoots?: readonly string[],
+  ) => Promise<number>;
+  startFrameServer(port?: number): Promise<number>;
+};
+
 // =============================================================================
 // Activation
 // =============================================================================
@@ -300,8 +308,8 @@ function registerCommands(context: vscode.ExtensionContext): void {
             }
           }
 
-          // Start frame server with auto-assigned port
-          const port = await engine.engine.startFrameServer(0);
+          // Start frame server with auto-assigned port and a workspace-scoped preview allow-list.
+          const port = await startFrameServer(engine.engine as NativeEngineWithPreviewRoots);
           frameServerPort = port;
           log(`Frame server started on port ${port}`);
           return { port };
@@ -735,6 +743,15 @@ async function isFrameServerHealthy(port: number): Promise<boolean> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function startFrameServer(engine: NativeEngineWithPreviewRoots): Promise<number> {
+  const previewRoots =
+    vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).filter(Boolean) ?? [];
+  if (typeof engine.startFrameServerWithPreviewRoots === 'function') {
+    return engine.startFrameServerWithPreviewRoots(0, previewRoots);
+  }
+  return engine.startFrameServer(0);
 }
 
 /**

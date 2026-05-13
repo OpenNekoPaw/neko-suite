@@ -60,6 +60,18 @@ describe('engine-first preview shared contracts', () => {
     expectJsonSerializable(manifest);
   });
 
+  it('models manual projection metadata as a persisted asset decision', () => {
+    const projection: PreviewProjectionMetadata = {
+      type: 'flat',
+      confidence: 'manual',
+      source: 'manual',
+      requiresConfirmation: false,
+    };
+
+    expect(projection.confidence).toBe('manual');
+    expectJsonSerializable(projection);
+  });
+
   it('keeps preview view state separate from model environment placement', () => {
     const viewState: PanoramaViewState = {
       ...DEFAULT_PANORAMA_VIEW_STATE,

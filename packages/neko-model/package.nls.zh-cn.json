@@ -6,5 +6,7 @@
   "neko.model.selectAll.title": "全选",
   "neko.model.undo.title": "撤销",
   "neko.model.redo.title": "重做",
-  "neko.model.resetView.title": "重置视图"
+  "neko.model.resetView.title": "重置视图",
+  "neko.model.useEnvironment.invalidPlacement": "环境放置请求无效。",
+  "neko.model.useEnvironment.noActiveEditor": "请先打开模型编辑器，再使用全景环境。"
 }

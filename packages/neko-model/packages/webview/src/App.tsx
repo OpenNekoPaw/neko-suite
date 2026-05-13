@@ -64,6 +64,7 @@ export function App(): React.JSX.Element {
 
   const setModelUrl = useModelStore((s) => s.setModelUrl);
   const setQualityPreview = useModelStore((s) => s.setQualityPreview);
+  const setEnvironmentPlacement = useModelStore((s) => s.setEnvironmentPlacement);
   const applySceneSnapshot = useModelStore((s) => s.applySceneSnapshot);
   const applySceneDelta = useModelStore((s) => s.applySceneDelta);
   const setSceneControlStatus = useModelStore((s) => s.setSceneControlStatus);
@@ -231,6 +232,9 @@ export function App(): React.JSX.Element {
         }
         case 'liveExpressions':
           useModelStore.getState().setFaceParams(message.expressions);
+          break;
+        case 'environmentPlacement':
+          setEnvironmentPlacement(message.placement);
           break;
         default:
           break;

@@ -110,6 +110,7 @@ describe('PanoramicImagePreviewProvider', () => {
       getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
       registerPreviewAsset: vi.fn().mockResolvedValue(manifest),
       requestPreviewVariant: vi.fn(),
+      updatePreviewAssetMetadata: vi.fn(),
       unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
     };
     const statusBar = createStatusBar();
@@ -146,6 +147,32 @@ describe('PanoramicImagePreviewProvider', () => {
     expect(payload).not.toHaveProperty('filePath');
   });
 
+  it('uses basename for Windows paths in the status bar', async () => {
+    const manifest = createManifest();
+    const service = {
+      isAvailable: true,
+      getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
+      registerPreviewAsset: vi.fn().mockResolvedValue(manifest),
+      requestPreviewVariant: vi.fn(),
+      updatePreviewAssetMetadata: vi.fn(),
+      unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
+    };
+    const statusBar = createStatusBar();
+    const provider = new PanoramicImagePreviewProvider(vscode.Uri.file('/ext'), statusBar as never);
+    provider.setPreviewService(service as never);
+
+    await provider.resolveCustomEditor(
+      {
+        uri: vscode.Uri.file('C:\\project\\studio_360.jpg'),
+        dispose: vi.fn(),
+      } as vscode.CustomDocument,
+      createPanel() as unknown as vscode.WebviewPanel,
+      {} as vscode.CancellationToken,
+    );
+
+    expect(statusBar.show).toHaveBeenCalledWith({ fileName: 'studio_360.jpg', duration: 0 });
+  });
+
   it('cleans up the manifest asset on dispose', async () => {
     const manifest = createManifest();
     const disposeHandlers: Array<() => void> = [];
@@ -154,6 +181,7 @@ describe('PanoramicImagePreviewProvider', () => {
       getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
       registerPreviewAsset: vi.fn().mockResolvedValue(manifest),
       requestPreviewVariant: vi.fn(),
+      updatePreviewAssetMetadata: vi.fn(),
       unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
     };
     const panel = createPanel();
@@ -209,13 +237,18 @@ describe('PanoramicImagePreviewProvider', () => {
     expect(panel.webview.html).toContain('Panoramic Preview Error');
   });
 
-  it('persists heuristic projection confirmation as a semantic low-frequency message', async () => {
+  it('persists heuristic projection confirmation through engine metadata', async () => {
     const manifest = createManifest();
+    const updatedManifest: PreviewManifest = {
+      ...manifest,
+      projection: { type: 'equirectangular', confidence: 'manual', source: 'manual' },
+    };
     const service = {
       isAvailable: true,
       getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
       registerPreviewAsset: vi.fn().mockResolvedValue(manifest),
       requestPreviewVariant: vi.fn(),
+      updatePreviewAssetMetadata: vi.fn().mockResolvedValue(updatedManifest),
       unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
     };
     const provider = new PanoramicImagePreviewProvider(
@@ -224,10 +257,12 @@ describe('PanoramicImagePreviewProvider', () => {
     );
     provider.setPreviewService(service as never);
     const panel = createPanel();
-    const uri = vscode.Uri.file('/project/studio_360.jpg');
 
     await provider.resolveCustomEditor(
-      { uri, dispose: vi.fn() } as vscode.CustomDocument,
+      {
+        uri: vscode.Uri.file('/project/studio_360.jpg'),
+        dispose: vi.fn(),
+      } as vscode.CustomDocument,
       panel as unknown as vscode.WebviewPanel,
       {} as vscode.CancellationToken,
     );
@@ -243,15 +278,76 @@ describe('PanoramicImagePreviewProvider', () => {
       projectionType: 'equirectangular',
     });
 
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+    expect(service.updatePreviewAssetMetadata).toHaveBeenCalledWith('asset-1', {
+      projectionType: 'equirectangular',
+    });
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
       'setContext',
-      'neko.preview.panoramaProjectionConfirmed',
-      {
-        uri: uri.toString(),
-        assetId: 'asset-1',
-        projectionType: 'equirectangular',
-      },
+      expect.stringContaining('panorama'),
+      expect.anything(),
     );
+    expect(panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'panorama:init',
+      payload: {
+        manifest: updatedManifest,
+        engineBaseUrl: 'http://127.0.0.1:3456',
+      },
+    });
+  });
+
+  it('persists default view through engine metadata', async () => {
+    const manifest = createManifest();
+    const viewState = {
+      mode: 'sphere',
+      yawDeg: 20,
+      pitchDeg: 5,
+      rollDeg: 0,
+      fovDeg: 80,
+      exposure: 1,
+      toneMapping: 'aces',
+    } as const;
+    const updatedManifest: PreviewManifest = { ...manifest, defaultViewState: viewState };
+    const service = {
+      isAvailable: true,
+      getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
+      registerPreviewAsset: vi.fn().mockResolvedValue(manifest),
+      requestPreviewVariant: vi.fn(),
+      updatePreviewAssetMetadata: vi.fn().mockResolvedValue(updatedManifest),
+      unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
+    };
+    const provider = new PanoramicImagePreviewProvider(
+      vscode.Uri.file('/ext'),
+      createStatusBar() as never,
+    );
+    provider.setPreviewService(service as never);
+    const panel = createPanel();
+
+    await provider.resolveCustomEditor(
+      {
+        uri: vscode.Uri.file('/project/studio_360.jpg'),
+        dispose: vi.fn(),
+      } as vscode.CustomDocument,
+      panel as unknown as vscode.WebviewPanel,
+      {} as vscode.CancellationToken,
+    );
+    const handler = (
+      panel as unknown as {
+        messageHandler: (message: Record<string, unknown>) => Promise<void>;
+      }
+    ).messageHandler;
+    await handler({ type: 'ready' });
+    await handler({ type: 'panorama:saveDefaultView', assetId: 'asset-1', viewState });
+
+    expect(service.updatePreviewAssetMetadata).toHaveBeenCalledWith('asset-1', {
+      defaultViewState: viewState,
+    });
+    expect(panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'panorama:init',
+      payload: {
+        manifest: updatedManifest,
+        engineBaseUrl: 'http://127.0.0.1:3456',
+      },
+    });
   });
 
   it('requests FOV crop variants with semantic view state', async () => {
@@ -267,6 +363,7 @@ describe('PanoramicImagePreviewProvider', () => {
       getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
       registerPreviewAsset: vi.fn().mockResolvedValue(manifest),
       requestPreviewVariant: vi.fn().mockResolvedValue(variant),
+      updatePreviewAssetMetadata: vi.fn(),
       unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
     };
     const provider = new PanoramicImagePreviewProvider(
@@ -326,6 +423,7 @@ describe('PanoramicImagePreviewProvider', () => {
       getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
       registerPreviewAsset: vi.fn().mockResolvedValue(manifest),
       requestPreviewVariant: vi.fn(),
+      updatePreviewAssetMetadata: vi.fn(),
       unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
     };
     const provider = new PanoramicImagePreviewProvider(
@@ -379,6 +477,7 @@ describe('PanoramicImagePreviewProvider', () => {
       getPreviewBaseUrl: vi.fn(() => 'http://127.0.0.1:3456'),
       registerPreviewAsset: vi.fn().mockResolvedValue(createManifest()),
       requestPreviewVariant: vi.fn(),
+      updatePreviewAssetMetadata: vi.fn(),
       unregisterPreviewAsset: vi.fn().mockResolvedValue(undefined),
     };
     const provider = new PanoramicImagePreviewProvider(

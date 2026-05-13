@@ -12,6 +12,7 @@ import type {
   PreviewVariant,
   PreviewVariantRequest,
   RegisterPreviewAssetRequest,
+  UpdatePreviewAssetMetadataRequest,
 } from '@neko/shared';
 
 export type MediaInfo = ProbeResult;
@@ -30,6 +31,9 @@ export interface NekoPreviewAPI {
 
   /** Build WebSocket URL for a stream ID */
   getStreamWebSocketUrl(streamId: string): string | null;
+
+  /** Base HTTP URL for engine-owned preview token and variant URLs. */
+  getPreviewBaseUrl(): string | null;
 
   /** Probe media file metadata */
   probeMedia(filePath: string): Promise<MediaInfo>;
@@ -73,6 +77,12 @@ export interface NekoPreviewAPI {
 
   /** Request a lightweight preview variant such as Canvas proxy or Agent FOV thumbnail. */
   requestPreviewVariant(assetId: string, request: PreviewVariantRequest): Promise<PreviewVariant>;
+
+  /** Persist low-frequency preview metadata such as projection/default view. */
+  updatePreviewAssetMetadata(
+    assetId: string,
+    request: UpdatePreviewAssetMetadataRequest,
+  ): Promise<PreviewManifest>;
 
   /** Release registered preview asset tokens and variants. */
   unregisterPreviewAsset(assetIdOrToken: string): Promise<void>;

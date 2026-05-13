@@ -34,6 +34,10 @@ input {
   min-width: 0;
 }
 
+.panorama-video-shell {
+  grid-template-columns: minmax(0, 1fr) 240px;
+}
+
 .panorama-stage {
   min-width: 0;
   padding: 16px;
@@ -237,6 +241,22 @@ input {
 .confirmation-box span {
   color: #ffd891;
   font-size: 12px;
+}
+
+.variant-status {
+  padding: 8px 10px;
+  border: 1px solid rgba(80, 178, 128, 0.38);
+  border-radius: 8px;
+  color: #9ce0bd;
+  background: rgba(80, 178, 128, 0.09);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.variant-status.is-error {
+  border-color: rgba(234, 92, 92, 0.42);
+  color: #ffb3b3;
+  background: rgba(234, 92, 92, 0.1);
 }
 
 .confirmation-box button {

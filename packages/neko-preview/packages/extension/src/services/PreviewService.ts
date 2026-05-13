@@ -18,6 +18,7 @@ import type {
   PreviewVariant,
   PreviewVariantRequest,
   RegisterPreviewAssetRequest,
+  UpdatePreviewAssetMetadataRequest,
 } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 
@@ -154,6 +155,16 @@ export class PreviewService implements vscode.Disposable {
       throw new Error('PreviewService not available');
     }
     return this._client.requestPreviewVariant(assetId, request);
+  }
+
+  async updatePreviewAssetMetadata(
+    assetId: string,
+    request: UpdatePreviewAssetMetadataRequest,
+  ): Promise<PreviewManifest> {
+    if (!this._client || this._disposed) {
+      throw new Error('PreviewService not available');
+    }
+    return this._client.updatePreviewAssetMetadata(assetId, request);
   }
 
   async unregisterPreviewAsset(assetIdOrToken: string): Promise<void> {

@@ -5,23 +5,34 @@ pub mod gamepad_stream;
 pub mod health;
 pub mod midi_stream;
 pub mod monitor;
+pub mod preview_asset;
 pub mod preview_file;
 pub mod puppet_stream;
 pub mod scene_control;
 pub mod scene_modeling;
 pub mod streaming;
 
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use neko_host_api::EngineApi;
 use preview_file::PreviewFileRegistry;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 /// Build the complete HTTP router with all routes.
 pub fn build_router(engine: Arc<EngineApi>) -> Router {
+    build_router_with_preview_roots(engine, Vec::new())
+}
+
+/// Build the complete HTTP router with explicit preview file allow-list roots.
+pub fn build_router_with_preview_roots(
+    engine: Arc<EngineApi>,
+    preview_allowed_roots: Vec<PathBuf>,
+) -> Router {
     // Shared token registry — injected as an axum Extension so it does not
     // require changes to EngineApi.
-    let file_registry = Arc::new(PreviewFileRegistry::new());
+    let file_registry = Arc::new(PreviewFileRegistry::with_allowed_roots(
+        preview_allowed_roots,
+    ));
 
     Router::new()
         // Health check
@@ -80,6 +91,10 @@ pub fn build_router(engine: Arc<EngineApi>) -> Router {
         .route(
             "/v1/preview/assets/:asset_id/variants",
             post(preview_file::handle_request_variant),
+        )
+        .route(
+            "/v1/preview/assets/:asset_id/metadata",
+            put(preview_file::handle_update_asset_metadata),
         )
         .route(
             "/v1/preview/assets/:asset_id_or_token",

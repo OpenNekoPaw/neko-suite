@@ -21,6 +21,7 @@ import type {
   PreviewVariant,
   PreviewVariantRequest,
   RegisterPreviewAssetRequest,
+  UpdatePreviewAssetMetadataRequest,
   RenderStreamDescriptor,
   SceneSnapshot,
   ViewportDescriptor,
@@ -1981,6 +1982,22 @@ export class EngineClient {
       throw new Error(`preview:requestVariant failed: ${res.status} ${res.statusText}`);
     }
     return (await res.json()) as PreviewVariant;
+  }
+
+  /** Persist low-frequency preview metadata such as projection/default view. */
+  async updatePreviewAssetMetadata(
+    assetId: string,
+    request: UpdatePreviewAssetMetadataRequest,
+  ): Promise<PreviewManifest> {
+    const res = await fetch(`${this.baseUrl}/v1/preview/assets/${assetId}/metadata`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    if (!res.ok) {
+      throw new Error(`preview:updateAssetMetadata failed: ${res.status} ${res.statusText}`);
+    }
+    return (await res.json()) as PreviewManifest;
   }
 
   /** Unregister a preview asset and release manifest tokens/variants best-effort. */
