@@ -5,11 +5,13 @@
   },
   "brackets": [
     ["[", "]"],
-    ["(", ")"]
+    ["(", ")"],
+    ["（", "）"]
   ],
   "autoClosingPairs": [
     { "open": "[", "close": "]" },
     { "open": "(", "close": ")" },
+    { "open": "（", "close": "）" },
     { "open": "[[", "close": "]]" },
     { "open": "/*", "close": "*/" },
     { "open": "*", "close": "*" },
@@ -19,14 +21,15 @@
   "surroundingPairs": [
     ["[", "]"],
     ["(", ")"],
+    ["（", "）"],
     ["*", "*"],
     ["_", "_"]
   ],
   "folding": {
     "markers": {
-      "start": "^\\s*(#{1,6}|INT\\.|EXT\\.|EST\\.|INT/EXT\\.|I/E\\.)",
-      "end": "^(?=\\s*(#{1,6}|INT\\.|EXT\\.|EST\\.|INT/EXT\\.|I/E\\.))"
+      "start": "^\\s*(#{1,6}|INT\\.|EXT\\.|EST\\.|INT/EXT\\.|I/E\\.|内景|內景|外景|内外景|內外景)",
+      "end": "^(?=\\s*(#{1,6}|INT\\.|EXT\\.|EST\\.|INT/EXT\\.|I/E\\.|内景|內景|外景|内外景|內外景))"
     }
   },
-  "wordPattern": "[A-Za-z0-9_\\-']+"
+  "wordPattern": "[A-Za-z0-9_\\-']+|[\\u4E00-\\u9FFF\\u3400-\\u4DBF]+"
 }

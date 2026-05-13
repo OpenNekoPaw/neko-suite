@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { ICreativeEntityWorkspaceIndex, IWorkspaceIndex } from '../services/types';
 import { serializeLocationKey } from '../services/locationKey';
+import { getCharacterWordRange } from './characterRange';
 
 /**
  * Provides go-to-definition for Fountain files.
@@ -17,12 +18,12 @@ export class FountainDefinitionProvider implements vscode.DefinitionProvider {
     position: vscode.Position,
     _token: vscode.CancellationToken,
   ): Promise<vscode.Definition | null> {
-    const wordRange = document.getWordRangeAtPosition(position, /[A-Z][A-Z0-9 ._\-']+/);
-    if (!wordRange) return null;
-
-    const word = document.getText(wordRange).trim();
     await this.index.ensureInitialized();
     await this.creativeEntityIndex?.ensureInitialized();
+
+    const match = getCharacterWordRange(document, position, this.index);
+    if (!match) return null;
+    const word = match.name;
 
     const characterQuery = this.creativeEntityIndex?.queryCharacter(word, document.uri);
     if (characterQuery?.registryDefinition) {
@@ -78,12 +79,12 @@ export class FountainReferenceProvider implements vscode.ReferenceProvider {
     context: vscode.ReferenceContext,
     _token: vscode.CancellationToken,
   ): Promise<vscode.Location[]> {
-    const wordRange = document.getWordRangeAtPosition(position, /[A-Z][A-Z0-9 ._\-']+/);
-    if (!wordRange) return [];
-
-    const word = document.getText(wordRange).trim();
     await this.index.ensureInitialized();
     await this.creativeEntityIndex?.ensureInitialized();
+
+    const match = getCharacterWordRange(document, position, this.index);
+    if (!match) return [];
+    const word = match.name;
 
     const characterQuery = this.creativeEntityIndex?.queryCharacter(word, document.uri);
     if (characterQuery) {

@@ -33,9 +33,10 @@ export class FountainHoverProvider implements vscode.HoverProvider {
     // Use indexed document if available, otherwise parse on the fly
     const fountainDoc = this.index.getDocument(document.uri) ?? parse(document.getText());
 
-    // Check if hovering over a character name
-    // eslint-disable-next-line security/detect-unsafe-regex -- false positive: no nested quantifiers, input is short local Fountain script lines
-    const charMatch = /^([A-Z][A-Z0-9 ._\-']+)(?:\s*\([^)]+\))?(\s*\^)?$/.exec(line);
+    // Check if hovering over a character name (English ALL-CAPS or CJK)
+    const charMatch =
+      /^([A-Z][A-Z0-9 ._\-']+)(?:\s*\([^)]+\))?(\s*\^)?$/.exec(line) ??
+      /^([一-鿿㐀-䶿][一-鿿㐀-䶿·]{0,9})(?:\s*[（(][^)）]+[)）])?(\s*\^)?$/.exec(line);
     if (charMatch) {
       const charName = charMatch[1]?.trim();
       if (charName) {
@@ -68,8 +69,11 @@ export class FountainHoverProvider implements vscode.HoverProvider {
       }
     }
 
-    // Check if hovering over a scene heading
-    const sceneMatch = /^(\.|\s*(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[.\s])/i.exec(line);
+    // Check if hovering over a scene heading (English or CJK)
+    const sceneMatch =
+      /^(\.|\s*(?:INT|EXT|EST|INT\.?\/EXT|I\.?\/E|内景|內景|外景|内外景|內外景)[.\s\u3000])/i.exec(
+        line,
+      );
     if (sceneMatch) {
       // Try cross-modal scene query first
       const sceneQuery = this.creativeEntityIndex?.queryScene(line.trim(), document.uri);

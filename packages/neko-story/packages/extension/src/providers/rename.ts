@@ -11,8 +11,7 @@ import type {
   ICreativeEntityWorkspaceIndex,
   IWorkspaceIndex,
 } from '../services/types';
-
-const CHARACTER_WORD_RE = /[A-Z][A-Z0-9 ._\-']+/;
+import { getCharacterWordRange } from './characterRange';
 
 interface CharacterRenameContext {
   readonly wordRange: vscode.Range;
@@ -123,15 +122,15 @@ export class FountainCharacterRenameProvider implements vscode.RenameProvider {
     document: vscode.TextDocument,
     position: vscode.Position,
   ): Promise<CharacterRenameContext | undefined> {
-    const wordRange = document.getWordRangeAtPosition(position, CHARACTER_WORD_RE);
-    if (!wordRange) {
-      return undefined;
-    }
-
     await this.index.ensureInitialized();
     await this.creativeEntityIndex.ensureInitialized();
 
-    const query = document.getText(wordRange).trim();
+    const match = getCharacterWordRange(document, position, this.index);
+    if (!match) {
+      return undefined;
+    }
+    const wordRange = match.range;
+    const query = match.name;
     const characterQuery = this.creativeEntityIndex.queryCharacter(query, document.uri);
     if (!characterQuery?.resolved || !characterQuery.registryDefinition) {
       return undefined;
@@ -163,15 +162,15 @@ export class FountainCharacterCodeActionProvider implements vscode.CodeActionPro
     _token: vscode.CancellationToken,
   ): Promise<vscode.CodeAction[]> {
     const position = range.start;
-    const wordRange = document.getWordRangeAtPosition(position, CHARACTER_WORD_RE);
-    if (!wordRange) {
-      return [];
-    }
 
     await this.index.ensureInitialized();
     await this.creativeEntityIndex.ensureInitialized();
 
-    const query = document.getText(wordRange).trim();
+    const match = getCharacterWordRange(document, position, this.index);
+    if (!match) {
+      return [];
+    }
+    const query = match.name;
     const characterQuery = this.creativeEntityIndex.queryCharacter(query, document.uri);
     if (!characterQuery?.resolved || !characterQuery.registryDefinition) {
       return [];

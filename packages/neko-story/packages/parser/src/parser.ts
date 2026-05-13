@@ -20,6 +20,9 @@ import type {
   Lyrics,
 } from '@neko-story/types';
 
+// CJK punctuation used to distinguish action lines from character cues
+const CJK_SENTENCE_PUNCTUATION = /[。！？…；，、：]/;
+
 // Regex patterns for Fountain elements
 const PATTERNS = {
   // Scene heading: INT./EXT./etc. or forced with leading period
@@ -28,13 +31,24 @@ const PATTERNS = {
     /^(INT|EXT|EST|INT\.?\/EXT|I\.?\/E)[.\s]+(.+?)(?:\s*-\s*(.+?))?(?:\s*#([^#]+)#)?$/i,
   forcedSceneHeading: /^\.(.+?)(?:\s*#([^#]+)#)?$/,
 
+  // CJK scene heading: 内景/外景/内外景 (simplified + traditional)
+  cjkSceneHeading: /^(内景|內景|外景|内外景|內外景)[.\s\u3000]/,
+  cjkSceneHeadingFull:
+    /^(内景|內景|外景|内外景|內外景)[.\s\u3000]+(.+?)(?:\s*[-—]\s*(.+?))?(?:\s*#([^#]+)#)?$/,
+
   // Character: all caps, may have extension in parens
   character: /^([A-Z][A-Z0-9 ._\-']+)(?:\s*\(([^)]+)\))?(\s*\^)?$/,
   forcedCharacter: /^@(.+)$/,
 
+  // CJK character: 1-10 CJK chars (with middot for minority names), optional extension in parens
+  cjkCharacter: /^([一-鿿㐀-䶿][一-鿿㐀-䶿·]{0,9})(?:\s*[（(]([^)）]+)[)）])?(\s*\^)?$/,
+
   // Transition: ends with TO: or forced with >
   transition: /^[A-Z ]+TO:$/,
   forcedTransition: /^>(?!<)(.+)$/,
+
+  // CJK transition: known keywords followed by full-width or ASCII colon
+  cjkTransition: /^(切至|淡入|淡出|叠化|化入|化出|跳切|交叉剪辑)[：:]$/,
 
   // Centered: >text<
   centered: /^>(.+)<$/,
@@ -56,11 +70,12 @@ const PATTERNS = {
   // Lyrics: ~text
   lyrics: /^~(.+)$/,
 
-  // Parenthetical: (text)
+  // Parenthetical: (text) or （text）
   parenthetical: /^\((.+)\)$/,
+  cjkParenthetical: /^（(.+)）$/,
 
-  // Title page: Key: Value
-  titlePageEntry: /^([A-Za-z ]+):\s*(.*)$/,
+  // Title page: Key: Value (supports CJK keys and full-width colon)
+  titlePageEntry: /^([A-Za-z一-鿿㐀-䶿 ]+)[：:]\s*(.*)$/,
 
   // Blank line
   blankLine: /^\s*$/,
@@ -255,8 +270,8 @@ function parseElement(state: ParserState): AnyFountainElement | null {
     return createNote(lineNum, line, lineNoteMatch[1] ?? '', 'line');
   }
 
-  // Scene heading
-  if (PATTERNS.sceneHeading.test(line)) {
+  // Scene heading (English or CJK)
+  if (PATTERNS.sceneHeading.test(line) || PATTERNS.cjkSceneHeading.test(line)) {
     state.currentLine++;
     state.inDialogue = false;
     state.lastCharacter = null;
@@ -281,8 +296,18 @@ function parseElement(state: ParserState): AnyFountainElement | null {
     }
   }
 
-  // Parenthetical (only in dialogue context)
-  const parenMatch = PATTERNS.parenthetical.exec(line);
+  // CJK transition (must be preceded by blank line)
+  if (PATTERNS.cjkTransition.test(line)) {
+    const prevLine = state.lines[lineNum - 1];
+    if (prevLine !== undefined && PATTERNS.blankLine.test(prevLine)) {
+      state.currentLine++;
+      state.inDialogue = false;
+      return createTransition(lineNum, line, line.replace(/[：:]$/, ''), false);
+    }
+  }
+
+  // Parenthetical (only in dialogue context, ASCII or full-width parens)
+  const parenMatch = PATTERNS.parenthetical.exec(line) ?? PATTERNS.cjkParenthetical.exec(line);
   if (parenMatch && state.inDialogue) {
     state.currentLine++;
     return createParenthetical(lineNum, line, parenMatch);
@@ -300,6 +325,24 @@ function parseElement(state: ParserState): AnyFountainElement | null {
     state.inDialogue = true;
     state.lastCharacter = forcedCharMatch[1]?.trim() ?? '';
     return createCharacter(lineNum, line, state.lastCharacter, null, false, true);
+  }
+
+  // CJK character (heuristic: short CJK-only line, no sentence punctuation)
+  const cjkCharMatch = PATTERNS.cjkCharacter.exec(line);
+  if (
+    cjkCharMatch &&
+    isPrevBlank &&
+    nextLine !== undefined &&
+    !PATTERNS.blankLine.test(nextLine) &&
+    !CJK_SENTENCE_PUNCTUATION.test(line)
+  ) {
+    state.currentLine++;
+    state.inDialogue = true;
+    const name = cjkCharMatch[1]?.trim() ?? '';
+    const extension = cjkCharMatch[2]?.trim() ?? null;
+    const isDual = !!cjkCharMatch[3];
+    state.lastCharacter = name;
+    return createCharacter(lineNum, line, name, extension, isDual, false);
   }
 
   // Regular character
@@ -341,19 +384,35 @@ function createSceneHeading(lineNum: number, raw: string): SceneHeading {
       sceneNumber = match[2]?.trim() ?? null;
     }
   } else {
-    const match = PATTERNS.sceneHeadingFull.exec(raw);
-    if (match) {
-      const prefix = (match[1] ?? '').toUpperCase().replace(/\./g, '').replace(/\s/g, '');
-      if (prefix === 'INT' || prefix === 'EXT' || prefix === 'EST') {
-        intExt = prefix as 'INT' | 'EXT' | 'EST';
-      } else if (prefix.includes('INT') && prefix.includes('EXT')) {
+    // Try CJK scene heading first (more specific prefix)
+    const cjkMatch = PATTERNS.cjkSceneHeadingFull.exec(raw);
+    if (cjkMatch) {
+      const prefix = cjkMatch[1] ?? '';
+      if (prefix === '内景' || prefix === '內景') {
+        intExt = 'INT';
+      } else if (prefix === '外景') {
+        intExt = 'EXT';
+      } else if (prefix === '内外景' || prefix === '內外景') {
         intExt = 'INT/EXT';
-      } else if (prefix === 'IE' || prefix === 'I/E') {
-        intExt = 'I/E';
       }
-      location = match[2]?.trim() ?? '';
-      time = match[3]?.trim() ?? null;
-      sceneNumber = match[4]?.trim() ?? null;
+      location = cjkMatch[2]?.trim() ?? '';
+      time = cjkMatch[3]?.trim() ?? null;
+      sceneNumber = cjkMatch[4]?.trim() ?? null;
+    } else {
+      const match = PATTERNS.sceneHeadingFull.exec(raw);
+      if (match) {
+        const prefix = (match[1] ?? '').toUpperCase().replace(/\./g, '').replace(/\s/g, '');
+        if (prefix === 'INT' || prefix === 'EXT' || prefix === 'EST') {
+          intExt = prefix as 'INT' | 'EXT' | 'EST';
+        } else if (prefix.includes('INT') && prefix.includes('EXT')) {
+          intExt = 'INT/EXT';
+        } else if (prefix === 'IE' || prefix === 'I/E') {
+          intExt = 'I/E';
+        }
+        location = match[2]?.trim() ?? '';
+        time = match[3]?.trim() ?? null;
+        sceneNumber = match[4]?.trim() ?? null;
+      }
     }
   }
 

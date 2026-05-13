@@ -20,7 +20,7 @@
   ],
   "repository": {
     "title-page": {
-      "match": "^([A-Za-z ]+):\\s*(.*)$",
+      "match": "^([A-Za-z\\u4E00-\\u9FFF\\u3400-\\u4DBF ]+)[：:]\\s*(.*)$",
       "captures": {
         "1": { "name": "keyword.control.title-key.nekostory" },
         "2": { "name": "string.unquoted.title-value.nekostory" }
@@ -60,6 +60,16 @@
             "3": { "name": "constant.other.scene-time.nekostory" },
             "4": { "name": "comment.line.scene-number.nekostory" }
           }
+        },
+        {
+          "comment": "CJK scene heading (内景/外景/内外景, simplified + traditional)",
+          "match": "^((?:内景|內景|外景|内外景|內外景)[.\\s\\u3000])(.+?)(?:\\s*[-\\u2014]\\s*(.+?))?(?:\\s*(#[^#]+#))?$",
+          "captures": {
+            "1": { "name": "keyword.control.scene-prefix.nekostory" },
+            "2": { "name": "entity.name.tag.scene-heading.nekostory" },
+            "3": { "name": "constant.other.scene-time.nekostory" },
+            "4": { "name": "comment.line.scene-number.nekostory" }
+          }
         }
       ]
     },
@@ -76,6 +86,13 @@
         {
           "comment": "Standard transition ending with TO:",
           "match": "^([A-Z ]+TO:)$",
+          "captures": {
+            "1": { "name": "keyword.other.transition.nekostory" }
+          }
+        },
+        {
+          "comment": "CJK transition (known keywords + colon)",
+          "match": "^((?:切至|淡入|淡出|叠化|化入|化出|跳切|交叉剪辑)[：:])$",
           "captures": {
             "1": { "name": "keyword.other.transition.nekostory" }
           }
@@ -108,16 +125,39 @@
             "2": { "name": "storage.modifier.character-extension.nekostory" },
             "3": { "name": "keyword.operator.dual-dialogue.nekostory" }
           }
+        },
+        {
+          "comment": "CJK character name (short CJK-only line, no punctuation)",
+          "match": "^([\\u4E00-\\u9FFF\\u3400-\\u4DBF\\u00B7]{1,10})(?:\\s*([（(][^)）]+[)）]))?(\\s*\\^)?$",
+          "captures": {
+            "1": { "name": "entity.name.function.character.nekostory" },
+            "2": { "name": "storage.modifier.character-extension.nekostory" },
+            "3": { "name": "keyword.operator.dual-dialogue.nekostory" }
+          }
         }
       ]
     },
     "parenthetical": {
-      "match": "^(\\()(.+)(\\))$",
-      "captures": {
-        "1": { "name": "punctuation.definition.parenthetical.begin.nekostory" },
-        "2": { "name": "comment.block.parenthetical.nekostory" },
-        "3": { "name": "punctuation.definition.parenthetical.end.nekostory" }
-      }
+      "patterns": [
+        {
+          "comment": "ASCII parenthetical",
+          "match": "^(\\()(.+)(\\))$",
+          "captures": {
+            "1": { "name": "punctuation.definition.parenthetical.begin.nekostory" },
+            "2": { "name": "comment.block.parenthetical.nekostory" },
+            "3": { "name": "punctuation.definition.parenthetical.end.nekostory" }
+          }
+        },
+        {
+          "comment": "Full-width parenthetical",
+          "match": "^(（)(.+)(）)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.parenthetical.begin.nekostory" },
+            "2": { "name": "comment.block.parenthetical.nekostory" },
+            "3": { "name": "punctuation.definition.parenthetical.end.nekostory" }
+          }
+        }
+      ]
     },
     "lyrics": {
       "match": "^(~)(.+)$",

@@ -2,12 +2,14 @@ import * as vscode from 'vscode';
 import { normalizeCharacterLookupKey } from '@neko/shared';
 import type { ICharacterWorkspaceIndex, IWorkspaceIndex } from '../services/types';
 
-// Scene heading prefix patterns: INT. / EXT. / INT./EXT. / EST. / I/E.
-const HEADING_PREFIX_RE = /^\s*(?:\.|\s*(?:INT|EXT|EST|I\/E)(?:\.\/?(?:EXT)?\.?)?\s*)$/i;
-// Already typed a valid prefix followed by content: "INT. xxx" or ".xxx"
-const HEADING_LOCATION_RE = /^\s*(?:\.|(?:INT|EXT|EST|I\/E)(?:\.\/?(?:EXT)?\.?)?)\s+/i;
-// After " - " separator for time-of-day
-const HEADING_TIME_RE = /\s+-\s+$/;
+// Scene heading prefix patterns: INT. / EXT. / INT./EXT. / EST. / I/E. / 内景 / 外景 / 内外景
+const HEADING_PREFIX_RE =
+  /^\s*(?:\.|\s*(?:INT|EXT|EST|I\/E)(?:\.\/?(?:EXT)?\.?)?\s*|(?:内景|內景|外景|内外景|內外景)\s*)$/i;
+// Already typed a valid prefix followed by content: "INT. xxx" or ".xxx" or "内景 xxx"
+const HEADING_LOCATION_RE =
+  /^\s*(?:\.|(?:INT|EXT|EST|I\/E)(?:\.\/?(?:EXT)?\.?)?|(?:内景|內景|外景|内外景|內外景))\s+/i;
+// After " - " or " — " separator for time-of-day
+const HEADING_TIME_RE = /\s+[-—]\s+$/;
 
 const TRANSITION_PREFIXES = [
   'CUT TO:',
@@ -22,6 +24,17 @@ const TRANSITION_PREFIXES = [
   'INTERCUT:',
 ];
 
+const CJK_TRANSITION_PREFIXES = [
+  '切至：',
+  '淡入：',
+  '淡出：',
+  '叠化：',
+  '化入：',
+  '化出：',
+  '跳切：',
+  '交叉剪辑：',
+];
+
 const TIMES_OF_DAY = [
   'DAY',
   'NIGHT',
@@ -33,6 +46,14 @@ const TIMES_OF_DAY = [
   'CONTINUOUS',
   'MOMENTS LATER',
   'SAME TIME',
+  '日',
+  '夜',
+  '黄昏',
+  '黎明',
+  '清晨',
+  '傍晚',
+  '稍后',
+  '连续',
 ];
 
 const HEADING_PREFIXES = [
@@ -41,6 +62,9 @@ const HEADING_PREFIXES = [
   { label: 'INT./EXT. ', detail: 'Interior/Exterior scene' },
   { label: 'EST. ', detail: 'Establishing shot' },
   { label: 'I/E. ', detail: 'Interior/Exterior (short)' },
+  { label: '内景 ', detail: '内景（Interior scene）' },
+  { label: '外景 ', detail: '外景（Exterior scene）' },
+  { label: '内外景 ', detail: '内外景（Interior/Exterior scene）' },
 ];
 
 /**
@@ -112,8 +136,8 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
   ): boolean {
     if (position.line === 0) return false;
     const prevLine = document.lineAt(position.line - 1).text;
-    // After blank line, starting with uppercase letter (Fountain character cue rule)
-    return prevLine.trim() === '' && /^[A-Z\u4e00-\u9fff]/.test(linePrefix.trim());
+    // After blank line, starting with uppercase letter or CJK character
+    return prevLine.trim() === '' && /^[A-Z\u4e00-\u9fff\u3400-\u4dbf]/.test(linePrefix.trim());
   }
 
   private isTransitionContext(
@@ -124,9 +148,14 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
     if (position.line === 0) return false;
     const prevLine = document.lineAt(position.line - 1).text;
     if (prevLine.trim() !== '') return false;
-    // Only match if the typed text is a prefix of a known transition
-    const upper = linePrefix.trim().toUpperCase();
-    return upper.length >= 2 && TRANSITION_PREFIXES.some((t) => t.startsWith(upper));
+    const trimmed = linePrefix.trim();
+    // English transitions: prefix of known transition keywords
+    const upper = trimmed.toUpperCase();
+    if (upper.length >= 2 && TRANSITION_PREFIXES.some((t) => t.startsWith(upper))) {
+      return true;
+    }
+    // CJK transitions: prefix of known CJK transition keywords
+    return trimmed.length >= 1 && CJK_TRANSITION_PREFIXES.some((t) => t.startsWith(trimmed));
   }
 
   // ---------------------------------------------------------------------------
@@ -202,13 +231,21 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
   }
 
   private getTransitionCompletions(linePrefix: string): vscode.CompletionItem[] {
-    const upper = linePrefix.trim().toUpperCase();
-    return TRANSITION_PREFIXES.filter((t) => t.startsWith(upper)).map((t, i) => {
+    const trimmed = linePrefix.trim();
+    const upper = trimmed.toUpperCase();
+    const englishItems = TRANSITION_PREFIXES.filter((t) => t.startsWith(upper)).map((t, i) => {
       const item = new vscode.CompletionItem(t, vscode.CompletionItemKind.Snippet);
       item.detail = 'Transition';
       item.sortText = String(i).padStart(2, '0');
       return item;
     });
+    const cjkItems = CJK_TRANSITION_PREFIXES.filter((t) => t.startsWith(trimmed)).map((t, i) => {
+      const item = new vscode.CompletionItem(t, vscode.CompletionItemKind.Snippet);
+      item.detail = 'Transition';
+      item.sortText = String(TRANSITION_PREFIXES.length + i).padStart(2, '0');
+      return item;
+    });
+    return [...englishItems, ...cjkItems];
   }
 }
 
