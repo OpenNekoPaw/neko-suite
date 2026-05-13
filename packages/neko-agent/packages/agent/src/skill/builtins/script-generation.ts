@@ -77,13 +77,32 @@ EXT. PARK - LATER
 They walk side by side in silence.
 \`\`\`
 
-6. **Fountain syntax rules**:
-   - Scene heading: \`INT./EXT. LOCATION - TIME\`
-   - Character: ALL CAPS before dialogue
-   - Dialogue: Regular text after character
-   - Parenthetical: \`(emotion or action)\`
-   - Action: Regular paragraphs
-   - Transition: \`CUT TO:\`, \`FADE OUT.\`
+**Chinese screenplay example:**
+
+\`\`\`fountain
+内景 咖啡厅 - 日
+
+小美（28岁，焦虑）独自坐着，反复查看手机。
+
+小美
+（自言自语）
+他怎么还不来？
+
+门开了。大卫（30岁，自信）走进来。
+
+大卫
+对不起，我迟到了。
+
+切至：
+
+外景 公园 - 傍晚
+
+两人并肩默默走着。
+\`\`\`
+
+6. **Fountain syntax**: Follow the Fountain Syntax Reference provided by
+   neko-story (covers English + CJK scene headings, characters, transitions,
+   parentheticals, forced markers, and all other elements).
 
 7. **Save to file**:
    - Use Write tool to save as \`.fountain\` file

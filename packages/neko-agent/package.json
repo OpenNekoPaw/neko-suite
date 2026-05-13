@@ -88,6 +88,7 @@
       {
         "command": "neko.ai.chat",
         "title": "%neko.ai.chat.title%",
+        "icon": "$(comment-discussion)",
         "category": "NekoAgent"
       },
       {
@@ -223,6 +224,12 @@
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "neko.ai.chat",
+          "group": "navigation"
+        }
+      ],
       "editor/context": [
         {
           "command": "neko.script.generate",
