@@ -151,11 +151,6 @@
           "command": "neko.story.scriptTableView",
           "when": "editorLangId == nekostory",
           "group": "navigation"
-        },
-        {
-          "command": "neko.story.startVideoCreation",
-          "when": "editorLangId == nekostory",
-          "group": "navigation"
         }
       ],
       "editor/context": [

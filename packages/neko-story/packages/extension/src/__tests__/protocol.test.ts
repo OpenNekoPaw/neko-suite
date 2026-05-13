@@ -146,10 +146,7 @@ describe('neko-story protocol', () => {
     it('routes generateStoryboard command through scene agent payload', () => {
       expect(extensionSource).toContain("'neko.story.generateStoryboard'");
       expect(extensionSource).toContain('const payload = buildSceneAgentPayload(');
-      expect(extensionSource).toContain("'neko.agent.startPipeline'");
-      expect(extensionSource).toContain("flowId: 'flowF'");
-      expect(extensionSource).toContain('createStoryPipelineParams(payload, {');
-      expect(extensionSource).toContain('skipStages: [');
+      expect(extensionSource).toContain("'neko.agent.sendContext'");
     });
 
     it('registers pipeline event write-back command for scene state store', () => {
