@@ -31,7 +31,7 @@ describe('createPluginSkillDiscoveryTools', () => {
     const [tool] = createPluginSkillDiscoveryTools({
       listPluginSkills: vi.fn(async () => [
         {
-          extensionId: 'neko.nekocanvas',
+          extensionId: 'neko.neko-canvas',
           skills: [
             {
               id: 'batch',
@@ -50,7 +50,7 @@ describe('createPluginSkillDiscoveryTools', () => {
           ],
         },
         {
-          extensionId: 'neko.nekocut',
+          extensionId: 'neko.neko-cut',
           skills: [
             {
               id: 'timeline',
@@ -69,7 +69,7 @@ describe('createPluginSkillDiscoveryTools', () => {
       data: {
         catalogue: [
           {
-            extensionId: 'neko.nekocanvas',
+            extensionId: 'neko.neko-canvas',
             skills: [
               {
                 id: 'batch',

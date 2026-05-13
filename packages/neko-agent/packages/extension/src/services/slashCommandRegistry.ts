@@ -5,7 +5,7 @@
  * custom slash commands into the neko-agent chat panel.
  *
  * Usage from an extension:
- *   vscode.commands.executeCommand('neko.agent.registerSlashCommands', 'neko.nekocanvas', [
+ *   vscode.commands.executeCommand('neko.agent.registerSlashCommands', 'neko.neko-canvas', [
  *     { id: 'batch', name: '/batch', description: 'Batch generate images for selected shots', icon: '🖼️' },
  *     { id: 'export', name: '/export', description: 'Export storyboard to PDF/ZIP', icon: '📦' },
  *   ]);

@@ -282,7 +282,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
             'Trigger AI image generation for all shot nodes on the active storyboard canvas. ' +
             'Runs up to 2 generations in parallel with automatic retry on failure.',
           icon: '$(images)',
-          command: 'neko.nekocanvas.slashCommand.batch',
+          command: 'neko.neko-canvas.slashCommand.batch',
           tags: ['generation', 'image', 'storyboard', 'batch'],
         },
         {
@@ -291,7 +291,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
           description:
             'Export the current storyboard canvas as a PDF document or ZIP archive of shot images.',
           icon: '$(package)',
-          command: 'neko.nekocanvas.slashCommand.export',
+          command: 'neko.neko-canvas.slashCommand.export',
           tags: ['export', 'storyboard', 'pdf', 'zip'],
         },
         {
@@ -649,23 +649,26 @@ async function createCanvas(config: CanvasConfig): Promise<string> {
 function registerAgentSlashCommands(context: vscode.ExtensionContext): void {
   // Register command handlers that neko-agent will call via invokePluginSlashCommand
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.nekocanvas.slashCommand.batch', async (args?: string) => {
-      // Trigger batch image generation for selected shots
-      const nodeIds = (await canvasEditorProvider.listNodes('shot')).map((n) => n.id);
-      if (nodeIds.length === 0) {
-        vscode.window.showInformationMessage(
-          'No shot nodes found. Add shot nodes to the canvas first.',
-        );
-        return;
-      }
-      await canvasEditorProvider.generateBatchForNodes(nodeIds);
-      getRootLogger().info(`/batch: queued ${nodeIds.length} shots`, { args });
-    }),
+    vscode.commands.registerCommand(
+      'neko.neko-canvas.slashCommand.batch',
+      async (args?: string) => {
+        // Trigger batch image generation for selected shots
+        const nodeIds = (await canvasEditorProvider.listNodes('shot')).map((n) => n.id);
+        if (nodeIds.length === 0) {
+          vscode.window.showInformationMessage(
+            'No shot nodes found. Add shot nodes to the canvas first.',
+          );
+          return;
+        }
+        await canvasEditorProvider.generateBatchForNodes(nodeIds);
+        getRootLogger().info(`/batch: queued ${nodeIds.length} shots`, { args });
+      },
+    ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'neko.nekocanvas.slashCommand.export',
+      'neko.neko-canvas.slashCommand.export',
       async (_args?: string) => {
         // Export storyboard — show quick pick for format
         const choice = await vscode.window.showQuickPick(
@@ -688,7 +691,7 @@ function registerAgentSlashCommands(context: vscode.ExtensionContext): void {
   // Register the slash commands with neko-agent (fires after agent extension activates)
   const doRegister = () => {
     vscode.commands
-      .executeCommand('neko.agent.registerSlashCommands', 'neko.nekocanvas', [
+      .executeCommand('neko.agent.registerSlashCommands', 'neko.neko-canvas', [
         {
           id: 'batch',
           name: '/batch',

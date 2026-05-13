@@ -322,7 +322,7 @@ describe('webview protocol projectors', () => {
           id: 'batch',
           name: '/batch',
           description: 'Batch generate',
-          extensionId: 'neko.nekocanvas',
+          extensionId: 'neko.neko-canvas',
         },
       ]),
     ).toEqual({
@@ -332,7 +332,7 @@ describe('webview protocol projectors', () => {
           id: 'batch',
           name: '/batch',
           description: 'Batch generate',
-          extensionId: 'neko.nekocanvas',
+          extensionId: 'neko.neko-canvas',
         },
       ],
     });

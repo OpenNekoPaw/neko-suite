@@ -20,9 +20,9 @@ describe('extension command contract', () => {
   it('builds plugin slash command ids without duplicating format in extension', () => {
     expect(
       buildPluginSlashCommandCommand({
-        extensionId: 'neko.nekocanvas',
+        extensionId: 'neko.neko-canvas',
         commandId: 'batch',
       }),
-    ).toBe('neko.nekocanvas.slashCommand.batch');
+    ).toBe('neko.neko-canvas.slashCommand.batch');
   });
 });

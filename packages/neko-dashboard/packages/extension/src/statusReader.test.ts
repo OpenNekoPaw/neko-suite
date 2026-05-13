@@ -33,7 +33,7 @@ describe('StatusReader', () => {
   });
 
   it('marks agent and assets available when extensions are installed', async () => {
-    installExtension('neko.nekoagent');
+    installExtension('neko.neko-agent');
     installExtension('neko.neko-assets');
 
     const status = await new StatusReader().read();

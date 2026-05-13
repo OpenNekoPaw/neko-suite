@@ -662,7 +662,7 @@ function subscribeCanvasSceneWriteback(
       return;
     }
 
-    const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.nekocanvas');
+    const canvasExt = vscode.extensions.getExtension<NekoCanvasAPI>('neko.neko-canvas');
     if (!canvasExt?.isActive) {
       return;
     }

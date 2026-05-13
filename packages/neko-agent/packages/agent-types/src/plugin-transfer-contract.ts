@@ -1,8 +1,8 @@
 import type { CanvasStoryboardPayload } from '@neko/shared';
 
 export const NEKO_PLUGIN_EXTENSION_IDS = {
-  canvas: 'neko.nekocanvas',
-  cut: 'neko.nekocut',
+  canvas: 'neko.neko-canvas',
+  cut: 'neko.neko-cut',
   sketch: 'neko.neko-sketch',
   model: 'neko.neko-model',
 } as const;

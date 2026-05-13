@@ -7,7 +7,7 @@ import type {
 } from './protocol';
 
 const ENGINE_EXTENSION_ID = 'neko.neko-engine';
-const AGENT_EXTENSION_ID = 'neko.nekoagent';
+const AGENT_EXTENSION_ID = 'neko.neko-agent';
 const ASSETS_EXTENSION_ID = 'neko.neko-assets';
 
 const WORKFLOW_PROBE_COMMANDS: ReadonlyArray<{

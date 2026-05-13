@@ -742,9 +742,9 @@ export interface NekoAssetsAPI {
  * VSCode extension IDs for Neko suite extensions
  */
 export const NEKO_EXTENSION_IDS = {
-  NEKO_CUT: 'neko.nekocut',
-  NEKO_CANVAS: 'neko.nekocanvas',
-  NEKO_AGENT: 'neko.nekoagent',
+  NEKO_CUT: 'neko.neko-cut',
+  NEKO_CANVAS: 'neko.neko-canvas',
+  NEKO_AGENT: 'neko.neko-agent',
   NEKO_STORY: 'neko.neko-story',
   NEKO_SKETCH: 'neko.neko-sketch',
   NEKO_PUPPET: 'neko.neko-puppet',

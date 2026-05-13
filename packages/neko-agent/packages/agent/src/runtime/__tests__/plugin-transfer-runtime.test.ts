@@ -195,15 +195,15 @@ describe('plugin transfer runtime', () => {
     expect(
       buildRuntimePluginSlashCommandDispatch({
         type: 'invokePluginSlashCommand',
-        extensionId: 'neko.nekocanvas',
+        extensionId: 'neko.neko-canvas',
         commandId: 'batch',
         conversationId: 'conv-1',
         args: 'selected shots',
       }),
     ).toEqual({
-      command: 'neko.nekocanvas.slashCommand.batch',
+      command: 'neko.neko-canvas.slashCommand.batch',
       invocation: {
-        extensionId: 'neko.nekocanvas',
+        extensionId: 'neko.neko-canvas',
         commandId: 'batch',
         conversationId: 'conv-1',
         args: 'selected shots',
@@ -264,7 +264,7 @@ describe('plugin transfer runtime', () => {
   it('projects installed neko plugins to a webview message', () => {
     expect(
       buildRuntimePluginsAvailableMessage({
-        hasExtension: (extensionId) => extensionId === 'neko.nekocanvas',
+        hasExtension: (extensionId) => extensionId === 'neko.neko-canvas',
       }),
     ).toEqual({
       type: 'pluginsAvailable',
