@@ -265,12 +265,13 @@ export class AudioProjectProvider
   }
 
   async revertCustomDocument(document: vscode.CustomDocument): Promise<void> {
-    const panel = this._activePanels.get(document.uri.toString());
+    const docKey = document.uri.toString();
+    const panel = this._activePanels.get(docKey);
     if (!panel) return;
 
     try {
       await panel.webview.postMessage({ type: 'revert' });
-      // Re-send project:init with data from disk
+      if (!this._activePanels.has(docKey)) return;
       await this.initializeWebview(panel, document.uri);
     } catch (error) {
       if ((error as Error).message?.includes('disposed')) return;

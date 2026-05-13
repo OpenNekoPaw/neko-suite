@@ -41,6 +41,7 @@ export function useAudioPlayback() {
     playbackState,
     currentTime,
     volume,
+    speed,
     streamUrl,
     isMuted,
     projectMode,
@@ -62,14 +63,8 @@ export function useAudioPlayback() {
   const updatePlaybackTime = useCallback(() => {
     if (playbackState !== 'playing') return;
 
-    let newTime: number;
-    const audioClient = audioClientRef.current;
-    if (audioClient && audioClient.isClockReady) {
-      newTime = audioClient.getCurrentTime();
-    } else {
-      const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
-      newTime = playStartTimeRef.current + elapsed;
-    }
+    const elapsed = (performance.now() - playWallTimeRef.current) / 1000;
+    const newTime = playStartTimeRef.current + elapsed * speed;
 
     if (duration > 0 && newTime >= duration) {
       setCurrentTime(duration);
@@ -89,7 +84,7 @@ export function useAudioPlayback() {
 
     setCurrentTime(newTime);
     animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [playbackState, duration, projectMode, setCurrentTime, setPlaybackState]);
+  }, [playbackState, speed, duration, projectMode, setCurrentTime, setPlaybackState]);
 
   useEffect(() => {
     if (playbackState === 'playing') {
@@ -101,6 +96,18 @@ export function useAudioPlayback() {
       }
     };
   }, [playbackState, updatePlaybackTime]);
+
+  // =========================================================================
+  // Speed change mid-playback → reset wall-clock reference
+  // =========================================================================
+
+  useEffect(() => {
+    if (playbackState === 'playing') {
+      playStartTimeRef.current = currentTime;
+      playWallTimeRef.current = performance.now();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speed]);
 
   // =========================================================================
   // Stream URL change → create AudioStreamClient
