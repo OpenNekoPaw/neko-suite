@@ -19,6 +19,9 @@ export type { CollapsibleSectionProps } from './CollapsibleSection';
 export { Panel, PanelSection } from './Panel';
 export type { PanelProps, PanelSectionProps } from './Panel';
 
+export { ResizeHandle } from './ResizeHandle';
+export type { ResizeHandleProps } from './ResizeHandle';
+
 // ── Overlay ───────────────────────────────────────────────────────────────────
 
 export { ContextMenu } from './ContextMenu';
@@ -69,3 +72,17 @@ export type {
 
 export { useDrag } from './useDrag';
 export type { DragCallbacks, DragOptions, DragBindings } from './useDrag';
+
+export { useResizable } from './useResizable';
+export type {
+  ResizeEdge,
+  ResizeHandleBindings,
+  ResizeMode,
+  ResizeOrientation,
+  ResizePointerPosition,
+  ResizeRect,
+  UseResizableControlledOptions,
+  UseResizableOptions,
+  UseResizableReturn,
+  UseResizableUncontrolledOptions,
+} from './useResizable';

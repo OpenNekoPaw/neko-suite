@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { ResizeHandle, useResizable } from '@neko/shared/components';
 import { useShallowStore } from './hooks/useShallowStore';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -55,10 +56,7 @@ function App() {
   const togglePropertyPanel = useEditorStore((state) => state.togglePropertyPanel);
   const { sendMessage } = useVSCodeMessaging();
   const animationFrameRef = useRef<number>(0);
-  const containerRef = useRef<HTMLDivElement>(null);
   const lastSeekTimeRef = useRef<number>(currentTime); // Track last known currentTime
-  const [previewRatio, setPreviewRatio] = useState(DEFAULT_PREVIEW_RATIO);
-  const [isResizing, setIsResizing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
 
@@ -114,64 +112,33 @@ function App() {
     }
   }, [project, isCapturingScreenshot]);
 
-  // Handle vertical resize with pointer capture to prevent cursor sticking when mouse leaves webview
-  const resizeHandleRef = useRef<HTMLDivElement>(null);
+  const {
+    size: previewRatio,
+    isResizing,
+    containerRef,
+    handleProps: previewResizeHandleProps,
+  } = useResizable<HTMLDivElement>({
+    edge: 'top',
+    mode: 'ratio',
+    initialSize: DEFAULT_PREVIEW_RATIO,
+    minSize: MIN_PREVIEW_RATIO,
+    maxSize: MAX_PREVIEW_RATIO,
+    // Preserve the previous split math: the 4px resize handle is outside the
+    // two flex panels, so the draggable height excludes the handle itself.
+    calculateSize: (event, containerRect) =>
+      (event.clientY - containerRect.top) / (containerRect.height - 4),
+  });
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    // Capture pointer to receive events even when pointer leaves the element/window
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    setIsResizing(true);
-  }, []);
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isResizing || !containerRef.current) return;
-
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const containerHeight = containerRect.height - 4; // 4px for resize handle
-
-      // Calculate preview ratio based on pointer position
-      const pointerY = e.clientY - containerRect.top;
-      const newRatio = pointerY / containerHeight;
-
-      // Clamp to min/max
-      setPreviewRatio(Math.max(MIN_PREVIEW_RATIO, Math.min(MAX_PREVIEW_RATIO, newRatio)));
-    },
-    [isResizing],
-  );
-
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    // Release pointer capture
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    setIsResizing(false);
-  }, []);
-
-  // Handle horizontal resize for PropertyPanel width
-  const [isHResizing, setIsHResizing] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  const handleHResizeStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    setIsHResizing(true);
-  }, []);
-
-  const handleHResizeMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isHResizing || !rootRef.current) return;
-      const rootRect = rootRef.current.getBoundingClientRect();
-      // Width = distance from pointer to right edge
-      const newWidth = rootRect.right - e.clientX;
-      setPropertyPanelWidth(newWidth);
-    },
-    [isHResizing, setPropertyPanelWidth],
-  );
-
-  const handleHResizeEnd = useCallback((e: React.PointerEvent) => {
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    setIsHResizing(false);
-  }, []);
+  const {
+    isResizing: isHResizing,
+    containerRef: rootRef,
+    handleProps: propertyPanelResizeHandleProps,
+  } = useResizable<HTMLDivElement>({
+    edge: 'right',
+    mode: 'pixel',
+    size: propertyPanelWidth,
+    onSizeChange: setPropertyPanelWidth,
+  });
 
   // Playback loop with optimized timing (avoid excessive seek calls)
   // Use refs to avoid restarting the loop when currentTime changes
@@ -288,15 +255,11 @@ function App() {
 
         {/* Vertical Resize Handle - hidden in fullscreen */}
         {!isFullscreen && (
-          <div
-            ref={resizeHandleRef}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
+          <ResizeHandle
+            handleProps={previewResizeHandleProps}
             className={`h-1 flex-shrink-0 cursor-ns-resize border-t border-vscode-panel-border transition-colors ${
               isResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
             }`}
-            style={{ touchAction: 'none' }}
           />
         )}
 
@@ -312,16 +275,13 @@ function App() {
       {propertyPanelVisible && (
         <>
           {/* Horizontal Resize Handle */}
-          <div
-            onPointerDown={handleHResizeStart}
-            onPointerMove={handleHResizeMove}
-            onPointerUp={handleHResizeEnd}
+          <ResizeHandle
+            handleProps={propertyPanelResizeHandleProps}
             className={`w-1 flex-shrink-0 cursor-ew-resize transition-colors ${
               isHResizing
                 ? 'bg-[var(--neko-accent)]'
                 : 'bg-[var(--neko-border)] hover:bg-[var(--neko-accent)]'
             }`}
-            style={{ touchAction: 'none' }}
           />
           {/* PropertyPanel */}
           <div

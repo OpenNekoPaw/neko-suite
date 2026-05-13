@@ -4,7 +4,8 @@
  * Assembles the sketch editor layout:
  * Toolbar | Canvas | Side panels (Brush/Color/Layers)
  */
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState } from 'react';
+import { ResizeHandle, useResizable } from '@neko/shared/components';
 import type { ExtensionToWebviewMessage } from './types';
 import { useSketchStore } from './stores';
 import {
@@ -111,30 +112,16 @@ export function App() {
   // Drag-over visual state
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Horizontal resize for sidebar
-  const [isHResizing, setIsHResizing] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  const handleHResizeStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    setIsHResizing(true);
-  }, []);
-
-  const handleHResizeMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isHResizing || !rootRef.current) return;
-      const rootRect = rootRef.current.getBoundingClientRect();
-      const newWidth = rootRect.right - e.clientX;
-      setSidebarWidth(newWidth);
-    },
-    [isHResizing, setSidebarWidth],
-  );
-
-  const handleHResizeEnd = useCallback((e: React.PointerEvent) => {
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-    setIsHResizing(false);
-  }, []);
+  const {
+    isResizing: isHResizing,
+    containerRef: rootRef,
+    handleProps: sidebarResizeHandleProps,
+  } = useResizable<HTMLDivElement>({
+    edge: 'right',
+    mode: 'pixel',
+    size: sidebarWidth,
+    onSizeChange: setSidebarWidth,
+  });
 
   useEffect(() => {
     vscode.postMessage({
@@ -565,14 +552,11 @@ export function App() {
           {store((s) => s.showSidebar) && (
             <>
               {/* Horizontal Resize Handle */}
-              <div
-                onPointerDown={handleHResizeStart}
-                onPointerMove={handleHResizeMove}
-                onPointerUp={handleHResizeEnd}
+              <ResizeHandle
+                handleProps={sidebarResizeHandleProps}
                 className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
                   isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
                 }`}
-                style={{ touchAction: 'none' }}
               />
               <div
                 className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
