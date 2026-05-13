@@ -100,6 +100,7 @@ function createScriptIndex(
       sceneCharacters: s.sceneCharacters ?? [],
       actionSummary: '',
       estimatedDuration: 30,
+      directives: [],
       line_start: s.line_start ?? i * 20,
       line_end: s.line_end ?? (i + 1) * 20 - 1,
     })),

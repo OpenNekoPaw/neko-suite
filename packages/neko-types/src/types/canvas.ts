@@ -239,7 +239,7 @@ export interface TableCanvasNode extends CanvasNodeBase {
 // =============================================================================
 
 /** Shot scale codes following cinematography conventions */
-export type ShotScale = 'ECU' | 'CU' | 'MCU' | 'MS' | 'MLS' | 'LS' | 'VLS' | 'ELS';
+export type ShotScale = 'ECU' | 'CU' | 'MCU' | 'MS' | 'MLS' | 'LS' | 'VLS' | 'ELS' | 'OTS' | 'POV';
 
 /** Camera movement type */
 export type CameraMovement =
@@ -325,6 +325,14 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     voiceOver?: string;
     /** Sound effect cue */
     soundCue?: string;
+    /** AI generation prompt — overrides visualDescription for image generation */
+    generationPrompt?: string;
+    /** Visual style directive (e.g. "noir", "cyberpunk") */
+    visualStyle?: string;
+    /** Reference image asset path from [[REF: path]] */
+    referenceImagePath?: string;
+    /** Visual effects cues */
+    vfx?: string[];
     /** Last successful storyboard import into neko-cut timeline */
     lastImportedToTimelineAt?: number;
     /** Target project name used during the last storyboard import */

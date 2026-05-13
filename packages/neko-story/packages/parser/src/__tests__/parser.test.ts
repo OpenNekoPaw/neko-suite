@@ -782,4 +782,117 @@ CUT TO:
       });
     });
   });
+
+  describe('Directives', () => {
+    it('should parse MOOD directive', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[MOOD: tense]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.directive).toEqual({ category: 'metadata', key: 'MOOD', value: 'tense' });
+      }
+    });
+
+    it('should parse SHOT directive as camera category', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[SHOT: close-up]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.directive).toEqual({ category: 'camera', key: 'SHOT', value: 'close-up' });
+      }
+    });
+
+    it('should parse PROMPT directive with CJK value', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[PROMPT: 赛博朋克风格的咖啡厅]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.directive).toEqual({
+          category: 'ai',
+          key: 'PROMPT',
+          value: '赛博朋克风格的咖啡厅',
+        });
+      }
+    });
+
+    it('should populate both assetRef and directive for IMAGE note', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[IMAGE: path.png]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.assetRef).toEqual({ type: 'image', path: 'path.png' });
+        expect(note.directive).toEqual({ category: 'asset', key: 'IMAGE', value: 'path.png' });
+      }
+    });
+
+    it('should not parse free text note as directive', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[This is just a regular note]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.directive).toBeUndefined();
+      }
+    });
+
+    it('should parse unknown key as metadata category', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[CUSTOM: some value]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.directive).toEqual({
+          category: 'metadata',
+          key: 'CUSTOM',
+          value: 'some value',
+        });
+      }
+    });
+
+    it('should normalize key to uppercase', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[mood: tense]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.directive?.key).toBe('MOOD');
+      }
+    });
+
+    it('should parse DURATION directive', () => {
+      const doc = parse('INT. LAB - NIGHT\n\n[[DURATION: 30s]]');
+      const note = doc.elements.find((e) => e.type === 'note');
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.directive).toEqual({ category: 'metadata', key: 'DURATION', value: '30s' });
+      }
+    });
+
+    it('should parse directive from line note', () => {
+      const doc = parse('// MOOD: calm');
+      const note = doc.elements[0];
+
+      expect(note?.type).toBe('note');
+      if (note?.type === 'note') {
+        expect(note.noteType).toBe('line');
+        expect(note.directive).toEqual({ category: 'metadata', key: 'MOOD', value: 'calm' });
+      }
+    });
+
+    it('should parse multiple directives in a scene', () => {
+      const text = `INT. LAB - NIGHT\n\n[[MOOD: tense]]\n\n[[SHOT: close-up]]\n\n[[MUSIC: dramatic.mp3]]`;
+      const doc = parse(text);
+      const notes = doc.elements.filter((e) => e.type === 'note');
+
+      expect(notes).toHaveLength(3);
+      if (notes[0]?.type === 'note') expect(notes[0].directive?.key).toBe('MOOD');
+      if (notes[1]?.type === 'note') expect(notes[1].directive?.key).toBe('SHOT');
+      if (notes[2]?.type === 'note') expect(notes[2].directive?.key).toBe('MUSIC');
+    });
+  });
 });

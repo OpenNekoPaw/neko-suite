@@ -19,6 +19,7 @@ const scriptIndex: NekoStoryScriptIndex = {
       sceneCharacters: ['ALICE', 'BOB'],
       actionSummary: 'Alice studies a wall of monitors.',
       estimatedDuration: 24,
+      directives: [],
       line_start: 0,
       line_end: 15,
     },
@@ -74,5 +75,49 @@ describe('storyScenePlanner', () => {
 
     expect(shots[0]!.cameraAngle).toBe('eye-level');
     expect(shots[2]!.cameraMovement).toBe('dolly-in');
+  });
+
+  it('maps PROMPT/STYLE/REF/VFX directives to shot plan fields', () => {
+    const sceneWithDirectives: NekoStoryScriptIndex['scenes'][number] = {
+      ...scriptIndex.scenes[0]!,
+      directives: [
+        { category: 'ai', key: 'PROMPT', value: '赛博朋克咖啡厅，霓虹雨夜' },
+        { category: 'ai', key: 'STYLE', value: 'noir' },
+        { category: 'ai', key: 'REF', value: 'reference.png' },
+        { category: 'metadata', key: 'VFX', value: '雨滴特效' },
+        { category: 'metadata', key: 'VFX', value: '闪电' },
+      ],
+    };
+    const shots = buildShotPlansForScene(sceneWithDirectives, 1);
+
+    expect(shots[0]!.generationPrompt).toBe('赛博朋克咖啡厅，霓虹雨夜');
+    expect(shots[0]!.visualStyle).toBe('noir');
+    expect(shots[0]!.referenceImagePath).toBe('reference.png');
+    expect(shots[0]!.vfx).toEqual(['雨滴特效', '闪电']);
+  });
+
+  it('maps OTS and POV shot directives to dedicated ShotScale values', () => {
+    const sceneOTS: NekoStoryScriptIndex['scenes'][number] = {
+      ...scriptIndex.scenes[0]!,
+      directives: [{ category: 'camera', key: 'SHOT', value: 'over-the-shoulder' }],
+    };
+    const shotOTS = buildShotPlansForScene(sceneOTS, 1);
+    expect(shotOTS[0]!.shotScale).toBe('OTS');
+
+    const scenePOV: NekoStoryScriptIndex['scenes'][number] = {
+      ...scriptIndex.scenes[0]!,
+      directives: [{ category: 'camera', key: 'SHOT', value: 'POV' }],
+    };
+    const shotPOV = buildShotPlansForScene(scenePOV, 1);
+    expect(shotPOV[0]!.shotScale).toBe('POV');
+  });
+
+  it('omits AI fields when no directives present', () => {
+    const shots = buildShotPlansForScene(scriptIndex.scenes[0]!, 1);
+
+    expect(shots[0]!.generationPrompt).toBeUndefined();
+    expect(shots[0]!.visualStyle).toBeUndefined();
+    expect(shots[0]!.referenceImagePath).toBeUndefined();
+    expect(shots[0]!.vfx).toBeUndefined();
   });
 });

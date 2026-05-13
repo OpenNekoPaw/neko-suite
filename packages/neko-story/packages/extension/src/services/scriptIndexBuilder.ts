@@ -3,7 +3,9 @@ import type {
   Action,
   Character,
   Dialogue,
+  Directive,
   FountainDocument,
+  Note,
   SceneHeading,
 } from '@neko-story/types';
 import type { CharacterEntry, SceneEntry, ScriptIndex } from './types';
@@ -22,6 +24,8 @@ interface MutableSceneDraft {
   actionLines: string[];
   dialogueLines: number;
   characters: Set<string>;
+  directives: Directive[];
+  explicitDuration: number | undefined;
 }
 
 /**
@@ -59,6 +63,8 @@ export function buildScriptIndex(uri: vscode.Uri, doc: FountainDocument): Script
         actionLines: [],
         dialogueLines: 0,
         characters: new Set<string>(),
+        directives: [],
+        explicitDuration: undefined,
       });
       continue;
     }
@@ -103,16 +109,32 @@ export function buildScriptIndex(uri: vscode.Uri, doc: FountainDocument): Script
       if (normalizeWhitespace(dialogue.text)) {
         currentScene.dialogueLines += 1;
       }
+      continue;
+    }
+
+    if (element.type === 'note') {
+      const note = element as Note;
+      if (note.directive) {
+        currentScene.directives.push(note.directive);
+        if (note.directive.key === 'DURATION') {
+          const parsed = parseDurationValue(note.directive.value);
+          if (parsed !== undefined) {
+            currentScene.explicitDuration = parsed;
+          }
+        }
+      }
     }
   }
 
   const scenes: SceneEntry[] = sceneDrafts.map((draft) => {
     const actionSummary = draft.actionLines.slice(0, 2).join(' ').slice(0, 200).trim();
-    const estimatedDuration = estimateSceneDurationSeconds(
-      draft.line_end - draft.line_start + 1,
-      draft.dialogueLines,
-      draft.actionLines.length,
-    );
+    const estimatedDuration =
+      draft.explicitDuration ??
+      estimateSceneDurationSeconds(
+        draft.line_end - draft.line_start + 1,
+        draft.dialogueLines,
+        draft.actionLines.length,
+      );
     return {
       id: draft.sceneId,
       heading: draft.heading,
@@ -126,6 +148,7 @@ export function buildScriptIndex(uri: vscode.Uri, doc: FountainDocument): Script
       sceneCharacters: Array.from(draft.characters),
       actionSummary,
       estimatedDuration,
+      directives: draft.directives,
       line_start: draft.line_start,
       line_end: draft.line_end,
     };
@@ -183,4 +206,13 @@ function hashString(value: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return Math.abs(hash >>> 0).toString(36);
+}
+
+export function parseDurationValue(raw: string): number | undefined {
+  const match = /^(?:(\d+)m)?(?:(\d+)s?)?$/.exec(raw.trim());
+  if (!match) return undefined;
+  const minutes = parseInt(match[1] ?? '0', 10);
+  const seconds = parseInt(match[2] ?? '0', 10);
+  const total = minutes * 60 + seconds;
+  return total > 0 ? total : undefined;
 }

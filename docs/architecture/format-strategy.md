@@ -33,7 +33,16 @@ neko-suite 包含多个创意工具扩展，每个扩展都有自己的项目文
 
 **命名规则**：`nk` + 英文名首字母小写。`.fountain` 是行业标准，保持原样不改名。
 
-**Fountain 资产引用扩展**：neko-story 通过 Fountain 标准的 Notes 语法 `[[...]]` 支持素材引用，保持与其他 Fountain 工具的兼容性。语法：`[[IMAGE: path]]`、`[[VIDEO: path]]`、`[[AUDIO: path]]`、`[[ASSET: type://path]]`。转换为 neko-cut 时自动生成 MediaElement。
+**Fountain `[[KEY: value]]` 指令扩展**：neko-story 通过 Fountain 标准的 Notes 语法 `[[...]]` 支持结构化指令，保持与其他 Fountain 工具的兼容性（标准渲染器将 `[[...]]` 视为不可见注释）。
+
+| 类别 | 指令键 | 示例 |
+|------|--------|------|
+| 资产 | `IMAGE`, `VIDEO`, `AUDIO`, `ASSET` | `[[IMAGE: hero.png]]` `[[ASSET: image://path]]` |
+| 元数据 | `MOOD`, `MUSIC`, `VFX`, `SFX`, `DURATION` | `[[MOOD: tense]]` `[[DURATION: 30s]]` |
+| 镜头 | `SHOT`, `ANGLE`, `MOVEMENT` | `[[SHOT: close-up]]` `[[ANGLE: low]]` |
+| AI | `PROMPT`, `STYLE`, `REF` | `[[PROMPT: 赛博朋克咖啡厅]]` `[[STYLE: noir]]` |
+
+资产引用转换为 neko-cut 时自动生成 MediaElement。元数据/镜头/AI 指令由 storyScenePlanner 转换为 `StoryShotPlan` schema，经 storyboardPlanner 传入 canvas ShotNode.data，最终影响 AI 生图 prompt。
 
 ---
 

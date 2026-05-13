@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { ICharacterWorkspaceIndex, IWorkspaceIndex } from '../services/types';
 
 /**
  * Provides LLM-powered ghost text (inline completions) for Fountain screenplay files.
@@ -22,6 +23,11 @@ export class FountainInlineCompletionProvider implements vscode.InlineCompletion
 
   /** Debounce delay in milliseconds */
   private static readonly DEBOUNCE_MS = 400;
+
+  constructor(
+    private readonly index?: IWorkspaceIndex,
+    private readonly characterIndex?: ICharacterWorkspaceIndex,
+  ) {}
 
   async provideInlineCompletionItems(
     document: vscode.TextDocument,
@@ -48,21 +54,27 @@ export class FountainInlineCompletionProvider implements vscode.InlineCompletion
         : textBefore;
 
     try {
+      const preamble = this.buildContextPreamble(document, position);
+      const userContent = preamble ? `${preamble}\n\n${contextText}` : contextText;
+
       const completion = await vscode.commands.executeCommand<string | null>(
         'neko.agent.internalChat',
         [
           {
             role: 'system',
             content:
-              'You are a Fountain screenplay completion assistant. ' +
+              'You are a Fountain screenplay completion assistant for neko-story. ' +
               'Continue the screenplay from exactly where it leaves off. ' +
               'Output ONLY the continuation text — no explanations, no markdown fences, no leading/trailing blank lines. ' +
               'Keep it concise: 1–3 Fountain elements (action, dialogue, scene heading, or transition). ' +
-              'Preserve correct Fountain formatting.',
+              'Preserve correct Fountain formatting. ' +
+              'CJK names are valid character cues. CJK scene prefixes: 内景/外景/内外景. ' +
+              'You may use [[KEY: value]] directives: MOOD, MUSIC, VFX, SFX, DURATION, SHOT, ANGLE, MOVEMENT, PROMPT, STYLE, REF. ' +
+              'Asset embeds: [[IMAGE: path]], [[VIDEO: path]], [[AUDIO: path]].',
           },
           {
             role: 'user',
-            content: contextText,
+            content: userContent,
           },
         ],
         { maxTokens: FountainInlineCompletionProvider.MAX_COMPLETION_TOKENS },
@@ -81,6 +93,43 @@ export class FountainInlineCompletionProvider implements vscode.InlineCompletion
       // neko-agent not available or LLM error — silently skip
       return null;
     }
+  }
+
+  private buildContextPreamble(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+  ): string | null {
+    const parts: string[] = [];
+
+    const lineText = document.lineAt(position.line).text.trimStart();
+    const prevLine = position.line > 0 ? document.lineAt(position.line - 1).text.trim() : '';
+    const isPrevBlank = prevLine === '';
+
+    if (
+      /^(INT|EXT|EST|I\/E|内景|內景|外景|内外景|內外景)[.\s\u3000]/i.test(lineText) ||
+      lineText.startsWith('.')
+    ) {
+      parts.push('[Context: scene heading]');
+    } else if (/^\(|^（/.test(lineText)) {
+      parts.push('[Context: parenthetical]');
+    } else if (isPrevBlank && /^[A-Z][A-Z0-9 ._\-']+$/.test(lineText)) {
+      parts.push('[Context: character cue]');
+    } else if (isPrevBlank && /^[一-鿿㐀-䶿][一-鿿㐀-䶿·]{0,9}$/.test(lineText)) {
+      parts.push('[Context: character cue]');
+    } else if (/^\[\[/.test(lineText)) {
+      parts.push('[Context: directive/note]');
+    } else if (isPrevBlank) {
+      parts.push('[Context: action]');
+    } else {
+      parts.push('[Context: dialogue]');
+    }
+
+    const characters = this.index?.getAllCharacterNames().slice(0, 10) ?? [];
+    if (characters.length > 0) {
+      parts.push(`[Characters: ${characters.join(', ')}]`);
+    }
+
+    return parts.length > 0 ? parts.join(' ') : null;
   }
 }
 

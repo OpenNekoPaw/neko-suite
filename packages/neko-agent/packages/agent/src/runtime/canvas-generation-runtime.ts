@@ -22,6 +22,9 @@ export interface CanvasShotPromptData {
   readonly emotion?: readonly string[];
   readonly sceneTags?: readonly string[];
   readonly dialogue?: string;
+  readonly generationPrompt?: string;
+  readonly visualStyle?: string;
+  readonly vfx?: readonly string[];
 }
 
 export type CanvasGenerationStatus = 'pending' | 'generating' | 'done' | 'error';
@@ -272,7 +275,12 @@ export function buildCanvasShotPromptMessages(
 
 export function buildCanvasShotPromptUserContent(shotData: CanvasShotPromptData): string {
   const parts: string[] = [];
-  if (shotData.visualDescription) parts.push(`Scene: ${shotData.visualDescription}`);
+  if (shotData.generationPrompt) {
+    parts.push(`Scene: ${shotData.generationPrompt}`);
+  } else if (shotData.visualDescription) {
+    parts.push(`Scene: ${shotData.visualDescription}`);
+  }
+  if (shotData.visualStyle) parts.push(`Style: ${shotData.visualStyle}`);
   if (shotData.characters?.length) {
     parts.push(`Characters: ${shotData.characters.map((c) => c.characterName).join(', ')}`);
   }
@@ -287,6 +295,7 @@ export function buildCanvasShotPromptUserContent(shotData: CanvasShotPromptData)
   if (shotData.emotion?.length) parts.push(`Emotion: ${shotData.emotion.join(', ')}`);
   if (shotData.sceneTags?.length) parts.push(`Tags: ${shotData.sceneTags.join(', ')}`);
   if (shotData.dialogue) parts.push(`Dialogue: "${shotData.dialogue}"`);
+  if (shotData.vfx?.length) parts.push(`VFX: ${shotData.vfx.join(', ')}`);
 
   return parts.join('\n') || 'Generate an image prompt for this shot.';
 }

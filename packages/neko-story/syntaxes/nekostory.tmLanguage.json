@@ -169,6 +169,16 @@
     "note": {
       "patterns": [
         {
+          "comment": "Directive note [[KEY: value]]",
+          "match": "(\\[\\[)((?:IMAGE|VIDEO|AUDIO|ASSET|MOOD|MUSIC|VFX|SFX|DURATION|SHOT|ANGLE|MOVEMENT|PROMPT|STYLE|REF)\\s*:\\s*)([^\\]]+)(\\]\\])",
+          "captures": {
+            "1": { "name": "punctuation.definition.note.begin.nekostory" },
+            "2": { "name": "keyword.other.directive-key.nekostory" },
+            "3": { "name": "string.unquoted.directive-value.nekostory" },
+            "4": { "name": "punctuation.definition.note.end.nekostory" }
+          }
+        },
+        {
           "comment": "Inline note [[...]]",
           "match": "(\\[\\[)([^\\]]+)(\\]\\])",
           "captures": {

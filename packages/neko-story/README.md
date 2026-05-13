@@ -90,29 +90,47 @@ BOB
 How are you?
 ```
 
-### 资产引用（Asset References）
+### 指令与资产引用（Directives & Asset References）
 
-通过 Fountain 标准的 Notes 语法 `[[...]]` 引用图片、视频、音频素材：
+通过 Fountain 标准的 Notes 语法 `[[KEY: value]]` 支持结构化指令。标准 Fountain 渲染器将 `[[...]]` 视为不可见注释，完全兼容。
 
 ```fountain
-INT. LAB - NIGHT
+内景 咖啡厅 - 夜
+[[MOOD: tense]]
+[[SHOT: close-up]]
+[[STYLE: noir]]
+[[PROMPT: 赛博朋克咖啡厅，霓虹灯光，雨夜]]
+[[DURATION: 30s]]
+
+小美
+（低声地）
+你到底想怎样？
 
 [[IMAGE: diagram.png]]
-[[VIDEO: establishing-shot.mp4]]
-[[AUDIO: background-music.wav]]
-[[ASSET: image://path/to/file.png]]
-
-The scientist points at the screen.
+[[SFX: thunder]]
 ```
 
-**支持的格式**：
-- `[[IMAGE: path]]` - 图片素材
-- `[[VIDEO: path]]` - 视频素材
-- `[[AUDIO: path]]` - 音频素材
-- `[[ASSET: type://path]]` - 统一协议格式
+**指令分类**：
 
-**转换行为**：
-- 转换为 neko-cut 时间线时，资产引用自动生成 MediaElement
-- 创建独立的 Assets 轨道（Track 0）
-- 图片默认静音，视频保留音频
-- 时长根据场景自动估算
+| 类别 | 键 | 说明 |
+|------|-----|------|
+| 资产 | `IMAGE`, `VIDEO`, `AUDIO`, `ASSET` | 素材嵌入，转换为时间线 MediaElement |
+| 元数据 | `MOOD`, `MUSIC`, `VFX`, `SFX`, `DURATION` | 场景氛围/音效/时长（`DURATION` 覆盖启发式估算） |
+| 镜头 | `SHOT`, `ANGLE`, `MOVEMENT` | 分镜参数，映射到 `StoryShotPlan` schema |
+| AI | `PROMPT`, `STYLE`, `REF` | AI 生图提示/风格/参考图 |
+
+**编辑支持**：输入 `[[` 自动弹出指令键补全，选择后弹出值建议。TextMate 语法高亮区分指令键（关键字色）和值（字符串色）。
+
+**数据流**：指令由 parser 解析为 `Directive` AST 节点 → scriptIndexBuilder 收集到 `SceneEntry.directives` → storyScenePlanner 转换为类型化 `StoryShotPlan` 字段 → storyboardPlanner 传入 canvas `ShotNode.data` → canvas-generation-runtime 用于 AI 生图 prompt。
+
+**SHOT 值映射**（`ShotScale` 类型）：
+
+| 指令值 | ShotScale | 说明 |
+|--------|-----------|------|
+| `wide` / `establishing` / `long` | `LS` | 远景 |
+| `medium` / `mid` / `two-shot` | `MS` | 中景 |
+| `close-up` / `closeup` / `close` | `CU` | 特写 |
+| `extreme-close-up` / `ecu` / `insert` | `ECU` | 大特写 |
+| `over-the-shoulder` / `OTS` | `OTS` | 过肩 |
+| `POV` | `POV` | 主观 |
+| `aerial` | `LS` | 航拍 |

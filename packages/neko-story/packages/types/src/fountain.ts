@@ -156,6 +156,34 @@ export interface AssetReference {
   path: string;
 }
 
+export type DirectiveCategory = 'asset' | 'metadata' | 'camera' | 'ai';
+
+export interface Directive {
+  category: DirectiveCategory;
+  key: string;
+  value: string;
+}
+
+export const DIRECTIVE_KEYS = {
+  IMAGE: { category: 'asset' as const, label: 'Image embed' },
+  VIDEO: { category: 'asset' as const, label: 'Video embed' },
+  AUDIO: { category: 'asset' as const, label: 'Audio embed' },
+  ASSET: { category: 'asset' as const, label: 'Asset embed (protocol)' },
+  MOOD: { category: 'metadata' as const, label: 'Scene mood' },
+  MUSIC: { category: 'metadata' as const, label: 'Music cue' },
+  VFX: { category: 'metadata' as const, label: 'Visual effects' },
+  SFX: { category: 'metadata' as const, label: 'Sound effects' },
+  DURATION: { category: 'metadata' as const, label: 'Scene duration override' },
+  SHOT: { category: 'camera' as const, label: 'Shot type' },
+  ANGLE: { category: 'camera' as const, label: 'Camera angle' },
+  MOVEMENT: { category: 'camera' as const, label: 'Camera movement' },
+  PROMPT: { category: 'ai' as const, label: 'Generation prompt' },
+  STYLE: { category: 'ai' as const, label: 'Visual style' },
+  REF: { category: 'ai' as const, label: 'Reference image' },
+} as const;
+
+export type DirectiveKey = keyof typeof DIRECTIVE_KEYS;
+
 /**
  * Note (inline or block)
  * e.g., "[[note text]]" or block comments
@@ -165,6 +193,7 @@ export interface Note extends FountainElement {
   text: string;
   noteType: 'inline' | 'block' | 'line';
   assetRef?: AssetReference;
+  directive?: Directive;
 }
 
 /**

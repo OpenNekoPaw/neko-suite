@@ -40,6 +40,21 @@ describe('canvas generation runtime', () => {
     expect(messages[1]?.content).toBe('Generate an image prompt for this shot.');
   });
 
+  it('prefers generationPrompt over visualDescription and includes style/vfx', () => {
+    const userContent = buildCanvasShotPromptUserContent({
+      generationPrompt: '赛博朋克咖啡厅，霓虹雨夜',
+      visualDescription: 'A coffee shop scene',
+      visualStyle: 'noir',
+      vfx: ['rain', 'neon glow'],
+      shotScale: 'CU',
+    });
+
+    expect(userContent).toContain('Scene: 赛博朋克咖啡厅，霓虹雨夜');
+    expect(userContent).not.toContain('A coffee shop scene');
+    expect(userContent).toContain('Style: noir');
+    expect(userContent).toContain('VFX: rain, neon glow');
+  });
+
   it('delegates prompt generation to the injected LLM service', async () => {
     const chat = vi.fn().mockResolvedValue({
       message: { content: 'A concise cinematic English prompt.' },

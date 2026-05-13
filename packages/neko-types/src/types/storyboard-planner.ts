@@ -17,6 +17,10 @@ export interface StoryShotPlan {
   readonly dialogue?: string;
   readonly voiceOver?: string;
   readonly soundCue?: string;
+  readonly generationPrompt?: string;
+  readonly visualStyle?: string;
+  readonly referenceImagePath?: string;
+  readonly vfx?: readonly string[];
 }
 
 export interface StoryScenePlan {
@@ -41,6 +45,10 @@ export interface CanvasStoryboardShotPlan {
   readonly dialogue?: string;
   readonly voiceOver?: string;
   readonly soundCue?: string;
+  readonly generationPrompt?: string;
+  readonly visualStyle?: string;
+  readonly referenceImagePath?: string;
+  readonly vfx?: readonly string[];
 }
 
 export interface CanvasStoryboardScenePlan {

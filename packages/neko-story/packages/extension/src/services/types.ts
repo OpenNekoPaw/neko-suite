@@ -29,6 +29,7 @@ export interface SceneEntry {
   readonly sceneCharacters: readonly string[];
   readonly actionSummary: string;
   readonly estimatedDuration: number;
+  readonly directives: readonly import('@neko-story/types').Directive[];
   readonly line_start: number;
   readonly line_end: number; // Inclusive; last line before next scene or EOF
 }

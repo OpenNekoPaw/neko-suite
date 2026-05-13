@@ -405,6 +405,12 @@ export interface NekoStorySceneEntry {
   readonly actionSummary: string;
   /** Estimated scene duration in seconds */
   readonly estimatedDuration: number;
+  /** Structured directives from [[KEY: value]] notes within this scene */
+  readonly directives: readonly {
+    readonly category: string;
+    readonly key: string;
+    readonly value: string;
+  }[];
   readonly line_start: number;
   readonly line_end: number;
 }

@@ -16,9 +16,12 @@ import type {
   Synopsis,
   Note,
   AssetReference,
+  Directive,
+  DirectiveKey,
   PageBreak,
   Lyrics,
 } from '@neko-story/types';
+import { DIRECTIVE_KEYS } from '@neko-story/types';
 
 // CJK punctuation used to distinguish action lines from character cues
 const CJK_SENTENCE_PUNCTUATION = /[。！？…；，、：]/;
@@ -546,13 +549,28 @@ function parseAssetReference(text: string): AssetReference | undefined {
   return undefined;
 }
 
+function parseDirective(text: string): Directive | undefined {
+  const match = /^([A-Z][A-Z0-9_]{0,11}):\s*(.+)$/i.exec(text.trim());
+  if (!match) return undefined;
+  const rawKey = (match[1] ?? '').toUpperCase();
+  const value = (match[2] ?? '').trim();
+  const known = DIRECTIVE_KEYS[rawKey as DirectiveKey];
+  return {
+    category: known?.category ?? 'metadata',
+    key: rawKey,
+    value,
+  };
+}
+
 function createNote(lineNum: number, raw: string, text: string, noteType: Note['noteType']): Note {
   const assetRef = parseAssetReference(text);
+  const directive = parseDirective(text);
   return {
     type: 'note',
     text,
     noteType,
     assetRef,
+    directive,
     range: range(lineNum, 0, lineNum, raw.length),
     raw,
   };

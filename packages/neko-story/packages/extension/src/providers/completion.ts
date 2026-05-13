@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { normalizeCharacterLookupKey } from '@neko/shared';
+import { DIRECTIVE_KEYS, type DirectiveKey } from '@neko-story/types';
 import type { ICharacterWorkspaceIndex, IWorkspaceIndex } from '../services/types';
 
 // Scene heading prefix patterns: INT. / EXT. / INT./EXT. / EST. / I/E. / 内景 / 外景 / 内外景
@@ -92,6 +93,21 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
 
     await this.index.ensureInitialized();
     await this.characterIndex?.ensureInitialized();
+
+    // [[KEY: value]] directive value completions (must check before key match)
+    const directiveValueMatch = /\[\[([A-Z][A-Z0-9_]*)\s*:\s*(.*)$/i.exec(linePrefix);
+    if (directiveValueMatch) {
+      return this.getDirectiveValueCompletions(
+        (directiveValueMatch[1] ?? '').toUpperCase(),
+        directiveValueMatch[2] ?? '',
+      );
+    }
+
+    // [[KEY directive key completions
+    const directiveKeyMatch = /\[\[([A-Z]*)$/i.exec(linePrefix);
+    if (directiveKeyMatch) {
+      return this.getDirectiveKeyCompletions(directiveKeyMatch[1] ?? '');
+    }
 
     // @-forced character: always takes priority
     if (linePrefix.startsWith('@')) {
@@ -247,7 +263,95 @@ export class FountainCompletionProvider implements vscode.CompletionItemProvider
     });
     return [...englishItems, ...cjkItems];
   }
+
+  private getDirectiveKeyCompletions(typed: string): vscode.CompletionItem[] {
+    const upper = typed.toUpperCase();
+    return (Object.keys(DIRECTIVE_KEYS) as DirectiveKey[])
+      .filter((key) => !upper || key.startsWith(upper))
+      .map((key, i) => {
+        const info = DIRECTIVE_KEYS[key];
+        const item = new vscode.CompletionItem(key, vscode.CompletionItemKind.Keyword);
+        item.detail = info.label;
+        item.insertText = `${key}: `;
+        item.sortText = String(i).padStart(2, '0');
+        item.command = {
+          command: 'editor.action.triggerSuggest',
+          title: 'Trigger value suggestions',
+        };
+        return item;
+      });
+  }
+
+  private getDirectiveValueCompletions(key: string, typed: string): vscode.CompletionItem[] {
+    const values = DIRECTIVE_VALUE_SUGGESTIONS[key];
+    if (!values) return [];
+    const upper = typed.toUpperCase();
+    return values
+      .filter((v) => !upper || v.toUpperCase().startsWith(upper))
+      .map((v, i) => {
+        const item = new vscode.CompletionItem(v, vscode.CompletionItemKind.EnumMember);
+        item.detail = key;
+        item.sortText = String(i).padStart(2, '0');
+        return item;
+      });
+  }
 }
+
+const DIRECTIVE_VALUE_SUGGESTIONS: Record<string, string[]> = {
+  SHOT: [
+    'wide',
+    'medium',
+    'close-up',
+    'extreme-close-up',
+    'over-the-shoulder',
+    'POV',
+    'aerial',
+    'establishing',
+    'insert',
+    'two-shot',
+    'OTS',
+  ],
+  ANGLE: ['eye-level', 'low', 'high', 'dutch', 'bird-eye', 'worm-eye'],
+  MOVEMENT: [
+    'static',
+    'pan',
+    'tilt',
+    'dolly-in',
+    'dolly-out',
+    'tracking',
+    'crane',
+    'handheld',
+    'steadicam',
+    'zoom-in',
+    'zoom-out',
+  ],
+  MOOD: [
+    'tense',
+    'calm',
+    'melancholic',
+    'joyful',
+    'mysterious',
+    'romantic',
+    'comedic',
+    'dramatic',
+    'horror',
+    'epic',
+    'nostalgic',
+  ],
+  STYLE: [
+    'noir',
+    'cyberpunk',
+    'pastoral',
+    'documentary',
+    'anime',
+    'watercolor',
+    'photorealistic',
+    'minimalist',
+    'surreal',
+    'vintage',
+  ],
+  DURATION: ['5s', '10s', '15s', '30s', '45s', '1m', '1m30s', '2m'],
+};
 
 function mergeCharacterNames(
   preferredNames: readonly string[],

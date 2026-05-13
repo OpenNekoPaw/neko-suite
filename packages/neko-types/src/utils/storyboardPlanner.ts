@@ -109,6 +109,10 @@ export async function applyStoryboardPayloadToCanvas(
               dialogue: shot.dialogue,
               voiceOver: shot.voiceOver,
               soundCue: shot.soundCue,
+              generationPrompt: shot.generationPrompt,
+              visualStyle: shot.visualStyle,
+              referenceImagePath: shot.referenceImagePath,
+              vfx: shot.vfx ? [...shot.vfx] : undefined,
               // Phase 6.3 — stamp plan provenance when orchestrated
               ...(options.workflowPlanId !== undefined && {
                 workflowPlanId: options.workflowPlanId,
@@ -198,6 +202,10 @@ function normalizeShotPlan(
     dialogue: shotPlan.dialogue,
     voiceOver: shotPlan.voiceOver,
     soundCue: shotPlan.soundCue,
+    generationPrompt: shotPlan.generationPrompt,
+    visualStyle: shotPlan.visualStyle,
+    referenceImagePath: shotPlan.referenceImagePath,
+    vfx: shotPlan.vfx ? [...shotPlan.vfx] : undefined,
   };
 }
 

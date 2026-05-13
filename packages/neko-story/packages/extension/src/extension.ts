@@ -163,6 +163,7 @@ export function activate(context: vscode.ExtensionContext) {
       new FountainCompletionProvider(indexService, characterIndexService),
       '.', // Trigger on period for forced scene headings
       '@', // Trigger on @ for forced characters
+      '[', // Trigger on [ for [[KEY: value]] directives
     ),
     // Go to definition (cross-file via index)
     vscode.languages.registerDefinitionProvider(
@@ -203,7 +204,7 @@ export function activate(context: vscode.ExtensionContext) {
     // LLM ghost text — 400 ms debounce, delegates to neko.agent.internalChat
     vscode.languages.registerInlineCompletionItemProvider(
       FOUNTAIN_SELECTOR,
-      new FountainInlineCompletionProvider(),
+      new FountainInlineCompletionProvider(indexService, characterIndexService),
     ),
   );
 
