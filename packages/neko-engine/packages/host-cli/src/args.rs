@@ -440,6 +440,12 @@ define_actions!(SceneAction {
     UpdateMaterial => "update_material",
     /// Delete a scene node
     DeleteNode => "delete_node",
+    /// Update VRM face parameter presets
+    SetFaceParams => "set_face_params",
+    /// Get VRM face parameter presets
+    GetFaceParams => "get_face_params",
+    /// Update scene camera settings
+    UpdateCamera => "update_camera",
 });
 
 // ---------------------------------------------------------------------------

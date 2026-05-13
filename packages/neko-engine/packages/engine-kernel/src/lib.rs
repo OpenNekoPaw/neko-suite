@@ -44,8 +44,8 @@ pub mod prelude {
     pub use crate::error::{Error, Result};
     pub use crate::gpu::GpuContext;
     pub use crate::services::{
-        AudioService, ExportService as CoreExportService, IAudioService, IExportService,
-        IDeviceBindingService, IImageService, INodeService, IStreamPlayback, ITaskService,
+        AudioService, ExportService as CoreExportService, IAudioService, IDeviceBindingService,
+        IExportService, IImageService, INodeService, IStreamPlayback, ITaskService,
         ITimelineService, IVideoService, ImageService, NodeService, TaskService, TimelineService,
         VideoService,
     };

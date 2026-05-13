@@ -2,6 +2,7 @@
 //!
 //! Provides audio-related operations: probing, transcoding, streaming, and waveform generation.
 
+use crate::audio::dsp::speed_resampler::SpeedResampler;
 use crate::audio::dsp::AudioEffect;
 use crate::audio::mic_capture::{
     AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult,
@@ -339,23 +340,29 @@ impl IAudioService for AudioService {
 
             let sample_rate = 48000u32;
             let channels = 2u16;
+            let ch = channels as usize;
+            let output_buffer_frames: usize = 4096;
+            let buf_duration = output_buffer_frames as f64 / sample_rate as f64;
 
-            // Typical decoded frame ~1024 samples at 48kHz ≈ 21ms; 50fps pacer is a safe upper bound
-            let mut pacer = WallClockPacer::new(50.0, 1.0);
+            let pacer_fps = (sample_rate as f64 / output_buffer_frames as f64).min(120.0);
+            let mut pacer = WallClockPacer::new(pacer_fps, 1.0);
+            let resampler = SpeedResampler::new(ch);
             let mut current_speed = 1.0;
             let mut last_seen_paused = false;
             let mut last_seek_seq: u64 = 0;
+            let mut content_time = 0.0;
+            // Residual buffer: accumulates decoded f32 samples between iterations
+            let mut residual: Vec<f32> = Vec::new();
+            let mut eof_reached = false;
             // Fade-in ramp after seek: 5ms at 48kHz = 240 samples
             let fade_in_samples_total = (sample_rate as f64 * 0.005) as usize;
             let mut fade_in_remaining: usize = 0;
 
             loop {
-                // Check cancellation
                 if cancel_clone.is_cancelled() {
                     break;
                 }
 
-                // Read playback state
                 let state = state_rx.borrow().clone();
 
                 // Handle seek request (dedup via seek_seq)
@@ -363,18 +370,19 @@ impl IAudioService for AudioService {
                     if state.seek_seq != last_seek_seq {
                         last_seek_seq = state.seek_seq;
                         let _ = AudioDecoder::seek(&mut decoder, time);
+                        content_time = time;
+                        residual.clear();
+                        eof_reached = false;
                         pacer.reset();
                         fade_in_remaining = fade_in_samples_total;
                     }
                 }
 
-                // Detect pause→resume transition: reset pacer to avoid time jump
                 if last_seen_paused && !state.paused {
                     pacer.reset();
                 }
                 last_seen_paused = state.paused;
 
-                // When paused, sleep and continue
                 if state.paused {
                     std::thread::sleep(std::time::Duration::from_millis(16));
                     continue;
@@ -384,73 +392,106 @@ impl IAudioService for AudioService {
                 if (state.speed - current_speed).abs() > 0.001 {
                     current_speed = state.speed;
                     pacer.update_speed(current_speed);
+                    residual.clear();
                 }
 
-                // Decode next audio frame and send raw PCM
-                match AudioDecoder::decode_next(&mut decoder) {
-                    Ok(Some(frame)) => {
-                        let duration = frame.duration();
-                        let mut pcm_data = frame.data.clone();
+                // Determine how many source frames we need for this output buffer
+                let source_frames_needed =
+                    (output_buffer_frames as f64 * current_speed).ceil() as usize;
+                let source_samples_needed = source_frames_needed * ch;
 
-                        // Apply fade-in ramp after seek to eliminate click/pop
-                        if fade_in_remaining > 0 {
-                            let ch = channels as usize;
-                            let total = fade_in_samples_total;
-                            // PCM data is raw bytes of f32le samples
-                            let samples: &mut [f32] = bytemuck::cast_slice_mut(&mut pcm_data);
-                            let num_samples = samples.len() / ch;
-                            for i in 0..num_samples {
-                                if fade_in_remaining == 0 {
-                                    break;
-                                }
-                                let progress = 1.0 - (fade_in_remaining as f32 / total as f32);
-                                let gain = progress * progress; // quadratic ease-in
-                                for c in 0..ch {
-                                    samples[i * ch + c] *= gain;
-                                }
-                                fade_in_remaining -= 1;
-                            }
-                        }
+                // Fill residual from decoder until we have enough
+                while residual.len() < source_samples_needed && !eof_reached {
+                    match AudioDecoder::decode_next(&mut decoder) {
+                        Ok(Some(frame)) => {
+                            let mut pcm_data = frame.data.clone();
 
-                        let packed = pack_pcm_f32le_stream_frame(
-                            &pcm_data,
-                            frame.timestamp,
-                            duration,
-                            sample_rate,
-                            channels,
-                        );
-                        let _ = tx.send(packed);
-                    }
-                    Ok(None) => {
-                        // EOF — check loop region first
-                        let state = state_rx.borrow().clone();
-                        if let Some(ref region) = state.loop_region {
-                            let seek_time = region.in_point;
-                            let _ = AudioDecoder::seek(&mut decoder, seek_time);
-                            pacer.reset();
-                        } else {
-                            // No loop: enter EOF idle wait for seek
-                            match eof_idle_wait(
-                                &cancel_clone,
-                                &state_rx,
-                                last_seek_seq,
-                                EOF_IDLE_TIMEOUT,
-                            ) {
-                                Some(time) => {
-                                    let _ = AudioDecoder::seek(&mut decoder, time);
-                                    pacer.reset();
+                            // Apply fade-in ramp after seek
+                            if fade_in_remaining > 0 {
+                                let total = fade_in_samples_total;
+                                let samples: &mut [f32] =
+                                    bytemuck::cast_slice_mut(&mut pcm_data);
+                                let num_samples = samples.len() / ch;
+                                for i in 0..num_samples {
+                                    if fade_in_remaining == 0 {
+                                        break;
+                                    }
+                                    let progress =
+                                        1.0 - (fade_in_remaining as f32 / total as f32);
+                                    let gain = progress * progress;
+                                    for c in 0..ch {
+                                        samples[i * ch + c] *= gain;
+                                    }
+                                    fade_in_remaining -= 1;
                                 }
-                                None => break, // Cancelled or timeout
                             }
+
+                            let samples: &[f32] = bytemuck::cast_slice(&pcm_data);
+                            residual.extend_from_slice(samples);
                         }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Audio stream decode error: {}", e);
-                        break;
+                        Ok(None) => {
+                            eof_reached = true;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Audio stream decode error: {}", e);
+                            eof_reached = true;
+                        }
                     }
                 }
 
-                // Wall-clock pacing
+                if residual.is_empty() && eof_reached {
+                    // True EOF — check loop or idle wait
+                    let state = state_rx.borrow().clone();
+                    if let Some(ref region) = state.loop_region {
+                        let _ = AudioDecoder::seek(&mut decoder, region.in_point);
+                        content_time = region.in_point;
+                        eof_reached = false;
+                        pacer.reset();
+                        continue;
+                    } else {
+                        match eof_idle_wait(
+                            &cancel_clone,
+                            &state_rx,
+                            last_seek_seq,
+                            EOF_IDLE_TIMEOUT,
+                        ) {
+                            Some(time) => {
+                                let _ = AudioDecoder::seek(&mut decoder, time);
+                                content_time = time;
+                                eof_reached = false;
+                                pacer.reset();
+                                continue;
+                            }
+                            None => break,
+                        }
+                    }
+                }
+
+                // Consume source_samples_needed from residual (or all remaining if near EOF)
+                let consume = source_samples_needed.min(residual.len());
+                let source_chunk: Vec<f32> = residual.drain(..consume).collect();
+                let source_frames = consume / ch;
+
+                // Resample to output_buffer_frames
+                let speed_is_unity = (current_speed - 1.0).abs() < 0.001;
+                let output_data = if speed_is_unity || source_frames == output_buffer_frames {
+                    source_chunk
+                } else {
+                    resampler.resample(&source_chunk, output_buffer_frames)
+                };
+
+                let content_advance = buf_duration * current_speed;
+                let pcm_bytes: &[u8] = bytemuck::cast_slice(&output_data);
+                let packed = pack_pcm_f32le_stream_frame(
+                    pcm_bytes,
+                    content_time,
+                    content_advance,
+                    sample_rate,
+                    channels,
+                );
+                let _ = tx.send(packed);
+                content_time += content_advance;
+
                 pacer.wait_for_next_frame();
             }
 
@@ -549,6 +590,24 @@ mod tests {
     fn create_test_service() -> AudioService {
         let task_service = Arc::new(TaskService::new());
         AudioService::new(None, task_service)
+    }
+
+    fn optional_audio_fixture(env_var: &str, file_name: &str) -> Option<std::path::PathBuf> {
+        let fixture_dir = std::env::var_os(env_var)?;
+        let test_file = std::path::PathBuf::from(fixture_dir).join(file_name);
+        if !test_file.exists() {
+            eprintln!(
+                "Skipping test: {}={} does not contain {}",
+                env_var,
+                test_file
+                    .parent()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_default(),
+                file_name
+            );
+            return None;
+        }
+        Some(test_file)
     }
 
     #[tokio::test]
@@ -697,14 +756,13 @@ mod tests {
     /// Integration test: start audio stream with real mp3 file and verify PCM f32le frames
     #[tokio::test]
     async fn test_audio_stream_real_file_mp3() {
-        let test_file = std::path::Path::new("/Users/feng/git/neko-test/cases/test.mp3");
-        if !test_file.exists() {
-            eprintln!("Skipping test: test file not found at {:?}", test_file);
+        let Some(test_file) = optional_audio_fixture("NEKO_AUDIO_TEST_FIXTURE_DIR", "test.mp3")
+        else {
             return;
-        }
+        };
 
         let service = create_test_service();
-        let result = service.start_stream(test_file, "test-audio").await;
+        let result = service.start_stream(&test_file, "test-audio").await;
         assert!(result.is_ok(), "start_stream should succeed");
 
         let (stream_id, mut rx) = result.unwrap();
@@ -760,14 +818,13 @@ mod tests {
     /// Integration test: start audio stream with real aac file
     #[tokio::test]
     async fn test_audio_stream_real_file_aac() {
-        let test_file = std::path::Path::new("/Users/feng/git/neko-test/cases/test.aac");
-        if !test_file.exists() {
-            eprintln!("Skipping test: test file not found at {:?}", test_file);
+        let Some(test_file) = optional_audio_fixture("NEKO_AUDIO_TEST_FIXTURE_DIR", "test.aac")
+        else {
             return;
-        }
+        };
 
         let service = create_test_service();
-        let result = service.start_stream(test_file, "test-aac").await;
+        let result = service.start_stream(&test_file, "test-aac").await;
         assert!(result.is_ok(), "start_stream should succeed for aac");
 
         let (stream_id, mut rx) = result.unwrap();

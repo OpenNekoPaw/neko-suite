@@ -676,7 +676,12 @@ impl PbrRenderer {
                 }],
             });
             // Buffers must outlive the render pass; bind groups borrow them.
-            Some((camera_buffer, camera_bind_group, light_buffer, light_bind_group))
+            Some((
+                camera_buffer,
+                camera_bind_group,
+                light_buffer,
+                light_bind_group,
+            ))
         };
 
         // Begin render pass

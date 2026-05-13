@@ -108,7 +108,10 @@ impl AssetCache {
         // Load meshes
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
-                let key = (uri.clone(), composite_primitive_id(mesh.index(), primitive.index()));
+                let key = (
+                    uri.clone(),
+                    composite_primitive_id(mesh.index(), primitive.index()),
+                );
                 if self.meshes.contains_key(&key) {
                     continue;
                 }

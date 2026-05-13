@@ -3,6 +3,7 @@
 //! Spawns a blocking thread that runs `AudioMixdown::mix_buffer()` in a loop,
 //! packing output as PCM f32le frames and broadcasting via the stream infrastructure.
 
+use crate::audio::dsp::speed_resampler::SpeedResampler;
 use crate::domain::FrameData;
 use crate::error::Result;
 use crate::services::audio_mixdown::{AudioMixdown, MixdownConfig};
@@ -54,6 +55,7 @@ pub async fn start_mix_stream(
 
         let mut pacer =
             WallClockPacer::new((sample_rate as f64 / buffer_size as f64).min(120.0), 1.0);
+        let mut resampler = SpeedResampler::new(channels as usize);
         let mut current_speed = 1.0;
         let mut current_time = 0.0;
         let mut last_seen_paused = false;
@@ -86,6 +88,7 @@ pub async fn start_mix_stream(
                     channels = mixdown.channels();
                     buffer_size = mixdown.buffer_size();
                     buf_duration = buffer_size as f64 / sample_rate as f64;
+                    resampler = SpeedResampler::new(channels as usize);
                     pacer = WallClockPacer::new(
                         (sample_rate as f64 / buffer_size as f64).min(120.0),
                         current_speed,
@@ -122,24 +125,66 @@ pub async fn start_mix_stream(
                 pacer.update_speed(current_speed);
             }
 
-            // Mix at current time
-            match mixdown.mix_buffer(current_time) {
-                Ok(buf) => {
-                    let pcm_bytes: &[u8] = bytemuck::cast_slice(&buf.data);
-                    let packed = pack_pcm_f32le_stream_frame(
-                        pcm_bytes,
-                        current_time,
-                        buf_duration,
-                        sample_rate,
-                        channels,
-                    );
-                    let _ = tx.send(packed);
-                    current_time += buf_duration * current_speed;
+            // Mix at current time with speed-aware resampling
+            let speed_is_unity = (current_speed - 1.0).abs() < 0.001;
+            if speed_is_unity {
+                match mixdown.mix_buffer(current_time) {
+                    Ok(buf) => {
+                        let pcm_bytes: &[u8] = bytemuck::cast_slice(&buf.data);
+                        let packed = pack_pcm_f32le_stream_frame(
+                            pcm_bytes,
+                            current_time,
+                            buf_duration,
+                            sample_rate,
+                            channels,
+                        );
+                        let _ = tx.send(packed);
+                        current_time += buf_duration;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Mix stream buffer error: {}", e);
+                        break;
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!("Mix stream buffer error: {}", e);
+            } else {
+                let source_duration = buf_duration * current_speed;
+                let source_frames_needed =
+                    (buffer_size as f64 * current_speed).ceil() as usize;
+                let ch = channels as usize;
+                let mut accumulated = Vec::with_capacity(source_frames_needed * ch);
+                let mut mix_time = current_time;
+                let mut mix_error = false;
+
+                while accumulated.len() < source_frames_needed * ch {
+                    match mixdown.mix_buffer(mix_time) {
+                        Ok(buf) => {
+                            let remaining = source_frames_needed * ch - accumulated.len();
+                            let take = remaining.min(buf.data.len());
+                            accumulated.extend_from_slice(&buf.data[..take]);
+                            mix_time += buf_duration;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Mix stream buffer error: {}", e);
+                            mix_error = true;
+                            break;
+                        }
+                    }
+                }
+                if mix_error {
                     break;
                 }
+
+                let resampled = resampler.resample(&accumulated, buffer_size);
+                let pcm_bytes: &[u8] = bytemuck::cast_slice(&resampled);
+                let packed = pack_pcm_f32le_stream_frame(
+                    pcm_bytes,
+                    current_time,
+                    buf_duration,
+                    sample_rate,
+                    channels,
+                );
+                let _ = tx.send(packed);
+                current_time += source_duration;
             }
 
             // EOF check

@@ -16,6 +16,7 @@ pub mod limiter;
 pub mod noise_gate;
 pub mod parametric_eq;
 pub mod reverb;
+pub mod speed_resampler;
 pub mod traits;
 
 pub use effect_chain::EffectChain;
