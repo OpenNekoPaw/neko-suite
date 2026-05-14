@@ -1,4 +1,6 @@
 export { EngineClient } from '../EngineClient';
+export { sourceReplacementToElementPatch } from './sourceReplacement';
+export type { TimelineSourcePatch } from './sourceReplacement';
 export type {
   // Request / Response
   ActionRequest,
@@ -35,8 +37,16 @@ export type {
   WaveformResult,
   StreamHandle,
   // Effects types
+  EffectCapability,
+  EffectCapabilityParamDef,
+  EffectKind,
+  EffectParamOption,
   ShaderParamDef,
   EffectPresetInfo,
   EffectApplyResult,
+  ModelPreprocessOperation,
+  ModelPreprocessRequest,
+  ModelPreprocessResult,
+  TimelineSourceReplacement,
 } from './types';
 export { transformDiffResponse } from './responseTransform';

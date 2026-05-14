@@ -40,6 +40,7 @@ import type {
   Resolution,
   LoudnessAnalysis,
   SilenceAnalysis,
+  EffectCapability,
   EffectPresetInfo,
   EffectApplyResult,
   ShaderParamDef,
@@ -53,6 +54,8 @@ import type {
   MidiConnectResult,
   GamepadInfo,
   GamepadConnectResult,
+  ModelPreprocessRequest,
+  ModelPreprocessResult,
   DocumentProbeResult,
 } from './engine/types';
 import { transformDiffResponse } from './engine/responseTransform';
@@ -141,6 +144,38 @@ export interface SceneRenderStreamHandle {
   descriptor: RenderStreamDescriptor;
   wsUrl: string;
   audioWsUrl?: string;
+}
+
+export type PuppetStreamFormat = 'json' | 'h264';
+
+export interface PuppetStreamOptions {
+  format?: PuppetStreamFormat;
+  width?: number;
+  height?: number;
+  fps?: number;
+  bitrate?: number;
+}
+
+export interface PuppetH264StreamHandle {
+  wsUrl: string;
+  width: number;
+  height: number;
+  fps: number;
+  codecString: string;
+}
+
+export interface PuppetExportH264Options {
+  outputPath: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+  durationMs?: number;
+  bitrate?: number;
+  gopSize?: number;
+}
+
+export interface PuppetExportSummary {
+  framesSubmitted: number;
 }
 
 const logger = getLogger('EngineClient');
@@ -324,6 +359,15 @@ function normalizeSceneCapturePreview(value: unknown): SceneCapturePreview {
   };
 }
 
+function normalizePuppetExportSummary(value: unknown): PuppetExportSummary {
+  if (!isRecord(value)) {
+    return { framesSubmitted: 0 };
+  }
+  return {
+    framesSubmitted: getNumber(value.frames_submitted ?? value.framesSubmitted),
+  };
+}
+
 function normalizeAudioStreamDescriptor(value: unknown): AudioStreamDescriptor | undefined {
   if (!isRecord(value)) return undefined;
   const streamId = getString(value.streamId);
@@ -448,6 +492,17 @@ export class EngineClient {
 
   getAudioWsUrl(streamId: string): string {
     return `ws://127.0.0.1:${this.port}/v1/audio/${streamId}`;
+  }
+
+  getPuppetStreamWsUrl(options?: PuppetStreamOptions): string {
+    const params = new URLSearchParams();
+    if (options?.format) params.set('format', options.format);
+    if (options?.width !== undefined) params.set('width', String(options.width));
+    if (options?.height !== undefined) params.set('height', String(options.height));
+    if (options?.fps !== undefined) params.set('fps', String(options.fps));
+    if (options?.bitrate !== undefined) params.set('bitrate', String(options.bitrate));
+    const query = params.toString();
+    return `ws://127.0.0.1:${this.port}/v1/puppets/stream${query ? `?${query}` : ''}`;
   }
 
   getSceneControlWsUrl(): string {
@@ -888,6 +943,20 @@ export class EngineClient {
     });
     this.assertOk(resp, 'effects:list');
     return (resp.data as EffectPresetInfo[] | undefined) ?? [];
+  }
+
+  /**
+   * List all registered effect capabilities.
+   * Dispatches `effects:list-capabilities`.
+   */
+  async listEffectCapabilities(): Promise<EffectCapability[]> {
+    const resp = await this.dispatch({
+      group: 'effects',
+      action: 'list-capabilities',
+      options: {},
+    });
+    this.assertOk(resp, 'effects:list-capabilities');
+    return (resp.data as EffectCapability[] | undefined) ?? [];
   }
 
   /**
@@ -1434,6 +1503,25 @@ export class EngineClient {
     return (resp.data ?? []) as unknown[];
   }
 
+  /** Export the current puppet animation/render state as H.264 through the engine muxer. */
+  async exportPuppetH264(options: PuppetExportH264Options): Promise<PuppetExportSummary> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'export_h264',
+      options: {
+        output_path: options.outputPath,
+        width: options.width,
+        height: options.height,
+        fps: options.fps,
+        duration_ms: options.durationMs,
+        bitrate: options.bitrate,
+        gop_size: options.gopSize,
+      },
+    });
+    this.assertOk(resp, 'puppets:export_h264');
+    return normalizePuppetExportSummary(resp.data);
+  }
+
   // ── Scene Keyframe CRUD ──
 
   /** Get keyframe tracks for a scene animation clip */
@@ -1611,9 +1699,23 @@ export class EngineClient {
    * The server pushes PuppetDelta at ~60fps while the connection is active.
    * Returns the raw WebSocket — caller is responsible for closing it.
    */
-  openPuppetStream(): WebSocket {
-    const url = `ws://127.0.0.1:${this.port}/v1/puppets/stream`;
-    return new WebSocket(url);
+  openPuppetStream(options?: PuppetStreamOptions): WebSocket {
+    return new WebSocket(this.getPuppetStreamWsUrl(options));
+  }
+
+  createPuppetH264StreamHandle(
+    options?: Omit<PuppetStreamOptions, 'format'>,
+  ): PuppetH264StreamHandle {
+    const width = options?.width ?? 512;
+    const height = options?.height ?? 512;
+    const fps = options?.fps ?? 60;
+    return {
+      wsUrl: this.getPuppetStreamWsUrl({ ...options, format: 'h264' }),
+      width,
+      height,
+      fps,
+      codecString: 'avc1.42001f',
+    };
   }
 
   // =========================================================================
@@ -1909,6 +2011,20 @@ export class EngineClient {
     };
   }
 
+  /**
+   * Run offline ML preprocessing and return timeline source replacement metadata.
+   * Dispatches `models:preprocess`.
+   */
+  async preprocessModelSource(request: ModelPreprocessRequest): Promise<ModelPreprocessResult> {
+    const resp = await this.dispatch({
+      group: 'models',
+      action: 'preprocess',
+      options: { ...request },
+    });
+    this.assertOk(resp, 'models:preprocess');
+    return resp.data as ModelPreprocessResult;
+  }
+
   // =========================================================================
   // Internals
   // =========================================================================
@@ -1937,15 +2053,16 @@ export class EngineClient {
    */
   async registerDocument(source: string): Promise<string> {
     const resolved = this.resolveSource(source);
-    const res = await fetch(`${this.baseUrl}/v1/preview/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filePath: resolved }),
+    const resp = await this.dispatch({
+      group: 'previews',
+      action: 'register-token',
+      options: { filePath: resolved },
     });
-    if (!res.ok) {
-      throw new Error(`documents:register failed: ${res.status} ${res.statusText}`);
+    this.assertOk(resp, 'previews:register-token');
+    const body = resp.data as { token?: string } | undefined;
+    if (!body?.token) {
+      throw new Error('previews:register-token returned no token');
     }
-    const body = (await res.json()) as { token: string };
     return body.token;
   }
 
@@ -1956,16 +2073,13 @@ export class EngineClient {
    * receiving raw local file paths for Neko-owned preview media.
    */
   async registerPreviewAsset(request: RegisterPreviewAssetRequest): Promise<PreviewManifest> {
-    const resolved = this.resolveSource(request.source);
-    const res = await fetch(`${this.baseUrl}/v1/preview/assets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...request, source: resolved }),
+    const resp = await this.dispatch({
+      group: 'previews',
+      action: 'register-asset',
+      options: { ...request },
     });
-    if (!res.ok) {
-      throw new Error(`preview:registerAsset failed: ${res.status} ${res.statusText}`);
-    }
-    return (await res.json()) as PreviewManifest;
+    this.assertOk(resp, 'previews:register-asset');
+    return resp.data as PreviewManifest;
   }
 
   /** Request a manifest-linked preview variant such as thumbnail or FOV crop. */
@@ -1973,15 +2087,14 @@ export class EngineClient {
     assetId: string,
     request: PreviewVariantRequest,
   ): Promise<PreviewVariant> {
-    const res = await fetch(`${this.baseUrl}/v1/preview/assets/${assetId}/variants`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+    const resp = await this.dispatch({
+      group: 'previews',
+      action: 'request-variant',
+      id: assetId,
+      options: { ...request },
     });
-    if (!res.ok) {
-      throw new Error(`preview:requestVariant failed: ${res.status} ${res.statusText}`);
-    }
-    return (await res.json()) as PreviewVariant;
+    this.assertOk(resp, 'previews:request-variant');
+    return resp.data as PreviewVariant;
   }
 
   /** Persist low-frequency preview metadata such as projection/default view. */
@@ -1989,21 +2102,23 @@ export class EngineClient {
     assetId: string,
     request: UpdatePreviewAssetMetadataRequest,
   ): Promise<PreviewManifest> {
-    const res = await fetch(`${this.baseUrl}/v1/preview/assets/${assetId}/metadata`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+    const resp = await this.dispatch({
+      group: 'previews',
+      action: 'update-metadata',
+      id: assetId,
+      options: { ...request },
     });
-    if (!res.ok) {
-      throw new Error(`preview:updateAssetMetadata failed: ${res.status} ${res.statusText}`);
-    }
-    return (await res.json()) as PreviewManifest;
+    this.assertOk(resp, 'previews:update-metadata');
+    return resp.data as PreviewManifest;
   }
 
   /** Unregister a preview asset and release manifest tokens/variants best-effort. */
   async unregisterPreviewAsset(assetIdOrToken: string): Promise<void> {
-    await fetch(`${this.baseUrl}/v1/preview/assets/${assetIdOrToken}`, {
-      method: 'DELETE',
+    await this.dispatch({
+      group: 'previews',
+      action: 'unregister',
+      id: assetIdOrToken,
+      options: {},
     }).catch(() => {
       // Best-effort; engine may have already stopped.
     });
@@ -2016,8 +2131,11 @@ export class EngineClient {
 
   /** Unregister a previously registered document token. */
   async unregisterDocument(token: string): Promise<void> {
-    await fetch(`${this.baseUrl}/v1/preview/unregister/${token}`, {
-      method: 'DELETE',
+    await this.dispatch({
+      group: 'previews',
+      action: 'unregister-token',
+      id: token,
+      options: {},
     }).catch(() => {
       // Best-effort; engine may have already stopped.
     });

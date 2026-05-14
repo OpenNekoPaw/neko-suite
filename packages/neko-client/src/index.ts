@@ -105,6 +105,11 @@ export {
   type EnginePerceptionFacade,
   type PerceptionSimilarityRequest,
   type PerceptionTranscribeRequest,
+  type PuppetExportH264Options,
+  type PuppetExportSummary,
+  type PuppetH264StreamHandle,
+  type PuppetStreamFormat,
+  type PuppetStreamOptions,
   type SceneCaptureOptions,
   type SceneCapturePreview,
   type SceneRenderStreamHandle,
@@ -168,9 +173,17 @@ export type {
   SilenceAnalysis,
   SilenceRegion,
   // Effects types
+  EffectCapability,
+  EffectCapabilityParamDef,
+  EffectKind,
+  EffectParamOption,
   ShaderParamDef,
   EffectPresetInfo,
   EffectApplyResult,
+  ModelPreprocessOperation,
+  ModelPreprocessRequest,
+  ModelPreprocessResult,
+  TimelineSourceReplacement,
   // Audio input / recording
   AudioInputDevice,
   RecordStartResult,
@@ -198,3 +211,5 @@ export type {
 } from './engine/types';
 
 export { transformDiffResponse } from './engine/responseTransform';
+export { sourceReplacementToElementPatch } from './engine/sourceReplacement';
+export type { TimelineSourcePatch } from './engine/sourceReplacement';

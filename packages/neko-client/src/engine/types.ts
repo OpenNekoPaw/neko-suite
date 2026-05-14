@@ -420,6 +420,43 @@ export interface EffectPresetInfo {
   params: ShaderParamDef[];
 }
 
+export type EffectKind = 'shader' | 'audio' | 'model' | 'lut';
+
+export type EffectSource = 'built-in' | 'plugin' | 'user';
+
+export interface EffectParamOption {
+  value: unknown;
+  label?: string;
+  labelKey?: string;
+}
+
+export interface EffectCapabilityParamDef {
+  name: string;
+  type: string;
+  default?: unknown;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  labelKey?: string;
+  options?: EffectParamOption[];
+  animatable?: boolean;
+}
+
+export interface EffectCapability {
+  id: string;
+  kind: EffectKind;
+  source: EffectSource;
+  sourceId?: string;
+  name: string;
+  nameKey?: string;
+  description?: string;
+  category?: string;
+  gpuAccelerated?: boolean;
+  entry?: string;
+  params: EffectCapabilityParamDef[];
+}
+
 /** Result of `effects:apply` — processed RGBA frame */
 export interface EffectApplyResult {
   width: number;
@@ -428,6 +465,33 @@ export interface EffectApplyResult {
   size: number;
   /** Base64-encoded RGBA pixel data */
   data: string;
+}
+
+export type ModelPreprocessOperation = 'upscale' | 'denoise';
+
+export interface ModelPreprocessRequest {
+  operation: ModelPreprocessOperation;
+  model: string;
+  input: string;
+  output: string;
+  clipId?: string;
+  trackId?: string;
+  scale?: number;
+  strength?: number;
+}
+
+export interface TimelineSourceReplacement {
+  trackId?: string | null;
+  elementId?: string | null;
+  src: string;
+  resourceId?: string | null;
+}
+
+export interface ModelPreprocessResult {
+  operation: ModelPreprocessOperation;
+  input: string;
+  output: string;
+  sourceReplacement: TimelineSourceReplacement;
 }
 
 /** Stream handle with convenience WebSocket URL */
