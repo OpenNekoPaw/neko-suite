@@ -182,18 +182,6 @@ export function PuppetApp() {
 
           // Get initial deformed meshes for rendering
           const meshes = await ctrl.getMeshes();
-          console.log('[PuppetApp] deformedMesh[0] vertices:', JSON.stringify(meshes[0]?.vertices));
-          console.log(
-            '[PuppetApp] snapshot[0] indices:',
-            JSON.stringify(snapshot.meshes?.[0]?.indices),
-          );
-          console.log('[PuppetApp] snapshot[0] uvs:', JSON.stringify(snapshot.meshes?.[0]?.uvs));
-          console.log(
-            '[PuppetApp] textures:',
-            store.textures.length,
-            store.textures[0]?.width,
-            store.textures[0]?.height,
-          );
           store.setDeformedMeshes(meshes);
 
           // Load parameters and animations

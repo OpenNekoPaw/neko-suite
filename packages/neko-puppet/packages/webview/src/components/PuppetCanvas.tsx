@@ -4,7 +4,7 @@
  * Draws deformed triangle meshes with texture mapping using Canvas 2D API.
  * Supports zoom/pan via mouse wheel and drag.
  */
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePuppetStore } from '../stores/puppet-store';
 import type { DeformedMesh, MeshSnapshot } from '../animation/types';
 
@@ -101,6 +101,27 @@ function drawSolidTriangle(
   ctx.fill();
 }
 
+function buildSolidColorCache(textures: ImageBitmap[]): ReadonlyMap<number, string> {
+  const colors = new Map<number, string>();
+  const sampleCanvas = document.createElement('canvas');
+  const sampleCtx = sampleCanvas.getContext('2d');
+  if (!sampleCtx) return colors;
+
+  textures.forEach((texture, index) => {
+    if (texture.width > 16 || texture.height > 16) return;
+
+    sampleCanvas.width = texture.width;
+    sampleCanvas.height = texture.height;
+    sampleCtx.clearRect(0, 0, texture.width, texture.height);
+    sampleCtx.drawImage(texture, 0, 0);
+
+    const pixel = sampleCtx.getImageData(texture.width >> 1, texture.height >> 1, 1, 1).data;
+    colors.set(index, `rgba(${pixel[0]},${pixel[1]},${pixel[2]},${(pixel[3] ?? 255) / 255})`);
+  });
+
+  return colors;
+}
+
 // ── Main render function ────────────────────────────────────────────────────
 
 function renderPuppet(
@@ -109,6 +130,7 @@ function renderPuppet(
   meshSnapshots: MeshSnapshot[],
   deformedMeshes: DeformedMesh[],
   textures: ImageBitmap[],
+  solidColors: ReadonlyMap<number, string>,
   viewport: { zoom: number; panX: number; panY: number },
 ): void {
   const dpr = window.devicePixelRatio || 1;
@@ -143,20 +165,7 @@ function renderPuppet(
     const { indices, uvs, texture_index } = snapshot;
     const verts = dm.vertices;
     const tex = texture_index != null ? textures[texture_index] : undefined;
-
-    // For small solid-color textures, sample center pixel as fill color
-    let solidColor: string | undefined;
-    if (tex && tex.width <= 16 && tex.height <= 16) {
-      const sampleCanvas = document.createElement('canvas');
-      sampleCanvas.width = tex.width;
-      sampleCanvas.height = tex.height;
-      const sCtx = sampleCanvas.getContext('2d');
-      if (sCtx) {
-        sCtx.drawImage(tex, 0, 0);
-        const pixel = sCtx.getImageData(tex.width >> 1, tex.height >> 1, 1, 1).data;
-        solidColor = `rgba(${pixel[0]},${pixel[1]},${pixel[2]},${(pixel[3] ?? 255) / 255})`;
-      }
-    }
+    const solidColor = texture_index != null ? solidColors.get(texture_index) : undefined;
 
     ctx.globalAlpha = dm.opacity;
     ctx.globalCompositeOperation = BLEND_MODE_MAP[dm.blend_mode] ?? 'source-over';
@@ -244,6 +253,7 @@ export function PuppetCanvas() {
   const viewport = usePuppetStore((s) => s.viewport);
   const previewFrame = usePuppetStore((s) => s.previewFrame);
   const setViewport = usePuppetStore((s) => s.setViewport);
+  const solidColors = useMemo(() => buildSolidColorCache(textures), [textures]);
 
   // Mark dirty when mesh data changes
   useEffect(() => {
@@ -265,7 +275,7 @@ export function PuppetCanvas() {
         if (previewFrame) {
           renderPreviewFrame(ctx, canvas, previewFrame);
         } else {
-          renderPuppet(ctx, canvas, meshSnapshots, deformedMeshes, textures, viewport);
+          renderPuppet(ctx, canvas, meshSnapshots, deformedMeshes, textures, solidColors, viewport);
         }
       }
       rafRef.current = requestAnimationFrame(loop);
@@ -275,7 +285,7 @@ export function PuppetCanvas() {
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [meshSnapshots, deformedMeshes, textures, viewport, previewFrame]);
+  }, [meshSnapshots, deformedMeshes, textures, solidColors, viewport, previewFrame]);
 
   // Resize observer — keep canvas size in sync with container
   useEffect(() => {
