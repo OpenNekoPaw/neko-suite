@@ -226,7 +226,8 @@ export class PuppetController implements IPuppetController {
   }
 
   isStreaming(): boolean {
-    return this.previewActive && this.activeStream?.readyState === WebSocket.OPEN;
+    const jsonStreamOpen = this.activeStream?.readyState === WebSocket.OPEN;
+    return this.previewActive && (jsonStreamOpen || this.activeH264Stream !== null);
   }
 
   // ── Keyframe CRUD ────────────────────────────────────────────────────────
