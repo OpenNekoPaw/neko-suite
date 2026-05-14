@@ -117,6 +117,16 @@ PreviewPipeline 把编码焊死在 render 方法里，导致 GPU 合成结果无
 
 **GpuFrameLease 设计约束**：`VideoGpuFrame.handle` 不使用裸 `usize`，而是一个 RAII 包装类型 `GpuFrameLease`，通过 retain/release 语义保证底层 GPU 资源在 lease 存活期间不被回收。裸 `usize` 句柄无法表达生命周期和所有权——持有者（如 sink 的编码队列）可能在编码器实际使用期间释放底层资源。`GpuFrameLease` 在 `Drop` 时自动释放。具体实现方式由实现者决定（可以是 `Arc` 引用计数、回调释放、或 pool slot index）。
 
+**GpuFrameLease 语义细节**：
+
+| 属性 | 要求 | 理由 |
+|------|------|------|
+| `Clone` | 是（`Arc` 式廉价 clone） | StreamSink + SnapshotSink 可能同时持有同一帧的 lease（多 sink fan-out） |
+| `Send + Sync` | 是 | lease 跨线程传递：管线线程 → sink 线程 → encoder worker |
+| `close()`/`flush()` 后失效 | sink `close()` 后不得持有 lease；`flush()` 前必须等待所有 in-flight lease 归还（encoder 完成编码） | 防止 close 后 lease 引用已释放的 backing store |
+| encoder 队列持有 lease | encoder `encode_frame_gpu()` 接收 `GpuFrameLease`（不是 `&GpuFrameLease`）——编码完成后 lease 自动 Drop 释放 | 明确所有权转移；避免管线帧步进后 backing store 被复用而 encoder 仍在读取 |
+| 生命周期测试 | 单测：lease `Drop` 后 backing store slot 可被后续帧复用；集成测试：并发 StreamSink + SnapshotSink 持有同帧 lease，两者 Drop 后 slot 释放 | 验证 ABA 场景——lease 计数归零才释放，不是 first-drop 就释放 |
+
 跨平台 handle 的实现状态必须显式标注：
 
 - macOS：`IOSurface` 是 P0/P1 的主实现路径。
@@ -245,6 +255,23 @@ IOSurface 从 pipeline → sink → encoder 流动，全程没有 CPU readback�
 - 修改：`engine-kernel/src/services/impls/timeline.rs` —— snapshot 路径使用 `SnapshotSink`
 
 **新增能力**：GPU 合成 → RGBA，无需编码 + 解码往返。
+
+### P2-PR2：MuxerSink（约 120 行）
+
+**变更文件**：
+
+- 新增：`engine-kernel/src/services/impls/muxer_sink.rs` —— `MuxerSink`（同步 `PipelineSink` 前端 + 内部 `AsyncExportPipeline` worker）
+- 修改：`engine-kernel/src/export/service.rs` —— `ExportService` 使用 `MuxerSink` 替代直接调用 `AsyncExportPipeline::submit_composited()`
+- 修改：`engine-kernel/src/export/gpu_export_pipeline.rs` —— 移除导出循环中的内联编码；由 MuxerSink 统一管理
+
+**行为不变量**：导出输出保持一致。编码和 mux 逻辑从导出循环移到 MuxerSink 内部 worker。
+
+**设计约束**（详见 Sink 设计约束章节）：
+- `flush()` 必须 oneshot ack——ExportService 需确认文件写完
+- `close()` 同样需要 ack 确认
+- 有界 channel 连接同步前端与 async worker；离线场景下阻塞 producer 是正确行为
+
+**为什么在 P2 而非 P0**：P0 聚焦流式预览（StreamSink）和截图（SnapshotSink）——这两者直接验证 PipelineSink trait 设计。MuxerSink 依赖导出管线的 async worker 重构，复杂度更高。P2 时 PipelineSink trait 已经过 P0/P1 验证，MuxerSink 实现风险更低。PuppetRenderer（P2-PR4）和全景视频导出（P3-PR1）都需要 MuxerSink 作为导出入口。
 
 ### P0-PR7：CPU fallback 路径消除（约 60 行）
 

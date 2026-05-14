@@ -33,7 +33,12 @@ neko-engine 是一个 Rust sidecar 进程，为整个 neko-suite 提供 GPU 渲�
 | GPU Budget Controller | Part IV | 并发管线资源管理 |
 | PuppetRenderer + WS 命令协议 | Part VIII.CP2-CP4 | 2D 骨骼 GPU 渲染 + 控制平面对齐 |
 
-**P0 应收窄为两条主线**：(1) PipelineSink + StreamSink/SnapshotSink，(2) GpuEffect registry。Scene/Puppet 的 Dual API、PreviewProviderRegistry、PuppetRenderer 建议在独立子 ADR 中分别推进。
+**P0 分为两个子阶段**：
+
+- **P0a**（IO + 效果）：PipelineSink + StreamSink/SnapshotSink + CPU fallback 消除 + GpuEffect registry。这是最小可交付底座——解耦管线输出和效果派发，不触及 ECS 层。
+- **P0b**（ECS 抽象）：Dual API trait 定义 + SceneComputation/SceneRenderer 拆分 + 消除 `ecs_world_mut()` 逃逸口。依赖 P0a 中 PipelineOutput 类型定义（SceneRenderer 产出 `VideoGpuFrame`），但可在 P0a 的 PipelineSink PR 合入后立即开始。
+
+P0a 和 P0b 的 PR 在 PipelineSink 合入后可并行推进。PreviewProviderRegistry、PuppetRenderer、GPU Budget 在 P2 推进。
 
 ---
 
@@ -261,21 +266,24 @@ pub fn mix_buffer(&mut self, time: f64) -> Result<MixdownBuffer>;
 
 | # | 子 ADR | 对应本文 Part | 核心聚焦 | P 阶段 | 前置条件 |
 |---|--------|-------------|----------|--------|----------|
-| 1 | [PipelineSink](./adr-engine-pipeline-sink.md) | Part III + §2.1 | 管线输出解耦 + GPU-only 规则 + StreamSink/SnapshotSink | P0（PR1+PR2+PR7） | 无（基础） |
-| 2 | [GpuEffect Registry](./adr-engine-effect-registry.md) | Part V | 效果系统 OCP 改造 + AudioEffectFactory + 插件桥接 + ML 集成 | P0-PR6 + P1 + P2-PR5 | 子 ADR 1 |
-| 3 | [Dual API + Scene 拆分](./adr-engine-dual-api-scene-split.md) | Part IX + VIII(Scene) | CreativeAccess + DataAccess 双抽象 + 计算-渲染分离 | P0（PR3+PR4a+PR4b+PR5） | 子 ADR 1 |
+| 1 | [PipelineSink](./adr-engine-pipeline-sink.md) | Part III + §2.1 | 管线输出解耦 + GPU-only 规则 + StreamSink/SnapshotSink | P0a（PR1+PR2+PR7） | 无（基础） |
+| 2 | [GpuEffect Registry](./adr-engine-effect-registry.md) | Part V | 效果系统 OCP 改造 + AudioEffectFactory + 插件桥接 + ML 集成 | P0a-PR6 + P1 + P2-PR5 | 无硬依赖（与子 ADR 1 共享 GPU-only 原则） |
+| 3 | [Dual API + Scene 拆分](./adr-engine-dual-api-scene-split.md) | Part IX + VIII(Scene) | CreativeAccess + DataAccess 双抽象 + 计算-渲染分离 | P0b（PR3+PR4a+PR4b+PR5） | 子 ADR 1（PipelineOutput 类型） |
 | 4 | [GPU Budget Controller](./adr-engine-gpu-budget.md) | Part IV | 并发管线资源管理 + 帧时间反馈 | P2-PR1 | 子 ADR 1 |
-| 5 | [PuppetRenderer + WS 命令](./adr-engine-puppet-renderer.md) | Part VIII(Puppet) | wgpu SpriteBatch + WebSocket 命令协议 | P2（PR3+PR4）+ P3-PR1 | 子 ADR 1 + 4 |
-| 6 | [预览子系统 + PanoramicRenderer](./adr-engine-preview-subsystem.md) | §7B | 三层预览架构 + PanoramicRenderer + PreviewProviderRegistry | P2（PR6a+PR6b+PR6c）+ P3-PR4 | 子 ADR 1 + 4 |
+| 5 | [PuppetRenderer + WS 命令](./adr-engine-puppet-renderer.md) | Part VIII(Puppet) | wgpu SpriteBatch + WebSocket 命令协议 | P2（PR3+PR4）+ P3-PR1 | PR3 无依赖；PR4 依赖子 ADR 1 + 4 |
+| 6 | [预览子系统 + PanoramicRenderer](./adr-engine-preview-subsystem.md) | §7B | 三层预览架构 + PanoramicRenderer + PreviewProviderRegistry | P2（PR6a+PR6b+PR6c）+ P3-PR4 | PR6a/6b 无依赖；PR6c 依赖子 ADR 4 |
 
 ### 跨子 ADR 排序约束
 
 ```
-P0（基础能力，~1100 行）:
+P0a（IO + 效果，~500 行）:
   子ADR 1: PR1 PipelineSink+StreamSink → PR2 SnapshotSink → PR7 CPU fallback 消除
-  子ADR 3: PR3 Dual API Trait → PR4a SceneComputation → PR4b SceneRenderer → PR5 消除 ecs_world_mut()
   子ADR 2: PR6 GpuEffect HashMap
-  ── PR1/PR3 可并行；PR6 可与 PR3 系列并行 ──
+  ── PR1 和 PR6 可并行（GpuEffect 不依赖 PipelineOutput 类型） ──
+
+P0b（ECS 抽象，~600 行，PR1 合入后启动）:
+  子ADR 3: PR3 Dual API Trait → PR4a SceneComputation → PR4b SceneRenderer → PR5 消除 ecs_world_mut()
+  ── PR3 依赖 PR1 的 PipelineOutput 类型定义；PR3 系列可与 PR6 并行 ──
 
 P1（插件接线 + 音频注册表，~410 行）:
   子ADR 2: PR1 AudioEffectFactory → PR2 PluginActivationHandler → PR3 EffectCapability+TS → PR4 ML 离线
@@ -284,10 +292,10 @@ P1（插件接线 + 音频注册表，~410 行）:
 P2（GPU Budget + Puppet + Preview + Effect 优化，~1400 行）:
   子ADR 4: PR1 GpuBudgetController
   子ADR 1: PR2 MuxerSink
-  子ADR 5: PR3 Puppet WS Command → PR4 PuppetRenderer
+  子ADR 5: PR3 Puppet WS Command（无 GPU 依赖，可与 PR1 并行） → PR4 PuppetRenderer
   子ADR 2: PR5 EffectDispatcher 成本+in-place
   子ADR 6: PR6a runtime-media 吸收 → PR6b PreviewProviderRegistry → PR6c PanoramicRenderer
-  ── PR1 先于 PR3/PR4/PR6c；PR6a→PR6b→PR6c 串行 ──
+  ── PR6a/PR6b 无 GPU 依赖，可与 PR1 并行；PR1 先于 PR4/PR6c；PR3 可与 PR1 并行 ──
 
 P3（高级合成，~820 行，延期）:
   子ADR 5: PR1 Puppet H.264+导出
@@ -429,7 +437,8 @@ PreviewProviderRegistry.generate_preview(file)
 
 | 阶段 | 范围 | 预估规模 | 子 ADR |
 |------|------|----------|--------|
-| P0 | PipelineSink + Dual API + ECS 拆分 + GpuEffect 注册表 | ~1100 行 | 1 + 2 + 3 |
+| P0a | PipelineSink + GpuEffect 注册表 + CPU fallback 消除 | ~500 行 | 1 + 2 |
+| P0b | Dual API + ECS 拆分（P0a PR1 合入后启动） | ~600 行 | 3 |
 | P1 | 插件接线 + 音频注册表 + ML 离线 | ~410 行 | 2 |
 | P2 | GPU Budget + MuxerSink + PuppetRenderer + Preview + Effect 优化 | ~1400 行 | 1 + 2 + 4 + 5 + 6 |
 | P3 | Puppet H.264 + ML GPU Bridge + Transition + 全景视频 | ~820 行（延期） | 2 + 5 + 6 |

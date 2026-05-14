@@ -5,7 +5,7 @@
 - **作者**：Claude（架构师）
 - **范围**：engine-kernel（gpu/、audio/dsp/、export/）、engine-types、host-api（plugin/、controllers/effects.rs）
 - **父文档**：[adr-engine-interface-pipeline-decoupling](./adr-engine-interface-pipeline-decoupling.md)
-- **前置条件**：[adr-engine-pipeline-sink](./adr-engine-pipeline-sink.md)（GpuEffect 消费 PipelineOutput 类型）
+- **前置条件**：无硬依赖。与 [adr-engine-pipeline-sink](./adr-engine-pipeline-sink.md) 共享 GPU-only 原则（效果不得引入 CPU fallback），但 `GpuEffect::apply_tex()` 是 texture-to-texture 操作，不直接消费 `PipelineOutput` 类型。GpuEffect registry PR 可与 PipelineSink PR 并行推进。
 
 ---
 

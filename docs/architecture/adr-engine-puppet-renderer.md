@@ -5,7 +5,10 @@
 - **作者**：Claude（架构师）
 - **范围**：engine-kernel（gpu/puppet_renderer/）、engine-types、host-http、runtime-puppet
 - **父文档**：[adr-engine-interface-pipeline-decoupling](./adr-engine-interface-pipeline-decoupling.md)
-- **前置条件**：[adr-engine-pipeline-sink](./adr-engine-pipeline-sink.md)（PipelineSink）、[adr-engine-gpu-budget](./adr-engine-gpu-budget.md)（GpuBudgetController）
+- **前置条件**：
+  - P2-PR3（WS 命令协议）：无硬依赖——WS command envelope 是纯控制平面协议，不涉及 GPU 渲染或 PipelineSink。可在 P0 完成后任意时间落地。
+  - P2-PR4（PuppetRenderer）：[adr-engine-pipeline-sink](./adr-engine-pipeline-sink.md)（产出 `VideoOutput::GpuFrame` → PipelineSink 消费）+ [adr-engine-gpu-budget](./adr-engine-gpu-budget.md)（GPU 使用受 BudgetController 管理）
+  - P3-PR1（H.264 + 导出）：P2-PR4 + StreamSink + MuxerSink
 
 ---
 
@@ -211,11 +214,11 @@ neko-live 应该消费来自 SceneRenderer 和 PuppetRenderer 的 `VideoGpuFrame
 
 > 以下表格说明本 ADR 中的 PR 在 umbrella ADR 全局计划中的位置和依赖关系。
 
-| 本 ADR 范围                          | 主计划位置 | 理由                                                                |
-| ------------------------------------- | ---------- | ------------------------------------------------------------------- |
-| Puppet WebSocket Command Protocol     | P2-PR3     | 输出路径依赖 PipelineSink（P0）                                     |
-| PuppetRenderer（wgpu SpriteBatch）    | P2-PR4     | 资源管理依赖 GpuBudgetController（P2-PR1）                          |
-| Puppet H.264 流 + 导出                | P3-PR1     | 依赖 PuppetRenderer + StreamSink                                    |
+| 本 ADR 范围                          | 主计划位置 | 前置依赖 | 理由                                                                |
+| ------------------------------------- | ---------- | -------- | ------------------------------------------------------------------- |
+| Puppet WebSocket Command Protocol     | P2-PR3     | 无       | 纯控制平面协议，不涉及 GPU 渲染——可在 P0 后任意时间落地             |
+| PuppetRenderer（wgpu SpriteBatch）    | P2-PR4     | PipelineSink + GpuBudget | 产出 VideoGpuFrame → Sink 消费；GPU 使用受 BudgetController 管理    |
+| Puppet H.264 流 + 导出                | P3-PR1     | PR4 + StreamSink + MuxerSink | 依赖 PuppetRenderer + 编码 Sink                                     |
 
 ---
 

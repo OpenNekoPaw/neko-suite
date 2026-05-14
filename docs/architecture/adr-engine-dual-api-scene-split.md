@@ -191,12 +191,20 @@ SceneService 暴露具体类型（`MutexGuard<'_, BevySceneWorld>`），调用�
 
 ### 1.10 Dual API 验证
 
+**行为验证**：
+
 - SceneService 中所有 18 个 `ecs_world_mut()` 调用点都迁移到类型化 DataAPI 调用
-- controller（host-api）在只暴露 CreativeAccess 的情况下仍能编译通过（不导入 DataAccess）
-- SceneRenderer 不导入 World/DataAccess（只操作 RenderWorld 快照）
 - ModelingSession 正确使用两个 API（CreativeAccess 管生命周期，DataAccess 管 vertex 操作）
 - `cargo test`（engine-kernel）通过；没有行为变化
 - Puppet 对应实现也迁移到同样的 Dual API 模式
+
+**强制力验证**（补偿 P0 阶段类型系统无法完全阻止误用的弱点）：
+
+- controller（host-api）模块不导入 `DataAccess` trait——通过 `grep -r "use.*DataAccess" packages/neko-engine/packages/host-api/` 验证为零命中
+- SceneRenderer 模块不导入 `World` 或 `DataAccess`——只操作 `RenderWorld` 快照。通过 `grep -r "use.*\(World\|DataAccess\)" engine-kernel/src/gpu/scene_renderer/` 验证
+- `ecs_world_mut()` 方法签名降级为 `pub(crate)` 并标记 `#[deprecated(since = "P0", note = "Use DataAccess typed methods")]`——新调用方在编译时收到 warning
+- CI 中添加 `grep` 门禁脚本：若 host-api 中出现 `DataAccess` 导入，或 renderer 中出现 `World` 导入，CI 失败。这是 P0 对编译器级强制的低成本替代
+- 若 P1 期间出现新的绕过点（新 controller 直接导入 DataAccess），升级到 P2 方案（`runtime-core` crate 隔离）
 
 ---
 
@@ -382,7 +390,7 @@ tick() {
 
 **行为不变量**：外部 API 不变。DataAccess 将现有绕过点提升为类型化方法；原始 World 访问只保留为 crate 内部迁移工具。
 
-**依赖**：无。可与 PipelineSink PR 并行推进。
+**依赖**：无。PR3 和 PR4a 可与 PipelineSink PR 并行推进——trait 定义和 SceneComputation 提取不涉及 `PipelineOutput` 类型。PR4b（SceneRenderer）依赖 P0a 的 `PipelineOutput`/`VideoOutput::GpuFrame` 类型定义（SceneRenderer 产出 `VideoGpuFrame` 并由 PipelineSink 消费）。
 
 ### P0-PR4a：SceneComputation 提取 + SceneService facade（约 220 行）
 

@@ -85,6 +85,36 @@
 
 对视频帧、3D 渲染或 puppet 渲染来说，CPU 执行不是负载削减方案。它要么保留 GPU 工作并增加 readback stall，要么把高吞吐渲染转移到 CPU，带来 UI/系统卡顿风险。P2 实现选项 1（暂停）。选项 2-3 是 P3 增强项。
 
+### Permit 生命周期
+
+管线在每次 render loop 迭代前调用 `budget.acquire_permit(pipeline_id, priority)` 获取 `GpuPermit`。permit 行为取决于优先级和系统压力：
+
+| 调用方优先级 | 无压力 | 有压力（Interactive EMA > 18ms） |
+|-------------|--------|-------------------------------|
+| `Interactive` | 立即返回 `Permit::Proceed` | 立即返回 `Permit::Proceed`（永不阻塞） |
+| `Export` | 立即返回 `Permit::Proceed` | 返回 `Permit::Queued`——在 Interactive 帧之间交替调度 |
+| `Transcode` | 立即返回 `Permit::Proceed` | 返回 `Permit::Paused(reason)`——管线必须 sleep 直到 controller 唤醒 |
+
+**`Permit::Paused` 的消费方协议**：管线收到 `Paused` 后：
+1. 释放当前帧的所有临时 GPU 资源（texture、staging buffer）
+2. 通过 `budget.wait_for_resume(pipeline_id)` 阻塞（内部使用 `tokio::sync::Notify`）
+3. Controller 在恢复条件满足时调用 `notify_one()`
+
+**恢复滞回**：暂停在 Interactive EMA **持续** > 18ms（3 个连续采样点）时触发；恢复在 Interactive EMA **持续** < 14ms（5 个连续采样点）时触发。不对称窗口避免 Transcode 在边界值附近反复暂停/恢复（抖动）。
+
+### Export 排队语义
+
+`Export` 不被暂停，但在压力下交替调度——Interactive 帧和 Export 帧轮流获取 permit。这确保导出不会饿死，但 Interactive 帧率至少维持在非压力值的 50%。Export 排队是公平的（FIFO），多个并发导出按入队顺序交替。
+
+### Preview Provider 被暂停时的用户体验
+
+`PreviewProviderRegistry` 发起的 GPU 操作（如 `PanoramicRenderer`）以 `Transcode` 优先级运行。如果 permit 返回 `Paused`：
+
+1. Provider 返回 `PreviewArtifact::Unavailable { reason: GpuBusy, retry_after_ms: 500 }`
+2. 调用方（host-http handler）返回 HTTP 503 + `Retry-After: 1` header
+3. 前端收到 503 后显示 loading 占位符并在 1s 后重试
+4. 非 GPU 预览（PDF/EPUB/纯图片 resize）不受影响——它们不获取 GPU permit
+
 ---
 
 ## 实施计划

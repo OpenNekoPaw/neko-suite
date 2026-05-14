@@ -5,7 +5,10 @@
 - **作者**：Claude（架构师）
 - **范围**：engine-kernel（preview/）、runtime-media、host-http（routes/preview_*.rs）、host-api
 - **父文档**：[adr-engine-interface-pipeline-decoupling](./adr-engine-interface-pipeline-decoupling.md)
-- **前置条件**：[adr-engine-pipeline-sink](./adr-engine-pipeline-sink.md)、[adr-engine-gpu-budget](./adr-engine-gpu-budget.md)
+- **前置条件**：
+  - PR6a/PR6b：无硬依赖——CPU 分析逻辑下沉和路由迁移不涉及 GPU 或 PipelineSink。可在 P0 完成后任意时间落地。
+  - PR6c（PanoramicRenderer）：[adr-engine-gpu-budget](./adr-engine-gpu-budget.md)（GPU permit 以 Transcode 优先级获取）
+  - P3-PR4（全景视频流 + Scene/Puppet Provider）：[adr-engine-pipeline-sink](./adr-engine-pipeline-sink.md)（StreamSink 消费 PanoramicRenderer 输出）+ PR6c
 
 ---
 
