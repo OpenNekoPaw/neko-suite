@@ -50,6 +50,7 @@ export function usePuppetPlayback(controller: IPuppetController | null): PuppetP
     ctrl.startPreviewStream(
       (delta) => {
         const s = usePuppetStore.getState();
+        s.setPreviewFrame(null);
         s.setDeformedMeshes(delta.deformed_meshes);
 
         // Sync animation progress from stream
@@ -66,6 +67,9 @@ export function usePuppetPlayback(controller: IPuppetController | null): PuppetP
       },
       (connected) => {
         usePuppetStore.getState().setStreamConnected(connected);
+      },
+      (frame) => {
+        usePuppetStore.getState().setPreviewFrame(frame);
       },
     );
   }, []);
@@ -85,6 +89,7 @@ export function usePuppetPlayback(controller: IPuppetController | null): PuppetP
     // 3. Update store
     store.setPlayState('idle');
     store.setStreamConnected(false);
+    store.setPreviewFrame(null);
   }, []);
 
   const onSeek = useCallback((timeMs: number) => {
@@ -113,6 +118,7 @@ export function usePuppetPlayback(controller: IPuppetController | null): PuppetP
       ctrl.startPreviewStream(
         (delta) => {
           const s = usePuppetStore.getState();
+          s.setPreviewFrame(null);
           s.setDeformedMeshes(delta.deformed_meshes);
 
           if (delta.animation_time_ms != null) {
@@ -127,6 +133,9 @@ export function usePuppetPlayback(controller: IPuppetController | null): PuppetP
         },
         (connected) => {
           usePuppetStore.getState().setStreamConnected(connected);
+        },
+        (frame) => {
+          usePuppetStore.getState().setPreviewFrame(frame);
         },
       );
     }

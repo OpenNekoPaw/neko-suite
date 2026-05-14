@@ -233,6 +233,29 @@ function renderPuppet(
   ctx.restore();
 }
 
+function renderPreviewFrame(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  frame: VideoFrame,
+): void {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.width / dpr;
+  const cssH = canvas.height / dpr;
+  const frameW = frame.displayWidth || frame.codedWidth;
+  const frameH = frame.displayHeight || frame.codedHeight;
+  if (frameW <= 0 || frameH <= 0) return;
+
+  const scale = Math.min(cssW / frameW, cssH / frameH);
+  const width = frameW * scale;
+  const height = frameH * scale;
+  const x = (cssW - width) / 2;
+  const y = (cssH - height) / 2;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  ctx.drawImage(frame, x, y, width, height);
+}
+
 // ── React Component ─────────────────────────────────────────────────────────
 
 export function PuppetCanvas() {
@@ -245,12 +268,13 @@ export function PuppetCanvas() {
   const deformedMeshes = usePuppetStore((s) => s.deformedMeshes);
   const textures = usePuppetStore((s) => s.textures);
   const viewport = usePuppetStore((s) => s.viewport);
+  const previewFrame = usePuppetStore((s) => s.previewFrame);
   const setViewport = usePuppetStore((s) => s.setViewport);
 
   // Mark dirty when mesh data changes
   useEffect(() => {
     needsRenderRef.current = true;
-  }, [deformedMeshes, textures, viewport]);
+  }, [deformedMeshes, textures, viewport, previewFrame]);
 
   // Render loop
   useEffect(() => {
@@ -264,7 +288,11 @@ export function PuppetCanvas() {
       if (!running) return;
       if (needsRenderRef.current) {
         needsRenderRef.current = false;
-        renderPuppet(ctx, canvas, meshSnapshots, deformedMeshes, textures, viewport);
+        if (previewFrame) {
+          renderPreviewFrame(ctx, canvas, previewFrame);
+        } else {
+          renderPuppet(ctx, canvas, meshSnapshots, deformedMeshes, textures, viewport);
+        }
       }
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -273,7 +301,7 @@ export function PuppetCanvas() {
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [meshSnapshots, deformedMeshes, textures, viewport]);
+  }, [meshSnapshots, deformedMeshes, textures, viewport, previewFrame]);
 
   // Resize observer — keep canvas size in sync with container
   useEffect(() => {

@@ -11,7 +11,7 @@
  *   Tick → EngineClient.tickPuppet() → PuppetDelta (deformed meshes)
  */
 
-import type { EngineClient } from '@neko/neko-client';
+import { H264StreamClient, type EngineClient } from '@neko/neko-client';
 import type { EditorKeyframeTrack, ParameterCurveInfo, EasingType } from '@neko/shared';
 import type {
   AnimationClipInfo,
@@ -75,6 +75,7 @@ export interface IPuppetController {
   startPreviewStream(
     onDelta: (delta: PuppetDelta) => void,
     onStatusChange?: (connected: boolean) => void,
+    onFrame?: (frame: VideoFrame) => void,
   ): void;
 
   /** Stop the managed preview stream */
@@ -113,8 +114,10 @@ export interface IPuppetController {
 export class PuppetController implements IPuppetController {
   private snapshot: PuppetSnapshot | null = null;
   private activeStream: WebSocket | null = null;
+  private activeH264Stream: H264StreamClient | null = null;
   private previewActive = false;
   private previewOnDelta: ((delta: PuppetDelta) => void) | null = null;
+  private previewOnFrame: ((frame: VideoFrame) => void) | null = null;
   private previewOnStatus: ((connected: boolean) => void) | null = null;
 
   constructor(private readonly engine: EngineClient) {}
@@ -189,6 +192,10 @@ export class PuppetController implements IPuppetController {
   }
 
   disconnectStream(): void {
+    if (this.activeH264Stream) {
+      this.activeH264Stream.dispose();
+      this.activeH264Stream = null;
+    }
     if (this.activeStream) {
       this.activeStream.close();
       this.activeStream = null;
@@ -198,19 +205,22 @@ export class PuppetController implements IPuppetController {
   startPreviewStream(
     onDelta: (delta: PuppetDelta) => void,
     onStatusChange?: (connected: boolean) => void,
+    onFrame?: (frame: VideoFrame) => void,
   ): void {
     this.stopPreviewStream();
 
     this.previewActive = true;
     this.previewOnDelta = onDelta;
+    this.previewOnFrame = onFrame ?? null;
     this.previewOnStatus = onStatusChange ?? null;
 
-    this.openPreviewWs();
+    void this.openPreferredPreviewStream();
   }
 
   stopPreviewStream(): void {
     this.previewActive = false;
     this.previewOnDelta = null;
+    this.previewOnFrame = null;
     this.previewOnStatus = null;
     this.disconnectStream();
   }
@@ -275,6 +285,62 @@ export class PuppetController implements IPuppetController {
   }
 
   /** Internal: open the WebSocket and wire up reconnect on unexpected close */
+  private async openPreferredPreviewStream(): Promise<void> {
+    if (!this.previewActive) return;
+
+    if (this.previewOnFrame && (await canUseH264Preview())) {
+      this.openH264PreviewStream();
+      return;
+    }
+
+    this.openPreviewWs();
+  }
+
+  private openH264PreviewStream(): void {
+    this.disconnectStream();
+
+    const handle = this.engine.createPuppetH264StreamHandle();
+    let fallbackStarted = false;
+    const startJsonFallback = () => {
+      if (!this.previewActive || fallbackStarted) return;
+      fallbackStarted = true;
+      this.activeH264Stream?.dispose();
+      this.activeH264Stream = null;
+      this.openPreviewWs();
+    };
+
+    const stream = new H264StreamClient({
+      websocketUrl: handle.wsUrl,
+      width: handle.width,
+      height: handle.height,
+      codecString: handle.codecString,
+      onFrame: (frame) => {
+        if (!this.previewActive) {
+          frame.close();
+          return;
+        }
+        this.previewOnFrame?.(frame);
+      },
+      onConnectionChange: (connected) => {
+        this.previewOnStatus?.(connected);
+        if (!connected) {
+          startJsonFallback();
+        }
+      },
+      onError: () => {
+        startJsonFallback();
+      },
+      onStreamEnd: () => {
+        startJsonFallback();
+      },
+    });
+
+    this.activeH264Stream = stream;
+    void stream.connect().catch(() => {
+      startJsonFallback();
+    });
+  }
+
   private openPreviewWs(): void {
     this.disconnectStream();
 
@@ -308,5 +374,18 @@ export class PuppetController implements IPuppetController {
     ws.addEventListener('error', () => {
       // The 'close' handler will fire after 'error', which handles reconnect
     });
+  }
+}
+
+async function canUseH264Preview(): Promise<boolean> {
+  if (typeof VideoDecoder === 'undefined') return false;
+  try {
+    const support = await VideoDecoder.isConfigSupported({
+      codec: 'avc1.42001f',
+      hardwareAcceleration: 'prefer-hardware',
+    });
+    return support.supported === true;
+  } catch {
+    return false;
   }
 }

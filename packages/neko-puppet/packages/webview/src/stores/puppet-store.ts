@@ -38,6 +38,8 @@ export interface PuppetStore {
   playState: AnimationPlayState;
   /** Whether the WebSocket stream to the engine is active */
   streamConnected: boolean;
+  /** Last decoded H.264 puppet preview frame, when hardware preview is active */
+  previewFrame: VideoFrame | null;
   /** Current animation elapsed time in ms (from stream delta) */
   animationTimeMs: number;
 
@@ -64,6 +66,7 @@ export interface PuppetStore {
   setCurrentAnimation: (name: string | null) => void;
   setPlayState: (state: AnimationPlayState) => void;
   setStreamConnected: (connected: boolean) => void;
+  setPreviewFrame: (frame: VideoFrame | null) => void;
   setAnimationTimeMs: (timeMs: number) => void;
 
   setKeyframeTracks: (tracks: EditorKeyframeTrack[]) => void;
@@ -89,6 +92,7 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   currentAnimation: null,
   playState: 'idle',
   streamConnected: false,
+  previewFrame: null,
   animationTimeMs: 0,
 
   // ── Keyframe editor state ────────────────────────────────────────────────
@@ -118,6 +122,13 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   setCurrentAnimation: (name) => set({ currentAnimation: name }),
   setPlayState: (state) => set({ playState: state }),
   setStreamConnected: (connected) => set({ streamConnected: connected }),
+  setPreviewFrame: (frame) =>
+    set((state) => {
+      if (state.previewFrame && state.previewFrame !== frame) {
+        state.previewFrame.close();
+      }
+      return { previewFrame: frame };
+    }),
   setAnimationTimeMs: (timeMs) => set({ animationTimeMs: timeMs }),
 
   setKeyframeTracks: (tracks) => set({ keyframeTracks: tracks }),
@@ -126,21 +137,25 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
     set((state) => ({ isKeyframeEditorOpen: !state.isKeyframeEditorOpen })),
 
   resetAnimation: () =>
-    set({
-      puppetLoaded: false,
-      puppetSnapshot: null,
-      puppetParameters: [],
-      deformedMeshes: [],
-      textures: [],
-      viewport: { zoom: 2, panX: 0, panY: 0 },
-      isPlayingPhysics: false,
-      animations: [],
-      currentAnimation: null,
-      playState: 'idle',
-      streamConnected: false,
-      animationTimeMs: 0,
-      keyframeTracks: [],
-      selectedKeyframeIds: new Set<string>(),
-      isKeyframeEditorOpen: false,
+    set((state) => {
+      state.previewFrame?.close();
+      return {
+        puppetLoaded: false,
+        puppetSnapshot: null,
+        puppetParameters: [],
+        deformedMeshes: [],
+        textures: [],
+        viewport: { zoom: 2, panX: 0, panY: 0 },
+        isPlayingPhysics: false,
+        animations: [],
+        currentAnimation: null,
+        playState: 'idle',
+        streamConnected: false,
+        previewFrame: null,
+        animationTimeMs: 0,
+        keyframeTracks: [],
+        selectedKeyframeIds: new Set<string>(),
+        isKeyframeEditorOpen: false,
+      };
     }),
 }));
