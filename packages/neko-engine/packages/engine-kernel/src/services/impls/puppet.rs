@@ -3,16 +3,16 @@
 //! Wraps BevyPuppetWorld with Mutex for thread-safe access.
 //! Mirrors the SceneService pattern.
 
-use crate::error::{Error, Result};
 use crate::encoder::{
     ContainerFormat, EncoderConfig, EncoderPreset, HwEncoderType, PipelineConfig, VideoCodec,
 };
+use crate::error::{Error, Result};
+#[cfg(target_os = "macos")]
+use crate::gpu::RgbaToNv12TextureConverter;
 use crate::gpu::{
     GpuContext, GpuPermit, PipelinePriority, PuppetBlendMode, PuppetMeshInput, PuppetRenderOutput,
     PuppetRenderRequest, PuppetRenderer, PuppetTextureAtlasInput,
 };
-#[cfg(target_os = "macos")]
-use crate::gpu::RgbaToNv12TextureConverter;
 use crate::services::impls::muxer_sink::MuxerSink;
 use crate::services::pipeline_sink::{
     GpuFrameLease, GpuOutputHandle, PipelineOutput, PipelineSink, VideoGpuFrame, VideoOutput,
@@ -536,7 +536,9 @@ fn validate_puppet_export_config(config: PuppetExportConfig) -> Result<PuppetExp
 }
 
 fn puppet_export_frame_count(config: PuppetExportConfig) -> u64 {
-    ((config.duration_ms / 1_000.0) * config.fps).ceil().max(1.0) as u64
+    ((config.duration_ms / 1_000.0) * config.fps)
+        .ceil()
+        .max(1.0) as u64
 }
 
 fn puppet_frame_timing(frame_index: u64, fps: f64) -> PuppetRenderTiming {
@@ -696,7 +698,7 @@ impl IPuppetService for PuppetService {
             sink.submit(PipelineOutput::Video(video_output))?;
         }
 
-        sink.flush()?;
+        sink.close()?;
         Ok(PuppetExportSummary {
             frames_submitted: total_frames,
         })

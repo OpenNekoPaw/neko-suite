@@ -14,12 +14,12 @@ use crate::domain::{
 };
 use crate::encoder::{ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer};
 use crate::error::{Error, Result};
+#[cfg(target_os = "macos")]
+use crate::gpu::RgbaToNv12TextureConverter;
 use crate::gpu::{
     ColorSpace, GpuContext, GpuPermit, Nv12Renderer, Nv12TextureImporter, PanoramicRenderOutput,
     PanoramicRenderer, PipelinePriority,
 };
-#[cfg(target_os = "macos")]
-use crate::gpu::RgbaToNv12TextureConverter;
 use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, global_probe_cache};
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
@@ -412,6 +412,8 @@ impl IVideoService for VideoService {
             let encode_handle = std::thread::spawn(move || {
                 let budget = budget;
                 let budget_pipeline_id = budget_pipeline_id;
+                let _budget_guard = budget
+                    .register_pipeline(budget_pipeline_id.clone(), PipelinePriority::Interactive);
                 // Acquire decoder from pool (reuses existing if available)
                 let pool = global_pool();
                 let mut guard = match pool.acquire(&path, HwAccelType::Auto) {
@@ -740,8 +742,11 @@ impl IVideoService for VideoService {
         session_id: &str,
         view_state: PanoramaViewState,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
+        PanoramicRenderer::validate_view_state(&view_state)?;
         let gpu_ctx = self.gpu_ctx.clone().ok_or_else(|| {
-            Error::UnsupportedCapability("GPU context required for panoramic video streaming".into())
+            Error::UnsupportedCapability(
+                "GPU context required for panoramic video streaming".into(),
+            )
         })?;
         let budget = gpu_ctx.budget_controller().clone();
         let path = source.to_string_lossy().to_string();
@@ -794,10 +799,7 @@ impl IVideoService for VideoService {
                 match RgbaToNv12TextureConverter::new(Arc::clone(&gpu_ctx)) {
                     Ok(converter) => converter,
                     Err(error) => {
-                        tracing::error!(
-                            "Failed to create panoramic encoder bridge: {}",
-                            error
-                        );
+                        tracing::error!("Failed to create panoramic encoder bridge: {}", error);
                         return;
                     }
                 };
@@ -812,6 +814,8 @@ impl IVideoService for VideoService {
             let mut frame_index = 0u64;
             let mut last_view_seq = 1u64;
             let time_base = decoder.time_base();
+            let _budget_guard =
+                budget.register_pipeline(budget_pipeline_id.clone(), PipelinePriority::Transcode);
 
             loop {
                 if cancel_for_loop.is_cancelled() {
@@ -861,7 +865,8 @@ impl IVideoService for VideoService {
                         break;
                     }
                 };
-                let rgba_texture = nv12_renderer.create_output_texture(imported.width, imported.height);
+                let rgba_texture =
+                    nv12_renderer.create_output_texture(imported.width, imported.height);
                 let rgba_view = rgba_texture.create_view(&wgpu::TextureViewDescriptor::default());
                 nv12_renderer.render(&imported, &rgba_view, color_space);
                 let projected = match renderer.render(&rgba_view, imported.width, imported.height) {
@@ -914,7 +919,6 @@ impl IVideoService for VideoService {
                 pacer.wait_for_next_frame();
             }
 
-            let _ = sink.flush();
             let _ = sink.close();
             let rt = tokio::runtime::Handle::current();
             rt.block_on(streams_clone.remove(stream_id_for_handle.as_str()));
@@ -937,6 +941,7 @@ impl IVideoService for VideoService {
         stream_id: &StreamId,
         view_state: PanoramaViewState,
     ) -> Result<()> {
+        PanoramicRenderer::validate_view_state(&view_state)?;
         self.playback
             .update_panorama_view_state(stream_id, Arc::new(view_state))
             .await
@@ -959,6 +964,8 @@ impl IVideoService for VideoService {
         let budget_pipeline_id = format!("video-transcode:{}", output.display());
 
         tokio::task::spawn_blocking(move || -> Result<()> {
+            let _budget_guard =
+                budget.register_pipeline(budget_pipeline_id.clone(), PipelinePriority::Transcode);
             // =====================================================
             // Video decoder + encoder
             // =====================================================

@@ -453,6 +453,8 @@ impl ExportService {
         let job_id = config.job_id.clone();
         let budget = gpu_ctx.budget_controller().clone();
         let budget_pipeline_id = format!("export:{}", job_id);
+        let _budget_guard =
+            budget.register_pipeline(budget_pipeline_id.clone(), PipelinePriority::Export);
 
         // Update state to Initializing (blocking)
         {
@@ -768,8 +770,8 @@ impl ExportService {
             rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Muxing));
         }
 
-        // Wait for sink worker to complete (video encode + mux).
-        muxer_sink.flush()?;
+        // Close the sink to finalize video encode and mux output.
+        muxer_sink.close()?;
 
         // Update state to Finalizing
         {

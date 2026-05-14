@@ -56,7 +56,8 @@ mod windows_import;
 
 pub use blur_processor::{BlurParams, BlurType, GpuBlurProcessor, SharpenParams};
 pub use budget::{
-    GpuBudgetConfig, GpuBudgetController, GpuBudgetSnapshot, GpuPermit, PipelinePriority,
+    GpuBudgetConfig, GpuBudgetController, GpuBudgetPipelineGuard, GpuBudgetSnapshot, GpuPermit,
+    PipelinePriority,
 };
 pub use compositor::{
     BlendMode, CompositeLayer, CompositeResult, GpuCompositor, LayerPixelFormat, Transform2D,

@@ -72,6 +72,13 @@ impl EncoderPool {
         }
     }
 
+    fn lock_available(&self) -> std::sync::MutexGuard<'_, Vec<PooledEncoder>> {
+        self.available.lock().unwrap_or_else(|poisoned| {
+            tracing::warn!("EncoderPool: recovering from poisoned pool lock");
+            poisoned.into_inner()
+        })
+    }
+
     /// Acquire an opened encoder matching the given config.
     ///
     /// Returns a pre-opened encoder if one with matching signature is available,
@@ -81,7 +88,7 @@ impl EncoderPool {
 
         // Try to find a matching encoder in the pool
         {
-            let mut pool = self.available.lock().unwrap();
+            let mut pool = self.lock_available();
             if let Some(idx) = pool.iter().position(|e| e.signature == target_sig) {
                 let entry = pool.swap_remove(idx);
                 tracing::debug!(
@@ -121,7 +128,7 @@ impl EncoderPool {
         }
 
         let signature = EncoderSignature::from_config(&config);
-        let mut pool = self.available.lock().unwrap();
+        let mut pool = self.lock_available();
 
         // Evict expired entries
         pool.retain(|e| e.last_used.elapsed() < self.idle_timeout);
@@ -149,14 +156,14 @@ impl EncoderPool {
 
     /// Clean up idle encoders that have exceeded the timeout
     pub fn cleanup_idle(&self) {
-        let mut pool = self.available.lock().unwrap();
+        let mut pool = self.lock_available();
         let timeout = self.idle_timeout;
         pool.retain(|e| e.last_used.elapsed() < timeout);
     }
 
     /// Clear all pooled encoders
     pub fn clear(&self) {
-        let mut pool = self.available.lock().unwrap();
+        let mut pool = self.lock_available();
         pool.clear();
     }
 }

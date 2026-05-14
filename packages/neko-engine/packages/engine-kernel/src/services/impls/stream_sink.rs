@@ -75,8 +75,10 @@ impl StreamSink {
         let new_encoder = acquire_preview_encoder(&new_encoder_config)?;
 
         if let Some(mut old_encoder) = state.encoder.take() {
-            self.flush_encoder(&mut old_encoder, state.width, state.height, state.fps)?;
+            let flush_result =
+                self.flush_encoder(&mut old_encoder, state.width, state.height, state.fps);
             global_encoder_pool().release(old_encoder, state.encoder_config.clone());
+            flush_result?;
         }
 
         state.encoder = Some(new_encoder);
@@ -187,11 +189,16 @@ impl PipelineSink for StreamSink {
             return Ok(());
         }
 
-        if let Some(encoder) = state.encoder.take() {
+        let width = state.width;
+        let height = state.height;
+        let fps = state.fps;
+        let mut flush_result = Ok(());
+        if let Some(mut encoder) = state.encoder.take() {
+            flush_result = self.flush_encoder(&mut encoder, width, height, fps);
             global_encoder_pool().release(encoder, state.encoder_config.clone());
         }
         state.closed = true;
-        Ok(())
+        flush_result
     }
 }
 

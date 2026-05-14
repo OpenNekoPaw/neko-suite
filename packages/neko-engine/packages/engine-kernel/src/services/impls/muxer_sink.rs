@@ -37,6 +37,7 @@ trait MuxerBackend: Send {
     fn submit_video(&mut self, frame: CompositedFrame) -> Result<()>;
     fn submit_audio(&mut self, packet: EncoderPacket) -> Result<()>;
     fn cancel(&mut self) -> Result<()>;
+    fn flush(&mut self) -> Result<()>;
     fn finish(&mut self) -> Result<()>;
 }
 
@@ -74,6 +75,11 @@ impl MuxerBackend for AsyncPipelineMuxerBackend {
         self.finish()
     }
 
+    fn flush(&mut self) -> Result<()> {
+        self.pipeline()?;
+        Ok(())
+    }
+
     fn finish(&mut self) -> Result<()> {
         if let Some(pipeline) = self.pipeline.take() {
             let _ = pipeline.finish_audio();
@@ -108,7 +114,7 @@ impl MuxerSink {
 
     /// Cancel and finalize the sink.
     pub fn cancel(&self) -> Result<()> {
-        self.finish_with(|ack| MuxerCommand::Cancel(ack))
+        self.finish_with(|ack| MuxerCommand::Cancel(ack), true)
     }
 
     fn submit_video_gpu_frame(&self, frame: VideoGpuFrame) -> Result<()> {
@@ -154,12 +160,19 @@ impl MuxerSink {
         recv_ack(ack_rx)
     }
 
-    fn finish_with(&self, command: impl FnOnce(Sender<Result<()>>) -> MuxerCommand) -> Result<()> {
+    fn finish_with(
+        &self,
+        command: impl FnOnce(Sender<Result<()>>) -> MuxerCommand,
+        terminal: bool,
+    ) -> Result<()> {
         let ack_result = {
             let _guard = self.lock_commands()?;
-            if self.closed.swap(true, Ordering::SeqCst) {
+            if self.closed.load(Ordering::SeqCst) {
                 Ok(())
             } else {
+                if terminal {
+                    self.closed.store(true, Ordering::SeqCst);
+                }
                 let (ack_tx, ack_rx) = bounded(1);
                 self.tx
                     .send(command(ack_tx))
@@ -169,8 +182,12 @@ impl MuxerSink {
             }
         };
 
-        let join_result = self.join_worker();
-        ack_result.and(join_result)
+        if terminal {
+            let join_result = self.join_worker();
+            ack_result.and(join_result)
+        } else {
+            ack_result
+        }
     }
 
     fn join_worker(&self) -> Result<()> {
@@ -222,11 +239,11 @@ impl PipelineSink for MuxerSink {
     }
 
     fn flush(&self) -> Result<()> {
-        self.finish_with(|ack| MuxerCommand::Flush(ack))
+        self.finish_with(|ack| MuxerCommand::Flush(ack), false)
     }
 
     fn close(&self) -> Result<()> {
-        self.finish_with(|ack| MuxerCommand::Close(ack))
+        self.finish_with(|ack| MuxerCommand::Close(ack), true)
     }
 }
 
@@ -251,7 +268,10 @@ fn muxer_worker_loop(rx: Receiver<MuxerCommand>, mut backend: Box<dyn MuxerBacke
                 let _ = ack.send(result);
                 return worker_result;
             }
-            MuxerCommand::Flush(ack) | MuxerCommand::Close(ack) => {
+            MuxerCommand::Flush(ack) => {
+                let _ = ack.send(backend.flush());
+            }
+            MuxerCommand::Close(ack) => {
                 let result = backend.finish();
                 let worker_result = mirror_result(&result);
                 let _ = ack.send(result);
@@ -316,6 +336,10 @@ mod tests {
             self.record("cancel")
         }
 
+        fn flush(&mut self) -> Result<()> {
+            self.record("flush")
+        }
+
         fn finish(&mut self) -> Result<()> {
             self.record("finish")
         }
@@ -346,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn muxer_sink_flush_ack_finalizes_worker() {
+    fn muxer_sink_flush_ack_keeps_worker_open() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = MuxerSink::with_backend(
             Box::new(RecordingBackend::with_events(Arc::clone(&events))),
@@ -355,8 +379,20 @@ mod tests {
         .unwrap();
 
         sink.flush().unwrap();
-        assert_eq!(*events.lock().unwrap(), vec!["finish"]);
+        assert_eq!(*events.lock().unwrap(), vec!["flush"]);
+        sink.submit(PipelineOutput::Audio(AudioOutput::EncodedPacket(
+            AudioEncodedPacket {
+                data: vec![1],
+                pts: 0,
+                dts: 0,
+                duration: 1,
+                codec: neko_engine_types::AudioCodec::Aac,
+                stream_index: 1,
+            },
+        )))
+        .unwrap();
         sink.close().unwrap();
+        assert_eq!(*events.lock().unwrap(), vec!["flush", "audio", "finish"]);
     }
 
     #[test]

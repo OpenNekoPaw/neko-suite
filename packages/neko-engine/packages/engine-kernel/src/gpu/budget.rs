@@ -190,6 +190,49 @@ impl GpuBudgetController {
         &self.inner.config
     }
 
+    /// Register a pipeline for automatic cleanup when the returned guard is dropped.
+    pub fn register_pipeline(
+        &self,
+        pipeline_id: impl Into<String>,
+        priority: PipelinePriority,
+    ) -> GpuBudgetPipelineGuard {
+        let pipeline_id = pipeline_id.into();
+        let mut state = self.lock_state();
+        state
+            .pipelines
+            .entry(pipeline_id.clone())
+            .or_insert_with(|| PipelineStats::new(priority))
+            .priority = priority;
+        drop(state);
+
+        GpuBudgetPipelineGuard {
+            controller: self.clone(),
+            pipeline_id: Some(pipeline_id),
+        }
+    }
+
+    /// Remove a pipeline from budget accounting and release queued export state.
+    pub fn deregister_pipeline(&self, pipeline_id: impl AsRef<str>) {
+        let mut state = self.lock_state();
+        let pipeline_id = pipeline_id.as_ref();
+        state.pipelines.remove(pipeline_id);
+        remove_export_queue_entry(&mut state, pipeline_id);
+        self.recompute_emas_locked(&mut state);
+        if state.pipelines.is_empty() {
+            if state.under_pressure {
+                state.generation = state.generation.saturating_add(1);
+            }
+            state.under_pressure = false;
+            state.pressure_samples = 0;
+            state.recovery_samples = 0;
+        } else {
+            let _ = self.update_pressure_locked(&mut state);
+        }
+        drop(state);
+
+        self.inner.resume.notify_all();
+    }
+
     /// Acquire a non-blocking permit decision.
     pub fn acquire_permit(
         &self,
@@ -445,7 +488,7 @@ impl GpuBudgetController {
             state.active_export_slot = None;
         }
 
-        was_under_pressure != state.under_pressure || !state.under_pressure
+        was_under_pressure != state.under_pressure
     }
 
     fn pressure_signal(&self, state: &GpuBudgetState) -> bool {
@@ -498,6 +541,20 @@ impl GpuBudgetController {
 impl Default for GpuBudgetController {
     fn default() -> Self {
         Self::with_defaults()
+    }
+}
+
+/// RAII cleanup for a budgeted pipeline id.
+pub struct GpuBudgetPipelineGuard {
+    controller: GpuBudgetController,
+    pipeline_id: Option<String>,
+}
+
+impl Drop for GpuBudgetPipelineGuard {
+    fn drop(&mut self) {
+        if let Some(pipeline_id) = self.pipeline_id.take() {
+            self.controller.deregister_pipeline(pipeline_id);
+        }
     }
 }
 
@@ -695,5 +752,57 @@ mod tests {
             controller.acquire_permit("proxy", PipelinePriority::Transcode),
             GpuPermit::Paused { .. }
         ));
+    }
+
+    #[test]
+    fn deregister_pipeline_removes_stats_and_export_queue_state() {
+        let controller = GpuBudgetController::new(test_config());
+        for _ in 0..2 {
+            controller.report_frame_time(
+                "timeline",
+                PipelinePriority::Interactive,
+                Duration::from_millis(25),
+            );
+        }
+        assert!(controller.snapshot().global_frame_time_ema.is_some());
+
+        assert_eq!(
+            controller.acquire_permit("export-a", PipelinePriority::Export),
+            GpuPermit::Proceed
+        );
+        assert!(matches!(
+            controller.acquire_permit("export-b", PipelinePriority::Export),
+            GpuPermit::Queued { position: 2, .. }
+        ));
+
+        controller.deregister_pipeline("export-a");
+        assert_eq!(
+            controller.acquire_permit("export-b", PipelinePriority::Export),
+            GpuPermit::Proceed
+        );
+
+        controller.deregister_pipeline("timeline");
+        controller.deregister_pipeline("export-b");
+        let snapshot = controller.snapshot();
+        assert!(snapshot.global_frame_time_ema.is_none());
+        assert!(!snapshot.under_pressure);
+    }
+
+    #[test]
+    fn pipeline_guard_deregisters_on_drop() {
+        let controller = GpuBudgetController::new(test_config());
+        {
+            let _guard = controller.register_pipeline("proxy", PipelinePriority::Transcode);
+            controller.report_frame_time(
+                "proxy",
+                PipelinePriority::Transcode,
+                Duration::from_millis(10),
+            );
+            assert!(controller.snapshot().global_frame_time_ema.is_some());
+        }
+
+        let snapshot = controller.snapshot();
+        assert!(snapshot.global_frame_time_ema.is_none());
+        assert!(!snapshot.under_pressure);
     }
 }

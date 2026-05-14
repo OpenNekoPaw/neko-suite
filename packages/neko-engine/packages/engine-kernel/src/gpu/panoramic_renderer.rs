@@ -173,41 +173,45 @@ struct PanoramicViewUniforms {
 }
 
 impl PanoramicRenderer {
+    /// Validate a panoramic view state against currently implemented GPU projection modes.
+    pub fn validate_view_state(view_state: &PanoramaViewState) -> Result<()> {
+        validate_view_state(view_state)
+    }
+
     /// Create a panoramic renderer with an initial view state.
     pub fn new(ctx: Arc<GpuContext>, view_state: PanoramaViewState) -> Self {
         let device = ctx.device();
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("panoramic_bind_group_layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("panoramic_bind_group_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("panoramic_projection_shader"),
             source: wgpu::ShaderSource::Wgsl(PANORAMIC_SHADER.into()),
@@ -304,6 +308,7 @@ impl PanoramicRenderer {
             .state
             .lock()
             .map_err(|_| Error::Other("PanoramicRenderer state lock poisoned".to_string()))?;
+        validate_view_state(&state.view_state)?;
         let output = self.ctx.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("panoramic_projection_output"),
             size: wgpu::Extent3d {
@@ -327,24 +332,27 @@ impl PanoramicRenderer {
             0,
             bytemuck::bytes_of(&uniforms_for_state(width, height, &state.view_state)),
         );
-        let bind_group = self.ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("panoramic_bind_group"),
-            layout: &state.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: state.uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(input_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&state.sampler),
-                },
-            ],
-        });
+        let bind_group = self
+            .ctx
+            .device()
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("panoramic_bind_group"),
+                layout: &state.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: state.uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(input_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&state.sampler),
+                    },
+                ],
+            });
         let mut encoder =
             self.ctx
                 .device()
@@ -388,6 +396,12 @@ fn validate_view_state(view_state: &PanoramaViewState) -> Result<()> {
             "panoramic FOV must be in 1..=179 degrees, got {}",
             view_state.fov_deg
         )));
+    }
+    if view_state.mode == PanoramaViewMode::LittlePlanet {
+        return Err(Error::UnsupportedCapability(
+            "panoramic LittlePlanet mode requires stereographic projection shader support"
+                .to_string(),
+        ));
     }
     Ok(())
 }
@@ -438,5 +452,16 @@ mod tests {
         state.fov_deg = 0.0;
 
         assert!(validate_view_state(&state).is_err());
+    }
+
+    #[test]
+    fn rejects_little_planet_until_shader_is_implemented() {
+        let mut state = default_panorama_view_state();
+        state.mode = PanoramaViewMode::LittlePlanet;
+
+        assert!(matches!(
+            validate_view_state(&state),
+            Err(Error::UnsupportedCapability(_))
+        ));
     }
 }

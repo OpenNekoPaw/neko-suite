@@ -710,6 +710,8 @@ impl ITimelineService for TimelineService {
         let video_stream_id_clone = video_stream_id.clone();
         let video_join = tokio::task::spawn_blocking(move || {
             let budget_pipeline_id = format!("timeline-preview:{}", video_stream_id_clone.as_str());
+            let _budget_guard = video_budget
+                .register_pipeline(budget_pipeline_id.clone(), PipelinePriority::Interactive);
             // Create PreviewPipeline and StreamSink.
             let preview_config = PreviewPipelineConfig {
                 width,
