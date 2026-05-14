@@ -11,6 +11,7 @@ use neko_engine_kernel::media_service::{
 use neko_engine_kernel::services::{IVideoService, VideoService};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, FrameFormat};
+use neko_runtime_media::PanoramaViewState;
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
@@ -126,6 +127,18 @@ struct StreamRequestOptions {
     source: Option<String>,
     /// Session ID for the stream
     session_id: Option<String>,
+    /// Route through the panoramic GPU projection stream.
+    #[serde(default)]
+    panoramic: bool,
+    /// Initial panoramic view state.
+    view_state: Option<PanoramaViewState>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewStateRequestOptions {
+    stream_id: String,
+    view_state: PanoramaViewState,
 }
 
 /// Options for videos:transcode
@@ -357,10 +370,20 @@ impl Controller for VideoController {
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
-                let (stream_id, rx) = self
-                    .video_service
-                    .start_stream(&file_path, &session_id)
-                    .await?;
+                let (stream_id, rx) = if opts.panoramic {
+                    self.video_service
+                        .start_panoramic_stream(
+                            &file_path,
+                            &session_id,
+                            opts.view_state
+                                .unwrap_or_else(neko_runtime_media::default_panorama_view_state),
+                        )
+                        .await?
+                } else {
+                    self.video_service
+                        .start_stream(&file_path, &session_id)
+                        .await?
+                };
 
                 // Register the stream into StreamRegistry so WebSocket subscribers can find it
                 let cancel_token = CancellationToken::new();
@@ -379,6 +402,7 @@ impl Controller for VideoController {
                     "streamId": stream_id.as_str(),
                     "resourceId": res_id.as_str(),
                     "status": "active",
+                    "projection": if opts.panoramic { "panoramic" } else { "flat" },
                 });
 
                 Ok(ActionResponse::ok("", response))
@@ -499,6 +523,21 @@ impl Controller for VideoController {
                 });
 
                 Ok(ActionResponse::ok("", response))
+            }
+            "view-state" => {
+                let opts: ViewStateRequestOptions = serde_json::from_value(options)
+                    .map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
+                let stream_id = neko_engine_types::StreamId::from_string(opts.stream_id);
+                self.video_service
+                    .update_panoramic_view_state(&stream_id, opts.view_state)
+                    .await?;
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({
+                        "streamId": stream_id.as_str(),
+                        "viewStateUpdated": true,
+                    }),
+                ))
             }
             "stop" | "pause" | "resume" | "speed" | "seek" | "loop" => {
                 handle_stream_control(self.video_service.as_ref(), action, options, "videos").await

@@ -1,12 +1,12 @@
 //! AudioController - handles audios:* actions
 
-use crate::controllers::Controller;
 use crate::controllers::utils::{handle_stream_control, resolve_resource};
+use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_engine_kernel::domain::{AudioOutputFormat, AudioRenderEffectConfig, StreamConfig};
 use neko_engine_kernel::media_service::{
-    AudioDiffOptions, DiffCategory, diff_audio_content_with_options, diff_media,
+    diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory,
 };
 use neko_engine_kernel::services::{AudioService, IAudioService};
 use neko_engine_types::registry;
@@ -1061,11 +1061,9 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(
-            error
-                .to_string()
-                .contains("config required for audios:mixdown")
-        );
+        assert!(error
+            .to_string()
+            .contains("config required for audios:mixdown"));
     }
 
     #[tokio::test]

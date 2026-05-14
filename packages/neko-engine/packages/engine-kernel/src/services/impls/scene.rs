@@ -1,43 +1,47 @@
 //! SceneService — implementation using runtime-scene crate
 //!
-//! Wraps BevySceneWorld with Mutex for thread-safe access.
-//! Optionally holds PbrRenderer + AssetCache for GPU rendering.
+//! Delegates live world access to SceneComputation and GPU work to renderer state.
 
-use super::scene_command_queue::SceneCommandQueue;
+use super::scene_computation::SceneComputation;
+use super::scene_renderer::{
+    SceneExportFrameQueue, SceneRenderRequest, SceneRenderSnapshot, SceneRenderer,
+    SceneSnapshotWatch,
+};
 use crate::domain::FrameData;
 use crate::encoder::encode_nv12_to_h264_iframe;
 use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::{
-    extract_render_world, AssetCache, CameraParams, ControlAckHealthSample, PbrRenderer,
-    RenderExtractStats, RenderWorld, SceneRenderOutput, ViewportDescriptor,
-    ViewportRenderGraphOutput,
+    extract_render_world, CameraParams, ControlAckHealthSample, RenderExtractStats, RenderWorld,
+    SceneRenderOutput, ViewportDescriptor, ViewportRenderGraphOutput,
 };
 use crate::gpu::GpuContext;
+#[cfg(target_os = "macos")]
+use crate::gpu::RgbaToNv12TextureConverter;
 use crate::media_service::encode_rgba_to_jpeg;
+use crate::services::pipeline_sink::{
+    GpuFrameLease, GpuOutputHandle, PipelineOutput, VideoGpuFrame, VideoOutput,
+};
 use crate::services::scene::ISceneService;
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::FrameFormat;
+use neko_runtime_scene::access::{
+    BeginModelingSession, CommitModelingSession, DataAccess, ProceduralSceneEntitySpec,
+    SceneEntityFilter, SceneNodeMeshRef, SceneRenderExtractInput, SceneRenderExtraction,
+    SceneRenderExtractor,
+};
 use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
 use neko_runtime_scene::asset_database::{AssetDatabase, AssetHandle, MaterialDescriptorPatch};
-use neko_runtime_scene::components::{
-    AnimationChannelInfo, Camera, GlobalTransform, Light, MaterialRef, MeshRef, NodeName,
-    SceneNodeId, Transform,
-};
+use neko_runtime_scene::components::AnimationChannelInfo;
 use neko_runtime_scene::exporter::{self, ExportNode};
 use neko_runtime_scene::ik::IkChainInfo;
 use neko_runtime_scene::procedural_mesh::ProceduralMesh;
 use neko_runtime_scene::project::NkmProject;
-use neko_runtime_scene::world::{
-    AnimationClipInfo, BevySceneWorld, SceneDelta, SceneSnapshot, SceneWorld,
-};
+use neko_runtime_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot, SceneWorld};
 use neko_runtime_scene::{
-    ensure_scene_control_resources, extract_scene_delta, SceneCommandAck, SceneCommandAckStatus,
-    SceneCommandEnvelope, SceneRevision,
+    BrushPatchApplyOutcome, ModelingSession, ModelingSessionStateDelta, TopologyChangeEvent,
+    TopologyOperation, VertexBrushPatchMetadata,
 };
-use neko_runtime_scene::{
-    BrushPatchApplyOutcome, ModelingSession, ModelingSessionManager, ModelingSessionStateDelta,
-    TopologyChangeEvent, TopologyOperation, VertexBrushPatchMetadata,
-};
+use neko_runtime_scene::{SceneCommandAck, SceneCommandEnvelope};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::{
@@ -126,52 +130,80 @@ struct SharedRenderExtract {
 impl SharedRenderExtractCache {
     fn prepare(
         &mut self,
-        world: &mut bevy_ecs::world::World,
+        data: &mut impl DataAccess,
         asset_database: &AssetDatabase,
         camera: &CameraParams,
     ) -> SharedRenderExtract {
-        let revision = world
-            .get_resource::<SceneRevision>()
-            .map(|revision| revision.current())
-            .unwrap_or_default();
-        if self.revision == Some(revision) {
-            return SharedRenderExtract {
-                revision,
-                render_world: self.render_world.clone(),
-                stats: self.stats,
-                extracted: false,
-            };
-        }
-
-        self.stats = extract_render_world(world, asset_database, camera, &mut self.render_world);
+        let extraction = data.extract_render_world(
+            SceneRenderExtractInput {
+                asset_database,
+                camera,
+            },
+            self,
+        );
+        let revision = extraction.revision;
+        let extracted = self.revision != Some(revision);
         self.revision = Some(revision);
-        self.extract_count = self.extract_count.saturating_add(1);
+        self.stats = extraction.stats;
+        self.render_world = extraction.render_world;
+        if extracted {
+            self.extract_count = self.extract_count.saturating_add(1);
+        }
         SharedRenderExtract {
             revision,
             render_world: self.render_world.clone(),
             stats: self.stats,
-            extracted: true,
+            extracted,
+        }
+    }
+}
+
+impl SceneRenderExtractor<CameraParams> for SharedRenderExtractCache {
+    type RenderWorld = RenderWorld;
+    type Stats = RenderExtractStats;
+
+    fn extract(
+        &mut self,
+        world: &mut bevy_ecs::world::World,
+        input: SceneRenderExtractInput<'_, CameraParams>,
+    ) -> SceneRenderExtraction<Self::RenderWorld, Self::Stats> {
+        let revision = world
+            .get_resource::<neko_runtime_scene::SceneRevision>()
+            .map(|revision| revision.current())
+            .unwrap_or_default();
+        if self.revision != Some(revision) {
+            self.stats = extract_render_world(
+                world,
+                input.asset_database,
+                input.camera,
+                &mut self.render_world,
+            );
+        }
+        SceneRenderExtraction {
+            revision,
+            render_world: self.render_world.clone(),
+            stats: self.stats,
         }
     }
 }
 
 /// Concrete scene service backed by bevy_ecs
 pub struct SceneService {
-    world: Mutex<BevySceneWorld>,
+    computation: SceneComputation,
     /// GPU context used for readback/capture helpers
     gpu_ctx: Option<Arc<GpuContext>>,
-    /// PBR renderer (None if GPU unavailable)
-    renderer: Option<Mutex<PbrRenderer>>,
-    /// GPU asset cache (None if GPU unavailable)
-    asset_cache: Option<Mutex<AssetCache>>,
+    /// Snapshot renderer and derived GPU cache (None if GPU unavailable)
+    scene_renderer: Option<SceneRenderer>,
     /// Authoring asset descriptors used by export, Inspector, and GPU cache derivation
     asset_database: Mutex<AssetDatabase>,
-    /// Serial scene command validator/apply queue
-    command_queue: Mutex<SceneCommandQueue>,
     /// Runtime health metrics for the /v1/scenes/control ack path.
     control_ack_metrics: ControlAckMetrics,
     /// Shared render-only extraction reused by multiple viewports at the same scene revision.
     render_extract_cache: Mutex<SharedRenderExtractCache>,
+    /// Latest extracted render snapshot for realtime preview consumers.
+    realtime_snapshot_watch: SceneSnapshotWatch,
+    /// Bounded complete-frame queue for export-style render consumers.
+    export_frame_queue: SceneExportFrameQueue,
     /// CPU-side mesh cache for procedural meshes (needed for CSG lookups)
     procedural_meshes: Mutex<HashMap<String, ProceduralMesh>>,
     /// VRM face parameter presets (populated from NkmProject on load)
@@ -184,15 +216,17 @@ pub struct SceneService {
 impl SceneService {
     /// Create without GPU (scene management only, no rendering)
     pub fn new() -> Self {
+        let (realtime_snapshot_watch, _snapshot_rx) =
+            SceneSnapshotWatch::new(SceneRenderSnapshot::default());
         Self {
-            world: Mutex::new(BevySceneWorld::new()),
+            computation: SceneComputation::new(),
             gpu_ctx: None,
-            renderer: None,
-            asset_cache: None,
+            scene_renderer: None,
             asset_database: Mutex::new(AssetDatabase::default()),
-            command_queue: Mutex::new(SceneCommandQueue::default()),
             control_ack_metrics: ControlAckMetrics::default(),
             render_extract_cache: Mutex::new(SharedRenderExtractCache::default()),
+            realtime_snapshot_watch,
+            export_frame_queue: SceneExportFrameQueue::bounded(),
             procedural_meshes: Mutex::new(HashMap::new()),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
@@ -201,18 +235,17 @@ impl SceneService {
 
     /// Create with GPU context (enables render_frame)
     pub fn with_gpu(ctx: Arc<GpuContext>) -> Self {
-        let (renderer, material_bgl) = PbrRenderer::new(Arc::clone(&ctx));
-        let asset_cache = AssetCache::new(Arc::clone(&ctx), material_bgl);
-
+        let (realtime_snapshot_watch, _snapshot_rx) =
+            SceneSnapshotWatch::new(SceneRenderSnapshot::default());
         Self {
-            world: Mutex::new(BevySceneWorld::new()),
+            computation: SceneComputation::new(),
             gpu_ctx: Some(Arc::clone(&ctx)),
-            renderer: Some(Mutex::new(renderer)),
-            asset_cache: Some(Mutex::new(asset_cache)),
+            scene_renderer: Some(SceneRenderer::new(ctx)),
             asset_database: Mutex::new(AssetDatabase::default()),
-            command_queue: Mutex::new(SceneCommandQueue::default()),
             control_ack_metrics: ControlAckMetrics::default(),
             render_extract_cache: Mutex::new(SharedRenderExtractCache::default()),
+            realtime_snapshot_watch,
+            export_frame_queue: SceneExportFrameQueue::bounded(),
             procedural_meshes: Mutex::new(HashMap::new()),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
@@ -232,13 +265,17 @@ impl SceneService {
     }
 
     pub fn current_revision(&self) -> Result<u64> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        let ecs = world.ecs_world_mut();
-        ensure_scene_control_resources(ecs);
-        Ok(ecs.resource::<SceneRevision>().current())
+        self.computation.current_revision()
+    }
+
+    pub fn latest_render_snapshot_generation(&self) -> u64 {
+        self.realtime_snapshot_watch.latest_generation()
+    }
+
+    pub fn pop_export_render_snapshot_generation(&self) -> Result<Option<u64>> {
+        self.export_frame_queue
+            .try_pop()
+            .map(|snapshot| snapshot.map(|snapshot| snapshot.generation))
     }
 
     pub fn apply_scene_command(
@@ -254,24 +291,7 @@ impl SceneService {
         envelope: SceneCommandEnvelope,
     ) -> Result<(Vec<SceneCommandAck>, Option<SceneDelta>)> {
         let _ack_sample = self.control_ack_metrics.start_sample();
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        let mut queue = self
-            .command_queue
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene command queue lock poisoned: {}", e)))?;
-
-        let acks = queue.apply(world.ecs_world_mut(), envelope);
-        let applied_seq = acks
-            .iter()
-            .rev()
-            .find(|ack| ack.status == SceneCommandAckStatus::Applied)
-            .map(|ack| ack.applied_seq);
-        let delta = applied_seq.map(|seq| extract_scene_delta(world.ecs_world_mut(), Some(seq)));
-
-        Ok((acks, delta))
+        self.computation.apply_scene_command_with_delta(envelope)
     }
 
     pub fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample {
@@ -287,28 +307,14 @@ impl SceneService {
         topology_mutable: bool,
         before_hash: String,
     ) -> Result<(ModelingSession, Option<SceneDelta>)> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        let ecs = world.ecs_world_mut();
-        ensure_scene_control_resources(ecs);
-        if !ecs.contains_resource::<ModelingSessionManager>() {
-            ecs.insert_resource(ModelingSessionManager::default());
-        }
-        let session = ecs
-            .resource_mut::<ModelingSessionManager>()
-            .begin(
+        self.computation
+            .begin_modeling_session(BeginModelingSession {
                 session_id,
                 mesh_id,
                 character_id,
                 topology_mutable,
                 before_hash,
-            )
-            .map_err(|error| Error::Other(error.to_string()))?;
-        ecs.resource_mut::<SceneRevision>().advance();
-        let delta = extract_scene_delta(ecs, None);
-        Ok((session, Some(delta)))
+            })
     }
 
     pub fn commit_modeling_session(
@@ -318,68 +324,30 @@ impl SceneService {
         vertex_count_before: u32,
         vertex_count_after: u32,
     ) -> Result<(TopologyChangeEvent, Option<SceneDelta>)> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        let ecs = world.ecs_world_mut();
-        ensure_scene_control_resources(ecs);
-        let event = ecs
-            .get_resource_mut::<ModelingSessionManager>()
-            .ok_or_else(|| Error::Other("modeling session manager is not available".to_string()))?
-            .commit(
-                session_id,
+        self.computation
+            .commit_modeling_session(CommitModelingSession {
+                session_id: session_id.to_string(),
                 operation,
                 vertex_count_before,
                 vertex_count_after,
-            )
-            .map_err(|error| Error::Other(error.to_string()))?;
-        ecs.resource_mut::<SceneRevision>().advance();
-        let delta = extract_scene_delta(ecs, None);
-        Ok((event, Some(delta)))
+            })
     }
 
     pub fn cancel_modeling_session(
         &self,
         session_id: &str,
     ) -> Result<(ModelingSessionStateDelta, Option<SceneDelta>)> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        let ecs = world.ecs_world_mut();
-        ensure_scene_control_resources(ecs);
-        let session = ecs
-            .get_resource_mut::<ModelingSessionManager>()
-            .ok_or_else(|| Error::Other("modeling session manager is not available".to_string()))?
-            .cancel(session_id)
-            .map_err(|error| Error::Other(error.to_string()))?;
-        ecs.resource_mut::<SceneRevision>().advance();
-        let delta = extract_scene_delta(ecs, None);
-        Ok((session, Some(delta)))
+        self.computation.cancel_modeling_session(session_id)
     }
 
     pub fn apply_vertex_brush_patch(
         &self,
         patch: VertexBrushPatchMetadata,
     ) -> Result<BrushPatchApplyOutcome> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        let ecs = world.ecs_world_mut();
-        if !ecs.contains_resource::<ModelingSessionManager>() {
-            ecs.insert_resource(ModelingSessionManager::default());
-        }
-        let outcome = ecs
-            .resource_mut::<ModelingSessionManager>()
-            .apply_brush_patch(patch)
-            .map_err(|error| Error::Other(error.to_string()))?;
+        let outcome = self.computation.apply_vertex_brush_patch(patch)?;
 
-        if let Some(cache_mutex) = &self.asset_cache {
-            if let Ok(cache) = cache_mutex.lock() {
-                cache.record_mesh_dirty_region(&outcome.dirty_region);
-            }
+        if let Some(renderer) = &self.scene_renderer {
+            renderer.record_mesh_dirty_region(&outcome.dirty_region)?;
         }
 
         Ok(outcome)
@@ -387,10 +355,20 @@ impl SceneService {
 
     #[cfg(test)]
     fn prepare_shared_extract_for_test(&self) -> Result<(u64, RenderExtractStats, bool, u64)> {
-        let mut world = self
-            .world
+        let shared_extract = self.prepare_shared_extract(&CameraParams::default())?;
+        let cache = self
+            .render_extract_cache
             .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+            .map_err(|e| Error::Other(format!("Render extract cache lock poisoned: {}", e)))?;
+        Ok((
+            shared_extract.revision,
+            shared_extract.stats,
+            shared_extract.extracted,
+            cache.extract_count,
+        ))
+    }
+
+    fn prepare_shared_extract(&self, camera: &CameraParams) -> Result<SharedRenderExtract> {
         let asset_database = self
             .asset_database
             .lock()
@@ -399,17 +377,24 @@ impl SceneService {
             .render_extract_cache
             .lock()
             .map_err(|e| Error::Other(format!("Render extract cache lock poisoned: {}", e)))?;
-        let shared_extract = cache.prepare(
-            world.ecs_world_mut(),
-            &asset_database,
-            &CameraParams::default(),
-        );
-        Ok((
-            shared_extract.revision,
-            shared_extract.stats,
-            shared_extract.extracted,
-            cache.extract_count,
-        ))
+        let shared_extract = self
+            .computation
+            .data(|world| cache.prepare(world, &asset_database, camera))?;
+        let render_snapshot = SceneRenderSnapshot {
+            generation: shared_extract.revision,
+            render_world: shared_extract.render_world.clone(),
+        };
+        self.realtime_snapshot_watch
+            .publish(render_snapshot.clone())?;
+        if self.export_frame_queue.try_push(render_snapshot).is_err() {
+            let _ = self.export_frame_queue.try_pop()?;
+            self.export_frame_queue.try_push(SceneRenderSnapshot {
+                generation: shared_extract.revision,
+                render_world: shared_extract.render_world.clone(),
+            })?;
+        }
+        drop(asset_database);
+        Ok(shared_extract)
     }
 
     fn render_frame_internal(
@@ -421,28 +406,15 @@ impl SceneService {
         background_color: Option<[f32; 4]>,
         viewport_graph: Option<(&ViewportDescriptor, ViewportRenderGraphOutput)>,
     ) -> Result<SceneRenderOutput> {
-        let renderer_mutex = self
-            .renderer
+        let scene_renderer = self
+            .scene_renderer
             .as_ref()
             .ok_or_else(|| Error::Other("GPU not available for rendering".into()))?;
-        let cache_mutex = self
-            .asset_cache
-            .as_ref()
-            .ok_or_else(|| Error::Other("GPU not available for rendering".into()))?;
-
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        let renderer = renderer_mutex
-            .lock()
-            .map_err(|e| Error::Other(format!("Renderer lock poisoned: {}", e)))?;
-        let cache = cache_mutex
-            .lock()
-            .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
 
         if let Some(clip) = clip_name {
-            world.tick(clip, time);
+            self.computation
+                .creative(|world| world.tick(clip, time))
+                .map(|_| ())?;
         }
 
         let stored_camera = self.get_editor_camera();
@@ -451,19 +423,7 @@ impl SceneService {
             .or(stored_camera.as_ref())
             .unwrap_or(&default_camera);
 
-        let asset_database = self
-            .asset_database
-            .lock()
-            .map_err(|e| Error::Other(format!("Asset database lock poisoned: {}", e)))?;
-        let shared_extract = self
-            .render_extract_cache
-            .lock()
-            .map_err(|e| Error::Other(format!("Render extract cache lock poisoned: {}", e)))?
-            .prepare(
-                world.ecs_world_mut(),
-                &asset_database,
-                &CameraParams::default(),
-            );
+        let shared_extract = self.prepare_shared_extract(camera)?;
         tracing::trace!(
             scene_revision = shared_extract.revision,
             extracted = shared_extract.extracted,
@@ -472,28 +432,17 @@ impl SceneService {
             lights = shared_extract.stats.lights,
             "Prepared shared scene RenderWorld extract"
         );
-        drop(asset_database);
-        drop(world);
 
-        match viewport_graph {
-            Some((descriptor, output)) => renderer.render_viewport_from_render_world(
-                &shared_extract.render_world,
-                &cache,
+        scene_renderer.render(
+            shared_extract.revision,
+            SceneRenderRequest {
+                snapshot: &shared_extract.render_world,
                 camera,
                 output_size,
                 background_color,
-                descriptor,
-                output,
-            ),
-            None => renderer.render_from_render_world(
-                &shared_extract.render_world,
-                &cache,
-                camera,
-                output_size,
-                background_color,
-            ),
-        }
-        .map_err(|e| Error::Other(format!("PBR render failed: {}", e)))
+                viewport_graph,
+            },
+        )
     }
 
     pub fn capture_display_frame(
@@ -567,6 +516,82 @@ impl SceneService {
             pts_us,
             duration_us,
         ))
+    }
+
+    pub fn render_scene_stream_gpu_output(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        pts_us: i64,
+        duration_us: i64,
+        frame_index: u64,
+        viewport: &ViewportDescriptor,
+    ) -> Result<PipelineOutput> {
+        let frame = self.render_scene_stream_gpu_frame(
+            output_size,
+            camera_override,
+            background_color,
+            pts_us,
+            duration_us,
+            frame_index,
+            viewport,
+        )?;
+        Ok(PipelineOutput::Video(VideoOutput::GpuFrame(frame)))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn render_scene_stream_gpu_frame(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        pts_us: i64,
+        duration_us: i64,
+        frame_index: u64,
+        viewport: &ViewportDescriptor,
+    ) -> Result<VideoGpuFrame> {
+        let output = self.render_frame_internal(
+            None,
+            0.0,
+            output_size,
+            camera_override,
+            background_color,
+            Some((viewport, ViewportRenderGraphOutput::RealtimeStream)),
+        )?;
+        let ctx = self
+            .gpu_ctx
+            .as_ref()
+            .ok_or_else(|| Error::Other("GPU not available for scene stream".to_string()))?;
+        let mut converter = RgbaToNv12TextureConverter::new(Arc::clone(ctx))?;
+        let io_surface =
+            converter.convert_to_iosurface(&output.color_view, output.width, output.height, 1)?;
+
+        Ok(VideoGpuFrame {
+            lease: GpuFrameLease::new(GpuOutputHandle::IOSurface(io_surface)),
+            pts: pts_us,
+            duration: duration_us,
+            frame_index,
+            width: output.width,
+            height: output.height,
+        })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn render_scene_stream_gpu_frame(
+        &self,
+        _output_size: (u32, u32),
+        _camera_override: Option<&CameraParams>,
+        _background_color: Option<[f32; 4]>,
+        _pts_us: i64,
+        _duration_us: i64,
+        _frame_index: u64,
+        _viewport: &ViewportDescriptor,
+    ) -> Result<VideoGpuFrame> {
+        Err(Error::UnsupportedCapability(format!(
+            "scene GPU stream output is not implemented on {}",
+            std::env::consts::OS
+        )))
     }
 }
 
@@ -674,13 +699,13 @@ impl Default for SceneService {
 
 impl ISceneService for SceneService {
     fn load_model(&self, path: &Path) -> Result<SceneSnapshot> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        let load_result = world
-            .load_model(path)
+        let (load_result, snapshot) = self
+            .computation
+            .creative(|world| {
+                let load_result = world.load_model(path)?;
+                let snapshot = world.get_snapshot();
+                Ok::<_, neko_runtime_scene::loader::LoadError>((load_result, snapshot))
+            })?
             .map_err(|e| Error::Other(format!("Failed to load model: {}", e)))?;
         {
             let mut database = self
@@ -690,26 +715,17 @@ impl ISceneService for SceneService {
             database.merge(load_result.asset_database);
         }
 
-        // Also load GPU assets if renderer is available
-        if let Some(cache_mutex) = &self.asset_cache {
-            let mut cache = cache_mutex
-                .lock()
-                .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
-            if let Err(e) = cache.load_gltf(path) {
+        if let Some(renderer) = &self.scene_renderer {
+            if let Err(e) = renderer.load_gltf(path) {
                 tracing::warn!("Failed to load GPU assets for {}: {}", path.display(), e);
             }
         }
 
-        Ok(world.get_snapshot())
+        Ok(snapshot)
     }
 
     fn get_snapshot(&self) -> Result<SceneSnapshot> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        Ok(world.get_snapshot())
+        self.computation.creative(|world| world.get_snapshot())
     }
 
     fn update_transform(
@@ -719,37 +735,26 @@ impl ISceneService for SceneService {
         rotation: [f32; 4],
         scale: [f32; 3],
     ) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        world
-            .update_transform(
-                node_id,
-                glam::Vec3::from(position),
-                glam::Quat::from_array(rotation),
-                glam::Vec3::from(scale),
-            )
+        self.computation
+            .creative(|world| {
+                world.update_transform(
+                    node_id,
+                    glam::Vec3::from(position),
+                    glam::Quat::from_array(rotation),
+                    glam::Vec3::from(scale),
+                )
+            })?
             .map_err(Error::Other)
     }
 
     fn tick(&self, clip_name: &str, time: f32) -> Result<SceneDelta> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        Ok(world.tick(clip_name, time))
+        self.computation
+            .creative(|world| world.tick(clip_name, time))
     }
 
     fn get_animation_clips(&self) -> Result<Vec<AnimationClipInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        Ok(world.get_animation_clips())
+        self.computation
+            .creative(|world| world.get_animation_clips())
     }
 
     fn create_shape(&self, params: serde_json::Value) -> Result<SceneSnapshot> {
@@ -759,12 +764,8 @@ impl ISceneService for SceneService {
         let mesh = neko_runtime_scene::procedural::generate_shape(&shape_params);
         let uri = format!("procedural://shape_{}", uuid::Uuid::new_v4());
 
-        // Register in GPU asset cache if available
-        if let Some(cache_mutex) = &self.asset_cache {
-            let mut cache = cache_mutex
-                .lock()
-                .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
-            if let Err(e) = cache.register_procedural_mesh(&uri, 0, &mesh) {
+        if let Some(renderer) = &self.scene_renderer {
+            if let Err(e) = renderer.register_procedural_mesh(&uri, 0, &mesh) {
                 tracing::warn!("Failed to register procedural shape in GPU cache: {}", e);
             }
         }
@@ -778,15 +779,13 @@ impl ISceneService for SceneService {
             pm.insert(uri.clone(), mesh);
         }
 
-        // Spawn entity in ECS world
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        spawn_procedural_entity(world.ecs_world_mut(), &uri, "Shape");
-
-        Ok(world.get_snapshot())
+        self.computation.data(|world| {
+            world.spawn_procedural(ProceduralSceneEntitySpec {
+                uri,
+                label: "Shape".to_string(),
+            });
+            world.get_snapshot()
+        })
     }
 
     fn create_text_mesh(&self, params: serde_json::Value) -> Result<SceneSnapshot> {
@@ -797,12 +796,8 @@ impl ISceneService for SceneService {
             .map_err(|e| Error::Other(format!("Text mesh generation failed: {}", e)))?;
         let uri = format!("procedural://text_{}", uuid::Uuid::new_v4());
 
-        // Register in GPU asset cache if available
-        if let Some(cache_mutex) = &self.asset_cache {
-            let mut cache = cache_mutex
-                .lock()
-                .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
-            if let Err(e) = cache.register_procedural_mesh(&uri, 0, &mesh) {
+        if let Some(renderer) = &self.scene_renderer {
+            if let Err(e) = renderer.register_procedural_mesh(&uri, 0, &mesh) {
                 tracing::warn!("Failed to register text mesh in GPU cache: {}", e);
             }
         }
@@ -816,15 +811,13 @@ impl ISceneService for SceneService {
             pm.insert(uri.clone(), mesh);
         }
 
-        // Spawn entity in ECS world
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        spawn_procedural_entity(world.ecs_world_mut(), &uri, "Text");
-
-        Ok(world.get_snapshot())
+        self.computation.data(|world| {
+            world.spawn_procedural(ProceduralSceneEntitySpec {
+                uri,
+                label: "Text".to_string(),
+            });
+            world.get_snapshot()
+        })
     }
 
     fn csg_boolean(
@@ -845,17 +838,12 @@ impl ISceneService for SceneService {
             }
         };
 
-        // Look up MeshRef URIs from the ECS world
-        let (uri_a, uri_b) = {
-            let mut world = self
-                .world
-                .lock()
-                .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-            let ecs = world.ecs_world_mut();
-            let ua = find_mesh_uri(ecs, entity_a)?;
-            let ub = find_mesh_uri(ecs, entity_b)?;
-            (ua, ub)
-        };
+        let (uri_a, uri_b) = self.computation.data(|world| {
+            Ok::<_, Error>((
+                world.mesh_uri(entity_a).map_err(Error::Other)?,
+                world.mesh_uri(entity_b).map_err(Error::Other)?,
+            ))
+        })??;
 
         // Only support CSG on procedural meshes
         if !uri_a.starts_with("procedural://") {
@@ -889,12 +877,8 @@ impl ISceneService for SceneService {
 
         let uri = format!("procedural://csg_{}", uuid::Uuid::new_v4());
 
-        // Register in GPU asset cache if available
-        if let Some(cache_mutex) = &self.asset_cache {
-            let mut cache = cache_mutex
-                .lock()
-                .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
-            if let Err(e) = cache.register_procedural_mesh(&uri, 0, &result_mesh) {
+        if let Some(renderer) = &self.scene_renderer {
+            if let Err(e) = renderer.register_procedural_mesh(&uri, 0, &result_mesh) {
                 tracing::warn!("Failed to register CSG result in GPU cache: {}", e);
             }
         }
@@ -908,15 +892,13 @@ impl ISceneService for SceneService {
             pm.insert(uri.clone(), result_mesh);
         }
 
-        // Spawn entity in ECS world
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        spawn_procedural_entity(world.ecs_world_mut(), &uri, "CSG");
-
-        Ok(world.get_snapshot())
+        self.computation.data(|world| {
+            world.spawn_procedural(ProceduralSceneEntitySpec {
+                uri,
+                label: "CSG".to_string(),
+            });
+            world.get_snapshot()
+        })
     }
 
     fn render_frame(
@@ -938,46 +920,32 @@ impl ISceneService for SceneService {
     }
 
     fn export_glb(&self) -> Result<Vec<u8>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
+        let (snapshot, serialized) = self.computation.data(|world| {
+            (
+                world.get_snapshot(),
+                world.serialize_entities(SceneEntityFilter::Export),
+            )
+        })?;
 
-        let snapshot = world.get_snapshot();
-
-        // Build ExportNodes by querying MeshRef URIs from ECS
-        let export_nodes: Vec<ExportNode> = {
-            let ecs = world.ecs_world_mut();
-            snapshot
-                .nodes
-                .iter()
-                .map(|node| {
-                    let (mesh_uri, material_handle, light, camera) =
-                        if node.has_mesh || node.has_light || node.has_camera {
-                            find_export_refs(ecs, &node.id).unwrap_or((None, None, None, None))
-                        } else {
-                            (None, None, None, None)
-                        };
-                    ExportNode {
-                        snapshot: node.clone(),
-                        mesh_uri,
-                        material_handle,
-                        light,
-                        camera,
-                    }
-                })
-                .collect()
-        };
-
-        // Query animation clips from ECS
-        let animation_clips: Vec<neko_runtime_scene::components::AnimationClipData> = {
-            let ecs = world.ecs_world_mut();
-            let mut query = ecs.query::<&neko_runtime_scene::components::AnimationTarget>();
-            query
-                .iter(ecs)
-                .flat_map(|target| target.clips.iter().cloned())
-                .collect()
-        };
+        let export_refs: HashMap<_, _> = serialized
+            .export_refs
+            .into_iter()
+            .map(|export_ref| (export_ref.node_id.clone(), export_ref))
+            .collect();
+        let export_nodes: Vec<ExportNode> = snapshot
+            .nodes
+            .iter()
+            .map(|node| {
+                let export_ref = export_refs.get(&node.id);
+                ExportNode {
+                    snapshot: node.clone(),
+                    mesh_uri: export_ref.and_then(|value| value.mesh_uri.clone()),
+                    material_handle: export_ref.and_then(|value| value.material_handle.clone()),
+                    light: export_ref.and_then(|value| value.light.clone()),
+                    camera: export_ref.and_then(|value| value.camera.clone()),
+                }
+            })
+            .collect();
 
         let pm = self
             .procedural_meshes
@@ -994,10 +962,10 @@ impl ISceneService for SceneService {
             .lock()
             .map_err(|e| Error::Other(format!("Asset database lock poisoned: {}", e)))?;
 
-        let clips_ref = if animation_clips.is_empty() {
+        let clips_ref = if serialized.animation_clips.is_empty() {
             None
         } else {
-            Some(animation_clips.as_slice())
+            Some(serialized.animation_clips.as_slice())
         };
         let fp_ref = if fp.is_empty() { None } else { Some(&*fp) };
 
@@ -1006,22 +974,11 @@ impl ISceneService for SceneService {
     }
 
     fn save_project(&self, path: &str, editor_state: serde_json::Value) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        let snapshot = world.get_snapshot();
-
-        // Build node_id → mesh_uri mapping from ECS
-        let node_mesh_map: HashMap<String, String> = {
-            let ecs = world.ecs_world_mut();
-            let mut query = ecs.query::<(&SceneNodeId, &MeshRef)>();
-            query
-                .iter(ecs)
-                .map(|(id, mesh_ref)| (id.0.clone(), mesh_ref.uri.clone()))
-                .collect()
-        };
+        let (snapshot, node_mesh_map) = self.computation.data(|world| {
+            let snapshot = world.get_snapshot();
+            let serialized = world.serialize_entities(SceneEntityFilter::Project);
+            (snapshot, serialized.node_mesh_map)
+        })?;
 
         let pm = self
             .procedural_meshes
@@ -1051,13 +1008,8 @@ impl ISceneService for SceneService {
         let project = NkmProject::load(Path::new(path))
             .map_err(|e| Error::Other(format!("Project load failed: {}", e)))?;
 
-        // Restore scene world from snapshot
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-
-        world.restore_snapshot(&project.scene_snapshot);
+        self.computation
+            .creative(|world| world.restore_snapshot(&project.scene_snapshot))?;
 
         // Restore procedural meshes and re-register in GPU cache
         {
@@ -1067,38 +1019,26 @@ impl ISceneService for SceneService {
                 .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
             *pm = project.procedural_meshes.clone();
 
-            if let Some(cache_mutex) = &self.asset_cache {
-                let mut cache = cache_mutex
-                    .lock()
-                    .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
+            if let Some(renderer) = &self.scene_renderer {
                 for (uri, mesh) in &*pm {
-                    if let Err(e) = cache.register_procedural_mesh(uri, 0, mesh) {
+                    if let Err(e) = renderer.register_procedural_mesh(uri, 0, mesh) {
                         tracing::warn!("Failed to re-register mesh '{}' in GPU cache: {}", uri, e);
                     }
                 }
             }
         }
 
-        // Re-add MeshRef components using the saved node_mesh_map
-        {
-            let ecs = world.ecs_world_mut();
-            for (node_id, mesh_uri) in &project.node_mesh_map {
-                let entity = {
-                    let mut query = ecs.query::<(bevy_ecs::prelude::Entity, &SceneNodeId)>();
-                    query
-                        .iter(ecs)
-                        .find(|(_, id)| id.0 == *node_id)
-                        .map(|(e, _)| e)
-                };
-                if let Some(entity) = entity {
-                    ecs.entity_mut(entity).insert(MeshRef {
-                        asset: AssetHandle::for_mesh(mesh_uri, 0),
-                        uri: mesh_uri.clone(),
-                        primitive_index: 0,
-                    });
-                }
-            }
-        }
+        let mesh_refs: Vec<SceneNodeMeshRef> = project
+            .node_mesh_map
+            .iter()
+            .map(|(node_id, mesh_uri)| SceneNodeMeshRef {
+                node_id: node_id.clone(),
+                mesh_uri: mesh_uri.clone(),
+                primitive_index: 0,
+            })
+            .collect();
+        self.computation
+            .data(|world| world.insert_mesh_refs(&mesh_refs))?;
 
         // Restore face params for VRM export
         {
@@ -1109,16 +1049,14 @@ impl ISceneService for SceneService {
             *fp = project.face_params.clone();
         }
 
-        let final_snapshot = world.get_snapshot();
+        let final_snapshot = self.computation.creative(|world| world.get_snapshot())?;
         Ok((final_snapshot, project.editor_state))
     }
 
     fn get_keyframe_tracks(&self, clip_name: &str) -> Result<Vec<AnimationChannelInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world.get_keyframe_tracks(clip_name).map_err(Error::Other)
+        self.computation
+            .creative(|world| world.get_keyframe_tracks(clip_name))?
+            .map_err(Error::Other)
     }
 
     fn add_keyframe(
@@ -1129,22 +1067,14 @@ impl ISceneService for SceneService {
         timestamp: f32,
         values: Vec<f32>,
     ) -> Result<String> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .add_keyframe(clip_name, node_id, property, timestamp, values)
+        self.computation
+            .creative(|world| world.add_keyframe(clip_name, node_id, property, timestamp, values))?
             .map_err(Error::Other)
     }
 
     fn remove_keyframe(&self, clip_name: &str, keyframe_id: &str) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .remove_keyframe(clip_name, keyframe_id)
+        self.computation
+            .creative(|world| world.remove_keyframe(clip_name, keyframe_id))?
             .map_err(Error::Other)
     }
 
@@ -1156,21 +1086,17 @@ impl ISceneService for SceneService {
         values: Option<Vec<f32>>,
         easing: Option<EasingType>,
     ) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .update_keyframe(clip_name, keyframe_id, timestamp, values, easing)
+        self.computation
+            .creative(|world| {
+                world.update_keyframe(clip_name, keyframe_id, timestamp, values, easing)
+            })?
             .map_err(Error::Other)
     }
 
     fn create_clip(&self, name: &str, duration: f32) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world.create_clip(name, duration).map_err(Error::Other)
+        self.computation
+            .creative(|world| world.create_clip(name, duration))?
+            .map_err(Error::Other)
     }
 
     fn crossfade_animation(
@@ -1179,31 +1105,19 @@ impl ISceneService for SceneService {
         fade_duration: f32,
         loop_anim: bool,
     ) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .crossfade_animation(clip_name, fade_duration, loop_anim)
+        self.computation
+            .creative(|world| world.crossfade_animation(clip_name, fade_duration, loop_anim))?
             .map_err(Error::Other)
     }
 
     fn set_blend_weight(&self, clip_name: &str, weight: f32) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .set_blend_weight(clip_name, weight)
+        self.computation
+            .creative(|world| world.set_blend_weight(clip_name, weight))?
             .map_err(Error::Other)
     }
 
     fn get_blend_state(&self) -> Result<Vec<SceneBlendLayerInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        Ok(world.get_blend_state())
+        self.computation.creative(|world| world.get_blend_state())
     }
 
     fn create_ik_chain(
@@ -1214,21 +1128,17 @@ impl ISceneService for SceneService {
         iterations: u32,
         tolerance: f32,
     ) -> Result<String> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .create_ik_chain(root_joint, end_effector, solver, iterations, tolerance)
+        self.computation
+            .creative(|world| {
+                world.create_ik_chain(root_joint, end_effector, solver, iterations, tolerance)
+            })?
             .map_err(Error::Other)
     }
 
     fn remove_ik_chain(&self, chain_id: &str) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world.remove_ik_chain(chain_id).map_err(Error::Other)
+        self.computation
+            .creative(|world| world.remove_ik_chain(chain_id))?
+            .map_err(Error::Other)
     }
 
     fn set_ik_target(
@@ -1238,48 +1148,30 @@ impl ISceneService for SceneService {
         rotation: Option<[f32; 4]>,
         pole: Option<[f32; 3]>,
     ) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .set_ik_target(chain_id, position, rotation, pole)
+        self.computation
+            .creative(|world| world.set_ik_target(chain_id, position, rotation, pole))?
             .map_err(Error::Other)
     }
 
     fn set_ik_enabled(&self, chain_id: &str, enabled: bool) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .set_ik_enabled(chain_id, enabled)
+        self.computation
+            .creative(|world| world.set_ik_enabled(chain_id, enabled))?
             .map_err(Error::Other)
     }
 
     fn get_ik_chains(&self) -> Result<Vec<IkChainInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        Ok(world.get_ik_chains())
+        self.computation.creative(|world| world.get_ik_chains())
     }
 
     fn set_visible(&self, node_id: &str, visible: bool) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world.set_visible(node_id, visible).map_err(Error::Other)
+        self.computation
+            .creative(|world| world.set_visible(node_id, visible))?
+            .map_err(Error::Other)
     }
 
     fn set_morph_weights(&self, node_id: &str, weights: Vec<f32>) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world
-            .set_morph_weights(node_id, weights)
+        self.computation
+            .creative(|world| world.set_morph_weights(node_id, weights))?
             .map_err(Error::Other)
     }
 
@@ -1310,13 +1202,10 @@ impl ISceneService for SceneService {
         occlusion_strength: Option<f32>,
     ) -> Result<()> {
         // Read the material reference from the scene world
-        let mat_ref = {
-            let mut world = self
-                .world
-                .lock()
-                .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-            world.get_material_ref(node_id).map_err(Error::Other)?
-        };
+        let mat_ref = self
+            .computation
+            .creative(|world| world.get_material_ref(node_id))?
+            .map_err(Error::Other)?;
 
         let (uri, mat_idx) =
             mat_ref.ok_or_else(|| Error::Other(format!("Node '{}' has no material", node_id)))?;
@@ -1341,103 +1230,26 @@ impl ISceneService for SceneService {
 
         // GPU cache is a derived runtime cache. Keep authoring update even when
         // GPU rendering is unavailable, then best-effort sync the cache.
-        if let Some(cache_mutex) = &self.asset_cache {
-            let cache = cache_mutex
-                .lock()
-                .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
-            cache
-                .update_material_uniforms(
-                    &uri,
-                    mat_idx,
-                    base_color,
-                    metallic,
-                    roughness,
-                    emissive,
-                    occlusion_strength,
-                )
-                .map_err(Error::Other)?;
+        if let Some(renderer) = &self.scene_renderer {
+            renderer.update_material_uniforms(
+                &uri,
+                mat_idx,
+                base_color,
+                metallic,
+                roughness,
+                emissive,
+                occlusion_strength,
+            )?;
         }
 
         Ok(())
     }
 
     fn delete_node(&self, node_id: &str) -> Result<()> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Scene world lock poisoned: {}", e)))?;
-        world.delete_node(node_id).map_err(Error::Other)
+        self.computation
+            .creative(|world| world.delete_node(node_id))?
+            .map_err(Error::Other)
     }
-}
-
-/// Spawn a new ECS entity for a procedural mesh with a unique node ID.
-fn spawn_procedural_entity(ecs_world: &mut bevy_ecs::prelude::World, uri: &str, label: &str) {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let idx = COUNTER.fetch_add(1, Ordering::Relaxed);
-
-    let node_id = format!("procedural_{}_{}", label.to_lowercase(), idx);
-    let name = format!("{} {}", label, idx);
-
-    ecs_world.spawn((
-        SceneNodeId(node_id),
-        NodeName(name),
-        Transform::default(),
-        GlobalTransform::identity(),
-        MeshRef {
-            asset: AssetHandle::for_mesh(uri, 0),
-            uri: uri.to_string(),
-            primitive_index: 0,
-        },
-    ));
-}
-
-/// Look up the MeshRef URI for a given scene node ID.
-fn find_mesh_uri(ecs_world: &mut bevy_ecs::prelude::World, node_id: &str) -> Result<String> {
-    let mut query = ecs_world.query::<(&SceneNodeId, &MeshRef)>();
-
-    for (scene_id, mesh_ref) in query.iter(ecs_world) {
-        if scene_id.0 == node_id {
-            return Ok(mesh_ref.uri.clone());
-        }
-    }
-
-    Err(Error::Other(format!(
-        "Entity '{}' not found or has no mesh",
-        node_id
-    )))
-}
-
-/// Look up export-relevant mesh and material asset handles for a scene node.
-fn find_export_refs(
-    ecs_world: &mut bevy_ecs::prelude::World,
-    node_id: &str,
-) -> Result<(
-    Option<String>,
-    Option<AssetHandle>,
-    Option<Light>,
-    Option<Camera>,
-)> {
-    let mut query = ecs_world.query::<(
-        &SceneNodeId,
-        Option<&MeshRef>,
-        Option<&MaterialRef>,
-        Option<&Light>,
-        Option<&Camera>,
-    )>();
-
-    for (scene_id, mesh_ref, material_ref, light, camera) in query.iter(ecs_world) {
-        if scene_id.0 == node_id {
-            return Ok((
-                mesh_ref.map(|mesh| mesh.uri.clone()),
-                material_ref.map(|material| material.asset.clone()),
-                light.cloned(),
-                camera.cloned(),
-            ));
-        }
-    }
-
-    Err(Error::Other(format!("Entity '{}' not found", node_id)))
 }
 
 #[cfg(test)]
@@ -1498,34 +1310,54 @@ mod tests {
     }
 
     #[test]
+    fn shared_render_extract_updates_snapshot_watch_and_bounded_export_queue() {
+        let service = SceneService::new();
+
+        assert_eq!(service.latest_render_snapshot_generation(), 0);
+        let first = service.prepare_shared_extract_for_test().unwrap();
+        assert_eq!(service.latest_render_snapshot_generation(), first.0);
+        assert_eq!(
+            service.pop_export_render_snapshot_generation().unwrap(),
+            Some(first.0)
+        );
+        assert_eq!(
+            service.pop_export_render_snapshot_generation().unwrap(),
+            None
+        );
+
+        let _ = service.prepare_shared_extract_for_test().unwrap();
+        let _ = service.prepare_shared_extract_for_test().unwrap();
+        assert_eq!(
+            service.pop_export_render_snapshot_generation().unwrap(),
+            Some(first.0)
+        );
+        assert_eq!(
+            service.pop_export_render_snapshot_generation().unwrap(),
+            None
+        );
+    }
+
+    #[test]
     fn service_export_glb_uses_engine_evaluated_animation_pose() {
-        use neko_runtime_scene::components::{
-            AnimationChannel, AnimationClipData, AnimationProperty, AnimationTarget,
-            GlobalTransform, NodeName, SceneNodeId, SceneRoot, Transform,
-        };
+        use serde_json::json;
 
         let service = SceneService::new();
-        {
-            let mut world = service.world.lock().unwrap();
-            let ecs = world.ecs_world_mut();
-            ecs.spawn((
-                SceneNodeId("node_0".to_string()),
-                NodeName("Animated Node".to_string()),
-                Transform::default(),
-                GlobalTransform::identity(),
-            ));
-            let clip = AnimationClipData {
-                name: "Move".to_string(),
-                duration: 1.0,
-                channels: vec![AnimationChannel::from_flat(
-                    "node_0".to_string(),
-                    AnimationProperty::Translation,
-                    &[0.0, 1.0],
-                    &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-                )],
-            };
-            ecs.spawn((SceneRoot, AnimationTarget { clips: vec![clip] }));
-        }
+        let snapshot = service
+            .create_shape(json!({
+                "type": "cube",
+                "width": 1.0,
+                "height": 1.0,
+                "depth": 1.0
+            }))
+            .unwrap();
+        let node_id = snapshot.nodes[0].id.clone();
+        service.create_clip("Move", 1.0).unwrap();
+        service
+            .add_keyframe("Move", &node_id, "translation", 0.0, vec![0.0, 0.0, 0.0])
+            .unwrap();
+        service
+            .add_keyframe("Move", &node_id, "translation", 1.0, vec![1.0, 0.0, 0.0])
+            .unwrap();
 
         service.tick("Move", 0.25).unwrap();
         let glb = service.export_glb().unwrap();

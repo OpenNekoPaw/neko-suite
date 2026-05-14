@@ -64,7 +64,12 @@ impl Runner {
                     .await
             }
             Command::Audios { action } => match action {
-                AudioAction::MixExport { opts } if opts.source.as_deref().is_some_and(|source| source.ends_with(".nka")) => {
+                AudioAction::MixExport { opts }
+                    if opts
+                        .source
+                        .as_deref()
+                        .is_some_and(|source| source.ends_with(".nka")) =>
+                {
                     self.run_nka_mix_export(&opts).await
                 }
                 ref a => {

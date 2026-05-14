@@ -26,6 +26,7 @@ pub mod groups {
     pub const COLOR_CORRECTION: &str = "color-correction";
     pub const DOCUMENTS: &str = "documents";
     pub const PLUGINS: &str = "plugins";
+    pub const PREVIEWS: &str = "previews";
 
     pub const ALL: &[&str] = &[
         NODES,
@@ -46,6 +47,7 @@ pub mod groups {
         COLOR_CORRECTION,
         DOCUMENTS,
         PLUGINS,
+        PREVIEWS,
     ];
 }
 
@@ -71,6 +73,7 @@ pub mod actions {
         "speed",
         "seek",
         "loop",
+        "view-state",
     ];
 
     pub const AUDIOS: &[&str] = &[
@@ -144,6 +147,7 @@ pub mod actions {
         "denoise",
         "clip",
         "transcribe",
+        "preprocess",
     ];
 
     pub const CANVAS: &[&str] = &["composite", "capture", "export", "diff"];
@@ -210,12 +214,14 @@ pub mod actions {
         "set_texture",
         "expressions",
         "set_expression",
+        "clear_expression",
         "load_auxiliary",
         "export_motion3",
         "export_expression3",
+        "export_h264",
     ];
 
-    pub const EFFECTS: &[&str] = &["apply", "list", "info", "register"];
+    pub const EFFECTS: &[&str] = &["apply", "list", "info", "register", "list-capabilities"];
 
     pub const CAMERAS: &[&str] = &["list_devices", "capture_start", "capture_stop", "snapshot"];
 
@@ -235,5 +241,15 @@ pub mod actions {
         "reload",
         "system-info",
         "audit-events",
+    ];
+
+    pub const PREVIEWS: &[&str] = &[
+        "register-asset",
+        "request-variant",
+        "update-metadata",
+        "unregister",
+        "register-token",
+        "unregister-token",
+        "generate",
     ];
 }

@@ -1,13 +1,15 @@
 //! EngineApi - Main facade for all engine operations
 
 use crate::error::{ApiError, ApiResult};
+use crate::preview::PreviewFileRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_engine_kernel::gpu::GpuContext;
 use neko_engine_kernel::services::{
-    AudioService, EffectsService, ExportService, IPuppetService, ISceneService, ImageService,
-    NodeService, PuppetService, SceneService, TaskService, TimelineService, VideoService,
+    AudioService, EffectRegistry, EffectsService, ExportService, IPuppetService, ISceneService,
+    ImageService, NodeService, PuppetService, SceneService, TaskService, TimelineService,
+    VideoService,
 };
 use neko_engine_types::{ActionRequest, ActionResponse, EngineConfig};
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
@@ -27,6 +29,8 @@ pub struct EngineApi {
     resource_registry: Arc<ResourceRegistry>,
     /// Stream registry
     stream_registry: Arc<StreamRegistry>,
+    /// Preview token/asset registry shared by ActionRouter and HTTP file routes
+    preview_registry: Arc<PreviewFileRegistry>,
     /// Session manager
     session_manager: Arc<SessionManager>,
     /// GPU context (if available)
@@ -107,10 +111,12 @@ impl EngineApi {
                         None
                     }
                 });
+        let effect_registry = Arc::new(EffectRegistry::with_builtins());
 
         // Create registries
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
+        let preview_registry = Arc::new(PreviewFileRegistry::new());
 
         // Create session manager
         let session_manager = Arc::new(SessionManager::new(stream_registry.clone()));
@@ -137,7 +143,10 @@ impl EngineApi {
 
         // Create puppet service (2D puppet management)
         // Keep an Arc clone so the WS stream endpoint shares the same ECS world
-        let puppet_svc = Arc::new(PuppetService::new());
+        let puppet_svc = Arc::new(match &gpu_ctx {
+            Some(ctx) => PuppetService::with_gpu(Arc::clone(ctx)),
+            None => PuppetService::new(),
+        });
         let puppet_service_dyn: Option<Arc<dyn IPuppetService>> = Some(puppet_svc.clone());
 
         // Device services
@@ -148,7 +157,11 @@ impl EngineApi {
         let gamepad_service_ref = gamepad_service.clone();
 
         // Plugin manager
-        let plugin_manager = Arc::new(crate::plugin::PluginManager::new(vec![], "0.1.0"));
+        let plugin_manager = Arc::new(
+            crate::plugin::PluginManager::new(vec![], "0.1.0").with_activation_handler(Box::new(
+                crate::plugin::EffectRegistryActivator::new(effect_registry.clone()),
+            )),
+        );
 
         // Create router
         let router = ActionRouter::new(
@@ -160,6 +173,7 @@ impl EngineApi {
             timeline_service,
             export_service,
             effects_service,
+            effect_registry,
             scene_service,
             Some(puppet_svc),
             camera_service,
@@ -168,6 +182,7 @@ impl EngineApi {
             resource_registry.clone(),
             stream_registry.clone(),
             plugin_manager,
+            preview_registry.clone(),
             #[cfg(feature = "onnx")]
             Some(std::sync::Arc::new(MlService::new(
                 config.ml.max_loaded,
@@ -179,6 +194,7 @@ impl EngineApi {
             router,
             resource_registry,
             stream_registry,
+            preview_registry,
             session_manager,
             gpu_ctx,
             puppet_service: puppet_service_dyn,
@@ -254,6 +270,16 @@ impl EngineApi {
     /// Get the stream registry
     pub fn stream_registry(&self) -> &Arc<StreamRegistry> {
         &self.stream_registry
+    }
+
+    /// Get the preview file/token registry shared with host-http.
+    pub fn preview_registry(&self) -> &Arc<PreviewFileRegistry> {
+        &self.preview_registry
+    }
+
+    /// Configure preview file allow-list roots for HTTP/server adapters.
+    pub fn set_preview_allowed_roots(&self, roots: Vec<std::path::PathBuf>) -> ApiResult<()> {
+        self.preview_registry.set_allowed_roots(roots)
     }
 
     /// Get the puppet service (shared with controller layer)

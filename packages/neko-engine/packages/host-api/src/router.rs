@@ -3,15 +3,16 @@
 use crate::controllers::{
     AudioController, CameraController, CanvasController, ColorCorrectionController, Controller,
     DocumentsController, EffectsController, GamepadController, ImageController, MidiController,
-    ModelsController, NodeController, PluginsController, PuppetsController, ScenesController,
-    StreamController, TaskController, TimelineController, VideoController,
+    ModelsController, NodeController, PluginsController, PreviewsController, PuppetsController,
+    ScenesController, StreamController, TaskController, TimelineController, VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::plugin::PluginManager;
+use crate::preview::PreviewFileRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_engine_kernel::services::{
-    AudioService, EffectsService, ExportService, ImageService, NodeService, PuppetService,
-    SceneService, TaskService, TimelineService, VideoService,
+    AudioService, EffectRegistry, EffectsService, ExportService, ImageService, NodeService,
+    PuppetService, SceneService, TaskService, TimelineService, VideoService,
 };
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
 
@@ -41,6 +42,7 @@ pub struct ActionRouter {
     color_correction_controller: ColorCorrectionController,
     documents_controller: DocumentsController,
     plugins_controller: PluginsController,
+    previews_controller: PreviewsController,
 }
 
 impl ActionRouter {
@@ -55,6 +57,7 @@ impl ActionRouter {
         timeline_service: Arc<TimelineService>,
         export_service: Option<Arc<ExportService>>,
         effects_service: Option<Arc<EffectsService>>,
+        effect_registry: Arc<EffectRegistry>,
         scene_service: Option<Arc<SceneService>>,
         puppet_service: Option<Arc<PuppetService>>,
         camera_service: Arc<CameraService>,
@@ -63,6 +66,7 @@ impl ActionRouter {
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
         plugin_manager: Arc<PluginManager>,
+        preview_registry: Arc<PreviewFileRegistry>,
         #[cfg(feature = "onnx")] ml_service: Option<Arc<dyn IMlService>>,
     ) -> Self {
         Self {
@@ -85,7 +89,7 @@ impl ActionRouter {
                 stream_registry.clone(),
             ),
             stream_controller: StreamController::new(stream_registry.clone(), timeline_service),
-            effects_controller: EffectsController::new(effects_service),
+            effects_controller: EffectsController::new(effects_service, effect_registry),
             #[cfg(feature = "onnx")]
             models_controller: ModelsController::new(ml_service),
             #[cfg(not(feature = "onnx"))]
@@ -102,6 +106,7 @@ impl ActionRouter {
             color_correction_controller: ColorCorrectionController::new(),
             documents_controller: DocumentsController::new(),
             plugins_controller: PluginsController::new(plugin_manager),
+            previews_controller: PreviewsController::new(preview_registry),
         }
     }
 
@@ -206,6 +211,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::PREVIEWS => {
+                self.previews_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -239,6 +249,7 @@ impl ActionRouter {
             groups::COLOR_CORRECTION => Some(self.color_correction_controller.actions()),
             groups::DOCUMENTS => Some(self.documents_controller.actions()),
             groups::PLUGINS => Some(self.plugins_controller.actions()),
+            groups::PREVIEWS => Some(self.previews_controller.actions()),
             _ => None,
         }
     }
@@ -265,6 +276,8 @@ mod tests {
         let gamepad_service = Arc::new(GamepadService::new());
 
         let plugin_manager = Arc::new(PluginManager::new(vec![], "0.1.0"));
+        let effect_registry = Arc::new(EffectRegistry::with_builtins());
+        let preview_registry = Arc::new(PreviewFileRegistry::new());
 
         ActionRouter::new(
             task_service,
@@ -275,6 +288,7 @@ mod tests {
             timeline_service,
             None, // No GPU = no export service in tests
             None, // No GPU = no effects service in tests
+            effect_registry,
             scene_service,
             puppet_service,
             camera_service,
@@ -283,6 +297,7 @@ mod tests {
             resource_registry,
             stream_registry,
             plugin_manager,
+            preview_registry,
         )
     }
 
@@ -413,6 +428,7 @@ mod tests {
                 "denoise",
                 "clip",
                 "transcribe",
+                "preprocess",
             ]
         );
 

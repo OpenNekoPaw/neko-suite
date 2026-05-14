@@ -27,6 +27,7 @@
 
 pub mod controllers;
 pub mod plugin;
+pub mod preview;
 pub mod registry;
 pub mod runtime;
 
@@ -54,5 +55,9 @@ pub use neko_engine_kernel::services::audio_mixdown::{
 };
 
 // Re-export puppet types needed by host-http for the WS stream endpoint
-pub use neko_engine_kernel::services::IPuppetService;
+pub use neko_engine_kernel::preview::PreviewPipelineConfig;
+pub use neko_engine_kernel::services::{
+    IPuppetService, PipelineSink, PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming,
+    StreamSink,
+};
 pub use neko_engine_kernel::PuppetDelta;

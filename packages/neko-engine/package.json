@@ -118,7 +118,7 @@
     "watch": "pnpm run compile -- --watch",
     "lint": "eslint packages/extension/src --ext ts,tsx",
     "test:extension": "vitest --config vitest.config.ts --run",
-    "test:scripts": "node --test scripts/*.test.js",
+    "test:scripts": "node --test scripts/*.test.js && bash scripts/check-scene-dual-api-guards.sh",
     "test": "pnpm run test:extension && pnpm run test:scripts",
     "setup:ffmpeg": "node scripts/download-ffmpeg.js",
     "setup": "pnpm run setup:ffmpeg && pnpm run bundle:ort",

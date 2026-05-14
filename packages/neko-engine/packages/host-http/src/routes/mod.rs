@@ -5,8 +5,8 @@ pub mod gamepad_stream;
 pub mod health;
 pub mod midi_stream;
 pub mod monitor;
-pub mod preview_asset;
 pub mod preview_file;
+pub mod puppet_control;
 pub mod puppet_stream;
 pub mod scene_control;
 pub mod scene_modeling;
@@ -15,7 +15,6 @@ pub mod streaming;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use neko_host_api::EngineApi;
-use preview_file::PreviewFileRegistry;
 use std::{path::PathBuf, sync::Arc};
 
 /// Build the complete HTTP router with all routes.
@@ -28,11 +27,10 @@ pub fn build_router_with_preview_roots(
     engine: Arc<EngineApi>,
     preview_allowed_roots: Vec<PathBuf>,
 ) -> Router {
-    // Shared token registry — injected as an axum Extension so it does not
-    // require changes to EngineApi.
-    let file_registry = Arc::new(PreviewFileRegistry::with_allowed_roots(
-        preview_allowed_roots,
-    ));
+    if let Err(error) = engine.set_preview_allowed_roots(preview_allowed_roots) {
+        tracing::error!("Failed to configure preview allowed roots: {}", error);
+    }
+    let file_registry = engine.preview_registry().clone();
 
     Router::new()
         // Health check
@@ -63,6 +61,11 @@ pub fn build_router_with_preview_roots(
         .route(
             "/v1/puppets/stream",
             get(puppet_stream::handle_puppet_stream),
+        )
+        // WebSocket puppet command control plane
+        .route(
+            "/v1/puppets/control",
+            get(puppet_control::handle_puppet_control),
         )
         // WebSocket 3D scene control plane
         .route(

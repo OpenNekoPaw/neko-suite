@@ -148,8 +148,7 @@ pub async fn start_mix_stream(
                 }
             } else {
                 let source_duration = buf_duration * current_speed;
-                let source_frames_needed =
-                    (buffer_size as f64 * current_speed).ceil() as usize;
+                let source_frames_needed = (buffer_size as f64 * current_speed).ceil() as usize;
                 let ch = channels as usize;
                 let mut accumulated = Vec::with_capacity(source_frames_needed * ch);
                 let mut mix_time = current_time;

@@ -11,7 +11,8 @@ use neko_engine_kernel::gpu::scene_renderer::{
     ViewportDebugView, ViewportDescriptor, ViewportPostProcess, ViewportRenderMode,
     ViewportWorkMode,
 };
-use neko_engine_kernel::services::{ISceneService, SceneService};
+use neko_engine_kernel::preview::PreviewPipelineConfig;
+use neko_engine_kernel::services::{ISceneService, PipelineSink, SceneService, StreamSink};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -441,6 +442,22 @@ fn spawn_scene_stream_producer(
         let mut control_ack = ControlAckHealthSample::default();
         let mut settings = runtime_scheduler.settings(0, load, control_ack);
         let mut frame_id = 0u64;
+        let mut stream_sink = match stream_registry.get_sender(&stream_id).await {
+            Some(tx) => match scene_stream_sink_config(settings)
+                .and_then(|sink_config| StreamSink::new(sink_config, tx))
+            {
+                Ok(sink) => Some(sink),
+                Err(err) => {
+                    tracing::warn!(
+                        "Scene stream {} GPU sink unavailable, using legacy H.264 path: {}",
+                        stream_id.as_str(),
+                        err
+                    );
+                    None
+                }
+            },
+            None => None,
+        };
 
         loop {
             tokio::select! {
@@ -454,38 +471,105 @@ fn spawn_scene_stream_producer(
                     let duration_us = settings.duration_us();
                     let quality = settings.h264_quality;
                     let viewport = runtime_scheduler.viewport_descriptor_for_settings(settings);
-                    let frame = tokio::task::spawn_blocking(move || {
-                        service.capture_h264_keyframe(
-                            output_size,
-                            camera.as_ref(),
-                            None,
-                            quality,
-                            pts_us,
-                            duration_us,
-                            &viewport,
-                        )
-                    })
-                    .await;
-
-                    match frame {
-                        Ok(Ok(frame)) => {
-                            match stream_registry.send_frame(&stream_id, frame).await {
-                                Ok(_) => {}
-                                Err(crate::registry::StreamStateError::NoReceivers(_)) => {}
-                                Err(crate::registry::StreamStateError::NotFound(_)) => break,
-                                Err(err) => {
-                                    tracing::warn!("Scene stream {} send failed: {}", stream_id.as_str(), err);
-                                    break;
-                                }
+                    if let Some(sink) = stream_sink.as_ref() {
+                        if let Ok(sink_config) = scene_stream_sink_config(settings) {
+                            if let Err(err) = sink.reconfigure(sink_config) {
+                                tracing::warn!(
+                                    "Scene stream {} GPU sink reconfigure failed, using legacy H.264 path: {}",
+                                    stream_id.as_str(),
+                                    err
+                                );
+                                stream_sink = None;
                             }
                         }
-                        Ok(Err(err)) => {
-                            tracing::warn!("Scene stream {} frame production stopped: {}", stream_id.as_str(), err);
-                            break;
+                    }
+
+                    let gpu_submitted = if let Some(sink) = stream_sink.as_ref() {
+                        let gpu_output = tokio::task::spawn_blocking({
+                            let service = Arc::clone(&service);
+                            let camera = camera.clone();
+                            let viewport = viewport.clone();
+                            move || {
+                                service.render_scene_stream_gpu_output(
+                                    output_size,
+                                    camera.as_ref(),
+                                    None,
+                                    pts_us,
+                                    duration_us,
+                                    frame_id,
+                                    &viewport,
+                                )
+                            }
+                        })
+                        .await;
+
+                        match gpu_output {
+                            Ok(Ok(output)) => {
+                                match sink.submit(output) {
+                                    Ok(()) => true,
+                                    Err(err) => {
+                                        tracing::warn!(
+                                            "Scene stream {} GPU sink submit failed, using legacy H.264 path: {}",
+                                            stream_id.as_str(),
+                                            err
+                                        );
+                                        stream_sink = None;
+                                        false
+                                    }
+                                }
+                            }
+                            Ok(Err(err)) => {
+                                tracing::warn!(
+                                    "Scene stream {} GPU frame output unavailable, using legacy H.264 path: {}",
+                                    stream_id.as_str(),
+                                    err
+                                );
+                                stream_sink = None;
+                                false
+                            }
+                            Err(err) => {
+                                tracing::warn!("Scene stream {} GPU task failed: {}", stream_id.as_str(), err);
+                                break;
+                            }
                         }
-                        Err(err) => {
-                            tracing::warn!("Scene stream {} task failed: {}", stream_id.as_str(), err);
-                            break;
+                    } else {
+                        false
+                    };
+
+                    if !gpu_submitted {
+                        let frame = tokio::task::spawn_blocking(move || {
+                            service.capture_h264_keyframe(
+                                output_size,
+                                camera.as_ref(),
+                                None,
+                                quality,
+                                pts_us,
+                                duration_us,
+                                &viewport,
+                            )
+                        })
+                        .await;
+
+                        match frame {
+                            Ok(Ok(frame)) => {
+                                match stream_registry.send_frame(&stream_id, frame).await {
+                                    Ok(_) => {}
+                                    Err(crate::registry::StreamStateError::NoReceivers(_)) => {}
+                                    Err(crate::registry::StreamStateError::NotFound(_)) => break,
+                                    Err(err) => {
+                                        tracing::warn!("Scene stream {} send failed: {}", stream_id.as_str(), err);
+                                        break;
+                                    }
+                                }
+                            }
+                            Ok(Err(err)) => {
+                                tracing::warn!("Scene stream {} frame production stopped: {}", stream_id.as_str(), err);
+                                break;
+                            }
+                            Err(err) => {
+                                tracing::warn!("Scene stream {} task failed: {}", stream_id.as_str(), err);
+                                break;
+                            }
                         }
                     }
 
@@ -521,6 +605,18 @@ fn spawn_scene_stream_producer(
             }
         }
     });
+}
+
+fn scene_stream_sink_config(
+    settings: SceneStreamRuntimeSettings,
+) -> neko_engine_kernel::error::Result<PreviewPipelineConfig> {
+    Ok(PreviewPipelineConfig {
+        width: settings.width,
+        height: settings.height,
+        fps: settings.fps,
+        bitrate: (settings.width as u64) * (settings.height as u64) * 4,
+        gop_size: settings.fps.round().max(1.0) as u32,
+    })
 }
 
 fn dropped_frames_for_elapsed(elapsed_ms: f32, frame_duration: Duration) -> u32 {
@@ -789,9 +885,7 @@ impl Controller for ScenesController {
                     .await;
 
                 if let Some(scene_service) = self.scene_service.clone() {
-                    if let Some(camera) =
-                        parse_camera_ref_to_params(opts.camera_ref.as_ref())
-                    {
+                    if let Some(camera) = parse_camera_ref_to_params(opts.camera_ref.as_ref()) {
                         scene_service.set_editor_camera(camera);
                     }
                     spawn_scene_stream_producer(
@@ -1430,6 +1524,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_shape_controller_behavior_is_preserved() {
+        let controller = create_test_controller();
+        let response = controller
+            .handle(
+                "create_shape",
+                None,
+                serde_json::json!({
+                    "type": "cube",
+                    "width": 1.0,
+                    "height": 1.0,
+                    "depth": 1.0
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(response.is_ok());
+        let data = response.data.as_ref().unwrap();
+        let nodes = data["nodes"].as_array().unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert!(nodes[0]["name"].as_str().unwrap().starts_with("Shape"));
+        assert_eq!(nodes[0]["has_mesh"], true);
+    }
+
+    #[tokio::test]
     async fn test_animate_empty_scene() {
         let controller = create_test_controller();
         let result = controller.handle("animate", None, Value::Null, None).await;
@@ -1491,6 +1611,27 @@ mod tests {
         assert_eq!(data["controlAckPreserved"], true);
         assert!(registry.exists(&StreamId::from_string(stream_id)).await);
         let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
+    }
+
+    #[test]
+    fn scene_stream_sink_config_uses_gpu_pipeline_sink_contract() {
+        let settings = SceneStreamRuntimeSettings {
+            width: 1280,
+            height: 720,
+            fps: 30.0,
+            h264_quality: 85,
+            helper_passes_enabled: true,
+            post_process_enabled: true,
+            quality_tier: SceneStreamQualityTier::Full,
+            preserve_control_ack: true,
+        };
+
+        let config = scene_stream_sink_config(settings).unwrap();
+        assert_eq!(config.width, 1280);
+        assert_eq!(config.height, 720);
+        assert_eq!(config.fps, 30.0);
+        assert_eq!(config.gop_size, 30);
+        assert_eq!(config.bitrate, 1280 * 720 * 4);
     }
 
     #[tokio::test]

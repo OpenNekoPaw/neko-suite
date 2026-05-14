@@ -75,6 +75,7 @@ pub struct PresetShaderMeta {
 
 struct CachedPipeline {
     pipeline: wgpu::ComputePipeline,
+    texture_pipeline: Option<wgpu::ComputePipeline>,
     meta: PresetShaderMeta,
 }
 
@@ -89,6 +90,7 @@ struct CachedPipeline {
 pub struct CustomShaderProcessor {
     ctx: Arc<GpuContext>,
     bind_group_layout: wgpu::BindGroupLayout,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     buffer_pool: BufferPool,
     /// Preset pipelines (shader_id → compiled pipeline + meta)
@@ -141,6 +143,7 @@ impl CustomShaderProcessor {
                 },
             ],
         });
+        let texture_bind_group_layout = Self::create_texture_bind_group_layout(device);
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Custom Shader Pipeline Layout"),
@@ -153,6 +156,7 @@ impl CustomShaderProcessor {
         let mut processor = Self {
             ctx,
             bind_group_layout,
+            texture_bind_group_layout,
             pipeline_layout,
             buffer_pool,
             presets: HashMap::new(),
@@ -290,11 +294,14 @@ impl CustomShaderProcessor {
         wgsl_source: &str,
         params: Vec<ParamDef>,
     ) -> Result<()> {
-        let pipeline = self.compile_pipeline(id, wgsl_source)?;
+        let pipeline = self.compile_buffer_pipeline(id, wgsl_source)?;
+        let texture_source = Self::buffer_shader_to_texture_shader(wgsl_source);
+        let texture_pipeline = self.compile_texture_pipeline(id, &texture_source)?;
         self.presets.insert(
             id.to_string(),
             CachedPipeline {
                 pipeline,
+                texture_pipeline: Some(texture_pipeline),
                 meta: PresetShaderMeta {
                     id: id.to_string(),
                     description: description.to_string(),
@@ -337,6 +344,26 @@ impl CustomShaderProcessor {
 
         let uniforms = self.build_uniforms(width, height, &cached.meta.params, params);
         self.run_shader(input, width, height, &cached.pipeline, &uniforms)
+    }
+
+    /// Apply a preset shader effect without leaving the texture-to-texture path.
+    pub fn apply_preset_tex(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        shader_id: &str,
+        params: &serde_json::Value,
+    ) -> Result<()> {
+        let cached = self.presets.get(shader_id).ok_or_else(|| {
+            Error::InvalidParameter(format!("Unknown preset shader: {}", shader_id))
+        })?;
+
+        let uniforms =
+            self.build_uniforms(input.width(), input.height(), &cached.meta.params, params);
+        let texture_pipeline = cached.texture_pipeline.as_ref().ok_or_else(|| {
+            Error::InvalidParameter(format!("Shader '{}' has no texture pipeline", shader_id))
+        })?;
+        self.run_shader_tex(input, output, texture_pipeline, &uniforms)
     }
 
     // -----------------------------------------------------------------------
@@ -417,12 +444,13 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
             format!("{}\n{}", Self::SHADER_TEMPLATE_HEADER, wgsl_source)
         };
 
-        let pipeline = self.compile_pipeline(id, &full_source)?;
+        let pipeline = self.compile_buffer_pipeline(id, &full_source)?;
 
         self.custom_pipelines.insert(
             id.to_string(),
             CachedPipeline {
                 pipeline,
+                texture_pipeline: None,
                 meta: PresetShaderMeta {
                     id: id.to_string(),
                     description: "User-defined custom shader".to_string(),
@@ -492,7 +520,11 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    fn compile_pipeline(&self, label: &str, wgsl_source: &str) -> Result<wgpu::ComputePipeline> {
+    fn compile_buffer_pipeline(
+        &self,
+        label: &str,
+        wgsl_source: &str,
+    ) -> Result<wgpu::ComputePipeline> {
         let device = self.ctx.device();
 
         // wgpu internally uses naga for validation — invalid WGSL will be caught here
@@ -509,6 +541,143 @@ fn sample_at(x: i32, y: i32) -> vec4<f32> {
         });
 
         Ok(pipeline)
+    }
+
+    fn compile_texture_pipeline(
+        &self,
+        label: &str,
+        wgsl_source: &str,
+    ) -> Result<wgpu::ComputePipeline> {
+        let device = self.ctx.device();
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(label),
+            source: wgpu::ShaderSource::Wgsl(wgsl_source.into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Custom Shader Texture Pipeline Layout"),
+            bind_group_layouts: &[&self.texture_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        Ok(
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(label),
+                layout: Some(&pipeline_layout),
+                module: &shader_module,
+                entry_point: "main",
+            }),
+        )
+    }
+
+    fn create_texture_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Custom Shader Texture Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        })
+    }
+
+    fn run_shader_tex<U: Pod>(
+        &self,
+        input: &wgpu::Texture,
+        output: &wgpu::Texture,
+        pipeline: &wgpu::ComputePipeline,
+        uniforms: &U,
+    ) -> Result<()> {
+        if input.width() != output.width() || input.height() != output.height() {
+            return Err(Error::InvalidParameter(format!(
+                "Input ({}x{}) and output ({}x{}) texture dimensions must match",
+                input.width(),
+                input.height(),
+                output.width(),
+                output.height()
+            )));
+        }
+
+        let device = self.ctx.device();
+        let input_view = input.create_view(&wgpu::TextureViewDescriptor::default());
+        let output_view = output.create_view(&wgpu::TextureViewDescriptor::default());
+        let uniform_buffer = self
+            .ctx
+            .create_buffer_with_data(bytemuck::bytes_of(uniforms), wgpu::BufferUsages::UNIFORM);
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Custom Shader Texture Bind Group"),
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&input_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&output_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Custom Shader Texture Encoder"),
+        });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Custom Shader Texture Pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups(output.width().div_ceil(16), output.height().div_ceil(16), 1);
+        }
+        self.ctx.queue().submit(Some(encoder.finish()));
+        Ok(())
+    }
+
+    fn buffer_shader_to_texture_shader(source: &str) -> String {
+        source
+            .replace("@group(0) @binding(0) var<storage, read> input: array<u32>;", "@group(0) @binding(0) var input_tex: texture_2d<f32>;")
+            .replace("@group(0) @binding(1) var<storage, read_write> output: array<u32>;", "@group(0) @binding(1) var output_tex: texture_storage_2d<rgba8unorm, write>;")
+            .replace("return unpack_rgba(input[idx]);", "return textureLoad(input_tex, vec2<i32>(cx, cy), 0);")
+            .replace("let color = unpack_rgba(input[idx]);", "let color = textureLoad(input_tex, vec2<i32>(global_id.xy), 0);")
+            .replace("output[idx] = pack_rgba(color);", "textureStore(output_tex, vec2<i32>(global_id.xy), color);")
+            .replace("output[idx] = pack_rgba(result);", "textureStore(output_tex, vec2<i32>(global_id.xy), result);")
+            .replace("output[idx] = pack_rgba(vec4<f32>(clamp(posterized, vec3<f32>(0.0), vec3<f32>(1.0)), color.a));", "textureStore(output_tex, vec2<i32>(global_id.xy), vec4<f32>(clamp(posterized, vec3<f32>(0.0), vec3<f32>(1.0)), color.a));")
+            .replace("output[idx] = pack_rgba(vec4<f32>(clamp(result, vec3<f32>(0.0), vec3<f32>(1.0)), color.a));", "textureStore(output_tex, vec2<i32>(global_id.xy), vec4<f32>(clamp(result, vec3<f32>(0.0), vec3<f32>(1.0)), color.a));")
+            .replace("let idx = global_id.x + global_id.y * uniforms.width;\n    output[idx] = pack_rgba(vec4<f32>(r, g, b, a));", "textureStore(output_tex, vec2<i32>(global_id.xy), vec4<f32>(r, g, b, a));")
     }
 
     fn build_uniforms(

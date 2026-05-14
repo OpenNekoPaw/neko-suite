@@ -4,6 +4,7 @@
 //! and mesh output using bevy_ecs. Mirrors the runtime-scene architecture
 //! for 3D scenes but targets 2D puppet models (.inp / .moc3 files).
 
+pub mod access;
 pub mod animation;
 pub mod animation_blend;
 pub mod components;

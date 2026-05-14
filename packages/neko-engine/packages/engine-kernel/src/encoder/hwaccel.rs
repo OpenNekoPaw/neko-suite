@@ -903,9 +903,10 @@ impl Encoder for HwAccelEncoder {
 
     #[cfg(not(target_os = "macos"))]
     fn encode_frame_gpu(&mut self, _gpu_handle: usize, _pts: i64) -> Result<Vec<EncodedPacket>> {
-        Err(Error::Other(
-            "GPU frame encoding not yet implemented for this platform".to_string(),
-        ))
+        Err(Error::UnsupportedCapability(format!(
+            "zero-copy GPU frame encoding is not implemented on {}",
+            std::env::consts::OS
+        )))
     }
 
     fn supports_gpu_input(&self) -> bool {

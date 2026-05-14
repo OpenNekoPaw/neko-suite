@@ -13,9 +13,12 @@
 pub mod audio_diff;
 pub mod error;
 pub mod ffmpeg_parser;
+pub mod image_analysis;
 pub mod image_diff;
+pub mod image_variant;
 pub mod jpeg_encoder;
 pub mod probe;
+pub mod sidecar;
 pub mod subtitle;
 pub mod video_diff;
 
@@ -25,8 +28,20 @@ pub use audio_diff::{
     AudioDiffRegion,
 };
 pub use image_diff::{diff_image_content, ImageContentDiff};
+pub use image_analysis::{
+    contains_gpano_metadata, default_panorama_view_state, infer_projection,
+    manual_projection_metadata, probe_dimensions, PanoramaViewMode, PanoramaViewState,
+    PreviewDimensions, PreviewProjectionConfidence, PreviewProjectionMetadata,
+    PreviewProjectionType, PreviewToneMapping, ProjectionInferenceInput,
+};
+pub use image_variant::{
+    generate_preview_variant, generated_proxy_needed, infer_dynamic_range, is_exr_path, is_hdr_path,
+    ImageVariantArtifact, ImageVariantFormat, ImageVariantRequest, ImageVariantRole,
+    PreviewDynamicRange,
+};
 pub use jpeg_encoder::encode_rgba_to_jpeg;
 pub use probe::{global_probe_cache, probe_media_info, MediaInfo, ProbeCache, SubtitleStream};
+pub use sidecar::{read_sidecar, sidecar_path, write_sidecar_update, PreviewAssetSidecar};
 pub use subtitle::{extract_subtitles, ExtractedSubtitleTrack, SubtitleCue};
 pub use video_diff::{
     diff_video_content, FrameMetric, VideoContentDiff, VideoDiffOptions, VideoDiffRegion,

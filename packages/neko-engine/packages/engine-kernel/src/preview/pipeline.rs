@@ -15,9 +15,10 @@ use crate::encoder::{
     global_encoder_pool, EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwAccelEncoder,
     VideoCodec,
 };
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::export::{ExportSettings, GpuExportPipeline, GpuPipelineTiming};
 use crate::gpu::GpuContext;
+use crate::services::pipeline_sink::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame};
 
 /// Preview pipeline configuration
 #[derive(Debug, Clone)]
@@ -132,6 +133,11 @@ impl PreviewPipeline {
         Ok(())
     }
 
+    /// Initialize GPU composition resources without opening the rollback encoder.
+    pub fn initialize_gpu_only(&mut self) -> Result<()> {
+        self.gpu_pipeline.initialize()
+    }
+
     /// Update configuration (e.g., resolution change).
     /// Flushes the old encoder and returns any remaining frames before resetting.
     pub fn update_config(&mut self, config: PreviewPipelineConfig) -> Result<Vec<PreviewFrame>> {
@@ -179,6 +185,16 @@ impl PreviewPipeline {
         }
         self.config = config;
         Ok(flushed)
+    }
+
+    /// Update only GPU output configuration for the sink-based path.
+    pub fn update_gpu_config(&mut self, config: PreviewPipelineConfig) {
+        if self.config.width != config.width || self.config.height != config.height {
+            self.gpu_pipeline
+                .update_resolution(config.width, config.height);
+            self.frame_count = 0;
+        }
+        self.config = config;
     }
 
     /// Hot-update timeline data without recreating the pipeline.
@@ -249,26 +265,17 @@ impl PreviewPipeline {
         Ok(packets.iter().map(PreviewFrame::from).collect())
     }
 
-    /// Render frame (non-macOS fallback - not zero-copy)
+    /// Render frame (non-macOS rollback path).
     #[cfg(not(target_os = "macos"))]
     pub fn render_frame(
         &mut self,
-        time: f64,
-        background_color: [f32; 4],
+        _time: f64,
+        _background_color: [f32; 4],
     ) -> Result<Vec<PreviewFrame>> {
-        self.ensure_encoder_initialized()?;
-
-        // Use CPU path on non-macOS
-        let result = self
-            .gpu_pipeline
-            .process_frame_to_nv12(time, background_color)?;
-
-        let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
-        let packets = self.encoder.encode_frame(&result, pts)?;
-
-        self.frame_count += 1;
-
-        Ok(packets.iter().map(PreviewFrame::from).collect())
+        Err(Error::UnsupportedCapability(format!(
+            "zero-copy GPU preview encoding is not implemented on {}",
+            std::env::consts::OS
+        )))
     }
 
     /// Render frame with detailed timing breakdown (macOS zero-copy)
@@ -303,34 +310,60 @@ impl PreviewPipeline {
         ))
     }
 
-    /// Render frame with detailed timing breakdown (non-macOS fallback)
-    #[cfg(not(target_os = "macos"))]
-    pub fn render_frame_timed(
+    /// Render a GPU-resident frame with detailed timing breakdown.
+    #[cfg(target_os = "macos")]
+    pub fn render_gpu_frame_timed(
         &mut self,
         time: f64,
         background_color: [f32; 4],
-    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming, u64)> {
-        self.ensure_encoder_initialized()?;
-
-        let result = self
+    ) -> Result<(VideoGpuFrame, GpuPipelineTiming)> {
+        let iosurface_result = self
             .gpu_pipeline
-            .process_frame_to_nv12_timed(time, background_color)?;
+            .process_frame_to_iosurface_timed(time, background_color)?;
+        let timing = iosurface_result.timing;
+        let gpu_handle = iosurface_result.gpu_handle.ok_or_else(|| {
+            Error::UnsupportedCapability(
+                "macOS GPU preview output did not return an IOSurface handle".to_string(),
+            )
+        })?;
 
-        let timing = result.timing;
-
-        // PTS based on actual timeline time, not frame_count
-        let pts = (time * 1_000_000.0) as i64;
-        let encode_start = std::time::Instant::now();
-        let packets = self.encoder.encode_frame(&result.data, pts)?;
-        let encode_ns = encode_start.elapsed().as_nanos() as u64;
+        let frame = VideoGpuFrame {
+            lease: GpuFrameLease::new(GpuOutputHandle::IOSurface(gpu_handle)),
+            pts: (time * 1_000_000.0) as i64,
+            duration: (1_000_000.0 / self.config.fps) as i64,
+            frame_index: self.frame_count,
+            width: iosurface_result.width,
+            height: iosurface_result.height,
+        };
 
         self.frame_count += 1;
+        Ok((frame, timing))
+    }
 
-        Ok((
-            packets.iter().map(PreviewFrame::from).collect(),
-            timing,
-            encode_ns,
-        ))
+    /// Render a GPU-resident frame with detailed timing breakdown.
+    #[cfg(not(target_os = "macos"))]
+    pub fn render_gpu_frame_timed(
+        &mut self,
+        _time: f64,
+        _background_color: [f32; 4],
+    ) -> Result<(VideoGpuFrame, GpuPipelineTiming)> {
+        Err(Error::UnsupportedCapability(format!(
+            "zero-copy GPU preview output is not implemented on {}",
+            std::env::consts::OS
+        )))
+    }
+
+    /// Render frame with detailed timing breakdown (non-macOS rollback path)
+    #[cfg(not(target_os = "macos"))]
+    pub fn render_frame_timed(
+        &mut self,
+        _time: f64,
+        _background_color: [f32; 4],
+    ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming, u64)> {
+        Err(Error::UnsupportedCapability(format!(
+            "zero-copy GPU preview encoding is not implemented on {}",
+            std::env::consts::OS
+        )))
     }
 
     /// Flush encoder and get remaining packets

@@ -11,17 +11,20 @@ use crate::export::{AudioMixer, EffectDispatcher, ExportSettings, ExportStats};
 #[allow(deprecated)]
 use crate::gpu::GpuTransitionProcessor;
 use crate::gpu::{
-    BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext,
-    LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter, TransitionParams,
-    TransitionType,
+    BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext, GpuPermit,
+    LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter, PipelinePriority,
+    TransitionParams, TransitionType,
 };
 use crate::jvi::JviLoader;
 use crate::monitor::SystemMonitor;
-use crate::preview::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
+use crate::preview::{PreviewPipeline, PreviewPipelineConfig};
+use crate::services::impls::snapshot_sink::SnapshotSink;
 use crate::services::impls::stream_loop::{
     eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle,
     StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
+use crate::services::impls::stream_sink::StreamSink;
+use crate::services::pipeline_sink::{PipelineOutput, PipelineSink, VideoOutput, VideoRawFrame};
 use crate::services::{
     IStreamPlayback, ITaskService, ITimelineService, StreamStats, TimelineStreamResult,
 };
@@ -230,29 +233,6 @@ impl TimelineService {
     }
 }
 
-/// Pack a PreviewFrame (H.264 NAL units from PreviewPipeline) into FrameData for broadcast
-///
-/// Wire format: [pts_us:i64 LE][dts_us:i64 LE][is_keyframe:u8][duration_us:i64 LE][H.264 NAL data...]
-/// PTS/DTS are already in microseconds from PreviewPipeline. Duration is calculated from fps.
-fn pack_preview_frame(frame: &PreviewFrame, width: u32, height: u32, fps: f64) -> FrameData {
-    let header_size = 8 + 8 + 1 + 8; // pts + dts + is_keyframe + duration
-    let duration_us = (1_000_000.0 / fps) as i64;
-    let mut data = Vec::with_capacity(header_size + frame.data.len());
-    data.extend_from_slice(&frame.pts.to_le_bytes());
-    data.extend_from_slice(&frame.dts.to_le_bytes());
-    data.push(if frame.is_keyframe { 1 } else { 0 });
-    data.extend_from_slice(&duration_us.to_le_bytes());
-    data.extend_from_slice(&frame.data);
-
-    FrameData {
-        data,
-        width,
-        height,
-        format: FrameFormat::H264,
-        timestamp: frame.pts as f64 / 1_000_000.0,
-    }
-}
-
 impl IStreamPlayback for TimelineService {
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
         // Clean up stats receiver before stopping
@@ -451,6 +431,7 @@ impl ITimelineService for TimelineService {
                             &element.effects,
                         ) {
                             Ok(processed) => processed,
+                            Err(e @ Error::UnknownEffect(_)) => return Err(e),
                             Err(e) => {
                                 tracing::warn!("Effects processing failed for element '{}', using unprocessed frame: {}", element.id, e);
                                 original
@@ -649,12 +630,25 @@ impl ITimelineService for TimelineService {
         let compositor = GpuCompositor::new(gpu_ctx)?;
         let result = compositor.composite(&layers, width, height, [0.0, 0.0, 0.0, 1.0])?;
 
+        let (snapshot_sink, snapshot_rx) = SnapshotSink::new();
+        snapshot_sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(
+            VideoRawFrame {
+                data: result.data,
+                width: result.width,
+                height: result.height,
+                format: FrameFormat::Rgba,
+                pts: (time * 1_000_000.0) as i64,
+                duration: (1_000_000.0 / timeline.fps) as i64,
+            },
+        )))?;
+        let snapshot = SnapshotSink::recv_blocking(snapshot_rx)?;
+
         Ok(FrameData {
-            data: result.data,
-            width: result.width,
-            height: result.height,
-            format: FrameFormat::Rgba,
-            timestamp: time,
+            data: snapshot.data,
+            width: snapshot.width,
+            height: snapshot.height,
+            format: snapshot.format,
+            timestamp: snapshot.pts as f64 / 1_000_000.0,
         })
     }
 
@@ -671,8 +665,8 @@ impl ITimelineService for TimelineService {
             .clone();
 
         let mut fps = config.fps;
-        let mut width = config.resolution.width;
-        let mut height = config.resolution.height;
+        let width = config.resolution.width;
+        let height = config.resolution.height;
         let mut timeline = timeline.clone();
 
         // Auto-calculate duration from elements if not explicitly set
@@ -703,18 +697,20 @@ impl ITimelineService for TimelineService {
         // Stats watch channel (latest snapshot, polled on demand)
         let (stats_tx, stats_rx) = watch::channel(StreamStats::default());
 
-        // === Video loop: PreviewPipeline (persistent decoder pool + GPU resources + H.264 encoder) ===
+        // === Video loop: PreviewPipeline (persistent decoder pool + GPU resources) + StreamSink ===
         let video_cancel = cancel.clone();
         let video_state_rx = state_rx.clone();
         let video_timeline = timeline.clone();
         let video_gpu_ctx = gpu_ctx.clone();
+        let video_budget = video_gpu_ctx.budget_controller().clone();
         let video_start_time = config.start_time;
         let video_stats_tx = stats_tx.clone();
         let mut video_duration = timeline.duration;
         let video_streams_clone = self.active_streams.clone();
         let video_stream_id_clone = video_stream_id.clone();
         let video_join = tokio::task::spawn_blocking(move || {
-            // Create PreviewPipeline (wraps GpuExportPipeline + HwAccelEncoder)
+            let budget_pipeline_id = format!("timeline-preview:{}", video_stream_id_clone.as_str());
+            // Create PreviewPipeline and StreamSink.
             let preview_config = PreviewPipelineConfig {
                 width,
                 height,
@@ -723,19 +719,30 @@ impl ITimelineService for TimelineService {
                 gop_size: (fps as u32).max(1), // 1 second GOP
             };
 
-            let mut pipeline =
-                match PreviewPipeline::new(video_timeline.clone(), video_gpu_ctx, preview_config) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        tracing::error!("Failed to create PreviewPipeline: {}", e);
-                        return;
-                    }
-                };
+            let mut pipeline = match PreviewPipeline::new(
+                video_timeline.clone(),
+                Arc::clone(&video_gpu_ctx),
+                preview_config.clone(),
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::error!("Failed to create PreviewPipeline: {}", e);
+                    return;
+                }
+            };
 
-            if let Err(e) = pipeline.initialize() {
+            if let Err(e) = pipeline.initialize_gpu_only() {
                 tracing::error!("Failed to initialize PreviewPipeline: {}", e);
                 return;
             }
+
+            let stream_sink = match StreamSink::new(preview_config.clone(), video_tx.clone()) {
+                Ok(sink) => sink,
+                Err(e) => {
+                    tracing::error!("Failed to create StreamSink: {}", e);
+                    return;
+                }
+            };
 
             tracing::info!(
                 "PreviewPipeline initialized: {}x{} @ {}fps, hw={}",
@@ -750,7 +757,6 @@ impl ITimelineService for TimelineService {
             let mut current_time = video_start_time;
             let mut last_seek_seq: u64 = 0;
             let timeline = video_timeline;
-            let tx = video_tx;
             let background_color = [0.0_f32, 0.0, 0.0, 1.0];
             let mut stats = FrameStatsCollector::new(std::time::Duration::from_secs(10));
             let mut system_monitor = SystemMonitor::new();
@@ -792,22 +798,15 @@ impl ITimelineService for TimelineService {
                             new_config.height,
                             new_config.bitrate / 1000
                         );
-                        match pipeline.update_config(new_config.clone()) {
-                            Ok(flushed_frames) => {
-                                // Deliver flushed frames from old encoder (at old resolution)
-                                for pf in &flushed_frames {
-                                    let frame = pack_preview_frame(pf, width, height, fps);
-                                    let _ = tx.send(frame);
-                                }
-                                // Update local dimensions for subsequent frames
-                                width = new_config.width;
-                                height = new_config.height;
+                        pipeline.update_gpu_config(new_config.clone());
+                        let update_result = stream_sink.reconfigure(new_config.clone());
+
+                        match update_result {
+                            Ok(()) => {
                                 fps = new_config.fps;
                                 pacer.reset();
                             }
-                            Err(e) => {
-                                tracing::error!("Video loop: failed to update config: {}", e);
-                            }
+                            Err(e) => tracing::error!("Video loop: failed to update config: {}", e),
                         }
                     }
                 }
@@ -866,24 +865,44 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
-                // Render frame via PreviewPipeline with timing
-                let frame_start = std::time::Instant::now();
-                match pipeline.render_frame_timed(current_time, background_color) {
-                    Ok((mut preview_frames, gpu_timing, encode_ns)) => {
-                        // Measure pack+send time separately
-                        let send_start = std::time::Instant::now();
-                        // Override PTS/DTS with wall-clock time so client-side
-                        // frame scheduling stays in sync with actual delivery rate
-                        // (avoids ~6 drops/sec from ideal-vs-real PTS drift).
-                        let wall_pts_us = (pacer.elapsed_secs() * 1_000_000.0) as i64;
-                        for pf in &mut preview_frames {
-                            pf.pts = wall_pts_us;
-                            pf.dts = wall_pts_us;
-                            let frame = pack_preview_frame(pf, width, height, fps);
-                            let _ = tx.send(frame);
-                        }
-                        let send_ns = send_start.elapsed().as_nanos() as u64;
+                // Render frame via PreviewPipeline with timing.
+                match video_budget
+                    .acquire_permit(budget_pipeline_id.clone(), PipelinePriority::Interactive)
+                {
+                    GpuPermit::Proceed => {}
+                    GpuPermit::Queued { retry_after, .. }
+                    | GpuPermit::Paused { retry_after, .. } => {
+                        std::thread::sleep(retry_after);
+                        pacer.reset();
+                        continue;
+                    }
+                }
 
+                let frame_start = std::time::Instant::now();
+                let render_result = pipeline
+                    .render_gpu_frame_timed(current_time, background_color)
+                    .and_then(|(mut gpu_frame, gpu_timing)| {
+                        let submit_start = std::time::Instant::now();
+                        gpu_frame.pts = (pacer.elapsed_secs() * 1_000_000.0) as i64;
+                        gpu_frame.duration = (1_000_000.0 / fps) as i64;
+                        stream_sink
+                            .submit(PipelineOutput::Video(VideoOutput::GpuFrame(gpu_frame)))?;
+                        let submit_ns = submit_start.elapsed().as_nanos() as u64;
+                        Ok((gpu_timing, submit_ns, submit_ns))
+                    });
+
+                match render_result {
+                    Ok((gpu_timing, submit_ns, encode_ns)) => {
+                        video_budget.report_frame_time(
+                            budget_pipeline_id.clone(),
+                            PipelinePriority::Interactive,
+                            frame_start.elapsed(),
+                        );
+                        video_budget.observe_submitted_work_done(
+                            budget_pipeline_id.clone(),
+                            PipelinePriority::Interactive,
+                            video_gpu_ctx.queue(),
+                        );
                         let timing = FrameTiming {
                             hw_decode_ns: gpu_timing.hw_decode_ns,
                             nv12_import_ns: gpu_timing.nv12_import_ns,
@@ -893,7 +912,7 @@ impl ITimelineService for TimelineService {
                             cpu_readback_ns: gpu_timing.cpu_readback_ns,
                             decode_ns: gpu_timing.hw_decode_ns,
                             gpu_ns: gpu_timing.total_ns(),
-                            encode_submit_ns: send_ns,
+                            encode_submit_ns: submit_ns,
                             encode_ns,
                             total_ns: frame_start.elapsed().as_nanos() as u64,
                             ..Default::default()
@@ -901,6 +920,11 @@ impl ITimelineService for TimelineService {
                         stats.record_frame(timing);
                     }
                     Err(e) => {
+                        video_budget.report_frame_time(
+                            budget_pipeline_id.clone(),
+                            PipelinePriority::Interactive,
+                            frame_start.elapsed(),
+                        );
                         tracing::warn!(
                             "PreviewPipeline render error at {:.3}s: {}",
                             current_time,
@@ -973,12 +997,11 @@ impl ITimelineService for TimelineService {
                 "=== Video Stream ExportStats ===\n{}",
                 serde_json::to_string_pretty(&video_stats).unwrap_or_default()
             );
-            // Flush encoder
-            if let Ok(flush_frames) = pipeline.flush() {
-                for pf in &flush_frames {
-                    let frame = pack_preview_frame(pf, width, height, fps);
-                    let _ = tx.send(frame);
-                }
+            if let Err(e) = stream_sink.flush() {
+                tracing::warn!("StreamSink flush failed: {}", e);
+            }
+            if let Err(e) = stream_sink.close() {
+                tracing::warn!("StreamSink close failed: {}", e);
             }
             pipeline.close();
 

@@ -96,6 +96,20 @@ struct DenoiseOptions {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+struct PreprocessOptions {
+    clip_id: Option<String>,
+    track_id: Option<String>,
+    operation: Option<String>,
+    model: Option<String>,
+    input: Option<String>,
+    output: Option<String>,
+    scale: Option<u32>,
+    strength: Option<f32>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct ClipOptions {
     model: Option<String>,
     image: Option<String>,
@@ -265,6 +279,69 @@ impl Controller for ModelsController {
             }
 
             #[cfg(feature = "onnx")]
+            "preprocess" => {
+                let opts: PreprocessOptions = serde_json::from_value(options).unwrap_or_default();
+                let operation = opts
+                    .operation
+                    .ok_or_else(|| ApiError::InvalidRequest("operation required".to_string()))?;
+                let model = opts
+                    .model
+                    .ok_or_else(|| ApiError::InvalidRequest("model required".to_string()))?;
+                let input = opts
+                    .input
+                    .ok_or_else(|| ApiError::InvalidRequest("input required".to_string()))?;
+                let output = opts
+                    .output
+                    .ok_or_else(|| ApiError::InvalidRequest("output required".to_string()))?;
+                let output_path = output.clone();
+                self.require_ml()?;
+                let ml: Arc<dyn IMlService> = self.ml_service.as_ref().unwrap().clone();
+
+                match operation.as_str() {
+                    "upscale" => {
+                        let scale = opts.scale.unwrap_or(4);
+                        tokio::task::spawn_blocking(move || {
+                            ml.upscale(&model, &input, &output, scale).map_err(|e| {
+                                ApiError::ServiceError(format!("Upscale preprocess failed: {}", e))
+                            })
+                        })
+                        .await
+                        .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;
+                    }
+                    "denoise" => {
+                        let strength = opts.strength.unwrap_or(0.5);
+                        tokio::task::spawn_blocking(move || {
+                            ml.denoise(&model, &input, &output, strength).map_err(|e| {
+                                ApiError::ServiceError(format!("Denoise preprocess failed: {}", e))
+                            })
+                        })
+                        .await
+                        .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;
+                    }
+                    other => {
+                        return Err(ApiError::InvalidRequest(format!(
+                            "Unsupported preprocess operation: {other}"
+                        )));
+                    }
+                }
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({
+                        "operation": operation,
+                        "input": input,
+                        "output": output_path,
+                        "sourceReplacement": {
+                            "trackId": opts.track_id,
+                            "elementId": opts.clip_id,
+                            "src": output_path,
+                            "resourceId": null
+                        }
+                    }),
+                ))
+            }
+
+            #[cfg(feature = "onnx")]
             "clip" => {
                 let opts: ClipOptions = serde_json::from_value(options).unwrap_or_default();
                 let model = opts
@@ -380,6 +457,7 @@ mod tests {
         let actions = controller.actions();
         assert!(actions.contains(&"register"));
         assert!(actions.contains(&"upscale"));
+        assert!(actions.contains(&"preprocess"));
         assert!(actions.contains(&"diff"));
     }
 

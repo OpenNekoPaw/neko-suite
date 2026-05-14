@@ -3,6 +3,7 @@
 //! Provides scene graph, glTF loading, transform hierarchy,
 //! and animation systems using bevy_ecs.
 
+pub mod access;
 pub mod animation_blend;
 pub mod asset_database;
 pub mod character_authoring;

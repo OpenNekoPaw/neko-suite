@@ -64,7 +64,17 @@ impl ApiError {
 
 impl From<neko_engine_kernel::error::Error> for ApiError {
     fn from(e: neko_engine_kernel::error::Error) -> Self {
-        ApiError::ServiceError(e.to_string())
+        match e {
+            neko_engine_kernel::error::Error::UnsupportedCapability(message)
+            | neko_engine_kernel::error::Error::UnsupportedOutput(message)
+            | neko_engine_kernel::error::Error::UnknownEffect(message) => {
+                ApiError::InvalidRequest(message)
+            }
+            neko_engine_kernel::error::Error::AlreadyCompleted(message) => {
+                ApiError::InvalidRequest(message)
+            }
+            other => ApiError::ServiceError(other.to_string()),
+        }
     }
 }
 

@@ -4,7 +4,7 @@ use crate::controllers::utils::{base64_decode, base64_encode};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_engine_kernel::gpu::custom_shader_processor::ParamDef;
-use neko_engine_kernel::services::{EffectsService, IEffectsService};
+use neko_engine_kernel::services::{EffectRegistry, EffectsService, IEffectsService};
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use serde::Deserialize;
@@ -14,12 +14,19 @@ use std::sync::Arc;
 /// Controller for custom shader effect actions
 pub struct EffectsController {
     effects_service: Option<Arc<EffectsService>>,
+    effect_registry: Arc<EffectRegistry>,
 }
 
 impl EffectsController {
     /// Create a new EffectsController
-    pub fn new(effects_service: Option<Arc<EffectsService>>) -> Self {
-        Self { effects_service }
+    pub fn new(
+        effects_service: Option<Arc<EffectsService>>,
+        effect_registry: Arc<EffectRegistry>,
+    ) -> Self {
+        Self {
+            effects_service,
+            effect_registry,
+        }
     }
 
     fn require_service(&self) -> ApiResult<&EffectsService> {
@@ -96,6 +103,10 @@ impl Controller for EffectsController {
                 let service = self.require_service()?;
                 let presets = service.list_presets();
                 let response = serde_json::to_value(&presets)?;
+                Ok(ActionResponse::ok("", response))
+            }
+            "list-capabilities" => {
+                let response = serde_json::to_value(self.effect_registry.list_capabilities())?;
                 Ok(ActionResponse::ok("", response))
             }
             "info" => {
@@ -201,7 +212,7 @@ mod tests {
     use super::*;
 
     fn create_test_controller() -> EffectsController {
-        EffectsController::new(None)
+        EffectsController::new(None, Arc::new(EffectRegistry::with_builtins()))
     }
 
     #[tokio::test]
@@ -224,8 +235,24 @@ mod tests {
         let actions = controller.actions();
         assert!(actions.contains(&"apply"));
         assert!(actions.contains(&"list"));
+        assert!(actions.contains(&"list-capabilities"));
         assert!(actions.contains(&"info"));
         assert!(actions.contains(&"register"));
+    }
+
+    #[tokio::test]
+    async fn test_list_capabilities_no_gpu_returns_builtin_metadata() {
+        let controller = create_test_controller();
+        let response = controller
+            .handle("list-capabilities", None, Value::Null, None)
+            .await
+            .unwrap();
+
+        assert!(response.is_ok());
+        let data = response.data.unwrap();
+        let caps = data.as_array().unwrap();
+        assert!(caps.iter().any(|cap| cap["id"] == "gaussian-blur"));
+        assert!(caps.iter().any(|cap| cap["id"] == "gain"));
     }
 
     #[test]

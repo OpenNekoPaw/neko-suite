@@ -136,8 +136,8 @@ impl NativeEngine {
         stream_id: Option<String>,
         body: Option<String>,
     ) -> napi::Result<String> {
-        let options_value: serde_json::Value = parse_json_arg(options, "options")?
-            .unwrap_or(serde_json::Value::Null);
+        let options_value: serde_json::Value =
+            parse_json_arg(options, "options")?.unwrap_or(serde_json::Value::Null);
 
         let body_value: Option<serde_json::Value> = parse_json_arg(body, "body")?;
 
@@ -423,15 +423,11 @@ impl NativeEngine {
     }
 }
 
-fn parse_json_arg(
-    value: Option<String>,
-    label: &str,
-) -> napi::Result<Option<serde_json::Value>> {
+fn parse_json_arg(value: Option<String>, label: &str) -> napi::Result<Option<serde_json::Value>> {
     value
         .map(|s| {
-            serde_json::from_str(&s).map_err(|e| {
-                napi::Error::from_reason(format!("Invalid {} JSON: {}", label, e))
-            })
+            serde_json::from_str(&s)
+                .map_err(|e| napi::Error::from_reason(format!("Invalid {} JSON: {}", label, e)))
         })
         .transpose()
 }

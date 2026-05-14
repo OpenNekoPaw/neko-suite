@@ -569,7 +569,9 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin::PluginAuditReporter;
+    use crate::plugin::{EffectRegistryActivator, PluginAuditReporter};
+    use neko_engine_kernel::services::EffectRegistry;
+    use neko_engine_types::EffectKind;
     use std::fs;
     use std::sync::{Arc, Mutex};
 
@@ -584,6 +586,51 @@ mod tests {
             "engineVersion": "^0.1.0",
             "platforms": ["darwin-arm64"],
             "capabilities": [],
+            "permissions": []
+        });
+        fs::write(
+            plugin_dir.join("plugin.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn create_effect_capability_plugin(
+        dir: &Path,
+        id: &str,
+        capability_id: &str,
+        entry: &str,
+        write_entry: bool,
+    ) {
+        let plugin_dir = dir.join(id);
+        fs::create_dir_all(&plugin_dir).unwrap();
+        if write_entry {
+            fs::write(plugin_dir.join(entry), "@compute fn main() {}").unwrap();
+        }
+
+        let manifest = serde_json::json!({
+            "id": id,
+            "name": format!("Effect {}", id),
+            "version": "0.1.0",
+            "kind": "shader",
+            "engineVersion": "^0.1.0",
+            "platforms": ["darwin-arm64"],
+            "capabilities": [{
+                "id": capability_id,
+                "type": "effect-shader",
+                "entry": entry,
+                "name": "Plugin Shader",
+                "category": "stylize",
+                "params": [{
+                    "name": "amount",
+                    "type": "number",
+                    "default": 0.5,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.1,
+                    "animatable": true
+                }]
+            }],
             "permissions": []
         });
         fs::write(
@@ -810,6 +857,64 @@ mod tests {
         mgr.disable("com.test.p1").unwrap();
         let p = mgr.get("com.test.p1").unwrap();
         assert_eq!(p.state, PluginState::Disabled);
+    }
+
+    #[test]
+    fn effect_registry_activator_registers_and_unregisters_via_manager() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_effect_capability_plugin(
+            tmp.path(),
+            "com.test.effect",
+            "com.test.effect.shader",
+            "shader.wgsl",
+            true,
+        );
+
+        let registry = Arc::new(EffectRegistry::with_builtins());
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_activation_handler(Box::new(EffectRegistryActivator::new(registry.clone())));
+        mgr.scan();
+
+        mgr.enable("com.test.effect").unwrap();
+        assert!(registry
+            .list_capabilities()
+            .iter()
+            .any(|cap| { cap.id == "com.test.effect.shader" && cap.kind == EffectKind::Shader }));
+
+        mgr.disable("com.test.effect").unwrap();
+        assert!(!registry
+            .list_capabilities()
+            .iter()
+            .any(|cap| cap.source_id.as_deref() == Some("com.test.effect")));
+    }
+
+    #[test]
+    fn effect_registry_activator_failure_is_reported_on_plugin_state() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_effect_capability_plugin(
+            tmp.path(),
+            "com.test.bad-effect",
+            "com.test.bad.shader",
+            "missing.wgsl",
+            false,
+        );
+
+        let registry = Arc::new(EffectRegistry::with_builtins());
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_activation_handler(Box::new(EffectRegistryActivator::new(registry)));
+        mgr.scan();
+
+        let err = mgr.enable("com.test.bad-effect").unwrap_err();
+        assert!(err.contains("Activation failed"));
+        assert!(err.contains("entry does not exist"));
+
+        let plugin = mgr.get("com.test.bad-effect").unwrap();
+        assert_eq!(plugin.state, PluginState::Disabled);
+        assert!(plugin
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Activation failed"));
     }
 
     #[test]

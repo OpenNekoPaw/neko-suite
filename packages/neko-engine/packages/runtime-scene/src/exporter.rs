@@ -1495,6 +1495,7 @@ mod tests {
 
     #[test]
     fn export_uses_engine_evaluated_animation_pose() {
+        use crate::access::RawWorldAccess;
         use crate::components::{
             AnimationChannel, AnimationClipData, AnimationProperty, AnimationTarget,
             GlobalTransform, NodeName, SceneNodeId, SceneRoot, Transform,
@@ -1503,7 +1504,7 @@ mod tests {
 
         let mut scene = BevySceneWorld::new();
         {
-            let ecs = scene.ecs_world_mut();
+            let ecs = scene.ecs_world_mut_raw();
             ecs.spawn((
                 SceneNodeId("node_0".to_string()),
                 NodeName("Animated Node".to_string()),

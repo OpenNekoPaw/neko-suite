@@ -160,12 +160,32 @@ pub struct PluginMachineBinding {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginCapability {
+    /// Optional explicit capability id. When absent, activation derives one deterministically.
+    #[serde(default)]
+    pub id: Option<String>,
+
     /// Capability type (e.g. "effect-shader", "format-probe")
     #[serde(rename = "type")]
     pub capability_type: String,
 
     /// Entry point (relative path within the plugin package)
     pub entry: String,
+
+    /// Human-readable capability name.
+    #[serde(default)]
+    pub name: Option<String>,
+
+    /// Optional UI translation key for the capability name.
+    #[serde(default)]
+    pub name_key: Option<String>,
+
+    /// Optional human-readable description.
+    #[serde(default)]
+    pub description: Option<String>,
+
+    /// Optional UI category, e.g. "stylize", "audio", or "preprocess".
+    #[serde(default)]
+    pub category: Option<String>,
 
     /// Parameter definitions (for shaders and configurable capabilities)
     #[serde(default)]
@@ -180,8 +200,31 @@ pub struct PluginParam {
     pub param_type: String,
     #[serde(default)]
     pub default: serde_json::Value,
+    #[serde(default)]
     pub min: Option<f64>,
+    #[serde(default)]
     pub max: Option<f64>,
+    #[serde(default)]
+    pub step: Option<f64>,
+    #[serde(default)]
+    pub unit: Option<String>,
+    #[serde(default)]
+    pub label_key: Option<String>,
+    #[serde(default)]
+    pub options: Vec<PluginParamOption>,
+    #[serde(default)]
+    pub animatable: bool,
+}
+
+/// Select-style parameter option for configurable plugin capabilities.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginParamOption {
+    pub value: serde_json::Value,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub label_key: Option<String>,
 }
 
 /// Content integrity information.

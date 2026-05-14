@@ -4,6 +4,7 @@ use crate::domain::{CaptureOptions, ExtractOptions, FrameData, TaskHandle, Trans
 use crate::error::Result;
 use crate::services::IStreamPlayback;
 use neko_engine_types::{MediaInfo, StreamId};
+use neko_runtime_media::PanoramaViewState;
 use std::path::Path;
 use tokio::sync::broadcast;
 
@@ -39,6 +40,21 @@ pub trait IVideoService: IStreamPlayback {
         source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
+
+    /// Start a panoramic video stream projected by the GPU renderer.
+    async fn start_panoramic_stream(
+        &self,
+        source: &Path,
+        session_id: &str,
+        view_state: PanoramaViewState,
+    ) -> Result<(StreamId, broadcast::Receiver<FrameData>)>;
+
+    /// Update panoramic stream view state without restarting decode.
+    async fn update_panoramic_view_state(
+        &self,
+        stream_id: &StreamId,
+        view_state: PanoramaViewState,
+    ) -> Result<()>;
 
     /// Transcode video to different format
     async fn transcode(

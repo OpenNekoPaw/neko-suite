@@ -4,9 +4,9 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::services::{IPuppetService, PuppetService};
+use neko_engine_kernel::services::{IPuppetService, PuppetExportConfig, PuppetService};
 use neko_engine_types::registry;
-use neko_engine_types::ActionResponse;
+use neko_engine_types::{ActionResponse, PuppetCommand, PuppetCommandAck, PuppetCommandAckStatus};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -56,22 +56,15 @@ impl Controller for PuppetsController {
                 let load_body: LoadBody = serde_json::from_value(body)
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
-                // Decode base64
-                use base64::Engine;
-                let data = base64::engine::general_purpose::STANDARD
-                    .decode(&load_body.data)
-                    .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
-
                 let service = self.service()?;
-                let snapshot = service
-                    .load_puppet(&data)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                let snapshot = apply_alias(
+                    service,
+                    PuppetCommand::Load {
+                        data_base64: load_body.data,
+                    },
+                )?;
 
-                Ok(ActionResponse::ok(
-                    "",
-                    serde_json::to_value(snapshot)
-                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
-                ))
+                Ok(ActionResponse::ok("", snapshot))
             }
 
             "snapshot" => {
@@ -97,9 +90,13 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .set_parameter(&opts.name, opts.value)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::SetParameter {
+                        name: opts.name,
+                        value: opts.value,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -126,15 +123,9 @@ impl Controller for PuppetsController {
                 let delta_ms = opts.delta_ms.unwrap_or(16.0); // ~60fps default
 
                 let service = self.service()?;
-                let delta = service
-                    .tick(delta_ms)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                let delta = apply_alias(service, PuppetCommand::Tick { delta_ms })?;
 
-                Ok(ActionResponse::ok(
-                    "",
-                    serde_json::to_value(delta)
-                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
-                ))
+                Ok(ActionResponse::ok("", delta))
             }
 
             "meshes" => {
@@ -174,18 +165,20 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .play_animation(&opts.name, opts.loop_anim)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::PlayAnimation {
+                        name: opts.name,
+                        loop_anim: opts.loop_anim,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
             "anim_stop" => {
                 let service = self.service()?;
-                service
-                    .stop_animation()
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(service, PuppetCommand::StopAnimation)?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -199,9 +192,12 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .seek_animation(opts.time_ms)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::SeekAnimation {
+                        time_ms: opts.time_ms,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -238,15 +234,17 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                let id = service
-                    .add_keyframe(&opts.clip_name, &opts.param_name, opts.time_ms, opts.value)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                let data = apply_alias(
+                    service,
+                    PuppetCommand::AddKeyframe {
+                        clip_name: opts.clip_name,
+                        param_name: opts.param_name,
+                        time_ms: opts.time_ms,
+                        value: opts.value,
+                    },
+                )?;
 
-                Ok(ActionResponse::ok(
-                    "",
-                    serde_json::to_value(serde_json::json!({ "id": id }))
-                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
-                ))
+                Ok(ActionResponse::ok("", data))
             }
 
             "keyframe_remove" => {
@@ -260,9 +258,14 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .remove_keyframe(&opts.clip_name, &opts.param_name, &opts.keyframe_id)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::RemoveKeyframe {
+                        clip_name: opts.clip_name,
+                        param_name: opts.param_name,
+                        keyframe_id: opts.keyframe_id,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -280,22 +283,18 @@ impl Controller for PuppetsController {
                 let opts: KeyframeUpdateOptions = serde_json::from_value(options)
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
-                // Parse easing string to EasingType
-                let easing = opts
-                    .easing
-                    .map(|s| neko_engine_types::easing::EasingType::from_name(&s));
-
                 let service = self.service()?;
-                service
-                    .update_keyframe(
-                        &opts.clip_name,
-                        &opts.param_name,
-                        &opts.keyframe_id,
-                        opts.time_ms,
-                        opts.value,
-                        easing,
-                    )
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::UpdateKeyframe {
+                        clip_name: opts.clip_name,
+                        param_name: opts.param_name,
+                        keyframe_id: opts.keyframe_id,
+                        time_ms: opts.time_ms,
+                        value: opts.value,
+                        easing: opts.easing,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -310,9 +309,13 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .create_clip(&opts.name, opts.duration_ms)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::CreateClip {
+                        name: opts.name,
+                        duration_ms: opts.duration_ms,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -329,9 +332,14 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .crossfade_animation(&opts.clip_name, opts.fade_duration_ms, opts.loop_anim)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::CrossfadeAnimation {
+                        clip_name: opts.clip_name,
+                        fade_duration_ms: opts.fade_duration_ms,
+                        loop_anim: opts.loop_anim,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -346,9 +354,13 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .set_blend_weight(&opts.clip_name, opts.weight)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::SetBlendWeight {
+                        clip_name: opts.clip_name,
+                        weight: opts.weight,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -376,9 +388,13 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .set_node_opacity(&opts.node_id, opts.opacity)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::SetNodeOpacity {
+                        node_id: opts.node_id,
+                        opacity: opts.opacity,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -405,18 +421,14 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .set_expression(&opts.name)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(service, PuppetCommand::SetExpression { name: opts.name })?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
             "clear_expression" => {
                 let service = self.service()?;
-                service
-                    .clear_expression()
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(service, PuppetCommand::ClearExpression)?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -437,9 +449,14 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .load_moc3_auxiliary(&aux.expressions, &aux.motions, aux.physics.as_deref())
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::LoadMoc3Auxiliary {
+                        expressions: aux.expressions,
+                        motions: aux.motions,
+                        physics_json: aux.physics,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -454,9 +471,13 @@ impl Controller for PuppetsController {
                     .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
 
                 let service = self.service()?;
-                service
-                    .set_texture(&opts.node_id, opts.texture_index)
-                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                apply_alias(
+                    service,
+                    PuppetCommand::SetTexture {
+                        node_id: opts.node_id,
+                        texture_index: opts.texture_index,
+                    },
+                )?;
 
                 Ok(ActionResponse::ok("", Value::Null))
             }
@@ -493,6 +514,47 @@ impl Controller for PuppetsController {
                 ))
             }
 
+            "export_h264" => {
+                #[derive(Debug, Deserialize)]
+                struct ExportH264Options {
+                    output_path: String,
+                    #[serde(default)]
+                    width: Option<u32>,
+                    #[serde(default)]
+                    height: Option<u32>,
+                    #[serde(default)]
+                    fps: Option<f64>,
+                    #[serde(default)]
+                    duration_ms: Option<f64>,
+                    #[serde(default)]
+                    bitrate: Option<u64>,
+                    #[serde(default)]
+                    gop_size: Option<u32>,
+                }
+                let opts: ExportH264Options = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+                let defaults = PuppetExportConfig::default();
+                let config = PuppetExportConfig {
+                    width: opts.width.unwrap_or(defaults.width),
+                    height: opts.height.unwrap_or(defaults.height),
+                    fps: opts.fps.unwrap_or(defaults.fps),
+                    duration_ms: opts.duration_ms.unwrap_or(defaults.duration_ms),
+                    bitrate: opts.bitrate.unwrap_or(defaults.bitrate),
+                    gop_size: opts.gop_size.unwrap_or(defaults.gop_size),
+                };
+
+                let service = self.service()?;
+                let summary = service
+                    .export_h264_to_path(&opts.output_path, config)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(summary)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),
@@ -507,6 +569,26 @@ impl Controller for PuppetsController {
     fn actions(&self) -> &'static [&'static str] {
         registry::actions::PUPPETS
     }
+}
+
+fn apply_alias(service: &PuppetService, command: PuppetCommand) -> ApiResult<Value> {
+    let ack = service
+        .apply_puppet_command_alias(command)
+        .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+    ack_data(ack)
+}
+
+fn ack_data(ack: PuppetCommandAck) -> ApiResult<Value> {
+    if ack.status != PuppetCommandAckStatus::Applied {
+        let message = ack
+            .error
+            .as_ref()
+            .map(|error| error.message.clone())
+            .unwrap_or_else(|| "puppet command rejected".to_string());
+        return Err(ApiError::ServiceError(message));
+    }
+
+    Ok(ack.result.unwrap_or(Value::Null))
 }
 
 #[cfg(test)]

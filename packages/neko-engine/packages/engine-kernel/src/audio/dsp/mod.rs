@@ -20,5 +20,7 @@ pub mod speed_resampler;
 pub mod traits;
 
 pub use effect_chain::EffectChain;
-pub use effect_factory::{AudioEffectConfig, build_effect_chain, create_effect};
+pub use effect_factory::{
+    build_effect_chain, create_effect, AudioEffectConfig, AudioEffectFactory,
+};
 pub use traits::AudioEffect;

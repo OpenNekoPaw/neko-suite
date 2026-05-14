@@ -8,6 +8,7 @@ use crate::encoder::EncodedPacket;
 use crate::error::{Error, Result};
 use crate::preview::PreviewPipelineConfig;
 use crate::services::audio_mixdown::MixdownConfig;
+use neko_runtime_media::PanoramaViewState;
 use neko_engine_types::{FrameFormat, LoopRegion, StreamId};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -44,6 +45,10 @@ pub struct PlaybackState {
     pub mixdown_update_ack: Option<MixdownUpdateAck>,
     /// Monotonically increasing mixdown update sequence counter.
     pub mixdown_seq: u64,
+    /// Hot-update: panoramic video view state.
+    pub panorama_view_state: Option<Arc<PanoramaViewState>>,
+    /// Monotonically increasing panoramic view-state sequence counter.
+    pub panorama_view_seq: u64,
 }
 
 impl Default for PlaybackState {
@@ -61,6 +66,8 @@ impl Default for PlaybackState {
             mixdown_update: None,
             mixdown_update_ack: None,
             mixdown_seq: 0,
+            panorama_view_state: None,
+            panorama_view_seq: 0,
         }
     }
 }
@@ -80,6 +87,8 @@ impl Clone for PlaybackState {
             mixdown_update: self.mixdown_update.clone(),
             mixdown_update_ack: self.mixdown_update_ack.clone(),
             mixdown_seq: self.mixdown_seq,
+            panorama_view_state: self.panorama_view_state.clone(),
+            panorama_view_seq: self.panorama_view_seq,
         }
     }
 }
@@ -102,6 +111,8 @@ impl std::fmt::Debug for PlaybackState {
                 &self.mixdown_update_ack.as_ref().map(|_| "<ack>"),
             )
             .field("mixdown_seq", &self.mixdown_seq)
+            .field("panorama_view_state", &self.panorama_view_state)
+            .field("panorama_view_seq", &self.panorama_view_seq)
             .finish()
     }
 }
@@ -352,6 +363,20 @@ impl StreamPlaybackDelegate {
         config: Arc<MixdownConfig>,
     ) -> Result<Vec<String>> {
         self.active_streams.update_mixdown(stream_id, config).await
+    }
+
+    /// Hot-update panoramic view state for a running video stream.
+    pub async fn update_panorama_view_state(
+        &self,
+        stream_id: &StreamId,
+        view_state: Arc<PanoramaViewState>,
+    ) -> Result<()> {
+        self.active_streams
+            .update_state(stream_id, |s| {
+                s.panorama_view_state = Some(view_state);
+                s.panorama_view_seq += 1;
+            })
+            .await
     }
 }
 

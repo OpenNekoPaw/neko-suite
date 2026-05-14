@@ -7,6 +7,7 @@
 //! - `POST /v1/:group/:id/:action` — RESTful resource-level dispatch
 //! - `GET /v1/streams/:stream_id` — WebSocket media frame streaming
 //! - `GET /v1/puppets/stream` — WebSocket puppet delta stream (~60fps for neko-live)
+//! - `GET /v1/puppets/control` — WebSocket puppet command control plane
 //! - `GET /health` — Health check
 //!
 //! # Usage

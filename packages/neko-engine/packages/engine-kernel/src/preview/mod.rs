@@ -6,5 +6,11 @@
 //! All processing stays on GPU until final H.264 output.
 
 mod pipeline;
+mod provider;
 
 pub use pipeline::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};
+pub use provider::{
+    DocumentPreviewProvider, ImagePreviewProvider, PreviewArtifact, PreviewArtifactKind,
+    PreviewProvider, PreviewProviderKind, PreviewProviderRegistry, PreviewProviderVariantRequest,
+    PreviewRequest, PuppetPreviewProvider, ScenePreviewProvider, VideoPreviewProvider,
+};

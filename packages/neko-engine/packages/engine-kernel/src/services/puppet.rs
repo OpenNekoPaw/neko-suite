@@ -4,14 +4,80 @@
 //! Mirrors the ISceneService pattern for 3D scenes.
 
 use neko_engine_types::easing::EasingType;
+use neko_engine_types::{PuppetCommandAck, PuppetCommandEnvelope};
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;
 use neko_runtime_puppet::moc3::expression::ExpressionInfo;
 use neko_runtime_puppet::world::{DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot};
 
+use super::pipeline_sink::{PipelineSink, VideoOutput};
+
+/// Puppet clip export configuration.
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]
+pub struct PuppetExportConfig {
+    /// Output width in pixels.
+    pub width: u32,
+    /// Output height in pixels.
+    pub height: u32,
+    /// Output frame rate.
+    pub fps: f64,
+    /// Export duration in milliseconds.
+    pub duration_ms: f64,
+    /// Target video bitrate.
+    pub bitrate: u64,
+    /// GOP size in frames.
+    pub gop_size: u32,
+}
+
+impl Default for PuppetExportConfig {
+    fn default() -> Self {
+        Self {
+            width: 512,
+            height: 512,
+            fps: 60.0,
+            duration_ms: 1_000.0,
+            bitrate: 2_000_000,
+            gop_size: 60,
+        }
+    }
+}
+
+/// Summary returned after submitting puppet frames to an export sink.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct PuppetExportSummary {
+    /// Number of submitted frames.
+    pub frames_submitted: u64,
+}
+
+/// Puppet render timing metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PuppetRenderTiming {
+    /// Presentation timestamp in microseconds.
+    pub pts: i64,
+    /// Frame duration in microseconds.
+    pub duration: i64,
+    /// Monotonic frame index.
+    pub frame_index: u64,
+}
+
 /// Service interface for 2D puppet management
 #[allow(async_fn_in_trait)]
 pub trait IPuppetService: Send + Sync {
+    /// Current command revision for conflict detection
+    fn current_revision(&self) -> crate::error::Result<u64>;
+
+    /// Apply a typed puppet command envelope
+    fn apply_puppet_command(
+        &self,
+        envelope: PuppetCommandEnvelope,
+    ) -> crate::error::Result<PuppetCommandAck>;
+
+    /// Apply a compatibility command using the service-owned sequence cursor
+    fn apply_puppet_command_alias(
+        &self,
+        command: neko_engine_types::PuppetCommand,
+    ) -> crate::error::Result<PuppetCommandAck>;
+
     /// Load a puppet from INP binary data and return a snapshot
     fn load_puppet(&self, data: &[u8]) -> crate::error::Result<PuppetSnapshot>;
 
@@ -29,6 +95,37 @@ pub trait IPuppetService: Send + Sync {
 
     /// Get current deformed mesh data without advancing physics
     fn get_deformed_meshes(&self) -> crate::error::Result<Vec<DeformedMesh>>;
+
+    /// Render the current puppet state into a PipelineSink-compatible GPU frame
+    fn render_gpu_frame(
+        &self,
+        width: u32,
+        height: u32,
+        timing: PuppetRenderTiming,
+    ) -> crate::error::Result<VideoOutput>;
+
+    /// Render the current puppet state and submit it to a PipelineSink.
+    fn submit_rendered_frame_to_sink(
+        &self,
+        sink: &dyn PipelineSink,
+        width: u32,
+        height: u32,
+        timing: PuppetRenderTiming,
+    ) -> crate::error::Result<()>;
+
+    /// Submit a rendered puppet clip to an existing sink.
+    fn export_rendered_clip_to_sink(
+        &self,
+        sink: &dyn PipelineSink,
+        config: PuppetExportConfig,
+    ) -> crate::error::Result<PuppetExportSummary>;
+
+    /// Export a rendered puppet clip to an H.264 container path through MuxerSink.
+    fn export_h264_to_path(
+        &self,
+        output_path: &str,
+        config: PuppetExportConfig,
+    ) -> crate::error::Result<PuppetExportSummary>;
 
     /// Get all available animation clip descriptions
     fn get_animations(&self) -> crate::error::Result<Vec<AnimationClipInfo>>;

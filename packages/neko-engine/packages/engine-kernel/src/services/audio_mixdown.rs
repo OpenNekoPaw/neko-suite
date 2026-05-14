@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::audio::dsp::effect_factory::{AudioEffectConfig, create_effect};
+use crate::audio::dsp::effect_factory::{AudioEffectConfig, AudioEffectFactory};
 use crate::audio::dsp::gain::db_to_linear;
 use crate::audio::dsp::{AudioEffect, EffectChain};
 use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat, SoftLimiter};
@@ -558,14 +558,21 @@ fn rebuild_effect_chains(
     config: &MixdownConfig,
 ) -> (EffectChain, HashMap<String, EffectChain>, Vec<String>) {
     let mut warnings = Vec::new();
-    let master_chain = build_lossy_effect_chain(&config.master_effects, None, &mut warnings);
+    let factory = AudioEffectFactory::with_builtins();
+    let master_chain =
+        build_lossy_effect_chain(&factory, &config.master_effects, None, &mut warnings);
 
     let mut track_chains = HashMap::new();
     for track in &config.tracks {
         if track.effect_chain.is_empty() {
             continue;
         }
-        let chain = build_lossy_effect_chain(&track.effect_chain, Some(&track.id), &mut warnings);
+        let chain = build_lossy_effect_chain(
+            &factory,
+            &track.effect_chain,
+            Some(&track.id),
+            &mut warnings,
+        );
         if !chain.is_empty() {
             track_chains.insert(track.id.clone(), chain);
         }
@@ -575,13 +582,14 @@ fn rebuild_effect_chains(
 }
 
 fn build_lossy_effect_chain(
+    factory: &AudioEffectFactory,
     configs: &[AudioEffectConfig],
     track_id: Option<&str>,
     warnings: &mut Vec<String>,
 ) -> EffectChain {
     let mut chain = EffectChain::new();
     for config in configs {
-        match create_effect(config) {
+        match factory.create(config) {
             Ok(effect) => chain.push(config.id.clone(), config.enabled, effect),
             Err(err) => {
                 let scope = track_id
@@ -724,18 +732,14 @@ mod tests {
         let mixdown = AudioMixdown::new(config);
 
         assert_eq!(mixdown.warnings().len(), 2);
-        assert!(
-            mixdown
-                .warnings()
-                .iter()
-                .any(|w| w.contains("noise-reduction") && w.contains("master"))
-        );
-        assert!(
-            mixdown
-                .warnings()
-                .iter()
-                .any(|w| w.contains("spectral-wizard") && w.contains("track-a"))
-        );
+        assert!(mixdown
+            .warnings()
+            .iter()
+            .any(|w| w.contains("noise-reduction") && w.contains("master")));
+        assert!(mixdown
+            .warnings()
+            .iter()
+            .any(|w| w.contains("spectral-wizard") && w.contains("track-a")));
     }
 
     #[test]

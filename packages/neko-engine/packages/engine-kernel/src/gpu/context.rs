@@ -1,6 +1,7 @@
 //! GPU Context - wgpu device management
 
 use crate::error::{Error, Result};
+use crate::gpu::budget::GpuBudgetController;
 use crate::gpu::buffer_pool::BufferPool;
 use std::sync::Arc;
 use wgpu::BufferUsages;
@@ -31,6 +32,8 @@ pub struct GpuContext {
     info: GpuInfo,
     /// Staging buffer pool for efficient GPU readback
     staging_buffer_pool: BufferPool,
+    /// Shared soft GPU budget controller
+    budget_controller: GpuBudgetController,
 }
 
 impl GpuContext {
@@ -122,6 +125,7 @@ impl GpuContext {
             queue,
             info,
             staging_buffer_pool,
+            budget_controller: GpuBudgetController::default(),
         })
     }
 
@@ -138,6 +142,11 @@ impl GpuContext {
     /// Get wgpu queue
     pub fn queue(&self) -> &Arc<wgpu::Queue> {
         &self.queue
+    }
+
+    /// Get the shared soft GPU budget controller.
+    pub fn budget_controller(&self) -> &GpuBudgetController {
+        &self.budget_controller
     }
 
     /// Create a storage buffer with initial data

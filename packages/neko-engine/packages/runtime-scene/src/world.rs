@@ -2,6 +2,12 @@
 //!
 //! Isolates bevy_ecs API details behind a stable interface.
 
+use crate::access::{
+    BeginModelingSession, CommitModelingSession, CreativeAccess, DataAccess, ProceduralSceneEntity,
+    ProceduralSceneEntitySpec, RawWorldAccess, SceneCommandBatch, SceneEntityFilter,
+    SceneExportRef, SceneNodeMeshRef, SceneRenderExtractInput, SceneRenderExtraction,
+    SceneRenderExtractor, SerializedSceneEntities,
+};
 use crate::animation_blend::{
     SceneAnimationBlendState, SceneAnimationPlaybackState, SceneBlendLayer, SceneBlendLayerInfo,
     SceneCrossfadeRequest,
@@ -10,11 +16,13 @@ use crate::components::*;
 use crate::hierarchy;
 use crate::ik::{self, IkChain, IkChainInfo, IkSolverType};
 use crate::loader::{self, LoadError, LoadResult};
-use crate::modeling_session::{ModelingSessionStateDelta, TopologyChangeEvent};
+use crate::modeling_session::{
+    ModelingSession, ModelingSessionManager, ModelingSessionStateDelta, TopologyChangeEvent,
+};
 use crate::scene_control::{
     advance_scene_revision, ensure_scene_control_resources, extract_scene_delta,
     mark_morph_weights_dirty, mark_node_removed, mark_transform_dirty, mark_visibility_dirty,
-    rebuild_node_index,
+    rebuild_node_index, SceneCommandAck, SceneCommandEnvelope, SceneRevision,
 };
 use crate::systems;
 use bevy_ecs::prelude::*;
@@ -239,11 +247,6 @@ impl BevySceneWorld {
         Self { world }
     }
 
-    /// Access the inner ECS World (for GPU rendering queries)
-    pub fn ecs_world_mut(&mut self) -> &mut World {
-        &mut self.world
-    }
-
     fn write_playback_state(
         &mut self,
         clip_name: &str,
@@ -323,6 +326,229 @@ impl BevySceneWorld {
 impl Default for BevySceneWorld {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl CreativeAccess for BevySceneWorld {
+    fn current_revision(&mut self) -> u64 {
+        ensure_scene_control_resources(&mut self.world);
+        self.world.resource::<SceneRevision>().current()
+    }
+}
+
+impl DataAccess for BevySceneWorld {
+    fn extract_render_world<C, E>(
+        &mut self,
+        input: SceneRenderExtractInput<'_, C>,
+        extractor: &mut E,
+    ) -> SceneRenderExtraction<E::RenderWorld, E::Stats>
+    where
+        E: SceneRenderExtractor<C>,
+    {
+        extractor.extract(&mut self.world, input)
+    }
+
+    fn serialize_entities(&mut self, filter: SceneEntityFilter) -> SerializedSceneEntities {
+        let mut export_refs = Vec::new();
+        let mut node_mesh_map = HashMap::new();
+
+        if matches!(
+            filter,
+            SceneEntityFilter::All | SceneEntityFilter::Export | SceneEntityFilter::Project
+        ) {
+            let mut query = self.world.query::<(
+                &SceneNodeId,
+                Option<&MeshRef>,
+                Option<&MaterialRef>,
+                Option<&Light>,
+                Option<&Camera>,
+            )>();
+            for (scene_id, mesh_ref, material_ref, light, camera) in query.iter(&self.world) {
+                if let Some(mesh_ref) = mesh_ref {
+                    node_mesh_map.insert(scene_id.0.clone(), mesh_ref.uri.clone());
+                }
+                export_refs.push(SceneExportRef {
+                    node_id: scene_id.0.clone(),
+                    mesh_uri: mesh_ref.map(|mesh| mesh.uri.clone()),
+                    material_handle: material_ref.map(|material| material.asset.clone()),
+                    light: light.cloned(),
+                    camera: camera.cloned(),
+                });
+            }
+        }
+
+        let animation_clips =
+            if matches!(filter, SceneEntityFilter::All | SceneEntityFilter::Export) {
+                let mut query = self.world.query::<&AnimationTarget>();
+                query
+                    .iter(&self.world)
+                    .flat_map(|target| target.clips.iter().cloned())
+                    .collect()
+            } else {
+                Vec::new()
+            };
+
+        SerializedSceneEntities {
+            export_refs,
+            animation_clips,
+            node_mesh_map,
+        }
+    }
+
+    fn spawn_procedural(&mut self, spec: ProceduralSceneEntitySpec) -> ProceduralSceneEntity {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let idx = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let node_id = format!("procedural_{}_{}", spec.label.to_lowercase(), idx);
+        let name = format!("{} {}", spec.label, idx);
+
+        self.world.spawn((
+            SceneNodeId(node_id.clone()),
+            NodeName(name.clone()),
+            Transform::default(),
+            GlobalTransform::identity(),
+            MeshRef {
+                asset: crate::asset_database::AssetHandle::for_mesh(&spec.uri, 0),
+                uri: spec.uri,
+                primitive_index: 0,
+            },
+        ));
+        rebuild_node_index(&mut self.world);
+        advance_scene_revision(&mut self.world);
+
+        ProceduralSceneEntity { node_id, name }
+    }
+
+    fn mesh_uri(&mut self, node_id: &str) -> Result<String, String> {
+        let mut query = self.world.query::<(&SceneNodeId, &MeshRef)>();
+        query
+            .iter(&self.world)
+            .find(|(scene_id, _)| scene_id.0 == node_id)
+            .map(|(_, mesh_ref)| mesh_ref.uri.clone())
+            .ok_or_else(|| format!("Entity '{}' not found or has no mesh", node_id))
+    }
+
+    fn insert_mesh_refs(&mut self, refs: &[SceneNodeMeshRef]) {
+        for mesh_ref in refs {
+            let entity = {
+                let mut query = self.world.query::<(Entity, &SceneNodeId)>();
+                query
+                    .iter(&self.world)
+                    .find(|(_, id)| id.0 == mesh_ref.node_id)
+                    .map(|(entity, _)| entity)
+            };
+            if let Some(entity) = entity {
+                self.world.entity_mut(entity).insert(mesh_ref.mesh_ref());
+            }
+        }
+        rebuild_node_index(&mut self.world);
+        advance_scene_revision(&mut self.world);
+    }
+
+    fn apply_scene_command_batch<Q>(
+        &mut self,
+        queue: &mut Q,
+        envelope: SceneCommandEnvelope,
+    ) -> Vec<SceneCommandAck>
+    where
+        Q: SceneCommandBatch,
+    {
+        queue.apply_to_world(&mut self.world, envelope)
+    }
+
+    fn extract_delta(&mut self, applied_seq: Option<u64>) -> SceneDelta {
+        extract_scene_delta(&mut self.world, applied_seq)
+    }
+
+    fn begin_modeling_session(
+        &mut self,
+        request: BeginModelingSession,
+    ) -> Result<(ModelingSession, SceneDelta), crate::modeling_session::ModelingSessionError> {
+        ensure_scene_control_resources(&mut self.world);
+        if !self.world.contains_resource::<ModelingSessionManager>() {
+            self.world
+                .insert_resource(ModelingSessionManager::default());
+        }
+        let session = self.world.resource_mut::<ModelingSessionManager>().begin(
+            request.session_id,
+            request.mesh_id,
+            request.character_id,
+            request.topology_mutable,
+            request.before_hash,
+        )?;
+        self.world.resource_mut::<SceneRevision>().advance();
+        let delta = extract_scene_delta(&mut self.world, None);
+        Ok((session, delta))
+    }
+
+    fn commit_modeling_session(
+        &mut self,
+        request: CommitModelingSession,
+    ) -> Result<(TopologyChangeEvent, SceneDelta), crate::modeling_session::ModelingSessionError>
+    {
+        ensure_scene_control_resources(&mut self.world);
+        let event = self
+            .world
+            .get_resource_mut::<ModelingSessionManager>()
+            .ok_or_else(|| {
+                crate::modeling_session::ModelingSessionError::SessionNotFound(
+                    request.session_id.clone(),
+                )
+            })?
+            .commit(
+                &request.session_id,
+                request.operation,
+                request.vertex_count_before,
+                request.vertex_count_after,
+            )?;
+        self.world.resource_mut::<SceneRevision>().advance();
+        let delta = extract_scene_delta(&mut self.world, None);
+        Ok((event, delta))
+    }
+
+    fn cancel_modeling_session(
+        &mut self,
+        session_id: &str,
+    ) -> Result<
+        (ModelingSessionStateDelta, SceneDelta),
+        crate::modeling_session::ModelingSessionError,
+    > {
+        ensure_scene_control_resources(&mut self.world);
+        let session = self
+            .world
+            .get_resource_mut::<ModelingSessionManager>()
+            .ok_or_else(|| {
+                crate::modeling_session::ModelingSessionError::SessionNotFound(
+                    session_id.to_string(),
+                )
+            })?
+            .cancel(session_id)?;
+        self.world.resource_mut::<SceneRevision>().advance();
+        let delta = extract_scene_delta(&mut self.world, None);
+        Ok((session, delta))
+    }
+
+    fn apply_vertex_brush_patch(
+        &mut self,
+        patch: crate::modeling_session::VertexBrushPatchMetadata,
+    ) -> Result<
+        crate::modeling_session::BrushPatchApplyOutcome,
+        crate::modeling_session::ModelingSessionError,
+    > {
+        if !self.world.contains_resource::<ModelingSessionManager>() {
+            self.world
+                .insert_resource(ModelingSessionManager::default());
+        }
+        self.world
+            .resource_mut::<ModelingSessionManager>()
+            .apply_brush_patch(patch)
+    }
+}
+
+#[allow(deprecated)]
+impl RawWorldAccess for BevySceneWorld {
+    fn ecs_world_mut_raw(&mut self) -> &mut World {
+        &mut self.world
     }
 }
 
@@ -1036,7 +1262,7 @@ mod tests {
     fn tick_writes_engine_playback_state_and_evaluated_pose() {
         let mut scene = BevySceneWorld::new();
         let (root, target) = {
-            let ecs = scene.ecs_world_mut();
+            let ecs = scene.ecs_world_mut_raw();
             let target = ecs
                 .spawn((
                     SceneNodeId("node_0".to_string()),
@@ -1063,7 +1289,7 @@ mod tests {
 
         scene.tick("Move", 1.25);
 
-        let ecs = scene.ecs_world_mut();
+        let ecs = scene.ecs_world_mut_raw();
         let state = ecs
             .get::<SceneAnimationPlaybackState>(root)
             .expect("playback state is stored in ECS");

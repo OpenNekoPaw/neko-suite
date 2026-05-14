@@ -14,6 +14,7 @@ neko-engine-types = { path = "../engine-types" }
 
 # Core services
 neko-engine-kernel = { path = "../engine-kernel", features = [] }
+neko-runtime-media = { path = "../runtime-media" }
 
 # Device runtime (camera, MIDI, gamepad)
 neko-runtime-device = { path = "../runtime-device" }
@@ -55,3 +56,4 @@ onnx = ["neko-runtime-ml"]
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 tokio-util = { version = "0.7", features = ["rt"] }
+image = { workspace = true, features = ["hdr"] }

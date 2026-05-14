@@ -5,6 +5,7 @@
 //! by host-http.
 
 use bevy_ecs::prelude::World;
+use neko_runtime_scene::access::SceneCommandBatch;
 use neko_runtime_scene::{
     ensure_scene_control_resources, CommandApplySystem, SceneCommandAck, SceneCommandAckStatus,
     SceneCommandEnvelope, SceneCommandValidator, SceneRevision,
@@ -71,6 +72,16 @@ impl SceneCommandQueue {
             error: None,
         });
         acks
+    }
+}
+
+impl SceneCommandBatch for SceneCommandQueue {
+    fn apply_to_world(
+        &mut self,
+        world: &mut World,
+        envelope: SceneCommandEnvelope,
+    ) -> Vec<SceneCommandAck> {
+        self.apply(world, envelope)
     }
 }
 

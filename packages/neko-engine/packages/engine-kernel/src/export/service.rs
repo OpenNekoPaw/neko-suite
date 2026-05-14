@@ -11,12 +11,15 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::audio::{AudioEncoder, AudioEncoderConfig, FfmpegAudioEncoder, SampleFormat};
-use crate::encoder::{
-    AsyncExportPipeline, CompositedFrame, ContainerFormat, EncodedPacket, PipelineConfig,
-};
+use crate::encoder::{ContainerFormat, EncodedPacket, PipelineConfig};
 use crate::error::{Error, Result};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, PipelinePriority};
 use crate::monitor::SystemMonitor;
+use crate::services::impls::muxer_sink::MuxerSink;
+use crate::services::pipeline_sink::{
+    AudioEncodedPacket, AudioOutput, GpuFrameLease, GpuOutputHandle, PipelineOutput, PipelineSink,
+    VideoGpuFrame, VideoOutput,
+};
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 
 use super::audio_mixer::AudioMixer;
@@ -448,6 +451,8 @@ impl ExportService {
         cancel_flag: Arc<AtomicBool>,
     ) -> Result<()> {
         let job_id = config.job_id.clone();
+        let budget = gpu_ctx.budget_controller().clone();
+        let budget_pipeline_id = format!("export:{}", job_id);
 
         // Update state to Initializing (blocking)
         {
@@ -554,8 +559,8 @@ impl ExportService {
             total_frames,
         };
 
-        // Start encode-only pipeline (compositing done by GpuExportPipeline)
-        let pipeline = AsyncExportPipeline::start_encode_only(pipeline_config)?;
+        // Start sink-backed encode/mux pipeline (compositing done by GpuExportPipeline).
+        let muxer_sink = MuxerSink::new(pipeline_config)?;
 
         // Update state to Encoding
         {
@@ -578,13 +583,15 @@ impl ExportService {
         for frame_idx in 0..total_frames {
             // Check cancellation
             if cancel_flag.load(Ordering::Relaxed) {
-                pipeline.cancel();
+                let _ = muxer_sink.cancel();
                 return Err(Error::Cancelled);
             }
 
             let time = frame_idx as f64 * frame_duration;
             let frame_start = Instant::now();
             let mut timing = FrameTiming::default();
+
+            budget.wait_for_resume(budget_pipeline_id.clone(), PipelinePriority::Export);
 
             // GPU pipeline: decode + composite + NV12 convert (all on GPU)
             // Use zero-copy path on macOS, CPU path on other platforms
@@ -594,19 +601,20 @@ impl ExportService {
                 match gpu_pipeline.process_frame_to_iosurface_timed(time, [0.0, 0.0, 0.0, 1.0]) {
                     Ok(result) => (result.data, result.gpu_handle, result.timing),
                     Err(e) => {
-                        tracing::warn!("Zero-copy failed, falling back to CPU: {}", e);
-                        let result =
-                            gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
-                        (result.data, result.gpu_handle, result.timing)
+                        return Err(Error::UnsupportedCapability(format!(
+                            "macOS zero-copy IOSurface export failed at {:.3}s: {}",
+                            time, e
+                        )))
                     }
                 }
             };
 
             #[cfg(not(target_os = "macos"))]
             let (nv12_data, gpu_handle, gpu_timing) = {
-                let result =
-                    gpu_pipeline.process_frame_to_nv12_timed(time, [0.0, 0.0, 0.0, 1.0])?;
-                (result.data, result.gpu_handle, result.timing)
+                return Err(Error::UnsupportedCapability(format!(
+                    "zero-copy GPU export output is not implemented on {}",
+                    std::env::consts::OS
+                )));
             };
 
             // Copy detailed GPU timing to frame timing
@@ -637,7 +645,16 @@ impl ExportService {
                                     duration: audio_pkt.duration,
                                     stream_index: 1,
                                 };
-                                if let Err(e) = pipeline.submit_audio_packet(mux_pkt) {
+                                if let Err(e) = muxer_sink.submit(PipelineOutput::Audio(
+                                    AudioOutput::EncodedPacket(AudioEncodedPacket {
+                                        data: mux_pkt.data,
+                                        pts: mux_pkt.pts,
+                                        dts: mux_pkt.dts,
+                                        duration: mux_pkt.duration,
+                                        codec: config.settings.audio_codec,
+                                        stream_index: mux_pkt.stream_index,
+                                    }),
+                                )) {
                                     tracing::warn!("Failed to submit audio packet: {}", e);
                                 }
                             }
@@ -657,18 +674,32 @@ impl ExportService {
 
             // Submit frame to encoder
             let encode_start = Instant::now();
-            pipeline.submit_composited(CompositedFrame {
-                index: frame_idx,
-                pts: frame_idx as i64,
-                data: nv12_data,
-                width: output_width,
-                height: output_height,
-                gpu_handle,
-            })?;
+            let gpu_handle = export_gpu_output_handle(gpu_handle)?;
+            let _ = nv12_data;
+            muxer_sink.submit(PipelineOutput::Video(VideoOutput::GpuFrame(
+                VideoGpuFrame {
+                    lease: GpuFrameLease::new(gpu_handle),
+                    pts: frame_idx as i64,
+                    duration: (1_000_000.0 / fps) as i64,
+                    frame_index: frame_idx,
+                    width: output_width,
+                    height: output_height,
+                },
+            )))?;
             timing.encode_submit_ns = encode_start.elapsed().as_nanos() as u64;
             timing.encode_ns = timing.encode_submit_ns;
 
             timing.total_ns = frame_start.elapsed().as_nanos() as u64;
+            budget.report_frame_time(
+                budget_pipeline_id.clone(),
+                PipelinePriority::Export,
+                frame_start.elapsed(),
+            );
+            budget.observe_submitted_work_done(
+                budget_pipeline_id.clone(),
+                PipelinePriority::Export,
+                gpu_ctx.queue(),
+            );
 
             // Record frame timing (outputs stats every 100ms)
             stats_collector.record_frame(timing);
@@ -711,7 +742,16 @@ impl ExportService {
                             duration: audio_pkt.duration,
                             stream_index: 1,
                         };
-                        if let Err(e) = pipeline.submit_audio_packet(mux_pkt) {
+                        if let Err(e) = muxer_sink.submit(PipelineOutput::Audio(
+                            AudioOutput::EncodedPacket(AudioEncodedPacket {
+                                data: mux_pkt.data,
+                                pts: mux_pkt.pts,
+                                dts: mux_pkt.dts,
+                                duration: mux_pkt.duration,
+                                codec: config.settings.audio_codec,
+                                stream_index: mux_pkt.stream_index,
+                            }),
+                        )) {
                             tracing::warn!("Failed to submit flushed audio packet: {}", e);
                         }
                     }
@@ -720,8 +760,6 @@ impl ExportService {
                     tracing::warn!("Audio encoder flush error: {}", e);
                 }
             }
-            // Signal audio stream is complete
-            let _ = pipeline.finish_audio();
         }
 
         // Update state to Muxing
@@ -730,8 +768,8 @@ impl ExportService {
             rt.block_on(Self::update_job_state(&jobs, &job_id, ExportState::Muxing));
         }
 
-        // Wait for pipeline to complete (video encode + mux)
-        pipeline.wait()?;
+        // Wait for sink worker to complete (video encode + mux).
+        muxer_sink.flush()?;
 
         // Update state to Finalizing
         {
@@ -843,6 +881,21 @@ impl ExportService {
         let jobs_guard = jobs.read().await;
         jobs_guard.get(job_id).map(|job| job.to_progress())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn export_gpu_output_handle(handle: Option<usize>) -> Result<GpuOutputHandle> {
+    handle.map(GpuOutputHandle::IOSurface).ok_or_else(|| {
+        Error::UnsupportedCapability("MuxerSink export requires an IOSurface handle".to_string())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn export_gpu_output_handle(_handle: Option<usize>) -> Result<GpuOutputHandle> {
+    Err(Error::UnsupportedCapability(format!(
+        "zero-copy GPU export output is not implemented on {}",
+        std::env::consts::OS
+    )))
 }
 
 #[cfg(test)]

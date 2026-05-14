@@ -11,7 +11,7 @@
 //! shader to avoid CPU overhead. Only the final NV12 readback is CPU-bound.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
 use crate::decoder::{global_pool, HwAccelDecoder, HwAccelType};
@@ -20,11 +20,11 @@ use crate::error::{Error, Result};
 use crate::gpu::scene_renderer::CameraParams;
 use crate::gpu::{
     BlurParams, BlurType, ChromaKeyParams, ChromaticAberrationParams, ColorCorrectionTexParams,
-    CustomShaderProcessor, FilmGrainParams, GlowParams, GpuBlurProcessor, GpuContext, GpuLayer,
-    GpuLayerBuilder, GpuStyleProcessor, LumaKeyParams, Nv12OutputBuffers, Nv12RenderCache,
-    Nv12TextureImporter, RgbaToNv12Converter, ShapeRasterizer, SharpenParams, TextRenderer,
-    TextureCompositeResult, TextureCompositor, TextureTransitionProcessor, TransitionParams,
-    TransitionType, VignetteParams,
+    CustomShaderProcessor, FilmGrainParams, GlowParams, GpuBlurProcessor, GpuContext, GpuEffect,
+    GpuEffectContext, GpuEffectParams, GpuLayer, GpuLayerBuilder, GpuStyleProcessor, LumaKeyParams,
+    Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, ShapeRasterizer,
+    SharpenParams, TextRenderer, TextureCompositeResult, TextureCompositor,
+    TextureTransitionProcessor, TransitionParams, TransitionType, VignetteParams,
 };
 use crate::services::{ISceneService, SceneService};
 use crate::telemetry::spans::span;
@@ -45,19 +45,81 @@ mod tests;
 /// The only legal CPU exit is the final NV12 readback for the encoder.
 pub struct EffectDispatcher {
     ctx: Arc<GpuContext>,
-    custom_shader: CustomShaderProcessor,
-    blur_processor: GpuBlurProcessor,
-    style_processor: GpuStyleProcessor,
+    registry: HashMap<String, Box<dyn GpuEffect>>,
 }
 
 impl EffectDispatcher {
     pub fn new(ctx: Arc<GpuContext>) -> Result<Self> {
-        Ok(Self {
-            custom_shader: CustomShaderProcessor::new(ctx.clone())?,
-            blur_processor: GpuBlurProcessor::new(ctx.clone())?,
-            style_processor: GpuStyleProcessor::new(ctx.clone())?,
+        let mut dispatcher = Self {
             ctx,
-        })
+            registry: HashMap::new(),
+        };
+        dispatcher.register_builtin_effects()?;
+        Ok(dispatcher)
+    }
+
+    /// Register a GPU effect implementation by its stable id.
+    pub fn register_effect(&mut self, effect: Box<dyn GpuEffect>) -> Result<()> {
+        let id = effect.id().to_string();
+        if self.registry.contains_key(&id) {
+            return Err(Error::InvalidParameter(format!(
+                "GPU effect '{}' is already registered",
+                id
+            )));
+        }
+        self.registry.insert(id, effect);
+        Ok(())
+    }
+
+    /// Return true when an effect id can be resolved from the registry.
+    pub fn has_effect(&self, effect_id: &str) -> bool {
+        self.registry.contains_key(effect_id)
+    }
+
+    /// Snapshot of registered effect ids, sorted for deterministic tests/logging.
+    pub fn registered_effect_ids(&self) -> Vec<&str> {
+        let mut ids: Vec<&str> = self.registry.keys().map(String::as_str).collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    fn register_builtin_effects(&mut self) -> Result<()> {
+        let blur = Arc::new(Mutex::new(GpuBlurProcessor::new(self.ctx.clone())?));
+        let style = Arc::new(Mutex::new(GpuStyleProcessor::new(self.ctx.clone())?));
+        let shader = Arc::new(Mutex::new(CustomShaderProcessor::new(self.ctx.clone())?));
+
+        self.register_effect(Box::new(GaussianBlurEffect::new(blur.clone())))?;
+        self.register_effect(Box::new(MotionBlurEffect::new(blur.clone())))?;
+        self.register_effect(Box::new(RadialBlurEffect::new(blur.clone())))?;
+        self.register_effect(Box::new(SharpenEffect::new(blur)))?;
+
+        self.register_effect(Box::new(VignetteEffect::new(style.clone())))?;
+        self.register_effect(Box::new(GlowEffect::new(style.clone())))?;
+        self.register_effect(Box::new(ChromaticAberrationEffect::new(style.clone())))?;
+        self.register_effect(Box::new(FilmGrainEffect::new(style.clone())))?;
+        self.register_effect(Box::new(ColorCorrectionEffect::new(style.clone())))?;
+        self.register_effect(Box::new(LumaKeyEffect::new(style.clone())))?;
+        self.register_effect(Box::new(ChromaKeyEffect::new(style)))?;
+
+        for (effect_id, shader_id) in [
+            ("pixelate", "pixelate"),
+            ("edge_detect", "edge_detect"),
+            ("edge-detect", "edge_detect"),
+            ("posterize", "posterize"),
+            ("noise", "noise"),
+            ("rgb_split", "rgb_split"),
+            ("rgb-split", "rgb_split"),
+            ("wave_distort", "wave_distort"),
+            ("wave-distort", "wave_distort"),
+        ] {
+            self.register_effect(Box::new(ShaderPresetEffect::new(
+                effect_id,
+                shader_id,
+                shader.clone(),
+            )))?;
+        }
+
+        Ok(())
     }
 
     /// Apply all enabled effects on a GPU texture, returning the processed texture.
@@ -96,27 +158,7 @@ impl EffectDispatcher {
                 &textures[1 - dst_idx]
             };
 
-            match self.apply_single_tex(src, dst, fx) {
-                Ok(()) => {}
-                Err(e) => {
-                    tracing::warn!(
-                        "Effect '{}' ({}) failed, skipping: {}",
-                        fx.effect_type,
-                        fx.id,
-                        e
-                    );
-                    // Graceful degradation: write src pixels through film-grain identity pass
-                    // (amount=0 → identity but actually triggers the is_identity copy path, which
-                    // requires same format — so use a near-zero amount to force shader execution)
-                    let identity_grain = crate::gpu::FilmGrainParams {
-                        amount: 0.0001,
-                        ..Default::default()
-                    };
-                    let _ = self
-                        .style_processor
-                        .apply_film_grain_tex(src, dst, &identity_grain);
-                }
-            }
+            self.apply_single_tex(src, dst, fx)?;
 
             src_is_input = false;
             if i + 1 < sorted.len() {
@@ -146,286 +188,16 @@ impl EffectDispatcher {
         output: &wgpu::Texture,
         fx: &neko_engine_types::ElementEffect,
     ) -> Result<()> {
-        let params = &fx.parameters;
-        match fx.effect_type.as_str() {
-            // Blur effects → GpuBlurProcessor
-            "gaussian-blur" => {
-                let radius = Self::get_f32(params, "radius", 10.0);
-                self.blur_processor.apply_blur_tex(
-                    input,
-                    output,
-                    &BlurParams {
-                        blur_type: BlurType::Gaussian as u32,
-                        radius,
-                        strength: 1.0,
-                        samples: 32,
-                        ..Default::default()
-                    },
-                )
-            }
-            "motion-blur" => {
-                let distance = Self::get_f32(params, "distance", 20.0);
-                let angle = Self::get_f32(params, "angle", 0.0).to_radians();
-                self.blur_processor.apply_blur_tex(
-                    input,
-                    output,
-                    &BlurParams {
-                        blur_type: BlurType::Directional as u32,
-                        radius: distance,
-                        direction_x: angle.cos(),
-                        direction_y: angle.sin(),
-                        ..Default::default()
-                    },
-                )
-            }
-            "radial-blur" => {
-                let amount = Self::get_f32(params, "amount", 20.0) / 100.0;
-                let center_x = Self::get_f32(params, "centerX", 50.0) / 100.0;
-                let center_y = Self::get_f32(params, "centerY", 50.0) / 100.0;
-                self.blur_processor.apply_blur_tex(
-                    input,
-                    output,
-                    &BlurParams {
-                        blur_type: BlurType::Radial as u32,
-                        center_x,
-                        center_y,
-                        strength: amount,
-                        ..Default::default()
-                    },
-                )
-            }
-            "sharpen" => {
-                let amount = Self::get_f32(params, "amount", 1.0);
-                let radius = Self::get_f32(params, "radius", 1.0);
-                let threshold = Self::get_f32(params, "threshold", 0.0);
-                self.blur_processor.apply_sharpen_tex(
-                    input,
-                    output,
-                    &SharpenParams::with_options(amount, radius, threshold),
-                )
-            }
+        let effect = self
+            .registry
+            .get_mut(&fx.effect_type)
+            .ok_or_else(|| Error::UnknownEffect(fx.effect_type.clone()))?;
 
-            // Style effects → GpuStyleProcessor
-            "vignette" => {
-                let amount = Self::get_f32(params, "amount", 0.5);
-                let radius = Self::get_f32(params, "radius", 0.5);
-                let softness = Self::get_f32(params, "softness", 0.5);
-                let roundness = Self::get_f32(params, "roundness", 1.0);
-                self.style_processor.apply_vignette_tex(
-                    input,
-                    output,
-                    &VignetteParams::with_options(amount, radius, softness, roundness),
-                )
-            }
-            "glow" => {
-                let intensity = Self::get_f32(params, "intensity", 0.5);
-                let threshold = Self::get_f32(params, "threshold", 0.5);
-                let radius = Self::get_f32(params, "radius", 10.0);
-                self.style_processor.apply_glow_tex(
-                    input,
-                    output,
-                    &GlowParams::with_options(intensity, threshold, radius),
-                )
-            }
-            "chromatic-aberration" => {
-                let amount = Self::get_f32(params, "amount", 0.01);
-                let angle = Self::get_f32(params, "angle", 0.0);
-                let center_x = Self::get_f32(params, "centerX", 0.5);
-                let center_y = Self::get_f32(params, "centerY", 0.5);
-                self.style_processor.apply_chromatic_aberration_tex(
-                    input,
-                    output,
-                    &ChromaticAberrationParams::with_options(amount, angle, center_x, center_y),
-                )
-            }
-            "film-grain" => {
-                let amount = Self::get_f32(params, "amount", 0.1);
-                let size = Self::get_f32(params, "size", 1.0);
-                let time = Self::get_f32(params, "time", 0.0);
-                let color_amount = Self::get_f32(params, "colorAmount", 0.0);
-                self.style_processor.apply_film_grain_tex(
-                    input,
-                    output,
-                    &FilmGrainParams::with_options(amount, size, time, color_amount),
-                )
-            }
-
-            // Color correction → GpuStyleProcessor (full GPU pass: CC + wheels + HSL + curves + LUT)
-            "color-correction" => {
-                let brightness = Self::get_f32(params, "brightness", 0.0);
-                let contrast = Self::get_f32(params, "contrast", 1.0);
-                let saturation = Self::get_f32(params, "saturation", 1.0);
-                let exposure = Self::get_f32(params, "exposure", 0.0);
-                let gamma = Self::get_f32(params, "gamma", 1.0);
-                let hue_shift = Self::get_f32(params, "hueShift", 0.0);
-                let vibrance = Self::get_f32(params, "vibrance", 0.0);
-                let temperature = Self::get_f32(params, "temperature", 0.0);
-                let tint = Self::get_f32(params, "tint", 0.0);
-                let highlights = Self::get_f32(params, "highlights", 0.0);
-                let shadows = Self::get_f32(params, "shadows", 0.0);
-                let whites = Self::get_f32(params, "whites", 0.0);
-                let blacks = Self::get_f32(params, "blacks", 0.0);
-
-                let cw_enabled = if Self::get_bool(params, "cw_enabled", false) {
-                    1.0
-                } else {
-                    0.0
-                };
-                let cw_shadows = [
-                    Self::get_f32(params, "cw_shadows_r", 0.5),
-                    Self::get_f32(params, "cw_shadows_g", 0.5),
-                    Self::get_f32(params, "cw_shadows_b", 0.5),
-                    Self::get_f32(params, "cw_shadows_brightness", 0.0),
-                ];
-                let cw_midtones = [
-                    Self::get_f32(params, "cw_midtones_r", 0.5),
-                    Self::get_f32(params, "cw_midtones_g", 0.5),
-                    Self::get_f32(params, "cw_midtones_b", 0.5),
-                    Self::get_f32(params, "cw_midtones_brightness", 0.0),
-                ];
-                let cw_highlights = [
-                    Self::get_f32(params, "cw_highlights_r", 0.5),
-                    Self::get_f32(params, "cw_highlights_g", 0.5),
-                    Self::get_f32(params, "cw_highlights_b", 0.5),
-                    Self::get_f32(params, "cw_highlights_brightness", 0.0),
-                ];
-
-                let hsl_count = Self::get_f32(params, "hsl_count", 0.0);
-                let mut hsl_data = [[0.0f32; 4]; 8];
-                let count = (hsl_count as usize).min(8);
-                for (i, item) in hsl_data.iter_mut().enumerate().take(count) {
-                    *item = [
-                        Self::get_f32(params, &format!("hsl_{}_target", i), 0.0),
-                        Self::get_f32(params, &format!("hsl_{}_hue", i), 0.0),
-                        Self::get_f32(params, &format!("hsl_{}_sat", i), 0.0),
-                        Self::get_f32(params, &format!("hsl_{}_lum", i), 0.0),
-                    ];
-                }
-
-                let has_curves = if Self::get_bool(params, "curves_enabled", false) {
-                    1.0
-                } else {
-                    0.0
-                };
-                let lut_id = Self::get_str(params, "lut_id").map(|s| s.to_string());
-                let lut_intensity = Self::get_f32(params, "lut_intensity", 1.0);
-                let lut_enabled = if lut_id.is_some() { 1.0 } else { 0.0 };
-
-                // Build 5×256 curves float array from JSON-encoded LUT strings
-                let curves_data: Option<Vec<f32>> = if has_curves > 0.0 {
-                    Some(Self::build_curves_data(params))
-                } else {
-                    None
-                };
-
-                let cc_params = ColorCorrectionTexParams {
-                    brightness,
-                    exposure,
-                    contrast,
-                    highlights,
-                    shadows,
-                    whites,
-                    blacks,
-                    temperature,
-                    tint,
-                    saturation,
-                    vibrance,
-                    gamma,
-                    hue_shift,
-                    cw_enabled,
-                    curves_enabled: has_curves,
-                    lut_enabled,
-                    lut_intensity,
-                    hsl_count,
-                    _pad0: 0.0,
-                    _pad1: 0.0,
-                    cw_shadows,
-                    cw_midtones,
-                    cw_highlights,
-                    hsl_data,
-                };
-
-                self.style_processor.apply_color_correction_tex(
-                    input,
-                    output,
-                    &cc_params,
-                    curves_data.as_deref(),
-                    lut_id.as_deref(),
-                )
-            }
-
-            // Keying effects → GpuStyleProcessor
-            "luma-key" => {
-                let threshold = Self::get_f32(params, "threshold", 50.0) / 100.0;
-                let softness = Self::get_f32(params, "softness", 10.0) / 100.0;
-                let invert = Self::get_bool(params, "invert", false);
-                self.style_processor.apply_luma_key_tex(
-                    input,
-                    output,
-                    &LumaKeyParams::with_options(threshold, softness, invert),
-                )
-            }
-            "chroma-key" => {
-                let key_color = Self::get_str(params, "keyColor").unwrap_or("#00ff00");
-                let (key_r, key_g, key_b) = Self::parse_hex_color(key_color);
-                let similarity = Self::get_f32(params, "similarity", 30.0) / 200.0;
-                let smoothness = Self::get_f32(params, "smoothness", 10.0) / 500.0;
-                let spill = Self::get_f32(params, "spillSuppression", 50.0) / 100.0;
-                self.style_processor.apply_chroma_key_tex(
-                    input,
-                    output,
-                    &ChromaKeyParams::with_options(
-                        key_r, key_g, key_b, similarity, smoothness, spill,
-                    ),
-                )
-            }
-
-            // Custom/preset shaders — CPU fallback (single round-trip)
-            _ => self.apply_custom_tex_fallback(input, output, fx),
-        }
-    }
-
-    /// CPU fallback for unknown/custom shader effects.
-    /// Reads input texture to CPU, applies custom shader, uploads result.
-    fn apply_custom_tex_fallback(
-        &self,
-        input: &wgpu::Texture,
-        output: &wgpu::Texture,
-        fx: &neko_engine_types::ElementEffect,
-    ) -> Result<()> {
-        let width = input.width();
-        let height = input.height();
-        let params = &fx.parameters;
-
-        let pixels = self.ctx.read_texture_sync(input, width, height)?;
-
-        let shader_id = fx.effect_type.replace('-', "_");
-        let json_params = serde_json::Value::Object(params.clone());
-        let processed =
-            self.custom_shader
-                .apply(&pixels, width, height, &shader_id, &json_params)?;
-
-        self.ctx.queue().write_texture(
-            wgpu::ImageCopyTexture {
-                texture: output,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &processed,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(width * 4),
-                rows_per_image: Some(height),
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        Ok(())
+        effect.apply_tex(GpuEffectContext {
+            input,
+            output,
+            params: GpuEffectParams::new(&fx.parameters),
+        })
     }
 
     // =========================================================================
@@ -478,33 +250,6 @@ impl EffectDispatcher {
             }
         }
         data
-    }
-
-    fn get_f32(
-        params: &serde_json::Map<String, serde_json::Value>,
-        key: &str,
-        default: f32,
-    ) -> f32 {
-        params
-            .get(key)
-            .and_then(|v| v.as_f64())
-            .map(|v| v as f32)
-            .unwrap_or(default)
-    }
-
-    fn get_bool(
-        params: &serde_json::Map<String, serde_json::Value>,
-        key: &str,
-        default: bool,
-    ) -> bool {
-        params.get(key).and_then(|v| v.as_bool()).unwrap_or(default)
-    }
-
-    fn get_str<'a>(
-        params: &'a serde_json::Map<String, serde_json::Value>,
-        key: &str,
-    ) -> Option<&'a str> {
-        params.get(key).and_then(|v| v.as_str())
     }
 
     /// Parse a CSS hex color string (`#rrggbb` or `#rgb`) into linear f32 components.
@@ -585,6 +330,460 @@ impl EffectDispatcher {
 
         // Readback to CPU
         self.ctx.read_texture_sync(&output_tex, width, height)
+    }
+}
+
+type SharedBlurProcessor = Arc<Mutex<GpuBlurProcessor>>;
+type SharedStyleProcessor = Arc<Mutex<GpuStyleProcessor>>;
+type SharedShaderProcessor = Arc<Mutex<CustomShaderProcessor>>;
+
+fn lock_processor<'a, T>(processor: &'a Arc<Mutex<T>>, name: &str) -> Result<MutexGuard<'a, T>> {
+    processor
+        .lock()
+        .map_err(|_| Error::Other(format!("{} processor mutex poisoned", name)))
+}
+
+struct GaussianBlurEffect {
+    processor: SharedBlurProcessor,
+}
+
+impl GaussianBlurEffect {
+    fn new(processor: SharedBlurProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for GaussianBlurEffect {
+    fn id(&self) -> &'static str {
+        "gaussian-blur"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let radius = ctx.params.get_f32("radius", 10.0);
+        lock_processor(&self.processor, self.id())?.apply_blur_tex(
+            ctx.input,
+            ctx.output,
+            &BlurParams {
+                blur_type: BlurType::Gaussian as u32,
+                radius,
+                strength: 1.0,
+                samples: 32,
+                ..Default::default()
+            },
+        )
+    }
+}
+
+struct MotionBlurEffect {
+    processor: SharedBlurProcessor,
+}
+
+impl MotionBlurEffect {
+    fn new(processor: SharedBlurProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for MotionBlurEffect {
+    fn id(&self) -> &'static str {
+        "motion-blur"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let distance = ctx.params.get_f32("distance", 20.0);
+        let angle = ctx.params.get_f32("angle", 0.0).to_radians();
+        lock_processor(&self.processor, self.id())?.apply_blur_tex(
+            ctx.input,
+            ctx.output,
+            &BlurParams {
+                blur_type: BlurType::Directional as u32,
+                radius: distance,
+                direction_x: angle.cos(),
+                direction_y: angle.sin(),
+                ..Default::default()
+            },
+        )
+    }
+}
+
+struct RadialBlurEffect {
+    processor: SharedBlurProcessor,
+}
+
+impl RadialBlurEffect {
+    fn new(processor: SharedBlurProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for RadialBlurEffect {
+    fn id(&self) -> &'static str {
+        "radial-blur"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let amount = ctx.params.get_f32("amount", 20.0) / 100.0;
+        let center_x = ctx.params.get_f32("centerX", 50.0) / 100.0;
+        let center_y = ctx.params.get_f32("centerY", 50.0) / 100.0;
+        lock_processor(&self.processor, self.id())?.apply_blur_tex(
+            ctx.input,
+            ctx.output,
+            &BlurParams {
+                blur_type: BlurType::Radial as u32,
+                center_x,
+                center_y,
+                strength: amount,
+                ..Default::default()
+            },
+        )
+    }
+}
+
+struct SharpenEffect {
+    processor: SharedBlurProcessor,
+}
+
+impl SharpenEffect {
+    fn new(processor: SharedBlurProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for SharpenEffect {
+    fn id(&self) -> &'static str {
+        "sharpen"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let amount = ctx.params.get_f32("amount", 1.0);
+        let radius = ctx.params.get_f32("radius", 1.0);
+        let threshold = ctx.params.get_f32("threshold", 0.0);
+        lock_processor(&self.processor, self.id())?.apply_sharpen_tex(
+            ctx.input,
+            ctx.output,
+            &SharpenParams::with_options(amount, radius, threshold),
+        )
+    }
+}
+
+struct VignetteEffect {
+    processor: SharedStyleProcessor,
+}
+
+impl VignetteEffect {
+    fn new(processor: SharedStyleProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for VignetteEffect {
+    fn id(&self) -> &'static str {
+        "vignette"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let amount = ctx.params.get_f32("amount", 0.5);
+        let radius = ctx.params.get_f32("radius", 0.5);
+        let softness = ctx.params.get_f32("softness", 0.5);
+        let roundness = ctx.params.get_f32("roundness", 1.0);
+        lock_processor(&self.processor, self.id())?.apply_vignette_tex(
+            ctx.input,
+            ctx.output,
+            &VignetteParams::with_options(amount, radius, softness, roundness),
+        )
+    }
+}
+
+struct GlowEffect {
+    processor: SharedStyleProcessor,
+}
+
+impl GlowEffect {
+    fn new(processor: SharedStyleProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for GlowEffect {
+    fn id(&self) -> &'static str {
+        "glow"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let intensity = ctx.params.get_f32("intensity", 0.5);
+        let threshold = ctx.params.get_f32("threshold", 0.5);
+        let radius = ctx.params.get_f32("radius", 10.0);
+        lock_processor(&self.processor, self.id())?.apply_glow_tex(
+            ctx.input,
+            ctx.output,
+            &GlowParams::with_options(intensity, threshold, radius),
+        )
+    }
+}
+
+struct ChromaticAberrationEffect {
+    processor: SharedStyleProcessor,
+}
+
+impl ChromaticAberrationEffect {
+    fn new(processor: SharedStyleProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for ChromaticAberrationEffect {
+    fn id(&self) -> &'static str {
+        "chromatic-aberration"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let amount = ctx.params.get_f32("amount", 0.01);
+        let angle = ctx.params.get_f32("angle", 0.0);
+        let center_x = ctx.params.get_f32("centerX", 0.5);
+        let center_y = ctx.params.get_f32("centerY", 0.5);
+        lock_processor(&self.processor, self.id())?.apply_chromatic_aberration_tex(
+            ctx.input,
+            ctx.output,
+            &ChromaticAberrationParams::with_options(amount, angle, center_x, center_y),
+        )
+    }
+}
+
+struct FilmGrainEffect {
+    processor: SharedStyleProcessor,
+}
+
+impl FilmGrainEffect {
+    fn new(processor: SharedStyleProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for FilmGrainEffect {
+    fn id(&self) -> &'static str {
+        "film-grain"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let amount = ctx.params.get_f32("amount", 0.1);
+        let size = ctx.params.get_f32("size", 1.0);
+        let time = ctx.params.get_f32("time", 0.0);
+        let color_amount = ctx.params.get_f32("colorAmount", 0.0);
+        lock_processor(&self.processor, self.id())?.apply_film_grain_tex(
+            ctx.input,
+            ctx.output,
+            &FilmGrainParams::with_options(amount, size, time, color_amount),
+        )
+    }
+}
+
+struct ColorCorrectionEffect {
+    processor: SharedStyleProcessor,
+}
+
+impl ColorCorrectionEffect {
+    fn new(processor: SharedStyleProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for ColorCorrectionEffect {
+    fn id(&self) -> &'static str {
+        "color-correction"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let brightness = ctx.params.get_f32("brightness", 0.0);
+        let contrast = ctx.params.get_f32("contrast", 1.0);
+        let saturation = ctx.params.get_f32("saturation", 1.0);
+        let exposure = ctx.params.get_f32("exposure", 0.0);
+        let gamma = ctx.params.get_f32("gamma", 1.0);
+        let hue_shift = ctx.params.get_f32("hueShift", 0.0);
+        let vibrance = ctx.params.get_f32("vibrance", 0.0);
+        let temperature = ctx.params.get_f32("temperature", 0.0);
+        let tint = ctx.params.get_f32("tint", 0.0);
+        let highlights = ctx.params.get_f32("highlights", 0.0);
+        let shadows = ctx.params.get_f32("shadows", 0.0);
+        let whites = ctx.params.get_f32("whites", 0.0);
+        let blacks = ctx.params.get_f32("blacks", 0.0);
+
+        let cw_enabled = if ctx.params.get_bool("cw_enabled", false) {
+            1.0
+        } else {
+            0.0
+        };
+        let cw_shadows = [
+            ctx.params.get_f32("cw_shadows_r", 0.5),
+            ctx.params.get_f32("cw_shadows_g", 0.5),
+            ctx.params.get_f32("cw_shadows_b", 0.5),
+            ctx.params.get_f32("cw_shadows_brightness", 0.0),
+        ];
+        let cw_midtones = [
+            ctx.params.get_f32("cw_midtones_r", 0.5),
+            ctx.params.get_f32("cw_midtones_g", 0.5),
+            ctx.params.get_f32("cw_midtones_b", 0.5),
+            ctx.params.get_f32("cw_midtones_brightness", 0.0),
+        ];
+        let cw_highlights = [
+            ctx.params.get_f32("cw_highlights_r", 0.5),
+            ctx.params.get_f32("cw_highlights_g", 0.5),
+            ctx.params.get_f32("cw_highlights_b", 0.5),
+            ctx.params.get_f32("cw_highlights_brightness", 0.0),
+        ];
+
+        let hsl_count = ctx.params.get_f32("hsl_count", 0.0);
+        let mut hsl_data = [[0.0f32; 4]; 8];
+        let count = (hsl_count as usize).min(8);
+        for (i, item) in hsl_data.iter_mut().enumerate().take(count) {
+            *item = [
+                ctx.params.get_f32(&format!("hsl_{}_target", i), 0.0),
+                ctx.params.get_f32(&format!("hsl_{}_hue", i), 0.0),
+                ctx.params.get_f32(&format!("hsl_{}_sat", i), 0.0),
+                ctx.params.get_f32(&format!("hsl_{}_lum", i), 0.0),
+            ];
+        }
+
+        let has_curves = if ctx.params.get_bool("curves_enabled", false) {
+            1.0
+        } else {
+            0.0
+        };
+        let lut_id = ctx.params.get_str("lut_id").map(str::to_string);
+        let lut_intensity = ctx.params.get_f32("lut_intensity", 1.0);
+        let lut_enabled = if lut_id.is_some() { 1.0 } else { 0.0 };
+
+        let curves_data = if has_curves > 0.0 {
+            Some(EffectDispatcher::build_curves_data(ctx.params.as_map()))
+        } else {
+            None
+        };
+
+        let cc_params = ColorCorrectionTexParams {
+            brightness,
+            exposure,
+            contrast,
+            highlights,
+            shadows,
+            whites,
+            blacks,
+            temperature,
+            tint,
+            saturation,
+            vibrance,
+            gamma,
+            hue_shift,
+            cw_enabled,
+            curves_enabled: has_curves,
+            lut_enabled,
+            lut_intensity,
+            hsl_count,
+            _pad0: 0.0,
+            _pad1: 0.0,
+            cw_shadows,
+            cw_midtones,
+            cw_highlights,
+            hsl_data,
+        };
+
+        lock_processor(&self.processor, self.id())?.apply_color_correction_tex(
+            ctx.input,
+            ctx.output,
+            &cc_params,
+            curves_data.as_deref(),
+            lut_id.as_deref(),
+        )
+    }
+}
+
+struct LumaKeyEffect {
+    processor: SharedStyleProcessor,
+}
+
+impl LumaKeyEffect {
+    fn new(processor: SharedStyleProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for LumaKeyEffect {
+    fn id(&self) -> &'static str {
+        "luma-key"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let threshold = ctx.params.get_f32("threshold", 50.0) / 100.0;
+        let softness = ctx.params.get_f32("softness", 10.0) / 100.0;
+        let invert = ctx.params.get_bool("invert", false);
+        lock_processor(&self.processor, self.id())?.apply_luma_key_tex(
+            ctx.input,
+            ctx.output,
+            &LumaKeyParams::with_options(threshold, softness, invert),
+        )
+    }
+}
+
+struct ChromaKeyEffect {
+    processor: SharedStyleProcessor,
+}
+
+impl ChromaKeyEffect {
+    fn new(processor: SharedStyleProcessor) -> Self {
+        Self { processor }
+    }
+}
+
+impl GpuEffect for ChromaKeyEffect {
+    fn id(&self) -> &'static str {
+        "chroma-key"
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let key_color = ctx.params.get_str("keyColor").unwrap_or("#00ff00");
+        let (key_r, key_g, key_b) = EffectDispatcher::parse_hex_color(key_color);
+        let similarity = ctx.params.get_f32("similarity", 30.0) / 200.0;
+        let smoothness = ctx.params.get_f32("smoothness", 10.0) / 500.0;
+        let spill = ctx.params.get_f32("spillSuppression", 50.0) / 100.0;
+        lock_processor(&self.processor, self.id())?.apply_chroma_key_tex(
+            ctx.input,
+            ctx.output,
+            &ChromaKeyParams::with_options(key_r, key_g, key_b, similarity, smoothness, spill),
+        )
+    }
+}
+
+struct ShaderPresetEffect {
+    effect_id: &'static str,
+    shader_id: &'static str,
+    processor: SharedShaderProcessor,
+}
+
+impl ShaderPresetEffect {
+    fn new(
+        effect_id: &'static str,
+        shader_id: &'static str,
+        processor: SharedShaderProcessor,
+    ) -> Self {
+        Self {
+            effect_id,
+            shader_id,
+            processor,
+        }
+    }
+}
+
+impl GpuEffect for ShaderPresetEffect {
+    fn id(&self) -> &'static str {
+        self.effect_id
+    }
+
+    fn apply_tex(&mut self, ctx: GpuEffectContext<'_>) -> Result<()> {
+        let params = serde_json::Value::Object(ctx.params.as_map().clone());
+        lock_processor(&self.processor, self.id())?.apply_preset_tex(
+            ctx.input,
+            ctx.output,
+            self.shader_id,
+            &params,
+        )
     }
 }
 
@@ -1849,6 +2048,7 @@ impl GpuExportPipeline {
                         .entered();
                 match dispatcher.apply_effects_gpu(rgba_texture, width, height, &element.effects) {
                     Ok(tex) => Some(tex),
+                    Err(e @ Error::UnknownEffect(_)) => return Err(e),
                     Err(e) => {
                         tracing::error!("GPU effect dispatch failed: {}, using original frame", e);
                         None

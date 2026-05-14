@@ -3,6 +3,10 @@
 //! Isolates bevy_ecs API details behind a stable interface.
 //! Mirrors runtime-scene's SceneWorld pattern.
 
+use crate::access::{
+    CreativeAccess, DataAccess, PuppetAnimationTracks, PuppetEntityFilter, RawWorldAccess,
+    SerializedPuppetEntities,
+};
 use crate::animation::{
     AnimationClipInfo, AnimationLibrary, AnimationPlayback, ParameterCurveInfo,
 };
@@ -215,6 +219,62 @@ impl BevyPuppetWorld {
 impl Default for BevyPuppetWorld {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl CreativeAccess for BevyPuppetWorld {}
+
+impl DataAccess for BevyPuppetWorld {
+    fn serialize_puppet(&mut self, filter: PuppetEntityFilter) -> SerializedPuppetEntities {
+        let snapshot = self.get_snapshot();
+        let animations = if matches!(filter, PuppetEntityFilter::All | PuppetEntityFilter::Export) {
+            self.get_animations()
+        } else {
+            Vec::new()
+        };
+        let expressions = if matches!(filter, PuppetEntityFilter::All | PuppetEntityFilter::Export)
+        {
+            self.get_expressions()
+        } else {
+            Vec::new()
+        };
+        let tracks = if matches!(filter, PuppetEntityFilter::All | PuppetEntityFilter::Export) {
+            animations
+                .iter()
+                .filter_map(|animation| {
+                    self.get_keyframe_tracks(&animation.name)
+                        .ok()
+                        .map(|tracks| PuppetAnimationTracks {
+                            clip_name: animation.name.clone(),
+                            tracks,
+                        })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        SerializedPuppetEntities {
+            snapshot,
+            animations,
+            expressions,
+            tracks,
+        }
+    }
+
+    fn extract_deformed_meshes(&mut self) -> Vec<DeformedMesh> {
+        self.get_deformed_meshes()
+    }
+
+    fn tick_data(&mut self, delta_ms: f32) -> PuppetDelta {
+        self.tick(delta_ms)
+    }
+}
+
+#[allow(deprecated)]
+impl RawWorldAccess for BevyPuppetWorld {
+    fn ecs_world_mut_raw(&mut self) -> &mut World {
+        &mut self.world
     }
 }
 

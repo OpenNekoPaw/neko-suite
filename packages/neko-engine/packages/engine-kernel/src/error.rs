@@ -72,6 +72,22 @@ pub enum Error {
     #[error("Unsupported container format: {0}")]
     UnsupportedContainer(String),
 
+    /// Unsupported engine capability
+    #[error("Unsupported capability: {0}")]
+    UnsupportedCapability(String),
+
+    /// Unsupported pipeline output for the selected sink
+    #[error("Unsupported pipeline output: {0}")]
+    UnsupportedOutput(String),
+
+    /// Unknown GPU effect id
+    #[error("Unknown effect: {0}")]
+    UnknownEffect(String),
+
+    /// Operation has already completed
+    #[error("Already completed: {0}")]
+    AlreadyCompleted(String),
+
     /// Hardware encoder not available
     #[error("Hardware encoder not available: {0}")]
     HwEncoderNotAvailable(String),
@@ -91,6 +107,15 @@ pub enum Error {
     /// GPU operation error
     #[error("GPU error: {0}")]
     GpuError(String),
+
+    /// GPU budget policy temporarily paused preview work
+    #[error("GPU busy: retry after {retry_after_ms}ms ({message})")]
+    GpuBusy {
+        /// Retry hint in milliseconds.
+        retry_after_ms: u64,
+        /// Human-readable reason.
+        message: String,
+    },
 
     /// JPEG encoding error
     #[error("JPEG error: {0}")]

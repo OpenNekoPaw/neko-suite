@@ -14,15 +14,24 @@ use crate::domain::{
 };
 use crate::encoder::{ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer};
 use crate::error::{Error, Result};
-use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
+use crate::gpu::{
+    ColorSpace, GpuContext, GpuPermit, Nv12Renderer, Nv12TextureImporter, PanoramicRenderOutput,
+    PanoramicRenderer, PipelinePriority,
+};
+#[cfg(target_os = "macos")]
+use crate::gpu::RgbaToNv12TextureConverter;
 use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, global_probe_cache};
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
     create_stream_channels, eof_idle_wait, pack_h264_frame, ActiveStreams, StreamLoopHandle,
     StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
-use crate::services::{IStreamPlayback, ITaskService, IVideoService};
+use crate::services::pipeline_sink::{
+    GpuFrameLease, GpuOutputHandle, PipelineOutput, PipelineSink, VideoGpuFrame, VideoOutput,
+};
+use crate::services::{IStreamPlayback, ITaskService, IVideoService, StreamSink};
 use neko_engine_types::{FrameFormat, LoopRegion, MediaInfo, StreamId, WaveformData};
+use neko_runtime_media::PanoramaViewState;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -36,6 +45,37 @@ fn container_from_path(path: &Path) -> ContainerFormat {
         Some("mov") => ContainerFormat::Mov,
         _ => ContainerFormat::Mp4, // Default
     }
+}
+
+#[cfg(target_os = "macos")]
+fn panoramic_stream_video_output(
+    output: PanoramicRenderOutput,
+    converter: &mut RgbaToNv12TextureConverter,
+    pts: i64,
+    duration: i64,
+    frame_index: u64,
+) -> Result<VideoOutput> {
+    let io_surface =
+        converter.convert_to_iosurface(&output.color_view, output.width, output.height, 1)?;
+    Ok(VideoOutput::GpuFrame(VideoGpuFrame {
+        lease: GpuFrameLease::new(GpuOutputHandle::IOSurface(io_surface)),
+        pts,
+        duration,
+        frame_index,
+        width: output.width,
+        height: output.height,
+    }))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn panoramic_stream_video_output(
+    output: PanoramicRenderOutput,
+    ctx: Arc<GpuContext>,
+    pts: i64,
+    duration: i64,
+    frame_index: u64,
+) -> Result<VideoOutput> {
+    Ok(output.into_video_output(ctx, pts, duration, frame_index))
 }
 
 /// Bilinear downscale for RGBA pixel data.
@@ -312,10 +352,11 @@ impl IVideoService for VideoService {
         source: &Path,
         session_id: &str,
     ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
-        let _gpu_ctx = self
+        let gpu_ctx = self
             .gpu_ctx
             .clone()
             .ok_or_else(|| Error::Other("GPU context required for video streaming".to_string()))?;
+        let budget = gpu_ctx.budget_controller().clone();
 
         let path = source.to_string_lossy().to_string();
 
@@ -357,6 +398,7 @@ impl IVideoService for VideoService {
 
         let cancel_clone = cancel.clone();
         let cancel_clone2 = cancel.clone();
+        let budget_pipeline_id = format!("video-stream:{}", stream_id.as_str());
         // Create a second watch receiver for the pacing thread
         let pacing_state_rx = state_tx.subscribe();
         let streams_clone = self.active_streams.clone();
@@ -368,6 +410,8 @@ impl IVideoService for VideoService {
             // =================================================================
             let encode_cancel = cancel_clone.clone();
             let encode_handle = std::thread::spawn(move || {
+                let budget = budget;
+                let budget_pipeline_id = budget_pipeline_id;
                 // Acquire decoder from pool (reuses existing if available)
                 let pool = global_pool();
                 let mut guard = match pool.acquire(&path, HwAccelType::Auto) {
@@ -460,7 +504,19 @@ impl IVideoService for VideoService {
                         current_speed = state.speed;
                     }
 
+                    match budget
+                        .acquire_permit(budget_pipeline_id.clone(), PipelinePriority::Interactive)
+                    {
+                        GpuPermit::Proceed => {}
+                        GpuPermit::Queued { retry_after, .. }
+                        | GpuPermit::Paused { retry_after, .. } => {
+                            std::thread::sleep(retry_after);
+                            continue;
+                        }
+                    }
+
                     // Decode next GPU frame
+                    let gpu_start = std::time::Instant::now();
                     let gpu_texture = match decoder.decode_next_gpu() {
                         Ok(Some(t)) => {
                             consecutive_decode_errors = 0; // Reset on success
@@ -552,6 +608,11 @@ impl IVideoService for VideoService {
 
                     match Encoder::encode_frame_gpu(&mut encoder, gpu_handle, pts) {
                         Ok(packets) => {
+                            budget.report_frame_time(
+                                budget_pipeline_id.clone(),
+                                PipelinePriority::Interactive,
+                                gpu_start.elapsed(),
+                            );
                             for p in &packets {
                                 let frame_data =
                                     pack_h264_frame(p, tex_width, tex_height, time_base);
@@ -563,6 +624,11 @@ impl IVideoService for VideoService {
                             }
                         }
                         Err(e) => {
+                            budget.report_frame_time(
+                                budget_pipeline_id.clone(),
+                                PipelinePriority::Interactive,
+                                gpu_start.elapsed(),
+                            );
                             tracing::warn!("Video stream encode error: {}", e);
                             break;
                         }
@@ -668,6 +734,214 @@ impl IVideoService for VideoService {
         Ok((stream_id, rx))
     }
 
+    async fn start_panoramic_stream(
+        &self,
+        source: &Path,
+        session_id: &str,
+        view_state: PanoramaViewState,
+    ) -> Result<(StreamId, broadcast::Receiver<FrameData>)> {
+        let gpu_ctx = self.gpu_ctx.clone().ok_or_else(|| {
+            Error::UnsupportedCapability("GPU context required for panoramic video streaming".into())
+        })?;
+        let budget = gpu_ctx.budget_controller().clone();
+        let path = source.to_string_lossy().to_string();
+
+        let media_info = tokio::task::spawn_blocking({
+            let path = path.clone();
+            move || global_probe_cache().probe(Path::new(&path))
+        })
+        .await
+        .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
+
+        let config = crate::preview::PreviewPipelineConfig {
+            width: media_info.width,
+            height: media_info.height,
+            fps: media_info.fps,
+            ..Default::default()
+        };
+        let (stream_id, tx, rx, cancel, state_tx, state_rx) =
+            create_stream_channels(session_id, 64);
+        state_tx.send_modify(|state| {
+            state.panorama_view_state = Some(Arc::new(view_state.clone()));
+            state.panorama_view_seq = 1;
+        });
+
+        let stream_id_for_handle = stream_id.clone();
+        let streams_clone = self.active_streams.clone();
+        let budget_pipeline_id = format!("panoramic-stream:{}", stream_id.as_str());
+        let cancel_for_loop = cancel.clone();
+
+        let join_handle = tokio::task::spawn_blocking(move || {
+            let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
+            let media = match decoder.open(&path) {
+                Ok(media) => media,
+                Err(error) => {
+                    tracing::error!("Failed to open panoramic decoder: {}", error);
+                    return;
+                }
+            };
+            let importer = Nv12TextureImporter::new(Arc::clone(&gpu_ctx));
+            let nv12_renderer = match Nv12Renderer::new(Arc::clone(&gpu_ctx)) {
+                Ok(renderer) => renderer,
+                Err(error) => {
+                    tracing::error!("Failed to create NV12 renderer for panorama: {}", error);
+                    return;
+                }
+            };
+            let renderer = PanoramicRenderer::new(Arc::clone(&gpu_ctx), view_state);
+            #[cfg(target_os = "macos")]
+            let mut panoramic_encoder_bridge =
+                match RgbaToNv12TextureConverter::new(Arc::clone(&gpu_ctx)) {
+                    Ok(converter) => converter,
+                    Err(error) => {
+                        tracing::error!(
+                            "Failed to create panoramic encoder bridge: {}",
+                            error
+                        );
+                        return;
+                    }
+                };
+            let sink = match StreamSink::new(config, tx) {
+                Ok(sink) => sink,
+                Err(error) => {
+                    tracing::error!("Failed to create panoramic StreamSink: {}", error);
+                    return;
+                }
+            };
+            let mut pacer = WallClockPacer::new(media.fps, 1.0);
+            let mut frame_index = 0u64;
+            let mut last_view_seq = 1u64;
+            let time_base = decoder.time_base();
+
+            loop {
+                if cancel_for_loop.is_cancelled() {
+                    break;
+                }
+
+                let state = state_rx.borrow().clone();
+                if state.panorama_view_seq != last_view_seq {
+                    if let Some(view_state) = &state.panorama_view_state {
+                        if let Err(error) = renderer.update_view_state((**view_state).clone()) {
+                            tracing::warn!("Rejected panoramic view-state update: {}", error);
+                        }
+                    }
+                    last_view_seq = state.panorama_view_seq;
+                }
+                if state.paused {
+                    std::thread::sleep(std::time::Duration::from_millis(16));
+                    continue;
+                }
+
+                match budget.acquire_permit(budget_pipeline_id.clone(), PipelinePriority::Transcode)
+                {
+                    GpuPermit::Proceed => {}
+                    GpuPermit::Queued { retry_after, .. }
+                    | GpuPermit::Paused { retry_after, .. } => {
+                        std::thread::sleep(retry_after);
+                        continue;
+                    }
+                }
+
+                let started = std::time::Instant::now();
+                let gpu_texture = match decoder.decode_next_gpu() {
+                    Ok(Some(frame)) => frame,
+                    Ok(None) => break,
+                    Err(error) => {
+                        tracing::warn!("Panoramic decode error: {}", error);
+                        break;
+                    }
+                };
+                let pts_us = (gpu_texture.pts as f64 * time_base * 1_000_000.0) as i64;
+                let duration_us = (1_000_000.0 / media.fps.max(1.0)) as i64;
+                let color_space = ColorSpace::from_ffmpeg(gpu_texture.color_space);
+                let imported = match importer.import(&gpu_texture) {
+                    Ok(imported) => imported,
+                    Err(error) => {
+                        tracing::warn!("Panoramic NV12 import error: {}", error);
+                        break;
+                    }
+                };
+                let rgba_texture = nv12_renderer.create_output_texture(imported.width, imported.height);
+                let rgba_view = rgba_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                nv12_renderer.render(&imported, &rgba_view, color_space);
+                let projected = match renderer.render(&rgba_view, imported.width, imported.height) {
+                    Ok(output) => output,
+                    Err(error) => {
+                        tracing::warn!("Panoramic projection error: {}", error);
+                        break;
+                    }
+                };
+                #[cfg(target_os = "macos")]
+                let video_output = panoramic_stream_video_output(
+                    projected,
+                    &mut panoramic_encoder_bridge,
+                    pts_us,
+                    duration_us,
+                    frame_index,
+                );
+                #[cfg(not(target_os = "macos"))]
+                let video_output = panoramic_stream_video_output(
+                    projected,
+                    Arc::clone(&gpu_ctx),
+                    pts_us,
+                    duration_us,
+                    frame_index,
+                );
+                let video_output = match video_output {
+                    Ok(output) => output,
+                    Err(error) => {
+                        tracing::warn!("Panoramic encoder bridge failed: {}", error);
+                        break;
+                    }
+                };
+                let submit_result = sink.submit(PipelineOutput::Video(video_output));
+                budget.report_frame_time(
+                    budget_pipeline_id.clone(),
+                    PipelinePriority::Transcode,
+                    started.elapsed(),
+                );
+                budget.observe_submitted_work_done(
+                    budget_pipeline_id.clone(),
+                    PipelinePriority::Transcode,
+                    gpu_ctx.queue(),
+                );
+                if let Err(error) = submit_result {
+                    tracing::warn!("Panoramic StreamSink submit failed: {}", error);
+                    break;
+                }
+
+                frame_index = frame_index.saturating_add(1);
+                pacer.wait_for_next_frame();
+            }
+
+            let _ = sink.flush();
+            let _ = sink.close();
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(streams_clone.remove(stream_id_for_handle.as_str()));
+        });
+
+        let handle = StreamLoopHandle {
+            stream_id: stream_id.clone(),
+            cancel,
+            state_tx,
+            join_handle,
+            linked_stream_id: None,
+        };
+        self.active_streams.insert(handle).await;
+
+        Ok((stream_id, rx))
+    }
+
+    async fn update_panoramic_view_state(
+        &self,
+        stream_id: &StreamId,
+        view_state: PanoramaViewState,
+    ) -> Result<()> {
+        self.playback
+            .update_panorama_view_state(stream_id, Arc::new(view_state))
+            .await
+    }
+
     async fn transcode(
         &self,
         source: &Path,
@@ -677,6 +951,12 @@ impl IVideoService for VideoService {
     ) -> Result<()> {
         let path = source.to_string_lossy().to_string();
         let output = output_path.to_path_buf();
+        let budget = self
+            .gpu_ctx
+            .as_ref()
+            .map(|ctx| ctx.budget_controller().clone())
+            .unwrap_or_default();
+        let budget_pipeline_id = format!("video-transcode:{}", output.display());
 
         tokio::task::spawn_blocking(move || -> Result<()> {
             // =====================================================
@@ -781,6 +1061,9 @@ impl IVideoService for VideoService {
 
                 // Decode + encode video frame
                 if !video_done {
+                    let _permit = budget
+                        .wait_for_resume(budget_pipeline_id.clone(), PipelinePriority::Transcode);
+                    let gpu_start = std::time::Instant::now();
                     match decoder.decode_next_gpu()? {
                         Some(nv12_texture) => {
                             let gpu_handle = match nv12_texture.handle {
@@ -798,6 +1081,11 @@ impl IVideoService for VideoService {
                             };
                             let packets =
                                 video_encoder.encode_frame_gpu(gpu_handle, nv12_texture.pts)?;
+                            budget.report_frame_time(
+                                budget_pipeline_id.clone(),
+                                PipelinePriority::Transcode,
+                                gpu_start.elapsed(),
+                            );
                             for packet in &packets {
                                 muxer.write_video_packet(packet)?;
                             }
@@ -845,6 +1133,11 @@ impl IVideoService for VideoService {
                             }
                         }
                         None => {
+                            budget.report_frame_time(
+                                budget_pipeline_id.clone(),
+                                PipelinePriority::Transcode,
+                                gpu_start.elapsed(),
+                            );
                             video_done = true;
                         }
                     }

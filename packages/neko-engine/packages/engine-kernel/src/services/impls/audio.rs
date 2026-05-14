@@ -8,8 +8,8 @@ use crate::audio::mic_capture::{
     AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult,
 };
 use crate::audio::{
-    AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
-    FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat, dsp,
+    dsp, AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
+    FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
 };
 use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::{Error, Result};
@@ -22,8 +22,8 @@ use crate::services::impls::common::{
     generate_waveform_blocking,
 };
 use crate::services::impls::stream_loop::{
-    ActiveStreams, EOF_IDLE_TIMEOUT, StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer,
-    create_stream_channels, eof_idle_wait, pack_pcm_f32le_stream_frame,
+    create_stream_channels, eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams,
+    StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::{IAudioService, IStreamPlayback, ITaskService};
 use neko_engine_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
@@ -409,15 +409,13 @@ impl IAudioService for AudioService {
                             // Apply fade-in ramp after seek
                             if fade_in_remaining > 0 {
                                 let total = fade_in_samples_total;
-                                let samples: &mut [f32] =
-                                    bytemuck::cast_slice_mut(&mut pcm_data);
+                                let samples: &mut [f32] = bytemuck::cast_slice_mut(&mut pcm_data);
                                 let num_samples = samples.len() / ch;
                                 for i in 0..num_samples {
                                     if fade_in_remaining == 0 {
                                         break;
                                     }
-                                    let progress =
-                                        1.0 - (fade_in_remaining as f32 / total as f32);
+                                    let progress = 1.0 - (fade_in_remaining as f32 / total as f32);
                                     let gain = progress * progress;
                                     for c in 0..ch {
                                         samples[i * ch + c] *= gain;
