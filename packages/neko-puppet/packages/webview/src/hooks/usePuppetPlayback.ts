@@ -9,12 +9,48 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { IPuppetController } from '../animation';
 import { usePuppetStore } from '../stores/puppet-store';
+import type { PuppetDelta } from '../animation/types';
 
 export interface PuppetPlaybackCallbacks {
   onPlay: (name: string, loop: boolean) => void;
   onStop: () => void;
   onSeek: (timeMs: number) => void;
   onCrossfade: (name: string, fadeDurationMs: number, loop: boolean) => void;
+}
+
+function createPreviewStreamHandlers(ctrl: IPuppetController): {
+  onDelta: (delta: PuppetDelta) => void;
+  onStatusChange: (connected: boolean) => void;
+  onFrame: (frame: VideoFrame) => void;
+} {
+  return {
+    onDelta: (delta) => {
+      const store = usePuppetStore.getState();
+      store.setPreviewFrame(null);
+      store.setDeformedMeshes(delta.deformed_meshes);
+
+      if (delta.animation_time_ms != null) {
+        store.setAnimationTimeMs(delta.animation_time_ms);
+      }
+
+      if (delta.animation_playing === false) {
+        store.setPlayState('idle');
+        ctrl.stopPreviewStream();
+        store.setStreamConnected(false);
+      }
+    },
+    onStatusChange: (connected) => {
+      usePuppetStore.getState().setStreamConnected(connected);
+    },
+    onFrame: (frame) => {
+      usePuppetStore.getState().setPreviewFrame(frame);
+    },
+  };
+}
+
+function startPreviewStream(ctrl: IPuppetController): void {
+  const handlers = createPreviewStreamHandlers(ctrl);
+  ctrl.startPreviewStream(handlers.onDelta, handlers.onStatusChange, handlers.onFrame);
 }
 
 /**
@@ -47,31 +83,7 @@ export function usePuppetPlayback(controller: IPuppetController | null): PuppetP
     store.setAnimationTimeMs(0);
 
     // 3. Connect preview stream for continuous mesh updates
-    ctrl.startPreviewStream(
-      (delta) => {
-        const s = usePuppetStore.getState();
-        s.setPreviewFrame(null);
-        s.setDeformedMeshes(delta.deformed_meshes);
-
-        // Sync animation progress from stream
-        if (delta.animation_time_ms != null) {
-          s.setAnimationTimeMs(delta.animation_time_ms);
-        }
-
-        // Auto-stop when animation finishes (non-looping)
-        if (delta.animation_playing === false) {
-          s.setPlayState('idle');
-          ctrl.stopPreviewStream();
-          s.setStreamConnected(false);
-        }
-      },
-      (connected) => {
-        usePuppetStore.getState().setStreamConnected(connected);
-      },
-      (frame) => {
-        usePuppetStore.getState().setPreviewFrame(frame);
-      },
-    );
+    startPreviewStream(ctrl);
   }, []);
 
   const onStop = useCallback(() => {
@@ -115,29 +127,7 @@ export function usePuppetPlayback(controller: IPuppetController | null): PuppetP
 
     // 3. Ensure preview stream is connected for continuous mesh updates
     if (!ctrl.isStreaming()) {
-      ctrl.startPreviewStream(
-        (delta) => {
-          const s = usePuppetStore.getState();
-          s.setPreviewFrame(null);
-          s.setDeformedMeshes(delta.deformed_meshes);
-
-          if (delta.animation_time_ms != null) {
-            s.setAnimationTimeMs(delta.animation_time_ms);
-          }
-
-          if (delta.animation_playing === false) {
-            s.setPlayState('idle');
-            ctrl.stopPreviewStream();
-            s.setStreamConnected(false);
-          }
-        },
-        (connected) => {
-          usePuppetStore.getState().setStreamConnected(connected);
-        },
-        (frame) => {
-          usePuppetStore.getState().setPreviewFrame(frame);
-        },
-      );
+      startPreviewStream(ctrl);
     }
   }, []);
 
