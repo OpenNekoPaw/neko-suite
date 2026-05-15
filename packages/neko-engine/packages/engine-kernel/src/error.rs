@@ -1,5 +1,6 @@
 //! Error types for media processor
 
+use neko_engine_types::PipelineContractError;
 use thiserror::Error;
 
 /// Result type alias for media processor operations
@@ -136,8 +137,99 @@ impl From<wgpu::RequestDeviceError> for Error {
     }
 }
 
+impl From<neko_engine_gpu::GpuError> for Error {
+    fn from(e: neko_engine_gpu::GpuError) -> Self {
+        match e {
+            neko_engine_gpu::GpuError::GpuInit(message) => Error::GpuInit(message),
+            neko_engine_gpu::GpuError::GpuDeviceLost => Error::GpuDeviceLost,
+            neko_engine_gpu::GpuError::ShaderCompilation(message) => {
+                Error::ShaderCompilation(message)
+            }
+            neko_engine_gpu::GpuError::BufferError(message) => Error::BufferError(message),
+            neko_engine_gpu::GpuError::InvalidParameter(message) => {
+                Error::InvalidParameter(message)
+            }
+            neko_engine_gpu::GpuError::UnsupportedCapability(message) => {
+                Error::UnsupportedCapability(message)
+            }
+            neko_engine_gpu::GpuError::UnknownEffect(effect_id) => Error::UnknownEffect(effect_id),
+            neko_engine_gpu::GpuError::Other(message) => Error::Other(message),
+        }
+    }
+}
+
 impl From<ffmpeg_next::Error> for Error {
     fn from(e: ffmpeg_next::Error) -> Self {
         Error::Ffmpeg(e.to_string())
+    }
+}
+
+impl From<neko_engine_codec::CodecError> for Error {
+    fn from(e: neko_engine_codec::CodecError) -> Self {
+        match e {
+            neko_engine_codec::CodecError::Ffmpeg(message) => Error::Ffmpeg(message),
+            neko_engine_codec::CodecError::DecoderNotInitialized => Error::DecoderNotInitialized,
+            neko_engine_codec::CodecError::EncoderNotInitialized => Error::EncoderNotInitialized,
+            neko_engine_codec::CodecError::MuxerNotInitialized => Error::MuxerNotInitialized,
+            neko_engine_codec::CodecError::InvalidSeek(position) => Error::InvalidSeek(position),
+            neko_engine_codec::CodecError::DecodeFailed(message) => Error::DecodeFailed(message),
+            neko_engine_codec::CodecError::EncodeFailed(message) => Error::EncodeFailed(message),
+            neko_engine_codec::CodecError::FileNotFound(path) => Error::FileNotFound(path),
+            neko_engine_codec::CodecError::InvalidParameter(message) => {
+                Error::InvalidParameter(message)
+            }
+            neko_engine_codec::CodecError::UnsupportedCodec(codec) => {
+                Error::UnsupportedCodec(codec)
+            }
+            neko_engine_codec::CodecError::UnsupportedContainer(container) => {
+                Error::UnsupportedContainer(container)
+            }
+            neko_engine_codec::CodecError::UnsupportedCapability(message) => {
+                Error::UnsupportedCapability(message)
+            }
+            neko_engine_codec::CodecError::AlreadyCompleted(message) => {
+                Error::AlreadyCompleted(message)
+            }
+            neko_engine_codec::CodecError::HwEncoderNotAvailable(message) => {
+                Error::HwEncoderNotAvailable(message)
+            }
+            neko_engine_codec::CodecError::Cancelled => Error::Cancelled,
+            neko_engine_codec::CodecError::Other(message) => Error::Other(message),
+        }
+    }
+}
+
+impl From<neko_engine_audio::AudioError> for Error {
+    fn from(e: neko_engine_audio::AudioError) -> Self {
+        match e {
+            neko_engine_audio::AudioError::Ffmpeg(message) => Error::Ffmpeg(message),
+            neko_engine_audio::AudioError::DecoderNotInitialized => Error::DecoderNotInitialized,
+            neko_engine_audio::AudioError::EncoderNotInitialized => Error::EncoderNotInitialized,
+            neko_engine_audio::AudioError::InvalidSeek(position) => Error::InvalidSeek(position),
+            neko_engine_audio::AudioError::DecodeFailed(message) => Error::DecodeFailed(message),
+            neko_engine_audio::AudioError::EncodeFailed(message) => Error::EncodeFailed(message),
+            neko_engine_audio::AudioError::FileNotFound(path) => Error::FileNotFound(path),
+            neko_engine_audio::AudioError::InvalidParameter(message) => {
+                Error::InvalidParameter(message)
+            }
+            neko_engine_audio::AudioError::UnsupportedCodec(codec) => {
+                Error::UnsupportedCodec(codec)
+            }
+            neko_engine_audio::AudioError::Cancelled => Error::Cancelled,
+            neko_engine_audio::AudioError::Other(message) => Error::Other(message),
+        }
+    }
+}
+
+impl From<PipelineContractError> for Error {
+    fn from(e: PipelineContractError) -> Self {
+        match e {
+            PipelineContractError::UnsupportedHandle { .. }
+            | PipelineContractError::EncoderInputUnsupported { .. }
+            | PipelineContractError::MissingReadback { .. } => {
+                Error::UnsupportedCapability(e.to_string())
+            }
+            PipelineContractError::ReadbackFailed(message) => Error::GpuError(message),
+        }
     }
 }

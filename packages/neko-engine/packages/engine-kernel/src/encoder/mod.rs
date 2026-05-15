@@ -1,30 +1,26 @@
-//! Encoder module - Video encoding with hardware acceleration
+//! Encoder module - video encoding with hardware acceleration.
 //!
-//! Provides hardware-accelerated encoding capabilities:
-//! - `HwAccelEncoder`: Hardware-accelerated encoding (VideoToolbox, NVENC, VAAPI, QSV)
-//! - `IFrameEncoder`: Single-frame H.264 I-frame encoding for static images
-//! - `AsyncExportPipeline`: Three-stage concurrent export pipeline
-//! - `Muxer`: Container muxing (MP4, MKV, WebM, MOV)
+//! Codec implementation lives in `neko-engine-codec`. This module keeps the
+//! previous kernel import surface as a temporary migration compatibility layer,
+//! while `pipeline` remains kernel-owned because it still mixes GPU/export
+//! orchestration with encode/mux workers.
 
-pub mod codec_ext;
-pub mod hwaccel;
-pub mod iframe;
-mod muxer;
 pub mod pipeline;
-pub mod pool;
-mod traits;
 
-pub use codec_ext::{
-    AudioCodecExt, ContainerFormatExt, EncoderPresetExt, HwEncoderTypeExt, VideoCodecExt,
+pub use neko_engine_codec::encoder::codec_ext;
+pub use neko_engine_codec::encoder::hwaccel;
+pub use neko_engine_codec::encoder::iframe;
+pub use neko_engine_codec::encoder::muxer;
+pub use neko_engine_codec::encoder::pool;
+pub use neko_engine_codec::encoder::{
+    encode_nv12_to_h264_iframe, global_encoder_pool, global_iframe_encoder, AudioCodecExt,
+    ContainerFormatExt, EncoderPresetExt, FfmpegMuxer, HwAccelEncoder, HwEncoderTypeExt,
+    IFrameConfig, IFrameEncoder, Muxer, StreamInfo, VideoCodecExt,
 };
-pub use hwaccel::HwAccelEncoder;
-pub use iframe::{encode_nv12_to_h264_iframe, global_iframe_encoder, IFrameConfig, IFrameEncoder};
-pub use muxer::{FfmpegMuxer, Muxer, StreamInfo};
+pub use neko_engine_codec::encoder::{
+    ContainerFormat, EncodedPacket, Encoder, EncoderConfig, EncoderPool, EncoderPreset,
+    HwEncoderType, PixelFormat, VideoCodec,
+};
 pub use pipeline::{
     AsyncExportPipeline, CompositedFrame, PipelineConfig, PipelineFrame, PipelineProgress,
-};
-pub use pool::{global_encoder_pool, EncoderPool};
-pub use traits::{
-    ContainerFormat, EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType,
-    VideoCodec,
 };

@@ -11,6 +11,9 @@ crate-type = ["lib"]
 [dependencies]
 # Shared types
 neko-engine-types = { path = "../engine-types" }
+neko-engine-codec = { path = "../engine-codec" }
+neko-engine-audio = { path = "../engine-audio" }
+neko-engine-gpu = { path = "../engine-gpu" }
 
 # 3D scene management
 neko-runtime-scene = { path = "../runtime-scene" }
@@ -70,11 +73,6 @@ image.workspace = true
 
 # Loudness measurement - ITU-R BS.1770-4
 ebur128.workspace = true
-
-# Audio capture - cross-platform mic input (WASAPI/CoreAudio/ALSA)
-cpal = "0.15"
-# WAV file writing
-hound = "3.5"
 
 # NOTE: ML inference (ort/ndarray/rustfft) moved to neko-runtime-ml
 

@@ -2,6 +2,9 @@
 resolver = "2"
 members = [
     "packages/engine-types",
+    "packages/engine-codec",
+    "packages/engine-audio",
+    "packages/engine-gpu",
     "packages/engine-kernel",
     "packages/host-api",
     "packages/host-http",

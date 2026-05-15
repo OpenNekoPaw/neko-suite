@@ -11,10 +11,8 @@ use neko_runtime_media::{PanoramaViewMode, PanoramaViewState};
 use wgpu::util::DeviceExt;
 
 use crate::error::{Error, Result};
-use crate::gpu::GpuContext;
-use crate::services::pipeline_sink::{
-    GpuFrameLease, GpuOutputHandle, GpuReadbackTarget, VideoGpuFrame, VideoOutput,
-};
+use crate::gpu::{GpuContext, GpuReadbackTarget};
+use neko_engine_types::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame, VideoOutput};
 
 /// Output texture format used by panoramic preview before encode handoff.
 pub const PANORAMIC_RENDER_TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;

@@ -2375,6 +2375,66 @@ dependencies = [
 ]
 
 [[package]]
+name = "neko-engine-audio"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "crossbeam-channel",
+ "ffmpeg-next",
+ "ffmpeg-sys-next",
+ "hound",
+ "neko-engine-codec",
+ "neko-engine-types",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "neko-engine-codec"
+version = "0.1.0"
+dependencies = [
+ "ffmpeg-next",
+ "ffmpeg-sys-next",
+ "neko-engine-types",
+ "objc",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "neko-engine-gpu"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ash",
+ "block",
+ "bytemuck",
+ "core-foundation 0.9.4",
+ "cosmic-text",
+ "half",
+ "libc",
+ "metal",
+ "neko-engine-types",
+ "objc",
+ "pollster",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tiny-skia",
+ "tokio",
+ "tracing",
+ "wgpu",
+ "wgpu-core",
+ "wgpu-hal",
+ "windows 0.52.0",
+]
+
+[[package]]
 name = "neko-engine-kernel"
 version = "0.1.0"
 dependencies = [
@@ -2386,7 +2446,6 @@ dependencies = [
  "bytemuck",
  "core-foundation 0.9.4",
  "cosmic-text",
- "cpal",
  "crossbeam-channel",
  "ebur128",
  "ffmpeg-next",
@@ -2394,10 +2453,12 @@ dependencies = [
  "glam",
  "gltf",
  "half",
- "hound",
  "image",
  "libc",
  "metal",
+ "neko-engine-audio",
+ "neko-engine-codec",
+ "neko-engine-gpu",
  "neko-engine-types",
  "neko-runtime-media",
  "neko-runtime-puppet",

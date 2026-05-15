@@ -22,12 +22,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use crate::audio::AudioEncoderConfig;
 use crate::encoder::{
     ContainerFormat, EncodedPacket, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer,
 };
 use crate::error::{Error, Result};
 use crate::gpu::{CompositeLayer, GpuCompositor, GpuContext, GpuLayer};
+use neko_engine_types::AudioEncoderConfig;
 
 // =============================================================================
 // Pipeline Types
@@ -629,7 +629,7 @@ impl AsyncExportPipeline {
                 }
                 Err(e) => {
                     progress.set_error(format!("Compose error on frame {}: {}", frame.index, e));
-                    return Err(e);
+                    return Err(e.into());
                 }
             }
         }
@@ -865,7 +865,7 @@ impl AsyncExportPipeline {
                 }
                 Err(e) => {
                     progress.set_error(format!("Mux error on video frame {}: {}", index, e));
-                    return Err(e);
+                    return Err(e.into());
                 }
             },
             MuxPacket::Audio { packet } => {

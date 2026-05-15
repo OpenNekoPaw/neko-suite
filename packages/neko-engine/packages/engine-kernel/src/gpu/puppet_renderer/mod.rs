@@ -10,10 +10,8 @@ mod sprite_batch;
 use std::sync::{Arc, Mutex};
 
 use crate::error::{Error, Result};
-use crate::gpu::GpuContext;
-use crate::services::pipeline_sink::{
-    GpuFrameLease, GpuOutputHandle, GpuReadbackTarget, VideoGpuFrame, VideoOutput,
-};
+use crate::gpu::{GpuContext, GpuReadbackTarget};
+use neko_engine_types::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame, VideoOutput};
 
 pub use atlas_cache::{PuppetAtlasCache, PuppetTextureAtlas, PuppetTextureAtlasInput};
 pub use shader::{create_shader_module, PUPPET_TEXTURED_MESH_WGSL};
@@ -460,8 +458,7 @@ fn unsupported_output_handle() -> GpuOutputHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::pipeline_sink::{PipelineOutput, PipelineSink};
-    use std::sync::Mutex;
+    use neko_engine_types::PipelineOutput;
 
     #[test]
     fn blend_mode_parses_runtime_strings() {
@@ -487,33 +484,7 @@ mod tests {
     }
 
     #[test]
-    fn puppet_gpu_frame_is_pipeline_sink_compatible() {
-        struct GpuOnlySink {
-            accepted: Mutex<usize>,
-        }
-
-        impl PipelineSink for GpuOnlySink {
-            fn accepts(&self, output: &PipelineOutput) -> bool {
-                matches!(output, PipelineOutput::Video(VideoOutput::GpuFrame(_)))
-            }
-
-            fn submit(&self, output: PipelineOutput) -> Result<()> {
-                if !self.accepts(&output) {
-                    return Err(Error::UnsupportedOutput("expected GPU frame".to_string()));
-                }
-                *self.accepted.lock().unwrap() += 1;
-                Ok(())
-            }
-
-            fn flush(&self) -> Result<()> {
-                Ok(())
-            }
-
-            fn close(&self) -> Result<()> {
-                Ok(())
-            }
-        }
-
+    fn puppet_gpu_frame_has_pipeline_output_shape() {
         let frame = VideoOutput::GpuFrame(VideoGpuFrame {
             lease: GpuFrameLease::new(unsupported_output_handle()),
             pts: 0,
@@ -523,12 +494,10 @@ mod tests {
             height: 480,
         });
         let output = PipelineOutput::Video(frame);
-        let sink = GpuOnlySink {
-            accepted: Mutex::new(0),
-        };
 
-        assert!(sink.accepts(&output));
-        sink.submit(output).unwrap();
-        assert_eq!(*sink.accepted.lock().unwrap(), 1);
+        assert!(matches!(
+            output,
+            PipelineOutput::Video(VideoOutput::GpuFrame(_))
+        ));
     }
 }
