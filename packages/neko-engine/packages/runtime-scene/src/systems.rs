@@ -339,14 +339,15 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
     // Process crossfade
     let crossfade_done = {
         match world.get::<SceneCrossfadeRequest>(root_entity) {
-            Some(cf) => cf.fade_elapsed + delta >= cf.fade_duration,
+            Some(cf) => cf.fade_elapsed_seconds() + delta >= cf.fade_duration_seconds(),
             None => false,
         }
     };
 
     if let Some(mut cf) = world.get_mut::<SceneCrossfadeRequest>(root_entity) {
-        cf.fade_elapsed += delta;
-        let fade_t = (cf.fade_elapsed / cf.fade_duration.max(0.001)).clamp(0.0, 1.0);
+        cf.advance_seconds(delta);
+        let fade_t =
+            (cf.fade_elapsed_seconds() / cf.fade_duration_seconds().max(0.001)).clamp(0.0, 1.0);
         let target_idx = cf.target_clip_index;
 
         if let Some(mut blend) = world.get_mut::<SceneAnimationBlendState>(root_entity) {
@@ -392,16 +393,16 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
             continue;
         }
         let duration = clips[layer.clip_index].1;
-        let advanced = layer.elapsed + delta;
+        let advanced = layer.elapsed_seconds() + delta;
         if advanced >= duration {
             if layer.looping {
-                layer.elapsed = advanced % duration.max(0.001);
+                layer.set_elapsed_seconds(advanced % duration.max(0.001));
             } else {
-                layer.elapsed = duration;
+                layer.set_elapsed_seconds(duration);
                 layer.weight = 0.0;
             }
         } else {
-            layer.elapsed = advanced;
+            layer.set_elapsed_seconds(advanced);
         }
     }
 
@@ -428,7 +429,7 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
         }
         let (_, duration, ref channels) = clips[layer.clip_index];
         let time = if duration > 0.0 {
-            layer.elapsed % duration
+            layer.elapsed_seconds() % duration
         } else {
             0.0
         };
@@ -599,7 +600,7 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
     {
         let (clip_name, duration, _) = &clips[dominant_layer.clip_index];
         let evaluated_time = if *duration > 0.0 {
-            dominant_layer.elapsed % duration
+            dominant_layer.elapsed_seconds() % duration
         } else {
             0.0
         };
@@ -607,7 +608,7 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
             .entity_mut(root_entity)
             .insert(SceneAnimationPlaybackState {
                 clip_name: Some(clip_name.clone()),
-                time_cursor: dominant_layer.elapsed,
+                time_cursor: dominant_layer.elapsed_seconds(),
                 evaluated_time,
                 playing: dominant_layer.weight > 0.0,
                 looping: dominant_layer.looping,

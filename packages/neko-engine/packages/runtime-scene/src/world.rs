@@ -881,30 +881,27 @@ impl SceneWorld for BevySceneWorld {
             let initial_layers = Vec::new();
             self.world
                 .entity_mut(root)
-                .insert(SceneAnimationBlendState {
-                    layers: initial_layers,
-                });
+                .insert(SceneAnimationBlendState::new(initial_layers));
         }
 
         // Add target clip as new layer with weight 0
         if let Some(mut blend) = self.world.get_mut::<SceneAnimationBlendState>(root) {
             // Remove existing layer for same clip if present
             blend.layers.retain(|l| l.clip_index != target_clip_index);
-            blend.layers.push(SceneBlendLayer {
-                clip_index: target_clip_index,
-                elapsed: 0.0,
-                weight: 0.0,
-                looping: loop_anim,
-            });
+            blend
+                .layers
+                .push(SceneBlendLayer::new(target_clip_index, 0.0, 0.0, loop_anim));
         }
 
         // Insert crossfade request
-        self.world.entity_mut(root).insert(SceneCrossfadeRequest {
-            target_clip_index,
-            fade_duration,
-            fade_elapsed: 0.0,
-            loop_anim,
-        });
+        self.world
+            .entity_mut(root)
+            .insert(SceneCrossfadeRequest::new(
+                target_clip_index,
+                fade_duration,
+                0.0,
+                loop_anim,
+            ));
 
         self.write_playback_state(clip_name, 0.0, true, loop_anim);
 
@@ -966,11 +963,13 @@ impl SceneWorld for BevySceneWorld {
                 blend
                     .layers
                     .iter()
-                    .map(|l| SceneBlendLayerInfo {
-                        clip_name: clip_names.get(l.clip_index).cloned().unwrap_or_default(),
-                        elapsed: l.elapsed,
-                        weight: l.weight,
-                        looping: l.looping,
+                    .map(|l| {
+                        SceneBlendLayerInfo::new(
+                            clip_names.get(l.clip_index).cloned().unwrap_or_default(),
+                            l.elapsed_seconds(),
+                            l.weight,
+                            l.looping,
+                        )
                     })
                     .collect()
             })

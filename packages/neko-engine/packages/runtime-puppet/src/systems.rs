@@ -686,14 +686,14 @@ pub fn animation_blend_tick(world: &mut World, delta_ms: f32) {
     // Process crossfade
     let crossfade_done = {
         match world.get::<CrossfadeRequest>(root_entity) {
-            Some(cf) => cf.fade_elapsed_ms + delta_ms >= cf.fade_duration_ms,
+            Some(cf) => cf.fade_elapsed_ms() + delta_ms >= cf.fade_duration_ms(),
             None => false,
         }
     };
 
     if let Some(mut cf) = world.get_mut::<CrossfadeRequest>(root_entity) {
-        cf.fade_elapsed_ms += delta_ms;
-        let fade_t = (cf.fade_elapsed_ms / cf.fade_duration_ms.max(0.001)).clamp(0.0, 1.0);
+        cf.advance_ms(delta_ms);
+        let fade_t = (cf.fade_elapsed_ms() / cf.fade_duration_ms().max(0.001)).clamp(0.0, 1.0);
         let target_idx = cf.target_clip_index;
 
         // Adjust blend state weights: fade out old layers, fade in target
@@ -738,16 +738,16 @@ pub fn animation_blend_tick(world: &mut World, delta_ms: f32) {
             continue;
         }
         let duration = clip_data[layer.clip_index].0;
-        let advanced = layer.elapsed_ms + delta_ms;
+        let advanced = layer.elapsed_ms() + delta_ms;
         if advanced >= duration {
             if layer.looping {
-                layer.elapsed_ms = advanced % duration.max(0.001);
+                layer.set_elapsed_ms(advanced % duration.max(0.001));
             } else {
-                layer.elapsed_ms = duration;
+                layer.set_elapsed_ms(duration);
                 layer.weight = 0.0; // Non-looping done → fade out
             }
         } else {
-            layer.elapsed_ms = advanced;
+            layer.set_elapsed_ms(advanced);
         }
     }
 
@@ -759,7 +759,7 @@ pub fn animation_blend_tick(world: &mut World, delta_ms: f32) {
         }
         let (_, ref curves) = clip_data[layer.clip_index];
         for (param_name, kfs) in curves {
-            let value = sample_eased(kfs, layer.elapsed_ms);
+            let value = sample_eased(kfs, layer.elapsed_ms());
             *param_accum.entry(param_name.clone()).or_insert(0.0) += value * layer.weight;
         }
     }

@@ -10,6 +10,7 @@
 
 #![deny(clippy::all)]
 
+pub mod animation;
 pub mod codec;
 pub mod common;
 pub mod easing;
@@ -31,6 +32,7 @@ pub mod task;
 pub mod waveform;
 
 // Re-export commonly used types
+pub use animation::*;
 pub use codec::*;
 pub use common::*;
 pub use easing::Easing;

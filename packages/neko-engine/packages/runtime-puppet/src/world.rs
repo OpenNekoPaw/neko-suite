@@ -748,12 +748,7 @@ impl PuppetWorld for BevyPuppetWorld {
                 // Check if there's an active single-clip playback to migrate
                 if let Some(pb) = self.world.get::<AnimationPlayback>(root) {
                     if let Some(idx) = pb.clip_index {
-                        let layer = BlendLayer {
-                            clip_index: idx,
-                            elapsed_ms: pb.elapsed_ms,
-                            weight: 1.0,
-                            looping: pb.looping,
-                        };
+                        let layer = BlendLayer::new(idx, pb.elapsed_ms, 1.0, pb.looping);
                         if let Some(mut blend) = self.world.get_mut::<AnimationBlendState>(root) {
                             blend.layers.push(layer);
                         }
@@ -776,23 +771,20 @@ impl PuppetWorld for BevyPuppetWorld {
 
             if !already_present {
                 if let Some(mut blend) = self.world.get_mut::<AnimationBlendState>(root) {
-                    blend.layers.push(BlendLayer {
-                        clip_index: target_clip_index,
-                        elapsed_ms: 0.0,
-                        weight: 0.0,
-                        looping: loop_anim,
-                    });
+                    blend
+                        .layers
+                        .push(BlendLayer::new(target_clip_index, 0.0, 0.0, loop_anim));
                 }
             }
         }
 
         // Insert or replace CrossfadeRequest
-        self.world.entity_mut(root).insert(CrossfadeRequest {
+        self.world.entity_mut(root).insert(CrossfadeRequest::new(
             target_clip_index,
             fade_duration_ms,
-            fade_elapsed_ms: 0.0,
+            0.0,
             loop_anim,
-        });
+        ));
 
         Ok(())
     }
@@ -842,14 +834,16 @@ impl PuppetWorld for BevyPuppetWorld {
                 blend
                     .layers
                     .iter()
-                    .map(|l| BlendLayerInfo {
-                        clip_name: clip_names
-                            .get(l.clip_index)
-                            .cloned()
-                            .unwrap_or_else(|| format!("clip_{}", l.clip_index)),
-                        elapsed_ms: l.elapsed_ms,
-                        weight: l.weight,
-                        looping: l.looping,
+                    .map(|l| {
+                        BlendLayerInfo::new(
+                            clip_names
+                                .get(l.clip_index)
+                                .cloned()
+                                .unwrap_or_else(|| format!("clip_{}", l.clip_index)),
+                            l.elapsed_ms(),
+                            l.weight,
+                            l.looping,
+                        )
                     })
                     .collect()
             })
