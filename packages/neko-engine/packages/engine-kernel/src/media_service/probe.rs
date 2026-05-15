@@ -378,14 +378,21 @@ impl ProbeCache {
         Ok(info)
     }
 
-    /// Invalidate cache entry for a specific path
+    /// Invalidate cache entry for a specific path.
+    ///
+    /// TODO(P2): wire this to asset-change notifications from host registries.
+    #[allow(dead_code)]
     pub fn invalidate(&self, path: &Path) {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let mut cache = self.cache.write().unwrap();
         cache.remove(&canonical);
     }
 
-    /// Clear all cached entries
+    /// Clear all cached entries.
+    ///
+    /// TODO(P2): expose through a cache-maintenance endpoint when registry
+    /// invalidation is centralized.
+    #[allow(dead_code)]
     pub fn clear(&self) {
         let mut cache = self.cache.write().unwrap();
         cache.clear();

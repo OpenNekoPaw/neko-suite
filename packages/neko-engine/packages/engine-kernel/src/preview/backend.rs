@@ -1,5 +1,9 @@
 //! Preview backend contracts and default adapters.
 
+// TODO(P2): connect provider and encode backends to preview HTTP/WebSocket
+// routes after the registry-backed preview path is promoted.
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use crate::domain::Timeline;

@@ -1,5 +1,9 @@
 //! Preview provider contracts and CPU-backed default providers.
 
+// TODO(P2): wire these providers into host preview routes once the preview
+// registry fully replaces the host-api file registry path.
+#![allow(dead_code)]
+
 use crate::error::{Error, Result};
 use neko_runtime_media::{
     infer_projection, read_sidecar, ImageVariantFormat, ImageVariantRequest, ImageVariantRole,

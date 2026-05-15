@@ -18,7 +18,9 @@ pub const SCENE_EXPORT_QUEUE_CAPACITY: usize = 1;
 
 #[derive(Debug, Clone, Default)]
 pub struct SceneRenderSnapshot {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub generation: u64,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub render_world: RenderWorld,
 }
 
@@ -37,10 +39,12 @@ impl SceneSnapshotWatch {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn subscribe(&self) -> watch::Receiver<SceneRenderSnapshot> {
         self.tx.subscribe()
     }
 
+    #[cfg(test)]
     pub fn latest_generation(&self) -> u64 {
         self.tx.borrow().generation
     }
@@ -49,6 +53,7 @@ impl SceneSnapshotWatch {
 pub struct SceneExportFrameQueue {
     tx: mpsc::Sender<SceneRenderSnapshot>,
     rx: Mutex<mpsc::Receiver<SceneRenderSnapshot>>,
+    #[cfg(test)]
     capacity: usize,
 }
 
@@ -58,10 +63,12 @@ impl SceneExportFrameQueue {
         Self {
             tx,
             rx: Mutex::new(rx),
+            #[cfg(test)]
             capacity: SCENE_EXPORT_QUEUE_CAPACITY,
         }
     }
 
+    #[cfg(test)]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
@@ -113,6 +120,7 @@ struct SceneRenderGenerationTracker {
 }
 
 impl SceneRenderGenerationTracker {
+    #[cfg(test)]
     fn should_render(&self, generation: u64) -> bool {
         self.last_generation
             .lock()
@@ -241,10 +249,6 @@ impl SceneRenderer {
         Ok(output)
     }
 
-    pub fn should_render_generation(&self, generation: u64) -> bool {
-        self.generation.should_render(generation)
-    }
-
     fn record_generation(&self, generation: u64) -> Result<()> {
         self.generation.record(generation)
     }
@@ -264,6 +268,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(rx.borrow().generation, 2);
+        assert_eq!(rx.borrow().render_world.draw_list.len(), 0);
     }
 
     #[test]

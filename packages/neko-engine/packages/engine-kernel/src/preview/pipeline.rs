@@ -8,6 +8,10 @@
 //!     → VideoToolbox H.264 Encode → H.264 NAL units → WebSocket
 //! ```
 
+// TODO(P2): keep the encoded preview path available while current preview
+// routing uses the sink-based GPU frame backend.
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use crate::domain::Timeline;

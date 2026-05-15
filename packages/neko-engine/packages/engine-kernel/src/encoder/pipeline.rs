@@ -17,6 +17,10 @@
 //! - Atomic counters track progress without locks
 //! - Cancellation flag for graceful shutdown
 
+// TODO(P2): retire this legacy CPU/encode-only pipeline after export fully
+// migrates to sink-based zero-copy orchestration.
+#![allow(dead_code)]
+
 use crossbeam_channel::{bounded, select, Receiver, Sender};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -26,29 +30,12 @@ use crate::encoder::{
     ContainerFormat, EncodedPacket, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer,
 };
 use crate::error::{Error, Result};
-use crate::gpu::{CompositeLayer, GpuCompositor, GpuContext, GpuLayer};
+use crate::gpu::{CompositeLayer, GpuCompositor, GpuContext};
 use neko_engine_types::AudioEncoderConfig;
 
 // =============================================================================
 // Pipeline Types
 // =============================================================================
-
-/// Frame submitted to the pipeline for compositing (GPU texture-based)
-#[allow(dead_code)]
-pub struct GpuPipelineFrame {
-    /// Frame index (sequential, for ordering)
-    pub index: u64,
-    /// Presentation timestamp (time base units)
-    pub pts: i64,
-    /// GPU texture layers to composite
-    pub layers: Vec<GpuLayer>,
-    /// Output width
-    pub output_width: u32,
-    /// Output height
-    pub output_height: u32,
-    /// Background color [r, g, b, a]
-    pub background_color: [f32; 4],
-}
 
 /// Legacy frame for backward compatibility (CPU data-based)
 #[derive(Debug, Clone)]

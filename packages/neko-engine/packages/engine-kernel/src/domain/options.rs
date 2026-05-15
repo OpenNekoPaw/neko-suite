@@ -5,7 +5,7 @@
 
 use neko_engine_types::{
     AudioCodec, AudioEffectConfig, EncoderPreset, FrameFormat, HwEncoderType, Resolution,
-    VideoCodec, WaveformFormat,
+    VideoCodec,
 };
 
 /// Options for single frame capture (videos:capture / images:capture)
@@ -117,90 +117,6 @@ impl Default for TranscodeOptions {
     }
 }
 
-/// Options for stream creation (videos:stream / timelines:stream)
-#[derive(Debug, Clone)]
-pub struct StreamOptions {
-    /// Stream resolution (None = source resolution)
-    pub resolution: Option<Resolution>,
-    /// Stream frame rate (None = source fps)
-    pub fps: Option<f64>,
-    /// Start time in seconds
-    pub start_time: f64,
-}
-
-impl Default for StreamOptions {
-    fn default() -> Self {
-        Self {
-            resolution: None,
-            fps: None,
-            start_time: 0.0,
-        }
-    }
-}
-
-/// Options for waveform generation (videos:waveform / audios:waveform)
-#[derive(Debug, Clone)]
-pub struct WaveformOptions {
-    /// Peaks per second (resolution)
-    pub peaks_per_second: u32,
-    /// Specific channel (None = all channels)
-    pub channel: Option<u16>,
-    /// Time range (None = full duration)
-    pub time_range: Option<(f64, f64)>,
-    /// Output format
-    pub format: WaveformFormat,
-}
-
-impl Default for WaveformOptions {
-    fn default() -> Self {
-        Self {
-            peaks_per_second: 100,
-            channel: None,
-            time_range: None,
-            format: WaveformFormat::Json,
-        }
-    }
-}
-
-/// Options for proxy generation (videos:proxy)
-#[derive(Debug, Clone)]
-pub struct ProxyOptions {
-    /// Target resolution ("720p", "480p", etc.)
-    pub resolution: String,
-    /// Codec to use
-    pub codec: String,
-    /// Target bitrate
-    pub bitrate: Option<String>,
-}
-
-impl Default for ProxyOptions {
-    fn default() -> Self {
-        Self {
-            resolution: "720p".to_string(),
-            codec: "h264".to_string(),
-            bitrate: Some("2M".to_string()),
-        }
-    }
-}
-
-/// Options for timeline composite (timelines:composite)
-#[derive(Debug, Clone)]
-pub struct CompositeOptions {
-    /// Background color [r, g, b, a] (0.0-1.0)
-    pub background_color: [f64; 4],
-    /// Output format
-    pub output_format: FrameFormat,
-}
-
-impl Default for CompositeOptions {
-    fn default() -> Self {
-        Self {
-            background_color: [0.0, 0.0, 0.0, 1.0],
-            output_format: FrameFormat::Rgba,
-        }
-    }
-}
-
 /// Options for audio transcoding (audios:transcode)
 #[derive(Debug, Clone, Default)]
 pub struct AudioTranscodeOptions {
@@ -242,33 +158,6 @@ impl From<AudioCodec> for AudioOutputFormat {
             AudioCodec::Opus => Self::Opus,
             AudioCodec::Flac => Self::Flac,
             AudioCodec::Pcm | AudioCodec::Vorbis => Self::Pcm,
-        }
-    }
-}
-
-/// Options for image capture (images:capture)
-#[derive(Debug, Clone)]
-pub struct ImageCaptureOptions {
-    /// Output format
-    pub format: FrameFormat,
-    /// Compression quality
-    pub quality: u32,
-    /// Scale factor (None = original size)
-    pub scale: Option<f64>,
-    /// Target width (None = original)
-    pub width: Option<u32>,
-    /// Target height (None = original)
-    pub height: Option<u32>,
-}
-
-impl Default for ImageCaptureOptions {
-    fn default() -> Self {
-        Self {
-            format: FrameFormat::Jpeg,
-            quality: 85,
-            scale: None,
-            width: None,
-            height: None,
         }
     }
 }

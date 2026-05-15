@@ -10,7 +10,6 @@ use crate::error::{Error, Result};
 use crate::services::impls::scene_command_queue::SceneCommandQueue;
 use neko_runtime_scene::access::{
     BeginModelingSession, CommitModelingSession, CreativeAccess, DataAccess,
-    SceneRenderExtractInput, SceneRenderExtraction, SceneRenderExtractor,
 };
 use neko_runtime_scene::modeling_session::{
     BrushPatchApplyOutcome, ModelingSession, ModelingSessionStateDelta, TopologyChangeEvent,
@@ -101,17 +100,6 @@ impl SceneComputation {
     ) -> Result<BrushPatchApplyOutcome> {
         self.data(|world| world.apply_vertex_brush_patch(patch))
             .and_then(|result| result.map_err(|error| Error::Other(error.to_string())))
-    }
-
-    pub fn extract_render_world<C, E>(
-        &self,
-        input: SceneRenderExtractInput<'_, C>,
-        extractor: &mut E,
-    ) -> Result<SceneRenderExtraction<E::RenderWorld, E::Stats>>
-    where
-        E: SceneRenderExtractor<C>,
-    {
-        self.data(|world| world.extract_render_world(input, extractor))
     }
 
     fn lock_world(&self) -> Result<MutexGuard<'_, BevySceneWorld>> {

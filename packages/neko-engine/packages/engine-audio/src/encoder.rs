@@ -64,18 +64,6 @@ impl FfmpegAudioEncoder {
         }
     }
 
-    /// Convert SampleFormat to FFmpeg Sample format (planar for encoding)
-    #[allow(dead_code)]
-    fn to_ffmpeg_sample_format_planar(format: SampleFormat) -> Sample {
-        match format {
-            SampleFormat::U8 => Sample::U8(ffmpeg::format::sample::Type::Planar),
-            SampleFormat::S16 => Sample::I16(ffmpeg::format::sample::Type::Planar),
-            SampleFormat::S32 => Sample::I32(ffmpeg::format::sample::Type::Planar),
-            SampleFormat::F32 => Sample::F32(ffmpeg::format::sample::Type::Planar),
-            SampleFormat::F64 => Sample::F64(ffmpeg::format::sample::Type::Planar),
-        }
-    }
-
     /// Convert SampleFormat to FFmpeg Sample format (packed for input)
     fn to_ffmpeg_sample_format_packed(format: SampleFormat) -> Sample {
         match format {

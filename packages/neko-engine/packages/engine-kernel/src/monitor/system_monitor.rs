@@ -19,6 +19,7 @@ pub struct ResourceSnapshot {
     /// GPU VRAM usage in bytes, None if unavailable
     pub vram_bytes: Option<u64>,
     /// Timestamp of this snapshot
+    #[allow(dead_code)]
     pub timestamp: Instant,
 }
 
@@ -175,6 +176,7 @@ impl SystemMonitor {
     }
 
     /// Reset statistics
+    #[cfg(test)]
     pub fn reset(&mut self) {
         self.cpu_samples.clear();
         self.gpu_samples.clear();

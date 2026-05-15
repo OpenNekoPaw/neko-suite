@@ -18,7 +18,6 @@ mod effect_trait;
 mod encoder_bridge;
 pub mod error;
 mod gpu_layer;
-mod hal_import;
 pub mod lut3d;
 mod mask_rasterizer;
 mod ml_gpu_bridge;
@@ -31,7 +30,6 @@ pub mod shaders;
 mod shape_rasterizer;
 mod style_processor;
 mod text_renderer;
-mod texture;
 mod texture_compositor;
 mod texture_transition_processor;
 mod transition_processor;
@@ -91,7 +89,6 @@ pub use style_processor::{
     GlowParams, GpuStyleProcessor, LumaKeyParams, VignetteParams,
 };
 pub use text_renderer::{TextRenderer, TextShadowStyle, TextStyle};
-pub use texture::{TextureFormat, TextureHandle, TexturePool};
 pub use texture_compositor::{TextureCompositeResult, TextureCompositor};
 pub use texture_transition_processor::TextureTransitionProcessor;
 #[allow(deprecated)]

@@ -5,6 +5,10 @@
 //! boundaries so later GPU/codec extraction can move implementation crates
 //! without rewriting `ExportService`.
 
+// TODO(P2): encode-only backend contracts remain as the migration adapter for
+// the legacy async export pipeline until zero-copy sink export covers all paths.
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use crate::audio::{AudioEncoder, FfmpegAudioEncoder};

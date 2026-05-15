@@ -316,32 +316,6 @@ pub struct JviAudioProperties {
     pub muted: bool,
 }
 
-/// Animatable value - can be either a simple f32 or an object with baseValue
-/// This supports both formats:
-/// - Simple: `"volume": 1.0`
-/// - Object: `"volume": {"baseValue": 1.0}`
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum AnimatableValue {
-    Simple(f32),
-    WithBase { base_value: f32 },
-}
-
-impl AnimatableValue {
-    pub fn value(&self) -> f32 {
-        match self {
-            AnimatableValue::Simple(v) => *v,
-            AnimatableValue::WithBase { base_value } => *base_value,
-        }
-    }
-}
-
-impl Default for AnimatableValue {
-    fn default() -> Self {
-        AnimatableValue::Simple(1.0)
-    }
-}
-
 /// Custom deserializer for animatable values
 fn deserialize_animatable_value<'de, D>(deserializer: D) -> Result<f32, D::Error>
 where

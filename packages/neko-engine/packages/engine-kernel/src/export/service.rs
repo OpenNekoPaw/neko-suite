@@ -149,6 +149,7 @@ pub struct ExportService {
 
 impl ExportService {
     /// Create a new export service
+    #[allow(dead_code)]
     pub async fn new() -> Result<Self> {
         let gpu_ctx = Arc::new(
             GpuContext::new()
@@ -167,6 +168,7 @@ impl ExportService {
     }
 
     /// Create with existing GPU context and export sink factory.
+    #[allow(dead_code)]
     pub fn with_gpu_context_and_sink_factory(
         gpu_ctx: Arc<GpuContext>,
         sink_factory: Arc<dyn ExportSinkFactory>,
@@ -443,6 +445,7 @@ impl ExportService {
     }
 
     /// Subscribe to progress updates
+    #[allow(dead_code)]
     pub fn subscribe_progress(&self) -> broadcast::Receiver<ExportProgress> {
         self.progress_tx.subscribe()
     }
@@ -723,19 +726,6 @@ impl ExportService {
         let jobs_guard = jobs.read().await;
         if let Some(job) = jobs_guard.get(job_id) {
             job.decode_time_us.fetch_add(time_us, Ordering::Relaxed);
-        }
-    }
-
-    /// Update job progress
-    #[allow(dead_code)] // Phase 2: granular progress tracking
-    async fn update_job_progress(
-        jobs: &Arc<RwLock<HashMap<String, ExportJob>>>,
-        job_id: &str,
-        current_frame: u64,
-    ) {
-        let mut jobs_guard = jobs.write().await;
-        if let Some(job) = jobs_guard.get_mut(job_id) {
-            job.current_frame = current_frame;
         }
     }
 

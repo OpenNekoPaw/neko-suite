@@ -265,32 +265,6 @@ pub struct ExportStartResponse {
     pub total_frames: u64,
 }
 
-/// Response for POST /export/cancel
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportCancelResponse {
-    /// Whether cancellation was successful
-    pub success: bool,
-}
-
-/// Response for GET /export/status
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportStatusResponse {
-    /// Current progress
-    pub progress: ExportProgress,
-}
-
-/// Error response
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExportErrorResponse {
-    /// Error message
-    pub error: String,
-    /// Error code
-    pub code: u16,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

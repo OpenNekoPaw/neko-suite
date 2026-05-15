@@ -121,17 +121,6 @@ impl BufferPool {
         }
     }
 
-    /// Get current pool size
-    #[allow(dead_code)]
-    pub fn available_count(&self) -> usize {
-        self.inner.lock().unwrap().available.len()
-    }
-
-    /// Clear all pooled buffers
-    #[allow(dead_code)]
-    pub fn clear(&self) {
-        self.inner.lock().unwrap().available.clear();
-    }
 }
 
 #[cfg(test)]

@@ -9,9 +9,6 @@
 //! - https://developer.apple.com/documentation/metal/mtldevice
 //! - https://developer.apple.com/documentation/iosurface
 
-// Phase 2: macOS zero-copy import — IOSurface → Metal → wgpu
-#![allow(dead_code)]
-
 use crate::error::{GpuError as Error, GpuResult as Result};
 use crate::nv12_import::{ColorSpace, ImportedNv12Texture};
 use crate::GpuContext;
@@ -34,12 +31,9 @@ type IOSurfaceRef = *mut Object;
 // External C functions for IOSurface
 #[link(name = "IOSurface", kind = "framework")]
 extern "C" {
-    fn IOSurfaceGetWidth(surface: IOSurfaceRef) -> usize;
-    fn IOSurfaceGetHeight(surface: IOSurfaceRef) -> usize;
     fn IOSurfaceGetPlaneCount(surface: IOSurfaceRef) -> usize;
     fn IOSurfaceGetWidthOfPlane(surface: IOSurfaceRef, plane: usize) -> usize;
     fn IOSurfaceGetHeightOfPlane(surface: IOSurfaceRef, plane: usize) -> usize;
-    fn IOSurfaceGetBytesPerRowOfPlane(surface: IOSurfaceRef, plane: usize) -> usize;
 }
 
 // External C functions for CoreVideo
@@ -308,115 +302,10 @@ impl MacOsTextureImporter {
         })
     }
 
-    /// Import from IOSurface handle directly (for use with FFmpeg)
-    ///
-    /// WARNING: This function does NOT perform GPU synchronization.
-    /// The caller must ensure the IOSurface data is ready before calling.
-    /// For VideoToolbox output, use `import_videotoolbox` instead which
-    /// properly synchronizes using CVPixelBufferLockBaseAddress.
-    ///
-    /// # Safety
-    /// The io_surface must be a valid IOSurfaceRef with data already written.
-    pub unsafe fn import_iosurface(
-        &self,
-        io_surface: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
-    ) -> Result<ImportedNv12Texture> {
-        let io_surface_ref = io_surface as IOSurfaceRef;
-
-        if io_surface_ref.is_null() {
-            return Err(Error::Other("IOSurface is null".to_string()));
-        }
-
-        let plane_count = IOSurfaceGetPlaneCount(io_surface_ref);
-        if plane_count != 2 {
-            return Err(Error::Other(format!(
-                "Expected 2 planes for NV12, got {}",
-                plane_count
-            )));
-        }
-
-        let y_width = IOSurfaceGetWidthOfPlane(io_surface_ref, 0);
-        let y_height = IOSurfaceGetHeightOfPlane(io_surface_ref, 0);
-        let uv_width = IOSurfaceGetWidthOfPlane(io_surface_ref, 1);
-        let uv_height = IOSurfaceGetHeightOfPlane(io_surface_ref, 1);
-
-        // Use zero-copy Metal texture import
-        // Note: No GPU sync here - caller must ensure data is ready
-        self.create_metal_textures_from_iosurface(
-            std::ptr::null_mut(), // No CVPixelBuffer available
-            io_surface_ref,
-            y_width,
-            y_height,
-            uv_width,
-            uv_height,
-            gpu_texture,
-        )
-    }
-
     /// Get the Metal device
     pub fn metal_device(&self) -> &MTLDevice {
         &self.metal_device
     }
-}
-
-/// Helper to read IOSurface plane data to CPU buffer
-///
-/// # Safety
-/// The io_surface must be a valid IOSurfaceRef.
-pub unsafe fn read_iosurface_plane(
-    io_surface: usize,
-    plane: usize,
-) -> Result<(Vec<u8>, usize, usize, usize)> {
-    let io_surface_ref = io_surface as IOSurfaceRef;
-
-    if io_surface_ref.is_null() {
-        return Err(Error::Other("IOSurface is null".to_string()));
-    }
-
-    let width = IOSurfaceGetWidthOfPlane(io_surface_ref, plane);
-    let height = IOSurfaceGetHeightOfPlane(io_surface_ref, plane);
-    let bytes_per_row = IOSurfaceGetBytesPerRowOfPlane(io_surface_ref, plane);
-
-    // Lock the IOSurface for reading
-    #[allow(clashing_extern_declarations)]
-    #[link(name = "IOSurface", kind = "framework")]
-    extern "C" {
-        fn IOSurfaceLock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
-        fn IOSurfaceUnlock(surface: IOSurfaceRef, options: u32, seed: *mut u32) -> i32;
-        fn IOSurfaceGetBaseAddressOfPlane(surface: IOSurfaceRef, plane: usize) -> *const u8;
-    }
-
-    #[allow(non_upper_case_globals)]
-    const kIOSurfaceLockReadOnly: u32 = 1;
-
-    let lock_result = IOSurfaceLock(io_surface_ref, kIOSurfaceLockReadOnly, std::ptr::null_mut());
-    if lock_result != 0 {
-        return Err(Error::Other(format!(
-            "Failed to lock IOSurface: {}",
-            lock_result
-        )));
-    }
-
-    let base_address = IOSurfaceGetBaseAddressOfPlane(io_surface_ref, plane);
-    if base_address.is_null() {
-        IOSurfaceUnlock(io_surface_ref, kIOSurfaceLockReadOnly, std::ptr::null_mut());
-        return Err(Error::Other(
-            "IOSurface plane base address is null".to_string(),
-        ));
-    }
-
-    // Copy data
-    let mut data = Vec::with_capacity(bytes_per_row * height);
-    for row in 0..height {
-        let row_ptr = base_address.add(row * bytes_per_row);
-        let row_slice = std::slice::from_raw_parts(row_ptr, bytes_per_row);
-        data.extend_from_slice(row_slice);
-    }
-
-    IOSurfaceUnlock(io_surface_ref, kIOSurfaceLockReadOnly, std::ptr::null_mut());
-
-    Ok((data, width, height, bytes_per_row))
 }
 
 #[cfg(test)]

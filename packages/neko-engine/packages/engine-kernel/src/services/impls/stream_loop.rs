@@ -281,12 +281,6 @@ impl StreamPlaybackDelegate {
         Self { active_streams }
     }
 
-    /// Get a reference to the underlying ActiveStreams
-    #[allow(dead_code)] // Phase 2: stream introspection API
-    pub fn active_streams(&self) -> &Arc<ActiveStreams> {
-        &self.active_streams
-    }
-
     pub async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
         self.active_streams.stop(stream_id).await
     }
@@ -439,12 +433,6 @@ impl WallClockPacer {
     pub fn reset(&mut self) {
         self.start_time = std::time::Instant::now();
         self.frame_number = 0;
-    }
-
-    /// Get current frame count
-    #[allow(dead_code)] // Phase 2: pacer diagnostics
-    pub fn frame_count(&self) -> u64 {
-        self.frame_number
     }
 
     /// Get elapsed seconds since pacer start

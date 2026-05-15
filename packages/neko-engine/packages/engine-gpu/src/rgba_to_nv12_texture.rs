@@ -13,8 +13,7 @@
 //! 1. Input: RGBA texture from compositor
 //! 2. Render Pass 1: RGBA → Y (R8Unorm) at full resolution
 //! 3. Render Pass 2: RGBA → UV (RG8Unorm) at half resolution
-//! 4. Metal Blit: staging textures → IOSurface
-//! 5. Output: IOSurface textures ready for VideoToolbox
+//! 4. Output: IOSurface textures ready for VideoToolbox
 //!
 //! Note: wgpu doesn't support different-sized MRT attachments, so we use two passes.
 //! This is still efficient as both passes share the same input texture binding.
@@ -248,158 +247,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec2<f32> {
 }
 "#;
 
-/// Compute shader for RGBA to NV12 conversion (Compute + Blit approach)
-///
-/// Pipeline:
-/// 1. Compute shader: RGBA → R16Float/RG16Float intermediate textures
-/// 2. Blit render pass: intermediate → staging textures
-/// 3. Metal blit: staging → IOSurface
-///
-/// Note: A single-pass MRT approach would be more optimal, but wgpu does not
-/// support different-sized MRT attachments (Y=full res, UV=half res), making
-/// the dual render pass the permanent design.
-#[allow(dead_code)] // Phase 2: alternative compute-based NV12 conversion
-pub const RGBA_TO_NV12_TEXTURE_SHADER: &str = r#"
-// RGBA to NV12 Texture Conversion Compute Shader
-// Outputs to texture storage for zero-copy encoding pipeline
-
-struct Uniforms {
-    output_width: f32,
-    output_height: f32,
-    // Color space: 0 = BT.601, 1 = BT.709, 2 = BT.2020
-    color_space: u32,
-    _padding: u32,
-}
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(0) @binding(1) var input_texture: texture_2d<f32>;
-// Use r16float/rg16float instead of r8unorm/rg8unorm because Metal doesn't support
-// 8-bit formats as storage textures. The values will be clamped to [0,1] range.
-@group(0) @binding(2) var y_output: texture_storage_2d<r16float, write>;
-@group(0) @binding(3) var uv_output: texture_storage_2d<rg16float, write>;
-
-// BT.601 RGB to YUV (SD video)
-fn rgb_to_yuv_bt601(rgb: vec3<f32>) -> vec3<f32> {
-    let y = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
-    let u = -0.169 * rgb.r - 0.331 * rgb.g + 0.500 * rgb.b + 0.5;
-    let v = 0.500 * rgb.r - 0.419 * rgb.g - 0.081 * rgb.b + 0.5;
-    return vec3<f32>(y, u, v);
-}
-
-// BT.709 RGB to YUV (HD video)
-fn rgb_to_yuv_bt709(rgb: vec3<f32>) -> vec3<f32> {
-    let y = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
-    let u = -0.1146 * rgb.r - 0.3854 * rgb.g + 0.5000 * rgb.b + 0.5;
-    let v = 0.5000 * rgb.r - 0.4542 * rgb.g - 0.0458 * rgb.b + 0.5;
-    return vec3<f32>(y, u, v);
-}
-
-// BT.2020 RGB to YUV (UHD video)
-fn rgb_to_yuv_bt2020(rgb: vec3<f32>) -> vec3<f32> {
-    let y = 0.2627 * rgb.r + 0.6780 * rgb.g + 0.0593 * rgb.b;
-    let u = -0.1396 * rgb.r - 0.3604 * rgb.g + 0.5000 * rgb.b + 0.5;
-    let v = 0.5000 * rgb.r - 0.4598 * rgb.g - 0.0402 * rgb.b + 0.5;
-    return vec3<f32>(y, u, v);
-}
-
-fn rgb_to_yuv(rgb: vec3<f32>, color_space: u32) -> vec3<f32> {
-    switch color_space {
-        case 0u: { return rgb_to_yuv_bt601(rgb); }
-        case 2u: { return rgb_to_yuv_bt2020(rgb); }
-        default: { return rgb_to_yuv_bt709(rgb); }
-    }
-}
-
-// Combined Y and UV kernel: processes 2x2 blocks
-// Each thread handles one 2x2 block, writing 4 Y values and 1 UV pair
-@compute @workgroup_size(16, 16)
-fn convert_rgba_to_nv12(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let block_x = global_id.x;
-    let block_y = global_id.y;
-
-    let width = u32(uniforms.output_width);
-    let height = u32(uniforms.output_height);
-    let uv_width = width / 2u;
-    let uv_height = height / 2u;
-
-    if (block_x >= uv_width || block_y >= uv_height) {
-        return;
-    }
-
-    // Process 2x2 block
-    let x0 = block_x * 2u;
-    let y0 = block_y * 2u;
-
-    var u_sum: f32 = 0.0;
-    var v_sum: f32 = 0.0;
-
-    // Process each pixel in the 2x2 block
-    for (var dy: u32 = 0u; dy < 2u; dy = dy + 1u) {
-        for (var dx: u32 = 0u; dx < 2u; dx = dx + 1u) {
-            let px = min(x0 + dx, width - 1u);
-            let py = min(y0 + dy, height - 1u);
-
-            let rgba = textureLoad(input_texture, vec2<i32>(i32(px), i32(py)), 0);
-            let yuv = rgb_to_yuv(rgba.rgb, uniforms.color_space);
-
-            // Write Y value to Y plane texture
-            textureStore(y_output, vec2<i32>(i32(px), i32(py)), vec4<f32>(yuv.x, 0.0, 0.0, 1.0));
-
-            // Accumulate UV for averaging
-            u_sum = u_sum + yuv.y;
-            v_sum = v_sum + yuv.z;
-        }
-    }
-
-    // Average UV values and write to UV plane texture
-    let u_avg = u_sum / 4.0;
-    let v_avg = v_sum / 4.0;
-
-    textureStore(uv_output, vec2<i32>(i32(block_x), i32(block_y)), vec4<f32>(u_avg, v_avg, 0.0, 1.0));
-}
-"#;
-
-/// Blit shader for copying intermediate textures to staging/IOSurface textures
-#[allow(dead_code)] // Phase 2: used with RGBA_TO_NV12_TEXTURE_SHADER compute path
-pub const BLIT_SHADER: &str = r#"
-// Fullscreen triangle vertex shader
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-}
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    // Generate fullscreen triangle vertices
-    var out: VertexOutput;
-    let x = f32(i32(vertex_index & 1u) * 2 - 1);
-    let y = f32(i32(vertex_index >> 1u) * 2 - 1);
-    out.position = vec4<f32>(x, -y, 0.0, 1.0);
-    out.uv = vec2<f32>((x + 1.0) * 0.5, (y + 1.0) * 0.5);
-    return out;
-}
-
-// Y plane blit (R16Float -> R8Unorm)
-@group(0) @binding(0) var y_sampler: sampler;
-@group(0) @binding(1) var y_texture: texture_2d<f32>;
-
-@fragment
-fn fs_y_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let y = textureSample(y_texture, y_sampler, in.uv).r;
-    return vec4<f32>(y, 0.0, 0.0, 1.0);
-}
-
-// UV plane blit (RG16Float -> RG8Unorm)
-@group(0) @binding(0) var uv_sampler: sampler;
-@group(0) @binding(1) var uv_texture: texture_2d<f32>;
-
-@fragment
-fn fs_uv_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let uv = textureSample(uv_texture, uv_sampler, in.uv).rg;
-    return vec4<f32>(uv.r, uv.g, 0.0, 1.0);
-}
-"#;
-
 /// Uniform buffer for RGBA to NV12 render pipeline
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -409,10 +256,6 @@ pub struct RgbaToNv12RenderUniforms {
     pub color_space: u32,
     pub _padding: u32,
 }
-
-// Legacy alias for backward compatibility
-#[allow(dead_code)] // Phase 2: kept for API compatibility
-pub type RgbaToNv12TextureUniforms = RgbaToNv12RenderUniforms;
 
 /// GPU RGBA to NV12 texture converter for zero-copy encoding
 ///
@@ -441,17 +284,6 @@ pub struct RgbaToNv12TextureConverter {
     render_bind_group_layout: wgpu::BindGroupLayout,
     uniform_buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
-    /// Staging textures (R8Unorm/RG8Unorm, standard wgpu textures) - kept for fallback
-    staging_y_texture: Option<wgpu::Texture>,
-    staging_uv_texture: Option<wgpu::Texture>,
-    /// Metal staging textures (kept in sync with wgpu textures for direct Metal access)
-    staging_y_metal: Option<metal::Texture>,
-    staging_uv_metal: Option<metal::Texture>,
-    /// IOSurface-backed wgpu textures for direct rendering (true zero-copy)
-    #[allow(dead_code)] // Phase 2: direct IOSurface rendering
-    iosurface_y_wgpu: Option<wgpu::Texture>,
-    #[allow(dead_code)] // Phase 2: direct IOSurface rendering
-    iosurface_uv_wgpu: Option<wgpu::Texture>,
     /// Cached texture dimensions
     texture_size: (u32, u32),
     /// IOSurface exporter
@@ -614,80 +446,10 @@ impl RgbaToNv12TextureConverter {
             render_bind_group_layout,
             uniform_buffer,
             sampler,
-            staging_y_texture: None,
-            staging_uv_texture: None,
-            staging_y_metal: None,
-            staging_uv_metal: None,
-            iosurface_y_wgpu: None,
-            iosurface_uv_wgpu: None,
             texture_size: (0, 0),
             exporter,
             output_backing: None,
         })
-    }
-
-    /// Ensure staging textures exist with correct dimensions (legacy, for fallback)
-    /// Creates wgpu textures and uses wgpu's copy_texture_to_buffer for blit
-    ///
-    /// NOTE: This is no longer used in the main zero-copy path.
-    /// The new implementation renders directly to IOSurface-backed textures.
-    #[allow(dead_code)]
-    fn ensure_staging_textures(&mut self, width: u32, height: u32) {
-        if self.texture_size == (width, height)
-            && self.staging_y_texture.is_some()
-            && self.staging_uv_texture.is_some()
-        {
-            return;
-        }
-
-        let device = self.ctx.device();
-
-        // Create wgpu textures normally - wgpu will use its own Metal Device
-        let y_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Staging Y Texture (R8Unorm)"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-
-        let uv_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Staging UV Texture (RG8Unorm)"),
-            size: wgpu::Extent3d {
-                width: width / 2,
-                height: height / 2,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rg8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-
-        // Clear Metal texture references - we'll use wgpu copy instead
-        self.staging_y_metal = None;
-        self.staging_uv_metal = None;
-
-        self.staging_y_texture = Some(y_texture);
-        self.staging_uv_texture = Some(uv_texture);
-        self.texture_size = (width, height);
-
-        tracing::debug!(
-            "Created staging textures: Y={}x{} (R8Unorm), UV={}x{} (RG8Unorm)",
-            width,
-            height,
-            width / 2,
-            height / 2
-        );
     }
 
     /// Convert RGBA texture to NV12 and return IOSurface handle
@@ -846,144 +608,6 @@ impl RgbaToNv12TextureConverter {
         Ok(backing.io_surface_handle())
     }
 
-    /// Legacy CPU-intermediate blit (kept for fallback/debugging)
-    /// Copy staging textures to IOSurface using wgpu buffer copy (CPU intermediate)
-    #[allow(dead_code)]
-    fn blit_staging_to_iosurface_legacy(
-        &self,
-        staging_y: &wgpu::Texture,
-        staging_uv: &wgpu::Texture,
-        backing: &IOSurfaceBackingStore,
-        width: u32,
-        height: u32,
-    ) -> Result<()> {
-        tracing::debug!("blit_staging_to_iosurface: starting, {}x{}", width, height);
-
-        let device = self.ctx.device();
-        let queue = self.ctx.queue();
-
-        // Calculate buffer sizes with proper alignment
-        let y_bytes_per_row = width; // R8Unorm = 1 byte per pixel
-        let y_padded_bytes_per_row = (y_bytes_per_row + 255) & !255; // 256-byte alignment
-        let y_buffer_size = y_padded_bytes_per_row * height;
-
-        let uv_width = width / 2;
-        let uv_height = height / 2;
-        let uv_bytes_per_row = uv_width * 2; // RG8Unorm = 2 bytes per pixel
-        let uv_padded_bytes_per_row = (uv_bytes_per_row + 255) & !255;
-        let uv_buffer_size = uv_padded_bytes_per_row * uv_height;
-
-        // Create staging buffers
-        let y_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Y Staging Buffer"),
-            size: y_buffer_size as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        let uv_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("UV Staging Buffer"),
-            size: uv_buffer_size as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        // Copy textures to buffers
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Texture to Buffer Copy"),
-        });
-
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                texture: staging_y,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &y_buffer,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(y_padded_bytes_per_row),
-                    rows_per_image: Some(height),
-                },
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
-                texture: staging_uv,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyBuffer {
-                buffer: &uv_buffer,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(uv_padded_bytes_per_row),
-                    rows_per_image: Some(uv_height),
-                },
-            },
-            wgpu::Extent3d {
-                width: uv_width,
-                height: uv_height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        queue.submit(std::iter::once(encoder.finish()));
-
-        // Map buffers and copy to IOSurface
-        let y_slice = y_buffer.slice(..);
-        let uv_slice = uv_buffer.slice(..);
-
-        let (y_tx, y_rx) = std::sync::mpsc::channel();
-        let (uv_tx, uv_rx) = std::sync::mpsc::channel();
-
-        y_slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = y_tx.send(result);
-        });
-        uv_slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = uv_tx.send(result);
-        });
-
-        device.poll(wgpu::Maintain::Wait);
-
-        y_rx.recv()
-            .map_err(|_| crate::error::GpuError::Other("Y buffer map failed".to_string()))?
-            .map_err(|e| crate::error::GpuError::Other(format!("Y buffer async error: {:?}", e)))?;
-        uv_rx
-            .recv()
-            .map_err(|_| crate::error::GpuError::Other("UV buffer map failed".to_string()))?
-            .map_err(|e| {
-                crate::error::GpuError::Other(format!("UV buffer async error: {:?}", e))
-            })?;
-
-        // Copy data to IOSurface
-        unsafe {
-            backing.copy_from_buffers(
-                &y_slice.get_mapped_range(),
-                y_padded_bytes_per_row,
-                &uv_slice.get_mapped_range(),
-                uv_padded_bytes_per_row,
-                width,
-                height,
-            )?;
-        }
-
-        y_buffer.unmap();
-        uv_buffer.unmap();
-
-        tracing::debug!("blit_staging_to_iosurface: done");
-        Ok(())
-    }
-
     /// Get the cached output texture dimensions
     #[allow(dead_code)]
     pub fn cached_dimensions(&self) -> Option<(u32, u32)> {
@@ -1028,6 +652,6 @@ mod tests {
 
     #[test]
     fn test_uniforms_size() {
-        assert_eq!(std::mem::size_of::<RgbaToNv12TextureUniforms>(), 16);
+        assert_eq!(std::mem::size_of::<RgbaToNv12RenderUniforms>(), 16);
     }
 }

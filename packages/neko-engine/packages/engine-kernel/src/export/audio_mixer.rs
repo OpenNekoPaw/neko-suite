@@ -81,8 +81,11 @@ impl ActiveAudioElement {
 pub struct MixedAudioFrame {
     pub data: Vec<f32>,
     pub samples: usize,
+    #[allow(dead_code)]
     pub timestamp: f64,
+    #[allow(dead_code)]
     pub sample_rate: u32,
+    #[allow(dead_code)]
     pub channels: u16,
 }
 
@@ -382,6 +385,7 @@ impl AudioMixer {
         }))
     }
 
+    #[cfg(test)]
     pub fn to_s16_bytes(frame: &MixedAudioFrame) -> Vec<u8> {
         let mut output = Vec::with_capacity(frame.data.len() * 2);
         for &sample in &frame.data {

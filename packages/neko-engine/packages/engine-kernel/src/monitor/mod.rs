@@ -4,4 +4,4 @@
 
 mod system_monitor;
 
-pub use system_monitor::{ResourceSnapshot, SystemMonitor};
+pub use system_monitor::SystemMonitor;

@@ -19,15 +19,17 @@ use crate::error::Result;
 
 /// Parsed SSIM entry for a single frame
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Phase 2: quality metrics analysis
 pub struct SsimEntry {
     /// Frame number (1-based)
     pub frame: u64,
     /// SSIM for Y (luminance) channel
+    #[allow(dead_code)]
     pub y: f64,
     /// SSIM for U (chrominance) channel
+    #[allow(dead_code)]
     pub u: f64,
     /// SSIM for V (chrominance) channel
+    #[allow(dead_code)]
     pub v: f64,
     /// SSIM across all channels
     pub all: f64,
@@ -35,11 +37,12 @@ pub struct SsimEntry {
 
 /// Parsed PSNR entry for a single frame
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Phase 2: quality metrics analysis
 pub struct PsnrEntry {
     /// Frame number (1-based)
+    #[allow(dead_code)]
     pub frame: u64,
     /// Average MSE
+    #[allow(dead_code)]
     pub mse_avg: f64,
     /// Average PSNR in dB
     pub psnr_avg: f64,

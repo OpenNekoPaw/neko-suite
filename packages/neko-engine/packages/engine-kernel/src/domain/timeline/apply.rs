@@ -459,6 +459,14 @@ impl Timeline {
         }
 
         let track = self.tracks.remove(payload.from_index);
+        if track.id != payload.track_id {
+            let actual_track_id = track.id.clone();
+            self.tracks.insert(payload.from_index, track);
+            return Err(crate::error::Error::Other(format!(
+                "Track reorder id mismatch: expected={}, actual={}",
+                payload.track_id, actual_track_id
+            )));
+        }
         self.tracks.insert(payload.to_index, track);
         Ok(())
     }

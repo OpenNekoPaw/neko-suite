@@ -4,5 +4,3 @@
 //! require heavier deps such as `cosmic-text` and therefore stay in engine-kernel.
 
 pub mod text_mesh;
-
-pub use text_mesh::{generate_text_mesh, TextMeshError, TextMeshParams};

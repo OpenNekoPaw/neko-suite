@@ -9,7 +9,6 @@
 //! - GPU encoder ← GPU texture (zero copy)
 
 use super::compositor::{BlendMode, Transform2D};
-use super::nv12_import::ImportedNv12Texture;
 
 /// GPU texture layer for compositing
 ///
@@ -44,20 +43,6 @@ pub struct GpuMask {
     pub view: wgpu::TextureView,
     /// Whether mask is inverted
     pub inverted: bool,
-}
-
-/// Source for GPU layer data
-#[allow(dead_code)]
-pub enum GpuLayerSource<'a> {
-    /// From imported NV12 texture (hardware decoded)
-    Nv12(&'a ImportedNv12Texture),
-    /// From existing RGBA texture
-    Rgba {
-        texture: &'a wgpu::Texture,
-        view: &'a wgpu::TextureView,
-        width: u32,
-        height: u32,
-    },
 }
 
 impl GpuLayer {

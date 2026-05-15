@@ -10,7 +10,6 @@ pub enum FrameData {
     /// CPU memory buffer
     Cpu(Vec<u8>),
     /// GPU texture handle (platform-specific)
-    #[allow(dead_code)]
     Gpu(GpuTextureHandle),
 }
 

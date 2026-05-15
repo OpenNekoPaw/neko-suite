@@ -7,8 +7,9 @@
 //!   → GpuLayer → TextureCompositor → RGBA texture → NV12 (GPU) → Encoder
 //! ```
 //!
-//! All compositing stays on GPU. RGBA→NV12 conversion is done via GPU compute
-//! shader to avoid CPU overhead. Only the final NV12 readback is CPU-bound.
+//! All compositing stays on GPU. macOS export uses an IOSurface-backed
+//! zero-copy path; CPU/NV12 helpers are retained only for diagnostics and
+//! non-macOS fallback work.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,11 +58,11 @@ pub struct GpuExportPipeline {
     /// Multi-layer GPU texture compositor
     compositor: TextureCompositor,
     /// RGBA → NV12 converter for encoder output
+    #[allow(dead_code)]
     rgba_to_nv12: RgbaToNv12Converter,
     /// Timeline data
     timeline: Timeline,
     /// Export settings
-    #[allow(dead_code)]
     settings: ExportSettings,
     /// Total frames to export
     total_frames: u64,
@@ -225,6 +226,7 @@ impl GpuExportPipeline {
             time = %format!("{:.3}s", time),
         )
     )]
+    #[allow(dead_code)]
     pub fn process_frame(
         &mut self,
         time: f64,
@@ -369,8 +371,9 @@ impl GpuExportPipeline {
     /// Process a single frame and read back to CPU
     ///
     /// Calls `process_frame()` then reads the GPU texture to CPU memory.
-    /// CPU readback is needed because hardware encoder zero-copy is not yet implemented.
+    /// CPU readback is used only by diagnostic and non-zero-copy fallback paths.
     #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    #[allow(dead_code)]
     pub fn process_frame_to_cpu(
         &mut self,
         time: f64,
@@ -388,6 +391,7 @@ impl GpuExportPipeline {
     /// Full pipeline: Decode → NV12 Import → RGBA Convert → Composite → NV12 Convert
     /// The RGBA→NV12 conversion is done on GPU via compute shader.
     #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    #[allow(dead_code)]
     pub fn process_frame_to_nv12(
         &mut self,
         time: f64,
@@ -402,6 +406,7 @@ impl GpuExportPipeline {
     /// Returns NV12 data along with timing for each pipeline stage.
     /// Use this method when you need performance metrics.
     #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    #[allow(dead_code)]
     pub fn process_frame_to_nv12_timed(
         &mut self,
         time: f64,
@@ -464,6 +469,7 @@ impl GpuExportPipeline {
     /// Returns the IOSurface handle that can be used with `HwAccelEncoder::encode_frame_gpu()`.
     #[cfg(target_os = "macos")]
     #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
+    #[allow(dead_code)]
     pub fn process_frame_to_iosurface(
         &mut self,
         time: f64,
@@ -1145,27 +1151,6 @@ impl GpuExportPipeline {
         );
 
         Some(layer)
-    }
-
-    /// Decode a media element to a GPU layer
-    ///
-    /// Pipeline: HwAccelDecoder → Nv12GpuTexture → ImportedNv12Texture → RGBA → GpuLayer
-    #[tracing::instrument(
-        skip(self, element),
-        fields(
-            src = %element.source_path().unwrap_or_default(),
-            z_index = z_index,
-        )
-    )]
-    #[allow(dead_code)] // Phase 2: convenience wrapper over decode_to_gpu_layer_timed
-    fn decode_to_gpu_layer(
-        &mut self,
-        element: &Element,
-        timeline_time: f64,
-        z_index: i32,
-    ) -> Result<Option<GpuLayer>> {
-        let mut timing = GpuPipelineTiming::default();
-        self.decode_to_gpu_layer_timed(element, timeline_time, z_index, &mut timing)
     }
 
     /// Decode a media element to a GPU layer with timing breakdown

@@ -1,4 +1,6 @@
 use super::*;
+use crate::domain::operations::EditOperationEnvelope;
+use serde_json::json;
 
 #[test]
 fn test_timeline_total_frames() {
@@ -80,4 +82,30 @@ fn test_element_source_time() {
 
     assert_eq!(element.get_source_time(5.0), 2.0);
     assert_eq!(element.get_source_time(10.0), 7.0);
+}
+
+#[test]
+fn track_reorder_rejects_mismatched_track_id() {
+    let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
+    timeline.tracks = vec![
+        Track::new("video", TrackType::Video),
+        Track::new("audio", TrackType::Audio),
+    ];
+
+    let op = EditOperationEnvelope {
+        op_type: "track.reorder".to_string(),
+        payload: json!({
+            "trackId": "audio",
+            "fromIndex": 0,
+            "toIndex": 1
+        }),
+    };
+
+    let error = match timeline.try_apply_operation(&op) {
+        Ok(_) => panic!("mismatched reorder should fail"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("Track reorder id mismatch"));
+    assert_eq!(timeline.tracks[0].id, "video");
+    assert_eq!(timeline.tracks[1].id, "audio");
 }

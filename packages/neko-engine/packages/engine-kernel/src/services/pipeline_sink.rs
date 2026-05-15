@@ -15,6 +15,7 @@ pub use neko_engine_types::{
 };
 
 /// Convert a pure pipeline contract error into the kernel domain error type.
+#[allow(dead_code)]
 pub fn pipeline_contract_error(error: PipelineContractError) -> Error {
     match error {
         PipelineContractError::UnsupportedHandle { .. }
@@ -27,6 +28,7 @@ pub fn pipeline_contract_error(error: PipelineContractError) -> Error {
 }
 
 /// Kernel convenience helpers for GPU leases.
+#[allow(dead_code)]
 pub trait KernelGpuFrameLeaseExt {
     /// Return the native encoder handle for platforms supported in P0.
     fn native_encoder_handle_kernel(&self) -> Result<usize>;

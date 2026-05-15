@@ -7,6 +7,5 @@ mod converter;
 mod loader;
 mod types;
 
-pub use converter::ProjectConverter;
 pub use loader::JviLoader;
 pub use types::*;
