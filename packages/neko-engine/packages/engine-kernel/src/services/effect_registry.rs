@@ -59,11 +59,7 @@ impl EffectRegistry {
     }
 
     /// Resolve a registered two-input transition capability with normalized progress.
-    pub fn resolve_transition(
-        &self,
-        id: &str,
-        progress: f32,
-    ) -> Option<ResolvedTransitionEffect> {
+    pub fn resolve_transition(&self, id: &str, progress: f32) -> Option<ResolvedTransitionEffect> {
         let capability = self.get_capability(id)?;
         if capability.kind != EffectKind::Transition {
             return None;
@@ -340,7 +336,10 @@ fn transition_capability(id: &str, name: &str, category: &str) -> EffectCapabili
         source: EffectSource::BuiltIn,
         source_id: None,
         name: name.to_string(),
-        name_key: Some(format!("effects.transitions.{}", id.trim_start_matches("transition-"))),
+        name_key: Some(format!(
+            "effects.transitions.{}",
+            id.trim_start_matches("transition-")
+        )),
         description: None,
         category: Some(category.to_string()),
         gpu_accelerated: true,

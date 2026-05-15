@@ -13,8 +13,9 @@ use crate::encoder::{
     AsyncExportPipeline, CompositedFrame, EncodedPacket as EncoderPacket, PipelineConfig,
 };
 use crate::error::{Error, Result};
-use crate::services::pipeline_sink::{
-    AudioEncodedPacket, AudioOutput, PipelineOutput, PipelineSink, VideoGpuFrame, VideoOutput,
+use crate::services::pipeline_sink::PipelineSink;
+use neko_engine_types::{
+    AudioEncodedPacket, AudioOutput, PipelineOutput, VideoGpuFrame, VideoOutput,
 };
 
 /// Export sink backed by a bounded worker command queue.
@@ -300,7 +301,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use crate::services::pipeline_sink::{
+    use neko_engine_types::{
         GpuFrameLease, GpuOutputHandle, PipelineOutput, VideoGpuFrame, VideoOutput,
     };
 

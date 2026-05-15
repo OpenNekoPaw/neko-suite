@@ -10,7 +10,8 @@ use neko_runtime_puppet::animation_blend::BlendLayerInfo;
 use neko_runtime_puppet::moc3::expression::ExpressionInfo;
 use neko_runtime_puppet::world::{DeformedMesh, ParameterInfo, PuppetDelta, PuppetSnapshot};
 
-use super::pipeline_sink::{PipelineSink, VideoOutput};
+use super::pipeline_sink::PipelineSink;
+use neko_engine_types::VideoOutput;
 
 /// Puppet clip export configuration.
 #[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize)]

@@ -1,7 +1,7 @@
 //! Export Service - Main orchestrator for compat mode video export
 //!
-//! Coordinates GpuExportPipeline, AudioMixer, and AsyncExportPipeline
-//! to perform server-side video export with audio mixing.
+//! Coordinates export backend adapters to perform server-side video export with
+//! audio mixing.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -10,33 +10,31 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::{broadcast, Mutex, RwLock};
 
-use crate::audio::{AudioEncoder, AudioEncoderConfig, FfmpegAudioEncoder, SampleFormat};
 use crate::encoder::{ContainerFormat, EncodedPacket, PipelineConfig};
 use crate::error::{Error, Result};
 use crate::gpu::{GpuContext, PipelinePriority};
 use crate::monitor::SystemMonitor;
-use crate::services::impls::muxer_sink::MuxerSink;
-use crate::services::pipeline_sink::{
-    AudioEncodedPacket, AudioOutput, GpuFrameLease, GpuOutputHandle, PipelineOutput, PipelineSink,
-    VideoGpuFrame, VideoOutput,
-};
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
+use neko_engine_types::{
+    AudioCodec, AudioEncodedPacket, AudioOutput, GpuFrameLease, PipelineOutput, VideoGpuFrame,
+    VideoOutput,
+};
 
-use super::audio_mixer::AudioMixer;
-use super::gpu_export_pipeline::GpuExportPipeline;
+use super::backend::{build_audio_encoder_config, build_export_metadata, ExportBackendBundle};
 use super::types::{
     ExportJobConfig, ExportMetadata, ExportProgress, ExportStartResponse, ExportState, ExportStats,
     QueueEntry, QueueStatus,
 };
+use super::ExportSinkFactory;
 
 /// Active export job
-struct ExportJob {
+pub(super) struct ExportJob {
     /// Job configuration
     config: ExportJobConfig,
     /// Current state
     state: ExportState,
     /// Cancellation flag
-    cancel_flag: Arc<AtomicBool>,
+    pub(super) cancel_flag: Arc<AtomicBool>,
     /// Start time
     start_time: Instant,
     /// Current frame
@@ -56,7 +54,7 @@ struct ExportJob {
 }
 
 impl ExportJob {
-    fn new(config: ExportJobConfig, total_frames: u64) -> Self {
+    pub(super) fn new(config: ExportJobConfig, total_frames: u64) -> Self {
         Self {
             config,
             state: ExportState::Pending,
@@ -139,14 +137,14 @@ impl ExportJob {
 
 /// Export service for managing export jobs
 pub struct ExportService {
-    /// GPU context for compositing
-    gpu_ctx: Arc<GpuContext>,
     /// Active export jobs
     jobs: Arc<RwLock<HashMap<String, ExportJob>>>,
     /// Pending job queue (FIFO order)
     pending: Arc<Mutex<VecDeque<(ExportJobConfig, u64)>>>,
     /// Progress broadcast channel
     progress_tx: broadcast::Sender<ExportProgress>,
+    /// Export backend adapters
+    backends: Arc<ExportBackendBundle>,
 }
 
 impl ExportService {
@@ -158,25 +156,35 @@ impl ExportService {
                 .map_err(|e| Error::Other(format!("Failed to create GPU context: {}", e)))?,
         );
 
-        let (progress_tx, _) = broadcast::channel(100);
-
-        Ok(Self {
-            gpu_ctx,
-            jobs: Arc::new(RwLock::new(HashMap::new())),
-            pending: Arc::new(Mutex::new(VecDeque::new())),
-            progress_tx,
-        })
+        Ok(Self::with_backend_bundle(Arc::new(
+            ExportBackendBundle::with_gpu_context(gpu_ctx),
+        )))
     }
 
     /// Create with existing GPU context
     pub fn with_gpu_context(gpu_ctx: Arc<GpuContext>) -> Self {
+        Self::with_backend_bundle(Arc::new(ExportBackendBundle::with_gpu_context(gpu_ctx)))
+    }
+
+    /// Create with existing GPU context and export sink factory.
+    pub fn with_gpu_context_and_sink_factory(
+        gpu_ctx: Arc<GpuContext>,
+        sink_factory: Arc<dyn ExportSinkFactory>,
+    ) -> Self {
+        Self::with_backend_bundle(Arc::new(
+            ExportBackendBundle::with_gpu_context_and_sink_factory(gpu_ctx, sink_factory),
+        ))
+    }
+
+    /// Create with fully injected backend adapters.
+    pub fn with_backend_bundle(backends: Arc<ExportBackendBundle>) -> Self {
         let (progress_tx, _) = broadcast::channel(100);
 
         Self {
-            gpu_ctx,
             jobs: Arc::new(RwLock::new(HashMap::new())),
             pending: Arc::new(Mutex::new(VecDeque::new())),
             progress_tx,
+            backends,
         }
     }
 
@@ -249,8 +257,8 @@ impl ExportService {
         Self::process_next_from_queue(
             Arc::clone(&self.jobs),
             Arc::clone(&self.pending),
-            Arc::clone(&self.gpu_ctx),
             self.progress_tx.clone(),
+            Arc::clone(&self.backends),
         )
         .await;
     }
@@ -262,8 +270,8 @@ impl ExportService {
     async fn process_next_from_queue(
         jobs: Arc<RwLock<HashMap<String, ExportJob>>>,
         pending: Arc<Mutex<VecDeque<(ExportJobConfig, u64)>>>,
-        gpu_ctx: Arc<GpuContext>,
         progress_tx: broadcast::Sender<ExportProgress>,
+        backends: Arc<ExportBackendBundle>,
     ) {
         // Check if any job is still running (non-terminal state)
         {
@@ -305,16 +313,16 @@ impl ExportService {
 
         let jobs_c = Arc::clone(&jobs);
         let pending_c = Arc::clone(&pending);
-        let gpu_ctx_c = Arc::clone(&gpu_ctx);
         let progress_tx_c = progress_tx.clone();
+        let backends_c = Arc::clone(&backends);
         let job_id_c = job_id.clone();
 
         tokio::task::spawn_blocking(move || {
             let result = Self::export_worker_sync(
                 config,
-                Arc::clone(&gpu_ctx_c),
                 jobs_c.clone(),
                 progress_tx_c.clone(),
+                backends_c,
                 cancel_flag,
             );
 
@@ -340,7 +348,7 @@ impl ExportService {
                     }
                 }
                 // Continue processing the queue
-                Self::process_next_from_queue(jobs_c, pending_c, gpu_ctx_c, progress_tx_c).await;
+                Self::process_next_from_queue(jobs_c, pending_c, progress_tx_c, backends).await;
             });
 
             result
@@ -366,18 +374,18 @@ impl ExportService {
         }
 
         // Spawn export worker in blocking thread
-        let gpu_ctx_c = Arc::clone(&self.gpu_ctx);
         let jobs_c = Arc::clone(&self.jobs);
         let pending_c = Arc::clone(&self.pending);
         let progress_tx_c = self.progress_tx.clone();
+        let backends_c = Arc::clone(&self.backends);
         let job_id_clone = job_id.clone();
 
         tokio::task::spawn_blocking(move || {
             let result = Self::export_worker_sync(
                 config,
-                gpu_ctx_c.clone(),
                 jobs_c.clone(),
                 progress_tx_c.clone(),
+                backends_c.clone(),
                 cancel_flag,
             );
 
@@ -405,7 +413,7 @@ impl ExportService {
                 }
 
                 // Process next queued job if any
-                Self::process_next_from_queue(jobs_c, pending_c, gpu_ctx_c, progress_tx_c).await;
+                Self::process_next_from_queue(jobs_c, pending_c, progress_tx_c, backends_c).await;
             });
 
             result
@@ -443,15 +451,15 @@ impl ExportService {
     ///
     /// This function runs in a blocking thread because GpuExportPipeline
     /// and AudioMixer contain FFmpeg contexts that are not Send.
-    fn export_worker_sync(
+    pub(super) fn export_worker_sync(
         config: ExportJobConfig,
-        gpu_ctx: Arc<GpuContext>,
         jobs: Arc<RwLock<HashMap<String, ExportJob>>>,
         progress_tx: broadcast::Sender<ExportProgress>,
+        backends: Arc<ExportBackendBundle>,
         cancel_flag: Arc<AtomicBool>,
     ) -> Result<()> {
         let job_id = config.job_id.clone();
-        let budget = gpu_ctx.budget_controller().clone();
+        let budget = backends.render_factory.budget_controller();
         let budget_pipeline_id = format!("export:{}", job_id);
         let _budget_guard =
             budget.register_pipeline(budget_pipeline_id.clone(), PipelinePriority::Export);
@@ -466,82 +474,26 @@ impl ExportService {
             ));
         }
 
-        // Initialize GPU export pipeline (decode + composite)
-        let mut gpu_pipeline = GpuExportPipeline::new(
-            config.timeline.clone(),
-            config.settings.clone(),
-            Arc::clone(&gpu_ctx),
-            None,
-        )?;
-        gpu_pipeline.initialize()?;
+        // Initialize render backend (decode + composite)
+        let mut render_backend = backends.render_factory.create(&config)?;
+        render_backend.initialize()?;
 
-        // Initialize audio mixer and encoder
-        let mut audio_mixer = AudioMixer::new(config.timeline.clone(), &config.settings);
-        let mut audio_encoder: Option<FfmpegAudioEncoder> = None;
-        let audio_encoder_config: Option<AudioEncoderConfig>;
+        // Initialize audio mix and encode backends.
+        let mut audio_backend = backends.audio_factory.create(&config)?;
+        let audio_encoder_config = audio_backend
+            .as_ref()
+            .map(|audio| build_audio_encoder_config(&config, audio.as_ref()));
+        let mut audio_encoder = match audio_encoder_config.clone() {
+            Some(audio_config) => backends.audio_encode_factory.create(audio_config)?,
+            None => None,
+        };
 
-        match audio_mixer.initialize() {
-            Ok(()) => {
-                // Create audio encoder config
-                let audio_cfg = AudioEncoderConfig::new(
-                    audio_mixer.sample_rate(),
-                    audio_mixer.channels(),
-                    config.settings.audio_codec,
-                )
-                .with_bitrate(config.settings.audio_bitrate.unwrap_or(128_000))
-                .with_sample_format(SampleFormat::F32);
-
-                // Open audio encoder
-                let mut enc = FfmpegAudioEncoder::new();
-                match enc.open(&audio_cfg) {
-                    Ok(()) => {
-                        tracing::info!(
-                            "Audio encoder opened: {:?}, {}Hz, {}ch",
-                            audio_cfg.codec,
-                            audio_cfg.sample_rate,
-                            audio_cfg.channels
-                        );
-                        audio_encoder = Some(enc);
-                        audio_encoder_config = Some(audio_cfg);
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Audio encoder init failed (continuing without audio): {}",
-                            e
-                        );
-                        audio_encoder_config = None;
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Audio mixer initialization failed (continuing without audio): {}",
-                    e
-                );
-                audio_encoder_config = None;
-            }
-        }
-
-        let total_frames = gpu_pipeline.total_frames();
-        let (output_width, output_height) = gpu_pipeline.output_dimensions();
+        let total_frames = render_backend.total_frames();
+        let (output_width, output_height) = render_backend.output_dimensions();
         let fps = config.settings.fps;
 
         // Build export metadata
-        let metadata = ExportMetadata {
-            width: output_width,
-            height: output_height,
-            fps,
-            video_bitrate: config.settings.video_bitrate.unwrap_or(5_000_000),
-            audio_bitrate: config.settings.audio_bitrate.unwrap_or(128_000),
-            video_codec: format!("{:?}", config.settings.video_codec),
-            audio_codec: format!("{:?}", config.settings.audio_codec),
-            render_mode: "wgpu".to_string(),
-            hw_encoder: if config.settings.hw_encoder != super::types::ExportHwEncoder::None {
-                Some(format!("{:?}", config.settings.hw_encoder))
-            } else {
-                None
-            },
-        };
+        let metadata = build_export_metadata(&config, output_width, output_height);
 
         // Update job with metadata
         {
@@ -562,7 +514,7 @@ impl ExportService {
         };
 
         // Start sink-backed encode/mux pipeline (compositing done by GpuExportPipeline).
-        let muxer_sink = MuxerSink::new(pipeline_config)?;
+        let export_sink = backends.sink_factory.create(pipeline_config)?;
 
         // Update state to Encoding
         {
@@ -585,7 +537,7 @@ impl ExportService {
         for frame_idx in 0..total_frames {
             // Check cancellation
             if cancel_flag.load(Ordering::Relaxed) {
-                let _ = muxer_sink.cancel();
+                let _ = export_sink.cancel();
                 return Err(Error::Cancelled);
             }
 
@@ -597,27 +549,10 @@ impl ExportService {
 
             // GPU pipeline: decode + composite + NV12 convert (all on GPU)
             // Use zero-copy path on macOS, CPU path on other platforms
-            #[cfg(target_os = "macos")]
-            let (nv12_data, gpu_handle, gpu_timing) = {
-                // Zero-copy: get IOSurface handle directly
-                match gpu_pipeline.process_frame_to_iosurface_timed(time, [0.0, 0.0, 0.0, 1.0]) {
-                    Ok(result) => (result.data, result.gpu_handle, result.timing),
-                    Err(e) => {
-                        return Err(Error::UnsupportedCapability(format!(
-                            "macOS zero-copy IOSurface export failed at {:.3}s: {}",
-                            time, e
-                        )))
-                    }
-                }
-            };
-
-            #[cfg(not(target_os = "macos"))]
-            let (nv12_data, gpu_handle, gpu_timing) = {
-                return Err(Error::UnsupportedCapability(format!(
-                    "zero-copy GPU export output is not implemented on {}",
-                    std::env::consts::OS
-                )));
-            };
+            let rendered = render_backend.render_frame(time, [0.0, 0.0, 0.0, 1.0])?;
+            let nv12_data = rendered.nv12_data;
+            let gpu_handle = rendered.gpu_handle;
+            let gpu_timing = rendered.timing;
 
             // Copy detailed GPU timing to frame timing
             timing.hw_decode_ns = gpu_timing.hw_decode_ns;
@@ -630,33 +565,18 @@ impl ExportService {
             timing.gpu_ns = gpu_timing.total_ns();
 
             // Mix and encode audio for this frame (streaming)
-            if let Some(ref mut enc) = audio_encoder {
-                if let Ok(Some(audio_frame)) = audio_mixer.mix_frame(time) {
-                    // Convert F32 samples to bytes for encoder
-                    let audio_bytes: &[u8] = bytemuck::cast_slice(&audio_frame.data);
-                    let samples_per_channel = audio_frame.samples;
-
-                    match enc.encode_frame(audio_bytes, samples_per_channel) {
+            if let (Some(ref mut enc), Some(ref mut audio)) =
+                (audio_encoder.as_mut(), audio_backend.as_mut())
+            {
+                if let Ok(Some(audio_frame)) = audio.mix_frame(time) {
+                    match enc.encode_frame(&audio_frame) {
                         Ok(packets) => {
                             for audio_pkt in packets {
-                                let mux_pkt = EncodedPacket {
-                                    data: audio_pkt.data,
-                                    pts: audio_pkt.pts,
-                                    dts: audio_pkt.pts,
-                                    is_keyframe: true,
-                                    duration: audio_pkt.duration,
-                                    stream_index: 1,
-                                };
-                                if let Err(e) = muxer_sink.submit(PipelineOutput::Audio(
-                                    AudioOutput::EncodedPacket(AudioEncodedPacket {
-                                        data: mux_pkt.data,
-                                        pts: mux_pkt.pts,
-                                        dts: mux_pkt.dts,
-                                        duration: mux_pkt.duration,
-                                        codec: config.settings.audio_codec,
-                                        stream_index: mux_pkt.stream_index,
-                                    }),
-                                )) {
+                                if let Err(e) = submit_audio_packet_to_sink(
+                                    export_sink.as_ref(),
+                                    audio_pkt,
+                                    config.settings.audio_codec,
+                                ) {
                                     tracing::warn!("Failed to submit audio packet: {}", e);
                                 }
                             }
@@ -676,9 +596,8 @@ impl ExportService {
 
             // Submit frame to encoder
             let encode_start = Instant::now();
-            let gpu_handle = export_gpu_output_handle(gpu_handle)?;
             let _ = nv12_data;
-            muxer_sink.submit(PipelineOutput::Video(VideoOutput::GpuFrame(
+            export_sink.submit(PipelineOutput::Video(VideoOutput::GpuFrame(
                 VideoGpuFrame {
                     lease: GpuFrameLease::new(gpu_handle),
                     pts: frame_idx as i64,
@@ -697,11 +616,9 @@ impl ExportService {
                 PipelinePriority::Export,
                 frame_start.elapsed(),
             );
-            budget.observe_submitted_work_done(
-                budget_pipeline_id.clone(),
-                PipelinePriority::Export,
-                gpu_ctx.queue(),
-            );
+            backends
+                .render_factory
+                .observe_submitted_work_done(&budget_pipeline_id);
 
             // Record frame timing (outputs stats every 100ms)
             stats_collector.record_frame(timing);
@@ -736,24 +653,11 @@ impl ExportService {
             match enc.flush() {
                 Ok(packets) => {
                     for audio_pkt in packets {
-                        let mux_pkt = EncodedPacket {
-                            data: audio_pkt.data,
-                            pts: audio_pkt.pts,
-                            dts: audio_pkt.pts,
-                            is_keyframe: true,
-                            duration: audio_pkt.duration,
-                            stream_index: 1,
-                        };
-                        if let Err(e) = muxer_sink.submit(PipelineOutput::Audio(
-                            AudioOutput::EncodedPacket(AudioEncodedPacket {
-                                data: mux_pkt.data,
-                                pts: mux_pkt.pts,
-                                dts: mux_pkt.dts,
-                                duration: mux_pkt.duration,
-                                codec: config.settings.audio_codec,
-                                stream_index: mux_pkt.stream_index,
-                            }),
-                        )) {
+                        if let Err(e) = submit_audio_packet_to_sink(
+                            export_sink.as_ref(),
+                            audio_pkt,
+                            config.settings.audio_codec,
+                        ) {
                             tracing::warn!("Failed to submit flushed audio packet: {}", e);
                         }
                     }
@@ -771,7 +675,7 @@ impl ExportService {
         }
 
         // Close the sink to finalize video encode and mux output.
-        muxer_sink.close()?;
+        export_sink.close()?;
 
         // Update state to Finalizing
         {
@@ -885,18 +789,20 @@ impl ExportService {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn export_gpu_output_handle(handle: Option<usize>) -> Result<GpuOutputHandle> {
-    handle.map(GpuOutputHandle::IOSurface).ok_or_else(|| {
-        Error::UnsupportedCapability("MuxerSink export requires an IOSurface handle".to_string())
-    })
-}
-
-#[cfg(not(target_os = "macos"))]
-fn export_gpu_output_handle(_handle: Option<usize>) -> Result<GpuOutputHandle> {
-    Err(Error::UnsupportedCapability(format!(
-        "zero-copy GPU export output is not implemented on {}",
-        std::env::consts::OS
+fn submit_audio_packet_to_sink(
+    sink: &dyn super::ExportSink,
+    packet: EncodedPacket,
+    codec: AudioCodec,
+) -> Result<()> {
+    sink.submit(PipelineOutput::Audio(AudioOutput::EncodedPacket(
+        AudioEncodedPacket {
+            data: packet.data,
+            pts: packet.pts,
+            dts: packet.dts,
+            duration: packet.duration,
+            codec,
+            stream_index: packet.stream_index,
+        },
     )))
 }
 

@@ -371,17 +371,11 @@ fn is_supported_video(path: &Path) -> bool {
 }
 
 fn is_supported_scene(path: &Path) -> bool {
-    matches!(
-        extension(path).as_deref(),
-        Some("gltf" | "glb" | "nkm")
-    )
+    matches!(extension(path).as_deref(), Some("gltf" | "glb" | "nkm"))
 }
 
 fn is_supported_puppet(path: &Path) -> bool {
-    matches!(
-        extension(path).as_deref(),
-        Some("inp" | "moc3" | "nkp")
-    )
+    matches!(extension(path).as_deref(), Some("inp" | "moc3" | "nkp"))
 }
 
 fn extension(path: &Path) -> Option<String> {

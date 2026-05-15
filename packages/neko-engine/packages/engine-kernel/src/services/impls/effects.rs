@@ -56,7 +56,7 @@ impl IEffectsService for EffectsService {
             .processor
             .lock()
             .map_err(|e| Error::GpuError(format!("Failed to acquire processor lock: {}", e)))?;
-        proc.apply(input, width, height, shader_id, params)
+        Ok(proc.apply(input, width, height, shader_id, params)?)
     }
 
     fn register_shader(
@@ -69,6 +69,6 @@ impl IEffectsService for EffectsService {
             .processor
             .lock()
             .map_err(|e| Error::GpuError(format!("Failed to acquire processor lock: {}", e)))?;
-        proc.register_custom_shader(id, wgsl_source, param_defs)
+        Ok(proc.register_custom_shader(id, wgsl_source, param_defs)?)
     }
 }

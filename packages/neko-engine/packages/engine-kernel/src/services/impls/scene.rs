@@ -18,12 +18,11 @@ use crate::gpu::GpuContext;
 #[cfg(target_os = "macos")]
 use crate::gpu::RgbaToNv12TextureConverter;
 use crate::media_service::encode_rgba_to_jpeg;
-use crate::services::pipeline_sink::{
-    GpuFrameLease, GpuOutputHandle, PipelineOutput, VideoGpuFrame, VideoOutput,
-};
 use crate::services::scene::ISceneService;
 use neko_engine_types::easing::EasingType;
-use neko_engine_types::FrameFormat;
+use neko_engine_types::{
+    FrameFormat, GpuFrameLease, GpuOutputHandle, PipelineOutput, VideoGpuFrame, VideoOutput,
+};
 use neko_runtime_scene::access::{
     BeginModelingSession, CommitModelingSession, DataAccess, ProceduralSceneEntitySpec,
     SceneEntityFilter, SceneNodeMeshRef, SceneRenderExtractInput, SceneRenderExtraction,

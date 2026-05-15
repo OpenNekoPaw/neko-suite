@@ -11,8 +11,8 @@ use crate::encoder::{
 };
 use crate::error::{Error, Result};
 use crate::preview::PreviewPipelineConfig;
-use crate::services::pipeline_sink::{PipelineOutput, PipelineSink, VideoGpuFrame, VideoOutput};
-use neko_engine_types::FrameFormat;
+use crate::services::pipeline_sink::PipelineSink;
+use neko_engine_types::{FrameFormat, PipelineOutput, VideoGpuFrame, VideoOutput};
 
 /// Realtime H.264 stream sink.
 pub struct StreamSink {
@@ -259,7 +259,7 @@ fn pack_encoded_packet(packet: &EncodedPacket, width: u32, height: u32, fps: f64
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::pipeline_sink::{
+    use neko_engine_types::{
         AudioBuffer, AudioOutput, GpuFrameLease, GpuOutputHandle, VideoGpuFrame,
     };
 
@@ -354,6 +354,19 @@ mod tests {
         assert!(sink.close().is_ok());
         assert!(sink.close().is_ok());
         assert!(!sink.is_open());
+    }
+
+    #[test]
+    fn stream_sink_close_flushes_encoder_before_pool_release() {
+        let source = include_str!("stream_sink.rs");
+        let close_start = source.find("fn close(&self) -> Result<()>").unwrap();
+        let close_body = &source[close_start..];
+        let flush_pos = close_body.find("self.flush_encoder").unwrap();
+        let release_pos = close_body.find("global_encoder_pool().release").unwrap();
+        assert!(
+            flush_pos < release_pos,
+            "StreamSink::close must flush encoder buffered frames before releasing it to the pool"
+        );
     }
 
     #[test]

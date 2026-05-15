@@ -14,15 +14,13 @@ use crate::gpu::{
     PuppetRenderRequest, PuppetRenderer, PuppetTextureAtlasInput,
 };
 use crate::services::impls::muxer_sink::MuxerSink;
-use crate::services::pipeline_sink::{
-    GpuFrameLease, GpuOutputHandle, PipelineOutput, PipelineSink, VideoGpuFrame, VideoOutput,
-};
+use crate::services::pipeline_sink::PipelineSink;
 use crate::services::puppet::IPuppetService;
 use base64::Engine;
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
-    PuppetCommand, PuppetCommandAck, PuppetCommandAckStatus, PuppetCommandEnvelope,
-    PuppetCommandError,
+    GpuFrameLease, GpuOutputHandle, PipelineOutput, PuppetCommand, PuppetCommandAck,
+    PuppetCommandAckStatus, PuppetCommandEnvelope, PuppetCommandError, VideoGpuFrame, VideoOutput,
 };
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;

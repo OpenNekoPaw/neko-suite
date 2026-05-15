@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use super::Transform;
 use crate::animation::{Easing, EasingType};
-use crate::gpu::{BlendMode as GpuBlendMode, Transform2D};
 
 mod apply;
 
@@ -541,59 +540,6 @@ impl Element {
     /// Check if this is a subtitle element
     pub fn is_subtitle(&self) -> bool {
         matches!(self.element_type, ElementType::Subtitle(_))
-    }
-
-    /// Convert element transform to GPU Transform2D
-    pub fn to_transform_2d(&self) -> Transform2D {
-        Transform2D {
-            x: self.transform.x,
-            y: self.transform.y,
-            scale_x: self.transform.scale_x,
-            scale_y: self.transform.scale_y,
-            rotation: self.transform.rotation,
-            anchor_x: self.transform.anchor_x,
-            anchor_y: self.transform.anchor_y,
-            _padding: 0.0,
-        }
-    }
-
-    /// Convert element blend mode to GPU BlendMode
-    pub fn to_gpu_blend_mode(&self) -> GpuBlendMode {
-        match self.blend_mode {
-            // Basic
-            BlendMode::Normal => GpuBlendMode::Normal,
-            BlendMode::Dissolve => GpuBlendMode::Dissolve,
-            // Darken Group
-            BlendMode::Darken => GpuBlendMode::Darken,
-            BlendMode::Multiply => GpuBlendMode::Multiply,
-            BlendMode::ColorBurn => GpuBlendMode::ColorBurn,
-            BlendMode::LinearBurn => GpuBlendMode::LinearBurn,
-            BlendMode::DarkerColor => GpuBlendMode::DarkerColor,
-            // Lighten Group
-            BlendMode::Lighten => GpuBlendMode::Lighten,
-            BlendMode::Screen => GpuBlendMode::Screen,
-            BlendMode::ColorDodge => GpuBlendMode::ColorDodge,
-            BlendMode::LinearDodge => GpuBlendMode::LinearDodge,
-            BlendMode::LighterColor => GpuBlendMode::LighterColor,
-            // Contrast Group
-            BlendMode::Overlay => GpuBlendMode::Overlay,
-            BlendMode::SoftLight => GpuBlendMode::SoftLight,
-            BlendMode::HardLight => GpuBlendMode::HardLight,
-            BlendMode::VividLight => GpuBlendMode::VividLight,
-            BlendMode::LinearLight => GpuBlendMode::LinearLight,
-            BlendMode::PinLight => GpuBlendMode::PinLight,
-            BlendMode::HardMix => GpuBlendMode::HardMix,
-            // Difference Group
-            BlendMode::Difference => GpuBlendMode::Difference,
-            BlendMode::Exclusion => GpuBlendMode::Exclusion,
-            BlendMode::Subtract => GpuBlendMode::Subtract,
-            BlendMode::Divide => GpuBlendMode::Divide,
-            // HSL Group
-            BlendMode::Hue => GpuBlendMode::Hue,
-            BlendMode::Saturation => GpuBlendMode::Saturation,
-            BlendMode::Color => GpuBlendMode::Color,
-            BlendMode::Luminosity => GpuBlendMode::Luminosity,
-        }
     }
 
     /// Get effective volume for this element

@@ -5,31 +5,38 @@
 //! and full playback control (pause/resume/speed/loop/seek).
 
 use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
-use crate::domain::{FrameData, MediaReference, StreamConfig, Timeline, TimelineProjectInfo};
+use crate::domain::{
+    BezierControlPoint, ElementMask, FrameData, MaskShapeData, MediaReference, StreamConfig,
+    Timeline, TimelineProjectInfo,
+};
 use crate::error::{Error, Result};
 use crate::export::{AudioMixer, EffectDispatcher, ExportSettings, ExportStats};
 #[allow(deprecated)]
 use crate::gpu::GpuTransitionProcessor;
 use crate::gpu::{
-    BlendMode as GpuBlendMode, ColorSpace, CompositeLayer, GpuCompositor, GpuContext, GpuPermit,
-    LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter, PipelinePriority,
-    TransitionParams, TransitionType,
+    ColorSpace, CompositeLayer, GpuCompositor, GpuContext, GpuElementMask, GpuMaskBezierPoint,
+    GpuMaskShape, GpuPermit, LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter,
+    PipelinePriority, Transform2D, TransitionParams, TransitionType,
 };
 use crate::jvi::JviLoader;
 use crate::monitor::SystemMonitor;
-use crate::preview::{PreviewPipeline, PreviewPipelineConfig};
+use crate::preview::{
+    DefaultPreviewRenderBackendFactory, PreviewPipelineConfig, PreviewRenderBackendFactory,
+};
 use crate::services::impls::snapshot_sink::SnapshotSink;
 use crate::services::impls::stream_loop::{
     eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle,
     StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::impls::stream_sink::StreamSink;
-use crate::services::pipeline_sink::{PipelineOutput, PipelineSink, VideoOutput, VideoRawFrame};
+use crate::services::pipeline_sink::PipelineSink;
 use crate::services::{
     IStreamPlayback, ITaskService, ITimelineService, StreamStats, TimelineStreamResult,
 };
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
-use neko_engine_types::{BlendMode, FrameFormat, LoopRegion, StreamId};
+use neko_engine_types::{
+    BlendMode, FrameFormat, LoopRegion, PipelineOutput, StreamId, VideoOutput, VideoRawFrame,
+};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -91,6 +98,8 @@ pub struct TimelineService {
     stats_receivers: Arc<RwLock<HashMap<String, watch::Receiver<StreamStats>>>>,
     /// Current timeline per stream (for incremental operations)
     current_timelines: Arc<RwLock<HashMap<String, Timeline>>>,
+    /// Factory for timeline preview render backends.
+    preview_render_factory: Option<Arc<dyn PreviewRenderBackendFactory>>,
 }
 
 impl TimelineService {
@@ -98,6 +107,19 @@ impl TimelineService {
     pub fn new(
         gpu_ctx: Option<Arc<GpuContext>>,
         task_service: Arc<dyn ITaskService + Send + Sync>,
+    ) -> Self {
+        let preview_render_factory = gpu_ctx.as_ref().map(|ctx| {
+            Arc::new(DefaultPreviewRenderBackendFactory::new(Arc::clone(ctx)))
+                as Arc<dyn PreviewRenderBackendFactory>
+        });
+        Self::with_preview_render_factory(gpu_ctx, task_service, preview_render_factory)
+    }
+
+    /// Create a TimelineService with an injected preview render backend factory.
+    pub fn with_preview_render_factory(
+        gpu_ctx: Option<Arc<GpuContext>>,
+        task_service: Arc<dyn ITaskService + Send + Sync>,
+        preview_render_factory: Option<Arc<dyn PreviewRenderBackendFactory>>,
     ) -> Self {
         let active_streams = Arc::new(ActiveStreams::new());
         let playback = StreamPlaybackDelegate::new(active_streams.clone());
@@ -108,6 +130,7 @@ impl TimelineService {
             playback,
             stats_receivers: Arc::new(RwLock::new(HashMap::new())),
             current_timelines: Arc::new(RwLock::new(HashMap::new())),
+            preview_render_factory,
         }
     }
 
@@ -152,45 +175,84 @@ impl TimelineService {
         self.playback.update_config(stream_id, config).await
     }
 
-    /// Convert domain BlendMode to GPU BlendMode
-    fn convert_blend_mode(mode: &BlendMode) -> GpuBlendMode {
-        // Delegate to the canonical implementation on Element to avoid duplication.
-        // This wrapper exists for use with &BlendMode references in the compositing path.
-        use neko_engine_types::BlendMode as BM;
-        match mode {
-            // Basic
-            BM::Normal => GpuBlendMode::Normal,
-            BM::Dissolve => GpuBlendMode::Dissolve,
-            // Darken Group
-            BM::Darken => GpuBlendMode::Darken,
-            BM::Multiply => GpuBlendMode::Multiply,
-            BM::ColorBurn => GpuBlendMode::ColorBurn,
-            BM::LinearBurn => GpuBlendMode::LinearBurn,
-            BM::DarkerColor => GpuBlendMode::DarkerColor,
-            // Lighten Group
-            BM::Lighten => GpuBlendMode::Lighten,
-            BM::Screen => GpuBlendMode::Screen,
-            BM::ColorDodge => GpuBlendMode::ColorDodge,
-            BM::LinearDodge => GpuBlendMode::LinearDodge,
-            BM::LighterColor => GpuBlendMode::LighterColor,
-            // Contrast Group
-            BM::Overlay => GpuBlendMode::Overlay,
-            BM::SoftLight => GpuBlendMode::SoftLight,
-            BM::HardLight => GpuBlendMode::HardLight,
-            BM::VividLight => GpuBlendMode::VividLight,
-            BM::LinearLight => GpuBlendMode::LinearLight,
-            BM::PinLight => GpuBlendMode::PinLight,
-            BM::HardMix => GpuBlendMode::HardMix,
-            // Difference Group
-            BM::Difference => GpuBlendMode::Difference,
-            BM::Exclusion => GpuBlendMode::Exclusion,
-            BM::Subtract => GpuBlendMode::Subtract,
-            BM::Divide => GpuBlendMode::Divide,
-            // HSL Group
-            BM::Hue => GpuBlendMode::Hue,
-            BM::Saturation => GpuBlendMode::Saturation,
-            BM::Color => GpuBlendMode::Color,
-            BM::Luminosity => GpuBlendMode::Luminosity,
+    fn element_transform_2d(element: &crate::domain::Element) -> Transform2D {
+        Transform2D {
+            x: element.transform.x,
+            y: element.transform.y,
+            scale_x: element.transform.scale_x,
+            scale_y: element.transform.scale_y,
+            rotation: element.transform.rotation,
+            anchor_x: element.transform.anchor_x,
+            anchor_y: element.transform.anchor_y,
+            _padding: 0.0,
+        }
+    }
+
+    fn gpu_masks(masks: &[ElementMask]) -> Vec<GpuElementMask> {
+        masks
+            .iter()
+            .map(|mask| GpuElementMask {
+                shape: Self::gpu_mask_shape(&mask.shape),
+                inverted: mask.inverted,
+                feather: mask.feather,
+                expansion: mask.expansion,
+                opacity: mask.opacity,
+                blend_mode: mask.blend_mode.clone(),
+            })
+            .collect()
+    }
+
+    fn gpu_mask_shape(shape: &MaskShapeData) -> GpuMaskShape {
+        match shape {
+            MaskShapeData::Rectangle {
+                center_x,
+                center_y,
+                width,
+                height,
+                rotation,
+                corner_radius,
+            } => GpuMaskShape::Rectangle {
+                center_x: *center_x,
+                center_y: *center_y,
+                width: *width,
+                height: *height,
+                rotation: *rotation,
+                corner_radius: *corner_radius,
+            },
+            MaskShapeData::Ellipse {
+                center_x,
+                center_y,
+                width,
+                height,
+                rotation,
+            } => GpuMaskShape::Ellipse {
+                center_x: *center_x,
+                center_y: *center_y,
+                width: *width,
+                height: *height,
+                rotation: *rotation,
+            },
+            MaskShapeData::Polygon { points } => GpuMaskShape::Polygon {
+                points: points.clone(),
+            },
+            MaskShapeData::Bezier {
+                control_points,
+                closed,
+            } => GpuMaskShape::Bezier {
+                control_points: control_points
+                    .iter()
+                    .map(Self::gpu_mask_bezier_point)
+                    .collect(),
+                closed: *closed,
+            },
+        }
+    }
+
+    fn gpu_mask_bezier_point(point: &BezierControlPoint) -> GpuMaskBezierPoint {
+        GpuMaskBezierPoint {
+            position: point.position,
+            handle_in: point.handle_in,
+            handle_out: point.handle_out,
         }
     }
 
@@ -431,7 +493,9 @@ impl ITimelineService for TimelineService {
                             &element.effects,
                         ) {
                             Ok(processed) => processed,
-                            Err(e @ Error::UnknownEffect(_)) => return Err(e),
+                            Err(e @ neko_engine_gpu::GpuError::UnknownEffect(_)) => {
+                                return Err(e.into())
+                            }
                             Err(e) => {
                                 tracing::warn!("Effects processing failed for element '{}', using unprocessed frame: {}", element.id, e);
                                 original
@@ -446,7 +510,7 @@ impl ITimelineService for TimelineService {
             }
 
             // Build transform — apply same coordinate conversion as GpuExportPipeline
-            let mut transform = element.to_transform_2d();
+            let mut transform = Self::element_transform_2d(element);
             if element.transform.is_identity() {
                 // No transform specified: auto-scale to fit output (letterbox + center)
                 let scale_x = width as f32 / src_width as f32;
@@ -478,7 +542,8 @@ impl ITimelineService for TimelineService {
             let (mask_data, mask_inverted) = if !element.masks.is_empty() {
                 match MaskRasterizer::new(gpu_ctx.clone()) {
                     Ok(rasterizer) => {
-                        match rasterizer.rasterize_masks(&element.masks, src_width, src_height) {
+                        let masks = Self::gpu_masks(&element.masks);
+                        match rasterizer.rasterize_masks(&masks, src_width, src_height) {
                             Ok(data) if !data.is_empty() => {
                                 // Use inverted flag from first mask (primary)
                                 let inverted = element.masks[0].inverted;
@@ -511,7 +576,7 @@ impl ITimelineService for TimelineService {
                 pixel_format: LayerPixelFormat::Rgba,
                 transform,
                 opacity: element.opacity as f32,
-                blend_mode: Self::convert_blend_mode(&element.blend_mode),
+                blend_mode: element.blend_mode,
                 z_index: z_index as i32,
                 mask: mask_data,
                 mask_inverted,
@@ -606,7 +671,7 @@ impl ITimelineService for TimelineService {
                         _padding: 0.0,
                     },
                     opacity: 1.0,
-                    blend_mode: GpuBlendMode::Normal,
+                    blend_mode: BlendMode::Normal,
                     z_index: layers[from_idx].z_index,
                     mask: None,
                     mask_inverted: false,
@@ -702,6 +767,10 @@ impl ITimelineService for TimelineService {
         let video_state_rx = state_rx.clone();
         let video_timeline = timeline.clone();
         let video_gpu_ctx = gpu_ctx.clone();
+        let preview_render_factory = self
+            .preview_render_factory
+            .clone()
+            .unwrap_or_else(|| Arc::new(DefaultPreviewRenderBackendFactory::new(gpu_ctx.clone())));
         let video_budget = video_gpu_ctx.budget_controller().clone();
         let video_start_time = config.start_time;
         let video_stats_tx = stats_tx.clone();
@@ -721,11 +790,9 @@ impl ITimelineService for TimelineService {
                 gop_size: (fps as u32).max(1), // 1 second GOP
             };
 
-            let mut pipeline = match PreviewPipeline::new(
-                video_timeline.clone(),
-                Arc::clone(&video_gpu_ctx),
-                preview_config.clone(),
-            ) {
+            let mut pipeline = match preview_render_factory
+                .create(video_timeline.clone(), preview_config.clone())
+            {
                 Ok(p) => p,
                 Err(e) => {
                     tracing::error!("Failed to create PreviewPipeline: {}", e);

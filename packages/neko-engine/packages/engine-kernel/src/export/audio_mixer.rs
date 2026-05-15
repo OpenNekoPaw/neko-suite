@@ -137,7 +137,7 @@ impl AudioMixer {
                 }
                 Err(e) => {
                     tracing::error!("Failed to open audio decoder for {}: {}", src, e);
-                    return Err(e);
+                    return Err(e.into());
                 }
             }
         }
@@ -410,5 +410,29 @@ impl AudioMixer {
 impl Drop for AudioMixer {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_s16_bytes_clamps_and_serializes_little_endian() {
+        let frame = MixedAudioFrame {
+            data: vec![-2.0, -1.0, 0.0, 1.0, 2.0],
+            samples: 5,
+            timestamp: 0.0,
+            sample_rate: 48_000,
+            channels: 1,
+        };
+
+        let bytes = AudioMixer::to_s16_bytes(&frame);
+        let samples: Vec<i16> = bytes
+            .chunks_exact(2)
+            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+
+        assert_eq!(samples, vec![-32768, -32767, 0, 32767, 32767]);
     }
 }

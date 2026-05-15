@@ -32,6 +32,9 @@ pub mod preview;
 pub mod services;
 pub mod telemetry;
 
+#[cfg(test)]
+mod architecture_tests;
+
 // NOTE: ml module moved to neko-runtime-ml
 
 // Re-export puppet world types so higher-level crates (host-api, host-http)

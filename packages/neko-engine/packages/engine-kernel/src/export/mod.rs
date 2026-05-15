@@ -6,11 +6,23 @@
 //! Accessed via ActionRouter: `timelines:export`, `timelines:export_progress`, `timelines:export_cancel`
 
 mod audio_mixer;
+mod backend;
 mod gpu_export_pipeline;
 mod service;
+mod sink_factory;
 mod types;
 
+pub use crate::gpu::EffectDispatcher;
 pub use audio_mixer::{AudioMixer, MixedAudioFrame};
-pub use gpu_export_pipeline::{EffectDispatcher, GpuExportPipeline, GpuPipelineTiming};
+pub use backend::{
+    build_audio_encoder_config, build_export_metadata, DefaultExportAudioBackendFactory,
+    DefaultExportAudioEncodeBackendFactory, DefaultExportEncodeBackendFactory,
+    DefaultExportRenderBackendFactory, ExportAudioBackend, ExportAudioBackendFactory,
+    ExportAudioEncodeBackend, ExportAudioEncodeBackendFactory, ExportBackendBundle,
+    ExportEncodeBackend, ExportEncodeBackendFactory, ExportRenderBackend,
+    ExportRenderBackendFactory, ExportRenderedFrame,
+};
+pub use gpu_export_pipeline::{GpuExportPipeline, GpuPipelineTiming};
 pub use service::ExportService;
+pub use sink_factory::{DefaultExportSinkFactory, ExportSink, ExportSinkFactory};
 pub use types::*;

@@ -164,7 +164,7 @@ impl AudioMixdown {
                 }
                 Err(e) => {
                     tracing::error!("Mixdown: failed to open {}: {}", entry.src, e);
-                    return Err(e);
+                    return Err(e.into());
                 }
             }
         }

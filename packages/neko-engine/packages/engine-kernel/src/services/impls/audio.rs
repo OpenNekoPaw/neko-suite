@@ -559,11 +559,11 @@ impl IAudioService for AudioService {
         device_id: Option<&str>,
         config: RecordCaptureConfig,
     ) -> Result<StreamId> {
-        self.mic_capture.start_capture(device_id, config)
+        Ok(self.mic_capture.start_capture(device_id, config)?)
     }
 
     async fn record_stop(&self, stream_id: &str) -> Result<RecordingResult> {
-        self.mic_capture.stop_capture(stream_id).await
+        Ok(self.mic_capture.stop_capture(stream_id).await?)
     }
 
     fn monitor_data(&self, stream_id: &str) -> Option<MonitorData> {

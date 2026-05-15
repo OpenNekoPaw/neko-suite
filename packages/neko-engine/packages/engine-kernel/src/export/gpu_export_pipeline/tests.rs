@@ -164,7 +164,8 @@ async fn test_unknown_effect_returns_unknown_effect_error() {
 
     assert!(matches!(
         error,
-        Error::UnknownEffect(effect_id) if effect_id == "plugin-custom-effect"
+        neko_engine_gpu::GpuError::UnknownEffect(effect_id)
+            if effect_id == "plugin-custom-effect"
     ));
 }
 

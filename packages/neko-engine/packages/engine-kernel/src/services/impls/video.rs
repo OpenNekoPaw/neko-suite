@@ -26,11 +26,12 @@ use crate::services::impls::stream_loop::{
     create_stream_channels, eof_idle_wait, pack_h264_frame, ActiveStreams, StreamLoopHandle,
     StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
-use crate::services::pipeline_sink::{
-    GpuFrameLease, GpuOutputHandle, PipelineOutput, PipelineSink, VideoGpuFrame, VideoOutput,
-};
+use crate::services::pipeline_sink::PipelineSink;
 use crate::services::{IStreamPlayback, ITaskService, IVideoService, StreamSink};
-use neko_engine_types::{FrameFormat, LoopRegion, MediaInfo, StreamId, WaveformData};
+use neko_engine_types::{
+    FrameFormat, GpuFrameLease, GpuOutputHandle, LoopRegion, MediaInfo, PipelineOutput, StreamId,
+    VideoGpuFrame, VideoOutput, WaveformData,
+};
 use neko_runtime_media::PanoramaViewState;
 use std::path::Path;
 use std::sync::Arc;
@@ -1220,6 +1221,7 @@ impl IVideoService for VideoService {
         })
         .await
         .map_err(|e| Error::Other(format!("Keyframe scan task failed: {}", e)))?
+        .map_err(Into::into)
     }
 
     async fn generate_waveform(

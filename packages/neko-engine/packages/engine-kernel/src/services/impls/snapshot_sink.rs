@@ -5,8 +5,8 @@ use std::sync::Mutex;
 use tokio::sync::oneshot;
 
 use crate::error::{Error, Result};
-use crate::services::pipeline_sink::{PipelineOutput, PipelineSink, VideoOutput, VideoRawFrame};
-use neko_engine_types::FrameFormat;
+use crate::services::pipeline_sink::PipelineSink;
+use neko_engine_types::{FrameFormat, PipelineOutput, VideoGpuFrame, VideoOutput, VideoRawFrame};
 
 /// Single-frame snapshot sink.
 pub struct SnapshotSink {
@@ -36,10 +36,7 @@ impl SnapshotSink {
         self.complete(frame)
     }
 
-    fn submit_gpu_frame(
-        &self,
-        output: crate::services::pipeline_sink::VideoGpuFrame,
-    ) -> Result<()> {
+    fn submit_gpu_frame(&self, output: VideoGpuFrame) -> Result<()> {
         let mut frame = output.lease.read_rgba8()?;
         frame.pts = output.pts;
         frame.duration = output.duration;
