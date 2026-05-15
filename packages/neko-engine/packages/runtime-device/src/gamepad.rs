@@ -4,7 +4,7 @@
 
 use gilrs::Gilrs;
 use neko_engine_kernel::error::{Error, Result};
-use neko_engine_kernel::services::gamepad::{GamepadEvent, GamepadInfo, IGamepadService};
+use neko_engine_kernel::contracts::services::{GamepadEvent, GamepadInfo, IGamepadService};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tokio::sync::broadcast;

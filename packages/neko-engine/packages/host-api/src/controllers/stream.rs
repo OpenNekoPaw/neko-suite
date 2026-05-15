@@ -23,10 +23,10 @@ use crate::controllers::utils::handle_stream_control;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
-use neko_engine_kernel::domain::operations::EditOperationEnvelope;
-use neko_engine_kernel::domain::{StreamCodec, StreamConfig, Timeline};
-use neko_engine_kernel::jvi::JviLoader;
-use neko_engine_kernel::services::{IStreamPlayback, ITimelineService, TimelineService};
+use neko_engine_kernel::contracts::domain::EditOperationEnvelope;
+use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig, Timeline};
+use neko_engine_kernel::contracts::jvi::JviLoader;
+use neko_engine_kernel::contracts::services::{IStreamPlayback, ITimelineService, TimelineService};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -454,15 +454,12 @@ impl Controller for StreamController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_kernel::facade::ServiceFactory;
 
     fn create_test_controller() -> StreamController {
         let stream_registry = Arc::new(StreamRegistry::new());
-        let task_service = Arc::new(neko_engine_kernel::services::TaskService::new());
-        let timeline_service = Arc::new(neko_engine_kernel::services::TimelineService::new(
-            None,
-            task_service,
-        ));
-        StreamController::new(stream_registry, timeline_service)
+        let services = ServiceFactory::new().create_with_gpu(None);
+        StreamController::new(stream_registry, services.timeline_service)
     }
 
     #[tokio::test]

@@ -4,11 +4,13 @@ use crate::controllers::utils::{base64_encode, handle_stream_control, resolve_re
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
-use neko_engine_kernel::domain::{CaptureOptions, ExtractOptions, ExtractType, StreamConfig};
-use neko_engine_kernel::media_service::{
+use neko_engine_kernel::contracts::domain::{
+    CaptureOptions, ExtractOptions, ExtractType, StreamConfig,
+};
+use neko_engine_kernel::contracts::media::{
     diff_media, diff_video_content, DiffCategory, VideoDiffOptions,
 };
-use neko_engine_kernel::services::{IVideoService, VideoService};
+use neko_engine_kernel::contracts::services::{IVideoService, VideoService};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, FrameFormat};
 use neko_runtime_media::PanoramaViewState;
@@ -427,7 +429,7 @@ impl Controller for VideoController {
                     )
                 })?;
 
-                let transcode_opts = neko_engine_kernel::domain::TranscodeOptions {
+                let transcode_opts = neko_engine_kernel::contracts::domain::TranscodeOptions {
                     video_codec: codec,
                     resolution,
                     bitrate,
@@ -571,9 +573,10 @@ impl Controller for VideoController {
 
                     match diff_video_content(&source_a, &source_b, &video_opts) {
                         Ok(video_diff) => {
-                            result.content = Some(
-                                neko_engine_kernel::media_service::ContentDiff::Video(video_diff),
-                            );
+                            result.content =
+                                Some(neko_engine_kernel::contracts::media::ContentDiff::Video(
+                                    video_diff,
+                                ));
                         }
                         Err(e) => {
                             tracing::warn!("Video content diff failed: {}", e);
@@ -607,14 +610,13 @@ impl Controller for VideoController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_engine_kernel::services::TaskService;
+    use neko_engine_kernel::facade::ServiceFactory;
 
     fn create_test_controller() -> VideoController {
-        let task_service = Arc::new(TaskService::new());
-        let video_service = Arc::new(VideoService::new(None, task_service));
+        let services = ServiceFactory::new().create_with_gpu(None);
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
-        VideoController::new(video_service, resource_registry, stream_registry)
+        VideoController::new(services.video_service, resource_registry, stream_registry)
     }
 
     #[tokio::test]

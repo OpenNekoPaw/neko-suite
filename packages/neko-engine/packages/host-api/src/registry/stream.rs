@@ -5,7 +5,7 @@
 //! - Lifecycle state machine (Created → Active → Paused → Destroyed)
 //! - Automatic cleanup of stale streams
 
-use neko_engine_kernel::domain::{FrameData, StreamConfig, StreamEntry};
+use neko_engine_kernel::contracts::domain::{FrameData, StreamConfig, StreamEntry};
 use neko_engine_types::{StreamId, StreamState};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -515,8 +515,8 @@ impl std::fmt::Display for StreamStateError {
 
 impl std::error::Error for StreamStateError {}
 
-impl From<neko_engine_kernel::domain::StreamTransitionError> for StreamStateError {
-    fn from(e: neko_engine_kernel::domain::StreamTransitionError) -> Self {
+impl From<neko_engine_kernel::contracts::domain::StreamTransitionError> for StreamStateError {
+    fn from(e: neko_engine_kernel::contracts::domain::StreamTransitionError) -> Self {
         Self::InvalidTransition(e.to_string())
     }
 }
@@ -531,7 +531,7 @@ mod tests {
             resolution: Resolution::new(1920, 1080),
             fps: 30.0,
             start_time: 0.0,
-            codec: neko_engine_kernel::domain::StreamCodec::H264,
+            codec: neko_engine_kernel::contracts::domain::StreamCodec::H264,
             initial_paused: false,
         }
     }

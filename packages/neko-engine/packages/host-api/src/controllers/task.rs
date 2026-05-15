@@ -2,7 +2,7 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::services::{ITaskService, TaskService};
+use neko_engine_kernel::contracts::services::{ITaskService, TaskService};
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use serde_json::Value;
@@ -84,11 +84,16 @@ impl Controller for TaskController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_kernel::facade::ServiceFactory;
+
+    fn create_test_controller() -> TaskController {
+        let services = ServiceFactory::new().create_with_gpu(None);
+        TaskController::new(services.task_service)
+    }
 
     #[tokio::test]
     async fn test_task_controller_list() {
-        let task_service = Arc::new(TaskService::new());
-        let controller = TaskController::new(task_service);
+        let controller = create_test_controller();
 
         let response = controller
             .handle("list", None, Value::Null, None)
@@ -100,8 +105,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_controller_probe_missing_id() {
-        let task_service = Arc::new(TaskService::new());
-        let controller = TaskController::new(task_service);
+        let controller = create_test_controller();
 
         let result = controller.handle("probe", None, Value::Null, None).await;
 
@@ -110,8 +114,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_controller_unknown_action() {
-        let task_service = Arc::new(TaskService::new());
-        let controller = TaskController::new(task_service);
+        let controller = create_test_controller();
 
         let result = controller.handle("unknown", None, Value::Null, None).await;
 

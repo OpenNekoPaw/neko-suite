@@ -46,18 +46,16 @@ pub use session::{Session, SessionConfig, SessionManager};
 pub use neko_engine_types::{ActionRequest, ActionResponse, ResourceId, StreamId};
 
 // Re-export engine-kernel types needed by CLI and other view adapters
-pub use neko_engine_kernel::export::{
+pub use neko_engine_kernel::contracts::audio::{MixdownConfig, MixdownElement, MixdownTrack};
+pub use neko_engine_kernel::contracts::export::{
     ExportHwEncoder, ExportJobConfig, ExportPreset, ExportSettings, ExportVideoCodec,
 };
-pub use neko_engine_kernel::jvi::JviLoader;
-pub use neko_engine_kernel::services::audio_mixdown::{
-    MixdownConfig, MixdownElement, MixdownTrack,
-};
+pub use neko_engine_kernel::contracts::jvi::JviLoader;
 
 // Re-export puppet types needed by host-http for the WS stream endpoint
-pub use neko_engine_kernel::preview::PreviewPipelineConfig;
-pub use neko_engine_kernel::services::{
+pub use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
+pub use neko_engine_kernel::contracts::puppet::PuppetDelta;
+pub use neko_engine_kernel::contracts::services::{
     IPuppetService, PipelineSink, PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming,
     StreamSink,
 };
-pub use neko_engine_kernel::PuppetDelta;

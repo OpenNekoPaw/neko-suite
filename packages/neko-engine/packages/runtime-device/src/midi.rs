@@ -5,7 +5,7 @@
 
 use midir::MidiInput;
 use neko_engine_kernel::error::{Error, Result};
-use neko_engine_kernel::services::midi::{IMidiService, MidiEvent, MidiPort};
+use neko_engine_kernel::contracts::services::{IMidiService, MidiEvent, MidiPort};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Mutex;

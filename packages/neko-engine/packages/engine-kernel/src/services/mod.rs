@@ -3,6 +3,8 @@
 //! This module defines the service interfaces (traits) that abstract business logic.
 //! Implementations can be swapped for testing or different backends.
 
+#![allow(unused_imports)]
+
 mod audio;
 pub mod audio_mixdown;
 pub mod camera;

@@ -4,12 +4,12 @@ use crate::controllers::utils::{base64_encode, handle_stream_control};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
-use neko_engine_kernel::domain::{StreamConfig, Timeline};
-use neko_engine_kernel::jvi::JviLoader;
-use neko_engine_kernel::media_service::{
+use neko_engine_kernel::contracts::domain::{StreamConfig, Timeline};
+use neko_engine_kernel::contracts::jvi::JviLoader;
+use neko_engine_kernel::contracts::media::{
     diff_media, diff_timeline_content_with_options, DiffCategory, TimelineDiffOptions,
 };
-use neko_engine_kernel::services::{
+use neko_engine_kernel::contracts::services::{
     ExportService, IExportService, ITimelineService, TimelineService,
 };
 use neko_engine_types::registry;
@@ -284,7 +284,7 @@ impl Controller for TimelineController {
                         )
                     })?;
 
-                let config: neko_engine_kernel::export::ExportJobConfig =
+                let config: neko_engine_kernel::contracts::export::ExportJobConfig =
                     serde_json::from_value(config_value).map_err(|e| {
                         ApiError::InvalidRequest(format!("Invalid ExportJobConfig: {}", e))
                     })?;
@@ -362,7 +362,7 @@ impl Controller for TimelineController {
                         )
                     })?;
 
-                let config: neko_engine_kernel::export::ExportJobConfig =
+                let config: neko_engine_kernel::contracts::export::ExportJobConfig =
                     serde_json::from_value(config_value).map_err(|e| {
                         ApiError::InvalidRequest(format!("Invalid ExportJobConfig: {}", e))
                     })?;
@@ -449,13 +449,12 @@ impl Controller for TimelineController {
 mod tests {
     use super::*;
     use crate::registry::StreamRegistry;
-    use neko_engine_kernel::services::TaskService;
+    use neko_engine_kernel::facade::ServiceFactory;
 
     fn create_test_controller() -> TimelineController {
-        let task_service = Arc::new(TaskService::new());
-        let timeline_service = Arc::new(TimelineService::new(None, task_service));
+        let services = ServiceFactory::new().create_with_gpu(None);
         let stream_registry = Arc::new(StreamRegistry::new());
-        TimelineController::new(timeline_service, None, stream_registry)
+        TimelineController::new(services.timeline_service, None, stream_registry)
     }
 
     #[tokio::test]

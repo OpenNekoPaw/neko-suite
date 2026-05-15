@@ -5,12 +5,11 @@ use crate::preview::PreviewFileRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use crate::router::ActionRouter;
 use crate::session::SessionManager;
-use neko_engine_kernel::gpu::GpuContext;
-use neko_engine_kernel::services::{
-    AudioService, EffectRegistry, EffectsService, ExportService, IPuppetService, ISceneService,
-    ImageService, NodeService, PuppetService, SceneService, TaskService, TimelineService,
-    VideoService,
+use neko_engine_kernel::contracts::gpu::GpuContext;
+use neko_engine_kernel::contracts::services::{
+    AudioService, IPuppetService, ISceneService, SceneService,
 };
+use neko_engine_kernel::facade::EngineKernelFacade;
 use neko_engine_types::{ActionRequest, ActionResponse, EngineConfig};
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
 #[cfg(feature = "onnx")]
@@ -33,8 +32,8 @@ pub struct EngineApi {
     preview_registry: Arc<PreviewFileRegistry>,
     /// Session manager
     session_manager: Arc<SessionManager>,
-    /// GPU context (if available)
-    gpu_ctx: Option<Arc<GpuContext>>,
+    /// Kernel service graph facade
+    kernel_facade: EngineKernelFacade,
     /// Puppet service — exposed for WS stream endpoint
     puppet_service: Option<Arc<dyn IPuppetService>>,
     /// Scene service — exposed for scene control WebSocket endpoint
@@ -61,16 +60,8 @@ impl EngineApi {
 
     /// Create EngineApi with explicit configuration
     pub async fn with_config(config: EngineConfig) -> ApiResult<Self> {
-        // Initialize GPU context
-        let gpu_ctx = match GpuContext::new().await {
-            Ok(ctx) => Some(Arc::new(ctx)),
-            Err(e) => {
-                tracing::warn!("GPU initialization failed, running in CPU-only mode: {}", e);
-                None
-            }
-        };
-
-        Self::with_gpu_and_config(gpu_ctx, config)
+        let kernel_facade = EngineKernelFacade::new().await?;
+        Self::with_kernel_facade_and_config(kernel_facade, config)
     }
 
     /// Create EngineApi with optional GPU context (uses default config)
@@ -83,35 +74,22 @@ impl EngineApi {
         gpu_ctx: Option<Arc<GpuContext>>,
         config: EngineConfig,
     ) -> ApiResult<Self> {
-        // Create services
-        let task_service = Arc::new(TaskService::new());
-        let mut node_service = NodeService::new(gpu_ctx.clone());
-        node_service.set_task_service(task_service.clone());
-        let node_service = Arc::new(node_service);
-        let video_service = Arc::new(VideoService::new(gpu_ctx.clone(), task_service.clone()));
-        let audio_service = Arc::new(AudioService::new(gpu_ctx.clone(), task_service.clone()));
-        let audio_service_ref = audio_service.clone();
-        let image_service = Arc::new(ImageService::new(gpu_ctx.clone()));
-        let timeline_service =
-            Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
+        let kernel_facade = EngineKernelFacade::with_gpu(gpu_ctx);
+        Self::with_kernel_facade_and_config(kernel_facade, config)
+    }
 
-        // Export service requires GPU
-        let export_service = gpu_ctx
+    /// Create EngineApi with an already constructed kernel facade.
+    pub fn with_kernel_facade_and_config(
+        kernel_facade: EngineKernelFacade,
+        config: EngineConfig,
+    ) -> ApiResult<Self> {
+        let kernel_services = kernel_facade.service_handles();
+        let audio_service_ref = kernel_services.audio_service.clone();
+        let scene_service_ref = kernel_services.scene_service.clone();
+        let puppet_service_dyn: Option<Arc<dyn IPuppetService>> = kernel_services
+            .puppet_service
             .as_ref()
-            .map(|ctx| Arc::new(ExportService::new(Arc::clone(ctx))));
-
-        // Effects service requires GPU
-        let effects_service =
-            gpu_ctx
-                .as_ref()
-                .and_then(|ctx| match EffectsService::new(Arc::clone(ctx)) {
-                    Ok(svc) => Some(Arc::new(svc)),
-                    Err(e) => {
-                        tracing::warn!("Effects service initialization failed: {}", e);
-                        None
-                    }
-                });
-        let effect_registry = Arc::new(EffectRegistry::with_builtins());
+            .map(|svc| svc.clone() as Arc<dyn IPuppetService>);
 
         // Create registries
         let resource_registry = Arc::new(ResourceRegistry::new());
@@ -122,7 +100,7 @@ impl EngineApi {
         let session_manager = Arc::new(SessionManager::new(stream_registry.clone()));
 
         // Wire up stream count into NodeService for metrics reporting
-        let active_streams_counter = node_service.active_streams_counter();
+        let active_streams_counter = kernel_services.node_service.active_streams_counter();
         let stream_registry_for_sync = stream_registry.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
@@ -132,22 +110,6 @@ impl EngineApi {
                 active_streams_counter.store(count, std::sync::atomic::Ordering::Relaxed);
             }
         });
-
-        // Create scene service. When GPU is available, the scene service owns
-        // the Engine-rendered authoring viewport path used by scenes:capture and scenes:stream.
-        let scene_service = Some(Arc::new(match &gpu_ctx {
-            Some(ctx) => SceneService::with_gpu(Arc::clone(ctx)),
-            None => SceneService::new(),
-        }));
-        let scene_service_ref = scene_service.clone();
-
-        // Create puppet service (2D puppet management)
-        // Keep an Arc clone so the WS stream endpoint shares the same ECS world
-        let puppet_svc = Arc::new(match &gpu_ctx {
-            Some(ctx) => PuppetService::with_gpu(Arc::clone(ctx)),
-            None => PuppetService::new(),
-        });
-        let puppet_service_dyn: Option<Arc<dyn IPuppetService>> = Some(puppet_svc.clone());
 
         // Device services
         let camera_service = Arc::new(CameraService::new());
@@ -159,23 +121,15 @@ impl EngineApi {
         // Plugin manager
         let plugin_manager = Arc::new(
             crate::plugin::PluginManager::new(vec![], "0.1.0").with_activation_handler(Box::new(
-                crate::plugin::EffectRegistryActivator::new(effect_registry.clone()),
+                crate::plugin::EffectRegistryActivator::new(
+                    kernel_services.effect_registry.clone(),
+                ),
             )),
         );
 
         // Create router
         let router = ActionRouter::new(
-            task_service,
-            node_service,
-            video_service,
-            audio_service,
-            image_service,
-            timeline_service,
-            export_service,
-            effects_service,
-            effect_registry,
-            scene_service,
-            Some(puppet_svc),
+            kernel_services,
             camera_service,
             midi_service,
             gamepad_service,
@@ -196,7 +150,7 @@ impl EngineApi {
             stream_registry,
             preview_registry,
             session_manager,
-            gpu_ctx,
+            kernel_facade,
             puppet_service: puppet_service_dyn,
             scene_service: scene_service_ref,
             audio_service: audio_service_ref,
@@ -339,7 +293,7 @@ impl EngineApi {
 
     /// Check if GPU is available
     pub fn has_gpu(&self) -> bool {
-        self.gpu_ctx.is_some()
+        self.kernel_facade.has_gpu()
     }
 
     /// Get list of supported groups

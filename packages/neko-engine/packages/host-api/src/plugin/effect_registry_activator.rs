@@ -2,7 +2,7 @@
 
 use super::manager::PluginActivationHandler;
 use super::manifest::{PluginCapability, PluginKind};
-use neko_engine_kernel::services::EffectRegistry;
+use neko_engine_kernel::contracts::services::EffectRegistry;
 use neko_engine_types::{EffectCapability, EffectKind, EffectSource, ParamDef};
 use std::path::Path;
 use std::sync::Arc;

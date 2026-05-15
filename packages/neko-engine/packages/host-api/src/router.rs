@@ -10,10 +10,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::plugin::PluginManager;
 use crate::preview::PreviewFileRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
-use neko_engine_kernel::services::{
-    AudioService, EffectRegistry, EffectsService, ExportService, ImageService, NodeService,
-    PuppetService, SceneService, TaskService, TimelineService, VideoService,
-};
+use neko_engine_kernel::facade::KernelServices;
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
 
 use neko_engine_types::registry::{self, groups};
@@ -47,19 +44,8 @@ pub struct ActionRouter {
 
 impl ActionRouter {
     /// Create a new ActionRouter with all controllers
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        task_service: Arc<TaskService>,
-        node_service: Arc<NodeService>,
-        video_service: Arc<VideoService>,
-        audio_service: Arc<AudioService>,
-        image_service: Arc<ImageService>,
-        timeline_service: Arc<TimelineService>,
-        export_service: Option<Arc<ExportService>>,
-        effects_service: Option<Arc<EffectsService>>,
-        effect_registry: Arc<EffectRegistry>,
-        scene_service: Option<Arc<SceneService>>,
-        puppet_service: Option<Arc<PuppetService>>,
+        kernel_services: KernelServices,
         camera_service: Arc<CameraService>,
         midi_service: Arc<MidiService>,
         gamepad_service: Arc<GamepadService>,
@@ -70,36 +56,45 @@ impl ActionRouter {
         #[cfg(feature = "onnx")] ml_service: Option<Arc<dyn IMlService>>,
     ) -> Self {
         Self {
-            node_controller: NodeController::new(node_service),
-            task_controller: TaskController::new(task_service),
+            node_controller: NodeController::new(kernel_services.node_service),
+            task_controller: TaskController::new(kernel_services.task_service),
             video_controller: VideoController::new(
-                video_service,
+                kernel_services.video_service,
                 resource_registry.clone(),
                 stream_registry.clone(),
             ),
             audio_controller: AudioController::new(
-                audio_service,
+                kernel_services.audio_service,
                 resource_registry.clone(),
                 stream_registry.clone(),
             ),
-            image_controller: ImageController::new(image_service, resource_registry),
+            image_controller: ImageController::new(
+                kernel_services.image_service,
+                resource_registry,
+            ),
             timeline_controller: TimelineController::new(
-                timeline_service.clone(),
-                export_service,
+                kernel_services.timeline_service.clone(),
+                kernel_services.export_service,
                 stream_registry.clone(),
             ),
-            stream_controller: StreamController::new(stream_registry.clone(), timeline_service),
-            effects_controller: EffectsController::new(effects_service, effect_registry),
+            stream_controller: StreamController::new(
+                stream_registry.clone(),
+                kernel_services.timeline_service,
+            ),
+            effects_controller: EffectsController::new(
+                kernel_services.effects_service,
+                kernel_services.effect_registry,
+            ),
             #[cfg(feature = "onnx")]
             models_controller: ModelsController::new(ml_service),
             #[cfg(not(feature = "onnx"))]
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::with_stream_registry(
-                scene_service,
+                kernel_services.scene_service,
                 stream_registry,
             ),
-            puppets_controller: PuppetsController::new(puppet_service),
+            puppets_controller: PuppetsController::new(kernel_services.puppet_service),
             camera_controller: CameraController::new(camera_service),
             midi_controller: MidiController::new(midi_service),
             gamepad_controller: GamepadController::new(gamepad_service),
@@ -260,14 +255,8 @@ mod tests {
     use super::*;
 
     fn create_test_router() -> ActionRouter {
-        let task_service = Arc::new(TaskService::new());
-        let node_service = Arc::new(NodeService::new(None));
-        let video_service = Arc::new(VideoService::new(None, task_service.clone()));
-        let audio_service = Arc::new(AudioService::new(None, task_service.clone()));
-        let image_service = Arc::new(ImageService::new(None));
-        let timeline_service = Arc::new(TimelineService::new(None, task_service.clone()));
-        let scene_service = Some(Arc::new(SceneService::new()));
-        let puppet_service = Some(Arc::new(PuppetService::new()));
+        let kernel_services =
+            neko_engine_kernel::facade::ServiceFactory::new().create_with_gpu(None);
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
 
@@ -276,21 +265,10 @@ mod tests {
         let gamepad_service = Arc::new(GamepadService::new());
 
         let plugin_manager = Arc::new(PluginManager::new(vec![], "0.1.0"));
-        let effect_registry = Arc::new(EffectRegistry::with_builtins());
         let preview_registry = Arc::new(PreviewFileRegistry::new());
 
         ActionRouter::new(
-            task_service,
-            node_service,
-            video_service,
-            audio_service,
-            image_service,
-            timeline_service,
-            None, // No GPU = no export service in tests
-            None, // No GPU = no effects service in tests
-            effect_registry,
-            scene_service,
-            puppet_service,
+            kernel_services,
             camera_service,
             midi_service,
             gamepad_service,

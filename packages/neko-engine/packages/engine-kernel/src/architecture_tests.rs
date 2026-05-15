@@ -7,6 +7,14 @@ use crate::gpu::boundary::{
     extraction_ready_modules, renderer_companion_modules, GpuExtractionGroup,
 };
 
+const APPROVED_KERNEL_PUBLIC_MODULES: &[&str] = &[
+    "contracts",
+    "error",
+    "facade",
+    "telemetry",
+    "prelude",
+];
+
 fn rust_files(root: &Path) -> Vec<PathBuf> {
     if root.is_file() {
         return if root.extension().is_some_and(|ext| ext == "rs") {
@@ -94,6 +102,13 @@ fn workspace_manifest() -> PathBuf {
         .parent()
         .expect("packages directory has a workspace root")
         .join("Cargo.toml")
+}
+
+fn relative_to_packages(path: &Path) -> String {
+    path.strip_prefix(packages_dir())
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 #[test]
@@ -275,7 +290,8 @@ fn kernel_gpu_module_documents_temporary_reexports_and_companion_shims() {
     let source = fs::read_to_string(&gpu_mod)
         .unwrap_or_else(|err| panic!("failed to read {}: {}", gpu_mod.display(), err));
 
-    assert!(source.contains("pub use neko_engine_gpu::*"));
+    assert!(!source.contains("pub use neko_engine_gpu::*"));
+    assert!(source.contains("pub use neko_engine_gpu::{"));
     assert!(source.contains("pub use neko_engine_scene_renderer::"));
     assert!(source.contains("pub use neko_engine_puppet_renderer::"));
     assert!(source.contains("pub use neko_engine_panoramic_renderer::"));
@@ -283,6 +299,129 @@ fn kernel_gpu_module_documents_temporary_reexports_and_companion_shims() {
     assert!(source.contains("pub mod puppet_renderer"));
     assert!(source.contains("pub mod panoramic_renderer"));
     assert!(source.contains("Temporary GPU compatibility surface"));
+}
+
+#[test]
+fn kernel_public_modules_are_allowlisted() {
+    let lib_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
+    let source = fs::read_to_string(&lib_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", lib_rs.display(), err));
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("pub mod ") {
+            let module = rest.trim_end_matches(';').trim_end_matches(" {").trim();
+            assert!(
+                APPROVED_KERNEL_PUBLIC_MODULES.contains(&module),
+                "engine-kernel public module `{}` must be reviewed and added to the facade allowlist",
+                module
+            );
+        }
+    }
+
+    for forbidden in ["pub use neko_runtime_puppet::world::PuppetDelta;"] {
+        assert!(
+            !source.contains(forbidden),
+            "engine-kernel root must keep domain shortcuts behind `contracts`, not `{}`",
+            forbidden
+        );
+    }
+}
+
+#[test]
+fn kernel_gpu_compatibility_exports_avoid_glob_reexports() {
+    let gpu_mod = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gpu/mod.rs");
+    let source = fs::read_to_string(&gpu_mod)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", gpu_mod.display(), err));
+
+    for forbidden in [
+        "pub use neko_engine_gpu::*",
+        "pub use neko_engine_scene_renderer::*;",
+        "pub use neko_engine_puppet_renderer::*;",
+        "pub use neko_engine_panoramic_renderer::*;",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "{} must not contain broad compatibility export `{}`",
+            gpu_mod.display(),
+            forbidden
+        );
+    }
+}
+
+#[test]
+fn host_crates_use_kernel_facade_or_contract_paths() {
+    let packages_dir = packages_dir();
+    let host_roots = [
+        packages_dir.join("host-api/src"),
+        packages_dir.join("host-http/src"),
+        packages_dir.join("host-napi/src"),
+    ];
+    let forbidden = [
+        "neko_engine_kernel::services::",
+        "neko_engine_kernel::domain::",
+        "neko_engine_kernel::media_service::",
+        "neko_engine_kernel::gpu::",
+        "neko_engine_kernel::encoder::",
+        "neko_engine_kernel::decoder::",
+        "neko_engine_kernel::audio::",
+        "neko_engine_kernel::jvi::",
+        "neko_engine_kernel::export::",
+        "neko_engine_kernel::preview::",
+        "neko_engine_kernel::PuppetDelta",
+    ];
+
+    for root in host_roots {
+        for file in rust_files(&root) {
+            let source = fs::read_to_string(&file)
+                .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
+            for pattern in forbidden {
+                assert!(
+                    !source.contains(pattern),
+                    "{} must use `neko_engine_kernel::contracts` or `facade`, not `{}`",
+                    relative_to_packages(&file),
+                    pattern
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn host_production_code_does_not_construct_kernel_services_directly() {
+    let packages_dir = packages_dir();
+    let host_roots = [
+        packages_dir.join("host-api/src"),
+        packages_dir.join("host-http/src"),
+        packages_dir.join("host-napi/src"),
+    ];
+    let forbidden = [
+        "TaskService::new(",
+        "TimelineService::new(",
+        "VideoService::new(",
+        "AudioService::new(",
+        "ImageService::new(",
+        "NodeService::new(",
+        "SceneService::new(",
+        "PuppetService::new(",
+        "ExportService::new(",
+        "EffectsService::new(",
+    ];
+
+    for root in host_roots {
+        for file in rust_files(&root) {
+            let source = fs::read_to_string(&file)
+                .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
+            for pattern in forbidden {
+                assert!(
+                    !source.contains(pattern),
+                    "{} must use `ServiceFactory`, facade helpers, or explicit fakes instead of `{}`",
+                    relative_to_packages(&file),
+                    pattern
+                );
+            }
+        }
+    }
 }
 
 #[test]

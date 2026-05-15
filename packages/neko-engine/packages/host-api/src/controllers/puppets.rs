@@ -4,7 +4,7 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::services::{IPuppetService, PuppetExportConfig, PuppetService};
+use neko_engine_kernel::contracts::services::{IPuppetService, PuppetExportConfig, PuppetService};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, PuppetCommand, PuppetCommandAck, PuppetCommandAckStatus};
 use serde::Deserialize;
@@ -594,9 +594,11 @@ fn ack_data(ack: PuppetCommandAck) -> ApiResult<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_kernel::facade::ServiceFactory;
 
     fn create_test_controller() -> PuppetsController {
-        PuppetsController::new(Some(Arc::new(PuppetService::new())))
+        let services = ServiceFactory::new().create_with_gpu(None);
+        PuppetsController::new(services.puppet_service)
     }
 
     fn create_controller_without_service() -> PuppetsController {

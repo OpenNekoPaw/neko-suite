@@ -5,6 +5,8 @@
 //!
 //! Accessed via ActionRouter: `timelines:export`, `timelines:export_progress`, `timelines:export_cancel`
 
+#![allow(unused_imports)]
+
 mod audio_mixer;
 mod backend;
 mod gpu_export_pipeline;

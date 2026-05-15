@@ -9,6 +9,8 @@
 //!
 //! NOTE: Video frame extraction now uses GPU path only (HwAccelDecoder + Nv12Renderer).
 
+#![allow(unused_imports)]
+
 mod audio_diff;
 mod diff;
 mod ffmpeg_parser;

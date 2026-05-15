@@ -3,8 +3,8 @@
 use crate::controllers::utils::{base64_decode, base64_encode};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::gpu::custom_shader_processor::ParamDef;
-use neko_engine_kernel::services::{EffectRegistry, EffectsService, IEffectsService};
+use neko_engine_kernel::contracts::gpu::ParamDef;
+use neko_engine_kernel::contracts::services::{EffectRegistry, EffectsService, IEffectsService};
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use serde::Deserialize;

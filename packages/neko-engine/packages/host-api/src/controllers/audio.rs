@@ -4,11 +4,13 @@ use crate::controllers::utils::{handle_stream_control, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::{ResourceRegistry, StreamRegistry};
-use neko_engine_kernel::domain::{AudioOutputFormat, AudioRenderEffectConfig, StreamConfig};
-use neko_engine_kernel::media_service::{
+use neko_engine_kernel::contracts::domain::{
+    AudioOutputFormat, AudioRenderEffectConfig, StreamConfig,
+};
+use neko_engine_kernel::contracts::media::{
     diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory,
 };
-use neko_engine_kernel::services::{AudioService, IAudioService};
+use neko_engine_kernel::contracts::services::{AudioService, IAudioService};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, SUPPORTED_AUDIO_EFFECT_TYPES};
 use serde::Deserialize;
@@ -335,7 +337,7 @@ impl Controller for AudioController {
                 })?;
 
                 // Build AudioTranscodeOptions from request
-                use neko_engine_kernel::domain::AudioTranscodeOptions;
+                use neko_engine_kernel::contracts::domain::AudioTranscodeOptions;
 
                 let requested_format = opts.codec.as_deref().or(opts.format.as_deref());
                 let format = parse_audio_output_format(requested_format);
@@ -383,7 +385,9 @@ impl Controller for AudioController {
                 }
 
                 use base64::Engine;
-                use neko_engine_kernel::domain::{AudioOutputFormat, AudioTranscodeOptions};
+                use neko_engine_kernel::contracts::domain::{
+                    AudioOutputFormat, AudioTranscodeOptions,
+                };
                 let requested_format = opts.format.unwrap_or_else(|| "wav".to_string());
                 let format = match requested_format.to_lowercase().as_str() {
                     "aac" | "m4a" => AudioOutputFormat::Aac,
@@ -510,9 +514,10 @@ impl Controller for AudioController {
 
                     match diff_audio_content_with_options(&source_a, &source_b, &audio_opts) {
                         Ok(audio_diff) => {
-                            result.content = Some(
-                                neko_engine_kernel::media_service::ContentDiff::Audio(audio_diff),
-                            );
+                            result.content =
+                                Some(neko_engine_kernel::contracts::media::ContentDiff::Audio(
+                                    audio_diff,
+                                ));
                         }
                         Err(e) => {
                             tracing::warn!("Audio content diff failed: {}", e);
@@ -601,7 +606,7 @@ impl Controller for AudioController {
                     )
                 })?;
 
-                use neko_engine_kernel::audio::mic_capture::RecordCaptureConfig;
+                use neko_engine_kernel::contracts::audio::mic_capture::RecordCaptureConfig;
 
                 let config = RecordCaptureConfig {
                     sample_rate: opts.sample_rate.unwrap_or(48000),
@@ -644,7 +649,7 @@ impl Controller for AudioController {
                 let time = opts.time.unwrap_or(0.0);
 
                 use base64::Engine;
-                use neko_engine_kernel::services::audio_mixdown::{AudioMixdown, MixdownConfig};
+                use neko_engine_kernel::contracts::audio::{AudioMixdown, MixdownConfig};
 
                 let config_value = opts.config.ok_or_else(|| {
                     ApiError::InvalidRequest("config required for audios:mixdown".to_string())
@@ -692,7 +697,7 @@ impl Controller for AudioController {
                             )
                         })?;
 
-                        let config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
+                        let config: neko_engine_kernel::contracts::audio::MixdownConfig =
                             serde_json::from_value(config_value).map_err(|e| {
                                 ApiError::InvalidRequest(format!("invalid config: {}", e))
                             })?;
@@ -719,7 +724,7 @@ impl Controller for AudioController {
                             )
                         })?;
 
-                        let config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
+                        let config: neko_engine_kernel::contracts::audio::MixdownConfig =
                             serde_json::from_value(config_value).map_err(|e| {
                                 ApiError::InvalidRequest(format!("invalid config: {}", e))
                             })?;
@@ -765,7 +770,7 @@ impl Controller for AudioController {
                     )
                 })?;
 
-                let config: neko_engine_kernel::services::audio_mixdown::MixdownConfig =
+                let config: neko_engine_kernel::contracts::audio::MixdownConfig =
                     serde_json::from_value(config_value)
                         .map_err(|e| ApiError::InvalidRequest(format!("invalid config: {}", e)))?;
 
@@ -774,11 +779,11 @@ impl Controller for AudioController {
                 let output = output_path.clone();
 
                 let (_total_duration, warnings) = tokio::task::spawn_blocking(move || {
-                    use neko_engine_kernel::audio::{
+                    use neko_engine_kernel::contracts::audio::AudioMixdown;
+                    use neko_engine_kernel::contracts::audio::{
                         AudioCodec as InternalAudioCodec, AudioEncoder, AudioEncoderConfig,
                         FfmpegAudioEncoder,
                     };
-                    use neko_engine_kernel::services::audio_mixdown::AudioMixdown;
                     use std::fs::File;
                     use std::io::Write;
 
@@ -882,14 +887,13 @@ impl Controller for AudioController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_engine_kernel::services::TaskService;
+    use neko_engine_kernel::facade::ServiceFactory;
 
     fn create_test_controller() -> AudioController {
-        let task_service = Arc::new(TaskService::new());
-        let audio_service = Arc::new(AudioService::new(None, task_service));
+        let services = ServiceFactory::new().create_with_gpu(None);
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
-        AudioController::new(audio_service, resource_registry, stream_registry)
+        AudioController::new(services.audio_service, resource_registry, stream_registry)
     }
 
     #[tokio::test]

@@ -5,6 +5,8 @@
 //! while `pipeline` remains kernel-owned because it still mixes GPU/export
 //! orchestration with encode/mux workers.
 
+#![allow(unused_imports)]
+
 pub mod pipeline;
 
 pub use neko_engine_codec::encoder::codec_ext;

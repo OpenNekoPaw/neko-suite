@@ -2,7 +2,7 @@
 
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
-use neko_engine_kernel::services::IStreamPlayback;
+use neko_engine_kernel::contracts::services::IStreamPlayback;
 use neko_engine_types::project_context::{ProjectContext, ResolvedPath};
 use neko_engine_types::{ActionResponse, LoopRegion, ResourceId, StreamId};
 use serde::Deserialize;

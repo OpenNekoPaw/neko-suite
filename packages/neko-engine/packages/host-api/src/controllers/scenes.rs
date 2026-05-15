@@ -4,15 +4,17 @@ use crate::controllers::utils::base64_encode;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::StreamRegistry;
-use neko_engine_kernel::domain::{StreamCodec, StreamConfig};
-use neko_engine_kernel::gpu::scene_renderer::{
+use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig};
+use neko_engine_kernel::contracts::gpu::{
     CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
     DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneToneMapping,
     ViewportDebugView, ViewportDescriptor, ViewportPostProcess, ViewportRenderMode,
     ViewportWorkMode,
 };
-use neko_engine_kernel::preview::PreviewPipelineConfig;
-use neko_engine_kernel::services::{ISceneService, PipelineSink, SceneService, StreamSink};
+use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
+use neko_engine_kernel::contracts::services::{
+    ISceneService, PipelineSink, SceneService, StreamSink,
+};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -1445,18 +1447,18 @@ impl Controller for ScenesController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_kernel::facade::ServiceFactory;
 
     fn create_test_controller() -> ScenesController {
-        ScenesController::new(Some(Arc::new(SceneService::new())))
+        let services = ServiceFactory::new().create_with_gpu(None);
+        ScenesController::new(services.scene_service)
     }
 
     fn create_stream_test_controller() -> (ScenesController, Arc<StreamRegistry>) {
         let registry = Arc::new(StreamRegistry::new());
+        let services = ServiceFactory::new().create_with_gpu(None);
         (
-            ScenesController::with_stream_registry(
-                Some(Arc::new(SceneService::new())),
-                registry.clone(),
-            ),
+            ScenesController::with_stream_registry(services.scene_service, registry.clone()),
             registry,
         )
     }

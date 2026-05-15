@@ -6,8 +6,8 @@
 use crate::controllers::utils::base64_decode;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::gpu::Lut3DData;
-use neko_engine_kernel::gpu::LutRegistry;
+use neko_engine_kernel::contracts::gpu::Lut3DData;
+use neko_engine_kernel::contracts::gpu::LutRegistry;
 use neko_engine_types::ActionResponse;
 use serde::Deserialize;
 use serde_json::Value;

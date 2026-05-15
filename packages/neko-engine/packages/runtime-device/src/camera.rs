@@ -4,7 +4,7 @@
 //! Placeholder — full implementation requires avdevice integration.
 
 use neko_engine_kernel::error::{Error, Result};
-use neko_engine_kernel::services::camera::{CameraCaptureConfig, CameraDevice, ICameraService};
+use neko_engine_kernel::contracts::services::{CameraCaptureConfig, CameraDevice, ICameraService};
 use neko_engine_types::StreamId;
 
 pub struct CameraService;

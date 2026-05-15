@@ -6,7 +6,7 @@
 //! - Proxy binding: link proxy files to original resources
 //! - LRU eviction: automatic cleanup when capacity exceeded
 
-use neko_engine_kernel::domain::{infer_resource_type, ResourceHandle};
+use neko_engine_kernel::contracts::domain::{infer_resource_type, ResourceHandle};
 use neko_engine_types::{ResourceId, ResourceType};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

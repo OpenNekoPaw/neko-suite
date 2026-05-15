@@ -2,9 +2,9 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::encoder::codec_ext::HwEncoderTypeExt;
-use neko_engine_kernel::encoder::hwaccel::detect_hw_encoders;
-use neko_engine_kernel::services::{INodeService, NodeService};
+use neko_engine_kernel::contracts::codec::detect_hw_encoders;
+use neko_engine_kernel::contracts::codec::HwEncoderTypeExt;
+use neko_engine_kernel::contracts::services::{INodeService, NodeService};
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use neko_engine_types::{HwEncoderType, VideoCodec};
@@ -76,11 +76,16 @@ impl Controller for NodeController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_kernel::facade::ServiceFactory;
+
+    fn create_test_controller() -> NodeController {
+        let services = ServiceFactory::new().create_with_gpu(None);
+        NodeController::new(services.node_service)
+    }
 
     #[tokio::test]
     async fn test_node_controller_health() {
-        let node_service = Arc::new(NodeService::new(None));
-        let controller = NodeController::new(node_service);
+        let controller = create_test_controller();
 
         let response = controller
             .handle("health", None, Value::Null, None)
@@ -92,8 +97,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_node_controller_metric() {
-        let node_service = Arc::new(NodeService::new(None));
-        let controller = NodeController::new(node_service);
+        let controller = create_test_controller();
 
         let response = controller
             .handle("metric", None, Value::Null, None)
@@ -105,8 +109,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_node_controller_unknown_action() {
-        let node_service = Arc::new(NodeService::new(None));
-        let controller = NodeController::new(node_service);
+        let controller = create_test_controller();
 
         let result = controller.handle("unknown", None, Value::Null, None).await;
 
@@ -115,8 +118,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_node_controller_hw_capabilities() {
-        let node_service = Arc::new(NodeService::new(None));
-        let controller = NodeController::new(node_service);
+        let controller = create_test_controller();
 
         let response = controller
             .handle("hw_capabilities", None, Value::Null, None)

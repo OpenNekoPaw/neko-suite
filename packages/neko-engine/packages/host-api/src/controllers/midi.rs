@@ -2,7 +2,7 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::services::IMidiService;
+use neko_engine_kernel::contracts::services::IMidiService;
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use neko_runtime_device::MidiService;

@@ -9,8 +9,7 @@
 use super::audit::{PluginAuditContext, PluginAuditor, PluginPermissionAuditEvent};
 use super::governance::{
     now_unix_millis, DefaultPluginLoadAuthority, PluginLicenseDecision, PluginLoadAuthority,
-    PluginLoadError, PluginLoadGate, PluginLoadRecord, PluginLoadResult, PluginTrustTier,
-    WorkspaceTrustLevel,
+    PluginLoadError, PluginLoadGate, PluginLoadRecord, PluginTrustTier, WorkspaceTrustLevel,
 };
 use super::manifest::{EnginePluginManifest, PluginCapability, PluginKind, PluginSourceKind};
 use super::system_info::{coarse_system_info, PluginSystemInfo};
@@ -569,8 +568,8 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugin::{EffectRegistryActivator, PluginAuditReporter};
-    use neko_engine_kernel::services::EffectRegistry;
+    use crate::plugin::{EffectRegistryActivator, PluginAuditReporter, PluginLoadResult};
+    use neko_engine_kernel::contracts::services::EffectRegistry;
     use neko_engine_types::EffectKind;
     use std::fs;
     use std::sync::{Arc, Mutex};

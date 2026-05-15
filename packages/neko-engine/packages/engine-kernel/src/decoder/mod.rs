@@ -3,6 +3,8 @@
 //! Codec implementation lives in `neko-engine-codec`. This module keeps the
 //! previous kernel import surface as a temporary migration compatibility layer.
 
+#![allow(unused_imports)]
+
 pub use neko_engine_codec::decoder::common;
 pub use neko_engine_codec::decoder::hwaccel;
 pub use neko_engine_codec::decoder::idr_scanner;

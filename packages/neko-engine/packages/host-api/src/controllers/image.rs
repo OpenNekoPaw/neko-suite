@@ -4,9 +4,9 @@ use crate::controllers::utils::{base64_decode, base64_encode, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
-use neko_engine_kernel::domain::CaptureOptions;
-use neko_engine_kernel::media_service::{diff_media, DiffCategory};
-use neko_engine_kernel::services::{IImageService, ImageService};
+use neko_engine_kernel::contracts::domain::CaptureOptions;
+use neko_engine_kernel::contracts::media::{diff_media, DiffCategory};
+use neko_engine_kernel::contracts::services::{IImageService, ImageService};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, FrameFormat};
 use serde::Deserialize;
@@ -180,7 +180,7 @@ impl Controller for ImageController {
                     .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64 data: {}", e)))?;
 
                 // Encode RGBA to JPEG
-                use neko_engine_kernel::media_service::encode_rgba_to_jpeg;
+                use neko_engine_kernel::contracts::media::encode_rgba_to_jpeg;
                 let jpeg_data = encode_rgba_to_jpeg(&rgba_data, width, height, opts.quality)
                     .map_err(|e| ApiError::ServiceError(format!("JPEG encoding failed: {}", e)))?;
 
@@ -236,11 +236,12 @@ impl Controller for ImageController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_kernel::facade::ServiceFactory;
 
     fn create_test_controller() -> ImageController {
-        let image_service = Arc::new(ImageService::new(None));
+        let services = ServiceFactory::new().create_with_gpu(None);
         let resource_registry = Arc::new(ResourceRegistry::new());
-        ImageController::new(image_service, resource_registry)
+        ImageController::new(services.image_service, resource_registry)
     }
 
     #[tokio::test]

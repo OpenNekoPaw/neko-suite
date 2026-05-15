@@ -5,6 +5,8 @@
 //!
 //! All processing stays on GPU until final H.264 output.
 
+#![allow(unused_imports)]
+
 mod backend;
 mod pipeline;
 mod provider;
