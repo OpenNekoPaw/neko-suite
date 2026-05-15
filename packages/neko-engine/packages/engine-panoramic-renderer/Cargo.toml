@@ -1,0 +1,20 @@
+[package]
+name = "neko-engine-panoramic-renderer"
+version.workspace = true
+edition.workspace = true
+description = "Panoramic renderer companion crate for neko-engine"
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+neko-engine-gpu = { path = "../engine-gpu" }
+neko-engine-types = { path = "../engine-types" }
+neko-runtime-media = { path = "../runtime-media" }
+
+bytemuck.workspace = true
+wgpu.workspace = true
+
+[features]
+default = []

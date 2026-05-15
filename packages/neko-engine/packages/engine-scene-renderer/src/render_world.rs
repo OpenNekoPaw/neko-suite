@@ -4,7 +4,7 @@
 //! render-only copies, GPU cache keys, and draw ordering data, but never stores
 //! live ECS component references.
 
-use crate::gpu::scene_renderer::asset_cache::MaterialUniforms;
+use crate::asset_cache::MaterialUniforms;
 use glam::{Mat4, Vec3};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

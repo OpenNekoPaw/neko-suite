@@ -16,8 +16,8 @@ pub enum GpuExtractionGroup {
     /// Frame-time scheduling and queue pressure policy. Extraction-ready, but
     /// expected to remain a separately re-exported scheduling surface.
     Budget,
-    /// Domain-specific renderers that remain kernel-owned until companion
-    /// renderer crates are introduced.
+    /// Domain-specific renderers that live in companion crates instead of the
+    /// generic GPU core crate.
     RendererCompanion,
 }
 
@@ -82,7 +82,7 @@ pub const BUDGET_MODULES: &[GpuModuleBoundary] = &[GpuModuleBoundary {
     rationale: "frame-time scheduling API is GPU-facing and can move behind a stable re-export",
 }];
 
-/// Renderer companion modules excluded from the first GPU core extraction.
+/// Renderer companion modules excluded from the generic GPU core extraction.
 pub const RENDERER_COMPANION_MODULES: &[GpuModuleBoundary] = &[
     companion("scene_renderer"),
     companion("puppet_renderer"),
@@ -125,7 +125,7 @@ const fn companion(path: &'static str) -> GpuModuleBoundary {
         path,
         group: GpuExtractionGroup::RendererCompanion,
         extraction_ready: false,
-        rationale: "domain-specific renderer companion excluded from first GPU core extraction",
+        rationale: "domain-specific renderer companion owned outside generic GPU core",
     }
 }
 
@@ -138,7 +138,7 @@ mod tests {
         for module in renderer_companion_modules() {
             assert!(
                 !module.extraction_ready,
-                "{} must stay kernel-owned",
+                "{} must stay outside the generic GPU core extraction",
                 module.path
             );
             assert_eq!(module.group, GpuExtractionGroup::RendererCompanion);

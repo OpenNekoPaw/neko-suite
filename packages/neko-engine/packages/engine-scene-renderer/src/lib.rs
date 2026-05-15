@@ -14,6 +14,9 @@
 //! TextureCompositor (2D compositing)
 //! ```
 
+#[cfg(test)]
+mod architecture_tests;
+
 pub mod asset_cache;
 pub mod environment;
 pub mod frame_scheduler;
@@ -59,7 +62,8 @@ pub use viewport::{
     ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
 };
 
-use crate::gpu::{BlendMode, GpuLayer, Transform2D};
+use neko_engine_gpu::{GpuLayer, Transform2D};
+use neko_engine_types::BlendMode;
 
 /// Output from a 3D scene render pass
 #[derive(Debug, Clone, PartialEq, Eq)]

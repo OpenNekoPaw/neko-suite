@@ -1,7 +1,7 @@
 //! One-way extraction from runtime-scene Simulation ECS into Render World.
 
-use crate::gpu::scene_renderer::asset_cache::MaterialUniforms;
-use crate::gpu::scene_renderer::{
+use crate::asset_cache::MaterialUniforms;
+use crate::{
     CameraParams, GpuMaterialHandle, GpuMeshHandle, RenderCameraData, RenderInstance,
     RenderLightData, RenderLightKind, RenderMaterialData, RenderWorld,
 };

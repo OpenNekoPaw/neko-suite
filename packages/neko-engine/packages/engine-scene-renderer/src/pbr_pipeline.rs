@@ -3,17 +3,17 @@
 //! Renders a bevy_ecs World's visible meshes using metallic-roughness PBR.
 //! Outputs to Rgba16Float texture (matching TextureCompositor format).
 
-use crate::gpu::scene_renderer::asset_cache::AssetCache;
-use crate::gpu::scene_renderer::{
+use crate::asset_cache::AssetCache;
+use crate::{
     build_viewport_render_graph, extract_render_world, CameraParams, CompiledRenderPass,
     PostProcessChain, PostProcessSettings, RenderGraphError, RenderGraphExecutor, RenderLightKind,
     RenderSystemLabel, RenderWorld, SceneRenderGraphExecution, SceneRenderOutput, SceneToneMapping,
     ToneMapping, ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput,
     ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
 };
-use crate::gpu::GpuContext;
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
+use neko_engine_gpu::GpuContext;
 use neko_runtime_scene::asset_database::AssetDatabase;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
@@ -316,13 +316,13 @@ impl PbrRenderer {
                 push_constant_ranges: &[],
             });
 
-        let shader_src = include_str!("../../../shaders/pbr_forward.wgsl");
+        let shader_src = include_str!("../shaders/pbr_forward.wgsl");
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("pbr_forward_shader"),
             source: wgpu::ShaderSource::Wgsl(shader_src.into()),
         });
 
-        let skinned_shader_src = include_str!("../../../shaders/pbr_forward_skinned.wgsl");
+        let skinned_shader_src = include_str!("../shaders/pbr_forward_skinned.wgsl");
         let skinned_shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("pbr_forward_skinned_shader"),
             source: wgpu::ShaderSource::Wgsl(skinned_shader_src.into()),

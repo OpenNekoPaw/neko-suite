@@ -1,6 +1,6 @@
 //! Frame scheduling budgets for scene viewport rendering.
 
-use crate::gpu::scene_renderer::{ViewportDescriptor, ViewportWorkMode};
+use crate::{ViewportDescriptor, ViewportWorkMode};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FrameBudget {
@@ -265,7 +265,7 @@ impl BudgetWeights {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gpu::scene_renderer::{SceneToneMapping, ViewportPostProcess, ViewportRenderMode};
+    use crate::{SceneToneMapping, ViewportPostProcess, ViewportRenderMode};
 
     fn descriptor(work_mode: ViewportWorkMode, fps: u32) -> ViewportDescriptor {
         ViewportDescriptor {

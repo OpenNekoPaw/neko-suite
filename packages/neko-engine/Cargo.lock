@@ -2407,6 +2407,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "neko-engine-export-renderer"
+version = "0.1.0"
+dependencies = [
+ "neko-engine-gpu",
+ "wgpu",
+]
+
+[[package]]
 name = "neko-engine-gpu"
 version = "0.1.0"
 dependencies = [
@@ -2458,7 +2466,11 @@ dependencies = [
  "metal",
  "neko-engine-audio",
  "neko-engine-codec",
+ "neko-engine-export-renderer",
  "neko-engine-gpu",
+ "neko-engine-panoramic-renderer",
+ "neko-engine-puppet-renderer",
+ "neko-engine-scene-renderer",
  "neko-engine-types",
  "neko-runtime-media",
  "neko-runtime-puppet",
@@ -2481,6 +2493,45 @@ dependencies = [
  "wgpu-core",
  "wgpu-hal",
  "windows 0.52.0",
+]
+
+[[package]]
+name = "neko-engine-panoramic-renderer"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "neko-engine-gpu",
+ "neko-engine-types",
+ "neko-runtime-media",
+ "wgpu",
+]
+
+[[package]]
+name = "neko-engine-puppet-renderer"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "neko-engine-gpu",
+ "neko-engine-types",
+ "neko-runtime-puppet",
+ "wgpu",
+]
+
+[[package]]
+name = "neko-engine-scene-renderer"
+version = "0.1.0"
+dependencies = [
+ "bevy_ecs",
+ "bytemuck",
+ "glam",
+ "gltf",
+ "half",
+ "neko-engine-gpu",
+ "neko-engine-types",
+ "neko-runtime-scene",
+ "thiserror 1.0.69",
+ "tracing",
+ "wgpu",
 ]
 
 [[package]]

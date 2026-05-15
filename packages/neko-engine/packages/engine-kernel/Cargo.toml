@@ -14,6 +14,10 @@ neko-engine-types = { path = "../engine-types" }
 neko-engine-codec = { path = "../engine-codec" }
 neko-engine-audio = { path = "../engine-audio" }
 neko-engine-gpu = { path = "../engine-gpu" }
+neko-engine-scene-renderer = { path = "../engine-scene-renderer" }
+neko-engine-puppet-renderer = { path = "../engine-puppet-renderer" }
+neko-engine-panoramic-renderer = { path = "../engine-panoramic-renderer" }
+neko-engine-export-renderer = { path = "../engine-export-renderer" }
 
 # 3D scene management
 neko-runtime-scene = { path = "../runtime-scene" }

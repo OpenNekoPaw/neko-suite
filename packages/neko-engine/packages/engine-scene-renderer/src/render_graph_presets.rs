@@ -1,6 +1,6 @@
 //! Standard RenderGraph presets for the 3D scene renderer.
 
-use crate::gpu::scene_renderer::{
+use crate::{
     RenderGraph, RenderGraphError, RenderPassDesc, RenderResourceDesc, RenderResourceId,
     RenderResourceKind, RenderSystemLabel,
 };

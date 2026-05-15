@@ -9,7 +9,7 @@
 //! Uses ping-pong texture approach: each pass reads from one texture
 //! and writes to another, alternating between two render targets.
 
-use crate::gpu::GpuContext;
+use neko_engine_gpu::GpuContext;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -132,9 +132,7 @@ impl PostProcessChain {
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("post_process_shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("../../../shaders/post_process.wgsl").into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/post_process.wgsl").into()),
         });
 
         let tonemap_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

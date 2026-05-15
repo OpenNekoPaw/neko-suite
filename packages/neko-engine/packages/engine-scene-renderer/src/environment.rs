@@ -10,7 +10,7 @@
 //! (falls back to constant ambient). When present, it dramatically improves
 //! metallic/reflective surface quality.
 
-use crate::gpu::GpuContext;
+use neko_engine_gpu::GpuContext;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -157,7 +157,7 @@ impl Environment {
         // Skybox pipeline
         let skybox_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("skybox_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../../../shaders/skybox.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/skybox.wgsl").into()),
         });
 
         let skybox_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

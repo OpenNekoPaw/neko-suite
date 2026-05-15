@@ -7,8 +7,8 @@
 //! - Compute pass: update particle positions, velocities, lifetimes
 //! - Render pass: billboard quads facing camera, sorted by distance
 
-use crate::gpu::GpuContext;
 use bytemuck::{Pod, Zeroable};
+use neko_engine_gpu::GpuContext;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -256,7 +256,7 @@ impl GpuParticleSystem {
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("particle_update_shader"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("../../../shaders/particle_update.wgsl").into(),
+                include_str!("../shaders/particle_update.wgsl").into(),
             ),
         });
 
@@ -307,7 +307,7 @@ impl GpuParticleSystem {
         let render_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("particle_render_shader"),
             source: wgpu::ShaderSource::Wgsl(
-                include_str!("../../../shaders/particle_render.wgsl").into(),
+                include_str!("../shaders/particle_render.wgsl").into(),
             ),
         });
 

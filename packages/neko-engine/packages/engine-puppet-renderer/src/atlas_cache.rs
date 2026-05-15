@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::error::{Error, Result};
+use neko_engine_gpu::error::{Error, Result};
 
 /// CPU texture atlas input.
 #[derive(Debug, Clone, PartialEq, Eq)]

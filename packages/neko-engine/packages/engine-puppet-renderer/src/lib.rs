@@ -3,14 +3,17 @@
 //! The renderer consumes runtime-puppet render data and produces a GPU-resident
 //! output texture. Output routing remains owned by PipelineSink users.
 
+#[cfg(test)]
+mod architecture_tests;
+
 mod atlas_cache;
 mod shader;
 mod sprite_batch;
 
 use std::sync::{Arc, Mutex};
 
-use crate::error::{Error, Result};
-use crate::gpu::{GpuContext, GpuReadbackTarget};
+use neko_engine_gpu::error::{Error, Result};
+use neko_engine_gpu::{GpuContext, GpuReadbackTarget};
 use neko_engine_types::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame, VideoOutput};
 
 pub use atlas_cache::{PuppetAtlasCache, PuppetTextureAtlas, PuppetTextureAtlasInput};

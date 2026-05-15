@@ -1,6 +1,6 @@
 //! Viewport descriptor planning for scene render graph variants.
 
-use crate::gpu::scene_renderer::{
+use crate::{
     build_standard_scene_render_graph, RenderGraph, RenderGraphError, RenderResourceId,
     StandardSceneRenderGraphOptions,
 };

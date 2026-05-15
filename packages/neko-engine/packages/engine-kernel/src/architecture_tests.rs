@@ -270,16 +270,108 @@ fn engine_gpu_sources_avoid_kernel_orchestration_and_renderer_companions() {
 }
 
 #[test]
-fn kernel_gpu_module_documents_temporary_reexports_and_retained_renderers() {
+fn kernel_gpu_module_documents_temporary_reexports_and_companion_shims() {
     let gpu_mod = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gpu/mod.rs");
     let source = fs::read_to_string(&gpu_mod)
         .unwrap_or_else(|err| panic!("failed to read {}: {}", gpu_mod.display(), err));
 
     assert!(source.contains("pub use neko_engine_gpu::*"));
+    assert!(source.contains("pub use neko_engine_scene_renderer::"));
+    assert!(source.contains("pub use neko_engine_puppet_renderer::"));
+    assert!(source.contains("pub use neko_engine_panoramic_renderer::"));
     assert!(source.contains("pub mod scene_renderer"));
     assert!(source.contains("pub mod puppet_renderer"));
-    assert!(source.contains("mod panoramic_renderer"));
+    assert!(source.contains("pub mod panoramic_renderer"));
     assert!(source.contains("Temporary GPU compatibility surface"));
+}
+
+#[test]
+fn renderer_companion_crates_exist_and_are_workspace_members() {
+    let packages_dir = packages_dir();
+    for crate_dir in [
+        "engine-scene-renderer",
+        "engine-puppet-renderer",
+        "engine-panoramic-renderer",
+        "engine-export-renderer",
+    ] {
+        assert!(
+            packages_dir.join(crate_dir).exists(),
+            "renderer companion crate `{}` must exist",
+            crate_dir
+        );
+    }
+
+    let manifest = fs::read_to_string(workspace_manifest())
+        .unwrap_or_else(|err| panic!("failed to read workspace manifest: {}", err));
+    for member in [
+        "\"packages/engine-scene-renderer\"",
+        "\"packages/engine-puppet-renderer\"",
+        "\"packages/engine-panoramic-renderer\"",
+        "\"packages/engine-export-renderer\"",
+    ] {
+        assert!(
+            manifest.contains(member),
+            "workspace must list renderer companion member {}",
+            member
+        );
+    }
+}
+
+#[test]
+fn renderer_companion_manifests_avoid_kernel_and_host_crates() {
+    let packages_dir = packages_dir();
+    for crate_dir in [
+        "engine-scene-renderer",
+        "engine-puppet-renderer",
+        "engine-panoramic-renderer",
+        "engine-export-renderer",
+    ] {
+        let manifest_path = packages_dir.join(crate_dir).join("Cargo.toml");
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {}", manifest_path.display(), err));
+        for forbidden in [
+            "neko-engine-kernel",
+            "host-api",
+            "host-http",
+            "host-napi",
+            "host-cli",
+        ] {
+            assert!(
+                !manifest.contains(forbidden),
+                "{} must not depend on `{}`",
+                manifest_path.display(),
+                forbidden
+            );
+        }
+    }
+}
+
+#[test]
+fn runtime_scene_and_puppet_remain_gpu_free() {
+    let packages_dir = packages_dir();
+    for crate_dir in ["runtime-scene", "runtime-puppet"] {
+        let manifest_path = packages_dir.join(crate_dir).join("Cargo.toml");
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {}", manifest_path.display(), err));
+        for forbidden in [
+            "wgpu",
+            "neko-engine-gpu",
+            "engine-scene-renderer",
+            "engine-puppet-renderer",
+            "engine-panoramic-renderer",
+            "neko-engine-kernel",
+            "host-api",
+            "host-http",
+            "host-napi",
+        ] {
+            assert!(
+                !manifest.contains(forbidden),
+                "{} must not depend on `{}`",
+                manifest_path.display(),
+                forbidden
+            );
+        }
+    }
 }
 
 #[test]

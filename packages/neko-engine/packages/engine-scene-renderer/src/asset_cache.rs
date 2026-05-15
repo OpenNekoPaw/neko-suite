@@ -10,7 +10,7 @@
 //! descriptors and materializes them as `wgpu` resources here.
 
 use super::vertex::{PbrVertex, SkinnedPbrVertex};
-use crate::gpu::GpuContext;
+use neko_engine_gpu::GpuContext;
 use neko_runtime_scene::asset_database::composite_primitive_id;
 use neko_runtime_scene::MeshDirtyRegion;
 use std::collections::HashMap;

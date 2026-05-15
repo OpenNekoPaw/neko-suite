@@ -4,14 +4,17 @@
 //! projects equirectangular content into a view texture. View state is mutable so
 //! stream loops can update yaw/pitch/roll/FOV without recreating the decoder.
 
+#[cfg(test)]
+mod architecture_tests;
+
 use std::sync::{Arc, Mutex};
 
 use bytemuck::{Pod, Zeroable};
 use neko_runtime_media::{PanoramaViewMode, PanoramaViewState};
 use wgpu::util::DeviceExt;
 
-use crate::error::{Error, Result};
-use crate::gpu::{GpuContext, GpuReadbackTarget};
+use neko_engine_gpu::error::{Error, Result};
+use neko_engine_gpu::{GpuContext, GpuReadbackTarget};
 use neko_engine_types::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame, VideoOutput};
 
 /// Output texture format used by panoramic preview before encode handoff.

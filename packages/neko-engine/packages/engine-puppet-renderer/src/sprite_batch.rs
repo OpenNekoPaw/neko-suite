@@ -2,7 +2,7 @@
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::error::{Error, Result};
+use neko_engine_gpu::error::{Error, Result};
 
 use super::{PuppetBlendMode, PuppetMeshInput};
 
@@ -154,7 +154,7 @@ impl SpriteBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gpu::puppet_renderer::{PuppetBlendMode, PuppetMeshInput};
+    use crate::{PuppetBlendMode, PuppetMeshInput};
     use std::time::Duration;
     use std::time::Instant;
 

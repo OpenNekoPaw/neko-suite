@@ -30,149 +30,13 @@ use crate::gpu::{
 };
 use crate::services::{ISceneService, SceneService};
 use crate::telemetry::spans::span;
+use neko_engine_export_renderer::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
 use neko_engine_types::{BlendMode, TrackType};
 
 use super::types::ExportSettings;
 
 #[cfg(test)]
 mod tests;
-
-// =============================================================================
-// GPU Pipeline Timing
-// =============================================================================
-
-/// Detailed timing breakdown for GPU pipeline stages
-#[derive(Debug, Clone, Default)]
-pub struct GpuPipelineTiming {
-    /// Hardware decode time in nanoseconds
-    pub hw_decode_ns: u64,
-    /// NV12 texture import to wgpu in nanoseconds
-    pub nv12_import_ns: u64,
-    /// NV12 to RGBA conversion in nanoseconds
-    pub nv12_to_rgba_ns: u64,
-    /// Layer composition in nanoseconds
-    pub composite_ns: u64,
-    /// RGBA to NV12 conversion in nanoseconds
-    pub rgba_to_nv12_ns: u64,
-    /// CPU readback in nanoseconds
-    pub cpu_readback_ns: u64,
-}
-
-impl GpuPipelineTiming {
-    /// Get total GPU pipeline time in nanoseconds
-    pub fn total_ns(&self) -> u64 {
-        self.hw_decode_ns
-            + self.nv12_import_ns
-            + self.nv12_to_rgba_ns
-            + self.composite_ns
-            + self.rgba_to_nv12_ns
-            + self.cpu_readback_ns
-    }
-}
-
-/// Result of processing a frame to NV12 with timing information
-pub struct Nv12FrameResult {
-    /// NV12 data (empty if using zero-copy)
-    pub data: Vec<u8>,
-    /// IOSurface handle for zero-copy (macOS only)
-    pub gpu_handle: Option<usize>,
-    /// Output width
-    pub width: u32,
-    /// Output height
-    pub height: u32,
-    /// Detailed timing breakdown
-    pub timing: GpuPipelineTiming,
-}
-
-// =============================================================================
-// Layer Texture Pool
-// =============================================================================
-
-/// Simple texture pool for reusing layer textures across frames
-///
-/// Avoids per-frame texture allocation by recycling textures between frames.
-/// All textures in the pool have the same dimensions (output_width × output_height).
-struct LayerTexturePool {
-    /// Available textures ready for reuse
-    available: Vec<wgpu::Texture>,
-    /// Textures currently in use by the current frame
-    in_use: Vec<wgpu::Texture>,
-    /// Cached texture dimensions
-    width: u32,
-    height: u32,
-}
-
-impl LayerTexturePool {
-    /// Create an empty texture pool
-    fn new() -> Self {
-        Self {
-            available: Vec::new(),
-            in_use: Vec::new(),
-            width: 0,
-            height: 0,
-        }
-    }
-
-    /// Acquire a texture from the pool, creating one if necessary
-    ///
-    /// Returns the index of the texture in the in_use vector.
-    fn acquire(&mut self, ctx: &GpuContext, width: u32, height: u32) -> usize {
-        // If dimensions changed, clear the pool
-        if self.width != width || self.height != height {
-            self.available.clear();
-            self.in_use.clear();
-            self.width = width;
-            self.height = height;
-        }
-
-        // Try to reuse an available texture
-        if let Some(texture) = self.available.pop() {
-            self.in_use.push(texture);
-            return self.in_use.len() - 1;
-        }
-
-        // Create a new texture
-        let texture = ctx.device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("LayerTexturePool Texture"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            // Rgba16Float: matches nv12_renderer output for HDR-safe copies
-            format: wgpu::TextureFormat::Rgba16Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-
-        self.in_use.push(texture);
-        self.in_use.len() - 1
-    }
-
-    /// Get reference to a texture by index
-    fn get(&self, index: usize) -> &wgpu::Texture {
-        &self.in_use[index]
-    }
-
-    /// Release all in-use textures back to the available pool
-    ///
-    /// Call this at the start of each frame to recycle textures.
-    fn release_all(&mut self) {
-        self.available.append(&mut self.in_use);
-    }
-
-    /// Clear all textures from the pool
-    #[allow(dead_code)]
-    fn clear(&mut self) {
-        self.available.clear();
-        self.in_use.clear();
-    }
-}
 
 /// GPU-centric export pipeline (Facade)
 ///
@@ -1436,7 +1300,7 @@ impl GpuExportPipeline {
                 );
                 self.ctx.queue().submit(std::iter::once(encoder.finish()));
             }
-            self.layer_texture_pool.in_use.pop().unwrap()
+            self.layer_texture_pool.take_last_in_use().unwrap()
         };
 
         // Calculate transform: always apply fit-to-canvas base scaling

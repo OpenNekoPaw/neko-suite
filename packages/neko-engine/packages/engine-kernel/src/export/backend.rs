@@ -14,9 +14,10 @@ use crate::gpu::{GpuBudgetController, GpuContext};
 use neko_engine_types::{AudioEncoderConfig, GpuOutputHandle, SampleFormat};
 
 use super::audio_mixer::{AudioMixer, MixedAudioFrame};
-use super::gpu_export_pipeline::{GpuExportPipeline, GpuPipelineTiming};
+use super::gpu_export_pipeline::GpuExportPipeline;
 use super::sink_factory::{DefaultExportSinkFactory, ExportSinkFactory};
 use super::types::{ExportJobConfig, ExportMetadata};
+use neko_engine_export_renderer::GpuPipelineTiming;
 
 /// Frame output produced by the export render backend.
 pub struct ExportRenderedFrame {

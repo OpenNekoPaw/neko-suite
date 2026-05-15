@@ -1,0 +1,26 @@
+[package]
+name = "neko-engine-scene-renderer"
+version.workspace = true
+edition.workspace = true
+description = "Scene renderer companion crate for neko-engine"
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+neko-engine-gpu = { path = "../engine-gpu" }
+neko-engine-types = { path = "../engine-types" }
+neko-runtime-scene = { path = "../runtime-scene" }
+
+bevy_ecs.workspace = true
+bytemuck.workspace = true
+glam.workspace = true
+gltf.workspace = true
+half = "2.4"
+thiserror.workspace = true
+tracing.workspace = true
+wgpu.workspace = true
+
+[features]
+default = []
