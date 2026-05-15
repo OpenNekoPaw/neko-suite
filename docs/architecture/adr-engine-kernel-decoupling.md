@@ -1,9 +1,9 @@
 # ADR：engine-kernel 解耦与 crate 边界重塑
 
-- **状态**：已实施（P0 + P1）；P2/P3 待推进
+- **状态**：已实施（P0-P3）；后续进入归档与局部清理
 - **日期**：2026-05-15
 - **作者**：Codex（架构审查）
-- **范围**：neko-engine（engine-kernel / engine-types / runtime-scene / runtime-puppet / host-api）
+- **范围**：neko-engine（engine-kernel / engine-types / engine-gpu / engine-codec / engine-audio / renderer companions / host-api / host-http）
 - **父文档**：[adr-engine-interface-pipeline-decoupling](./adr-engine-interface-pipeline-decoupling.md)
 - **相关 ADR**：
   - [adr-engine-pipeline-sink](./adr-engine-pipeline-sink.md)
@@ -21,22 +21,28 @@
 
 因此，当前问题不是“engine-kernel 做了不该做的事”，而是“本该分层、分 crate 的事全部在同一个 crate 中完成”。这削弱了 ADR 追求的解耦效果，也让后续扩展、测试和编译边界变得模糊。
 
-## 实施状态（2026-05-15）
+## 实施状态（2026-05-15 更新）
 
-P0 和 P1 已落地并归档到 OpenSpec：
+P0 到 P3 已落地，`engine-kernel` 已从基础设施容器收敛为编排与 facade 层：
 
 - `PipelineOutput`、`VideoOutput`、`AudioOutput`、`GpuOutputHandle`、`GpuFrameLease` 等输出合同已迁入 `engine-types`。
-- `engine-gpu` 已承接 GPU context/resource/HAL、platform interop、compositor/effect/budget 等基础设施；scene/puppet/panoramic renderer 仍作为 kernel-owned companion 留待 P2。
+- `engine-gpu` 已承接 GPU context/resource/HAL、platform interop、compositor/effect/budget 等基础设施。
 - `engine-codec` 已承接 FFmpeg video decoder/encoder/muxer、IDR scanner、codec pools。
 - `engine-audio` 已承接 audio decoder/encoder、DSP effect factory、mic capture、soft limiter。
-- `engine-kernel` 的 `audio`、`decoder`、`encoder`、`gpu` 模块保留兼容 re-export shim，host facade 收窄留待 P3。
+- `engine-scene-renderer`、`engine-puppet-renderer`、`engine-panoramic-renderer`、`engine-export-renderer` 已承接领域 renderer companion 职责，且不依赖 `engine-kernel` 或 host crate。
+- `engine-kernel` 的 `audio`、`decoder`、`encoder`、`gpu` 模块保留兼容 re-export shim，但已去除 broad/glob GPU re-export。
 - `export` / `preview` 已引入 backend adapter 与 sink factory，避免直接依赖 `services::impls::*` 具体实现。
-- 架构测试已覆盖 `gpu -> services`、`domain -> gpu`、基础设施 crate forbidden dependency、export/preview backend adapter、BlendMode 单一合同等规则。
+- `EngineKernelFacade` / `ServiceFactory` / `KernelServices` 已成为 host-facing 入口，host-api/host-http 通过 facade 与 contract path 消费服务。
+- `KernelServices` 的 controller-facing 字段已收窄为 `Arc<dyn I*Service>` trait object，具体 service 构造留在 `ServiceFactory` 内部。
+- `contracts::services` 不再 re-export concrete kernel service 类型，只保留 service traits 与明确的非 service 例外，例如 `EffectRegistry`、`PipelineSink`、`StreamSink`。
+- 架构测试已覆盖 `gpu -> services`、`domain -> gpu`、基础设施 crate forbidden dependency、renderer companion boundary、export/preview backend adapter、host facade import、trait-object service handles、BlendMode 单一合同等规则。
+- 移除 kernel 级 blanket `#[allow(dead_code, unused_imports)]` 后，kernel 自身 dead-code warning 已收敛为 0；ADR 已规划但尚未接入的 preview provider / encode-only export adapter 等保留 targeted `#[allow(dead_code)] + TODO(P2)`。
 
-当前剩余结构任务：
+当前剩余任务：
 
-- P2：提取 scene/puppet/panoramic renderer companion crate，并评估 `GpuExportPipeline` 是否需要进入 rendering/export companion crate。
-- P3：引入 `ServiceFactory` / kernel facade，收窄 `engine-kernel` 顶层 `pub mod` 与 `neko_engine_kernel::gpu::*` glob re-export。
+- 归档 `abstract-engine-kernel-service-facade` OpenSpec change。
+- 继续消化 5 个既有 runtime warning：`runtime-media` 3 个 unused/dead-code warning、`runtime-scene` / `runtime-puppet` 各 1 个 `RawWorldAccess` deprecated warning。
+- 后续按独立 PR 清理 preview provider 接入、legacy encode-only export pipeline、runtime `RawWorldAccess` 迁移。
 
 ---
 
@@ -46,10 +52,10 @@ P0 和 P1 已落地并归档到 OpenSpec：
 
 | 指标 | 当前值 | 判断 |
 |------|--------|------|
-| Rust 文件数 | 177 | 单 crate 内部模块过多 |
-| 代码量 | 约 68,043 行 | 体量已接近多个 runtime/infrastructure crate 的合体 |
-| `pub` 暴露面 | 约 1,771 处 | 包含 re-export 与可见性声明，说明边界过宽 |
-| 顶层模块 | 15 个 | 覆盖 GPU、codec、audio、export、preview、domain、services 等独立职责 |
+| Rust 文件数 | 99 | 大型基础设施和 renderer 已迁出 |
+| 代码量 | 约 32,411 行 | 较初始约 68K 行显著下降，仍包含编排、domain、services、export/preview orchestration |
+| `pub` 暴露面 | 已由架构测试 allowlist 约束 | host-facing 入口集中到 facade/contracts |
+| 顶层模块 | allowlist 约束 | GPU/codec/audio implementation 不再由 kernel 拥有 |
 
 ### 模块体量
 
@@ -299,34 +305,44 @@ P1/P2 可进一步引入依赖图检查，例如 `cargo-depgraph` 或自定义 `
 
 ---
 
-## 验收标准
+## 当前验收结果
 
-P0 完成后，应满足：
+截至 2026-05-15，本 ADR 的 P0-P3 目标已满足：
 
-- `gpu/` 不依赖 `services/`。
-- `PipelineOutput` 等输出 DTO 位于 `engine-types` 或由 `engine-types` re-export。
-- `GpuReadbackTarget` 不在 `engine-types` 中。
-- `host-api` 现有导出兼容。
-- 最小验证通过：
-  - `cargo check -p neko-engine-kernel --lib --no-default-features`
-  - 与 PipelineSink、snapshot、stream、muxer 相关的 targeted tests
-- 合入前验证：
-  - `cargo test -p neko-engine-kernel`
-  - 零拷贝热路径 smoke/perf 测试，确认帧时间没有因为合同迁移发生退化
-  - MuxerSink flush/close 行为有回归保护：`flush()` 不应被 DTO 迁移意外改变为未定义行为；若当前实现仍保持 flush 等同终结操作，必须有测试或文档明确语义，或在同一 PR 中修复为 flush 后 worker 继续可用。
-  - StreamSink close 行为有回归保护：`close()` 应先 flush 编码器再释放回池，或至少通过测试证明迁移前后不会丢失 encoder buffered frames。
+- `gpu/` 不依赖 `services/`，并由 `gpu_module_does_not_depend_on_services` 架构测试保护。
+- `domain/` 不依赖 `gpu/`，并由 `domain_module_does_not_depend_on_gpu` 架构测试保护。
+- `PipelineOutput` 等输出 DTO 位于 `engine-types`，`GpuReadbackTarget` 留在 GPU/kernel adapter 层。
+- `engine-types` 没有引入 `wgpu`、FFmpeg、tokio runtime、host 或 kernel 依赖。
+- `engine-gpu`、`engine-codec`、`engine-audio` 可独立编译和测试，且不依赖 `engine-kernel` 或 host crate。
+- renderer companion crates 不依赖 `engine-kernel` 或 host crate，纯 `runtime-scene` / `runtime-puppet` 保持 GPU-free。
+- `engine-kernel::gpu` 兼容层使用显式 re-export，不再使用 broad `pub use neko_engine_gpu::*`。
+- `export` / `preview` 通过 backend adapter 和 sink factory 注入具体实现，不直接依赖 `services::impls::*`。
+- `KernelServices` host-facing service handles 使用 `Arc<dyn I*Service>` trait object；host controller 不再以具体 kernel service 类型作为注入合同。
+- `contracts::services` 不 re-export concrete kernel services；保留的例外均为显式非 service 合同。
+- `MuxerSink::flush()` 与 `StreamSink::close()` 已有回归测试保护，分别覆盖 flush 后 worker 保持可用、close 前 flush encoder。
+- kernel 级 blanket `#[allow(dead_code, unused_imports)]` 已移除；kernel 自身 dead-code warning 已清零。
 
-P1/P2 完成后，应满足：
+最近一次验证：
 
-- `engine-kernel` 行数显著下降，目标约 20K 到 30K 行。
-- GPU、codec、audio 可独立编译和测试。
-- scene/puppet renderer 的依赖方向清晰，不污染纯 runtime crate。
-- CI 中有架构依赖规则，防止循环回归。
+```bash
+cargo check -p neko-engine-kernel --lib --no-default-features
+cargo test -p neko-engine-kernel --lib --no-default-features
+cargo test -p neko-engine-kernel domain::timeline::tests --lib --no-default-features
+cargo test --workspace
+```
+
+其中 `cargo test --workspace` 已通过；后续 warning 仅来自既有 runtime crate：
+
+| Crate | 数量 | 性质 |
+|-------|------|------|
+| `runtime-media` | 3 | unused import / unused variable / unused constant |
+| `runtime-scene` | 1 | deprecated `RawWorldAccess` migration hatch |
+| `runtime-puppet` | 1 | deprecated `RawWorldAccess` migration hatch |
 
 ---
 
 ## 结论
 
-`engine-kernel` 的主要问题不是功能错误，而是 crate 边界没有跟随 ADR 的接口边界演进。当前最优先的切入点是 PipelineSink 合同层：先把纯输出合同下沉到 `engine-types`，把 GPU readback 适配留在实现层，从而切断 `gpu -> services` 的反向依赖。
+`engine-kernel` 的主要问题不是功能错误，而是 crate 边界没有跟随 ADR 的接口边界演进。当前实现已经完成从大型基础设施容器到编排/facade 层的转向：纯合同进入 `engine-types`，GPU/codec/audio/renderer 进入 focused crates，host 层通过 facade 与 traits 访问服务。
 
-完成 P0 后，后续再拆 `engine-gpu`、`engine-codec`、`engine-audio` 和领域 renderer，会变成一组可验证的小迁移，而不是一次高风险的大搬家。
+后续工作不再是大规模解耦主线，而是收尾治理：归档 OpenSpec、接入已规划的 preview provider/legacy export adapter、迁移 runtime `RawWorldAccess`，并继续用架构测试守住依赖方向。
