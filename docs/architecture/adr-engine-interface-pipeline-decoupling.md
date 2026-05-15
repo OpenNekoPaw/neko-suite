@@ -32,6 +32,7 @@ neko-engine 是一个 Rust sidecar 进程，为整个 neko-suite 提供 GPU 渲�
 | Dual API (CreativeAccess + DataAccess) + Scene 拆分 | Part IX + VIII.3-8.4 | ECS 双抽象 + 计算-渲染分离 |
 | GPU Budget Controller | Part IV | 并发管线资源管理 |
 | PuppetRenderer + WS 命令协议 | Part VIII.CP2-CP4 | 2D 骨骼 GPU 渲染 + 控制平面对齐 |
+| engine-kernel crate 边界重塑 | 横跨 Part III/V/VIII/IX | 已落地能力的 crate 边界收敛 + `gpu -> services` 反向依赖消除 |
 
 **P0 分为两个子阶段**：
 
