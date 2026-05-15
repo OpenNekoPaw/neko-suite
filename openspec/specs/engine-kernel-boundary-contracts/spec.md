@@ -90,3 +90,52 @@ The engine SHALL preserve zero-copy GPU hot path behavior when pipeline output c
 #### Scenario: Unsupported zero-copy remains explicit
 - **WHEN** a platform cannot provide required native GPU handle interop for a realtime path
 - **THEN** the engine returns `UnsupportedCapability` instead of falling back to CPU readback and encode
+
+### Requirement: Host-Facing Boundary Uses Facade
+The engine SHALL extend kernel boundary enforcement to host-facing callers by requiring host crates to use facade or contract paths for engine access and service trait contracts for injected service behavior.
+
+#### Scenario: Host avoids kernel internals
+- **WHEN** host-api, host-http, or host-napi needs kernel services or engine capabilities
+- **THEN** it imports approved facade or contract modules
+- **THEN** it does not import kernel implementation modules solely for construction, wiring, access to shared DTOs, or service behavior
+
+#### Scenario: Host service injection uses traits
+- **WHEN** host-api receives service handles from `KernelServices`
+- **THEN** controller-facing service dependencies use service trait objects where traits cover the required behavior
+- **THEN** concrete service types are not the host-facing dependency contract
+
+#### Scenario: Kernel compatibility is temporary and explicit
+- **WHEN** a legacy public path remains available for compatibility
+- **THEN** it is documented as compatibility surface
+- **THEN** it has an explicit migration path toward facade or contract imports
+
+#### Scenario: Exposed operation payload fields are enforced
+- **WHEN** a timeline operation payload includes both an identifier and positional data
+- **THEN** kernel domain code validates that the identifier matches the item at the supplied position before mutating state
+- **THEN** mismatch leaves the original order unchanged and returns a typed kernel error
+
+### Requirement: Kernel Public Surface Regression Protection
+The engine SHALL protect the narrowed kernel public surface with architecture tests.
+
+#### Scenario: Top-level public module regression is detected
+- **WHEN** a new top-level `pub mod` is added to `engine-kernel`
+- **THEN** architecture checks fail unless the module is added to the approved public surface allowlist
+
+#### Scenario: Broad implementation re-export regression is detected
+- **WHEN** a kernel compatibility module attempts to re-export an implementation crate with a glob
+- **THEN** architecture checks fail
+- **THEN** compatibility exports must be explicit and reviewed
+
+### Requirement: Runtime Layers Do Not Depend Upward On Kernel
+The engine boundary model SHALL prevent lower runtime crates from depending on `engine-kernel` orchestration.
+
+#### Scenario: Runtime-device and runtime-ml avoid kernel dependency
+- **WHEN** boundary checks inspect `runtime-device` and `runtime-ml`
+- **THEN** those crates do not depend on `neko-engine-kernel`
+- **THEN** shared runtime contracts are imported from lower-layer contract modules
+
+#### Scenario: Kernel remains the adapter layer
+- **WHEN** kernel services consume device or ML runtime capabilities
+- **THEN** kernel imports the runtime crates or their contracts
+- **THEN** the runtime crates do not import kernel back
+
