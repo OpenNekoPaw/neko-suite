@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::gpu::GpuContext;
 use crate::monitor::SystemMonitor;
 use crate::services::{GpuInfo, INodeService, ITaskService};
+use async_trait::async_trait;
 use neko_engine_types::{HealthStatus, ResourceSnapshot};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -36,30 +37,19 @@ impl NodeService {
         }
     }
 
-    /// Create with existing monitor
-    pub fn with_monitor(
-        monitor: Arc<Mutex<SystemMonitor>>,
-        gpu_ctx: Option<Arc<GpuContext>>,
-    ) -> Self {
-        Self {
-            monitor,
-            gpu_ctx,
-            task_service: None,
-            active_streams: Arc::new(AtomicUsize::new(0)),
-        }
-    }
-
     /// Set task service for active task count
     pub fn set_task_service(&mut self, task_service: Arc<dyn ITaskService + Send + Sync>) {
         self.task_service = Some(task_service);
     }
 
     /// Get the active streams counter (for external updates)
+    #[allow(dead_code)]
     pub fn active_streams_counter(&self) -> Arc<AtomicUsize> {
         self.active_streams.clone()
     }
 }
 
+#[async_trait]
 impl INodeService for NodeService {
     async fn health(&self) -> Result<HealthStatus> {
         let gpu_info = self.gpu_ctx.as_ref().map(|ctx| ctx.info());
@@ -132,6 +122,10 @@ impl INodeService for NodeService {
                 hw_accel: vec![],
             }),
         }
+    }
+
+    fn active_streams_counter(&self) -> Arc<AtomicUsize> {
+        self.active_streams.clone()
     }
 }
 

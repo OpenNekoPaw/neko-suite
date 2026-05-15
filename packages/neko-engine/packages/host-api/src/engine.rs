@@ -6,9 +6,7 @@ use crate::registry::{ResourceRegistry, StreamRegistry};
 use crate::router::ActionRouter;
 use crate::session::SessionManager;
 use neko_engine_kernel::contracts::gpu::GpuContext;
-use neko_engine_kernel::contracts::services::{
-    AudioService, IPuppetService, ISceneService, SceneService,
-};
+use neko_engine_kernel::contracts::services::{IAudioService, IPuppetService, ISceneService};
 use neko_engine_kernel::facade::EngineKernelFacade;
 use neko_engine_types::{ActionRequest, ActionResponse, EngineConfig};
 use neko_runtime_device::{CameraService, GamepadService, MidiService};
@@ -37,9 +35,9 @@ pub struct EngineApi {
     /// Puppet service — exposed for WS stream endpoint
     puppet_service: Option<Arc<dyn IPuppetService>>,
     /// Scene service — exposed for scene control WebSocket endpoint
-    scene_service: Option<Arc<SceneService>>,
+    scene_service: Option<Arc<dyn ISceneService>>,
     /// Audio service — exposed for monitor endpoint
-    audio_service: Arc<AudioService>,
+    audio_service: Arc<dyn IAudioService>,
     /// MIDI service — exposed for WS event stream endpoint
     midi_service: Arc<MidiService>,
     /// Gamepad service — exposed for WS event stream endpoint
@@ -86,10 +84,7 @@ impl EngineApi {
         let kernel_services = kernel_facade.service_handles();
         let audio_service_ref = kernel_services.audio_service.clone();
         let scene_service_ref = kernel_services.scene_service.clone();
-        let puppet_service_dyn: Option<Arc<dyn IPuppetService>> = kernel_services
-            .puppet_service
-            .as_ref()
-            .map(|svc| svc.clone() as Arc<dyn IPuppetService>);
+        let puppet_service_ref = kernel_services.puppet_service.clone();
 
         // Create registries
         let resource_registry = Arc::new(ResourceRegistry::new());
@@ -151,7 +146,7 @@ impl EngineApi {
             preview_registry,
             session_manager,
             kernel_facade,
-            puppet_service: puppet_service_dyn,
+            puppet_service: puppet_service_ref,
             scene_service: scene_service_ref,
             audio_service: audio_service_ref,
             midi_service: midi_service_ref,
@@ -242,7 +237,7 @@ impl EngineApi {
     }
 
     /// Get the scene service (shared with scene control WebSocket endpoint)
-    pub fn scene_service(&self) -> Option<Arc<SceneService>> {
+    pub fn scene_service(&self) -> Option<Arc<dyn ISceneService>> {
         self.scene_service.clone()
     }
 
@@ -262,7 +257,7 @@ impl EngineApi {
     }
 
     /// Get the audio service (for monitor endpoint)
-    pub fn audio_service(&self) -> &Arc<AudioService> {
+    pub fn audio_service(&self) -> &Arc<dyn IAudioService> {
         &self.audio_service
     }
 

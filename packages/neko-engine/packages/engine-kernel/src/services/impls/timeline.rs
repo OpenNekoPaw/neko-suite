@@ -34,6 +34,7 @@ use crate::services::{
     IStreamPlayback, ITaskService, ITimelineService, StreamStats, TimelineStreamResult,
 };
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
+use async_trait::async_trait;
 use neko_engine_types::{
     BlendMode, FrameFormat, LoopRegion, PipelineOutput, StreamId, VideoOutput, VideoRawFrame,
 };
@@ -85,11 +86,7 @@ fn f16_to_f32(bits: u16) -> f32 {
 /// Provides timeline composition, H.264 preview streaming, and playback control.
 pub struct TimelineService {
     /// GPU context for compositing
-    #[allow(dead_code)]
     gpu_ctx: Option<Arc<GpuContext>>,
-    /// Task service for registering long-running operations
-    #[allow(dead_code)]
-    task_service: Arc<dyn ITaskService + Send + Sync>,
     /// Active stream loops
     active_streams: Arc<ActiveStreams>,
     /// Delegate for stream playback control (stop/pause/resume/speed/seek/loop)
@@ -118,14 +115,13 @@ impl TimelineService {
     /// Create a TimelineService with an injected preview render backend factory.
     pub fn with_preview_render_factory(
         gpu_ctx: Option<Arc<GpuContext>>,
-        task_service: Arc<dyn ITaskService + Send + Sync>,
+        _task_service: Arc<dyn ITaskService + Send + Sync>,
         preview_render_factory: Option<Arc<dyn PreviewRenderBackendFactory>>,
     ) -> Self {
         let active_streams = Arc::new(ActiveStreams::new());
         let playback = StreamPlaybackDelegate::new(active_streams.clone());
         Self {
             gpu_ctx,
-            task_service,
             active_streams,
             playback,
             stats_receivers: Arc::new(RwLock::new(HashMap::new())),
@@ -134,9 +130,7 @@ impl TimelineService {
         }
     }
 
-    /// Hot-update preview quality (resolution/bitrate) for a running stream.
-    /// The video loop picks up the new config on the next frame iteration.
-    pub async fn set_quality(
+    async fn set_quality_inner(
         &self,
         stream_id: &StreamId,
         width: u32,
@@ -295,6 +289,7 @@ impl TimelineService {
     }
 }
 
+#[async_trait]
 impl IStreamPlayback for TimelineService {
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
         // Clean up stats receiver before stopping
@@ -331,6 +326,7 @@ impl IStreamPlayback for TimelineService {
     }
 }
 
+#[async_trait]
 impl ITimelineService for TimelineService {
     async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo> {
         let path = jvi_path.to_path_buf();
@@ -1330,6 +1326,18 @@ impl ITimelineService for TimelineService {
         receivers
             .get(stream_id.as_str())
             .map(|rx| rx.borrow().clone())
+    }
+
+    async fn set_quality(
+        &self,
+        stream_id: &StreamId,
+        width: u32,
+        height: u32,
+        bitrate: Option<u64>,
+        fps: Option<f64>,
+    ) -> Result<()> {
+        self.set_quality_inner(stream_id, width, height, bitrate, fps)
+            .await
     }
 
     async fn update_stream(&self, stream_id: &StreamId, timeline: &Timeline) -> Result<()> {

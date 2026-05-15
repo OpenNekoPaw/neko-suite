@@ -2,13 +2,14 @@
 
 use crate::domain::{CaptureOptions, FrameData};
 use crate::error::Result;
+use async_trait::async_trait;
 use neko_engine_types::MediaInfo;
 use std::path::Path;
 
 /// Image service interface
 ///
 /// Handles image-related operations: probing and capture.
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait IImageService: Send + Sync {
     /// Probe image file metadata
     async fn probe(&self, path: &Path) -> Result<MediaInfo>;

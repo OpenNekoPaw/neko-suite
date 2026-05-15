@@ -2,12 +2,20 @@
 //!
 //! Provides an interface for loading, querying, and manipulating 3D scenes.
 
-use crate::gpu::scene_renderer::{CameraParams, SceneRenderOutput};
+use crate::domain::FrameData;
+use crate::gpu::scene_renderer::{
+    CameraParams, ControlAckHealthSample, SceneRenderOutput, ViewportDescriptor,
+};
+use crate::services::pipeline_sink::PipelineOutput;
 use neko_engine_types::easing::EasingType;
 use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
 use neko_runtime_scene::components::AnimationChannelInfo;
 use neko_runtime_scene::ik::IkChainInfo;
 use neko_runtime_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot};
+use neko_runtime_scene::{
+    BrushPatchApplyOutcome, ModelingSession, ModelingSessionStateDelta, SceneCommandAck,
+    SceneCommandEnvelope, TopologyChangeEvent, TopologyOperation, VertexBrushPatchMetadata,
+};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -67,6 +75,90 @@ pub trait ISceneService: Send + Sync {
         camera_override: Option<&CameraParams>,
         background_color: Option<[f32; 4]>,
     ) -> crate::error::Result<SceneRenderOutput>;
+
+    /// Capture the current scene as a display JPEG frame.
+    fn capture_display_frame(
+        &self,
+        clip_name: Option<&str>,
+        time: f32,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        quality: u8,
+    ) -> crate::error::Result<FrameData>;
+
+    /// Capture one H.264 keyframe for the legacy scene stream path.
+    fn capture_h264_keyframe(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        quality: u32,
+        pts_us: i64,
+        duration_us: i64,
+        viewport: &ViewportDescriptor,
+    ) -> crate::error::Result<FrameData>;
+
+    /// Render one GPU-resident scene stream output frame.
+    fn render_scene_stream_gpu_output(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        pts_us: i64,
+        duration_us: i64,
+        frame_index: u64,
+        viewport: &ViewportDescriptor,
+    ) -> crate::error::Result<PipelineOutput>;
+
+    /// Set the editor camera used by realtime scene stream rendering.
+    fn set_editor_camera(&self, camera: CameraParams);
+
+    /// Get the current editor camera used by realtime scene stream rendering.
+    fn get_editor_camera(&self) -> Option<CameraParams>;
+
+    /// Report control acknowledgement health for adaptive scene streaming.
+    fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample;
+
+    /// Current scene command revision for stream descriptors and conflict detection.
+    fn current_revision(&self) -> crate::error::Result<u64>;
+
+    /// Apply a realtime scene command and return command acknowledgements plus optional delta.
+    fn apply_scene_command_with_delta(
+        &self,
+        envelope: SceneCommandEnvelope,
+    ) -> crate::error::Result<(Vec<SceneCommandAck>, Option<SceneDelta>)>;
+
+    /// Begin an interactive modeling session for a mesh.
+    fn begin_modeling_session(
+        &self,
+        session_id: String,
+        mesh_id: String,
+        character_id: Option<String>,
+        topology_mutable: bool,
+        before_hash: String,
+    ) -> crate::error::Result<(ModelingSession, Option<SceneDelta>)>;
+
+    /// Commit topology changes from an interactive modeling session.
+    fn commit_modeling_session(
+        &self,
+        session_id: &str,
+        operation: TopologyOperation,
+        vertex_count_before: u32,
+        vertex_count_after: u32,
+    ) -> crate::error::Result<(TopologyChangeEvent, Option<SceneDelta>)>;
+
+    /// Cancel an interactive modeling session without committing topology changes.
+    fn cancel_modeling_session(
+        &self,
+        session_id: &str,
+    ) -> crate::error::Result<(ModelingSessionStateDelta, Option<SceneDelta>)>;
+
+    /// Apply one binary vertex brush patch to an active modeling session.
+    fn apply_vertex_brush_patch(
+        &self,
+        patch: VertexBrushPatchMetadata,
+    ) -> crate::error::Result<BrushPatchApplyOutcome>;
 
     /// Export the current scene to GLB binary format
     fn export_glb(&self) -> crate::error::Result<Vec<u8>>;

@@ -10,7 +10,7 @@ use neko_engine_kernel::contracts::domain::{
 use neko_engine_kernel::contracts::media::{
     diff_media, diff_video_content, DiffCategory, VideoDiffOptions,
 };
-use neko_engine_kernel::contracts::services::{IVideoService, VideoService};
+use neko_engine_kernel::contracts::services::IVideoService;
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, FrameFormat};
 use neko_runtime_media::PanoramaViewState;
@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Controller for video-related actions
 pub struct VideoController {
-    video_service: Arc<VideoService>,
+    video_service: Arc<dyn IVideoService>,
     resource_registry: Arc<ResourceRegistry>,
     stream_registry: Arc<StreamRegistry>,
 }
@@ -30,7 +30,7 @@ pub struct VideoController {
 impl VideoController {
     /// Create a new VideoController
     pub fn new(
-        video_service: Arc<VideoService>,
+        video_service: Arc<dyn IVideoService>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {

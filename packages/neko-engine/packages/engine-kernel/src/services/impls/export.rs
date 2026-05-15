@@ -9,6 +9,7 @@ use crate::error::Result;
 use crate::export::{ExportJobConfig, ExportProgress, ExportStartResponse, QueueEntry};
 use crate::gpu::GpuContext;
 use crate::services::IExportService;
+use async_trait::async_trait;
 
 /// Export service implementation
 ///
@@ -24,13 +25,9 @@ impl ExportService {
         let inner = Arc::new(crate::export::ExportService::with_gpu_context(gpu_ctx));
         Self { inner }
     }
-
-    /// Create from an existing infrastructure ExportService
-    pub fn from_inner(inner: Arc<crate::export::ExportService>) -> Self {
-        Self { inner }
-    }
 }
 
+#[async_trait]
 impl IExportService for ExportService {
     async fn start(&self, config: ExportJobConfig) -> Result<ExportStartResponse> {
         self.inner.start_export(config).await

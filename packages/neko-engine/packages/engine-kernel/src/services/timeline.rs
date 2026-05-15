@@ -4,7 +4,9 @@ use crate::domain::operations::EditOperationEnvelope;
 use crate::domain::{FrameData, StreamConfig, Timeline, TimelineProjectInfo};
 use crate::error::Result;
 use crate::export::ExportStats;
+use crate::preview::PreviewPipelineConfig;
 use crate::services::IStreamPlayback;
+use async_trait::async_trait;
 use neko_engine_types::StreamId;
 use serde::Serialize;
 use std::path::Path;
@@ -68,7 +70,7 @@ impl std::fmt::Debug for TimelineStreamResult {
 /// Handles timeline-specific operations: compositing frames,
 /// stream management, and project probing.
 /// Stream playback control (stop/pause/resume/speed/seek/loop) is inherited from `IStreamPlayback`.
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait ITimelineService: IStreamPlayback {
     /// Probe a .nkv project file and return metadata without rendering
     async fn probe(&self, jvi_path: &Path) -> Result<TimelineProjectInfo>;
@@ -86,6 +88,16 @@ pub trait ITimelineService: IStreamPlayback {
 
     /// Get stream performance statistics
     async fn get_stream_stats(&self, stream_id: &StreamId) -> Option<StreamStats>;
+
+    /// Hot-update preview quality for a running stream.
+    async fn set_quality(
+        &self,
+        stream_id: &StreamId,
+        width: u32,
+        height: u32,
+        bitrate: Option<u64>,
+        fps: Option<f64>,
+    ) -> Result<()>;
 
     /// Hot-update timeline data for an active stream without recreating it.
     /// Initial implementation: stop the old stream and start a new one with the same IDs.

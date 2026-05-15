@@ -6,7 +6,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::registry::ResourceRegistry;
 use neko_engine_kernel::contracts::domain::CaptureOptions;
 use neko_engine_kernel::contracts::media::{diff_media, DiffCategory};
-use neko_engine_kernel::contracts::services::{IImageService, ImageService};
+use neko_engine_kernel::contracts::services::IImageService;
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, FrameFormat};
 use serde::Deserialize;
@@ -16,13 +16,16 @@ use std::sync::Arc;
 
 /// Controller for image-related actions
 pub struct ImageController {
-    image_service: Arc<ImageService>,
+    image_service: Arc<dyn IImageService>,
     resource_registry: Arc<ResourceRegistry>,
 }
 
 impl ImageController {
     /// Create a new ImageController
-    pub fn new(image_service: Arc<ImageService>, resource_registry: Arc<ResourceRegistry>) -> Self {
+    pub fn new(
+        image_service: Arc<dyn IImageService>,
+        resource_registry: Arc<ResourceRegistry>,
+    ) -> Self {
         Self {
             image_service,
             resource_registry,

@@ -26,7 +26,7 @@ use crate::registry::StreamRegistry;
 use neko_engine_kernel::contracts::domain::EditOperationEnvelope;
 use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig, Timeline};
 use neko_engine_kernel::contracts::jvi::JviLoader;
-use neko_engine_kernel::contracts::services::{IStreamPlayback, ITimelineService, TimelineService};
+use neko_engine_kernel::contracts::services::ITimelineService;
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -36,14 +36,14 @@ use std::sync::Arc;
 /// Controller for stream lifecycle management and playback control
 pub struct StreamController {
     stream_registry: Arc<StreamRegistry>,
-    timeline_service: Arc<TimelineService>,
+    timeline_service: Arc<dyn ITimelineService>,
 }
 
 impl StreamController {
     /// Create a new StreamController
     pub fn new(
         stream_registry: Arc<StreamRegistry>,
-        timeline_service: Arc<TimelineService>,
+        timeline_service: Arc<dyn ITimelineService>,
     ) -> Self {
         Self {
             stream_registry,

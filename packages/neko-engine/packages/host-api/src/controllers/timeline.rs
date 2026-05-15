@@ -9,9 +9,7 @@ use neko_engine_kernel::contracts::jvi::JviLoader;
 use neko_engine_kernel::contracts::media::{
     diff_media, diff_timeline_content_with_options, DiffCategory, TimelineDiffOptions,
 };
-use neko_engine_kernel::contracts::services::{
-    ExportService, IExportService, ITimelineService, TimelineService,
-};
+use neko_engine_kernel::contracts::services::{IExportService, ITimelineService};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -22,16 +20,16 @@ use tokio_util::sync::CancellationToken;
 
 /// Controller for timeline-related actions
 pub struct TimelineController {
-    timeline_service: Arc<TimelineService>,
-    export_service: Option<Arc<ExportService>>,
+    timeline_service: Arc<dyn ITimelineService>,
+    export_service: Option<Arc<dyn IExportService>>,
     stream_registry: Arc<StreamRegistry>,
 }
 
 impl TimelineController {
     /// Create a new TimelineController
     pub fn new(
-        timeline_service: Arc<TimelineService>,
-        export_service: Option<Arc<ExportService>>,
+        timeline_service: Arc<dyn ITimelineService>,
+        export_service: Option<Arc<dyn IExportService>>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {
         Self {

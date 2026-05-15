@@ -4,7 +4,7 @@ use crate::controllers::utils::{base64_decode, base64_encode};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_engine_kernel::contracts::gpu::ParamDef;
-use neko_engine_kernel::contracts::services::{EffectRegistry, EffectsService, IEffectsService};
+use neko_engine_kernel::contracts::services::{EffectRegistry, IEffectsService};
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use serde::Deserialize;
@@ -13,14 +13,14 @@ use std::sync::Arc;
 
 /// Controller for custom shader effect actions
 pub struct EffectsController {
-    effects_service: Option<Arc<EffectsService>>,
+    effects_service: Option<Arc<dyn IEffectsService>>,
     effect_registry: Arc<EffectRegistry>,
 }
 
 impl EffectsController {
     /// Create a new EffectsController
     pub fn new(
-        effects_service: Option<Arc<EffectsService>>,
+        effects_service: Option<Arc<dyn IEffectsService>>,
         effect_registry: Arc<EffectRegistry>,
     ) -> Self {
         Self {
@@ -29,7 +29,7 @@ impl EffectsController {
         }
     }
 
-    fn require_service(&self) -> ApiResult<&EffectsService> {
+    fn require_service(&self) -> ApiResult<&dyn IEffectsService> {
         self.effects_service
             .as_ref()
             .map(|s| s.as_ref())

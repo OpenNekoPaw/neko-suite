@@ -267,16 +267,19 @@ impl SceneService {
         self.computation.current_revision()
     }
 
+    #[cfg(test)]
     pub fn latest_render_snapshot_generation(&self) -> u64 {
         self.realtime_snapshot_watch.latest_generation()
     }
 
+    #[cfg(test)]
     pub fn pop_export_render_snapshot_generation(&self) -> Result<Option<u64>> {
         self.export_frame_queue
             .try_pop()
             .map(|snapshot| snapshot.map(|snapshot| snapshot.generation))
     }
 
+    #[allow(dead_code)]
     pub fn apply_scene_command(
         &self,
         envelope: SceneCommandEnvelope,
@@ -916,6 +919,141 @@ impl ISceneService for SceneService {
             background_color,
             None,
         )
+    }
+
+    fn capture_display_frame(
+        &self,
+        clip_name: Option<&str>,
+        time: f32,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        quality: u8,
+    ) -> Result<FrameData> {
+        SceneService::capture_display_frame(
+            self,
+            clip_name,
+            time,
+            output_size,
+            camera_override,
+            background_color,
+            quality,
+        )
+    }
+
+    fn capture_h264_keyframe(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        quality: u32,
+        pts_us: i64,
+        duration_us: i64,
+        viewport: &ViewportDescriptor,
+    ) -> Result<FrameData> {
+        SceneService::capture_h264_keyframe(
+            self,
+            output_size,
+            camera_override,
+            background_color,
+            quality,
+            pts_us,
+            duration_us,
+            viewport,
+        )
+    }
+
+    fn render_scene_stream_gpu_output(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        pts_us: i64,
+        duration_us: i64,
+        frame_index: u64,
+        viewport: &ViewportDescriptor,
+    ) -> Result<PipelineOutput> {
+        SceneService::render_scene_stream_gpu_output(
+            self,
+            output_size,
+            camera_override,
+            background_color,
+            pts_us,
+            duration_us,
+            frame_index,
+            viewport,
+        )
+    }
+
+    fn set_editor_camera(&self, camera: CameraParams) {
+        SceneService::set_editor_camera(self, camera);
+    }
+
+    fn get_editor_camera(&self) -> Option<CameraParams> {
+        SceneService::get_editor_camera(self)
+    }
+
+    fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample {
+        SceneService::control_ack_health_sample(self, render_backlog_frames)
+    }
+
+    fn current_revision(&self) -> Result<u64> {
+        SceneService::current_revision(self)
+    }
+
+    fn apply_scene_command_with_delta(
+        &self,
+        envelope: SceneCommandEnvelope,
+    ) -> Result<(Vec<SceneCommandAck>, Option<SceneDelta>)> {
+        SceneService::apply_scene_command_with_delta(self, envelope)
+    }
+
+    fn begin_modeling_session(
+        &self,
+        session_id: String,
+        mesh_id: String,
+        character_id: Option<String>,
+        topology_mutable: bool,
+        before_hash: String,
+    ) -> Result<(ModelingSession, Option<SceneDelta>)> {
+        SceneService::begin_modeling_session(
+            self,
+            session_id,
+            mesh_id,
+            character_id,
+            topology_mutable,
+            before_hash,
+        )
+    }
+
+    fn commit_modeling_session(
+        &self,
+        session_id: &str,
+        operation: TopologyOperation,
+        vertex_count_before: u32,
+        vertex_count_after: u32,
+    ) -> Result<(TopologyChangeEvent, Option<SceneDelta>)> {
+        SceneService::commit_modeling_session(
+            self,
+            session_id,
+            operation,
+            vertex_count_before,
+            vertex_count_after,
+        )
+    }
+
+    fn cancel_modeling_session(
+        &self,
+        session_id: &str,
+    ) -> Result<(ModelingSessionStateDelta, Option<SceneDelta>)> {
+        SceneService::cancel_modeling_session(self, session_id)
+    }
+
+    fn apply_vertex_brush_patch(
+        &self,
+        patch: VertexBrushPatchMetadata,
+    ) -> Result<BrushPatchApplyOutcome> {
+        SceneService::apply_vertex_brush_patch(self, patch)
     }
 
     fn export_glb(&self) -> Result<Vec<u8>> {

@@ -26,6 +26,7 @@ use crate::services::impls::stream_loop::{
     StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::{IAudioService, IStreamPlayback, ITaskService};
+use async_trait::async_trait;
 use neko_engine_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
 use std::fs::File;
 use std::io::Write;
@@ -85,12 +86,6 @@ fn trim_frame_to_time_range(
 /// Wraps media_service probe for audio file metadata.
 /// Supports audio transcoding, PCM streaming, and waveform generation.
 pub struct AudioService {
-    /// GPU context (for future waveform GPU acceleration)
-    #[allow(dead_code)]
-    gpu_ctx: Option<Arc<GpuContext>>,
-    /// Task service for registering long-running operations
-    #[allow(dead_code)]
-    task_service: Arc<dyn ITaskService + Send + Sync>,
     /// Active stream loops
     active_streams: Arc<ActiveStreams>,
     /// Delegate for stream playback control (stop/pause/resume/speed/seek/loop)
@@ -102,23 +97,16 @@ pub struct AudioService {
 impl AudioService {
     /// Create a new AudioService
     pub fn new(
-        gpu_ctx: Option<Arc<GpuContext>>,
-        task_service: Arc<dyn ITaskService + Send + Sync>,
+        _gpu_ctx: Option<Arc<GpuContext>>,
+        _task_service: Arc<dyn ITaskService + Send + Sync>,
     ) -> Self {
         let active_streams = Arc::new(ActiveStreams::new());
         let playback = StreamPlaybackDelegate::new(active_streams.clone());
         Self {
-            gpu_ctx,
-            task_service,
             active_streams,
             playback,
             mic_capture: Arc::new(MicCaptureService::new()),
         }
-    }
-
-    /// Get mic capture service reference (for monitor endpoint access)
-    pub fn mic_capture(&self) -> &MicCaptureService {
-        &self.mic_capture
     }
 
     /// Hot-update a running mix stream with a full replacement mixdown config.
@@ -133,6 +121,7 @@ impl AudioService {
     }
 }
 
+#[async_trait]
 impl IStreamPlayback for AudioService {
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
         self.playback.stop_stream(stream_id).await
@@ -159,6 +148,7 @@ impl IStreamPlayback for AudioService {
     }
 }
 
+#[async_trait]
 impl IAudioService for AudioService {
     async fn probe(&self, path: &Path) -> Result<MediaInfo> {
         let path = path.to_path_buf();

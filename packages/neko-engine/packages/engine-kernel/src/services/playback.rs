@@ -4,13 +4,14 @@
 //! duplicated stream control methods (stop/pause/resume/speed/seek/loop).
 
 use crate::error::Result;
+use async_trait::async_trait;
 use neko_engine_types::{LoopRegion, StreamId};
 
 /// Stream playback control interface
 ///
 /// All services that manage streams share this common set of playback
 /// control operations. Implementations delegate to `StreamPlaybackDelegate`.
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait IStreamPlayback: Send + Sync {
     /// Stop a stream
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()>;

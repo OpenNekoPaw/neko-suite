@@ -9,25 +9,27 @@ use std::sync::Arc;
 use crate::error::Result;
 use crate::gpu::GpuContext;
 use crate::services::{
-    AudioService, EffectRegistry, EffectsService, ExportService, ImageService, NodeService,
-    PuppetService, SceneService, TaskService, TimelineService, VideoService,
+    AudioService, EffectRegistry, EffectsService, ExportService, IAudioService, IEffectsService,
+    IExportService, IImageService, INodeService, IPuppetService, ISceneService, ITaskService,
+    ITimelineService, IVideoService, ImageService, NodeService, PuppetService, SceneService,
+    TaskService, TimelineService, VideoService,
 };
 
 /// Typed handle bundle for the default kernel service graph.
 #[derive(Clone)]
 pub struct KernelServices {
     pub gpu_ctx: Option<Arc<GpuContext>>,
-    pub task_service: Arc<TaskService>,
-    pub node_service: Arc<NodeService>,
-    pub video_service: Arc<VideoService>,
-    pub audio_service: Arc<AudioService>,
-    pub image_service: Arc<ImageService>,
-    pub timeline_service: Arc<TimelineService>,
-    pub export_service: Option<Arc<ExportService>>,
-    pub effects_service: Option<Arc<EffectsService>>,
+    pub task_service: Arc<dyn ITaskService>,
+    pub node_service: Arc<dyn INodeService>,
+    pub video_service: Arc<dyn IVideoService>,
+    pub audio_service: Arc<dyn IAudioService>,
+    pub image_service: Arc<dyn IImageService>,
+    pub timeline_service: Arc<dyn ITimelineService>,
+    pub export_service: Option<Arc<dyn IExportService>>,
+    pub effects_service: Option<Arc<dyn IEffectsService>>,
     pub effect_registry: Arc<EffectRegistry>,
-    pub scene_service: Option<Arc<SceneService>>,
-    pub puppet_service: Option<Arc<PuppetService>>,
+    pub scene_service: Option<Arc<dyn ISceneService>>,
+    pub puppet_service: Option<Arc<dyn IPuppetService>>,
 }
 
 impl KernelServices {
@@ -81,14 +83,14 @@ impl ServiceFactory {
         let timeline_service =
             Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
 
-        let export_service = gpu_ctx
+        let export_service: Option<Arc<dyn IExportService>> = gpu_ctx
             .as_ref()
-            .map(|ctx| Arc::new(ExportService::new(Arc::clone(ctx))));
-        let effects_service =
+            .map(|ctx| Arc::new(ExportService::new(Arc::clone(ctx))) as Arc<dyn IExportService>);
+        let effects_service: Option<Arc<dyn IEffectsService>> =
             gpu_ctx
                 .as_ref()
                 .and_then(|ctx| match EffectsService::new(Arc::clone(ctx)) {
-                    Ok(service) => Some(Arc::new(service)),
+                    Ok(service) => Some(Arc::new(service) as Arc<dyn IEffectsService>),
                     Err(error) => {
                         tracing::warn!("Effects service initialization failed: {}", error);
                         None
@@ -96,24 +98,26 @@ impl ServiceFactory {
                 });
         let effect_registry = Arc::new(EffectRegistry::with_builtins());
 
-        let scene_service = Some(Arc::new(match &gpu_ctx {
+        let scene_service: Option<Arc<dyn ISceneService>> = Some(Arc::new(match &gpu_ctx {
             Some(ctx) => SceneService::with_gpu(Arc::clone(ctx)),
             None => SceneService::new(),
-        }));
+        })
+            as Arc<dyn ISceneService>);
 
-        let puppet_service = Some(Arc::new(match &gpu_ctx {
+        let puppet_service: Option<Arc<dyn IPuppetService>> = Some(Arc::new(match &gpu_ctx {
             Some(ctx) => PuppetService::with_gpu(Arc::clone(ctx)),
             None => PuppetService::new(),
-        }));
+        })
+            as Arc<dyn IPuppetService>);
 
         KernelServices {
             gpu_ctx,
-            task_service,
-            node_service,
-            video_service,
-            audio_service,
-            image_service,
-            timeline_service,
+            task_service: task_service as Arc<dyn ITaskService>,
+            node_service: node_service as Arc<dyn INodeService>,
+            video_service: video_service as Arc<dyn IVideoService>,
+            audio_service: audio_service as Arc<dyn IAudioService>,
+            image_service: image_service as Arc<dyn IImageService>,
+            timeline_service: timeline_service as Arc<dyn ITimelineService>,
             export_service,
             effects_service,
             effect_registry,

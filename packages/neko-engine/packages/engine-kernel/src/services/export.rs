@@ -6,12 +6,13 @@
 
 use crate::error::Result;
 use crate::export::{ExportJobConfig, ExportProgress, ExportStartResponse, QueueEntry};
+use async_trait::async_trait;
 
 /// Export service interface
 ///
 /// Handles timeline export to video files with progress reporting.
 /// Each export job is identified by a unique job_id.
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait IExportService: Send + Sync {
     /// Start an export job immediately
     ///

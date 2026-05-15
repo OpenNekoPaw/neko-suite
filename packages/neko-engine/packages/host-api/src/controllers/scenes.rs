@@ -12,9 +12,7 @@ use neko_engine_kernel::contracts::gpu::{
     ViewportWorkMode,
 };
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
-use neko_engine_kernel::contracts::services::{
-    ISceneService, PipelineSink, SceneService, StreamSink,
-};
+use neko_engine_kernel::contracts::services::{ISceneService, PipelineSink, StreamSink};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, Resolution, StreamId};
 use serde::Deserialize;
@@ -26,12 +24,12 @@ use tokio_util::sync::CancellationToken;
 
 /// Controller for 3D scene operations
 pub struct ScenesController {
-    scene_service: Option<Arc<SceneService>>,
+    scene_service: Option<Arc<dyn ISceneService>>,
     stream_registry: Option<Arc<StreamRegistry>>,
 }
 
 impl ScenesController {
-    pub fn new(scene_service: Option<Arc<SceneService>>) -> Self {
+    pub fn new(scene_service: Option<Arc<dyn ISceneService>>) -> Self {
         Self {
             scene_service,
             stream_registry: None,
@@ -39,7 +37,7 @@ impl ScenesController {
     }
 
     pub fn with_stream_registry(
-        scene_service: Option<Arc<SceneService>>,
+        scene_service: Option<Arc<dyn ISceneService>>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {
         Self {
@@ -48,7 +46,7 @@ impl ScenesController {
         }
     }
 
-    fn service(&self) -> ApiResult<&SceneService> {
+    fn service(&self) -> ApiResult<&dyn ISceneService> {
         self.scene_service
             .as_deref()
             .ok_or_else(|| ApiError::ServiceError("Scene service not available".to_string()))
@@ -432,7 +430,7 @@ fn parse_post_process(value: Option<&Value>) -> ViewportPostProcess {
 
 fn spawn_scene_stream_producer(
     stream_registry: Arc<StreamRegistry>,
-    scene_service: Arc<SceneService>,
+    scene_service: Arc<dyn ISceneService>,
     stream_id: StreamId,
     config: SceneStreamProducerConfig,
     cancel_token: CancellationToken,

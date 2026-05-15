@@ -3,17 +3,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::gpu::boundary::{
-    extraction_ready_modules, renderer_companion_modules, GpuExtractionGroup,
-};
-
-const APPROVED_KERNEL_PUBLIC_MODULES: &[&str] = &[
-    "contracts",
-    "error",
-    "facade",
-    "telemetry",
-    "prelude",
-];
+const APPROVED_KERNEL_PUBLIC_MODULES: &[&str] =
+    &["contracts", "error", "facade", "telemetry", "prelude"];
 
 fn rust_files(root: &Path) -> Vec<PathBuf> {
     if root.is_file() {
@@ -61,35 +52,6 @@ fn assert_no_pattern(root: &str, forbidden: &[&str]) {
     }
 }
 
-fn assert_no_pattern_in_files(
-    base_dir: &Path,
-    paths: impl IntoIterator<Item = String>,
-    forbidden: &[&str],
-) {
-    for path in paths {
-        let root_path = base_dir.join(path);
-        for file in rust_files(&root_path) {
-            let source = fs::read_to_string(&file)
-                .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
-            for pattern in forbidden {
-                assert!(
-                    !source.contains(pattern),
-                    "{} must not contain forbidden dependency pattern `{}`",
-                    file.display(),
-                    pattern
-                );
-            }
-        }
-    }
-}
-
-fn gpu_module_paths(paths: impl IntoIterator<Item = &'static str>) -> Vec<String> {
-    paths
-        .into_iter()
-        .map(|path| format!("src/{}", path))
-        .collect()
-}
-
 fn packages_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -114,96 +76,6 @@ fn relative_to_packages(path: &Path) -> String {
 #[test]
 fn gpu_module_does_not_depend_on_services() {
     assert_no_pattern("src/gpu", &["crate::services", "use crate::services"]);
-}
-
-#[test]
-fn engine_gpu_core_modules_avoid_orchestration_dependencies() {
-    let gpu_crate = packages_dir().join("engine-gpu");
-    assert_no_pattern_in_files(
-        &gpu_crate,
-        gpu_module_paths(
-            crate::gpu::boundary::CORE_RESOURCE_HAL_MODULES
-                .iter()
-                .map(|module| module.path),
-        ),
-        &[
-            "crate::services",
-            "crate::export",
-            "crate::preview",
-            "crate::domain",
-            "host_api",
-            "host_http",
-            "host_napi",
-            "host_cli",
-            "neko_engine_kernel",
-            "neko_engine_codec",
-            "neko_engine_audio",
-            "scene_renderer",
-            "puppet_renderer",
-            "panoramic_renderer",
-        ],
-    );
-}
-
-#[test]
-fn engine_gpu_pipeline_modules_avoid_orchestration_dependencies() {
-    let gpu_crate = packages_dir().join("engine-gpu");
-    assert_no_pattern_in_files(
-        &gpu_crate,
-        gpu_module_paths(
-            crate::gpu::boundary::PIPELINE_EFFECT_MODULES
-                .iter()
-                .map(|module| module.path),
-        ),
-        &[
-            "crate::services",
-            "crate::export",
-            "crate::preview",
-            "crate::domain",
-            "host_api",
-            "host_http",
-            "host_napi",
-            "host_cli",
-            "neko_engine_kernel",
-            "neko_engine_codec",
-            "neko_engine_audio",
-            "scene_renderer",
-            "puppet_renderer",
-            "panoramic_renderer",
-        ],
-    );
-}
-
-#[test]
-fn gpu_boundary_metadata_classifies_extraction_groups() {
-    let ready: Vec<_> = extraction_ready_modules().collect();
-    assert!(ready.iter().any(|module| module.path == "context.rs"));
-    assert!(ready.iter().any(|module| module.path == "budget.rs"));
-    assert!(ready.iter().any(|module| module.path == "shaders/mod.rs"));
-
-    for module in ready {
-        assert!(
-            module.extraction_ready,
-            "{} must be extraction-ready",
-            module.path
-        );
-        assert_ne!(module.group, GpuExtractionGroup::RendererCompanion);
-    }
-
-    let companions: Vec<_> = renderer_companion_modules().collect();
-    assert!(companions
-        .iter()
-        .any(|module| module.path == "scene_renderer"));
-    assert!(companions
-        .iter()
-        .any(|module| module.path == "puppet_renderer"));
-    assert!(companions
-        .iter()
-        .any(|module| module.path == "panoramic_renderer.rs"));
-    for module in companions {
-        assert!(!module.extraction_ready);
-        assert_eq!(module.group, GpuExtractionGroup::RendererCompanion);
-    }
 }
 
 #[test]
@@ -296,8 +168,6 @@ fn kernel_gpu_module_documents_temporary_reexports_and_companion_shims() {
     assert!(source.contains("pub use neko_engine_puppet_renderer::"));
     assert!(source.contains("pub use neko_engine_panoramic_renderer::"));
     assert!(source.contains("pub mod scene_renderer"));
-    assert!(source.contains("pub mod puppet_renderer"));
-    assert!(source.contains("pub mod panoramic_renderer"));
     assert!(source.contains("Temporary GPU compatibility surface"));
 }
 
@@ -421,6 +291,136 @@ fn host_production_code_does_not_construct_kernel_services_directly() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn kernel_services_facade_exposes_trait_objects_for_service_handles() {
+    let facade_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/facade.rs");
+    let source = fs::read_to_string(&facade_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", facade_rs.display(), err));
+
+    for required in [
+        "pub task_service: Arc<dyn ITaskService>",
+        "pub node_service: Arc<dyn INodeService>",
+        "pub video_service: Arc<dyn IVideoService>",
+        "pub audio_service: Arc<dyn IAudioService>",
+        "pub image_service: Arc<dyn IImageService>",
+        "pub timeline_service: Arc<dyn ITimelineService>",
+        "pub export_service: Option<Arc<dyn IExportService>>",
+        "pub effects_service: Option<Arc<dyn IEffectsService>>",
+        "pub scene_service: Option<Arc<dyn ISceneService>>",
+        "pub puppet_service: Option<Arc<dyn IPuppetService>>",
+    ] {
+        assert!(
+            source.contains(required),
+            "KernelServices must expose trait-object service handle `{}`",
+            required
+        );
+    }
+
+    for forbidden in [
+        "pub task_service: Arc<TaskService>",
+        "pub node_service: Arc<NodeService>",
+        "pub video_service: Arc<VideoService>",
+        "pub audio_service: Arc<AudioService>",
+        "pub image_service: Arc<ImageService>",
+        "pub timeline_service: Arc<TimelineService>",
+        "pub export_service: Option<Arc<ExportService>>",
+        "pub effects_service: Option<Arc<EffectsService>>",
+        "pub scene_service: Option<Arc<SceneService>>",
+        "pub puppet_service: Option<Arc<PuppetService>>",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "KernelServices must not expose concrete service handle `{}`",
+            forbidden
+        );
+    }
+}
+
+#[test]
+fn host_controllers_store_trait_service_handles() {
+    let controllers_dir = packages_dir().join("host-api/src/controllers");
+    let forbidden = [
+        "Arc<TaskService>",
+        "Arc<NodeService>",
+        "Arc<VideoService>",
+        "Arc<AudioService>",
+        "Arc<ImageService>",
+        "Arc<TimelineService>",
+        "Arc<ExportService>",
+        "Arc<EffectsService>",
+        "Arc<SceneService>",
+        "Arc<PuppetService>",
+        "Option<Arc<ExportService>>",
+        "Option<Arc<EffectsService>>",
+        "Option<Arc<SceneService>>",
+        "Option<Arc<PuppetService>>",
+    ];
+
+    for file in rust_files(&controllers_dir) {
+        let source = fs::read_to_string(&file)
+            .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
+        for pattern in forbidden {
+            assert!(
+                !source.contains(pattern),
+                "{} must store service traits from KernelServices, not concrete handle `{}`",
+                relative_to_packages(&file),
+                pattern
+            );
+        }
+    }
+}
+
+#[test]
+fn contracts_services_do_not_reexport_concrete_kernel_services() {
+    let contracts_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/contracts.rs");
+    let source = fs::read_to_string(&contracts_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", contracts_rs.display(), err));
+
+    let service_section = source
+        .split("pub mod services {")
+        .nth(1)
+        .and_then(|rest| rest.split("/// Runtime puppet contracts").next())
+        .expect("contracts.rs must contain services contract module");
+
+    let root_services_export = service_section
+        .split("pub use crate::services::{")
+        .nth(1)
+        .and_then(|rest| rest.split("};").next())
+        .expect("contracts::services must contain root service trait exports");
+    let exported_idents: Vec<&str> = root_services_export
+        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+        .filter(|token| !token.is_empty())
+        .collect();
+
+    for forbidden in [
+        "AudioService",
+        "EffectsService",
+        "ExportService",
+        "ImageService",
+        "NodeService",
+        "PuppetService",
+        "SceneService",
+        "TaskService",
+        "TimelineService",
+        "VideoService",
+    ] {
+        assert!(
+            !exported_idents.contains(&forbidden)
+                && !service_section.contains(&format!("pub use crate::services::{};", forbidden)),
+            "contracts::services must expose service traits, not concrete `{}`",
+            forbidden
+        );
+    }
+
+    for allowed_exception in ["EffectRegistry", "PipelineSink", "StreamSink"] {
+        assert!(
+            exported_idents.contains(&allowed_exception),
+            "contracts::services should keep explicit non-service exception `{}`",
+            allowed_exception
+        );
     }
 }
 

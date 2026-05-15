@@ -10,7 +10,7 @@ use neko_engine_kernel::contracts::domain::{
 use neko_engine_kernel::contracts::media::{
     diff_audio_content_with_options, diff_media, AudioDiffOptions, DiffCategory,
 };
-use neko_engine_kernel::contracts::services::{AudioService, IAudioService};
+use neko_engine_kernel::contracts::services::IAudioService;
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, SUPPORTED_AUDIO_EFFECT_TYPES};
 use serde::Deserialize;
@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Controller for audio-related actions
 pub struct AudioController {
-    audio_service: Arc<AudioService>,
+    audio_service: Arc<dyn IAudioService>,
     resource_registry: Arc<ResourceRegistry>,
     stream_registry: Arc<StreamRegistry>,
 }
@@ -29,7 +29,7 @@ pub struct AudioController {
 impl AudioController {
     /// Create a new AudioController
     pub fn new(
-        audio_service: Arc<AudioService>,
+        audio_service: Arc<dyn IAudioService>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
     ) -> Self {

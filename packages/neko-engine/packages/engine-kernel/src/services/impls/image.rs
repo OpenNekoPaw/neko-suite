@@ -9,6 +9,7 @@ use crate::gpu::{ColorSpace, GpuContext, Nv12Renderer, Nv12TextureImporter};
 use crate::media_service::{encode_rgba_to_jpeg, global_probe_cache};
 use crate::services::impls::common::convert_media_info;
 use crate::services::IImageService;
+use async_trait::async_trait;
 use neko_engine_types::{FrameFormat, MediaInfo};
 use std::path::Path;
 use std::sync::Arc;
@@ -29,6 +30,7 @@ impl ImageService {
     }
 }
 
+#[async_trait]
 impl IImageService for ImageService {
     async fn probe(&self, path: &Path) -> Result<MediaInfo> {
         let path = path.to_path_buf();

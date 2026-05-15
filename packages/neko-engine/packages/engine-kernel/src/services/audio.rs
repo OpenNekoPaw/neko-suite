@@ -6,6 +6,7 @@ use crate::audio::mic_capture::{
 use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
+use async_trait::async_trait;
 use neko_engine_types::{MediaInfo, StreamId, WaveformData};
 use std::path::Path;
 use tokio::sync::broadcast;
@@ -18,7 +19,7 @@ use super::audio_mixdown::MixdownConfig;
 /// Handles audio-specific operations: probing, transcoding, streaming,
 /// and waveform generation.
 /// Stream playback control (stop/pause/resume/speed/seek/loop) is inherited from `IStreamPlayback`.
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait IAudioService: IStreamPlayback {
     /// Probe audio file metadata
     async fn probe(&self, path: &Path) -> Result<MediaInfo>;

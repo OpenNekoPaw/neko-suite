@@ -13,7 +13,9 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
-use neko_host_api::{EngineApi, PipelineSink, PreviewPipelineConfig, PuppetRenderTiming, StreamSink};
+use neko_host_api::{
+    EngineApi, PipelineSink, PreviewPipelineConfig, PuppetRenderTiming, StreamSink,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -62,7 +64,9 @@ pub async fn handle_puppet_stream(
 ) -> impl IntoResponse {
     let format = parse_stream_format(query.format.as_deref());
     match format {
-        PuppetStreamFormat::Json => ws.on_upgrade(move |socket| puppet_json_stream_loop(socket, engine)),
+        PuppetStreamFormat::Json => {
+            ws.on_upgrade(move |socket| puppet_json_stream_loop(socket, engine))
+        }
         PuppetStreamFormat::H264 => {
             let config = h264_stream_config(&query);
             ws.on_upgrade(move |socket| puppet_h264_stream_loop(socket, engine, config))

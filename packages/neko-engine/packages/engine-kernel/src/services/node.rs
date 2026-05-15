@@ -1,13 +1,16 @@
 //! Node service trait
 
 use crate::error::Result;
+use async_trait::async_trait;
 use neko_engine_types::{HealthStatus, ResourceSnapshot};
 use serde::Serialize;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 /// Node service interface
 ///
 /// Handles system health monitoring and resource metrics.
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait INodeService: Send + Sync {
     /// Get system health status
     async fn health(&self) -> Result<HealthStatus>;
@@ -17,6 +20,9 @@ pub trait INodeService: Send + Sync {
 
     /// Get GPU information
     async fn gpu_info(&self) -> Result<GpuInfo>;
+
+    /// Counter used by host registries to report active stream count in metrics.
+    fn active_streams_counter(&self) -> Arc<AtomicUsize>;
 }
 
 /// GPU information

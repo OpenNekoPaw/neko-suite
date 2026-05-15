@@ -2448,6 +2448,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ash",
+ "async-trait",
  "base64 0.22.1",
  "bevy_ecs",
  "block",

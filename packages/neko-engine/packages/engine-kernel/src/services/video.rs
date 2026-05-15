@@ -3,6 +3,7 @@
 use crate::domain::{CaptureOptions, ExtractOptions, FrameData, TaskHandle, TranscodeOptions};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
+use async_trait::async_trait;
 use neko_engine_types::{MediaInfo, StreamId};
 use neko_runtime_media::PanoramaViewState;
 use std::path::Path;
@@ -13,7 +14,7 @@ use tokio::sync::broadcast;
 /// Handles video-specific operations: probing, capture, extraction,
 /// streaming, transcoding, keyframe analysis, waveform generation, and proxy creation.
 /// Stream playback control (stop/pause/resume/speed/seek/loop) is inherited from `IStreamPlayback`.
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait IVideoService: IStreamPlayback {
     /// Probe video file metadata
     async fn probe(&self, path: &Path) -> Result<MediaInfo>;

@@ -78,7 +78,7 @@ pub mod preview {
     pub use crate::preview::PreviewPipelineConfig;
 }
 
-/// Service traits and concrete handles approved for host controller injection.
+/// Service traits and explicit non-service exceptions approved for host callers.
 pub mod services {
     pub use crate::services::camera::{CameraCaptureConfig, CameraDevice, ICameraService};
     pub use crate::services::device_binding::{
@@ -88,12 +88,10 @@ pub mod services {
     pub use crate::services::gamepad::{GamepadEvent, GamepadInfo};
     pub use crate::services::midi::{MidiEvent, MidiPort};
     pub use crate::services::{
-        AudioService, EffectRegistry, EffectsService, ExportService, IAudioService,
-        IEffectsService, IExportService, IGamepadService, IImageService, IMidiService,
-        INodeService, IPuppetService, ISceneService, IStreamPlayback, ITaskService,
-        ITimelineService, IVideoService, ImageService, NodeService, PipelineSink,
-        PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming, PuppetService, SceneService,
-        StreamSink, TaskService, TimelineService, VideoService,
+        EffectRegistry, IAudioService, IEffectsService, IExportService, IGamepadService,
+        IImageService, IMidiService, INodeService, IPuppetService, ISceneService, IStreamPlayback,
+        ITaskService, ITimelineService, IVideoService, PipelineSink, PuppetExportConfig,
+        PuppetExportSummary, PuppetRenderTiming, StreamSink,
     };
 }
 

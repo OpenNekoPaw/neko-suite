@@ -4,7 +4,7 @@ use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
 use neko_engine_kernel::contracts::codec::detect_hw_encoders;
 use neko_engine_kernel::contracts::codec::HwEncoderTypeExt;
-use neko_engine_kernel::contracts::services::{INodeService, NodeService};
+use neko_engine_kernel::contracts::services::INodeService;
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use neko_engine_types::{HwEncoderType, VideoCodec};
@@ -13,12 +13,12 @@ use std::sync::Arc;
 
 /// Controller for node-related actions
 pub struct NodeController {
-    node_service: Arc<NodeService>,
+    node_service: Arc<dyn INodeService>,
 }
 
 impl NodeController {
     /// Create a new NodeController
-    pub fn new(node_service: Arc<NodeService>) -> Self {
+    pub fn new(node_service: Arc<dyn INodeService>) -> Self {
         Self { node_service }
     }
 }

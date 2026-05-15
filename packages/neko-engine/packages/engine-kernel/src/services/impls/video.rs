@@ -28,6 +28,7 @@ use crate::services::impls::stream_loop::{
 };
 use crate::services::pipeline_sink::PipelineSink;
 use crate::services::{IStreamPlayback, ITaskService, IVideoService, StreamSink};
+use async_trait::async_trait;
 use neko_engine_types::{
     FrameFormat, GpuFrameLease, GpuOutputHandle, LoopRegion, MediaInfo, PipelineOutput, StreamId,
     VideoGpuFrame, VideoOutput, WaveformData,
@@ -130,9 +131,6 @@ fn bilinear_downscale_rgba(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h
 pub struct VideoService {
     /// GPU context for hardware acceleration
     gpu_ctx: Option<Arc<GpuContext>>,
-    /// Task service for registering long-running operations
-    #[allow(dead_code)]
-    task_service: Arc<dyn ITaskService + Send + Sync>,
     /// Active stream loops
     active_streams: Arc<ActiveStreams>,
     /// Delegate for stream playback control (stop/pause/resume/speed/seek/loop)
@@ -143,19 +141,19 @@ impl VideoService {
     /// Create a new VideoService
     pub fn new(
         gpu_ctx: Option<Arc<GpuContext>>,
-        task_service: Arc<dyn ITaskService + Send + Sync>,
+        _task_service: Arc<dyn ITaskService + Send + Sync>,
     ) -> Self {
         let active_streams = Arc::new(ActiveStreams::new());
         let playback = StreamPlaybackDelegate::new(active_streams.clone());
         Self {
             gpu_ctx,
-            task_service,
             active_streams,
             playback,
         }
     }
 }
 
+#[async_trait]
 impl IStreamPlayback for VideoService {
     async fn stop_stream(&self, stream_id: &StreamId) -> Result<()> {
         self.playback.stop_stream(stream_id).await
@@ -182,6 +180,7 @@ impl IStreamPlayback for VideoService {
     }
 }
 
+#[async_trait]
 impl IVideoService for VideoService {
     async fn probe(&self, path: &Path) -> Result<MediaInfo> {
         // Use blocking task for FFmpeg probe

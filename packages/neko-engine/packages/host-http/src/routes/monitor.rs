@@ -20,7 +20,7 @@ pub async fn handle_monitor(
 ) -> impl IntoResponse {
     let audio_service = engine.audio_service();
 
-    match audio_service.mic_capture().get_monitor_data(&stream_id) {
+    match audio_service.monitor_data(&stream_id) {
         Some(data) => match serde_json::to_value(&data) {
             Ok(value) => (StatusCode::OK, Json(value)).into_response(),
             Err(error) => {

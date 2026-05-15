@@ -201,7 +201,7 @@ pub struct StreamControlOptions {
 ///
 /// This eliminates duplicated stream control handler logic across
 /// VideoController, AudioController, and TimelineController.
-pub async fn handle_stream_control<S: IStreamPlayback>(
+pub async fn handle_stream_control<S: IStreamPlayback + ?Sized>(
     playback: &S,
     action: &str,
     options: Value,

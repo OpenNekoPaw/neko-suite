@@ -12,7 +12,7 @@ use axum::{
     Json,
 };
 use neko_host_api::preview::{
-    mime_for_path, PreviewErrorState, PreviewFileRegistry, PreviewVariant, PreviewVariantRequest,
+    mime_for_path, PreviewFileRegistry, PreviewVariant, PreviewVariantRequest,
     RegisterPreviewAssetRequest, RegisterRequest, RegisterResponse,
     UpdatePreviewAssetMetadataRequest,
 };
@@ -321,6 +321,7 @@ mod tests {
     use axum::body::to_bytes;
     use image::{ImageBuffer, Rgb};
     use neko_engine_types::ActionRequest;
+    use neko_host_api::preview::PreviewErrorState;
     use neko_host_api::EngineApi;
     use std::io::Write;
     use tempfile::tempdir;

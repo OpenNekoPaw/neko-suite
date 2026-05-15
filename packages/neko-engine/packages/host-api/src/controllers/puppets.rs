@@ -4,7 +4,7 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::contracts::services::{IPuppetService, PuppetExportConfig, PuppetService};
+use neko_engine_kernel::contracts::services::{IPuppetService, PuppetExportConfig};
 use neko_engine_types::registry;
 use neko_engine_types::{ActionResponse, PuppetCommand, PuppetCommandAck, PuppetCommandAckStatus};
 use serde::Deserialize;
@@ -13,15 +13,15 @@ use std::sync::Arc;
 
 /// Controller for 2D puppet operations
 pub struct PuppetsController {
-    puppet_service: Option<Arc<PuppetService>>,
+    puppet_service: Option<Arc<dyn IPuppetService>>,
 }
 
 impl PuppetsController {
-    pub fn new(puppet_service: Option<Arc<PuppetService>>) -> Self {
+    pub fn new(puppet_service: Option<Arc<dyn IPuppetService>>) -> Self {
         Self { puppet_service }
     }
 
-    fn service(&self) -> ApiResult<&PuppetService> {
+    fn service(&self) -> ApiResult<&dyn IPuppetService> {
         self.puppet_service
             .as_deref()
             .ok_or_else(|| ApiError::ServiceError("Puppet service not available".to_string()))
@@ -571,7 +571,7 @@ impl Controller for PuppetsController {
     }
 }
 
-fn apply_alias(service: &PuppetService, command: PuppetCommand) -> ApiResult<Value> {
+fn apply_alias(service: &dyn IPuppetService, command: PuppetCommand) -> ApiResult<Value> {
     let ack = service
         .apply_puppet_command_alias(command)
         .map_err(|e| ApiError::ServiceError(e.to_string()))?;

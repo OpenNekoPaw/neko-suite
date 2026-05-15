@@ -2,7 +2,7 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::contracts::services::{ITaskService, TaskService};
+use neko_engine_kernel::contracts::services::ITaskService;
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
 use serde_json::Value;
@@ -10,12 +10,12 @@ use std::sync::Arc;
 
 /// Controller for task-related actions
 pub struct TaskController {
-    task_service: Arc<TaskService>,
+    task_service: Arc<dyn ITaskService>,
 }
 
 impl TaskController {
     /// Create a new TaskController
-    pub fn new(task_service: Arc<TaskService>) -> Self {
+    pub fn new(task_service: Arc<dyn ITaskService>) -> Self {
         Self { task_service }
     }
 }
