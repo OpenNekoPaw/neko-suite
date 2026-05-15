@@ -57,10 +57,10 @@ fn panoramic_stream_video_output(
     duration: i64,
     frame_index: u64,
 ) -> Result<VideoOutput> {
-    let io_surface =
-        converter.convert_to_iosurface(&output.color_view, output.width, output.height, 1)?;
+    let gpu_handle =
+        converter.convert_to_encoder_handle(&output.color_view, output.width, output.height, 1)?;
     Ok(VideoOutput::GpuFrame(VideoGpuFrame {
-        lease: GpuFrameLease::new(GpuOutputHandle::IOSurface(io_surface)),
+        lease: GpuFrameLease::new(gpu_handle),
         pts,
         duration,
         frame_index,

@@ -483,10 +483,14 @@ fn rendered_output_to_encoder_video_output(
     ctx: Arc<GpuContext>,
 ) -> Result<VideoOutput> {
     if let Some(converter) = converter {
-        let io_surface =
-            converter.convert_to_iosurface(&output.color_view, output.width, output.height, 1)?;
+        let gpu_handle = converter.convert_to_encoder_handle(
+            &output.color_view,
+            output.width,
+            output.height,
+            1,
+        )?;
         return Ok(VideoOutput::GpuFrame(VideoGpuFrame {
-            lease: GpuFrameLease::new(GpuOutputHandle::IOSurface(io_surface)),
+            lease: GpuFrameLease::new(gpu_handle),
             pts: output.pts,
             duration: output.duration,
             frame_index: output.frame_index,

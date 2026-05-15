@@ -18,12 +18,10 @@
 //! Note: wgpu doesn't support different-sized MRT attachments, so we use two passes.
 //! This is still efficient as both passes share the same input texture binding.
 
-use crate::error::GpuResult as Result;
-use crate::GpuContext;
+use crate::error::{GpuError as Error, GpuResult as Result};
+use crate::{DefaultPlatformGpuMediaBridge, GpuContext, PlatformGpuMediaBridge};
+use neko_engine_types::GpuOutputHandle;
 use std::sync::Arc;
-
-#[cfg(not(target_os = "macos"))]
-use crate::error::GpuError as Error;
 
 #[cfg(target_os = "macos")]
 use super::macos_export::{IOSurfaceBackingStore, MacOsTextureExporter};
@@ -288,6 +286,8 @@ pub struct RgbaToNv12TextureConverter {
     texture_size: (u32, u32),
     /// IOSurface exporter
     exporter: MacOsTextureExporter,
+    /// Platform bridge for encoder handle wrapping and capability reporting.
+    bridge: DefaultPlatformGpuMediaBridge,
     /// Persistent IOSurface backing store (reused across frames)
     output_backing: Option<IOSurfaceBackingStore>,
 }
@@ -436,6 +436,7 @@ impl RgbaToNv12TextureConverter {
 
         // IOSurface exporter
         let exporter = MacOsTextureExporter::new(ctx.clone())?;
+        let bridge = DefaultPlatformGpuMediaBridge::new(Arc::clone(&ctx));
 
         tracing::info!("RGBA to NV12 texture converter initialized (Dual Render Pass Pipeline)");
 
@@ -448,6 +449,7 @@ impl RgbaToNv12TextureConverter {
             sampler,
             texture_size: (0, 0),
             exporter,
+            bridge,
             output_backing: None,
         })
     }
@@ -470,6 +472,20 @@ impl RgbaToNv12TextureConverter {
         height: u32,
         color_space: u32,
     ) -> Result<usize> {
+        Ok(self
+            .convert_to_encoder_handle(input_texture, width, height, color_space)?
+            .native_encoder_handle()
+            .map_err(|error| Error::UnsupportedCapability(error.to_string()))?)
+    }
+
+    /// Convert RGBA texture to an encoder-ready platform handle.
+    pub fn convert_to_encoder_handle(
+        &mut self,
+        input_texture: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+        color_space: u32,
+    ) -> Result<GpuOutputHandle> {
         // Wait for any pending GPU work (compositor) to complete before reading input texture
         self.ctx.device().poll(wgpu::Maintain::Wait);
 
@@ -605,7 +621,8 @@ impl RgbaToNv12TextureConverter {
         // Note: iosurface_y and iosurface_uv (wgpu textures) are dropped here
         // This is intentional - fresh import each frame avoids wgpu cache conflicts
 
-        Ok(backing.io_surface_handle())
+        self.bridge
+            .export_encoder_handle(backing.io_surface_handle(), width, height)
     }
 
     /// Get the cached output texture dimensions
@@ -639,6 +656,19 @@ impl RgbaToNv12TextureConverter {
         Err(Error::Other(
             "Zero-copy texture conversion only supported on macOS".to_string(),
         ))
+    }
+
+    pub fn convert_to_encoder_handle(
+        &mut self,
+        _input_texture: &wgpu::TextureView,
+        _width: u32,
+        _height: u32,
+        _color_space: u32,
+    ) -> Result<GpuOutputHandle> {
+        Err(Error::UnsupportedCapability(format!(
+            "zero-copy NV12 encoder bridge is not implemented on {}",
+            std::env::consts::OS
+        )))
     }
 
     pub fn cached_dimensions(&self) -> Option<(u32, u32)> {

@@ -225,7 +225,7 @@ impl LinuxTextureImporter {
         &self,
         surface_id: u32,
         display: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
+        gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
     ) -> Result<ImportedNv12Texture> {
         // Step 1: Sync — ensure decode is complete before export
         let va_display = display as *mut std::ffi::c_void;
@@ -261,7 +261,7 @@ impl LinuxTextureImporter {
         &self,
         surface_id: u32,
         display: *mut std::ffi::c_void,
-        _gpu_texture: &impl Nv12GpuTextureSource,
+        _gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
     ) -> Result<DmaBufFrame> {
         let mut desc = VADRMPRIMESurfaceDescriptor::default();
 
@@ -331,7 +331,7 @@ impl LinuxTextureImporter {
     fn import_dmabuf(
         &self,
         dma_buf: &DmaBufFrame,
-        gpu_texture: &impl Nv12GpuTextureSource,
+        gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
     ) -> Result<ImportedNv12Texture> {
         if dma_buf.planes.len() < 2 {
             return Err(Error::Other(
@@ -814,7 +814,7 @@ impl CudaTextureImporter {
         &self,
         device_ptr: usize,
         pitch: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
+        gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
     ) -> Result<ImportedNv12Texture> {
         let width = gpu_texture.width();
         let height = gpu_texture.height();

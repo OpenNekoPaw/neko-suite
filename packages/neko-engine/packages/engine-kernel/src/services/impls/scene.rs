@@ -566,11 +566,15 @@ impl SceneService {
             .as_ref()
             .ok_or_else(|| Error::Other("GPU not available for scene stream".to_string()))?;
         let mut converter = RgbaToNv12TextureConverter::new(Arc::clone(ctx))?;
-        let io_surface =
-            converter.convert_to_iosurface(&output.color_view, output.width, output.height, 1)?;
+        let gpu_handle = converter.convert_to_encoder_handle(
+            &output.color_view,
+            output.width,
+            output.height,
+            1,
+        )?;
 
         Ok(VideoGpuFrame {
-            lease: GpuFrameLease::new(GpuOutputHandle::IOSurface(io_surface)),
+            lease: GpuFrameLease::new(gpu_handle),
             pts: pts_us,
             duration: duration_us,
             frame_index,

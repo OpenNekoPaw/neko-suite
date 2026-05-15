@@ -10,6 +10,7 @@ crate-type = ["lib"]
 
 [dependencies]
 neko-engine-gpu = { path = "../engine-gpu" }
+neko-engine-types = { path = "../engine-types" }
 
 wgpu.workspace = true
 

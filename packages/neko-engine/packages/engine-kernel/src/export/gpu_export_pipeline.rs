@@ -32,7 +32,7 @@ use crate::gpu::{
 use crate::services::{ISceneService, SceneService};
 use crate::telemetry::spans::span;
 use neko_engine_export_renderer::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
-use neko_engine_types::{BlendMode, TrackType};
+use neko_engine_types::{BlendMode, GpuOutputHandle, TrackType};
 
 use super::types::ExportSettings;
 
@@ -461,28 +461,30 @@ impl GpuExportPipeline {
         })
     }
 
-    /// Process a single frame and return IOSurface handle for zero-copy encoding (macOS only)
+    /// Process a single frame and return an encoder-ready GPU handle.
     ///
     /// Full pipeline: Decode → NV12 Import → RGBA Convert → Composite → NV12 Convert → IOSurface
     /// The output IOSurface can be passed directly to VideoToolbox encoder.
     ///
     /// Returns the IOSurface handle that can be used with `HwAccelEncoder::encode_frame_gpu()`.
-    #[cfg(target_os = "macos")]
     #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
     #[allow(dead_code)]
-    pub fn process_frame_to_iosurface(
+    pub fn process_frame_to_gpu_handle(
         &mut self,
         time: f64,
         background_color: [f32; 4],
-    ) -> Result<usize> {
-        let result = self.process_frame_to_iosurface_timed(time, background_color)?;
-        Ok(result.gpu_handle.unwrap())
+    ) -> Result<GpuOutputHandle> {
+        let result = self.process_frame_to_gpu_handle_timed(time, background_color)?;
+        result.gpu_handle.ok_or_else(|| {
+            Error::UnsupportedCapability(
+                "GPU export path did not return an encoder-ready handle".to_string(),
+            )
+        })
     }
 
-    /// Process a single frame to IOSurface with detailed timing breakdown (macOS only)
-    #[cfg(target_os = "macos")]
+    /// Process a single frame to an encoder-ready GPU handle with timing breakdown.
     #[tracing::instrument(skip(self), fields(time = %format!("{:.3}s", time)))]
-    pub fn process_frame_to_iosurface_timed(
+    pub fn process_frame_to_gpu_handle_timed(
         &mut self,
         time: f64,
         background_color: [f32; 4],
@@ -506,12 +508,16 @@ impl GpuExportPipeline {
 
         let converter = self.zerocopy_converter.as_mut().unwrap();
 
-        // Convert RGBA to NV12 and return IOSurface handle
+        // Convert RGBA to NV12 and return an encoder-ready platform handle.
         let gpu_handle = {
             let start = Instant::now();
             let _span = tracing::debug_span!(span::RGBA_TO_NV12, zerocopy = true).entered();
-            let handle =
-                converter.convert_to_iosurface(&texture_view, result.width, result.height, 1)?;
+            let handle = converter.convert_to_encoder_handle(
+                &texture_view,
+                result.width,
+                result.height,
+                1,
+            )?;
             timing.rgba_to_nv12_ns = start.elapsed().as_nanos() as u64;
             handle
         };

@@ -22,7 +22,7 @@ use crate::encoder::{
 use crate::error::{Error, Result};
 use crate::export::{ExportSettings, GpuExportPipeline, GpuPipelineTiming};
 use crate::gpu::GpuContext;
-use neko_engine_types::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame};
+use neko_engine_types::{GpuFrameLease, VideoGpuFrame};
 
 /// Preview pipeline configuration
 #[derive(Debug, Clone)]
@@ -255,14 +255,16 @@ impl PreviewPipeline {
     ) -> Result<Vec<PreviewFrame>> {
         self.ensure_encoder_initialized()?;
 
-        // Use GpuExportPipeline to process frame to IOSurface (zero-copy)
-        let iosurface_handle = self
+        // Use GpuExportPipeline to process frame to an encoder-ready GPU handle.
+        let gpu_handle = self
             .gpu_pipeline
-            .process_frame_to_iosurface(time, background_color)?;
+            .process_frame_to_gpu_handle(time, background_color)?;
 
-        // Encode to H.264 via VideoToolbox (zero-copy from IOSurface)
+        // Encode to H.264 through the platform GPU bridge handle.
         let pts = (self.frame_count as f64 * 1_000_000.0 / self.config.fps) as i64;
-        let packets = self.encoder.encode_frame_gpu(iosurface_handle, pts)?;
+        let packets = self
+            .encoder
+            .encode_frame_gpu(gpu_handle.native_encoder_handle()?, pts)?;
 
         self.frame_count += 1;
 
@@ -291,18 +293,23 @@ impl PreviewPipeline {
     ) -> Result<(Vec<PreviewFrame>, GpuPipelineTiming, u64)> {
         self.ensure_encoder_initialized()?;
 
-        let iosurface_result = self
+        let gpu_result = self
             .gpu_pipeline
-            .process_frame_to_iosurface_timed(time, background_color)?;
+            .process_frame_to_gpu_handle_timed(time, background_color)?;
 
-        let timing = iosurface_result.timing;
+        let timing = gpu_result.timing;
+        let gpu_handle = gpu_result.gpu_handle.ok_or_else(|| {
+            Error::UnsupportedCapability(
+                "GPU preview output did not return an encoder-ready handle".to_string(),
+            )
+        })?;
 
         // PTS based on actual timeline time, not frame_count
         let pts = (time * 1_000_000.0) as i64;
         let encode_start = std::time::Instant::now();
         let packets = self
             .encoder
-            .encode_frame_gpu(iosurface_result.gpu_handle.unwrap(), pts)?;
+            .encode_frame_gpu(gpu_handle.native_encoder_handle()?, pts)?;
         let encode_ns = encode_start.elapsed().as_nanos() as u64;
 
         self.frame_count += 1;
@@ -321,23 +328,23 @@ impl PreviewPipeline {
         time: f64,
         background_color: [f32; 4],
     ) -> Result<(VideoGpuFrame, GpuPipelineTiming)> {
-        let iosurface_result = self
+        let gpu_result = self
             .gpu_pipeline
-            .process_frame_to_iosurface_timed(time, background_color)?;
-        let timing = iosurface_result.timing;
-        let gpu_handle = iosurface_result.gpu_handle.ok_or_else(|| {
+            .process_frame_to_gpu_handle_timed(time, background_color)?;
+        let timing = gpu_result.timing;
+        let gpu_handle = gpu_result.gpu_handle.ok_or_else(|| {
             Error::UnsupportedCapability(
-                "macOS GPU preview output did not return an IOSurface handle".to_string(),
+                "GPU preview output did not return an encoder-ready handle".to_string(),
             )
         })?;
 
         let frame = VideoGpuFrame {
-            lease: GpuFrameLease::new(GpuOutputHandle::IOSurface(gpu_handle)),
+            lease: GpuFrameLease::new(gpu_handle),
             pts: (time * 1_000_000.0) as i64,
             duration: (1_000_000.0 / self.config.fps) as i64,
             frame_index: self.frame_count,
-            width: iosurface_result.width,
-            height: iosurface_result.height,
+            width: gpu_result.width,
+            height: gpu_result.height,
         };
 
         self.frame_count += 1;

@@ -10,17 +10,8 @@
 //! - BT.601/BT.709 color space support
 
 use crate::error::{GpuError as Error, GpuResult as Result};
-use crate::GpuContext;
+use crate::{DefaultPlatformGpuMediaBridge, GpuContext, PlatformGpuMediaBridge};
 use neko_engine_types::{DecodedGpuTextureHandle, Nv12GpuTextureSource};
-
-#[cfg(all(target_os = "linux", feature = "cuda"))]
-use super::linux_import::CudaTextureImporter;
-#[cfg(target_os = "linux")]
-use super::linux_import::LinuxTextureImporter;
-#[cfg(target_os = "macos")]
-use super::macos_import::MacOsTextureImporter;
-#[cfg(target_os = "windows")]
-use super::windows_import::WindowsTextureImporter;
 
 use std::sync::Arc;
 
@@ -96,12 +87,14 @@ pub struct Nv12FrameData<'a> {
 /// NV12 texture importer for wgpu
 pub struct Nv12TextureImporter {
     ctx: Arc<GpuContext>,
+    bridge: DefaultPlatformGpuMediaBridge,
 }
 
 impl Nv12TextureImporter {
     /// Create a new texture importer
     pub fn new(ctx: Arc<GpuContext>) -> Self {
-        Self { ctx }
+        let bridge = DefaultPlatformGpuMediaBridge::new(Arc::clone(&ctx));
+        Self { ctx, bridge }
     }
 
     /// Create empty NV12 textures for uploading data
@@ -170,29 +163,6 @@ impl Nv12TextureImporter {
     #[allow(unused_variables)]
     pub fn import(&self, gpu_texture: &impl Nv12GpuTextureSource) -> Result<ImportedNv12Texture> {
         match gpu_texture.handle() {
-            #[cfg(target_os = "macos")]
-            DecodedGpuTextureHandle::VideoToolbox {
-                pixel_buffer,
-                io_surface,
-            } => self.import_videotoolbox(*pixel_buffer, *io_surface, gpu_texture),
-
-            #[cfg(target_os = "linux")]
-            DecodedGpuTextureHandle::Vaapi {
-                surface_id,
-                display,
-            } => self.import_vaapi(*surface_id, *display, gpu_texture),
-
-            #[cfg(all(any(target_os = "linux", target_os = "windows"), feature = "cuda"))]
-            DecodedGpuTextureHandle::Cuda { device_ptr, pitch } => {
-                self.import_cuda(*device_ptr, *pitch, gpu_texture)
-            }
-
-            #[cfg(target_os = "windows")]
-            DecodedGpuTextureHandle::D3d11 {
-                texture,
-                array_index,
-            } => self.import_d3d11(*texture, *array_index, gpu_texture),
-
             DecodedGpuTextureHandle::None => {
                 Err(Error::Other("No GPU texture handle available".to_string()))
             }
@@ -221,86 +191,8 @@ impl Nv12TextureImporter {
                 Ok(imported)
             }
 
-            #[allow(unreachable_patterns)]
-            _ => Err(Error::Other(
-                "Unsupported GPU texture handle for this platform".to_string(),
-            )),
+            _ => self.bridge.import_decoded_frame(gpu_texture),
         }
-    }
-
-    /// Import from VideoToolbox (macOS)
-    #[cfg(target_os = "macos")]
-    #[allow(unused_variables)]
-    fn import_videotoolbox(
-        &self,
-        pixel_buffer: usize,
-        io_surface: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
-    ) -> Result<ImportedNv12Texture> {
-        // Create macOS texture importer and delegate to it
-        let importer = MacOsTextureImporter::new(self.ctx.clone())?;
-
-        // Use CVPixelBuffer for proper GPU synchronization
-        // CVPixelBufferLockBaseAddress waits for GPU operations to complete,
-        // which is required for zero-copy import from VideoToolbox.
-        // Safety: pixel_buffer is a valid CVPixelBufferRef from VideoToolbox decoder
-        unsafe { importer.import_videotoolbox(pixel_buffer, gpu_texture) }
-    }
-
-    /// Import from VAAPI (Linux)
-    #[cfg(target_os = "linux")]
-    fn import_vaapi(
-        &self,
-        surface_id: u32,
-        display: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
-    ) -> Result<ImportedNv12Texture> {
-        let importer = LinuxTextureImporter::new(self.ctx.clone())?;
-        // Safety: surface_id and display are valid VAAPI handles from HwAccelDecoder
-        unsafe { importer.import_vaapi(surface_id, display, gpu_texture) }
-    }
-
-    /// Import from CUDA (Linux — GPU-to-GPU via CUDA-Vulkan interop)
-    #[cfg(all(target_os = "linux", feature = "cuda"))]
-    fn import_cuda(
-        &self,
-        device_ptr: usize,
-        pitch: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
-    ) -> Result<ImportedNv12Texture> {
-        let importer = CudaTextureImporter::new(self.ctx.clone())?;
-        // Safety: device_ptr is a valid CUdeviceptr from HwAccelDecoder (NVDEC)
-        unsafe { importer.import_cuda(device_ptr, pitch, gpu_texture) }
-    }
-
-    /// Import from CUDA (Windows — not yet implemented)
-    #[cfg(all(target_os = "windows", feature = "cuda"))]
-    fn import_cuda(
-        &self,
-        device_ptr: usize,
-        pitch: usize,
-        _gpu_texture: &impl Nv12GpuTextureSource,
-    ) -> Result<ImportedNv12Texture> {
-        // Windows CUDA interop would use cuImportExternalMemory with
-        // CU_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32 + D3D12 shared handle.
-        // For now, NVIDIA on Windows should prefer D3D11VA path instead.
-        Err(Error::Other(format!(
-            "CUDA zero-copy on Windows not yet implemented (use D3D11VA instead) - ptr={:#x}, pitch={}",
-            device_ptr, pitch
-        )))
-    }
-
-    /// Import from D3D11 (Windows)
-    #[cfg(target_os = "windows")]
-    fn import_d3d11(
-        &self,
-        texture: usize,
-        array_index: u32,
-        gpu_texture: &impl Nv12GpuTextureSource,
-    ) -> Result<ImportedNv12Texture> {
-        let importer = WindowsTextureImporter::new(self.ctx.clone())?;
-        // Safety: texture is a valid ID3D11Texture2D* from HwAccelDecoder
-        unsafe { importer.import_d3d11(texture, array_index, gpu_texture) }
     }
 
     /// Upload NV12 data with linesize handling

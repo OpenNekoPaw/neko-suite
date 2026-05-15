@@ -72,7 +72,7 @@ impl MacOsTextureImporter {
     pub unsafe fn import_videotoolbox(
         &self,
         pixel_buffer: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
+        gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
     ) -> Result<ImportedNv12Texture> {
         let cv_pixel_buffer = pixel_buffer as *mut Object;
 
@@ -144,7 +144,7 @@ impl MacOsTextureImporter {
         y_height: usize,
         uv_width: usize,
         uv_height: usize,
-        gpu_texture: &impl Nv12GpuTextureSource,
+        gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
     ) -> Result<ImportedNv12Texture> {
         // GPU synchronization is handled by CVPixelBufferLockBaseAddress in the caller.
         // IOSurfaceLock only provides CPU-level synchronization and does NOT wait for GPU.

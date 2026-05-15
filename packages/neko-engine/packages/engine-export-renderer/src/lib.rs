@@ -7,6 +7,7 @@
 mod architecture_tests;
 
 use neko_engine_gpu::GpuContext;
+use neko_engine_types::GpuOutputHandle;
 
 /// Detailed timing breakdown for GPU pipeline stages.
 #[derive(Debug, Clone, Default)]
@@ -41,8 +42,8 @@ impl GpuPipelineTiming {
 pub struct Nv12FrameResult {
     /// NV12 data (empty if using zero-copy).
     pub data: Vec<u8>,
-    /// IOSurface handle for zero-copy (macOS only).
-    pub gpu_handle: Option<usize>,
+    /// Encoder-ready GPU handle for zero-copy export.
+    pub gpu_handle: Option<GpuOutputHandle>,
     /// Output width.
     pub width: u32,
     /// Output height.

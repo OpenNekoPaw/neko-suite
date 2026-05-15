@@ -23,6 +23,7 @@ mod mask_rasterizer;
 mod ml_gpu_bridge;
 mod nv12_import;
 mod nv12_renderer;
+mod platform_bridge;
 mod readback_target;
 mod rgba_to_nv12;
 mod rgba_to_nv12_texture;
@@ -76,6 +77,11 @@ pub use nv12_import::{
     NV12_TO_RGB_SHADER,
 };
 pub use nv12_renderer::{Nv12RenderCache, Nv12Renderer};
+pub use platform_bridge::{
+    DefaultPlatformGpuMediaBridge, PlatformGpuBridgeCapability, PlatformGpuBridgeDirection,
+    PlatformGpuBridgeFormat, PlatformGpuBridgeHandleKind, PlatformGpuBridgeRequest,
+    PlatformGpuBridgeSynchronization, PlatformGpuMediaBridge,
+};
 pub use readback_target::GpuReadbackTarget;
 pub use rgba_to_nv12::{
     Nv12OutputBuffers, RgbaToNv12Converter, RgbaToNv12Uniforms, RGBA_TO_NV12_SHADER,

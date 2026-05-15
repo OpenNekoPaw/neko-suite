@@ -228,14 +228,14 @@ impl ExportRenderBackend for DefaultExportRenderBackend {
     ) -> Result<ExportRenderedFrame> {
         let result = self
             .pipeline
-            .process_frame_to_iosurface_timed(time, background_color)?;
+            .process_frame_to_gpu_handle_timed(time, background_color)?;
         Ok(ExportRenderedFrame {
             nv12_data: result.data,
-            gpu_handle: GpuOutputHandle::IOSurface(result.gpu_handle.ok_or_else(|| {
+            gpu_handle: result.gpu_handle.ok_or_else(|| {
                 Error::UnsupportedCapability(
-                    "macOS zero-copy IOSurface export did not return a GPU handle".to_string(),
+                    "zero-copy GPU export did not return an encoder-ready handle".to_string(),
                 )
-            })?),
+            })?,
             timing: result.timing,
         })
     }

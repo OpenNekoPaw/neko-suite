@@ -643,7 +643,6 @@ impl MacOsTextureExporter {
 
         Ok((y_metal, uv_metal))
     }
-
 }
 
 #[cfg(test)]

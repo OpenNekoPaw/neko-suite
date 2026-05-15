@@ -57,7 +57,7 @@ impl WindowsTextureImporter {
         &self,
         texture_ptr: usize,
         array_index: u32,
-        gpu_texture: &impl Nv12GpuTextureSource,
+        gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
     ) -> Result<ImportedNv12Texture> {
         if texture_ptr == 0 {
             return Err(Error::Other("Null D3D11 texture pointer".to_string()));
@@ -124,7 +124,7 @@ impl WindowsTextureImporter {
     unsafe fn import_shared_handle(
         &self,
         shared_handle: HANDLE,
-        gpu_texture: &impl Nv12GpuTextureSource,
+        gpu_texture: &(impl Nv12GpuTextureSource + ?Sized),
         width: u32,
         height: u32,
     ) -> Result<ImportedNv12Texture> {

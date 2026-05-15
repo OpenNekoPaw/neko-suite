@@ -120,7 +120,6 @@ impl BufferPool {
             size: min_size,
         }
     }
-
 }
 
 #[cfg(test)]
