@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Blend mode for compositing layers — 27 modes aligned with gpu::BlendMode and timeline.proto
+/// Blend mode for compositing layers — 27 modes aligned with timeline.proto and GPU shaders.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BlendMode {
@@ -43,6 +43,37 @@ pub enum BlendMode {
 }
 
 impl BlendMode {
+    /// All blend modes in stable shader-code order.
+    pub const ALL: [Self; 27] = [
+        Self::Normal,
+        Self::Dissolve,
+        Self::Darken,
+        Self::Multiply,
+        Self::ColorBurn,
+        Self::LinearBurn,
+        Self::DarkerColor,
+        Self::Lighten,
+        Self::Screen,
+        Self::ColorDodge,
+        Self::LinearDodge,
+        Self::LighterColor,
+        Self::Overlay,
+        Self::SoftLight,
+        Self::HardLight,
+        Self::VividLight,
+        Self::LinearLight,
+        Self::PinLight,
+        Self::HardMix,
+        Self::Difference,
+        Self::Exclusion,
+        Self::Subtract,
+        Self::Divide,
+        Self::Hue,
+        Self::Saturation,
+        Self::Color,
+        Self::Luminosity,
+    ];
+
     pub fn from_name(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             // Basic
@@ -51,23 +82,23 @@ impl BlendMode {
             // Darken Group
             "darken" => Self::Darken,
             "multiply" => Self::Multiply,
-            "color-burn" | "colorburn" => Self::ColorBurn,
-            "linear-burn" | "linearburn" => Self::LinearBurn,
-            "darker-color" | "darkercolor" => Self::DarkerColor,
+            "color-burn" | "color_burn" | "colorburn" => Self::ColorBurn,
+            "linear-burn" | "linear_burn" | "linearburn" => Self::LinearBurn,
+            "darker-color" | "darker_color" | "darkercolor" => Self::DarkerColor,
             // Lighten Group
             "lighten" => Self::Lighten,
             "screen" => Self::Screen,
-            "color-dodge" | "colordodge" => Self::ColorDodge,
-            "linear-dodge" | "lineardodge" | "add" => Self::LinearDodge,
-            "lighter-color" | "lightercolor" => Self::LighterColor,
+            "color-dodge" | "color_dodge" | "colordodge" => Self::ColorDodge,
+            "linear-dodge" | "linear_dodge" | "lineardodge" | "add" => Self::LinearDodge,
+            "lighter-color" | "lighter_color" | "lightercolor" => Self::LighterColor,
             // Contrast Group
             "overlay" => Self::Overlay,
-            "soft-light" | "softlight" => Self::SoftLight,
-            "hard-light" | "hardlight" => Self::HardLight,
-            "vivid-light" | "vividlight" => Self::VividLight,
-            "linear-light" | "linearlight" => Self::LinearLight,
-            "pin-light" | "pinlight" => Self::PinLight,
-            "hard-mix" | "hardmix" => Self::HardMix,
+            "soft-light" | "soft_light" | "softlight" => Self::SoftLight,
+            "hard-light" | "hard_light" | "hardlight" => Self::HardLight,
+            "vivid-light" | "vivid_light" | "vividlight" => Self::VividLight,
+            "linear-light" | "linear_light" | "linearlight" => Self::LinearLight,
+            "pin-light" | "pin_light" | "pinlight" => Self::PinLight,
+            "hard-mix" | "hard_mix" | "hardmix" => Self::HardMix,
             // Difference Group
             "difference" => Self::Difference,
             "exclusion" => Self::Exclusion,
@@ -80,6 +111,12 @@ impl BlendMode {
             "luminosity" => Self::Luminosity,
             _ => Self::Normal,
         }
+    }
+
+    /// Parse a blend mode name, defaulting to normal for unknown values.
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Self {
+        Self::from_name(s)
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -117,6 +154,39 @@ impl BlendMode {
             Self::Saturation => "saturation",
             Self::Color => "color",
             Self::Luminosity => "luminosity",
+        }
+    }
+
+    /// Stable numeric code consumed by GPU blend shaders.
+    pub fn shader_code(&self) -> u32 {
+        match self {
+            Self::Normal => 0,
+            Self::Dissolve => 1,
+            Self::Darken => 2,
+            Self::Multiply => 3,
+            Self::ColorBurn => 4,
+            Self::LinearBurn => 5,
+            Self::DarkerColor => 6,
+            Self::Lighten => 7,
+            Self::Screen => 8,
+            Self::ColorDodge => 9,
+            Self::LinearDodge => 10,
+            Self::LighterColor => 11,
+            Self::Overlay => 12,
+            Self::SoftLight => 13,
+            Self::HardLight => 14,
+            Self::VividLight => 15,
+            Self::LinearLight => 16,
+            Self::PinLight => 17,
+            Self::HardMix => 18,
+            Self::Difference => 19,
+            Self::Exclusion => 20,
+            Self::Subtract => 21,
+            Self::Divide => 22,
+            Self::Hue => 23,
+            Self::Saturation => 24,
+            Self::Color => 25,
+            Self::Luminosity => 26,
         }
     }
 }
@@ -388,4 +458,58 @@ pub enum EasingType {
     EaseInBounce,
     EaseOutBounce,
     EaseInOutBounce,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blend_mode_parses_existing_aliases() {
+        assert_eq!(BlendMode::from_str("normal"), BlendMode::Normal);
+        assert_eq!(BlendMode::from_str("color_burn"), BlendMode::ColorBurn);
+        assert_eq!(BlendMode::from_str("linear-dodge"), BlendMode::LinearDodge);
+        assert_eq!(BlendMode::from_str("add"), BlendMode::LinearDodge);
+        assert_eq!(BlendMode::from_str("soft_light"), BlendMode::SoftLight);
+        assert_eq!(BlendMode::from_str("unknown"), BlendMode::Normal);
+    }
+
+    #[test]
+    fn blend_mode_shader_codes_are_stable_and_exhaustive() {
+        let expected = [
+            (BlendMode::Normal, 0),
+            (BlendMode::Dissolve, 1),
+            (BlendMode::Darken, 2),
+            (BlendMode::Multiply, 3),
+            (BlendMode::ColorBurn, 4),
+            (BlendMode::LinearBurn, 5),
+            (BlendMode::DarkerColor, 6),
+            (BlendMode::Lighten, 7),
+            (BlendMode::Screen, 8),
+            (BlendMode::ColorDodge, 9),
+            (BlendMode::LinearDodge, 10),
+            (BlendMode::LighterColor, 11),
+            (BlendMode::Overlay, 12),
+            (BlendMode::SoftLight, 13),
+            (BlendMode::HardLight, 14),
+            (BlendMode::VividLight, 15),
+            (BlendMode::LinearLight, 16),
+            (BlendMode::PinLight, 17),
+            (BlendMode::HardMix, 18),
+            (BlendMode::Difference, 19),
+            (BlendMode::Exclusion, 20),
+            (BlendMode::Subtract, 21),
+            (BlendMode::Divide, 22),
+            (BlendMode::Hue, 23),
+            (BlendMode::Saturation, 24),
+            (BlendMode::Color, 25),
+            (BlendMode::Luminosity, 26),
+        ];
+
+        assert_eq!(BlendMode::ALL.len(), expected.len());
+        for (index, (mode, code)) in expected.iter().copied().enumerate() {
+            assert_eq!(BlendMode::ALL[index], mode);
+            assert_eq!(mode.shader_code(), code);
+        }
+    }
 }

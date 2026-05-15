@@ -67,6 +67,20 @@ impl AudioCodec {
             Self::Vorbis => "vorbis",
         }
     }
+
+    /// Default audio bitrate in bits per second.
+    ///
+    /// Lossless or uncompressed codecs return 0 because they do not use a
+    /// target lossy bitrate.
+    pub fn default_bitrate(&self) -> u64 {
+        match self {
+            Self::Aac => 128_000,
+            Self::Mp3 => 192_000,
+            Self::Opus => 96_000,
+            Self::Vorbis => 128_000,
+            Self::Flac | Self::Pcm => 0,
+        }
+    }
 }
 
 impl FromStr for AudioCodec {
@@ -83,6 +97,148 @@ impl FromStr for AudioCodec {
             _ => Err(format!("unknown audio codec: {s}")),
         }
     }
+}
+
+/// Audio sample format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SampleFormat {
+    /// Unsigned 8-bit integer samples.
+    U8,
+    /// Signed 16-bit integer samples.
+    S16,
+    /// Signed 32-bit integer samples.
+    S32,
+    /// 32-bit floating point samples.
+    #[default]
+    F32,
+    /// 64-bit floating point samples.
+    F64,
+}
+
+impl SampleFormat {
+    /// Get bytes per sample for this format.
+    pub fn bytes_per_sample(&self) -> usize {
+        match self {
+            Self::U8 => 1,
+            Self::S16 => 2,
+            Self::S32 | Self::F32 => 4,
+            Self::F64 => 8,
+        }
+    }
+}
+
+/// Audio encoder configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioEncoderConfig {
+    /// Sample rate in Hz.
+    pub sample_rate: u32,
+    /// Number of channels.
+    pub channels: u16,
+    /// Target bitrate in bits per second.
+    pub bitrate: u64,
+    /// Audio codec.
+    pub codec: AudioCodec,
+    /// Input sample format.
+    pub sample_format: SampleFormat,
+}
+
+impl AudioEncoderConfig {
+    /// Create a new audio encoder config with codec defaults.
+    pub fn new(sample_rate: u32, channels: u16, codec: AudioCodec) -> Self {
+        Self {
+            sample_rate,
+            channels,
+            bitrate: codec.default_bitrate(),
+            codec,
+            sample_format: SampleFormat::default(),
+        }
+    }
+
+    /// Set target bitrate in bits per second.
+    pub fn with_bitrate(mut self, bitrate: u64) -> Self {
+        self.bitrate = bitrate;
+        self
+    }
+
+    /// Set input sample format.
+    pub fn with_sample_format(mut self, format: SampleFormat) -> Self {
+        self.sample_format = format;
+        self
+    }
+}
+
+/// Platform-specific GPU texture handle for hardware-decoded frames.
+///
+/// The handle is an identifier only; it does not retain or own the underlying
+/// platform resource. The producer must keep the decoded frame/resource alive
+/// while consumers import it into GPU textures.
+#[derive(Debug)]
+pub enum DecodedGpuTextureHandle {
+    /// No GPU texture is available.
+    None,
+    /// CPU NV12 data used for software fallback when hardware decode is unavailable.
+    CpuNv12 {
+        /// Y plane data.
+        y_data: Vec<u8>,
+        /// Interleaved UV plane data.
+        uv_data: Vec<u8>,
+        /// Y plane bytes per row.
+        y_linesize: u32,
+        /// UV plane bytes per row.
+        uv_linesize: u32,
+    },
+    /// macOS VideoToolbox CVPixelBuffer and IOSurface.
+    #[cfg(target_os = "macos")]
+    VideoToolbox {
+        /// CVPixelBuffer pointer as an FFI-safe integer.
+        pixel_buffer: usize,
+        /// IOSurface pointer for Metal interop.
+        io_surface: usize,
+    },
+    /// Linux VA-API surface.
+    #[cfg(target_os = "linux")]
+    Vaapi {
+        /// VASurfaceID.
+        surface_id: u32,
+        /// VADisplay pointer.
+        display: usize,
+    },
+    /// NVIDIA CUDA surface.
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    Cuda {
+        /// CUdeviceptr.
+        device_ptr: usize,
+        /// Pitch in bytes.
+        pitch: usize,
+    },
+    /// Windows D3D11 texture.
+    #[cfg(target_os = "windows")]
+    D3d11 {
+        /// ID3D11Texture2D pointer.
+        texture: usize,
+        /// Texture array index.
+        array_index: u32,
+    },
+}
+
+/// Read-only view over an NV12 GPU texture produced by a decoder.
+pub trait Nv12GpuTextureSource {
+    /// Texture width.
+    fn width(&self) -> u32;
+
+    /// Texture height.
+    fn height(&self) -> u32;
+
+    /// Platform-specific GPU handle.
+    fn handle(&self) -> &DecodedGpuTextureHandle;
+
+    /// Presentation timestamp.
+    fn pts(&self) -> i64;
+
+    /// FFmpeg AVColorSpace value.
+    fn color_space(&self) -> i32;
 }
 
 /// Encoder preset (speed vs quality tradeoff)
@@ -338,6 +494,41 @@ mod tests {
         assert_eq!(AudioCodec::from_str("pcm_s16le"), Ok(AudioCodec::Pcm));
         assert_eq!(AudioCodec::from_str("pcm_s24le"), Ok(AudioCodec::Pcm));
         assert_eq!(AudioCodec::from_str("pcm_f32le"), Ok(AudioCodec::Pcm));
+    }
+
+    #[test]
+    fn test_audio_codec_default_bitrate() {
+        assert_eq!(AudioCodec::Aac.default_bitrate(), 128_000);
+        assert_eq!(AudioCodec::Mp3.default_bitrate(), 192_000);
+        assert_eq!(AudioCodec::Opus.default_bitrate(), 96_000);
+        assert_eq!(AudioCodec::Vorbis.default_bitrate(), 128_000);
+        assert_eq!(AudioCodec::Flac.default_bitrate(), 0);
+        assert_eq!(AudioCodec::Pcm.default_bitrate(), 0);
+    }
+
+    #[test]
+    fn test_sample_format_bytes_per_sample() {
+        assert_eq!(SampleFormat::U8.bytes_per_sample(), 1);
+        assert_eq!(SampleFormat::S16.bytes_per_sample(), 2);
+        assert_eq!(SampleFormat::S32.bytes_per_sample(), 4);
+        assert_eq!(SampleFormat::F32.bytes_per_sample(), 4);
+        assert_eq!(SampleFormat::F64.bytes_per_sample(), 8);
+    }
+
+    #[test]
+    fn test_audio_encoder_config_defaults_and_overrides() {
+        let config = AudioEncoderConfig::new(48_000, 2, AudioCodec::Aac);
+        assert_eq!(config.sample_rate, 48_000);
+        assert_eq!(config.channels, 2);
+        assert_eq!(config.bitrate, 128_000);
+        assert_eq!(config.codec, AudioCodec::Aac);
+        assert_eq!(config.sample_format, SampleFormat::F32);
+
+        let config = config
+            .with_bitrate(256_000)
+            .with_sample_format(SampleFormat::S16);
+        assert_eq!(config.bitrate, 256_000);
+        assert_eq!(config.sample_format, SampleFormat::S16);
     }
 
     // ---- EncoderPreset ----
