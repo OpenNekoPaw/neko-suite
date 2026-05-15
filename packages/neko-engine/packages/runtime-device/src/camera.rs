@@ -3,8 +3,8 @@
 //! Camera capture via FFmpeg avdevice (cross-platform).
 //! Placeholder — full implementation requires avdevice integration.
 
-use neko_engine_kernel::error::{Error, Result};
-use neko_engine_kernel::contracts::services::{CameraCaptureConfig, CameraDevice, ICameraService};
+use crate::{CameraCaptureConfig, CameraDevice, Error, ICameraService, Result};
+use async_trait::async_trait;
 use neko_engine_types::StreamId;
 
 pub struct CameraService;
@@ -21,6 +21,7 @@ impl CameraService {
     }
 }
 
+#[async_trait]
 impl ICameraService for CameraService {
     fn list_devices(&self) -> Vec<CameraDevice> {
         // TODO(P2): enumerate via FFmpeg avdevice or nokhwa
@@ -34,13 +35,13 @@ impl ICameraService for CameraService {
         _device_id: Option<&str>,
         _config: CameraCaptureConfig,
     ) -> Result<StreamId> {
-        Err(Error::Other(
+        Err(Error::UnsupportedCapability(
             "Camera capture not yet implemented".to_string(),
         ))
     }
 
     async fn capture_stop(&self, _stream_id: &str) -> Result<()> {
-        Err(Error::Other(
+        Err(Error::UnsupportedCapability(
             "Camera capture not yet implemented".to_string(),
         ))
     }

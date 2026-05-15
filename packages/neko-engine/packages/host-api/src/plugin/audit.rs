@@ -5,7 +5,7 @@
 //! code.
 
 use super::governance::{now_unix_millis, NATIVE_SYSCALL_AUDIT_BOUNDARY_NOTE};
-use super::manifest::EnginePluginManifest;
+use super::manifest::{EnginePluginManifest, PluginKind};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
@@ -38,6 +38,19 @@ pub struct PluginPermissionAuditEvent {
     pub boundary_note: String,
 }
 
+/// Activation lifecycle audit event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLifecycleAuditEvent {
+    pub plugin_id: String,
+    pub plugin_kind: PluginKind,
+    pub action: String,
+    pub outcome: String,
+    pub message: String,
+    pub timestamp: u64,
+    pub boundary_note: String,
+}
+
 /// Reporting adapter for undeclared host-api permission usage.
 pub trait PluginAuditReporter: Send + Sync {
     fn report_permission_violation(&self, event: &PluginPermissionAuditEvent);
@@ -52,6 +65,7 @@ impl PluginAuditReporter for NoopPluginAuditReporter {
 
 pub struct PluginAuditor {
     events: Mutex<Vec<PluginPermissionAuditEvent>>,
+    lifecycle_events: Mutex<Vec<PluginLifecycleAuditEvent>>,
     reporter: Box<dyn PluginAuditReporter>,
 }
 
@@ -59,6 +73,7 @@ impl PluginAuditor {
     pub fn new() -> Self {
         Self {
             events: Mutex::new(Vec::new()),
+            lifecycle_events: Mutex::new(Vec::new()),
             reporter: Box::new(NoopPluginAuditReporter),
         }
     }
@@ -66,6 +81,7 @@ impl PluginAuditor {
     pub fn with_reporter(reporter: Box<dyn PluginAuditReporter>) -> Self {
         Self {
             events: Mutex::new(Vec::new()),
+            lifecycle_events: Mutex::new(Vec::new()),
             reporter,
         }
     }
@@ -105,6 +121,40 @@ impl PluginAuditor {
 
     pub fn events(&self) -> Vec<PluginPermissionAuditEvent> {
         let events = self.events.lock().unwrap_or_else(|e| e.into_inner());
+        events.clone()
+    }
+
+    pub fn record_lifecycle_event(
+        &self,
+        plugin_id: impl Into<String>,
+        plugin_kind: PluginKind,
+        action: impl Into<String>,
+        outcome: impl Into<String>,
+        message: impl Into<String>,
+    ) -> PluginLifecycleAuditEvent {
+        let event = PluginLifecycleAuditEvent {
+            plugin_id: plugin_id.into(),
+            plugin_kind,
+            action: action.into(),
+            outcome: outcome.into(),
+            message: message.into(),
+            timestamp: now_unix_millis(),
+            boundary_note: NATIVE_SYSCALL_AUDIT_BOUNDARY_NOTE.to_string(),
+        };
+
+        let mut events = self
+            .lifecycle_events
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        events.push(event.clone());
+        event
+    }
+
+    pub fn lifecycle_events(&self) -> Vec<PluginLifecycleAuditEvent> {
+        let events = self
+            .lifecycle_events
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         events.clone()
     }
 }

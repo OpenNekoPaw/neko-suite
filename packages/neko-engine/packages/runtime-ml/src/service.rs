@@ -3,7 +3,7 @@
 use crate::ml::onnx_runtime::DeviceSelection;
 use crate::ml::{self, ModelInfo, ModelRegistry};
 use crate::service_trait::IMlService;
-use neko_engine_kernel::error::Result;
+use crate::Result;
 
 /// Idle threshold: sessions unused for 5 minutes are evicted after each inference.
 const IDLE_EVICT_SECS: u64 = 300;
@@ -172,7 +172,7 @@ mod tests {
     //   ORT_DYLIB_PATH=<path/to/libonnxruntime.dylib> \
     //   ML_TEST_UPSCALE_MODEL=<path/to/realesrgan.onnx> \
     //   ML_TEST_IMAGE=<path/to/input.png> \
-    //   cargo test --package neko-engine-kernel --features onnx \
+    //   cargo test --package neko-runtime-ml \
     //     -- ml_e2e --include-ignored
     // ------------------------------------------------------------------
 

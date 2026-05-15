@@ -5,7 +5,7 @@
 //! the ONNX model encodes a fixed denoising level baked at export time.
 
 use ndarray::Array4;
-use neko_engine_kernel::error::{Error, Result};
+use crate::{Error, Result};
 use ort::value::Tensor as OrtTensor;
 
 const TILE_SIZE: u32 = 512;

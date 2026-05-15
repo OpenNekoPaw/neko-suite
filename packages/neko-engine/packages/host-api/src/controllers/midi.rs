@@ -2,26 +2,20 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::contracts::services::IMidiService;
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
-use neko_runtime_device::MidiService;
+use neko_runtime_device::IMidiService;
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
 pub struct MidiController {
-    midi_service: Arc<MidiService>,
+    midi_service: Arc<dyn IMidiService>,
 }
 
 impl MidiController {
-    pub fn new(midi_service: Arc<MidiService>) -> Self {
+    pub fn new(midi_service: Arc<dyn IMidiService>) -> Self {
         Self { midi_service }
-    }
-
-    /// Get the midi service for WebSocket stream subscription
-    pub fn midi_service(&self) -> &Arc<MidiService> {
-        &self.midi_service
     }
 }
 

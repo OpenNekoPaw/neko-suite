@@ -2,26 +2,20 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::contracts::services::IGamepadService;
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
-use neko_runtime_device::GamepadService;
+use neko_runtime_device::IGamepadService;
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
 pub struct GamepadController {
-    gamepad_service: Arc<GamepadService>,
+    gamepad_service: Arc<dyn IGamepadService>,
 }
 
 impl GamepadController {
-    pub fn new(gamepad_service: Arc<GamepadService>) -> Self {
+    pub fn new(gamepad_service: Arc<dyn IGamepadService>) -> Self {
         Self { gamepad_service }
-    }
-
-    /// Get the gamepad service for WebSocket stream subscription
-    pub fn gamepad_service(&self) -> &Arc<GamepadService> {
-        &self.gamepad_service
     }
 }
 

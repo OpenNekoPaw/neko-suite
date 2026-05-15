@@ -28,6 +28,9 @@ bevy_ecs.workspace = true
 # 2D puppet management
 neko-runtime-puppet = { path = "../runtime-puppet" }
 
+# Device runtime contracts and implementations
+neko-runtime-device = { path = "../runtime-device" }
+
 # Math (re-export from runtime-scene)
 glam.workspace = true
 

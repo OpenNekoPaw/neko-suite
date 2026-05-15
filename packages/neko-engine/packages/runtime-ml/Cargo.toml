@@ -9,9 +9,6 @@ license.workspace = true
 crate-type = ["lib"]
 
 [dependencies]
-# Engine kernel (for error types and service traits)
-neko-engine-kernel = { path = "../engine-kernel" }
-
 # ONNX Runtime inference
 ort = { workspace = true }
 ndarray = { workspace = true }

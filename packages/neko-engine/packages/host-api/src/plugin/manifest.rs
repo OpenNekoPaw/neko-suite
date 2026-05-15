@@ -137,8 +137,9 @@ pub enum PluginSourceKind {
     Local,
 }
 
-/// Publisher signature metadata. The default PluginManager checks presence and
-/// shape; real cryptographic verification is delegated to the injected authority.
+/// Publisher signature metadata. PluginManager consumes an explicit verifier
+/// outcome; real cryptographic verification is delegated to the injected
+/// authority/verifier boundary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginSignatureInfo {

@@ -12,7 +12,7 @@
 //! the CLIP tokeniser bundled with the model package).
 
 use ndarray::{Array3, Array4};
-use neko_engine_kernel::error::{Error, Result};
+use crate::{Error, Result};
 use ort::value::Tensor as OrtTensor;
 
 // ImageNet normalisation constants.

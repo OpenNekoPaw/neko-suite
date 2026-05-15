@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use neko_engine_kernel::error::{Error, Result};
+use crate::{Error, Result};
 
 // =============================================================================
 // Model Info (metadata for registered models)

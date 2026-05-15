@@ -3,9 +3,9 @@
 //! Enumerates MIDI input ports and connects to receive events.
 //! Events are pushed to a broadcast channel for WebSocket delivery.
 
+use crate::{Error, IMidiService, MidiEvent, MidiPort, Result};
+use async_trait::async_trait;
 use midir::MidiInput;
-use neko_engine_kernel::error::{Error, Result};
-use neko_engine_kernel::contracts::services::{IMidiService, MidiEvent, MidiPort};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Mutex;
@@ -38,19 +38,12 @@ impl MidiService {
         }
     }
 
-    /// Get a receiver for MIDI events (for WebSocket endpoint)
-    pub fn subscribe(&self, stream_id: &str) -> Option<broadcast::Receiver<MidiEvent>> {
-        self.senders
-            .lock()
-            .ok()
-            .and_then(|s| s.get(stream_id).map(|tx| tx.subscribe()))
-    }
-
     fn create_input(client_name: &str) -> Result<MidiInput> {
         MidiInput::new(client_name).map_err(|e| Error::Other(e.to_string()))
     }
 }
 
+#[async_trait]
 impl IMidiService for MidiService {
     fn list_ports(&self) -> Vec<MidiPort> {
         let midi_in = match Self::create_input("neko-midi-list") {
@@ -75,6 +68,13 @@ impl IMidiService for MidiService {
                 }
             })
             .collect()
+    }
+
+    fn subscribe(&self, stream_id: &str) -> Option<broadcast::Receiver<MidiEvent>> {
+        self.senders
+            .lock()
+            .ok()
+            .and_then(|s| s.get(stream_id).map(|tx| tx.subscribe()))
     }
 
     async fn connect(&self, port_id: &str) -> Result<String> {

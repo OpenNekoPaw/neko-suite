@@ -78,6 +78,29 @@ impl From<neko_engine_kernel::error::Error> for ApiError {
     }
 }
 
+impl From<neko_runtime_device::DeviceError> for ApiError {
+    fn from(e: neko_runtime_device::DeviceError) -> Self {
+        match e {
+            neko_runtime_device::DeviceError::NotFound(message)
+            | neko_runtime_device::DeviceError::UnsupportedCapability(message) => {
+                ApiError::InvalidRequest(message)
+            }
+            other => ApiError::ServiceError(other.to_string()),
+        }
+    }
+}
+
+#[cfg(feature = "onnx")]
+impl From<neko_runtime_ml::MlError> for ApiError {
+    fn from(e: neko_runtime_ml::MlError) -> Self {
+        match e {
+            neko_runtime_ml::MlError::FileNotFound(message)
+            | neko_runtime_ml::MlError::NotFound(message) => ApiError::InvalidRequest(message),
+            other => ApiError::ServiceError(other.to_string()),
+        }
+    }
+}
+
 impl From<serde_json::Error> for ApiError {
     fn from(e: serde_json::Error) -> Self {
         ApiError::SerializationError(e.to_string())

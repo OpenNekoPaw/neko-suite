@@ -11,7 +11,6 @@ use crate::plugin::PluginManager;
 use crate::preview::PreviewFileRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_engine_kernel::facade::KernelServices;
-use neko_runtime_device::{CameraService, GamepadService, MidiService};
 
 use neko_engine_types::registry::{self, groups};
 use neko_engine_types::{ActionRequest, ActionResponse};
@@ -46,9 +45,6 @@ impl ActionRouter {
     /// Create a new ActionRouter with all controllers
     pub fn new(
         kernel_services: KernelServices,
-        camera_service: Arc<CameraService>,
-        midi_service: Arc<MidiService>,
-        gamepad_service: Arc<GamepadService>,
         resource_registry: Arc<ResourceRegistry>,
         stream_registry: Arc<StreamRegistry>,
         plugin_manager: Arc<PluginManager>,
@@ -95,9 +91,9 @@ impl ActionRouter {
                 stream_registry,
             ),
             puppets_controller: PuppetsController::new(kernel_services.puppet_service),
-            camera_controller: CameraController::new(camera_service),
-            midi_controller: MidiController::new(midi_service),
-            gamepad_controller: GamepadController::new(gamepad_service),
+            camera_controller: CameraController::new(kernel_services.camera_service),
+            midi_controller: MidiController::new(kernel_services.midi_service),
+            gamepad_controller: GamepadController::new(kernel_services.gamepad_service),
             color_correction_controller: ColorCorrectionController::new(),
             documents_controller: DocumentsController::new(),
             plugins_controller: PluginsController::new(plugin_manager),
@@ -260,18 +256,11 @@ mod tests {
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
 
-        let camera_service = Arc::new(CameraService::new());
-        let midi_service = Arc::new(MidiService::new());
-        let gamepad_service = Arc::new(GamepadService::new());
-
         let plugin_manager = Arc::new(PluginManager::new(vec![], "0.1.0"));
         let preview_registry = Arc::new(PreviewFileRegistry::new());
 
         ActionRouter::new(
             kernel_services,
-            camera_service,
-            midi_service,
-            gamepad_service,
             resource_registry,
             stream_registry,
             plugin_manager,

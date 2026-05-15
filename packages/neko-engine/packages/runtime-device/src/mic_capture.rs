@@ -9,10 +9,10 @@
 //! - Tokio task reads from channel: computes RMS/Peak + writes WAV via spawn_blocking
 //! - Monitor data stored in AtomicU32 (reinterpreted as f32) for zero-lock reads
 
+use crate::{Error, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam_channel::bounded;
 use hound::{SampleFormat as HoundSampleFormat, WavSpec, WavWriter};
-use neko_engine_kernel::error::Error;
 use neko_engine_types::StreamId;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -175,7 +175,7 @@ impl MicCaptureService {
         &self,
         device_id: Option<&str>,
         config: RecordCaptureConfig,
-    ) -> neko_engine_kernel::error::Result<StreamId> {
+    ) -> Result<StreamId> {
         let host = cpal::default_host();
 
         // Find device
@@ -344,10 +344,7 @@ impl MicCaptureService {
     }
 
     /// Stop recording and return result
-    pub async fn stop_capture(
-        &self,
-        stream_id: &str,
-    ) -> neko_engine_kernel::error::Result<RecordingResult> {
+    pub async fn stop_capture(&self, stream_id: &str) -> Result<RecordingResult> {
         let recording = self
             .recordings
             .lock()
@@ -392,9 +389,8 @@ mod tests {
     #[test]
     fn test_list_devices_does_not_panic() {
         let service = MicCaptureService::new();
-        let devices = service.list_devices();
         // Should not panic; may return empty on CI without audio devices
-        assert!(devices.len() >= 0);
+        let _devices = service.list_devices();
     }
 
     #[test]

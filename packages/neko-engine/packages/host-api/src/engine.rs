@@ -9,7 +9,7 @@ use neko_engine_kernel::contracts::gpu::GpuContext;
 use neko_engine_kernel::contracts::services::{IAudioService, IPuppetService, ISceneService};
 use neko_engine_kernel::facade::EngineKernelFacade;
 use neko_engine_types::{ActionRequest, ActionResponse, EngineConfig};
-use neko_runtime_device::{CameraService, GamepadService, MidiService};
+use neko_runtime_device::{IGamepadService, IMidiService};
 #[cfg(feature = "onnx")]
 use neko_runtime_ml::{DeviceSelection, IMlService, MlService};
 use std::sync::Arc;
@@ -39,9 +39,9 @@ pub struct EngineApi {
     /// Audio service — exposed for monitor endpoint
     audio_service: Arc<dyn IAudioService>,
     /// MIDI service — exposed for WS event stream endpoint
-    midi_service: Arc<MidiService>,
+    midi_service: Arc<dyn IMidiService>,
     /// Gamepad service — exposed for WS event stream endpoint
-    gamepad_service: Arc<GamepadService>,
+    gamepad_service: Arc<dyn IGamepadService>,
     /// Global HTTP admission semaphore — limits total concurrent requests
     admission_semaphore: Arc<Semaphore>,
     /// FFmpeg codec semaphore — limits concurrent probe/encode/decode
@@ -106,37 +106,33 @@ impl EngineApi {
             }
         });
 
-        // Device services
-        let camera_service = Arc::new(CameraService::new());
-        let midi_service = Arc::new(MidiService::new());
-        let gamepad_service = Arc::new(GamepadService::new());
-        let midi_service_ref = midi_service.clone();
-        let gamepad_service_ref = gamepad_service.clone();
+        let midi_service_ref = kernel_services.midi_service.clone();
+        let gamepad_service_ref = kernel_services.gamepad_service.clone();
 
         // Plugin manager
-        let plugin_manager = Arc::new(
-            crate::plugin::PluginManager::new(vec![], "0.1.0").with_activation_handler(Box::new(
+        let plugin_activation_router =
+            crate::plugin::PluginActivationRouter::with_default_metadata_registries(Box::new(
                 crate::plugin::EffectRegistryActivator::new(
                     kernel_services.effect_registry.clone(),
                 ),
-            )),
+            ));
+        let plugin_manager = Arc::new(
+            crate::plugin::PluginManager::new(vec![], "0.1.0")
+                .with_activation_handler(Box::new(plugin_activation_router)),
         );
 
         // Create router
         let router = ActionRouter::new(
             kernel_services,
-            camera_service,
-            midi_service,
-            gamepad_service,
             resource_registry.clone(),
             stream_registry.clone(),
             plugin_manager,
             preview_registry.clone(),
             #[cfg(feature = "onnx")]
-            Some(std::sync::Arc::new(MlService::new(
+            Some(Arc::new(MlService::new(
                 config.ml.max_loaded,
                 Self::parse_device_selection(&config.ml.device),
-            )) as std::sync::Arc<dyn IMlService>),
+            )) as Arc<dyn IMlService>),
         );
 
         Ok(Self {
@@ -168,7 +164,7 @@ impl EngineApi {
         match device.to_lowercase().as_str() {
             "cpu" => DeviceSelection::Cpu,
             "coreml" => DeviceSelection::CoreMl,
-            "cuda" => DeviceSelection::Cuda,
+            "cuda" => DeviceSelection::Cuda(0),
             _ => DeviceSelection::Auto,
         }
     }
@@ -262,12 +258,12 @@ impl EngineApi {
     }
 
     /// Get the MIDI service (for WS event stream endpoint)
-    pub fn midi_service(&self) -> &Arc<MidiService> {
+    pub fn midi_service(&self) -> &Arc<dyn IMidiService> {
         &self.midi_service
     }
 
     /// Get the gamepad service (for WS event stream endpoint)
-    pub fn gamepad_service(&self) -> &Arc<GamepadService> {
+    pub fn gamepad_service(&self) -> &Arc<dyn IGamepadService> {
         &self.gamepad_service
     }
 

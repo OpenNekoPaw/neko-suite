@@ -2473,6 +2473,7 @@ dependencies = [
  "neko-engine-puppet-renderer",
  "neko-engine-scene-renderer",
  "neko-engine-types",
+ "neko-runtime-device",
  "neko-runtime-media",
  "neko-runtime-puppet",
  "neko-runtime-scene",
@@ -2639,15 +2640,16 @@ dependencies = [
 name = "neko-runtime-device"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "cpal",
  "crossbeam-channel",
  "gilrs",
  "hound",
  "midir",
- "neko-engine-kernel",
  "neko-engine-types",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2677,7 +2679,6 @@ dependencies = [
  "ffmpeg-next",
  "image",
  "ndarray",
- "neko-engine-kernel",
  "ort",
  "rustfft",
  "serde",

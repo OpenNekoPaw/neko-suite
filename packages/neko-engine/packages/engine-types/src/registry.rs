@@ -241,6 +241,7 @@ pub mod actions {
         "reload",
         "system-info",
         "audit-events",
+        "lifecycle-audit-events",
     ];
 
     pub const PREVIEWS: &[&str] = &[

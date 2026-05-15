@@ -4,7 +4,7 @@
 //! Tile-based processing (512×512 with 32px overlap) prevents OOM on large images.
 
 use ndarray::Array4;
-use neko_engine_kernel::error::{Error, Result};
+use crate::{Error, Result};
 use ort::value::Tensor as OrtTensor;
 
 // Real-ESRGAN tile parameters.

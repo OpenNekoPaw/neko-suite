@@ -11,6 +11,8 @@ pub struct EngineConfig {
     pub server: ServerConfig,
     /// Concurrency limits.
     pub concurrency: ConcurrencyConfig,
+    /// ML runtime settings.
+    pub ml: MlConfig,
 }
 
 /// HTTP server configuration.
@@ -33,9 +35,28 @@ pub struct ConcurrencyConfig {
     pub gpu: usize,
 }
 
+/// ML runtime configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MlConfig {
+    /// Maximum number of loaded model sessions retained by the runtime.
+    pub max_loaded: usize,
+    /// Preferred inference device.
+    pub device: String,
+}
+
 impl Default for ServerConfig {
     fn default() -> Self {
         Self { port: 8765 }
+    }
+}
+
+impl Default for MlConfig {
+    fn default() -> Self {
+        Self {
+            max_loaded: 2,
+            device: "auto".to_string(),
+        }
     }
 }
 
@@ -91,6 +112,8 @@ mod tests {
     fn test_default_config() {
         let config = EngineConfig::default();
         assert_eq!(config.server.port, 8765);
+        assert_eq!(config.ml.max_loaded, 2);
+        assert_eq!(config.ml.device, "auto");
     }
 
     #[test]

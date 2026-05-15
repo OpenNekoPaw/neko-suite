@@ -221,6 +221,18 @@ impl From<neko_engine_audio::AudioError> for Error {
     }
 }
 
+impl From<neko_runtime_device::DeviceError> for Error {
+    fn from(e: neko_runtime_device::DeviceError) -> Self {
+        match e {
+            neko_runtime_device::DeviceError::NotFound(message) => Error::NotFound(message),
+            neko_runtime_device::DeviceError::UnsupportedCapability(message) => {
+                Error::UnsupportedCapability(message)
+            }
+            neko_runtime_device::DeviceError::Other(message) => Error::Other(message),
+        }
+    }
+}
+
 impl From<PipelineContractError> for Error {
     fn from(e: PipelineContractError) -> Self {
         match e {

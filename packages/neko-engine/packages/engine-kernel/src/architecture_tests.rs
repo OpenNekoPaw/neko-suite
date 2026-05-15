@@ -609,6 +609,45 @@ fn engine_types_does_not_gain_implementation_dependencies() {
 }
 
 #[test]
+fn runtime_device_and_ml_do_not_depend_on_kernel() {
+    let packages_dir = packages_dir();
+    for crate_dir in ["runtime-device", "runtime-ml"] {
+        let manifest_path = packages_dir.join(crate_dir).join("Cargo.toml");
+        let manifest = fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {}", manifest_path.display(), err));
+
+        assert!(
+            !manifest.contains("neko-engine-kernel"),
+            "{} must not depend upward on engine-kernel",
+            manifest_path.display()
+        );
+    }
+}
+
+#[test]
+fn runtime_device_and_ml_sources_do_not_import_kernel() {
+    let packages_dir = packages_dir();
+    for crate_dir in ["runtime-device", "runtime-ml"] {
+        let source_root = packages_dir.join(crate_dir).join("src");
+        for file in rust_files(&source_root) {
+            if file
+                .file_name()
+                .is_some_and(|name| name == "architecture_tests.rs")
+            {
+                continue;
+            }
+            let source = fs::read_to_string(&file)
+                .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
+            assert!(
+                !source.contains("neko_engine_kernel"),
+                "{} must not import engine-kernel; keep runtime contracts below kernel",
+                relative_to_packages(&file)
+            );
+        }
+    }
+}
+
+#[test]
 fn engine_codec_does_not_depend_on_kernel_or_host_crates() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let codec_manifest = manifest_dir

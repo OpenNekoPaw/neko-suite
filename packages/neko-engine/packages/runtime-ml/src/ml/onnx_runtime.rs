@@ -3,7 +3,7 @@
 //! macOS: CoreML EP (Apple Neural Engine / GPU) — auto-selected, falls back to CPU.
 //! Windows/Linux: CPU only for now (DirectML / CUDA planned as future work).
 
-use neko_engine_kernel::error::{Error, Result};
+use crate::{Error, Result};
 use ort::session::Session;
 
 /// Device selection for ONNX Runtime inference.

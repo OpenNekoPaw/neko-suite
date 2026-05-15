@@ -17,7 +17,7 @@
 //! (or `decoder_model.onnx`) in the same directory.
 
 use ndarray::Array2;
-use neko_engine_kernel::error::{Error, Result};
+use crate::{Error, Result};
 use ort::value::Tensor as OrtTensor;
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::collections::HashMap;

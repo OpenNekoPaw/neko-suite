@@ -1,5 +1,6 @@
 //! Plugin activation handler for effect capability discovery.
 
+use super::activation::{PluginActivationError, PluginActivationOutcome, PluginActivationResult};
 use super::manager::PluginActivationHandler;
 use super::manifest::{PluginCapability, PluginKind};
 use neko_engine_kernel::contracts::services::EffectRegistry;
@@ -22,23 +23,19 @@ impl EffectRegistryActivator {
         kind: PluginKind,
         capability: &PluginCapability,
         install_path: &Path,
-    ) -> Result<Option<EffectCapability>, String> {
+    ) -> PluginActivationResult<Option<EffectCapability>> {
         let effect_kind = effect_kind(kind, &capability.capability_type)?;
         let id = capability.id.clone().unwrap_or_else(|| {
             derived_capability_id(plugin_id, &capability.capability_type, &capability.entry)
         });
         let entry_path = install_path.join(&capability.entry);
 
-        if matches!(
-            effect_kind,
-            EffectKind::Shader | EffectKind::Model | EffectKind::Lut
-        ) && !entry_path.exists()
-        {
-            return Err(format!(
+        if matches!(effect_kind, EffectKind::Shader | EffectKind::Lut) && !entry_path.exists() {
+            return Err(PluginActivationError::ValidationFailure(format!(
                 "Capability '{}' entry does not exist: {}",
                 id,
                 entry_path.display()
-            ));
+            )));
         }
 
         Ok(Some(EffectCapability {
@@ -71,7 +68,13 @@ impl PluginActivationHandler for EffectRegistryActivator {
         kind: PluginKind,
         capabilities: &[PluginCapability],
         install_path: &Path,
-    ) -> std::result::Result<(), String> {
+    ) -> PluginActivationResult<PluginActivationOutcome> {
+        if capabilities.is_empty() {
+            return Err(PluginActivationError::UnsupportedCapability(format!(
+                "{kind:?} plugin {plugin_id} declares no effect capabilities"
+            )));
+        }
+
         let mut registered = Vec::new();
         for capability in capabilities {
             if let Some(effect_capability) =
@@ -81,27 +84,41 @@ impl PluginActivationHandler for EffectRegistryActivator {
             }
         }
 
+        let registered_count = registered.len();
         self.registry.register_many(registered);
-        Ok(())
+        Ok(PluginActivationOutcome::registered(
+            plugin_id,
+            kind,
+            registered_count,
+            format!("registered {registered_count} effect contribution(s)"),
+        ))
     }
 
-    fn on_deactivate(&self, plugin_id: &str, _kind: PluginKind) -> std::result::Result<(), String> {
+    fn on_deactivate(
+        &self,
+        plugin_id: &str,
+        kind: PluginKind,
+    ) -> PluginActivationResult<PluginActivationOutcome> {
         self.registry.unregister_source(plugin_id);
-        Ok(())
+        Ok(PluginActivationOutcome::registered(
+            plugin_id,
+            kind,
+            0,
+            "unregistered effect plugin contributions",
+        ))
     }
 }
 
-fn effect_kind(kind: PluginKind, capability_type: &str) -> Result<EffectKind, String> {
+fn effect_kind(kind: PluginKind, capability_type: &str) -> PluginActivationResult<EffectKind> {
     match (kind, capability_type) {
         (PluginKind::Shader, "effect-shader") | (_, "shader") | (_, "effect-shader") => {
             Ok(EffectKind::Shader)
         }
         (PluginKind::Lut, "lut") | (_, "effect-lut") => Ok(EffectKind::Lut),
-        (PluginKind::Model, "model") | (_, "effect-model") | (_, "ml-model") => {
-            Ok(EffectKind::Model)
-        }
         (PluginKind::EffectPreset, "audio") | (_, "audio-effect") => Ok(EffectKind::Audio),
-        (_, other) => Err(format!("Unsupported effect capability type: {other}")),
+        (_, other) => Err(PluginActivationError::UnsupportedCapability(format!(
+            "unsupported effect capability type: {other}"
+        ))),
     }
 }
 
@@ -159,10 +176,9 @@ mod tests {
     use crate::plugin::{PluginParam, PluginParamOption};
 
     #[test]
-    fn registers_shader_model_lut_and_audio_capabilities() {
+    fn registers_shader_lut_and_audio_capabilities() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("shader.wgsl"), "@compute fn main() {}").unwrap();
-        std::fs::write(tmp.path().join("model.onnx"), "model").unwrap();
         std::fs::write(tmp.path().join("look.cube"), "lut").unwrap();
 
         let registry = Arc::new(EffectRegistry::with_builtins());
@@ -195,16 +211,6 @@ mod tests {
                 }],
             },
             PluginCapability {
-                id: Some("plugin.model".to_string()),
-                capability_type: "effect-model".to_string(),
-                entry: "model.onnx".to_string(),
-                name: Some("Plugin Model".to_string()),
-                name_key: None,
-                description: None,
-                category: Some("preprocess".to_string()),
-                params: Vec::new(),
-            },
-            PluginCapability {
                 id: Some("plugin.lut".to_string()),
                 capability_type: "effect-lut".to_string(),
                 entry: "look.cube".to_string(),
@@ -234,9 +240,6 @@ mod tests {
         assert!(listed
             .iter()
             .any(|cap| cap.id == "plugin.shader" && cap.kind == EffectKind::Shader));
-        assert!(listed
-            .iter()
-            .any(|cap| cap.id == "plugin.model" && cap.kind == EffectKind::Model));
         assert!(listed
             .iter()
             .any(|cap| cap.id == "plugin.lut" && cap.kind == EffectKind::Lut));
@@ -277,6 +280,6 @@ mod tests {
             )
             .unwrap_err();
 
-        assert!(err.contains("entry does not exist"));
+        assert!(err.to_string().contains("entry does not exist"));
     }
 }

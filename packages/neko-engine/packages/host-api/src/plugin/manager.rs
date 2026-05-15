@@ -6,6 +6,10 @@
 //! - Track plugin state (enabled / disabled)
 //! - Provide query API for the PluginsController
 
+use super::activation::{
+    PluginActivationError, PluginActivationOutcome, PluginActivationOutcomeKind,
+    PluginActivationResult,
+};
 use super::audit::{PluginAuditContext, PluginAuditor, PluginPermissionAuditEvent};
 use super::governance::{
     now_unix_millis, DefaultPluginLoadAuthority, PluginLicenseDecision, PluginLoadAuthority,
@@ -29,10 +33,14 @@ pub trait PluginActivationHandler: Send + Sync {
         kind: PluginKind,
         capabilities: &[PluginCapability],
         install_path: &Path,
-    ) -> std::result::Result<(), String>;
+    ) -> PluginActivationResult<PluginActivationOutcome>;
 
     /// Called when a plugin is disabled. Should unregister capabilities.
-    fn on_deactivate(&self, plugin_id: &str, kind: PluginKind) -> std::result::Result<(), String>;
+    fn on_deactivate(
+        &self,
+        plugin_id: &str,
+        kind: PluginKind,
+    ) -> PluginActivationResult<PluginActivationOutcome>;
 }
 
 /// Plugin runtime state.
@@ -80,7 +88,7 @@ impl PluginManager {
             install_dirs,
             engine_version: engine_version.to_string(),
             activation_handler: None,
-            load_authority: Box::new(DefaultPluginLoadAuthority),
+            load_authority: Box::new(DefaultPluginLoadAuthority::default()),
             auditor: Arc::new(PluginAuditor::new()),
         }
     }
@@ -211,16 +219,28 @@ impl PluginManager {
         };
 
         let license = if manifest.is_native_cdylib() {
-            Some(self.run_load_gates(&manifest, &install_path)?)
+            match self.run_load_gates(&manifest, &install_path) {
+                Ok(license) => Some(license),
+                Err(error) => {
+                    self.audit_activation_failure(
+                        id,
+                        manifest.kind,
+                        PluginActivationOutcomeKind::TrustFailure,
+                        &error,
+                    );
+                    return Err(error);
+                }
+            }
         } else {
             None
         };
 
         // Invoke activation handler outside the lock
         if let Some(handler) = &self.activation_handler {
-            if let Err(e) =
+            if let Err(error) =
                 handler.on_activate(id, manifest.kind, &manifest.capabilities, &install_path)
             {
+                let e = error.to_string();
                 tracing::warn!(plugin = %id, error = %e, "Activation handler failed");
                 // Revert state
                 if let Ok(mut plugins) = self.plugins.lock() {
@@ -229,8 +249,25 @@ impl PluginManager {
                         p.error = Some(format!("Activation failed: {e}"));
                     }
                 }
+                self.audit_activation_failure(id, manifest.kind, error.outcome_kind(), &e);
                 return Err(format!("Activation failed: {e}"));
+            } else {
+                self.auditor.record_lifecycle_event(
+                    id,
+                    manifest.kind,
+                    "activation",
+                    "registered",
+                    "plugin activation bridge completed",
+                );
             }
+        } else {
+            let error = PluginActivationError::UnsupportedCapability(format!(
+                "no activation bridge configured for {:?}",
+                manifest.kind
+            ));
+            let e = error.to_string();
+            self.audit_activation_failure(id, manifest.kind, error.outcome_kind(), &e);
+            return Err(format!("Activation failed: {e}"));
         }
 
         {
@@ -305,6 +342,11 @@ impl PluginManager {
         self.auditor.events()
     }
 
+    /// List recorded activation/deactivation lifecycle audit events.
+    pub fn lifecycle_audit_events(&self) -> Vec<super::audit::PluginLifecycleAuditEvent> {
+        self.auditor.lifecycle_events()
+    }
+
     /// Disable a plugin. Invokes the deactivation handler if set.
     pub fn disable(&self, id: &str) -> Result<(), String> {
         let kind = {
@@ -319,8 +361,21 @@ impl PluginManager {
         };
 
         if let Some(handler) = &self.activation_handler {
-            if let Err(e) = handler.on_deactivate(id, kind) {
-                tracing::warn!(plugin = %id, error = %e, "Deactivation handler failed");
+            match handler.on_deactivate(id, kind) {
+                Ok(_) => {
+                    self.auditor.record_lifecycle_event(
+                        id,
+                        kind,
+                        "deactivation",
+                        "registered",
+                        "plugin deactivation bridge completed",
+                    );
+                }
+                Err(error) => {
+                    let e = error.to_string();
+                    self.audit_activation_failure(id, kind, error.outcome_kind(), &e);
+                    tracing::warn!(plugin = %id, error = %e, "Deactivation handler failed");
+                }
             }
         }
 
@@ -559,6 +614,22 @@ impl PluginManager {
     fn load_error_to_string(error: PluginLoadError) -> String {
         error.to_string()
     }
+
+    fn audit_activation_failure(
+        &self,
+        plugin_id: &str,
+        plugin_kind: PluginKind,
+        outcome: PluginActivationOutcomeKind,
+        message: &str,
+    ) {
+        self.auditor.record_lifecycle_event(
+            plugin_id,
+            plugin_kind,
+            "activation",
+            format!("{outcome:?}"),
+            message,
+        );
+    }
 }
 
 // =============================================================================
@@ -676,6 +747,11 @@ mod tests {
             self
         }
 
+        fn with_developer_mode(mut self, active: bool) -> Self {
+            self.developer_mode = active;
+            self
+        }
+
         fn push(&self, call: &'static str) {
             self.calls.lock().unwrap().push(call);
         }
@@ -750,22 +826,32 @@ mod tests {
     impl PluginActivationHandler for RecordingActivationHandler {
         fn on_activate(
             &self,
-            _plugin_id: &str,
-            _kind: PluginKind,
+            plugin_id: &str,
+            kind: PluginKind,
             _capabilities: &[PluginCapability],
             _install_path: &Path,
-        ) -> std::result::Result<(), String> {
+        ) -> PluginActivationResult<PluginActivationOutcome> {
             self.calls.lock().unwrap().push("activate");
-            Ok(())
+            Ok(PluginActivationOutcome::registered(
+                plugin_id,
+                kind,
+                0,
+                "recorded activation",
+            ))
         }
 
         fn on_deactivate(
             &self,
-            _plugin_id: &str,
-            _kind: PluginKind,
-        ) -> std::result::Result<(), String> {
+            plugin_id: &str,
+            kind: PluginKind,
+        ) -> PluginActivationResult<PluginActivationOutcome> {
             self.calls.lock().unwrap().push("deactivate");
-            Ok(())
+            Ok(PluginActivationOutcome::registered(
+                plugin_id,
+                kind,
+                0,
+                "recorded deactivation",
+            ))
         }
     }
 
@@ -822,7 +908,8 @@ mod tests {
         create_test_plugin(tmp.path(), "com.test.shader1", "shader");
         create_test_plugin(tmp.path(), "com.test.model1", "model");
 
-        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_activation_handler(Box::new(RecordingActivationHandler::default()));
         let count = mgr.scan();
         assert_eq!(count, 2);
         assert_eq!(mgr.list().len(), 2);
@@ -840,7 +927,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         create_test_plugin(tmp.path(), "com.test.p1", "shader");
 
-        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0");
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_activation_handler(Box::new(RecordingActivationHandler::default()));
         mgr.scan();
 
         // Initially disabled
@@ -1012,6 +1100,64 @@ mod tests {
     }
 
     #[test]
+    fn default_signature_verifier_unavailable_blocks_registry_native_activation() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.native", "test-target");
+
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_activation_handler(Box::new(RecordingActivationHandler::default()));
+        mgr.scan();
+
+        let error = mgr.enable("com.test.native").unwrap_err();
+
+        assert!(error.contains("Signature"));
+        assert!(error.contains("ed25519 verification backend is not configured"));
+        assert!(mgr
+            .lifecycle_audit_events()
+            .iter()
+            .any(|event| event.message.contains("Signature")));
+        assert_eq!(
+            mgr.get("com.test.native").unwrap().state,
+            PluginState::Disabled
+        );
+    }
+
+    #[test]
+    fn local_developer_mode_still_requires_explicit_activation_bridge() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_native_plugin(tmp.path(), "com.test.local-native", "test-target");
+        {
+            let manifest_path = tmp.path().join("com.test.local-native/plugin.json");
+            let mut manifest: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&manifest_path).unwrap()).unwrap();
+            manifest["source"] = serde_json::json!("local");
+            manifest["trustTier"] = serde_json::json!("community");
+            manifest["capabilities"] = serde_json::json!([]);
+            fs::write(
+                manifest_path,
+                serde_json::to_string_pretty(&manifest).unwrap(),
+            )
+            .unwrap();
+        }
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let authority = RecordingAuthority::new(calls.clone(), "test-target")
+            .with_workspace_trust(WorkspaceTrustLevel::Trusted)
+            .with_developer_mode(true);
+        let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
+            .with_load_authority(Box::new(authority));
+        mgr.scan();
+
+        let error = mgr.enable("com.test.local-native").unwrap_err();
+
+        assert!(error.contains("no activation bridge configured"));
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &["integrity", "signature", "license", "workspace", "target"]
+        );
+    }
+
+    #[test]
     fn native_load_rejects_machine_binding_mismatch() {
         let tmp = tempfile::tempdir().unwrap();
         create_native_plugin(tmp.path(), "com.test.native", "test-target");
@@ -1057,7 +1203,10 @@ mod tests {
         let authority = RecordingAuthority::new(calls.clone(), "test-target")
             .with_workspace_trust(WorkspaceTrustLevel::Restricted);
         let mgr = PluginManager::new(vec![tmp.path().to_path_buf()], "0.1.0")
-            .with_load_authority(Box::new(authority));
+            .with_load_authority(Box::new(authority))
+            .with_activation_handler(Box::new(RecordingActivationHandler {
+                calls: calls.clone(),
+            }));
         mgr.scan();
 
         mgr.enable("com.test.native").unwrap();

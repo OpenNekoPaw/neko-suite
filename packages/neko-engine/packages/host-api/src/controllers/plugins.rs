@@ -126,6 +126,10 @@ impl Controller for PluginsController {
                 let events = self.plugin_manager.audit_events();
                 Ok(ActionResponse::ok("", serde_json::to_value(events)?))
             }
+            "lifecycle-audit-events" => {
+                let events = self.plugin_manager.lifecycle_audit_events();
+                Ok(ActionResponse::ok("", serde_json::to_value(events)?))
+            }
             _ => Err(ApiError::UnknownAction {
                 group: "plugins".to_string(),
                 action: action.to_string(),
@@ -194,5 +198,6 @@ mod tests {
         assert!(actions.contains(&"reload"));
         assert!(actions.contains(&"system-info"));
         assert!(actions.contains(&"audit-events"));
+        assert!(actions.contains(&"lifecycle-audit-events"));
     }
 }

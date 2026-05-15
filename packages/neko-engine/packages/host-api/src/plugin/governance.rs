@@ -5,8 +5,12 @@
 //! without coupling host-api to marketplace UI state.
 
 use super::manifest::EnginePluginManifest;
+use super::signature::{
+    DefaultPluginSignatureVerifier, PluginSignatureVerifier, SignatureVerificationOutcome,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const NATIVE_SYSCALL_AUDIT_BOUNDARY_NOTE: &str =
@@ -133,6 +137,17 @@ pub trait PluginLoadAuthority: Send + Sync {
         install_path: &Path,
     ) -> PluginLoadResult<()>;
 
+    fn signature_verification_outcome(
+        &self,
+        manifest: &EnginePluginManifest,
+        install_path: &Path,
+    ) -> SignatureVerificationOutcome {
+        match self.verify_signature(manifest, install_path) {
+            Ok(()) => SignatureVerificationOutcome::Valid,
+            Err(error) => SignatureVerificationOutcome::Invalid(error.message),
+        }
+    }
+
     fn check_license(
         &self,
         manifest: &EnginePluginManifest,
@@ -161,8 +176,21 @@ pub trait PluginLoadAuthority: Send + Sync {
 /// It does not trust TypeScript UI state. Registry native plugins are denied at
 /// the license gate unless a real authority is injected; local native plugins
 /// remain denied unless an injected authority explicitly enables Developer Mode.
-#[derive(Debug, Default)]
-pub struct DefaultPluginLoadAuthority;
+pub struct DefaultPluginLoadAuthority {
+    signature_verifier: Arc<dyn PluginSignatureVerifier>,
+}
+
+impl DefaultPluginLoadAuthority {
+    pub fn new(signature_verifier: Arc<dyn PluginSignatureVerifier>) -> Self {
+        Self { signature_verifier }
+    }
+}
+
+impl Default for DefaultPluginLoadAuthority {
+    fn default() -> Self {
+        Self::new(Arc::new(DefaultPluginSignatureVerifier))
+    }
+}
 
 impl PluginLoadAuthority for DefaultPluginLoadAuthority {
     fn verify_integrity(
@@ -194,27 +222,40 @@ impl PluginLoadAuthority for DefaultPluginLoadAuthority {
     fn verify_signature(
         &self,
         manifest: &EnginePluginManifest,
-        _install_path: &Path,
+        install_path: &Path,
     ) -> PluginLoadResult<()> {
-        let Some(signature) = &manifest.signature else {
-            if manifest.is_registry_native_plugin() {
-                return Err(PluginLoadError::new(
-                    PluginLoadGate::Signature,
-                    &manifest.id,
-                    "registry native plugin requires engine-verifiable signature metadata",
-                ));
+        match self.signature_verification_outcome(manifest, install_path) {
+            SignatureVerificationOutcome::Valid => Ok(()),
+            SignatureVerificationOutcome::Missing(message)
+                if !manifest.is_registry_native_plugin() =>
+            {
+                if manifest.signature.is_none() {
+                    Ok(())
+                } else {
+                    Err(PluginLoadError::new(
+                        PluginLoadGate::Signature,
+                        &manifest.id,
+                        message,
+                    ))
+                }
             }
-            return Ok(());
-        };
-
-        if signature.algorithm.trim().is_empty() || signature.value.trim().is_empty() {
-            return Err(PluginLoadError::new(
+            SignatureVerificationOutcome::Invalid(message)
+            | SignatureVerificationOutcome::Missing(message)
+            | SignatureVerificationOutcome::UnsupportedAlgorithm(message)
+            | SignatureVerificationOutcome::Unavailable(message) => Err(PluginLoadError::new(
                 PluginLoadGate::Signature,
                 &manifest.id,
-                "signature metadata is incomplete",
-            ));
+                message,
+            )),
         }
-        Ok(())
+    }
+
+    fn signature_verification_outcome(
+        &self,
+        manifest: &EnginePluginManifest,
+        install_path: &Path,
+    ) -> SignatureVerificationOutcome {
+        self.signature_verifier.verify(manifest, install_path)
     }
 
     fn check_license(

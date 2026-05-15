@@ -300,20 +300,36 @@ impl Controller for ModelsController {
                 match operation.as_str() {
                     "upscale" => {
                         let scale = opts.scale.unwrap_or(4);
+                        let model = model.clone();
+                        let input_for_task = input.clone();
+                        let output = output.clone();
+                        let ml = Arc::clone(&ml);
                         tokio::task::spawn_blocking(move || {
-                            ml.upscale(&model, &input, &output, scale).map_err(|e| {
-                                ApiError::ServiceError(format!("Upscale preprocess failed: {}", e))
-                            })
+                            ml.upscale(&model, &input_for_task, &output, scale)
+                                .map_err(|e| {
+                                    ApiError::ServiceError(format!(
+                                        "Upscale preprocess failed: {}",
+                                        e
+                                    ))
+                                })
                         })
                         .await
                         .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;
                     }
                     "denoise" => {
                         let strength = opts.strength.unwrap_or(0.5);
+                        let model = model.clone();
+                        let input_for_task = input.clone();
+                        let output = output.clone();
+                        let ml = Arc::clone(&ml);
                         tokio::task::spawn_blocking(move || {
-                            ml.denoise(&model, &input, &output, strength).map_err(|e| {
-                                ApiError::ServiceError(format!("Denoise preprocess failed: {}", e))
-                            })
+                            ml.denoise(&model, &input_for_task, &output, strength)
+                                .map_err(|e| {
+                                    ApiError::ServiceError(format!(
+                                        "Denoise preprocess failed: {}",
+                                        e
+                                    ))
+                                })
                         })
                         .await
                         .map_err(|e| ApiError::ServiceError(format!("Task failed: {}", e)))??;

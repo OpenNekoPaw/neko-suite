@@ -2,9 +2,9 @@
 //!
 //! Enumerates gamepads and pushes events to a broadcast channel.
 
+use crate::{Error, GamepadEvent, GamepadInfo, IGamepadService, Result};
+use async_trait::async_trait;
 use gilrs::Gilrs;
-use neko_engine_kernel::error::{Error, Result};
-use neko_engine_kernel::contracts::services::{GamepadEvent, GamepadInfo, IGamepadService};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tokio::sync::broadcast;
@@ -31,16 +31,9 @@ impl GamepadService {
             senders: Mutex::new(HashMap::new()),
         }
     }
-
-    /// Get a receiver for gamepad events (for WebSocket endpoint)
-    pub fn subscribe(&self, stream_id: &str) -> Option<broadcast::Receiver<GamepadEvent>> {
-        self.senders
-            .lock()
-            .ok()
-            .and_then(|s| s.get(stream_id).map(|tx| tx.subscribe()))
-    }
 }
 
+#[async_trait]
 impl IGamepadService for GamepadService {
     fn list(&self) -> Vec<GamepadInfo> {
         match Gilrs::new() {
@@ -57,6 +50,13 @@ impl IGamepadService for GamepadService {
                 Vec::new()
             }
         }
+    }
+
+    fn subscribe(&self, stream_id: &str) -> Option<broadcast::Receiver<GamepadEvent>> {
+        self.senders
+            .lock()
+            .ok()
+            .and_then(|s| s.get(stream_id).map(|tx| tx.subscribe()))
     }
 
     async fn connect(&self, gamepad_id: &str) -> Result<String> {

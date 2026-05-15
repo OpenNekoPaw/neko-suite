@@ -14,6 +14,9 @@ use crate::services::{
     ITimelineService, IVideoService, ImageService, NodeService, PuppetService, SceneService,
     TaskService, TimelineService, VideoService,
 };
+use neko_runtime_device::{
+    CameraService, GamepadService, ICameraService, IGamepadService, IMidiService, MidiService,
+};
 
 /// Typed handle bundle for the default kernel service graph.
 #[derive(Clone)]
@@ -30,6 +33,9 @@ pub struct KernelServices {
     pub effect_registry: Arc<EffectRegistry>,
     pub scene_service: Option<Arc<dyn ISceneService>>,
     pub puppet_service: Option<Arc<dyn IPuppetService>>,
+    pub camera_service: Arc<dyn ICameraService>,
+    pub midi_service: Arc<dyn IMidiService>,
+    pub gamepad_service: Arc<dyn IGamepadService>,
 }
 
 impl KernelServices {
@@ -110,6 +116,10 @@ impl ServiceFactory {
         })
             as Arc<dyn IPuppetService>);
 
+        let camera_service: Arc<dyn ICameraService> = Arc::new(CameraService::new());
+        let midi_service: Arc<dyn IMidiService> = Arc::new(MidiService::new());
+        let gamepad_service: Arc<dyn IGamepadService> = Arc::new(GamepadService::new());
+
         KernelServices {
             gpu_ctx,
             task_service: task_service as Arc<dyn ITaskService>,
@@ -123,6 +133,9 @@ impl ServiceFactory {
             effect_registry,
             scene_service,
             puppet_service,
+            camera_service,
+            midi_service,
+            gamepad_service,
         }
     }
 }

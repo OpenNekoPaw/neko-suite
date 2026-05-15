@@ -1,6 +1,6 @@
 //! ML service trait — interface for ONNX model inference operations.
 
-use neko_engine_kernel::error::Result;
+use crate::error::Result;
 
 use crate::ml;
 

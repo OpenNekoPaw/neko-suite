@@ -9,9 +9,6 @@ license.workspace = true
 crate-type = ["lib"]
 
 [dependencies]
-# Engine kernel (for error types and service traits)
-neko-engine-kernel = { path = "../engine-kernel" }
-
 # Shared types
 neko-engine-types = { path = "../engine-types" }
 
@@ -25,7 +22,8 @@ midir = "0.10"
 gilrs = "0.11"
 
 # Async runtime
-tokio = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["macros", "time"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 
 # Broadcast channels for event streaming
@@ -37,6 +35,9 @@ serde_json = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
 
 # UUID generation
 uuid = { workspace = true }

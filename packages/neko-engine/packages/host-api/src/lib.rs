@@ -59,3 +59,4 @@ pub use neko_engine_kernel::contracts::services::{
     IPuppetService, PipelineSink, PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming,
     StreamSink,
 };
+pub use neko_runtime_device::{CameraCaptureConfig, ICameraService, IGamepadService, IMidiService};

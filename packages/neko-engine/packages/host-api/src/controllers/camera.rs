@@ -2,20 +2,19 @@
 
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
-use neko_engine_kernel::contracts::services::{CameraCaptureConfig, ICameraService};
 use neko_engine_types::registry;
 use neko_engine_types::ActionResponse;
-use neko_runtime_device::CameraService;
+use neko_runtime_device::{CameraCaptureConfig, ICameraService};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
 pub struct CameraController {
-    camera_service: Arc<CameraService>,
+    camera_service: Arc<dyn ICameraService>,
 }
 
 impl CameraController {
-    pub fn new(camera_service: Arc<CameraService>) -> Self {
+    pub fn new(camera_service: Arc<dyn ICameraService>) -> Self {
         Self { camera_service }
     }
 }
