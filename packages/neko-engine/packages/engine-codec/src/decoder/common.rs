@@ -10,18 +10,9 @@ use ffmpeg_next::format::Pixel;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 use std::ptr;
-use std::sync::Once;
 
 use crate::error::{Error, Result};
-
-static FFMPEG_INIT: Once = Once::new();
-
-/// Initialize FFmpeg (thread-safe, called once)
-pub fn init_ffmpeg() {
-    FFMPEG_INIT.call_once(|| {
-        ffmpeg::init().expect("Failed to initialize FFmpeg");
-    });
-}
+pub use crate::init_ffmpeg;
 
 pub use neko_engine_types::HwAccelType;
 

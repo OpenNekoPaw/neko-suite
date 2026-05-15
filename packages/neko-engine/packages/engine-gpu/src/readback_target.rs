@@ -3,6 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use half::f16;
 use neko_engine_types::{GpuFrameReadback, PipelineContractError};
 
 use super::GpuContext;
@@ -64,45 +65,16 @@ fn rgba16float_to_rgba8(data: &[u8]) -> Vec<u8> {
     let pixel_count = data.len() / 8;
     let mut output = Vec::with_capacity(pixel_count * 4);
     for chunk in data.chunks_exact(8) {
-        let r = half_to_f32(u16::from_le_bytes([chunk[0], chunk[1]]));
-        let g = half_to_f32(u16::from_le_bytes([chunk[2], chunk[3]]));
-        let b = half_to_f32(u16::from_le_bytes([chunk[4], chunk[5]]));
-        let a = half_to_f32(u16::from_le_bytes([chunk[6], chunk[7]]));
+        let r = f16::from_bits(u16::from_le_bytes([chunk[0], chunk[1]])).to_f32();
+        let g = f16::from_bits(u16::from_le_bytes([chunk[2], chunk[3]])).to_f32();
+        let b = f16::from_bits(u16::from_le_bytes([chunk[4], chunk[5]])).to_f32();
+        let a = f16::from_bits(u16::from_le_bytes([chunk[6], chunk[7]])).to_f32();
         output.push((r.clamp(0.0, 1.0) * 255.0) as u8);
         output.push((g.clamp(0.0, 1.0) * 255.0) as u8);
         output.push((b.clamp(0.0, 1.0) * 255.0) as u8);
         output.push((a.clamp(0.0, 1.0) * 255.0) as u8);
     }
     output
-}
-
-fn half_to_f32(bits: u16) -> f32 {
-    let sign = ((bits >> 15) & 1) as u32;
-    let exponent = ((bits >> 10) & 0x1f) as u32;
-    let mantissa = (bits & 0x03ff) as u32;
-
-    if exponent == 0 {
-        if mantissa == 0 {
-            f32::from_bits(sign << 31)
-        } else {
-            let mut m = mantissa;
-            let mut e = 0i32;
-            while (m & 0x0400) == 0 {
-                m <<= 1;
-                e += 1;
-            }
-            let f32_exp = (127 - 15 - e) as u32;
-            let f32_mantissa = (m & 0x03ff) << 13;
-            f32::from_bits((sign << 31) | (f32_exp << 23) | f32_mantissa)
-        }
-    } else if exponent == 31 {
-        let f32_mantissa = mantissa << 13;
-        f32::from_bits((sign << 31) | (0xff << 23) | f32_mantissa)
-    } else {
-        let f32_exp = exponent + 127 - 15;
-        let f32_mantissa = mantissa << 13;
-        f32::from_bits((sign << 31) | (f32_exp << 23) | f32_mantissa)
-    }
 }
 
 #[cfg(test)]

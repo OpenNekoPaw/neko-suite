@@ -3,6 +3,7 @@
 use crate::error::{Error, Result};
 pub use neko_engine_types::AudioEffectConfig;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use super::biquad::{BiquadFilter, FilterType};
 use super::chorus::Chorus;
@@ -18,6 +19,9 @@ use super::reverb::Reverb;
 use super::traits::AudioEffect;
 
 type AudioEffectBuilder = fn(&serde_json::Value) -> Box<dyn AudioEffect>;
+
+static BUILTIN_AUDIO_EFFECT_FACTORY: LazyLock<AudioEffectFactory> =
+    LazyLock::new(AudioEffectFactory::with_builtins);
 
 fn f(v: &serde_json::Value, key: &str, default: f32) -> f32 {
     v.get(key)
@@ -109,12 +113,12 @@ impl AudioEffectFactory {
 
 /// Create a single audio effect from its configuration.
 pub fn create_effect(config: &AudioEffectConfig) -> Result<Box<dyn AudioEffect>> {
-    AudioEffectFactory::with_builtins().create(config)
+    BUILTIN_AUDIO_EFFECT_FACTORY.create(config)
 }
 
 /// Build an EffectChain from a list of configurations.
 pub fn build_effect_chain(configs: &[AudioEffectConfig]) -> Result<EffectChain> {
-    AudioEffectFactory::with_builtins().build_chain(configs)
+    BUILTIN_AUDIO_EFFECT_FACTORY.build_chain(configs)
 }
 
 fn build_gain(p: &serde_json::Value) -> Box<dyn AudioEffect> {

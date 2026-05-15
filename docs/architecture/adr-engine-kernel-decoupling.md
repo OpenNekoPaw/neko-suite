@@ -1,6 +1,6 @@
 # ADR：engine-kernel 解耦与 crate 边界重塑
 
-- **状态**：提议中
+- **状态**：已实施（P0 + P1）；P2/P3 待推进
 - **日期**：2026-05-15
 - **作者**：Codex（架构审查）
 - **范围**：neko-engine（engine-kernel / engine-types / runtime-scene / runtime-puppet / host-api）
@@ -20,6 +20,23 @@
 `engine-kernel` 原本承担媒体引擎的核心编排职责：连接领域模型、GPU、编解码、音频、导出、预览和 host API。随着 PipelineSink、GpuEffect Registry、Dual API、GPU Budget、PuppetRenderer 和 Preview Subsystem 等 ADR 实现落地，大量基础设施和运行时实现继续集中在 `engine-kernel` 内部。
 
 因此，当前问题不是“engine-kernel 做了不该做的事”，而是“本该分层、分 crate 的事全部在同一个 crate 中完成”。这削弱了 ADR 追求的解耦效果，也让后续扩展、测试和编译边界变得模糊。
+
+## 实施状态（2026-05-15）
+
+P0 和 P1 已落地并归档到 OpenSpec：
+
+- `PipelineOutput`、`VideoOutput`、`AudioOutput`、`GpuOutputHandle`、`GpuFrameLease` 等输出合同已迁入 `engine-types`。
+- `engine-gpu` 已承接 GPU context/resource/HAL、platform interop、compositor/effect/budget 等基础设施；scene/puppet/panoramic renderer 仍作为 kernel-owned companion 留待 P2。
+- `engine-codec` 已承接 FFmpeg video decoder/encoder/muxer、IDR scanner、codec pools。
+- `engine-audio` 已承接 audio decoder/encoder、DSP effect factory、mic capture、soft limiter。
+- `engine-kernel` 的 `audio`、`decoder`、`encoder`、`gpu` 模块保留兼容 re-export shim，host facade 收窄留待 P3。
+- `export` / `preview` 已引入 backend adapter 与 sink factory，避免直接依赖 `services::impls::*` 具体实现。
+- 架构测试已覆盖 `gpu -> services`、`domain -> gpu`、基础设施 crate forbidden dependency、export/preview backend adapter、BlendMode 单一合同等规则。
+
+当前剩余结构任务：
+
+- P2：提取 scene/puppet/panoramic renderer companion crate，并评估 `GpuExportPipeline` 是否需要进入 rendering/export companion crate。
+- P3：引入 `ServiceFactory` / kernel facade，收窄 `engine-kernel` 顶层 `pub mod` 与 `neko_engine_kernel::gpu::*` glob re-export。
 
 ---
 
@@ -256,6 +273,16 @@ P1 前置清理：
 ### 增量编译收益需要通过边界落地兑现
 
 仅新增 crate 名称不会自动降低编译成本。如果大部分改动仍集中在 `engine-kernel`，Rust 增量编译收益有限。P1 必须让 GPU、codec、audio 的日常实现改动落在独立 crate 内，才能减少 kernel 和 host 层重编译。
+
+### 接受 runtime-media 与生产 codec/audio 的少量重复
+
+`runtime-media` 与 `engine-codec` / `engine-audio` 保持兄弟 crate 关系，不互相依赖。少量 FFmpeg 打开文件、选择 stream、建立 decoder/resampler 的样板重复是有意接受的边界成本：
+
+- `runtime-media` 是 CPU-only 媒体分析工具集，负责 probe、diff、subtitle、JPEG、image analysis 和 preview variant 等离线分析能力。
+- `engine-codec` 是生产视频 codec 基础设施，负责硬件 decode/encode、mux、pool 和 zero-copy 句柄。
+- `engine-audio` 是生产音频基础设施，负责流式 audio decode/encode、DSP、capture 和 mixdown。
+
+短期不提取共享抽象，也不让 `runtime-media` 依赖 `engine-codec` 或 `engine-audio`。只有当重复扩大到多个分析工具且仍能保持 CPU-only 约束时，才考虑单独的轻量 `engine-media-io` 或 audio decode helper。
 
 ---
 

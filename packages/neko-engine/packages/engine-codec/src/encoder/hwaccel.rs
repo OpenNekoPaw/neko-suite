@@ -24,18 +24,9 @@ use ffmpeg_next::util::color::Range as ColorRange;
 use ffmpeg_next::util::frame::video::Video as VideoFrame;
 use ffmpeg_next::{Dictionary, Rational};
 
+use crate::init_ffmpeg;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use std::path::Path;
-use std::sync::Once;
-
-static FFMPEG_INIT: Once = Once::new();
-
-/// Initialize FFmpeg (thread-safe, called once)
-fn init_ffmpeg() {
-    FFMPEG_INIT.call_once(|| {
-        ffmpeg::init().expect("Failed to initialize FFmpeg");
-    });
-}
 
 // =============================================================================
 // Hardware Encoder Detection
