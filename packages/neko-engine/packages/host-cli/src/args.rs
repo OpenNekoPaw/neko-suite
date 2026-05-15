@@ -250,6 +250,8 @@ define_actions!(VideoAction {
     Seek => "seek",
     /// Set loop region
     Loop => "loop",
+    /// Query or update panoramic view state
+    ViewState => "view-state",
 });
 
 define_actions!(AudioAction {
@@ -360,6 +362,8 @@ define_actions!(ModelAction {
     Clip => "clip",
     /// Run transcription against model pipeline
     Transcribe => "transcribe",
+    /// Preprocess model input (e.g. segmentation, depth)
+    Preprocess => "preprocess",
 });
 
 define_actions!(CanvasAction {
