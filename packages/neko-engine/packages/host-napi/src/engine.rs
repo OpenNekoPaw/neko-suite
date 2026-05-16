@@ -9,7 +9,7 @@
 //! - Convenience methods for common operations (probe, capture, tasks, etc.)
 
 use napi_derive::napi;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
 
 use neko_engine_types::{ActionRequest, EngineConfig};
@@ -17,6 +17,7 @@ use neko_host_api::EngineApi;
 
 /// Global engine instance (singleton)
 static ENGINE: OnceCell<Arc<EngineApi>> = OnceCell::const_new();
+static HTTP_SERVER: Mutex<Option<HttpServerState>> = Mutex::new(None);
 
 pub(crate) fn init_tracing() {
     let _ = tracing_subscriber::fmt()
@@ -60,10 +61,19 @@ pub(crate) async fn get_engine() -> napi::Result<Arc<EngineApi>> {
     get_engine_with_config(None).await
 }
 
-/// Internal state for the embedded HTTP/WebSocket server
+/// Process-wide state for the embedded HTTP/WebSocket server.
+///
+/// The engine itself is process-scoped, and the frame server must follow that
+/// lifetime rather than the lifetime of any single JavaScript NativeEngine
+/// wrapper. Otherwise a wrapper drop or GC cycle can close the HTTP server
+/// while other extensions still hold a cached port.
 struct HttpServerState {
     addr: std::net::SocketAddr,
-    shutdown_tx: tokio::sync::watch::Sender<()>,
+    shutdown_tx: tokio::sync::watch::Sender<bool>,
+}
+
+fn http_server_state() -> &'static Mutex<Option<HttpServerState>> {
+    &HTTP_SERVER
 }
 
 /// NativeEngine - Main entry point for all engine operations
@@ -76,7 +86,6 @@ struct HttpServerState {
 #[napi]
 pub struct NativeEngine {
     engine: Arc<EngineApi>,
-    http_server: std::sync::Mutex<Option<HttpServerState>>,
 }
 
 #[napi]
@@ -102,10 +111,7 @@ impl NativeEngine {
             }
         );
 
-        Ok(Self {
-            engine,
-            http_server: std::sync::Mutex::new(None),
-        })
+        Ok(Self { engine })
     }
 
     /// Dispatch an action request
@@ -352,8 +358,7 @@ impl NativeEngine {
     ) -> napi::Result<u16> {
         // Check if already running
         {
-            let guard = self
-                .http_server
+            let guard = http_server_state()
                 .lock()
                 .map_err(|_| napi::Error::from_reason("Failed to lock http_server state"))?;
             if guard.is_some() {
@@ -384,8 +389,7 @@ impl NativeEngine {
 
         // Store the server state
         {
-            let mut guard = self
-                .http_server
+            let mut guard = http_server_state()
                 .lock()
                 .map_err(|_| napi::Error::from_reason("Failed to lock http_server state"))?;
             *guard = Some(HttpServerState { addr, shutdown_tx });
@@ -398,15 +402,14 @@ impl NativeEngine {
     #[napi]
     pub async fn stop_frame_server(&self) -> napi::Result<()> {
         let state = {
-            let mut guard = self
-                .http_server
+            let mut guard = http_server_state()
                 .lock()
                 .map_err(|_| napi::Error::from_reason("Failed to lock http_server state"))?;
             guard.take()
         };
 
         if let Some(server_state) = state {
-            let _ = server_state.shutdown_tx.send(());
+            let _ = server_state.shutdown_tx.send(true);
             tracing::info!("Frame server on port {} stopped", server_state.addr.port());
         }
 
@@ -416,7 +419,7 @@ impl NativeEngine {
     /// Get the frame server port, or null if not running
     #[napi]
     pub fn get_frame_server_port(&self) -> Option<u16> {
-        self.http_server
+        http_server_state()
             .lock()
             .ok()
             .and_then(|guard| guard.as_ref().map(|s| s.addr.port()))
@@ -434,7 +437,7 @@ fn parse_json_arg(value: Option<String>, label: &str) -> napi::Result<Option<ser
 
 #[cfg(test)]
 mod tests {
-    use super::parse_json_arg;
+    use super::{http_server_state, parse_json_arg, HttpServerState, NativeEngine};
 
     #[test]
     fn parse_json_arg_rejects_malformed_json() {
@@ -455,5 +458,40 @@ mod tests {
         // Note: This test requires GPU, may fail in CI
         // let engine = NativeEngine::create().await;
         // assert!(engine.is_ok());
+    }
+
+    #[tokio::test]
+    async fn frame_server_state_is_shared_across_native_engine_wrappers_without_binding_socket() {
+        let (shutdown_tx, _shutdown_rx) = tokio::sync::watch::channel(false);
+        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 43210));
+        {
+            let mut guard = http_server_state()
+                .lock()
+                .expect("shared server state lock");
+            *guard = Some(HttpServerState {
+                addr: test_addr,
+                shutdown_tx,
+            });
+        }
+
+        let first = NativeEngine::create(None).await.expect("first engine");
+        let second = NativeEngine::create(None).await.expect("second engine");
+        assert_eq!(first.get_frame_server_port(), Some(test_addr.port()));
+        assert_eq!(second.get_frame_server_port(), Some(test_addr.port()));
+        assert!(
+            second.start_frame_server(Some(0)).await.is_err(),
+            "a second wrapper must see the already-running shared server"
+        );
+
+        second
+            .stop_frame_server()
+            .await
+            .expect("stop shared server");
+        assert_eq!(first.get_frame_server_port(), None);
+
+        let mut guard = http_server_state()
+            .lock()
+            .expect("shared server state lock");
+        *guard = None;
     }
 }

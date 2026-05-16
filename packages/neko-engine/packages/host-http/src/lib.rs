@@ -50,22 +50,26 @@ pub async fn start_server(engine: Arc<EngineApi>, port: u16) -> std::io::Result<
     axum::serve(listener, app).await
 }
 
-/// Start the HTTP server with a shutdown signal
+/// Start the HTTP server with an explicit shutdown signal.
+///
+/// The returned sender uses `true` as the terminal shutdown request. Dropping
+/// the sender without sending `true` is treated as an accidental owner drop and
+/// does not stop the server.
 ///
 /// Returns the actual bound address (useful when port=0 for auto-assign).
 pub async fn start_server_with_shutdown(
     engine: Arc<EngineApi>,
     port: u16,
-) -> std::io::Result<(std::net::SocketAddr, watch::Sender<()>)> {
+) -> std::io::Result<(std::net::SocketAddr, watch::Sender<bool>)> {
     start_server_with_shutdown_and_preview_roots(engine, port, Vec::new()).await
 }
 
-/// Start the HTTP server with a shutdown signal and preview file allow-list roots.
+/// Start the HTTP server with an explicit shutdown signal and preview file allow-list roots.
 pub async fn start_server_with_shutdown_and_preview_roots(
     engine: Arc<EngineApi>,
     port: u16,
     preview_allowed_roots: Vec<PathBuf>,
-) -> std::io::Result<(std::net::SocketAddr, watch::Sender<()>)> {
+) -> std::io::Result<(std::net::SocketAddr, watch::Sender<bool>)> {
     let app = routes::build_router_with_preview_roots(engine, preview_allowed_roots);
     let app = middleware::apply_middleware(app);
 
@@ -73,21 +77,36 @@ pub async fn start_server_with_shutdown_and_preview_roots(
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let local_addr = listener.local_addr()?;
 
-    let (shutdown_tx, mut shutdown_rx) = watch::channel(());
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
     tracing::info!("Neko HTTP server started on http://{}", local_addr);
 
     tokio::spawn(async move {
         axum::serve(listener, app)
-            .with_graceful_shutdown(async move {
-                let _ = shutdown_rx.changed().await;
-                tracing::info!("HTTP server shutting down");
-            })
+            .with_graceful_shutdown(wait_for_explicit_shutdown(shutdown_rx))
             .await
             .ok();
     });
 
     Ok((local_addr, shutdown_tx))
+}
+
+async fn wait_for_explicit_shutdown(mut shutdown_rx: watch::Receiver<bool>) {
+    loop {
+        match shutdown_rx.changed().await {
+            Ok(()) if *shutdown_rx.borrow() => {
+                tracing::info!("HTTP server shutting down");
+                break;
+            }
+            Ok(()) => continue,
+            Err(_) => {
+                tracing::warn!(
+                    "HTTP server shutdown sender dropped without explicit stop; keeping server alive"
+                );
+                std::future::pending::<()>().await;
+            }
+        }
+    }
 }
 
 fn loopback_addr(port: u16) -> std::net::SocketAddr {
@@ -96,10 +115,48 @@ fn loopback_addr(port: u16) -> std::net::SocketAddr {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use tokio::time::{timeout, Duration};
+
     #[test]
     fn server_bind_addr_is_loopback_only() {
         let addr = super::loopback_addr(8765);
         assert_eq!(addr.ip(), std::net::IpAddr::from([127, 0, 0, 1]));
         assert_eq!(addr.port(), 8765);
+    }
+
+    #[tokio::test]
+    async fn shutdown_waiter_only_finishes_on_explicit_true_signal() {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let waiter = wait_for_explicit_shutdown(shutdown_rx);
+        tokio::pin!(waiter);
+
+        shutdown_tx.send(false).expect("send non-terminal update");
+        assert!(
+            timeout(Duration::from_millis(20), &mut waiter)
+                .await
+                .is_err(),
+            "false updates must not stop the HTTP server"
+        );
+
+        shutdown_tx.send(true).expect("send terminal update");
+        timeout(Duration::from_millis(100), &mut waiter)
+            .await
+            .expect("explicit true signal should stop the HTTP server");
+    }
+
+    #[tokio::test]
+    async fn shutdown_waiter_ignores_sender_drop_without_explicit_stop() {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let waiter = wait_for_explicit_shutdown(shutdown_rx);
+        tokio::pin!(waiter);
+
+        drop(shutdown_tx);
+        assert!(
+            timeout(Duration::from_millis(20), &mut waiter)
+                .await
+                .is_err(),
+            "dropping the sender must not be treated as an explicit shutdown"
+        );
     }
 }
