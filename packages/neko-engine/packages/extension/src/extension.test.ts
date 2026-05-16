@@ -270,6 +270,39 @@ describe('neko-engine extension command bridge', () => {
     });
   });
 
+  it('coalesces concurrent frame server ensure calls into one native start', async () => {
+    await activateExtension();
+
+    const [first, second, third] = await Promise.all([
+      mockState.executeCommand('neko.engine.ensureFrameServer'),
+      mockState.executeCommand('neko.engine.ensureFrameServer'),
+      mockState.executeCommand('neko.engine.ensureFrameServer'),
+    ]);
+
+    expect(first).toEqual({ port: 1234 });
+    expect(second).toEqual({ port: 1234 });
+    expect(third).toEqual({ port: 1234 });
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledTimes(1);
+    expect(mockState.nativeEngine.stopFrameServer).not.toHaveBeenCalled();
+  });
+
+  it('retries frame server health before restarting an existing port', async () => {
+    mockState.nativeEngine.getFrameServerPort.mockReturnValue(4321);
+    mockState.fetch
+      .mockResolvedValueOnce({ ok: false })
+      .mockRejectedValueOnce(new Error('transient connection reset'))
+      .mockResolvedValueOnce({ ok: true });
+
+    await activateExtension();
+
+    const result = await mockState.executeCommand('neko.engine.ensureFrameServer');
+
+    expect(result).toEqual({ port: 4321 });
+    expect(mockState.fetch).toHaveBeenCalledTimes(3);
+    expect(mockState.nativeEngine.stopFrameServer).not.toHaveBeenCalled();
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).not.toHaveBeenCalled();
+  });
+
   it('restarts the embedded frame server when the cached port is stale', async () => {
     mockState.nativeEngine.startFrameServerWithPreviewRoots
       .mockResolvedValueOnce(1234)
@@ -285,6 +318,7 @@ describe('neko-engine extension command bridge', () => {
     expect(second).toEqual({ port: 5678 });
     expect(mockState.nativeEngine.stopFrameServer).toHaveBeenCalledTimes(1);
     expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledTimes(2);
+    expect(mockState.fetch).toHaveBeenCalledTimes(3);
     expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledWith(0, [
       '/workspace',
     ]);

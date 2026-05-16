@@ -41,6 +41,11 @@ let statusBarItem: vscode.StatusBarItem;
 let outputChannel: vscode.OutputChannel;
 /** Cached frame server port for the current extension session (null = not connected) */
 let frameServerPort: number | null = null;
+let ensureFrameServerPromise: Promise<{ port: number } | null> | null = null;
+
+const FRAME_SERVER_HEALTH_ATTEMPTS = 3;
+const FRAME_SERVER_HEALTH_TIMEOUT_MS = 1000;
+const FRAME_SERVER_HEALTH_RETRY_DELAY_MS = 120;
 
 type NativeEngineWithPreviewRoots = {
   startFrameServerWithPreviewRoots?: (
@@ -286,38 +291,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'neko.engine.ensureFrameServer',
       async (): Promise<{ port: number } | null> => {
-        try {
-          const engine = await getOrStartEngine();
-          if (!engine?.engine) return null;
-
-          // Reuse a healthy embedded server when possible, but self-heal stale cache state.
-          const existingPort = frameServerPort ?? engine.engine.getFrameServerPort();
-          if (existingPort !== null) {
-            if (await isFrameServerHealthy(existingPort)) {
-              frameServerPort = existingPort;
-              return { port: existingPort };
-            }
-
-            log(`Frame server port ${existingPort} is stale, restarting`, 'error');
-            frameServerPort = null;
-
-            try {
-              await engine.engine.stopFrameServer();
-            } catch {
-              // Ignore — the wrapper may already be out of sync with the real server state.
-            }
-          }
-
-          // Start frame server with auto-assigned port and a workspace-scoped preview allow-list.
-          const port = await startFrameServer(engine.engine as NativeEngineWithPreviewRoots);
-          frameServerPort = port;
-          log(`Frame server started on port ${port}`);
-          return { port };
-        } catch (error) {
-          frameServerPort = null;
-          log(`ensureFrameServer failed: ${error}`, 'error');
-          return null;
+        if (!ensureFrameServerPromise) {
+          ensureFrameServerPromise = ensureFrameServer().finally(() => {
+            ensureFrameServerPromise = null;
+          });
         }
+        return ensureFrameServerPromise;
       },
     ),
   );
@@ -729,9 +708,56 @@ async function getOrStartEngine(): Promise<NativeMediaEngine | null> {
   }
 }
 
+async function ensureFrameServer(): Promise<{ port: number } | null> {
+  try {
+    const engine = await getOrStartEngine();
+    if (!engine?.engine) return null;
+
+    // Reuse a healthy embedded server when possible, but self-heal stale cache state.
+    const existingPort = frameServerPort ?? engine.engine.getFrameServerPort();
+    if (existingPort !== null) {
+      if (await isFrameServerHealthy(existingPort)) {
+        frameServerPort = existingPort;
+        return { port: existingPort };
+      }
+
+      log(`Frame server port ${existingPort} is stale after health retries, restarting`, 'error');
+      frameServerPort = null;
+
+      try {
+        await engine.engine.stopFrameServer();
+      } catch {
+        // Ignore — the wrapper may already be out of sync with the real server state.
+      }
+    }
+
+    // Start frame server with auto-assigned port and a workspace-scoped preview allow-list.
+    const port = await startFrameServer(engine.engine as NativeEngineWithPreviewRoots);
+    frameServerPort = port;
+    log(`Frame server started on port ${port}`);
+    return { port };
+  } catch (error) {
+    frameServerPort = null;
+    log(`ensureFrameServer failed: ${error}`, 'error');
+    return null;
+  }
+}
+
 async function isFrameServerHealthy(port: number): Promise<boolean> {
+  for (let attempt = 1; attempt <= FRAME_SERVER_HEALTH_ATTEMPTS; attempt += 1) {
+    if (await checkFrameServerHealthOnce(port)) {
+      return true;
+    }
+    if (attempt < FRAME_SERVER_HEALTH_ATTEMPTS) {
+      await delay(FRAME_SERVER_HEALTH_RETRY_DELAY_MS);
+    }
+  }
+  return false;
+}
+
+async function checkFrameServerHealthOnce(port: number): Promise<boolean> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 1000);
+  const timeout = setTimeout(() => controller.abort(), FRAME_SERVER_HEALTH_TIMEOUT_MS);
 
   try {
     const response = await fetch(`http://127.0.0.1:${port}/health`, {
@@ -743,6 +769,10 @@ async function isFrameServerHealthy(port: number): Promise<boolean> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function startFrameServer(engine: NativeEngineWithPreviewRoots): Promise<number> {
@@ -824,6 +854,7 @@ export async function deactivate(): Promise<void> {
   }
 
   frameServerPort = null;
+  ensureFrameServerPromise = null;
 
   log('Extension deactivated');
 }

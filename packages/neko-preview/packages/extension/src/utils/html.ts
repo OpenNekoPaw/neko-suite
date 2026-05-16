@@ -96,7 +96,7 @@ function getDevHtml(
   const styleSrc = isDocument
     ? `style-src 'unsafe-inline' blob: ${devUrl} ${ENGINE};`
     : `style-src 'unsafe-inline' ${devUrl};`;
-  const fontSrc = isDocument ? `font-src ${devUrl} ${ENGINE} data:;` : `font-src ${devUrl};`;
+  const fontSrc = isDocument ? `font-src ${devUrl} ${ENGINE} data:;` : `font-src ${devUrl} data:;`;
 
   const workerSrc = entry === 'pdf' ? `worker-src blob:;` : '';
   const frameSrc = isEpub ? `frame-src blob: ${devUrl};` : '';
@@ -159,7 +159,7 @@ function getProdHtml(
   const styleSrc = isDocument
     ? `style-src 'unsafe-inline' blob: ${csp} ${ENGINE};`
     : `style-src 'unsafe-inline' ${csp};`;
-  const fontSrc = isDocument ? `font-src ${csp} ${ENGINE} data:;` : `font-src ${csp};`;
+  const fontSrc = isDocument ? `font-src ${csp} ${ENGINE} data:;` : `font-src ${csp} data:;`;
 
   const workerSrc = entry === 'pdf' ? `worker-src blob: ${csp};` : '';
   const frameSrc = isEpub ? `frame-src blob: ${csp};` : '';
