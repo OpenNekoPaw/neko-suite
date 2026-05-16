@@ -12,7 +12,7 @@
 //! ## Usage
 //!
 //! ```ignore
-//! use neko_engine_kernel::media_service::encode_rgba_to_jpeg;
+//! use neko_runtime_media::encode_rgba_to_jpeg;
 //!
 //! let jpeg_data = encode_rgba_to_jpeg(&rgba_buffer, 1920, 1080, 85)?;
 //! ```

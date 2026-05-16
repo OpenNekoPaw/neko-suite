@@ -12,9 +12,9 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::encoder::{ContainerFormat, EncodedPacket, PipelineConfig};
 use crate::error::{Error, Result};
-use crate::gpu::{GpuContext, PipelinePriority};
 use crate::monitor::SystemMonitor;
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
+use neko_engine_gpu::{GpuContext, PipelinePriority};
 use neko_engine_types::{
     AudioCodec, AudioEncodedPacket, AudioOutput, GpuFrameLease, PipelineOutput, VideoGpuFrame,
     VideoOutput,

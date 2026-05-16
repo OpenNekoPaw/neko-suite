@@ -3,10 +3,10 @@
 //! Provides system health monitoring and resource metrics.
 
 use crate::error::Result;
-use crate::gpu::GpuContext;
 use crate::monitor::SystemMonitor;
 use crate::services::{GpuInfo, INodeService, ITaskService};
 use async_trait::async_trait;
+use neko_engine_gpu::GpuContext;
 use neko_engine_types::{HealthStatus, ResourceSnapshot};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

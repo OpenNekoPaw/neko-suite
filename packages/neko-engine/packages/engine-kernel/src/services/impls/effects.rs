@@ -1,9 +1,9 @@
 //! Effects service implementation
 
 use crate::error::{Error, Result};
-use crate::gpu::custom_shader_processor::{CustomShaderProcessor, ParamDef, PresetShaderMeta};
-use crate::gpu::GpuContext;
 use crate::services::effects::IEffectsService;
+use neko_engine_gpu::GpuContext;
+use neko_engine_gpu::{CustomShaderProcessor, ParamDef, PresetShaderMeta};
 use std::sync::{Arc, Mutex};
 
 /// Effects service — wraps `CustomShaderProcessor` for the API layer.

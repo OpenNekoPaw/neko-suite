@@ -10,19 +10,19 @@ use super::scene_renderer::{
 use crate::domain::FrameData;
 use crate::encoder::encode_nv12_to_h264_iframe;
 use crate::error::{Error, Result};
-use crate::gpu::scene_renderer::{
+use crate::services::scene::ISceneService;
+use neko_engine_gpu::GpuContext;
+#[cfg(target_os = "macos")]
+use neko_engine_gpu::RgbaToNv12TextureConverter;
+use neko_engine_scene_renderer::{
     extract_render_world, CameraParams, ControlAckHealthSample, RenderExtractStats, RenderWorld,
     SceneRenderOutput, ViewportDescriptor, ViewportRenderGraphOutput,
 };
-use crate::gpu::GpuContext;
-#[cfg(target_os = "macos")]
-use crate::gpu::RgbaToNv12TextureConverter;
-use crate::media_service::encode_rgba_to_jpeg;
-use crate::services::scene::ISceneService;
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
     FrameFormat, GpuFrameLease, GpuOutputHandle, PipelineOutput, VideoGpuFrame, VideoOutput,
 };
+use neko_runtime_media::encode_rgba_to_jpeg;
 use neko_runtime_scene::access::{
     BeginModelingSession, CommitModelingSession, DataAccess, ProceduralSceneEntitySpec,
     SceneEntityFilter, SceneNodeMeshRef, SceneRenderExtractInput, SceneRenderExtraction,
@@ -795,10 +795,10 @@ impl ISceneService for SceneService {
     }
 
     fn create_text_mesh(&self, params: serde_json::Value) -> Result<SceneSnapshot> {
-        let text_params: crate::generators::text_mesh::TextMeshParams =
+        let text_params: neko_runtime_scene::text_mesh::TextMeshParams =
             serde_json::from_value(params)
                 .map_err(|e| Error::Other(format!("Invalid text mesh params: {}", e)))?;
-        let mesh = crate::generators::text_mesh::generate_text_mesh(&text_params)
+        let mesh = neko_runtime_scene::text_mesh::generate_text_mesh(&text_params)
             .map_err(|e| Error::Other(format!("Text mesh generation failed: {}", e)))?;
         let uri = format!("procedural://text_{}", uuid::Uuid::new_v4());
 

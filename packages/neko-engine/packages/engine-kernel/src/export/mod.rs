@@ -14,7 +14,6 @@ mod service;
 mod sink_factory;
 mod types;
 
-pub use crate::gpu::EffectDispatcher;
 pub use audio_mixer::{AudioMixer, MixedAudioFrame};
 pub use backend::{
     build_audio_encoder_config, build_export_metadata, DefaultExportAudioBackendFactory,
@@ -26,6 +25,7 @@ pub use backend::{
 };
 pub use gpu_export_pipeline::GpuExportPipeline;
 pub use neko_engine_export_renderer::GpuPipelineTiming;
+pub use neko_engine_gpu::EffectDispatcher;
 pub use service::ExportService;
 pub use sink_factory::{DefaultExportSinkFactory, ExportSink, ExportSinkFactory};
 pub use types::*;

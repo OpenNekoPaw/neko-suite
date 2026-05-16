@@ -9,6 +9,7 @@
 //! - Models are consumed by the Service layer
 
 pub mod frame;
+pub mod jvi_loader;
 pub mod loudness;
 pub mod operations;
 pub mod options;
@@ -22,6 +23,7 @@ pub mod transform;
 
 // Re-export domain types
 pub use frame::*;
+pub use jvi_loader::*;
 pub use loudness::*;
 pub use options::*;
 pub use resource::*;

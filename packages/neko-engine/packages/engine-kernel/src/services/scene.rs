@@ -3,10 +3,10 @@
 //! Provides an interface for loading, querying, and manipulating 3D scenes.
 
 use crate::domain::FrameData;
-use crate::gpu::scene_renderer::{
+use crate::services::pipeline_sink::PipelineOutput;
+use neko_engine_scene_renderer::{
     CameraParams, ControlAckHealthSample, SceneRenderOutput, ViewportDescriptor,
 };
-use crate::services::pipeline_sink::PipelineOutput;
 use neko_engine_types::easing::EasingType;
 use neko_runtime_scene::animation_blend::SceneBlendLayerInfo;
 use neko_runtime_scene::components::AnimationChannelInfo;

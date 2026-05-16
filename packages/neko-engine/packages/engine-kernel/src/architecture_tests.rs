@@ -74,11 +74,6 @@ fn relative_to_packages(path: &Path) -> String {
 }
 
 #[test]
-fn gpu_module_does_not_depend_on_services() {
-    assert_no_pattern("src/gpu", &["crate::services", "use crate::services"]);
-}
-
-#[test]
 fn engine_gpu_crate_exists_and_is_workspace_member() {
     let packages_dir = packages_dir();
     assert!(
@@ -157,21 +152,6 @@ fn engine_gpu_sources_avoid_kernel_orchestration_and_renderer_companions() {
 }
 
 #[test]
-fn kernel_gpu_module_documents_temporary_reexports_and_companion_shims() {
-    let gpu_mod = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gpu/mod.rs");
-    let source = fs::read_to_string(&gpu_mod)
-        .unwrap_or_else(|err| panic!("failed to read {}: {}", gpu_mod.display(), err));
-
-    assert!(!source.contains("pub use neko_engine_gpu::*"));
-    assert!(source.contains("pub use neko_engine_gpu::{"));
-    assert!(source.contains("pub use neko_engine_scene_renderer::"));
-    assert!(source.contains("pub use neko_engine_puppet_renderer::"));
-    assert!(source.contains("pub use neko_engine_panoramic_renderer::"));
-    assert!(source.contains("pub mod scene_renderer"));
-    assert!(source.contains("Temporary GPU compatibility surface"));
-}
-
-#[test]
 fn kernel_public_modules_are_allowlisted() {
     let lib_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
     let source = fs::read_to_string(&lib_rs)
@@ -193,27 +173,6 @@ fn kernel_public_modules_are_allowlisted() {
         assert!(
             !source.contains(forbidden),
             "engine-kernel root must keep domain shortcuts behind `contracts`, not `{}`",
-            forbidden
-        );
-    }
-}
-
-#[test]
-fn kernel_gpu_compatibility_exports_avoid_glob_reexports() {
-    let gpu_mod = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/gpu/mod.rs");
-    let source = fs::read_to_string(&gpu_mod)
-        .unwrap_or_else(|err| panic!("failed to read {}: {}", gpu_mod.display(), err));
-
-    for forbidden in [
-        "pub use neko_engine_gpu::*",
-        "pub use neko_engine_scene_renderer::*;",
-        "pub use neko_engine_puppet_renderer::*;",
-        "pub use neko_engine_panoramic_renderer::*;",
-    ] {
-        assert!(
-            !source.contains(forbidden),
-            "{} must not contain broad compatibility export `{}`",
-            gpu_mod.display(),
             forbidden
         );
     }
@@ -554,8 +513,8 @@ fn preview_module_keeps_renderer_internals_behind_backend_adapters() {
     assert_no_pattern(
         "src/preview",
         &[
-            "crate::gpu::scene_renderer",
-            "crate::gpu::puppet_renderer",
+            "neko_engine_gpu::scene_renderer",
+            "neko_engine_gpu::puppet_renderer",
             "SceneRenderer::new",
             "PuppetRenderer::new",
         ],
@@ -567,16 +526,66 @@ fn encoder_module_does_not_import_audio_encoder_config_from_audio() {
     assert_no_pattern(
         "src/encoder",
         &[
-            "crate::audio::AudioEncoderConfig",
-            "use crate::audio::{AudioEncoderConfig",
-            "use crate::audio::{ AudioEncoderConfig",
+            "neko_engine_audio::AudioEncoderConfig",
+            "use neko_engine_audio::{AudioEncoderConfig",
+            "use neko_engine_audio::{ AudioEncoderConfig",
         ],
     );
 }
 
 #[test]
-fn gpu_compositor_does_not_expose_duplicate_blend_mode_enum() {
-    assert_no_pattern("src/gpu", &["pub enum BlendMode"]);
+fn kernel_helper_shell_directories_are_removed() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for forbidden_dir in [
+        "src/media_service",
+        "src/jvi",
+        "src/generators",
+        "src/animation",
+        "src/audio",
+        "src/decoder",
+        "src/gpu",
+    ] {
+        let path = manifest_dir.join(forbidden_dir);
+        assert!(
+            !path.exists(),
+            "{} must not reappear in engine-kernel; move implementation to the owning runtime/infrastructure crate or add an explicit ADR allowlist",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn kernel_contract_media_exports_are_runtime_media_reexports() {
+    let contracts_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/contracts.rs");
+    let source = fs::read_to_string(&contracts_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", contracts_rs.display(), err));
+
+    let media_section = source
+        .split("pub mod media {")
+        .nth(1)
+        .and_then(|rest| rest.split("/// Preview contracts").next())
+        .expect("contracts.rs must contain media contract module");
+
+    assert!(media_section.contains("pub use neko_runtime_media::{"));
+    assert!(!media_section.contains("crate::media_service"));
+}
+
+#[test]
+fn kernel_contract_gpu_exports_are_explicit_lower_crate_reexports() {
+    let contracts_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/contracts.rs");
+    let source = fs::read_to_string(&contracts_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", contracts_rs.display(), err));
+
+    let gpu_section = source
+        .split("pub mod gpu {")
+        .nth(1)
+        .and_then(|rest| rest.split("/// JVI project").next())
+        .expect("contracts.rs must contain gpu contract module");
+
+    assert!(gpu_section.contains("neko_engine_gpu"));
+    assert!(gpu_section.contains("neko_engine_scene_renderer"));
+    assert!(!gpu_section.contains("crate::gpu"));
+    assert!(!gpu_section.contains("pub use neko_engine_gpu::*"));
 }
 
 #[test]
@@ -802,8 +811,7 @@ fn encoder_pipeline_is_only_kernel_owned_mixed_gpu_codec_boundary() {
     for file in rust_files(&encoder_root) {
         let source = fs::read_to_string(&file)
             .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
-        let imports_gpu = source.contains("crate::gpu")
-            || source.contains("GpuContext")
+        let imports_gpu = source.contains("GpuContext")
             || source.contains("GpuCompositor")
             || source.contains("GpuLayer");
         assert!(

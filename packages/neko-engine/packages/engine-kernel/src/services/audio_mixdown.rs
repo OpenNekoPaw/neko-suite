@@ -8,11 +8,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::audio::dsp::effect_factory::{AudioEffectConfig, AudioEffectFactory};
-use crate::audio::dsp::gain::db_to_linear;
-use crate::audio::dsp::{AudioEffect, EffectChain};
-use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat, SoftLimiter};
 use crate::error::Result;
+use neko_engine_audio::dsp::effect_factory::{AudioEffectConfig, AudioEffectFactory};
+use neko_engine_audio::dsp::gain::db_to_linear;
+use neko_engine_audio::dsp::{AudioEffect, EffectChain};
+use neko_engine_audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat, SoftLimiter};
 use serde::{Deserialize, Serialize};
 
 /// Full mix configuration sent from the TS layer.

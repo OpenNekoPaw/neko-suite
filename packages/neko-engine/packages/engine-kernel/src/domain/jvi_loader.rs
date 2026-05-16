@@ -1,8 +1,9 @@
-//! ProjectData to Timeline converter
+//! JVI project loader and ProjectData to Timeline converter
 //!
-//! Converts JVI ProjectData to unified domain Timeline model with path resolution.
+//! `runtime-media` owns raw JVI/NKV file parsing. Kernel owns conversion into
+//! Timeline and ExportSettings because those are service-domain models.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::domain::{
     AudioElementData, AudioProperties, Element, ElementType, MediaElementData, ShapeElementData,
@@ -13,8 +14,44 @@ use crate::export::{
     ExportAudioCodec, ExportHwEncoder, ExportPreset, ExportSettings, ExportVideoCodec,
 };
 use neko_engine_types::{BlendMode, Resolution, TrackType};
+use neko_runtime_media::{JviElement, JviProjectLoader, JviTrack, ProjectData};
 
-use super::types::{JviElement, JviTrack, ProjectData};
+/// Host-compatible JVI file loader.
+pub struct JviLoader;
+
+impl JviLoader {
+    /// Create a new JVI loader.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Load a .nkv file and convert it to Timeline + ExportSettings.
+    pub fn load(&self, path: &Path) -> Result<(Timeline, ExportSettings)> {
+        let project = JviProjectLoader::new().load(path)?;
+        let base_dir = path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        ProjectConverter::new(base_dir).convert(project)
+    }
+
+    /// Load a JVI JSON string and convert it to Timeline + ExportSettings.
+    pub fn load_from_json(
+        &self,
+        json: &str,
+        base_dir: PathBuf,
+    ) -> Result<(Timeline, ExportSettings)> {
+        let project = JviProjectLoader::new().load_from_json(json)?;
+        ProjectConverter::new(base_dir).convert(project)
+    }
+}
+
+impl Default for JviLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Converter from ProjectData to Timeline
 pub struct ProjectConverter {
@@ -336,7 +373,7 @@ impl ProjectConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jvi::types::{JviMediaElement, Resolution as JviResolution};
+    use neko_runtime_media::{JviMediaElement, Resolution as JviResolution};
 
     #[test]
     fn test_convert_project() {

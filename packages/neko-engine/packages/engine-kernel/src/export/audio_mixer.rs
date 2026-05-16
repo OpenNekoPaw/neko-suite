@@ -5,10 +5,10 @@
 
 use std::collections::HashMap;
 
-use crate::animation::{Easing, EasingType};
-use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat, SoftLimiter};
 use crate::domain::{ElementType, Timeline};
 use crate::error::Result;
+use neko_engine_audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat, SoftLimiter};
+use neko_engine_types::easing::{Easing, EasingType};
 
 use super::types::ExportSettings;
 

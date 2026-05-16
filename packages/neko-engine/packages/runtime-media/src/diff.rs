@@ -6,12 +6,12 @@
 use serde::Serialize;
 use std::path::Path;
 
-use super::audio_diff::{diff_audio_content, AudioContentDiff};
-use super::image_diff::{diff_image_content, ImageContentDiff};
-use super::probe::{global_probe_cache, MediaInfo};
-use super::timeline_diff::{diff_timeline_content, TimelineContentDiff};
-use super::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
-use crate::error::{Error, Result};
+use crate::audio_diff::{diff_audio_content, AudioContentDiff};
+use crate::error::{MediaError as Error, Result};
+use crate::image_diff::{diff_image_content, ImageContentDiff};
+use crate::probe::{global_probe_cache, MediaInfo};
+use crate::timeline_diff::{diff_timeline_content, TimelineContentDiff};
+use crate::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
 
 /// Category of media being compared
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_content_diff_audio_serialize() {
-        use crate::media_service::audio_diff::{AudioContentDiff, AudioDiffRegion};
+        use crate::audio_diff::{AudioContentDiff, AudioDiffRegion};
 
         let audio = AudioContentDiff {
             snr: 30.0,
@@ -613,7 +613,7 @@ mod tests {
 
     #[test]
     fn test_diff_result_with_audio_content_serialize() {
-        use crate::media_service::audio_diff::AudioContentDiff;
+        use crate::audio_diff::AudioContentDiff;
 
         let result = DiffResult {
             source_a: "/a.mp3".to_string(),

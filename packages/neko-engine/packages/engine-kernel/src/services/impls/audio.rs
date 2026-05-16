@@ -2,19 +2,8 @@
 //!
 //! Provides audio-related operations: probing, transcoding, streaming, and waveform generation.
 
-use crate::audio::dsp::speed_resampler::SpeedResampler;
-use crate::audio::dsp::AudioEffect;
-use crate::audio::mic_capture::{
-    AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult,
-};
-use crate::audio::{
-    dsp, AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
-    FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
-};
 use crate::domain::{AudioTranscodeOptions, FrameData, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::{Error, Result};
-use crate::gpu::GpuContext;
-use crate::media_service::global_probe_cache;
 use crate::services::audio_mixdown::MixdownConfig;
 use crate::services::impls::audio_mix_stream::start_mix_stream;
 use crate::services::impls::common::{
@@ -27,7 +16,18 @@ use crate::services::impls::stream_loop::{
 };
 use crate::services::{IAudioService, IStreamPlayback, ITaskService};
 use async_trait::async_trait;
+use neko_engine_audio::dsp::speed_resampler::SpeedResampler;
+use neko_engine_audio::dsp::AudioEffect;
+use neko_engine_audio::mic_capture::{
+    AudioInputDevice, MicCaptureService, MonitorData, RecordCaptureConfig, RecordingResult,
+};
+use neko_engine_audio::{
+    dsp, AudioCodec as InternalAudioCodec, AudioDecoder, AudioEncoder, AudioEncoderConfig,
+    FfmpegAudioDecoder, FfmpegAudioEncoder, SampleFormat,
+};
+use neko_engine_gpu::GpuContext;
 use neko_engine_types::{LoopRegion, MediaInfo, StreamId, WaveformData};
+use neko_runtime_media::global_probe_cache;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -572,8 +572,8 @@ impl IAudioService for AudioService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::dsp::AudioEffect;
     use crate::services::TaskService;
+    use neko_engine_audio::dsp::AudioEffect;
 
     fn create_test_service() -> AudioService {
         let task_service = Arc::new(TaskService::new());

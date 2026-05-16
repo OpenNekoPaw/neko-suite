@@ -1,12 +1,12 @@
 //! Shared utilities for service implementations
 
-use crate::audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
 use crate::domain::{LoudnessAnalysis, SilenceAnalysis, SilenceRegion};
 use crate::error::{Error, Result};
-use crate::media_service::MediaInfo as InternalMediaInfo;
 use base64::Engine as _;
 use ebur128::{EbuR128, Mode};
+use neko_engine_audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
 use neko_engine_types::{CoverArtInfo, MediaInfo, WaveformData};
+use neko_runtime_media::MediaInfo as InternalMediaInfo;
 
 /// Convert internal probe MediaInfo to neko_engine_types::MediaInfo
 ///

@@ -21,7 +21,7 @@ use crate::encoder::{
 };
 use crate::error::{Error, Result};
 use crate::export::{ExportSettings, GpuExportPipeline, GpuPipelineTiming};
-use crate::gpu::GpuContext;
+use neko_engine_gpu::GpuContext;
 use neko_engine_types::{GpuFrameLease, VideoGpuFrame};
 
 /// Preview pipeline configuration

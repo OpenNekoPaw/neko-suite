@@ -10,8 +10,8 @@
 
 use std::collections::HashMap;
 
+use crate::procedural_mesh::{ProceduralMesh, ProceduralVertex};
 use glam::Vec2;
-use neko_runtime_scene::procedural_mesh::{ProceduralMesh, ProceduralVertex};
 use serde::{Deserialize, Serialize};
 
 use cosmic_text::{

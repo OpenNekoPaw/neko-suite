@@ -4,21 +4,12 @@
 //! Supports GPU-accelerated compositing, H.264 preview streaming,
 //! and full playback control (pause/resume/speed/loop/seek).
 
-use crate::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 use crate::domain::{
-    BezierControlPoint, ElementMask, FrameData, MaskShapeData, MediaReference, StreamConfig,
-    Timeline, TimelineProjectInfo,
+    BezierControlPoint, ElementMask, FrameData, JviLoader, MaskShapeData, MediaReference,
+    StreamConfig, Timeline, TimelineProjectInfo,
 };
 use crate::error::{Error, Result};
 use crate::export::{AudioMixer, EffectDispatcher, ExportSettings, ExportStats};
-#[allow(deprecated)]
-use crate::gpu::GpuTransitionProcessor;
-use crate::gpu::{
-    ColorSpace, CompositeLayer, GpuCompositor, GpuContext, GpuElementMask, GpuMaskBezierPoint,
-    GpuMaskShape, GpuPermit, LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter,
-    PipelinePriority, Transform2D, TransitionParams, TransitionType,
-};
-use crate::jvi::JviLoader;
 use crate::monitor::SystemMonitor;
 use crate::preview::{
     DefaultPreviewRenderBackendFactory, PreviewPipelineConfig, PreviewRenderBackendFactory,
@@ -35,6 +26,14 @@ use crate::services::{
 };
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 use async_trait::async_trait;
+use neko_engine_codec::decoder::{Decoder, HwAccelDecoder, HwAccelType};
+#[allow(deprecated)]
+use neko_engine_gpu::GpuTransitionProcessor;
+use neko_engine_gpu::{
+    ColorSpace, CompositeLayer, GpuCompositor, GpuContext, GpuElementMask, GpuMaskBezierPoint,
+    GpuMaskShape, GpuPermit, LayerPixelFormat, MaskRasterizer, Nv12Renderer, Nv12TextureImporter,
+    PipelinePriority, Transform2D, TransitionParams, TransitionType,
+};
 use neko_engine_types::{
     BlendMode, FrameFormat, LoopRegion, PipelineOutput, StreamId, VideoOutput, VideoRawFrame,
 };
@@ -656,7 +655,7 @@ impl ITimelineService for TimelineService {
                     width,
                     height,
                     pixel_format: LayerPixelFormat::Rgba,
-                    transform: crate::gpu::Transform2D {
+                    transform: neko_engine_gpu::Transform2D {
                         x: width as f32 / 2.0,
                         y: height as f32 / 2.0,
                         scale_x: 1.0,

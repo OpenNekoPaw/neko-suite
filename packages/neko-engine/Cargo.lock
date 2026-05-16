@@ -2455,7 +2455,6 @@ dependencies = [
  "block",
  "bytemuck",
  "core-foundation 0.9.4",
- "cosmic-text",
  "crossbeam-channel",
  "ebur128",
  "ffmpeg-next",
@@ -2666,6 +2665,7 @@ dependencies = [
  "ffmpeg-next",
  "ffmpeg-sys-next",
  "image",
+ "neko-engine-types",
  "serde",
  "serde_json",
  "tempfile",
@@ -2708,6 +2708,7 @@ name = "neko-runtime-scene"
 version = "0.1.0"
 dependencies = [
  "bevy_ecs",
+ "cosmic-text",
  "glam",
  "gltf",
  "neko-engine-types",

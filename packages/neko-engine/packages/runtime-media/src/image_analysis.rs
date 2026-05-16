@@ -107,7 +107,10 @@ pub fn manual_projection_metadata(
     )
 }
 
-pub fn infer_projection(path: &Path, input: &ProjectionInferenceInput) -> PreviewProjectionMetadata {
+pub fn infer_projection(
+    path: &Path,
+    input: &ProjectionInferenceInput,
+) -> PreviewProjectionMetadata {
     if let Some((projection_type, confidence, source)) = input
         .sidecar_projection
         .clone()
@@ -260,8 +263,7 @@ mod tests {
     fn infers_heuristic_projection_from_two_to_one_aspect() {
         let dir = tempdir().expect("tempdir");
         let image_path = dir.path().join("wide.png");
-        let image: ImageBuffer<Rgb<u8>, Vec<u8>> =
-            ImageBuffer::from_pixel(8, 4, Rgb([10, 10, 10]));
+        let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(8, 4, Rgb([10, 10, 10]));
         image.save(&image_path).expect("save image");
 
         let projection = infer_projection(
@@ -276,7 +278,10 @@ mod tests {
             projection.projection_type,
             PreviewProjectionType::Equirectangular
         );
-        assert_eq!(projection.confidence, PreviewProjectionConfidence::Heuristic);
+        assert_eq!(
+            projection.confidence,
+            PreviewProjectionConfidence::Heuristic
+        );
         assert_eq!(projection.requires_confirmation, Some(true));
     }
 }

@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 
 /// Unified sample rate for comparison (48 kHz)
 const COMPARE_SAMPLE_RATE: u32 = 48000;
-/// Unified channel count for comparison (mono)
-const COMPARE_CHANNELS: u16 = 1;
 /// Segment length in seconds for region detection
 const SEGMENT_DURATION: f64 = 0.1;
 /// SNR threshold (dB) below which a segment is considered "different"
@@ -205,8 +203,6 @@ fn decode_to_f32_mono(
         .ok_or_else(|| Error::Other(format!("No audio stream in {}", path)))?;
 
     let stream_index = stream.index();
-    let time_base = stream.time_base();
-
     let context = codec::context::Context::from_parameters(stream.parameters())
         .map_err(|e| Error::Other(format!("Codec context error: {}", e)))?;
     let mut audio_decoder = context

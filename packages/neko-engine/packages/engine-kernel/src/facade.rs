@@ -7,13 +7,13 @@
 use std::sync::Arc;
 
 use crate::error::Result;
-use crate::gpu::GpuContext;
 use crate::services::{
     AudioService, EffectRegistry, EffectsService, ExportService, IAudioService, IEffectsService,
     IExportService, IImageService, INodeService, IPuppetService, ISceneService, ITaskService,
     ITimelineService, IVideoService, ImageService, NodeService, PuppetService, SceneService,
     TaskService, TimelineService, VideoService,
 };
+use neko_engine_gpu::GpuContext;
 use neko_runtime_device::{
     CameraService, GamepadService, ICameraService, IGamepadService, IMidiService, MidiService,
 };

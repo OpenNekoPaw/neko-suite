@@ -90,9 +90,6 @@ neko-runtime-media = { path = "../runtime-media" }
 # Base64 encoding
 base64.workspace = true
 
-# Text rendering - font shaping, layout, rasterization
-cosmic-text.workspace = true
-
 # 2D shape rasterization - pure Rust path renderer
 tiny-skia = "0.11"
 

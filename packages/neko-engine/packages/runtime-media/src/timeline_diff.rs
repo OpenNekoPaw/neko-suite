@@ -12,12 +12,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::error::{Error, Result};
+use crate::audio_diff::{diff_audio_content, AudioContentDiff};
+use crate::error::{MediaError as Error, Result};
+use crate::image_diff::{diff_image_content, ImageContentDiff};
 use crate::jvi::{JviElement, JviTrack, ProjectData};
-
-use super::audio_diff::{diff_audio_content, AudioContentDiff};
-use super::image_diff::{diff_image_content, ImageContentDiff};
-use super::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
+use crate::video_diff::{diff_video_content, VideoContentDiff, VideoDiffOptions};
 
 // =============================================================================
 // Types (aligned with diff.proto / EngineTimelineContentDiff)

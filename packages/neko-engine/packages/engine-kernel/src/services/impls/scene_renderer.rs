@@ -8,11 +8,11 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, watch};
 
 use crate::error::{Error, Result};
-use crate::gpu::scene_renderer::{
+use neko_engine_gpu::GpuContext;
+use neko_engine_scene_renderer::{
     AssetCache, CameraParams, PbrRenderer, RenderWorld, SceneRenderOutput, ViewportDescriptor,
     ViewportRenderGraphOutput,
 };
-use crate::gpu::GpuContext;
 
 pub const SCENE_EXPORT_QUEUE_CAPACITY: usize = 1;
 

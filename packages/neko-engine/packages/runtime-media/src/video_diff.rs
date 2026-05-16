@@ -355,7 +355,7 @@ pub fn diff_video_content<P: AsRef<Path>>(
 // FFmpeg library-based filter runners (no external CLI dependency)
 // ─────────────────────────────────────────────────────────────
 
-use ffmpeg::{codec, filter, format, media, Rational};
+use ffmpeg::{codec, filter, format, media};
 use ffmpeg_next as ffmpeg;
 
 static FFMPEG_INIT: std::sync::Once = std::sync::Once::new();

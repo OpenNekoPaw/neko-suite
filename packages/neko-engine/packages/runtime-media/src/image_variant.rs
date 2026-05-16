@@ -111,7 +111,8 @@ pub fn generated_proxy_needed(
     if file_size_bytes > LARGE_IMAGE_PROXY_THRESHOLD_BYTES {
         return true;
     }
-    dimensions.is_some_and(|dimensions| dimensions.width.max(dimensions.height) > DEFAULT_PROXY_MAX_EDGE)
+    dimensions
+        .is_some_and(|dimensions| dimensions.width.max(dimensions.height) > DEFAULT_PROXY_MAX_EDGE)
 }
 
 pub fn generate_preview_variant(
@@ -297,7 +298,9 @@ fn write_image(
     quality: u8,
 ) -> Result<()> {
     match format {
-        ImageVariantFormat::Png => DynamicImage::ImageRgba8(image).save_with_format(path, ImageFormat::Png)?,
+        ImageVariantFormat::Png => {
+            DynamicImage::ImageRgba8(image).save_with_format(path, ImageFormat::Png)?
+        }
         ImageVariantFormat::Jpeg => {
             let file = fs::File::create(path)?;
             let rgb = DynamicImage::ImageRgba8(image).to_rgb8();
@@ -341,8 +344,7 @@ mod tests {
         let dir = tempdir().expect("tempdir");
         let image_path = dir.path().join("preview.png");
         let output_path = dir.path().join("thumbnail.jpg");
-        let image: ImageBuffer<Rgb<u8>, Vec<u8>> =
-            ImageBuffer::from_pixel(8, 4, Rgb([20, 40, 60]));
+        let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(8, 4, Rgb([20, 40, 60]));
         image.save(&image_path).expect("save image");
 
         let artifact = generate_preview_variant(
@@ -360,7 +362,10 @@ mod tests {
         .expect("generate thumbnail");
 
         assert_eq!(artifact.mime_type, "image/jpeg");
-        assert_eq!((artifact.dimensions.width, artifact.dimensions.height), (4, 2));
+        assert_eq!(
+            (artifact.dimensions.width, artifact.dimensions.height),
+            (4, 2)
+        );
         assert!(artifact.path.exists());
         assert!(artifact.file_size_bytes > 0);
     }

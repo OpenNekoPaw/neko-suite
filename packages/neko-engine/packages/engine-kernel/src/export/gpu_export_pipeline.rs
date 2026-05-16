@@ -15,23 +15,23 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::decoder::{global_pool, HwAccelDecoder, HwAccelType};
 use crate::domain::{
     Element, ElementType, ShapeElementData, ShapeFillData, ShapeGradientData, ShapeGradientStop,
     ShapeShadowData, ShapeStrokeData, Timeline,
 };
 use crate::error::{Error, Result};
-use crate::gpu::scene_renderer::CameraParams;
-use crate::gpu::{
+use crate::services::{ISceneService, SceneService};
+use crate::telemetry::spans::span;
+use neko_engine_codec::decoder::{global_pool, HwAccelDecoder, HwAccelType};
+use neko_engine_export_renderer::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
+use neko_engine_gpu::{
     EffectDispatcher, GpuContext, GpuLayer, GpuLayerBuilder, GpuShapeElementData, GpuShapeFillData,
     GpuShapeGradientData, GpuShapeGradientStop, GpuShapeShadowData, GpuShapeStrokeData,
     Nv12OutputBuffers, Nv12RenderCache, Nv12TextureImporter, RgbaToNv12Converter, ShapeRasterizer,
     TextRenderer, TextureCompositeResult, TextureCompositor, TextureTransitionProcessor,
     Transform2D, TransitionParams, TransitionType,
 };
-use crate::services::{ISceneService, SceneService};
-use crate::telemetry::spans::span;
-use neko_engine_export_renderer::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
+use neko_engine_scene_renderer::CameraParams;
 use neko_engine_types::{BlendMode, GpuOutputHandle, TrackType};
 
 use super::types::ExportSettings;
@@ -86,7 +86,7 @@ pub struct GpuExportPipeline {
     scene_service: Option<Arc<SceneService>>,
     /// Zero-copy RGBA→NV12 converter (macOS only, outputs to IOSurface)
     #[cfg(target_os = "macos")]
-    zerocopy_converter: Option<crate::gpu::RgbaToNv12TextureConverter>,
+    zerocopy_converter: Option<neko_engine_gpu::RgbaToNv12TextureConverter>,
 }
 
 impl GpuExportPipeline {
@@ -489,7 +489,7 @@ impl GpuExportPipeline {
         time: f64,
         background_color: [f32; 4],
     ) -> Result<Nv12FrameResult> {
-        use crate::gpu::RgbaToNv12TextureConverter;
+        use neko_engine_gpu::RgbaToNv12TextureConverter;
 
         let mut timing = GpuPipelineTiming::default();
 
@@ -613,7 +613,7 @@ impl GpuExportPipeline {
                 blended_texture,
                 self.output_width,
                 self.output_height,
-                crate::gpu::Transform2D {
+                neko_engine_gpu::Transform2D {
                     x: self.output_width as f32 / 2.0,
                     y: self.output_height as f32 / 2.0,
                     scale_x: 1.0,
@@ -906,7 +906,7 @@ impl GpuExportPipeline {
         let transform = if !element.transform.is_identity() {
             Self::element_transform_2d(element)
         } else {
-            crate::gpu::Transform2D {
+            neko_engine_gpu::Transform2D {
                 x: self.output_width as f32 / 2.0,
                 y: self.output_height as f32 / 2.0,
                 scale_x: 1.0,
@@ -951,7 +951,7 @@ impl GpuExportPipeline {
         let renderer = self.text_renderer.as_mut().unwrap();
 
         // Build text style from Phase 2 fields
-        let style_opts = crate::gpu::TextStyle {
+        let style_opts = neko_engine_gpu::TextStyle {
             line_height: Some(text_data.line_height),
             text_decoration: Some(text_data.text_decoration.clone()),
             stroke_color: Some(text_data.stroke_color.clone()),
@@ -959,7 +959,7 @@ impl GpuExportPipeline {
             shadow: text_data
                 .shadow
                 .as_ref()
-                .map(|s| crate::gpu::TextShadowStyle {
+                .map(|s| neko_engine_gpu::TextShadowStyle {
                     color: s.color.clone(),
                     offset_x: s.offset_x,
                     offset_y: s.offset_y,
@@ -1027,7 +1027,7 @@ impl GpuExportPipeline {
         let renderer = self.text_renderer.as_mut().unwrap();
 
         // Map SubtitleElementData fields → TextStyle
-        let style_opts = crate::gpu::TextStyle {
+        let style_opts = neko_engine_gpu::TextStyle {
             line_height: Some(1.4), // Subtitles use wider line spacing for readability
             text_decoration: None,
             stroke_color: Some(sub_data.stroke_color.clone()),
@@ -1035,7 +1035,7 @@ impl GpuExportPipeline {
             shadow: sub_data
                 .shadow
                 .as_ref()
-                .map(|s| crate::gpu::TextShadowStyle {
+                .map(|s| neko_engine_gpu::TextShadowStyle {
                     color: s.color.clone(),
                     offset_x: s.offset_x,
                     offset_y: s.offset_y,
@@ -1129,7 +1129,7 @@ impl GpuExportPipeline {
             Self::element_transform_2d(element)
         } else {
             // Default: center the scene in the output
-            crate::gpu::Transform2D {
+            neko_engine_gpu::Transform2D {
                 x: self.output_width as f32 / 2.0,
                 y: self.output_height as f32 / 2.0,
                 scale_x: 1.0,

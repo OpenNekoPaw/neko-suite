@@ -67,7 +67,10 @@ pub trait IVideoService: IStreamPlayback {
     ) -> Result<()>;
 
     /// Get keyframe information
-    async fn get_keyframes(&self, source: &Path) -> Result<Vec<crate::decoder::KeyframeInfo>>;
+    async fn get_keyframes(
+        &self,
+        source: &Path,
+    ) -> Result<Vec<neko_engine_codec::decoder::KeyframeInfo>>;
 
     /// Generate audio waveform from video
     async fn generate_waveform(

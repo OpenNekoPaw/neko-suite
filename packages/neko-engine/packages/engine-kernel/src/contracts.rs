@@ -6,14 +6,14 @@
 
 /// Audio contracts used by host controllers and N-API conversions.
 pub mod audio {
-    pub use crate::audio::{
-        mic_capture, AudioCodec, AudioEncoder, AudioEncoderConfig, AudioInfo, FfmpegAudioEncoder,
-    };
     pub use crate::domain::{
         AudioOutputFormat, AudioRenderEffectConfig, AudioTranscodeOptions, StreamConfig,
     };
     pub use crate::services::audio_mixdown::{
         AudioMixdown, MixdownConfig, MixdownElement, MixdownTrack,
+    };
+    pub use neko_engine_audio::{
+        mic_capture, AudioCodec, AudioEncoder, AudioEncoderConfig, AudioInfo, FfmpegAudioEncoder,
     };
 }
 
@@ -47,25 +47,25 @@ pub mod export {
 
 /// GPU and renderer compatibility contracts used by host adapters.
 pub mod gpu {
-    pub use crate::gpu::custom_shader_processor::ParamDef;
-    pub use crate::gpu::scene_renderer::{
+    pub use neko_engine_gpu::ParamDef;
+    pub use neko_engine_gpu::{GpuContext, Lut3DData, LutRegistry};
+    pub use neko_engine_gpu::{GpuInfo, GpuInfo as GpuDeviceInfo};
+    pub use neko_engine_scene_renderer::{
         CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
         DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneToneMapping,
         ViewportDebugView, ViewportDescriptor, ViewportPostProcess, ViewportRenderMode,
         ViewportWorkMode,
     };
-    pub use crate::gpu::{GpuContext, Lut3DData, LutRegistry};
-    pub use neko_engine_gpu::{GpuInfo, GpuInfo as GpuDeviceInfo};
 }
 
 /// JVI project loading contracts.
 pub mod jvi {
-    pub use crate::jvi::JviLoader;
+    pub use crate::domain::JviLoader;
 }
 
 /// Media helper contracts used by host controllers and N-API conversions.
 pub mod media {
-    pub use crate::media_service::{
+    pub use neko_runtime_media::{
         diff_audio_content_with_options, diff_media, diff_timeline_content_with_options,
         diff_video_content, encode_rgba_to_jpeg, AudioDiffOptions, ContentDiff, DiffCategory,
         ExtractedSubtitleTrack, MediaInfo, SubtitleCue, SubtitleStream, TimelineDiffOptions,

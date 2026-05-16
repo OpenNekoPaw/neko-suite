@@ -20,8 +20,11 @@ pub mod procedural_mesh;
 pub mod project;
 pub mod scene_control;
 pub mod systems;
+pub mod text_mesh;
 pub mod world;
 
+#[cfg(test)]
+mod architecture_tests;
 #[cfg(test)]
 mod contract_tests;
 
@@ -31,4 +34,5 @@ pub use character_baking::*;
 pub use components::*;
 pub use modeling_session::*;
 pub use scene_control::*;
+pub use text_mesh::*;
 pub use world::{BevySceneWorld, SceneWorld};

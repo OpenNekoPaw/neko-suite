@@ -6,6 +6,6 @@ This crate owns GPU scene rendering implementation that depends on `wgpu`,
 `neko-engine-gpu`, `neko-engine-types`, and pure `runtime-scene` data. It must
 not depend on `neko-engine-kernel` or host crates.
 
-During P2 migration, `neko_engine_kernel::gpu::scene_renderer::*` remains as a
-temporary compatibility path. P3 should move host-facing callers to facade or
-explicit contract paths and then narrow the kernel compatibility surface.
+Callers inside engine-kernel import scene renderer types directly from
+`neko_engine_scene_renderer`; host-facing compatibility belongs in
+`neko_engine_kernel::contracts::gpu` when needed.

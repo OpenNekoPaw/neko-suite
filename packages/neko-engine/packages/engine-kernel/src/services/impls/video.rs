@@ -3,24 +3,11 @@
 //! Provides video-related operations: probing, capture, extraction,
 //! streaming, transcoding, keyframe analysis, waveform generation, and proxy creation.
 
-use crate::audio::{
-    AudioDecoder, AudioEncoder, AudioEncoderConfig, FfmpegAudioDecoder, FfmpegAudioEncoder,
-    SampleFormat,
-};
-use crate::decoder::{global_pool, Decoder, HwAccelDecoder, HwAccelType};
-use crate::decoder::{IdrScanner, KeyframeInfo};
 use crate::domain::{
     CaptureOptions, ExtractOptions, ExtractType, FrameData, TaskHandle, TranscodeOptions,
 };
 use crate::encoder::{ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer};
 use crate::error::{Error, Result};
-#[cfg(target_os = "macos")]
-use crate::gpu::RgbaToNv12TextureConverter;
-use crate::gpu::{
-    ColorSpace, GpuContext, GpuPermit, Nv12Renderer, Nv12TextureImporter, PanoramicRenderOutput,
-    PanoramicRenderer, PipelinePriority,
-};
-use crate::media_service::{encode_rgba_to_jpeg, extract_subtitles, global_probe_cache};
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
     create_stream_channels, eof_idle_wait, pack_h264_frame, ActiveStreams, StreamLoopHandle,
@@ -29,11 +16,24 @@ use crate::services::impls::stream_loop::{
 use crate::services::pipeline_sink::PipelineSink;
 use crate::services::{IStreamPlayback, ITaskService, IVideoService, StreamSink};
 use async_trait::async_trait;
+use neko_engine_audio::{
+    AudioDecoder, AudioEncoder, AudioEncoderConfig, FfmpegAudioDecoder, FfmpegAudioEncoder,
+    SampleFormat,
+};
+use neko_engine_codec::decoder::{global_pool, Decoder, HwAccelDecoder, HwAccelType};
+use neko_engine_codec::decoder::{IdrScanner, KeyframeInfo};
+#[cfg(target_os = "macos")]
+use neko_engine_gpu::RgbaToNv12TextureConverter;
+use neko_engine_gpu::{
+    ColorSpace, GpuContext, GpuPermit, Nv12Renderer, Nv12TextureImporter, PipelinePriority,
+};
+use neko_engine_panoramic_renderer::{PanoramicRenderOutput, PanoramicRenderer};
 use neko_engine_types::{
     FrameFormat, GpuFrameLease, GpuOutputHandle, LoopRegion, MediaInfo, PipelineOutput, StreamId,
     VideoGpuFrame, VideoOutput, WaveformData,
 };
 use neko_runtime_media::PanoramaViewState;
+use neko_runtime_media::{encode_rgba_to_jpeg, extract_subtitles, global_probe_cache};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -598,9 +598,10 @@ impl IVideoService for VideoService {
 
                     let gpu_handle = match gpu_texture.handle {
                         #[cfg(target_os = "macos")]
-                        crate::decoder::GpuTextureHandle::VideoToolbox { io_surface, .. } => {
-                            io_surface
-                        }
+                        neko_engine_codec::decoder::GpuTextureHandle::VideoToolbox {
+                            io_surface,
+                            ..
+                        } => io_surface,
                         #[allow(unreachable_patterns)]
                         _ => {
                             tracing::warn!("Unsupported GPU texture handle for encoding");
@@ -1075,7 +1076,7 @@ impl IVideoService for VideoService {
                         Some(nv12_texture) => {
                             let gpu_handle = match nv12_texture.handle {
                                 #[cfg(target_os = "macos")]
-                                crate::decoder::GpuTextureHandle::VideoToolbox {
+                                neko_engine_codec::decoder::GpuTextureHandle::VideoToolbox {
                                     io_surface,
                                     ..
                                 } => io_surface,

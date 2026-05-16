@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::domain::Timeline;
 use crate::error::Result;
 use crate::export::GpuPipelineTiming;
-use crate::gpu::GpuContext;
+use neko_engine_gpu::GpuContext;
 use neko_engine_types::VideoGpuFrame;
 
 use super::pipeline::{PreviewFrame, PreviewPipeline, PreviewPipelineConfig};

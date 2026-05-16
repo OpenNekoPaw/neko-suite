@@ -7,7 +7,7 @@
 use crate::error::{Error, Result};
 use neko_engine_types::PipelineContractError;
 
-pub use crate::gpu::GpuReadbackTarget;
+pub use neko_engine_gpu::GpuReadbackTarget;
 pub use neko_engine_types::{
     AudioBuffer, AudioEncodedPacket, AudioOutput, GpuFrameLease, GpuOutputHandle, PipelineOutput,
     PreviewUnavailable, PreviewUnavailableReason, VideoEncodedPacket, VideoGpuFrame, VideoOutput,

@@ -3,7 +3,6 @@
 //! Spawns a blocking thread that runs `AudioMixdown::mix_buffer()` in a loop,
 //! packing output as PCM f32le frames and broadcasting via the stream infrastructure.
 
-use crate::audio::dsp::speed_resampler::SpeedResampler;
 use crate::domain::FrameData;
 use crate::error::Result;
 use crate::services::audio_mixdown::{AudioMixdown, MixdownConfig};
@@ -11,6 +10,7 @@ use crate::services::impls::stream_loop::{
     create_stream_channels, pack_pcm_f32le_stream_frame, ActiveStreams, MixdownUpdateAck,
     StreamLoopHandle, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
+use neko_engine_audio::dsp::speed_resampler::SpeedResampler;
 use neko_engine_types::StreamId;
 use std::sync::Arc;
 use std::time::Duration;

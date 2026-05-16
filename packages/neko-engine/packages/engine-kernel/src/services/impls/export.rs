@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use crate::error::Result;
 use crate::export::{ExportJobConfig, ExportProgress, ExportStartResponse, QueueEntry};
-use crate::gpu::GpuContext;
 use crate::services::IExportService;
 use async_trait::async_trait;
+use neko_engine_gpu::GpuContext;
 
 /// Export service implementation
 ///

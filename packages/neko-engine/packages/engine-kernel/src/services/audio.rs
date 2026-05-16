@@ -1,12 +1,12 @@
 //! Audio service trait
 
-use crate::audio::mic_capture::{
-    AudioInputDevice, MonitorData, RecordCaptureConfig, RecordingResult,
-};
 use crate::domain::{AudioTranscodeOptions, LoudnessAnalysis, SilenceAnalysis};
 use crate::error::Result;
 use crate::services::IStreamPlayback;
 use async_trait::async_trait;
+use neko_engine_audio::mic_capture::{
+    AudioInputDevice, MonitorData, RecordCaptureConfig, RecordingResult,
+};
 use neko_engine_types::{MediaInfo, StreamId, WaveformData};
 use std::path::Path;
 use tokio::sync::broadcast;

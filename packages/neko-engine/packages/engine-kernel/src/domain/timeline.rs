@@ -7,7 +7,7 @@ use neko_engine_types::{BlendMode, ElementEffect, Resolution, TrackType};
 use serde::{Deserialize, Serialize};
 
 use super::Transform;
-use crate::animation::{Easing, EasingType};
+use neko_engine_types::easing::{Easing, EasingType};
 
 mod apply;
 

@@ -233,6 +233,19 @@ impl From<neko_runtime_device::DeviceError> for Error {
     }
 }
 
+impl From<neko_runtime_media::MediaError> for Error {
+    fn from(e: neko_runtime_media::MediaError) -> Self {
+        match e {
+            neko_runtime_media::MediaError::FileNotFound(path) => Error::FileNotFound(path),
+            neko_runtime_media::MediaError::NotFound(message) => Error::NotFound(message),
+            neko_runtime_media::MediaError::Ffmpeg(message) => Error::Ffmpeg(message),
+            neko_runtime_media::MediaError::Image(message)
+            | neko_runtime_media::MediaError::Parse(message)
+            | neko_runtime_media::MediaError::Other(message) => Error::Other(message),
+        }
+    }
+}
+
 impl From<PipelineContractError> for Error {
     fn from(e: PipelineContractError) -> Self {
         match e {

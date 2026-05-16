@@ -1,7 +1,7 @@
 //! Effects service trait
 
 use crate::error::Result;
-use crate::gpu::custom_shader_processor::{ParamDef, PresetShaderMeta};
+use neko_engine_gpu::{ParamDef, PresetShaderMeta};
 
 /// Effects service interface
 ///

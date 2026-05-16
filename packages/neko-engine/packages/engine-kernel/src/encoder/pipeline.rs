@@ -30,7 +30,7 @@ use crate::encoder::{
     ContainerFormat, EncodedPacket, Encoder, EncoderConfig, FfmpegMuxer, HwAccelEncoder, Muxer,
 };
 use crate::error::{Error, Result};
-use crate::gpu::{CompositeLayer, GpuCompositor, GpuContext};
+use neko_engine_gpu::{CompositeLayer, GpuCompositor, GpuContext};
 use neko_engine_types::AudioEncoderConfig;
 
 // =============================================================================

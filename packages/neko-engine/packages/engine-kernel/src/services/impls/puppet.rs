@@ -7,16 +7,17 @@ use crate::encoder::{
     ContainerFormat, EncoderConfig, EncoderPreset, HwEncoderType, PipelineConfig, VideoCodec,
 };
 use crate::error::{Error, Result};
-#[cfg(target_os = "macos")]
-use crate::gpu::RgbaToNv12TextureConverter;
-use crate::gpu::{
-    GpuContext, GpuPermit, PipelinePriority, PuppetBlendMode, PuppetMeshInput, PuppetRenderOutput,
-    PuppetRenderRequest, PuppetRenderer, PuppetTextureAtlasInput,
-};
 use crate::services::impls::muxer_sink::MuxerSink;
 use crate::services::pipeline_sink::PipelineSink;
 use crate::services::puppet::IPuppetService;
 use base64::Engine;
+#[cfg(target_os = "macos")]
+use neko_engine_gpu::RgbaToNv12TextureConverter;
+use neko_engine_gpu::{GpuContext, GpuPermit, PipelinePriority};
+use neko_engine_puppet_renderer::{
+    PuppetBlendMode, PuppetMeshInput, PuppetRenderOutput, PuppetRenderRequest, PuppetRenderer,
+    PuppetTextureAtlasInput,
+};
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
     GpuFrameLease, GpuOutputHandle, PipelineOutput, PuppetCommand, PuppetCommandAck,

@@ -11,10 +11,10 @@
 
 use std::sync::Arc;
 
-use crate::audio::{AudioEncoder, FfmpegAudioEncoder};
 use crate::encoder::{AsyncExportPipeline, CompositedFrame, EncodedPacket, PipelineConfig};
 use crate::error::{Error, Result};
-use crate::gpu::{GpuBudgetController, GpuContext};
+use neko_engine_audio::{AudioEncoder, FfmpegAudioEncoder};
+use neko_engine_gpu::{GpuBudgetController, GpuContext};
 use neko_engine_types::{AudioEncoderConfig, GpuOutputHandle, SampleFormat};
 
 use super::audio_mixer::{AudioMixer, MixedAudioFrame};
@@ -197,7 +197,7 @@ impl ExportRenderBackendFactory for DefaultExportRenderBackendFactory {
             .budget_controller()
             .observe_submitted_work_done(
                 pipeline_id.to_string(),
-                crate::gpu::PipelinePriority::Export,
+                neko_engine_gpu::PipelinePriority::Export,
                 self.gpu_ctx.queue(),
             );
     }

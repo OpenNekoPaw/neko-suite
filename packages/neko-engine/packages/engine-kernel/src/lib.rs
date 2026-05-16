@@ -14,19 +14,12 @@
 #![deny(clippy::all)]
 #![allow(unexpected_cfgs)]
 
-pub(crate) mod animation;
-pub(crate) mod audio;
 pub mod contracts;
-pub(crate) mod decoder;
 pub(crate) mod domain;
 pub(crate) mod encoder;
 pub mod error;
 pub(crate) mod export;
 pub mod facade;
-pub(crate) mod generators;
-pub(crate) mod gpu;
-pub(crate) mod jvi;
-pub(crate) mod media_service;
 pub(crate) mod monitor;
 pub(crate) mod preview;
 pub(crate) mod services;
