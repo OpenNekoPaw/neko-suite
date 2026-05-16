@@ -2407,15 +2407,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "neko-engine-export-renderer"
-version = "0.1.0"
-dependencies = [
- "neko-engine-gpu",
- "neko-engine-types",
- "wgpu",
-]
-
-[[package]]
 name = "neko-engine-gpu"
 version = "0.1.0"
 dependencies = [
@@ -2467,7 +2458,6 @@ dependencies = [
  "metal",
  "neko-engine-audio",
  "neko-engine-codec",
- "neko-engine-export-renderer",
  "neko-engine-gpu",
  "neko-engine-panoramic-renderer",
  "neko-engine-puppet-renderer",
@@ -2601,9 +2591,9 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "image",
+ "neko-engine-kernel",
  "neko-engine-types",
  "neko-host-api",
- "neko-runtime-scene",
  "serde",
  "serde_json",
  "tempfile",

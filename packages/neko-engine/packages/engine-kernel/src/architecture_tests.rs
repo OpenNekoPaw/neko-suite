@@ -138,6 +138,12 @@ fn engine_gpu_sources_avoid_kernel_orchestration_and_renderer_companions() {
     ];
 
     for file in rust_files(&gpu_src) {
+        if file
+            .file_name()
+            .is_some_and(|name| name == "architecture_tests.rs")
+        {
+            continue;
+        }
         let source = fs::read_to_string(&file)
             .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
         for pattern in forbidden {
@@ -213,6 +219,55 @@ fn host_crates_use_kernel_facade_or_contract_paths() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn host_http_uses_kernel_scene_contracts_instead_of_runtime_scene_dependency() {
+    let packages_dir = packages_dir();
+    let manifest_path = packages_dir.join("host-http/Cargo.toml");
+    let manifest = fs::read_to_string(&manifest_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", manifest_path.display(), err));
+    assert!(
+        !manifest.contains("neko-runtime-scene"),
+        "{} must consume scene DTOs through engine-kernel contracts",
+        manifest_path.display()
+    );
+
+    let host_http_src = packages_dir.join("host-http/src");
+    for file in rust_files(&host_http_src) {
+        let source = fs::read_to_string(&file)
+            .unwrap_or_else(|err| panic!("failed to read {}: {}", file.display(), err));
+        assert!(
+            !source.contains("neko_runtime_scene"),
+            "{} must import scene DTOs from `neko_engine_kernel::contracts::scene`",
+            relative_to_packages(&file)
+        );
+    }
+
+    let contracts_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/contracts.rs");
+    let contracts = fs::read_to_string(&contracts_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", contracts_rs.display(), err));
+    let scene_section = contracts
+        .split("pub mod scene {")
+        .nth(1)
+        .expect("contracts.rs must expose a scene contract module");
+    for required in [
+        "SceneDelta",
+        "TransformUpdate",
+        "SceneCommandAck",
+        "SceneCommandAckStatus",
+        "SceneCommandEnvelope",
+        "SceneCommandEvent",
+        "SceneCommandPhase",
+        "TopologyOperation",
+        "VertexBrushPatchMetadata",
+    ] {
+        assert!(
+            scene_section.contains(required),
+            "contracts::scene must explicitly re-export `{}` for host-http",
+            required
+        );
     }
 }
 
@@ -390,7 +445,6 @@ fn renderer_companion_crates_exist_and_are_workspace_members() {
         "engine-scene-renderer",
         "engine-puppet-renderer",
         "engine-panoramic-renderer",
-        "engine-export-renderer",
     ] {
         assert!(
             packages_dir.join(crate_dir).exists(),
@@ -405,7 +459,6 @@ fn renderer_companion_crates_exist_and_are_workspace_members() {
         "\"packages/engine-scene-renderer\"",
         "\"packages/engine-puppet-renderer\"",
         "\"packages/engine-panoramic-renderer\"",
-        "\"packages/engine-export-renderer\"",
     ] {
         assert!(
             manifest.contains(member),
@@ -413,6 +466,15 @@ fn renderer_companion_crates_exist_and_are_workspace_members() {
             member
         );
     }
+
+    assert!(
+        !packages_dir.join("engine-export-renderer").exists(),
+        "thin export renderer support belongs in engine-gpu::export_support"
+    );
+    assert!(
+        !manifest.contains("\"packages/engine-export-renderer\""),
+        "workspace must not list removed thin export renderer crate"
+    );
 }
 
 #[test]
@@ -422,7 +484,6 @@ fn renderer_companion_manifests_avoid_kernel_and_host_crates() {
         "engine-scene-renderer",
         "engine-puppet-renderer",
         "engine-panoramic-renderer",
-        "engine-export-renderer",
     ] {
         let manifest_path = packages_dir.join(crate_dir).join("Cargo.toml");
         let manifest = fs::read_to_string(&manifest_path)

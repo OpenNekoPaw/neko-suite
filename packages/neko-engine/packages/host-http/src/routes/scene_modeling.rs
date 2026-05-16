@@ -5,8 +5,8 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
+use neko_engine_kernel::contracts::scene::VertexBrushPatchMetadata;
 use neko_host_api::EngineApi;
-use neko_runtime_scene::VertexBrushPatchMetadata;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;

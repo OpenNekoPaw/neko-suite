@@ -5,12 +5,11 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
-use neko_host_api::EngineApi;
-use neko_runtime_scene::world::SceneDelta;
-use neko_runtime_scene::{
+use neko_engine_kernel::contracts::scene::{
     SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope, SceneCommandEvent,
-    SceneCommandPhase, TopologyOperation,
+    SceneCommandPhase, SceneDelta, TopologyOperation,
 };
+use neko_host_api::EngineApi;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
@@ -1530,6 +1529,7 @@ impl QuatPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_kernel::contracts::scene::TransformUpdate;
 
     #[test]
     fn parses_hello_message() {
@@ -1624,7 +1624,7 @@ mod tests {
         let delta = SceneDelta {
             revision: 3,
             applied_seq: Some(9),
-            updated_transforms: vec![neko_runtime_scene::world::TransformUpdate {
+            updated_transforms: vec![TransformUpdate {
                 node_id: "node_1".to_string(),
                 position: [1.0, 0.0, 0.0],
                 rotation: [0.0, 0.0, 0.0, 1.0],

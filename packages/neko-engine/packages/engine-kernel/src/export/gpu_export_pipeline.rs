@@ -23,7 +23,6 @@ use crate::error::{Error, Result};
 use crate::services::{ISceneService, SceneService};
 use crate::telemetry::spans::span;
 use neko_engine_codec::decoder::{global_pool, HwAccelDecoder, HwAccelType};
-use neko_engine_export_renderer::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
 use neko_engine_gpu::{
     EffectDispatcher, GpuContext, GpuLayer, GpuLayerBuilder, GpuShapeElementData, GpuShapeFillData,
     GpuShapeGradientData, GpuShapeGradientStop, GpuShapeShadowData, GpuShapeStrokeData,
@@ -31,6 +30,7 @@ use neko_engine_gpu::{
     TextRenderer, TextureCompositeResult, TextureCompositor, TextureTransitionProcessor,
     Transform2D, TransitionParams, TransitionType,
 };
+use neko_engine_gpu::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
 use neko_engine_scene_renderer::CameraParams;
 use neko_engine_types::{BlendMode, GpuOutputHandle, TrackType};
 

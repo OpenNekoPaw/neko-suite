@@ -1,13 +1,14 @@
-//! Export render pipeline companion support.
+//! Export render pipeline GPU support.
 //!
-//! This crate owns GPU-rendering support types that do not require kernel job
-//! orchestration, service wiring, or sink ownership.
+//! This module owns reusable GPU export support types that do not require
+//! kernel job orchestration, service wiring, or sink ownership.
 
 #[cfg(test)]
 mod architecture_tests;
 
-use neko_engine_gpu::GpuContext;
 use neko_engine_types::GpuOutputHandle;
+
+use crate::GpuContext;
 
 /// Detailed timing breakdown for GPU pipeline stages.
 #[derive(Debug, Clone, Default)]

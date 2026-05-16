@@ -1,8 +1,8 @@
 //! GPU infrastructure for neko-engine.
 //!
 //! This crate owns reusable GPU context, resource, HAL, compositor, effect,
-//! and budget infrastructure. Domain-specific renderer companions remain in
-//! `engine-kernel` until they are extracted into their own companion crates.
+//! budget, and export support infrastructure. Domain-specific renderers live
+//! in companion crates that bridge runtime data to this GPU layer.
 
 #![deny(clippy::all)]
 #![allow(unexpected_cfgs)]
@@ -17,6 +17,7 @@ mod effect_dispatcher;
 mod effect_trait;
 mod encoder_bridge;
 pub mod error;
+pub mod export_support;
 mod gpu_layer;
 pub mod lut3d;
 mod mask_rasterizer;
@@ -66,6 +67,7 @@ pub use effect_trait::{
 };
 pub use encoder_bridge::{GpuBufferHandle, GpuBufferHandles, GpuEncoderFrame};
 pub use error::{GpuError, GpuResult};
+pub use export_support::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
 pub use gpu_layer::{GpuLayer, GpuLayerBuilder};
 pub use lut3d::{Lut3DData, LutRegistry};
 pub use mask_rasterizer::{GpuElementMask, GpuMaskBezierPoint, GpuMaskShape, MaskRasterizer};

@@ -24,8 +24,8 @@ pub use backend::{
     ExportRenderBackendFactory, ExportRenderedFrame,
 };
 pub use gpu_export_pipeline::GpuExportPipeline;
-pub use neko_engine_export_renderer::GpuPipelineTiming;
 pub use neko_engine_gpu::EffectDispatcher;
+pub use neko_engine_gpu::GpuPipelineTiming;
 pub use service::ExportService;
 pub use sink_factory::{DefaultExportSinkFactory, ExportSink, ExportSinkFactory};
 pub use types::*;

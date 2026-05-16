@@ -8,7 +8,6 @@ members = [
     "packages/engine-scene-renderer",
     "packages/engine-puppet-renderer",
     "packages/engine-panoramic-renderer",
-    "packages/engine-export-renderer",
     "packages/engine-kernel",
     "packages/host-api",
     "packages/host-http",
