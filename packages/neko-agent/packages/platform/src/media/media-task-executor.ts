@@ -31,6 +31,12 @@ import { getLogger } from '../utils/logger';
 import { resolveProvider } from '@neko/ai-sdk';
 import { generateImage, experimental_generateVideo, experimental_generateSpeech } from 'ai';
 import { materializeImageRequestFileUris } from './media-request-assets';
+import {
+  formatMediaGenerationErrorSummary,
+  getMediaGenerationHttpStatus,
+  summarizeMediaGenerationError,
+  type MediaGenerationErrorSummary,
+} from './media-generation-error';
 
 const logger = getLogger('MediaTaskExecutor');
 
@@ -448,16 +454,22 @@ export class MediaTaskExecutor {
 
       return null;
     } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
+      const errorSummary = summarizeMediaGenerationError(error);
+      const retryable = this.isRetryableError(error, errorSummary);
+      const rawMessage = formatMediaGenerationErrorSummary(errorSummary);
       const errorContext = `[${provider.type}/${model.name}] ${rawMessage}`;
-      logger.error('AI SDK generation failed', {
-        error,
-        provider: provider.type,
-        model: model.name,
+      logger.error(`AI SDK generation failed: ${errorContext}`, {
+        generationType,
+        providerId: provider.id,
+        providerType: provider.type,
+        modelId: model.id,
+        modelName: model.name,
+        retryable,
+        error: errorSummary,
       });
 
       // Determine if the error is retryable (network, rate limit, server errors)
-      if (this.isRetryableError(error)) {
+      if (retryable) {
         // Throw to let TaskManager's retry loop handle it
         throw new Error(errorContext);
       }
@@ -470,11 +482,14 @@ export class MediaTaskExecutor {
   /**
    * Check if an error is retryable (network, rate limit, server errors)
    */
-  private isRetryableError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-    const message = error.message.toLowerCase();
-    const name = error.name;
-    const status = getHttpStatus(error);
+  private isRetryableError(
+    error: unknown,
+    summary: MediaGenerationErrorSummary = summarizeMediaGenerationError(error),
+  ): boolean {
+    if (summary.isRetryable !== undefined) return summary.isRetryable;
+
+    const message = summary.message.toLowerCase();
+    const status = summary.status ?? getMediaGenerationHttpStatus(error);
 
     if (status !== undefined) {
       return status === 429 || (status >= 500 && status < 600);
@@ -671,33 +686,6 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new Error('Task aborted');
   }
-}
-
-function getHttpStatus(error: Error): number | undefined {
-  for (const key of ['statusCode', 'status', 'responseStatus']) {
-    const value = getObjectField(error, key);
-    if (typeof value === 'number' && Number.isInteger(value)) {
-      return value;
-    }
-  }
-  const response = getObjectField(error, 'response');
-  if (isRecord(response)) {
-    const status = response['status'];
-    if (typeof status === 'number' && Number.isInteger(status)) {
-      return status;
-    }
-  }
-  return undefined;
-}
-
-function getObjectField(value: object, key: string): unknown {
-  return Object.prototype.hasOwnProperty.call(value, key)
-    ? Object.getOwnPropertyDescriptor(value, key)?.value
-    : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
