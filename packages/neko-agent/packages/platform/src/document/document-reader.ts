@@ -75,21 +75,40 @@ export function estimateSlideCount(text: string): number {
   return text.split('\n\n').filter((section) => section.trim().length > 0).length;
 }
 
-interface PdfParseResult {
-  text: string;
-  numpages: number;
-  info?: Record<string, string>;
+interface PdfTextResult {
+  text?: string;
+  total?: number;
 }
 
-type PdfParse = (buffer: Uint8Array) => Promise<PdfParseResult>;
+interface PdfInfoResult {
+  total?: number;
+  info?: Record<string, unknown>;
+}
+
+interface PdfParserInstance {
+  getText(): Promise<PdfTextResult>;
+  getInfo(): Promise<PdfInfoResult>;
+  destroy(): Promise<void>;
+}
+
+interface PdfParserConstructor {
+  new (options: { data: Uint8Array }): PdfParserInstance;
+}
+
+type PdfReader = (buffer: Uint8Array) => Promise<DocumentContent>;
 
 interface MammothModule {
   extractRawText(options: { path: string }): Promise<{ value: string }>;
 }
 
-interface OfficeParserModule {
-  parseOfficeAsync(filePath: string): Promise<string>;
+interface OfficeParserAst {
+  type?: string;
+  metadata?: Record<string, unknown>;
+  toText(): string;
 }
+
+type OfficeReader = (filePath: string) => Promise<DocumentContent>;
+type UnknownFunction = (...args: unknown[]) => unknown;
 
 interface EpubChapter {
   id: string;
@@ -289,19 +308,14 @@ export class DocumentReaderRuntime implements IDocumentReader {
 
   private async readPdf(filePath: string): Promise<DocumentContent> {
     try {
-      const pdfParse = await this.deps.loadModule<PdfParse>('pdf-parse');
-      if (!pdfParse) {
+      const pdfReader = resolvePdfReader(await this.deps.loadModule<unknown>('pdf-parse'));
+      if (!pdfReader) {
         throw new Error(
           'pdf-parse package not installed. Run: pnpm add pdf-parse -F @neko-agent/extension',
         );
       }
 
-      const result = await pdfParse(await this.deps.readBinaryFile(filePath));
-      return {
-        text: result.text,
-        pageCount: result.numpages,
-        metadata: result.info,
-      };
+      return await pdfReader(await this.deps.readBinaryFile(filePath));
     } catch (error) {
       if (error instanceof Error && error.message.includes('pdf-parse')) {
         throw error;
@@ -337,23 +351,14 @@ export class DocumentReaderRuntime implements IDocumentReader {
 
   private async readPptx(filePath: string): Promise<DocumentContent> {
     try {
-      const officeParser = await this.deps.loadModule<OfficeParserModule>('officeparser');
-      if (!officeParser) {
+      const officeReader = resolveOfficeReader(await this.deps.loadModule<unknown>('officeparser'));
+      if (!officeReader) {
         throw new Error(
           'officeparser package not installed. Run: pnpm add officeparser -F @neko-agent/extension',
         );
       }
 
-      const text = await officeParser.parseOfficeAsync(filePath);
-      const slideCount = estimateSlideCount(text);
-      return {
-        text,
-        pageCount: slideCount,
-        metadata: {
-          format: 'pptx',
-          slideCount,
-        },
-      };
+      return await officeReader(filePath);
     } catch (error) {
       if (error instanceof Error && error.message.includes('officeparser')) {
         throw error;
@@ -367,7 +372,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
 
   private async readEpub(filePath: string): Promise<DocumentContent> {
     try {
-      const EPub = await this.deps.loadModule<EpubConstructor>('epub2');
+      const EPub = resolveEpubConstructor(await this.deps.loadModule<unknown>('epub2'));
       if (!EPub) {
         throw new Error(
           'epub2 package not installed. Run: pnpm add epub2 -F @neko-agent/extension',
@@ -671,6 +676,131 @@ function extractFDXScenes(doc: unknown): Array<{ text: string }> {
   return scenes.length > 0 ? scenes : [{ text: 'Failed to parse FDX content' }];
 }
 
+function resolvePdfReader(moduleValue: unknown): PdfReader | null {
+  const modernConstructor = readFunctionProperty(moduleValue, 'PDFParse');
+  if (modernConstructor) {
+    return async (buffer) => {
+      const PdfParser = modernConstructor as unknown as PdfParserConstructor;
+      const parser = new PdfParser({ data: buffer });
+      try {
+        const textResult = await parser.getText();
+        const infoResult = await readPdfInfo(parser);
+        const metadata = isRecord(infoResult?.info) ? infoResult.info : undefined;
+        const pageCount = readNumber(infoResult?.total) ?? readNumber(textResult.total);
+
+        return {
+          text: typeof textResult.text === 'string' ? textResult.text : '',
+          ...(pageCount !== undefined ? { pageCount } : {}),
+          ...(metadata ? { metadata } : {}),
+        };
+      } finally {
+        await parser.destroy().catch(() => undefined);
+      }
+    };
+  }
+
+  const legacyParser =
+    typeof moduleValue === 'function'
+      ? moduleValue
+      : isRecord(moduleValue) && typeof moduleValue['default'] === 'function'
+        ? moduleValue['default']
+        : null;
+
+  if (!legacyParser) {
+    return null;
+  }
+
+  return async (buffer) => {
+    const result = await legacyParser(buffer);
+    const resultRecord = isRecord(result) ? result : {};
+    const metadata = isRecord(resultRecord['info']) ? resultRecord['info'] : undefined;
+    const pageCount = readNumber(resultRecord['numpages']);
+
+    return {
+      text: typeof resultRecord['text'] === 'string' ? resultRecord['text'] : '',
+      ...(pageCount !== undefined ? { pageCount } : {}),
+      ...(metadata ? { metadata } : {}),
+    };
+  };
+}
+
+async function readPdfInfo(parser: PdfParserInstance): Promise<PdfInfoResult | undefined> {
+  try {
+    return await parser.getInfo();
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveOfficeReader(moduleValue: unknown): OfficeReader | null {
+  const legacyParser = readFunctionProperty(moduleValue, 'parseOfficeAsync');
+  if (legacyParser) {
+    return async (filePath) => {
+      const text = String(await legacyParser(filePath));
+      const slideCount = estimateSlideCount(text);
+      return {
+        text,
+        pageCount: slideCount,
+        metadata: {
+          format: readDocumentFormat(filePath, 'pptx'),
+          slideCount,
+        },
+      };
+    };
+  }
+
+  const parser =
+    readFunctionProperty(moduleValue, 'parseOffice') ??
+    readNestedFunctionProperty(moduleValue, 'OfficeParser', 'parseOffice') ??
+    readNestedFunctionProperty(moduleValue, 'default', 'parseOffice') ??
+    readCallableDefault(moduleValue);
+
+  if (!parser) {
+    return null;
+  }
+
+  return async (filePath) => {
+    const ast = await parser(filePath);
+    return normalizeOfficeAst(ast, filePath);
+  };
+}
+
+function normalizeOfficeAst(value: unknown, filePath: string): DocumentContent {
+  if (!isOfficeParserAst(value)) {
+    const text = typeof value === 'string' ? value : String(value ?? '');
+    const slideCount = estimateSlideCount(text);
+    return {
+      text,
+      pageCount: slideCount,
+      metadata: {
+        format: readDocumentFormat(filePath, 'pptx'),
+        slideCount,
+      },
+    };
+  }
+
+  const text = value.toText();
+  const slideCount = estimateSlideCount(text);
+  return {
+    text,
+    pageCount: slideCount,
+    metadata: {
+      ...(value.metadata ?? {}),
+      format: value.type ?? readDocumentFormat(filePath, 'pptx'),
+      slideCount,
+    },
+  };
+}
+
+function resolveEpubConstructor(moduleValue: unknown): EpubConstructor | null {
+  const constructorValue =
+    typeof moduleValue === 'function'
+      ? moduleValue
+      : (readFunctionProperty(moduleValue, 'EPub') ?? readFunctionProperty(moduleValue, 'default'));
+
+  return constructorValue ? (constructorValue as EpubConstructor) : null;
+}
+
 function readNestedValue(value: unknown, pathSegments: string[]): unknown {
   let current = value;
   for (const segment of pathSegments) {
@@ -682,6 +812,57 @@ function readNestedValue(value: unknown, pathSegments: string[]): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isOfficeParserAst(value: unknown): value is OfficeParserAst {
+  return isRecord(value) && typeof value['toText'] === 'function';
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readDocumentFormat(filePath: string, fallback: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  return ext.length > 1 ? ext.slice(1) : fallback;
+}
+
+function readFunctionProperty(value: unknown, property: string): UnknownFunction | null {
+  if (!hasPropertyBag(value)) {
+    return null;
+  }
+
+  const propertyValue = value[property];
+  return typeof propertyValue === 'function' ? (propertyValue as UnknownFunction) : null;
+}
+
+function readNestedFunctionProperty(
+  value: unknown,
+  parentProperty: string,
+  childProperty: string,
+): UnknownFunction | null {
+  if (!hasPropertyBag(value)) {
+    return null;
+  }
+
+  return readFunctionProperty(value[parentProperty], childProperty);
+}
+
+function readCallableDefault(value: unknown): UnknownFunction | null {
+  if (!hasPropertyBag(value)) {
+    return null;
+  }
+
+  const defaultValue = value['default'];
+  if (typeof defaultValue !== 'function' || readFunctionProperty(defaultValue, 'parseOffice')) {
+    return null;
+  }
+
+  return defaultValue as UnknownFunction;
+}
+
+function hasPropertyBag(value: unknown): value is Record<string, unknown> {
+  return (typeof value === 'object' || typeof value === 'function') && value !== null;
 }
 
 export function createDocumentReaderRuntime(deps: DocumentReaderRuntimeDeps): IDocumentReader {

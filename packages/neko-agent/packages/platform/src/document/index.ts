@@ -1,4 +1,17 @@
 export {
+  createDocumentAccessService,
+  createManifestBatchCursor,
+  detectDocumentFormat,
+  DocumentAccessError,
+  DocumentAccessService,
+  DEFAULT_DOCUMENT_BATCH_MAX_CHARS,
+  type DocumentAccessErrorCode,
+  type DocumentAccessServiceDeps,
+  type DocumentLowLevelAccess,
+  type IDocumentAccessService,
+} from './document-access-service';
+
+export {
   DocumentReaderRuntime,
   createDocumentReaderRuntime,
   estimateSlideCount,

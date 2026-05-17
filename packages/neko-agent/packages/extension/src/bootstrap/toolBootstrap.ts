@@ -7,6 +7,7 @@
  *
  * This module now only registers:
  * - SkillProvider (meta-tool: enumerates skills from all installed extensions)
+ * - ReadDocument (agent-owned document reader bridge)
  *
  * Migrated sub-packages (2026-04-08):
  * - neko-cut → timeline tools + GenerateVideoForClip
@@ -25,26 +26,49 @@ import {
   type PluginSkillCatalogueEntry,
   type PluginSkillCatalogueSource,
 } from '@neko/agent/tools';
-import { type ISkillProvider } from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, type ISkillProvider } from '@neko/shared';
 import type { Platform } from '@neko/platform';
-import type { Tool } from '@neko/shared';
+import type { IToolGroupRegistry, Tool } from '@neko/shared';
+import { createDocumentReaderService } from '../services/DocumentReaderService';
+import { getEngineClientProvider } from '../services/engineClientProvider';
+import { createReadDocumentTool } from '../tools/readDocumentTool';
 
 /**
  * Register neko-agent's own meta-tools.
  * Domain tools are now registered by sub-packages via CapabilityProvider.
  */
 export function registerExtensionTools(
-  toolRegistry: { register: (tool: Tool) => void },
+  toolRegistry: { register: (tool: Tool) => void; get?: (name: string) => Tool | undefined },
   _platform: Platform,
 ): void {
   const tools = createPluginSkillDiscoveryTools(
     createVSCodePluginSkillCatalogueSource(),
     getRootLogger().child('PluginSkillDiscovery'),
   );
+  tools.push(
+    createReadDocumentTool({ reader: createDocumentReaderService(getEngineClientProvider()) }),
+  );
   for (const tool of tools) {
-    toolRegistry.register(tool);
+    if (!toolRegistry.get?.(tool.name)) {
+      toolRegistry.register(tool);
+    }
   }
-  getRootLogger().info(`Registered ${tools.length} meta-tool(s)`);
+  getRootLogger().info(`Registered ${tools.length} extension tool(s)`);
+}
+
+export function registerExtensionToolGroups(toolGroupRegistry: IToolGroupRegistry): void {
+  toolGroupRegistry.register({
+    name: 'document-reading',
+    description:
+      'Document reading tools for EPUB, PDF, DOC/DOCX, PPT/PPTX, Excel, text, Final Draft, and comic archives',
+    tools: [TOOL_NAMES_SYSTEM.READ_DOCUMENT],
+    alwaysActive: true,
+    priority: 100,
+    loadingTier: 'resident',
+    source: 'builtin',
+    enabled: true,
+    icon: '📄',
+  });
 }
 
 /**

@@ -159,6 +159,10 @@ describe('DocumentReaderService', () => {
 
     it('should throw error when required package is missing', async () => {
       vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+      vi.spyOn(
+        service as unknown as { tryImport(packageName: string): Promise<unknown | null> },
+        'tryImport',
+      ).mockResolvedValue(null);
 
       await expect(service.read('/path/to/file.pdf')).rejects.toThrow(
         'pdf-parse package not installed',
@@ -292,6 +296,10 @@ describe('DocumentReaderService', () => {
   describe('readPptx', () => {
     it('should handle PPTX files without officeparser', async () => {
       vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
+      vi.spyOn(
+        service as unknown as { tryImport(packageName: string): Promise<unknown | null> },
+        'tryImport',
+      ).mockResolvedValue(null);
 
       await expect(service.read('/path/to/presentation.pptx')).rejects.toThrow(
         'officeparser package not installed',

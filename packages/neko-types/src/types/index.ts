@@ -214,6 +214,9 @@ export * from './generation';
 // Agent context types (unified sendToAgent payload)
 export * from './agent-context';
 
+// Document reading contracts (Preview ↔ Agent ↔ Platform)
+export * from './document-reading';
+
 // Loading tier types (tiered lazy loading for tools, skills, commands)
 export * from './loading-tier';
 

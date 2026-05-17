@@ -156,15 +156,25 @@ export {
 // =============================================================================
 
 export {
+  createDocumentAccessService,
+  createManifestBatchCursor,
+  detectDocumentFormat,
+  DocumentAccessError,
+  DocumentAccessService,
+  DEFAULT_DOCUMENT_BATCH_MAX_CHARS,
   DocumentReaderRuntime,
   createDocumentReaderRuntime,
   estimateSlideCount,
   isDocumentUrl,
   isSupportedDocumentPath,
   stripHtmlToText,
+  type DocumentAccessErrorCode,
+  type DocumentAccessServiceDeps,
   type DocumentContent,
+  type DocumentLowLevelAccess,
   type DocumentReaderLogger,
   type DocumentReaderRuntimeDeps,
+  type IDocumentAccessService,
   type IDocumentReader,
 } from './document';
 

@@ -199,6 +199,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
 export const CORE_TOOLS = [
   // core-system (resident)
   'Read',
+  'ReadDocument',
   'ListDirectory',
   'Glob',
   'Grep',
