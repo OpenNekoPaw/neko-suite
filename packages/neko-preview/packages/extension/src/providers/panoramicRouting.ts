@@ -8,6 +8,7 @@ import {
   PANORAMIC_IMAGE_VIEW_TYPE,
   PANORAMIC_VIDEO_VIEW_TYPE,
 } from '@neko/shared';
+import { previewFileServer } from './document/PreviewFileServer';
 
 const GPANO_METADATA_PREFIX_BYTES = 256 * 1024;
 
@@ -96,8 +97,8 @@ function shouldProbeImageMetadata(filePath: string): boolean {
 
 async function readMetadataPrefix(uri: vscode.Uri): Promise<string | undefined> {
   try {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    return Buffer.from(bytes.slice(0, GPANO_METADATA_PREFIX_BYTES)).toString('utf8');
+    const bytes = await previewFileServer.readRange(uri.fsPath, 0, GPANO_METADATA_PREFIX_BYTES - 1);
+    return Buffer.from(bytes).toString('utf8');
   } catch {
     return undefined;
   }

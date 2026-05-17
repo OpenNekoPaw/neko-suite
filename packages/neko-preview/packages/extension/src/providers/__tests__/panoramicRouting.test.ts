@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { readRange } = vi.hoisted(() => ({
+  readRange: vi.fn(),
+}));
+
 vi.mock('vscode', () => ({
   commands: {
     executeCommand: vi.fn(),
   },
-  workspace: {
-    fs: {
-      readFile: vi.fn(),
-    },
-  },
+}));
+
+vi.mock('../document/PreviewFileServer', () => ({
+  previewFileServer: { readRange },
 }));
 
 import * as vscode from 'vscode';
@@ -25,7 +28,7 @@ import {
 describe('panoramic image routing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(new Error('not mocked') as never);
+    readRange.mockRejectedValue(new Error('not mocked'));
   });
 
   it('routes high-confidence HDR/EXR and filename hints', () => {
@@ -46,10 +49,10 @@ describe('panoramic image routing', () => {
   });
 
   it('routes GPano metadata as a high-confidence image without filename hints', async () => {
-    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
-      Buffer.from(
+    readRange.mockResolvedValue(
+      new TextEncoder().encode(
         '<x:xmpmeta><rdf:Description GPano:ProjectionType="equirectangular" /></x:xmpmeta>',
-      ) as never,
+      ).buffer,
     );
     const uri = { fsPath: '/assets/mobile-photo.jpg' } as vscode.Uri;
 
@@ -57,6 +60,7 @@ describe('panoramic image routing', () => {
       confidence: 'high',
       signal: 'gpano-metadata',
     });
+    expect(readRange).toHaveBeenCalledWith('/assets/mobile-photo.jpg', 0, 256 * 1024 - 1);
   });
 
   it('opens the manifest-backed panoramic custom editor', async () => {
@@ -95,7 +99,7 @@ describe('panoramic image routing', () => {
     await expect(
       openBestPanoramicPreview({ fsPath: '/assets/studio_360.jpg' } as vscode.Uri),
     ).resolves.toBe(true);
-    vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(new Error('not mocked') as never);
+    readRange.mockRejectedValue(new Error('not mocked'));
     await expect(
       openBestPanoramicPreview({ fsPath: '/assets/ordinary.jpg' } as vscode.Uri),
     ).resolves.toBe(false);
