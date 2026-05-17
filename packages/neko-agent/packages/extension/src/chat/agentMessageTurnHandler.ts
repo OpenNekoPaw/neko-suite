@@ -47,6 +47,7 @@ import { MediaTurnBridge } from '../services/mediaTurnBridge';
 import type { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
 import { createVSCodeWorkspaceFileReader } from '../services/workspaceFileReader';
 import { searchVSCodeProjectFiles } from '../services/workspaceProjectSearch';
+import { searchProjectMentionCandidates } from '../services/projectMentionSearch';
 import { AgentTurnBridge } from './message/agentTurnBridge';
 
 const logger = getLogger('AgentMessageTurnHandler');
@@ -281,6 +282,7 @@ export class AgentMessageTurnHandler {
       conversationId,
       filter,
       searchProjectFiles: searchVSCodeProjectFiles,
+      getMentionCandidates: (plan) => searchProjectMentionCandidates(plan, { webview }),
       getCanvasNodes: (id) => getCanvasSelection(id),
       getCharacters: async () => {
         try {

@@ -6,6 +6,8 @@ import type {
   MediaModelCategory,
   ModelRef,
   ProjectFileMentionInfo,
+  ProjectMentionMediaType,
+  ProjectMentionSource,
   SsoSessionChangedMessage,
 } from './webview-protocol';
 
@@ -70,7 +72,14 @@ export interface SsoErrorProjection {
 
 export type SsoSessionMessagePayload = SsoSessionChangedMessage['session'];
 
-export type ProjectMentionItemKind = 'file' | 'canvas-node' | 'character' | 'scene';
+export type ProjectMentionItemKind =
+  | 'file'
+  | 'canvas-node'
+  | 'character'
+  | 'scene'
+  | 'asset'
+  | 'media'
+  | 'entity';
 
 export interface ProjectMentionItem {
   id: string;
@@ -78,6 +87,12 @@ export interface ProjectMentionItem {
   label: string;
   description?: string;
   filePath?: string;
+  icon?: string;
+  source?: ProjectMentionSource;
+  mediaType?: ProjectMentionMediaType;
+  entityType?: string;
+  navigationData?: Record<string, string>;
+  thumbnailUri?: string;
   contextPayload?: AgentContextPayload;
 }
 

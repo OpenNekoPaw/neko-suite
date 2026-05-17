@@ -48,6 +48,29 @@ import type {
 } from './sketch-ai';
 
 // =============================================================================
+// NekoEngine API
+// =============================================================================
+
+export type NekoEngineRuntimeState = 'idle' | 'starting' | 'ready' | 'error';
+
+export interface NekoEngineConnectionEndpoint {
+  /** Host clients should use for local HTTP/WebSocket checks. */
+  readonly host: string;
+  /** Bound HTTP/WebSocket frame server port. */
+  readonly port: number;
+  /** Human-readable endpoint, e.g. "127.0.0.1:43123". */
+  readonly address: string;
+  /** Base HTTP URL for diagnostics and preview clients. */
+  readonly url: string;
+}
+
+export interface NekoEngineRuntimeStatus {
+  readonly state: NekoEngineRuntimeState;
+  readonly endpoint?: NekoEngineConnectionEndpoint;
+  readonly health?: 'unknown' | 'healthy' | 'unhealthy';
+}
+
+// =============================================================================
 // NekoCut API
 // =============================================================================
 
@@ -757,6 +780,22 @@ export const NEKO_EXTENSION_IDS = {
 // =============================================================================
 
 /**
+ * Localized display strings for a skill.
+ *
+ * Extension providers keep `name` / `description` as the fallback contract and
+ * add locale overrides only where they have translated text. Locale keys follow
+ * VSCode language ids such as `en`, `en-us`, `zh-cn`, or `zh-hans`.
+ */
+export interface SkillLocalizedText {
+  /** Short display name shown in the skill browser */
+  readonly name?: string;
+  /** One-sentence description for UI display and intent matching */
+  readonly description?: string;
+  /** Optional localized tags for UI/filter labels */
+  readonly tags?: readonly string[];
+}
+
+/**
  * A single capability advertised by a plugin for discovery in the agent UI.
  *
  * Skills appear in the agent's skill browser and can be invoked directly by
@@ -772,6 +811,11 @@ export interface SkillDef {
   readonly description: string;
   /** Optional emoji or codicon name (\$(symbol-name)) for the skill icon */
   readonly icon?: string;
+  /**
+   * Optional localized display strings keyed by VSCode language id.
+   * Consumers should fall back to `name` / `description` when no locale matches.
+   */
+  readonly locales?: Readonly<Record<string, SkillLocalizedText>>;
   /**
    * VSCode command to invoke when the skill is selected.
    * The agent passes `{ intent?: string }` as the first argument.

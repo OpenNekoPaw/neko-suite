@@ -198,6 +198,9 @@ export function projectProjectFilesMessage(message: ProjectFilesMessage): Projec
     label: file.name,
     description: file.path,
     filePath: file.path,
+    ...(file.icon ? { icon: file.icon } : {}),
+    ...(file.source ? { source: file.source } : {}),
+    ...(file.mediaType ? { mediaType: file.mediaType } : {}),
   }));
 
   const extraMentions = (message.mentionExtras ?? [])
@@ -206,15 +209,14 @@ export function projectProjectFilesMessage(message: ProjectFilesMessage): Projec
       id: `${extra.type}:${extra.id}`,
       kind: extra.type,
       label: extra.label,
-      description:
-        extra.type === 'canvas-node'
-          ? 'Canvas node'
-          : extra.type === 'character'
-            ? 'Character'
-            : extra.type === 'scene'
-              ? 'Scene'
-              : extra.type,
+      description: describeMentionExtra(extra),
       contextPayload: toAgentContextPayload(extra),
+      ...(extra.icon ? { icon: extra.icon } : {}),
+      ...(extra.source ? { source: extra.source } : {}),
+      ...(extra.filePath ? { filePath: extra.filePath } : {}),
+      ...(extra.mediaType ? { mediaType: extra.mediaType } : {}),
+      ...(extra.entityType ? { entityType: extra.entityType } : {}),
+      ...(extra.navigationData ? { navigationData: extra.navigationData } : {}),
       ...(extra.thumbnailUri ? { thumbnailUri: extra.thumbnailUri } : {}),
     }));
 
@@ -389,8 +391,28 @@ function toAgentContextPayload(extra: ProjectMentionExtra): AgentContextPayload 
       id: extra.id,
       label: extra.label,
       summary: extra.summary,
+      ...(extra.source ? { source: extra.source } : {}),
+      ...(extra.filePath ? { filePath: extra.filePath } : {}),
+      ...(extra.mediaType ? { mediaType: extra.mediaType } : {}),
+      ...(extra.entityType ? { entityType: extra.entityType } : {}),
+      ...(extra.navigationData ? { navigationData: extra.navigationData } : {}),
+      ...(extra.thumbnailUri ? { thumbnailUri: extra.thumbnailUri } : {}),
     },
   };
+}
+
+function describeMentionExtra(extra: ProjectMentionExtra): string {
+  if (extra.type === 'canvas-node') return 'Canvas node';
+  if (extra.type === 'character') return 'Character';
+  if (extra.type === 'scene') return 'Scene';
+  if (extra.type === 'asset') return extra.entityType ? `Asset · ${extra.entityType}` : 'Asset';
+  if (extra.type === 'media') {
+    return extra.mediaType ? `Media · ${extra.mediaType}` : 'Media';
+  }
+  if (extra.type === 'entity') {
+    return extra.entityType ? `Entity · ${extra.entityType}` : 'Entity';
+  }
+  return extra.type;
 }
 
 function isProviderView(value: unknown): value is SettingsState['providers'][number] {
@@ -440,7 +462,9 @@ function isProjectFileMentionInfo(value: unknown): value is ProjectFileMentionIn
     readString(record, 'path') &&
     readString(record, 'name') &&
     (record.type === 'file' || record.type === 'folder') &&
-    (record.icon === undefined || typeof record.icon === 'string'),
+    (record.icon === undefined || typeof record.icon === 'string') &&
+    (record.source === undefined || isProjectMentionSource(record.source)) &&
+    (record.mediaType === undefined || isProjectMentionMediaType(record.mediaType)),
   );
 }
 
@@ -448,11 +472,56 @@ function isProjectMentionExtra(value: unknown): value is ProjectMentionExtra {
   const record = asRecord(value);
   return Boolean(
     record &&
-    (record.type === 'canvas-node' || record.type === 'character' || record.type === 'scene') &&
+    isProjectMentionExtraType(record.type) &&
     readString(record, 'id') &&
     readString(record, 'label') &&
-    readString(record, 'summary'),
+    readString(record, 'summary') &&
+    (record.thumbnailUri === undefined || typeof record.thumbnailUri === 'string') &&
+    (record.source === undefined || isProjectMentionSource(record.source)) &&
+    (record.icon === undefined || typeof record.icon === 'string') &&
+    (record.filePath === undefined || typeof record.filePath === 'string') &&
+    (record.mediaType === undefined || isProjectMentionMediaType(record.mediaType)) &&
+    (record.entityType === undefined || typeof record.entityType === 'string') &&
+    (record.navigationData === undefined || isStringRecord(record.navigationData)),
   );
+}
+
+function isProjectMentionExtraType(value: unknown): value is ProjectMentionExtra['type'] {
+  return (
+    value === 'canvas-node' ||
+    value === 'character' ||
+    value === 'scene' ||
+    value === 'asset' ||
+    value === 'media' ||
+    value === 'entity'
+  );
+}
+
+function isProjectMentionSource(value: unknown): value is ProjectMentionExtra['source'] {
+  return (
+    value === 'workspace' ||
+    value === 'asset-library' ||
+    value === 'media-library' ||
+    value === 'entity-graph' ||
+    value === 'story' ||
+    value === 'canvas'
+  );
+}
+
+function isProjectMentionMediaType(value: unknown): value is ProjectMentionExtra['mediaType'] {
+  return (
+    value === 'video' ||
+    value === 'audio' ||
+    value === 'image' ||
+    value === 'sequence' ||
+    value === 'text' ||
+    value === 'document'
+  );
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  const record = asRecord(value);
+  return Boolean(record && Object.values(record).every((item) => typeof item === 'string'));
 }
 
 function isPluginSlashCommandProjection(value: unknown): value is PluginSlashCommandProjection {

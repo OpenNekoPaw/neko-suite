@@ -40,6 +40,8 @@ export const chat = {
   'chat.input.attach': '添加附件',
   'chat.input.attachFile': '添加附件',
   'chat.input.fileSearchHint': '输入以搜索项目文件',
+  'chat.input.mentionHint': '输入以搜索文件、素材、媒体或实体',
+  'chat.input.mentionSearching': '"{filter}"',
   'chat.input.noMatchingFiles': '未找到匹配的文件',
   'chat.input.startTypingToSearch': '开始输入以搜索文件...',
   'chat.input.filesFound': '"{filter}" - {count} 个文件',

@@ -334,6 +334,7 @@ export {
   type AgentProjectFileSearchPlan,
   type AgentProjectFileSearchPlanInput,
   type AgentProjectFilesProjectionInput,
+  type AgentProjectMentionCandidate,
   type AgentProcessedReferencedMedia,
   type AgentReferencedMediaProcessor,
   type AgentReferencedFileContent,

@@ -252,6 +252,8 @@ export type {
   ProjectFilesMessage,
   ProjectMentionExtra,
   ProjectMentionExtraType,
+  ProjectMentionMediaType,
+  ProjectMentionSource,
   ProtocolModelCategory,
   RuntimeMediaModelSelections,
   SearchProjectFilesWebviewMessage,

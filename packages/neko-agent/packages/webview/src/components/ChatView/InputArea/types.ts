@@ -81,10 +81,19 @@ export interface ProjectFile {
   name: string;
   type: 'file' | 'folder';
   icon?: string;
+  source?: 'workspace' | 'asset-library' | 'media-library' | 'entity-graph' | 'story' | 'canvas';
+  mediaType?: 'video' | 'audio' | 'image' | 'sequence' | 'text' | 'document';
 }
 
 // @mention item kinds
-export type MentionItemKind = 'file' | 'canvas-node' | 'character' | 'scene';
+export type MentionItemKind =
+  | 'file'
+  | 'canvas-node'
+  | 'character'
+  | 'scene'
+  | 'asset'
+  | 'media'
+  | 'entity';
 
 /**
  * Unified item shown in the @mention popup.
@@ -100,6 +109,16 @@ export interface MentionItem {
   description?: string;
   /** For files: relative workspace path to insert */
   filePath?: string;
+  /** Optional icon supplied by host protocol */
+  icon?: string;
+  /** Source index that produced this candidate */
+  source?: ProjectFile['source'];
+  /** Media type, when known */
+  mediaType?: ProjectFile['mediaType'];
+  /** Entity category or graph node kind */
+  entityType?: string;
+  /** Host-side navigation metadata */
+  navigationData?: Record<string, string>;
   /** For canvas-node / character / scene: payload for AgentContextChip */
   contextPayload?: import('@neko/shared').AgentContextPayload;
   /** Optional thumbnail for visual enrichment (webview-safe URI or base64) */

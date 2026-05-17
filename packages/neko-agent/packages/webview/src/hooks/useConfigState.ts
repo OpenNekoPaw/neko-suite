@@ -16,6 +16,8 @@ export interface ProjectFileInfo {
   name: string;
   type: 'file' | 'folder';
   icon?: string;
+  source?: 'workspace' | 'asset-library' | 'media-library' | 'entity-graph' | 'story' | 'canvas';
+  mediaType?: 'video' | 'audio' | 'image' | 'sequence' | 'text' | 'document';
 }
 
 /**

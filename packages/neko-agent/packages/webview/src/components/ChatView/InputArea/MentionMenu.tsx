@@ -19,14 +19,30 @@ const KIND_ICONS: Record<string, string> = {
   'canvas-node': '⬡',
   character: '🎭',
   scene: '🎬',
+  asset: '◈',
+  media: '🎞',
+  entity: '◇',
 };
 
 const KIND_SECTION_LABELS: Record<string, string> = {
   file: 'Files',
+  asset: 'Assets',
+  media: 'Media Library',
+  entity: 'Entities',
   'canvas-node': 'Canvas nodes',
   character: 'Characters',
   scene: 'Scenes',
 };
+
+const MENTION_KIND_ORDER: MentionItem['kind'][] = [
+  'file',
+  'asset',
+  'media',
+  'entity',
+  'canvas-node',
+  'character',
+  'scene',
+];
 
 interface MentionMenuProps {
   isOpen: boolean;
@@ -56,21 +72,9 @@ export function MentionMenu({
 
   if (!isOpen) return null;
 
-  // Filter items by label / description / filePath
-  const lc = filter.toLowerCase();
-  const filtered = items
-    .filter(
-      (item) =>
-        !filter ||
-        item.label.toLowerCase().includes(lc) ||
-        (item.description ?? '').toLowerCase().includes(lc) ||
-        (item.filePath ?? '').toLowerCase().includes(lc),
-    )
-    .slice(0, 20);
+  const filtered = getFilteredMentionItems(items, filter);
 
-  // Group into ordered sections
-  const ORDER: MentionItem['kind'][] = ['file', 'canvas-node', 'character', 'scene'];
-  const sections = ORDER.map((kind) => ({
+  const sections = MENTION_KIND_ORDER.map((kind) => ({
     kind,
     items: filtered.filter((i) => i.kind === kind),
   })).filter((s) => s.items.length > 0);
@@ -93,9 +97,7 @@ export function MentionMenu({
     >
       {/* Search hint */}
       <div className="px-3 py-1 text-[10px] text-[var(--vscode-descriptionForeground)] border-b border-[var(--vscode-dropdown-border)]">
-        {filter
-          ? t('chat.input.mentionSearching', { defaultValue: `"${filter}"` })
-          : t('chat.input.mentionHint', { defaultValue: 'Type to search files or canvas nodes' })}
+        {filter ? t('chat.input.mentionSearching', { filter }) : t('chat.input.mentionHint')}
       </div>
 
       {flat.length === 0 ? (
@@ -113,7 +115,7 @@ export function MentionMenu({
             {section.items.map((item) => {
               const flatIdx = flat.indexOf(item);
               const isSelected = flatIdx === selectedIndex;
-              const icon = KIND_ICONS[item.kind] ?? '◈';
+              const icon = getMentionIcon(item);
 
               return (
                 <button
@@ -160,14 +162,48 @@ export function MentionMenu({
  * Filter mention items by text (used in InputArea for keyboard navigation count)
  */
 export function getFilteredMentionItems(items: MentionItem[], filter: string): MentionItem[] {
-  if (!filter) return items.slice(0, 20);
   const lc = filter.toLowerCase();
   return items
     .filter(
       (item) =>
+        !filter ||
         item.label.toLowerCase().includes(lc) ||
         (item.description ?? '').toLowerCase().includes(lc) ||
         (item.filePath ?? '').toLowerCase().includes(lc),
     )
+    .sort((a, b) => MENTION_KIND_ORDER.indexOf(a.kind) - MENTION_KIND_ORDER.indexOf(b.kind))
     .slice(0, 20);
+}
+
+export function getMentionIcon(item: MentionItem): string {
+  if (item.icon) return item.icon;
+  if (item.mediaType) return getMediaTypeIcon(item.mediaType);
+  if (item.filePath) return getFilePathIcon(item.filePath);
+  return KIND_ICONS[item.kind] ?? '◈';
+}
+
+function getMediaTypeIcon(mediaType: NonNullable<MentionItem['mediaType']>): string {
+  if (mediaType === 'video') return '🎬';
+  if (mediaType === 'audio') return '♪';
+  if (mediaType === 'image') return '🖼';
+  if (mediaType === 'sequence') return '▦';
+  if (mediaType === 'text') return 'TXT';
+  return '📄';
+}
+
+function getFilePathIcon(filePath: string): string {
+  const fileName = filePath.split(/[/\\]/).pop() ?? filePath;
+  const ext = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : undefined;
+  if (!ext) return KIND_ICONS.file;
+  if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) return 'TS';
+  if (['rs', 'toml'].includes(ext)) return 'RS';
+  if (['json', 'jsonc'].includes(ext)) return '{}';
+  if (['md', 'mdx'].includes(ext)) return 'MD';
+  if (['css', 'scss', 'less'].includes(ext)) return '#';
+  if (['html', 'xml', 'svg'].includes(ext)) return '<>';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff'].includes(ext)) return '🖼';
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].includes(ext)) return '🎬';
+  if (['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'].includes(ext)) return '♪';
+  if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'epub'].includes(ext)) return '📄';
+  return KIND_ICONS.file;
 }

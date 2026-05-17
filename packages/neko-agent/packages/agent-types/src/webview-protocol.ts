@@ -255,9 +255,33 @@ export interface ProjectFileMentionInfo {
   name: string;
   type: 'file' | 'folder';
   icon?: string;
+  source?: ProjectMentionSource;
+  mediaType?: ProjectMentionMediaType;
 }
 
-export type ProjectMentionExtraType = 'canvas-node' | 'character' | 'scene';
+export type ProjectMentionExtraType =
+  | 'canvas-node'
+  | 'character'
+  | 'scene'
+  | 'asset'
+  | 'media'
+  | 'entity';
+
+export type ProjectMentionSource =
+  | 'workspace'
+  | 'asset-library'
+  | 'media-library'
+  | 'entity-graph'
+  | 'story'
+  | 'canvas';
+
+export type ProjectMentionMediaType =
+  | 'video'
+  | 'audio'
+  | 'image'
+  | 'sequence'
+  | 'text'
+  | 'document';
 
 export interface ProjectMentionExtra {
   type: ProjectMentionExtraType;
@@ -265,6 +289,12 @@ export interface ProjectMentionExtra {
   label: string;
   summary: string;
   thumbnailUri?: string;
+  source?: ProjectMentionSource;
+  icon?: string;
+  filePath?: string;
+  mediaType?: ProjectMentionMediaType;
+  entityType?: string;
+  navigationData?: Record<string, string>;
 }
 
 export interface ProjectFilesWebviewMessage {
@@ -1167,6 +1197,9 @@ function isAgentContextPayloadType(type: unknown): type is AgentContextPayload['
     type === 'story-selection' ||
     type === 'character' ||
     type === 'scene' ||
+    type === 'asset' ||
+    type === 'media' ||
+    type === 'entity' ||
     type === 'sketch-layer' ||
     type === 'model-scene' ||
     type === 'audio-clip' ||
@@ -1559,6 +1592,9 @@ function isAgentContextType(value: unknown): value is AgentContextType {
     value === 'story-selection' ||
     value === 'character' ||
     value === 'scene' ||
+    value === 'asset' ||
+    value === 'media' ||
+    value === 'entity' ||
     value === 'sketch-layer' ||
     value === 'model-scene' ||
     value === 'audio-clip' ||

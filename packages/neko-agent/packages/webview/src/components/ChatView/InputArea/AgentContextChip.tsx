@@ -14,6 +14,9 @@ const TYPE_ICONS: Record<string, string> = {
   'story-selection': '📄',
   file: '📎',
   image: '🖼',
+  asset: '◈',
+  media: '🎞',
+  entity: '◇',
 };
 
 interface AgentContextChipProps {

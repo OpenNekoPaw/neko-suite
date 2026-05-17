@@ -42,6 +42,8 @@ export const chat = {
   'chat.input.attach': 'Attach file',
   'chat.input.attachFile': 'Attach file',
   'chat.input.fileSearchHint': 'Type to search project files',
+  'chat.input.mentionHint': 'Type to search files, assets, media, or entities',
+  'chat.input.mentionSearching': '"{filter}"',
   'chat.input.noMatchingFiles': 'No matching files found',
   'chat.input.startTypingToSearch': 'Start typing to search files...',
   'chat.input.filesFound': '"{filter}" - {count} files',

@@ -35,6 +35,12 @@ vi.mock('vscode', () => {
         fsPath: `${base.fsPath}/${filePath}`,
       }),
     },
+    extensions: {
+      getExtension: vi.fn(),
+    },
+    window: {
+      activeTextEditor: undefined,
+    },
     workspace: {
       workspaceFolders: undefined,
       fs: {
@@ -128,7 +134,12 @@ vi.mock('../message/agentStreamProcessor', () => {
 // ---------------------------------------------------------------------------
 
 function createMockWebview() {
-  return { postMessage: vi.fn().mockResolvedValue(true) };
+  return {
+    postMessage: vi.fn().mockResolvedValue(true),
+    asWebviewUri: vi.fn((uri: { fsPath?: string }) => ({
+      toString: () => `webview:${uri.fsPath ?? ''}`,
+    })),
+  };
 }
 
 function createMessageRequest(
@@ -271,6 +282,7 @@ describe('AgentMessageTurnHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (vscode.workspace as any).workspaceFolders = undefined;
+    vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(new Error('missing fixture'));
     vi.mocked(vscode.workspace.findFiles).mockResolvedValue([]);
     vi.mocked(vscode.workspace.asRelativePath).mockImplementation(
       (value: { fsPath?: string } | string) =>
@@ -685,8 +697,119 @@ describe('AgentMessageTurnHandler', () => {
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'projectFiles',
         conversationId: 'conv-search',
-        files: [{ path: 'src/app.ts', name: 'app.ts', type: 'file' }],
+        files: [
+          {
+            path: 'src/app.ts',
+            name: 'app.ts',
+            type: 'file',
+            source: 'workspace',
+            icon: 'TS',
+          },
+        ],
         mentionExtras: [],
+      });
+    });
+
+    it('merges asset, media, and entity index candidates into mention extras', async () => {
+      const webview = createMockWebview();
+      const handler = buildHandler();
+      const files = new Map<string, unknown>([
+        [
+          '/workspace/neko/assets/library.json',
+          {
+            version: 1,
+            entities: [
+              {
+                id: 'asset-hero',
+                name: 'Hero portrait',
+                category: 'character',
+                tags: ['hero'],
+                variants: [
+                  {
+                    id: 'variant-default',
+                    thumbnailPath: '/workspace/thumbs/hero.png',
+                    files: [
+                      {
+                        id: 'file-hero',
+                        name: 'hero.png',
+                        path: 'assets/hero.png',
+                        mediaType: 'image',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        [
+          '/workspace/.neko/.cache/search-index.json',
+          {
+            version: 1,
+            entries: [
+              {
+                filePath: '/library/hero-shot.mp4',
+                fileName: 'hero-shot.mp4',
+                libraryName: 'Footage',
+                mediaType: 'video',
+              },
+            ],
+          },
+        ],
+        [
+          '/workspace/.neko/.cache/asset-graph.json',
+          {
+            version: 1,
+            nodes: [
+              {
+                id: 'entity-hero',
+                kind: 'entity',
+                refId: 'char-hero',
+                label: 'Hero',
+              },
+            ],
+          },
+        ],
+      ]);
+
+      (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
+      vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: any) => {
+        const value = files.get(String(uri.fsPath));
+        if (!value) throw new Error(`missing ${uri.fsPath}`);
+        return new TextEncoder().encode(JSON.stringify(value));
+      });
+
+      await handler.searchProjectFiles(webview as any, 'hero', 'conv-search');
+
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'projectFiles',
+        conversationId: 'conv-search',
+        files: [],
+        mentionExtras: [
+          expect.objectContaining({
+            type: 'asset',
+            id: 'asset-hero',
+            label: 'Hero portrait',
+            source: 'asset-library',
+            mediaType: 'image',
+            filePath: 'assets/hero.png',
+          }),
+          expect.objectContaining({
+            type: 'media',
+            id: '/library/hero-shot.mp4',
+            label: 'hero-shot.mp4',
+            source: 'media-library',
+            mediaType: 'video',
+            filePath: '/library/hero-shot.mp4',
+          }),
+          expect.objectContaining({
+            type: 'entity',
+            id: 'entity-hero',
+            label: 'Hero',
+            source: 'entity-graph',
+            entityType: 'entity',
+          }),
+        ],
       });
     });
   });
