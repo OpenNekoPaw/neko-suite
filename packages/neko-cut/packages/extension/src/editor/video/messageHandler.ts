@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import type { EngineClient } from '@neko/neko-client';
 import { VideoEditorModel } from './videoEditorModel';
 import {
   MessageFromWebview,
@@ -36,6 +37,7 @@ export class MessageHandler {
     private readonly webview: vscode.Webview,
     private readonly model: VideoEditorModel,
     private readonly _context: vscode.ExtensionContext,
+    private readonly engineClient: EngineClient | null = null,
   ) {}
 
   /**
@@ -691,7 +693,8 @@ export class MessageHandler {
 
   /**
    * Handle file range read request (for testing on-demand loading)
-   * Uses Node.js fs API to read specific byte range from file
+   * Uses neko-engine file access so binary source bytes stay behind the
+   * engine-owned token and range boundary.
    */
   private async handleReadFileRange(
     requestId: string,
@@ -702,53 +705,53 @@ export class MessageHandler {
     try {
       // Resolve path relative to .nkv file
       const absolutePath = await this.resolveStoredMediaPath(filePath);
+      if (!this.engineClient) {
+        throw new Error('Neko Engine is not available for file range reads');
+      }
 
-      // Get file stats (async)
-      const fsPromises = await import('node:fs/promises');
-      const stats = await fsPromises.stat(absolutePath);
-      const fileSize = stats.size;
-
-      // Validate range
       const actualStart = Math.max(0, start);
-      const actualEnd = Math.min(end, fileSize - 1);
+      const registered = await this.engineClient.registerFile({
+        filePath: absolutePath,
+        purpose: 'subtitle',
+      });
+      try {
+        const fileSize = registered.fileSizeBytes;
+        const actualEnd = Math.min(end, fileSize - 1);
 
-      if (actualStart > actualEnd || actualStart >= fileSize) {
+        if (actualStart > actualEnd || actualStart >= fileSize) {
+          this.webview.postMessage({
+            type: 'fileRangeResult',
+            requestId,
+            success: false,
+            error: `Invalid range: ${start}-${end} for file size ${fileSize}`,
+          });
+          return;
+        }
+
+        const data = await this.engineClient.readFileRange(
+          registered.token,
+          actualStart,
+          actualEnd,
+        );
+        const buffer = Buffer.from(data);
+        const base64Data = buffer.toString('base64');
+
+        logger.debug(
+          `readFileRange: path=${filePath}, requested=${start}-${end}, actual=${actualStart}-${actualEnd}, size=${buffer.byteLength}, fileSize=${fileSize}`,
+        );
+
         this.webview.postMessage({
           type: 'fileRangeResult',
           requestId,
-          success: false,
-          error: `Invalid range: ${start}-${end} for file size ${fileSize}`,
+          success: true,
+          data: base64Data,
+          actualStart,
+          actualEnd,
+          fileSize,
         });
-        return;
-      }
-
-      // Read specific range using async file handle
-      const length = actualEnd - actualStart + 1;
-      const buffer = Buffer.alloc(length);
-      const fh = await fsPromises.open(absolutePath, 'r');
-
-      try {
-        await fh.read(buffer, 0, length, actualStart);
       } finally {
-        await fh.close();
+        await this.engineClient.unregisterFile(registered.token);
       }
-
-      // Convert to base64 for transfer
-      const base64Data = buffer.toString('base64');
-
-      logger.debug(
-        `readFileRange: path=${filePath}, requested=${start}-${end}, actual=${actualStart}-${actualEnd}, size=${length}, fileSize=${fileSize}`,
-      );
-
-      this.webview.postMessage({
-        type: 'fileRangeResult',
-        requestId,
-        success: true,
-        data: base64Data,
-        actualStart,
-        actualEnd,
-        fileSize,
-      });
     } catch (error) {
       logger.error('File range read error:', error);
       this.webview.postMessage({

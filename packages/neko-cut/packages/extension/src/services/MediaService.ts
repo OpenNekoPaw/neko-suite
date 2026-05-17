@@ -259,7 +259,7 @@ export class MediaService implements vscode.Disposable {
     const result = await this.dispatch({
       group: 'videos',
       action: 'probe',
-      id: absolutePath,
+      options: { source: absolutePath },
     });
 
     // Rust MediaInfo has nested videoStreams/audioStreams/subtitleStreams.
@@ -767,7 +767,7 @@ export class MediaService implements vscode.Disposable {
       const result = await this.dispatch({
         group: 'videos',
         action: 'probe',
-        id: absolutePath,
+        options: { source: absolutePath },
       });
 
       const data = result.data as Record<string, unknown>;

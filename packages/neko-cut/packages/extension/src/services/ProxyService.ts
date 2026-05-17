@@ -143,7 +143,7 @@ export class ProxyService implements vscode.Disposable {
       const result = await this.dispatch({
         group: 'videos',
         action: 'probe',
-        id: absoluteSource,
+        options: { source: absoluteSource },
       });
 
       const data = result.data as Record<string, unknown>;
@@ -333,7 +333,7 @@ export class ProxyService implements vscode.Disposable {
         const probeResult = await this.dispatch({
           group: 'videos',
           action: 'probe',
-          id: proxyAbsolute,
+          options: { source: proxyAbsolute },
         });
         const probeData = probeResult.data as Record<string, unknown>;
         const videoStreams = (probeData.videoStreams ?? []) as Array<Record<string, unknown>>;

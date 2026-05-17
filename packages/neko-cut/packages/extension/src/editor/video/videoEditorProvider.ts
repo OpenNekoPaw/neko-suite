@@ -470,7 +470,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     // Create message handler
-    const messageHandler = new MessageHandler(webviewPanel.webview, model, this.context);
+    const messageHandler = new MessageHandler(webviewPanel.webview, model, this.context, client);
 
     // Set up the webview HTML content
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
@@ -989,7 +989,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' http://localhost:${devServerPort}; script-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-eval' 'wasm-unsafe-eval' http://localhost:${devServerPort}; worker-src ${webview.cspSource} blob:; img-src ${webview.cspSource} data: blob: https: http://127.0.0.1:* http://localhost:${devServerPort}; media-src ${webview.cspSource} data: blob: https: file:; font-src ${webview.cspSource} http://localhost:${devServerPort}; connect-src ${webview.cspSource} https: data: blob: ws://127.0.0.1:* http://127.0.0.1:* ws://localhost:${devServerPort} http://localhost:${devServerPort};">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' http://localhost:${devServerPort}; script-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-eval' 'wasm-unsafe-eval' http://localhost:${devServerPort}; worker-src ${webview.cspSource} blob:; img-src ${webview.cspSource} data: blob: https: http://127.0.0.1:* http://localhost:${devServerPort}; media-src ${webview.cspSource} data: blob: https: file:; font-src ${webview.cspSource} data: http://localhost:${devServerPort}; connect-src ${webview.cspSource} https: data: blob: ws://127.0.0.1:* http://127.0.0.1:* ws://localhost:${devServerPort} http://localhost:${devServerPort};">
   <title>Neko Suite - Video Editor (Dev)</title>
 </head>
 <body>
@@ -1025,7 +1025,7 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src ${webview.cspSource} blob:; img-src ${webview.cspSource} data: blob: https: http://127.0.0.1:*; media-src ${webview.cspSource} data: blob: https: file:; font-src ${webview.cspSource}; connect-src ${webview.cspSource} https: data: blob: ws://127.0.0.1:* http://127.0.0.1:*;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src ${webview.cspSource} blob:; img-src ${webview.cspSource} data: blob: https: http://127.0.0.1:*; media-src ${webview.cspSource} data: blob: https: file:; font-src ${webview.cspSource} data:; connect-src ${webview.cspSource} https: data: blob: ws://127.0.0.1:* http://127.0.0.1:*;">
   <link rel="stylesheet" href="${styleUri}">
   <title>Neko Suite - Video Editor</title>
 </head>
