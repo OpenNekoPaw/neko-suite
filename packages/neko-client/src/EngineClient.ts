@@ -505,8 +505,8 @@ export class EngineClient {
   /** Resolve a source path through the PathResolver if available. */
   private resolveSource(source: string): string {
     if (!this.pathResolver) return source;
-    const result = this.pathResolver.resolveSource(source, '');
-    return result.type === 'local' ? result.path : source;
+    if (!this.pathResolver.hasVariable(source)) return source;
+    return this.pathResolver.resolve(source);
   }
 
   // =========================================================================

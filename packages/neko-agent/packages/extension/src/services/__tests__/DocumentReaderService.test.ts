@@ -3,18 +3,23 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as vscode from 'vscode';
 import { DocumentReaderService } from '../DocumentReaderService';
+
+vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
 // Mock fs.promises
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   mkdir: vi.fn(),
+  stat: vi.fn(),
 }));
 
 // Mock os
 vi.mock('os', () => ({
   tmpdir: vi.fn(() => '/tmp'),
+  homedir: vi.fn(() => '/home/tester'),
 }));
 
 // Mock the logger
@@ -32,6 +37,7 @@ describe('DocumentReaderService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(vscode.commands.executeCommand).mockResolvedValue(undefined);
     service = new DocumentReaderService();
   });
 
@@ -147,6 +153,33 @@ describe('DocumentReaderService', () => {
       expect(result.text).toBe('Hello World');
       expect(result.pageCount).toBeUndefined();
       expect(result.imagePaths).toBeUndefined();
+    });
+
+    it('should resolve media library variables before reading files', async () => {
+      const fs = await import('fs/promises');
+      vi.mocked(vscode.commands.executeCommand).mockResolvedValue('/library/books/book.txt');
+      vi.mocked(fs.readFile).mockResolvedValue('Resolved content' as any);
+
+      const result = await service.read('${A}/books/book.txt');
+
+      expect(result.text).toBe('Resolved content');
+      expect(fs.readFile).toHaveBeenCalledWith('/library/books/book.txt', 'utf-8');
+    });
+
+    it('should resolve media library variables before reading manifests', async () => {
+      const fs = await import('fs/promises');
+      vi.mocked(vscode.commands.executeCommand).mockResolvedValue('/library/books/book.txt');
+      vi.mocked(fs.stat).mockResolvedValue({
+        size: 16,
+        mtimeMs: 123,
+      } as any);
+      vi.mocked(fs.readFile).mockResolvedValue('Line one\nLine two' as any);
+
+      const manifest = await service.getManifest('${A}/books/book.txt');
+
+      expect(manifest.source.filePath).toBe('/library/books/book.txt');
+      expect(fs.stat).toHaveBeenCalledWith('/library/books/book.txt');
+      expect(fs.readFile).toHaveBeenCalledWith('/library/books/book.txt', 'utf-8');
     });
 
     it('should throw error for unsupported formats', async () => {

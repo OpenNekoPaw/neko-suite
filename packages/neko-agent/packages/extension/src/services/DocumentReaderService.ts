@@ -18,6 +18,7 @@ import type {
 } from '@neko/shared';
 import { getLogger } from '../base';
 import { createDocumentLowLevelAccess } from './documentLowLevelAccess';
+import { resolveDocumentPath } from './documentPathResolver';
 import type { IEngineClientProvider } from './engineClientProvider';
 
 const logger = getLogger('DocumentReaderService');
@@ -32,10 +33,12 @@ export class DocumentReaderService implements IDocumentReaderService {
 
   constructor(lowLevelAccess?: DocumentLowLevelAccess) {
     const runtimeDeps: DocumentReaderRuntimeDeps = {
-      readTextFile: (filePath) => fs.readFile(filePath, 'utf-8'),
-      readBinaryFile: (filePath) => fs.readFile(filePath),
-      writeBinaryFile: (filePath, data) => fs.writeFile(filePath, data),
-      makeDir: (filePath, options) => fs.mkdir(filePath, options).then(() => undefined),
+      readTextFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath), 'utf-8'),
+      readBinaryFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath)),
+      writeBinaryFile: async (filePath, data) =>
+        fs.writeFile(await resolveDocumentPath(filePath), data),
+      makeDir: async (filePath, options) =>
+        fs.mkdir(await resolveDocumentPath(filePath), options).then(() => undefined),
       tempDir: () => os.tmpdir(),
       loadModule: <T>(packageName: string) => this.tryImport<T>(packageName),
       logger,
@@ -48,39 +51,45 @@ export class DocumentReaderService implements IDocumentReaderService {
     });
   }
 
-  read(filePath: string): Promise<DocumentContent> {
-    return this.runtime.read(filePath);
+  async read(filePath: string): Promise<DocumentContent> {
+    return this.runtime.read(await resolveDocumentPath(filePath));
   }
 
   supports(filePath: string): boolean {
     return this.runtime.supports(filePath);
   }
 
-  hasDRM(filePath: string): Promise<boolean> {
-    return this.runtime.hasDRM(filePath);
+  async hasDRM(filePath: string): Promise<boolean> {
+    return this.runtime.hasDRM(await resolveDocumentPath(filePath));
   }
 
-  readContent(filePath: string): Promise<DocumentContent> {
-    return this.access.readContent(filePath);
+  async readContent(filePath: string): Promise<DocumentContent> {
+    return this.access.readContent(await resolveDocumentPath(filePath));
   }
 
-  getManifest(source: DocumentSourceRef | string): Promise<DocumentManifest> {
-    return this.access.getManifest(source);
+  async getManifest(source: DocumentSourceRef | string): Promise<DocumentManifest> {
+    return this.access.getManifest(await this.resolveSourceInput(source));
   }
 
-  createBatchCursor(
+  async createBatchCursor(
     source: DocumentSourceRef | string,
     options?: { maxChars?: number },
   ): Promise<DocumentBatchCursor> {
-    return this.access.createBatchCursor(source, options);
+    return this.access.createBatchCursor(await this.resolveSourceInput(source), options);
   }
 
-  readRange(source: DocumentSourceRef | string, range: DocumentRange): Promise<DocumentReadResult> {
-    return this.access.readRange(source, range);
+  async readRange(
+    source: DocumentSourceRef | string,
+    range: DocumentRange,
+  ): Promise<DocumentReadResult> {
+    return this.access.readRange(await this.resolveSourceInput(source), range);
   }
 
-  readNext(cursor: DocumentBatchCursor): Promise<DocumentReadResult> {
-    return this.access.readNext(cursor);
+  async readNext(cursor: DocumentBatchCursor): Promise<DocumentReadResult> {
+    return this.access.readNext({
+      ...cursor,
+      source: await this.resolveSourceRef(cursor.source),
+    });
   }
 
   private async tryImport<T>(packageName: string): Promise<T | null> {
@@ -90,6 +99,20 @@ export class DocumentReaderService implements IDocumentReaderService {
     } catch {
       return null;
     }
+  }
+
+  private async resolveSourceInput(
+    source: DocumentSourceRef | string,
+  ): Promise<DocumentSourceRef | string> {
+    if (typeof source === 'string') {
+      return resolveDocumentPath(source);
+    }
+    return this.resolveSourceRef(source);
+  }
+
+  private async resolveSourceRef(source: DocumentSourceRef): Promise<DocumentSourceRef> {
+    const filePath = await resolveDocumentPath(source.filePath);
+    return filePath === source.filePath ? source : { ...source, filePath };
   }
 }
 

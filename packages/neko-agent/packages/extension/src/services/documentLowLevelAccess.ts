@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import type { DocumentLowLevelAccess } from '@neko/platform/document';
+import { resolveDocumentPath } from './documentPathResolver';
 import type { IEngineClientProvider } from './engineClientProvider';
 
 export function createDocumentLowLevelAccess(
@@ -7,9 +8,10 @@ export function createDocumentLowLevelAccess(
 ): DocumentLowLevelAccess {
   const access: DocumentLowLevelAccess = {
     async identify(filePath) {
-      const stat = await fs.stat(filePath);
+      const resolvedPath = await resolveDocumentPath(filePath);
+      const stat = await fs.stat(resolvedPath);
       return {
-        fileId: `${filePath}:${stat.size}:${stat.mtimeMs}`,
+        fileId: `${resolvedPath}:${stat.size}:${stat.mtimeMs}`,
         sizeBytes: stat.size,
         mtimeMs: stat.mtimeMs,
       };
@@ -28,8 +30,9 @@ export function createDocumentLowLevelAccess(
         throw new Error('Engine file access is unavailable for document byte range reads');
       }
 
+      const resolvedPath = await resolveDocumentPath(filePath);
       return engine.withRegisteredFile(
-        { filePath, purpose: 'document' },
+        { filePath: resolvedPath, purpose: 'document' },
         async (registered) =>
           new Uint8Array(await engine.readFileRange(registered.token, start, end)),
       );
@@ -41,8 +44,9 @@ export function createDocumentLowLevelAccess(
         throw new Error('Engine file access is unavailable for document entry reads');
       }
 
+      const resolvedPath = await resolveDocumentPath(filePath);
       return engine.withRegisteredFile(
-        { filePath, purpose: 'document' },
+        { filePath: resolvedPath, purpose: 'document' },
         async (registered) =>
           new Uint8Array(await engine.readFileEntry(registered.token, entryPath)),
       );

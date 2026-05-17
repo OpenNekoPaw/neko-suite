@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PathResolver } from '@neko/shared';
 import { EngineClient, type RegisteredFile } from '../index';
 
 function dispatchResponse(data: unknown): Response {
@@ -89,6 +90,66 @@ describe('EngineClient file access helpers', () => {
       .mocked(globalThis.fetch)
       .mock.calls.filter((call) => String((call[1] as RequestInit).body).includes('unregister'));
     expect(unregisterCalls).toHaveLength(2);
+
+    fetchMock.mockRestore();
+  });
+
+  it('resolves path variables before registering files', async () => {
+    const registered: RegisteredFile = {
+      token: 'token-3',
+      fileSizeBytes: 64,
+      mimeType: 'application/epub+zip',
+      purpose: 'document',
+      rangeUrl: '/v1/files/token-3',
+      entryBaseUrl: '/v1/files/token-3/entries/',
+      resourceBaseUrl: '/v1/files/token-3/resources/',
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(dispatchResponse(registered));
+    const client = new EngineClient(3456);
+    client.setPathResolver(new PathResolver(new Map([['A', '/library']])));
+
+    await expect(
+      client.registerFile({ filePath: '${A}/books/book.epub', purpose: 'document' }),
+    ).resolves.toEqual(registered);
+
+    expect(lastDispatchBody()).toEqual(
+      expect.objectContaining({
+        group: 'files',
+        action: 'register',
+        options: { filePath: '/library/books/book.epub', purpose: 'document' },
+      }),
+    );
+
+    fetchMock.mockRestore();
+  });
+
+  it('keeps relative file paths unchanged when a path resolver is configured', async () => {
+    const registered: RegisteredFile = {
+      token: 'token-4',
+      fileSizeBytes: 64,
+      mimeType: 'application/epub+zip',
+      purpose: 'document',
+      rangeUrl: '/v1/files/token-4',
+      entryBaseUrl: '/v1/files/token-4/entries/',
+      resourceBaseUrl: '/v1/files/token-4/resources/',
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(dispatchResponse(registered));
+    const client = new EngineClient(3456);
+    client.setPathResolver(new PathResolver(new Map([['A', '/library']])));
+
+    await client.registerFile({ filePath: 'books/book.epub', purpose: 'document' });
+
+    expect(lastDispatchBody()).toEqual(
+      expect.objectContaining({
+        group: 'files',
+        action: 'register',
+        options: { filePath: 'books/book.epub', purpose: 'document' },
+      }),
+    );
 
     fetchMock.mockRestore();
   });
