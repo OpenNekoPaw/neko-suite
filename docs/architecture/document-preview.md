@@ -368,6 +368,55 @@ document:url → pdfjsLib.getDocument({ url })
 → sendToAi({ selectedText, pageNumber })
 ```
 
+### 5.3.1 Preview 与 Agent 统一读取契约
+
+文档预览与 Agent 文档读取共享同一组语义契约，避免 Preview 当前页/章节与 `ReadDocument` 实际读取内容不一致：
+
+```
+Webview
+  负责渲染、选择、上报 DocumentLocator
+    └─ page / chapterHref+spineIndex / entryName / text-range / region
+
+Extension / Agent Platform
+  负责 DocumentSourceRef、DocumentManifest、DocumentRange、DocumentBatchCursor
+  负责 ReadDocument manifest/range/next 语义接口
+
+Engine / neko-client
+  负责文件 token、byte range、container entry、native-heavy 读取/转换能力
+```
+
+Preview 发给 Agent 的 `document-selection` payload 同时保留 legacy 字段和结构化字段：
+
+```typescript
+{
+  filePath,
+  text,
+  imageData,
+  contentKind,
+  context,
+  source: DocumentSourceRef,
+  locator: DocumentLocator,
+  range?: DocumentRange,
+  excerpt?: DocumentExcerpt
+}
+```
+
+Agent 若需要继续读取上下文，不再重新猜测“当前页”或全文截断，而是通过：
+
+```
+ReadDocument({ file_path, mode: "manifest" })
+ReadDocument({ file_path, mode: "range", range: { locator } })
+ReadDocument({ file_path, mode: "next", cursor })
+```
+
+格式定位规则：
+
+- PDF：使用 `pageNumber/pageIndex`，支持按页读取。
+- EPUB：使用 `chapterHref/spineIndex`，CFI 作为可选精度。
+- CBZ：使用 `pageNumber/pageIndex/entryName`，区域选择使用 `region`。
+- DOCX：短期使用 `text-range`，不把 rendered page 当稳定文档页。
+- TXT/MD/Fountain：使用 line/char range。
+
 **CSP**：`worker-src blob: ${cspSource}`，`workerSrc` 指向 `asWebviewUri(pdf.worker.min.mjs)`。
 
 ### 5.4 CBZ 预览（P0）

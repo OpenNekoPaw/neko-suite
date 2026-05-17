@@ -205,9 +205,27 @@ export const EpubViewer: FC = () => {
   const measurementSessionRef = useRef(0);
   const chapterLayoutFrameRef = useRef<number | null>(null);
 
+  const buildCurrentChapterLocator = useCallback(() => {
+    const href =
+      currentChapterHref ||
+      tocRef.current.find((item) => item.label === currentChapter)?.href ||
+      currentChapter ||
+      '';
+    const spineIndex = spineEntriesRef.current.find((entry) =>
+      matchesHref(entry.href, href),
+    )?.index;
+    return {
+      kind: 'chapter' as const,
+      chapterHref: href,
+      spineIndex,
+      title: currentChapter || undefined,
+    };
+  }, [currentChapter, currentChapterHref]);
+
   // Waterfall text selection via native document selection
   const { selection: waterfallSelection } = useDocumentSelection({
     chapterTitle: currentChapter,
+    getLocator: () => buildCurrentChapterLocator(),
   });
 
   const applyCurrentChapter = useCallback(
@@ -1218,6 +1236,17 @@ export const EpubViewer: FC = () => {
                   text: bodyText,
                   contentKind: 'text',
                   context: { chapter: currentChapter || undefined },
+                  locator: {
+                    kind: 'chapter',
+                    chapterHref: entry.href,
+                    spineIndex: entry.index,
+                    title: currentChapter || undefined,
+                  },
+                  excerpt: {
+                    contentKind: 'text',
+                    text: bodyText,
+                    truncated: bodyText.length >= MAX_SELECTION_CHARS,
+                  },
                 },
               } as never);
             }
@@ -1242,12 +1271,20 @@ export const EpubViewer: FC = () => {
           text: bodyText || undefined,
           contentKind: 'text',
           context: { chapter: currentChapter || undefined },
+          locator: buildCurrentChapterLocator(),
+          excerpt: bodyText
+            ? {
+                contentKind: 'text',
+                text: bodyText,
+                truncated: bodyText.length >= MAX_SELECTION_CHARS,
+              }
+            : undefined,
         },
       } as never);
     } finally {
       setCapturing(false);
     }
-  }, [capturing, currentChapter, viewMode]);
+  }, [capturing, currentChapter, viewMode, buildCurrentChapterLocator]);
 
   // =========================================================================
   // Send text selection to AI (rendition modes)
@@ -1262,11 +1299,17 @@ export const EpubViewer: FC = () => {
         text: epubSelection.text,
         contentKind: 'text',
         context: { chapter: currentChapter || undefined },
+        locator: buildCurrentChapterLocator(),
+        excerpt: {
+          contentKind: 'text',
+          text: epubSelection.text,
+          truncated: false,
+        },
       },
     } as never);
 
     setEpubSelection(null);
-  }, [epubSelection, currentChapter]);
+  }, [epubSelection, currentChapter, buildCurrentChapterLocator]);
 
   const handleContextMenuTarget = useCallback((target: HTMLElement) => {
     const imgEl = target.tagName === 'IMG' ? (target as HTMLImageElement) : null;
@@ -1320,6 +1363,13 @@ export const EpubViewer: FC = () => {
         imageData,
         contentKind,
         context: { chapter: currentChapter || undefined },
+        locator: buildCurrentChapterLocator(),
+        excerpt: {
+          contentKind,
+          text: text || undefined,
+          imageData,
+          truncated: false,
+        },
       },
     } as never);
 
@@ -1328,7 +1378,14 @@ export const EpubViewer: FC = () => {
     }
     setEpubSelection(null);
     setRightClickedImageSrc(null);
-  }, [isWaterfall, waterfallSelection, epubSelection, rightClickedImageSrc, currentChapter]);
+  }, [
+    isWaterfall,
+    waterfallSelection,
+    epubSelection,
+    rightClickedImageSrc,
+    currentChapter,
+    buildCurrentChapterLocator,
+  ]);
 
   const contextActions = useDocumentContextActions({
     hasContent: hasTextSelection || !!rightClickedImageSrc,

@@ -5,6 +5,15 @@
  * for document preview providers (PDF, CBZ, EPUB, DOCX).
  */
 
+import type {
+  DocumentContentKind,
+  DocumentExcerpt,
+  DocumentLocator,
+  DocumentRange,
+  DocumentRegion,
+  DocumentSourceRef,
+} from '@neko/shared';
+
 // =============================================================================
 // Extension → Webview Messages
 // =============================================================================
@@ -72,14 +81,6 @@ export interface DocumentStatusUpdateMessage {
   payload: DocumentStatusPayload;
 }
 
-/** Region selection for CBZ image-based documents */
-export interface DocumentRegion {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface DocumentSendToAiMessage {
   type: 'document:sendToAi';
   payload: {
@@ -88,13 +89,21 @@ export interface DocumentSendToAiMessage {
     /** Image base64 data (inline) */
     imageData?: string;
     /** Content type — drives agent intent prompt */
-    contentKind: 'text' | 'image' | 'mixed';
+    contentKind: DocumentContentKind;
     /** Location context within the document */
     context?: {
       page?: number;
       chapter?: string;
       region?: DocumentRegion;
     };
+    /** Structured source, normally enriched by Extension before forwarding to Agent. */
+    source?: DocumentSourceRef;
+    /** Stable semantic document locator emitted by the viewer. */
+    locator?: DocumentLocator;
+    /** Semantic document range for follow-up reads. */
+    range?: DocumentRange;
+    /** Bounded inline excerpt attached to the context payload. */
+    excerpt?: DocumentExcerpt;
   };
 }
 

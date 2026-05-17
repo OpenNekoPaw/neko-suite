@@ -3,6 +3,15 @@
  * Mirrors the extension-side protocol in extension/src/types/document-messages.ts.
  */
 
+import type {
+  DocumentContentKind,
+  DocumentExcerpt,
+  DocumentLocator,
+  DocumentRange,
+  DocumentRegion,
+  DocumentSourceRef,
+} from '@neko/shared';
+
 // =============================================================================
 // Extension → Webview
 // =============================================================================
@@ -59,24 +68,21 @@ export interface DocumentStatusUpdateMessage {
   payload: DocumentStatusPayload;
 }
 
-export interface DocumentRegion {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface DocumentSendToAiMessage {
   type: 'document:sendToAi';
   payload: {
     text?: string;
     imageData?: string;
-    contentKind: 'text' | 'image' | 'mixed';
+    contentKind: DocumentContentKind;
     context?: {
       page?: number;
       chapter?: string;
       region?: DocumentRegion;
     };
+    source?: DocumentSourceRef;
+    locator?: DocumentLocator;
+    range?: DocumentRange;
+    excerpt?: DocumentExcerpt;
   };
 }
 

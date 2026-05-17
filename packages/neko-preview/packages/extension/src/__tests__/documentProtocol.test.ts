@@ -23,6 +23,7 @@ vi.mock('vscode', () => ({
   commands: { executeCommand },
   window: { showWarningMessage },
   workspace: { workspaceFolders },
+  env: { language: 'en' },
   EventEmitter: vi.fn(),
 }));
 
@@ -43,6 +44,7 @@ vi.mock('../../utils/logger', () => ({
 import {
   getErrorHtml,
   getUnresolvedVariableHtml,
+  setupDocumentWebview,
 } from '../providers/document/documentProviderHelper';
 import {
   previewFileServer,
@@ -55,6 +57,56 @@ beforeEach(() => {
   showWarningMessage.mockReset();
   readFile.mockReset();
   workspaceFolders.length = 0;
+});
+
+describe('document preview to Agent context bridge', () => {
+  it('enriches document selections with source locator and excerpt metadata', async () => {
+    let messageHandler: ((message: unknown) => Promise<void>) | undefined;
+    const panel = {
+      webview: {
+        options: {},
+        html: '',
+        asWebviewUri: (uri: unknown) => uri,
+        onDidReceiveMessage: vi.fn((handler: (message: unknown) => Promise<void>) => {
+          messageHandler = handler;
+          return { dispose: vi.fn() };
+        }),
+      },
+      onDidDispose: vi.fn(),
+    };
+
+    await setupDocumentWebview(
+      { uri: { fsPath: '/docs/book.epub', toString: () => 'file:///docs/book.epub' } } as never,
+      panel as never,
+      { path: '/extension' } as never,
+      'epub',
+    );
+
+    await messageHandler?.({
+      type: 'document:sendToAi',
+      payload: {
+        text: 'Selected text',
+        contentKind: 'text',
+        context: { chapter: 'Chapter 1' },
+        locator: { kind: 'chapter', chapterHref: 'chapter-1.xhtml', spineIndex: 0 },
+      },
+    });
+
+    expect(executeCommand).toHaveBeenCalledWith(
+      'neko.agent.sendContext',
+      expect.objectContaining({
+        type: 'document-selection',
+        data: expect.objectContaining({
+          source: expect.objectContaining({
+            filePath: '/docs/book.epub',
+            format: 'epub',
+          }),
+          locator: { kind: 'chapter', chapterHref: 'chapter-1.xhtml', spineIndex: 0 },
+          excerpt: expect.objectContaining({ text: 'Selected text', contentKind: 'text' }),
+        }),
+      }),
+    );
+  });
 });
 
 // ============================================================================
@@ -351,5 +403,28 @@ describe('PreviewFileServer retry logic source contract (NKP-006)', () => {
     execCmd.mockResolvedValueOnce({ port: 5002 });
     const port2 = await previewFileServer.getPort();
     expect(port2).toBe(5002);
+  });
+});
+
+describe('document viewer locator emission contracts', () => {
+  it('keeps viewer send-to-agent paths on structured locators', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '../../../webview/src');
+    const pdf = fs.readFileSync(path.join(root, 'shared/useDocumentSelection.ts'), 'utf-8');
+    const epub = fs.readFileSync(path.join(root, 'epub/EpubViewer.tsx'), 'utf-8');
+    const cbz = fs.readFileSync(path.join(root, 'cbz/CbzViewer.tsx'), 'utf-8');
+    const docx = fs.readFileSync(path.join(root, 'docx/DocxViewer.tsx'), 'utf-8');
+
+    expect(pdf).toContain("kind: 'page'");
+    expect(pdf).toContain("kind: 'region'");
+    expect(epub).toContain("kind: 'chapter'");
+    expect(epub).toContain('chapterHref');
+    expect(epub).toContain('spineIndex');
+    expect(cbz).toContain('entryName');
+    expect(cbz).toContain('const getPageLocator = useCallback');
+    expect(docx).toContain("kind: 'text-range'");
+    expect(docx).toContain('resolveDocxSelectionLocator');
+    expect(docx).toContain('endChar');
   });
 });

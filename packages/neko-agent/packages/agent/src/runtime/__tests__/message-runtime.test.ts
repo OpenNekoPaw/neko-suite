@@ -177,6 +177,41 @@ describe('message runtime helpers', () => {
     ).toBe('[File: notes.md]\nnotes.md');
   });
 
+  it('does not treat non-document context data as document context by field shape alone', () => {
+    expect(
+      formatAgentContextPayload({
+        type: 'file',
+        id: 'file-1',
+        label: 'notes.md',
+        summary: 'File notes',
+        data: {
+          filePath: 'notes.md',
+          source: { provider: 'workspace' },
+          excerpt: { text: 'not a document selection' },
+        },
+      }),
+    ).toBe('[File: notes.md]\nnotes.md');
+  });
+
+  it('formats document context source and locator metadata for follow-up reads', () => {
+    expect(
+      formatAgentContextPayload({
+        type: 'document-selection',
+        id: 'selection-1',
+        label: 'book.epub · Chapter 1',
+        summary: 'Selected text',
+        data: {
+          filePath: '/books/book.epub',
+          text: 'selected paragraph',
+          contentKind: 'text',
+          source: { filePath: '/books/book.epub', format: 'epub', fileId: 'book-1' },
+          locator: { kind: 'chapter', chapterHref: 'chapter-1.xhtml', spineIndex: 0 },
+          excerpt: { contentKind: 'text', text: 'selected paragraph', truncated: false },
+        },
+      }),
+    ).toContain('Follow-up: use ReadDocument with mode="manifest" or mode="range"');
+  });
+
   it('prepares referenced file contents with injected input processor', async () => {
     const onReferenceError = vi.fn();
 
@@ -497,11 +532,11 @@ describe('message runtime helpers', () => {
   it('projects host file candidates to mention file rows', () => {
     expect(
       projectAgentFileMentions([
-        { relativePath: 'src/app.ts' },
+        { relativePath: 'src/app.ts', source: 'workspace', icon: 'TS' },
         { relativePath: 'docs\\intro.md' },
       ]),
     ).toEqual([
-      { path: 'src/app.ts', name: 'app.ts', type: 'file' },
+      { path: 'src/app.ts', name: 'app.ts', type: 'file', source: 'workspace', icon: 'TS' },
       { path: 'docs/intro.md', name: 'intro.md', type: 'file' },
     ]);
   });
@@ -521,6 +556,39 @@ describe('message runtime helpers', () => {
         id: 'node-1',
         label: 'Hero frame',
         summary: 'Canvas: Hero frame',
+        source: 'canvas',
+      },
+    ]);
+  });
+
+  it('projects typed asset, media, and entity candidates to mention extras', () => {
+    expect(
+      projectAgentMentionExtras([], 'hero', undefined, undefined, [
+        {
+          type: 'asset',
+          id: 'asset-1',
+          label: 'Hero portrait',
+          summary: 'Asset: Hero portrait',
+          source: 'asset-library',
+          icon: '🎭',
+          filePath: 'assets\\hero.png',
+          mediaType: 'image',
+          entityType: 'character',
+          navigationData: { assetId: 'asset-1' },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: 'asset',
+        id: 'asset-1',
+        label: 'Hero portrait',
+        summary: 'Asset: Hero portrait',
+        source: 'asset-library',
+        icon: '🎭',
+        filePath: 'assets/hero.png',
+        mediaType: 'image',
+        entityType: 'character',
+        navigationData: { assetId: 'asset-1' },
       },
     ]);
   });
@@ -543,6 +611,7 @@ describe('message runtime helpers', () => {
           id: 'node-1',
           label: 'Hero frame',
           summary: 'Canvas: Hero frame',
+          source: 'canvas',
         },
       ],
     });
@@ -574,6 +643,7 @@ describe('message runtime helpers', () => {
           id: 'node-1',
           label: 'App hero',
           summary: 'Canvas: App hero',
+          source: 'canvas',
         },
       ],
     });

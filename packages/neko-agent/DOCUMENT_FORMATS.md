@@ -49,6 +49,22 @@ NekoAgent supports reading and extracting content from various document formats 
 
 ## Usage
 
+### Structured Manifest And Range Reads
+
+`ReadDocument` keeps the legacy full-content behavior, and also supports structured modes for large documents:
+
+```typescript
+await readDocument({ file_path: '/path/to/book.epub', mode: 'manifest' });
+await readDocument({
+  file_path: '/path/to/book.epub',
+  mode: 'range',
+  range: { locator: { kind: 'chapter', chapterHref: 'chapter-1.xhtml', spineIndex: 0 } },
+});
+await readDocument({ file_path: '/path/to/book.epub', mode: 'next', cursor });
+```
+
+Preview selections carry `DocumentSourceRef`, `DocumentLocator`, and an excerpt so Agent can continue from the same page/chapter/entry instead of re-reading and truncating the whole file.
+
 ### Basic Reading
 
 ```typescript

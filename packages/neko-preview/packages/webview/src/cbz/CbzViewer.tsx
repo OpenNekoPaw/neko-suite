@@ -59,8 +59,22 @@ export const CbzViewer: FC = () => {
   // Track active waterfall images for region selection
   const waterfallImgRefs = useRef<Map<number, HTMLImageElement>>(new Map());
 
+  const getPageLocator = useCallback(
+    ({ pageNumber }: { pageNumber?: number }) => {
+      const page = pageNumber ?? currentPage + 1;
+      return {
+        kind: 'page' as const,
+        pageNumber: page,
+        pageIndex: Math.max(0, page - 1),
+        entryName: imageEntries[Math.max(0, page - 1)]?.filename,
+      };
+    },
+    [currentPage, imageEntries],
+  );
+
   const { sendRegionToAgent, sendFileToAgent } = useDocumentSelection({
     pageNumber: currentPage + 1,
+    getLocator: getPageLocator,
     enabled: false, // CBZ uses region selection, not text
   });
 

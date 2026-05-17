@@ -10,6 +10,9 @@ import type {
   ProjectFileMentionInfo,
   ProjectFilesWebviewMessage,
   ProjectMentionExtra,
+  ProjectMentionExtraType,
+  ProjectMentionMediaType,
+  ProjectMentionSource,
   RuntimeMediaModelSelections,
   SessionMode,
   ThinkingMessage,
@@ -21,6 +24,8 @@ import {
 } from '@neko-agent/types';
 import type {
   AgentContextPayload,
+  DocumentContextData,
+  DocumentLocator,
   MessageAttachment,
   ProviderGenerationCapability,
 } from '@neko/shared';
@@ -248,6 +253,9 @@ export interface AgentProjectFileSearchPlan {
 
 export interface AgentProjectFileCandidate {
   readonly relativePath: string;
+  readonly icon?: string;
+  readonly source?: ProjectMentionSource;
+  readonly mediaType?: ProjectMentionMediaType;
 }
 
 export interface AgentMentionCharacter {
@@ -263,6 +271,20 @@ export interface AgentMentionScene {
   readonly heading?: string;
 }
 
+export interface AgentProjectMentionCandidate {
+  readonly type: ProjectMentionExtraType;
+  readonly id: string;
+  readonly label: string;
+  readonly summary: string;
+  readonly source?: ProjectMentionSource;
+  readonly icon?: string;
+  readonly filePath?: string;
+  readonly mediaType?: ProjectMentionMediaType;
+  readonly entityType?: string;
+  readonly thumbnailUri?: string;
+  readonly navigationData?: Record<string, string>;
+}
+
 export interface AgentProjectFilesProjectionInput {
   readonly conversationId: string;
   readonly filter?: string;
@@ -270,6 +292,7 @@ export interface AgentProjectFilesProjectionInput {
   readonly canvasNodes?: readonly AgentAmbientCanvasNode[];
   readonly characters?: readonly AgentMentionCharacter[];
   readonly scenes?: readonly AgentMentionScene[];
+  readonly mentionCandidates?: readonly AgentProjectMentionCandidate[];
 }
 
 export interface ExecuteAgentProjectFileSearchInput {
@@ -281,6 +304,9 @@ export interface ExecuteAgentProjectFileSearchInput {
   readonly getCanvasNodes?: (conversationId: string) => readonly AgentAmbientCanvasNode[];
   readonly getCharacters?: () => Promise<readonly AgentMentionCharacter[]>;
   readonly getScenes?: () => Promise<readonly AgentMentionScene[]>;
+  readonly getMentionCandidates?: (
+    plan: AgentProjectFileSearchPlan,
+  ) => Promise<readonly AgentProjectMentionCandidate[]>;
   readonly onSearchError?: (error: unknown) => void;
 }
 
@@ -720,9 +746,35 @@ export function buildEnhancedAgentMessage(input: BuildEnhancedAgentMessageInput)
 }
 
 export function formatAgentContextPayload(payload: AgentContextPayload): string {
+  const documentContext =
+    payload.type === 'document-selection' ? extractDocumentContextData(payload.data) : undefined;
   const text = extractAgentContextText(payload.data);
   const imageData = extractAgentContextImageData(payload.data);
   const filePath = extractAgentContextFilePath(payload.data);
+
+  if (documentContext) {
+    const lines = [`[Document: ${payload.label}]`];
+    const source = documentContext.source;
+    lines.push(`Source: ${source?.filePath ?? filePath ?? 'unknown'}`);
+    if (source?.format) {
+      lines.push(`Format: ${source.format}`);
+    }
+    const locatorText = formatDocumentLocator(documentContext.locator);
+    if (locatorText) {
+      lines.push(`Locator: ${locatorText}`);
+    }
+    const excerptText = documentContext.excerpt?.text ?? text;
+    if (excerptText) {
+      lines.push(`Excerpt:\n${excerptText}`);
+    }
+    if (imageData || documentContext.excerpt?.imageData) {
+      lines.push('[Image attached]');
+    }
+    lines.push(
+      'Follow-up: use ReadDocument with mode="manifest" or mode="range" and this source/locator when more document context is needed.',
+    );
+    return lines.join('\n');
+  }
 
   if (text && imageData) {
     return `[Content: ${payload.label}]\n${text}\n[Image attached]`;
@@ -758,10 +810,17 @@ export async function executeAgentProjectFileSearch(
   input: ExecuteAgentProjectFileSearchInput,
 ): Promise<ProjectFilesWebviewMessage> {
   let files: readonly AgentProjectFileCandidate[] = [];
+  let mentionCandidates: readonly AgentProjectMentionCandidate[] = [];
   const plan = buildAgentProjectFileSearchPlan({ filter: input.filter });
 
   try {
     files = input.searchProjectFiles ? await input.searchProjectFiles(plan) : [];
+  } catch (error) {
+    input.onSearchError?.(error);
+  }
+
+  try {
+    mentionCandidates = input.getMentionCandidates ? await input.getMentionCandidates(plan) : [];
   } catch (error) {
     input.onSearchError?.(error);
   }
@@ -778,6 +837,7 @@ export async function executeAgentProjectFileSearch(
     canvasNodes: input.getCanvasNodes?.(input.conversationId) ?? [],
     characters,
     scenes,
+    mentionCandidates,
   });
 }
 
@@ -793,6 +853,7 @@ export function projectAgentProjectFilesMessage(
       input.filter,
       input.characters,
       input.scenes,
+      input.mentionCandidates,
     ),
   };
 }
@@ -806,6 +867,9 @@ export function projectAgentFileMentions(
       path: relativePath,
       name: getProjectPathBaseName(relativePath),
       type: 'file',
+      ...(file.icon ? { icon: file.icon } : {}),
+      ...(file.source ? { source: file.source } : {}),
+      ...(file.mediaType ? { mediaType: file.mediaType } : {}),
     };
   });
 }
@@ -815,6 +879,7 @@ export function projectAgentMentionExtras(
   filter?: string,
   characters?: readonly AgentMentionCharacter[],
   scenes?: readonly AgentMentionScene[],
+  mentionCandidates?: readonly AgentProjectMentionCandidate[],
 ): ProjectMentionExtra[] {
   const normalizedFilter = normalizeProjectFileFilter(filter).toLowerCase();
   const extras: ProjectMentionExtra[] = [];
@@ -826,6 +891,7 @@ export function projectAgentMentionExtras(
         id: node.nodeId,
         label: node.summary,
         summary: `Canvas: ${node.summary}`,
+        source: 'canvas',
       });
     }
   }
@@ -838,6 +904,7 @@ export function projectAgentMentionExtras(
           id: c.id,
           label: c.name,
           summary: `Character: ${c.name}${c.role ? ` (${c.role})` : ''}`,
+          source: 'story',
           ...(c.thumbnailUri ? { thumbnailUri: c.thumbnailUri } : {}),
         });
       }
@@ -853,8 +920,36 @@ export function projectAgentMentionExtras(
           id: s.id,
           label: s.title,
           summary: `Scene: ${s.heading ?? s.title}`,
+          source: 'story',
         });
       }
+    }
+  }
+
+  if (mentionCandidates) {
+    for (const candidate of mentionCandidates) {
+      const text = `${candidate.label} ${candidate.summary} ${candidate.filePath ?? ''} ${
+        candidate.entityType ?? ''
+      }`.toLowerCase();
+      if (normalizedFilter && !text.includes(normalizedFilter)) {
+        continue;
+      }
+
+      extras.push({
+        type: candidate.type,
+        id: candidate.id,
+        label: candidate.label,
+        summary: candidate.summary,
+        ...(candidate.source ? { source: candidate.source } : {}),
+        ...(candidate.icon ? { icon: candidate.icon } : {}),
+        ...(candidate.filePath
+          ? { filePath: normalizeRelativeProjectPath(candidate.filePath) }
+          : {}),
+        ...(candidate.mediaType ? { mediaType: candidate.mediaType } : {}),
+        ...(candidate.entityType ? { entityType: candidate.entityType } : {}),
+        ...(candidate.thumbnailUri ? { thumbnailUri: candidate.thumbnailUri } : {}),
+        ...(candidate.navigationData ? { navigationData: candidate.navigationData } : {}),
+      });
     }
   }
 
@@ -1272,6 +1367,35 @@ function extractAgentContextImageData(data: unknown): string | undefined {
 function extractAgentContextFilePath(data: unknown): string | undefined {
   if (!isRecord(data)) return undefined;
   return optionalString(data['filePath']) ?? optionalString(data['path']);
+}
+
+function extractDocumentContextData(data: unknown): DocumentContextData | undefined {
+  if (!isRecord(data)) return undefined;
+  const source = data['source'];
+  const locator = data['locator'];
+  if (isRecord(source) || isRecord(locator) || isRecord(data['excerpt'])) {
+    return data as DocumentContextData;
+  }
+  return undefined;
+}
+
+function formatDocumentLocator(locator: DocumentLocator | undefined): string | undefined {
+  if (!locator) return undefined;
+  switch (locator.kind) {
+    case 'page':
+      return `page ${locator.pageNumber}${locator.entryName ? ` (${locator.entryName})` : ''}`;
+    case 'chapter':
+      return `chapter ${locator.chapterHref}${locator.spineIndex !== undefined ? ` spine ${locator.spineIndex}` : ''}`;
+    case 'slide':
+      return `slide ${locator.slideNumber}`;
+    case 'text-range':
+      if (locator.startLine !== undefined || locator.endLine !== undefined) {
+        return `lines ${locator.startLine ?? '?'}-${locator.endLine ?? '?'}`;
+      }
+      return `chars ${locator.startChar ?? '?'}-${locator.endChar ?? '?'}`;
+    case 'region':
+      return `page ${locator.pageNumber} region x=${locator.region.x} y=${locator.region.y} w=${locator.region.width} h=${locator.region.height}`;
+  }
 }
 
 function optionalString(value: unknown): string | undefined {

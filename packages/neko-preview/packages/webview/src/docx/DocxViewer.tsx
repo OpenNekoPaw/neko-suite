@@ -4,7 +4,7 @@
  * Native text selection works on the rendered DOM.
  */
 
-import { useState, useEffect, useRef, useCallback, type FC } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type FC } from 'react';
 import { renderAsync } from 'docx-preview';
 import { useExtensionMessage, postMessage } from '../shared/useVscodeMessage';
 import { useDocumentSelection } from '../shared/useDocumentSelection';
@@ -20,7 +20,16 @@ export const DocxViewer: FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const styleContainerRef = useRef<HTMLDivElement>(null);
 
-  const { selection, sendFileToAgent } = useDocumentSelection({});
+  const getSelectionLocator = useCallback(() => {
+    const locator = resolveDocxSelectionLocator(containerRef.current);
+    return locator ?? { kind: 'text-range' as const, startChar: 0 };
+  }, []);
+
+  const fileLocator = useMemo(() => ({ kind: 'text-range' as const, startChar: 0 }), []);
+  const { selection, sendFileToAgent } = useDocumentSelection({
+    locator: fileLocator,
+    getLocator: getSelectionLocator,
+  });
 
   useExtensionMessage((msg) => {
     if (msg.type === 'document:data') {
@@ -125,18 +134,23 @@ export const DocxViewer: FC = () => {
     }
 
     const contentKind = hasText && imageData ? 'mixed' : hasText ? 'text' : 'image';
+    const locator = getSelectionLocator();
     postMessage({
       type: 'document:sendToAi',
       payload: {
         text: selection?.text || undefined,
         imageData,
         contentKind,
+        locator,
+        excerpt: selection?.text
+          ? { contentKind, text: selection.text, imageData, truncated: false }
+          : undefined,
       },
     } as never);
 
     window.getSelection()?.removeAllRanges();
     setRightClickedImageSrc(null);
-  }, [selection, rightClickedImageSrc]);
+  }, [selection, rightClickedImageSrc, getSelectionLocator]);
 
   const contextActions = useDocumentContextActions({
     hasContent: !!selection || !!rightClickedImageSrc,
@@ -207,3 +221,34 @@ export const DocxViewer: FC = () => {
     </DocumentContextMenu>
   );
 };
+
+function resolveDocxSelectionLocator(root: HTMLElement | null) {
+  const selection = window.getSelection();
+  if (!root || !selection || selection.rangeCount === 0) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (
+    !root.contains(range.startContainer) ||
+    !root.contains(range.endContainer) ||
+    selection.toString().length === 0
+  ) {
+    return null;
+  }
+
+  const startRange = document.createRange();
+  startRange.setStart(root, 0);
+  startRange.setEnd(range.startContainer, range.startOffset);
+
+  const selectedText = selection.toString();
+  const startChar = startRange.toString().length;
+  const endChar = startChar + selectedText.length;
+  startRange.detach();
+
+  return {
+    kind: 'text-range' as const,
+    startChar,
+    endChar,
+  };
+}

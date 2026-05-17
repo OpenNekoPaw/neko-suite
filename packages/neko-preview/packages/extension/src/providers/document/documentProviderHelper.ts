@@ -14,7 +14,17 @@
  */
 
 import * as vscode from 'vscode';
-import type { AgentContextPayload } from '@neko/shared';
+import type {
+  AgentContextPayload,
+  DocumentContentKind,
+  DocumentContextData,
+  DocumentExcerpt,
+  DocumentFormat,
+  DocumentLocator,
+  DocumentRange,
+  DocumentRegion,
+  DocumentSourceRef,
+} from '@neko/shared';
 import type { PreviewEntry } from '../../utils/html';
 import { getWebviewHtml } from '../../utils/html';
 import { getLogger } from '../../utils/logger';
@@ -123,24 +133,41 @@ export async function setupDocumentWebview(
 
         // ── Send content to AI agent ──────────────────────────────────
         case 'document:sendToAi': {
-          const { text, imageData, contentKind, context } = (
+          const { text, imageData, contentKind, context, locator, range, excerpt } = (
             msg as DocumentWebviewMessage & { type: 'document:sendToAi' }
           ).payload;
+          const normalizedContentKind = contentKind ?? inferContentKind(text, imageData);
+          const source = buildDocumentSourceRef(filePath, entry);
+          const normalizedLocator =
+            locator ?? buildLegacyLocator(context?.page, context?.chapter, context?.region);
+          const normalizedExcerpt =
+            excerpt ?? buildDocumentExcerpt(normalizedContentKind, text, imageData);
           const label = buildLabel(fileName, context?.page, context?.chapter);
-          const intent = buildIntent(contentKind, text);
-          const summary = buildSummary(contentKind, text, !!imageData);
+          const intent = buildIntent(normalizedContentKind, text);
+          const summary = buildSummary(normalizedContentKind, text, !!imageData);
+          const data: DocumentContextData = {
+            filePath,
+            text,
+            imageData,
+            contentKind: normalizedContentKind,
+            context,
+            source,
+            locator: normalizedLocator,
+            range:
+              range ??
+              (normalizedLocator
+                ? {
+                    locator: normalizedLocator,
+                  }
+                : undefined),
+            excerpt: normalizedExcerpt,
+          };
           const payload: AgentContextPayload = {
             type: 'document-selection',
             id: `doc:${filePath}:${context?.page ?? 0}:${Date.now()}`,
             label,
             summary,
-            data: {
-              filePath,
-              text,
-              imageData,
-              contentKind,
-              context,
-            },
+            data,
             intent,
           };
           try {
@@ -196,6 +223,77 @@ export function registerOpenCommand(
       }
     }),
   );
+}
+
+function buildDocumentSourceRef(filePath: string, entry: PreviewEntry): DocumentSourceRef {
+  return {
+    filePath,
+    format: detectPreviewDocumentFormat(filePath, entry),
+    fileId: filePath,
+  };
+}
+
+function detectPreviewDocumentFormat(filePath: string, entry: PreviewEntry): DocumentFormat {
+  if (entry === 'epub' || entry === 'cbz' || entry === 'docx' || entry === 'pdf') {
+    return entry;
+  }
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  return ext === 'doc' ? 'doc' : 'unknown';
+}
+
+function buildLegacyLocator(
+  pageNumber: number | undefined,
+  chapterTitle: string | undefined,
+  region: DocumentRegion | undefined,
+): DocumentLocator | undefined {
+  if (pageNumber !== undefined && region) {
+    return {
+      kind: 'region',
+      pageNumber,
+      pageIndex: Math.max(0, pageNumber - 1),
+      region,
+    };
+  }
+  if (pageNumber !== undefined) {
+    return {
+      kind: 'page',
+      pageNumber,
+      pageIndex: Math.max(0, pageNumber - 1),
+    };
+  }
+  if (chapterTitle) {
+    return {
+      kind: 'chapter',
+      chapterHref: chapterTitle,
+      title: chapterTitle,
+    };
+  }
+  return undefined;
+}
+
+function buildDocumentExcerpt(
+  contentKind: DocumentContentKind,
+  text: string | undefined,
+  imageData: string | undefined,
+): DocumentExcerpt | undefined {
+  if (!text && !imageData) {
+    return undefined;
+  }
+  return {
+    contentKind,
+    text,
+    imageData,
+    truncated: false,
+  };
+}
+
+function inferContentKind(
+  text: string | undefined,
+  imageData: string | undefined,
+): DocumentContentKind {
+  if (text && imageData) return 'mixed';
+  if (imageData) return 'image';
+  return 'text';
 }
 
 function buildIntent(contentKind: string, text: string | undefined): string {
