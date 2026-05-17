@@ -30,6 +30,8 @@ import { TimelineToolBridge } from './services/timelineToolBridge';
 import { NekoCutDashboardTaskSource } from './services/dashboardTaskSource';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 
+type GenerateVideoForClipOptions = Parameters<NekoCutAPI['ai']['generateVideoForClip']>[0];
+
 /**
  * Activate the extension
  */
@@ -148,6 +150,14 @@ export async function activate(
           description:
             'Generate an AI video clip from a text prompt and add it directly to the timeline. ' +
             'Supports image-to-video when a reference image is provided.',
+          locales: {
+            'zh-cn': {
+              name: '生成视频片段',
+              description:
+                '根据文本提示生成 AI 视频片段，并直接添加到时间线。提供参考图时支持图生视频。',
+              tags: ['生成', '视频', '时间线'],
+            },
+          },
           icon: '$(play-circle)',
           command: 'neko.cut.ai.generateVideoForClip',
           tags: ['generation', 'video', 'timeline'],
@@ -158,6 +168,14 @@ export async function activate(
           description:
             'Transcribe audio or video file speech to text using Whisper, then add subtitle ' +
             'elements to the timeline with word-level timestamps.',
+          locales: {
+            'zh-cn': {
+              name: '转写音频为字幕',
+              description:
+                '使用 Whisper 将音频或视频中的语音转写为文本，并把带词级时间戳的字幕元素添加到时间线。',
+              tags: ['转写', '音频', '字幕'],
+            },
+          },
           icon: '$(mic)',
           command: 'neko.cut.ai.transcribeToSubtitles',
           tags: ['transcription', 'audio', 'subtitles'],
@@ -171,21 +189,49 @@ export async function activate(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.cut.ai.generateVideoForClip',
-      async (options: Parameters<NekoCutAPI['ai']['generateVideoForClip']>[0]) => {
-        // Delegate to neko-agent GenerateVideoForClip tool via internal chat command
-        const elementId = await vscode.commands.executeCommand<string | undefined>(
-          'neko.agent.generateForNode',
-          {
-            nodeId: `cut-${Date.now()}`,
-            prompt: options.prompt,
-            referenceRefs: options.referenceImageBase64
-              ? [options.referenceImageBase64]
-              : undefined,
-          },
+      async (options?: GenerateVideoForClipOptions | unknown) => {
+        const providedPrompt = readStringProperty(options, 'prompt');
+        const prompt = providedPrompt ?? (await promptForGenerateVideoClip());
+        if (!prompt) return undefined;
+
+        const referenceImageBase64 = readStringProperty(options, 'referenceImageBase64');
+
+        if (providedPrompt) {
+          try {
+            const result = await vscode.commands.executeCommand<unknown>(
+              'neko.agent.generateForNode',
+              {
+                nodeId: `cut-${Date.now()}`,
+                prompt,
+                ...(referenceImageBase64 ? { referenceRefs: [referenceImageBase64] } : {}),
+              },
+            );
+            const elementId = readGeneratedElementId(result);
+            if (elementId) return { elementId };
+          } catch (error) {
+            getRootLogger().warn('neko.cut.ai.generateVideoForClip direct generation failed', {
+              error,
+            });
+          }
+        }
+
+        await sendCutSkillIntentToAgent(
+          `Generate a video clip for the active NekoCut timeline from this prompt: ${prompt}`,
         );
-        return elementId ? { elementId } : undefined;
+        return undefined;
       },
     ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.cut.ai.transcribeToSubtitles', async (args?: unknown) => {
+      const filePath = readStringProperty(args, 'filePath') ?? (await promptForMediaFilePath());
+      if (!filePath) return;
+
+      await sendCutSkillIntentToAgent(
+        `Transcribe this audio/video file and add word-timed subtitles to the active NekoCut timeline: ${filePath}`,
+      );
+    }),
   );
 
   // Register Agent Capability Provider (P0-1: sub-package owns its tool definitions)
@@ -208,4 +254,54 @@ export async function activate(
  */
 export function deactivate(): void {
   getRootLogger().info('Deactivating extension...');
+}
+
+async function promptForGenerateVideoClip(): Promise<string | undefined> {
+  return vscode.window.showInputBox({
+    prompt: 'Describe the video clip to generate',
+    placeHolder: 'A cinematic close-up of rain on a neon city street...',
+  });
+}
+
+async function promptForMediaFilePath(): Promise<string | undefined> {
+  const selected = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    openLabel: 'Select Audio or Video',
+    filters: {
+      'Audio / Video': ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4', 'mov', 'mkv', 'webm'],
+      'All Files': ['*'],
+    },
+  });
+  return selected?.[0]?.fsPath;
+}
+
+async function sendCutSkillIntentToAgent(intent: string): Promise<void> {
+  try {
+    await vscode.commands.executeCommand('neko.agent.invokeSkill', {
+      skillName: 'ai-generate',
+      intent,
+      skill: {
+        name: 'NekoCut',
+        description: 'NekoCut timeline AI workflow',
+      },
+    });
+  } catch (error) {
+    getRootLogger().warn('Failed to forward NekoCut skill intent to neko-agent', { error });
+    vscode.window.showWarningMessage('Neko Agent is required to run this skill.');
+  }
+}
+
+function readGeneratedElementId(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  return readStringProperty(value, 'elementId');
+}
+
+function readStringProperty(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const candidate = value[key];
+  return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

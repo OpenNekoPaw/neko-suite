@@ -281,6 +281,14 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
           description:
             'Trigger AI image generation for all shot nodes on the active storyboard canvas. ' +
             'Runs up to 2 generations in parallel with automatic retry on failure.',
+          locales: {
+            'zh-cn': {
+              name: '批量生成图片',
+              description:
+                '为当前故事板画布上的所有镜头节点触发 AI 图片生成。最多并行生成 2 个，失败后自动重试。',
+              tags: ['生成', '图片', '故事板', '批量'],
+            },
+          },
           icon: '$(images)',
           command: 'neko.neko-canvas.slashCommand.batch',
           tags: ['generation', 'image', 'storyboard', 'batch'],
@@ -290,6 +298,13 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
           name: 'Export Storyboard',
           description:
             'Export the current storyboard canvas as a PDF document or ZIP archive of shot images.',
+          locales: {
+            'zh-cn': {
+              name: '导出故事板',
+              description: '将当前故事板画布导出为 PDF 文档，或导出为镜头图片 ZIP 压缩包。',
+              tags: ['导出', '故事板', 'PDF', 'ZIP'],
+            },
+          },
           icon: '$(package)',
           command: 'neko.neko-canvas.slashCommand.export',
           tags: ['export', 'storyboard', 'pdf', 'zip'],
@@ -299,6 +314,13 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
           name: 'Generate Image for Selected Shot',
           description:
             'Trigger AI image generation for the currently selected shot node on the canvas.',
+          locales: {
+            'zh-cn': {
+              name: '生成选中镜头图片',
+              description: '为画布上当前选中的镜头节点触发 AI 图片生成。',
+              tags: ['生成', '图片', '镜头'],
+            },
+          },
           icon: '$(sparkle)',
           command: 'neko.canvas.generateSelected',
           tags: ['generation', 'image', 'shot'],
