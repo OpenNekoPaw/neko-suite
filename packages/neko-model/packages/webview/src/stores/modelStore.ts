@@ -69,6 +69,7 @@ export interface ModelState {
 
   // Model loading
   modelUrl: string | null;
+  modelResourceBaseUrl: string | null;
   isLoading: boolean;
   qualityPreviewDataUrl: string | null;
   environmentPlacement: EnvironmentPlacement | null;
@@ -138,7 +139,7 @@ export interface ModelState {
   setTransformMode: (mode: TransformMode) => void;
 
   // Actions — Model
-  setModelUrl: (url: string | null) => void;
+  setModelUrl: (url: string | null, resourceBaseUrl?: string | null) => void;
   setLoading: (loading: boolean) => void;
   setQualityPreview: (dataUrl: string | null) => void;
   setEnvironmentPlacement: (placement: EnvironmentPlacement | null) => void;
@@ -216,6 +217,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   playbackState: 'stopped',
   transformMode: 'translate',
   modelUrl: null,
+  modelResourceBaseUrl: null,
   isLoading: false,
   qualityPreviewDataUrl: null,
   environmentPlacement: null,
@@ -506,7 +508,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
   setTransformMode: (mode) => set({ transformMode: mode }),
 
   // Model actions
-  setModelUrl: (url) => set({ modelUrl: url, qualityPreviewDataUrl: null }),
+  setModelUrl: (url, resourceBaseUrl = null) =>
+    set({ modelUrl: url, modelResourceBaseUrl: resourceBaseUrl, qualityPreviewDataUrl: null }),
 
   setLoading: (loading) => set({ isLoading: loading }),
 

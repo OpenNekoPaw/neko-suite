@@ -316,8 +316,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const data = fs.readFileSync(filePath);
-      await client.loadPuppet(data.buffer as ArrayBuffer);
+      await client.loadPuppetSource(filePath);
 
       const params = await client.getPuppetParameters();
       this.postMessage({

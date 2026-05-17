@@ -7,6 +7,7 @@
 /** Messages from extension → webview */
 export type ExtensionToWebviewMessage =
   | { type: 'loadPuppet'; data: string }
+  | { type: 'loadPuppetSource'; source: string }
   | { type: 'enginePort'; port: number }
   | { type: 'setLocale'; locale: string }
   | { type: 'loadState'; parameters: Record<string, number> }

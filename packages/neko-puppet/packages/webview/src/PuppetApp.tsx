@@ -12,7 +12,6 @@ import { ParameterPanel } from './components/ParameterPanel';
 import { PuppetNodeTree } from './components/PuppetNodeTree';
 import { PuppetKeyframeTimeline } from './components/PuppetKeyframeTimeline';
 import { PuppetCanvas } from './components/PuppetCanvas';
-import { parseInpTextures } from './utils/inp-parser';
 import { PuppetController } from './animation';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
@@ -154,7 +153,8 @@ export function PuppetApp() {
         break;
       }
 
-      case 'loadPuppet': {
+      case 'loadPuppet':
+      case 'loadPuppetSource': {
         const ctrl = controllerRef.current;
         if (!ctrl) {
           // Request engine port first, then retry
@@ -162,19 +162,19 @@ export function PuppetApp() {
           break;
         }
 
-        // Decode base64 → ArrayBuffer and load puppet
-        const binaryStr = atob(msg.data);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) {
-          bytes[i] = binaryStr.charCodeAt(i);
-        }
+        const load =
+          msg.type === 'loadPuppetSource'
+            ? () => ctrl.loadSource(msg.source)
+            : () => {
+                const binaryStr = atob(msg.data);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) {
+                  bytes[i] = binaryStr.charCodeAt(i);
+                }
+                return ctrl.load(bytes.buffer);
+              };
 
-        // Parse textures from INP binary (before engine load)
-        void parseInpTextures(bytes).then((textures) => {
-          usePuppetStore.getState().setTextures(textures);
-        });
-
-        void ctrl.load(bytes.buffer).then(async (snapshot) => {
+        void load().then(async (snapshot) => {
           const store = usePuppetStore.getState();
           store.setPuppetSnapshot(snapshot);
           store.setPuppetLoaded(true);

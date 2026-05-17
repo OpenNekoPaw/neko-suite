@@ -103,7 +103,7 @@ export function App(): React.JSX.Element {
       const message = event.data;
       switch (message.type) {
         case 'loadModel':
-          setModelUrl(message.uri);
+          setModelUrl(message.resourceUrl ?? message.uri, message.resourceBaseUrl ?? null);
           break;
         case 'enginePort': {
           setEnginePort(message.port);

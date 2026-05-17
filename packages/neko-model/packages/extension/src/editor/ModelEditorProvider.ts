@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient } from '@neko/neko-client';
+import type { FileSourceRef, RegisteredFile } from '@neko/neko-client';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
 import type { EnvironmentPlacement } from '@neko/shared';
 import {
@@ -18,6 +19,12 @@ import type { VrmExpressionValues } from '../live/vmcMapping';
 
 const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
 
+interface EngineModelResource {
+  readonly sourceRef?: FileSourceRef;
+  readonly resourceUrl?: string;
+  readonly resourceBaseUrl?: string;
+}
+
 /**
  * Custom editor provider for 3D model files (.gltf, .glb, .vrm)
  *
@@ -34,6 +41,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private queuedModelImport: { uri: vscode.Uri } | undefined;
   private engineClient: EngineClient | undefined;
   private activeStreamId: string | undefined;
+  private activeModelResourceToken: string | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -86,6 +94,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           .controlStream('streams', streamId, 'destroy')
           .catch((err) => this.logError('dispose:destroyStream', err));
       }
+      void this.releaseActiveModelResource();
     });
 
     // Try to connect to engine backend
@@ -178,13 +187,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             await this.tryLoadModelFromProject(filePath, webviewPanel);
           }
         } else {
-          // Send model file URI to webview for R3F direct loading
-          const modelUri = webviewPanel.webview.asWebviewUri(document.uri);
-          webviewPanel.webview.postMessage({
-            type: 'loadModel',
-            uri: modelUri.toString(),
-            filePath,
-          });
+          await this.postLoadModelMessage(filePath, webviewPanel);
 
           // Also load in engine backend if available
           await this.loadModelInEngine(filePath, webviewPanel);
@@ -640,12 +643,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
     // Send model URI to webview for R3F loading
     this.addWebviewResourceRoot(webviewPanel, path.dirname(importPath));
-    const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(importPath));
-    webviewPanel.webview.postMessage({
-      type: 'loadModel',
-      uri: modelUri.toString(),
-      filePath: importPath,
-    });
+    await this.postLoadModelMessage(importPath, webviewPanel);
 
     // Also load in engine backend
     await this.loadModelInEngine(importPath, webviewPanel);
@@ -686,6 +684,58 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     };
   }
 
+  private async postLoadModelMessage(
+    filePath: string,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<EngineModelResource | undefined> {
+    const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(filePath));
+    const engineResource = await this.registerModelResource(filePath);
+    webviewPanel.webview.postMessage({
+      type: 'loadModel',
+      uri: modelUri.toString(),
+      filePath,
+      sourceRef: engineResource?.sourceRef,
+      resourceUrl: engineResource?.resourceUrl,
+      resourceBaseUrl: engineResource?.resourceBaseUrl,
+    });
+    return engineResource;
+  }
+
+  private async registerModelResource(filePath: string): Promise<EngineModelResource | undefined> {
+    const client = await this.ensureEngineClient();
+    if (!client) return undefined;
+
+    try {
+      const registered = await client.registerFile({ filePath, purpose: 'model' });
+      await this.releaseActiveModelResource(client);
+      this.activeModelResourceToken = registered.token;
+      return this.toEngineModelResource(client, filePath, registered);
+    } catch (err) {
+      this.logError('registerModelResource', err);
+      return undefined;
+    }
+  }
+
+  private async releaseActiveModelResource(client = this.engineClient): Promise<void> {
+    const token = this.activeModelResourceToken;
+    if (!token || !client) return;
+    this.activeModelResourceToken = undefined;
+    await client.unregisterFile(token);
+  }
+
+  private toEngineModelResource(
+    client: EngineClient,
+    filePath: string,
+    registered: RegisteredFile,
+  ): EngineModelResource {
+    const fileName = path.basename(filePath);
+    return {
+      sourceRef: { token: registered.token },
+      resourceUrl: client.getFileResourceUrl(registered.token, fileName),
+      resourceBaseUrl: client.getFileResourceBaseUrl(registered.token),
+    };
+  }
+
   private getWorkspaceFolderUris(): readonly vscode.Uri[] {
     return (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri);
   }
@@ -701,7 +751,9 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     if (!client) return;
 
     try {
-      const data = await client.loadModel(filePath);
+      const data = await client.withRegisteredFile({ filePath, purpose: 'model' }, (registered) =>
+        client.loadModel({ token: registered.token }),
+      );
       webviewPanel.webview.postMessage({
         type: 'sceneSnapshot',
         snapshot: data,
@@ -766,12 +818,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       }
 
       // Send model URI to webview for R3F loading
-      const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(modelPath));
-      webviewPanel.webview.postMessage({
-        type: 'loadModel',
-        uri: modelUri.toString(),
-        filePath: modelPath,
-      });
+      await this.postLoadModelMessage(modelPath, webviewPanel);
 
       // Also load in engine backend
       await this.loadModelInEngine(modelPath, webviewPanel);
@@ -800,7 +847,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     content="default-src 'none';
              style-src ${webview.cspSource} 'unsafe-inline';
              script-src 'nonce-${nonce}' 'wasm-unsafe-eval';
-             img-src ${webview.cspSource} data: blob: https:;
+             img-src ${webview.cspSource} data: blob: https: http://127.0.0.1:*;
              font-src ${webview.cspSource};
              connect-src ${webview.cspSource} ws://127.0.0.1:* http://127.0.0.1:*;">
   <link rel="stylesheet" href="${webviewDistUri}/assets/index.css">

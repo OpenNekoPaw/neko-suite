@@ -227,14 +227,10 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         }
 
         if (document.isInpFile) {
-          // Read-only .inp: send binary directly
-          try {
-            const fileData = await vscode.workspace.fs.readFile(document.uri);
-            const base64 = Buffer.from(fileData).toString('base64');
-            webviewPanel.webview.postMessage({ type: 'loadPuppet', data: base64 });
-          } catch (err) {
-            logger.error(`Failed to read puppet file: ${err}`);
-          }
+          webviewPanel.webview.postMessage({
+            type: 'loadPuppetSource',
+            source: document.uri.fsPath,
+          });
         } else if (document.projectData) {
           // .nkp project: resolve .inp src and load
           const srcPath = document.projectData.puppet.src;
@@ -372,7 +368,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   }
 
   /**
-   * Resolve .inp path from .nkp project and send binary to webview.
+   * Resolve .inp path from .nkp project and let the webview load it through engine source refs.
    */
   private async loadInpFromProject(
     document: PuppetDocument,
@@ -384,10 +380,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     try {
       const nkpDir = path.dirname(document.uri.fsPath);
       const inpAbsPath = path.resolve(nkpDir, srcPath);
-      const inpUri = vscode.Uri.file(inpAbsPath);
-      const fileData = await vscode.workspace.fs.readFile(inpUri);
-      const base64 = Buffer.from(fileData).toString('base64');
-      webviewPanel.webview.postMessage({ type: 'loadPuppet', data: base64 });
+      webviewPanel.webview.postMessage({ type: 'loadPuppetSource', source: inpAbsPath });
     } catch (err) {
       logger.error(`Failed to read .inp from project: ${err}`);
     }

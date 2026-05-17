@@ -26,6 +26,9 @@ export interface IPuppetController {
   /** Load an INP puppet file */
   load(data: ArrayBuffer): Promise<PuppetSnapshot>;
 
+  /** Load an INP/MOC3 puppet from an engine-resolved local source. */
+  loadSource(source: string): Promise<PuppetSnapshot>;
+
   /** Set a parameter value (triggers deformation) */
   setParameter(name: string, value: number): Promise<void>;
 
@@ -124,6 +127,12 @@ export class PuppetController implements IPuppetController {
 
   async load(data: ArrayBuffer): Promise<PuppetSnapshot> {
     const raw = await this.engine.loadPuppet(data);
+    this.snapshot = raw as unknown as PuppetSnapshot;
+    return this.snapshot;
+  }
+
+  async loadSource(source: string): Promise<PuppetSnapshot> {
+    const raw = await this.engine.loadPuppetSource(source);
     this.snapshot = raw as unknown as PuppetSnapshot;
     return this.snapshot;
   }
