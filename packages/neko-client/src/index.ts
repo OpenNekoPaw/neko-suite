@@ -102,6 +102,8 @@ export { formatTime, formatTimePrecise } from './formatTime';
 export {
   EngineClient,
   type EngineClientConfig,
+  type FileAccessPurpose,
+  type FileSourceRef,
   type EnginePerceptionFacade,
   type PerceptionSimilarityRequest,
   type PerceptionTranscribeRequest,
@@ -110,6 +112,8 @@ export {
   type PuppetH264StreamHandle,
   type PuppetStreamFormat,
   type PuppetStreamOptions,
+  type RegisteredFile,
+  type RegisterFileRequest,
   type SceneCaptureOptions,
   type SceneCapturePreview,
   type SceneRenderStreamHandle,

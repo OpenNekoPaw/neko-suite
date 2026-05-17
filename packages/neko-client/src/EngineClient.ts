@@ -120,6 +120,41 @@ export interface EnginePerceptionFacade {
   detectShots(request: PerceptionDetectShotsRequest): Promise<readonly PerceptionDetectedShot[]>;
 }
 
+export type FileAccessPurpose =
+  | 'preview'
+  | 'media-decode'
+  | 'subtitle'
+  | 'document'
+  | 'model'
+  | 'puppet'
+  | 'agent-attachment'
+  | 'other';
+
+export interface FileSourceRef {
+  token?: string;
+  path?: string;
+  assetId?: string;
+}
+
+export interface RegisterFileRequest {
+  source?: string;
+  filePath?: string;
+  path?: string;
+  purpose?: FileAccessPurpose;
+  ttlMs?: number;
+  mimeHint?: string;
+}
+
+export interface RegisteredFile {
+  token: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  purpose: FileAccessPurpose;
+  rangeUrl: string;
+  entryBaseUrl?: string | null;
+  resourceBaseUrl?: string | null;
+}
+
 export interface SceneCapturePreview {
   width: number;
   height: number;
@@ -538,6 +573,15 @@ export class EngineClient {
         options = { ...options, source: this.resolveSource(optSource) };
       }
     }
+    if (options && typeof options === 'object' && 'sourceRef' in options) {
+      const sourceRef = (options as Record<string, unknown>).sourceRef;
+      if (isRecord(sourceRef) && typeof sourceRef.path === 'string') {
+        options = {
+          ...options,
+          sourceRef: { ...sourceRef, path: this.resolveSource(sourceRef.path) },
+        };
+      }
+    }
     // Also resolve sourceA/sourceB for diff operations
     if (options && typeof options === 'object') {
       const opts = options as Record<string, unknown>;
@@ -645,7 +689,7 @@ export class EngineClient {
     const resp = await this.dispatch({
       group: 'audios',
       action: 'waveform',
-      options: { source, ...opts },
+      options: { ...sourceOptions(source), ...opts },
     });
     this.assertOk(resp, 'audios:waveform');
 
@@ -732,7 +776,7 @@ export class EngineClient {
    * Returns raw image data as ArrayBuffer, or null on failure.
    */
   async extractFrame(
-    source: string,
+    source: string | FileSourceRef,
     time: number,
     opts?: { quality?: number; format?: string; width?: number; height?: number },
   ): Promise<ArrayBuffer | null> {
@@ -740,7 +784,7 @@ export class EngineClient {
       group: 'videos',
       action: 'capture',
       options: {
-        source,
+        ...sourceOptions(source),
         time,
         quality: opts?.quality ?? 85,
         format: opts?.format ?? 'jpeg',
@@ -765,14 +809,14 @@ export class EngineClient {
    * Returns raw image data as ArrayBuffer, or null on failure.
    */
   async captureImage(
-    source: string,
+    source: string | FileSourceRef,
     opts?: { quality?: number; format?: string; width?: number; height?: number },
   ): Promise<ArrayBuffer | null> {
     const resp = await this.dispatch({
       group: 'images',
       action: 'capture',
       options: {
-        source,
+        ...sourceOptions(source),
         quality: opts?.quality ?? 85,
         format: opts?.format ?? 'jpeg',
         ...(opts?.width != null && { width: opts.width }),
@@ -832,13 +876,13 @@ export class EngineClient {
    */
   async createStream(
     group: string,
-    source: string,
+    source: string | FileSourceRef,
     opts?: Record<string, unknown>,
   ): Promise<StreamHandle> {
     const resp = await this.dispatch({
       group,
       action: 'stream',
-      options: { source, ...opts },
+      options: { ...sourceOptions(source), ...opts },
     });
     this.assertOk(resp, `${group}:stream`);
 
@@ -1016,11 +1060,11 @@ export class EngineClient {
    * Dispatches `scenes:load`.
    * Returns the scene snapshot with all nodes and animations.
    */
-  async loadModel(source: string): Promise<SceneSnapshot> {
+  async loadModel(source: string | FileSourceRef): Promise<SceneSnapshot> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'load',
-      options: { source },
+      options: sourceOptions(source),
     });
     this.assertOk(resp, 'scenes:load');
     return normalizeSceneSnapshot(resp.data);
@@ -1268,6 +1312,22 @@ export class EngineClient {
       body: { data: base64Data },
     });
     this.assertOk(resp, 'puppets:load');
+    return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Load a puppet from an engine-resolved source reference.
+   * Prefer this over forwarding `.inp` bytes through Extension/Webview code.
+   */
+  async loadPuppetSource(source: string | FileSourceRef): Promise<Record<string, unknown>> {
+    const options =
+      typeof source === 'string' ? { source: this.resolveSource(source) } : { sourceRef: source };
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'load_source',
+      options,
+    });
+    this.assertOk(resp, 'puppets:load_source');
     return (resp.data as Record<string, unknown>) ?? {};
   }
 
@@ -2129,6 +2189,117 @@ export class EngineClient {
     return `${this.baseUrl}/v1/preview/file/${token}`;
   }
 
+  /** Build the general engine file access URL for a token. */
+  getFileTokenUrl(token: string): string {
+    return `${this.baseUrl}/v1/files/${encodeURIComponent(token)}`;
+  }
+
+  /** Build the general engine ZIP/container entry URL for a token and entry path. */
+  getFileEntryUrl(token: string, entryPath: string): string {
+    return `${this.baseUrl}/v1/files/${encodeURIComponent(token)}/entries/${encodeEntryPath(entryPath)}`;
+  }
+
+  /** Build the model/document resource base URL for relative Webview fetches. */
+  getFileResourceBaseUrl(token: string): string {
+    return `${this.baseUrl}/v1/files/${encodeURIComponent(token)}/resources/`;
+  }
+
+  /** Build a URL for a resource adjacent to a registered model/document file. */
+  getFileResourceUrl(token: string, resourcePath: string): string {
+    return `${this.getFileResourceBaseUrl(token)}${encodeEntryPath(resourcePath)}`;
+  }
+
+  /** Register a local file through the generic engine file access contract. */
+  async registerFile(request: RegisterFileRequest | string): Promise<RegisteredFile> {
+    const normalized =
+      typeof request === 'string'
+        ? { filePath: this.resolveSource(request), purpose: 'preview' as FileAccessPurpose }
+        : {
+            ...request,
+            filePath: request.filePath ? this.resolveSource(request.filePath) : request.filePath,
+            source: request.source ? this.resolveSource(request.source) : request.source,
+            path: request.path ? this.resolveSource(request.path) : request.path,
+          };
+    const resp = await this.dispatch({
+      group: 'files',
+      action: 'register',
+      options: normalized,
+    });
+    this.assertOk(resp, 'files:register');
+    return resp.data as RegisteredFile;
+  }
+
+  /** Best-effort release for a generic engine file token. */
+  async unregisterFile(token: string): Promise<void> {
+    await this.dispatch({
+      group: 'files',
+      action: 'unregister',
+      id: token,
+      options: {},
+    }).catch(() => {
+      // Best-effort; engine may have already stopped.
+    });
+  }
+
+  /** Fetch generic file token metadata. */
+  async statFile(token: string): Promise<RegisteredFile> {
+    const resp = await this.dispatch({
+      group: 'files',
+      action: 'stat',
+      id: token,
+      options: {},
+    });
+    this.assertOk(resp, 'files:stat');
+    return resp.data as RegisteredFile;
+  }
+
+  /** Resolve and authorize a local path without registering a token. */
+  async resolveFile(source: string): Promise<{ path: string }> {
+    const resp = await this.dispatch({
+      group: 'files',
+      action: 'resolve',
+      options: { source: this.resolveSource(source) },
+    });
+    this.assertOk(resp, 'files:resolve');
+    return resp.data as { path: string };
+  }
+
+  /** Read a byte range from a registered generic file token. */
+  async readFileRange(token: string, start: number, end: number): Promise<ArrayBuffer> {
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+      throw new Error(`Invalid engine file byte range: ${start}-${end}`);
+    }
+    const res = await fetch(this.getFileTokenUrl(token), {
+      headers: { Range: `bytes=${start}-${end}` },
+    });
+    if (res.status !== 206) {
+      throw new Error(`files:readRange failed: ${res.status}`);
+    }
+    return res.arrayBuffer();
+  }
+
+  /** Read a single entry from a registered ZIP/container file token. */
+  async readFileEntry(token: string, entryPath: string): Promise<ArrayBuffer> {
+    const res = await fetch(this.getFileEntryUrl(token, entryPath));
+    if (!res.ok) {
+      throw new Error(`files:readEntry(${entryPath}) failed: ${res.status}`);
+    }
+    return res.arrayBuffer();
+  }
+
+  /** Register a file for the duration of a scoped operation and always release it. */
+  async withRegisteredFile<T>(
+    request: RegisterFileRequest | string,
+    task: (registered: RegisteredFile) => Promise<T>,
+  ): Promise<T> {
+    const registered = await this.registerFile(request);
+    try {
+      return await task(registered);
+    } finally {
+      await this.unregisterFile(registered.token);
+    }
+  }
+
   /** Unregister a previously registered document token. */
   async unregisterDocument(token: string): Promise<void> {
     await this.dispatch({
@@ -2148,13 +2319,7 @@ export class EngineClient {
    * Returns raw binary data as `ArrayBuffer`.
    */
   async readDocumentRange(token: string, start: number, end: number): Promise<ArrayBuffer> {
-    const res = await fetch(`${this.baseUrl}/v1/preview/file/${token}`, {
-      headers: { Range: `bytes=${start}-${end}` },
-    });
-    if (!res.ok && res.status !== 206) {
-      throw new Error(`documents:readRange failed: ${res.status}`);
-    }
-    return res.arrayBuffer();
+    return this.readFileRange(token, start, end);
   }
 
   /**
@@ -2164,11 +2329,7 @@ export class EngineClient {
    * Returns raw binary data as `ArrayBuffer`.
    */
   async readDocumentEntry(token: string, entryPath: string): Promise<ArrayBuffer> {
-    const res = await fetch(`${this.baseUrl}/v1/preview/epub/${token}/${entryPath}`);
-    if (!res.ok) {
-      throw new Error(`documents:readEntry(${entryPath}) failed: ${res.status}`);
-    }
-    return res.arrayBuffer();
+    return this.readFileEntry(token, entryPath);
   }
 
   // =========================================================================
@@ -2215,6 +2376,18 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   // Node.js path
   const buf = Buffer.from(base64, 'base64');
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+}
+
+function encodeEntryPath(entryPath: string): string {
+  const normalized = entryPath.replace(/^\/+/, '');
+  if (normalized.length === 0) {
+    throw new Error('File entry path is required');
+  }
+  return normalized.split('/').map(encodeURIComponent).join('/');
+}
+
+function sourceOptions(source: string | FileSourceRef): Record<string, unknown> {
+  return typeof source === 'string' ? { source } : { sourceRef: source };
 }
 
 /**

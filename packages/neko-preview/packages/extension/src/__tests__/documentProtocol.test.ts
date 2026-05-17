@@ -31,6 +31,11 @@ vi.mock('node:fs/promises', () => ({
   readFile,
 }));
 
+vi.mock('node:os', () => ({
+  default: { homedir: () => '/Users/tester' },
+  homedir: () => '/Users/tester',
+}));
+
 vi.mock('../../utils/logger', () => ({
   getLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
@@ -43,6 +48,7 @@ import {
   previewFileServer,
   UnresolvedPathVariableError,
 } from '../providers/document/PreviewFileServer';
+import { getPreviewAllowedRoots } from '../providers/document/workspacePathResolver';
 
 beforeEach(() => {
   executeCommand.mockReset();
@@ -135,11 +141,10 @@ describe('PreviewFileServer -- port cache invalidation (NKP-003)', () => {
     const port1 = await previewFileServer.getPort();
     expect(port1).toBe(9001);
 
-    // Second call should use cache
-    const callCountBefore = execCmd.mock.calls.length;
+    // Second call should reuse the cached port while still syncing current roots.
     const port2 = await previewFileServer.getPort();
     expect(port2).toBe(9001);
-    expect(execCmd.mock.calls.length).toBe(callCountBefore);
+    expect(execCmd.mock.calls.length).toBe(2);
 
     // After invalidation, next call should re-query
     previewFileServer.invalidatePort();
@@ -203,12 +208,115 @@ describe('PreviewFileServer path resolution fallback', () => {
   });
 });
 
+describe('PreviewFileServer engine allow-list roots', () => {
+  it('includes workspace and configured media library roots', async () => {
+    workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
+    readFile.mockImplementation(async (filePath: string) => {
+      if (filePath === '/workspace-a/neko/settings.json') {
+        return JSON.stringify({
+          mediaLibraries: [
+            { variable: 'EPUB', path: '/Users/feng/Assets/epub', enabled: true },
+            { variable: 'OFFLINE', path: '/disabled', enabled: false },
+          ],
+        });
+      }
+      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw error;
+    });
+
+    await expect(getPreviewAllowedRoots()).resolves.toEqual([
+      '/workspace-a',
+      '/Users/feng/Assets/epub',
+    ]);
+  });
+
+  it('passes media library roots to neko-engine before registering files', async () => {
+    workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
+    readFile.mockImplementation(async (filePath: string) => {
+      if (filePath === '/workspace-a/neko/settings.json') {
+        return JSON.stringify({
+          mediaLibraries: [{ variable: 'EPUB', path: '/Users/feng/Assets/epub' }],
+        });
+      }
+      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw error;
+    });
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'neko.engine.ensureFrameServer') {
+        return { port: 5010 };
+      }
+      return undefined;
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/v1/dispatch')) {
+        return new Response(
+          JSON.stringify({
+            status: 'ok',
+            data: {
+              token: 'tok-epub',
+              fileSizeBytes: 10,
+              mimeType: 'application/epub+zip',
+              purpose: 'document',
+              rangeUrl: '/v1/files/tok-epub',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch;
+
+    try {
+      previewFileServer.invalidatePort();
+      await previewFileServer.registerEpub('/Users/feng/Assets/epub/book.epub');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(executeCommand).toHaveBeenCalledWith('neko.engine.ensureFrameServer', [
+      '/workspace-a',
+      '/Users/feng/Assets/epub',
+    ]);
+  });
+
+  it('normalizes supported media library root address forms before syncing to engine', async () => {
+    workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
+    readFile.mockImplementation(async (filePath: string) => {
+      if (filePath === '/workspace-a/neko/settings.json') {
+        return JSON.stringify({
+          mediaLibraries: [
+            { variable: 'REL', path: 'assets/epub' },
+            { variable: 'WS', path: '${WORKSPACE}/shared/books' },
+            { variable: 'HOME_LIB', path: '~/Books' },
+            { variable: 'FILE_URI', path: 'file:///Volumes/Library%20A/epub' },
+            { variable: 'CHAINED', path: '${REL}/nested' },
+            { variable: 'REMOTE', path: 'https://cdn.example.test/epub' },
+          ],
+        });
+      }
+      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw error;
+    });
+
+    await expect(getPreviewAllowedRoots()).resolves.toEqual([
+      '/workspace-a',
+      '/workspace-a/assets/epub',
+      '/workspace-a/shared/books',
+      '/Users/tester/Books',
+      '/Volumes/Library A/epub',
+      '/workspace-a/assets/epub/nested',
+    ]);
+  });
+});
+
 // ============================================================================
 // Tests: PreviewFileServer retry logic source contract (NKP-006)
 // ============================================================================
 
 describe('PreviewFileServer retry logic source contract (NKP-006)', () => {
-  it('_fetchWithRetry method exists and is used by registerFile/registerEpub/unregisterFile', () => {
+  it('withClientRetry method exists and wraps EngineClient file access helpers', () => {
     const fs = require('fs');
     const path = require('path');
     const source = fs.readFileSync(
@@ -216,13 +324,16 @@ describe('PreviewFileServer retry logic source contract (NKP-006)', () => {
       'utf-8',
     );
 
-    // _fetchWithRetry method defined
-    expect(source).toContain('private async _fetchWithRetry');
+    // withClientRetry method defined
+    expect(source).toContain('private async withClientRetry');
     // Retry logic: invalidates port on connection failure
     expect(source).toContain('this.invalidatePort()');
-    // All public methods use _fetchWithRetry
-    const fetchWithRetryCount = (source.match(/this\._fetchWithRetry/g) ?? []).length;
-    expect(fetchWithRetryCount).toBeGreaterThanOrEqual(3);
+    // PreviewFileServer is now a compatibility wrapper around EngineClient file access.
+    expect(source).toContain('client.registerFile');
+    expect(source).toContain('client.readFileRange');
+    expect(source).toContain('client.readFileEntry');
+    const retryCount = (source.match(/this\.withClientRetry/g) ?? []).length;
+    expect(retryCount).toBeGreaterThanOrEqual(3);
   });
 
   it('invalidatePort + getPort re-query cycle works (real code)', async () => {

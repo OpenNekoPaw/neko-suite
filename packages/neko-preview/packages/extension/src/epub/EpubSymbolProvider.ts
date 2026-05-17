@@ -7,7 +7,8 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { readEpubToc, type TocEntry } from './EpubParser';
+import { readEpubTocFromEntries, type TocEntry } from './EpubParser';
+import { previewFileServer } from '../providers/document/PreviewFileServer';
 import { resolvePreviewPath } from '../providers/document/workspacePathResolver';
 
 interface CacheEntry {
@@ -60,6 +61,10 @@ export class EpubSymbolProvider implements vscode.DocumentSymbolProvider {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+function readEpubToc(filePath: string): Promise<TocEntry[]> {
+  return previewFileServer.withEpubEntryReader(filePath, readEpubTocFromEntries);
+}
 
 function buildSymbolTree(entries: TocEntry[]): vscode.DocumentSymbol[] {
   const roots: vscode.DocumentSymbol[] = [];

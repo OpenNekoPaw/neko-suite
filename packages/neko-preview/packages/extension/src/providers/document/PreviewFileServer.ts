@@ -13,8 +13,13 @@
  */
 
 import * as vscode from 'vscode';
+import { EngineClient, type RegisteredFile } from '@neko/neko-client';
 import { getLogger } from '../../utils/logger';
-import { hasPathVariable, resolvePreviewPath } from './workspacePathResolver';
+import {
+  getPreviewAllowedRoots,
+  hasPathVariable,
+  resolvePreviewPath,
+} from './workspacePathResolver';
 
 const logger = getLogger('PreviewFileServer');
 
@@ -41,6 +46,7 @@ export class UnresolvedPathVariableError extends Error {
 
 class PreviewFileServer {
   private _port: number | null = null;
+  private _client: EngineClient | null = null;
 
   /**
    * Resolve path variables via neko-assets command.
@@ -71,6 +77,7 @@ class PreviewFileServer {
    * Throws if neko-engine is not installed or fails to start.
    */
   async getPort(): Promise<number> {
+    await this.syncAllowedRoots(await this.buildAllowedRoots());
     if (this._port !== null) return this._port;
     return this._fetchPort();
   }
@@ -78,11 +85,13 @@ class PreviewFileServer {
   /** Invalidate cached port so next getPort() re-queries the engine. */
   invalidatePort(): void {
     this._port = null;
+    this._client = null;
   }
 
   private async _fetchPort(): Promise<number> {
+    const previewAllowedRoots = await this.buildAllowedRoots();
     const result = await vscode.commands
-      .executeCommand<{ port: number } | null>('neko.engine.ensureFrameServer')
+      .executeCommand<{ port: number } | null>('neko.engine.ensureFrameServer', previewAllowedRoots)
       .then(
         (r) => r,
         () => null,
@@ -98,26 +107,37 @@ class PreviewFileServer {
     return this._port;
   }
 
-  /**
-   * Execute a fetch with automatic port retry.
-   * If the request fails with a connection error, invalidate the cached port,
-   * re-query the engine, and retry once.
-   */
-  private async _fetchWithRetry(
-    buildUrl: (base: string) => string,
-    init?: RequestInit,
-  ): Promise<Response> {
+  private async buildAllowedRoots(): Promise<string[]> {
+    return getPreviewAllowedRoots();
+  }
+
+  private async syncAllowedRoots(previewAllowedRoots: string[]): Promise<void> {
+    if (this._port === null) return;
+    await Promise.resolve(
+      vscode.commands.executeCommand('neko.engine.ensureFrameServer', previewAllowedRoots),
+    ).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
+  private async getClient(): Promise<EngineClient> {
     const port = await this.getPort();
-    const base = `http://127.0.0.1:${port}`;
+    if (!this._client || this._client.port !== port) {
+      this._client = new EngineClient(port);
+    }
+    return this._client;
+  }
+
+  /** Execute an EngineClient operation with automatic stale-port retry. */
+  private async withClientRetry<T>(task: (client: EngineClient) => Promise<T>): Promise<T> {
+    const client = await this.getClient();
     try {
-      const res = await fetch(buildUrl(base), init);
-      return res;
+      return await task(client);
     } catch {
-      // Connection failed — port may be stale; retry with fresh port
       this.invalidatePort();
-      const newPort = await this.getPort();
-      const newBase = `http://127.0.0.1:${newPort}`;
-      return fetch(buildUrl(newBase), init);
+      const retryClient = await this.getClient();
+      return task(retryClient);
     }
   }
 
@@ -131,19 +151,8 @@ class PreviewFileServer {
    */
   async registerFile(filePath: string): Promise<{ url: string; token: string }> {
     const resolved = await this.resolvePath(filePath);
-    const body = JSON.stringify({ filePath: resolved });
-
-    const res = await this._fetchWithRetry((base) => `${base}/v1/preview/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to register file: ${res.status} ${res.statusText}`);
-    }
-
-    const { token } = (await res.json()) as { token: string };
+    const registered = await this.registerEngineFile(resolved, 'document');
+    const { token } = registered;
     const port = await this.getPort();
     const url = `http://127.0.0.1:${port}/v1/preview/file/${token}`;
     logger.info(`Registered preview file token=${token} → ${filePath}`);
@@ -162,24 +171,54 @@ class PreviewFileServer {
    */
   async registerEpub(filePath: string): Promise<{ url: string; token: string }> {
     const resolved = await this.resolvePath(filePath);
-    const body = JSON.stringify({ filePath: resolved });
-
-    const res = await this._fetchWithRetry((base) => `${base}/v1/preview/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to register EPUB: ${res.status} ${res.statusText}`);
-    }
-
-    const { token } = (await res.json()) as { token: string };
+    const registered = await this.registerEngineFile(resolved, 'document');
+    const { token } = registered;
     const port = await this.getPort();
     // Trailing slash → epub.js DIRECTORY mode: fetches entries on demand
     const url = `http://127.0.0.1:${port}/v1/preview/epub/${token}/`;
     logger.info(`Registered EPUB token=${token} → ${filePath}`);
     return { url, token };
+  }
+
+  /**
+   * Read a byte range through the engine preview file server.
+   *
+   * Binary preview probes should use this instead of VSCode or Node file APIs so
+   * local file access stays behind the neko-engine token boundary.
+   */
+  async readRange(filePath: string, start: number, end: number): Promise<ArrayBuffer> {
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+      throw new Error(`Invalid preview file byte range: ${start}-${end}`);
+    }
+
+    const resolved = await this.resolvePath(filePath);
+    return this.withClientRetry((client) =>
+      client.withRegisteredFile({ filePath: resolved, purpose: 'document' }, (registered) =>
+        client.readFileRange(registered.token, start, end),
+      ),
+    );
+  }
+
+  /**
+   * Register an EPUB once, run a task that reads entries through neko-engine,
+   * then release the token. The task receives raw entry bytes; parsing stays in
+   * the extension layer while binary file access stays in the engine.
+   */
+  async withEpubEntryReader<T>(
+    filePath: string,
+    task: (readEntry: (entryPath: string) => Promise<ArrayBuffer>) => Promise<T>,
+  ): Promise<T> {
+    const { token } = await this.registerEpub(filePath);
+    try {
+      return await task((entryPath) => this.readRegisteredEpubEntry(token, entryPath));
+    } finally {
+      await this.unregisterFile(token);
+    }
+  }
+
+  /** Read one EPUB/ZIP entry through neko-engine. */
+  async readEpubEntry(filePath: string, entryPath: string): Promise<ArrayBuffer> {
+    return this.withEpubEntryReader(filePath, (readEntry) => readEntry(entryPath));
   }
 
   /**
@@ -189,13 +228,22 @@ class PreviewFileServer {
   async unregisterFile(token: string): Promise<void> {
     if (this._port === null) return;
     try {
-      await this._fetchWithRetry((base) => `${base}/v1/preview/unregister/${token}`, {
-        method: 'DELETE',
-      });
+      await this.withClientRetry((client) => client.unregisterFile(token));
       logger.info(`Unregistered preview file token=${token}`);
     } catch (err) {
       logger.warn('Failed to unregister preview file token:', err);
     }
+  }
+
+  private async readRegisteredEpubEntry(token: string, entryPath: string): Promise<ArrayBuffer> {
+    return this.withClientRetry((client) => client.readFileEntry(token, entryPath));
+  }
+
+  private async registerEngineFile(
+    filePath: string,
+    purpose: 'document' | 'preview',
+  ): Promise<RegisteredFile> {
+    return this.withClientRetry((client) => client.registerFile({ filePath, purpose }));
   }
 }
 
