@@ -29,7 +29,7 @@ pub const EASING_WGSL: &str = include_str!("../../shaders/easing.wgsl");
 ///   0: input_tex  — texture_2d<f32>
 ///   1: output_tex — texture_storage_2d<rgba8unorm, write>
 ///   2: params     — uniform ColorCorrectionTexParams (256 bytes)
-///   3: curves     — storage<read> array<f32>  (5×256 entries: rgb/r/g/b/luma)
+///   3: curves     — storage<read> CurvesBuffer (5×256 entries: rgb/r/g/b/luma)
 ///   4: lut_3d     — texture_3d<f32>  (n×n×n, x=R y=G z=B)
 ///   5: lut_sampler— sampler (linear/trilinear)
 pub const COLOR_CORRECTION_COMPUTE_SHADER: &str = r#"
@@ -71,6 +71,10 @@ struct ColorCorrectionTexParams {
     hsl_data:       array<vec4<f32>, 8>, // +128..+255
 }
 
+struct CurvesBuffer {
+    data: array<f32, 1280>,
+}
+
 // =============================================================================
 // Bindings
 // =============================================================================
@@ -78,7 +82,7 @@ struct ColorCorrectionTexParams {
 @group(0) @binding(0) var input_tex:   texture_2d<f32>;
 @group(0) @binding(1) var output_tex:  texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(2) var<uniform> p:  ColorCorrectionTexParams;
-@group(0) @binding(3) var<storage, read> curves: array<f32>;
+@group(0) @binding(3) var<storage, read> curves: CurvesBuffer;
 @group(0) @binding(4) var lut_3d:      texture_3d<f32>;
 @group(0) @binding(5) var lut_sampler: sampler;
 
@@ -201,7 +205,7 @@ fn cc_color_wheel(
 
 fn sample_curve(channel: u32, value: f32) -> f32 {
     let idx = channel * 256u + u32(clamp(round(value * 255.0), 0.0, 255.0));
-    return curves[idx];
+    return curves.data[idx];
 }
 
 fn apply_curves(c: vec3<f32>) -> vec3<f32> {
@@ -270,7 +274,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // 3D LUT
     if (p.lut_enabled > 0.5) {
-        let lut_c = textureSample(lut_3d, lut_sampler, c).rgb;
+        let lut_c = textureSampleLevel(lut_3d, lut_sampler, c, 0.0).rgb;
         c = mix(c, lut_c, p.lut_intensity);
         c = clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
     }
@@ -2671,6 +2675,16 @@ fn composite_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 mod tests {
     use super::*;
 
+    fn validate_wgsl(source: &str) {
+        let module = naga::front::wgsl::parse_str(source).expect("WGSL should parse");
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::default(),
+        )
+        .validate(&module)
+        .expect("WGSL should validate");
+    }
+
     #[test]
     fn test_common_shader_loaded() {
         assert!(!COMMON_WGSL.is_empty());
@@ -2714,6 +2728,11 @@ mod tests {
         assert!(shader.contains("@compute"), "missing @compute");
         assert!(shader.contains("lut_3d"), "missing lut_3d binding");
         assert!(shader.contains("curves"), "missing curves binding");
+    }
+
+    #[test]
+    fn test_color_correction_shader_is_valid_wgsl() {
+        validate_wgsl(&get_color_correction_shader());
     }
 
     #[test]

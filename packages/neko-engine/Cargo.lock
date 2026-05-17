@@ -2419,6 +2419,7 @@ dependencies = [
  "half",
  "libc",
  "metal",
+ "naga",
  "neko-engine-types",
  "objc",
  "pollster",

@@ -25,10 +25,10 @@ impl SnapshotSink {
         )
     }
 
-    /// Receive the submitted frame from a blocking context.
-    pub fn recv_blocking(receiver: oneshot::Receiver<VideoRawFrame>) -> Result<VideoRawFrame> {
+    /// Receive the submitted frame.
+    pub async fn recv(receiver: oneshot::Receiver<VideoRawFrame>) -> Result<VideoRawFrame> {
         receiver
-            .blocking_recv()
+            .await
             .map_err(|_| Error::Other("SnapshotSink result channel closed".to_string()))
     }
 
@@ -122,8 +122,8 @@ mod tests {
         assert!(sink.accepts(&output));
     }
 
-    #[test]
-    fn snapshot_sink_rejects_second_submit() {
+    #[tokio::test]
+    async fn snapshot_sink_rejects_second_submit() {
         let (sink, rx) = SnapshotSink::new();
         sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(rgba_frame())))
             .unwrap();
@@ -133,12 +133,12 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, Error::AlreadyCompleted(_)));
 
-        let frame = SnapshotSink::recv_blocking(rx).unwrap();
+        let frame = SnapshotSink::recv(rx).await.unwrap();
         assert_eq!(frame.data, vec![0, 0, 0, 255]);
     }
 
-    #[test]
-    fn snapshot_sink_round_trips_existing_rgba_terminal_frame() {
+    #[tokio::test]
+    async fn snapshot_sink_round_trips_existing_rgba_terminal_frame() {
         let (sink, rx) = SnapshotSink::new();
         let source = VideoRawFrame {
             data: vec![10, 20, 30, 255, 40, 50, 60, 255],
@@ -151,7 +151,7 @@ mod tests {
 
         sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(source.clone())))
             .unwrap();
-        let frame = SnapshotSink::recv_blocking(rx).unwrap();
+        let frame = SnapshotSink::recv(rx).await.unwrap();
 
         assert_eq!(frame.data, source.data);
         assert_eq!(frame.width, source.width);
@@ -159,5 +159,18 @@ mod tests {
         assert_eq!(frame.format, FrameFormat::Rgba);
         assert_eq!(frame.pts, source.pts);
         assert_eq!(frame.duration, source.duration);
+    }
+
+    #[tokio::test]
+    async fn snapshot_sink_receives_rgba_terminal_frame_async() {
+        let (sink, rx) = SnapshotSink::new();
+        sink.submit(PipelineOutput::Video(VideoOutput::RawFrame(rgba_frame())))
+            .unwrap();
+
+        let frame = SnapshotSink::recv(rx).await.unwrap();
+
+        assert_eq!(frame.data, vec![0, 0, 0, 255]);
+        assert_eq!(frame.width, 1);
+        assert_eq!(frame.height, 1);
     }
 }

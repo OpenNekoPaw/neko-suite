@@ -701,7 +701,7 @@ impl ITimelineService for TimelineService {
                 duration: (1_000_000.0 / timeline.fps) as i64,
             },
         )))?;
-        let snapshot = SnapshotSink::recv_blocking(snapshot_rx)?;
+        let snapshot = SnapshotSink::recv(snapshot_rx).await?;
 
         Ok(FrameData {
             data: snapshot.data,
