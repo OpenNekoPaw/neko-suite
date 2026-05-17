@@ -10,8 +10,8 @@ use crate::encoder::{ContainerFormat, Encoder, EncoderConfig, FfmpegMuxer, HwAcc
 use crate::error::{Error, Result};
 use crate::services::impls::common::{convert_media_info, generate_waveform_blocking};
 use crate::services::impls::stream_loop::{
-    create_stream_channels, eof_idle_wait, pack_h264_frame, ActiveStreams, StreamLoopHandle,
-    StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
+    create_stream_channels, eof_idle_wait, normalize_stream_fps, pack_h264_frame, ActiveStreams,
+    StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::pipeline_sink::PipelineSink;
 use crate::services::{IStreamPlayback, ITaskService, IVideoService, StreamSink};
@@ -47,6 +47,16 @@ fn container_from_path(path: &Path) -> ContainerFormat {
         Some("mov") => ContainerFormat::Mov,
         _ => ContainerFormat::Mp4, // Default
     }
+}
+
+fn validate_video_probe(media_info: &neko_runtime_media::MediaInfo, source: &Path) -> Result<()> {
+    if media_info.width == 0 || media_info.height == 0 {
+        return Err(Error::UnsupportedCapability(format!(
+            "No video stream found in {}",
+            source.display()
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -367,10 +377,11 @@ impl IVideoService for VideoService {
         })
         .await
         .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
+        validate_video_probe(&media_info, source)?;
 
         let width = media_info.width;
         let height = media_info.height;
-        let fps = media_info.fps;
+        let fps = normalize_stream_fps(media_info.fps);
 
         // Create stream channels
         let (stream_id, tx, rx, cancel, state_tx, state_rx) =
@@ -758,11 +769,12 @@ impl IVideoService for VideoService {
         })
         .await
         .map_err(|e| Error::Other(format!("Probe task failed: {}", e)))??;
+        validate_video_probe(&media_info, source)?;
 
         let config = crate::preview::PreviewPipelineConfig {
             width: media_info.width,
             height: media_info.height,
-            fps: media_info.fps,
+            fps: normalize_stream_fps(media_info.fps),
             ..Default::default()
         };
         let (stream_id, tx, rx, cancel, state_tx, state_rx) =
@@ -779,13 +791,10 @@ impl IVideoService for VideoService {
 
         let join_handle = tokio::task::spawn_blocking(move || {
             let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-            let media = match decoder.open(&path) {
-                Ok(media) => media,
-                Err(error) => {
-                    tracing::error!("Failed to open panoramic decoder: {}", error);
-                    return;
-                }
-            };
+            if let Err(error) = decoder.open(&path) {
+                tracing::error!("Failed to open panoramic decoder: {}", error);
+                return;
+            }
             let importer = Nv12TextureImporter::new(Arc::clone(&gpu_ctx));
             let nv12_renderer = match Nv12Renderer::new(Arc::clone(&gpu_ctx)) {
                 Ok(renderer) => renderer,
@@ -804,6 +813,7 @@ impl IVideoService for VideoService {
                         return;
                     }
                 };
+            let stream_fps = config.fps;
             let sink = match StreamSink::new(config, tx) {
                 Ok(sink) => sink,
                 Err(error) => {
@@ -811,7 +821,7 @@ impl IVideoService for VideoService {
                     return;
                 }
             };
-            let mut pacer = WallClockPacer::new(media.fps, 1.0);
+            let mut pacer = WallClockPacer::new(stream_fps, 1.0);
             let mut frame_index = 0u64;
             let mut last_view_seq = 1u64;
             let time_base = decoder.time_base();
@@ -857,7 +867,7 @@ impl IVideoService for VideoService {
                     }
                 };
                 let pts_us = (gpu_texture.pts as f64 * time_base * 1_000_000.0) as i64;
-                let duration_us = (1_000_000.0 / media.fps.max(1.0)) as i64;
+                let duration_us = (1_000_000.0 / stream_fps) as i64;
                 let color_space = ColorSpace::from_ffmpeg(gpu_texture.color_space);
                 let imported = match importer.import(&gpu_texture) {
                     Ok(imported) => imported,

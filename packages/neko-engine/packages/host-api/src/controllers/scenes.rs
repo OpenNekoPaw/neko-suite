@@ -193,11 +193,11 @@ struct SceneStreamRuntimeSettings {
 
 impl SceneStreamRuntimeSettings {
     fn frame_duration(self) -> Duration {
-        Duration::from_secs_f64(1.0 / self.fps.max(1.0))
+        Duration::try_from_secs_f64(1.0 / normalize_stream_fps(self.fps)).unwrap_or_default()
     }
 
     fn duration_us(self) -> i64 {
-        (1_000_000.0 / self.fps.max(1.0)) as i64
+        (1_000_000.0 / normalize_stream_fps(self.fps)) as i64
     }
 }
 
@@ -668,9 +668,9 @@ impl Controller for ScenesController {
                         "scenes:load",
                     )?
                 } else {
-                    opts.source
-                        .map(Into::into)
-                        .ok_or_else(|| ApiError::InvalidRequest("source path required".to_string()))?
+                    opts.source.map(Into::into).ok_or_else(|| {
+                        ApiError::InvalidRequest("source path required".to_string())
+                    })?
                 };
 
                 let service = self.service()?;

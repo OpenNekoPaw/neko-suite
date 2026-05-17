@@ -609,7 +609,8 @@ fn duration_ms(duration: Duration) -> f64 {
 }
 
 fn ms_duration(ms: f64) -> Duration {
-    Duration::from_secs_f64((ms / 1_000.0).max(0.0))
+    let secs = (ms / 1_000.0).max(0.0);
+    Duration::try_from_secs_f64(secs).unwrap_or(Duration::ZERO)
 }
 
 #[cfg(test)]
