@@ -171,9 +171,10 @@ describe('PermissionRuleMatcher - auto mode with traits', () => {
       expect(result.decision).toBe('allow');
     });
 
-    it('allows core local tools (Read, Write, Glob, Grep)', () => {
+    it('allows core local tools (Read, ReadDocument, Write, Glob, Grep)', () => {
       const matcher = new PermissionRuleMatcher(makeAutoConfig(), registry);
       expect(matcher.check(makeToolCall('Read')).decision).toBe('allow');
+      expect(matcher.check(makeToolCall('ReadDocument')).decision).toBe('allow');
       expect(matcher.check(makeToolCall('Write')).decision).toBe('allow');
       expect(matcher.check(makeToolCall('Glob')).decision).toBe('allow');
       expect(matcher.check(makeToolCall('Grep')).decision).toBe('allow');
@@ -280,6 +281,7 @@ describe('PermissionRuleMatcher - plan mode with creative tools', () => {
   it('still allows default read-only tools in plan mode', () => {
     const matcher = new PermissionRuleMatcher(makePlanConfig());
     expect(matcher.check(makeToolCall('Read')).decision).toBe('allow');
+    expect(matcher.check(makeToolCall('ReadDocument')).decision).toBe('allow');
     expect(matcher.check(makeToolCall('Glob')).decision).toBe('allow');
     expect(matcher.check(makeToolCall('Grep')).decision).toBe('allow');
   });

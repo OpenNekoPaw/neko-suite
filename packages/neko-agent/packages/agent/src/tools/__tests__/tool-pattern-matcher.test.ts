@@ -25,6 +25,12 @@ describe('normalizeToolCall', () => {
     );
   });
 
+  it('should normalize ReadDocument tool with file_path', () => {
+    expect(normalizeToolCall({ name: 'ReadDocument', arguments: { file_path: 'book.epub' } })).toBe(
+      'ReadDocument(book.epub)',
+    );
+  });
+
   it('should normalize Edit tool with file_path', () => {
     expect(normalizeToolCall({ name: 'Edit', arguments: { file_path: 'src/app.ts' } })).toBe(
       'Edit(src/app.ts)',

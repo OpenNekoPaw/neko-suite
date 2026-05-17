@@ -11,7 +11,12 @@
  */
 
 import type { ToolGroup, IToolGroupRegistry } from '@neko/shared';
-import { TOOL_NAMES_MEDIA, TOOL_NAMES_PERCEPTION, TOOL_NAMES_TIMELINE } from '@neko/shared';
+import {
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_PERCEPTION,
+  TOOL_NAMES_SYSTEM,
+  TOOL_NAMES_TIMELINE,
+} from '@neko/shared';
 
 // =============================================================================
 // Resident ToolSets — schema always in LLM context
@@ -23,7 +28,14 @@ import { TOOL_NAMES_MEDIA, TOOL_NAMES_PERCEPTION, TOOL_NAMES_TIMELINE } from '@n
 export const coreSystemToolSet: ToolGroup = {
   name: 'core-system',
   description: 'Core system tools for file reading, directory browsing, and searching',
-  tools: ['Read', 'ListDirectory', 'Glob', 'Grep', 'WebSearch'],
+  tools: [
+    TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
+    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
+    TOOL_NAMES_SYSTEM.GLOB,
+    'Grep',
+    'WebSearch',
+  ],
   alwaysActive: true,
   priority: 100,
   loadingTier: 'resident',

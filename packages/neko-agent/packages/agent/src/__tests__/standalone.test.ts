@@ -293,6 +293,7 @@ describe('Standalone Mode', () => {
 
     it('should check read-only tools', () => {
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('Read');
+      expect(DEFAULT_READ_ONLY_TOOLS).toContain('ReadDocument');
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('Glob');
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('Grep');
     });

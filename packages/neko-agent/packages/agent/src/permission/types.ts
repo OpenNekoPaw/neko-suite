@@ -142,6 +142,7 @@ export type ConfirmToolCallback = (
 export const DEFAULT_READ_ONLY_TOOLS = [
   // Claude Code standard read-only tools
   'Read',
+  'ReadDocument',
   'Glob',
   'Grep',
   'LS',

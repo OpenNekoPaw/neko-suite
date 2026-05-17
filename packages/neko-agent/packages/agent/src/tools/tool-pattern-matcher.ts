@@ -34,6 +34,7 @@ export interface ToolCallLike {
  * @example
  * { name: 'Bash', arguments: { command: 'git status' } } → 'Bash(git status)'
  * { name: 'Read', arguments: { file_path: 'src/index.ts' } } → 'Read(src/index.ts)'
+ * { name: 'ReadDocument', arguments: { file_path: 'book.epub' } } → 'ReadDocument(book.epub)'
  * { name: 'WebFetch', arguments: { url: 'https://github.com' } } → 'WebFetch(domain:github.com)'
  */
 export function normalizeToolCall(toolCall: ToolCallLike): string {
@@ -44,8 +45,8 @@ export function normalizeToolCall(toolCall: ToolCallLike): string {
     return `Bash(${String(args.command)})`;
   }
 
-  // Handle Read/Edit/Write tools - extract path
-  if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(name)) {
+  // Handle filesystem tools - extract path/pattern
+  if (['Read', 'ReadDocument', 'Edit', 'Write', 'Glob', 'Grep'].includes(name)) {
     const path = args?.file_path || args?.path || args?.pattern;
     if (path) {
       return `${name}(${String(path)})`;
