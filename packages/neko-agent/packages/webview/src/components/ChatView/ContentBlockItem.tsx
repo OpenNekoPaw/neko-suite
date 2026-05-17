@@ -141,7 +141,7 @@ function renderBlockContent(
 
     case 'markdown':
       return (
-        <div className="inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)] rounded-tl-sm">
+        <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)] rounded-tl-sm">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
         </div>
       );

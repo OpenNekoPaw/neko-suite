@@ -143,7 +143,7 @@ function ContentBlockRenderer({
 
     case 'markdown':
       return (
-        <div className="inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]/60 rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
+        <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]/60 rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
         </div>
       );
@@ -387,7 +387,7 @@ export const MessageItem = memo(function MessageItem({
           {/* User message content - compact bubble */}
           {isUser ? (
             <div
-              className={`inline-block px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] via-[var(--vscode-button-background)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] rounded-tr-sm shadow-[0_2px_8px_rgba(0,0,0,0.2)]`}
+              className={`block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] via-[var(--vscode-button-background)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] rounded-tr-sm shadow-[0_2px_8px_rgba(0,0,0,0.2)]`}
             >
               {/* Context references for user messages */}
               {message.contextReferences && message.contextReferences.length > 0 && (
@@ -420,7 +420,7 @@ export const MessageItem = memo(function MessageItem({
                   ))}
                 </div>
               )}
-              <div className="whitespace-pre-wrap break-words">{message.content}</div>
+              <div className="min-w-0 whitespace-pre-wrap break-words">{message.content}</div>
             </div>
           ) : message.isError ? (
             /* Error message: prominent red card */

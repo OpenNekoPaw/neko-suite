@@ -30,7 +30,7 @@ const components: Components = {
       // Inline code
       return (
         <code
-          className="px-1.5 py-0.5 rounded bg-[var(--vscode-textCodeBlock-background)] text-[var(--vscode-textPreformat-foreground)] text-[12px] font-mono"
+          className="px-1.5 py-0.5 rounded bg-[var(--vscode-textCodeBlock-background)] text-[var(--vscode-textPreformat-foreground)] text-[12px] font-mono break-words"
           {...props}
         >
           {children}
@@ -183,7 +183,9 @@ function MarkdownRendererComponent({ content, isStreaming, className }: Markdown
   const remarkPlugins = useMemo(() => [remarkGfm], []);
 
   return (
-    <div className={`markdown-content text-[13px] leading-relaxed ${className || ''}`}>
+    <div
+      className={`markdown-content min-w-0 max-w-full overflow-hidden text-[13px] leading-relaxed break-words ${className || ''}`}
+    >
       <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
         {content}
       </ReactMarkdown>

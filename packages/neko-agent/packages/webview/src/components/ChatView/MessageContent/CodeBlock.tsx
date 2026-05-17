@@ -33,6 +33,12 @@ interface CodeBlockProps {
   showLineNumbers?: boolean;
 }
 
+const WRAPPING_LANGUAGE_IDS = new Set(['text', 'txt', 'plain', 'plaintext', 'prompt', 'markdown']);
+
+export function shouldWrapCodeBlockLanguage(language?: string): boolean {
+  return WRAPPING_LANGUAGE_IDS.has((language || 'text').toLowerCase());
+}
+
 export function CodeBlock({ code, language = 'text', showLineNumbers = false }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isLight = useIsLightTheme();
@@ -50,12 +56,13 @@ export function CodeBlock({ code, language = 'text', showLineNumbers = false }: 
   // Normalize language name
   const normalizedLanguage = language?.toLowerCase() || 'text';
   const highlightTheme = isLight ? themes.vsLight : themes.vsDark;
+  const shouldWrap = !showLineNumbers && shouldWrapCodeBlockLanguage(normalizedLanguage);
 
   return (
-    <div className="relative group my-2 rounded-md overflow-hidden border border-[var(--vscode-panel-border)] w-full max-w-full">
+    <div className="relative group my-2 rounded-md overflow-hidden border border-[var(--vscode-panel-border)] w-full max-w-full min-w-0">
       {/* Header with language and copy button */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--vscode-titleBar-activeBackground)] border-b border-[var(--vscode-panel-border)]">
-        <span className="text-[10px] text-[var(--vscode-descriptionForeground)] uppercase font-medium">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-[var(--vscode-titleBar-activeBackground)] border-b border-[var(--vscode-panel-border)] min-w-0">
+        <span className="min-w-0 truncate text-[10px] text-[var(--vscode-descriptionForeground)] uppercase font-medium">
           {normalizedLanguage}
         </span>
         <button
@@ -81,7 +88,9 @@ export function CodeBlock({ code, language = 'text', showLineNumbers = false }: 
       <Highlight theme={highlightTheme} code={code.trim()} language={normalizedLanguage}>
         {({ className, style, tokens, getLineProps, getTokenProps }) => (
           <pre
-            className={`${className} overflow-x-auto p-3 m-0 text-[12px] leading-relaxed w-full`}
+            className={`${className} ${
+              shouldWrap ? 'overflow-x-hidden whitespace-pre-wrap break-words' : 'overflow-x-auto'
+            } p-3 m-0 text-[12px] leading-relaxed w-full max-w-full min-w-0`}
             style={{
               ...style,
               backgroundColor: 'var(--vscode-editor-background)',
@@ -89,13 +98,17 @@ export function CodeBlock({ code, language = 'text', showLineNumbers = false }: 
             }}
           >
             {tokens.map((line, i) => (
-              <div key={i} {...getLineProps({ line })} className="table-row">
+              <div
+                key={i}
+                {...getLineProps({ line })}
+                className={showLineNumbers ? 'table-row' : 'block min-w-0'}
+              >
                 {showLineNumbers && (
                   <span className="table-cell pr-4 text-right select-none text-[var(--vscode-editorLineNumber-foreground)] opacity-50">
                     {i + 1}
                   </span>
                 )}
-                <span className="table-cell">
+                <span className={showLineNumbers ? 'table-cell' : undefined}>
                   {line.map((token, key) => (
                     <span key={key} {...getTokenProps({ token })} />
                   ))}
