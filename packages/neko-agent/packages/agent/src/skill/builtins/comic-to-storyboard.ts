@@ -171,6 +171,7 @@ export const comicToStoryboardSkill: Skill = {
   allowedTools: [
     // Vision analysis (LLM with image input)
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
     // Media generation

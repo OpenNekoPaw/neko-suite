@@ -371,6 +371,7 @@ export const aiGenerateSkill: Skill = {
     TOOL_NAMES_MEDIA.GENERATE_MUSIC,
     TOOL_NAMES_TRANSCRIBE.TRANSCRIBE_AUDIO,
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     // TODO(P1): implement when tools are available:
     // GenerateCharacter, TransferStyle, EnhanceVideo, OptimizeAudio

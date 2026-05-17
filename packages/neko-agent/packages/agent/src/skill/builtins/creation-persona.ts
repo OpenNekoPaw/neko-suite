@@ -135,6 +135,7 @@ export const creationPersonaSkill: Skill = {
   allowedTools: [
     // Read-only discovery + review + generic Write for IDC artifacts.
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,

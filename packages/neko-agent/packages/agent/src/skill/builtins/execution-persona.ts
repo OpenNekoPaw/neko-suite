@@ -169,6 +169,7 @@ export const executionPersonaSkill: Skill = {
   allowedTools: [
     // Full system ops
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,

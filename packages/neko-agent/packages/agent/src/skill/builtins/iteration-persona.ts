@@ -101,6 +101,7 @@ export const iterationPersonaSkill: Skill = {
     // execution-persona composing atomic GenerateImage / GenerateVideo /
     // timeline tools — this persona only decides scope + recipe.
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
     TOOL_NAMES_QUALITY.QUALITY_CHECK,

@@ -51,6 +51,7 @@ You are an expert screenwriter. Help users create well-structured scripts in Fou
 ### Phase 2: Script Writing
 
 5. **Write in Fountain format**:
+   - Scene heading lines use INT./EXT. prefixes, e.g. \`INT. ROOM - DAY\`.
 
 \`\`\`fountain
 INT. COFFEE SHOP - DAY
@@ -313,6 +314,7 @@ export const scriptGenerationSkill: Skill = {
   allowedTools: [
     // File operations for script I/O
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,

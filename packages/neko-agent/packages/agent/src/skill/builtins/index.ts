@@ -310,6 +310,7 @@ You are a professional subtitler. Help users create accessible, well-timed capti
     TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
     // File operations for SRT/VTT
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
@@ -401,6 +402,7 @@ Fountain is a plain-text screenplay format:
 `,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
