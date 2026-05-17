@@ -79,6 +79,29 @@ Extension Host
 - **EngineClient 位置**：`@neko/neko-client`（非 neko-engine 子包），零 vscode 依赖
 - **便捷方法**：`probe()`, `waveform()`, `diff()`, `extractFrame()`, `listEffects()`, `applyEffect()` 等
 
+### 2.1 统一文件访问：二进制源文件由 Engine 读取
+
+媒体、文档、模型、木偶、字幕和 Agent 附件等本地二进制源文件统一通过 `neko-engine` 的 File Access 合同处理：
+
+```
+Extension Host
+  └─ EngineClient.registerFile({ filePath, purpose })
+       └─ host-api FileAccessRegistry：canonicalize + allowed roots + symlink escape 检查
+            └─ 返回 opaque token / size / MIME / URL
+
+Webview / Extension
+  ├─ GET /v1/files/:token                 # Range / full file
+  ├─ GET /v1/files/:token/entries/*path   # EPUB/CBZ/ZIP entry
+  └─ GET /v1/files/:token/resources/*path # glTF/VRM 相邻资源
+
+Engine Action
+  └─ sourceRef: { token } 或 { path }      # 在 Rust 内解析并打开文件
+```
+
+兼容别名（`/v1/preview/file/:token`, `/v1/preview/epub/:token/*path`, `source: string`）仍保留，但新增代码应优先使用 `sourceRef` 与 `EngineClient` 的 file access helper。
+
+允许 Extension 继续读取：项目 JSON CustomDocument（`.nkv/.nkm/.nkp/.nka/.nks`）、workspace settings、preferences、sidecar text、lyrics、测试 fixture 和用户选择的生成/导出写入。禁止 Extension/Webview 重新实现媒体/模型/木偶/文档/字幕源二进制读取或 base64 转发。
+
 ### 3. Webview ↔ Rust Engine：WebSocket 直连（流媒体）
 
 ```
@@ -289,6 +312,7 @@ Extension Host
 | 消融实验框架 | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig 映射 + MetricsHooks 指标采集，零侵入现有子系统 |
 | Agent 媒体架构 | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story 分镜职责边界；Agent 自足性；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递；Send-to-Agent 统一协议（文件级+内容级，零 base64）；MediaPreprocessor 自动缩放/抽帧 |
 | Story-Agent-Canvas 职责 | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md) | Agent-first 架构下的职责收敛：story 负责剧本事实与审阅入口，agent 负责编排，canvas 负责正式分镜工作台；定义轻量分镜表的目标、字段和非目标 |
+| 统一文件访问 | [architecture/engine-file-access.md](./docs/architecture/engine-file-access.md) | FileAccessRegistry + `/v1/files/*` + `sourceRef`，二进制源文件由 Engine 读取，Extension 仅保留项目 JSON/设置/sidecar 等文本语义 |
 | 文档预览 | [architecture/document-preview.md](./docs/architecture/document-preview.md) | PDF/EPUB/CBZ/DOCX 自建预览器；瀑布流虚拟滚动 + 双栏模式；Webview 直连 neko-engine HTTP（无 postMessage 中继）；epub.js fetchForEpub 替代 XHR |
 | 路径体系 | *已内化* | 项目文件只存相对路径 + `${VAR}/path`；PathResolver(@neko/shared L0) 统一解析；Rust ProjectContext(resolve/validate)；EngineClient/PreviewFileServer 自动展开变量；变量来源: neko/settings.json（Git 跟踪）+ .neko/settings.local.json（gitignore）|
 

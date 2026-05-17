@@ -223,7 +223,7 @@ interface DocumentDataMessage {
   type: 'document:data';
   payload: {
     data?: string;    // base64 (legacy fallback)
-    url?: string;     // Direct webview URI (preferred for large files)
+    url?: string;     // Engine file URL, e.g. /v1/files/:token
     fileName: string;
     fileSize: number;
   };
@@ -346,21 +346,23 @@ packages/neko-preview/packages/webview/
     PdfToolbar.tsx       — 页码导航、缩放、适应宽度/页面
 ```
 
-**Provider 逻辑**：
+**Provider 逻辑（legacy 记录）**：
 
 ```
 openCustomDocument(uri) → { uri, dispose() }
 resolveCustomEditor(doc, panel):
   1. webview.options = { enableScripts, localResourceRoots }
   2. webview.html = getWebviewHtml({ entry: 'pdf' })
-  3. onMessage('ready') → fs.readFile → base64 → postMessage('document:data')
+  3. onMessage('ready') → PreviewFileServer.registerFile → postMessage(document:url)
   4. onMessage('document:sendToAi') → AgentContextPayload → sendContext
 ```
+
+当前实现已迁移到通用 [Engine File Access](./engine-file-access.md) 合同：文档二进制不再由 Extension Host `fs.readFile → base64` 转发，Provider 只注册文件 token，Webview 通过 `/v1/files/:token` 或 `/v1/files/:token/entries/*path` 按需读取。旧 `document:data` base64 路径仅作为 Webview 兼容 fallback。
 
 **Webview 逻辑**：
 
 ```
-document:data → base64 → Uint8Array → pdfjsLib.getDocument({ data })
+document:url → pdfjsLib.getDocument({ url })
 → 逐页 page.render() 到 <canvas> + TextLayer 覆盖（原生文本选择）
 → useDocumentSelection hook → 浮动 FAB
 → sendToAi({ selectedText, pageNumber })
@@ -390,7 +392,7 @@ packages/neko-preview/packages/webview/
 **Webview 逻辑**：
 
 ```
-document:data → base64 → Uint8Array → ZipReader
+document:url → fetch /v1/files/:token 或 /entries/*path → ZipReader
 → 过滤图片条目 → 自然排序 → 逐页 Blob URL（IntersectionObserver 懒加载）
 → 用户框选区域 → canvas.toDataURL() → imageDataUrl
 → sendToAi({ imageDataUrl, pageNumber }) → Vision 模型分析
@@ -420,7 +422,7 @@ packages/neko-preview/packages/webview/
 **Webview 逻辑**：
 
 ```
-document:data → ArrayBuffer → ePub(data) → book.renderTo(container)
+document:url → fetch /v1/files/:token 或 /entries/*path → ePub(data) → book.renderTo(container)
 → book.loaded.navigation → TOC 侧栏
 → epub.js 'selected' 事件 → 选中文本 + CFI 定位
 → useDocumentSelection → FAB → sendToAi({ selectedText, chapterTitle })
@@ -451,7 +453,7 @@ packages/neko-preview/packages/webview/
 **Webview 逻辑**：
 
 ```
-document:data → ArrayBuffer → renderAsync(data, container, styleContainer, {
+document:url → fetch /v1/files/:token → renderAsync(data, container, styleContainer, {
   breakPages: true, ignoreWidth: false
 })
 → 标准 HTML DOM → window.getSelection() 原生可用
@@ -523,10 +525,10 @@ packages/neko-preview/
 **Extension 单元测试**（每个 Provider 一个文件）：
 
 - Mock `vscode.window.registerCustomEditorProvider`
-- Mock `fs.readFile` 返回测试 Buffer
+- Mock `PreviewFileServer` / `EngineClient.registerFile` 返回 token URL
 - 验证 `openCustomDocument` → `{ uri, dispose }`
 - 验证 `resolveCustomEditor` 设置正确 entry HTML
-- 模拟 `ready` → 验证发送 `document:data`
+- 模拟 `ready` → 验证发送 token-backed document URL
 - 模拟 `document:sendToAi` → 验证调用 `neko.agent.sendContext`
 
 **构建验证**：
@@ -555,7 +557,7 @@ pnpm check    # Knip + dependency-cruiser
 | pdfjs Worker CSP 被阻止 | PDF 无法渲染 | workerSrc 指向 asWebviewUri 路径，已有扩展验证可行 |
 | epub.js 嵌套 iframe 限制 | EPUB 渲染失败 | Book Reader 已验证可行；CSP 添加 frame-src blob: |
 | 大文件内存溢出 | Webview 崩溃 | PDF 分页渲染（虚拟滚动），CBZ 懒加载（IntersectionObserver） |
-| base64 传输大文件慢 | 打开卡顿 | 分块传输或使用 asWebviewUri 直接引用文件（需评估 CSP） |
+| legacy base64 fallback 传输大文件慢 | 打开卡顿 | 主路径使用 Engine File Access token URL；base64 仅保留兼容兜底 |
 
 ---
 
@@ -662,7 +664,7 @@ Tab 打开 → resolveCustomEditor()
   → webview sends 'ready'
   → Extension reads workspaceState[preview:state:{uri}]
   → Extension sends 'document:restoreState' { state }   ← 恢复
-  → Extension sends 'document:data' { url }              ← 加载
+  → Extension sends 'document:data' { url }              ← 加载（url 为 engine token URL）
 
 用户翻页/缩放
   → Webview sends 'document:saveState' { state }         ← 保存（debounce 500ms）
