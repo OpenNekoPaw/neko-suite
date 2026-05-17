@@ -1,8 +1,9 @@
 //! AudioController - handles audios:* actions
 
-use crate::controllers::utils::{handle_stream_control, resolve_resource};
+use crate::controllers::utils::{handle_stream_control, resolve_file_source_ref, resolve_resource};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
+use crate::file_access::FileAccessRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_engine_kernel::contracts::domain::{
     AudioOutputFormat, AudioRenderEffectConfig, StreamConfig,
@@ -12,7 +13,7 @@ use neko_engine_kernel::contracts::media::{
 };
 use neko_engine_kernel::contracts::services::IAudioService;
 use neko_engine_types::registry;
-use neko_engine_types::{ActionResponse, SUPPORTED_AUDIO_EFFECT_TYPES};
+use neko_engine_types::{ActionResponse, FileSourceRef, ResourceId, SUPPORTED_AUDIO_EFFECT_TYPES};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::path::Path;
@@ -24,6 +25,7 @@ pub struct AudioController {
     audio_service: Arc<dyn IAudioService>,
     resource_registry: Arc<ResourceRegistry>,
     stream_registry: Arc<StreamRegistry>,
+    file_access_registry: Option<Arc<FileAccessRegistry>>,
 }
 
 impl AudioController {
@@ -37,7 +39,28 @@ impl AudioController {
             audio_service,
             resource_registry,
             stream_registry,
+            file_access_registry: None,
         }
+    }
+
+    pub fn with_file_access_registry(mut self, registry: Arc<FileAccessRegistry>) -> Self {
+        self.file_access_registry = Some(registry);
+        self
+    }
+
+    async fn resolve_media_resource(
+        &self,
+        resource_id: Option<&str>,
+        source: Option<&str>,
+        source_ref: Option<&FileSourceRef>,
+        label: &str,
+    ) -> ApiResult<(ResourceId, std::path::PathBuf)> {
+        if let (Some(files), Some(source_ref)) = (&self.file_access_registry, source_ref) {
+            let file_path = resolve_file_source_ref(files, Some(source_ref), source, label)?;
+            let resource_id = self.resource_registry.register(&file_path).await;
+            return Ok((resource_id, file_path));
+        }
+        resolve_resource(&self.resource_registry, resource_id, source).await
     }
 }
 
@@ -45,12 +68,16 @@ impl AudioController {
 #[derive(Debug, Deserialize, Default)]
 struct ProbeOptions {
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
 }
 
 /// Options for audios:waveform
 #[derive(Debug, Deserialize, Default)]
 struct WaveformRequestOptions {
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
 }
 
 /// Options for audios:transcode
@@ -59,6 +86,8 @@ struct WaveformRequestOptions {
 struct TranscodeRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Output file path
     output: Option<String>,
     /// Force codec (overrides output extension inference)
@@ -86,6 +115,8 @@ struct TranscodeRequestOptions {
 struct SegmentRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Segment start time in seconds
     start: Option<f64>,
     /// Segment duration in seconds
@@ -104,6 +135,8 @@ struct SegmentRequestOptions {
 struct StreamRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Session ID for the stream
     session_id: Option<String>,
 }
@@ -130,6 +163,8 @@ struct AudioDiffRequestOptions {
 struct AnalyzeLoudnessOptions {
     /// Source file path (audio or video)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Target LUFS for recommended gain calculation (default: -14.0)
     target_lufs: Option<f64>,
 }
@@ -140,6 +175,8 @@ struct AnalyzeLoudnessOptions {
 struct DetectSilenceOptions {
     /// Source file path (audio or video)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Silence threshold in dBFS (default: -40.0)
     threshold_dbfs: Option<f64>,
     /// Minimum silence duration in seconds (default: 0.5)
@@ -301,15 +338,17 @@ impl Controller for AudioController {
             "probe" => {
                 let opts: ProbeOptions = serde_json::from_value(options).unwrap_or_default();
 
-                let source = opts.source.as_deref().or(resource_id).ok_or_else(|| {
-                    ApiError::InvalidRequest("source path required for audios:probe".to_string())
-                })?;
+                let (id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "audios:probe",
+                    )
+                    .await?;
 
-                let path = Path::new(source);
+                let path = file_path.as_path();
                 let media_info = self.audio_service.probe(path).await?;
-
-                // Register the resource
-                let id = self.resource_registry.register(path).await;
 
                 // Include resource_id in response
                 let mut response = serde_json::to_value(media_info)?;
@@ -326,9 +365,14 @@ impl Controller for AudioController {
                 let opts: TranscodeRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "audios:transcode",
+                    )
+                    .await?;
 
                 let output_path = opts.output.ok_or_else(|| {
                     ApiError::InvalidRequest(
@@ -369,9 +413,14 @@ impl Controller for AudioController {
                 let opts: SegmentRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "audios:segment",
+                    )
+                    .await?;
 
                 let start = opts.start.unwrap_or(0.0);
                 let duration = opts.duration.ok_or_else(|| {
@@ -438,9 +487,14 @@ impl Controller for AudioController {
                 let opts: StreamRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "audios:stream",
+                    )
+                    .await?;
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
@@ -474,9 +528,14 @@ impl Controller for AudioController {
                 let opts: WaveformRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "audios:waveform",
+                    )
+                    .await?;
 
                 let waveform = self.audio_service.generate_waveform(&file_path).await?;
 
@@ -536,9 +595,14 @@ impl Controller for AudioController {
                 let opts: AnalyzeLoudnessOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "audios:analyze_loudness",
+                    )
+                    .await?;
 
                 let target_lufs = opts.target_lufs.unwrap_or(-14.0);
 
@@ -561,9 +625,14 @@ impl Controller for AudioController {
                 let opts: DetectSilenceOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "audios:detect_silence",
+                    )
+                    .await?;
 
                 let threshold_dbfs = opts.threshold_dbfs.unwrap_or(-40.0);
                 let min_duration = opts.min_duration.unwrap_or(0.5);

@@ -52,6 +52,7 @@ type NativeEngineWithPreviewRoots = {
     port?: number,
     previewAllowedRoots?: readonly string[],
   ) => Promise<number>;
+  setPreviewAllowedRoots?: (previewAllowedRoots?: readonly string[]) => void;
   startFrameServer(port?: number): Promise<number>;
 };
 
@@ -290,9 +291,9 @@ function registerCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.engine.ensureFrameServer',
-      async (): Promise<{ port: number } | null> => {
+      async (previewAllowedRoots?: readonly string[]): Promise<{ port: number } | null> => {
         if (!ensureFrameServerPromise) {
-          ensureFrameServerPromise = ensureFrameServer().finally(() => {
+          ensureFrameServerPromise = ensureFrameServer(previewAllowedRoots).finally(() => {
             ensureFrameServerPromise = null;
           });
         }
@@ -708,15 +709,20 @@ async function getOrStartEngine(): Promise<NativeMediaEngine | null> {
   }
 }
 
-async function ensureFrameServer(): Promise<{ port: number } | null> {
+async function ensureFrameServer(
+  requestedPreviewAllowedRoots?: readonly string[],
+): Promise<{ port: number } | null> {
   try {
     const engine = await getOrStartEngine();
     if (!engine?.engine) return null;
+    const nativeEngine = engine.engine as NativeEngineWithPreviewRoots;
+    const previewRoots = previewAllowedRoots(requestedPreviewAllowedRoots);
 
     // Reuse a healthy embedded server when possible, but self-heal stale cache state.
     const existingPort = frameServerPort ?? engine.engine.getFrameServerPort();
     if (existingPort !== null) {
       if (await isFrameServerHealthy(existingPort)) {
+        updatePreviewAllowedRoots(nativeEngine, previewRoots);
         frameServerPort = existingPort;
         return { port: existingPort };
       }
@@ -732,7 +738,7 @@ async function ensureFrameServer(): Promise<{ port: number } | null> {
     }
 
     // Start frame server with auto-assigned port and a workspace-scoped preview allow-list.
-    const port = await startFrameServer(engine.engine as NativeEngineWithPreviewRoots);
+    const port = await startFrameServer(nativeEngine, previewRoots);
     frameServerPort = port;
     log(`Frame server started on port ${port}`);
     return { port };
@@ -775,9 +781,33 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function startFrameServer(engine: NativeEngineWithPreviewRoots): Promise<number> {
+function previewAllowedRoots(requestedRoots?: readonly string[]): string[] {
   const previewRoots =
     vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath).filter(Boolean) ?? [];
+  for (const root of requestedRoots ?? []) {
+    if (root) {
+      previewRoots.push(root);
+    }
+  }
+  return [...new Set(previewRoots)];
+}
+
+function updatePreviewAllowedRoots(
+  engine: NativeEngineWithPreviewRoots,
+  previewRoots: readonly string[],
+): void {
+  if (typeof engine.setPreviewAllowedRoots !== 'function') return;
+  try {
+    engine.setPreviewAllowedRoots(previewRoots);
+  } catch (error) {
+    log(`Failed to update preview allowed roots: ${error}`, 'error');
+  }
+}
+
+async function startFrameServer(
+  engine: NativeEngineWithPreviewRoots,
+  previewRoots: readonly string[],
+): Promise<number> {
   if (typeof engine.startFrameServerWithPreviewRoots === 'function') {
     return engine.startFrameServerWithPreviewRoots(0, previewRoots);
   }

@@ -25,6 +25,7 @@ pub mod groups {
     pub const GAMEPAD: &str = "gamepad";
     pub const COLOR_CORRECTION: &str = "color-correction";
     pub const DOCUMENTS: &str = "documents";
+    pub const FILES: &str = "files";
     pub const PLUGINS: &str = "plugins";
     pub const PREVIEWS: &str = "previews";
 
@@ -46,6 +47,7 @@ pub mod groups {
         GAMEPAD,
         COLOR_CORRECTION,
         DOCUMENTS,
+        FILES,
         PLUGINS,
         PREVIEWS,
     ];
@@ -193,6 +195,7 @@ pub mod actions {
 
     pub const PUPPETS: &[&str] = &[
         "load",
+        "load_source",
         "snapshot",
         "param",
         "params",
@@ -232,6 +235,8 @@ pub mod actions {
     pub const COLOR_CORRECTION: &[&str] = &["upload_lut", "remove_lut", "list_luts"];
 
     pub const DOCUMENTS: &[&str] = &["probe"];
+
+    pub const FILES: &[&str] = &["register", "unregister", "stat", "resolve"];
 
     pub const PLUGINS: &[&str] = &[
         "list",

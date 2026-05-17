@@ -1,6 +1,7 @@
 //! EngineApi - Main facade for all engine operations
 
 use crate::error::{ApiError, ApiResult};
+use crate::file_access::FileAccessRegistry;
 use crate::preview::PreviewFileRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use crate::router::ActionRouter;
@@ -28,6 +29,8 @@ pub struct EngineApi {
     stream_registry: Arc<StreamRegistry>,
     /// Preview token/asset registry shared by ActionRouter and HTTP file routes
     preview_registry: Arc<PreviewFileRegistry>,
+    /// Generic engine file access registry shared with preview compatibility routes
+    file_access_registry: Arc<FileAccessRegistry>,
     /// Session manager
     session_manager: Arc<SessionManager>,
     /// Kernel service graph facade
@@ -89,7 +92,10 @@ impl EngineApi {
         // Create registries
         let resource_registry = Arc::new(ResourceRegistry::new());
         let stream_registry = Arc::new(StreamRegistry::new());
-        let preview_registry = Arc::new(PreviewFileRegistry::new());
+        let file_access_registry = Arc::new(FileAccessRegistry::new());
+        let preview_registry = Arc::new(PreviewFileRegistry::from_file_access(
+            file_access_registry.clone(),
+        ));
 
         // Create session manager
         let session_manager = Arc::new(SessionManager::new(stream_registry.clone()));
@@ -140,6 +146,7 @@ impl EngineApi {
             resource_registry,
             stream_registry,
             preview_registry,
+            file_access_registry,
             session_manager,
             kernel_facade,
             puppet_service: puppet_service_ref,
@@ -222,9 +229,26 @@ impl EngineApi {
         &self.preview_registry
     }
 
-    /// Configure preview file allow-list roots for HTTP/server adapters.
+    /// Get the generic file access registry shared with host-http.
+    pub fn file_access_registry(&self) -> &Arc<FileAccessRegistry> {
+        &self.file_access_registry
+    }
+
+    /// Configure the shared file access allow-list roots for HTTP/server adapters.
+    ///
+    /// Preview compatibility routes and generic `/v1/files/*` routes are backed
+    /// by the same `FileAccessRegistry`, so this is the canonical server-start
+    /// configuration entry point.
     pub fn set_preview_allowed_roots(&self, roots: Vec<std::path::PathBuf>) -> ApiResult<()> {
         self.preview_registry.set_allowed_roots(roots)
+    }
+
+    /// Configure file access allow-list roots directly.
+    ///
+    /// Prefer `set_preview_allowed_roots` during HTTP server startup so preview
+    /// compatibility and generic file routes remain visibly tied together.
+    pub fn set_file_access_allowed_roots(&self, roots: Vec<std::path::PathBuf>) -> ApiResult<()> {
+        self.file_access_registry.set_allowed_roots(roots)
     }
 
     /// Get the puppet service (shared with controller layer)

@@ -2,9 +2,10 @@
 
 use crate::controllers::{
     AudioController, CameraController, CanvasController, ColorCorrectionController, Controller,
-    DocumentsController, EffectsController, GamepadController, ImageController, MidiController,
-    ModelsController, NodeController, PluginsController, PreviewsController, PuppetsController,
-    ScenesController, StreamController, TaskController, TimelineController, VideoController,
+    DocumentsController, EffectsController, FilesController, GamepadController, ImageController,
+    MidiController, ModelsController, NodeController, PluginsController, PreviewsController,
+    PuppetsController, ScenesController, StreamController, TaskController, TimelineController,
+    VideoController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::plugin::PluginManager;
@@ -37,6 +38,7 @@ pub struct ActionRouter {
     gamepad_controller: GamepadController,
     color_correction_controller: ColorCorrectionController,
     documents_controller: DocumentsController,
+    files_controller: FilesController,
     plugins_controller: PluginsController,
     previews_controller: PreviewsController,
 }
@@ -51,6 +53,7 @@ impl ActionRouter {
         preview_registry: Arc<PreviewFileRegistry>,
         #[cfg(feature = "onnx")] ml_service: Option<Arc<dyn IMlService>>,
     ) -> Self {
+        let file_access_registry = preview_registry.file_access().clone();
         Self {
             node_controller: NodeController::new(kernel_services.node_service),
             task_controller: TaskController::new(kernel_services.task_service),
@@ -58,12 +61,14 @@ impl ActionRouter {
                 kernel_services.video_service,
                 resource_registry.clone(),
                 stream_registry.clone(),
-            ),
+            )
+            .with_file_access_registry(file_access_registry.clone()),
             audio_controller: AudioController::new(
                 kernel_services.audio_service,
                 resource_registry.clone(),
                 stream_registry.clone(),
-            ),
+            )
+            .with_file_access_registry(file_access_registry.clone()),
             image_controller: ImageController::new(
                 kernel_services.image_service,
                 resource_registry,
@@ -89,13 +94,16 @@ impl ActionRouter {
             scenes_controller: ScenesController::with_stream_registry(
                 kernel_services.scene_service,
                 stream_registry,
-            ),
-            puppets_controller: PuppetsController::new(kernel_services.puppet_service),
+            )
+            .with_file_access_registry(file_access_registry.clone()),
+            puppets_controller: PuppetsController::new(kernel_services.puppet_service)
+                .with_file_access_registry(file_access_registry.clone()),
             camera_controller: CameraController::new(kernel_services.camera_service),
             midi_controller: MidiController::new(kernel_services.midi_service),
             gamepad_controller: GamepadController::new(kernel_services.gamepad_service),
             color_correction_controller: ColorCorrectionController::new(),
             documents_controller: DocumentsController::new(),
+            files_controller: FilesController::new(file_access_registry),
             plugins_controller: PluginsController::new(plugin_manager),
             previews_controller: PreviewsController::new(preview_registry),
         }
@@ -197,6 +205,11 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::FILES => {
+                self.files_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             groups::PLUGINS => {
                 self.plugins_controller
                     .handle(&request.action, resource_id, request.options, request.body)
@@ -239,6 +252,7 @@ impl ActionRouter {
             groups::GAMEPAD => Some(self.gamepad_controller.actions()),
             groups::COLOR_CORRECTION => Some(self.color_correction_controller.actions()),
             groups::DOCUMENTS => Some(self.documents_controller.actions()),
+            groups::FILES => Some(self.files_controller.actions()),
             groups::PLUGINS => Some(self.plugins_controller.actions()),
             groups::PREVIEWS => Some(self.previews_controller.actions()),
             _ => None,

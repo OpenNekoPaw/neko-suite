@@ -1,8 +1,9 @@
 //! ScenesController - handles scenes:* actions for 3D scene management
 
-use crate::controllers::utils::base64_encode;
+use crate::controllers::utils::{base64_encode, resolve_file_source_ref};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
+use crate::file_access::FileAccessRegistry;
 use crate::registry::StreamRegistry;
 use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig};
 use neko_engine_kernel::contracts::gpu::{
@@ -14,10 +15,9 @@ use neko_engine_kernel::contracts::gpu::{
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
 use neko_engine_kernel::contracts::services::{ISceneService, PipelineSink, StreamSink};
 use neko_engine_types::registry;
-use neko_engine_types::{ActionResponse, Resolution, StreamId};
+use neko_engine_types::{ActionResponse, FileSourceRef, Resolution, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
@@ -26,6 +26,7 @@ use tokio_util::sync::CancellationToken;
 pub struct ScenesController {
     scene_service: Option<Arc<dyn ISceneService>>,
     stream_registry: Option<Arc<StreamRegistry>>,
+    file_access_registry: Option<Arc<FileAccessRegistry>>,
 }
 
 impl ScenesController {
@@ -33,6 +34,7 @@ impl ScenesController {
         Self {
             scene_service,
             stream_registry: None,
+            file_access_registry: None,
         }
     }
 
@@ -43,7 +45,13 @@ impl ScenesController {
         Self {
             scene_service,
             stream_registry: Some(stream_registry),
+            file_access_registry: None,
         }
+    }
+
+    pub fn with_file_access_registry(mut self, registry: Arc<FileAccessRegistry>) -> Self {
+        self.file_access_registry = Some(registry);
+        self
     }
 
     fn service(&self) -> ApiResult<&dyn ISceneService> {
@@ -645,17 +653,29 @@ impl Controller for ScenesController {
         match action {
             "load" => {
                 #[derive(Debug, Deserialize, Default)]
+                #[serde(rename_all = "camelCase")]
                 struct LoadOptions {
                     source: Option<String>,
+                    #[serde(default)]
+                    source_ref: Option<FileSourceRef>,
                 }
                 let opts: LoadOptions = serde_json::from_value(options).unwrap_or_default();
-                let source = opts
-                    .source
-                    .ok_or_else(|| ApiError::InvalidRequest("source path required".to_string()))?;
+                let source = if let Some(files) = &self.file_access_registry {
+                    resolve_file_source_ref(
+                        files,
+                        opts.source_ref.as_ref(),
+                        opts.source.as_deref(),
+                        "scenes:load",
+                    )?
+                } else {
+                    opts.source
+                        .map(Into::into)
+                        .ok_or_else(|| ApiError::InvalidRequest("source path required".to_string()))?
+                };
 
                 let service = self.service()?;
                 let snapshot = service
-                    .load_model(Path::new(&source))
+                    .load_model(source.as_path())
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
 
                 Ok(ActionResponse::ok(

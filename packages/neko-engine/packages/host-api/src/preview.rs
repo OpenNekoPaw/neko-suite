@@ -1,6 +1,8 @@
 //! Preview registry and JSON wire contracts shared by ActionRouter and HTTP transport.
 
 use crate::error::{ApiError, ApiResult};
+use crate::file_access::FileAccessRegistry;
+use neko_engine_types::FileAccessPurpose;
 use neko_runtime_media::{
     default_panorama_view_state, generate_preview_variant as generate_runtime_variant,
     generated_proxy_needed, infer_dynamic_range, infer_projection, is_exr_path, is_hdr_path,
@@ -13,14 +15,14 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::RwLock,
+    sync::{Arc, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
 
-const PREVIEW_TOKEN_TTL_SECS: u64 = 60 * 60;
-const MAX_PREVIEW_TOKENS: usize = 4096;
 const MAX_PREVIEW_ASSETS: usize = 1024;
+
+pub use crate::file_access::mime_for_path;
 
 pub use neko_runtime_media::{
     PanoramaViewMode as RuntimePanoramaViewMode, PreviewProjectionType as RuntimeProjectionType,
@@ -28,9 +30,8 @@ pub use neko_runtime_media::{
 
 /// Thread-safe map of opaque tokens and preview asset manifests.
 pub struct PreviewFileRegistry {
-    inner: RwLock<HashMap<String, PreviewTokenRecord>>,
+    files: Arc<FileAccessRegistry>,
     assets: RwLock<HashMap<String, PreviewAssetRecord>>,
-    allowed_roots: RwLock<Vec<PathBuf>>,
 }
 
 impl PreviewFileRegistry {
@@ -41,39 +42,39 @@ impl PreviewFileRegistry {
 
     pub fn with_allowed_roots(allowed_roots: Vec<PathBuf>) -> Self {
         Self {
-            inner: RwLock::new(HashMap::new()),
+            files: Arc::new(FileAccessRegistry::with_allowed_roots(allowed_roots)),
             assets: RwLock::new(HashMap::new()),
-            allowed_roots: RwLock::new(canonicalize_allowed_roots(allowed_roots)),
         }
     }
 
+    pub fn from_file_access(files: Arc<FileAccessRegistry>) -> Self {
+        Self {
+            files,
+            assets: RwLock::new(HashMap::new()),
+        }
+    }
+
+    pub fn file_access(&self) -> &Arc<FileAccessRegistry> {
+        &self.files
+    }
+
     pub fn set_allowed_roots(&self, allowed_roots: Vec<PathBuf>) -> ApiResult<()> {
-        let mut guard = self.allowed_roots.write().map_err(|error| {
-            ApiError::Internal(format!("Preview allowed roots lock poisoned: {error}"))
-        })?;
-        *guard = canonicalize_allowed_roots(allowed_roots);
-        Ok(())
+        self.files.set_allowed_roots(allowed_roots)
     }
 
     /// Register a path and return a fresh UUID token.
     pub fn register(&self, path: PathBuf) -> ApiResult<String> {
-        let path = self.authorize_source_path(path)?;
-        let token = Uuid::new_v4().to_string();
-        self.register_token(token, path)
+        Ok(self.files.register(path, FileAccessPurpose::Preview)?.token)
     }
 
     /// Remove a previously registered token. No-op if unknown.
     pub fn unregister_token(&self, token: &str) -> ApiResult<()> {
-        let mut guard = self.inner.write().map_err(|error| {
-            ApiError::Internal(format!("Preview token registry lock poisoned: {error}"))
-        })?;
-        guard.remove(token);
-        Ok(())
+        self.files.unregister_token(token)
     }
 
     pub fn register_asset(&self, body: RegisterPreviewAssetRequest) -> ApiResult<PreviewManifest> {
         let asset_id = Uuid::new_v4().to_string();
-        let path = self.authorize_source_path(PathBuf::from(&body.source))?;
+        let path = self.files.resolve_path(PathBuf::from(&body.source))?;
         let token = self.register_token(asset_id.clone(), path.clone())?;
         let mut manifest = build_preview_manifest(&asset_id, &token, &path, &body)?;
         let initial_proxy = generate_initial_proxy(&asset_id, &path, &manifest);
@@ -81,7 +82,7 @@ impl PreviewFileRegistry {
         let mut generated_variant_paths = Vec::new();
         if let Some(generated) = &initial_proxy {
             if let Some((token, path)) = &generated.token_registration {
-                self.register_token(token.clone(), path.clone())?;
+                self.register_generated_token(token.clone(), path.clone())?;
                 variant_tokens.push(token.clone());
                 generated_variant_paths.push(path.clone());
             }
@@ -233,31 +234,21 @@ impl PreviewFileRegistry {
     }
 
     pub fn lookup_token(&self, token: &str) -> ApiResult<Option<PathBuf>> {
-        let mut guard = self.inner.write().map_err(|error| {
-            ApiError::Internal(format!("Preview token registry lock poisoned: {error}"))
-        })?;
-        prune_expired_tokens(&mut guard);
-        Ok(guard.get(token).map(|record| record.path.clone()))
+        self.files.lookup_token(token)
     }
 
     fn register_token(&self, token: String, path: PathBuf) -> ApiResult<String> {
-        let mut guard = self.inner.write().map_err(|error| {
-            ApiError::Internal(format!("Preview token registry lock poisoned: {error}"))
-        })?;
-        prune_expired_tokens(&mut guard);
-        if guard.len() >= MAX_PREVIEW_TOKENS {
-            return Err(ApiError::ServiceError(
-                "Preview token registry is full".to_string(),
-            ));
-        }
-        guard.insert(
-            token.clone(),
-            PreviewTokenRecord {
-                path,
-                expires_at: Some(SystemTime::now() + Duration::from_secs(PREVIEW_TOKEN_TTL_SECS)),
-            },
-        );
-        Ok(token)
+        Ok(self
+            .files
+            .register_with_token(token, path, FileAccessPurpose::Preview)?
+            .token)
+    }
+
+    fn register_generated_token(&self, token: String, path: PathBuf) -> ApiResult<String> {
+        Ok(self
+            .files
+            .register_trusted_path_with_token(token, path, FileAccessPurpose::Preview)?
+            .token)
     }
 
     fn lookup_asset_record(&self, asset_id: &str) -> ApiResult<Option<PreviewAssetRecord>> {
@@ -273,7 +264,7 @@ impl PreviewFileRegistry {
         token: String,
         path: PathBuf,
     ) -> ApiResult<()> {
-        self.register_token(token.clone(), path.clone())?;
+        self.register_generated_token(token.clone(), path.clone())?;
         let mut guard = self.assets.write().map_err(|error| {
             let _ = self.unregister_token(&token);
             cleanup_generated_file(&path);
@@ -302,31 +293,6 @@ impl PreviewFileRegistry {
         Ok(())
     }
 
-    fn authorize_source_path(&self, path: PathBuf) -> ApiResult<PathBuf> {
-        let canonical = path
-            .canonicalize()
-            .map_err(|error| ApiError::NotFound(format!("Preview path rejected: {error}")))?;
-        if !canonical.is_file() {
-            return Err(ApiError::InvalidRequest(format!(
-                "Preview path is not a file: {:?}",
-                canonical
-            )));
-        }
-        let allowed_roots = self.allowed_roots.read().map_err(|error| {
-            ApiError::Internal(format!("Preview allowed roots lock poisoned: {error}"))
-        })?;
-        if allowed_roots.is_empty()
-            || allowed_roots
-                .iter()
-                .any(|allowed_root| canonical.starts_with(allowed_root))
-        {
-            return Ok(canonical);
-        }
-        Err(ApiError::InvalidRequest(format!(
-            "Preview path outside allowed roots: {:?}",
-            canonical
-        )))
-    }
 }
 
 impl Default for PreviewFileRegistry {
@@ -335,10 +301,32 @@ impl Default for PreviewFileRegistry {
     }
 }
 
-#[derive(Clone)]
-struct PreviewTokenRecord {
-    path: PathBuf,
-    expires_at: Option<SystemTime>,
+#[cfg(test)]
+mod registry_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn preview_registry_delegates_token_lookup_to_file_access_registry() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("preview.pdf");
+        fs::write(&file_path, b"%PDF").expect("write preview");
+        let files = Arc::new(FileAccessRegistry::with_allowed_roots(vec![dir
+            .path()
+            .to_path_buf()]));
+        let registry = PreviewFileRegistry::from_file_access(files.clone());
+
+        let token = registry.register(file_path.clone()).expect("register token");
+
+        assert_eq!(
+            registry.lookup_token(&token).expect("preview lookup"),
+            files.lookup_token(&token).expect("file lookup")
+        );
+        registry
+            .unregister_token(&token)
+            .expect("unregister preview token");
+        assert_eq!(files.lookup_token(&token).expect("lookup removed"), None);
+    }
 }
 
 #[derive(Clone)]
@@ -508,31 +496,6 @@ pub struct PreviewVariant {
 
 pub fn preview_file_url(token: &str) -> String {
     format!("/v1/preview/file/{token}")
-}
-
-pub fn mime_for_path(path: &Path) -> String {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("pdf") => "application/pdf".to_string(),
-        Some("epub") => "application/epub+zip".to_string(),
-        Some("cbz") | Some("zip") => "application/zip".to_string(),
-        Some("html") | Some("htm") => "text/html; charset=utf-8".to_string(),
-        Some("xhtml") => "application/xhtml+xml; charset=utf-8".to_string(),
-        Some("css") => "text/css; charset=utf-8".to_string(),
-        Some("js") => "application/javascript".to_string(),
-        Some("xml") | Some("opf") | Some("ncx") => "application/xml; charset=utf-8".to_string(),
-        Some("jpg") | Some("jpeg") => "image/jpeg".to_string(),
-        Some("png") => "image/png".to_string(),
-        Some("hdr") => "image/vnd.radiance".to_string(),
-        Some("exr") => "image/x-exr".to_string(),
-        Some("gif") => "image/gif".to_string(),
-        Some("svg") => "image/svg+xml".to_string(),
-        Some("webp") => "image/webp".to_string(),
-        Some("ttf") => "font/ttf".to_string(),
-        Some("otf") => "font/otf".to_string(),
-        Some("woff") => "font/woff".to_string(),
-        Some("woff2") => "font/woff2".to_string(),
-        _ => "application/octet-stream".to_string(),
-    }
 }
 
 fn build_preview_manifest(
@@ -926,34 +889,6 @@ pub fn cleanup_generated_file(path: &Path) {
     if let Some(parent) = path.parent() {
         let _ = fs::remove_dir(parent);
     }
-}
-
-fn canonicalize_allowed_roots(allowed_roots: Vec<PathBuf>) -> Vec<PathBuf> {
-    let mut canonical_roots: Vec<PathBuf> = allowed_roots
-        .into_iter()
-        .filter_map(|path| match path.canonicalize() {
-            Ok(canonical) => Some(canonical),
-            Err(error) => {
-                tracing::warn!(
-                    "Ignoring invalid preview allowed root {:?}: {}",
-                    path,
-                    error
-                );
-                None
-            }
-        })
-        .collect();
-    if canonical_roots.is_empty() {
-        if let Ok(current_dir) = std::env::current_dir().and_then(|path| path.canonicalize()) {
-            canonical_roots.push(current_dir);
-        }
-    }
-    canonical_roots
-}
-
-fn prune_expired_tokens(tokens: &mut HashMap<String, PreviewTokenRecord>) {
-    let now = SystemTime::now();
-    tokens.retain(|_, record| record.expires_at.is_none_or(|expires_at| expires_at > now));
 }
 
 fn normalized_extension(path: &Path) -> Option<String> {

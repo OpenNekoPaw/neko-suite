@@ -30,7 +30,7 @@ pub fn build_router_with_preview_roots(
     if let Err(error) = engine.set_preview_allowed_roots(preview_allowed_roots) {
         tracing::error!("Failed to configure preview allowed roots: {}", error);
     }
-    let file_registry = engine.preview_registry().clone();
+    let preview_registry = engine.preview_registry().clone();
 
     Router::new()
         // Health check
@@ -86,6 +86,25 @@ pub fn build_router_with_preview_roots(
         )
         // Document preview — Range-capable static file serving (PDF / CBZ)
         .route("/v1/preview/register", post(preview_file::handle_register))
+        // Generic engine-owned file access routes. These share the same token
+        // store as the preview compatibility endpoints.
+        .route(
+            "/v1/files/register",
+            post(preview_file::handle_file_register),
+        )
+        .route(
+            "/v1/files/:token",
+            get(preview_file::handle_general_file)
+                .delete(preview_file::handle_file_unregister),
+        )
+        .route(
+            "/v1/files/:token/entries/*path",
+            get(preview_file::handle_general_entry),
+        )
+        .route(
+            "/v1/files/:token/resources/*path",
+            get(preview_file::handle_general_resource),
+        )
         // Engine-first preview manifests for image/video preview surfaces.
         .route(
             "/v1/preview/assets",
@@ -113,7 +132,7 @@ pub fn build_router_with_preview_roots(
             "/v1/preview/epub/:token/*path",
             get(preview_file::handle_epub_entry),
         )
-        .layer(axum::Extension(file_registry))
+        .layer(axum::Extension(preview_registry))
         .with_state(engine)
 }
 

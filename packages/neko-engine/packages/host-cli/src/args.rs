@@ -189,6 +189,12 @@ pub enum Command {
         #[command(subcommand)]
         action: SceneAction,
     },
+
+    /// File access: register, unregister, stat, resolve
+    Files {
+        #[command(subcommand)]
+        action: FileAction,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -452,6 +458,17 @@ define_actions!(SceneAction {
     UpdateCamera => "update_camera",
 });
 
+define_actions!(FileAction {
+    /// Register a local file and receive an engine token
+    Register => "register",
+    /// Release a registered file token
+    Unregister => "unregister",
+    /// Get metadata for a registered file token
+    Stat => "stat",
+    /// Resolve and authorize a local file path
+    Resolve => "resolve",
+});
+
 // ---------------------------------------------------------------------------
 // Timeline actions (special: export has rich CLI flags)
 // ---------------------------------------------------------------------------
@@ -683,6 +700,15 @@ mod tests {
             SceneAction::all_action_names(),
             registry::actions::SCENES,
             "SceneAction variants do not match registry::actions::SCENES"
+        );
+    }
+
+    #[test]
+    fn test_file_actions_align_with_registry() {
+        assert_eq!(
+            FileAction::all_action_names(),
+            registry::actions::FILES,
+            "FileAction variants do not match registry::actions::FILES"
         );
     }
 }

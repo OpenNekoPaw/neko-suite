@@ -49,23 +49,14 @@ pub async fn handle_dispatch(
     Json(dispatch_with_admission(&engine, request).await)
 }
 
-/// POST /v1/:group
-///
-/// Group-level dispatch: group from URL path, action and other fields from body.
-pub async fn handle_group_dispatch(
-    State(engine): State<Arc<EngineApi>>,
-    Path(group): Path<String>,
-    Json(mut request): Json<ActionRequest>,
-) -> Json<ActionResponse> {
-    request.group = group;
-    Json(dispatch_with_admission(&engine, request).await)
-}
-
-/// Request body for resource-level dispatch (options + body only)
-#[derive(serde::Deserialize, Default)]
+/// Request body for group-level dispatch.
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResourceDispatchBody {
+pub struct GroupDispatchBody {
+    action: String,
     #[serde(default)]
+    id: String,
+    #[serde(default = "default_options")]
     options: Value,
     #[serde(default)]
     body: Option<Value>,
@@ -75,6 +66,74 @@ pub struct ResourceDispatchBody {
     session_id: Option<String>,
     #[serde(default)]
     stream_id: Option<String>,
+}
+
+impl Default for GroupDispatchBody {
+    fn default() -> Self {
+        Self {
+            action: String::new(),
+            id: String::new(),
+            options: default_options(),
+            body: None,
+            source: None,
+            session_id: None,
+            stream_id: None,
+        }
+    }
+}
+
+/// POST /v1/:group
+///
+/// Group-level dispatch: group from URL path, action and other fields from body.
+pub async fn handle_group_dispatch(
+    State(engine): State<Arc<EngineApi>>,
+    Path(group): Path<String>,
+    Json(body): Json<GroupDispatchBody>,
+) -> Json<ActionResponse> {
+    let request = ActionRequest {
+        group,
+        id: body.id,
+        action: body.action,
+        source: body.source,
+        session_id: body.session_id,
+        stream_id: body.stream_id,
+        options: body.options,
+        body: body.body,
+    };
+
+    Json(dispatch_with_admission(&engine, request).await)
+}
+
+/// Request body for resource-level dispatch (options + body only)
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceDispatchBody {
+    #[serde(default = "default_options")]
+    options: Value,
+    #[serde(default)]
+    body: Option<Value>,
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
+    stream_id: Option<String>,
+}
+
+impl Default for ResourceDispatchBody {
+    fn default() -> Self {
+        Self {
+            options: default_options(),
+            body: None,
+            source: None,
+            session_id: None,
+            stream_id: None,
+        }
+    }
+}
+
+fn default_options() -> Value {
+    Value::Object(serde_json::Map::new())
 }
 
 /// POST /v1/:group/:id/:action
@@ -131,9 +190,10 @@ mod tests {
     #[tokio::test]
     async fn test_handle_group_dispatch() {
         let engine = test_engine();
-        let mut request = ActionRequest::new("", "health");
-        // group will be overridden by path
-        request.group = "should_be_overridden".to_string();
+        let request = GroupDispatchBody {
+            action: "health".to_string(),
+            ..Default::default()
+        };
 
         let Json(response) =
             handle_group_dispatch(State(engine), Path("nodes".to_string()), Json(request)).await;
@@ -151,5 +211,28 @@ mod tests {
         )
         .await;
         assert!(response.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_resource_dispatch_defaults_options_to_object() {
+        let engine = test_engine();
+
+        let Json(response) = handle_resource_dispatch(
+            State(engine),
+            Path(("files".to_string(), "missing-token".to_string(), "stat".to_string())),
+            None,
+        )
+        .await;
+
+        assert!(response.is_error());
+        let message = response
+            .error
+            .as_ref()
+            .map(|error| error.message.as_str())
+            .unwrap_or_default();
+        assert!(
+            message.contains("File token not found"),
+            "unexpected error: {message}"
+        );
     }
 }

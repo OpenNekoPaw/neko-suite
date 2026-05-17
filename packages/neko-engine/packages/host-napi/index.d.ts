@@ -245,6 +245,14 @@ export declare class NativeEngine {
   startFrameServer(port?: number | undefined | null): Promise<number>
   /** Start the embedded HTTP/WebSocket server with preview file allow-list roots. */
   startFrameServerWithPreviewRoots(port?: number | undefined | null, previewAllowedRoots?: Array<string> | undefined | null): Promise<number>
+  /**
+   * Update preview/file access allow-list roots for the running engine.
+   *
+   * The HTTP router and JSON controllers share the same EngineApi-backed
+   * registry, so this can safely be called after the frame server has
+   * already started.
+   */
+  setPreviewAllowedRoots(previewAllowedRoots?: Array<string> | undefined | null): void
   /** Stop the embedded HTTP/WebSocket server */
   stopFrameServer(): Promise<void>
   /** Get the frame server port, or null if not running */

@@ -1,10 +1,11 @@
 //! Shared utilities for controllers
 
 use crate::error::{ApiError, ApiResult};
+use crate::file_access::FileAccessRegistry;
 use crate::registry::ResourceRegistry;
 use neko_engine_kernel::contracts::services::IStreamPlayback;
 use neko_engine_types::project_context::{ProjectContext, ResolvedPath};
-use neko_engine_types::{ActionResponse, LoopRegion, ResourceId, StreamId};
+use neko_engine_types::{ActionResponse, FileSourceRef, LoopRegion, ResourceId, StreamId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::io::Write;
@@ -147,6 +148,34 @@ pub async fn resolve_resource(
     Err(ApiError::InvalidRequest(
         "Either resource_id or source path required".to_string(),
     ))
+}
+
+/// Resolve a token/path source reference into a local file path.
+pub fn resolve_file_source_ref(
+    files: &FileAccessRegistry,
+    source_ref: Option<&FileSourceRef>,
+    fallback_source: Option<&str>,
+    label: &str,
+) -> ApiResult<PathBuf> {
+    if let Some(source_ref) = source_ref {
+        if let Some(token) = source_ref.token.as_deref() {
+            return files
+                .lookup_token(token)?
+                .ok_or_else(|| ApiError::NotFound(format!("{label} file token not found")));
+        }
+        if let Some(path) = source_ref.path.as_deref() {
+            return Ok(PathBuf::from(path));
+        }
+        if let Some(asset_id) = source_ref.asset_id.as_deref() {
+            return Err(ApiError::InvalidRequest(format!(
+                "{label} asset source refs are not supported yet: {asset_id}"
+            )));
+        }
+    }
+
+    fallback_source.map(PathBuf::from).ok_or_else(|| {
+        ApiError::InvalidRequest(format!("{label} source path or sourceRef required"))
+    })
 }
 
 /// Resolve a source path using an optional ProjectContext.

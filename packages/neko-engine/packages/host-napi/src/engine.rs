@@ -398,6 +398,27 @@ impl NativeEngine {
         Ok(actual_port)
     }
 
+    /// Update preview/file access allow-list roots for the running engine.
+    ///
+    /// The HTTP router and JSON controllers share the same EngineApi-backed
+    /// registry, so this can safely be called after the frame server has
+    /// already started.
+    #[napi]
+    pub fn set_preview_allowed_roots(
+        &self,
+        preview_allowed_roots: Option<Vec<String>>,
+    ) -> napi::Result<()> {
+        let roots = preview_allowed_roots
+            .unwrap_or_default()
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .collect();
+
+        self.engine
+            .set_preview_allowed_roots(roots)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to set preview roots: {}", e)))
+    }
+
     /// Stop the embedded HTTP/WebSocket server
     #[napi]
     pub async fn stop_frame_server(&self) -> napi::Result<()> {

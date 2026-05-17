@@ -11,6 +11,8 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use neko_engine_types::RegisterFileRequest;
+use neko_host_api::file_access::FileAccessRegistry;
 use neko_host_api::preview::{
     mime_for_path, PreviewFileRegistry, PreviewVariant, PreviewVariantRequest,
     RegisterPreviewAssetRequest, RegisterRequest, RegisterResponse,
@@ -44,6 +46,43 @@ pub async fn handle_unregister(
     Path(token): Path<String>,
 ) -> impl IntoResponse {
     match registry.unregister_token(&token) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => api_error_response(error),
+    }
+}
+
+/// POST /v1/files/register
+pub async fn handle_file_register(
+    Extension(registry): Extension<Arc<PreviewFileRegistry>>,
+    Json(body): Json<RegisterFileRequest>,
+) -> impl IntoResponse {
+    let result = tokio::task::spawn_blocking(move || {
+        let path = body.local_path().ok_or_else(|| {
+            ApiError::InvalidRequest(
+                "path, filePath, or source required for files register".to_string(),
+            )
+        })?;
+        registry
+            .file_access()
+            .register(PathBuf::from(path), body.purpose())
+    })
+    .await;
+    match result {
+        Ok(Ok(registered)) => Json(registered).into_response(),
+        Ok(Err(error)) => api_error_response(error),
+        Err(error) => {
+            tracing::error!("File register task failed: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// DELETE /v1/files/:token
+pub async fn handle_file_unregister(
+    Extension(registry): Extension<Arc<PreviewFileRegistry>>,
+    Path(token): Path<String>,
+) -> impl IntoResponse {
+    match registry.file_access().unregister_token(&token) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => api_error_response(error),
     }
@@ -127,6 +166,23 @@ pub async fn handle_file(
     Path(token): Path<String>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
+    serve_file_token(registry.file_access().clone(), token, headers).await
+}
+
+/// GET /v1/files/:token
+pub async fn handle_general_file(
+    Extension(registry): Extension<Arc<PreviewFileRegistry>>,
+    Path(token): Path<String>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    serve_file_token(registry.file_access().clone(), token, headers).await
+}
+
+async fn serve_file_token(
+    registry: Arc<FileAccessRegistry>,
+    token: String,
+    headers: HeaderMap,
+) -> axum::response::Response {
     let Some(path) = (match registry.lookup_token(&token) {
         Ok(path) => path,
         Err(error) => return api_error_response(error),
@@ -134,6 +190,10 @@ pub async fn handle_file(
         return (StatusCode::NOT_FOUND, "token not found").into_response();
     };
 
+    serve_file_path(path, headers).await
+}
+
+async fn serve_file_path(path: PathBuf, headers: HeaderMap) -> axum::response::Response {
     let metadata = match tokio::fs::metadata(&path).await {
         Ok(m) => m,
         Err(_) => return (StatusCode::NOT_FOUND, "file not found").into_response(),
@@ -211,6 +271,64 @@ pub async fn handle_epub_entry(
     Extension(registry): Extension<Arc<PreviewFileRegistry>>,
     Path((token, entry_path)): Path<(String, String)>,
 ) -> impl IntoResponse {
+    serve_entry_token(registry.file_access().clone(), token, entry_path).await
+}
+
+/// GET /v1/files/:token/entries/*path
+pub async fn handle_general_entry(
+    Extension(registry): Extension<Arc<PreviewFileRegistry>>,
+    Path((token, entry_path)): Path<(String, String)>,
+) -> impl IntoResponse {
+    serve_entry_token(registry.file_access().clone(), token, entry_path).await
+}
+
+/// GET /v1/files/:token/resources/*path
+pub async fn handle_general_resource(
+    Extension(registry): Extension<Arc<PreviewFileRegistry>>,
+    Path((token, resource_path)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    serve_resource_token(registry.file_access().clone(), token, resource_path, headers).await
+}
+
+async fn serve_resource_token(
+    registry: Arc<FileAccessRegistry>,
+    token: String,
+    resource_path: String,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    let Some(source_path) = (match registry.lookup_token(&token) {
+        Ok(path) => path,
+        Err(error) => return api_error_response(error),
+    }) else {
+        return (StatusCode::NOT_FOUND, "token not found").into_response();
+    };
+
+    let Some(source_dir) = source_path.parent().map(PathBuf::from) else {
+        return (StatusCode::NOT_FOUND, "source parent not found").into_response();
+    };
+    let resource_path = resource_path.trim_start_matches('/');
+    if resource_path.is_empty() {
+        return (StatusCode::BAD_REQUEST, "resource path required").into_response();
+    }
+
+    let candidate = source_dir.join(resource_path);
+    let resource_path = match tokio::fs::canonicalize(candidate).await {
+        Ok(path) => path,
+        Err(_) => return (StatusCode::NOT_FOUND, "resource not found").into_response(),
+    };
+    if !resource_path.starts_with(&source_dir) {
+        return (StatusCode::BAD_REQUEST, "resource path outside source root").into_response();
+    }
+
+    serve_file_path(resource_path, headers).await
+}
+
+async fn serve_entry_token(
+    registry: Arc<FileAccessRegistry>,
+    token: String,
+    entry_path: String,
+) -> axum::response::Response {
     let Some(epub_path) = (match registry.lookup_token(&token) {
         Ok(path) => path,
         Err(error) => return api_error_response(error),
@@ -368,6 +486,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn general_file_route_matches_preview_alias_for_range_reads() {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("preview.pdf");
+        std::fs::write(&file_path, b"abcdef").expect("write preview");
+        let preview_registry = Arc::new(PreviewFileRegistry::with_allowed_roots(vec![dir
+            .path()
+            .to_path_buf()]));
+        let token = preview_registry.register(file_path).expect("register file");
+        let mut preview_headers = HeaderMap::new();
+        preview_headers.insert(header::RANGE, "bytes=2-5".parse().expect("range header"));
+        let mut general_headers = HeaderMap::new();
+        general_headers.insert(header::RANGE, "bytes=2-5".parse().expect("range header"));
+
+        let preview_response = handle_file(
+            Extension(preview_registry.clone()),
+            Path(token.clone()),
+            preview_headers,
+        )
+        .await
+        .into_response();
+        let general_response =
+            handle_general_file(Extension(preview_registry), Path(token), general_headers)
+                .await
+                .into_response();
+
+        assert_eq!(preview_response.status(), general_response.status());
+        assert_eq!(
+            preview_response.headers().get(header::CONTENT_RANGE),
+            general_response.headers().get(header::CONTENT_RANGE)
+        );
+        assert_eq!(
+            preview_response.headers().get(header::CONTENT_LENGTH),
+            general_response.headers().get(header::CONTENT_LENGTH)
+        );
+        let preview_body = to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .expect("read preview body");
+        let general_body = to_bytes(general_response.into_body(), usize::MAX)
+            .await
+            .expect("read general body");
+        assert_eq!(preview_body, general_body);
+        assert_eq!(&general_body[..], b"cdef");
+    }
+
+    #[tokio::test]
     async fn epub_route_serves_zip_entry_from_shared_registry() {
         let dir = tempdir().expect("tempdir");
         let epub_path = dir.path().join("book.epub");
@@ -402,6 +565,121 @@ mod tests {
             .await
             .expect("read epub body");
         assert_eq!(&body[..], b"<html>chapter</html>");
+    }
+
+    #[tokio::test]
+    async fn general_entry_route_matches_preview_epub_alias() {
+        let dir = tempdir().expect("tempdir");
+        let epub_path = dir.path().join("book.epub");
+        {
+            let file = std::fs::File::create(&epub_path).expect("create epub");
+            let mut archive = zip::ZipWriter::new(file);
+            archive
+                .start_file("OPS/nav.xhtml", zip::write::SimpleFileOptions::default())
+                .expect("start entry");
+            archive.write_all(b"<nav>toc</nav>").expect("write entry");
+            archive.finish().expect("finish archive");
+        }
+        let preview_registry = Arc::new(PreviewFileRegistry::with_allowed_roots(vec![dir
+            .path()
+            .to_path_buf()]));
+        let token = preview_registry.register(epub_path).expect("register epub");
+
+        let preview_response = handle_epub_entry(
+            Extension(preview_registry.clone()),
+            Path((token.clone(), "OPS/nav.xhtml".to_string())),
+        )
+        .await
+        .into_response();
+        let general_response = handle_general_entry(
+            Extension(preview_registry),
+            Path((token, "OPS/nav.xhtml".to_string())),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(preview_response.status(), general_response.status());
+        assert_eq!(
+            preview_response.headers().get(header::CONTENT_TYPE),
+            general_response.headers().get(header::CONTENT_TYPE)
+        );
+        let preview_body = to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .expect("read preview entry body");
+        let general_body = to_bytes(general_response.into_body(), usize::MAX)
+            .await
+            .expect("read general entry body");
+        assert_eq!(preview_body, general_body);
+        assert_eq!(&general_body[..], b"<nav>toc</nav>");
+    }
+
+    #[tokio::test]
+    async fn general_resource_route_serves_sibling_model_assets() {
+        let dir = tempdir().expect("tempdir");
+        let model_path = dir.path().join("scene.gltf");
+        let texture_path = dir.path().join("textures").join("albedo.png");
+        std::fs::create_dir_all(texture_path.parent().expect("texture parent"))
+            .expect("create texture dir");
+        std::fs::write(&model_path, br#"{"asset":{"version":"2.0"}}"#).expect("write gltf");
+        std::fs::write(&texture_path, b"png-bytes").expect("write texture");
+        let registry = Arc::new(PreviewFileRegistry::with_allowed_roots(vec![dir
+            .path()
+            .to_path_buf()]));
+        let token = registry
+            .file_access()
+            .register(model_path, neko_engine_types::FileAccessPurpose::Model)
+            .expect("register model")
+            .token;
+
+        let response = handle_general_resource(
+            Extension(registry),
+            Path((token, "textures/albedo.png".to_string())),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("image/png")
+        );
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read resource body");
+        assert_eq!(&body[..], b"png-bytes");
+    }
+
+    #[tokio::test]
+    async fn general_resource_route_rejects_parent_traversal() {
+        let dir = tempdir().expect("tempdir");
+        let model_dir = dir.path().join("models");
+        std::fs::create_dir_all(&model_dir).expect("create model dir");
+        let model_path = model_dir.join("scene.gltf");
+        let secret_path = dir.path().join("secret.bin");
+        std::fs::write(&model_path, br#"{"asset":{"version":"2.0"}}"#).expect("write gltf");
+        std::fs::write(&secret_path, b"secret").expect("write secret");
+        let registry = Arc::new(PreviewFileRegistry::with_allowed_roots(vec![dir
+            .path()
+            .to_path_buf()]));
+        let token = registry
+            .file_access()
+            .register(model_path, neko_engine_types::FileAccessPurpose::Model)
+            .expect("register model")
+            .token;
+
+        let response = handle_general_resource(
+            Extension(registry),
+            Path((token, "../secret.bin".to_string())),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

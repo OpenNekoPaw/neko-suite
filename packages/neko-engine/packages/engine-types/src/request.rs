@@ -32,7 +32,7 @@ pub struct ActionRequest {
     pub stream_id: Option<String>,
 
     /// Action-specific options
-    #[serde(default)]
+    #[serde(default = "default_options")]
     pub options: Value,
 
     /// Request body (for complex payloads like Timeline)
@@ -49,7 +49,7 @@ impl ActionRequest {
             source: None,
             session_id: None,
             stream_id: None,
-            options: Value::Null,
+            options: default_options(),
             body: None,
         }
     }
@@ -118,6 +118,10 @@ impl ActionRequest {
             None => Err(ApiError::missing_parameter("body")),
         }
     }
+}
+
+fn default_options() -> Value {
+    Value::Object(serde_json::Map::new())
 }
 
 /// Unified action response

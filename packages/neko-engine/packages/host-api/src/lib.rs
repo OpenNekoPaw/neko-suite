@@ -26,6 +26,7 @@
 #![deny(clippy::all)]
 
 pub mod controllers;
+pub mod file_access;
 pub mod plugin;
 pub mod preview;
 pub mod registry;
@@ -38,6 +39,7 @@ mod session;
 
 pub use engine::EngineApi;
 pub use error::{ApiError, ApiResult};
+pub use file_access::{FileAccessRegistry, FileAccessRecord};
 pub use registry::{ResourceRegistry, StreamRegistry};
 pub use router::ActionRouter;
 pub use session::{Session, SessionConfig, SessionManager};

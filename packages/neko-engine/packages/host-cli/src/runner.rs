@@ -97,6 +97,10 @@ impl Runner {
                 self.dispatch_action("scenes", action.action_name(), action.opts())
                     .await
             }
+            Command::Files { action } => {
+                self.dispatch_action("files", action.action_name(), action.opts())
+                    .await
+            }
 
             // Timelines: special handling for export (progress bar), generic for others
             Command::Timelines { action } => match action {

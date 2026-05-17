@@ -1,8 +1,11 @@
 //! VideoController - handles videos:* actions
 
-use crate::controllers::utils::{base64_encode, handle_stream_control, resolve_resource};
+use crate::controllers::utils::{
+    base64_encode, handle_stream_control, resolve_file_source_ref, resolve_resource,
+};
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
+use crate::file_access::FileAccessRegistry;
 use crate::registry::{ResourceRegistry, StreamRegistry};
 use neko_engine_kernel::contracts::domain::{
     CaptureOptions, ExtractOptions, ExtractType, StreamConfig,
@@ -12,7 +15,7 @@ use neko_engine_kernel::contracts::media::{
 };
 use neko_engine_kernel::contracts::services::IVideoService;
 use neko_engine_types::registry;
-use neko_engine_types::{ActionResponse, FrameFormat};
+use neko_engine_types::{ActionResponse, FileSourceRef, FrameFormat};
 use neko_runtime_media::PanoramaViewState;
 use serde::Deserialize;
 use serde_json::Value;
@@ -25,6 +28,7 @@ pub struct VideoController {
     video_service: Arc<dyn IVideoService>,
     resource_registry: Arc<ResourceRegistry>,
     stream_registry: Arc<StreamRegistry>,
+    file_access_registry: Option<Arc<FileAccessRegistry>>,
 }
 
 impl VideoController {
@@ -38,7 +42,28 @@ impl VideoController {
             video_service,
             resource_registry,
             stream_registry,
+            file_access_registry: None,
         }
+    }
+
+    pub fn with_file_access_registry(mut self, registry: Arc<FileAccessRegistry>) -> Self {
+        self.file_access_registry = Some(registry);
+        self
+    }
+
+    async fn resolve_media_resource(
+        &self,
+        resource_id: Option<&str>,
+        source: Option<&str>,
+        source_ref: Option<&FileSourceRef>,
+        label: &str,
+    ) -> ApiResult<(neko_engine_types::ResourceId, std::path::PathBuf)> {
+        if let (Some(files), Some(source_ref)) = (&self.file_access_registry, source_ref) {
+            let file_path = resolve_file_source_ref(files, Some(source_ref), source, label)?;
+            let resource_id = self.resource_registry.register(&file_path).await;
+            return Ok((resource_id, file_path));
+        }
+        resolve_resource(&self.resource_registry, resource_id, source).await
     }
 }
 
@@ -46,6 +71,8 @@ impl VideoController {
 #[derive(Debug, Deserialize, Default)]
 struct ProbeOptions {
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
 }
 
 /// Options for videos:capture
@@ -53,6 +80,8 @@ struct ProbeOptions {
 struct CaptureRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Time in seconds to capture
     #[serde(default)]
     time: f64,
@@ -81,6 +110,8 @@ fn default_format() -> String {
 struct KeyframesRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
 }
 
 /// Options for videos:waveform
@@ -88,6 +119,8 @@ struct KeyframesRequestOptions {
 struct WaveformRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
 }
 
 /// Options for videos:extract
@@ -96,6 +129,8 @@ struct WaveformRequestOptions {
 struct ExtractRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Extract type: "subtitles", "frame", "frame_range"
     #[serde(default = "default_extract_type")]
     extract_type: String,
@@ -127,6 +162,8 @@ fn default_extract_fps() -> f64 {
 struct StreamRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Session ID for the stream
     session_id: Option<String>,
     /// Route through the panoramic GPU projection stream.
@@ -149,6 +186,8 @@ struct ViewStateRequestOptions {
 struct TranscodeRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Output file path
     output: Option<String>,
     /// Video codec
@@ -179,6 +218,8 @@ impl TranscodeRequestOptions {
 struct ProxyRequestOptions {
     /// Source path (alternative to resource_id)
     source: Option<String>,
+    #[serde(default)]
+    source_ref: Option<FileSourceRef>,
     /// Output file path
     output: Option<String>,
 }
@@ -223,16 +264,17 @@ impl Controller for VideoController {
             "probe" => {
                 let opts: ProbeOptions = serde_json::from_value(options).unwrap_or_default();
 
-                // For probe, we need a source path
-                let source = opts.source.as_deref().or(resource_id).ok_or_else(|| {
-                    ApiError::InvalidRequest("source path required for videos:probe".to_string())
-                })?;
+                let (id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:probe",
+                    )
+                    .await?;
 
-                let path = Path::new(source);
+                let path = file_path.as_path();
                 let media_info = self.video_service.probe(path).await?;
-
-                // Register the resource
-                let id = self.resource_registry.register(path).await;
 
                 // Include resource_id in response
                 let mut response = serde_json::to_value(media_info)?;
@@ -250,9 +292,14 @@ impl Controller for VideoController {
                     serde_json::from_value(options).unwrap_or_default();
 
                 // Resolve resource (by ID or source path)
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:capture",
+                    )
+                    .await?;
 
                 // Parse format
                 let format = match opts.format.to_lowercase().as_str() {
@@ -294,9 +341,14 @@ impl Controller for VideoController {
                 let opts: ExtractRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:extract",
+                    )
+                    .await?;
 
                 let extract_type = match opts.extract_type.to_lowercase().as_str() {
                     "subtitles" | "subtitle" => ExtractType::Subtitles,
@@ -366,9 +418,14 @@ impl Controller for VideoController {
                 let opts: StreamRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:stream",
+                    )
+                    .await?;
 
                 let session_id = opts.session_id.unwrap_or_else(|| "default".to_string());
 
@@ -413,9 +470,14 @@ impl Controller for VideoController {
                 let opts: TranscodeRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:transcode",
+                    )
+                    .await?;
 
                 let resolution = opts.resolution();
                 let codec = opts.codec.unwrap_or_default();
@@ -455,9 +517,14 @@ impl Controller for VideoController {
                 let opts: KeyframesRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:keyframes",
+                    )
+                    .await?;
 
                 let keyframes = self.video_service.get_keyframes(&file_path).await?;
 
@@ -487,9 +554,14 @@ impl Controller for VideoController {
                 let opts: WaveformRequestOptions =
                     serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:waveform",
+                    )
+                    .await?;
 
                 let waveform = self
                     .video_service
@@ -506,9 +578,14 @@ impl Controller for VideoController {
             "proxy" => {
                 let opts: ProxyRequestOptions = serde_json::from_value(options).unwrap_or_default();
 
-                let (res_id, file_path) =
-                    resolve_resource(&self.resource_registry, resource_id, opts.source.as_deref())
-                        .await?;
+                let (res_id, file_path) = self
+                    .resolve_media_resource(
+                        resource_id,
+                        opts.source.as_deref(),
+                        opts.source_ref.as_ref(),
+                        "videos:proxy",
+                    )
+                    .await?;
 
                 let output = opts.output.ok_or_else(|| {
                     ApiError::InvalidRequest("output path required for videos:proxy".to_string())

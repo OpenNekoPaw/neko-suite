@@ -2,11 +2,15 @@
 //!
 //! Mirrors ScenesController pattern for 3D scenes.
 
+use crate::controllers::utils::resolve_file_source_ref;
 use crate::controllers::Controller;
 use crate::error::{ApiError, ApiResult};
+use crate::file_access::FileAccessRegistry;
 use neko_engine_kernel::contracts::services::{IPuppetService, PuppetExportConfig};
 use neko_engine_types::registry;
-use neko_engine_types::{ActionResponse, PuppetCommand, PuppetCommandAck, PuppetCommandAckStatus};
+use neko_engine_types::{
+    ActionResponse, FileSourceRef, PuppetCommand, PuppetCommandAck, PuppetCommandAckStatus,
+};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -14,11 +18,20 @@ use std::sync::Arc;
 /// Controller for 2D puppet operations
 pub struct PuppetsController {
     puppet_service: Option<Arc<dyn IPuppetService>>,
+    file_access_registry: Option<Arc<FileAccessRegistry>>,
 }
 
 impl PuppetsController {
     pub fn new(puppet_service: Option<Arc<dyn IPuppetService>>) -> Self {
-        Self { puppet_service }
+        Self {
+            puppet_service,
+            file_access_registry: None,
+        }
+    }
+
+    pub fn with_file_access_registry(mut self, registry: Arc<FileAccessRegistry>) -> Self {
+        self.file_access_registry = Some(registry);
+        self
     }
 
     fn service(&self) -> ApiResult<&dyn IPuppetService> {
@@ -65,6 +78,38 @@ impl Controller for PuppetsController {
                 )?;
 
                 Ok(ActionResponse::ok("", snapshot))
+            }
+
+            "load_source" => {
+                #[derive(Debug, Deserialize, Default)]
+                #[serde(rename_all = "camelCase")]
+                struct LoadSourceOptions {
+                    source: Option<String>,
+                    #[serde(default)]
+                    source_ref: Option<FileSourceRef>,
+                }
+                let opts: LoadSourceOptions = serde_json::from_value(options).unwrap_or_default();
+                let files = self.file_access_registry.as_deref().ok_or_else(|| {
+                    ApiError::InvalidRequest(
+                        "puppets:load_source requires file access registry".to_string(),
+                    )
+                })?;
+                let path = resolve_file_source_ref(
+                    files,
+                    opts.source_ref.as_ref(),
+                    opts.source.as_deref(),
+                    "puppets:load_source",
+                )?;
+                let data = std::fs::read(&path).map_err(|error| {
+                    ApiError::ServiceError(format!("Failed to read puppet source {:?}: {error}", path))
+                })?;
+
+                let service = self.service()?;
+                let snapshot = service
+                    .load_puppet(&data)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok("", serde_json::to_value(snapshot)?))
             }
 
             "snapshot" => {
