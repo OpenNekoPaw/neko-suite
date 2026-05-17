@@ -26,6 +26,15 @@ export const vscodeExtensionState = {
   },
 };
 
+export const vscodeEnvState = {
+  setLanguage(language: string) {
+    vscode.env.language = language;
+  },
+  reset() {
+    vscode.env.language = 'en';
+  },
+};
+
 export function installExtension(
   id: string,
   options: { isActive?: boolean; exports?: unknown } = {},

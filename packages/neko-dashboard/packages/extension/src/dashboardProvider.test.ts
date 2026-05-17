@@ -9,6 +9,13 @@ import type { SkillReader } from './skillReader';
 import type { StatusReader } from './statusReader';
 import type { TaskAggregator } from './taskAggregator';
 
+type DashboardMessageListener = (message: unknown) => unknown;
+type WebviewMessageRegistration = (
+  listener: DashboardMessageListener,
+  thisArgs?: unknown,
+  disposables?: unknown[],
+) => { dispose(): void };
+
 describe('DashboardProvider', () => {
   beforeEach(() => {
     vscodeCommandState.reset();
@@ -47,6 +54,51 @@ describe('DashboardProvider', () => {
     expect(scanner.scan).toHaveBeenCalledTimes(1);
     expect(statusReader.read).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledTimes(1);
+    provider.dispose();
+  });
+
+  it('forwards skill context when executing a dashboard skill command', async () => {
+    const postMessage = vi.fn(async () => true);
+    const panel = createPanel(postMessage);
+    vscodeWindowState.createWebviewPanel.mockReturnValue(panel);
+
+    const provider = new DashboardProvider(createContext(), {
+      scanner: createScanner(),
+      statusReader: createStatusReader(),
+      skillReader: createSkillReader(),
+      taskAggregator: createTaskAggregator(),
+      activityStore: createActivityStore(),
+    });
+    await provider.show();
+
+    const receiveMessage = getRegisteredMessageListener(panel);
+
+    const handler = vi.fn(async () => undefined);
+    vscodeCommandState.commandHandlers.set('neko.agent.invokeSkill', handler);
+
+    await receiveMessage?.({
+      type: 'executeCommand',
+      command: 'neko.agent.invokeSkill',
+      intent: 'Generate a clip',
+      skill: {
+        id: 'ai-generate',
+        extensionId: 'neko.neko-agent',
+        name: 'AI Generate',
+        description: 'Generate media',
+        locale: 'en',
+      },
+    });
+
+    expect(handler).toHaveBeenCalledWith({
+      intent: 'Generate a clip',
+      skill: {
+        id: 'ai-generate',
+        extensionId: 'neko.neko-agent',
+        name: 'AI Generate',
+        description: 'Generate media',
+        locale: 'en',
+      },
+    });
     provider.dispose();
   });
 });
@@ -95,6 +147,8 @@ function createActivityStore(): ActivityStore {
 }
 
 function createPanel(postMessage: ReturnType<typeof vi.fn>) {
+  const onDidReceiveMessage = vi.fn<WebviewMessageRegistration>(() => ({ dispose() {} }));
+
   return {
     reveal: vi.fn(),
     dispose: vi.fn(),
@@ -104,9 +158,20 @@ function createPanel(postMessage: ReturnType<typeof vi.fn>) {
       cspSource: 'vscode-resource:',
       asWebviewUri: vi.fn((uri: unknown) => uri),
       postMessage,
-      onDidReceiveMessage: vi.fn(() => ({ dispose() {} })),
+      onDidReceiveMessage,
     },
   };
+}
+
+function getRegisteredMessageListener(
+  panel: ReturnType<typeof createPanel>,
+): DashboardMessageListener {
+  const [call] = panel.webview.onDidReceiveMessage.mock.calls;
+  const [listener] = call ?? [];
+  if (!listener) {
+    throw new Error('Expected dashboard message listener to be registered');
+  }
+  return listener;
 }
 
 function createContext() {

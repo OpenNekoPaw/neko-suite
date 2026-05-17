@@ -3,7 +3,7 @@ import type { DashboardSkill } from '../types';
 
 export interface SkillListProps {
   readonly skills: readonly DashboardSkill[];
-  readonly onCommand: (command: string) => void;
+  readonly onCommand: (skill: DashboardSkill) => void;
 }
 
 export function SkillList({ skills, onCommand }: SkillListProps) {
@@ -31,7 +31,7 @@ export function SkillList({ skills, onCommand }: SkillListProps) {
 
 interface SkillCardProps {
   readonly skill: DashboardSkill;
-  readonly onCommand: (command: string) => void;
+  readonly onCommand: (skill: DashboardSkill) => void;
 }
 
 function SkillCard({ skill, onCommand }: SkillCardProps) {
@@ -54,7 +54,7 @@ function SkillCard({ skill, onCommand }: SkillCardProps) {
         </div>
       ) : null}
       {skill.command ? (
-        <button type="button" className="skill-card-run" onClick={() => onCommand(skill.command!)}>
+        <button type="button" className="skill-card-run" onClick={() => onCommand(skill)}>
           {t('dashboard.skills.run')}
         </button>
       ) : null}

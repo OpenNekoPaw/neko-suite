@@ -10,6 +10,10 @@ export const dashboard = {
   'dashboard.status.ready': '就绪',
   'dashboard.status.running': '{running}/{total} 运行中',
   'dashboard.status.files': '{count} 个文件',
+  'dashboard.status.endpointUnknown': '端点未知',
+  'dashboard.status.health.healthy': '连接正常',
+  'dashboard.status.health.unhealthy': '连接异常',
+  'dashboard.status.health.unknown': '连接未检测',
 
   'dashboard.quickStart': '快速开始',
   'dashboard.quickStart.screenplay': '新建剧本',

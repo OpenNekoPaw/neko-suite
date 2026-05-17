@@ -7,7 +7,7 @@ import { WorkflowCards } from './components/WorkflowCards';
 import { TaskTable } from './components/TaskTable';
 import { postMessage } from './services/messenger';
 import { applyTaskChange } from './taskState';
-import type { DashboardData, ExtensionToWebviewMessage } from './types';
+import type { DashboardData, DashboardSkill, ExtensionToWebviewMessage } from './types';
 
 interface DashboardState {
   readonly data: DashboardData | null;
@@ -95,6 +95,23 @@ function handleCommand(command: string) {
   postMessage({ type: 'executeCommand', command });
 }
 
+function handleSkillCommand(skill: DashboardSkill) {
+  if (!skill.command) return;
+  postMessage({
+    type: 'executeCommand',
+    command: skill.command,
+    intent: skill.description,
+    skill: {
+      id: skill.id,
+      extensionId: skill.extensionId,
+      name: skill.name,
+      description: skill.description,
+      locale: skill.locale,
+      ...(skill.tags ? { tags: skill.tags } : {}),
+    },
+  });
+}
+
 function WelcomeView({ data }: { readonly data: DashboardData }) {
   return (
     <>
@@ -104,7 +121,7 @@ function WelcomeView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
-      <SkillList skills={data.skills} onCommand={handleCommand} />
+      <SkillList skills={data.skills} onCommand={handleSkillCommand} />
     </>
   );
 }
@@ -122,7 +139,7 @@ function WorkView({ data }: { readonly data: DashboardData }) {
         onCreateProject={handleCreateProject}
         onCommand={handleCommand}
       />
-      <SkillList skills={data.skills} onCommand={handleCommand} />
+      <SkillList skills={data.skills} onCommand={handleSkillCommand} />
       <TaskTable
         tasks={data.tasks}
         onCancel={(taskId) => postMessage({ type: 'cancelTask', taskId })}

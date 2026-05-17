@@ -28,6 +28,7 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
+import type { NekoEngineRuntimeState, NekoEngineRuntimeStatus } from '@neko/shared';
 import { initOrtDylib } from './mediaEngine/OrtInitializer';
 import { createEngineCapabilityProvider } from './agentCapabilityProvider';
 
@@ -39,6 +40,7 @@ let manager: MediaEngineManager | null = null;
 let exportService: ExportService | null = null;
 let statusBarItem: vscode.StatusBarItem;
 let outputChannel: vscode.OutputChannel;
+let runtimeState: NekoEngineRuntimeState = 'idle';
 /** Cached frame server port for the current extension session (null = not connected) */
 let frameServerPort: number | null = null;
 let ensureFrameServerPromise: Promise<{ port: number } | null> | null = null;
@@ -125,6 +127,11 @@ function registerCommands(context: vscode.ExtensionContext): void {
 
   // Engine Status
   context.subscriptions.push(vscode.commands.registerCommand('neko.engine.status', cmdShowStatus));
+
+  // Engine runtime status (internal read-only API for dashboard/diagnostics)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.engine.getStatus', getEngineRuntimeStatus),
+  );
 
   // Probe Media (interactive — shows file picker + output)
   context.subscriptions.push(vscode.commands.registerCommand('neko.engine.probe', cmdProbeMedia));
@@ -818,6 +825,8 @@ async function startFrameServer(
  * Update status bar based on engine state
  */
 function updateStatusBar(state: 'idle' | 'starting' | 'ready' | 'error'): void {
+  runtimeState = state;
+
   switch (state) {
     case 'idle':
       statusBarItem.text = '$(circle-outline) Neko Engine';
@@ -841,6 +850,28 @@ function updateStatusBar(state: 'idle' | 'starting' | 'ready' | 'error'): void {
       break;
   }
   statusBarItem.show();
+}
+
+function getEngineRuntimeStatus(): NekoEngineRuntimeStatus {
+  const port = frameServerPort ?? getNativeFrameServerPort();
+  return {
+    state: runtimeState,
+    ...(port !== undefined
+      ? {
+          endpoint: {
+            host: '127.0.0.1',
+            port,
+            address: `127.0.0.1:${port}`,
+            url: `http://127.0.0.1:${port}`,
+          },
+          health: 'unknown' as const,
+        }
+      : {}),
+  };
+}
+
+function getNativeFrameServerPort(): number | undefined {
+  return manager?.frameServerPort;
 }
 
 /**

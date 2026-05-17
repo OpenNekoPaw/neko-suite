@@ -10,6 +10,10 @@ export const dashboard = {
   'dashboard.status.ready': 'Ready',
   'dashboard.status.running': '{running}/{total} running',
   'dashboard.status.files': '{count} files',
+  'dashboard.status.endpointUnknown': 'Endpoint unknown',
+  'dashboard.status.health.healthy': 'Healthy',
+  'dashboard.status.health.unhealthy': 'Unhealthy',
+  'dashboard.status.health.unknown': 'Health unknown',
 
   'dashboard.quickStart': 'Quick Start',
   'dashboard.quickStart.screenplay': 'New Script',

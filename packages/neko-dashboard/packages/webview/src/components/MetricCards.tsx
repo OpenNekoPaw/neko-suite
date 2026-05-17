@@ -13,6 +13,10 @@ export function MetricCards({ runtime, projectCount, taskCount }: MetricCardsPro
   const engineState = runtime.engine?.available
     ? (runtime.engine.value?.state ?? 'unknown')
     : t('common.na');
+  const engineEndpoint = runtime.engine?.value?.endpoint?.address;
+  const engineDetail = runtime.engine?.available
+    ? (engineEndpoint ?? t('dashboard.status.endpointUnknown'))
+    : undefined;
   const engineOnline = runtime.engine?.available && runtime.engine.value?.state === 'ready';
 
   const agentText = runtime.agent?.available
@@ -35,6 +39,7 @@ export function MetricCards({ runtime, projectCount, taskCount }: MetricCardsPro
       <MetricCard
         label={t('dashboard.status.engine')}
         value={engineState}
+        detail={engineDetail}
         indicator={engineOnline ? 'online' : 'offline'}
       />
       <MetricCard label={t('dashboard.status.projects')} value={String(projectCount)} />
@@ -48,10 +53,11 @@ export function MetricCards({ runtime, projectCount, taskCount }: MetricCardsPro
 interface MetricCardProps {
   readonly label: string;
   readonly value: string;
+  readonly detail?: string;
   readonly indicator?: 'online' | 'offline';
 }
 
-function MetricCard({ label, value, indicator }: MetricCardProps) {
+function MetricCard({ label, value, detail, indicator }: MetricCardProps) {
   return (
     <div className="metric-card">
       <span className="metric-card-label">{label}</span>
@@ -61,6 +67,7 @@ function MetricCard({ label, value, indicator }: MetricCardProps) {
         ) : null}
         {value}
       </span>
+      {detail ? <span className="metric-card-detail">{detail}</span> : null}
     </div>
   );
 }

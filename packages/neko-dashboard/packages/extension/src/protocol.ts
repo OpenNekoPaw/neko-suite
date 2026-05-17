@@ -1,4 +1,5 @@
 import type { DashboardTask, DashboardTaskEvent } from '@neko/shared';
+import type { NekoEngineConnectionEndpoint } from '@neko/shared/types/extension-api';
 import { isDashboardProjectType, type DashboardProjectType } from './projectTypes';
 
 export type { DashboardProjectType } from './projectTypes';
@@ -24,6 +25,8 @@ export interface DashboardRuntimeStatus {
   readonly engine?: RuntimeSourceStatus<{
     readonly state: 'idle' | 'starting' | 'ready' | 'error';
     readonly port?: number;
+    readonly endpoint?: NekoEngineConnectionEndpoint;
+    readonly health?: 'unknown' | 'healthy' | 'unhealthy';
   }>;
   readonly agent?: RuntimeSourceStatus<{
     readonly total: number;
@@ -59,8 +62,18 @@ export interface DashboardSkill {
   readonly extensionId: string;
   readonly name: string;
   readonly description: string;
+  readonly locale: string;
   readonly icon?: string;
   readonly command?: string;
+  readonly tags?: readonly string[];
+}
+
+export interface DashboardSkillInvocation {
+  readonly id: string;
+  readonly extensionId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly locale: string;
   readonly tags?: readonly string[];
 }
 
@@ -83,7 +96,12 @@ export type WebviewToExtensionMessage =
   | { readonly type: 'cancelTask'; readonly taskId: string }
   | { readonly type: 'retryTask'; readonly taskId: string }
   | { readonly type: 'revealTaskOutput'; readonly taskId: string }
-  | { readonly type: 'executeCommand'; readonly command: string };
+  | {
+      readonly type: 'executeCommand';
+      readonly command: string;
+      readonly intent?: string;
+      readonly skill?: DashboardSkillInvocation;
+    };
 
 export type ExtensionToWebviewMessage =
   | { readonly type: 'update'; readonly data: DashboardData }
@@ -108,7 +126,11 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
     case 'createProject':
       return isDashboardProjectType(value.projectType);
     case 'executeCommand':
-      return typeof value.command === 'string';
+      return (
+        typeof value.command === 'string' &&
+        (value.intent === undefined || typeof value.intent === 'string') &&
+        (value.skill === undefined || isDashboardSkillInvocation(value.skill))
+      );
     default:
       return false;
   }
@@ -116,4 +138,17 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isDashboardSkillInvocation(value: unknown): value is DashboardSkillInvocation {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== 'string') return false;
+  if (typeof value.extensionId !== 'string') return false;
+  if (typeof value.name !== 'string') return false;
+  if (typeof value.description !== 'string') return false;
+  if (typeof value.locale !== 'string') return false;
+  if (value.tags !== undefined) {
+    return Array.isArray(value.tags) && value.tags.every((tag) => typeof tag === 'string');
+  }
+  return true;
 }

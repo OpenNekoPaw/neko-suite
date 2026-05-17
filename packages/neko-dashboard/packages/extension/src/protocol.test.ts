@@ -11,6 +11,21 @@ describe('dashboard webview protocol guards', () => {
     expect(isWebviewToExtensionMessage({ type: 'executeCommand', command: 'neko.ai.chat' })).toBe(
       true,
     );
+    expect(
+      isWebviewToExtensionMessage({
+        type: 'executeCommand',
+        command: 'neko.agent.invokeSkill',
+        intent: 'Generate a clip',
+        skill: {
+          id: 'ai-generate',
+          extensionId: 'neko.neko-agent',
+          name: 'AI Generate',
+          description: 'Generate media',
+          locale: 'en',
+          tags: ['ai'],
+        },
+      }),
+    ).toBe(true);
   });
 
   it('rejects invalid messages', () => {
@@ -19,6 +34,18 @@ describe('dashboard webview protocol guards', () => {
     expect(isWebviewToExtensionMessage({ type: 'createProject', projectType: 'unknown' })).toBe(
       false,
     );
+    expect(
+      isWebviewToExtensionMessage({
+        type: 'executeCommand',
+        command: 'neko.agent.invokeSkill',
+        skill: {
+          id: 'missing-locale',
+          extensionId: 'neko.neko-agent',
+          name: 'AI Generate',
+          description: 'Generate media',
+        },
+      }),
+    ).toBe(false);
     expect(isWebviewToExtensionMessage({ type: 'unknown' })).toBe(false);
   });
 });

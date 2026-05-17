@@ -196,9 +196,15 @@ export class DashboardProvider implements vscode.Disposable {
       case 'revealTaskOutput':
         await this.revealTaskOutput(message.taskId);
         return;
-      case 'executeCommand':
-        await vscode.commands.executeCommand(message.command);
+      case 'executeCommand': {
+        const invocation = buildDashboardCommandInvocation(message);
+        if (invocation) {
+          await vscode.commands.executeCommand(message.command, invocation);
+        } else {
+          await vscode.commands.executeCommand(message.command);
+        }
         return;
+      }
       default:
         assertNever(message);
     }
@@ -234,4 +240,17 @@ export class DashboardProvider implements vscode.Disposable {
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled dashboard message: ${JSON.stringify(value)}`);
+}
+
+function buildDashboardCommandInvocation(
+  message: Extract<WebviewToExtensionMessage, { readonly type: 'executeCommand' }>,
+): { readonly intent?: string; readonly skill?: NonNullable<typeof message.skill> } | undefined {
+  if (message.intent === undefined && message.skill === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(message.intent !== undefined ? { intent: message.intent } : {}),
+    ...(message.skill !== undefined ? { skill: message.skill } : {}),
+  };
 }

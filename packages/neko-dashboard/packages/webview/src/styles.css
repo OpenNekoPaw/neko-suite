@@ -192,8 +192,19 @@ progress {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   font-size: 16px;
   font-weight: 600;
+}
+
+.metric-card-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--neko-fg-muted);
+  font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .metric-indicator {

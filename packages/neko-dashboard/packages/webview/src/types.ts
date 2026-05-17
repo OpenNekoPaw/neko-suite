@@ -1,4 +1,5 @@
 import type { DashboardTask, DashboardTaskEvent } from '@neko/shared';
+import type { NekoEngineConnectionEndpoint } from '@neko/shared/types/extension-api';
 import type { DashboardProjectType } from '@neko/shared/types/dashboard-project';
 
 export type { DashboardProjectType } from '@neko/shared/types/dashboard-project';
@@ -30,6 +31,8 @@ export interface DashboardRuntimeStatus {
   readonly engine?: RuntimeSourceStatus<{
     readonly state: 'idle' | 'starting' | 'ready' | 'error';
     readonly port?: number;
+    readonly endpoint?: NekoEngineConnectionEndpoint;
+    readonly health?: 'unknown' | 'healthy' | 'unhealthy';
   }>;
   readonly agent?: RuntimeSourceStatus<{
     readonly total: number;
@@ -59,8 +62,18 @@ export interface DashboardSkill {
   readonly extensionId: string;
   readonly name: string;
   readonly description: string;
+  readonly locale: string;
   readonly icon?: string;
   readonly command?: string;
+  readonly tags?: readonly string[];
+}
+
+export interface DashboardSkillInvocation {
+  readonly id: string;
+  readonly extensionId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly locale: string;
   readonly tags?: readonly string[];
 }
 
@@ -83,7 +96,12 @@ export type WebviewToExtensionMessage =
   | { readonly type: 'cancelTask'; readonly taskId: string }
   | { readonly type: 'retryTask'; readonly taskId: string }
   | { readonly type: 'revealTaskOutput'; readonly taskId: string }
-  | { readonly type: 'executeCommand'; readonly command: string };
+  | {
+      readonly type: 'executeCommand';
+      readonly command: string;
+      readonly intent?: string;
+      readonly skill?: DashboardSkillInvocation;
+    };
 
 export type ExtensionToWebviewMessage =
   | { readonly type: 'update'; readonly data: DashboardData }

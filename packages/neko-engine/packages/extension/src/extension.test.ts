@@ -237,6 +237,7 @@ describe('neko-engine extension command bridge', () => {
     mockState.executeCommand.mockClear();
     mockState.manager.getCompatibleEngine.mockClear();
     mockState.manager.disposeEngines.mockClear();
+    Object.assign(mockState.manager, { frameServerPort: undefined });
     mockState.exportService.cancel.mockClear();
     mockState.exportService.dispose.mockClear();
     mockState.exportService.initializeWithEngine.mockClear();
@@ -268,6 +269,27 @@ describe('neko-engine extension command bridge', () => {
     expect(mockState.fetch).toHaveBeenCalledWith('http://127.0.0.1:4321/health', {
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('reports runtime status without starting the frame server', async () => {
+    Object.assign(mockState.manager, { frameServerPort: 6789 });
+
+    await activateExtension();
+
+    const result = await mockState.executeCommand('neko.engine.getStatus');
+
+    expect(result).toEqual({
+      state: 'idle',
+      endpoint: {
+        host: '127.0.0.1',
+        port: 6789,
+        address: '127.0.0.1:6789',
+        url: 'http://127.0.0.1:6789',
+      },
+      health: 'unknown',
+    });
+    expect(mockState.manager.getCompatibleEngine).not.toHaveBeenCalled();
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).not.toHaveBeenCalled();
   });
 
   it('coalesces concurrent frame server ensure calls into one native start', async () => {

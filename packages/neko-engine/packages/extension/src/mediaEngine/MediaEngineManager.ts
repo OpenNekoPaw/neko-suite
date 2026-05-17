@@ -74,6 +74,14 @@ export class MediaEngineManager implements vscode.Disposable {
     return true;
   }
 
+  /**
+   * Current frame server port if the compatible engine has already started one.
+   * This is read-only and never starts the engine or the server.
+   */
+  get frameServerPort(): number | undefined {
+    return this._compatibleEngine?.engine?.getFrameServerPort() ?? undefined;
+  }
+
   // =========================================================================
   // Engine Access
   // =========================================================================
