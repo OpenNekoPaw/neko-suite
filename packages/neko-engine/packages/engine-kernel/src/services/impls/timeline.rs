@@ -16,8 +16,8 @@ use crate::preview::{
 };
 use crate::services::impls::snapshot_sink::SnapshotSink;
 use crate::services::impls::stream_loop::{
-    eof_idle_wait, pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState, StreamLoopHandle,
-    StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
+    eof_idle_wait, normalize_stream_fps, pack_pcm_f32le_stream_frame, ActiveStreams, PlaybackState,
+    StreamLoopHandle, StreamPlaybackDelegate, WallClockPacer, EOF_IDLE_TIMEOUT,
 };
 use crate::services::impls::stream_sink::StreamSink;
 use crate::services::pipeline_sink::PipelineSink;
@@ -26,6 +26,7 @@ use crate::services::{
 };
 use crate::telemetry::metrics::{FrameStatsCollector, FrameTiming};
 use async_trait::async_trait;
+use neko_engine_audio::dsp::speed_resampler::SpeedResampler;
 use neko_engine_codec::decoder::{Decoder, HwAccelDecoder, HwAccelType};
 #[allow(deprecated)]
 use neko_engine_gpu::GpuTransitionProcessor;
@@ -78,6 +79,51 @@ fn f16_to_f32(bits: u16) -> f32 {
         let f32_mantissa = mantissa << 13;
         f32::from_bits((sign << 31) | (f32_exp << 23) | f32_mantissa)
     }
+}
+
+fn mix_speed_adjusted_timeline_audio(
+    mixer: &mut AudioMixer,
+    resampler: &SpeedResampler,
+    start_time: f64,
+    frame_duration: f64,
+    speed: f64,
+) -> Result<Option<crate::export::MixedAudioFrame>> {
+    let output_frames = (frame_duration * mixer.sample_rate() as f64).round() as usize;
+    let source_frames_needed = (output_frames as f64 * speed).ceil().max(1.0) as usize;
+    let channels = mixer.channels() as usize;
+    let mut accumulated = Vec::with_capacity(source_frames_needed * channels);
+    let mut mix_time = start_time;
+
+    while accumulated.len() < source_frames_needed * channels {
+        match mixer.mix_frame(mix_time)? {
+            Some(frame) => {
+                let remaining = source_frames_needed * channels - accumulated.len();
+                let take = remaining.min(frame.data.len());
+                accumulated.extend_from_slice(&frame.data[..take]);
+                mix_time += frame_duration;
+            }
+            None => break,
+        }
+    }
+
+    if accumulated.is_empty() {
+        return Ok(Some(crate::export::MixedAudioFrame {
+            data: vec![0.0; output_frames * channels],
+            samples: output_frames,
+            timestamp: start_time,
+            sample_rate: mixer.sample_rate(),
+            channels: mixer.channels(),
+        }));
+    }
+
+    let data = resampler.resample(&accumulated, output_frames);
+    Ok(Some(crate::export::MixedAudioFrame {
+        data,
+        samples: output_frames,
+        timestamp: start_time,
+        sample_rate: mixer.sample_rate(),
+        channels: mixer.channels(),
+    }))
 }
 
 /// TimelineService implementation
@@ -146,7 +192,7 @@ impl TimelineService {
 
         // Auto-calculate bitrate from resolution if not specified: ~4 bits/pixel
         let bitrate = bitrate.unwrap_or_else(|| (width as u64) * (height as u64) * 4);
-        let fps = fps.unwrap_or(30.0);
+        let fps = normalize_stream_fps(fps.unwrap_or(30.0));
         let gop_size = (fps as u32).max(1);
 
         let config = PreviewPipelineConfig {
@@ -724,7 +770,7 @@ impl ITimelineService for TimelineService {
             .ok_or_else(|| Error::Other("GPU context required for timeline streaming".to_string()))?
             .clone();
 
-        let mut fps = config.fps;
+        let mut fps = normalize_stream_fps(config.fps);
         let width = config.resolution.width;
         let height = config.resolution.height;
         let mut timeline = timeline.clone();
@@ -895,7 +941,7 @@ impl ITimelineService for TimelineService {
                 // Handle speed change
                 if (state.speed - current_speed).abs() > 0.001 {
                     current_speed = state.speed;
-                    pacer.update_speed(current_speed);
+                    pacer.reset();
                 }
 
                 // Handle loop region
@@ -947,8 +993,8 @@ impl ITimelineService for TimelineService {
                     .render_gpu_frame_timed(current_time, background_color)
                     .and_then(|(mut gpu_frame, gpu_timing)| {
                         let submit_start = std::time::Instant::now();
-                        gpu_frame.pts = (pacer.elapsed_secs() * 1_000_000.0) as i64;
-                        gpu_frame.duration = (1_000_000.0 / fps) as i64;
+                        gpu_frame.pts = (current_time * 1_000_000.0) as i64;
+                        gpu_frame.duration = (1_000_000.0 / fps * current_speed) as i64;
                         stream_sink
                             .submit(PipelineOutput::Video(VideoOutput::GpuFrame(gpu_frame)))?;
                         let submit_ns = submit_start.elapsed().as_nanos() as u64;
@@ -1032,7 +1078,7 @@ impl ITimelineService for TimelineService {
                     let _ = video_stats_tx.send_replace(stream_stats);
                 }
 
-                current_time += 1.0 / fps;
+                current_time += (1.0 / fps) * current_speed;
                 pacer.wait_for_next_frame();
             }
 
@@ -1121,14 +1167,15 @@ impl ITimelineService for TimelineService {
                 wait_start.elapsed().as_millis()
             );
 
+            let sample_rate = mixer.sample_rate();
+            let channels = mixer.channels();
             let mut pacer = WallClockPacer::new(audio_fps, 1.0);
+            let mut resampler = SpeedResampler::new(channels as usize);
             let mut current_speed = 1.0;
             let frame_duration = 1.0 / audio_fps;
             let mut current_time = audio_start_time;
             let mut last_seek_seq: u64 = 0;
             let mut last_timeline_seq: u64 = 0;
-            let sample_rate = mixer.sample_rate();
-            let channels = mixer.channels();
             let mut total_frames: u64 = 0;
             let mut total_mix_ns: u64 = 0;
             let loop_start = std::time::Instant::now();
@@ -1155,6 +1202,7 @@ impl ITimelineService for TimelineService {
                             state.timeline_seq
                         );
                         mixer.update_timeline((**new_tl).clone());
+                        resampler = SpeedResampler::new(mixer.channels() as usize);
                     }
                 }
 
@@ -1179,7 +1227,7 @@ impl ITimelineService for TimelineService {
                 // Handle speed change
                 if (state.speed - current_speed).abs() > 0.001 {
                     current_speed = state.speed;
-                    pacer.update_speed(current_speed);
+                    pacer.reset();
                 }
 
                 // Handle loop region
@@ -1213,9 +1261,25 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
-                // Mix one frame of audio
+                // Mix one frame of audio. At non-1x preview speed, consume a
+                // speed-scaled timeline window and resample it back to one
+                // output frame so Web Audio receives continuous PCM instead of
+                // duplicate/overlapping queued buffers.
                 let mix_start = std::time::Instant::now();
-                match mixer.mix_frame(current_time) {
+                let speed_is_unity = (current_speed - 1.0).abs() < 0.001;
+                let mix_result = if speed_is_unity {
+                    mixer.mix_frame(current_time)
+                } else {
+                    mix_speed_adjusted_timeline_audio(
+                        &mut mixer,
+                        &resampler,
+                        current_time,
+                        frame_duration,
+                        current_speed,
+                    )
+                };
+
+                match mix_result {
                     Ok(Some(mut mixed)) => {
                         total_mix_ns += mix_start.elapsed().as_nanos() as u64;
                         total_frames += 1;
@@ -1242,10 +1306,12 @@ impl ITimelineService for TimelineService {
 
                         // Cast f32 data to raw bytes
                         let pcm_bytes: &[u8] = bytemuck::cast_slice(&mixed.data);
+                        let frame_pts = current_time;
+                        let media_duration = frame_duration * current_speed;
                         let frame = pack_pcm_f32le_stream_frame(
                             pcm_bytes,
-                            current_time,
-                            frame_duration,
+                            frame_pts,
+                            media_duration,
                             sample_rate,
                             channels,
                         );
@@ -1259,7 +1325,7 @@ impl ITimelineService for TimelineService {
                     }
                 }
 
-                current_time += frame_duration;
+                current_time += frame_duration * current_speed;
                 pacer.wait_for_next_frame();
             }
 

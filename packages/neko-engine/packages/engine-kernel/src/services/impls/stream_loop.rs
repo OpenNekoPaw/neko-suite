@@ -19,6 +19,32 @@ use tokio_util::sync::CancellationToken;
 
 pub type MixdownUpdateAck = Arc<Mutex<Option<oneshot::Sender<Vec<String>>>>>;
 
+const DEFAULT_PACER_FPS: f64 = 30.0;
+const MIN_PACER_FPS: f64 = 1.0;
+const MAX_PACER_FPS: f64 = 240.0;
+pub const DEFAULT_PLAYBACK_SPEED: f64 = 1.0;
+pub const MIN_PLAYBACK_SPEED: f64 = 0.1;
+
+pub fn normalize_stream_fps(fps: f64) -> f64 {
+    if !fps.is_finite() || fps <= 0.0 {
+        return DEFAULT_PACER_FPS;
+    }
+    if fps < MIN_PACER_FPS {
+        MIN_PACER_FPS
+    } else if fps > MAX_PACER_FPS {
+        MAX_PACER_FPS
+    } else {
+        fps
+    }
+}
+
+pub fn normalize_playback_speed(speed: f64) -> f64 {
+    if !speed.is_finite() {
+        return DEFAULT_PLAYBACK_SPEED;
+    }
+    speed.max(MIN_PLAYBACK_SPEED)
+}
+
 /// Playback state (controlled externally via watch channel)
 pub struct PlaybackState {
     pub paused: bool,
@@ -298,6 +324,7 @@ impl StreamPlaybackDelegate {
     }
 
     pub async fn set_speed(&self, stream_id: &StreamId, speed: f64) -> Result<()> {
+        let speed = normalize_playback_speed(speed);
         self.active_streams
             .update_state(stream_id, |s| s.speed = speed)
             .await
@@ -393,8 +420,8 @@ impl WallClockPacer {
         Self {
             start_time: std::time::Instant::now(),
             frame_number: 0,
-            fps,
-            speed: speed.max(0.1),
+            fps: normalize_stream_fps(fps),
+            speed: normalize_playback_speed(speed),
         }
     }
 
@@ -403,9 +430,33 @@ impl WallClockPacer {
     /// Uses hybrid sleep+spin to achieve sub-millisecond accuracy
     /// (std::thread::sleep has ~2ms granularity on macOS).
     pub fn wait_for_next_frame(&mut self) {
-        self.frame_number += 1;
-        let expected = self.start_time
-            + Duration::from_secs_f64(self.frame_number as f64 / (self.fps * self.speed));
+        let Some(frame_number) = self.frame_number.checked_add(1) else {
+            tracing::warn!("Pacer frame counter overflow; resetting pacer");
+            self.reset();
+            return;
+        };
+        self.frame_number = frame_number;
+        let seconds = self.frame_number as f64 / (self.fps * self.speed);
+        let Ok(offset) = Duration::try_from_secs_f64(seconds) else {
+            tracing::warn!(
+                "Invalid pacer offset (fps={}, speed={}, frame={}); resetting pacer",
+                self.fps,
+                self.speed,
+                self.frame_number
+            );
+            self.reset();
+            return;
+        };
+        let Some(expected) = self.start_time.checked_add(offset) else {
+            tracing::warn!(
+                "Pacer offset overflow (fps={}, speed={}, frame={}); resetting pacer",
+                self.fps,
+                self.speed,
+                self.frame_number
+            );
+            self.reset();
+            return;
+        };
         let now = std::time::Instant::now();
         if now >= expected {
             return;
@@ -424,7 +475,7 @@ impl WallClockPacer {
 
     /// Update playback speed, resetting the time base to avoid jumps
     pub fn update_speed(&mut self, speed: f64) {
-        self.speed = speed.max(0.1);
+        self.speed = normalize_playback_speed(speed);
         self.start_time = std::time::Instant::now();
         self.frame_number = 0;
     }
@@ -433,11 +484,6 @@ impl WallClockPacer {
     pub fn reset(&mut self) {
         self.start_time = std::time::Instant::now();
         self.frame_number = 0;
-    }
-
-    /// Get elapsed seconds since pacer start
-    pub fn elapsed_secs(&self) -> f64 {
-        self.start_time.elapsed().as_secs_f64()
     }
 }
 
@@ -661,6 +707,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_stream_playback_delegate_sanitizes_invalid_speed() {
+        let streams = Arc::new(ActiveStreams::new());
+        let delegate = StreamPlaybackDelegate::new(streams.clone());
+        let cancel = CancellationToken::new();
+        let (state_tx, mut state_rx) = watch::channel(PlaybackState::default());
+        let cancel_clone = cancel.clone();
+        let join_handle = tokio::spawn(async move {
+            cancel_clone.cancelled().await;
+        });
+
+        let stream_id = StreamId::new("test-speed");
+        let handle = StreamLoopHandle {
+            stream_id: stream_id.clone(),
+            cancel: cancel.clone(),
+            state_tx,
+            join_handle,
+            linked_stream_id: None,
+        };
+        streams.insert(handle).await;
+
+        delegate.set_speed(&stream_id, f64::NAN).await.unwrap();
+
+        state_rx.changed().await.unwrap();
+        assert!((state_rx.borrow().speed - 1.0).abs() < f64::EPSILON);
+
+        cancel.cancel();
+        streams.stop_all().await;
+    }
+
+    #[tokio::test]
     async fn test_stream_playback_delegate_update_mixdown() {
         let streams = Arc::new(ActiveStreams::new());
         let delegate = StreamPlaybackDelegate::new(streams.clone());
@@ -814,6 +890,26 @@ mod tests {
     fn test_wall_clock_pacer_min_speed() {
         let pacer = WallClockPacer::new(30.0, 0.0);
         assert!((pacer.speed - 0.1).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_wall_clock_pacer_sanitizes_non_finite_inputs() {
+        let mut pacer = WallClockPacer::new(f64::NAN, f64::NAN);
+        assert!((pacer.fps - 30.0).abs() < f64::EPSILON);
+        assert!((pacer.speed - 1.0).abs() < f64::EPSILON);
+
+        pacer.update_speed(f64::INFINITY);
+        assert!((pacer.speed - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_wall_clock_pacer_handles_invalid_duration_without_panic() {
+        let mut pacer = WallClockPacer::new(1.0, 0.1);
+        pacer.frame_number = u64::MAX;
+
+        pacer.wait_for_next_frame();
+
+        assert_eq!(pacer.frame_number, 0);
     }
 
     #[test]

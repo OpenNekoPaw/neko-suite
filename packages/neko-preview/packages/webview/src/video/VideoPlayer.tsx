@@ -17,6 +17,11 @@ import { useTranslation } from '../i18n/I18nContext';
 import { VideoControls } from './VideoControls';
 import type { MediaInfo, PreviewInitMessage } from '../shared/types';
 import { getLogger } from '../utils/logger';
+import {
+  createVideoSeekGate,
+  shouldAcceptVideoFrameAfterSeek,
+  type VideoSeekGate,
+} from './videoPlayback';
 
 const logger = getLogger('VideoPlayer');
 
@@ -111,8 +116,8 @@ export function VideoPlayer() {
   const statsThrottleRef = useRef<number>(0);
   /** Track clock source to detect wall→audio transition */
   const clockSourceRef = useRef<'wall' | 'audio'>('wall');
-  /** Seek target time (seconds). When set, onFrame rejects stale pre-seek frames. */
-  const seekFilterRef = useRef<number | null>(null);
+  /** Seek gate. When set, onFrame rejects stale frames outside the post-seek target window. */
+  const seekGateRef = useRef<VideoSeekGate | null>(null);
 
   // =========================================================================
   // Keyboard shortcut: 'D' toggles stats overlay
@@ -192,27 +197,17 @@ export function VideoPlayer() {
    * Instead of rendering directly, enqueue to FrameScheduler for
    * clock-based scheduling.
    *
-   * After seek, stale pre-seek frames may still arrive from the WebSocket
-   * buffer. These are filtered out by comparing their PTS to the seek target.
+   * After seek, stale frames may still arrive from the WebSocket buffer.
+   * These are filtered out by comparing their PTS to the target video PTS
+   * window before enqueueing them into the scheduler.
    */
   const onFrame = useCallback(
     (frame: VideoFrame) => {
-      // Filter stale pre-seek frames: old keyframes in the WebSocket buffer
-      // can corrupt the scheduler's A/V offset if enqueued after flush.
-      // Directional filter: reject frames that arrived before the seek target.
-      // The backend skips pre-target frames, but a few may arrive from the
-      // WebSocket buffer (in-flight before the seek was processed).
-      // Allow up to 0.1s tolerance for keyframe alignment.
-      const seekTarget = seekFilterRef.current;
-      if (seekTarget !== null) {
-        const frameSec = frame.timestamp / 1_000_000;
-        if (frameSec < seekTarget - 0.1) {
-          frame.close();
-          return;
-        }
-        // First valid frame at or near seek target arrived — disable filter
-        seekFilterRef.current = null;
+      if (!shouldAcceptVideoFrameAfterSeek(frame.timestamp, seekGateRef.current)) {
+        frame.close();
+        return;
       }
+      seekGateRef.current = null;
 
       const scheduler = schedulerRef.current;
       if (scheduler) {
@@ -554,9 +549,13 @@ export function VideoPlayer() {
         playStartTimeRef.current = time;
         playWallTimeRef.current = performance.now();
       }
-      // Arm seek filter: reject stale WebSocket-buffered frames whose PTS
-      // is far from the target, preventing A/V offset corruption.
-      seekFilterRef.current = time;
+      // Arm seek gate before flushing: reject WebSocket-buffered stale frames
+      // from either side of the target, preventing A/V offset corruption.
+      seekGateRef.current = createVideoSeekGate(
+        time,
+        schedulerRef.current?.getStats() ?? null,
+        mediaInfo?.fps ?? 25,
+      );
       // Flush queued frames so stale pre-seek frames aren't rendered
       schedulerRef.current?.flush();
       // Reset decoders so they start clean from the next keyframe
@@ -566,7 +565,7 @@ export function VideoPlayer() {
       clockSourceRef.current = 'wall';
       postMessage({ type: 'preview:seek', time });
     },
-    [isPlaying, postMessage],
+    [isPlaying, mediaInfo?.fps, postMessage],
   );
 
   const handleSpeedChange = useCallback(

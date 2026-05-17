@@ -3,6 +3,12 @@ import { H264StreamClient, AudioStreamClient, FrameScheduler, formatTime } from 
 import { ProgressBar } from '@neko/shared/components';
 import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/shared/icons';
 import { getLogger } from '../../utils/logger';
+import {
+  createInlineVideoSeekGate,
+  resetInlineVideoPlaybackForSeek,
+  shouldAcceptInlineVideoFrameAfterSeek,
+  type InlineVideoSeekGate,
+} from './inlineVideoPlayback';
 
 const logger = getLogger('InlineVideoPlayer');
 
@@ -44,6 +50,7 @@ export function InlineVideoPlayer({
   const playWallTimeRef = useRef(0);
   const clockSourceRef = useRef<'wall' | 'audio'>('wall');
   const currentTimeRef = useRef(startTime);
+  const seekGateRef = useRef<InlineVideoSeekGate | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(startTime);
@@ -78,6 +85,12 @@ export function InlineVideoPlayer({
 
   const onFrame = useCallback(
     (frame: VideoFrame) => {
+      if (!shouldAcceptInlineVideoFrameAfterSeek(frame.timestamp, seekGateRef.current)) {
+        frame.close();
+        return;
+      }
+      seekGateRef.current = null;
+
       const scheduler = schedulerRef.current;
       if (scheduler) {
         scheduler.enqueue(frame);
@@ -220,15 +233,29 @@ export function InlineVideoPlayer({
   const handleSeekCommit = useCallback(
     (time: number) => {
       setCurrentTime(time);
-      currentTimeRef.current = time;
-      playStartTimeRef.current = time;
-      playWallTimeRef.current = performance.now();
-      clockSourceRef.current = 'wall';
-      schedulerRef.current?.flush();
-      audioClientRef.current?.resetClock();
+      seekGateRef.current = createInlineVideoSeekGate(
+        time,
+        schedulerRef.current?.getStats() ?? null,
+        fps,
+      );
+      resetInlineVideoPlaybackForSeek({
+        time,
+        now: () => performance.now(),
+        clock: {
+          currentTimeRef,
+          playStartTimeRef,
+          playWallTimeRef,
+          clockSourceRef,
+        },
+        pipeline: {
+          scheduler: schedulerRef.current,
+          videoClient: clientRef.current,
+          audioClient: audioClientRef.current,
+        },
+      });
       onSeek(time);
     },
-    [onSeek],
+    [fps, onSeek],
   );
 
   const handleSeeking = useCallback((time: number) => {

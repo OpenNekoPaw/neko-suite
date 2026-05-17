@@ -104,6 +104,41 @@ class FakeWebSocket {
   }
 }
 
+class FakeGainNode {
+  gain = {
+    value: 1,
+    cancelScheduledValues: vi.fn(),
+    setValueAtTime: vi.fn((value: number) => {
+      this.gain.value = value;
+    }),
+    linearRampToValueAtTime: vi.fn((value: number) => {
+      this.gain.value = value;
+    }),
+  };
+  connect = vi.fn();
+  disconnect = vi.fn();
+}
+
+class FakeBufferSource {
+  buffer: AudioBuffer | null = null;
+  connect = vi.fn();
+  start = vi.fn();
+}
+
+class FakeAudioContext {
+  currentTime = 0;
+  state: AudioContextState = 'running';
+  close = vi.fn(() => {
+    this.state = 'closed';
+    return Promise.resolve();
+  });
+  resume = vi.fn(() => Promise.resolve());
+  createGain = vi.fn(() => new FakeGainNode());
+  createBufferSource = vi.fn(() => new FakeBufferSource());
+  createBuffer = vi.fn();
+  getOutputTimestamp = vi.fn(() => ({ contextTime: this.currentTime, performanceTime: 0 }));
+}
+
 describe('stream descriptor clients', () => {
   beforeEach(() => {
     supportDecoderConfigs.length = 0;
@@ -202,6 +237,60 @@ describe('stream descriptor clients', () => {
         codec: 'aac',
       } as unknown as AudioStreamDescriptor),
     ).toThrow(/Unsupported audio stream codec/);
+  });
+
+  it('does not close an externally owned AudioContext on dispose', async () => {
+    const client = new AudioStreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-audio',
+      descriptor: audioDescriptor,
+    });
+    const audioContext = new FakeAudioContext();
+
+    await client.connect(audioContext as unknown as AudioContext);
+    client.dispose();
+
+    expect(audioContext.close).not.toHaveBeenCalled();
+  });
+
+  it('closes an internally owned AudioContext on dispose', async () => {
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const client = new AudioStreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-audio',
+      descriptor: audioDescriptor,
+    });
+
+    await client.connect();
+    const audioContext = client.getAudioContext() as unknown as FakeAudioContext;
+    client.dispose();
+
+    expect(audioContext.close).toHaveBeenCalledOnce();
+  });
+
+  it('keeps media clock continuous when playback rate changes', async () => {
+    const client = new AudioStreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-audio',
+      descriptor: audioDescriptor,
+    });
+    const audioContext = new FakeAudioContext();
+
+    await client.connect(audioContext as unknown as AudioContext);
+    const clockState = client as unknown as {
+      ptsOffset: number | null;
+      clockAnchorCtxTime: number | null;
+      clockAnchorPts: number | null;
+    };
+    clockState.ptsOffset = 0;
+    clockState.clockAnchorCtxTime = 0;
+    clockState.clockAnchorPts = 0;
+    audioContext.currentTime = 1;
+
+    expect(client.getCurrentTime()).toBe(1);
+
+    client.setClockPlaybackRate(2);
+    audioContext.currentTime = 1.5;
+
+    expect(client.getCurrentTime()).toBe(2);
+    client.dispose();
   });
 
   it('aligns render frame metadata from the descriptor and packet header', () => {

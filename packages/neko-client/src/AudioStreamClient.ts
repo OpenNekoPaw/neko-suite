@@ -98,12 +98,17 @@ export class AudioStreamClient {
   private config: NormalizedAudioStreamClientConfig;
   private ws: WebSocket | null = null;
   private audioCtx: AudioContext | null = null;
+  private ownsAudioContext = false;
   private gainNode: GainNode | null = null;
   private disposed = false;
   private isConnected = false;
 
   /** Offset between AudioContext.currentTime and media PTS */
   private ptsOffset: number | null = null;
+  /** Media-clock mapping used when preview playback speed changes. */
+  private clockAnchorCtxTime: number | null = null;
+  private clockAnchorPts: number | null = null;
+  private clockPlaybackRate = 1.0;
   /** Next scheduled play time in AudioContext time */
   private nextPlayTime = 0;
 
@@ -132,6 +137,7 @@ export class AudioStreamClient {
    * since AudioContext.currentTime keeps advancing during gain-muted pause.
    */
   private pausedAtCtxTime: number | null = null;
+  private pausedAtMediaTime: number | null = null;
 
   /**
    * Seek generation counter. Incremented on resetClock().
@@ -197,10 +203,12 @@ export class AudioStreamClient {
 
     if (existingAudioCtx) {
       this.audioCtx = existingAudioCtx;
+      this.ownsAudioContext = false;
     } else {
       this.audioCtx = new AudioContext({
         sampleRate: this.config.descriptor?.sampleRate ?? 48000,
       });
+      this.ownsAudioContext = true;
     }
 
     this.gainNode = this.audioCtx.createGain();
@@ -233,14 +241,21 @@ export class AudioStreamClient {
       this.ws = null;
     }
 
-    if (this.audioCtx && this.audioCtx.state !== 'closed') {
-      this.audioCtx.close().catch(() => {});
-      this.audioCtx = null;
+    if (this.gainNode) {
+      this.gainNode.disconnect();
     }
 
+    if (this.audioCtx && this.ownsAudioContext && this.audioCtx.state !== 'closed') {
+      this.audioCtx.close().catch(() => {});
+    }
+
+    this.audioCtx = null;
+    this.ownsAudioContext = false;
     this.gainNode = null;
     this.isConnected = false;
     this.ptsOffset = null;
+    this.clockAnchorCtxTime = null;
+    this.clockAnchorPts = null;
   }
 
   // =========================================================================
@@ -293,6 +308,7 @@ export class AudioStreamClient {
       const now = this.audioCtx.currentTime;
       const firstPts = this.prebufferQueue[0]!.ptsSeconds;
       this.ptsOffset = now - firstPts;
+      this.resetClockAnchor(now, firstPts);
       this.nextPlayTime = now;
       this.lastCalibrationTime = now;
       this.isPrebuffering = false;
@@ -324,6 +340,7 @@ export class AudioStreamClient {
     // Initialize PTS offset on first frame (fallback, should not hit after prebuffer)
     if (this.ptsOffset === null) {
       this.ptsOffset = now - ptsSeconds;
+      this.resetClockAnchor(now, ptsSeconds);
       this.nextPlayTime = now;
       this.lastCalibrationTime = now;
     }
@@ -331,14 +348,14 @@ export class AudioStreamClient {
     // --- Drift calibration (every CALIBRATION_INTERVAL seconds) ---
     if (now - this.lastCalibrationTime >= AudioStreamClient.CALIBRATION_INTERVAL) {
       this.lastCalibrationTime = now;
-      const expectedPts = now - this.ptsOffset;
+      const expectedPts = this.getMediaTimeAtContextTime(now);
       const drift = ptsSeconds - expectedPts;
       const absDrift = Math.abs(drift);
       this.lastDriftMs = drift * 1000;
 
       if (absDrift >= AudioStreamClient.DRIFT_MIN && absDrift <= AudioStreamClient.DRIFT_MAX) {
         const correction = drift * AudioStreamClient.DRIFT_CORRECTION;
-        this.ptsOffset -= correction;
+        this.applyClockCorrection(correction);
         logger.info(
           `Drift calibration: drift=${(drift * 1000).toFixed(2)}ms correction=${(correction * 1000).toFixed(2)}ms`,
         );
@@ -382,17 +399,9 @@ export class AudioStreamClient {
   getCurrentTime(): number {
     if (!this.audioCtx || this.ptsOffset === null) return 0;
 
-    let ctxTime = this.audioCtx.currentTime;
-    try {
-      const ts = this.audioCtx.getOutputTimestamp();
-      if (ts.contextTime !== undefined && ts.contextTime > 0) {
-        ctxTime = ts.contextTime;
-      }
-    } catch {
-      // getOutputTimestamp not supported — use currentTime
-    }
+    const ctxTime = this.getOutputContextTime();
 
-    return ctxTime - this.ptsOffset;
+    return this.getMediaTimeAtContextTime(ctxTime);
   }
 
   /**
@@ -415,6 +424,26 @@ export class AudioStreamClient {
   }
 
   /**
+   * Set the media-clock rate exposed by getCurrentTime().
+   *
+   * The Web Audio graph always plays scheduled PCM at the context sample rate.
+   * Engine-side streams handle the actual audio resampling/pacing. This method
+   * only keeps the client-side master clock aligned with preview playback speed.
+   */
+  setClockPlaybackRate(rate: number): void {
+    const normalized = Number.isFinite(rate) ? Math.max(0.1, rate) : 1.0;
+    if (!this.audioCtx || this.ptsOffset === null) {
+      this.clockPlaybackRate = normalized;
+      return;
+    }
+    const ctxTime = this.getOutputContextTime();
+    const currentPts = this.getCurrentTime();
+    this.clockPlaybackRate = normalized;
+    this.clockAnchorCtxTime = ctxTime;
+    this.clockAnchorPts = currentPts;
+  }
+
+  /**
    * Immediately mute audio output and stop scheduling new buffers.
    * Already-scheduled AudioBufferSourceNodes are silenced via gain = 0.
    * New PCM packets arriving from WebSocket are discarded while paused.
@@ -428,6 +457,7 @@ export class AudioStreamClient {
       // AudioContext.currentTime keeps ticking even with gain = 0, which would
       // cause getCurrentTime() to drift forward by the entire pause duration.
       this.pausedAtCtxTime = this.audioCtx.currentTime;
+      this.pausedAtMediaTime = this.getCurrentTime();
     }
 
     if (this.gainNode && this.audioCtx) {
@@ -452,8 +482,13 @@ export class AudioStreamClient {
     if (this.pausedAtCtxTime !== null && this.audioCtx && this.ptsOffset !== null) {
       const pauseDuration = this.audioCtx.currentTime - this.pausedAtCtxTime;
       this.ptsOffset += pauseDuration;
+      this.resetClockAnchor(
+        this.getOutputContextTime(),
+        this.pausedAtMediaTime ?? this.audioCtx.currentTime - this.ptsOffset,
+      );
     }
     this.pausedAtCtxTime = null;
+    this.pausedAtMediaTime = null;
 
     // Resume AudioContext if suspended (browser autoplay policy)
     if (this.audioCtx?.state === 'suspended') {
@@ -548,6 +583,8 @@ export class AudioStreamClient {
     }
 
     this.ptsOffset = null;
+    this.clockAnchorCtxTime = null;
+    this.clockAnchorPts = null;
     this.nextPlayTime = 0;
     this.lastCalibrationTime = 0;
     // Preserve pause state — don't unpause on seek
@@ -609,6 +646,44 @@ export class AudioStreamClient {
   }
 
   private packetCount = 0;
+
+  private getOutputContextTime(): number {
+    if (!this.audioCtx) return 0;
+    let ctxTime = this.audioCtx.currentTime;
+    try {
+      const ts = this.audioCtx.getOutputTimestamp();
+      if (ts.contextTime !== undefined && ts.contextTime > 0) {
+        ctxTime = ts.contextTime;
+      }
+    } catch {
+      // getOutputTimestamp not supported — use currentTime
+    }
+    return ctxTime;
+  }
+
+  private resetClockAnchor(ctxTime: number, ptsSeconds: number): void {
+    this.clockAnchorCtxTime = ctxTime;
+    this.clockAnchorPts = ptsSeconds;
+  }
+
+  private getMediaTimeAtContextTime(ctxTime: number): number {
+    if (
+      this.ptsOffset === null ||
+      this.clockAnchorCtxTime === null ||
+      this.clockAnchorPts === null
+    ) {
+      return this.ptsOffset === null ? 0 : ctxTime - this.ptsOffset;
+    }
+    return this.clockAnchorPts + (ctxTime - this.clockAnchorCtxTime) * this.clockPlaybackRate;
+  }
+
+  private applyClockCorrection(correction: number): void {
+    if (this.clockAnchorPts !== null) {
+      this.clockAnchorPts += correction;
+    } else if (this.ptsOffset !== null) {
+      this.ptsOffset -= correction;
+    }
+  }
 
   private handlePacket(data: ArrayBuffer): void {
     if (!this.audioCtx || !this.gainNode) return;

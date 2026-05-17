@@ -279,6 +279,9 @@ export const PreviewPanel = memo(function PreviewPanel({
   const currentTimeRef = useRef(currentTime);
   currentTimeRef.current = currentTime;
 
+  const playbackSpeedRef = useRef(playbackSpeed);
+  playbackSpeedRef.current = playbackSpeed;
+
   // isPlaying ref for rAF closure
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
@@ -419,6 +422,12 @@ export const PreviewPanel = memo(function PreviewPanel({
       });
       audioClientRef.current = audioClient;
       audioClient.connect(audioCtxRef.current ?? undefined);
+      audioClient.setClockPlaybackRate(playbackSpeedRef.current);
+      if (isPlayingRef.current) {
+        audioClient.resume();
+      } else {
+        audioClient.pause();
+      }
     }
 
     // Reset clock source for new stream
@@ -518,6 +527,7 @@ export const PreviewPanel = memo(function PreviewPanel({
 
     if (!isPlaying) {
       // Pause: engine stops encoding loop, stream stays alive
+      audioClientRef.current?.pause();
       postMessage({ type: 'media:frameServer:projectPlayback:pause' });
       return;
     }
@@ -534,20 +544,23 @@ export const PreviewPanel = memo(function PreviewPanel({
     playStartTimeRef.current = currentTimeRef.current;
     playWallTimeRef.current = performance.now();
     clockSourceRef.current = 'wall';
+    audioClientRef.current?.setClockPlaybackRate(playbackSpeedRef.current);
+    audioClientRef.current?.resume();
 
     logger.info('Resuming H264 push for playback');
     postMessage({
       type: 'media:frameServer:projectPlayback:resume',
       payload: {
         startTime: currentTimeRef.current,
-        speed: playbackSpeed,
+        speed: playbackSpeedRef.current,
       },
     });
 
     return () => {
+      audioClientRef.current?.pause();
       postMessage({ type: 'media:frameServer:projectPlayback:pause' });
     };
-  }, [frameServerPort, isPlaying, playbackSpeed]);
+  }, [frameServerPort, isPlaying]);
 
   // ==========================================================================
   // Scrubbing & Seek (paused or during playback)
@@ -763,7 +776,7 @@ export const PreviewPanel = memo(function PreviewPanel({
 
     playStartTimeRef.current = currentTimeRef.current;
     playWallTimeRef.current = performance.now();
-
+    audioClientRef.current?.setClockPlaybackRate(playbackSpeed);
     postMessage({
       type: 'media:frameServer:projectPlayback:speed',
       payload: { speed: playbackSpeed },
