@@ -24,7 +24,7 @@
 
 - [x] 4.1 Add a story-symbol adapter that projects existing `WorkspaceIndexService` scenes, sections, script roles, and story files into `ProjectSearchItem` records.
 - [x] 4.2 Ensure Story activation initializes the services needed for project search, including creative entity graph/index services where present, without blocking extension activation on heavy work.
-- [ ] 4.3 Add a creative-entity adapter for confirmed entities, aliases, entity candidates, occurrence refs, and missing representation requirements.
+- [x] 4.3 Add a creative-entity adapter for confirmed entities, aliases, entity candidates, occurrence refs, and missing representation requirements.
 - [x] 4.4 Ensure script-derived entity candidates remain searchable even when no visual identity, generated asset, confirmed binding, or representation exists.
 - [x] 4.5 Add tests using Fountain fixtures for Chinese role names such as `小橘`, scene names, aliases, confirmed entities without assets, and requirement-backed results.
 
@@ -50,7 +50,7 @@
 - [x] 7.2 Refactor `projectMentionSearch.ts` to call the project search service with query text, context file path/URI, project root, result kinds, and limit instead of reading `.neko/.cache/*.json` directly.
 - [x] 7.3 Preserve compatibility by mapping `ProjectSearchItem` records into existing `AgentProjectMentionCandidate` shapes during migration.
 - [x] 7.4 Update Agent Webview mention rendering to use item kind/icon/thumbnail/navigation metadata and to avoid duplicating cache/search filtering logic.
-- [ ] 7.5 Add integration tests for Agent mention search across script roles, scenes, asset library entries, media files, documents, confirmed entities, and entity candidates.
+- [x] 7.5 Add integration tests for Agent mention search across script roles, scenes, asset library entries, media files, documents, confirmed entities, and entity candidates.
 
 ## 8. Documentation And Verification
 
@@ -58,4 +58,4 @@
 - [x] 8.2 Add migration notes for removing direct Agent cache reads and keeping existing cache files as adapter-owned compatibility persistence.
 - [x] 8.3 Add architecture tests or dependency checks that prevent Webview direct cache/filesystem reads and prevent Agent mention search from owning cache JSON schemas.
 - [x] 8.4 Run targeted tests for `neko-types`, Story/entity adapters, Assets/media adapters, Agent mention search, and Webview mention rendering.
-- [ ] 8.5 Run the narrowest practical package checks, then escalate to `pnpm check` or `pnpm test` if the touched packages require it.
+- [x] 8.5 Run the narrowest practical package checks, then escalate to `pnpm check` or `pnpm test` if the touched packages require it.
