@@ -10,6 +10,8 @@
     "watch": "pnpm run build -- --watch"
   },
   "dependencies": {
+    "@neko/entity": "workspace:*",
+    "@neko/search": "workspace:*",
     "@neko/shared": "workspace:*"
   },
   "devDependencies": {

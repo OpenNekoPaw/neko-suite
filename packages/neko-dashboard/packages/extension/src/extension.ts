@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { registerDashboardEntitySourceCommand } from '@neko/entity/host-vscode';
 import {
   createVSCodeLogger,
   resolveLogLevelSetting,
@@ -18,6 +19,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const provider = new DashboardProvider(context, { logger });
 
   context.subscriptions.push(provider);
+  context.subscriptions.push(registerDashboardEntitySourceCommand({ logger }));
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.dashboard.show', () => provider.show()),
   );

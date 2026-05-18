@@ -18,6 +18,7 @@ export interface CharacterBindings {
 }
 
 export interface CharacterRecordMetadata {
+  readonly [key: string]: unknown;
   readonly role?: string;
   readonly gender?: string;
   readonly ageRange?: string;

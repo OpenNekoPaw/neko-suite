@@ -49,11 +49,16 @@ import { MediaLibraryTreeProvider } from './providers/MediaLibraryTreeProvider';
 import { VscodeGitService } from './services/VscodeGitService';
 import {
   createVSCodeLogger,
-  EntityAssetBindingService,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
+import {
+  CharacterRegistryService,
+  createVSCodeEntityServices,
+  resolveCharacterRegistryPath,
+  type EntityAssetBindingService,
+} from '@neko/entity/host-vscode';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { openAssetPreview } from './utils/preview';
@@ -381,8 +386,6 @@ export async function activate(
       if (!wsRoot) return undefined;
 
       try {
-        const { CharacterRegistryService, resolveCharacterRegistryPath } =
-          await import('@neko/shared/vscode/extension');
         const registry = new CharacterRegistryService(resolveCharacterRegistryPath(wsRoot));
         const record = await registry.resolveByName(name);
         if (!record) return undefined;
@@ -477,7 +480,9 @@ function registerAssetManagerCommands(
 
   function getBindingService(): EntityAssetBindingService | undefined {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    return workspaceRoot ? EntityAssetBindingService.fromWorkspaceRoot(workspaceRoot) : undefined;
+    return workspaceRoot
+      ? createVSCodeEntityServices({ projectRoot: workspaceRoot }).bindings
+      : undefined;
   }
 
   async function listBindingsForAsset(entityId: string) {

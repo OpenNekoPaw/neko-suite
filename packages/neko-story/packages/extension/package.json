@@ -11,6 +11,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@neko/entity": "workspace:*",
     "@neko/shared": "workspace:*",
     "@neko-story/parser": "workspace:*",
     "@neko-story/types": "workspace:*"

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
+  DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND,
   type DashboardCreativeEntityDetail,
   type DashboardCreativeEntityEvent,
   type DashboardCreativeEntityRef,
@@ -66,14 +67,20 @@ describe('CreativeEntitySourceAggregator', () => {
     await aggregator.refreshSources();
 
     expect(aggregator.getState()).toEqual({
-      statuses: [
+      statuses: expect.arrayContaining([
+        expect.objectContaining({
+          source: 'neko-entity',
+          sourceDisplayName: 'Neko Entity',
+          available: false,
+          freshness: 'stale',
+        }),
         expect.objectContaining({
           source: 'neko-story',
           sourceDisplayName: 'Neko Story',
           available: false,
           freshness: 'stale',
         }),
-      ],
+      ]),
       rows: [],
     });
     aggregator.dispose();
@@ -109,6 +116,33 @@ describe('CreativeEntitySourceAggregator', () => {
 
     expect(firstDispose).toHaveBeenCalledOnce();
     expect(aggregator.getState().rows.map((item) => item.label)).toEqual(['小橘 Updated']);
+    aggregator.dispose();
+  });
+
+  it('dedupes confirmed entity rows across neutral and Story sources', async () => {
+    registerCommandHandler(DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND, () =>
+      createSource({
+        source: 'neko-entity',
+        sourceDisplayName: 'Neko Entity',
+        rows: [
+          {
+            ...row,
+            ref: { ...row.ref, source: 'neko-entity' },
+            label: '小橘 Neutral',
+          },
+        ],
+      }),
+    );
+    registerCommandHandler(DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND, () =>
+      createSource({ rows: [row] }),
+    );
+    const aggregator = new CreativeEntitySourceAggregator();
+
+    await aggregator.refreshSources();
+
+    expect(aggregator.getState().rows).toEqual([
+      expect.objectContaining({ label: '小橘 Neutral' }),
+    ]);
     aggregator.dispose();
   });
 
@@ -191,6 +225,8 @@ describe('CreativeEntitySourceAggregator', () => {
 });
 
 interface CreateSourceOptions {
+  readonly source?: string;
+  readonly sourceDisplayName?: string;
   readonly rows?: readonly DashboardCreativeEntityRow[];
   readonly detail?: DashboardCreativeEntityDetail;
   readonly dispose?: () => void;
@@ -199,17 +235,19 @@ interface CreateSourceOptions {
 }
 
 function createSource(options: CreateSourceOptions = {}): DashboardCreativeEntitySource {
+  const source = options.source ?? 'neko-story';
+  const sourceDisplayName = options.sourceDisplayName ?? 'Neko Story';
   return {
     contractVersion: DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
-    source: 'neko-story',
-    sourceDisplayName: 'Neko Story',
+    source,
+    sourceDisplayName,
     async getSnapshot() {
       return {
-        source: 'neko-story',
-        sourceDisplayName: 'Neko Story',
+        source,
+        sourceDisplayName,
         status: {
-          source: 'neko-story',
-          sourceDisplayName: 'Neko Story',
+          source,
+          sourceDisplayName,
           available: true,
           freshness: 'fresh',
           entityCount: options.rows?.length ?? 0,

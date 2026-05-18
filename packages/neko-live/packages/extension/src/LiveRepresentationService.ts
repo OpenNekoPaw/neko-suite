@@ -4,12 +4,8 @@ import type {
   RepresentationResolveResult,
   ResolvedAssetRef,
 } from '@neko/shared';
-import {
-  CreativeEntityRegistryService,
-  DefaultAssetRefResolver,
-  EntityAssetBindingService,
-  RepresentationResolver,
-} from '@neko/shared/vscode/extension';
+import { DefaultAssetRefResolver, RepresentationResolver } from '@neko/entity/core';
+import { createVSCodeEntityServices } from '@neko/entity/host-vscode';
 
 export interface LiveRepresentationServiceDeps {
   readonly workspaceRoot: string;
@@ -39,14 +35,15 @@ export type LiveRepresentationAvatarResult =
   | LiveRepresentationMissingAvatar;
 
 export class LiveRepresentationService {
-  private readonly registry: CreativeEntityRegistryService;
+  private readonly registry: ReturnType<typeof createVSCodeEntityServices>['registry'];
   private readonly resolver: RepresentationResolver;
 
   constructor(private readonly deps: LiveRepresentationServiceDeps) {
-    this.registry = CreativeEntityRegistryService.forWorkspaceRoot(deps.workspaceRoot);
+    const entityServices = createVSCodeEntityServices({ projectRoot: deps.workspaceRoot });
+    this.registry = entityServices.registry;
     this.resolver = new RepresentationResolver({
       entities: this.registry,
-      bindings: EntityAssetBindingService.fromWorkspaceRoot(deps.workspaceRoot),
+      bindings: entityServices.bindings,
       assetRefs: new DefaultAssetRefResolver({
         project: async (parsed) => {
           const assetId =

@@ -33,6 +33,47 @@ export type ProjectIndexPartitionStatus =
 
 export type ProjectSearchFreshnessPolicy = 'allow-stale' | 'fresh-only';
 
+export type ProjectSearchMode =
+  | 'mention'
+  | 'global'
+  | 'asset-picker'
+  | 'entity-picker'
+  | 'document'
+  | 'agent-tool';
+
+export type ProjectSearchScopeKind =
+  | 'project'
+  | 'workspace'
+  | 'media-library'
+  | 'document'
+  | 'current-file';
+
+export interface ProjectSearchScope {
+  readonly kind: ProjectSearchScopeKind;
+  readonly id?: string;
+  readonly filePath?: string;
+  readonly uri?: string;
+}
+
+export interface ProjectSemanticProviderMetadata {
+  readonly providerId: string;
+  readonly model?: string;
+  readonly modelVersion?: string;
+  readonly chunkingVersion?: string;
+  readonly sourceIdentity?: string;
+  readonly indexVersion?: string;
+}
+
+export interface ProjectSearchProviderCapabilities {
+  readonly providerId?: string;
+  readonly semantic?: boolean;
+  readonly vector?: boolean;
+  readonly rag?: boolean;
+  readonly modes?: readonly ProjectSearchMode[];
+  readonly itemKinds?: readonly ProjectSearchItemKind[];
+  readonly partitions?: readonly ProjectSearchPartitionKind[];
+}
+
 export type ProjectIndexUpdateReason =
   | 'project-open'
   | 'manual-refresh'
@@ -87,10 +128,15 @@ export interface ProjectSearchItem {
 
 export interface ProjectSearchQuery {
   readonly text: string;
+  readonly mode?: ProjectSearchMode;
   readonly contextFilePath?: string;
   readonly contextUri?: string;
   readonly projectRoot?: string;
   readonly kinds?: readonly ProjectSearchItemKind[];
+  readonly partitions?: readonly ProjectSearchPartitionKind[];
+  readonly fileTypes?: readonly string[];
+  readonly mediaTypes?: readonly string[];
+  readonly scopes?: readonly ProjectSearchScope[];
   readonly limit?: number;
   readonly freshness?: ProjectSearchFreshnessPolicy;
 }
@@ -116,6 +162,8 @@ export interface ProjectSearchPartitionStatusSnapshot {
   readonly generation?: number;
   readonly updatedAt?: string;
   readonly error?: string;
+  readonly provider?: ProjectSearchProviderCapabilities;
+  readonly semantic?: ProjectSemanticProviderMetadata;
 }
 
 export interface ProjectSearchResult {
@@ -220,6 +268,23 @@ export const PROJECT_INDEX_PARTITION_STATUS_VALUES: readonly ProjectIndexPartiti
   'failed',
 ] as const;
 
+export const PROJECT_SEARCH_MODES: readonly ProjectSearchMode[] = [
+  'mention',
+  'global',
+  'asset-picker',
+  'entity-picker',
+  'document',
+  'agent-tool',
+] as const;
+
+export const PROJECT_SEARCH_SCOPE_KINDS: readonly ProjectSearchScopeKind[] = [
+  'project',
+  'workspace',
+  'media-library',
+  'document',
+  'current-file',
+] as const;
+
 export function isProjectSearchItemKind(value: unknown): value is ProjectSearchItemKind {
   return includesString(PROJECT_SEARCH_ITEM_KINDS, value);
 }
@@ -238,13 +303,71 @@ export function isProjectIndexPartitionStatus(
   return includesString(PROJECT_INDEX_PARTITION_STATUS_VALUES, value);
 }
 
+export function isProjectSearchMode(value: unknown): value is ProjectSearchMode {
+  return includesString(PROJECT_SEARCH_MODES, value);
+}
+
+export function isProjectSearchScopeKind(value: unknown): value is ProjectSearchScopeKind {
+  return includesString(PROJECT_SEARCH_SCOPE_KINDS, value);
+}
+
+export function isProjectSearchProviderCapabilities(
+  value: unknown,
+): value is ProjectSearchProviderCapabilities {
+  if (!isRecord(value)) return false;
+  return (
+    optionalString(value['providerId']) &&
+    optionalBoolean(value['semantic']) &&
+    optionalBoolean(value['vector']) &&
+    optionalBoolean(value['rag']) &&
+    optionalProjectSearchModes(value['modes']) &&
+    optionalProjectSearchKinds(value['itemKinds']) &&
+    optionalProjectSearchPartitions(value['partitions'])
+  );
+}
+
+export function isProjectSemanticProviderMetadata(
+  value: unknown,
+): value is ProjectSemanticProviderMetadata {
+  if (!isRecord(value) || typeof value['providerId'] !== 'string') return false;
+  return (
+    optionalString(value['model']) &&
+    optionalString(value['modelVersion']) &&
+    optionalString(value['chunkingVersion']) &&
+    optionalString(value['sourceIdentity']) &&
+    optionalString(value['indexVersion'])
+  );
+}
+
+export function isProjectSearchPartitionStatusSnapshot(
+  value: unknown,
+): value is ProjectSearchPartitionStatusSnapshot {
+  if (!isRecord(value)) return false;
+  return (
+    isProjectSearchPartitionKind(value['partition']) &&
+    isProjectIndexPartitionStatus(value['status']) &&
+    isProjectIndexFreshness(value['freshness']) &&
+    optionalNumber(value['itemCount']) &&
+    optionalNumber(value['generation']) &&
+    optionalString(value['updatedAt']) &&
+    optionalString(value['error']) &&
+    optionalProjectSearchProviderCapabilities(value['provider']) &&
+    optionalProjectSemanticProviderMetadata(value['semantic'])
+  );
+}
+
 export function isProjectSearchQuery(value: unknown): value is ProjectSearchQuery {
   if (!isRecord(value) || typeof value['text'] !== 'string') return false;
   return (
     optionalString(value['contextFilePath']) &&
     optionalString(value['contextUri']) &&
     optionalString(value['projectRoot']) &&
+    optionalProjectSearchMode(value['mode']) &&
     optionalProjectSearchKinds(value['kinds']) &&
+    optionalProjectSearchPartitions(value['partitions']) &&
+    optionalStringArray(value['fileTypes']) &&
+    optionalStringArray(value['mediaTypes']) &&
+    optionalProjectSearchScopes(value['scopes']) &&
     optionalNumber(value['limit']) &&
     optionalFreshnessPolicy(value['freshness'])
   );
@@ -299,12 +422,65 @@ function optionalProjectSearchKinds(value: unknown): boolean {
   );
 }
 
+function optionalProjectSearchPartitions(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => isProjectSearchPartitionKind(item)))
+  );
+}
+
+function optionalProjectSearchMode(value: unknown): boolean {
+  return value === undefined || isProjectSearchMode(value);
+}
+
+function optionalProjectSearchModes(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => isProjectSearchMode(item)))
+  );
+}
+
+function optionalProjectSearchScopes(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => isProjectSearchScope(item)))
+  );
+}
+
+function optionalProjectSearchProviderCapabilities(value: unknown): boolean {
+  return value === undefined || isProjectSearchProviderCapabilities(value);
+}
+
+function optionalProjectSemanticProviderMetadata(value: unknown): boolean {
+  return value === undefined || isProjectSemanticProviderMetadata(value);
+}
+
+function isProjectSearchScope(value: unknown): value is ProjectSearchScope {
+  return (
+    isRecord(value) &&
+    isProjectSearchScopeKind(value['kind']) &&
+    optionalString(value['id']) &&
+    optionalString(value['filePath']) &&
+    optionalString(value['uri'])
+  );
+}
+
 function optionalFreshnessPolicy(value: unknown): boolean {
   return value === undefined || value === 'allow-stale' || value === 'fresh-only';
 }
 
 function optionalString(value: unknown): boolean {
   return value === undefined || typeof value === 'string';
+}
+
+function optionalStringArray(value: unknown): boolean {
+  return (
+    value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+  );
+}
+
+function optionalBoolean(value: unknown): boolean {
+  return value === undefined || typeof value === 'boolean';
 }
 
 function optionalNumber(value: unknown): boolean {

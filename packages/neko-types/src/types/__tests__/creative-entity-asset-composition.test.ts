@@ -3,12 +3,20 @@ import {
   DEFAULT_REPRESENTATION_FALLBACKS,
   REPRESENTATION_FILE_ROLES,
   WELL_KNOWN_VISUAL_FACT_KEYS,
+  isCreativeEntity,
+  isCreativeEntityCandidate,
+  isCreativeEntityCandidateFile,
   isAssetRefScheme,
+  isCreativeEntityChangeEvent,
   isCreativeEntityKind,
+  isCreativeEntityOperationResult,
+  isCreativeEntityProviderStatus,
+  isCreativeEntityRef,
   isEntityAssetBinding,
   isEntityAssetBindingFile,
   isEntityAssetBindingRole,
   isEntityAssetRequirementFile,
+  isProjectCreativeEntityFile,
   isRepresentationFileRole,
   isRepresentationKind,
   isVisualIdentityDraftFile,
@@ -55,6 +63,129 @@ describe('creative entity asset composition contracts', () => {
     expect(isAssetRefScheme('file')).toBe(false);
     expect(isEntityAssetBindingRole('portrait')).toBe(true);
     expect(isEntityAssetBindingRole('video')).toBe(false);
+  });
+
+  it('validates creative entity lifecycle, candidates, and project fact contracts', () => {
+    const entityRef = {
+      entityId: 'char_xiaoju',
+      entityKind: 'character',
+      projectRoot: '${workspaceFolder}',
+      source: 'neko-entity',
+    };
+    const candidate = {
+      id: 'candidate:story:character:xiaoju',
+      kind: 'character',
+      name: '小橘',
+      aliases: ['Xiaoju'],
+      status: 'open',
+      confidence: 0.92,
+      provenance: [
+        {
+          providerId: 'neko-story',
+          sourceKind: 'story',
+          sourceRef: 'cases/test.fountain:12',
+          confidence: 0.92,
+        },
+      ],
+      sourceRefs: ['cases/test.fountain:12'],
+    };
+
+    expect(isCreativeEntityRef(entityRef)).toBe(true);
+    expect(
+      isCreativeEntity({
+        id: 'char_xiaoju',
+        kind: 'character',
+        canonicalName: '小橘',
+        aliases: ['Xiaoju'],
+        status: 'confirmed',
+      }),
+    ).toBe(true);
+    expect(isCreativeEntityCandidate(candidate)).toBe(true);
+    expect(isCreativeEntityCandidate({ ...candidate, provenance: [{ providerId: 'story' }] })).toBe(
+      false,
+    );
+    expect(isCreativeEntityCandidateFile({ version: 1, candidates: [candidate] })).toBe(true);
+    expect(
+      isProjectCreativeEntityFile({
+        version: 1,
+        kind: 'location',
+        entities: [
+          {
+            id: 'location-school',
+            kind: 'location',
+            canonicalName: '学校',
+            aliases: [],
+            status: 'confirmed',
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      isProjectCreativeEntityFile({
+        version: 1,
+        kind: 'location',
+        entities: [
+          {
+            id: 'char_wrong',
+            kind: 'character',
+            canonicalName: '小橘',
+            aliases: [],
+            status: 'confirmed',
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('validates entity change events and operation result metadata', () => {
+    const changedRef = {
+      kind: 'entity',
+      id: 'char_xiaoju',
+      entityRef: { entityId: 'char_xiaoju', entityKind: 'character' },
+      factRef: 'characters.json',
+    };
+
+    expect(
+      isCreativeEntityChangeEvent({
+        projectRoot: '${workspaceFolder}',
+        reason: 'rename',
+        changedRefs: [changedRef],
+        generation: 2,
+        freshness: 'fresh',
+        updatedAt: '2026-05-18T00:00:00.000Z',
+      }),
+    ).toBe(true);
+    expect(
+      isCreativeEntityOperationResult({
+        ok: true,
+        action: 'rename',
+        projectRoot: '${workspaceFolder}',
+        affectedEntityRefs: [{ entityId: 'char_xiaoju', entityKind: 'character' }],
+        changedRefs: [changedRef],
+        generation: 2,
+        freshness: 'fresh',
+        updatedAt: '2026-05-18T00:00:00.000Z',
+      }),
+    ).toBe(true);
+    expect(
+      isCreativeEntityProviderStatus({
+        providerId: 'neko-story',
+        sourceKind: 'story',
+        available: false,
+        freshness: 'stale',
+        error: 'Story extension unavailable',
+      }),
+    ).toBe(true);
+    expect(
+      isCreativeEntityChangeEvent({
+        projectRoot: '${workspaceFolder}',
+        reason: 'rewrite-script',
+        changedRefs: [changedRef],
+        generation: 2,
+        freshness: 'fresh',
+        updatedAt: '2026-05-18T00:00:00.000Z',
+      }),
+    ).toBe(false);
   });
 
   it('validates binding, draft, and requirement file shapes', () => {

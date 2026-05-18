@@ -141,7 +141,7 @@ const detail: DashboardCreativeEntityDetail = {
 describe('dashboard creative entity contracts', () => {
   it('accepts valid refs, rows, details, and snapshots', () => {
     expect(isDashboardCreativeEntityRef(ref)).toBe(true);
-    expect(toDashboardCreativeEntityId(ref)).toBe('neko-story:character:小橘');
+    expect(toDashboardCreativeEntityId(ref)).toBe('entity:character:char-xiaoju');
     expect(isDashboardCreativeEntityRow(row)).toBe(true);
     expect(isDashboardCreativeEntityDetail(detail)).toBe(true);
     expect(

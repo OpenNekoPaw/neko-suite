@@ -12,10 +12,7 @@ import type {
   GeneratedAsset,
   NekoCanvasAPI,
 } from '@neko/shared';
-import {
-  EntityAssetBindingService,
-  resolveEntityAssetBindingsPath,
-} from '@neko/shared/vscode/extension';
+import { createVSCodeEntityServices } from '@neko/entity/host-vscode';
 import { getRootLogger } from '../utils/logger';
 
 export interface CrossModalDataSnapshot {
@@ -218,10 +215,8 @@ export class CrossModalDataProvider implements vscode.Disposable {
     }
 
     try {
-      const service = new EntityAssetBindingService(
-        resolveEntityAssetBindingsPath(folders[0].uri.fsPath),
-      );
-      this.entityAssetBindings = await service.list();
+      const services = createVSCodeEntityServices({ projectRoot: folders[0].uri.fsPath });
+      this.entityAssetBindings = await services.bindings.list();
       this.onDidUpdateEmitter.fire();
     } catch (error) {
       getRootLogger().warn(

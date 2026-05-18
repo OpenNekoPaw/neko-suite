@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import {
+  DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
   isDashboardCreativeEntityActionRequest,
   isDashboardCreativeEntityActionResult,
@@ -26,7 +27,10 @@ import {
 } from '@neko/shared/types/dashboard-task';
 import { NOOP_DASHBOARD_LOGGER, type DashboardLogger } from './logging';
 
-const SOURCE_COMMANDS = [DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND] as const;
+const SOURCE_COMMANDS = [
+  DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND,
+  DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
+] as const;
 
 export interface DashboardCreativeEntityState {
   readonly statuses: readonly DashboardCreativeEntitySourceStatus[];
@@ -213,7 +217,7 @@ export class CreativeEntitySourceAggregator implements vscode.Disposable {
       this.deleteRowsForSource(source.source);
       for (const row of snapshot.rows) {
         if (isDashboardCreativeEntityRow(row)) {
-          this.rows.set(toDashboardCreativeEntityId(row.ref), row);
+          this.setRow(row);
         } else {
           this.logger.warn('Ignoring invalid dashboard creative entity row', {
             source: source.source,
@@ -246,7 +250,7 @@ export class CreativeEntitySourceAggregator implements vscode.Disposable {
       if (event.type === 'removed') {
         this.rows.delete(rowId);
       } else {
-        this.rows.set(rowId, event.row);
+        this.setRow(event.row);
       }
     } else {
       await this.reloadSource(source);
@@ -275,6 +279,15 @@ export class CreativeEntitySourceAggregator implements vscode.Disposable {
       }
     }
   }
+
+  private setRow(row: DashboardCreativeEntityRow): void {
+    const rowId = toDashboardCreativeEntityId(row.ref);
+    const current = this.rows.get(rowId);
+    if (current && sourcePriority(current.ref.source) < sourcePriority(row.ref.source)) {
+      return;
+    }
+    this.rows.set(rowId, row);
+  }
 }
 
 function missingSourceStatusForCommand(
@@ -285,6 +298,13 @@ function missingSourceStatusForCommand(
     return {
       source: 'neko-story',
       sourceDisplayName: 'Neko Story',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  if (command === DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND) {
+    return {
+      source: 'neko-entity',
+      sourceDisplayName: 'Neko Entity',
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -310,6 +330,17 @@ function compareRows(a: DashboardCreativeEntityRow, b: DashboardCreativeEntityRo
     a.ref.source.localeCompare(b.ref.source) ||
     a.ref.sourceEntityId.localeCompare(b.ref.sourceEntityId)
   );
+}
+
+function sourcePriority(source: string): number {
+  switch (source) {
+    case 'neko-entity':
+      return 0;
+    case 'neko-story':
+      return 10;
+    default:
+      return 20;
+  }
 }
 
 function statusRank(status: DashboardCreativeEntityRow['status']): number {

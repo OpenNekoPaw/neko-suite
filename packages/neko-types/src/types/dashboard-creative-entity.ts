@@ -28,6 +28,9 @@ export const DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION = 1;
 export const DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND =
   'neko.story.getDashboardCreativeEntitySource';
 
+export const DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND =
+  'neko.entity.getDashboardCreativeEntitySource';
+
 export type DashboardCreativeEntityKind = CreativeEntityKind | 'action';
 
 export type DashboardCreativeEntityLifecycleStatus = CreativeEntityStatus | 'merged' | 'unknown';
@@ -622,6 +625,9 @@ export function isDashboardCreativeEntitySource(
 }
 
 export function toDashboardCreativeEntityId(ref: DashboardCreativeEntityRef): string {
+  if (ref.entityId && ref.entityKind !== 'action' && !ref.sourceEntityId.startsWith('candidate:')) {
+    return `entity:${ref.entityKind}:${ref.entityId}`;
+  }
   return `${ref.source}:${ref.sourceEntityId}`;
 }
 

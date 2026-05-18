@@ -11,11 +11,12 @@ import type {
 } from '@neko/shared';
 import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import {
-  CreativeEntityRegistryService,
-  EntityAssetBindingService,
-  EntityAssetRequirementService,
-  VisualIdentityDraftService,
-} from '@neko/shared/vscode/extension';
+  type CreativeEntityRegistryService,
+  type EntityAssetBindingService,
+  type EntityAssetRequirementService,
+  type VisualIdentityDraftService,
+} from '@neko/entity/core';
+import { createVSCodeEntityServices } from '@neko/entity/host-vscode';
 import {
   CreativeEntityManagementService,
   ENTITY_MANAGEMENT_BINDING_ROLES,
@@ -327,10 +328,9 @@ function createCreativeEntityCommandContext(
     return undefined;
   }
 
-  const registry = CreativeEntityRegistryService.forWorkspaceRoot(workspaceRoot);
-  const bindings = EntityAssetBindingService.fromWorkspaceRoot(workspaceRoot);
-  const requirements = EntityAssetRequirementService.fromWorkspaceRoot(workspaceRoot);
-  const drafts = VisualIdentityDraftService.fromWorkspaceRoot(workspaceRoot);
+  const { registry, bindings, requirements, drafts } = createVSCodeEntityServices({
+    projectRoot: workspaceRoot,
+  });
   const management = new CreativeEntityManagementService({
     entities: registry,
     bindings,

@@ -1,15 +1,3 @@
-export { ProjectCacheSearchService } from './ProjectCacheSearchService';
-export { ProjectIndexCoordinator } from './ProjectIndexCoordinator';
-export {
-  buildProjectSearchText,
-  matchesProjectSearchItem,
-  normalizeProjectSearchQuery,
-  normalizeSearchText,
-  rankProjectSearchItems,
-} from './normalization';
-export { resolveProjectSearchContext } from './projectResolver';
-export {
-  DebouncedProjectCacheWriter,
-  readProjectSearchCacheManifest,
-  writeProjectSearchCacheManifest,
-} from './cacheManifest';
+// TODO(P2): Remove this Agent compatibility shim after internal imports move to @neko/search.
+export * from '@neko/search';
+export * from '@neko/search/host-vscode';

@@ -1,0 +1,32 @@
+{
+  "name": "@neko/entity",
+  "description": "Creative entity runtime, stores, providers, and host adapters for Neko Suite",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core/index.ts",
+    "./host-vscode": "./src/host-vscode/index.ts",
+    "./providers": "./src/providers/index.ts",
+    "./dashboard": "./src/dashboard/index.ts",
+    "./projections": "./src/projections/index.ts",
+    "./search": "./src/search/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "test": "vitest --passWithNoTests",
+    "test:run": "vitest --run --passWithNoTests"
+  },
+  "dependencies": {
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.2"
+  },
+  "license": "Apache-2.0"
+}

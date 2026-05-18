@@ -484,6 +484,7 @@
   },
   "dependencies": {
     "@neko/asset": "workspace:*",
+    "@neko/entity": "workspace:*",
     "@neko/shared": "workspace:*"
   },
   "devDependencies": {

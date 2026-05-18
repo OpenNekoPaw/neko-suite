@@ -14,7 +14,7 @@ import type {
   ProjectMentionMediaType,
   ProjectMentionSource,
 } from '@neko-agent/types';
-import { PROJECT_SEARCH_QUERY_COMMAND } from './projectSearch/commands';
+import { PROJECT_SEARCH_QUERY_COMMAND } from '@neko/search/host-vscode';
 
 const MENTION_SEARCH_KINDS: readonly ProjectSearchItemKind[] = [
   'story-scene',
@@ -44,6 +44,7 @@ export async function searchProjectMentionCandidates(
     PROJECT_SEARCH_QUERY_COMMAND,
     {
       text: filter,
+      mode: 'mention',
       limit: plan.limit,
       kinds: MENTION_SEARCH_KINDS,
       freshness: 'allow-stale',

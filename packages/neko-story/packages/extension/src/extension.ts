@@ -2,18 +2,17 @@ import * as vscode from 'vscode';
 import type { AgentContextPayload, NekoCanvasAPI, NekoStoryAPI } from '@neko/shared';
 import { createEmptyCharacterRegistryFile } from '@neko/shared';
 import { DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND } from '@neko/shared/types/dashboard-creative-entity';
-import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
 import {
   CharacterRegistryService,
-  CreativeEntityRegistryService,
+  createVSCodeEntityServices,
+  resolveCharacterRegistryPath,
+} from '@neko/entity/host-vscode';
+import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
+import {
   createVSCodeLogger,
   createNewFile,
-  EntityAssetBindingService,
-  EntityAssetRequirementService,
-  resolveCharacterRegistryPath,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
-  VisualIdentityDraftService,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import { setErrorHandler, handleError } from './utils/errorHandler';
@@ -691,10 +690,9 @@ function registerDashboardCreativeEntitySource(
         return undefined;
       }
 
-      const registry = CreativeEntityRegistryService.forWorkspaceRoot(workspaceRoot);
-      const bindings = EntityAssetBindingService.fromWorkspaceRoot(workspaceRoot);
-      const requirements = EntityAssetRequirementService.fromWorkspaceRoot(workspaceRoot);
-      const drafts = VisualIdentityDraftService.fromWorkspaceRoot(workspaceRoot);
+      const { registry, bindings, requirements, drafts } = createVSCodeEntityServices({
+        projectRoot: workspaceRoot,
+      });
       const management = new CreativeEntityManagementService({
         entities: registry,
         bindings,

@@ -4,8 +4,13 @@ import {
   isProjectSearchCacheManifest,
   isProjectSearchItem,
   isProjectSearchItemKind,
+  isProjectSearchMode,
   isProjectSearchPartitionKind,
+  isProjectSearchPartitionStatusSnapshot,
+  isProjectSearchProviderCapabilities,
   isProjectSearchQuery,
+  isProjectSearchScopeKind,
+  isProjectSemanticProviderMetadata,
   type ProjectSearchItem,
   type ProjectSearchQuery,
 } from '../project-cache-search';
@@ -16,6 +21,10 @@ describe('project cache/search contracts', () => {
     expect(isProjectSearchItemKind('file')).toBe(false);
     expect(isProjectSearchPartitionKind('asset-library')).toBe(true);
     expect(isProjectSearchPartitionKind('asset-cache')).toBe(false);
+    expect(isProjectSearchMode('mention')).toBe(true);
+    expect(isProjectSearchMode('everything')).toBe(false);
+    expect(isProjectSearchScopeKind('current-file')).toBe(true);
+    expect(isProjectSearchScopeKind('panel')).toBe(false);
     expect(isProjectIndexFreshness('fresh')).toBe(true);
     expect(isProjectIndexFreshness('unknown')).toBe(false);
   });
@@ -23,14 +32,22 @@ describe('project cache/search contracts', () => {
   it('accepts typed search queries with optional context and filters', () => {
     const query: ProjectSearchQuery = {
       text: '小橘',
+      mode: 'mention',
       contextFilePath: '${PROJECT}/cases/test.fountain',
       kinds: ['script-role', 'entity-candidate'],
+      partitions: ['story-symbols', 'creative-entities'],
+      fileTypes: ['fountain'],
+      mediaTypes: ['image'],
+      scopes: [{ kind: 'current-file', filePath: '${PROJECT}/cases/test.fountain' }],
       limit: 20,
       freshness: 'allow-stale',
     };
 
     expect(isProjectSearchQuery(query)).toBe(true);
     expect(isProjectSearchQuery({ ...query, kinds: ['file'] })).toBe(false);
+    expect(isProjectSearchQuery({ ...query, partitions: ['asset-cache'] })).toBe(false);
+    expect(isProjectSearchQuery({ ...query, mode: 'everything' })).toBe(false);
+    expect(isProjectSearchQuery({ ...query, scopes: [{ kind: 'panel' }] })).toBe(false);
     expect(isProjectSearchQuery({ text: 123 })).toBe(false);
   });
 
@@ -87,6 +104,63 @@ describe('project cache/search contracts', () => {
         updatedAt: '2026-05-18T00:00:00.000Z',
         generation: 3,
         partitions: [{ partition: 'unknown' }],
+      }),
+    ).toBe(false);
+  });
+
+  it('validates provider capabilities and semantic freshness metadata', () => {
+    expect(
+      isProjectSearchProviderCapabilities({
+        providerId: 'rag.local',
+        semantic: true,
+        vector: true,
+        rag: true,
+        modes: ['global', 'agent-tool'],
+        itemKinds: ['document', 'creative-entity'],
+        partitions: ['documents'],
+      }),
+    ).toBe(true);
+    expect(
+      isProjectSearchProviderCapabilities({
+        providerId: 'rag.local',
+        modes: ['everything'],
+      }),
+    ).toBe(false);
+
+    expect(
+      isProjectSemanticProviderMetadata({
+        providerId: 'rag.local',
+        model: 'text-embedding-local',
+        modelVersion: '2026-05-18',
+        chunkingVersion: 'document-v1',
+        sourceIdentity: 'workspace:abc',
+        indexVersion: 'idx-1',
+      }),
+    ).toBe(true);
+    expect(isProjectSemanticProviderMetadata({ model: 'missing-provider' })).toBe(false);
+
+    expect(
+      isProjectSearchPartitionStatusSnapshot({
+        partition: 'documents',
+        status: 'ready',
+        freshness: 'fresh',
+        itemCount: 3,
+        provider: { providerId: 'rag.local', semantic: true, partitions: ['documents'] },
+        semantic: {
+          providerId: 'rag.local',
+          modelVersion: '2026-05-18',
+          chunkingVersion: 'document-v1',
+          sourceIdentity: 'workspace:abc',
+          indexVersion: 'idx-1',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isProjectSearchPartitionStatusSnapshot({
+        partition: 'documents',
+        status: 'ready',
+        freshness: 'fresh',
+        provider: { modes: ['bad-mode'] },
       }),
     ).toBe(false);
   });

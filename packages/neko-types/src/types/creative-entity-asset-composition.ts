@@ -5,6 +5,8 @@
 // or external asset representations.
 // =============================================================================
 
+import type { ProjectIndexFreshness } from './project-cache-search';
+
 export type CreativeEntityKind = 'character' | 'scene' | 'object' | 'location' | 'style';
 
 export type CreativeEntityStatus = 'candidate' | 'confirmed' | 'deprecated';
@@ -32,6 +34,189 @@ export interface CreativeEntityRegistry {
     name: string,
     kind?: CreativeEntityKind,
   ): CreativeEntity | undefined | Promise<CreativeEntity | undefined>;
+}
+
+export interface CreativeEntityRef {
+  readonly entityId: string;
+  readonly entityKind: CreativeEntityKind;
+  readonly projectRoot?: string;
+  readonly source?: string;
+}
+
+export type CreativeEntitySourceKind =
+  | 'registry'
+  | 'candidate'
+  | 'story'
+  | 'canvas'
+  | 'asset'
+  | 'agent'
+  | 'document'
+  | 'importer'
+  | 'generated';
+
+export interface CreativeEntitySourceMetadata {
+  readonly sourceId: string;
+  readonly sourceKind: CreativeEntitySourceKind;
+  readonly sourceRef?: string;
+  readonly providerId?: string;
+  readonly freshness?: ProjectIndexFreshness;
+  readonly updatedAt?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export type CreativeEntityCandidateStatus =
+  | 'open'
+  | 'confirmed'
+  | 'rejected'
+  | 'dismissed'
+  | 'merged';
+
+export interface CreativeEntityCandidateProvenance {
+  readonly providerId: string;
+  readonly sourceKind: CreativeEntitySourceKind;
+  readonly sourceRef?: string;
+  readonly label?: string;
+  readonly confidence?: number;
+  readonly observedAt?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface CreativeEntityCandidate {
+  readonly id: string;
+  readonly kind: CreativeEntityKind;
+  readonly name: string;
+  readonly aliases?: readonly string[];
+  readonly status: CreativeEntityCandidateStatus;
+  readonly confidence?: number;
+  readonly provenance: readonly CreativeEntityCandidateProvenance[];
+  readonly sourceRefs: readonly string[];
+  readonly suggestedRequirements?: readonly EntityAssetRequirement[];
+  readonly resolvedEntityRef?: CreativeEntityRef;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface CreativeEntityCandidateFile {
+  readonly version: 1;
+  readonly candidates: readonly CreativeEntityCandidate[];
+}
+
+export type CreativeEntityLifecycleAction =
+  | 'create'
+  | 'confirm-candidate'
+  | 'reject-candidate'
+  | 'dismiss-candidate'
+  | 'merge-candidate'
+  | 'rename'
+  | 'update-display-name'
+  | 'add-alias'
+  | 'remove-alias'
+  | 'update-metadata'
+  | 'deprecate'
+  | 'reactivate'
+  | 'merge'
+  | 'bind'
+  | 'unbind'
+  | 'set-default-binding'
+  | 'update-requirement'
+  | 'update-visual-draft'
+  | 'apply-sync-suggestion'
+  | 'ignore-sync-suggestion';
+
+export interface CreativeEntityChangedRef {
+  readonly kind:
+    | 'entity'
+    | 'candidate'
+    | 'binding'
+    | 'requirement'
+    | 'visual-draft'
+    | 'provider'
+    | 'store';
+  readonly id: string;
+  readonly entityRef?: CreativeEntityRef;
+  readonly factRef?: string;
+}
+
+export interface CreativeEntityChangeEvent {
+  readonly projectRoot: string;
+  readonly reason: CreativeEntityLifecycleAction | 'provider-refresh' | 'store-refresh';
+  readonly changedRefs: readonly CreativeEntityChangedRef[];
+  readonly generation: number;
+  readonly freshness: ProjectIndexFreshness;
+  readonly updatedAt: string;
+  readonly source?: CreativeEntitySourceMetadata;
+}
+
+export interface CreativeEntityOperationResult {
+  readonly ok: boolean;
+  readonly action: CreativeEntityLifecycleAction;
+  readonly projectRoot: string;
+  readonly affectedEntityRefs: readonly CreativeEntityRef[];
+  readonly changedRefs: readonly CreativeEntityChangedRef[];
+  readonly generation: number;
+  readonly freshness: ProjectIndexFreshness;
+  readonly updatedAt: string;
+  readonly message?: string;
+}
+
+export interface CreativeEntityMergeResult extends CreativeEntityOperationResult {
+  readonly survivingEntityRef: CreativeEntityRef;
+  readonly mergedEntityRefs: readonly CreativeEntityRef[];
+}
+
+export interface ProjectCreativeEntityFile {
+  readonly version: 1;
+  readonly kind: Exclude<CreativeEntityKind, 'character'>;
+  readonly entities: readonly CreativeEntity[];
+}
+
+export interface CreativeEntityProviderStatus {
+  readonly providerId: string;
+  readonly sourceKind: CreativeEntitySourceKind;
+  readonly available: boolean;
+  readonly freshness: ProjectIndexFreshness;
+  readonly updatedAt?: string;
+  readonly error?: string;
+}
+
+export interface CreativeEntityOccurrenceProjection {
+  readonly entityRef?: CreativeEntityRef;
+  readonly candidateId?: string;
+  readonly label: string;
+  readonly source: CreativeEntitySourceMetadata;
+  readonly role: 'definition' | 'reference';
+  readonly location: string;
+  readonly detail?: string;
+}
+
+export interface CreativeEntityRelationshipProjection {
+  readonly from: CreativeEntityRef;
+  readonly to: CreativeEntityRef;
+  readonly type: string;
+  readonly strength?: string;
+  readonly source: CreativeEntitySourceMetadata;
+  readonly confidence?: number;
+}
+
+export interface CreativeEntityRepresentationHint {
+  readonly entityRef?: CreativeEntityRef;
+  readonly candidateId?: string;
+  readonly assetRef: string;
+  readonly roles: readonly EntityAssetBindingRole[];
+  readonly source: CreativeEntitySourceMetadata;
+  readonly confidence?: number;
+  readonly reason?: string;
+}
+
+export interface CreativeEntitySyncSuggestion {
+  readonly id: string;
+  readonly entityRef: CreativeEntityRef;
+  readonly targetRef: string;
+  readonly fields: readonly string[];
+  readonly reason: string;
+  readonly source: CreativeEntitySourceMetadata;
+  readonly readonlyTarget?: boolean;
 }
 
 export type EntityAssetBindingRole =
@@ -325,8 +510,71 @@ export const REPRESENTATION_FILE_ROLES: readonly RepresentationFileRole[] = [
   'source',
 ] as const;
 
+export const CREATIVE_ENTITY_SOURCE_KINDS: readonly CreativeEntitySourceKind[] = [
+  'registry',
+  'candidate',
+  'story',
+  'canvas',
+  'asset',
+  'agent',
+  'document',
+  'importer',
+  'generated',
+] as const;
+
+export const CREATIVE_ENTITY_CANDIDATE_STATUSES: readonly CreativeEntityCandidateStatus[] = [
+  'open',
+  'confirmed',
+  'rejected',
+  'dismissed',
+  'merged',
+] as const;
+
+export const CREATIVE_ENTITY_LIFECYCLE_ACTIONS: readonly CreativeEntityLifecycleAction[] = [
+  'create',
+  'confirm-candidate',
+  'reject-candidate',
+  'dismiss-candidate',
+  'merge-candidate',
+  'rename',
+  'update-display-name',
+  'add-alias',
+  'remove-alias',
+  'update-metadata',
+  'deprecate',
+  'reactivate',
+  'merge',
+  'bind',
+  'unbind',
+  'set-default-binding',
+  'update-requirement',
+  'update-visual-draft',
+  'apply-sync-suggestion',
+  'ignore-sync-suggestion',
+] as const;
+
 export function isCreativeEntityKind(value: unknown): value is CreativeEntityKind {
   return includesString(CREATIVE_ENTITY_KINDS, value);
+}
+
+export function isCreativeEntityStatus(value: unknown): value is CreativeEntityStatus {
+  return value === 'candidate' || value === 'confirmed' || value === 'deprecated';
+}
+
+export function isCreativeEntitySourceKind(value: unknown): value is CreativeEntitySourceKind {
+  return includesString(CREATIVE_ENTITY_SOURCE_KINDS, value);
+}
+
+export function isCreativeEntityCandidateStatus(
+  value: unknown,
+): value is CreativeEntityCandidateStatus {
+  return includesString(CREATIVE_ENTITY_CANDIDATE_STATUSES, value);
+}
+
+export function isCreativeEntityLifecycleAction(
+  value: unknown,
+): value is CreativeEntityLifecycleAction {
+  return includesString(CREATIVE_ENTITY_LIFECYCLE_ACTIONS, value);
 }
 
 export function isRepresentationKind(value: unknown): value is RepresentationKind {
@@ -343,6 +591,164 @@ export function isEntityAssetBindingRole(value: unknown): value is EntityAssetBi
 
 export function isRepresentationFileRole(value: unknown): value is RepresentationFileRole {
   return includesString(REPRESENTATION_FILE_ROLES, value);
+}
+
+export function isCreativeEntity(value: unknown): value is CreativeEntity {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['id'] === 'string' &&
+    isCreativeEntityKind(value['kind']) &&
+    typeof value['canonicalName'] === 'string' &&
+    (value['displayName'] === undefined || typeof value['displayName'] === 'string') &&
+    Array.isArray(value['aliases']) &&
+    value['aliases'].every((alias) => typeof alias === 'string') &&
+    isCreativeEntityStatus(value['status']) &&
+    (value['metadata'] === undefined || isRecord(value['metadata']))
+  );
+}
+
+export function isCreativeEntityRef(value: unknown): value is CreativeEntityRef {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['entityId'] === 'string' &&
+    isCreativeEntityKind(value['entityKind']) &&
+    (value['projectRoot'] === undefined || typeof value['projectRoot'] === 'string') &&
+    (value['source'] === undefined || typeof value['source'] === 'string')
+  );
+}
+
+export function isCreativeEntitySourceMetadata(
+  value: unknown,
+): value is CreativeEntitySourceMetadata {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['sourceId'] === 'string' &&
+    isCreativeEntitySourceKind(value['sourceKind']) &&
+    (value['sourceRef'] === undefined || typeof value['sourceRef'] === 'string') &&
+    (value['providerId'] === undefined || typeof value['providerId'] === 'string') &&
+    (value['freshness'] === undefined || isProjectIndexFreshnessValue(value['freshness'])) &&
+    (value['updatedAt'] === undefined || typeof value['updatedAt'] === 'string') &&
+    (value['metadata'] === undefined || isRecord(value['metadata']))
+  );
+}
+
+export function isCreativeEntityCandidateProvenance(
+  value: unknown,
+): value is CreativeEntityCandidateProvenance {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['providerId'] === 'string' &&
+    isCreativeEntitySourceKind(value['sourceKind']) &&
+    (value['sourceRef'] === undefined || typeof value['sourceRef'] === 'string') &&
+    (value['label'] === undefined || typeof value['label'] === 'string') &&
+    (value['confidence'] === undefined || isConfidence(value['confidence'])) &&
+    (value['observedAt'] === undefined || typeof value['observedAt'] === 'string') &&
+    (value['metadata'] === undefined || isRecord(value['metadata']))
+  );
+}
+
+export function isCreativeEntityCandidate(value: unknown): value is CreativeEntityCandidate {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['id'] === 'string' &&
+    isCreativeEntityKind(value['kind']) &&
+    typeof value['name'] === 'string' &&
+    isCreativeEntityCandidateStatus(value['status']) &&
+    (value['confidence'] === undefined || isConfidence(value['confidence'])) &&
+    (value['aliases'] === undefined ||
+      (Array.isArray(value['aliases']) &&
+        value['aliases'].every((alias) => typeof alias === 'string'))) &&
+    Array.isArray(value['provenance']) &&
+    value['provenance'].every((item) => isCreativeEntityCandidateProvenance(item)) &&
+    Array.isArray(value['sourceRefs']) &&
+    value['sourceRefs'].every((item) => typeof item === 'string') &&
+    (value['suggestedRequirements'] === undefined ||
+      (Array.isArray(value['suggestedRequirements']) &&
+        value['suggestedRequirements'].every((item) => isEntityAssetRequirement(item)))) &&
+    (value['resolvedEntityRef'] === undefined || isCreativeEntityRef(value['resolvedEntityRef'])) &&
+    (value['createdAt'] === undefined || typeof value['createdAt'] === 'string') &&
+    (value['updatedAt'] === undefined || typeof value['updatedAt'] === 'string') &&
+    (value['metadata'] === undefined || isRecord(value['metadata']))
+  );
+}
+
+export function isCreativeEntityCandidateFile(
+  value: unknown,
+): value is CreativeEntityCandidateFile {
+  if (!isRecord(value)) return false;
+  return (
+    value['version'] === 1 &&
+    Array.isArray(value['candidates']) &&
+    value['candidates'].every((candidate) => isCreativeEntityCandidate(candidate))
+  );
+}
+
+export function isProjectCreativeEntityFile(value: unknown): value is ProjectCreativeEntityFile {
+  if (!isRecord(value)) return false;
+  return (
+    value['version'] === 1 &&
+    isCreativeEntityKind(value['kind']) &&
+    value['kind'] !== 'character' &&
+    Array.isArray(value['entities']) &&
+    value['entities'].every((entity) => isCreativeEntity(entity) && entity.kind === value['kind'])
+  );
+}
+
+export function isCreativeEntityChangedRef(value: unknown): value is CreativeEntityChangedRef {
+  if (!isRecord(value)) return false;
+  return (
+    isCreativeEntityChangedRefKind(value['kind']) &&
+    typeof value['id'] === 'string' &&
+    (value['entityRef'] === undefined || isCreativeEntityRef(value['entityRef'])) &&
+    (value['factRef'] === undefined || typeof value['factRef'] === 'string')
+  );
+}
+
+export function isCreativeEntityChangeEvent(value: unknown): value is CreativeEntityChangeEvent {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['projectRoot'] === 'string' &&
+    isCreativeEntityChangeReason(value['reason']) &&
+    Array.isArray(value['changedRefs']) &&
+    value['changedRefs'].every((ref) => isCreativeEntityChangedRef(ref)) &&
+    typeof value['generation'] === 'number' &&
+    isProjectIndexFreshnessValue(value['freshness']) &&
+    typeof value['updatedAt'] === 'string' &&
+    (value['source'] === undefined || isCreativeEntitySourceMetadata(value['source']))
+  );
+}
+
+export function isCreativeEntityOperationResult(
+  value: unknown,
+): value is CreativeEntityOperationResult {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['ok'] === 'boolean' &&
+    isCreativeEntityLifecycleAction(value['action']) &&
+    typeof value['projectRoot'] === 'string' &&
+    Array.isArray(value['affectedEntityRefs']) &&
+    value['affectedEntityRefs'].every((ref) => isCreativeEntityRef(ref)) &&
+    Array.isArray(value['changedRefs']) &&
+    value['changedRefs'].every((ref) => isCreativeEntityChangedRef(ref)) &&
+    typeof value['generation'] === 'number' &&
+    isProjectIndexFreshnessValue(value['freshness']) &&
+    typeof value['updatedAt'] === 'string' &&
+    (value['message'] === undefined || typeof value['message'] === 'string')
+  );
+}
+
+export function isCreativeEntityProviderStatus(
+  value: unknown,
+): value is CreativeEntityProviderStatus {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value['providerId'] === 'string' &&
+    isCreativeEntitySourceKind(value['sourceKind']) &&
+    typeof value['available'] === 'boolean' &&
+    isProjectIndexFreshnessValue(value['freshness']) &&
+    (value['updatedAt'] === undefined || typeof value['updatedAt'] === 'string') &&
+    (value['error'] === undefined || typeof value['error'] === 'string')
+  );
 }
 
 export function isEntityAssetBinding(value: unknown): value is EntityAssetBinding {
@@ -450,6 +856,42 @@ function isEntityAssetRequirementStatus(value: unknown): value is EntityAssetReq
     value === 'bound' ||
     value === 'dismissed'
   );
+}
+
+function isCreativeEntityChangedRefKind(value: unknown): value is CreativeEntityChangedRef['kind'] {
+  return (
+    value === 'entity' ||
+    value === 'candidate' ||
+    value === 'binding' ||
+    value === 'requirement' ||
+    value === 'visual-draft' ||
+    value === 'provider' ||
+    value === 'store'
+  );
+}
+
+function isCreativeEntityChangeReason(
+  value: unknown,
+): value is CreativeEntityChangeEvent['reason'] {
+  return (
+    isCreativeEntityLifecycleAction(value) ||
+    value === 'provider-refresh' ||
+    value === 'store-refresh'
+  );
+}
+
+function isProjectIndexFreshnessValue(value: unknown): value is ProjectIndexFreshness {
+  return (
+    value === 'fresh' ||
+    value === 'stale' ||
+    value === 'building' ||
+    value === 'partial' ||
+    value === 'failed'
+  );
+}
+
+function isConfidence(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
 function includesString<T extends string>(values: readonly T[], value: unknown): value is T {
