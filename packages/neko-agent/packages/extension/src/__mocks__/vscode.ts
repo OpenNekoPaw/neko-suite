@@ -42,6 +42,7 @@ export const env = {
 
 // window mock
 export const window = {
+  activeTextEditor: undefined as any,
   showInputBox: vi.fn().mockResolvedValue(undefined),
   showInformationMessage: vi.fn().mockResolvedValue(undefined),
   showWarningMessage: vi.fn().mockResolvedValue(undefined),
@@ -63,7 +64,20 @@ export const workspace = {
     readFile: vi.fn().mockResolvedValue(new Uint8Array()),
     stat: vi.fn().mockResolvedValue({ type: 1 }),
   },
+  onDidChangeTextDocument: vi.fn((_listener: (event: any) => void) => ({
+    dispose: vi.fn(),
+  })),
+  createFileSystemWatcher: vi.fn(() => ({
+    onDidCreate: vi.fn((_listener: (uri: any) => void) => ({ dispose: vi.fn() })),
+    onDidChange: vi.fn((_listener: (uri: any) => void) => ({ dispose: vi.fn() })),
+    onDidDelete: vi.fn((_listener: (uri: any) => void) => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
+  })),
   findFiles: vi.fn().mockResolvedValue([]),
+  getWorkspaceFolder: vi.fn((uri: { fsPath?: string }) => {
+    const filePath = uri.fsPath ?? '';
+    return workspace.workspaceFolders.find((folder) => filePath.startsWith(folder.uri.fsPath));
+  }),
   asRelativePath: vi.fn((uri: { fsPath: string } | string) =>
     typeof uri === 'string' ? uri : uri.fsPath,
   ),

@@ -50,6 +50,7 @@ import { createAgentCapabilityRuntimeRegistries } from '@neko/agent/runtime';
 import { bootstrapCapabilities } from './bootstrap/capabilityBootstrap';
 import { createStatusBar } from './statusBar';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
+import { registerProjectSearchService } from './services/projectSearch/commands';
 
 type SkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
 
@@ -197,6 +198,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
 
   // Register document/media context menu commands (explorer/context)
   registerDocumentContextCommands(context, chatViewProvider);
+
+  // Project cache/search service — host-side facade for Agent mention search.
+  registerProjectSearchService(context);
 
   // Listen for extension changes to update tools (register disposable + avoid duplicates)
   let bridgeMetaToolsRegistered = true; // Already registered above
