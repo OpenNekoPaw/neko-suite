@@ -169,7 +169,11 @@ export function getFilteredMentionItems(items: MentionItem[], filter: string): M
         !filter ||
         item.label.toLowerCase().includes(lc) ||
         (item.description ?? '').toLowerCase().includes(lc) ||
-        (item.filePath ?? '').toLowerCase().includes(lc),
+        (item.filePath ?? '').toLowerCase().includes(lc) ||
+        (item.entityType ?? '').toLowerCase().includes(lc) ||
+        (item.mediaType ?? '').toLowerCase().includes(lc) ||
+        (item.searchText ?? '').toLowerCase().includes(lc) ||
+        Object.values(item.navigationData ?? {}).some((value) => value.toLowerCase().includes(lc)),
     )
     .sort((a, b) => MENTION_KIND_ORDER.indexOf(a.kind) - MENTION_KIND_ORDER.indexOf(b.kind))
     .slice(0, 20);

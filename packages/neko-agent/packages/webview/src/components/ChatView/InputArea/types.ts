@@ -119,6 +119,8 @@ export interface MentionItem {
   entityType?: string;
   /** Host-side navigation metadata */
   navigationData?: Record<string, string>;
+  /** Host-provided normalized or expanded search text */
+  searchText?: string;
   /** For canvas-node / character / scene: payload for AgentContextChip */
   contextPayload?: import('@neko/shared').AgentContextPayload;
   /** Optional thumbnail for visual enrichment (webview-safe URI or base64) */

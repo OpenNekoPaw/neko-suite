@@ -218,6 +218,16 @@ export function projectProjectFilesMessage(message: ProjectFilesMessage): Projec
       ...(extra.entityType ? { entityType: extra.entityType } : {}),
       ...(extra.navigationData ? { navigationData: extra.navigationData } : {}),
       ...(extra.thumbnailUri ? { thumbnailUri: extra.thumbnailUri } : {}),
+      searchText: [
+        extra.label,
+        extra.summary,
+        extra.filePath,
+        extra.mediaType,
+        extra.entityType,
+        ...(extra.navigationData ? Object.values(extra.navigationData) : []),
+      ]
+        .filter(Boolean)
+        .join(' '),
     }));
 
   return {

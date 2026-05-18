@@ -92,6 +92,7 @@ export interface ProjectMentionItem {
   mediaType?: ProjectMentionMediaType;
   entityType?: string;
   navigationData?: Record<string, string>;
+  searchText?: string;
   thumbnailUri?: string;
   contextPayload?: AgentContextPayload;
 }

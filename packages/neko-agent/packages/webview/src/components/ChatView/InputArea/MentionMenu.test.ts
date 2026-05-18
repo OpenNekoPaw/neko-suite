@@ -38,4 +38,26 @@ describe('MentionMenu icon projection', () => {
       ).map((item) => item.kind),
     ).toEqual(['file', 'asset', 'scene']);
   });
+
+  it('filters by host-provided search text and navigation metadata', () => {
+    expect(
+      getFilteredMentionItems(
+        [
+          mention({
+            id: 'asset',
+            kind: 'asset',
+            label: 'Portrait',
+            searchText: '小橘 alias',
+          }),
+          mention({
+            id: 'entity',
+            kind: 'entity',
+            label: 'Requirement',
+            navigationData: { entityId: '小灰' },
+          }),
+        ],
+        '小灰',
+      ).map((item) => item.id),
+    ).toEqual(['entity']);
+  });
 });

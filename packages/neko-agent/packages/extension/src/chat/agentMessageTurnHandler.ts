@@ -282,7 +282,7 @@ export class AgentMessageTurnHandler {
       conversationId,
       filter,
       searchProjectFiles: searchVSCodeProjectFiles,
-      getMentionCandidates: (plan) => searchProjectMentionCandidates(plan, { webview }),
+      getMentionCandidates: (plan) => searchProjectMentionCandidates(plan),
       getCanvasNodes: (id) => getCanvasSelection(id),
       getCharacters: async () => {
         try {

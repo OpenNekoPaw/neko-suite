@@ -161,6 +161,7 @@ describe('config message presenter', () => {
             },
           },
           source: 'story',
+          searchText: 'Hero Main character',
         },
         {
           id: 'asset:asset-1',
@@ -190,6 +191,7 @@ describe('config message presenter', () => {
           mediaType: 'image',
           entityType: 'character',
           navigationData: { assetId: 'asset-1' },
+          searchText: 'Hero portrait Asset: Hero portrait assets/hero.png image character asset-1',
         },
       ],
     });
