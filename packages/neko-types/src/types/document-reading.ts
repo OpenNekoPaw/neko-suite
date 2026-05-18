@@ -107,10 +107,20 @@ export interface DocumentRange {
 
 export type DocumentContentKind = 'text' | 'image' | 'mixed';
 
+export interface DocumentImageInfo {
+  readonly path: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly mimeType?: string;
+  readonly byteSize?: number;
+  readonly locator?: DocumentLocator;
+}
+
 export interface DocumentExcerpt {
   readonly text?: string;
   readonly imageData?: string;
   readonly imagePaths?: readonly string[];
+  readonly imageInfo?: readonly DocumentImageInfo[];
   readonly contentKind: DocumentContentKind;
   readonly truncated?: boolean;
 }
@@ -180,6 +190,7 @@ export interface DocumentReadResult {
   readonly locator?: DocumentLocator;
   readonly text?: string;
   readonly imagePaths?: readonly string[];
+  readonly imageInfo?: readonly DocumentImageInfo[];
   readonly excerpt?: DocumentExcerpt;
   readonly manifest?: DocumentManifest;
   readonly cursor?: DocumentBatchCursor;

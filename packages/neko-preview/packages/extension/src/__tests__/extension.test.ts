@@ -320,6 +320,32 @@ describe('extension', () => {
       expect(api.port).toBe(9090);
     });
 
+    it('should fall back to default open for CBR document locator reveals', async () => {
+      const context = createMockContext();
+      await activate(context);
+      vi.mocked(vscode.commands.executeCommand).mockClear();
+      const revealCommand = vi
+        .mocked(vscode.commands.registerCommand)
+        .mock.calls.find(([command]) => command === 'neko.preview.revealDocumentLocator');
+      const revealHandler = revealCommand?.[1];
+
+      await revealHandler?.({
+        filePath: '/books/archive.cbr',
+        source: { filePath: '/books/archive.cbr', format: 'cbr' },
+        locator: { kind: 'page', pageNumber: 1, pageIndex: 0 },
+      });
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'vscode.open',
+        expect.objectContaining({ fsPath: '/books/archive.cbr' }),
+      );
+      expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+        'vscode.openWith',
+        expect.anything(),
+        'neko.cbzPreview',
+      );
+    });
+
     it('should handle PreviewService creation failure gracefully', async () => {
       vi.mocked(PreviewService.tryCreate).mockResolvedValueOnce(null);
 

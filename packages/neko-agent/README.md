@@ -181,12 +181,14 @@ NekoAgent 支持读取多种文档格式用于 AI 内容分析和视频生成工
 
 | 类型 | 格式 | 说明 |
 |------|------|------|
-| **文本文档** | PDF, DOCX, MD, TXT, Fountain, HTML, JSON, YAML | 提取纯文本内容 |
-| **电子书** | EPUB | 提取所有章节文本 + 元数据 |
-| **漫画档案** | CBZ, CBR | 提取图片页面供 AI 视觉分析 |
+| **文本文档** | PDF, DOC/DOCX, MD, TXT, Fountain, HTML, JSON, YAML | 提取文本和结构信息 |
+| **电子书** | EPUB | 提取章节文本；图像型 EPUB 返回页面图片路径和图片元数据 |
+| **漫画档案** | CBZ, CBR | 提取图片页面及宽高/MIME/大小信息供 AI 视觉分析 |
 | **网页内容** | URL (HTTP/HTTPS) | 抓取网页主要内容 |
-| **电子表格** | Excel (XLSX, XLS) | 批量数据处理 |
+| **演示/表格** | PPT/PPTX, XLS/XLSX | 读取文本/表格数据，提取内嵌图片 |
 | **专业剧本** | Final Draft (FDX) | 影视行业标准格式 |
+
+解析由扩展内部库完成，不要求创作者安装 Python、unzip、unrar 等外部命令行工具。图片页基础元数据通过 `ReadDocument.imageInfo` 返回，Skill 不应再调用外部命令探测尺寸。
 
 ### 法律声明
 

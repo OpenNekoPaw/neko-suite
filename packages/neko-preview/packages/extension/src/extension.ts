@@ -37,6 +37,7 @@ import { PreviewService } from './services/PreviewService';
 import { StatusBarManager } from './ui/StatusBarManager';
 import type { NekoPreviewAPI } from './types/api';
 import { OPEN_PANORAMIC_IMAGE_COMMAND, OPEN_PANORAMIC_VIDEO_COMMAND } from './types/panoramic-api';
+import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import {
   createVSCodeLogger,
   VSCodeErrorHandler,
@@ -62,6 +63,12 @@ let epubProvider: EpubPreviewProvider | null = null;
 let docxProvider: DocxPreviewProvider | null = null;
 let statusBarManager: StatusBarManager | null = null;
 let sharedPreviewService: PreviewService | null = null;
+
+interface RevealDocumentLocatorInput {
+  readonly filePath: string;
+  readonly locator: DocumentLocator;
+  readonly source?: DocumentSourceRef;
+}
 
 // =============================================================================
 // Activation
@@ -284,6 +291,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   cbzProvider = new CbzPreviewProvider(context.extensionUri, statusBarManager, context);
   epubProvider = new EpubPreviewProvider(context.extensionUri, statusBarManager, context);
   docxProvider = new DocxPreviewProvider(context.extensionUri, statusBarManager, context);
+  const activeEpubProvider = epubProvider;
 
   // Register document custom editors
   context.subscriptions.push(
@@ -341,6 +349,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
       'Word Files': ['docx', 'doc'],
     },
     'Open DOCX Preview',
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.preview.revealDocumentLocator',
+      async (input?: RevealDocumentLocatorInput) => {
+        if (!input?.filePath || !input.locator) {
+          return;
+        }
+        await revealDocumentLocator(input);
+      },
+    ),
+    vscode.commands.registerCommand(
+      'neko.preview.navigateDocument',
+      async (uri?: vscode.Uri, locator?: DocumentLocator) => {
+        if (!uri || !locator) return;
+        navigateOpenDocumentPreview(uri, locator);
+      },
+    ),
   );
 
   // Register document providers for disposal
@@ -409,7 +436,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
       try {
         const toc = await epubSymbolProvider.getToc(uri.fsPath);
         epubOutlineProvider.update(toc);
-        await syncEpubOutlineLocation(epubProvider.getActiveLocation());
+        await syncEpubOutlineLocation(activeEpubProvider.getActiveLocation());
       } catch (err) {
         logger.warn(
           `Failed to parse EPUB TOC: ${err instanceof Error ? err.message : String(err)}`,
@@ -425,36 +452,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
 
   // Listen for EPUB custom editor activation/deactivation
   context.subscriptions.push(
-    epubProvider.onDidChangeActiveEpub((uri) => {
+    activeEpubProvider.onDidChangeActiveEpub((uri) => {
       void refreshEpubOutline(uri);
     }),
   );
   context.subscriptions.push(
-    epubProvider.onDidChangeActiveLocation((location) => {
+    activeEpubProvider.onDidChangeActiveLocation((location) => {
       void syncEpubOutlineLocation(location);
     }),
   );
   context.subscriptions.push(
     epubOutlineView.onDidChangeVisibility(() => {
       if (!epubOutlineView.visible) return;
-      void syncEpubOutlineLocation(epubProvider.getActiveLocation(), { forceReveal: true });
+      void syncEpubOutlineLocation(activeEpubProvider.getActiveLocation(), { forceReveal: true });
     }),
   );
 
   // Initial outline state: check if an EPUB is already open
-  void refreshEpubOutline(epubProvider.getActiveUri());
+  void refreshEpubOutline(activeEpubProvider.getActiveUri());
 
   // goToChapter command — accepts optional href arg (from TreeView command)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.epub.goToChapter', async (href?: string) => {
       // When invoked from TreeView, href is provided directly
       if (typeof href === 'string') {
-        epubProvider.navigateToChapter(href);
+        activeEpubProvider.navigateToChapter(href);
         return;
       }
 
       // When invoked from command palette, show QuickPick
-      const activeUri = epubProvider.getActiveUri();
+      const activeUri = activeEpubProvider.getActiveUri();
       if (!activeUri) {
         vscode.window.showInformationMessage('No EPUB file is currently open.');
         return;
@@ -474,7 +501,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
         matchOnDescription: true,
       });
       if (picked) {
-        epubProvider.navigateToChapter(picked.href);
+        activeEpubProvider.navigateToChapter(picked.href);
       }
     }),
   );
@@ -570,6 +597,75 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPr
   };
 
   return api;
+}
+
+async function revealDocumentLocator(input: RevealDocumentLocatorInput): Promise<void> {
+  const uri = vscode.Uri.file(input.filePath);
+  const viewType = getDocumentViewType(input.source?.format ?? input.filePath);
+  if (!viewType) {
+    await vscode.commands.executeCommand('vscode.open', uri);
+    return;
+  }
+
+  await vscode.commands.executeCommand('vscode.openWith', uri, viewType);
+
+  if (input.locator.kind === 'chapter' && viewType === EpubPreviewProvider.viewType) {
+    scheduleEpubChapterNavigation(input.locator.chapterHref, uri);
+    return;
+  }
+
+  await vscode.commands.executeCommand('neko.preview.navigateDocument', uri, input.locator);
+}
+
+function scheduleEpubChapterNavigation(href: string, uri: vscode.Uri): void {
+  retryPreviewNavigation(() => epubProvider?.navigateToChapter(href, uri) ?? false);
+}
+
+function navigateOpenDocumentPreview(uri: vscode.Uri, locator: DocumentLocator): void {
+  const pageNumber =
+    locator.kind === 'region' ? locator.pageNumber : readLocatorPageNumber(locator);
+  if (pageNumber === undefined) return;
+
+  retryPreviewNavigation(() => {
+    if (uri.fsPath.endsWith('.pdf')) {
+      return pdfProvider?.navigateToPage(pageNumber, uri) ?? false;
+    }
+    if (uri.fsPath.endsWith('.cbz')) {
+      return cbzProvider?.navigateToPage(pageNumber, uri) ?? false;
+    }
+    if (uri.fsPath.endsWith('.epub')) {
+      return epubProvider?.navigateToPage(pageNumber, uri) ?? false;
+    }
+    return false;
+  });
+}
+
+function retryPreviewNavigation(navigate: () => boolean, attemptsLeft = 10): void {
+  if (navigate() || attemptsLeft <= 1) return;
+  setTimeout(() => retryPreviewNavigation(navigate, attemptsLeft - 1), 80);
+}
+
+function readLocatorPageNumber(locator: DocumentLocator): number | undefined {
+  return locator.kind === 'page' ? locator.pageNumber : undefined;
+}
+
+function getDocumentViewType(formatOrPath: string): string | null {
+  const format = formatOrPath.includes('.')
+    ? formatOrPath.split('.').pop()?.toLowerCase()
+    : formatOrPath.toLowerCase();
+  switch (format) {
+    case 'pdf':
+      return PdfPreviewProvider.viewType;
+    case 'cbz':
+      return CbzPreviewProvider.viewType;
+    case 'epub':
+      return EpubPreviewProvider.viewType;
+    case 'doc':
+    case 'docx':
+      return DocxPreviewProvider.viewType;
+    default:
+      return null;
+  }
 }
 
 // =============================================================================

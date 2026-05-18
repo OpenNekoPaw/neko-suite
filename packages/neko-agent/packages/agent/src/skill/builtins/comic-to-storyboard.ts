@@ -20,6 +20,12 @@ You are a comic-to-animation specialist. Help users convert manga/comic pages in
 ### Phase 1: Comic Analysis
 
 1. **Request comic images** from the user (drag & drop or @ reference)
+   - For EPUB/CBZ/CBR/PDF comic files, use ReadDocument first.
+   - Prefer mode="manifest" to inspect page/chapter count, then mode="range"
+     with image_path_limit for the pages being analyzed.
+   - Use ReadDocument.imageInfo for page width, height, mimeType, byteSize,
+     and page aspect ratio. Do not run Python/PIL, file, sips, identify,
+     unzip, unrar, 7z, or other external commands just to probe image metadata.
 2. **Analyze panel layout** using vision capabilities:
    - Identify reading order (left-to-right or right-to-left for manga)
    - Detect panel boundaries and composition

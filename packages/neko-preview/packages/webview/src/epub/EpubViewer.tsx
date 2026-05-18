@@ -188,6 +188,7 @@ export const EpubViewer: FC = () => {
   const renditionRef = useRef<Rendition | null>(null);
   const tocRef = useRef<TocItem[]>([]);
   const loadingRef = useRef(false);
+  const pendingHrefRef = useRef<string | null>(null);
 
   // Waterfall mode refs
   const waterfallContainerRef = useRef<HTMLDivElement>(null);
@@ -330,7 +331,9 @@ export const EpubViewer: FC = () => {
     };
 
     const images = Array.from(root.querySelectorAll('img'));
-    const stylesheets = Array.from(root.querySelectorAll('link[rel="stylesheet"]'));
+    const stylesheets = Array.from(
+      root.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+    );
 
     await Promise.all([
       ...images.map((img) => waitForLoad(img, () => img.complete)),
@@ -511,6 +514,30 @@ export const EpubViewer: FC = () => {
       }
     } else if (msg.type === 'epub:navigate') {
       const href = (msg as { type: string; payload: { href: string } }).payload.href;
+      if (loadingRef.current) {
+        pendingHrefRef.current = href;
+        return;
+      }
+      if (viewMode === 'waterfall') {
+        void navigateWaterfallToHref(href);
+      } else {
+        renditionRef.current?.display(href);
+      }
+    } else if (msg.type === 'document:navigate') {
+      const locator = msg.payload.locator;
+      const href =
+        locator.kind === 'chapter'
+          ? locator.chapterHref
+          : locator.kind === 'page'
+            ? spineEntriesRef.current[locator.pageNumber - 1]?.href
+            : locator.kind === 'region'
+              ? spineEntriesRef.current[locator.pageNumber - 1]?.href
+              : undefined;
+      if (!href) return;
+      if (loadingRef.current) {
+        pendingHrefRef.current = href;
+        return;
+      }
       if (viewMode === 'waterfall') {
         void navigateWaterfallToHref(href);
       } else {
@@ -747,6 +774,19 @@ export const EpubViewer: FC = () => {
 
   /** Navigate to persisted chapter after load */
   const restoreChapter = () => {
+    const pendingHref = pendingHrefRef.current;
+    if (pendingHref) {
+      pendingHrefRef.current = null;
+      requestAnimationFrame(() => {
+        if (viewMode === 'waterfall') {
+          void navigateWaterfallToHref(pendingHref);
+        } else {
+          renditionRef.current?.display(pendingHref);
+        }
+      });
+      return;
+    }
+
     const savedHref = persistedChapterHrefRef.current;
     const fallbackLabel = persistedChapterRef.current;
     const toc = savedHref
@@ -774,7 +814,14 @@ export const EpubViewer: FC = () => {
         setError(null);
         // Use custom requestMethod with fetch instead of epub.js's default XMLHttpRequest.
         // VSCode webview service worker can interfere with XHR to localhost.
-        const book = ePub(url, { requestMethod: fetchForEpub });
+        const book = ePub(url, {
+          requestMethod: fetchForEpub as (
+            url: string,
+            type: string,
+            withCredentials: object,
+            headers: object,
+          ) => Promise<object>,
+        });
         bookRef.current = book;
         await initBook(book);
         setLoading(false);

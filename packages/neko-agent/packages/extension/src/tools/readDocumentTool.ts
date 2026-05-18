@@ -2,8 +2,11 @@ import { TOOL_NAMES_SYSTEM, createTool, type Tool, type ToolResult } from '@neko
 import { isDocumentUrl } from '@neko/platform/document';
 import type {
   DocumentBatchCursor,
+  DocumentImageInfo,
   DocumentLocator,
+  DocumentManifest,
   DocumentRange,
+  DocumentReadResult,
   DocumentRegion,
   DocumentSourceRef,
 } from '@neko/shared';
@@ -27,6 +30,7 @@ interface ReadDocumentToolData {
   readonly pageCount?: number;
   readonly metadata?: Record<string, unknown>;
   readonly imagePaths?: readonly string[];
+  readonly imageInfo?: readonly DocumentImageInfo[];
   readonly imagePathCount?: number;
   readonly imagePathsTruncated?: boolean;
 }
@@ -111,7 +115,7 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
         include_image_paths: {
           type: 'boolean',
           description:
-            'Whether to include extracted image page paths when the reader produces them, e.g. CBZ/CBR pages. Default true.',
+            'Whether to include extracted image page paths and matching image metadata when the reader produces them. Default true.',
         },
         image_path_limit: {
           type: 'integer',
@@ -172,20 +176,29 @@ async function executeReadDocument(
     }
 
     if (mode === 'range') {
-      const range = readDocumentRange(args['range']);
+      const range =
+        args['range'] === undefined
+          ? createDefaultRangeFromManifest(await reader.getManifest(source), imagePathLimit)
+          : readDocumentRange(args['range']);
       if (!range) {
         return { success: false, error: 'Missing or invalid required field for range mode: range' };
       }
       return {
         success: true,
-        data: await reader.readRange(source, {
-          ...range,
-          limit: {
-            ...range.limit,
-            maxChars,
-            maxImages: imagePathLimit,
+        data: formatDocumentReadResult(
+          await reader.readRange(source, {
+            ...range,
+            limit: {
+              ...range.limit,
+              maxChars,
+              maxImages: imagePathLimit,
+            },
+          }),
+          {
+            includeImagePaths,
+            imagePathLimit,
           },
-        }),
+        ),
       };
     }
 
@@ -194,7 +207,13 @@ async function executeReadDocument(
       if (!cursor) {
         return { success: false, error: 'Missing or invalid required field for next mode: cursor' };
       }
-      return { success: true, data: await reader.readNext(cursor) };
+      return {
+        success: true,
+        data: formatDocumentReadResult(await reader.readNext(cursor), {
+          includeImagePaths,
+          imagePathLimit,
+        }),
+      };
     }
 
     const content = await reader.read(filePath);
@@ -217,6 +236,110 @@ async function executeReadDocument(
   }
 }
 
+function formatDocumentReadResult(
+  result: DocumentReadResult,
+  options: {
+    readonly includeImagePaths: boolean;
+    readonly imagePathLimit: number;
+  },
+): DocumentReadResult {
+  const imagePaths = result.imagePaths ?? [];
+  if (imagePaths.length === 0) {
+    return result;
+  }
+
+  const visibleImagePaths = options.includeImagePaths
+    ? imagePaths.slice(0, options.imagePathLimit)
+    : [];
+  const visibleImageInfo = filterImageInfoByVisiblePaths(
+    result.imageInfo,
+    visibleImagePaths,
+    options.imagePathLimit,
+  );
+
+  return {
+    ...result,
+    imagePaths: visibleImagePaths,
+    imageInfo: visibleImageInfo,
+    excerpt: result.excerpt
+      ? {
+          ...result.excerpt,
+          imagePaths: visibleImagePaths,
+          imageInfo: visibleImageInfo,
+        }
+      : result.excerpt,
+    metadata: {
+      ...result.metadata,
+      imagePathCount: imagePaths.length,
+      imagePathsTruncated: visibleImagePaths.length < imagePaths.length,
+    },
+  };
+}
+
+function filterImageInfoByVisiblePaths(
+  imageInfo: readonly DocumentImageInfo[] | undefined,
+  visibleImagePaths: readonly string[],
+  imagePathLimit: number,
+): readonly DocumentImageInfo[] {
+  if (!imageInfo || imageInfo.length === 0 || visibleImagePaths.length === 0) {
+    return [];
+  }
+  const visiblePathSet = new Set(visibleImagePaths);
+  const byPath = imageInfo.filter((image) => visiblePathSet.has(image.path));
+  return byPath.length > 0
+    ? byPath.slice(0, visibleImagePaths.length)
+    : imageInfo.slice(0, Math.min(imagePathLimit, visibleImagePaths.length));
+}
+
+function createDefaultRangeFromManifest(
+  manifest: DocumentManifest,
+  imagePathLimit: number,
+): DocumentRange | null {
+  const firstUnit = manifest.units[0];
+  if (!firstUnit) {
+    return null;
+  }
+
+  const boundedUnitCount = Math.max(1, Math.min(imagePathLimit, manifest.units.length));
+  const endUnit = manifest.units[boundedUnitCount - 1];
+  const endLocator =
+    endUnit && sameDocumentLocatorKind(firstUnit.locator, endUnit.locator)
+      ? endUnit.locator
+      : undefined;
+
+  return {
+    locator: firstUnit.locator,
+    ...(endLocator && !sameDocumentLocator(firstUnit.locator, endLocator) ? { endLocator } : {}),
+  };
+}
+
+function sameDocumentLocatorKind(left: DocumentLocator, right: DocumentLocator): boolean {
+  return left.kind === right.kind;
+}
+
+function sameDocumentLocator(left: DocumentLocator, right: DocumentLocator): boolean {
+  if (left.kind !== right.kind) return false;
+  switch (left.kind) {
+    case 'page':
+      return right.kind === 'page' && left.pageIndex === right.pageIndex;
+    case 'chapter':
+      return right.kind === 'chapter' && left.chapterHref === right.chapterHref;
+    case 'slide':
+      return right.kind === 'slide' && left.slideIndex === right.slideIndex;
+    case 'text-range':
+      return (
+        right.kind === 'text-range' &&
+        left.startChar === right.startChar &&
+        left.endChar === right.endChar &&
+        left.startLine === right.startLine &&
+        left.endLine === right.endLine
+      );
+    case 'region':
+      return right.kind === 'region' && left.pageNumber === right.pageNumber;
+  }
+  return false;
+}
+
 function formatReadDocumentData(input: {
   readonly content: DocumentContent;
   readonly filePath: string;
@@ -232,6 +355,11 @@ function formatReadDocumentData(input: {
     input.includeImagePaths && imagePaths.length > 0
       ? imagePaths.slice(0, input.imagePathLimit)
       : [];
+  const visibleImageInfo = filterImageInfoByVisiblePaths(
+    input.content.imageInfo,
+    visibleImagePaths,
+    input.imagePathLimit,
+  );
 
   return {
     filePath: input.filePath,
@@ -246,6 +374,7 @@ function formatReadDocumentData(input: {
     ...(imagePaths.length > 0
       ? {
           imagePaths: visibleImagePaths,
+          ...(visibleImageInfo.length > 0 ? { imageInfo: visibleImageInfo } : {}),
           imagePathCount: imagePaths.length,
           imagePathsTruncated: visibleImagePaths.length < imagePaths.length,
         }
@@ -312,6 +441,25 @@ function readDocumentSource(value: unknown): DocumentSourceRef | null {
 function readDocumentRange(value: unknown): DocumentRange | null {
   if (!isRecord(value)) {
     return null;
+  }
+
+  if (value['kind'] === 'chapterRange') {
+    const start = readDocumentLocator(value['start']);
+    const end = readDocumentLocator(value['end']);
+    if (!start || start.kind !== 'chapter' || !end || end.kind !== 'chapter') {
+      return null;
+    }
+
+    const limit = readDocumentLimit(value['limit']);
+    if (limit === null) {
+      return null;
+    }
+
+    return {
+      locator: start,
+      endLocator: end,
+      ...(limit ? { limit } : {}),
+    };
   }
 
   const locator = readDocumentLocator(value['locator']);

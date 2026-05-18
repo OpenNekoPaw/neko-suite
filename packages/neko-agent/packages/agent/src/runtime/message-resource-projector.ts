@@ -22,6 +22,8 @@ const MEDIA_FILE_EXTENSIONS = [
 ] as const;
 
 const SINGLE_URL_KEYS = new Set(['url', 'thumbnailUrl', 'imageUrl', 'videoUrl', 'audioUrl']);
+const LOCAL_MEDIA_PATH_KEYS = new Set(['path']);
+const LOCAL_MEDIA_PATH_ARRAY_KEYS = new Set(['imagePaths']);
 
 export interface MessageResourceProjectionOptions {
   resolveLocalMediaPath?: (path: string) => string | undefined;
@@ -180,6 +182,30 @@ function projectResourceValueInternal(
   for (const [key, item] of Object.entries(value)) {
     if (key === 'localPath' || key === 'localPaths') {
       projected[key] = item;
+      continue;
+    }
+
+    if (LOCAL_MEDIA_PATH_KEYS.has(key) && typeof item === 'string' && isLocalMediaFilePath(item)) {
+      projected[key] = item;
+      if (!projected['webviewUri']) {
+        projected['webviewUri'] = resolveLocalMediaPath(item, options);
+      }
+      continue;
+    }
+
+    if (LOCAL_MEDIA_PATH_ARRAY_KEYS.has(key) && Array.isArray(item)) {
+      let hasLocalMediaPath = false;
+      const webviewUris = item.map((path) => {
+        if (typeof path === 'string' && isLocalMediaFilePath(path)) {
+          hasLocalMediaPath = true;
+          return resolveLocalMediaPath(path, options);
+        }
+        return path;
+      });
+      projected[key] = [...item];
+      if (hasLocalMediaPath && !projected[`${key.slice(0, -1)}WebviewUris`]) {
+        projected[`${key.slice(0, -1)}WebviewUris`] = webviewUris;
+      }
       continue;
     }
 

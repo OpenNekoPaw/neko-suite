@@ -403,6 +403,38 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
+  it('parses document locator reveal messages', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'revealDocumentLocator',
+        filePath: '/books/a.epub',
+        source: { filePath: '/books/a.epub', format: 'epub' },
+        locator: {
+          kind: 'chapter',
+          chapterHref: 'Page_1',
+          spineIndex: 1,
+        },
+      }),
+    ).toEqual({
+      type: 'revealDocumentLocator',
+      filePath: '/books/a.epub',
+      source: { filePath: '/books/a.epub', format: 'epub' },
+      locator: {
+        kind: 'chapter',
+        chapterHref: 'Page_1',
+        spineIndex: 1,
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'revealDocumentLocator',
+        filePath: '/books/a.epub',
+        locator: { kind: 'chapter' },
+      }),
+    ).toBeNull();
+  });
+
   it('parses structured send-to-plugin payloads', () => {
     expect(
       parseWebviewToExtensionMessage({

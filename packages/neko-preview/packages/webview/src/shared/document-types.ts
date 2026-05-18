@@ -31,6 +31,11 @@ export interface DocumentRestoreStateMessage {
   payload: Record<string, unknown>;
 }
 
+export interface DocumentNavigateMessage {
+  type: 'document:navigate';
+  payload: { locator: DocumentLocator };
+}
+
 export interface EpubNavigateMessage {
   type: 'epub:navigate';
   payload: { href: string };
@@ -39,6 +44,7 @@ export interface EpubNavigateMessage {
 export type DocumentExtensionMessage =
   | DocumentDataMessage
   | DocumentRestoreStateMessage
+  | DocumentNavigateMessage
   | EpubNavigateMessage;
 
 // =============================================================================

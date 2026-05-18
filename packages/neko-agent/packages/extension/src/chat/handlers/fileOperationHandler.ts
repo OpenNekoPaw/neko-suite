@@ -19,6 +19,7 @@ import {
   stripFileProtocol,
   type SaveDialogFilterPlan,
 } from '@neko/platform/files';
+import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import { getLogger, handleError } from '../../base';
 
 const logger = getLogger('FileOperationHandler');
@@ -61,6 +62,21 @@ export class FileOperationHandler {
     } catch (error) {
       logger.error('Failed to open file:', error);
       handleError(error, { showToUser: true, severity: 'error' });
+    }
+  }
+
+  async handleRevealDocumentLocator(input: {
+    readonly filePath: string;
+    readonly locator: DocumentLocator;
+    readonly source?: DocumentSourceRef;
+  }): Promise<void> {
+    if (!input.filePath) return;
+
+    try {
+      await vscode.commands.executeCommand('neko.preview.revealDocumentLocator', input);
+    } catch (error) {
+      logger.warn('Failed to reveal document locator, opening file instead:', error);
+      await this.handleOpenFile(input.filePath);
     }
   }
 

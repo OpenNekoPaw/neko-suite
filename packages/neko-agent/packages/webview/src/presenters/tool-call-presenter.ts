@@ -1,4 +1,5 @@
 import type { ToolCall } from '@/components/types';
+import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import {
   AUDIO_GENERATION_TOOLS,
   FILE_TOOLS,
@@ -18,6 +19,21 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.sv
 const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov', '.avi', '.mkv'] as const;
 const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a'] as const;
 
+export interface DocumentImageThumbnailProjection {
+  id: string;
+  index: number;
+  filePath: string;
+  source?: DocumentSourceRef;
+  path: string;
+  src: string;
+  width?: number;
+  height?: number;
+  byteSize?: number;
+  mimeType?: string;
+  locator?: DocumentLocator;
+  label: string;
+}
+
 export interface ToolCallDisplayProjection {
   argsJson: string;
   resultJson: string | null;
@@ -32,6 +48,7 @@ export interface ToolCallDisplayProjection {
   isAudioTool: boolean;
   audioUrls: string[];
   localPaths: string[];
+  documentThumbnails: DocumentImageThumbnailProjection[];
   isFileTool: boolean;
   filePath: string | null;
   summary: string;
@@ -50,6 +67,10 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
   const backgroundTaskStatus = readString(resultData, 'status');
   const shouldShowMediaPreview = !isBackgroundMode || backgroundTaskStatus === 'completed';
   const resultSuccess = toolCall.result?.success === true;
+  const documentThumbnails =
+    resultSuccess && toolCall.name === 'ReadDocument'
+      ? extractDocumentImageThumbnails(toolCall.result?.data)
+      : [];
 
   return {
     argsJson,
@@ -69,6 +90,7 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
     audioUrls:
       resultSuccess && shouldShowMediaPreview ? extractToolAudioUrls(toolCall.result?.data) : [],
     localPaths: resultSuccess ? extractToolLocalPaths(toolCall.result?.data) : [],
+    documentThumbnails,
     isFileTool: isFileTool(toolCall.name),
     filePath: extractToolFilePath(toolCall.arguments) || extractToolFilePath(toolCall.result?.data),
     summary: getToolSummary(toolCall.name, toolCall.arguments),
@@ -77,6 +99,52 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
     isFailed: toolCall.result?.success === false,
     needsConfirmation: toolCall.pendingConfirmation === true,
   };
+}
+
+export function extractDocumentImageThumbnails(data: unknown): DocumentImageThumbnailProjection[] {
+  const result = asRecord(data);
+  if (!result) return [];
+
+  const filePath = extractDocumentFilePath(result);
+  if (!filePath) return [];
+
+  const source = asDocumentSourceRef(result.source);
+  const imageInfo = Array.isArray(result.imageInfo) ? result.imageInfo : [];
+  const imagePaths = Array.isArray(result.imagePaths) ? result.imagePaths : [];
+  const imagePathWebviewUris = Array.isArray(result.imagePathWebviewUris)
+    ? result.imagePathWebviewUris
+    : [];
+
+  const thumbnails: DocumentImageThumbnailProjection[] = [];
+  const maxLength = Math.max(imageInfo.length, imagePaths.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    const info = asRecord(imageInfo[index]);
+    const path = readString(info, 'path') ?? readStringFromArray(imagePaths, index);
+    const src = readString(info, 'webviewUri') ?? readStringFromArray(imagePathWebviewUris, index);
+    if (!path || !src) continue;
+
+    const locator = asDocumentLocator(info?.locator);
+    const width = readFiniteNumber(info, 'width');
+    const height = readFiniteNumber(info, 'height');
+    const byteSize = readFiniteNumber(info, 'byteSize');
+    const mimeType = readString(info, 'mimeType');
+    thumbnails.push({
+      id: `${path}:${index}`,
+      index,
+      filePath,
+      ...(source ? { source } : {}),
+      path,
+      src,
+      ...(width !== undefined ? { width } : {}),
+      ...(height !== undefined ? { height } : {}),
+      ...(byteSize !== undefined ? { byteSize } : {}),
+      ...(mimeType ? { mimeType } : {}),
+      ...(locator ? { locator } : {}),
+      label: formatDocumentThumbnailLabel(locator, index),
+    });
+  }
+
+  return thumbnails;
 }
 
 export function extractToolFilePath(data: unknown): string | null {
@@ -215,8 +283,50 @@ function readString(obj: Record<string, unknown> | undefined, key: string): stri
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function readStringFromArray(values: unknown[], index: number): string | undefined {
+  const value = values[index];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readFiniteNumber(
+  obj: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const value = obj?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function extractDocumentFilePath(result: Record<string, unknown>): string | null {
+  const source = asRecord(result.source);
+  return readString(result, 'filePath') ?? readString(source, 'filePath') ?? null;
+}
+
+function asDocumentSourceRef(value: unknown): DocumentSourceRef | undefined {
+  const source = asRecord(value);
+  const filePath = readString(source, 'filePath');
+  const format = readString(source, 'format');
+  if (!filePath || !format) return undefined;
+  return source as unknown as DocumentSourceRef;
+}
+
+function asDocumentLocator(value: unknown): DocumentLocator | undefined {
+  const locator = asRecord(value);
+  if (!locator || typeof locator.kind !== 'string') return undefined;
+  return locator as unknown as DocumentLocator;
+}
+
+function formatDocumentThumbnailLabel(locator: DocumentLocator | undefined, index: number): string {
+  if (!locator) return `#${index + 1}`;
+  if (locator.kind === 'page' || locator.kind === 'region') return `P${locator.pageNumber}`;
+  if (locator.kind === 'chapter') {
+    return locator.spineIndex !== undefined ? `C${locator.spineIndex + 1}` : `C${index + 1}`;
+  }
+  if (locator.kind === 'slide') return `S${locator.slideNumber}`;
+  return `#${index + 1}`;
 }
 
 function isOneOf<T extends readonly string[]>(value: string, values: T): boolean {

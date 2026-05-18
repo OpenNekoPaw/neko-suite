@@ -198,7 +198,7 @@ describe('DocumentReaderService', () => {
       ).mockResolvedValue(null);
 
       await expect(service.read('/path/to/file.pdf')).rejects.toThrow(
-        'pdf-parse package not installed',
+        'PDF text reader is unavailable',
       );
     });
   });
@@ -335,7 +335,7 @@ describe('DocumentReaderService', () => {
       ).mockResolvedValue(null);
 
       await expect(service.read('/path/to/presentation.pptx')).rejects.toThrow(
-        'officeparser package not installed',
+        'Presentation reader is unavailable',
       );
     });
 

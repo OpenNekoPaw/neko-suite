@@ -10,6 +10,10 @@ import type {
   AgentContextType,
   CanvasStoryboardPayload,
   ChatModelOption,
+  DocumentFileIdentity,
+  DocumentLocator,
+  DocumentRegion,
+  DocumentSourceRef,
   MessageAttachment,
   ModelType,
   SkillSummary,
@@ -156,6 +160,13 @@ export interface OpenFileWebviewMessage {
   options?: { preview?: boolean; line?: number; column?: number };
 }
 
+export interface RevealDocumentLocatorWebviewMessage {
+  type: 'revealDocumentLocator';
+  filePath: string;
+  locator: DocumentLocator;
+  source?: DocumentSourceRef;
+}
+
 export interface FilePathWebviewMessage {
   type: 'revealFile';
   filePath: string;
@@ -238,6 +249,7 @@ export type WebviewToExtensionMessage =
   | UpdateTabStateWebviewMessage
   | TaskActionWebviewMessage
   | OpenFileWebviewMessage
+  | RevealDocumentLocatorWebviewMessage
   | FilePathWebviewMessage
   | OpenUrlWebviewMessage
   | SetPromptModeWebviewMessage
@@ -775,6 +787,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'updateTabState',
   ...TASK_ACTION_MESSAGE_TYPES,
   'openFile',
+  'revealDocumentLocator',
   'revealFile',
   'openUrl',
   'setPromptMode',
@@ -1068,6 +1081,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseUpdateTabStateMessage(raw);
     case 'openFile':
       return parseOpenFileMessage(raw);
+    case 'revealDocumentLocator':
+      return parseRevealDocumentLocatorMessage(raw);
     case 'revealFile':
       return parseFilePathMessage('revealFile', raw);
     case 'openUrl':
@@ -1288,6 +1303,21 @@ function parseOpenFileMessage(raw: Record<string, unknown>): OpenFileWebviewMess
   const options = raw.options === undefined ? undefined : parseOpenFileOptions(raw.options);
   if (!filePath || options === null) return null;
   return { type: 'openFile', filePath, ...(options !== undefined ? { options } : {}) };
+}
+
+function parseRevealDocumentLocatorMessage(
+  raw: Record<string, unknown>,
+): RevealDocumentLocatorWebviewMessage | null {
+  const filePath = requiredString(raw.filePath);
+  const locator = parseDocumentLocator(raw.locator);
+  const source = raw.source === undefined ? undefined : parseDocumentSourceRef(raw.source);
+  if (!filePath || !locator || source === null) return null;
+  return {
+    type: 'revealDocumentLocator',
+    filePath,
+    locator,
+    ...(source !== undefined ? { source } : {}),
+  };
 }
 
 function parseFilePathMessage(
@@ -1673,6 +1703,120 @@ function parseOpenFileOptions(value: unknown): OpenFileWebviewMessage['options']
     options.column = value.column;
   }
   return options;
+}
+
+function parseDocumentSourceRef(raw: unknown): DocumentSourceRef | null {
+  if (!isRecord(raw)) return null;
+  const filePath = requiredString(raw.filePath);
+  const format = requiredString(raw.format);
+  if (!filePath || !format) return null;
+  const fileId = optionalString(raw.fileId);
+  const uri = optionalString(raw.uri);
+  const token = optionalString(raw.token);
+  const rangeUrl = optionalString(raw.rangeUrl);
+  const entryBaseUrl = optionalString(raw.entryBaseUrl);
+  const identity = raw.identity === undefined ? undefined : parseDocumentFileIdentity(raw.identity);
+  if (identity === null) return null;
+  return {
+    filePath,
+    format: format as DocumentSourceRef['format'],
+    ...(fileId ? { fileId } : {}),
+    ...(uri ? { uri } : {}),
+    ...(token ? { token } : {}),
+    ...(rangeUrl ? { rangeUrl } : {}),
+    ...(entryBaseUrl ? { entryBaseUrl } : {}),
+    ...(identity ? { identity } : {}),
+  };
+}
+
+function parseDocumentFileIdentity(raw: unknown): DocumentFileIdentity | null {
+  if (!isRecord(raw)) return null;
+  const fileId = requiredString(raw.fileId);
+  if (!fileId) return null;
+  const hash = optionalString(raw.hash);
+  return {
+    fileId,
+    ...(isFiniteNumber(raw.sizeBytes) ? { sizeBytes: raw.sizeBytes } : {}),
+    ...(isFiniteNumber(raw.mtimeMs) ? { mtimeMs: raw.mtimeMs } : {}),
+    ...(hash ? { hash } : {}),
+  };
+}
+
+function parseDocumentLocator(raw: unknown): DocumentLocator | null {
+  if (!isRecord(raw) || typeof raw.kind !== 'string') return null;
+  switch (raw.kind) {
+    case 'page': {
+      if (!isFiniteNumber(raw.pageNumber) || !isFiniteNumber(raw.pageIndex)) return null;
+      const entryName = optionalString(raw.entryName);
+      return {
+        kind: 'page',
+        pageNumber: raw.pageNumber,
+        pageIndex: raw.pageIndex,
+        ...(entryName ? { entryName } : {}),
+      };
+    }
+    case 'chapter': {
+      const chapterHref = requiredString(raw.chapterHref);
+      if (!chapterHref) return null;
+      const title = optionalString(raw.title);
+      const cfi = optionalString(raw.cfi);
+      return {
+        kind: 'chapter',
+        chapterHref,
+        ...(isFiniteNumber(raw.spineIndex) ? { spineIndex: raw.spineIndex } : {}),
+        ...(title ? { title } : {}),
+        ...(cfi ? { cfi } : {}),
+      };
+    }
+    case 'slide': {
+      if (!isFiniteNumber(raw.slideNumber) || !isFiniteNumber(raw.slideIndex)) return null;
+      return { kind: 'slide', slideNumber: raw.slideNumber, slideIndex: raw.slideIndex };
+    }
+    case 'text-range': {
+      const heading = optionalString(raw.heading);
+      return {
+        kind: 'text-range',
+        ...(isFiniteNumber(raw.startChar) ? { startChar: raw.startChar } : {}),
+        ...(isFiniteNumber(raw.endChar) ? { endChar: raw.endChar } : {}),
+        ...(isFiniteNumber(raw.startLine) ? { startLine: raw.startLine } : {}),
+        ...(isFiniteNumber(raw.endLine) ? { endLine: raw.endLine } : {}),
+        ...(isFiniteNumber(raw.paragraphIndex) ? { paragraphIndex: raw.paragraphIndex } : {}),
+        ...(heading ? { heading } : {}),
+      };
+    }
+    case 'region': {
+      const region = parseDocumentRegion(raw.region);
+      if (!isFiniteNumber(raw.pageNumber) || !region) return null;
+      const entryName = optionalString(raw.entryName);
+      return {
+        kind: 'region',
+        pageNumber: raw.pageNumber,
+        ...(isFiniteNumber(raw.pageIndex) ? { pageIndex: raw.pageIndex } : {}),
+        ...(entryName ? { entryName } : {}),
+        region,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+function parseDocumentRegion(raw: unknown): DocumentRegion | null {
+  if (!isRecord(raw)) return null;
+  if (
+    !isFiniteNumber(raw.x) ||
+    !isFiniteNumber(raw.y) ||
+    !isFiniteNumber(raw.width) ||
+    !isFiniteNumber(raw.height)
+  ) {
+    return null;
+  }
+  return {
+    x: raw.x,
+    y: raw.y,
+    width: raw.width,
+    height: raw.height,
+  };
 }
 
 function isConversationOnlyMessageType(

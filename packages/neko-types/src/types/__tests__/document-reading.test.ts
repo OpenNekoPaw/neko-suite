@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   DocumentBatchCursor,
   DocumentContextData,
+  DocumentImageInfo,
   DocumentLocator,
   DocumentManifest,
   DocumentReadResult,
@@ -55,6 +56,14 @@ describe('document reading contracts', () => {
         supportsChapterRange: true,
       },
     };
+    const imageInfo: DocumentImageInfo = {
+      path: '/tmp/page-1.jpg',
+      width: 1494,
+      height: 2133,
+      mimeType: 'image/jpeg',
+      byteSize: 2048,
+      locator: manifest.units[0]?.locator,
+    };
     const cursor: DocumentBatchCursor = {
       source,
       strategy: 'manifest-order',
@@ -68,12 +77,22 @@ describe('document reading contracts', () => {
       manifest,
       cursor,
       text: 'Chapter text',
+      imagePaths: [imageInfo.path],
+      imageInfo: [imageInfo],
+      excerpt: {
+        contentKind: 'mixed',
+        text: 'Chapter text',
+        imagePaths: [imageInfo.path],
+        imageInfo: [imageInfo],
+      },
       returnedTextChars: 'Chapter text'.length,
       truncated: false,
     };
 
     expect(result.manifest?.units[0]?.kind).toBe('chapter');
     expect(result.cursor?.next?.kind).toBe('chapter');
+    expect(result.imageInfo?.[0]?.width).toBe(1494);
+    expect(result.excerpt?.imageInfo?.[0]?.mimeType).toBe('image/jpeg');
     expect(result.returnedTextChars).toBe(12);
   });
 

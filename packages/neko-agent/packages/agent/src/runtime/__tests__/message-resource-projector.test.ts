@@ -61,6 +61,29 @@ describe('message resource projector', () => {
     });
   });
 
+  it('adds webview URI siblings for document image paths without replacing local paths', () => {
+    expect(
+      projectResourceValue(
+        {
+          imagePaths: ['/tmp/page-1.jpg'],
+          imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      imagePaths: ['/tmp/page-1.jpg'],
+      imagePathWebviewUris: ['webview:///tmp/page-1.jpg'],
+      imageInfo: [
+        {
+          path: '/tmp/page-1.jpg',
+          webviewUri: 'webview:///tmp/page-1.jpg',
+          width: 1494,
+          height: 2133,
+        },
+      ],
+    });
+  });
+
   it('projects tool result payloads in legacy toolCalls and content blocks', () => {
     const messages: Message[] = [
       {

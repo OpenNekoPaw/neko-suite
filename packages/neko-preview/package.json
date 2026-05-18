@@ -35,7 +35,7 @@
   "extensionDependencies": [
     "neko.neko-engine"
   ],
-  "activationEvents": [],
+  "activationEvents": ["onCommand:neko.preview.revealDocumentLocator"],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [

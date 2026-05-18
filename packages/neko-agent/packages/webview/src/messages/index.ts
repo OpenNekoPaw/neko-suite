@@ -14,6 +14,7 @@ import type {
   SendMessageWebviewMessage,
   WebviewToExtensionMessage,
 } from '@neko-agent/types';
+import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import type { AgentContextType } from '@neko/shared';
 
 // Re-export for backward compatibility
@@ -287,6 +288,20 @@ export const VSCodeMessages = {
    */
   openFile: (filePath: string, options?: { preview?: boolean; line?: number; column?: number }) => {
     postWebviewMessage({ type: 'openFile', filePath, options });
+  },
+
+  /** Open a document preview and jump to a semantic locator when supported. */
+  revealDocumentLocator: (input: {
+    filePath: string;
+    locator: DocumentLocator;
+    source?: DocumentSourceRef;
+  }) => {
+    postWebviewMessage({
+      type: 'revealDocumentLocator',
+      filePath: input.filePath,
+      locator: input.locator,
+      ...(input.source ? { source: input.source } : {}),
+    });
   },
 
   // ==========================================================================

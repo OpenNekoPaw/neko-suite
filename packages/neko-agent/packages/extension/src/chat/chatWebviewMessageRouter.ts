@@ -41,6 +41,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'retryTask',
   'viewTaskResult',
   'openFile',
+  'revealDocumentLocator',
   'revealFile',
   'openConfigFile',
   'openUrl',

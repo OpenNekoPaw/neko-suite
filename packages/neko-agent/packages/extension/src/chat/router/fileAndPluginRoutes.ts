@@ -17,6 +17,14 @@ export function tryHandleFileAndPluginRoute(
       deps.fileOperationHandler.handleOpenFile(message.filePath);
       return true;
 
+    case 'revealDocumentLocator':
+      deps.fileOperationHandler.handleRevealDocumentLocator({
+        filePath: message.filePath,
+        locator: message.locator,
+        ...(message.source ? { source: message.source } : {}),
+      });
+      return true;
+
     case 'revealFile':
       deps.fileOperationHandler.handleRevealFile(message.filePath);
       return true;

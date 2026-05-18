@@ -260,6 +260,7 @@ export type {
   SendMessageWebviewMessage,
   SendToPluginWebviewMessage,
   SetPromptModeWebviewMessage,
+  RevealDocumentLocatorWebviewMessage,
   SettingsDataMessage,
   SettingsUpdatedMessage,
   SkillInjectionMessage,

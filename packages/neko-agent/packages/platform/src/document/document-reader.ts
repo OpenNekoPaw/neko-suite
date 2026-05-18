@@ -1,10 +1,13 @@
 import * as path from 'node:path';
+import type { DocumentImageInfo } from '@neko/shared';
+import { probeImageMetadata } from './image-metadata';
 
 export interface DocumentContent {
   text: string;
   pageCount?: number;
   metadata?: Record<string, unknown>;
   imagePaths?: string[];
+  imageInfo?: DocumentImageInfo[];
 }
 
 export interface IDocumentReader {
@@ -53,6 +56,9 @@ const SUPPORTED_EXTENSIONS = new Set([
 ]);
 
 const COMIC_IMAGE_PATTERN = /\.(jpg|jpeg|png|gif|webp|bmp)$/i;
+const HTML_IMAGE_ATTRIBUTE_PATTERN =
+  /<(?:img|image|object|source)\b[^>]*(?:src|href|xlink:href|data|srcset)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'=<>`]+))/gi;
+const MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 
 export function isDocumentUrl(input: string): boolean {
   return /^https?:\/\//i.test(input);
@@ -110,8 +116,15 @@ interface OfficeParserAst {
 type OfficeReader = (filePath: string) => Promise<DocumentContent>;
 type UnknownFunction = (...args: unknown[]) => unknown;
 
+interface ExtractedImage {
+  readonly path: string;
+  readonly info: DocumentImageInfo;
+}
+
 interface EpubChapter {
   id: string;
+  href?: string;
+  title?: string;
 }
 
 interface EpubMetadata {
@@ -182,9 +195,13 @@ interface FetchModule {
 interface CheerioSelection {
   remove(): void;
   text(): string;
+  attr(name: string): string | undefined;
+  each(callback: (index: number, element: unknown) => void): void;
 }
 
-type CheerioRoot = (selector: string) => CheerioSelection;
+interface CheerioRoot {
+  (selector: string | unknown): CheerioSelection;
+}
 
 interface CheerioModule {
   load(html: string): CheerioRoot;
@@ -303,21 +320,23 @@ export class DocumentReaderRuntime implements IDocumentReader {
   }
 
   private async readHtmlFile(filePath: string): Promise<DocumentContent> {
-    return { text: stripHtmlToText(await this.deps.readTextFile(filePath)) };
+    const html = await this.deps.readTextFile(filePath);
+    return {
+      text: stripHtmlToText(html),
+      imagePaths: extractLocalImageReferences(html),
+    };
   }
 
   private async readPdf(filePath: string): Promise<DocumentContent> {
     try {
       const pdfReader = resolvePdfReader(await this.deps.loadModule<unknown>('pdf-parse'));
       if (!pdfReader) {
-        throw new Error(
-          'pdf-parse package not installed. Run: pnpm add pdf-parse -F @neko-agent/extension',
-        );
+        throw new Error('PDF text reader is unavailable in this NekoAgent build');
       }
 
       return await pdfReader(await this.deps.readBinaryFile(filePath));
     } catch (error) {
-      if (error instanceof Error && error.message.includes('pdf-parse')) {
+      if (error instanceof Error && error.message.includes('PDF text reader')) {
         throw error;
       }
       this.deps.logger?.error('Failed to read PDF', { path: filePath, error });
@@ -331,15 +350,23 @@ export class DocumentReaderRuntime implements IDocumentReader {
     try {
       const mammoth = await this.deps.loadModule<MammothModule>('mammoth');
       if (!mammoth) {
-        throw new Error(
-          'mammoth package not installed. Run: pnpm add mammoth -F @neko-agent/extension',
-        );
+        throw new Error('Word document reader is unavailable in this NekoAgent build');
       }
 
       const result = await mammoth.extractRawText({ path: filePath });
-      return { text: result.value };
+      const images = await this.extractZipImages(filePath, 'docx', (entryPath) =>
+        entryPath.startsWith('word/media/'),
+      );
+      const imagePaths = images.map((image) => image.path);
+      const imageInfo = images.map((image) => image.info);
+      return {
+        text: result.value,
+        ...(imagePaths.length > 0 ? { imagePaths } : {}),
+        ...(imageInfo.length > 0 ? { imageInfo } : {}),
+        ...(imagePaths.length > 0 ? { metadata: { imageCount: imagePaths.length } } : {}),
+      };
     } catch (error) {
-      if (error instanceof Error && error.message.includes('mammoth')) {
+      if (error instanceof Error && error.message.includes('Word document reader')) {
         throw error;
       }
       this.deps.logger?.error('Failed to read DOCX', { path: filePath, error });
@@ -353,14 +380,30 @@ export class DocumentReaderRuntime implements IDocumentReader {
     try {
       const officeReader = resolveOfficeReader(await this.deps.loadModule<unknown>('officeparser'));
       if (!officeReader) {
-        throw new Error(
-          'officeparser package not installed. Run: pnpm add officeparser -F @neko-agent/extension',
-        );
+        throw new Error('Presentation reader is unavailable in this NekoAgent build');
       }
 
-      return await officeReader(filePath);
+      const content = await officeReader(filePath);
+      const images = await this.extractZipImages(filePath, 'pptx', (entryPath) =>
+        entryPath.startsWith('ppt/media/'),
+      );
+      const imagePaths = images.map((image) => image.path);
+      const imageInfo = images.map((image) => image.info);
+      return {
+        ...content,
+        ...(imagePaths.length > 0 ? { imagePaths } : {}),
+        ...(imageInfo.length > 0 ? { imageInfo } : {}),
+        ...(imagePaths.length > 0
+          ? {
+              metadata: {
+                ...content.metadata,
+                imageCount: imagePaths.length,
+              },
+            }
+          : {}),
+      };
     } catch (error) {
-      if (error instanceof Error && error.message.includes('officeparser')) {
+      if (error instanceof Error && error.message.includes('Presentation reader')) {
         throw error;
       }
       this.deps.logger?.error('Failed to read PPTX', { path: filePath, error });
@@ -374,9 +417,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
     try {
       const EPub = resolveEpubConstructor(await this.deps.loadModule<unknown>('epub2'));
       if (!EPub) {
-        throw new Error(
-          'epub2 package not installed. Run: pnpm add epub2 -F @neko-agent/extension',
-        );
+        throw new Error('EPUB reader is unavailable in this NekoAgent build');
       }
 
       return new Promise((resolve, reject) => {
@@ -385,23 +426,45 @@ export class DocumentReaderRuntime implements IDocumentReader {
         epub.on('end', async () => {
           try {
             const texts: string[] = [];
+            const imageEntryPaths: string[] = [];
             for (const chapter of epub.flow) {
-              const text = await new Promise<string>((res) => {
+              const content = await new Promise<string>((res) => {
                 epub.getChapter(chapter.id, (err, content) => {
-                  res(err ? '' : stripHtmlToText(content));
+                  res(err ? '' : content);
                 });
               });
-              texts.push(text);
+              texts.push(stripHtmlToText(content));
+              imageEntryPaths.push(
+                ...extractEpubImageEntryPaths(content, chapter.href ?? chapter.title),
+              );
+            }
+
+            const images = await this.extractEpubImages(filePath, dedupeStrings(imageEntryPaths));
+            const imagePaths = images.map((image) => image.path);
+            const imageInfo = images.map((image) => image.info);
+            const rawText = texts.join('\n\n');
+            const text =
+              rawText.trim().length > 0
+                ? rawText
+                : imagePaths.length > 0
+                  ? `EPUB image document with ${imagePaths.length} image pages`
+                  : rawText;
+            const metadata: Record<string, unknown> = {
+              title: epub.metadata.title,
+              author: epub.metadata.creator,
+              publisher: epub.metadata.publisher,
+              language: epub.metadata.language,
+            };
+            if (imagePaths.length > 0) {
+              metadata.imageCount = imagePaths.length;
             }
 
             resolve({
-              text: texts.join('\n\n'),
-              metadata: {
-                title: epub.metadata.title,
-                author: epub.metadata.creator,
-                publisher: epub.metadata.publisher,
-                language: epub.metadata.language,
-              },
+              text,
+              pageCount: epub.flow.length,
+              ...(imagePaths.length > 0 ? { imagePaths } : {}),
+              ...(imageInfo.length > 0 ? { imageInfo } : {}),
+              metadata,
             });
           } catch (error) {
             reject(error);
@@ -422,13 +485,119 @@ export class DocumentReaderRuntime implements IDocumentReader {
     }
   }
 
+  private async extractEpubImages(
+    filePath: string,
+    entryPaths: readonly string[],
+  ): Promise<ExtractedImage[]> {
+    if (entryPaths.length === 0) {
+      return [];
+    }
+
+    const AdmZip = await this.deps.loadModule<AdmZipConstructor>('adm-zip');
+    if (!AdmZip) {
+      this.deps.logger?.warn('Internal ZIP image reader is unavailable for EPUB images', {
+        path: filePath,
+      });
+      return [];
+    }
+
+    const zip = new AdmZip(filePath);
+    const tmpDir = path.join(
+      this.deps.tempDir(),
+      `neko_epub_${this.deps.now?.().getTime() ?? Date.now()}`,
+    );
+    await this.deps.makeDir(tmpDir, { recursive: true });
+
+    const images: ExtractedImage[] = [];
+    for (let index = 0; index < entryPaths.length; index += 1) {
+      const entryPath = entryPaths[index];
+      if (!entryPath) {
+        continue;
+      }
+      const entry = zip.getEntry(entryPath);
+      if (!entry) {
+        this.deps.logger?.warn('EPUB image entry not found', { path: filePath, entryPath });
+        continue;
+      }
+
+      const imgPath = path.join(
+        tmpDir,
+        `${String(index + 1).padStart(4, '0')}_${path.basename(entryPath)}`,
+      );
+      const imageBytes = entry.getData();
+      await this.deps.writeBinaryFile(imgPath, imageBytes);
+      images.push(createExtractedImage(imgPath, imageBytes));
+    }
+
+    this.deps.logger?.info('Extracted EPUB images', { images: images.length, tmpDir });
+    return images;
+  }
+
+  private async extractZipImages(
+    filePath: string,
+    tmpPrefix: string,
+    includeEntry: (entryPath: string) => boolean,
+  ): Promise<ExtractedImage[]> {
+    try {
+      const AdmZip = await this.deps.loadModule<AdmZipConstructor>('adm-zip');
+      if (!AdmZip) {
+        this.deps.logger?.warn('Internal ZIP image reader is unavailable', {
+          path: filePath,
+        });
+        return [];
+      }
+
+      const entries = new AdmZip(filePath)
+        .getEntries()
+        .filter((entry) => includeEntry(entry.name) && COMIC_IMAGE_PATTERN.test(entry.name))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+      if (entries.length === 0) {
+        return [];
+      }
+
+      const tmpDir = path.join(
+        this.deps.tempDir(),
+        `neko_${tmpPrefix}_${this.deps.now?.().getTime() ?? Date.now()}`,
+      );
+      await this.deps.makeDir(tmpDir, { recursive: true });
+
+      const images: ExtractedImage[] = [];
+      for (let index = 0; index < entries.length; index += 1) {
+        const entry = entries[index];
+        if (!entry) {
+          continue;
+        }
+        const imgPath = path.join(
+          tmpDir,
+          `${String(index + 1).padStart(4, '0')}_${path.basename(entry.name)}`,
+        );
+        const imageBytes = entry.getData();
+        await this.deps.writeBinaryFile(imgPath, imageBytes);
+        images.push(createExtractedImage(imgPath, imageBytes));
+      }
+
+      this.deps.logger?.info('Extracted document images', {
+        format: tmpPrefix,
+        images: images.length,
+        tmpDir,
+      });
+      return images;
+    } catch (error) {
+      this.deps.logger?.warn('Failed to extract document images', {
+        path: filePath,
+        format: tmpPrefix,
+        error,
+      });
+      return [];
+    }
+  }
+
   private async readCbz(filePath: string): Promise<DocumentContent> {
     try {
       const AdmZip = await this.deps.loadModule<AdmZipConstructor>('adm-zip');
       if (!AdmZip) {
-        throw new Error(
-          'adm-zip package not installed. Run: pnpm add adm-zip -F @neko-agent/extension',
-        );
+        throw new Error('CBZ image reader is unavailable in this NekoAgent build');
       }
 
       const entries = new AdmZip(filePath)
@@ -443,16 +612,26 @@ export class DocumentReaderRuntime implements IDocumentReader {
       await this.deps.makeDir(tmpDir, { recursive: true });
 
       const imagePaths: string[] = [];
+      const imageInfo: DocumentImageInfo[] = [];
       for (const entry of entries) {
         const imgPath = path.join(tmpDir, path.basename(entry.name));
-        await this.deps.writeBinaryFile(imgPath, entry.getData());
+        const imageBytes = entry.getData();
+        await this.deps.writeBinaryFile(imgPath, imageBytes);
         imagePaths.push(imgPath);
+        imageInfo.push(createImageInfo(imgPath, imageBytes));
       }
 
       this.deps.logger?.info('Extracted CBZ archive', { pages: entries.length, tmpDir });
-      return this.createComicContent('cbz', filePath, entries.length, tmpDir, imagePaths);
+      return this.createComicContent(
+        'cbz',
+        filePath,
+        entries.length,
+        tmpDir,
+        imagePaths,
+        imageInfo,
+      );
     } catch (error) {
-      if (error instanceof Error && error.message.includes('adm-zip')) {
+      if (error instanceof Error && error.message.includes('CBZ image reader')) {
         throw error;
       }
       this.deps.logger?.error('Failed to read CBZ', { path: filePath, error });
@@ -466,9 +645,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
     try {
       const unrar = await this.deps.loadModule<UnrarModule>('node-unrar-js');
       if (!unrar) {
-        throw new Error(
-          'node-unrar-js package not installed. Run: pnpm add node-unrar-js -F @neko-agent/extension',
-        );
+        throw new Error('CBR image reader is unavailable in this NekoAgent build');
       }
 
       const extractor = unrar.createExtractorFromData({
@@ -485,19 +662,37 @@ export class DocumentReaderRuntime implements IDocumentReader {
       );
       await this.deps.makeDir(tmpDir, { recursive: true });
 
+      const filesByName = new Map(
+        extractor
+          .extract()
+          .files.filter((file) => COMIC_IMAGE_PATTERN.test(file.fileHeader.name))
+          .map((file) => [file.fileHeader.name, file]),
+      );
       const imagePaths: string[] = [];
-      for (const file of extractor.extract().files) {
-        if (COMIC_IMAGE_PATTERN.test(file.fileHeader.name)) {
-          const imgPath = path.join(tmpDir, path.basename(file.fileHeader.name));
-          await this.deps.writeBinaryFile(imgPath, file.extract[1]);
-          imagePaths.push(imgPath);
+      const imageInfo: DocumentImageInfo[] = [];
+      for (const fileHeader of imageFiles) {
+        const file = filesByName.get(fileHeader.name);
+        if (!file) {
+          continue;
         }
+        const imgPath = path.join(tmpDir, path.basename(file.fileHeader.name));
+        const imageBytes = file.extract[1];
+        await this.deps.writeBinaryFile(imgPath, imageBytes);
+        imagePaths.push(imgPath);
+        imageInfo.push(createImageInfo(imgPath, imageBytes));
       }
 
       this.deps.logger?.info('Extracted CBR archive', { pages: imageFiles.length, tmpDir });
-      return this.createComicContent('cbr', filePath, imageFiles.length, tmpDir, imagePaths);
+      return this.createComicContent(
+        'cbr',
+        filePath,
+        imageFiles.length,
+        tmpDir,
+        imagePaths,
+        imageInfo,
+      );
     } catch (error) {
-      if (error instanceof Error && error.message.includes('node-unrar-js')) {
+      if (error instanceof Error && error.message.includes('CBR image reader')) {
         throw error;
       }
       this.deps.logger?.error('Failed to read CBR', { path: filePath, error });
@@ -514,9 +709,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
       const fetch = typeof fetchModule === 'function' ? fetchModule : fetchModule?.default;
 
       if (!fetch || !cheerio) {
-        throw new Error(
-          'URL support requires node-fetch and cheerio. Run: pnpm add node-fetch cheerio -F @neko-agent/extension',
-        );
+        throw new Error('URL reader is unavailable in this NekoAgent build');
       }
 
       const response = await fetch(url);
@@ -530,13 +723,28 @@ export class DocumentReaderRuntime implements IDocumentReader {
 
       const mainContent =
         $('article').text() || $('main').text() || $('.content').text() || $('body').text();
+      const imagePaths: string[] = [];
+      $('img, image, object, source').each((_index, element) => {
+        const selection = $(element);
+        const value =
+          selection.attr('src') ??
+          selection.attr('href') ??
+          selection.attr('xlink:href') ??
+          selection.attr('data') ??
+          selection.attr('srcset');
+        if (value) {
+          imagePaths.push(...extractLocalImageReferencesFromValue(value));
+        }
+      });
 
       return {
         text: mainContent.replace(/\s+/g, ' ').trim(),
+        ...(imagePaths.length > 0 ? { imagePaths: dedupeStrings(imagePaths) } : {}),
         metadata: {
           url,
           title: $('title').text().trim(),
           fetchedAt: (this.deps.now?.() ?? new Date()).toISOString(),
+          ...(imagePaths.length > 0 ? { imageCount: dedupeStrings(imagePaths).length } : {}),
         },
       };
     } catch (error) {
@@ -551,7 +759,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
     try {
       const xlsx = await this.deps.loadModule<XlsxModule>('xlsx');
       if (!xlsx) {
-        throw new Error('Excel support requires xlsx. Run: pnpm add xlsx -F @neko-agent/extension');
+        throw new Error('Excel reader is unavailable in this NekoAgent build');
       }
 
       const workbook = xlsx.readFile(filePath);
@@ -566,14 +774,22 @@ export class DocumentReaderRuntime implements IDocumentReader {
         allData.push(...data);
         sheets.push(`Sheet: ${sheetName}\n${data.map((row) => row.join('\t')).join('\n')}`);
       }
+      const images = await this.extractZipImages(filePath, 'xlsx', (entryPath) =>
+        entryPath.startsWith('xl/media/'),
+      );
+      const imagePaths = images.map((image) => image.path);
+      const imageInfo = images.map((image) => image.info);
 
       return {
         text: sheets.join('\n\n'),
+        ...(imagePaths.length > 0 ? { imagePaths } : {}),
+        ...(imageInfo.length > 0 ? { imageInfo } : {}),
         metadata: {
           format: 'xlsx',
           sheetCount: workbook.SheetNames.length,
           sheets: workbook.SheetNames,
           rowCount: allData.length,
+          ...(imagePaths.length > 0 ? { imageCount: imagePaths.length } : {}),
         },
       };
     } catch (error) {
@@ -589,9 +805,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
       const fastXmlParser = await this.deps.loadModule<FastXmlParserModule>('fast-xml-parser');
       const XMLParser = fastXmlParser?.XMLParser;
       if (!XMLParser) {
-        throw new Error(
-          'Final Draft support requires fast-xml-parser. Run: pnpm add fast-xml-parser -F @neko-agent/extension',
-        );
+        throw new Error('Final Draft reader is unavailable in this NekoAgent build');
       }
 
       const parser = new XMLParser({
@@ -625,11 +839,13 @@ export class DocumentReaderRuntime implements IDocumentReader {
     pageCount: number,
     tmpDir: string,
     imagePaths: string[],
+    imageInfo: DocumentImageInfo[] = [],
   ): DocumentContent {
     return {
       text: `Comic archive with ${pageCount} pages`,
       pageCount,
       imagePaths,
+      imageInfo,
       metadata: {
         format,
         fileName: path.basename(filePath),
@@ -637,6 +853,149 @@ export class DocumentReaderRuntime implements IDocumentReader {
       },
     };
   }
+}
+
+export function extractEpubImageEntryPaths(
+  html: string,
+  chapterHref: string | undefined,
+): string[] {
+  const paths: string[] = [];
+  for (const source of extractHtmlImageSources(html)) {
+    const entryPath = resolveEpubEntryReference(chapterHref, source);
+    if (entryPath && COMIC_IMAGE_PATTERN.test(entryPath)) {
+      paths.push(entryPath);
+    }
+  }
+  return dedupeStrings(paths);
+}
+
+export function extractLocalImageReferences(html: string): string[] {
+  const paths = extractHtmlImageSources(html)
+    .map((source) => normalizeLocalImageReference(source))
+    .filter((source): source is string => source !== null);
+  return dedupeStrings(paths);
+}
+
+export function extractHtmlImageSources(html: string): string[] {
+  const sources: string[] = [];
+  HTML_IMAGE_ATTRIBUTE_PATTERN.lastIndex = 0;
+  let htmlMatch: RegExpExecArray | null;
+  while ((htmlMatch = HTML_IMAGE_ATTRIBUTE_PATTERN.exec(html)) !== null) {
+    const match = htmlMatch;
+    const rawValue = match[1] ?? match[2] ?? match[3];
+    if (!rawValue) {
+      continue;
+    }
+    sources.push(...splitImageAttributeValue(rawValue));
+  }
+  MARKDOWN_IMAGE_PATTERN.lastIndex = 0;
+  let markdownMatch: RegExpExecArray | null;
+  while ((markdownMatch = MARKDOWN_IMAGE_PATTERN.exec(html)) !== null) {
+    const rawValue = markdownMatch[1];
+    if (rawValue) {
+      sources.push(rawValue);
+    }
+  }
+  return sources;
+}
+
+export function extractLocalImageReferencesFromValue(value: string): string[] {
+  return dedupeStrings(
+    splitImageAttributeValue(value)
+      .map((source) => normalizeLocalImageReference(source))
+      .filter((source): source is string => source !== null),
+  );
+}
+
+export function resolveEpubEntryReference(
+  chapterHref: string | undefined,
+  resourceHref: string,
+): string | null {
+  const normalizedResource = decodeHtmlAttribute(resourceHref).trim();
+  if (
+    normalizedResource.length === 0 ||
+    normalizedResource.startsWith('#') ||
+    /^(?:data|blob|https?):/i.test(normalizedResource)
+  ) {
+    return null;
+  }
+
+  const isRootReference = normalizedResource.startsWith('/');
+  let cleanHref = normalizedResource.split(/[?#]/, 1)[0]?.replace(/^\/+/, '');
+  if (!cleanHref) {
+    return null;
+  }
+  if (cleanHref.startsWith('images/')) {
+    cleanHref = cleanHref.slice('images/'.length);
+  }
+  if (isRootReference) {
+    return cleanHref;
+  }
+
+  const baseDir = chapterHref ? path.posix.dirname(chapterHref.replace(/\\/g, '/')) : '.';
+  const resolved = path.posix.normalize(path.posix.join(baseDir, cleanHref));
+  return resolved.startsWith('../') ? resolved.replace(/^(\.\.\/)+/, '') : resolved;
+}
+
+export function dedupeStrings(values: readonly string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function createExtractedImage(filePath: string, bytes: Uint8Array): ExtractedImage {
+  return {
+    path: filePath,
+    info: createImageInfo(filePath, bytes),
+  };
+}
+
+function createImageInfo(filePath: string, bytes: Uint8Array): DocumentImageInfo {
+  const metadata = probeImageMetadata(bytes);
+  return {
+    path: filePath,
+    byteSize: metadata?.byteSize ?? bytes.length,
+    ...(metadata?.mimeType ? { mimeType: metadata.mimeType } : {}),
+    ...(metadata?.width !== undefined ? { width: metadata.width } : {}),
+    ...(metadata?.height !== undefined ? { height: metadata.height } : {}),
+  };
+}
+
+function normalizeLocalImageReference(resourceHref: string): string | null {
+  const normalizedResource = decodeHtmlAttribute(resourceHref).trim();
+  if (
+    normalizedResource.length === 0 ||
+    normalizedResource.startsWith('#') ||
+    /^(?:data|blob):/i.test(normalizedResource)
+  ) {
+    return null;
+  }
+
+  const cleanHref = normalizedResource.split(/[?#]/, 1)[0];
+  if (!cleanHref || !COMIC_IMAGE_PATTERN.test(cleanHref)) {
+    return null;
+  }
+  return cleanHref;
+}
+
+function splitImageAttributeValue(value: string): string[] {
+  return value
+    .split(',')
+    .map(readFirstImageAttributeToken)
+    .filter((part): part is string => part !== null);
+}
+
+function readFirstImageAttributeToken(value: string): string | null {
+  const token = value.trim().split(/\s+/, 1)[0];
+  return token && token.length > 0 ? token : null;
+}
+
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
 }
 
 function extractFDXScenes(doc: unknown): Array<{ text: string }> {

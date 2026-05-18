@@ -57,6 +57,7 @@ export const PdfViewer: FC = () => {
   const renderingPagesRef = useRef<Set<number>>(new Set());
   const renderedPagesRef = useRef<Set<number>>(new Set());
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const pendingPageRef = useRef<number | null>(null);
   // Monotonic counter to invalidate stale renders after mode switch
   const modeEpochRef = useRef(0);
 
@@ -74,6 +75,17 @@ export const PdfViewer: FC = () => {
         void loadPdfFromUrl(msg.payload.url as string);
       } else if (msg.payload.data) {
         void loadPdf(msg.payload.data as string);
+      }
+    } else if (msg.type === 'document:navigate') {
+      const locator = msg.payload.locator;
+      const pageNumber =
+        locator.kind === 'page' || locator.kind === 'region' ? locator.pageNumber : undefined;
+      if (pageNumber !== undefined) {
+        if (numPages === 0) {
+          pendingPageRef.current = pageNumber;
+          return;
+        }
+        goToPage(pageNumber);
       }
     }
   });
@@ -372,6 +384,7 @@ export const PdfViewer: FC = () => {
   const goToPage = useCallback(
     (page: number) => {
       if (page >= 1 && page <= numPages) {
+        pendingPageRef.current = null;
         setCurrentPage(page);
         if (viewMode === 'scroll') {
           const el = pageRefsMap.current.get(page);
@@ -381,6 +394,12 @@ export const PdfViewer: FC = () => {
     },
     [numPages, viewMode],
   );
+
+  useEffect(() => {
+    const pendingPage = pendingPageRef.current;
+    if (loading || !pendingPage || numPages === 0) return;
+    goToPage(pendingPage);
+  }, [loading, numPages, goToPage]);
 
   const goToPrevPage = useCallback(() => {
     goToPage(Math.max(1, currentPage - 1));

@@ -135,6 +135,25 @@ describe('FileOperationHandler', () => {
     });
   });
 
+  describe('handleRevealDocumentLocator', () => {
+    it('delegates document locator reveal to neko-preview', async () => {
+      const { commands } = await import('vscode');
+      const locator = { kind: 'page' as const, pageNumber: 2, pageIndex: 1 };
+
+      await handler.handleRevealDocumentLocator({
+        filePath: '/tmp/book.pdf',
+        locator,
+        source: { filePath: '/tmp/book.pdf', format: 'pdf' },
+      });
+
+      expect(commands.executeCommand).toHaveBeenCalledWith('neko.preview.revealDocumentLocator', {
+        filePath: '/tmp/book.pdf',
+        locator,
+        source: { filePath: '/tmp/book.pdf', format: 'pdf' },
+      });
+    });
+  });
+
   describe('handleDownloadSvg', () => {
     it('should do nothing for empty svg', async () => {
       const { window } = await import('vscode');

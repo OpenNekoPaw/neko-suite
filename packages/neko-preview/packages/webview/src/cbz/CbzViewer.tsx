@@ -48,6 +48,7 @@ export const CbzViewer: FC = () => {
   persistedPageRef.current = currentPage;
   const pageCacheRef = useRef(pageCache);
   pageCacheRef.current = pageCache;
+  const pendingPageRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   // Track which pages are currently being decoded to avoid duplicate work
@@ -99,6 +100,17 @@ export const CbzViewer: FC = () => {
         void loadCbzFromUrl(msg.payload.url as string);
       } else if (msg.payload.data) {
         void loadCbz(msg.payload.data as string);
+      }
+    } else if (msg.type === 'document:navigate') {
+      const locator = msg.payload.locator;
+      const pageNumber =
+        locator.kind === 'page' || locator.kind === 'region' ? locator.pageNumber : undefined;
+      if (pageNumber !== undefined) {
+        if (imageEntries.length === 0) {
+          pendingPageRef.current = pageNumber;
+          return;
+        }
+        goToPage(pageNumber - 1);
       }
     }
   });
@@ -382,6 +394,7 @@ export const CbzViewer: FC = () => {
   const goToPage = useCallback(
     (page: number) => {
       if (page >= 0 && page < totalPages) {
+        pendingPageRef.current = null;
         setCurrentPage(page);
         setSelectionRect(null);
         if (viewMode === 'scroll') {
@@ -392,6 +405,12 @@ export const CbzViewer: FC = () => {
     },
     [totalPages, viewMode],
   );
+
+  useEffect(() => {
+    const pendingPage = pendingPageRef.current;
+    if (loading || !pendingPage || totalPages === 0) return;
+    goToPage(pendingPage - 1);
+  }, [loading, totalPages, goToPage]);
 
   // =========================================================================
   // Region selection (shared between modes)

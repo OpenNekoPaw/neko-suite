@@ -24,6 +24,7 @@ import {
   WarningIcon,
   ToolLoadingSpinner,
 } from './icons';
+import { DocumentImageThumbnails } from './DocumentImageThumbnails';
 
 const logger = getLogger('ToolCallDisplay');
 
@@ -78,6 +79,7 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
     isAudioTool,
     audioUrls,
     localPaths,
+    documentThumbnails,
     isFileTool,
     filePath,
     summary,
@@ -277,6 +279,8 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
       {relatedSubAgents.map((item) => (
         <SubAgentCard key={item.id} item={item} />
       ))}
+
+      {documentThumbnails.length > 0 && <DocumentImageThumbnails thumbnails={documentThumbnails} />}
 
       {/* Media previews — registry-driven rendering (ADR-6 §6.2) */}
       {isImageTool && imageUrls.length > 0 && (

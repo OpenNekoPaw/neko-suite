@@ -50,6 +50,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     } as any,
     fileOperationHandler: {
       handleOpenFile: vi.fn(),
+      handleRevealDocumentLocator: vi.fn(),
       handleRevealFile: vi.fn(),
       handleOpenConfigFile: vi.fn(),
       handleOpenUrl: vi.fn(),
@@ -242,6 +243,27 @@ describe('handleChatWebviewMessage', () => {
     );
 
     expect(sendGeneratedAssetToPlugin).toHaveBeenCalledWith('cut', undefined, undefined, payload);
+  });
+
+  it('routes document locator reveals to the file operation handler', () => {
+    const deps = createDeps();
+    const locator = { kind: 'page' as const, pageNumber: 2, pageIndex: 1 };
+
+    handleChatWebviewMessage(
+      {
+        type: 'revealDocumentLocator',
+        filePath: '/books/a.pdf',
+        locator,
+        source: { filePath: '/books/a.pdf', format: 'pdf' },
+      },
+      deps,
+    );
+
+    expect(deps.fileOperationHandler.handleRevealDocumentLocator).toHaveBeenCalledWith({
+      filePath: '/books/a.pdf',
+      locator,
+      source: { filePath: '/books/a.pdf', format: 'pdf' },
+    });
   });
 
   it('rejects plugin slash commands without an explicit conversationId', () => {

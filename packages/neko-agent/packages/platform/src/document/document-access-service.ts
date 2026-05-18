@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import type {
   DocumentBatchCursor,
   DocumentFormat,
+  DocumentImageInfo,
   DocumentLocator,
   DocumentManifest,
   DocumentManifestCapabilities,
@@ -10,7 +11,11 @@ import type {
   DocumentReadResult,
   DocumentSourceRef,
 } from '@neko/shared';
+import { probeImageMetadata } from './image-metadata';
 import {
+  dedupeStrings,
+  extractEpubImageEntryPaths,
+  extractLocalImageReferences,
   type DocumentContent,
   type DocumentReaderRuntimeDeps,
   type IDocumentReader,
@@ -64,6 +69,7 @@ export interface DocumentAccessServiceDeps {
 interface EpubChapterInfo {
   readonly id: string;
   readonly title?: string;
+  readonly href?: string;
 }
 
 interface EpubManifestData {
@@ -74,6 +80,19 @@ interface EpubManifestData {
 
 interface ParsedEpubData extends EpubManifestData {
   readonly epub: EpubLike;
+}
+
+interface ComicRangeSelection<
+  TEntry extends { readonly name: string } = { readonly name: string },
+> {
+  readonly startPageIndex: number;
+  readonly entries: readonly TEntry[];
+}
+
+interface ExtractedImage {
+  readonly path: string;
+  readonly entryName?: string;
+  readonly bytes: Uint8Array;
 }
 
 interface PdfParserWithPartial {
@@ -93,10 +112,29 @@ interface ZipEntryLike {
 
 interface AdmZipLike {
   getEntries(): ZipEntryLike[];
+  getEntry(name: string): ZipEntryLike | null;
 }
 
 interface AdmZipConstructorLike {
   new (filePath: string): AdmZipLike;
+}
+
+interface UnrarFileHeaderLike {
+  readonly name: string;
+}
+
+interface UnrarExtractedFileLike {
+  readonly fileHeader: UnrarFileHeaderLike;
+  readonly extract: readonly [unknown, Uint8Array];
+}
+
+interface UnrarExtractorLike {
+  getFileList(): { fileHeaders: UnrarFileHeaderLike[] };
+  extract(): { files: UnrarExtractedFileLike[] };
+}
+
+interface UnrarModuleLike {
+  createExtractorFromData(options: { data: Uint8Array }): UnrarExtractorLike;
 }
 
 interface EpubChapterLike {
@@ -147,12 +185,15 @@ export class DocumentAccessService implements IDocumentAccessService {
         return this.getEpubManifest(source);
       case 'cbz':
         return this.getCbzManifest(source);
+      case 'cbr':
+        return this.getCbrManifest(source);
       case 'text':
-      case 'markdown':
       case 'fountain':
       case 'json':
       case 'yaml':
       case 'html':
+        return this.getTextManifest(source);
+      case 'markdown':
         return this.getTextManifest(source);
       case 'docx':
       case 'doc':
@@ -192,12 +233,15 @@ export class DocumentAccessService implements IDocumentAccessService {
         return this.readEpubRange(source, range);
       case 'cbz':
         return this.readCbzRange(source, range);
+      case 'cbr':
+        return this.readCbrRange(source, range);
       case 'text':
-      case 'markdown':
       case 'fountain':
       case 'json':
       case 'yaml':
       case 'html':
+        return this.readTextRange(source, range);
+      case 'markdown':
         return this.readTextRange(source, range);
       case 'docx':
       case 'doc':
@@ -341,7 +385,7 @@ export class DocumentAccessService implements IDocumentAccessService {
           spineIndex: index,
           title: chapter.title,
         },
-        href: chapter.id,
+        href: chapter.href ?? chapter.id,
         title: chapter.title,
       })),
       capabilities: makeCapabilities({ chapter: true }),
@@ -356,9 +400,22 @@ export class DocumentAccessService implements IDocumentAccessService {
 
   private async getCbzManifest(source: DocumentSourceRef): Promise<DocumentManifest> {
     const entries = await this.readCbzEntries(source.filePath);
+    return this.makeComicManifest(source, entries, 'cbz');
+  }
+
+  private async getCbrManifest(source: DocumentSourceRef): Promise<DocumentManifest> {
+    const entries = await this.readCbrEntries(source.filePath);
+    return this.makeComicManifest(source, entries, 'cbr');
+  }
+
+  private makeComicManifest(
+    source: DocumentSourceRef,
+    entries: readonly { readonly name: string }[],
+    format: 'cbz' | 'cbr',
+  ): DocumentManifest {
     return {
       source,
-      format: 'cbz',
+      format,
       fileId: source.fileId,
       pageCount: entries.length,
       entryCount: entries.length,
@@ -374,7 +431,7 @@ export class DocumentAccessService implements IDocumentAccessService {
         title: path.basename(entry.name),
       })),
       capabilities: makeCapabilities({ entry: true, region: true }),
-      metadata: { format: 'cbz', fileName: path.basename(source.filePath) },
+      metadata: { format, fileName: path.basename(source.filePath) },
     };
   }
 
@@ -471,24 +528,93 @@ export class DocumentAccessService implements IDocumentAccessService {
 
     const locator = range.locator;
     const data = await this.parseEpubData(source);
-    const chapter = data.chapters.find((item, index) => {
-      return (
-        item.id === locator.chapterHref ||
-        (locator.spineIndex !== undefined && index === locator.spineIndex)
-      );
-    });
+    const startIndex = findEpubChapterIndex(data.chapters, locator);
+    const endIndex =
+      range.endLocator?.kind === 'chapter'
+        ? findEpubChapterIndex(data.chapters, range.endLocator)
+        : startIndex;
+    const chapter = startIndex >= 0 ? data.chapters[startIndex] : undefined;
     if (!chapter) {
       throw new DocumentAccessError(
         'invalid-range',
         `EPUB chapter not found: ${locator.chapterHref}`,
       );
     }
+    if (endIndex < startIndex) {
+      throw new DocumentAccessError(
+        'invalid-range',
+        `Invalid EPUB chapter range: ${locator.chapterHref}`,
+      );
+    }
 
-    const text = await readEpubChapterText(data.epub, chapter.id);
+    const chapters = data.chapters.slice(startIndex, endIndex + 1);
+    const chapterContents = await Promise.all(
+      chapters.map(async (item, offset) => ({
+        chapter: item,
+        spineIndex: startIndex + offset,
+        html: await readEpubChapterHtml(data.epub, item.id),
+      })),
+    );
+    const text = chapterContents.map((item) => stripHtmlToText(item.html)).join('\n\n');
+    const imageRefs = dedupeEpubImageRefs(
+      chapterContents.flatMap((item) =>
+        extractEpubImageEntryPaths(item.html, item.chapter.href ?? item.chapter.title).map(
+          (entryPath) => ({
+            entryPath,
+            locator: {
+              kind: 'chapter' as const,
+              chapterHref: item.chapter.id,
+              spineIndex: item.spineIndex,
+              ...(item.chapter.title ? { title: item.chapter.title } : {}),
+            },
+          }),
+        ),
+      ),
+    ).slice(0, range.limit?.maxImages);
+    const images = await this.extractZipEntriesToTemp(
+      source.filePath,
+      imageRefs.map((image) => image.entryPath),
+      'epub',
+    );
+    const locatorByEntryPath = new Map(
+      imageRefs.map((image) => [image.entryPath, image.locator] as const),
+    );
+    const imagePaths = images.map((image) => image.path);
+    const imageInfo = images.map((image, index) =>
+      createImageInfo(
+        image.path,
+        image.bytes,
+        image.entryName ? locatorByEntryPath.get(image.entryName) : imageRefs[index]?.locator,
+      ),
+    );
+    const readableText = text.trim().length > 0 ? text : '';
+    const result = this.makeTextResult(source, range, readableText, range.limit?.maxChars, {
+      metadata: data.metadata,
+    });
+    const contentKind = imagePaths.length > 0 ? (readableText ? 'mixed' : 'image') : 'text';
+    const resultText = result.text ?? '';
+    const rangeText =
+      resultText.trim().length > 0
+        ? resultText
+        : imagePaths.length > 0
+          ? `EPUB chapter range with ${imagePaths.length} image pages`
+          : resultText;
+
     return {
-      ...this.makeTextResult(source, range, text, range.limit?.maxChars, {
-        metadata: data.metadata,
-      }),
+      ...result,
+      text: rangeText,
+      imagePaths,
+      imageInfo,
+      excerpt: {
+        ...result.excerpt,
+        contentKind,
+        text: rangeText,
+        ...(imagePaths.length > 0 ? { imagePaths } : {}),
+        ...(imageInfo.length > 0 ? { imageInfo } : {}),
+      },
+      returnedTextChars: rangeText.length,
+      totalTextChars: result.totalTextChars === 0 ? rangeText.length : result.totalTextChars,
+      pageCount: data.chapters.length,
       manifest: this.makeEpubManifest(data),
     };
   }
@@ -502,34 +628,97 @@ export class DocumentAccessService implements IDocumentAccessService {
     }
 
     const entries = await this.readCbzEntries(source.filePath);
-    const pageIndex =
-      range.locator.kind === 'page'
-        ? range.locator.pageIndex
-        : Math.max(0, range.locator.pageNumber - 1);
-    const entryName = range.locator.entryName ?? entries[pageIndex]?.name;
-    const entry = entries.find((item) => item.name === entryName) ?? entries[pageIndex];
-    if (!entry) {
-      throw new DocumentAccessError('invalid-range', `CBZ page not found: ${pageIndex + 1}`);
+    const selection = selectComicRangeEntries(entries, range, 'CBZ');
+    const images = await this.writeZipEntriesToTemp(selection.entries, 'cbz');
+    return this.makeComicRangeResult(
+      source,
+      range,
+      selection,
+      images,
+      'CBZ',
+      entries.length,
+      this.makeComicManifest(source, entries, 'cbz'),
+    );
+  }
+
+  private async readCbrRange(
+    source: DocumentSourceRef,
+    range: DocumentRange,
+  ): Promise<DocumentReadResult> {
+    if (range.locator.kind !== 'page' && range.locator.kind !== 'region') {
+      throw unsupportedLocator(range.locator, 'CBR range reads require a page or region locator');
     }
 
-    const text = `Comic page ${pageIndex + 1}: ${entry.name}`;
+    const entries = await this.readCbrEntries(source.filePath);
+    const selection = selectComicRangeEntries(entries, range, 'CBR');
+    const images = await this.extractCbrEntriesToTemp(
+      source.filePath,
+      selection.entries.map((entry) => entry.name),
+    );
+    return this.makeComicRangeResult(
+      source,
+      range,
+      selection,
+      images,
+      'CBR',
+      entries.length,
+      this.makeComicManifest(source, entries, 'cbr'),
+    );
+  }
+
+  private makeComicRangeResult(
+    source: DocumentSourceRef,
+    range: DocumentRange,
+    selection: ComicRangeSelection,
+    images: readonly ExtractedImage[],
+    label: 'CBZ' | 'CBR',
+    pageCount: number,
+    manifest: DocumentManifest,
+  ): DocumentReadResult {
+    const entryNames = selection.entries.map((entry) => entry.name);
+    const imagePaths = images.map((image) => image.path);
+    const selectedIndexByEntryName = new Map(
+      selection.entries.map((entry, index) => [entry.name, selection.startPageIndex + index]),
+    );
+    const imageInfo = images.map((image, index) => {
+      const pageIndex =
+        selectedIndexByEntryName.get(image.entryName ?? '') ?? selection.startPageIndex + index;
+      const entryName = image.entryName ?? selection.entries[index]?.name;
+      return createImageInfo(image.path, image.bytes, {
+        kind: 'page',
+        pageNumber: pageIndex + 1,
+        pageIndex,
+        ...(entryName ? { entryName } : {}),
+      });
+    });
+    const text =
+      selection.entries.length === 1
+        ? `Comic page ${selection.startPageIndex + 1}: ${entryNames[0] ?? ''}`
+        : `${label} page range ${selection.startPageIndex + 1}-${
+            selection.startPageIndex + selection.entries.length
+          }: ${selection.entries.length} image pages`;
     return {
       source,
       range,
       locator: range.locator,
       text,
-      imagePaths: [entry.name],
+      imagePaths,
+      imageInfo,
       excerpt: {
         contentKind: 'image',
-        imagePaths: [entry.name],
+        imagePaths,
+        imageInfo,
         truncated: false,
       },
       returnedTextChars: text.length,
       totalTextChars: text.length,
       truncated: false,
-      pageCount: entries.length,
-      metadata: { format: 'cbz', entryName: entry.name },
-      manifest: await this.getCbzManifest(source),
+      pageCount,
+      metadata: {
+        format: label.toLowerCase(),
+        ...(entryNames.length === 1 ? { entryName: entryNames[0] } : { entryNames }),
+      },
+      manifest,
     };
   }
 
@@ -543,9 +732,17 @@ export class DocumentAccessService implements IDocumentAccessService {
 
     const text = await this.readTextLikeSource(source);
     const selected = sliceTextByLocator(text, range.locator);
-    return this.makeTextResult(source, range, selected, range.limit?.maxChars, {
+    const result = this.makeTextResult(source, range, selected, range.limit?.maxChars, {
       metadata: { totalTextChars: text.length },
     });
+    if (source.format !== 'markdown' && source.format !== 'html') {
+      return result;
+    }
+
+    const imagePaths = extractLocalImageReferences(
+      await this.deps.runtime.readTextFile(source.filePath),
+    );
+    return withContentImages(result, { text: selected, imagePaths });
   }
 
   private async readContentBackedRange(
@@ -554,28 +751,31 @@ export class DocumentAccessService implements IDocumentAccessService {
   ): Promise<DocumentReadResult> {
     const content = await this.deps.reader.read(source.filePath);
     if (range.locator.kind === 'text-range') {
-      return this.makeTextResult(
+      const result = this.makeTextResult(
         source,
         range,
         sliceTextByLocator(content.text, range.locator),
         range.limit?.maxChars,
         { pageCount: content.pageCount, metadata: content.metadata },
       );
+      return withContentImages(result, content);
     }
 
     if (range.locator.kind === 'slide') {
       const chunks = splitTextIntoSections(content.text);
       const text = chunks[range.locator.slideIndex] ?? chunks.join('\n\n');
-      return this.makeTextResult(source, range, text, range.limit?.maxChars, {
+      const result = this.makeTextResult(source, range, text, range.limit?.maxChars, {
         pageCount: content.pageCount,
         metadata: content.metadata,
       });
+      return withContentImages(result, content);
     }
 
-    return this.makeTextResult(source, range, content.text, range.limit?.maxChars, {
+    const result = this.makeTextResult(source, range, content.text, range.limit?.maxChars, {
       pageCount: content.pageCount,
       metadata: content.metadata,
     });
+    return withContentImages(result, content);
   }
 
   private async readTextLikeSource(source: DocumentSourceRef): Promise<string> {
@@ -597,7 +797,10 @@ export class DocumentAccessService implements IDocumentAccessService {
   private async parseEpubData(source: DocumentSourceRef): Promise<ParsedEpubData> {
     const EPub = resolveEpubConstructor(await this.deps.runtime.loadModule<unknown>('epub2'));
     if (!EPub) {
-      throw new DocumentAccessError('unsupported-format', 'epub2 package is not available');
+      throw new DocumentAccessError(
+        'unsupported-format',
+        'EPUB reader is unavailable in this NekoAgent build',
+      );
     }
 
     const epub = await parseEpub(source.filePath, EPub);
@@ -612,6 +815,7 @@ export class DocumentAccessService implements IDocumentAccessService {
       },
       chapters: epub.flow.map((chapter) => ({
         id: chapter.id,
+        href: chapter.href,
         title: chapter.title ?? chapter.href ?? chapter.id,
       })),
     };
@@ -620,12 +824,144 @@ export class DocumentAccessService implements IDocumentAccessService {
   private async readCbzEntries(filePath: string): Promise<readonly ZipEntryLike[]> {
     const AdmZip = await this.deps.runtime.loadModule<AdmZipConstructorLike>('adm-zip');
     if (!AdmZip) {
-      throw new DocumentAccessError('unsupported-format', 'adm-zip package is not available');
+      throw new DocumentAccessError(
+        'unsupported-format',
+        'CBZ image reader is unavailable in this NekoAgent build',
+      );
     }
     return new AdmZip(filePath)
       .getEntries()
       .filter((entry) => COMIC_IMAGE_PATTERN.test(entry.name))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  }
+
+  private async readCbrEntries(filePath: string): Promise<readonly { readonly name: string }[]> {
+    const unrar = await this.deps.runtime.loadModule<UnrarModuleLike>('node-unrar-js');
+    if (!unrar) {
+      throw new DocumentAccessError(
+        'unsupported-format',
+        'CBR image reader is unavailable in this NekoAgent build',
+      );
+    }
+
+    const extractor = unrar.createExtractorFromData({
+      data: await this.deps.runtime.readBinaryFile(filePath),
+    });
+    return extractor
+      .getFileList()
+      .fileHeaders.filter((file) => COMIC_IMAGE_PATTERN.test(file.name))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  }
+
+  private async extractZipEntriesToTemp(
+    filePath: string,
+    entryPaths: readonly string[],
+    tmpPrefix: string,
+  ): Promise<ExtractedImage[]> {
+    if (entryPaths.length === 0) {
+      return [];
+    }
+
+    const AdmZip = await this.deps.runtime.loadModule<AdmZipConstructorLike>('adm-zip');
+    if (!AdmZip) {
+      this.deps.runtime.logger?.warn('Internal ZIP image reader is unavailable', {
+        path: filePath,
+      });
+      return [];
+    }
+
+    const zip = new AdmZip(filePath);
+    const entries = entryPaths
+      .map((entryPath) => zip.getEntry(entryPath))
+      .filter((entry): entry is ZipEntryLike => entry !== null);
+    return this.writeZipEntriesToTemp(entries, tmpPrefix);
+  }
+
+  private async writeZipEntriesToTemp(
+    entries: readonly ZipEntryLike[],
+    tmpPrefix: string,
+  ): Promise<ExtractedImage[]> {
+    if (entries.length === 0) {
+      return [];
+    }
+
+    const tmpDir = path.join(
+      this.deps.runtime.tempDir(),
+      `neko_${tmpPrefix}_${this.deps.runtime.now?.().getTime() ?? Date.now()}`,
+    );
+    await this.deps.runtime.makeDir(tmpDir, { recursive: true });
+
+    const images: ExtractedImage[] = [];
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+      if (!entry) {
+        continue;
+      }
+      const imagePath = path.join(
+        tmpDir,
+        `${String(index + 1).padStart(4, '0')}_${path.basename(entry.name)}`,
+      );
+      const imageBytes = entry.getData();
+      await this.deps.runtime.writeBinaryFile(imagePath, imageBytes);
+      images.push({ path: imagePath, entryName: entry.name, bytes: imageBytes });
+    }
+    return images;
+  }
+
+  private async extractCbrEntriesToTemp(
+    filePath: string,
+    entryNames: readonly string[],
+  ): Promise<ExtractedImage[]> {
+    if (entryNames.length === 0) {
+      return [];
+    }
+
+    const unrar = await this.deps.runtime.loadModule<UnrarModuleLike>('node-unrar-js');
+    if (!unrar) {
+      throw new DocumentAccessError(
+        'unsupported-format',
+        'CBR image reader is unavailable in this NekoAgent build',
+      );
+    }
+
+    const selectedNames = new Set(entryNames);
+    const extractor = unrar.createExtractorFromData({
+      data: await this.deps.runtime.readBinaryFile(filePath),
+    });
+    const filesByName = new Map(
+      extractor
+        .extract()
+        .files.filter((file) => selectedNames.has(file.fileHeader.name))
+        .map((file) => [file.fileHeader.name, file]),
+    );
+    const files = entryNames
+      .map((entryName) => filesByName.get(entryName))
+      .filter((file): file is UnrarExtractedFileLike => file !== undefined);
+    if (files.length === 0) {
+      return [];
+    }
+
+    const tmpDir = path.join(
+      this.deps.runtime.tempDir(),
+      `neko_cbr_${this.deps.runtime.now?.().getTime() ?? Date.now()}`,
+    );
+    await this.deps.runtime.makeDir(tmpDir, { recursive: true });
+
+    const images: ExtractedImage[] = [];
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      if (!file) {
+        continue;
+      }
+      const imagePath = path.join(
+        tmpDir,
+        `${String(index + 1).padStart(4, '0')}_${path.basename(file.fileHeader.name)}`,
+      );
+      const imageBytes = file.extract[1];
+      await this.deps.runtime.writeBinaryFile(imagePath, imageBytes);
+      images.push({ path: imagePath, entryName: file.fileHeader.name, bytes: imageBytes });
+    }
+    return images;
   }
 
   private makeTextResult(
@@ -781,15 +1117,28 @@ function parseEpub(filePath: string, EPub: EpubConstructorLike): Promise<EpubLik
   });
 }
 
-function readEpubChapterText(epub: EpubLike, chapterId: string): Promise<string> {
+function readEpubChapterHtml(epub: EpubLike, chapterId: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     epub.getChapter(chapterId, (error, content) => {
       if (error) {
         reject(error);
         return;
       }
-      resolve(stripHtmlToText(content));
+      resolve(content);
     });
+  });
+}
+
+function findEpubChapterIndex(
+  chapters: readonly EpubChapterInfo[],
+  locator: Extract<DocumentLocator, { kind: 'chapter' }>,
+): number {
+  return chapters.findIndex((item, index) => {
+    return (
+      item.id === locator.chapterHref ||
+      item.href === locator.chapterHref ||
+      (locator.spineIndex !== undefined && index === locator.spineIndex)
+    );
   });
 }
 
@@ -819,6 +1168,108 @@ function splitTextIntoSections(text: string): readonly string[] {
     .filter((section) => section.length > 0);
 }
 
+function selectComicRangeEntries<TEntry extends { readonly name: string }>(
+  entries: readonly TEntry[],
+  range: DocumentRange,
+  label: 'CBZ' | 'CBR',
+): ComicRangeSelection<TEntry> {
+  const startPageIndex =
+    range.locator.kind === 'page'
+      ? range.locator.pageIndex
+      : range.locator.kind === 'region'
+        ? Math.max(0, range.locator.pageNumber - 1)
+        : 0;
+  const startEntryName =
+    range.locator.kind === 'page' || range.locator.kind === 'region'
+      ? (range.locator.entryName ?? entries[startPageIndex]?.name)
+      : entries[startPageIndex]?.name;
+  const startEntryIndex = findComicEntryIndex(entries, startEntryName, startPageIndex);
+  if (startEntryIndex < 0) {
+    throw new DocumentAccessError(
+      'invalid-range',
+      `${label} page not found: ${startPageIndex + 1}`,
+    );
+  }
+
+  const endPageIndex =
+    range.endLocator?.kind === 'page'
+      ? range.endLocator.pageIndex
+      : range.endLocator?.kind === 'region'
+        ? Math.max(0, range.endLocator.pageNumber - 1)
+        : startEntryIndex;
+  const endEntryName =
+    range.endLocator?.kind === 'page' || range.endLocator?.kind === 'region'
+      ? (range.endLocator.entryName ?? entries[endPageIndex]?.name)
+      : entries[endPageIndex]?.name;
+  const endEntryIndex = findComicEntryIndex(entries, endEntryName, endPageIndex);
+  if (endEntryIndex < startEntryIndex) {
+    throw new DocumentAccessError('invalid-range', `Invalid ${label} page range`);
+  }
+
+  const boundedEndIndex =
+    range.limit?.maxImages !== undefined
+      ? Math.min(endEntryIndex, startEntryIndex + range.limit.maxImages - 1)
+      : endEntryIndex;
+  return {
+    startPageIndex: startEntryIndex,
+    entries: entries.slice(startEntryIndex, boundedEndIndex + 1),
+  };
+}
+
+function findComicEntryIndex(
+  entries: readonly { readonly name: string }[],
+  entryName: string | undefined,
+  fallbackIndex: number,
+): number {
+  if (entryName) {
+    const entryIndex = entries.findIndex((entry) => entry.name === entryName);
+    if (entryIndex >= 0) {
+      return entryIndex;
+    }
+  }
+  return entries[fallbackIndex] ? fallbackIndex : -1;
+}
+
+function dedupeEpubImageRefs(
+  refs: readonly {
+    readonly entryPath: string;
+    readonly locator: Extract<DocumentLocator, { kind: 'chapter' }>;
+  }[],
+): Array<{
+  readonly entryPath: string;
+  readonly locator: Extract<DocumentLocator, { kind: 'chapter' }>;
+}> {
+  const seen = new Set<string>();
+  const deduped: Array<{
+    readonly entryPath: string;
+    readonly locator: Extract<DocumentLocator, { kind: 'chapter' }>;
+  }> = [];
+  for (const ref of refs) {
+    if (seen.has(ref.entryPath)) {
+      continue;
+    }
+    seen.add(ref.entryPath);
+    deduped.push(ref);
+  }
+  return deduped;
+}
+
+function createImageInfo(
+  filePath: string,
+  bytes: Uint8Array,
+  locator?: DocumentLocator,
+): DocumentImageInfo {
+  const metadata = probeImageMetadata(bytes);
+  return {
+    path: filePath,
+    byteSize: metadata?.byteSize ?? bytes.length,
+    ...(metadata?.mimeType ? { mimeType: metadata.mimeType } : {}),
+    ...(metadata?.width !== undefined ? { width: metadata.width } : {}),
+    ...(metadata?.height !== undefined ? { height: metadata.height } : {}),
+    ...(locator ? { locator } : {}),
+  };
+}
+
 function findManifestUnitIndex(
   units: readonly DocumentManifestUnit[],
   locator: DocumentLocator,
@@ -846,6 +1297,31 @@ function sameLocator(left: DocumentLocator, right: DocumentLocator): boolean {
     case 'region':
       return right.kind === 'region' && left.pageNumber === right.pageNumber;
   }
+  return false;
+}
+
+function withContentImages(
+  result: DocumentReadResult,
+  content: DocumentContent,
+): DocumentReadResult {
+  const imagePaths = content.imagePaths;
+  if (!imagePaths || imagePaths.length === 0) {
+    return result;
+  }
+
+  return {
+    ...result,
+    imagePaths,
+    ...(content.imageInfo && content.imageInfo.length > 0 ? { imageInfo: content.imageInfo } : {}),
+    excerpt: {
+      ...result.excerpt,
+      contentKind: result.text && result.text.trim().length > 0 ? 'mixed' : 'image',
+      imagePaths,
+      ...(content.imageInfo && content.imageInfo.length > 0
+        ? { imageInfo: content.imageInfo }
+        : {}),
+    },
+  };
 }
 
 function unsupportedLocator(locator: DocumentLocator, message: string): DocumentAccessError {

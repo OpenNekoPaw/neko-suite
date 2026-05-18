@@ -150,6 +150,11 @@ describe('createReadDocumentTool', () => {
         text: 'Comic archive with 3 pages',
         pageCount: 3,
         imagePaths: ['/tmp/1.png', '/tmp/2.png', '/tmp/3.png'],
+        imageInfo: [
+          { path: '/tmp/1.png', width: 100, height: 200, mimeType: 'image/png', byteSize: 10 },
+          { path: '/tmp/2.png', width: 110, height: 210, mimeType: 'image/png', byteSize: 11 },
+          { path: '/tmp/3.png', width: 120, height: 220, mimeType: 'image/png', byteSize: 12 },
+        ],
       })),
     });
     const tool = createReadDocumentTool({ reader });
@@ -163,6 +168,10 @@ describe('createReadDocumentTool', () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         imagePaths: ['/tmp/1.png', '/tmp/2.png'],
+        imageInfo: [
+          { path: '/tmp/1.png', width: 100, height: 200, mimeType: 'image/png', byteSize: 10 },
+          { path: '/tmp/2.png', width: 110, height: 210, mimeType: 'image/png', byteSize: 11 },
+        ],
         imagePathCount: 3,
         imagePathsTruncated: true,
       }),
@@ -224,6 +233,176 @@ describe('createReadDocumentTool', () => {
       limit: { maxChars: 1000, maxImages: 50 },
     });
     expect(result.data).toEqual(expect.objectContaining({ text: 'Chapter range' }));
+  });
+
+  it('limits image metadata with image paths in range results', async () => {
+    const reader = createReader({
+      readRange: vi.fn(async () => ({
+        source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+        locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
+        text: 'EPUB chapter range with 3 image pages',
+        imagePaths: ['/tmp/1.jpg', '/tmp/2.jpg', '/tmp/3.jpg'],
+        imageInfo: [
+          { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
+          { path: '/tmp/2.jpg', width: 110, height: 210, mimeType: 'image/jpeg', byteSize: 11 },
+          { path: '/tmp/3.jpg', width: 120, height: 220, mimeType: 'image/jpeg', byteSize: 12 },
+        ],
+        excerpt: {
+          contentKind: 'image',
+          imagePaths: ['/tmp/1.jpg', '/tmp/2.jpg', '/tmp/3.jpg'],
+          imageInfo: [
+            { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
+            { path: '/tmp/2.jpg', width: 110, height: 210, mimeType: 'image/jpeg', byteSize: 11 },
+            { path: '/tmp/3.jpg', width: 120, height: 220, mimeType: 'image/jpeg', byteSize: 12 },
+          ],
+        },
+        totalTextChars: 37,
+        returnedTextChars: 37,
+        truncated: false,
+      })),
+    });
+    const tool = createReadDocumentTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      mode: 'range',
+      image_path_limit: 2,
+      range: { locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 } },
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        imagePaths: ['/tmp/1.jpg', '/tmp/2.jpg'],
+        imageInfo: [
+          { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
+          { path: '/tmp/2.jpg', width: 110, height: 210, mimeType: 'image/jpeg', byteSize: 11 },
+        ],
+        excerpt: expect.objectContaining({
+          imagePaths: ['/tmp/1.jpg', '/tmp/2.jpg'],
+          imageInfo: [
+            { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
+            { path: '/tmp/2.jpg', width: 110, height: 210, mimeType: 'image/jpeg', byteSize: 11 },
+          ],
+        }),
+        metadata: expect.objectContaining({
+          imagePathCount: 3,
+          imagePathsTruncated: true,
+        }),
+      }),
+    );
+  });
+
+  it('hides image metadata when image paths are excluded', async () => {
+    const reader = createReader({
+      readRange: vi.fn(async () => ({
+        source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+        text: 'EPUB chapter range with 1 image pages',
+        imagePaths: ['/tmp/1.jpg'],
+        imageInfo: [
+          { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
+        ],
+        excerpt: {
+          contentKind: 'image',
+          imagePaths: ['/tmp/1.jpg'],
+          imageInfo: [
+            { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
+          ],
+        },
+        returnedTextChars: 37,
+        truncated: false,
+      })),
+    });
+    const tool = createReadDocumentTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      mode: 'range',
+      include_image_paths: false,
+      range: { locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 } },
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        imagePaths: [],
+        imageInfo: [],
+        excerpt: expect.objectContaining({
+          imagePaths: [],
+          imageInfo: [],
+        }),
+      }),
+    );
+  });
+
+  it('defaults missing range mode ranges to the first manifest units', async () => {
+    const reader = createReader({
+      getManifest: vi.fn(async () => ({
+        source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+        format: 'epub',
+        fileId: 'book-1',
+        chapterCount: 3,
+        units: [
+          {
+            kind: 'chapter',
+            locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 0 },
+          },
+          {
+            kind: 'chapter',
+            locator: { kind: 'chapter', chapterHref: 'Page_2', spineIndex: 1 },
+          },
+          {
+            kind: 'chapter',
+            locator: { kind: 'chapter', chapterHref: 'Page_3', spineIndex: 2 },
+          },
+        ],
+        capabilities: {
+          supportsManifest: true,
+          supportsRangeRead: true,
+          supportsCursorRead: true,
+          supportsChapterRange: true,
+        },
+      })),
+    });
+    const tool = createReadDocumentTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      mode: 'range',
+      image_path_limit: 2,
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(reader.getManifest).toHaveBeenCalledWith('/books/demo.epub');
+    expect(reader.readRange).toHaveBeenCalledWith('/books/demo.epub', {
+      locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 0 },
+      endLocator: { kind: 'chapter', chapterHref: 'Page_2', spineIndex: 1 },
+      limit: { maxChars: 20000, maxImages: 2 },
+    });
+    expect(reader.read).not.toHaveBeenCalled();
+  });
+
+  it('accepts chapterRange shorthand from document preview ranges', async () => {
+    const reader = createReader();
+    const tool = createReadDocumentTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      mode: 'range',
+      range: {
+        kind: 'chapterRange',
+        start: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+        end: { kind: 'chapter', chapterHref: 'Page_10', spineIndex: 10 },
+      },
+      image_path_limit: 10,
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(reader.readRange).toHaveBeenCalledWith('/books/demo.epub', {
+      locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+      endLocator: { kind: 'chapter', chapterHref: 'Page_10', spineIndex: 10 },
+      limit: { maxChars: 20000, maxImages: 10 },
+    });
   });
 
   it('rejects malformed range locators before calling the reader', async () => {

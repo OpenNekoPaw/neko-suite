@@ -2,13 +2,64 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createDocumentReaderRuntime,
   estimateSlideCount,
+  extractEpubImageEntryPaths,
+  extractLocalImageReferences,
   isSupportedDocumentPath,
+  resolveEpubEntryReference,
   stripHtmlToText,
   type DocumentReaderRuntimeDeps,
 } from '../document-reader';
 import { createDocumentAccessService } from '../document-access-service';
 
 type ModuleLoader = DocumentReaderRuntimeDeps['loadModule'];
+
+function makePng(width: number, height: number): Uint8Array {
+  return new Uint8Array([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    0x00,
+    0x00,
+    0x00,
+    0x0d,
+    0x49,
+    0x48,
+    0x44,
+    0x52,
+    (width >>> 24) & 0xff,
+    (width >>> 16) & 0xff,
+    (width >>> 8) & 0xff,
+    width & 0xff,
+    (height >>> 24) & 0xff,
+    (height >>> 16) & 0xff,
+    (height >>> 8) & 0xff,
+    height & 0xff,
+  ]);
+}
+
+function makeJpeg(width: number, height: number): Uint8Array {
+  return new Uint8Array([
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0x00,
+    0x08,
+    0x08,
+    (height >>> 8) & 0xff,
+    height & 0xff,
+    (width >>> 8) & 0xff,
+    width & 0xff,
+    0x03,
+    0xff,
+    0xd9,
+  ]);
+}
 
 function createDeps(overrides: Partial<DocumentReaderRuntimeDeps> = {}): DocumentReaderRuntimeDeps {
   return {
@@ -193,6 +244,204 @@ describe('document-reader runtime', () => {
     expect(result.metadata?.['title']).toBe('Book');
     expect(result.metadata?.['author']).toBe('Author');
   });
+
+  it('extracts EPUB image entry paths relative to chapter HTML', () => {
+    const html = `
+      <img src="../image/page-1.jpg" />
+      <image xlink:href="../image/page-2.png" />
+      <img srcset="../image/page-3.webp 1x, ../image/page-3@2x.webp 2x" />
+    `;
+
+    expect(extractEpubImageEntryPaths(html, 'html/page-1.xhtml')).toEqual([
+      'image/page-1.jpg',
+      'image/page-2.png',
+      'image/page-3.webp',
+      'image/page-3@2x.webp',
+    ]);
+    expect(resolveEpubEntryReference('OPS/html/page.xhtml', '../images/a.jpg')).toBe(
+      'OPS/images/a.jpg',
+    );
+    expect(resolveEpubEntryReference('html/page.xhtml', '/images/image/page-4.jpg')).toBe(
+      'image/page-4.jpg',
+    );
+  });
+
+  it('extracts local image references from HTML and Markdown', () => {
+    expect(
+      extractLocalImageReferences(`
+        <img src="./a.png?size=1" />
+        ![cover](images/cover.jpg)
+        <img src="data:image/png;base64,abc" />
+      `),
+    ).toEqual(['./a.png', 'images/cover.jpg']);
+  });
+
+  it('extracts image-only EPUB chapters to temporary image paths', async () => {
+    const writes: Array<{ path: string; data: Uint8Array }> = [];
+    class FakeEpub {
+      readonly flow = [{ id: 'page-1', title: 'html/page-1.xhtml' }];
+      readonly metadata = { title: 'Comic', creator: 'Author' };
+      private readonly handlers = new Map<string, (...args: never[]) => void>();
+
+      on(event: 'end' | 'error', handler: (...args: never[]) => void): void {
+        this.handlers.set(event, handler);
+      }
+
+      getChapter(id: string, callback: (error: Error | null, content: string) => void): void {
+        callback(null, `<html><body><img src="../image/${id}.jpg" /></body></html>`);
+      }
+
+      parse(): void {
+        this.handlers.get('end')?.();
+      }
+    }
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntry(name: string): { getData(): Uint8Array } | null {
+        return name === 'image/page-1.jpg' ? { getData: () => makeJpeg(1494, 2133) } : null;
+      }
+    }
+
+    const reader = createDocumentReaderRuntime(
+      createDeps({
+        loadModule: createModuleLoader((packageName) => {
+          if (packageName === 'epub2') return { EPub: FakeEpub };
+          if (packageName === 'adm-zip') return FakeZip;
+          return null;
+        }),
+        makeDir: vi.fn(async () => undefined),
+        writeBinaryFile: vi.fn(async (filePath, data) => {
+          writes.push({ path: filePath, data });
+        }),
+      }),
+    );
+
+    const result = await reader.read('/doc/comic.epub');
+
+    expect(result.text).toBe('EPUB image document with 1 image pages');
+    expect(result.pageCount).toBe(1);
+    expect(result.imagePaths).toEqual(['/tmp/neko_epub_1777248000000/0001_page-1.jpg']);
+    expect(result.imageInfo).toEqual([
+      {
+        path: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+        width: 1494,
+        height: 2133,
+        mimeType: 'image/jpeg',
+        byteSize: makeJpeg(1494, 2133).length,
+      },
+    ]);
+    expect(result.metadata?.['imageCount']).toBe(1);
+    expect(writes).toEqual([
+      {
+        path: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+        data: makeJpeg(1494, 2133),
+      },
+    ]);
+  });
+
+  it('extracts DOCX embedded images when present', async () => {
+    const writes: Array<{ path: string; data: Uint8Array }> = [];
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [
+          { name: 'word/media/image2.png', getData: () => makePng(800, 600) },
+          { name: 'word/media/image1.jpg', getData: () => makeJpeg(320, 240) },
+          { name: 'docProps/thumbnail.jpeg', getData: () => new Uint8Array([9]) },
+        ];
+      }
+    }
+
+    const reader = createDocumentReaderRuntime(
+      createDeps({
+        loadModule: createModuleLoader((packageName) => {
+          if (packageName === 'mammoth') return { extractRawText: async () => ({ value: 'Body' }) };
+          if (packageName === 'adm-zip') return FakeZip;
+          return null;
+        }),
+        writeBinaryFile: vi.fn(async (filePath, data) => {
+          writes.push({ path: filePath, data });
+        }),
+      }),
+    );
+
+    const result = await reader.read('/doc/report.docx');
+
+    expect(result.text).toBe('Body');
+    expect(result.imagePaths).toEqual([
+      '/tmp/neko_docx_1777248000000/0001_image1.jpg',
+      '/tmp/neko_docx_1777248000000/0002_image2.png',
+    ]);
+    expect(result.imageInfo).toEqual([
+      {
+        path: '/tmp/neko_docx_1777248000000/0001_image1.jpg',
+        width: 320,
+        height: 240,
+        mimeType: 'image/jpeg',
+        byteSize: makeJpeg(320, 240).length,
+      },
+      {
+        path: '/tmp/neko_docx_1777248000000/0002_image2.png',
+        width: 800,
+        height: 600,
+        mimeType: 'image/png',
+        byteSize: makePng(800, 600).length,
+      },
+    ]);
+    expect(result.metadata?.['imageCount']).toBe(2);
+    expect(writes).toHaveLength(2);
+  });
+
+  it('extracts PPTX and XLSX embedded media images', async () => {
+    class FakeZip {
+      constructor(private readonly filePath: string) {}
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        const mediaDir = this.filePath.endsWith('.pptx') ? 'ppt/media' : 'xl/media';
+        return [{ name: `${mediaDir}/image1.png`, getData: () => makePng(1024, 768) }];
+      }
+    }
+
+    const reader = createDocumentReaderRuntime(
+      createDeps({
+        loadModule: createModuleLoader((packageName) => {
+          if (packageName === 'officeparser') {
+            return { parseOfficeAsync: async () => 'Slide text' };
+          }
+          if (packageName === 'xlsx') {
+            return {
+              readFile: () => ({ SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }),
+              utils: { sheet_to_json: () => [['A1']] },
+            };
+          }
+          if (packageName === 'adm-zip') return FakeZip;
+          return null;
+        }),
+      }),
+    );
+
+    const pptx = await reader.read('/doc/deck.pptx');
+    const xlsx = await reader.read('/doc/sheet.xlsx');
+
+    expect(pptx.imagePaths).toEqual(['/tmp/neko_pptx_1777248000000/0001_image1.png']);
+    expect(pptx.imageInfo?.[0]).toEqual({
+      path: '/tmp/neko_pptx_1777248000000/0001_image1.png',
+      width: 1024,
+      height: 768,
+      mimeType: 'image/png',
+      byteSize: makePng(1024, 768).length,
+    });
+    expect(xlsx.imagePaths).toEqual(['/tmp/neko_xlsx_1777248000000/0001_image1.png']);
+    expect(xlsx.imageInfo?.[0]).toEqual({
+      path: '/tmp/neko_xlsx_1777248000000/0001_image1.png',
+      width: 1024,
+      height: 768,
+      mimeType: 'image/png',
+      byteSize: makePng(1024, 768).length,
+    });
+  });
 });
 
 describe('document access service', () => {
@@ -367,6 +616,258 @@ describe('document access service', () => {
     expect(result.text).toContain('chapter-2 正文');
     expect(result.manifest?.chapterCount).toBe(2);
     expect(parseCount).toBe(1);
+  });
+
+  it('reads EPUB chapter ranges with image entry paths', async () => {
+    const writes: Array<{ path: string; data: Uint8Array }> = [];
+    class FakeEpub {
+      readonly flow = [
+        { id: 'Page_1', title: 'html/page-1.xhtml' },
+        { id: 'Page_2', title: 'html/page-2.xhtml' },
+      ];
+      readonly metadata = { title: 'Comic', creator: 'Author' };
+      private readonly handlers = new Map<string, (...args: never[]) => void>();
+
+      on(event: 'end' | 'error', handler: (...args: never[]) => void): void {
+        this.handlers.set(event, handler);
+      }
+
+      getChapter(id: string, callback: (error: Error | null, content: string) => void): void {
+        callback(null, `<html><body><img src="../image/${id}.jpg" /></body></html>`);
+      }
+
+      parse(): void {
+        this.handlers.get('end')?.();
+      }
+    }
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntry(name: string): { name: string; getData(): Uint8Array } | null {
+        return name.startsWith('image/') ? { name, getData: () => makeJpeg(1494, 2133) } : null;
+      }
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [];
+      }
+    }
+
+    const deps = createDeps({
+      loadModule: createModuleLoader((packageName) => {
+        if (packageName === 'epub2') return { EPub: FakeEpub };
+        if (packageName === 'adm-zip') return FakeZip;
+        return null;
+      }),
+      writeBinaryFile: vi.fn(async (filePath, data) => {
+        writes.push({ path: filePath, data });
+      }),
+    });
+    const runtime = createDocumentReaderRuntime(deps);
+    const service = createDocumentAccessService({ reader: runtime, runtime: deps });
+
+    const result = await service.readRange('/doc/comic.epub', {
+      locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 0 },
+      endLocator: { kind: 'chapter', chapterHref: 'Page_2', spineIndex: 1 },
+      limit: { maxImages: 1 },
+    });
+
+    expect(result.text).toBe('EPUB chapter range with 1 image pages');
+    expect(result.imagePaths).toEqual(['/tmp/neko_epub_1777248000000/0001_Page_1.jpg']);
+    expect(result.imageInfo).toEqual([
+      {
+        path: '/tmp/neko_epub_1777248000000/0001_Page_1.jpg',
+        width: 1494,
+        height: 2133,
+        mimeType: 'image/jpeg',
+        byteSize: makeJpeg(1494, 2133).length,
+        locator: {
+          kind: 'chapter',
+          chapterHref: 'Page_1',
+          spineIndex: 0,
+          title: 'html/page-1.xhtml',
+        },
+      },
+    ]);
+    expect(result.excerpt).toEqual(
+      expect.objectContaining({
+        contentKind: 'image',
+        imagePaths: ['/tmp/neko_epub_1777248000000/0001_Page_1.jpg'],
+        imageInfo: [
+          expect.objectContaining({
+            width: 1494,
+            height: 2133,
+            mimeType: 'image/jpeg',
+          }),
+        ],
+      }),
+    );
+    expect(writes).toEqual([
+      {
+        path: '/tmp/neko_epub_1777248000000/0001_Page_1.jpg',
+        data: makeJpeg(1494, 2133),
+      },
+    ]);
+  });
+
+  it('passes content-backed image paths through range reads', async () => {
+    const deps = createDeps();
+    const reader = createDocumentReaderRuntime(deps);
+    const service = createDocumentAccessService({
+      reader: {
+        ...reader,
+        read: vi.fn(async () => ({
+          text: 'Slide text',
+          pageCount: 1,
+          imagePaths: ['/tmp/slide.png'],
+          imageInfo: [
+            {
+              path: '/tmp/slide.png',
+              width: 1024,
+              height: 768,
+              mimeType: 'image/png',
+              byteSize: 24,
+            },
+          ],
+        })),
+      },
+      runtime: deps,
+    });
+
+    const result = await service.readRange('/doc/deck.pptx', {
+      locator: { kind: 'slide', slideNumber: 1, slideIndex: 0 },
+    });
+
+    expect(result.imagePaths).toEqual(['/tmp/slide.png']);
+    expect(result.imageInfo).toEqual([
+      {
+        path: '/tmp/slide.png',
+        width: 1024,
+        height: 768,
+        mimeType: 'image/png',
+        byteSize: 24,
+      },
+    ]);
+    expect(result.excerpt).toEqual(
+      expect.objectContaining({
+        contentKind: 'mixed',
+        imagePaths: ['/tmp/slide.png'],
+        imageInfo: [
+          expect.objectContaining({
+            width: 1024,
+            height: 768,
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('reads CBZ page ranges as local temporary images', async () => {
+    const writes: Array<{ path: string; data: Uint8Array }> = [];
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntry(name: string): { name: string; getData(): Uint8Array } | null {
+        return this.getEntries().find((entry) => entry.name === name) ?? null;
+      }
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [
+          { name: '002.jpg', getData: () => makeJpeg(1002, 2002) },
+          { name: '001.jpg', getData: () => makeJpeg(1001, 2001) },
+          { name: 'notes.txt', getData: () => new Uint8Array([9]) },
+        ];
+      }
+    }
+
+    const deps = createDeps({
+      loadModule: createModuleLoader((packageName) => (packageName === 'adm-zip' ? FakeZip : null)),
+      writeBinaryFile: vi.fn(async (filePath, data) => {
+        writes.push({ path: filePath, data });
+      }),
+    });
+    const runtime = createDocumentReaderRuntime(deps);
+    const service = createDocumentAccessService({ reader: runtime, runtime: deps });
+
+    const result = await service.readRange('/doc/comic.cbz', {
+      locator: { kind: 'page', pageNumber: 1, pageIndex: 0 },
+      endLocator: { kind: 'page', pageNumber: 2, pageIndex: 1 },
+      limit: { maxImages: 2 },
+    });
+
+    expect(result.text).toBe('CBZ page range 1-2: 2 image pages');
+    expect(result.imagePaths).toEqual([
+      '/tmp/neko_cbz_1777248000000/0001_001.jpg',
+      '/tmp/neko_cbz_1777248000000/0002_002.jpg',
+    ]);
+    expect(result.imageInfo).toEqual([
+      {
+        path: '/tmp/neko_cbz_1777248000000/0001_001.jpg',
+        width: 1001,
+        height: 2001,
+        mimeType: 'image/jpeg',
+        byteSize: makeJpeg(1001, 2001).length,
+        locator: { kind: 'page', pageNumber: 1, pageIndex: 0, entryName: '001.jpg' },
+      },
+      {
+        path: '/tmp/neko_cbz_1777248000000/0002_002.jpg',
+        width: 1002,
+        height: 2002,
+        mimeType: 'image/jpeg',
+        byteSize: makeJpeg(1002, 2002).length,
+        locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
+      },
+    ]);
+    expect(writes).toHaveLength(2);
+  });
+
+  it('builds CBR manifests and reads one page by locator as a local temporary image', async () => {
+    const deps = createDeps({
+      readBinaryFile: vi.fn(async () => new Uint8Array([1, 2])),
+      loadModule: createModuleLoader((packageName) =>
+        packageName === 'node-unrar-js'
+          ? {
+              createExtractorFromData: () => ({
+                getFileList: () => ({
+                  fileHeaders: [{ name: '002.jpg' }, { name: '001.jpg' }, { name: 'notes.txt' }],
+                }),
+                extract: () => ({
+                  files: [
+                    {
+                      fileHeader: { name: '002.jpg' },
+                      extract: [undefined, makeJpeg(1002, 2002)] as const,
+                    },
+                    {
+                      fileHeader: { name: '001.jpg' },
+                      extract: [undefined, makeJpeg(1001, 2001)] as const,
+                    },
+                  ],
+                }),
+              }),
+            }
+          : null,
+      ),
+    });
+    const runtime = createDocumentReaderRuntime(deps);
+    const service = createDocumentAccessService({ reader: runtime, runtime: deps });
+
+    const manifest = await service.getManifest('/doc/comic.cbr');
+    const result = await service.readRange('/doc/comic.cbr', {
+      locator: { kind: 'page', pageNumber: 2, pageIndex: 1 },
+    });
+
+    expect(manifest.entryCount).toBe(2);
+    expect(result.imagePaths).toEqual(['/tmp/neko_cbr_1777248000000/0001_002.jpg']);
+    expect(result.imageInfo).toEqual([
+      {
+        path: '/tmp/neko_cbr_1777248000000/0001_002.jpg',
+        width: 1002,
+        height: 2002,
+        mimeType: 'image/jpeg',
+        byteSize: makeJpeg(1002, 2002).length,
+        locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
+      },
+    ]);
+    expect(result.metadata?.['format']).toBe('cbr');
   });
 
   it('continues cursor batches in manifest order and marks completion', async () => {

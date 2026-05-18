@@ -23,3 +23,10 @@ export {
   type DocumentReaderRuntimeDeps,
   type IDocumentReader,
 } from './document-reader';
+
+export {
+  imageMetadataProbe,
+  probeImageMetadata,
+  type ImageMetadata,
+  type ImageMetadataProbe,
+} from './image-metadata';

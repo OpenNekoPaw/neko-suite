@@ -187,6 +187,53 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
+    it('projects document image paths to webview URIs only for webview delivery', async () => {
+      const events = toAsyncIterable([
+        {
+          type: 'tool_call',
+          toolCall: { id: 'tc-1', name: 'ReadDocument', arguments: { file_path: '/books/a.epub' } },
+        },
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-1',
+            success: true,
+            data: {
+              source: { filePath: '/books/a.epub', format: 'epub' },
+              imagePaths: ['/tmp/page-1.jpg'],
+              imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
+            },
+          },
+        },
+      ]);
+
+      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(result.collectedToolCalls[0]!.result?.data).toEqual({
+        source: { filePath: '/books/a.epub', format: 'epub' },
+        imagePaths: ['/tmp/page-1.jpg'],
+        imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
+      });
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResult',
+          data: {
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            imagePaths: ['/tmp/page-1.jpg'],
+            imagePathWebviewUris: ['webview-uri:/tmp/page-1.jpg'],
+            imageInfo: [
+              {
+                path: '/tmp/page-1.jpg',
+                webviewUri: 'webview-uri:/tmp/page-1.jpg',
+                width: 1494,
+                height: 2133,
+              },
+            ],
+          },
+        }),
+      );
+    });
+
     it('should handle tool_confirmation events', async () => {
       const events = toAsyncIterable([
         {

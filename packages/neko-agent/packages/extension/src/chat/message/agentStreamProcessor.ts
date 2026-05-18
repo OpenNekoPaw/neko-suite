@@ -13,8 +13,10 @@ import { createMediaTaskProgressView } from '@neko/platform/media/media-task-vie
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import {
   AgentEventStreamRuntimeProcessor,
+  projectResourceValue,
   persistAgentStreamBackgroundTaskResultUrls,
   type BackfillSink,
+  type AgentEventStreamRuntimeMessage,
   type AgentStreamBackgroundTaskObservedProgress,
   type CollectedToolCall,
   type IPerceptionPipeline,
@@ -113,8 +115,9 @@ export class AgentStreamProcessor {
       conversationId,
       events,
       postMessage: (message) => {
+        const projectedMessage = projectStreamMessageResourcesForWebview(webview, message);
         this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
-        void webview.postMessage(message);
+        void webview.postMessage(projectedMessage);
       },
       onPhaseChange: callbacks.onPhaseChange,
       backgroundTasks: {
@@ -279,6 +282,35 @@ export class AgentStreamProcessor {
   dispose(): void {
     this.streamRuntime.dispose();
   }
+}
+
+function projectStreamMessageResourcesForWebview(
+  webview: vscode.Webview,
+  message: AgentEventStreamRuntimeMessage,
+): AgentEventStreamRuntimeMessage {
+  const resolveLocalMediaPath = (filePath: string): string =>
+    webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
+
+  if (message.type === 'toolResult' && message.data !== undefined) {
+    return {
+      ...message,
+      data: projectResourceValue(message.data, { resolveLocalMediaPath }),
+    };
+  }
+
+  if (message.type === 'toolResultBackfill') {
+    const dataPatch = projectResourceValue(message.dataPatch, { resolveLocalMediaPath });
+    return {
+      ...message,
+      dataPatch: isRecord(dataPatch) ? dataPatch : message.dataPatch,
+    };
+  }
+
+  return message;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function toPerceptualAssetRef(asset: GeneratedAsset): import('@neko/shared').PerceptualAssetRef {
