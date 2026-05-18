@@ -31,7 +31,10 @@
   - [ ] neko-puppet Live Mode（`packages/extension/src/live/`）
   - [ ] neko-model Live Mode（`packages/extension/src/live/`）
   - [ ] 原生 VSCode UI（TreeView / QuickPick / StatusBar）
-- [ ] **neko-engine**：接口与管线解耦（[ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md) — 进行中）
+- [ ] **项目缓存 / 搜索统一**（`unify-cache-search-service`，2026-05-18 为 29/38）：共享契约 + coordinator/cache 核心已启动；剩余 Story/entity 适配器、Assets/media/document 适配器、增量失效与 Agent mention 接入。
+- [ ] **文档读取服务统一**（`unify-document-reading-service`，32/33）：manifest/range/cursor 行为已完成；剩余包级 type/check 验证后归档。
+- [ ] **neko-engine**：接口与管线解耦（[ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md) — 进行中）：file access、kernel boundary、runtime helper extraction 已完成；剩余 PipelineSink/preview provider 接线、GPU budget、ML bridge、model/plugin 生命周期对齐。
+- [x] **OpenSpec 已归档项**：`unify-engine-file-access`、`tighten-engine-p2-boundaries`、`shrink-engine-kernel-domain-helpers` 已于 2026-05-18 完成验证 / spec 同步后归档。
 
 ### 待做
 
@@ -49,7 +52,7 @@
 - [ ] 消息语义细化（新增消息类型优先扩展工具层，而非直接访问全局对象）
 - [ ] 批量候选对比器 + 更强的审阅 UI 体验
 - [ ] `asset` 命名空间边界清理：推动 `neko-assets` 提供正式扩展 API，替代 command 级代理
-- [ ] **Block + Container Phase 2 布局**：将当前确定性 row-major/grid 布局升级为 aspect-ratio-aware packing
+- [ ] **Block + Container 布局 packing 优化**：将当前确定性 row-major/grid 布局升级为 aspect-ratio-aware packing
 
 ### neko-agent — IDC 统一工作流（剩余）
 
@@ -59,7 +62,7 @@
 - [ ] **P1** — `ExecutionMode 'ask'` 与 `StageMode 'ask'` 解耦（permission/IDC 边界重设计）
 - [ ] **P1** — `git rm --cached packages/neko-agent/neko`（65MB arm64 二进制历史误提交）
 - [ ] **P2** — `.nksession.md` 会话摘要（依赖 Journal/memory 四合一）
-- [ ] **P2** — `.neko/cache/*.json` 派生索引（UI 侧有查询需求时再做）
+- [ ] **P2** — IDC/session 专属派生投影（当前 artifact index 之外）；项目级 cache/search 已转由 `unify-cache-search-service` 跟踪
 - [ ] **P3** — 154 个 pre-existing TS 错误（MCPTool/BashTool 参数不匹配）
 - [ ] **P3** — 5 个 pre-existing `fileOperationHandler.test.ts` 失败（vscode mock 不一致）
 
@@ -67,9 +70,8 @@
 
 > [Agent Unified Workflow](./docs/architecture/agent-unified-workflow.md) — Phase 1-6 + R1-R6 解耦全部完成 ✅。详见归档。
 
-- [ ] **P2 Rust 里程碑**：Phase 4.2 CLIP napi + 4.3b 模型分发 + 5.4c-rust Puppet/Scene 适配器 + 5.4e 启动注册（~8-12 人天）
 - [x] **R1-R6 解耦评审**（2026-04-19，六轮）：approve 派发用户审过的 plan；plan.input + plan.matchingShots 持久化让 fork/reload 完全自足；WorkflowPlanCapabilities 契约；Legacy fork 明确拒绝；WorkflowPlanHandler 拆为 facade + 4 sub-controllers + plan-wire/；ReviewOrchestrator 窄端口 + Shot/NkplanShot 编译期形状断言
-- [ ] **P2 Rust milestone**：Phase 4.2 CLIP napi + 4.3b 模型分发 + 5.4c-rust Puppet/Scene adapters + 5.4e bootstrap（~8-12 人天；需 Rust toolchain）
+- [ ] **P2 Rust 里程碑**：Phase 4.2 CLIP napi + 4.3b 模型分发 + 5.4c-rust Puppet/Scene adapters + 5.4e bootstrap（~8-12 人天；需 Rust toolchain）
 - [ ] **P2 治理 C3/C4**：`.nkproj` 观察 telemetry + legacy 命令使用漏斗
 - [ ] **P2 治理 C5**：Plan Diff viewer webview 菜单入口
 - [ ] **P2 测试 D4/D5/D6**：`.nkproj` 真实项目 round-trip + 多工作区并发 FileIO + 6.3 wiring 集成测试
@@ -80,8 +82,8 @@
 
 ### neko-engine（引擎）
 
-- [ ] 新增 action：`documents:text-extract` / `models:clip-embed` / `text:stats`（action registry 中不存在）
-- [ ] 将 `effects:register` / `models:register` 集成到统一插件生命周期（PluginManager P1 后续）
+- [ ] 新增 action：`models:clip-embed` / `text:stats`；`documents:text-extract` 需在统一 `ReadDocument` manifest/range/cursor 服务后重新评估
+- [ ] 将 `models:register` 集成到统一插件生命周期；`effects:register` 已通过 `EffectRegistryActivator` 接线，剩余 parity/验证后续
 
 ### neko-types（共享基础）
 
@@ -90,8 +92,8 @@
 ### neko-assets（资产管理）
 
 - [ ] 搜索增强后续：
-  - [ ] P0：项目目录资源搜索
-  - _L1-L3 缓存 + P1/P2 搜索功能依赖 Engine 新 action，随 engine 完成后推进_
+  - [ ] 通过 `unify-cache-search-service` 接入项目目录 / 资产库 / 媒体库适配器
+  - [ ] 资产库、媒体设置、生成索引、文档引用的增量失效
 
 ### 跨模块
 
@@ -184,8 +186,12 @@
 
 ### neko-sketch（2D 绘画）
 
-- [ ] **变换工具实现**：旋转/缩放/倾斜（当前仅 UI 壳）
+- [ ] PSD 真实外部 fixtures：覆盖 Photoshop / Photopea / Krita 样本，避免空 manifest 导致 `psd-external-fixtures.test.ts` skip
+- [ ] PSD 语义增强：pass-through group、文本层、智能对象、调整层、蒙版、图层样式都报告明确 `PsdImportIssue.layerPath`
+- [ ] `.nks` v1.2 JSON Schema + schema drift test
+- [ ] AI palette / brushPreset undo 语义决策；若进入 history，补回归测试
 - [ ] S.4 P2：`style_transfer` / 跨模块集成增强
+- [ ] P2 功能开发：AI Outpainting / Portrait Retouching / SDF Shadow Maps / Liquify / Mesh Warp / Bezier 打磨 / Cross-module export 契约
 
 ### AI 生成链路 — 战术级修复（2026-04-17 分析）
 
@@ -369,7 +375,7 @@
 
 **剩余技术债**：
 
-- [ ] media_service/ 在 engine-kernel 和 runtime-media 中仍有副本（后续可委托给 runtime-media）
+- [x] `media_service/` 与 JVI helpers 已从 `engine-kernel` 移除并收敛到 `runtime-media`（`shrink-engine-kernel-domain-helpers`，2026-05-16）
 - [ ] generate_diff_video (blend) 为 stub（需 encode+mux pipeline，使用频率低）
 
 ### 其他
@@ -452,8 +458,15 @@
 - 清理 TODO、ROADMAP、架构文档、proto 注释与测试夹具中的旧 workflow umbrella / routing 引用
 - 未上线前直接移除 Skill workflow DSL（`phases` / `pipelines`）的类型、校验、slash 执行和市场安装入口；prompt-chain Skill 写作成为唯一规范
 
+### ✅ Sprint 4 后续同步（2026-05-16 → 2026-05-18）
+
+- **OpenSpec**：`unify-engine-file-access`、`tighten-engine-p2-boundaries`、`shrink-engine-kernel-domain-helpers` 已完成并于 2026-05-18 归档
+- **Document Reading**：manifest/range/cursor 文档读取服务已功能完成，仅剩包级 check/test
+- **Project Cache/Search**：统一项目搜索服务启动，neko-types 契约 + host-side coordinator/cache core 已落地，Story/Assets/Agent 接入仍在进行
+- **neko-sketch**：根 TODO 已与包级 TODO/ROADMAP 同步；P0/P1 core painting gaps 不再列为开放任务
+
 </details>
 
 ---
 
-_最后更新：2026-05-12（Sprint 4 进展：Engine DSP 效果库 + Audio DAW UI/Agent 工具 + Canvas Block 容器/组合预设/视频容器/通用节点卡片 + Story 5 列表/视频就绪 + MediaPlaybackService + 全景预览完成 + 设备客户端 + 存储拆分 + Agent 可追溯性/实体组合 + Engine 接口解耦 ADR 进行中。）_
+_最后更新：2026-05-18（Sprint 4 状态：项目 cache/search 统一正在推进；文档读取服务功能完成待包级验证；engine file access、engine P2 boundary、kernel helper shrink 已归档并同步 specs；根 sketch backlog 已同步包级 TODO。）_

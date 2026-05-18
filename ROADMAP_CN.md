@@ -18,12 +18,12 @@
 | 模块             | 状态   | 进度 | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ---------------- | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **neko-engine**  | Alpha  | 99%  | GPU 渲染 + 编解码 + 导出 + HTTP/WS + 设备代理 + ONNX ML 推理 + 完整色彩/抠像管线 + 关键帧/动画混合 + 角色编辑 API + **并发保护 Semaphore(8/4/2) ✅** + **3D 渲染控制面 ✅** + 可配置日志级别 + **DSP 效果库（14 种效果）✅** + **混音管线（效果/独奏/声像）✅**                                                                                                                                                                                                    |
-| **neko-agent**   | Alpha  | 99%  | **0 TODO**，1957+ 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估 + Webview P0 完成 + **IDC 统一工作流 ✅** + **多模态感知管线 ✅** + **富内容投递 ✅** + **运行时边界加固 ✅** + **可追溯性 + 会话边界加固 ✅** + **创意实体资产组合 ✅**；剩余：MCP 重连退避 + P1 Zustand 迁移 + ask 模式解耦                                                                                                                      |
+| **neko-agent**   | Alpha  | 99%  | **0 P0 TODO**，1957+ 测试，300+ 文件；7 LLM + 10 媒体适配器 + MCP + Coordinator + SubAgent + Creative Memory + 质量评估 + Webview P0 完成 + **IDC 统一工作流 ✅** + **多模态感知管线 ✅** + **富内容投递 ✅** + **运行时边界加固 ✅** + **可追溯性 + 会话边界加固 ✅** + **创意实体资产组合 ✅**；活跃后续：项目 cache/search 接入 + MCP 重连退避 + P1 Zustand 迁移 + ask 模式解耦                                                                                                                      |
 | **neko-cut**     | Alpha  | 95%  | **~65K LOC**，50+ 命令；AI Handler 14/16 action；**P0 已关闭**；字幕/波纹编辑/播放倍率/效果导出已完成；剩余：导出往返测试 + ai-auto-edit/ai-match-music + 高级时间编辑                                                                                                                                                                                                                                                                                                |
 | **neko-story**   | Alpha  | 97%  | **0 TODO(P0)**，155+ 测试；8 LSP Provider + Fountain 解析器 + 3 种预览视图 + ScenePlan/ShotPlan 规划器 + StorySceneStateStore 跨会话持久化 + **5 列分镜表 ✅** + **StoryVideoReadinessService ✅** + **角色徽章交互 ✅**；Story→Agent→Canvas 语义流水线已贯通                                                                                                                                                                                                            |
 | **neko-canvas**  | Alpha  | 95%  | 13 种节点 + BatchGenerationScheduler + 7 MCP Tools；**P0 已全部收敛** ✅ + **P1 全部完成** ✅（NodeRendererRegistry + Block 容器架构 + 组合预设 + 视频容器 + 通用容器卡片 + 内容覆盖层）；剩余：Phase 2 布局 packing 优化                                                                                                                                                                                                                                               |
 | **neko-preview** | Alpha  | 91%  | 6 种编辑器 + 瀑布流 + Content→Agent + **EPUB 大纲 TreeView ✅** + **引擎优先全景预览 ✅**；一期剩余：FDX + HDR 色调映射；二期：XLSX/PPTX                                                                                                                                                                                                                                                                                                                               |
-| **neko-assets**  | Alpha  | 88%  | 纯 TreeView 架构 + ThumbnailService + **搜索 L0 持久化索引 + 类型筛选 + 200 上限 ✅**；剩余：L1-L3 缓存（依赖 Engine 新 action）                                                                                                                                                                                                                                                                                                                                    |
+| **neko-assets**  | Alpha  | 88%  | 纯 TreeView 架构 + ThumbnailService + **搜索 L0 持久化索引 + 类型筛选 + 200 上限 ✅**；剩余：通过 `unify-cache-search-service` 接入项目级搜索适配器与增量失效                                                                                                                                                                                                                                                                                                          |
 | **neko-market**  | Alpha  | 90%  | **~4.4K LOC**；React Webview 完整实现 + market-core 58 tests + **插件治理加固 ✅**（注册表契约对齐）；剩余：Registry Server 对接（neko-hub）                                                                                                                                                                                                                                                                                                                          |
 | **neko-auth**    | Alpha  | 90%  | OAuth 2.0 + PKCE 全链路实现（OAuthClient + TokenManager + NekoAuthService + VscodeTokenStorage），0 TODO，43 tests；剩余：后端对接端到端验证                                                                                                                                                                                                                                                                                                                        |
 | **neko-tools**   | Alpha  | 72%  | **~15K LOC**；图片/视频/音频 Diff + 静音检测 + 元数据查看 + **JVI LSP 修复 ✅**；剩余：细节打磨                                                                                                                                                                                                                                                                                                                                                                       |
@@ -37,8 +37,8 @@
 
 | 模块            | 状态  | 进度 | 说明                                                                                                            |
 | --------------- | ----- | ---- | --------------------------------------------------------------------------------------------------------------- |
-| **neko-audio**  | Alpha | 82%  | **0 TODO**，~9.1K LOC，78 测试；波形 + 频谱 + 12 种效果链 + 多轨骨架 + 麦克风 + **DAW UI 重构 ✅**（TrackHeader/TrackLane/AudioClip/TransportBar）+ **Agent 工具（18 个）✅** + **预设 + 快捷键 ✅**；**缺失**：P0 剩余（标记栏/录制闭环/范围选择）+ P1 混音台/自动化 + P2 总线/干声/连录                             |
-| **neko-sketch** | Alpha | 68%  | **~14K+ LOC**；笔刷引擎 + 压感 + 图层 + 选区 + AI 工具 + 跨模块工作流 + **PSD 导入 + AI 桥接 ✅** + **.nks 迁移 ✅**；**缺失**：P0 核心工具（调整图层/图层蒙版/套索/Alpha Lock）+ 变换工具 + 2D 光照系统 |
+| **neko-audio**  | Alpha | 82%  | ~9.1K LOC，78 测试；波形 + 频谱 + 12 种效果链 + 多轨骨架 + 麦克风 + **DAW UI 重构 ✅**（TrackHeader/TrackLane/AudioClip/TransportBar）+ **Agent 工具（18 个）✅** + **预设 + 快捷键 ✅**；活跃 backlog：标记栏/录制闭环/范围选择 + P1 混音台/自动化 + P2 总线/干声/连录                             |
+| **neko-sketch** | Alpha | 82%  | **~14K+ LOC**；笔刷引擎 + 压感 + 图层 + 选区 + AI 工具 + 跨模块工作流 + **PSD 导入 + AI 桥接 ✅** + **.nks 迁移 ✅** + **P0/P1 核心绘画缺口已关闭 ✅**（调整层、蒙版、变换、套索/魔棒、Alpha Lock、2D/法线打光）；活跃 backlog：PSD fixture/语义加固、`.nks` schema、AI undo 语义、P2 创作工具 |
 
 ### 三期：专业编辑能力
 
@@ -241,7 +241,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - [ ] **P1 — `ask` 模式解耦**：`ExecutionMode 'ask'`（per-tool 确认 UX）和 `StageMode 'ask'`（IDC planner 模式）当前通过 cast 共用同一字符串；需重设计 permission/IDC 边界，让 stage 规划只认识 `plan`/`auto`。
 - [ ] **P1 — `git rm --cached packages/neko-agent/neko`**：65 MB arm64 二进制被误提交；`.gitignore` 规则已添加，需要独立 commit 把已追踪副本从 index 移除。
 - [ ] **P2 — `.nksession.md` 会话摘要**（ADR §7.4 ⏳）：依赖 E 波先完成 Journal / ConversationRecord / compact / memory 四合一设计，让"session"有单一事实源。
-- [ ] **P2 — `.neko/cache/*.json` 派生索引**：`draft-index.json` 消费 `artifact.written` 事件重建；UI 侧有查询需求时再启动。
+- [ ] **P2 — IDC/session 专属派生投影**：当前 artifact index 之外的会话投影；项目级 cache/search 已转由 `unify-cache-search-service` 跟踪。
 - [ ] **P3 — 154 个 pre-existing TS 错误**：`MCPTool`/`BashTool` 参数不匹配 + `ToolParameters` 形状漂移；先于 IDC 重构存在，独立清理。
 - [ ] **P3 — 5 个 pre-existing `fileOperationHandler.test.ts` 失败**：vscode mock 不一致；与 IDC 重构无关。
 
@@ -310,12 +310,16 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 - Phase 3.2 遗留：AI MCP Tools（face.generate_params / face.from_image / face.adjust）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接
 
-### neko-sketch (2D) — S.1-S.4 全部完成 ✅
+### neko-sketch (2D) — 核心绘画能力完成 ✅
 
 - ✅ Phase S.1-S.3（绘画 + 骨骼动画 + 高级 2D）
 - ✅ Phase S.4 P1：`sketch.generate`（SketchGenerate MCP tool → MediaGenerationService → canvas layer）
 - ✅ Phase S.4 P1：Inpaint / StyleTransfer / AutoLayer AI 工具（getSelectionMask/getCanvasImageData → generate → 新图层）
 - ✅ Phase S.4：跨模块工作流（editImage → SketchEditorProvider → pendingImport；sendToTimeline / sendToCanvas 命令）
+- ✅ P0 核心绘画工具：调整层、图层蒙版/剪贴蒙版、自由变换、套索、魔棒、Alpha Lock
+- ✅ P1 专业工具：法线打光、对称绘制、硬度/倾斜、渐变、文本、仿制图章、参考图、标尺/参考线、滤镜预设/LUT
+- ✅ P2 底座：视口旋转、半调、渐变映射、方向/聚光灯、自定义调色板、SSAO、透视网格/吸附、图案填充、纹理图章、矢量层 + Bezier MVP
+- [ ] 活跃 backlog 见 `packages/neko-sketch/TODO.md`：PSD fixture/语义加固、`.nks` JSON Schema、AI undo 语义、AI Outpainting、Portrait Retouching、SDF 阴影、Liquify/Mesh Warp、Bezier 打磨、跨模块导出
 - [ ] Phase S.4 P2：`style_transfer` 跨模块集成增强（依赖 NekoCanvasAPI 图像节点支持）
 
 ### neko-engine — 插件架构扩展
@@ -323,7 +327,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 > [插件 RFC](./docs/architecture/engine-plugin-rfc.md) + [Runtime 分层](./docs/architecture/engine-runtime-layering.md)
 
 - ✅ P1：PluginManager MVP（manifest 扫描 + 版本验证 + enable/disable/reload + PluginsController 5 actions + 12 tests）
-- [ ] P1 遗留：将 `effects:register` / `models:register` 集成到统一插件生命周期
+- [ ] P1 遗留：将 `models:register` 集成到统一插件生命周期；`effects:register` 已通过 `EffectRegistryActivator` 接线，剩余 parity/验证后续
 - [ ] P2：创建 FormatRegistry / DeviceRegistry / ExporterRegistry / PreviewRegistry（插件可扩展注册表）
 - [ ] P2：提取 `runtime-format` crate（将文件格式探测从 engine-kernel 解耦）
 - [ ] P3：Connector 插件支持（外部 sidecar/远程 runtime 声明 + 健康检查）
@@ -738,4 +742,4 @@ agent/market 已包含在 core 中，场景子包叠加时零重复：
 
 ---
 
-_最后更新：2026-05-12（Sprint 4 进展：Engine DSP 效果库 + Audio DAW UI 重构 + Canvas Block 容器/组合预设/视频容器/通用节点卡片 + Story 5 列表/视频就绪 + MediaPlaybackService + 全景预览完成 + 设备客户端 + 存储拆分 + Agent 可追溯性加固 + entity-uri + 遗留 nkplan/nkproj 移除。）_
+_最后更新：2026-05-18（Sprint 4 状态：项目 cache/search 统一正在推进；文档读取服务功能完成待包级验证；engine file access、engine P2 boundary、kernel helper shrink 已归档并同步 specs；根 sketch roadmap 已同步包级 roadmap。）_

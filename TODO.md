@@ -31,7 +31,10 @@
   - [ ] neko-puppet Live Mode (`packages/extension/src/live/`)
   - [ ] neko-model Live Mode (`packages/extension/src/live/`)
   - [ ] Native VSCode UI (TreeView / QuickPick / StatusBar)
-- [ ] **neko-engine**: Interface + pipeline decoupling ([ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md) — in progress)
+- [ ] **Project cache/search unification** (`unify-cache-search-service`, 29/38 on 2026-05-18): shared contracts + coordinator/cache core are started; remaining work is Story/entity adapters, Assets/media/document adapters, incremental invalidation, and Agent mention integration.
+- [ ] **Document reading service** (`unify-document-reading-service`, 32/33): manifest/range/cursor behavior is implemented; remaining work is package-level type/check validation before archive.
+- [ ] **neko-engine**: Interface + pipeline decoupling ([ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md) — in progress): file access, kernel boundary, and runtime helper extraction changes are complete; remaining work is PipelineSink/preview provider wiring, GPU budget, ML bridge, and model/plugin lifecycle parity.
+- [x] **OpenSpec archived items**: `unify-engine-file-access`, `tighten-engine-p2-boundaries`, and `shrink-engine-kernel-domain-helpers` were archived on 2026-05-18 after validation/spec sync.
 
 ### To Do
 
@@ -49,7 +52,7 @@
 - [ ] Message semantic refinement (new message types extend tool layer first, not direct global object access)
 - [ ] Batch candidate comparator + stronger review UI experience
 - [ ] `asset` namespace boundary cleanup: push `neko-assets` to provide formal extension API, replace command-level proxy
-- [ ] **Block + Container Phase 2 layout**: upgrade the current deterministic row-major/grid layout to aspect-ratio-aware packing while preserving policy-driven layout, `lockedChildIds` avoidance, absolute coordinates, and container-boundary semantics
+- [ ] **Block + Container layout packing refinement**: upgrade the current deterministic row-major/grid layout to aspect-ratio-aware packing while preserving policy-driven layout, `lockedChildIds` avoidance, absolute coordinates, and container-boundary semantics
 
 ### neko-agent — IDC Unified Workflow (Remaining)
 
@@ -59,7 +62,7 @@
 - [ ] **P1** — `ExecutionMode 'ask'` vs `StageMode 'ask'` decoupling (permission/IDC boundary redesign)
 - [ ] **P1** — `git rm --cached packages/neko-agent/neko` (65MB arm64 binary tracked by accident)
 - [ ] **P2** — `.nksession.md` session summary (requires Journal/ConversationRecord/compact/memory unification)
-- [ ] **P2** — `.neko/cache/*.json` derived indices (gated by UI-side query need)
+- [ ] **P2** — IDC/session-specific derived projections beyond the current artifact index; project-wide cache/search is now tracked by `unify-cache-search-service`
 - [ ] **P3** — 154 pre-existing TS errors (MCPTool/BashTool parameters mismatch)
 - [ ] **P3** — 5 pre-existing `fileOperationHandler.test.ts` failures (vscode mock divergence)
 
@@ -85,8 +88,8 @@
 - [x] **Mix pipeline upgrade** — MixdownTrack (pan/solo/volume/effect_chain) + MixdownElement (pan/fade/gain) + solo-aware mix + master effects
 - [ ] **Interface + pipeline decoupling** ([ADR](./docs/architecture/adr-engine-interface-pipeline-decoupling.md)) — PipelineSink output adapters + effect registry + GPU budget control + ML bridge
 - [ ] **Device binding service** (WIP) — `device_binding.rs` for unified device I/O
-- [ ] New actions: `documents:text-extract` / `models:clip-embed` / `text:stats` (not yet in the action registry)
-- [ ] Integrate `effects:register` / `models:register` into unified plugin lifecycle (PluginManager P1 follow-up)
+- [ ] New actions: `models:clip-embed` / `text:stats`; re-evaluate `documents:text-extract` after the unified `ReadDocument` manifest/range/cursor service
+- [ ] Integrate `models:register` into the unified plugin lifecycle; `effects:register` is wired through `EffectRegistryActivator`, with parity/validation follow-up remaining
 - [ ] **Headless CLI export**: `host-cli export --input a.nkv --output a.mp4 --format mp4 --resolution 1080p` (CI/CD 基础, host-cli 已有入口)
 - [ ] **Batch render API**: `POST /v1/batch/render` — 模板 + 数据实例数组 → 队列并行渲染 → N 个视频输出
 - [ ] **.nkv 模板变量绑定**: `{{variable}}` 槽位标记 + JSON 数据源替换 + 校验 — 支持 text/media/puppet/scene3d/emotion 变量
@@ -97,9 +100,9 @@
 
 ### neko-assets (Asset Management)
 
-- [ ] Search enhancement follow-ups:
-  - [ ] P0: Project directory resource search
-  - _L1-L3 cache + P1/P2 search features depend on new Engine actions; will proceed once engine work is done_
+- [ ] Search enhancement follow-ups now flow through `unify-cache-search-service`:
+  - [ ] Project directory / asset-library / media-library adapters for unified project search
+  - [ ] Incremental invalidation for asset library, media settings, generated index, and document references
 - [ ] **扩展名→AssetType 映射补全**: EXTENSION_TO_MEDIA_TYPE 补充 .glb/.vrm/.moc3/.hdr/.exr/.bvh/.vmd/.cube/.3dl/.exp3.json/.motion3.json + neko 自有格式 (.nkmotion/.nkexpr/.nkscene/.nkeffect/.nkchar/.nkbind/.nkseries)
 - [ ] **能力元数据提取 Handler**: Model3DHandler (glb/vrm 骨骼+动画+morph) + PuppetHandler (moc3 参数列表) + MotionHandler (bvh 骨骼名+时长) + LUTHandler (.cube 网格大小) + EnvironmentHandler (.hdr 分辨率+色深) — 简单格式 TS 解析, 复杂格式引擎 probe
 
@@ -342,38 +345,14 @@
 
 ### neko-sketch (2D Painting)
 
-> PSD Import + AI Bridge complete ✅. See archive.
+> P0/P1 core painting gaps are closed in `packages/neko-sketch/ROADMAP.md` (adjustment layers, layer masks, free transform, lasso/magic wand, Alpha Lock, 2D/normal lighting, gradient/text/clone/reference/ruler tools). Active backlog now lives in `packages/neko-sketch/TODO.md`.
 
-- [ ] **Transform tool implementation**: rotation/scale/skew (currently UI shell only)
+- [ ] PSD real external fixtures: cover Photoshop / Photopea / Krita samples and stop skipping `psd-external-fixtures.test.ts` on an empty manifest
+- [ ] PSD semantic issue reporting: pass-through groups, text layers, smart objects, adjustment layers, masks, and layer styles report explicit `PsdImportIssue.layerPath`
+- [ ] `.nks` JSON Schema + schema drift test for v1.2
+- [ ] AI palette / brushPreset undo semantics decision + history regression if undoable
 - [ ] S.4 P2: `style_transfer` / enhanced cross-module integration
-
-### neko-sketch — P0 Core Tool Gaps
-
-> [ADR](./docs/architecture/sketch-feature-gap-analysis.md)
-
-- [ ] **Adjustment layers**: Curves / Levels / White Balance / Vibrance — types exist, no render logic
-- [ ] **Layer masks + clipping masks**: data model exists, `compositeLayerStack()` not updated
-- [ ] **Lasso + magic wand selection**: ToolType enum present, SelectionManager only implements rect
-- [ ] **Alpha Lock**: fully absent (no type, no UI, no blend function modification)
-
-### neko-sketch — P1 Professional Tools
-
-- [ ] Symmetry painting (vertical / horizontal / multi-axis)
-- [ ] Gradient tool (linear / radial)
-- [ ] Text tool (`LayerType` stub only)
-- [ ] Reference image floating window
-- [ ] Clone stamp + healing brush
-- [ ] Hardness slider exposure + tilt influence (hardness hardcoded 0.7, tilt data unused)
-- [ ] Ruler / guide lines / grid snap (neko-canvas has snapEngine but it is not shared)
-
-### neko-sketch — 2D Lighting System
-
-> [ADR](./docs/architecture/sketch-2d-lighting.md)
-
-- [ ] **Phase 0**: flat point light + environment light + light tool UI
-- [ ] **Phase 1**: normal-map lighting + Blinn-Phong specular + RNM compositing shaders
-- [ ] **Phase 2**: spotlight / directional light / soft shadows / SSAO (deferred)
-- [ ] **AI normal-map generation**: Sobel-inferred shader → neko-agent integration
+- [ ] P2 backlog: AI outpainting, portrait retouching, SDF shadow maps, liquify/mesh warp, Bezier polish, and cross-module export contracts
 
 ### neko-puppet — 2D 法线打光 (Stage 3)
 
@@ -559,7 +538,7 @@
 
 **Remaining tech debt**:
 
-- [ ] media_service/ 在 engine-kernel 和 runtime-media 中仍有副本（后续可委托给 runtime-media）
+- [x] `media_service/` and JVI helpers removed from `engine-kernel` and consolidated under `runtime-media` (`shrink-engine-kernel-domain-helpers`, 2026-05-16)
 - [ ] generate_diff_video (blend) 为 stub（需 encode+mux pipeline，使用频率低）
 
 ### Other
@@ -680,9 +659,10 @@
 - **neko-preview**: Engine-first panoramic preview + fix pause black screen + fix double data-URL prefix
 - **Storage**: Split project facts (neko/) from local data (.neko/)
 - **neko-tools**: JVI LSP provider fixes (definition/hover/reference/diagnostics)
+- **OpenSpec follow-through**: unified engine file access + engine P2 boundary tightening + kernel helper shrink completed; document reading service is feature-complete pending package-level checks; project cache/search service started.
 
 </details>
 
 ---
 
-_Last updated: 2026-05-12 (Sprint 4 progress: Engine DSP library + Audio DAW UI/Agent tools + Canvas block container/composable presets/video container/generic node cards + Story 5-column table/video readiness + MediaPlaybackService + Panoramic preview complete + Device clients + Storage split + Agent traceability/entity composition + Engine interface decoupling ADR in progress.)_
+_Last updated: 2026-05-18 (Sprint 4 status: project cache/search unification active; document reading service feature-complete pending package checks; engine file access, engine P2 boundaries, and kernel helper shrink archived with specs synced; root sketch backlog synchronized with package-level TODO.)_
