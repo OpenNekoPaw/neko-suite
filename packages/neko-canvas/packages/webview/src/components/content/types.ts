@@ -11,6 +11,7 @@ export interface NodeContentRenderContext {
   selectedNodeIds: string[];
   isSelected: boolean;
   depth: number;
+  previewSurfaceKind?: 'inline' | 'overlay';
   onUpdateBinding?: (update: FieldBindingUpdate) => void;
   onSelectNode?: (nodeId: string, multi: boolean) => void;
   onRemoveChild?: (containerId: string, childId: string) => void;

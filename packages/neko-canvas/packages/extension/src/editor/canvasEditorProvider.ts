@@ -45,12 +45,16 @@ import type { CanvasChangeEvent, ShapeConfig } from '../api';
 import type { CanvasOutlineProvider, CanvasOutlineData } from '../views/canvasOutlineProvider';
 import type { CanvasStatusBar } from '../views/canvasStatusBar';
 import { EngineClient, MediaPlaybackService } from '@neko/neko-client';
-import type { PlaybackHandle } from '@neko/neko-client';
+import type { PlaybackHandle, PlaybackMediaType } from '@neko/neko-client';
 import { getLogger } from '../utils/logger';
 import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
 
 const logger = getLogger('CanvasEditorProvider');
+
+function readPlaybackMediaType(value: unknown): PlaybackMediaType {
+  return value === 'video' || value === 'audio' ? value : 'auto';
+}
 
 /**
  * Extract prompt-building fields from a shot node for batch generation paths
@@ -1281,6 +1285,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
       case 'media:probe': {
         const assetPath = message.assetPath as string;
+        const mediaType = readPlaybackMediaType(message.mediaType);
         if (!assetPath) break;
         try {
           const filePath = await this.resolveAssetPath(assetPath, document.uri);
@@ -1293,7 +1298,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             });
             break;
           }
-          const mediaInfo = await playback.probeMedia(filePath);
+          const mediaInfo = await playback.probeMedia(filePath, mediaType);
           webviewPanel.webview.postMessage({
             type: 'media:probeResult',
             nodeId: message.nodeId,
@@ -1316,6 +1321,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const mediaInfo = message.mediaInfo as Record<string, unknown>;
         const startTime = (message.startTime as number) ?? 0;
         const speed = (message.speed as number) ?? 1.0;
+        const mediaType = readPlaybackMediaType(message.mediaType);
         if (!assetPath || !mediaInfo) break;
         try {
           const filePath = await this.resolveAssetPath(assetPath, document.uri);
@@ -1341,6 +1347,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           const hasAudio = (mediaInfo.hasAudio as boolean) ?? true;
           const handle = await playback.startPlayback(filePath, {
             hasAudio,
+            mediaType,
             startTime,
             speed,
           });

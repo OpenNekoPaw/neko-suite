@@ -157,10 +157,20 @@ Extension Host
               └── 硬件解码 → H.264 NAL 流 (WebSocket /v1/streams/:id)
                     │
                     ▼
-              Webview H264StreamClient
-                    └── WebCodecs VideoDecoder
-                          └── Canvas 渲染帧
+Webview H264StreamClient
+      └── WebCodecs VideoDecoder
+            └── Canvas 渲染帧
 ```
+
+音频播放使用同一条 Engine-first 原则，但 Webview 侧消费的是 `AudioStreamClient`
+和 PCM Web Audio 输出。调用方必须显式传递媒体类型语义：音频文件走 audio
+探测与 audio stream，视频文件走 video 探测并按需附加 audio stream，不能让
+Webview 组件自己猜测文件路径或绕过 `@neko/neko-client`。
+
+Canvas 中同一资产在 inline 节点和 overlay 预览之间切换时，播放事实由
+Canvas Webview 的 playback store 统一协调：运行时 surface id、当前时间和
+handoff 请求不写入 `.nkc`，Extension Host 只负责按消息启动/停止 Engine
+stream 和释放资源。
 
 ### 视频导出流
 

@@ -70,6 +70,7 @@ function ComposableNodeContent({
     selectedNodeIds: context.selectedNodeIds,
     isSelected: context.isSelected,
     depth: 0,
+    previewSurfaceKind: 'inline',
     onUpdateBinding: handleUpdateBinding,
     onSelectNode: context.onSelect,
     onRemoveChild: context.onRemoveContainerChild,

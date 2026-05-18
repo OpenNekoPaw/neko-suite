@@ -7,12 +7,14 @@ import type { PreviewSourceDescriptor, RuntimePreviewVariant } from './types';
 import { InlineVideoPlayer } from '../components/media/InlineVideoPlayer';
 import { InlineAudioPlayer } from '../components/media/InlineAudioPlayer';
 import { usePlaybackStore } from '../stores/playbackStore';
+import type { PlaybackSurfaceKind } from '../stores/playbackStore';
 import { getGlobalVSCodeApi } from '../utils/vscode';
 
 export interface PreviewRendererProps {
   source: PreviewSourceDescriptor;
   runtime?: PreviewRuntime;
   delegateActions?: DelegateAction[];
+  surfaceKind?: PlaybackSurfaceKind;
 }
 
 export type PreviewRenderer = (props: PreviewRendererProps) => React.ReactNode;
@@ -116,7 +118,26 @@ interface MediaStreamState {
   duration: number;
 }
 
-function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'audio') {
+const PLAYBACK_PROGRESS_SYNC_INTERVAL_MS = 250;
+const PLAYBACK_PROGRESS_SYNC_DELTA_SECONDS = 0.25;
+
+let playbackSurfaceCounter = 0;
+
+function createPlaybackSurfaceId(mediaType: 'video' | 'audio'): string {
+  playbackSurfaceCounter += 1;
+  return `${mediaType}-${playbackSurfaceCounter.toString(36)}`;
+}
+
+function getMonotonicTimeMs(): number {
+  return performance.now();
+}
+
+function useMediaStream(
+  assetPath: string | undefined,
+  mediaType: 'video' | 'audio',
+  surfaceKind: PlaybackSurfaceKind,
+) {
+  const [surfaceId] = useState(() => createPlaybackSurfaceId(mediaType));
   const [stream, setStream] = useState<MediaStreamState | null>(null);
   const [probing, setProbing] = useState(false);
   const isPausedRef = useRef(false);
@@ -125,7 +146,17 @@ function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'aud
 
   const [savedStartTime] = useState(() => {
     if (!assetPath) return 0;
-    return usePlaybackStore.getState().getPlayback(assetPath)?.currentTime ?? 0;
+    const playbackStore = usePlaybackStore.getState();
+    return (
+      (playbackStore.activePlayback?.assetPath === assetPath
+        ? playbackStore.activePlayback.currentTime
+        : playbackStore.getPlayback(assetPath)?.currentTime) ?? 0
+    );
+  });
+  const currentTimeRef = useRef(savedStartTime);
+  const lastProgressSyncRef = useRef({
+    currentTime: savedStartTime,
+    updatedAtMs: 0,
   });
 
   const startPlayback = useCallback(
@@ -133,14 +164,32 @@ function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'aud
       const vscode = getGlobalVSCodeApi();
       if (!vscode || !assetPath) return;
 
+      const playbackStore = usePlaybackStore.getState();
+      const active = playbackStore.activePlayback;
+      if (active && active.assetPath === assetPath && active.surfaceId !== surfaceId) {
+        playbackStore.requestHandoff({
+          assetPath,
+          mediaType,
+          fromSurfaceId: active.surfaceId,
+          toKind: surfaceKind,
+          startTime: active.currentTime,
+        });
+        return;
+      }
+
       setProbing(true);
       isPausedRef.current = false;
 
-      const startTime = resumeFromTime ?? savedStartTime;
+      const handoff = playbackStore.consumeHandoff(assetPath, surfaceKind);
+      const startTime =
+        resumeFromTime ??
+        handoff?.startTime ??
+        playbackStore.getPlayback(assetPath)?.currentTime ??
+        savedStartTime;
 
       const handleMessage = (event: MessageEvent) => {
         const msg = event.data as Record<string, unknown>;
-        if (msg.type === 'media:probeResult' && msg.nodeId === assetPath) {
+        if (msg.type === 'media:probeResult' && msg.nodeId === surfaceId) {
           if (msg.error) {
             setProbing(false);
             return;
@@ -148,19 +197,33 @@ function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'aud
           const mediaInfo = msg.mediaInfo as Record<string, unknown>;
           vscode.postMessage({
             type: 'media:play',
-            nodeId: assetPath,
+            nodeId: surfaceId,
             assetPath,
             mediaInfo,
+            mediaType,
             startTime,
             speed: 1.0,
           });
         }
-        if (msg.type === 'media:streamReady' && msg.nodeId === assetPath) {
+        if (msg.type === 'media:streamReady' && msg.nodeId === surfaceId) {
           setProbing(false);
           if (msg.error) return;
           const mediaInfo = msg.mediaInfo as Record<string, unknown>;
           const dur = (mediaInfo?.duration as number) ?? 0;
           streamDurationRef.current = dur;
+          usePlaybackStore.getState().startActivePlayback({
+            assetPath,
+            mediaType,
+            surfaceId,
+            surfaceKind,
+            currentTime: startTime,
+            duration: dur,
+          });
+          currentTimeRef.current = startTime;
+          lastProgressSyncRef.current = {
+            currentTime: startTime,
+            updatedAtMs: getMonotonicTimeMs(),
+          };
           setStream({
             videoStreamUrl: (msg.videoStreamUrl as string) ?? null,
             audioStreamUrl: (msg.audioStreamUrl as string) ?? null,
@@ -176,44 +239,82 @@ function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'aud
       window.addEventListener('message', handleMessage);
       vscode.postMessage({
         type: 'media:probe',
-        nodeId: assetPath,
+        nodeId: surfaceId,
         assetPath,
         mediaType,
       });
     },
-    [assetPath, mediaType, savedStartTime],
+    [assetPath, mediaType, savedStartTime, surfaceId, surfaceKind],
   );
 
   const pausePlayback = useCallback(
     (currentTime: number) => {
       const vscode = getGlobalVSCodeApi();
       if (!vscode || !assetPath) return;
-      vscode.postMessage({ type: 'media:pause', nodeId: assetPath });
+      vscode.postMessage({ type: 'media:pause', nodeId: surfaceId });
       isPausedRef.current = true;
+      lastProgressSyncRef.current = {
+        currentTime,
+        updatedAtMs: getMonotonicTimeMs(),
+      };
       usePlaybackStore.getState().savePlayback(assetPath, {
         currentTime,
         duration: streamDurationRef.current,
         wasPlaying: true,
       });
+      usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, {
+        currentTime,
+        isPlaying: false,
+      });
+      currentTimeRef.current = currentTime;
     },
-    [assetPath],
+    [assetPath, surfaceId],
   );
 
   const resumePlayback = useCallback(() => {
     const vscode = getGlobalVSCodeApi();
     if (!vscode || !assetPath) return;
-    vscode.postMessage({ type: 'media:resume', nodeId: assetPath });
+    vscode.postMessage({ type: 'media:resume', nodeId: surfaceId });
     isPausedRef.current = false;
-  }, [assetPath]);
+    usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, { isPlaying: true });
+  }, [assetPath, surfaceId]);
 
   const seekPlayback = useCallback(
     (time: number) => {
       const vscode = getGlobalVSCodeApi();
       if (!vscode || !assetPath) return;
-      vscode.postMessage({ type: 'media:seek', nodeId: assetPath, time });
+      vscode.postMessage({ type: 'media:seek', nodeId: surfaceId, time });
+      lastProgressSyncRef.current = {
+        currentTime: time,
+        updatedAtMs: getMonotonicTimeMs(),
+      };
+      usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, { currentTime: time });
+      currentTimeRef.current = time;
     },
-    [assetPath],
+    [assetPath, surfaceId],
   );
+
+  const updatePlaybackProgress = useCallback(
+    (currentTime: number) => {
+      if (!assetPath) return;
+      currentTimeRef.current = currentTime;
+      const now = getMonotonicTimeMs();
+      const last = lastProgressSyncRef.current;
+      const shouldSync =
+        Math.abs(currentTime - last.currentTime) >= PLAYBACK_PROGRESS_SYNC_DELTA_SECONDS ||
+        now - last.updatedAtMs >= PLAYBACK_PROGRESS_SYNC_INTERVAL_MS;
+      if (!shouldSync) return;
+
+      lastProgressSyncRef.current = { currentTime, updatedAtMs: now };
+      usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, {
+        currentTime,
+        duration: streamDurationRef.current,
+      });
+    },
+    [assetPath, surfaceId],
+  );
+
+  const getCurrentTime = useCallback(() => currentTimeRef.current, []);
 
   const stopPlayback = useCallback(
     (currentTime: number) => {
@@ -223,20 +324,38 @@ function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'aud
       }
       const vscode = getGlobalVSCodeApi();
       if (vscode && assetPath) {
-        vscode.postMessage({ type: 'media:stop', nodeId: assetPath });
+        vscode.postMessage({ type: 'media:stop', nodeId: surfaceId });
       }
       if (assetPath) {
-        usePlaybackStore.getState().savePlayback(assetPath, {
+        const playbackStore = usePlaybackStore.getState();
+        playbackStore.savePlayback(assetPath, {
           currentTime,
           duration: streamDurationRef.current,
           wasPlaying: false,
         });
+        lastProgressSyncRef.current = {
+          currentTime,
+          updatedAtMs: getMonotonicTimeMs(),
+        };
+        playbackStore.stopActivePlayback(assetPath, surfaceId, currentTime);
       }
       setStream(null);
       isPausedRef.current = false;
     },
-    [assetPath],
+    [assetPath, surfaceId],
   );
+
+  usePlaybackHandoff({
+    assetPath,
+    mediaType,
+    surfaceId,
+    surfaceKind,
+    stream,
+    probing,
+    getCurrentTime,
+    startPlayback,
+    stopPlayback,
+  });
 
   useEffect(() => {
     return () => {
@@ -251,12 +370,129 @@ function useMediaStream(assetPath: string | undefined, mediaType: 'video' | 'aud
     probing,
     isPaused: isPausedRef.current,
     savedStartTime,
+    surfaceId,
     startPlayback,
     pausePlayback,
     resumePlayback,
     seekPlayback,
+    updatePlaybackProgress,
     stopPlayback,
   };
+}
+
+interface PlaybackHandoffOptions {
+  assetPath: string | undefined;
+  mediaType: 'video' | 'audio';
+  surfaceId: string;
+  surfaceKind: PlaybackSurfaceKind;
+  stream: MediaStreamState | null;
+  probing: boolean;
+  getCurrentTime: () => number;
+  startPlayback: (resumeFromTime?: number) => void;
+  stopPlayback: (currentTime: number) => void;
+}
+
+function usePlaybackHandoff({
+  assetPath,
+  mediaType,
+  surfaceId,
+  surfaceKind,
+  stream,
+  probing,
+  getCurrentTime,
+  startPlayback,
+  stopPlayback,
+}: PlaybackHandoffOptions): void {
+  const requestedMountHandoffRef = useRef(false);
+  const handledHandoffRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!assetPath || !stream) return;
+    const unsubscribe = usePlaybackStore.subscribe((state) => {
+      const request = state.handoffRequest;
+      const requestKey = request ? handoffRequestKey(request) : null;
+      if (
+        request?.assetPath === assetPath &&
+        request.fromSurfaceId === surfaceId &&
+        requestKey &&
+        handledHandoffRef.current !== requestKey
+      ) {
+        handledHandoffRef.current = requestKey;
+        stopPlayback(request.startTime);
+      }
+    });
+    return unsubscribe;
+  }, [assetPath, stopPlayback, stream, surfaceId]);
+
+  useEffect(() => {
+    if (!assetPath || stream || probing) return;
+    const unsubscribe = usePlaybackStore.subscribe((state) => {
+      const request = state.handoffRequest;
+      if (
+        request?.assetPath === assetPath &&
+        request.toKind === surfaceKind &&
+        state.activePlayback === null
+      ) {
+        const consumed = usePlaybackStore.getState().consumeHandoff(assetPath, surfaceKind);
+        if (consumed) {
+          startPlayback(consumed.startTime);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [assetPath, probing, startPlayback, stream, surfaceKind]);
+
+  useEffect(() => {
+    if (surfaceKind !== 'overlay' || !assetPath || stream || probing) return;
+    if (requestedMountHandoffRef.current) return;
+    const active = usePlaybackStore.getState().activePlayback;
+    if (
+      active &&
+      active.assetPath === assetPath &&
+      active.surfaceId !== surfaceId &&
+      active.isPlaying
+    ) {
+      requestedMountHandoffRef.current = true;
+      usePlaybackStore.getState().requestHandoff({
+        assetPath,
+        mediaType,
+        fromSurfaceId: active.surfaceId,
+        toKind: 'overlay',
+        startTime: active.currentTime,
+      });
+    }
+  }, [assetPath, mediaType, probing, stream, surfaceId, surfaceKind]);
+
+  useEffect(() => {
+    if (!stream) return;
+    return () => {
+      const active = usePlaybackStore.getState().activePlayback;
+      if (
+        surfaceKind === 'overlay' &&
+        assetPath &&
+        active?.assetPath === assetPath &&
+        active.surfaceId === surfaceId &&
+        active.isPlaying
+      ) {
+        usePlaybackStore.getState().requestHandoff({
+          assetPath,
+          mediaType,
+          fromSurfaceId: surfaceId,
+          toKind: 'inline',
+          startTime: getCurrentTime(),
+        });
+      }
+      stopPlayback(getCurrentTime());
+    };
+  }, [assetPath, getCurrentTime, mediaType, stopPlayback, stream, surfaceId, surfaceKind]);
+}
+
+function handoffRequestKey(request: {
+  readonly fromSurfaceId: string;
+  readonly toKind: PlaybackSurfaceKind;
+  readonly startTime: number;
+}): string {
+  return `${request.fromSurfaceId}:${request.toKind}:${request.startTime}`;
 }
 
 // =============================================================================
@@ -278,7 +514,10 @@ function renderVisualPreview({ source }: PreviewRendererProps): React.ReactNode 
   );
 }
 
-function renderVideoPreview({ source }: PreviewRendererProps): React.ReactNode {
+function renderVideoPreview({
+  source,
+  surfaceKind = 'inline',
+}: PreviewRendererProps): React.ReactNode {
   const variant = useResolvedVariant(source);
   const thumbnailUrl = variant?.runtimeUrl ?? getStableSafeUrl(source);
   const assetPath = source.asset?.path;
@@ -291,8 +530,9 @@ function renderVideoPreview({ source }: PreviewRendererProps): React.ReactNode {
     pausePlayback,
     resumePlayback,
     seekPlayback,
+    updatePlaybackProgress,
     stopPlayback,
-  } = useMediaStream(assetPath, 'video');
+  } = useMediaStream(assetPath, 'video', surfaceKind);
 
   const posterUrl = capturedFrame ?? thumbnailUrl;
 
@@ -310,6 +550,7 @@ function renderVideoPreview({ source }: PreviewRendererProps): React.ReactNode {
           onPause={pausePlayback}
           onResume={resumePlayback}
           onSeek={seekPlayback}
+          onTimeUpdate={updatePlaybackProgress}
           onStop={stopPlayback}
         />
       </div>
@@ -341,7 +582,11 @@ function renderVideoPreview({ source }: PreviewRendererProps): React.ReactNode {
   );
 }
 
-function renderAudioPreview({ source, delegateActions }: PreviewRendererProps): React.ReactNode {
+function renderAudioPreview({
+  source,
+  delegateActions,
+  surfaceKind = 'inline',
+}: PreviewRendererProps): React.ReactNode {
   const assetPath = source.asset?.path;
   const {
     stream,
@@ -351,8 +596,9 @@ function renderAudioPreview({ source, delegateActions }: PreviewRendererProps): 
     pausePlayback,
     resumePlayback,
     seekPlayback,
+    updatePlaybackProgress,
     stopPlayback,
-  } = useMediaStream(assetPath, 'audio');
+  } = useMediaStream(assetPath, 'audio', surfaceKind);
 
   if (stream && stream.audioStreamUrl) {
     return (
@@ -364,6 +610,7 @@ function renderAudioPreview({ source, delegateActions }: PreviewRendererProps): 
           onPause={pausePlayback}
           onResume={resumePlayback}
           onSeek={seekPlayback}
+          onTimeUpdate={updatePlaybackProgress}
           onStop={stopPlayback}
         />
       </div>

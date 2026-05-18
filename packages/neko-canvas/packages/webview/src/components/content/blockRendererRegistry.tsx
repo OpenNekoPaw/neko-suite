@@ -156,7 +156,13 @@ function renderAssetPreviewBlock(context: BlockRendererContext): React.ReactNode
     ?.filter((capability) => capability.kind === 'delegate')
     .flatMap((capability) => capability.actions);
 
-  return <PreviewSurface source={source} delegateActions={delegateActions} />;
+  return (
+    <PreviewSurface
+      source={source}
+      delegateActions={delegateActions}
+      surfaceKind={context.previewSurfaceKind ?? 'inline'}
+    />
+  );
 }
 
 function renderButtonBlock(context: BlockRendererContext): React.ReactNode {

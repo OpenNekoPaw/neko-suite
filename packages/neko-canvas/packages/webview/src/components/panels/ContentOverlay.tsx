@@ -145,6 +145,7 @@ function OverlayBody({
     selectedNodeIds: [...selectedNodeIds],
     isSelected: true,
     depth: 0,
+    previewSurfaceKind: 'overlay',
     onUpdateBinding: handleUpdateBinding,
   };
 

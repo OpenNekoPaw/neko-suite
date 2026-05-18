@@ -16,6 +16,7 @@ export interface InlineAudioPlayerProps {
   onPause: (currentTime: number) => void;
   onResume: () => void;
   onSeek: (time: number) => void;
+  onTimeUpdate?: (currentTime: number) => void;
   onStop: (currentTime: number) => void;
 }
 
@@ -26,6 +27,7 @@ export function InlineAudioPlayer({
   onPause,
   onResume,
   onSeek,
+  onTimeUpdate,
   onStop,
 }: InlineAudioPlayerProps) {
   const audioClientRef = useRef<AudioStreamClient | null>(null);
@@ -70,8 +72,9 @@ export function InlineAudioPlayer({
     }
 
     setCurrentTime(newTime);
+    onTimeUpdate?.(newTime);
     animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [duration, onStop]);
+  }, [duration, onStop, onTimeUpdate]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -136,13 +139,14 @@ export function InlineAudioPlayer({
     (time: number) => {
       setCurrentTime(time);
       currentTimeRef.current = time;
+      onTimeUpdate?.(time);
       playStartTimeRef.current = time;
       playWallTimeRef.current = performance.now();
       clockSourceRef.current = 'wall';
       audioClientRef.current?.resetClock();
       onSeek(time);
     },
-    [onSeek],
+    [onSeek, onTimeUpdate],
   );
 
   const handleSeeking = useCallback((time: number) => {

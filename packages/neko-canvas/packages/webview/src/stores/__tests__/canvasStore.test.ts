@@ -11,6 +11,7 @@ import { buildCanvasNode } from '../../utils/nodeFactory';
 import { hydrateCanvasNodePreview } from '../../utils/canvasPresetRegistry';
 import { useCanvasStore } from '../canvasStore';
 import { useHistoryStore } from '../historyStore';
+import { usePlaybackStore } from '../playbackStore';
 
 function createSceneNode(): SceneGroupCanvasNode {
   return {
@@ -339,5 +340,106 @@ describe('canvasStore scene container actions', () => {
       lastImportedToTimelineProject: 'Demo Cut',
     });
     expect(JSON.stringify(summary)).not.toContain('blob:runtime-preview');
+  });
+});
+
+describe('playbackStore runtime handoff', () => {
+  beforeEach(() => {
+    usePlaybackStore.setState({
+      playbacks: new Map(),
+      activePlayback: null,
+      handoffRequest: null,
+    });
+  });
+
+  it('tracks one active surface and consumes matching handoff requests once', () => {
+    const store = usePlaybackStore.getState();
+
+    store.startActivePlayback({
+      assetPath: 'assets/clip.mp4',
+      mediaType: 'video',
+      surfaceId: 'inline-1',
+      surfaceKind: 'inline',
+      currentTime: 4,
+      duration: 12,
+    });
+    store.updateActivePlayback('assets/clip.mp4', 'inline-1', { currentTime: 5 });
+    store.requestHandoff({
+      assetPath: 'assets/clip.mp4',
+      mediaType: 'video',
+      fromSurfaceId: 'inline-1',
+      toKind: 'overlay',
+      startTime: 5,
+    });
+
+    expect(usePlaybackStore.getState().activePlayback?.currentTime).toBe(5);
+    expect(usePlaybackStore.getState().consumeHandoff('assets/clip.mp4', 'inline')).toBeNull();
+    expect(usePlaybackStore.getState().consumeHandoff('assets/clip.mp4', 'overlay')).toMatchObject({
+      fromSurfaceId: 'inline-1',
+      startTime: 5,
+    });
+    expect(usePlaybackStore.getState().consumeHandoff('assets/clip.mp4', 'overlay')).toBeNull();
+  });
+
+  it('ignores stop requests from a non-owning playback surface', () => {
+    const store = usePlaybackStore.getState();
+
+    store.startActivePlayback({
+      assetPath: 'assets/clip.mp4',
+      mediaType: 'video',
+      surfaceId: 'inline-1',
+      surfaceKind: 'inline',
+      currentTime: 4,
+      duration: 12,
+    });
+    store.stopActivePlayback('assets/clip.mp4', 'overlay-1', 8);
+
+    expect(usePlaybackStore.getState().activePlayback).toMatchObject({
+      assetPath: 'assets/clip.mp4',
+      surfaceId: 'inline-1',
+      currentTime: 4,
+    });
+    expect(usePlaybackStore.getState().getPlayback('assets/clip.mp4')).toBeUndefined();
+  });
+
+  it('ignores active playback updates after playback has stopped', () => {
+    const store = usePlaybackStore.getState();
+
+    store.startActivePlayback({
+      assetPath: 'assets/clip.mp4',
+      mediaType: 'video',
+      surfaceId: 'inline-1',
+      surfaceKind: 'inline',
+      currentTime: 4,
+      duration: 12,
+    });
+    store.stopActivePlayback('assets/clip.mp4', 'inline-1', 5);
+    store.updateActivePlayback('assets/clip.mp4', 'inline-1', { currentTime: 9, isPlaying: true });
+
+    expect(usePlaybackStore.getState().activePlayback).toBeNull();
+    expect(usePlaybackStore.getState().getPlayback('assets/clip.mp4')).toMatchObject({
+      currentTime: 5,
+      duration: 12,
+      wasPlaying: false,
+    });
+  });
+
+  it('does not consume handoff requests for a different asset or target surface kind', () => {
+    const store = usePlaybackStore.getState();
+
+    store.requestHandoff({
+      assetPath: 'assets/clip.mp4',
+      mediaType: 'video',
+      fromSurfaceId: 'inline-1',
+      toKind: 'overlay',
+      startTime: 5,
+    });
+
+    expect(usePlaybackStore.getState().consumeHandoff('assets/other.mp4', 'overlay')).toBeNull();
+    expect(usePlaybackStore.getState().consumeHandoff('assets/clip.mp4', 'inline')).toBeNull();
+    expect(usePlaybackStore.getState().consumeHandoff('assets/clip.mp4', 'overlay')).toMatchObject({
+      assetPath: 'assets/clip.mp4',
+      startTime: 5,
+    });
   });
 });

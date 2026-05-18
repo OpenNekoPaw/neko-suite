@@ -234,6 +234,22 @@ selected candidate state, and preview descriptors. Runtime variant URLs, object/
 tokens, active playback handles, hover state, and current playback time remain owned by the Canvas
 Webview/Extension preview runtime and must not be serialized into `.nkc`.
 
+Implementation note (2026-05-18): Canvas inline nodes and overlay previews are separate playback
+surfaces over the same asset identity. The Webview assigns each mounted playback surface a stable
+runtime `surfaceId` and keeps the active playback record in the Canvas playback store. Opening an
+overlay requests a handoff from the active inline surface; closing the overlay can hand playback
+back to the inline surface with the current time. The store is the only authority for active
+surface ownership, current time handoff, and duplicate-consumption protection. Persisted canvas
+documents still store only asset identity and preview descriptors, not playback surface ids or
+timestamps.
+
+Implementation note (2026-05-18): Media stream creation uses an explicit media type contract.
+`@neko/neko-client` exposes `PlaybackMediaType = 'auto' | 'video' | 'audio'`; callers pass this
+through `media:probe` and `media:play` messages so audio-only assets probe the engine audio group
+directly instead of paying a failed video probe first. Canvas Webview components remain sandboxed:
+they request playback through Extension Host messages, while the host resolves paths, calls
+`MediaPlaybackService`, and owns stream cleanup.
+
 ### Refinement: Panoramic Viewer Reuse Scope
 
 `adr-panoramic-image-preview.md` states (line 140, 378, 392):

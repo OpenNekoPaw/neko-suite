@@ -25,6 +25,7 @@ export interface InlineVideoPlayerProps {
   onPause: (currentTime: number) => void;
   onResume: () => void;
   onSeek: (time: number) => void;
+  onTimeUpdate?: (currentTime: number) => void;
   onStop: (currentTime: number) => void;
 }
 
@@ -39,6 +40,7 @@ export function InlineVideoPlayer({
   onPause,
   onResume,
   onSeek,
+  onTimeUpdate,
   onStop,
 }: InlineVideoPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -144,8 +146,9 @@ export function InlineVideoPlayer({
     }
 
     setCurrentTime(newTime);
+    onTimeUpdate?.(newTime);
     animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [duration, renderFrame, onStop]);
+  }, [duration, onStop, onTimeUpdate, renderFrame]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -233,6 +236,7 @@ export function InlineVideoPlayer({
   const handleSeekCommit = useCallback(
     (time: number) => {
       setCurrentTime(time);
+      onTimeUpdate?.(time);
       seekGateRef.current = createInlineVideoSeekGate(
         time,
         schedulerRef.current?.getStats() ?? null,
@@ -255,7 +259,7 @@ export function InlineVideoPlayer({
       });
       onSeek(time);
     },
-    [fps, onSeek],
+    [fps, onSeek, onTimeUpdate],
   );
 
   const handleSeeking = useCallback((time: number) => {
