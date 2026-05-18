@@ -217,6 +217,9 @@ export * from './agent-context';
 // Document reading contracts (Preview ↔ Agent ↔ Platform)
 export * from './document-reading';
 
+// Project cache/search contracts (Project facts/cache ↔ Agent/Webview search)
+export * from './project-cache-search';
+
 // Loading tier types (tiered lazy loading for tools, skills, commands)
 export * from './loading-tier';
 
