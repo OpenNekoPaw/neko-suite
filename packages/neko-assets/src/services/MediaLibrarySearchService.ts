@@ -95,6 +95,20 @@ export class MediaLibrarySearchService implements vscode.Disposable {
   }
 
   /**
+   * Warm up the lightweight filename index and install watchers.
+   *
+   * This does not probe media metadata, generate thumbnails, or build embeddings.
+   * If the persisted index is absent, it reuses the existing bounded file-name
+   * index path in the background.
+   */
+  async warmup(): Promise<void> {
+    if (!this.fileIndex) {
+      this.fileIndex = await this.loadOrBuildIndex();
+    }
+    await this.setupWatchers();
+  }
+
+  /**
    * Search media files across all libraries by file name.
    *
    * On first call, attempts to load persisted index from disk.
@@ -102,8 +116,7 @@ export class MediaLibrarySearchService implements vscode.Disposable {
    */
   async search(keyword: string, options?: SearchOptions): Promise<MediaSearchResult[]> {
     if (!this.fileIndex) {
-      this.fileIndex = await this.loadOrBuildIndex();
-      this.setupWatchers();
+      await this.warmup();
     }
 
     const lower = keyword.toLowerCase();

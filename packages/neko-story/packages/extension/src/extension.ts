@@ -109,6 +109,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Non-blocking background initialization
   void indexService.ensureInitialized();
   void characterIndexService.ensureInitialized();
+  void entityGraphService.ensureInitialized();
+  void creativeEntityIndexService.ensureInitialized();
   subscribeCanvasSceneWriteback(context, sceneStateStore);
 
   const resolveStoryboardCharacterBindings = async (

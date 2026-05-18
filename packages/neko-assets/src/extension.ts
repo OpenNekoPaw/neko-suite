@@ -272,6 +272,9 @@ export async function activate(
       storageLayout.project.cache.searchIndex,
     );
     context.subscriptions.push(searchService);
+    void searchService.warmup().catch((error) => {
+      logger.warn('Media library search warmup failed (non-fatal):', error);
+    });
 
     // Register Media Library TreeView
     const mediaLibraryProvider = new MediaLibraryTreeProvider({
