@@ -124,6 +124,9 @@ export {
 // High-level media playback (paired video + audio streams)
 export {
   MediaPlaybackService,
+  type MediaPlaybackEnginePort,
+  type PlaybackMediaType,
+  type PlaybackStreamGroup,
   type StartPlaybackOptions,
   type CaptureFrameOptions,
 } from './MediaPlaybackService';

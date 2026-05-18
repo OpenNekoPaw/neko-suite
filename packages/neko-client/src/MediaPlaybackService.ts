@@ -1,11 +1,41 @@
-import type { EngineClient } from './EngineClient';
-import type { PlaybackHandle, ProbeResult, WaveformResult } from './engine/types';
+import type {
+  ActionRequest,
+  ActionResponse,
+  PlaybackHandle,
+  ProbeResult,
+  StreamHandle,
+  WaveformResult,
+} from './engine/types';
 import { getLogger } from './utils/logger';
 
 const logger = getLogger('MediaPlaybackService');
 
+export type PlaybackMediaType = 'auto' | 'video' | 'audio';
+export type PlaybackStreamGroup = 'videos' | 'audios';
+
+export interface MediaPlaybackEnginePort {
+  readonly port: number;
+  getStreamWsUrl(streamId: string): string;
+  getAudioWsUrl(streamId: string): string;
+  dispatch(req: ActionRequest): Promise<ActionResponse>;
+  probe(group: PlaybackStreamGroup, source: string): Promise<ProbeResult>;
+  createStream(
+    group: PlaybackStreamGroup,
+    source: string,
+    opts?: Record<string, unknown>,
+  ): Promise<StreamHandle>;
+  controlStream(
+    group: PlaybackStreamGroup,
+    streamId: string,
+    action: string,
+    opts?: Record<string, unknown>,
+  ): Promise<ActionResponse>;
+  waveform(source: string, opts?: { peaksPerSecond?: number }): Promise<WaveformResult>;
+}
+
 export interface StartPlaybackOptions {
   hasAudio?: boolean;
+  mediaType?: PlaybackMediaType;
   startTime?: number;
   speed?: number;
 }
@@ -18,7 +48,7 @@ export interface CaptureFrameOptions {
 }
 
 export class MediaPlaybackService {
-  constructor(private readonly client: EngineClient) {}
+  constructor(private readonly client: MediaPlaybackEnginePort) {}
 
   get port(): number {
     return this.client.port;
@@ -32,7 +62,15 @@ export class MediaPlaybackService {
     return this.client.getAudioWsUrl(streamId);
   }
 
-  async probeMedia(filePath: string): Promise<ProbeResult> {
+  async probeMedia(filePath: string, mediaType: PlaybackMediaType = 'auto'): Promise<ProbeResult> {
+    if (mediaType === 'audio') {
+      return this.client.probe('audios', filePath);
+    }
+
+    if (mediaType === 'video') {
+      return this.client.probe('videos', filePath);
+    }
+
     try {
       return await this.client.probe('videos', filePath);
     } catch {
@@ -41,7 +79,7 @@ export class MediaPlaybackService {
   }
 
   async startPlayback(filePath: string, options?: StartPlaybackOptions): Promise<PlaybackHandle> {
-    const { hasAudio = true, startTime = 0, speed = 1.0 } = options ?? {};
+    const { hasAudio = true, mediaType = 'auto', startTime = 0, speed = 1.0 } = options ?? {};
 
     const handle: PlaybackHandle = {
       videoStreamId: null,
@@ -50,14 +88,16 @@ export class MediaPlaybackService {
       audioStreamUrl: null,
     };
 
-    try {
-      const videoStream = await this.client.createStream('videos', filePath, {
-        sessionId: `playback-${Date.now()}`,
-      });
-      handle.videoStreamId = videoStream.streamId;
-      handle.videoStreamUrl = videoStream.wsUrl;
-    } catch (err) {
-      logger.warn('Failed to create video stream', err);
+    if (mediaType !== 'audio') {
+      try {
+        const videoStream = await this.client.createStream('videos', filePath, {
+          sessionId: `playback-${Date.now()}`,
+        });
+        handle.videoStreamId = videoStream.streamId;
+        handle.videoStreamUrl = videoStream.wsUrl;
+      } catch (err) {
+        logger.warn('Failed to create video stream', err);
+      }
     }
 
     if (hasAudio) {
