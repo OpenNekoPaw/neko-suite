@@ -18,8 +18,7 @@
  * - neko-puppet → face parameter tools
  */
 
-import { getRootLogger } from '../base';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import {
   DEFAULT_PLUGIN_SKILL_PROVIDER_EXTENSION_IDS,
   createPluginSkillDiscoveryTools,
@@ -29,6 +28,7 @@ import {
 import { TOOL_NAMES_SYSTEM, type ISkillProvider } from '@neko/shared';
 import type { Platform } from '@neko/platform';
 import type { IToolGroupRegistry, Tool } from '@neko/shared';
+import { getRootLogger } from '../base';
 import { createDocumentReaderService } from '../services/DocumentReaderService';
 import { getEngineClientProvider } from '../services/engineClientProvider';
 import { createReadDocumentTool } from '../tools/readDocumentTool';
@@ -40,13 +40,16 @@ import { createReadDocumentTool } from '../tools/readDocumentTool';
 export function registerExtensionTools(
   toolRegistry: { register: (tool: Tool) => void; get?: (name: string) => Tool | undefined },
   _platform: Platform,
+  context?: vscode.ExtensionContext,
 ): void {
   const tools = createPluginSkillDiscoveryTools(
     createVSCodePluginSkillCatalogueSource(),
     getRootLogger().child('PluginSkillDiscovery'),
   );
   tools.push(
-    createReadDocumentTool({ reader: createDocumentReaderService(getEngineClientProvider()) }),
+    createReadDocumentTool({
+      reader: createDocumentReaderService(getEngineClientProvider(), context),
+    }),
   );
   for (const tool of tools) {
     if (!toolRegistry.get?.(tool.name)) {

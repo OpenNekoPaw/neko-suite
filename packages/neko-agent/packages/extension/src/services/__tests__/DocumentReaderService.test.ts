@@ -182,6 +182,50 @@ describe('DocumentReaderService', () => {
       expect(fs.readFile).toHaveBeenCalledWith('/library/books/book.txt', 'utf-8');
     });
 
+    it('writes extracted document images under the configured cache directory', async () => {
+      const fs = await import('fs/promises');
+      vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+      const cachedService = new DocumentReaderService(undefined, {
+        tempDir: '/agent-storage/document-image-cache',
+      });
+      vi.spyOn(cachedService, 'hasDRM').mockResolvedValue(false);
+      vi.spyOn(
+        cachedService as unknown as { tryImport(packageName: string): Promise<unknown | null> },
+        'tryImport',
+      ).mockImplementation(async (packageName) => {
+        if (packageName !== 'adm-zip') return null;
+        return class FakeZip {
+          getEntries() {
+            return [
+              {
+                name: 'page-1.jpg',
+                getData: () =>
+                  new Uint8Array([
+                    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x08, 0x08, 0x00, 0x02, 0x00, 0x03, 0x03, 0xff,
+                    0xd9,
+                  ]),
+              },
+            ];
+          }
+        };
+      });
+
+      const result = await cachedService.read('/path/to/comic.cbz');
+
+      expect(result.imagePaths?.[0]).toMatch(
+        /^\/agent-storage\/document-image-cache\/neko_cbz_\d+\/page-1\.jpg$/,
+      );
+      expect(fs.mkdir).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/agent-storage\/document-image-cache\/neko_cbz_\d+$/),
+        { recursive: true },
+      );
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/agent-storage\/document-image-cache\/neko_cbz_\d+\/page-1\.jpg$/),
+        expect.any(Uint8Array),
+      );
+    });
+
     it('should throw error for unsupported formats', async () => {
       vi.spyOn(service, 'hasDRM').mockResolvedValue(false);
 

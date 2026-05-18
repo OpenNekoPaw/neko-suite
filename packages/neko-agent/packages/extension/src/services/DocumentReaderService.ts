@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
+import type * as vscode from 'vscode';
 import {
   createDocumentAccessService,
   createDocumentReaderRuntime,
@@ -17,6 +18,7 @@ import type {
   DocumentSourceRef,
 } from '@neko/shared';
 import { getLogger } from '../base';
+import { getDocumentImageCacheUri } from './documentCachePaths';
 import { createDocumentLowLevelAccess } from './documentLowLevelAccess';
 import { resolveDocumentPath } from './documentPathResolver';
 import type { IEngineClientProvider } from './engineClientProvider';
@@ -27,11 +29,16 @@ export type { DocumentContent };
 
 export interface IDocumentReaderService extends IDocumentReader, IDocumentAccessService {}
 
+export interface DocumentReaderServiceOptions {
+  readonly tempDir?: string;
+}
+
 export class DocumentReaderService implements IDocumentReaderService {
   private readonly runtime: IDocumentReader;
   private readonly access: IDocumentAccessService;
 
-  constructor(lowLevelAccess?: DocumentLowLevelAccess) {
+  constructor(lowLevelAccess?: DocumentLowLevelAccess, options: DocumentReaderServiceOptions = {}) {
+    const tempDir = options.tempDir ?? os.tmpdir();
     const runtimeDeps: DocumentReaderRuntimeDeps = {
       readTextFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath), 'utf-8'),
       readBinaryFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath)),
@@ -39,7 +46,7 @@ export class DocumentReaderService implements IDocumentReaderService {
         fs.writeFile(await resolveDocumentPath(filePath), data),
       makeDir: async (filePath, options) =>
         fs.mkdir(await resolveDocumentPath(filePath), options).then(() => undefined),
-      tempDir: () => os.tmpdir(),
+      tempDir: () => tempDir,
       loadModule: <T>(packageName: string) => this.tryImport<T>(packageName),
       logger,
     };
@@ -118,6 +125,9 @@ export class DocumentReaderService implements IDocumentReaderService {
 
 export function createDocumentReaderService(
   engineClientProvider?: IEngineClientProvider,
+  context?: vscode.ExtensionContext,
 ): IDocumentReaderService {
-  return new DocumentReaderService(createDocumentLowLevelAccess(engineClientProvider));
+  return new DocumentReaderService(createDocumentLowLevelAccess(engineClientProvider), {
+    tempDir: context ? getDocumentImageCacheUri(context).fsPath : undefined,
+  });
 }

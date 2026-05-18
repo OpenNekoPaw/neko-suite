@@ -164,7 +164,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   registerExtensionToolGroups(capabilityRegistries.toolGroupRegistry);
 
   // Register neko-agent host tools.
-  registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
+  registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform, context);
 
   bootstrapCapabilities(
     {
@@ -207,7 +207,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   context.subscriptions.push(
     vscode.extensions.onDidChange(() => {
       if (!bridgeMetaToolsRegistered) {
-        registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform);
+        registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform, context);
         bridgeMetaToolsRegistered = true;
         // Re-subscribe to canvas selection after late activation
         subscribeCanvasSelection(context);

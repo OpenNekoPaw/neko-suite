@@ -61,6 +61,7 @@ import { getSkillFileService } from '../services/SkillFileService';
 import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
 import { postPluginsAvailable } from '../services/pluginTransferBridge';
 import { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
+import { getDocumentImageCacheUri } from '../services/documentCachePaths';
 import { StateTaskDeliveryCursorStorage, TaskDeliveryBridge } from '../services/taskDeliveryBridge';
 import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
@@ -78,6 +79,14 @@ import {
 
 function getCurrentWorkspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+export function createChatLocalResourceRoots(
+  extensionUri: vscode.Uri,
+  context: vscode.ExtensionContext,
+): vscode.Uri[] {
+  const workspaceFolders = vscode.workspace.workspaceFolders?.map((f) => f.uri) || [];
+  return [extensionUri, getDocumentImageCacheUri(context), ...workspaceFolders];
 }
 
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -350,11 +359,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._disposeWebviewBindings();
     this._view = webviewView;
 
-    // Include workspace folders in localResourceRoots for accessing generated media files
-    const workspaceFolders = vscode.workspace.workspaceFolders?.map((f) => f.uri) || [];
+    // Include workspace folders and document image cache for generated/read media files.
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [this._extensionUri, ...workspaceFolders],
+      localResourceRoots: createChatLocalResourceRoots(this._extensionUri, this._context),
     };
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
