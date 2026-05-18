@@ -5,9 +5,15 @@ import { MetricCards } from './components/MetricCards';
 import { SkillList } from './components/SkillList';
 import { WorkflowCards } from './components/WorkflowCards';
 import { TaskTable } from './components/TaskTable';
+import { CreativeEntitiesSection } from './components/CreativeEntitiesSection';
 import { postMessage } from './services/messenger';
 import { applyTaskChange } from './taskState';
-import type { DashboardData, DashboardSkill, ExtensionToWebviewMessage } from './types';
+import type {
+  DashboardCreativeEntityState,
+  DashboardData,
+  DashboardSkill,
+  ExtensionToWebviewMessage,
+} from './types';
 
 interface DashboardState {
   readonly data: DashboardData | null;
@@ -21,6 +27,7 @@ type Action =
       readonly task: DashboardTask;
       readonly eventType: 'added' | 'updated' | 'removed';
     }
+  | { readonly type: 'creativeEntitiesChanged'; readonly state: DashboardCreativeEntityState }
   | { readonly type: 'error'; readonly message: string };
 
 const initialState: DashboardState = {
@@ -48,6 +55,14 @@ export function App() {
           return;
         case 'taskCompleted':
           dispatch({ type: 'taskChanged', task: message.task, eventType: 'updated' });
+          return;
+        case 'creativeEntitiesChanged':
+          dispatch({ type: 'creativeEntitiesChanged', state: message.state });
+          return;
+        case 'creativeEntityActionResult':
+          if (!message.result.ok && message.result.message) {
+            dispatch({ type: 'error', message: message.result.message });
+          }
           return;
         case 'error':
           dispatch({ type: 'error', message: message.message });
@@ -140,6 +155,12 @@ function WorkView({ data }: { readonly data: DashboardData }) {
         onCommand={handleCommand}
       />
       <SkillList skills={data.skills} onCommand={handleSkillCommand} />
+      <CreativeEntitiesSection
+        state={data.creativeEntities}
+        onSelect={(ref) => postMessage({ type: 'selectCreativeEntity', ref })}
+        onAction={(request) => postMessage({ type: 'creativeEntityAction', request })}
+        onRefresh={() => postMessage({ type: 'refreshCreativeEntities' })}
+      />
       <TaskTable
         tasks={data.tasks}
         onCancel={(taskId) => postMessage({ type: 'cancelTask', taskId })}
@@ -161,6 +182,15 @@ function reducer(state: DashboardState, action: Action): DashboardState {
         data: {
           ...state.data,
           tasks: applyTaskChange(state.data.tasks, action.task, action.eventType),
+        },
+      };
+    case 'creativeEntitiesChanged':
+      if (!state.data) return state;
+      return {
+        ...state,
+        data: {
+          ...state.data,
+          creativeEntities: action.state,
         },
       };
     case 'error':

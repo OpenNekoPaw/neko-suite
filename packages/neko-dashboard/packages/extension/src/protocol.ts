@@ -1,4 +1,17 @@
 import type { DashboardTask, DashboardTaskEvent } from '@neko/shared';
+import type {
+  DashboardCreativeEntityActionRequest,
+  DashboardCreativeEntityActionResult,
+  DashboardCreativeEntityDetail,
+  DashboardCreativeEntityEvent,
+  DashboardCreativeEntityRef,
+  DashboardCreativeEntityRow,
+  DashboardCreativeEntitySourceStatus,
+} from '@neko/shared/types/dashboard-creative-entity';
+import {
+  isDashboardCreativeEntityActionRequest,
+  isDashboardCreativeEntityRef,
+} from '@neko/shared/types/dashboard-creative-entity';
 import type { NekoEngineConnectionEndpoint } from '@neko/shared/types/extension-api';
 import { isDashboardProjectType, type DashboardProjectType } from './projectTypes';
 
@@ -82,14 +95,28 @@ export interface DashboardData {
   readonly projects: readonly DashboardProject[];
   readonly recent: readonly DashboardRecentActivity[];
   readonly tasks: readonly DashboardTask[];
+  readonly creativeEntities: DashboardCreativeEntityState;
   readonly runtime: DashboardRuntimeStatus;
   readonly workflows: readonly WorkflowAvailability[];
   readonly skills: readonly DashboardSkill[];
 }
 
+export interface DashboardCreativeEntityState {
+  readonly statuses: readonly DashboardCreativeEntitySourceStatus[];
+  readonly rows: readonly DashboardCreativeEntityRow[];
+  readonly selectedRef?: DashboardCreativeEntityRef;
+  readonly detail?: DashboardCreativeEntityDetail;
+}
+
 export type WebviewToExtensionMessage =
   | { readonly type: 'ready' }
   | { readonly type: 'refresh' }
+  | { readonly type: 'refreshCreativeEntities' }
+  | { readonly type: 'selectCreativeEntity'; readonly ref: DashboardCreativeEntityRef }
+  | {
+      readonly type: 'creativeEntityAction';
+      readonly request: DashboardCreativeEntityActionRequest;
+    }
   | { readonly type: 'openProject'; readonly path: string }
   | { readonly type: 'createProject'; readonly projectType: DashboardProjectType }
   | { readonly type: 'revealInExplorer'; readonly path: string }
@@ -107,6 +134,15 @@ export type ExtensionToWebviewMessage =
   | { readonly type: 'update'; readonly data: DashboardData }
   | { readonly type: 'taskProgress'; readonly event: DashboardTaskEvent }
   | { readonly type: 'taskCompleted'; readonly taskId: string; readonly task: DashboardTask }
+  | {
+      readonly type: 'creativeEntitiesChanged';
+      readonly state: DashboardCreativeEntityState;
+      readonly event?: DashboardCreativeEntityEvent;
+    }
+  | {
+      readonly type: 'creativeEntityActionResult';
+      readonly result: DashboardCreativeEntityActionResult;
+    }
   | { readonly type: 'error'; readonly message: string };
 
 export function isWebviewToExtensionMessage(value: unknown): value is WebviewToExtensionMessage {
@@ -115,7 +151,12 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
   switch (value.type) {
     case 'ready':
     case 'refresh':
+    case 'refreshCreativeEntities':
       return true;
+    case 'selectCreativeEntity':
+      return isDashboardCreativeEntityRef(value.ref);
+    case 'creativeEntityAction':
+      return isDashboardCreativeEntityActionRequest(value.request);
     case 'openProject':
     case 'revealInExplorer':
       return typeof value.path === 'string';

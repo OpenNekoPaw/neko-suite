@@ -447,9 +447,13 @@ revealTaskOutput(taskId)       — Open generated file
 update(dashboardData)          — Full state push (projects + status + recent + tasks)
 taskProgress(taskEvent)        — Incremental task status/progress update
 taskCompleted(taskId, result)  — Task finished (success or error)
+creativeEntitiesChanged(state) — Entity ledger snapshot/detail update from source events or refresh
+creativeEntityActionResult(result) — Source-owned entity action result
 ```
 
 `taskId` in webview messages is always the dashboard aggregation id. Extension-host code resolves it back to `DashboardTaskRef` before invoking `DashboardTaskSource.cancel()` or `retry()`.
+
+`creativeEntityAction` messages follow the same host-mediated rule: the Webview sends only a shared `DashboardCreativeEntityActionRequest`, the Extension Host validates the source/ref/action shape, and the owning source performs or delegates the domain operation. Dashboard never writes Story registries, entity binding files, requirement files, visual draft files, or Assets metadata directly. Source navigation such as `open-source` is also source-owned: the source resolves registry/script locations in Extension Host code and opens the editor there, while Webview state keeps only safe projected refs.
 
 ### 2.7 What Dashboard Does NOT Do
 
@@ -459,6 +463,8 @@ taskCompleted(taskId, result)  — Task finished (success or error)
 | AI conversation | neko-agent | Show task progress, link to panel |
 | Media playback | neko-preview | — |
 | Asset browsing/tagging | neko-assets | Show asset count |
+| Creative entity identity | neko-story / source adapters | Show project ledger, request details, delegate actions |
+| Asset metadata sync | neko-assets / owning source | Display suggestions, require explicit apply/ignore action |
 | File editing | respective editors | Navigate to editor |
 | Project file format | format-strategy.md | Read-only scan |
 | Task execution | source extensions | Subscribe to progress, delegate cancel/retry |
@@ -471,7 +477,7 @@ taskCompleted(taskId, result)  — Task finished (success or error)
 | Installed market plugins list | neko-market sidebar | Already has dedicated UI |
 | Provider detailed parameters | VSCode Settings | Configuration, not status |
 
-Dashboard is a **read-only aggregation view with navigation and task monitoring**. It does not own or mutate creative data, and does not execute tasks itself.
+Dashboard is a **read-only aggregation view with navigation, task monitoring, and source-delegated project semantic management**. It does not own or mutate creative data, and does not execute tasks itself.
 
 ### 2.8 Information Inclusion Criteria
 
@@ -613,8 +619,16 @@ Estimated size: ~3-4K LOC total (extension ~800, webview ~2500).
 | `neko.agent.getDashboardTaskSource` | `DashboardTaskSource \| undefined` | neko-agent |
 | `neko.engine.getDashboardTaskSource` | `DashboardTaskSource \| undefined` | neko-engine |
 | `neko.dashboard.registerTaskSource` | void (optional push registration) | neko-dashboard |
+| `neko.story.getDashboardCreativeEntitySource` | `DashboardCreativeEntitySource \| undefined` | neko-story |
+| `neko.dashboard.registerCreativeEntitySource` | void (optional push registration) | neko-dashboard |
 
 No hard extension dependencies — dashboard degrades gracefully if other extensions are not installed (shows "not available" for missing status, empty task list for missing sources). In implementation terms, `packages/neko-dashboard` may import `@neko/shared` and VSCode APIs, but must not import source extension packages. Source packages own their adapters and expose them only through programmatic commands.
+
+Creative Entities follows the same command boundary. Dashboard discovers sources through shared contract commands, validates returned DTOs, subscribes to source events, and renders the project semantic ledger in Work Mode. The initial source is `neko-story` because Story owns script candidates, confirmed character registry projection, occurrences, graph summaries, missing material requirements, visual drafts, and source-owned fallback commands. `neko-assets` remains the resource owner for files, thumbnails, asset metadata, representation packages, and asset mutation workflows.
+
+The Creative Entities Webview surface must use Dashboard i18n bundles for labels, filters, table headers, empty states, statuses, and action labels. Source DTO `label` fields remain data, not UI chrome; known action ids are translated in the Webview and unknown action ids fall back to the source-provided label.
+
+Migration note: P0 Dashboard actions may reuse existing Story QuickPick commands such as binding assets, reviewing visual drafts, and handling missing material queues. Those commands remain available as fallback entry points while Dashboard gains richer inline interactions. Inline mutations should still be added behind source-owned typed actions rather than by importing Story or Assets modules into Dashboard.
 
 ---
 
@@ -662,6 +676,8 @@ Dashboard ships only after the affected slice has focused tests. The goal is not
 | Task event merge | Applies `added` / `updated` / `removed` idempotently by `${source}:${sourceTaskId}` |
 | Task actions | Resolves dashboard `taskId` back to `DashboardTaskRef` before cancel/retry; surfaces source errors without corrupting table state |
 | Activity persistence | Appends terminal task results, caps at 50 entries, survives missing/corrupt `.neko/dashboard-activity.json`, and never writes absolute paths |
+| Creative entity source aggregation | Handles missing Story source, invalid source rejection, duplicate source replacement, stale event refresh, detail loading, action delegation, and unsafe ref rejection |
+| Dependency boundaries | Prevents Dashboard extension from importing Story/Assets implementation modules and prevents Dashboard Webview from reading filesystem/cache schemas |
 
 ### 7.3 Manual Verification
 

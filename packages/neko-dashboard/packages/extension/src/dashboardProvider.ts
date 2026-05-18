@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { DashboardTaskOutputRef } from '@neko/shared/types/dashboard-task';
 import { ActivityStore } from './activityStore';
+import { CreativeEntitySourceAggregator } from './creativeEntitySourceAggregator';
 import { getDashboardHtml } from './html';
 import { NOOP_DASHBOARD_LOGGER, type DashboardLogger } from './logging';
 import { NavigationDispatcher } from './navigationDispatcher';
@@ -24,6 +25,7 @@ export interface DashboardProviderOptions {
   readonly skillReader?: SkillReader;
   readonly navigation?: NavigationDispatcher;
   readonly taskAggregator?: TaskAggregator;
+  readonly creativeEntityAggregator?: CreativeEntitySourceAggregator;
   readonly activityStore?: ActivityStore;
 }
 
@@ -36,6 +38,7 @@ export class DashboardProvider implements vscode.Disposable {
   private readonly skillReader: SkillReader;
   private readonly navigation: NavigationDispatcher;
   private readonly taskAggregator: TaskAggregator;
+  private readonly creativeEntityAggregator: CreativeEntitySourceAggregator;
   private readonly activityStore: ActivityStore;
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -50,9 +53,15 @@ export class DashboardProvider implements vscode.Disposable {
     this.navigation = options.navigation ?? new NavigationDispatcher();
     this.taskAggregator =
       options.taskAggregator ?? new TaskAggregator({ logger: this.logger.child('TaskAggregator') });
+    this.creativeEntityAggregator =
+      options.creativeEntityAggregator ??
+      new CreativeEntitySourceAggregator({
+        logger: this.logger.child('CreativeEntitySourceAggregator'),
+      });
     this.activityStore = options.activityStore ?? new ActivityStore();
 
     this.disposables.push(this.taskAggregator);
+    this.disposables.push(this.creativeEntityAggregator);
     this.disposables.push(
       vscode.extensions.onDidChange(() => {
         if (this.panel) void this.refresh();
@@ -72,6 +81,15 @@ export class DashboardProvider implements vscode.Disposable {
             .catch((error) => this.logger.warn('Failed to persist dashboard activity', error));
           this.post({ type: 'taskCompleted', taskId: event.task.taskId, task: event.task });
         }
+      }),
+    );
+    this.disposables.push(
+      this.creativeEntityAggregator.onDidChangeEntity((event) => {
+        this.post({
+          type: 'creativeEntitiesChanged',
+          state: this.creativeEntityAggregator.getState(),
+          event,
+        });
       }),
     );
   }
@@ -143,7 +161,10 @@ export class DashboardProvider implements vscode.Disposable {
   }
 
   private async doRefresh(): Promise<void> {
-    await this.taskAggregator.refreshSources();
+    await Promise.all([
+      this.taskAggregator.refreshSources(),
+      this.creativeEntityAggregator.refreshSources(),
+    ]);
     const [projects, runtime, workflows, skills] = await Promise.all([
       this.scanner.scan(),
       this.statusReader.read(),
@@ -155,6 +176,7 @@ export class DashboardProvider implements vscode.Disposable {
       projects,
       recent: createRecentActivity(projects),
       tasks: this.taskAggregator.getSnapshot(),
+      creativeEntities: this.creativeEntityAggregator.getState(),
       runtime,
       workflows,
       skills,
@@ -178,6 +200,25 @@ export class DashboardProvider implements vscode.Disposable {
       case 'refresh':
         await this.refresh();
         return;
+      case 'refreshCreativeEntities':
+        await this.refreshCreativeEntities();
+        return;
+      case 'selectCreativeEntity':
+        await this.creativeEntityAggregator.getDetail(message.ref);
+        this.post({
+          type: 'creativeEntitiesChanged',
+          state: this.creativeEntityAggregator.getState(),
+        });
+        return;
+      case 'creativeEntityAction': {
+        const result = await this.creativeEntityAggregator.executeAction(message.request);
+        this.post({ type: 'creativeEntityActionResult', result });
+        this.post({
+          type: 'creativeEntitiesChanged',
+          state: this.creativeEntityAggregator.getState(),
+        });
+        return;
+      }
       case 'openProject':
         await this.navigation.openProject(message.path);
         return;
@@ -208,6 +249,14 @@ export class DashboardProvider implements vscode.Disposable {
       default:
         assertNever(message);
     }
+  }
+
+  private async refreshCreativeEntities(): Promise<void> {
+    await this.creativeEntityAggregator.refreshSources();
+    this.post({
+      type: 'creativeEntitiesChanged',
+      state: this.creativeEntityAggregator.getState(),
+    });
   }
 
   private post(message: ExtensionToWebviewMessage): void {

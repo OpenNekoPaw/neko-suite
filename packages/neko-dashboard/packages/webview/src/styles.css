@@ -95,6 +95,25 @@ progress {
   font-size: 14px;
 }
 
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.section-header h2 {
+  margin-bottom: 2px;
+}
+
+.section-subtitle,
+.muted-line {
+  color: var(--neko-fg-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .context-strip {
   display: flex;
   flex-wrap: wrap;
@@ -150,6 +169,94 @@ progress {
 .empty-cell {
   color: var(--neko-fg-secondary);
   text-align: center;
+}
+
+/* ── Creative Entities ─────────────────────────────────── */
+
+.creative-entity-toolbar {
+  flex-wrap: wrap;
+}
+
+.creative-entity-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 12px;
+}
+
+.creative-entity-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.creative-entity-table-wrap th,
+.creative-entity-table-wrap td {
+  white-space: nowrap;
+}
+
+.selected-link {
+  font-weight: 600;
+}
+
+.creative-entity-detail {
+  min-width: 0;
+  border: 1px solid var(--neko-border);
+  border-radius: var(--neko-radius-md);
+  padding: 10px;
+  line-height: 1.45;
+}
+
+.detail-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.detail-title-row h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.detail-block {
+  border-top: 1px solid var(--neko-divider);
+  padding-top: 8px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.detail-block-title {
+  color: var(--neko-fg-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-list-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid var(--neko-divider);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 840px) {
+  .creative-entity-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .error-banner {

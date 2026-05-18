@@ -1,14 +1,19 @@
 import * as vscode from 'vscode';
 import type { AgentContextPayload, NekoCanvasAPI, NekoStoryAPI } from '@neko/shared';
 import { createEmptyCharacterRegistryFile } from '@neko/shared';
+import { DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND } from '@neko/shared/types/dashboard-creative-entity';
 import { createNekoStoryCapabilityProvider } from './agentCapabilityProvider';
 import {
   CharacterRegistryService,
+  CreativeEntityRegistryService,
   createVSCodeLogger,
   createNewFile,
+  EntityAssetBindingService,
+  EntityAssetRequirementService,
   resolveCharacterRegistryPath,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
+  VisualIdentityDraftService,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import { setErrorHandler, handleError } from './utils/errorHandler';
@@ -38,6 +43,8 @@ import {
 import { CreativeEntityGraphService } from './services/CreativeEntityGraphService';
 import { SceneWorkspaceIndexService } from './services/SceneWorkspaceIndexService';
 import { registerCreativeEntityCommands } from './commands/creativeEntityCommands';
+import { CreativeEntityManagementService } from './services/CreativeEntityManagementService';
+import { StoryDashboardCreativeEntitySource } from './services/DashboardCreativeEntitySource';
 import { buildScriptIndex } from './services/scriptIndexBuilder';
 import { buildShotPlansForScene, buildStoryScenePlans } from './services/storyScenePlanner';
 import {
@@ -217,6 +224,11 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Register commands
   registerCreativeEntityCommands(context, {
+    creativeEntityIndex: creativeEntityIndexService,
+    entityGraph: entityGraphService,
+  });
+  registerDashboardCreativeEntitySource(context, {
+    workspaceIndex: indexService,
     creativeEntityIndex: creativeEntityIndexService,
     entityGraph: entityGraphService,
   });
@@ -652,6 +664,68 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+interface DashboardCreativeEntitySourceServices {
+  readonly workspaceIndex: Pick<
+    WorkspaceIndexService,
+    'ensureInitialized' | 'getAllCharacterNames' | 'onDidUpdateIndex'
+  >;
+  readonly creativeEntityIndex: Pick<
+    CreativeEntityWorkspaceIndexService,
+    'ensureInitialized' | 'queryCharacter'
+  >;
+  readonly entityGraph: Pick<
+    CreativeEntityGraphService,
+    'ensureInitialized' | 'getEdgesForEntity' | 'onDidUpdate'
+  >;
+}
+
+function registerDashboardCreativeEntitySource(
+  context: vscode.ExtensionContext,
+  services: DashboardCreativeEntitySourceServices,
+): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand(DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND, () => {
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspaceRoot) {
+        return undefined;
+      }
+
+      const registry = CreativeEntityRegistryService.forWorkspaceRoot(workspaceRoot);
+      const bindings = EntityAssetBindingService.fromWorkspaceRoot(workspaceRoot);
+      const requirements = EntityAssetRequirementService.fromWorkspaceRoot(workspaceRoot);
+      const drafts = VisualIdentityDraftService.fromWorkspaceRoot(workspaceRoot);
+      const management = new CreativeEntityManagementService({
+        entities: registry,
+        bindings,
+        requirements,
+        drafts,
+        workspaceIndex: services.creativeEntityIndex,
+        graph: services.entityGraph,
+      });
+
+      return new StoryDashboardCreativeEntitySource({
+        workspaceRoot,
+        workspaceIndex: services.workspaceIndex,
+        creativeEntityIndex: services.creativeEntityIndex,
+        entityGraph: services.entityGraph,
+        registry,
+        bindings,
+        requirements,
+        drafts,
+        management,
+        executeCommand: async (command, ...args) =>
+          vscode.commands.executeCommand(command, ...args),
+        openLocation: async (location) => {
+          const document = await vscode.workspace.openTextDocument(location.uri);
+          const editor = await vscode.window.showTextDocument(document);
+          editor.selection = new vscode.Selection(location.range.start, location.range.end);
+          editor.revealRange(location.range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+        },
+      });
+    }),
+  );
+}
 
 function subscribeCanvasSceneWriteback(
   context: vscode.ExtensionContext,

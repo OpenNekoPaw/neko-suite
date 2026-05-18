@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
+import type {
+  DashboardCreativeEntityDetail,
+  DashboardCreativeEntityEvent,
+  DashboardCreativeEntityRef,
+  DashboardCreativeEntityRow,
+} from '@neko/shared/types/dashboard-creative-entity';
 import { vscodeCommandState, vscodeWindowState } from './vscode-test-double';
 import type { ActivityStore } from './activityStore';
+import type { CreativeEntitySourceAggregator } from './creativeEntitySourceAggregator';
 import { DashboardProvider } from './dashboardProvider';
 import type { ProjectScanner } from './projectScanner';
 import type { SkillReader } from './skillReader';
@@ -40,6 +47,7 @@ describe('DashboardProvider', () => {
       statusReader,
       skillReader,
       taskAggregator,
+      creativeEntityAggregator: createCreativeEntityAggregator(),
       activityStore: createActivityStore(),
     });
 
@@ -67,6 +75,7 @@ describe('DashboardProvider', () => {
       statusReader: createStatusReader(),
       skillReader: createSkillReader(),
       taskAggregator: createTaskAggregator(),
+      creativeEntityAggregator: createCreativeEntityAggregator(),
       activityStore: createActivityStore(),
     });
     await provider.show();
@@ -101,6 +110,53 @@ describe('DashboardProvider', () => {
     });
     provider.dispose();
   });
+
+  it('refreshes entity state and delegates entity messages', async () => {
+    const postMessage = vi.fn(async () => true);
+    const panel = createPanel(postMessage);
+    vscodeWindowState.createWebviewPanel.mockReturnValue(panel);
+    const creativeEntityAggregator = createCreativeEntityAggregator({
+      state: { statuses: [], rows: [entityRow] },
+      detail: entityDetail,
+      actionResult: { ok: true, refresh: true, ref: entityRef },
+    });
+
+    const provider = new DashboardProvider(createContext(), {
+      scanner: createScanner(),
+      statusReader: createStatusReader(),
+      skillReader: createSkillReader(),
+      taskAggregator: createTaskAggregator(),
+      creativeEntityAggregator,
+      activityStore: createActivityStore(),
+    });
+    await provider.show();
+
+    const receiveMessage = getRegisteredMessageListener(panel);
+    await receiveMessage?.({ type: 'selectCreativeEntity', ref: entityRef });
+    await receiveMessage?.({
+      type: 'creativeEntityAction',
+      request: { source: 'neko-story', ref: entityRef, action: 'bind-existing', role: 'portrait' },
+    });
+    await receiveMessage?.({ type: 'refreshCreativeEntities' });
+
+    expect(creativeEntityAggregator.getDetail).toHaveBeenCalledWith(entityRef);
+    expect(creativeEntityAggregator.executeAction).toHaveBeenCalledWith({
+      source: 'neko-story',
+      ref: entityRef,
+      action: 'bind-existing',
+      role: 'portrait',
+    });
+    expect(creativeEntityAggregator.refreshSources).toHaveBeenCalledTimes(2);
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'creativeEntityActionResult',
+      result: { ok: true, refresh: true, ref: entityRef },
+    });
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'creativeEntitiesChanged',
+      state: { statuses: [], rows: [entityRow] },
+    });
+    provider.dispose();
+  });
 });
 
 function createTaskAggregator(
@@ -117,6 +173,62 @@ function createTaskAggregator(
     onDidChangeTask: vi.fn(() => ({ dispose() {} })),
     dispose: vi.fn(),
   } as unknown as TaskAggregator;
+}
+
+const entityRef: DashboardCreativeEntityRef = {
+  source: 'neko-story',
+  sourceEntityId: 'entity:char_xiaoju',
+  entityId: 'char_xiaoju',
+  entityKind: 'character',
+  workspaceFolder: 'neko-test',
+};
+
+const entityRow: DashboardCreativeEntityRow = {
+  ref: entityRef,
+  label: '小橘',
+  kind: 'character',
+  status: 'confirmed',
+  sourceKind: 'registry',
+  freshness: 'fresh',
+  actions: [{ id: 'show-detail', label: 'Show detail' }],
+  searchText: '小橘',
+};
+
+const entityDetail: DashboardCreativeEntityDetail = {
+  ref: entityRef,
+  label: '小橘',
+  kind: 'character',
+  status: 'confirmed',
+  sourceKind: 'registry',
+  aliases: [],
+  relationships: [],
+  occurrences: [],
+  bindings: [],
+  defaults: [],
+  requirements: [],
+  visualDrafts: [],
+  syncSuggestions: [],
+  freshness: 'fresh',
+  actions: [{ id: 'refresh', label: 'Refresh' }],
+};
+
+function createCreativeEntityAggregator(
+  overrides: {
+    readonly state?: ReturnType<CreativeEntitySourceAggregator['getState']>;
+    readonly detail?: DashboardCreativeEntityDetail;
+    readonly actionResult?: Awaited<ReturnType<CreativeEntitySourceAggregator['executeAction']>>;
+  } = {},
+): CreativeEntitySourceAggregator {
+  return {
+    refreshSources: vi.fn(async () => {}),
+    getState: vi.fn(() => overrides.state ?? { statuses: [], rows: [] }),
+    getDetail: vi.fn(async () => overrides.detail),
+    executeAction: vi.fn(async () => overrides.actionResult ?? { ok: true }),
+    onDidChangeEntity: vi.fn((_listener: (event: DashboardCreativeEntityEvent) => void) => ({
+      dispose() {},
+    })),
+    dispose: vi.fn(),
+  } as unknown as CreativeEntitySourceAggregator;
 }
 
 function createScanner(): ProjectScanner {

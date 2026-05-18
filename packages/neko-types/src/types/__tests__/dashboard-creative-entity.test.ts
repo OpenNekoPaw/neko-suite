@@ -1,0 +1,256 @@
+import { describe, expect, it } from 'vitest';
+import {
+  DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
+  DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
+  isDashboardCreativeEntityActionRequest,
+  isDashboardCreativeEntityBindingSummary,
+  isDashboardCreativeEntityDetail,
+  isDashboardCreativeEntityRef,
+  isDashboardCreativeEntityRow,
+  isDashboardCreativeEntitySnapshot,
+  isDashboardCreativeEntitySource,
+  isDashboardCreativeEntitySyncSuggestion,
+  isSafeDashboardAssetRef,
+  isSafeDashboardEntityRef,
+  normalizeDashboardEntityLocalRef,
+  toDashboardCreativeEntityId,
+  type DashboardCreativeEntityDetail,
+  type DashboardCreativeEntityRow,
+  type DashboardCreativeEntitySource,
+} from '../dashboard-creative-entity';
+
+const ref = {
+  source: 'neko-story',
+  sourceEntityId: 'character:小橘',
+  entityId: 'char-xiaoju',
+  entityKind: 'character',
+  projectRoot: '${workspaceFolder}/story',
+} as const;
+
+const row: DashboardCreativeEntityRow = {
+  ref,
+  label: '小橘',
+  kind: 'character',
+  status: 'candidate',
+  sourceKind: 'script',
+  aliases: ['Xiaoju'],
+  summary: 'Script candidate without portrait',
+  occurrenceCount: 3,
+  defaultBindingRoles: ['reference'],
+  missingRepresentationKinds: ['portrait'],
+  visualDraftCount: 1,
+  syncSuggestionCount: 1,
+  freshness: 'fresh',
+  actions: [
+    { id: 'show-detail', label: 'Show detail' },
+    { id: 'bind-existing', label: 'Bind asset' },
+  ],
+  searchText: '小橘 Xiaoju portrait',
+};
+
+const detail: DashboardCreativeEntityDetail = {
+  ref,
+  label: '小橘',
+  kind: 'character',
+  status: 'candidate',
+  sourceKind: 'script',
+  aliases: ['Xiaoju'],
+  description: 'Script candidate',
+  relationships: [
+    {
+      from: 'char-xiaoju',
+      to: 'asset-ref-1',
+      type: 'depicts-character',
+      strength: 'medium',
+      provenance: 'matcher',
+      confidence: 0.8,
+    },
+  ],
+  occurrences: [
+    {
+      source: 'script',
+      role: 'reference',
+      label: '小橘',
+      location: 'story/test.fountain',
+    },
+  ],
+  bindings: [
+    {
+      id: 'binding-1',
+      role: 'reference',
+      assetRef: 'project://assets/cat-ref',
+      status: 'confirmed',
+      source: 'user',
+      isDefault: true,
+      confidence: 0.9,
+      updatedAt: '2026-05-18T00:00:00.000Z',
+    },
+  ],
+  defaults: [
+    {
+      id: 'binding-1',
+      role: 'reference',
+      assetRef: 'project://assets/cat-ref',
+      status: 'confirmed',
+      source: 'user',
+      isDefault: true,
+      confidence: 0.9,
+      updatedAt: '2026-05-18T00:00:00.000Z',
+    },
+  ],
+  requirements: [
+    {
+      id: 'req-1',
+      entityId: 'char-xiaoju',
+      entityKind: 'character',
+      source: 'story',
+      sourceRef: 'story/test.fountain',
+      requiredKinds: ['portrait'],
+      status: 'missing',
+      actions: ['generate', 'bind-existing', 'dismiss'],
+    },
+  ],
+  visualDrafts: [
+    {
+      id: 'draft-1',
+      characterId: 'char-xiaoju',
+      source: 'agent',
+      prompt: 'orange cat portrait',
+      generatedAssetIds: ['gen-1'],
+      selectedAssetId: 'gen-1',
+      status: 'selected',
+      factCount: 2,
+    },
+  ],
+  syncSuggestions: [
+    {
+      id: 'sync-1',
+      kind: 'asset-metadata',
+      status: 'suggested',
+      entityRef: ref,
+      targetRef: 'project://assets/cat-ref',
+      fields: ['tags', 'description'],
+      reason: 'Asset metadata does not mention 小橘',
+      ownerSource: 'neko-story',
+    },
+  ],
+  freshness: 'fresh',
+  actions: [{ id: 'refresh', label: 'Refresh' }],
+};
+
+describe('dashboard creative entity contracts', () => {
+  it('accepts valid refs, rows, details, and snapshots', () => {
+    expect(isDashboardCreativeEntityRef(ref)).toBe(true);
+    expect(toDashboardCreativeEntityId(ref)).toBe('neko-story:character:小橘');
+    expect(isDashboardCreativeEntityRow(row)).toBe(true);
+    expect(isDashboardCreativeEntityDetail(detail)).toBe(true);
+    expect(
+      isDashboardCreativeEntitySnapshot({
+        source: 'neko-story',
+        sourceDisplayName: 'Neko Story',
+        status: {
+          source: 'neko-story',
+          sourceDisplayName: 'Neko Story',
+          available: true,
+          freshness: 'fresh',
+          entityCount: 1,
+        },
+        rows: [row],
+        freshness: 'fresh',
+        updatedAt: '2026-05-18T00:00:00.000Z',
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects unsafe local refs and accepts stable asset refs', () => {
+    expect(isSafeDashboardEntityRef('/tmp/story.fountain')).toBe(false);
+    expect(isSafeDashboardEntityRef('file:///tmp/story.fountain')).toBe(false);
+    expect(isSafeDashboardEntityRef('../story.fountain')).toBe(false);
+    expect(isSafeDashboardEntityRef('story/test.fountain')).toBe(true);
+    expect(isSafeDashboardEntityRef('story://demo#10')).toBe(true);
+    expect(isSafeDashboardEntityRef('story://.neko/.cache/entity.json')).toBe(false);
+    expect(isSafeDashboardEntityRef('${workspaceFolder}/story/test.fountain')).toBe(true);
+    expect(normalizeDashboardEntityLocalRef('story\\test.fountain')).toBe('story/test.fountain');
+    expect(isSafeDashboardAssetRef('project://assets/cat-ref')).toBe(true);
+    expect(isSafeDashboardAssetRef('market://pack/cat')).toBe(true);
+    expect(isSafeDashboardAssetRef('generated://asset-1')).toBe(true);
+    expect(isSafeDashboardAssetRef('/tmp/cat.png')).toBe(false);
+  });
+
+  it('validates binding and sync suggestion payloads', () => {
+    expect(isDashboardCreativeEntityBindingSummary(detail.bindings[0])).toBe(true);
+    expect(isDashboardCreativeEntitySyncSuggestion(detail.syncSuggestions[0])).toBe(true);
+    expect(
+      isDashboardCreativeEntitySyncSuggestion({
+        ...detail.syncSuggestions[0],
+        targetRef: '/tmp/cat.png',
+      }),
+    ).toBe(false);
+  });
+
+  it('validates action requests', () => {
+    expect(
+      isDashboardCreativeEntityActionRequest({
+        source: 'neko-story',
+        ref,
+        action: 'bind-existing',
+        role: 'portrait',
+      }),
+    ).toBe(true);
+    expect(
+      isDashboardCreativeEntityActionRequest({
+        source: 'neko-story',
+        ref,
+        action: 'unknown',
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts source contracts without vscode types', () => {
+    const source: DashboardCreativeEntitySource = {
+      contractVersion: DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
+      source: 'neko-story',
+      sourceDisplayName: 'Neko Story',
+      capabilities: {
+        detail: true,
+        syncSuggestions: true,
+        actions: ['show-detail', 'bind-existing'],
+      },
+      async getSnapshot() {
+        return {
+          source: 'neko-story',
+          status: {
+            source: 'neko-story',
+            available: true,
+            freshness: 'fresh',
+            entityCount: 1,
+          },
+          rows: [row],
+          freshness: 'fresh',
+          updatedAt: '2026-05-18T00:00:00.000Z',
+        };
+      },
+      async getDetail() {
+        return detail;
+      },
+      async executeAction() {
+        return { ok: true, refresh: true };
+      },
+      onDidChangeEntity() {
+        return { dispose() {} };
+      },
+    };
+
+    expect(DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND).toBe(
+      'neko.story.getDashboardCreativeEntitySource',
+    );
+    expect(isDashboardCreativeEntitySource(source)).toBe(true);
+    expect(
+      isDashboardCreativeEntitySource({
+        contractVersion: DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
+        source: 'neko-story',
+        getSnapshot: async () => [],
+      }),
+    ).toBe(false);
+  });
+});

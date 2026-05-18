@@ -82,6 +82,7 @@ export * from './task-view';
 // Dashboard task monitoring contracts
 export * from './dashboard-task';
 export * from './dashboard-project';
+export * from './dashboard-creative-entity';
 
 // SubAgent UI Types
 export * from './subagent';

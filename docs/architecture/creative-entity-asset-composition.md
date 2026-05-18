@@ -772,8 +772,30 @@ public asset
 - 不让 `neko-market` 管理所有外部素材；只有 market 来源素材由 market 管安装和升级。
 - 不让 Canvas、Story、Agent、Live 各自维护一套实体事实。
 - 不让 AI 生成结果静默改写用户确认的人物设定。
+- 不让统一实体改名、别名调整或设定变化静默改写素材库的素材名称、标签、描述、文件名或表现包 metadata。
+- 不让 Dashboard Webview 或其他展示层直接写入 `entity-bindings.json`、素材库 metadata 或 `.neko/.cache` 中的可重建索引。
 - 不让 `neko-live` 成为角色或素材事实源。
 - 不在 `characters.json` 中保存完整贴图、动作、物理、音频文件清单。
+
+## 14.1 Dashboard 管理面与显式素材同步
+
+Dashboard 可以提供项目级 Creative Entities 管理面，但它不是新的实体事实源。Dashboard 只消费 `@neko/shared` 中的 `DashboardCreativeEntitySource` 投影，并通过命令发现 Story 等 source。首个权威 source 是 Story，因为当前确认实体、剧本候选、出现点、关系、待补素材需求和视觉草案都由 Story 侧服务组合；Dashboard 不直接 import Story 或 Assets 实现。
+
+`neko-assets` 继续管理素材资源：文件、缩略图、技术元数据、素材标签、表现包组件和素材变更流程。统一实体层可以显示“素材 metadata 可能过期”“生成图可注册为 portrait”“绑定目标不匹配”等同步建议，但这些建议是只读 DTO，直到用户执行显式 `apply-sync-suggestion` 或 `ignore-sync-suggestion`。如果缺少 typed Assets 同步命令，source 必须返回安全的不可用/失败结果，并说明没有修改素材 metadata。
+
+打开来源也遵循同一边界：Dashboard Webview 只发送 `open-source` action，不解析本地文件路径。Story source 在 Extension Host 内根据实体 ref 定位 `characters.json` 或剧本出现位置并打开编辑器；Webview DTO 仍只携带 workspace-relative / scheme ref，不能暴露绝对路径、`file://` URI 或 `.neko/.cache` schema 路径。
+
+推荐交互边界：
+
+```text
+实体事实变化
+  -> 刷新实体索引 / 搜索 / Dashboard 行
+  -> 生成同步建议
+  -> 用户显式 apply / ignore
+  -> source 或 Assets 命令执行素材 mutation
+```
+
+这意味着“统一实体内容是否更新到素材中”的答案是：默认不更新，Dashboard 显示差异和建议，用户确认后由 owning source 或 `neko-assets` 执行。这样可以保护 market/shared 只读素材，避免多实体共享素材时的误写，也避免实体微调产生无意义的 Git diff。
 
 ## 15. 推荐落地顺序
 
