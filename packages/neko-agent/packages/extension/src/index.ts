@@ -52,6 +52,7 @@ import { createStatusBar } from './statusBar';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import { registerProjectSearchService } from '@neko/search/host-vscode';
 import { resolveDocumentPath } from './services/documentPathResolver';
+import { createAgentProjectSearchAdapters } from './services/agentProjectSearchAdapters';
 
 type SkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
 
@@ -201,9 +202,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   registerDocumentContextCommands(context, chatViewProvider);
 
   // Project cache/search service — host-side facade for Agent mention search.
+  const projectSearchLogger = getRootLogger().child('ProjectSearch');
   registerProjectSearchService(context, {
     resolvePath: resolveDocumentPath,
-    logger: getRootLogger().child('ProjectSearch'),
+    logger: projectSearchLogger,
+    adapters: createAgentProjectSearchAdapters({
+      logger: projectSearchLogger,
+    }),
   });
 
   // Listen for extension changes to update tools (register disposable + avoid duplicates)

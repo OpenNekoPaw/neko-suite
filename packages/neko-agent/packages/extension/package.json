@@ -15,6 +15,7 @@
   "dependencies": {
     "@neko-agent/types": "workspace:*",
     "@neko/agent": "workspace:*",
+    "@neko/entity": "workspace:*",
     "@neko/neko-client": "workspace:*",
     "@neko/platform": "workspace:*",
     "@neko/search": "workspace:*",

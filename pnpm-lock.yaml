@@ -205,6 +205,9 @@ importers:
       '@neko/agent':
         specifier: workspace:*
         version: link:../agent
+      '@neko/entity':
+        specifier: workspace:*
+        version: link:../../../neko-entity
       '@neko/neko-client':
         specifier: workspace:*
         version: link:../../../neko-client

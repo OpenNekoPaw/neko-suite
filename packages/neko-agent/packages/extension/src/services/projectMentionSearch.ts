@@ -63,7 +63,10 @@ function projectSearchItemToMentionCandidate(
   const type = mentionTypeForProjectItem(item);
   const source = mentionSourceForProjectItem(item);
   const mediaType = readMentionMediaType(item.metadata?.['mediaType']);
-  const entityType = readString(item.metadata?.['entityType']) ?? item.source.sourceKind;
+  const entityType =
+    readString(item.source.metadata?.['entityKind']) ??
+    readString(item.metadata?.['entityType']) ??
+    item.source.sourceKind;
   return {
     type,
     id: item.id,

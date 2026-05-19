@@ -55,6 +55,36 @@ describe('project search commands', () => {
     service.dispose();
     vi.useRealTimers();
   });
+
+  it('watches unified entity fact files as creative entity changes', async () => {
+    const context = { subscriptions: [] as { dispose(): void }[] } as vscode.ExtensionContext;
+    const service = registerProjectSearchService(context, {
+      resolvePath: async (filePath) => filePath,
+    });
+    const refresh = vi.spyOn(service, 'refresh').mockResolvedValue(undefined);
+    const entityWatcher = watcherForPattern('**/neko/entities/*.json');
+    const onDidChange = vi.mocked(entityWatcher?.onDidChange).mock.calls[0]?.[0];
+
+    expect(onDidChange).toBeDefined();
+    onDidChange?.(vscode.Uri.file('/workspace/neko/entities/scenes.json'));
+
+    await vi.advanceTimersByTimeAsync(299);
+    expect(refresh).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(refresh).toHaveBeenCalledWith(
+      '/workspace',
+      'file-change',
+      expect.objectContaining({
+        partition: 'creative-entities',
+        changedRefs: expect.arrayContaining([
+          expect.objectContaining({ filePath: '/workspace/neko/entities/scenes.json' }),
+        ]),
+      }),
+    );
+
+    service.dispose();
+  });
 });
 
 function setWorkspaceFolders(
@@ -69,4 +99,15 @@ function setWorkspaceFolders(
       workspaceFolders: typeof folders;
     }
   ).workspaceFolders = folders;
+}
+
+function watcherForPattern(pattern: string): {
+  readonly onDidChange: ReturnType<typeof vi.fn>;
+} {
+  const watcherIndex = vi
+    .mocked(vscode.workspace.createFileSystemWatcher)
+    .mock.calls.findIndex((call) => call[0] === pattern);
+  return vi.mocked(vscode.workspace.createFileSystemWatcher).mock.results[watcherIndex]?.value as {
+    readonly onDidChange: ReturnType<typeof vi.fn>;
+  };
 }
