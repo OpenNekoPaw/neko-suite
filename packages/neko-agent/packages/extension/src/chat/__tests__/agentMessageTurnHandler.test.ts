@@ -38,8 +38,12 @@ vi.mock('vscode', () => {
     extensions: {
       getExtension: vi.fn(),
     },
+    commands: {
+      executeCommand: vi.fn(),
+    },
     window: {
       activeTextEditor: undefined,
+      onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: vi.fn() })),
     },
     workspace: {
       workspaceFolders: undefined,
@@ -710,85 +714,87 @@ describe('AgentMessageTurnHandler', () => {
       });
     });
 
-    it('merges asset, media, and entity index candidates into mention extras', async () => {
+    it('maps upstream project search candidates into mention extras', async () => {
       const webview = createMockWebview();
       const handler = buildHandler();
-      const files = new Map<string, unknown>([
-        [
-          '/workspace/neko/assets/library.json',
-          {
-            version: 1,
-            entities: [
-              {
-                id: 'asset-hero',
-                name: 'Hero portrait',
-                category: 'character',
-                tags: ['hero'],
-                variants: [
-                  {
-                    id: 'variant-default',
-                    thumbnailPath: '/workspace/thumbs/hero.png',
-                    files: [
-                      {
-                        id: 'file-hero',
-                        name: 'hero.png',
-                        path: 'assets/hero.png',
-                        mediaType: 'image',
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-        [
-          '/workspace/.neko/.cache/search-index.json',
-          {
-            version: 1,
-            entries: [
-              {
-                filePath: '/library/hero-shot.mp4',
-                fileName: 'hero-shot.mp4',
-                libraryName: 'Footage',
-                mediaType: 'video',
-              },
-            ],
-          },
-        ],
-        [
-          '/workspace/.neko/.cache/asset-graph.json',
-          {
-            version: 1,
-            nodes: [
-              {
-                id: 'entity-hero',
-                kind: 'entity',
-                refId: 'char-hero',
-                label: 'Hero',
-              },
-            ],
-          },
-        ],
-      ]);
 
       (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
-      vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: any) => {
-        const value = files.get(String(uri.fsPath));
-        if (!value) throw new Error(`missing ${uri.fsPath}`);
-        return new TextEncoder().encode(JSON.stringify(value));
+      vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
+        items: [
+          {
+            id: 'asset:asset-hero',
+            kind: 'asset',
+            label: 'Hero portrait',
+            description: 'Asset',
+            icon: 'IMG',
+            source: {
+              partition: 'asset-library',
+              sourceId: 'asset-hero',
+              sourceKind: 'character',
+            },
+            projectRoot: '/workspace',
+            filePath: 'assets/hero.png',
+            searchText: 'Hero portrait',
+            freshness: 'fresh',
+            metadata: { mediaType: 'image', entityType: 'character' },
+          },
+          {
+            id: 'media:/library/hero-shot.mp4',
+            kind: 'media',
+            label: 'hero-shot.mp4',
+            description: 'Footage',
+            source: {
+              partition: 'media-library',
+              sourceId: '/library/hero-shot.mp4',
+              sourceKind: 'video',
+            },
+            projectRoot: '/workspace',
+            filePath: '/library/hero-shot.mp4',
+            searchText: 'hero-shot',
+            freshness: 'fresh',
+            metadata: { mediaType: 'video' },
+          },
+          {
+            id: 'entity:char-hero',
+            kind: 'creative-entity',
+            label: 'Hero',
+            description: 'Character',
+            source: {
+              partition: 'creative-entities',
+              sourceId: 'char-hero',
+              sourceKind: 'character',
+            },
+            projectRoot: '/workspace',
+            searchText: 'Hero character',
+            freshness: 'fresh',
+            metadata: { entityType: 'character' },
+          },
+        ],
+        partitions: [],
+        freshness: 'fresh',
+        context: { projectRoot: '/workspace' },
+        query: { text: 'hero' },
       });
 
       await handler.searchProjectFiles(webview as any, 'hero', 'conv-search');
 
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'neko.projectSearch.query',
+        expect.objectContaining({
+          text: 'hero',
+          mode: 'mention',
+          kinds: expect.arrayContaining(['asset', 'media', 'creative-entity']),
+        }),
+      );
+      expect(vscode.workspace.fs.readFile).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'projectFiles',
         conversationId: 'conv-search',
         files: [],
-        mentionExtras: [
+        mentionExtras: expect.arrayContaining([
           expect.objectContaining({
             type: 'asset',
-            id: 'asset-hero',
+            id: 'asset:asset-hero',
             label: 'Hero portrait',
             source: 'asset-library',
             mediaType: 'image',
@@ -796,7 +802,7 @@ describe('AgentMessageTurnHandler', () => {
           }),
           expect.objectContaining({
             type: 'media',
-            id: '/library/hero-shot.mp4',
+            id: 'media:/library/hero-shot.mp4',
             label: 'hero-shot.mp4',
             source: 'media-library',
             mediaType: 'video',
@@ -804,13 +810,47 @@ describe('AgentMessageTurnHandler', () => {
           }),
           expect.objectContaining({
             type: 'entity',
-            id: 'entity-hero',
+            id: 'entity:char-hero',
             label: 'Hero',
             source: 'entity-graph',
-            entityType: 'entity',
+            entityType: 'character',
           }),
-        ],
+        ]),
       });
+    });
+
+    it('passes the last active text editor as project search context', async () => {
+      const webview = createMockWebview();
+      const handler = buildHandler();
+      const editorListener = vi.mocked(vscode.window.onDidChangeActiveTextEditor).mock
+        .calls[0]?.[0] as ((editor: unknown) => void) | undefined;
+      editorListener?.({
+        document: {
+          uri: {
+            fsPath: '/workspace/cases/test.fountain',
+            toString: () => 'file:///workspace/cases/test.fountain',
+          },
+        },
+      });
+      (vscode.window as any).activeTextEditor = undefined;
+      vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
+        items: [],
+        partitions: [],
+        freshness: 'fresh',
+        context: { projectRoot: '/workspace' },
+        query: { text: '小橘' },
+      });
+
+      await handler.searchProjectFiles(webview as any, '小橘', 'conv-search');
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'neko.projectSearch.query',
+        expect.objectContaining({
+          text: '小橘',
+          contextFilePath: '/workspace/cases/test.fountain',
+          contextUri: 'file:///workspace/cases/test.fountain',
+        }),
+      );
     });
   });
 });

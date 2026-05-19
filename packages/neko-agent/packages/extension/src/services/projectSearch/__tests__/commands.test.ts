@@ -11,6 +11,11 @@ describe('project search commands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    vi.mocked(vscode.workspace.fs.stat).mockRejectedValue(
+      Object.assign(new Error('missing'), {
+        code: 'ENOENT',
+      }),
+    );
     vscode.workspace.workspaceFolders = [
       { uri: { fsPath: '/workspace' }, name: 'w', index: 0 },
     ] as any;
@@ -55,4 +60,56 @@ describe('project search commands', () => {
     service.dispose();
     vi.useRealTimers();
   });
+
+  it('refreshes the nearest marked Neko project instead of the parent workspace', async () => {
+    vscode.workspace.workspaceFolders = [
+      { uri: { fsPath: '/workspace' }, name: 'w', index: 0 },
+    ] as any;
+    vi.mocked(vscode.workspace.fs.stat).mockImplementation(async (uri: unknown) => {
+      const filePath = isUriLike(uri) ? uri.fsPath : '';
+      if (filePath === '/workspace/neko-test/neko/settings.json') {
+        return { type: vscode.FileType.File } as never;
+      }
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    const context = { subscriptions: [] as { dispose(): void }[] } as vscode.ExtensionContext;
+    const service = registerProjectSearchService(context);
+    const refresh = vi.spyOn(service, 'refresh').mockResolvedValue(undefined);
+    const entityWatcher = watcherForPattern('**/neko/entities/*.json');
+    const onDidChange = vi.mocked(entityWatcher?.onDidChange).mock.calls[0]?.[0];
+
+    expect(onDidChange).toBeDefined();
+    onDidChange?.(vscode.Uri.file('/workspace/neko-test/neko/entities/scenes.json'));
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(refresh).toHaveBeenCalledWith(
+      '/workspace/neko-test',
+      'file-change',
+      expect.objectContaining({
+        partition: 'creative-entities',
+        changedRefs: expect.arrayContaining([
+          expect.objectContaining({ filePath: '/workspace/neko-test/neko/entities/scenes.json' }),
+        ]),
+      }),
+    );
+
+    service.dispose();
+    vi.useRealTimers();
+  });
 });
+
+function watcherForPattern(pattern: string): {
+  readonly onDidChange: ReturnType<typeof vi.fn>;
+} {
+  const watcherIndex = vi
+    .mocked(vscode.workspace.createFileSystemWatcher)
+    .mock.calls.findIndex((call) => call[0] === pattern);
+  return vi.mocked(vscode.workspace.createFileSystemWatcher).mock.results[watcherIndex]?.value as {
+    readonly onDidChange: ReturnType<typeof vi.fn>;
+  };
+}
+
+function isUriLike(value: unknown): value is { readonly fsPath?: string } {
+  return typeof value === 'object' && value !== null && 'fsPath' in value;
+}

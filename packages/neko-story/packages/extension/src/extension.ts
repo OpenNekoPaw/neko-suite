@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import type { AgentContextPayload, NekoCanvasAPI, NekoStoryAPI } from '@neko/shared';
 import { createEmptyCharacterRegistryFile } from '@neko/shared';
-import { DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND } from '@neko/shared/types/dashboard-creative-entity';
+import {
+  DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
+  isDashboardCreativeEntitySourceRequest,
+} from '@neko/shared/types/dashboard-creative-entity';
 import {
   CharacterRegistryService,
   createVSCodeEntityServices,
@@ -667,7 +670,7 @@ export function deactivate() {}
 interface DashboardCreativeEntitySourceServices {
   readonly workspaceIndex: Pick<
     WorkspaceIndexService,
-    'ensureInitialized' | 'getAllCharacterNames' | 'onDidUpdateIndex'
+    'ensureInitialized' | 'getAllCharacterNames' | 'getAllScriptIndices' | 'onDidUpdateIndex'
   >;
   readonly creativeEntityIndex: Pick<
     CreativeEntityWorkspaceIndexService,
@@ -684,8 +687,10 @@ function registerDashboardCreativeEntitySource(
   services: DashboardCreativeEntitySourceServices,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand(DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND, () => {
-      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    vscode.commands.registerCommand(DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND, (request) => {
+      const sourceRequest = isDashboardCreativeEntitySourceRequest(request) ? request : undefined;
+      const workspaceRoot =
+        sourceRequest?.projectRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!workspaceRoot) {
         return undefined;
       }

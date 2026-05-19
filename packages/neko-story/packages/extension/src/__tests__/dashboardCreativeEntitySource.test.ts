@@ -239,6 +239,18 @@ describe('StoryDashboardCreativeEntitySource', () => {
     });
   });
 
+  it('limits script candidates to the requested workspace root', async () => {
+    const source = createSource({
+      characterNames: ['小橘'],
+      externalCharacterNames: ['隔壁角色'],
+    });
+
+    const snapshot = await source.getSnapshot();
+
+    expect(snapshot.rows.map((row) => row.label)).toContain('小橘');
+    expect(snapshot.rows.map((row) => row.label)).not.toContain('隔壁角色');
+  });
+
   it('does not mutate asset metadata when applying unavailable sync suggestions', async () => {
     const source = createSource({ characterNames: ['小橘'] });
 
@@ -361,6 +373,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
 interface CreateSourceOptions {
   readonly entities?: readonly CreativeEntity[];
   readonly characterNames?: readonly string[];
+  readonly externalCharacterNames?: readonly string[];
   readonly executeCommand?: (command: string, ...args: unknown[]) => Promise<unknown>;
   readonly openLocation?: (location: vscode.Location) => Promise<unknown>;
   readonly workspaceListeners?: Array<() => void>;
@@ -399,6 +412,40 @@ function createSource(options: CreateSourceOptions = {}): StoryDashboardCreative
     workspaceIndex: {
       ensureInitialized: vi.fn(async () => undefined),
       getAllCharacterNames: vi.fn(() => options.characterNames ?? ['小橘']),
+      getAllScriptIndices: vi.fn(() => {
+        const projectNames = options.characterNames ?? ['小橘'];
+        const externalNames = options.externalCharacterNames ?? [];
+        return [
+          ...(projectNames.length > 0
+            ? [
+                {
+                  uri: `file://${workspaceRoot}/cases/test.fountain`,
+                  total_lines: 10,
+                  scenes: [],
+                  characters: projectNames.map((name, index) => ({
+                    name,
+                    first_line: index,
+                    scene_ids: [],
+                  })),
+                },
+              ]
+            : []),
+          ...(externalNames.length > 0
+            ? [
+                {
+                  uri: 'file:///workspace/other/cases/test.fountain',
+                  total_lines: 10,
+                  scenes: [],
+                  characters: externalNames.map((name, index) => ({
+                    name,
+                    first_line: index,
+                    scene_ids: [],
+                  })),
+                },
+              ]
+            : []),
+        ];
+      }),
       onDidUpdateIndex,
     },
     creativeEntityIndex,

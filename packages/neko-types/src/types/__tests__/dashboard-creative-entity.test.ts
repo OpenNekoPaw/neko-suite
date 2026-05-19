@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
+  DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
   isDashboardCreativeEntityActionRequest,
   isDashboardCreativeEntityBindingSummary,
   isDashboardCreativeEntityDetail,
@@ -9,6 +10,8 @@ import {
   isDashboardCreativeEntityRow,
   isDashboardCreativeEntitySnapshot,
   isDashboardCreativeEntitySource,
+  isDashboardCreativeEntitySourceRequest,
+  isDashboardCreativeEntityState,
   isDashboardCreativeEntitySyncSuggestion,
   isSafeDashboardAssetRef,
   isSafeDashboardEntityRef,
@@ -144,6 +147,7 @@ describe('dashboard creative entity contracts', () => {
     expect(toDashboardCreativeEntityId(ref)).toBe('entity:character:char-xiaoju');
     expect(isDashboardCreativeEntityRow(row)).toBe(true);
     expect(isDashboardCreativeEntityDetail(detail)).toBe(true);
+    expect(isDashboardCreativeEntityState({ statuses: [], rows: [row], detail })).toBe(true);
     expect(
       isDashboardCreativeEntitySnapshot({
         source: 'neko-story',
@@ -189,6 +193,13 @@ describe('dashboard creative entity contracts', () => {
   });
 
   it('validates action requests', () => {
+    expect(
+      isDashboardCreativeEntitySourceRequest({
+        projectRoot: '/workspace/neko-test',
+        contextFilePath: '/workspace/neko-test/cases/test.fountain',
+      }),
+    ).toBe(true);
+    expect(isDashboardCreativeEntitySourceRequest({ projectRoot: '' })).toBe(false);
     expect(
       isDashboardCreativeEntityActionRequest({
         source: 'neko-story',
@@ -244,6 +255,7 @@ describe('dashboard creative entity contracts', () => {
     expect(DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND).toBe(
       'neko.story.getDashboardCreativeEntitySource',
     );
+    expect(DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND).toBe('neko.dashboard.getCreativeEntityState');
     expect(isDashboardCreativeEntitySource(source)).toBe(true);
     expect(
       isDashboardCreativeEntitySource({

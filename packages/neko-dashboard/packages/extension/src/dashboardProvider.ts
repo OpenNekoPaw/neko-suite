@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import type { DashboardTaskOutputRef } from '@neko/shared/types/dashboard-task';
+import {
+  DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
+  isDashboardCreativeEntitySourceRequest,
+} from '@neko/shared/types/dashboard-creative-entity';
 import { ActivityStore } from './activityStore';
 import { CreativeEntitySourceAggregator } from './creativeEntitySourceAggregator';
 import { getDashboardHtml } from './html';
@@ -62,6 +66,14 @@ export class DashboardProvider implements vscode.Disposable {
 
     this.disposables.push(this.taskAggregator);
     this.disposables.push(this.creativeEntityAggregator);
+    this.disposables.push(
+      vscode.commands.registerCommand(DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND, async (request) => {
+        await this.creativeEntityAggregator.refreshSources(
+          isDashboardCreativeEntitySourceRequest(request) ? request : undefined,
+        );
+        return this.creativeEntityAggregator.getState();
+      }),
+    );
     this.disposables.push(
       vscode.extensions.onDidChange(() => {
         if (this.panel) void this.refresh();

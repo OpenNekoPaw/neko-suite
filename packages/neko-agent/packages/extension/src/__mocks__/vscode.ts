@@ -43,6 +43,9 @@ export const env = {
 // window mock
 export const window = {
   activeTextEditor: undefined as any,
+  onDidChangeActiveTextEditor: vi.fn((_listener: (editor: any) => void) => ({
+    dispose: vi.fn(),
+  })),
   showInputBox: vi.fn().mockResolvedValue(undefined),
   showInformationMessage: vi.fn().mockResolvedValue(undefined),
   showWarningMessage: vi.fn().mockResolvedValue(undefined),

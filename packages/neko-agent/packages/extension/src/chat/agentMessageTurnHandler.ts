@@ -69,6 +69,8 @@ export class AgentMessageTurnHandler {
   private readonly _mediaTurnBridge: MediaTurnBridge;
   private readonly _agentTurnBridge: AgentTurnBridge;
   private readonly _subAgentEventSubscriptions = new Map<string, vscode.Disposable>();
+  private readonly _disposables: vscode.Disposable[] = [];
+  private _lastTextEditorUri: vscode.Uri | undefined = vscode.window.activeTextEditor?.document.uri;
 
   constructor(
     private readonly _settings: SettingsManager,
@@ -126,6 +128,13 @@ export class AgentMessageTurnHandler {
         this._ensureSubAgentEventSubscription(webview, conversationId, agentRunner),
       generateMessageId: () => createAgentMessageId(),
     });
+    this._disposables.push(
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (editor?.document.uri) {
+          this._lastTextEditorUri = editor.document.uri;
+        }
+      }),
+    );
   }
 
   /**
@@ -278,11 +287,16 @@ export class AgentMessageTurnHandler {
     filter: string,
     conversationId: string,
   ): Promise<void> {
+    const searchContextUri = this._resolveSearchContextUri();
     const message = await executeAgentProjectFileSearch({
       conversationId,
       filter,
       searchProjectFiles: searchVSCodeProjectFiles,
-      getMentionCandidates: (plan) => searchProjectMentionCandidates(plan),
+      getMentionCandidates: (plan) =>
+        searchProjectMentionCandidates(plan, {
+          contextFilePath: searchContextUri?.fsPath,
+          contextUri: searchContextUri?.toString(),
+        }),
       getCanvasNodes: (id) => getCanvasSelection(id),
       getCharacters: async () => {
         try {
@@ -339,6 +353,15 @@ export class AgentMessageTurnHandler {
     webview.postMessage(message);
   }
 
+  private _resolveSearchContextUri(): vscode.Uri | undefined {
+    const activeEditorUri = vscode.window.activeTextEditor?.document.uri;
+    if (activeEditorUri) {
+      this._lastTextEditorUri = activeEditorUri;
+      return activeEditorUri;
+    }
+    return this._lastTextEditorUri;
+  }
+
   /**
    * Dispose resources. Flushes asset index to disk.
    */
@@ -349,5 +372,9 @@ export class AgentMessageTurnHandler {
     this._subAgentEventSubscriptions.clear();
     this._streamProcessor.dispose();
     this._mediaDeliveryHost.dispose();
+    for (const disposable of this._disposables) {
+      disposable.dispose();
+    }
+    this._disposables.length = 0;
   }
 }

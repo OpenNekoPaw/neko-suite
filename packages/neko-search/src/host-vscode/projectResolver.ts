@@ -39,22 +39,22 @@ export async function resolveProjectSearchContext(
     query.contextFilePath ?? query.contextUri,
     options,
   );
-  const contextRoot = contextPath ? findWorkspaceRootForPath(contextPath) : undefined;
-  if (contextRoot) {
+  const markedProjectRoot = contextPath
+    ? await findMarkedProjectRootForPath(contextPath)
+    : undefined;
+  if (markedProjectRoot) {
     return {
-      projectRoot: contextRoot,
+      projectRoot: markedProjectRoot,
       resolvedContextFilePath: contextPath,
       contextUri: query.contextUri,
       fallbackDerived: false,
     };
   }
 
-  const inferredProjectRoot = contextPath
-    ? await findMarkedProjectRootForPath(contextPath)
-    : undefined;
-  if (inferredProjectRoot) {
+  const contextRoot = contextPath ? findWorkspaceRootForPath(contextPath) : undefined;
+  if (contextRoot) {
     return {
-      projectRoot: inferredProjectRoot,
+      projectRoot: contextRoot,
       resolvedContextFilePath: contextPath,
       contextUri: query.contextUri,
       fallbackDerived: true,
@@ -68,6 +68,11 @@ export async function resolveProjectSearchContext(
     contextUri: query.contextUri,
     fallbackDerived: Boolean(workspaceRoot),
   };
+}
+
+export async function resolveProjectRootForUri(uri: vscode.Uri): Promise<string | undefined> {
+  const markedProjectRoot = await findMarkedProjectRootForPath(normalizeLocalPath(uri.fsPath));
+  return markedProjectRoot ?? findWorkspaceRootForPath(uri.fsPath);
 }
 
 async function resolveOptionalContextPath(

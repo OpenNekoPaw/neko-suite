@@ -32,7 +32,9 @@
     "neko.neko-engine",
     "neko.neko-tools"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:neko.story.getDashboardCreativeEntitySource"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [

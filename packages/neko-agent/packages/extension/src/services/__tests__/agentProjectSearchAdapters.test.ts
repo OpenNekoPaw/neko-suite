@@ -5,8 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectSearchAdapter, ProjectSearchItem } from '@neko/shared';
 import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
+  DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
+  type DashboardCreativeEntityRow,
   type DashboardCreativeEntitySource,
 } from '@neko/shared/types/dashboard-creative-entity';
+import { commands } from '../../__mocks__/vscode';
 import { createAgentProjectSearchAdapters } from '../agentProjectSearchAdapters';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
@@ -197,6 +200,263 @@ describe('createAgentProjectSearchAdapters', () => {
           source: 'neko-story',
           sourceEntityId: 'candidate:character:小橘',
         }),
+      }),
+    ]);
+  });
+
+  it('projects dashboard aggregated entity state before source commands', async () => {
+    const projectRoot = await createEmptyProjectRoot();
+    const adapters = createAgentProjectSearchAdapters(
+      {},
+      {
+        createCompatibilityAdapters: () => [],
+        loadDashboardCreativeEntityState: async () => ({
+          statuses: [],
+          rows: [
+            createDashboardRow({
+              label: '讲述',
+              sourceEntityId: 'scene:narration',
+              status: 'confirmed',
+              kind: 'scene',
+            }),
+          ],
+        }),
+        loadDashboardCreativeEntitySources: async () => [],
+      },
+    );
+    const creativeEntities = adapters.find((adapter) => adapter.partition === 'creative-entities');
+
+    const items = await creativeEntities?.query(
+      { text: '讲述', mode: 'mention', kinds: ['creative-entity'] },
+      { projectRoot },
+    );
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: 'creative-entity',
+        label: '讲述',
+        source: expect.objectContaining({
+          sourceId: 'neko-story',
+          metadata: expect.objectContaining({ entityKind: 'scene' }),
+        }),
+      }),
+    ]);
+  });
+
+  it('loads dashboard aggregated state through the shared command by default', async () => {
+    const projectRoot = await createEmptyProjectRoot();
+    vi.mocked(commands.executeCommand).mockImplementation(async (command: string) => {
+      if (command === DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND) {
+        return {
+          statuses: [],
+          rows: [
+            createDashboardRow({
+              label: '讲述',
+              sourceEntityId: 'scene:narration',
+              status: 'confirmed',
+              kind: 'scene',
+            }),
+          ],
+        };
+      }
+      return undefined;
+    });
+    const adapters = createAgentProjectSearchAdapters(
+      {},
+      {
+        createCompatibilityAdapters: () => [],
+        loadDashboardCreativeEntitySources: async () => [],
+      },
+    );
+    const creativeEntities = adapters.find((adapter) => adapter.partition === 'creative-entities');
+
+    const items = await creativeEntities?.query(
+      { text: '讲述', mode: 'mention', kinds: ['creative-entity'] },
+      { projectRoot },
+    );
+
+    expect(commands.executeCommand).toHaveBeenCalledWith(
+      DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
+      expect.objectContaining({ projectRoot }),
+    );
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: 'creative-entity',
+        label: '讲述',
+      }),
+    ]);
+  });
+
+  it('falls back to dashboard source commands when aggregated state is empty', async () => {
+    const projectRoot = await createEmptyProjectRoot();
+    const source = createDashboardSource(projectRoot, {
+      label: '小橘',
+      sourceEntityId: 'candidate:character:小橘',
+      status: 'candidate',
+    });
+    const adapters = createAgentProjectSearchAdapters(
+      {},
+      {
+        createCompatibilityAdapters: () => [],
+        loadDashboardCreativeEntityState: async () => ({ statuses: [], rows: [] }),
+        loadDashboardCreativeEntitySources: async () => [source],
+      },
+    );
+    const creativeEntities = adapters.find((adapter) => adapter.partition === 'creative-entities');
+
+    const items = await creativeEntities?.query(
+      { text: '小橘', mode: 'mention', kinds: ['entity-candidate'] },
+      { projectRoot },
+    );
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: 'entity-candidate',
+        label: '小橘',
+      }),
+    ]);
+  });
+
+  it('passes non-workspace project roots to dashboard source commands', async () => {
+    const projectRoot = await createEmptyProjectRoot();
+    vi.mocked(commands.executeCommand).mockImplementation(async (command: string) => {
+      if (command === DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND) {
+        return { statuses: [], rows: [] };
+      }
+      if (command === 'neko.story.getDashboardCreativeEntitySource') {
+        return createDashboardSource(projectRoot, {
+          label: '小橘',
+          sourceEntityId: 'candidate:character:小橘',
+          status: 'candidate',
+        });
+      }
+      return undefined;
+    });
+    const adapters = createAgentProjectSearchAdapters(
+      {},
+      {
+        createCompatibilityAdapters: () => [],
+      },
+    );
+    const creativeEntities = adapters.find((adapter) => adapter.partition === 'creative-entities');
+
+    const items = await creativeEntities?.query(
+      { text: '小橘', mode: 'mention', kinds: ['entity-candidate'] },
+      { projectRoot },
+    );
+
+    expect(commands.executeCommand).toHaveBeenCalledWith(
+      'neko.story.getDashboardCreativeEntitySource',
+      expect.objectContaining({ projectRoot }),
+    );
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: 'entity-candidate',
+        label: '小橘',
+      }),
+    ]);
+  });
+
+  it('does not drop dashboard rows with foreign workspaceFolder hints', async () => {
+    const projectRoot = await createEmptyProjectRoot();
+    const adapters = createAgentProjectSearchAdapters(
+      {},
+      {
+        createCompatibilityAdapters: () => [],
+        loadDashboardCreativeEntityState: async () => ({
+          statuses: [],
+          rows: [
+            createDashboardRow({
+              label: '小橘',
+              sourceEntityId: 'candidate:character:小橘',
+              status: 'candidate',
+              workspaceFolder: 'neko-test',
+            }),
+          ],
+        }),
+        loadDashboardCreativeEntitySources: async () => [],
+      },
+    );
+    const creativeEntities = adapters.find((adapter) => adapter.partition === 'creative-entities');
+
+    const items = await creativeEntities?.query(
+      { text: '小橘', mode: 'mention', kinds: ['entity-candidate'] },
+      { projectRoot },
+    );
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: 'entity-candidate',
+        label: '小橘',
+      }),
+    ]);
+  });
+
+  it('ignores dashboard selected detail when projecting aggregated entity state', async () => {
+    const projectRoot = await createEmptyProjectRoot();
+    const adapters = createAgentProjectSearchAdapters(
+      {},
+      {
+        createCompatibilityAdapters: () => [],
+        loadDashboardCreativeEntityState: async () => ({
+          statuses: [],
+          rows: [
+            createDashboardRow({
+              label: '校长',
+              sourceEntityId: 'candidate:character:校长',
+              status: 'candidate',
+            }),
+          ],
+          selectedRef: {
+            source: 'neko-story',
+            sourceEntityId: 'candidate:character:校长',
+            entityId: '校长',
+            entityKind: 'character',
+          },
+          detail: {
+            ref: {
+              source: 'neko-story',
+              sourceEntityId: 'candidate:character:校长',
+              entityId: '校长',
+              entityKind: 'character',
+            },
+            label: '校长',
+            kind: 'character',
+            status: 'candidate',
+            sourceKind: 'script',
+            aliases: [],
+            relationships: [],
+            occurrences: [
+              {
+                source: 'script',
+                role: 'reference',
+                label: '校长',
+                location: '/absolute/path/test.fountain:12',
+              },
+            ],
+            bindings: [],
+            defaults: [],
+            requirements: [],
+            visualDrafts: [],
+            syncSuggestions: [],
+            freshness: 'fresh',
+            actions: [],
+          },
+        }),
+        loadDashboardCreativeEntitySources: async () => [],
+      },
+    );
+    const creativeEntities = adapters.find((adapter) => adapter.partition === 'creative-entities');
+
+    const items = await creativeEntities?.query(
+      { text: '校长', mode: 'mention', kinds: ['entity-candidate'] },
+      { projectRoot },
+    );
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: 'entity-candidate',
+        label: '校长',
       }),
     ]);
   });
@@ -413,5 +673,35 @@ function createDashboardSource(
     getDetail: async () => undefined,
     executeAction: async () => ({ ok: true }),
     onDidChangeEntity: () => ({ dispose: vi.fn() }),
+  };
+}
+
+function createDashboardRow(row: {
+  readonly label: string;
+  readonly sourceEntityId: string;
+  readonly status: 'candidate' | 'confirmed';
+  readonly kind?: 'character' | 'scene';
+  readonly workspaceFolder?: string;
+  readonly projectRoot?: string;
+}): DashboardCreativeEntityRow {
+  const kind = row.kind ?? 'character';
+  return {
+    ref: {
+      source: 'neko-story',
+      sourceEntityId: row.sourceEntityId,
+      entityId: row.label,
+      entityKind: kind,
+      ...(row.workspaceFolder ? { workspaceFolder: row.workspaceFolder } : {}),
+      ...(row.projectRoot ? { projectRoot: row.projectRoot } : {}),
+    },
+    label: row.label,
+    kind,
+    status: row.status,
+    sourceKind: row.status === 'candidate' ? 'script' : 'registry',
+    summary: 'Dashboard entity state row',
+    occurrenceCount: 1,
+    freshness: 'fresh',
+    actions: [],
+    searchText: `${row.label} ${kind}`,
   };
 }

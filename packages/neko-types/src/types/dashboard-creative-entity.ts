@@ -31,6 +31,8 @@ export const DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND =
 export const DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND =
   'neko.entity.getDashboardCreativeEntitySource';
 
+export const DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND = 'neko.dashboard.getCreativeEntityState';
+
 export type DashboardCreativeEntityKind = CreativeEntityKind | 'action';
 
 export type DashboardCreativeEntityLifecycleStatus = CreativeEntityStatus | 'merged' | 'unknown';
@@ -101,6 +103,12 @@ export interface DashboardCreativeEntitySourceStatus {
   readonly entityCount?: number;
   readonly updatedAt?: string;
   readonly error?: string;
+}
+
+export interface DashboardCreativeEntitySourceRequest {
+  readonly projectRoot?: string;
+  readonly contextFilePath?: string;
+  readonly contextUri?: string;
 }
 
 export interface DashboardCreativeEntityActionDescriptor {
@@ -266,6 +274,13 @@ export interface DashboardCreativeEntitySource {
   ): DashboardDisposableLike;
 }
 
+export interface DashboardCreativeEntityState {
+  readonly statuses: readonly DashboardCreativeEntitySourceStatus[];
+  readonly rows: readonly DashboardCreativeEntityRow[];
+  readonly selectedRef?: DashboardCreativeEntityRef;
+  readonly detail?: DashboardCreativeEntityDetail;
+}
+
 export const DASHBOARD_CREATIVE_ENTITY_KINDS: readonly DashboardCreativeEntityKind[] = [
   'character',
   'scene',
@@ -385,6 +400,18 @@ export function isDashboardCreativeEntitySourceStatus(
     (value['entityCount'] === undefined || isNonNegativeNumber(value['entityCount'])) &&
     (value['updatedAt'] === undefined || typeof value['updatedAt'] === 'string') &&
     (value['error'] === undefined || typeof value['error'] === 'string')
+  );
+}
+
+export function isDashboardCreativeEntitySourceRequest(
+  value: unknown,
+): value is DashboardCreativeEntitySourceRequest {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return (
+    (value['projectRoot'] === undefined || isNonEmptyString(value['projectRoot'])) &&
+    (value['contextFilePath'] === undefined || isNonEmptyString(value['contextFilePath'])) &&
+    (value['contextUri'] === undefined || isNonEmptyString(value['contextUri']))
   );
 }
 
@@ -621,6 +648,20 @@ export function isDashboardCreativeEntitySource(
     typeof value['getDetail'] === 'function' &&
     typeof value['executeAction'] === 'function' &&
     typeof value['onDidChangeEntity'] === 'function'
+  );
+}
+
+export function isDashboardCreativeEntityState(
+  value: unknown,
+): value is DashboardCreativeEntityState {
+  if (!isRecord(value)) return false;
+  return (
+    Array.isArray(value['statuses']) &&
+    value['statuses'].every(isDashboardCreativeEntitySourceStatus) &&
+    Array.isArray(value['rows']) &&
+    value['rows'].every(isDashboardCreativeEntityRow) &&
+    (value['selectedRef'] === undefined || isDashboardCreativeEntityRef(value['selectedRef'])) &&
+    (value['detail'] === undefined || isDashboardCreativeEntityDetail(value['detail']))
   );
 }
 

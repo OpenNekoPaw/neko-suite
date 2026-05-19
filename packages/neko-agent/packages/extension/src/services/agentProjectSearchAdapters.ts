@@ -14,11 +14,16 @@ import type {
 } from '@neko/shared';
 import {
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
+  DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
   DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND,
+  isDashboardCreativeEntityRow,
+  isDashboardCreativeEntitySourceStatus,
   isDashboardCreativeEntitySnapshot,
   isDashboardCreativeEntitySource,
   toDashboardCreativeEntityId,
   type DashboardCreativeEntityRow,
+  type DashboardCreativeEntitySourceRequest,
+  type DashboardCreativeEntityState,
   type DashboardCreativeEntitySource,
 } from '@neko/shared/types/dashboard-creative-entity';
 import {
@@ -34,11 +39,7 @@ export interface AgentEntitySearchAdapterFactoryOptions {
   readonly logger?: CompatibilityProjectSearchAdaptersOptions['logger'];
 }
 
-export interface AgentDashboardCreativeEntitySourceRequest {
-  readonly projectRoot?: string;
-  readonly contextFilePath?: string;
-  readonly contextUri?: string;
-}
+export type AgentDashboardCreativeEntitySourceRequest = DashboardCreativeEntitySourceRequest;
 
 export interface AgentProjectSearchAdapterDependencies {
   readonly createCompatibilityAdapters?: (
@@ -50,6 +51,9 @@ export interface AgentProjectSearchAdapterDependencies {
   readonly loadDashboardCreativeEntitySources?: (
     request: AgentDashboardCreativeEntitySourceRequest,
   ) => Promise<readonly DashboardCreativeEntitySource[]>;
+  readonly loadDashboardCreativeEntityState?: (
+    request: AgentDashboardCreativeEntitySourceRequest,
+  ) => Promise<DashboardCreativeEntityState | undefined>;
   readonly readTextFile?: (filePath: string) => Promise<string>;
   readonly getStoryApi?: () => NekoStoryAPI | undefined;
 }
@@ -80,6 +84,9 @@ export function createAgentProjectSearchAdapters(
       loadDashboardCreativeEntitySources:
         dependencies.loadDashboardCreativeEntitySources ??
         loadDashboardCreativeEntitySourcesFromCommands,
+      loadDashboardCreativeEntityState:
+        dependencies.loadDashboardCreativeEntityState ??
+        loadDashboardCreativeEntityStateFromCommand,
       readTextFile: dependencies.readTextFile ?? readVSCodeTextFile,
       getStoryApi: dependencies.getStoryApi ?? getStoryApi,
       logger: options.logger,
@@ -105,6 +112,9 @@ class AgentCreativeEntityProjectSearchAdapter implements ProjectSearchAdapter {
       readonly loadDashboardCreativeEntitySources: (
         request: AgentDashboardCreativeEntitySourceRequest,
       ) => Promise<readonly DashboardCreativeEntitySource[]>;
+      readonly loadDashboardCreativeEntityState: (
+        request: AgentDashboardCreativeEntitySourceRequest,
+      ) => Promise<DashboardCreativeEntityState | undefined>;
       readonly readTextFile: (filePath: string) => Promise<string>;
       readonly getStoryApi: () => NekoStoryAPI | undefined;
       readonly logger?: CompatibilityProjectSearchAdaptersOptions['logger'];
@@ -112,6 +122,7 @@ class AgentCreativeEntityProjectSearchAdapter implements ProjectSearchAdapter {
   ) {
     this.dashboardSourceAdapter = new DashboardCreativeEntitySourceProjectSearchAdapter({
       loadSources: options.loadDashboardCreativeEntitySources,
+      loadState: options.loadDashboardCreativeEntityState,
       logger: options.logger,
     });
     this.contextScriptCandidateAdapter = new ContextScriptEntityCandidateProjectSearchAdapter({
@@ -251,6 +262,9 @@ class DashboardCreativeEntitySourceProjectSearchAdapter implements ProjectSearch
       readonly loadSources: (
         request: AgentDashboardCreativeEntitySourceRequest,
       ) => Promise<readonly DashboardCreativeEntitySource[]>;
+      readonly loadState: (
+        request: AgentDashboardCreativeEntitySourceRequest,
+      ) => Promise<DashboardCreativeEntityState | undefined>;
       readonly logger?: CompatibilityProjectSearchAdaptersOptions['logger'];
     },
   ) {}
@@ -269,13 +283,29 @@ class DashboardCreativeEntitySourceProjectSearchAdapter implements ProjectSearch
     const projectRoot = query.projectRoot ?? context.projectRoot;
     if (!projectRoot) return [];
 
-    const sources = await this.loadSources({
+    const request = {
       projectRoot,
       contextFilePath: context.resolvedContextFilePath ?? query.contextFilePath,
       contextUri: query.contextUri ?? context.contextUri,
-    });
-    const settled = await Promise.allSettled(sources.map(async (source) => source.getSnapshot()));
+    };
+    const state = await this.loadState(request);
     const items: ProjectSearchItem[] = [];
+
+    if (state && state.rows.length > 0) {
+      items.push(...this.itemsFromRows(state.rows, projectRoot));
+      this.statusByProject.set(projectRoot, {
+        partition: this.partition,
+        status: 'ready',
+        freshness: aggregateStateFreshness(state, items),
+        itemCount: items.length,
+        updatedAt: new Date().toISOString(),
+        provider: DASHBOARD_CREATIVE_ENTITY_PROVIDER,
+      });
+      return items.filter((item) => matchesProjectSearchItem(item, query));
+    }
+
+    const sources = await this.loadSources(request);
+    const settled = await Promise.allSettled(sources.map(async (source) => source.getSnapshot()));
 
     settled.forEach((result, index) => {
       const source = sources[index];
@@ -293,12 +323,7 @@ class DashboardCreativeEntitySourceProjectSearchAdapter implements ProjectSearch
         });
         return;
       }
-      for (const row of result.value.rows) {
-        if (!dashboardRowBelongsToProject(row, projectRoot)) {
-          continue;
-        }
-        items.push(dashboardRowToSearchItem(row, projectRoot));
-      }
+      items.push(...this.itemsFromRows(result.value.rows, projectRoot));
     });
 
     const filtered = items.filter((item) => matchesProjectSearchItem(item, query));
@@ -339,6 +364,28 @@ class DashboardCreativeEntitySourceProjectSearchAdapter implements ProjectSearch
       });
       return [];
     }
+  }
+
+  private async loadState(
+    request: AgentDashboardCreativeEntitySourceRequest,
+  ): Promise<DashboardCreativeEntityState | undefined> {
+    try {
+      return await this.options.loadState(request);
+    } catch (error) {
+      this.options.logger?.warn('Dashboard creative entity state discovery failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  private itemsFromRows(
+    rows: readonly DashboardCreativeEntityRow[],
+    projectRoot: string,
+  ): readonly ProjectSearchItem[] {
+    return rows
+      .filter((row) => dashboardRowBelongsToProject(row, projectRoot))
+      .map((row) => dashboardRowToSearchItem(row, projectRoot));
   }
 }
 
@@ -590,28 +637,53 @@ function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function dashboardRowBelongsToProject(
   row: DashboardCreativeEntityRow,
   projectRoot: string,
 ): boolean {
-  const projectName = path.basename(projectRoot);
-  if (row.ref.workspaceFolder && row.ref.workspaceFolder !== projectName) {
-    return false;
-  }
   if (!row.ref.projectRoot) return true;
   if (path.isAbsolute(row.ref.projectRoot)) {
-    return normalizeLocalPath(row.ref.projectRoot) === projectRoot;
+    return normalizeLocalPath(row.ref.projectRoot) === normalizeLocalPath(projectRoot);
   }
-  return row.ref.projectRoot === projectName;
+  return true;
+}
+
+async function loadDashboardCreativeEntityStateFromCommand(
+  request: AgentDashboardCreativeEntitySourceRequest,
+): Promise<DashboardCreativeEntityState | undefined> {
+  try {
+    const candidate = await vscode.commands.executeCommand<unknown>(
+      DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
+      request,
+    );
+    return readDashboardCreativeEntitySearchState(candidate);
+  } catch {
+    return undefined;
+  }
+}
+
+function readDashboardCreativeEntitySearchState(
+  value: unknown,
+): DashboardCreativeEntityState | undefined {
+  if (!isRecord(value)) return undefined;
+  const rows = value['rows'];
+  const statuses = value['statuses'];
+  if (!Array.isArray(rows) || !rows.every(isDashboardCreativeEntityRow)) {
+    return undefined;
+  }
+  if (!Array.isArray(statuses) || !statuses.every(isDashboardCreativeEntitySourceStatus)) {
+    return undefined;
+  }
+  return { rows, statuses };
 }
 
 async function loadDashboardCreativeEntitySourcesFromCommands(
   request: AgentDashboardCreativeEntitySourceRequest,
 ): Promise<readonly DashboardCreativeEntitySource[]> {
-  if (request.projectRoot && !isFirstWorkspaceProjectRoot(request.projectRoot)) {
-    return [];
-  }
-
   const settled = await Promise.allSettled(
     DASHBOARD_SOURCE_COMMANDS.map((command) =>
       vscode.commands.executeCommand<unknown>(command, request),
@@ -803,14 +875,6 @@ function isPathInside(filePath: string, root: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-function isFirstWorkspaceProjectRoot(projectRoot: string): boolean {
-  const firstWorkspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  return (
-    firstWorkspaceRoot !== undefined &&
-    normalizeLocalPath(firstWorkspaceRoot) === normalizeLocalPath(projectRoot)
-  );
-}
-
 function normalizeLocalPath(value: string): string {
   return path.normalize(value);
 }
@@ -821,6 +885,22 @@ function aggregateItemFreshness(items: readonly ProjectSearchItem[]): ProjectInd
   if (items.some((item) => item.freshness === 'failed')) return 'partial';
   if (items.some((item) => item.freshness === 'building')) return 'building';
   if (items.some((item) => item.freshness === 'stale')) return 'stale';
+  return 'fresh';
+}
+
+function aggregateStateFreshness(
+  state: DashboardCreativeEntityState,
+  items: readonly ProjectSearchItem[],
+): ProjectIndexFreshness {
+  const freshnessValues = [
+    ...state.statuses.map((status) => status.freshness),
+    ...items.map((item) => item.freshness),
+  ];
+  if (freshnessValues.length === 0) return 'fresh';
+  if (freshnessValues.every((freshness) => freshness === 'failed')) return 'failed';
+  if (freshnessValues.some((freshness) => freshness === 'failed')) return 'partial';
+  if (freshnessValues.some((freshness) => freshness === 'building')) return 'building';
+  if (freshnessValues.some((freshness) => freshness === 'stale')) return 'stale';
   return 'fresh';
 }
 

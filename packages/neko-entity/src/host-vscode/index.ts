@@ -6,9 +6,13 @@ import type {
   CharacterRegistryFile,
   CreativeEntityChangeEvent,
   DashboardCreativeEntityEvent,
+  DashboardCreativeEntitySourceRequest,
 } from '@neko/shared';
 import { createEmptyCharacterRegistryFile } from '@neko/shared';
-import { toDashboardCreativeEntityId } from '@neko/shared/types/dashboard-creative-entity';
+import {
+  isDashboardCreativeEntitySourceRequest,
+  toDashboardCreativeEntityId,
+} from '@neko/shared/types/dashboard-creative-entity';
 import { CreativeEntityService } from '../core/CreativeEntityService';
 import {
   EntityAssetBindingService,
@@ -244,8 +248,12 @@ export function registerDashboardEntitySourceCommand(
   const cached = new Map<string, ReturnType<typeof createVSCodeDashboardEntitySource>>();
   const command = vscode.commands.registerCommand(
     'neko.entity.getDashboardCreativeEntitySource',
-    () => {
-      const projectRoot = options.projectRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    (request: DashboardCreativeEntitySourceRequest | unknown) => {
+      const sourceRequest = isDashboardCreativeEntitySourceRequest(request) ? request : undefined;
+      const projectRoot =
+        options.projectRoot ??
+        sourceRequest?.projectRoot ??
+        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!projectRoot) {
         return undefined;
       }

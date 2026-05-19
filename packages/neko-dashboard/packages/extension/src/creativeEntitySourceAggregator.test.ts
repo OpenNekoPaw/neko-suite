@@ -119,6 +119,23 @@ describe('CreativeEntitySourceAggregator', () => {
     aggregator.dispose();
   });
 
+  it('passes source discovery requests to dashboard source commands', async () => {
+    const handler = vi.fn(() => createSource({ rows: [row] }));
+    registerCommandHandler(DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND, handler);
+    const aggregator = new CreativeEntitySourceAggregator();
+
+    await aggregator.refreshSources({
+      projectRoot: '/workspace/neko-test',
+      contextFilePath: '/workspace/neko-test/cases/test.fountain',
+    });
+
+    expect(handler).toHaveBeenCalledWith({
+      projectRoot: '/workspace/neko-test',
+      contextFilePath: '/workspace/neko-test/cases/test.fountain',
+    });
+    aggregator.dispose();
+  });
+
   it('dedupes confirmed entity rows across neutral and Story sources', async () => {
     registerCommandHandler(DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND, () =>
       createSource({

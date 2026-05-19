@@ -9,7 +9,10 @@ import type {
 import { ProjectCacheSearchService } from '../core/ProjectCacheSearchService';
 import type { ProjectSearchLogger } from '../core/ports';
 import { createCompatibilityProjectSearchAdapters } from './compatAdapters';
-import { createVSCodeProjectSearchContextResolver } from './projectResolver';
+import {
+  createVSCodeProjectSearchContextResolver,
+  resolveProjectRootForUri,
+} from './projectResolver';
 
 export const PROJECT_SEARCH_QUERY_COMMAND = 'neko.projectSearch.query';
 export const PROJECT_SEARCH_REFRESH_COMMAND = 'neko.projectSearch.refresh';
@@ -72,12 +75,13 @@ export function registerProjectSearchWatchers(
     partition: ProjectSearchPartitionKind,
     delayMs: number,
   ) => {
-    const projectRoot = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
-    if (!projectRoot) return;
     const changedRefs: ProjectIndexChangedRef[] = [
       { kind: partition, filePath: uri.fsPath, uri: uri.toString() },
     ];
-    debouncedRefresh.schedule(projectRoot, reason, partition, changedRefs, delayMs);
+    void resolveProjectRootForUri(uri).then((root) => {
+      if (!root) return;
+      debouncedRefresh.schedule(root, reason, partition, changedRefs, delayMs);
+    });
   };
 
   disposables.push(

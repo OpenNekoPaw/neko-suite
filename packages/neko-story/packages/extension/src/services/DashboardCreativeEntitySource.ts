@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type {
   CreativeEntity,
   CreativeEntityKind,
@@ -67,7 +68,8 @@ export interface StoryDashboardCreativeEntitySourceOptions {
   readonly workspaceIndex: Pick<
     IWorkspaceIndex,
     'ensureInitialized' | 'getAllCharacterNames' | 'onDidUpdateIndex'
-  >;
+  > &
+    Partial<Pick<IWorkspaceIndex, 'getAllScriptIndices'>>;
   readonly creativeEntityIndex: Pick<
     ICreativeEntityWorkspaceIndex,
     'ensureInitialized' | 'queryCharacter'
@@ -231,7 +233,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     requirements: readonly EntityAssetRequirement[],
     drafts: readonly VisualIdentityDraft[],
   ): Promise<DashboardCreativeEntityRow[]> {
-    const names = this.options.workspaceIndex.getAllCharacterNames();
+    const names = this.getProjectCharacterNames();
     const rows: DashboardCreativeEntityRow[] = [];
 
     for (const name of names) {
@@ -561,6 +563,26 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     };
   }
 
+  private getProjectCharacterNames(): readonly string[] {
+    const scriptIndices = this.options.workspaceIndex.getAllScriptIndices?.();
+    if (!scriptIndices) {
+      return this.options.workspaceIndex.getAllCharacterNames();
+    }
+
+    const names = new Set<string>();
+    for (const index of scriptIndices) {
+      const filePath = uriToFsPath(index.uri);
+      if (!filePath || !isPathInside(filePath, this.options.workspaceRoot)) continue;
+      for (const character of index.characters) {
+        names.add(character.name);
+      }
+    }
+    if (names.size > 0) {
+      return [...names].sort();
+    }
+    return this.options.workspaceIndex.getAllCharacterNames();
+  }
+
   private sanitizeLocation(location: string): string | undefined {
     const candidate: unknown = location;
     if (isSafeDashboardEntityRef(candidate)) {
@@ -586,6 +608,20 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
   private now(): string {
     return this.options.now?.() ?? new Date().toISOString();
   }
+}
+
+function uriToFsPath(uri: string): string | undefined {
+  try {
+    const parsed = new URL(uri);
+    return parsed.protocol === 'file:' ? fileURLToPath(parsed) : undefined;
+  } catch {
+    return path.isAbsolute(uri) ? uri : undefined;
+  }
+}
+
+function isPathInside(filePath: string, root: string): boolean {
+  const relative = path.relative(root, filePath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function projectOccurrences(

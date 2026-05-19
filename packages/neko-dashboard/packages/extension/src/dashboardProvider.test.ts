@@ -7,6 +7,7 @@ import type {
   DashboardCreativeEntityRef,
   DashboardCreativeEntityRow,
 } from '@neko/shared/types/dashboard-creative-entity';
+import { DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND } from '@neko/shared/types/dashboard-creative-entity';
 import { vscodeCommandState, vscodeWindowState } from './vscode-test-double';
 import type { ActivityStore } from './activityStore';
 import type { CreativeEntitySourceAggregator } from './creativeEntitySourceAggregator';
@@ -155,6 +156,30 @@ describe('DashboardProvider', () => {
       type: 'creativeEntitiesChanged',
       state: { statuses: [], rows: [entityRow] },
     });
+    provider.dispose();
+  });
+
+  it('exposes aggregated creative entity state for agent search', async () => {
+    const creativeEntityAggregator = createCreativeEntityAggregator({
+      state: { statuses: [], rows: [entityRow] },
+    });
+    const provider = new DashboardProvider(createContext(), {
+      scanner: createScanner(),
+      statusReader: createStatusReader(),
+      skillReader: createSkillReader(),
+      taskAggregator: createTaskAggregator(),
+      creativeEntityAggregator,
+      activityStore: createActivityStore(),
+    });
+
+    const state = await vscodeCommandState.commandHandlers.get(
+      DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
+    )?.({ projectRoot: '/workspace/neko-test' });
+
+    expect(creativeEntityAggregator.refreshSources).toHaveBeenCalledWith({
+      projectRoot: '/workspace/neko-test',
+    });
+    expect(state).toEqual({ statuses: [], rows: [entityRow] });
     provider.dispose();
   });
 });

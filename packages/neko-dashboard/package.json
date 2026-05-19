@@ -28,6 +28,7 @@
   ],
   "activationEvents": [
     "onCommand:neko.dashboard.show",
+    "onCommand:neko.dashboard.getCreativeEntityState",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",

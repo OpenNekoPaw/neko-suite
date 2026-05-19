@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {
   DASHBOARD_NEUTRAL_CREATIVE_ENTITY_SOURCE_COMMAND,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
+  isDashboardCreativeEntitySourceRequest,
   isDashboardCreativeEntityActionRequest,
   isDashboardCreativeEntityActionResult,
   isDashboardCreativeEntityDetail,
@@ -18,6 +19,7 @@ import {
   type DashboardCreativeEntityEvent,
   type DashboardCreativeEntityRef,
   type DashboardCreativeEntityRow,
+  type DashboardCreativeEntitySourceRequest,
   type DashboardCreativeEntitySource,
   type DashboardCreativeEntitySourceStatus,
 } from '@neko/shared/types/dashboard-creative-entity';
@@ -73,11 +75,12 @@ export class CreativeEntitySourceAggregator implements vscode.Disposable {
     );
   }
 
-  async refreshSources(): Promise<void> {
+  async refreshSources(request?: DashboardCreativeEntitySourceRequest): Promise<void> {
+    const sourceRequest = isDashboardCreativeEntitySourceRequest(request) ? request : undefined;
     await Promise.all(
       this.sourceCommands.map(async (command) => {
         try {
-          const candidate = await vscode.commands.executeCommand<unknown>(command);
+          const candidate = await vscode.commands.executeCommand<unknown>(command, sourceRequest);
           await this.register(candidate);
         } catch (error) {
           const missingStatus = missingSourceStatusForCommand(command, error);

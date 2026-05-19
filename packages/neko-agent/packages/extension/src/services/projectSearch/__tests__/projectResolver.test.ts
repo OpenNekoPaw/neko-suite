@@ -53,6 +53,25 @@ describe('resolveProjectSearchContext', () => {
     expect(context.fallbackDerived).toBe(true);
   });
 
+  it('prefers the nearest marked Neko project over a parent workspace folder', async () => {
+    vi.mocked(vscode.workspace.fs.stat).mockImplementation(async (uri: unknown) => {
+      const filePath = isUriLike(uri) ? uri.fsPath : '';
+      if (filePath === '/workspace-a/neko-test/neko/settings.json') {
+        return { type: vscode.FileType.File } as never;
+      }
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+
+    const context = await resolveProjectSearchContext({
+      text: '小橘',
+      contextFilePath: '/workspace-a/neko-test/cases/test.fountain',
+    });
+
+    expect(context.projectRoot).toBe('/workspace-a/neko-test');
+    expect(context.resolvedContextFilePath).toBe('/workspace-a/neko-test/cases/test.fountain');
+    expect(context.fallbackDerived).toBe(false);
+  });
+
   it('infers external Neko project roots from context file markers', async () => {
     vi.mocked(vscode.workspace.fs.stat).mockImplementation(async (uri: unknown) => {
       const filePath = isUriLike(uri) ? uri.fsPath : '';
@@ -69,7 +88,7 @@ describe('resolveProjectSearchContext', () => {
 
     expect(context.projectRoot).toBe('/Users/feng/git/neko-test');
     expect(context.resolvedContextFilePath).toBe('/Users/feng/git/neko-test/cases/test.fountain');
-    expect(context.fallbackDerived).toBe(true);
+    expect(context.fallbackDerived).toBe(false);
   });
 });
 
