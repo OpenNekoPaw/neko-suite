@@ -7,7 +7,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'node:fs';
 import * as path from 'path';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  createDefaultLocalResourceAccessService,
+  injectLocaleAttribute,
+  type LocalResourceAccessService,
+} from '@neko/shared/vscode/extension';
 import {
   buildStoryboardImportTimelineSyncPayload,
   createCanvasStoryboardExecutionSummary,
@@ -264,8 +268,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly scheduler = new BatchGenerationScheduler();
   // Track active streams per panel for cleanup
   private _activeStreams = new Map<vscode.WebviewPanel, Map<string, PlaybackHandle>>();
+  private readonly localResourceAccess: LocalResourceAccessService;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.localResourceAccess = createDefaultLocalResourceAccessService({
+      extensionUri: context.extensionUri,
+      context,
+      logger,
+    });
+  }
 
   private async getMediaPlayback(): Promise<MediaPlaybackService | null> {
     if (this._mediaPlayback) return this._mediaPlayback;
@@ -320,10 +331,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     this.activeWebviewPanel = webviewPanel;
     this.activeDocument = document;
 
-    webviewPanel.webview.options = {
+    const extraRoots =
+      document.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(document.uri.fsPath))] : [];
+    await this.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
-    };
+      extraRoots,
+    });
 
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
@@ -432,12 +445,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return asset;
     }
 
-    const webviewUri = this.activeWebviewPanel?.webview.asWebviewUri(vscode.Uri.file(asset.path));
+    const webviewUri = this.projectLocalResource(
+      this.activeWebviewPanel.webview,
+      asset.path,
+      'neko-canvas.import-asset',
+    );
     if (!webviewUri) return asset;
     return {
       ...asset,
       originalPath: asset.path,
-      path: webviewUri.toString(),
+      path: webviewUri,
     };
   }
 
@@ -721,18 +738,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
-    // Allow loading resources from workspace folders for media files
-    const workspaceFolders = vscode.workspace.workspaceFolders || [];
-    const localResourceRoots = [
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
-      ...workspaceFolders.map((f) => f.uri),
-    ];
-
-    webview.options = {
-      enableScripts: true,
-      localResourceRoots,
-    };
-
     const webviewUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
     );
@@ -904,11 +909,20 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               url: variant.url ?? manifest.variants.find((item) => item.role === 'source')?.url,
             });
           } else {
-            const uri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(fsPath));
+            const uri = this.projectLocalResource(
+              webviewPanel.webview,
+              fsPath,
+              'neko-canvas.preview-variant',
+            );
+            if (!uri) {
+              throw new Error(
+                'Media path is outside authorized Webview roots. Add its folder as a media library or move it into the workspace.',
+              );
+            }
             webviewPanel.webview.postMessage({
               type: 'preview:variantResolved',
               requestId,
-              url: uri.toString(),
+              url: uri,
             });
           }
         } catch (error) {
@@ -1004,13 +1018,19 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
         if (uris && uris.length > 0) {
           const uri = uris[0];
+          await this.addFeatureRoot(webviewPanel.webview, path.dirname(uri.fsPath));
           // Convert to webview URI so the webview can access the file
-          const webviewUri = webviewPanel.webview.asWebviewUri(uri);
+          const webviewUri = this.projectLocalResource(
+            webviewPanel.webview,
+            uri.fsPath,
+            'neko-canvas.pick-media',
+          );
+          if (!webviewUri) break;
           const name = uri.path.split('/').pop() || 'media';
           webviewPanel.webview.postMessage({
             type: 'addMedia',
             mediaType,
-            uri: webviewUri.toString(),
+            uri: webviewUri,
             name,
           });
         }
@@ -1168,8 +1188,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           if (assetKind === 'media') {
             const mediaType = inferCanvasMediaType(fileName);
             if (mediaType) {
-              const webviewUri = webviewPanel.webview.asWebviewUri(uri);
-              asset = { kind: 'media', path: webviewUri.toString(), name: fileName, mediaType };
+              await this.addFeatureRoot(webviewPanel.webview, path.dirname(uri.fsPath));
+              const webviewUri = this.projectLocalResource(
+                webviewPanel.webview,
+                uri.fsPath,
+                'neko-canvas.pick-file',
+              );
+              if (webviewUri) {
+                asset = { kind: 'media', path: webviewUri, name: fileName, mediaType };
+              }
             }
           } else {
             const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
@@ -1602,10 +1629,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               const mediaType = inferCanvasMediaType(fileName);
               if (!mediaType) continue;
 
-              const webviewUri = webviewPanel.webview.asWebviewUri(fileUri);
+              await this.addFeatureRoot(webviewPanel.webview, path.dirname(fileUri.fsPath));
+              const webviewUri = this.projectLocalResource(
+                webviewPanel.webview,
+                fileUri.fsPath,
+                'neko-canvas.drop-file',
+              );
+              if (!webviewUri) continue;
               resolvedAssets.push({
                 kind: 'media',
-                path: webviewUri.toString(),
+                path: webviewUri,
                 name: fileName,
                 mediaType,
               });
@@ -2112,12 +2145,32 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (typeof value !== 'string' || !value) continue;
         try {
           const fsPath = await this.resolveAssetPath(value, documentUri);
-          nodeData[key] = webview.asWebviewUri(vscode.Uri.file(fsPath)).toString();
+          const uri = this.projectLocalResource(webview, fsPath, 'neko-canvas.load-node-media');
+          if (uri) nodeData[key] = uri;
         } catch {
           // leave as-is if resolution fails
         }
       }
     }
+  }
+
+  private projectLocalResource(
+    webview: vscode.Webview,
+    source: string,
+    caller: string,
+  ): string | undefined {
+    return this.localResourceAccess.createSyncProjector(
+      webview,
+      webview.options.localResourceRoots ?? [],
+      { caller },
+    )(source);
+  }
+
+  private async addFeatureRoot(webview: vscode.Webview, rootPath: string): Promise<void> {
+    await this.localResourceAccess.configureWebview(webview, {
+      enableScripts: true,
+      extraRoots: [...(webview.options.localResourceRoots ?? []), vscode.Uri.file(rootPath)],
+    });
   }
 
   /** Normalize all media node asset paths in canvas data for portable storage */

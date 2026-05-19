@@ -45,6 +45,7 @@ import {
 import { MediaTaskDeliveryHost } from '../services/mediaTaskDeliveryHost';
 import { MediaTurnBridge } from '../services/mediaTurnBridge';
 import type { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
+import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
 import { createVSCodeWorkspaceFileReader } from '../services/workspaceFileReader';
 import { searchVSCodeProjectFiles } from '../services/workspaceProjectSearch';
 import { searchProjectMentionCandidates } from '../services/projectMentionSearch';
@@ -87,6 +88,7 @@ export class AgentMessageTurnHandler {
     ) => ActiveSkillState | undefined,
     private readonly _engineClientProvider: IEngineClientProvider = getEngineClientProvider(),
     private readonly _dashboardWorkItems?: AgentDashboardWorkItemSource,
+    private readonly _localResourceAccess?: AgentLocalResourceAccess,
   ) {
     this._attachmentProcessor = new AttachmentProcessor();
 
@@ -94,11 +96,13 @@ export class AgentMessageTurnHandler {
       platform: this._platform,
       transcodeFile: (inputPath, outputPath, mediaType) =>
         this._engineClientProvider.transcodeFile(inputPath, outputPath, mediaType),
+      localResourceAccess: this._localResourceAccess,
     });
     this._mediaTurnBridge = new MediaTurnBridge({
       platform: this._platform,
       mediaDeliveryHost: this._mediaDeliveryHost,
       dashboardWorkItems: this._dashboardWorkItems,
+      localResourceAccess: this._localResourceAccess,
     });
 
     this._streamProcessor = new AgentStreamProcessor({
@@ -108,6 +112,7 @@ export class AgentMessageTurnHandler {
         this._engineClientProvider.transcodeFile(inputPath, outputPath, mediaType),
       mediaDeliveryHost: this._mediaDeliveryHost,
       dashboardWorkItems: this._dashboardWorkItems,
+      localResourceAccess: this._localResourceAccess,
     });
     this._agentTurnBridge = new AgentTurnBridge({
       settings: this._settings,
@@ -350,7 +355,7 @@ export class AgentMessageTurnHandler {
       },
     });
 
-    webview.postMessage(message);
+    webview.postMessage(this._projectProjectFilesMessageForWebview(webview, message));
   }
 
   private _resolveSearchContextUri(): vscode.Uri | undefined {
@@ -360,6 +365,29 @@ export class AgentMessageTurnHandler {
       return activeEditorUri;
     }
     return this._lastTextEditorUri;
+  }
+
+  private _projectProjectFilesMessageForWebview(
+    webview: vscode.Webview,
+    message: Awaited<ReturnType<typeof executeAgentProjectFileSearch>>,
+  ): Awaited<ReturnType<typeof executeAgentProjectFileSearch>> {
+    if (!this._localResourceAccess || !message.mentionExtras) {
+      return message;
+    }
+
+    return {
+      ...message,
+      mentionExtras: message.mentionExtras.map((extra) => {
+        if (!extra.thumbnailUri) return extra;
+        const thumbnailUri =
+          this._localResourceAccess?.toWebviewUri(
+            webview,
+            extra.thumbnailUri,
+            'neko-agent.project-search-thumbnail',
+          ) ?? extra.thumbnailUri;
+        return { ...extra, thumbnailUri };
+      }),
+    };
   }
 
   /**

@@ -35,6 +35,8 @@ describe('toolBootstrap', () => {
 
     expect(registered).toContain(TOOL_NAMES_SYSTEM.LIST_PLUGIN_SKILLS);
     expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT);
+    expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_IMAGE);
+    expect(registered).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE);
   });
 
   it('skips already registered extension tools on re-registration', () => {
@@ -48,7 +50,7 @@ describe('toolBootstrap', () => {
     expect(registry.register).not.toHaveBeenCalled();
   });
 
-  it('registers ReadDocument as a resident document tool group', () => {
+  it('registers document and image readers as a resident document tool group', () => {
     const registry = {
       register: vi.fn(),
     };
@@ -58,7 +60,11 @@ describe('toolBootstrap', () => {
     expect(registry.register).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'document-reading',
-        tools: [TOOL_NAMES_SYSTEM.READ_DOCUMENT],
+        tools: [
+          TOOL_NAMES_SYSTEM.READ_DOCUMENT,
+          TOOL_NAMES_SYSTEM.READ_IMAGE,
+          TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
+        ],
         loadingTier: 'resident',
         alwaysActive: true,
         enabled: true,

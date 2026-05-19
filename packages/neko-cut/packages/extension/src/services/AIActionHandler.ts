@@ -13,8 +13,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { EngineClient } from '@neko/neko-client';
 import type { TimelineElement } from '@neko/shared';
 import { getLogger, getService } from '../base';
@@ -59,6 +59,7 @@ export class AIActionHandler implements vscode.Disposable {
   constructor(
     private readonly webview: vscode.Webview,
     private readonly _documentUri: vscode.Uri,
+    private readonly _storageUri?: vscode.Uri,
   ) {}
 
   // ===========================================================================
@@ -164,6 +165,7 @@ export class AIActionHandler implements vscode.Disposable {
     }
 
     const outputPath = this.buildOutputPath(inputPath, '_upscaled');
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     this.sendProgress(ctx, 30, 'Running upscale model...');
 
     await engine.upscale(model, inputPath, outputPath, scale);
@@ -187,6 +189,7 @@ export class AIActionHandler implements vscode.Disposable {
     }
 
     const outputPath = this.buildOutputPath(inputPath, '_denoised');
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     this.sendProgress(ctx, 30, 'Running denoise model...');
 
     await engine.denoiseImage(model, inputPath, outputPath, strength);
@@ -208,6 +211,7 @@ export class AIActionHandler implements vscode.Disposable {
 
     // Step 1: Denoise
     const denoisedPath = this.buildOutputPath(inputPath, '_denoised_tmp');
+    fs.mkdirSync(path.dirname(denoisedPath), { recursive: true });
     this.sendProgress(ctx, 20, 'Running denoise...');
     await engine.denoiseImage('denoise-default', inputPath, denoisedPath, 0.4);
 
@@ -590,13 +594,18 @@ export class AIActionHandler implements vscode.Disposable {
   }
 
   /**
-   * Build an output file path with a suffix, placed in a temp directory.
+   * Build an output file path with a suffix under an authorized project or extension cache.
    */
   private buildOutputPath(inputPath: string, suffix: string): string {
     const ext = path.extname(inputPath);
     const base = path.basename(inputPath, ext);
-    const tmpDir = path.join(os.tmpdir(), 'neko-cut-ai');
-    return path.join(tmpDir, `${base}${suffix}${ext}`);
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const outputDir = workspaceRoot
+      ? path.join(workspaceRoot, '.neko', '.cache', 'cut-ai')
+      : this._storageUri
+        ? vscode.Uri.joinPath(this._storageUri, 'cut-ai').fsPath
+        : path.join(path.dirname(this._documentUri.fsPath), '.neko', '.cache', 'cut-ai');
+    return path.join(outputDir, `${base}${suffix}${ext}`);
   }
 
   /**

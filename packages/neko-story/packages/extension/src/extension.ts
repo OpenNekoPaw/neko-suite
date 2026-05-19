@@ -236,8 +236,8 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.story.preview', () => {
-      PreviewPanel.create(
+    vscode.commands.registerCommand('neko.story.preview', async () => {
+      await PreviewPanel.create(
         context.extensionUri,
         sceneStateStore,
         resolveStoryboardCharacterBindings,
@@ -482,8 +482,8 @@ export function activate(context: vscode.ExtensionContext) {
         // neko-agent extension not installed or not activated — silently ignore
       }
     }),
-    vscode.commands.registerCommand('neko.story.scriptTableView', () => {
-      const panel = PreviewPanel.create(
+    vscode.commands.registerCommand('neko.story.scriptTableView', async () => {
+      const panel = await PreviewPanel.create(
         context.extensionUri,
         sceneStateStore,
         resolveStoryboardCharacterBindings,

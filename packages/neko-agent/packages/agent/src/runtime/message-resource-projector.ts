@@ -166,7 +166,7 @@ function projectResourceValueInternal(
   if (value === null || value === undefined) return value;
 
   if (typeof value === 'string') {
-    return isLocalMediaFilePath(value) ? resolveLocalMediaPath(value, options) : value;
+    return isLocalMediaFilePath(value) ? (resolveLocalMediaPath(value, options) ?? value) : value;
   }
 
   if (Array.isArray(value)) {
@@ -186,31 +186,44 @@ function projectResourceValueInternal(
     }
 
     if (LOCAL_MEDIA_PATH_KEYS.has(key) && typeof item === 'string' && isLocalMediaFilePath(item)) {
+      const resolved = resolveLocalMediaPath(item, options);
       projected[key] = item;
-      if (!projected['webviewUri']) {
-        projected['webviewUri'] = resolveLocalMediaPath(item, options);
+      if (resolved && !projected['webviewUri']) {
+        projected['webviewUri'] = resolved;
       }
       continue;
     }
 
     if (LOCAL_MEDIA_PATH_ARRAY_KEYS.has(key) && Array.isArray(item)) {
       let hasLocalMediaPath = false;
+      let hasResolvedWebviewUri = false;
       const webviewUris = item.map((path) => {
         if (typeof path === 'string' && isLocalMediaFilePath(path)) {
           hasLocalMediaPath = true;
-          return resolveLocalMediaPath(path, options);
+          const resolved = resolveLocalMediaPath(path, options);
+          if (resolved) {
+            hasResolvedWebviewUri = true;
+          }
+          return resolved;
         }
-        return path;
+        return undefined;
       });
       projected[key] = [...item];
-      if (hasLocalMediaPath && !projected[`${key.slice(0, -1)}WebviewUris`]) {
+      if (
+        hasLocalMediaPath &&
+        hasResolvedWebviewUri &&
+        !projected[`${key.slice(0, -1)}WebviewUris`]
+      ) {
         projected[`${key.slice(0, -1)}WebviewUris`] = webviewUris;
       }
       continue;
     }
 
     if (SINGLE_URL_KEYS.has(key) && typeof item === 'string' && isLocalMediaFilePath(item)) {
-      projected[key] = resolveLocalMediaPath(item, options);
+      const resolved = resolveLocalMediaPath(item, options);
+      if (resolved) {
+        projected[key] = resolved;
+      }
       if (!projected['localPath']) {
         projected['localPath'] = item;
       }
@@ -219,12 +232,13 @@ function projectResourceValueInternal(
 
     if (key === 'urls' && Array.isArray(item)) {
       const localPaths: string[] = [];
-      projected[key] = item.map((url) => {
+      projected[key] = item.flatMap((url) => {
         if (typeof url === 'string' && isLocalMediaFilePath(url)) {
           localPaths.push(url);
-          return resolveLocalMediaPath(url, options);
+          const resolved = resolveLocalMediaPath(url, options);
+          return resolved ? [resolved] : [];
         }
-        return url;
+        return [url];
       });
       if (localPaths.length > 0 && !projected['localPaths']) {
         projected['localPaths'] = localPaths;
@@ -238,11 +252,14 @@ function projectResourceValueInternal(
   return projected;
 }
 
-function resolveLocalMediaPath(path: string, options: MessageResourceProjectionOptions): string {
+function resolveLocalMediaPath(
+  path: string,
+  options: MessageResourceProjectionOptions,
+): string | undefined {
   try {
-    return options.resolveLocalMediaPath?.(path) ?? path;
+    return options.resolveLocalMediaPath?.(path);
   } catch {
-    return path;
+    return undefined;
   }
 }
 

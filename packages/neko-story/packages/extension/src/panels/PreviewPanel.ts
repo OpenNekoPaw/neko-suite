@@ -3,7 +3,11 @@ import * as path from 'path';
 import { parse } from '@neko-story/parser';
 import type { FountainDocument, Note } from '@neko-story/types';
 import { createStoryboardPayload } from '@neko/shared';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  createDefaultLocalResourceAccessService,
+  injectLocaleAttribute,
+  type LocalResourceAccessService,
+} from '@neko/shared/vscode/extension';
 import type {
   AgentContextPayload,
   CanvasStoryboardExecutionSummary,
@@ -66,6 +70,7 @@ export class PreviewPanel implements vscode.Disposable {
   private readonly panel: vscode.WebviewPanel;
   private readonly extensionUri: vscode.Uri;
   private readonly sceneStateStore: StorySceneStateStore;
+  private readonly localResourceAccess: LocalResourceAccessService;
   private readonly resolveCharacterBindings: ResolveCharacterBindings;
   private readonly resolveCharacterRegistry: ResolveCharacterRegistry;
   private readonly readinessRowsByScene = new Map<string, StorySceneVideoReadiness>();
@@ -76,12 +81,14 @@ export class PreviewPanel implements vscode.Disposable {
   private constructor(
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
+    localResourceAccess: LocalResourceAccessService,
     sceneStateStore: StorySceneStateStore,
     resolveCharacterBindings: ResolveCharacterBindings,
     resolveCharacterRegistry: ResolveCharacterRegistry,
   ) {
     this.panel = panel;
     this.extensionUri = extensionUri;
+    this.localResourceAccess = localResourceAccess;
     this.sceneStateStore = sceneStateStore;
     this.resolveCharacterBindings = resolveCharacterBindings;
     this.resolveCharacterRegistry = resolveCharacterRegistry;
@@ -131,29 +138,29 @@ export class PreviewPanel implements vscode.Disposable {
     );
   }
 
-  public static create(
+  public static async create(
     extensionUri: vscode.Uri,
     sceneStateStore: StorySceneStateStore,
     resolveCharacterBindings: ResolveCharacterBindings,
     resolveCharacterRegistry: ResolveCharacterRegistry,
-  ): PreviewPanel {
+  ): Promise<PreviewPanel> {
     const column = vscode.window.activeTextEditor
       ? vscode.ViewColumn.Beside
       : vscode.ViewColumn.One;
 
-    const workspaceFolderUris = vscode.workspace.workspaceFolders?.map((f) => f.uri) ?? [];
+    const localResourceAccess = createDefaultLocalResourceAccessService({
+      extensionUri,
+    });
     const panel = vscode.window.createWebviewPanel(PreviewPanel.viewType, 'Story Preview', column, {
       enableScripts: true,
       retainContextWhenHidden: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(extensionUri, 'dist', 'webview'),
-        ...workspaceFolderUris,
-      ],
     });
+    await localResourceAccess.configureWebview(panel.webview, { enableScripts: true });
 
     const instance = new PreviewPanel(
       panel,
       extensionUri,
+      localResourceAccess,
       sceneStateStore,
       resolveCharacterBindings,
       resolveCharacterRegistry,
@@ -503,7 +510,8 @@ export class PreviewPanel implements vscode.Disposable {
         ? note.assetRef.path
         : path.join(docDir, note.assetRef.path);
 
-      const resolvedUri = this.panel.webview.asWebviewUri(vscode.Uri.file(assetPath)).toString();
+      const resolvedUri = this.projectLocalResource(assetPath, 'neko-story.note-asset');
+      if (!resolvedUri) return el;
 
       return { ...note, resolvedUri };
     });
@@ -629,11 +637,11 @@ export class PreviewPanel implements vscode.Disposable {
           characterId,
         );
         return characterThumbPath
-          ? this.panel.webview.asWebviewUri(vscode.Uri.file(characterThumbPath)).toString()
+          ? this.projectLocalResource(characterThumbPath, 'neko-story.character-thumbnail')
           : undefined;
       }
       return thumbPath
-        ? this.panel.webview.asWebviewUri(vscode.Uri.file(thumbPath)).toString()
+        ? this.projectLocalResource(thumbPath, 'neko-story.character-thumbnail')
         : undefined;
     } catch (error) {
       if (swallowErrors) {
@@ -731,6 +739,14 @@ export class PreviewPanel implements vscode.Disposable {
         disposable.dispose();
       }
     }
+  }
+
+  private projectLocalResource(source: string, caller: string): string | undefined {
+    return this.localResourceAccess.createSyncProjector(
+      this.panel.webview,
+      this.panel.webview.options.localResourceRoots ?? [],
+      { caller },
+    )(source);
   }
 }
 

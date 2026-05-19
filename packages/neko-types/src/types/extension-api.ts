@@ -720,6 +720,9 @@ export interface NekoAssetsAPI {
   /** Get the thumbnail file path for a given asset file path. */
   getThumbnailPath(filePath: string): Promise<string | undefined>;
 
+  /** Get resolved, enabled, and accessible media library roots for Webview authorization. */
+  getMediaLibraryRoots(): Promise<string[]>;
+
   /** Resolve an entity:// URI to a concrete variant file and absolute path. */
   resolveEntityUri(
     uri: string,
@@ -755,6 +758,9 @@ export interface NekoAssetsAPI {
 
   /** Fired when asset entities are added, removed, or modified. */
   onDidChangeEntities: { (listener: () => void): { dispose(): void } };
+
+  /** Fired when media library roots are added, removed, disabled, or overridden. */
+  onDidChangeMediaLibraryRoots: { (listener: () => void): { dispose(): void } };
 }
 
 // =============================================================================

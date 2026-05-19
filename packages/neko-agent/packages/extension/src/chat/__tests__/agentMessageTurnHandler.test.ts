@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const agentStreamProcessorInstances = vi.hoisted(
+  () => [] as Array<{ deps: Record<string, unknown> }>,
+);
+
 vi.mock('vscode', () => {
   class EventEmitter<T> {
     private readonly listeners: Array<(event: T) => void> = [];
@@ -120,6 +124,10 @@ vi.mock('../message/attachmentProcessor', () => {
 vi.mock('../message/agentStreamProcessor', () => {
   return {
     AgentStreamProcessor: class {
+      constructor(public readonly deps: Record<string, unknown>) {
+        agentStreamProcessorInstances.push(this);
+      }
+
       processStream = vi.fn().mockResolvedValue({
         accumulatedResponse: 'mock response',
         accumulatedThinking: '',
@@ -256,6 +264,10 @@ function buildHandler(
     conversations?: ReturnType<typeof createMockConversations>;
     settings?: ReturnType<typeof createMockSettings>;
     isPlanMode?: boolean;
+    localResourceAccess?: {
+      toWebviewUri: ReturnType<typeof vi.fn>;
+      toWebviewAsset?: ReturnType<typeof vi.fn>;
+    };
   } = {},
 ) {
   const settings = overrides.settings ?? createMockSettings();
@@ -275,6 +287,11 @@ function buildHandler(
     () => 'mock system prompt',
     () => overrides.isPlanMode ?? false,
     platform as any,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    overrides.localResourceAccess as any,
   );
 }
 
@@ -285,6 +302,7 @@ function buildHandler(
 describe('AgentMessageTurnHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    agentStreamProcessorInstances.length = 0;
     (vscode.workspace as any).workspaceFolders = undefined;
     vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(new Error('missing fixture'));
     vi.mocked(vscode.workspace.findFiles).mockResolvedValue([]);
@@ -319,6 +337,19 @@ describe('AgentMessageTurnHandler', () => {
         { capability: 'video.generate', providerId: 'openai', modelId: 'gpt-image-1' },
         { capability: 'audio.generate', providerId: 'openai', modelId: 'gpt-image-1' },
       ]);
+    });
+  });
+
+  describe('local resource access wiring', () => {
+    it('passes local resource access into the stream processor for tool-result thumbnails', () => {
+      const localResourceAccess = {
+        toWebviewUri: vi.fn(),
+      };
+
+      buildHandler({ localResourceAccess });
+
+      expect(agentStreamProcessorInstances).toHaveLength(1);
+      expect(agentStreamProcessorInstances[0]!.deps.localResourceAccess).toBe(localResourceAccess);
     });
   });
 
@@ -714,9 +745,12 @@ describe('AgentMessageTurnHandler', () => {
       });
     });
 
-    it('maps upstream project search candidates into mention extras', async () => {
+    it('projects search/entity thumbnails after upstream search resolves candidates', async () => {
       const webview = createMockWebview();
-      const handler = buildHandler();
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview, source: string) => `webview:${source}`),
+      };
+      const handler = buildHandler({ localResourceAccess });
 
       (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
       vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
@@ -734,6 +768,7 @@ describe('AgentMessageTurnHandler', () => {
             },
             projectRoot: '/workspace',
             filePath: 'assets/hero.png',
+            thumbnailUri: '/workspace/thumbs/hero.png',
             searchText: 'Hero portrait',
             freshness: 'fresh',
             metadata: { mediaType: 'image', entityType: 'character' },
@@ -750,6 +785,7 @@ describe('AgentMessageTurnHandler', () => {
             },
             projectRoot: '/workspace',
             filePath: '/library/hero-shot.mp4',
+            thumbnailUri: '/library/thumbs/hero-shot.jpg',
             searchText: 'hero-shot',
             freshness: 'fresh',
             metadata: { mediaType: 'video' },
@@ -765,6 +801,7 @@ describe('AgentMessageTurnHandler', () => {
               sourceKind: 'character',
             },
             projectRoot: '/workspace',
+            thumbnailUri: '/workspace/entities/hero.png',
             searchText: 'Hero character',
             freshness: 'fresh',
             metadata: { entityType: 'character' },
@@ -787,6 +824,11 @@ describe('AgentMessageTurnHandler', () => {
         }),
       );
       expect(vscode.workspace.fs.readFile).not.toHaveBeenCalled();
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        '/workspace/thumbs/hero.png',
+        'neko-agent.project-search-thumbnail',
+      );
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'projectFiles',
         conversationId: 'conv-search',
@@ -799,6 +841,7 @@ describe('AgentMessageTurnHandler', () => {
             source: 'asset-library',
             mediaType: 'image',
             filePath: 'assets/hero.png',
+            thumbnailUri: 'webview:/workspace/thumbs/hero.png',
           }),
           expect.objectContaining({
             type: 'media',
@@ -807,6 +850,7 @@ describe('AgentMessageTurnHandler', () => {
             source: 'media-library',
             mediaType: 'video',
             filePath: '/library/hero-shot.mp4',
+            thumbnailUri: 'webview:/library/thumbs/hero-shot.jpg',
           }),
           expect.objectContaining({
             type: 'entity',
@@ -814,6 +858,7 @@ describe('AgentMessageTurnHandler', () => {
             label: 'Hero',
             source: 'entity-graph',
             entityType: 'character',
+            thumbnailUri: 'webview:/workspace/entities/hero.png',
           }),
         ]),
       });

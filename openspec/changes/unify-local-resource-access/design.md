@@ -9,12 +9,14 @@ The relevant constraints are:
 - Webview code cannot access Node.js or VSCode APIs directly.
 - Extension Host code must own local path resolution and Webview URI projection.
 - `neko-assets` media libraries are the user-facing authority for external asset roots.
+- `neko-search` is the runtime owner for project search orchestration and source-ref projection.
+- `neko-entity` is the runtime owner for creative identity, entity bindings, requirements, visual drafts, and representation resolution.
 - Stored project data should keep portable references using path variables where possible.
 - Random system temp paths should not become durable Webview resources.
 
 Five-layer analysis:
 
-- Responsibilities: `neko-assets` owns media-library configuration, a local resource access service owns authorization/projection, Webview providers only consume resolved URIs.
+- Responsibilities: `neko-assets` owns media-library configuration, `neko-search` owns searchable source refs, `neko-entity` owns identity and representation semantics, a local resource access service owns authorization/projection, Webview providers only consume resolved URIs.
 - Dependencies: shared contracts stay in L0/L1-compatible packages; VSCode-specific URI and Webview APIs remain in Extension Host packages.
 - Interfaces: callers request roots and projected URIs through a narrow service instead of assembling roots or calling `asWebviewUri` directly.
 - Extension: new root providers can be registered for media libraries, extension caches, generated caches, market installs, or feature-specific roots.
@@ -29,6 +31,7 @@ Five-layer analysis:
 - Keep previewable transient files in controlled cache locations such as `globalStorageUri` or workspace `.neko/.cache`.
 - Preserve existing media-library variables and workspace-relative path resolution.
 - Migrate high-risk Webview surfaces without changing stored project file formats.
+- Respect `neko-search` and `neko-entity` as upstream semantic owners when local display paths originate from search results, entity bindings, or asset refs.
 - Make unauthorized path behavior explicit and testable.
 
 **Non-Goals:**
@@ -38,6 +41,7 @@ Five-layer analysis:
 - Move every user-level `~/.neko` state file into the workspace.
 - Convert all existing absolute paths in persisted project files in this change.
 - Add a new binary transport or return media bytes/base64 through tool results.
+- Reimplement project search, entity identity, entity-asset binding, or representation resolution.
 
 ## Decisions
 
@@ -113,6 +117,17 @@ Alternatives considered:
 - Big-bang migration across all packages: cleaner final state but higher regression risk.
 - Agent-only fix: solves the recent issue but leaves the same failure class elsewhere.
 
+### Decision 7: Consume search and identity outputs, do not own them
+
+`LocalResourceAccessService` is an access/projection boundary, not a semantic resolver. When a path originates from a search result, the service consumes `neko-search` source refs or host-projected file paths after search has selected the source. When a path originates from a creative entity or representation, the service consumes a local path resolved by `neko-entity`, `AssetRefResolver`, or the owning domain package after entity identity and binding semantics have already been applied.
+
+The service must not read search cache files, mutate entity facts, inspect entity binding storage, or infer identity from file paths. Its responsibility starts when the caller has a candidate local resource path or remote URL that needs Webview display.
+
+Alternatives considered:
+
+- Let local resource access resolve entity/search refs directly: convenient for callers but recreates coupling that the identity and search refactors removed.
+- Force Webviews to consume search/entity packages directly: violates the Webview sandbox and would leak runtime internals into UI code.
+
 ## Risks / Trade-offs
 
 - [Risk] Media-library roots can be large and authorize more files than a single preview needs. → Mitigation: authorize only configured roots, avoid home/root/temp, and preserve explicit root provider boundaries.
@@ -120,16 +135,19 @@ Alternatives considered:
 - [Risk] Some existing media references are absolute paths outside known roots. → Mitigation: return an explicit unresolved result and surface a clear warning/action to add the containing folder as a media library.
 - [Risk] Multiple packages may need parallel migration. → Mitigation: introduce adapter helpers first, then migrate package by package with targeted tests.
 - [Risk] Remote workspaces and non-file URI schemes need different handling. → Mitigation: keep this change focused on local file resources; remote sources remain pass-through URLs unless a provider handles them explicitly.
+- [Risk] Local resource access could grow into a second search/entity resolver. → Mitigation: add boundary tests and keep the service input contract limited to local paths, remote URLs, and already-resolved source metadata.
 
 ## Migration Plan
 
 1. Add shared/local-resource contracts and VSCode Extension Host implementation.
 2. Add `neko-assets` media-library root export and change notifications.
-3. Replace Agent Webview local roots and local media projection with the unified service.
-4. Move or route previewable Agent transient artifacts through `globalStorageUri` and workspace `.neko/.cache`.
-5. Migrate Canvas, Cut, Tools diff providers, Story previews, Model previews, and media preview providers.
-6. Add lint or search-based guardrails for direct `asWebviewUri(vscode.Uri.file(...))` and ad hoc `localResourceRoots` in new code.
-7. Keep legacy direct projection as a temporary adapter where a package-specific migration is not yet complete.
+3. Wire `neko-search` result consumers to pass host-resolved local paths or source refs through the local resource service rather than reading cache files from Webviews.
+4. Wire `neko-entity`/asset-ref consumers to resolve representation paths in the owning domain before local resource projection.
+5. Replace Agent Webview local roots and local media projection with the unified service.
+6. Move or route previewable Agent transient artifacts through `globalStorageUri` and workspace `.neko/.cache`.
+7. Migrate Canvas, Cut, Tools diff providers, Story previews, Model previews, and media preview providers.
+8. Add lint or search-based guardrails for direct `asWebviewUri(vscode.Uri.file(...))`, ad hoc `localResourceRoots`, search cache reads from Webviews, and identity/binding reads from local resource code.
+9. Keep legacy direct projection as a temporary adapter where a package-specific migration is not yet complete.
 
 Rollback strategy:
 

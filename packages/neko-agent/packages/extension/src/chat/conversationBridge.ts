@@ -15,18 +15,29 @@ import {
   type ConversationStorage,
 } from '@neko/agent';
 import type { Message } from '@neko-agent/types';
+import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
 
 const logger = getLogger('ConversationBridge');
 
 /**
  * Convert local file path to webview URI
  */
-function toWebviewUri(webview: vscode.Webview, filePath: string): string {
+function toWebviewUri(
+  webview: vscode.Webview,
+  filePath: string,
+  localResourceAccess?: AgentLocalResourceAccess,
+): string | undefined {
   try {
-    return webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
+    if (localResourceAccess) {
+      return localResourceAccess.toWebviewUri(webview, filePath, 'neko-agent.conversation');
+    }
+    logger.warn('Local resource access service unavailable for conversation media projection', {
+      filePath,
+    });
+    return undefined;
   } catch {
     logger.warn(`Failed to convert path to webview URI: ${filePath}`);
-    return filePath;
+    return undefined;
   }
 }
 
@@ -49,7 +60,11 @@ export class ConversationBridge {
   private _conversationManager: ConversationManager;
   private _persistenceRuntime: ConversationPersistenceRuntime | null = null;
 
-  constructor(context: vscode.ExtensionContext, workspaceRoot?: string) {
+  constructor(
+    context: vscode.ExtensionContext,
+    workspaceRoot?: string,
+    private readonly localResourceAccess?: AgentLocalResourceAccess,
+  ) {
     const storage = new VscodeConversationStorage(context.workspaceState);
     this._conversationManager = new ConversationManager(storage, undefined, {
       ...(workspaceRoot && {
@@ -235,7 +250,8 @@ export class ConversationBridge {
   sendActiveConversation(webview: vscode.Webview): void {
     webview.postMessage(
       buildActiveConversationMessage(this._conversationManager.getActive(), {
-        resolveLocalMediaPath: (filePath) => toWebviewUri(webview, filePath),
+        resolveLocalMediaPath: (filePath) =>
+          toWebviewUri(webview, filePath, this.localResourceAccess),
       }),
     );
   }

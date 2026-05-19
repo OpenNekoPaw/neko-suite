@@ -5,6 +5,10 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import {
+  createDefaultLocalResourceAccessService,
+  type LocalResourceAccessService,
+} from '@neko/shared/vscode/extension';
 import { IEditorRegistry } from '../common/editorRegistry';
 import { VideoEditorModel } from './videoEditorModel';
 import { MessageHandler } from './messageHandler';
@@ -33,8 +37,14 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
   readonly onDidRegisterExportService = this.onDidRegisterExportServiceEmitter.event;
   /** Deferred cleanup subscriptions (cancelled when editor is reopened during export) */
   private deferredCleanupSubs: Map<string, vscode.Disposable[]> = new Map();
+  private readonly localResourceAccess: LocalResourceAccessService;
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    this.localResourceAccess = createDefaultLocalResourceAccessService({
+      extensionUri: context.extensionUri,
+      context,
+      logger,
+    });
     this.context.subscriptions.push(this.onDidRegisterExportServiceEmitter);
   }
 
@@ -250,44 +260,17 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
     this.activeWebviews.set(docUri, webviewPanel.webview);
     this.activeWebviewPanels.set(docUri, webviewPanel);
 
-    // Setup webview options
-    const localResourceRoots = [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')];
-
-    // Add workspace folders to allow access to media files
-    if (vscode.workspace.workspaceFolders) {
-      localResourceRoots.push(...vscode.workspace.workspaceFolders.map((f) => f.uri));
-    }
-
-    // Add the .nkv file's directory and its parent directories
-    // This allows access to media files relative to the project file
-    const jviDir = vscode.Uri.file(path.dirname(document.uri.fsPath));
-    if (!localResourceRoots.some((root) => root.fsPath === jviDir.fsPath)) {
-      localResourceRoots.push(jviDir);
-    }
-
-    // Also add common parent directories that might contain media files
-    // (e.g., if .nkv is in /project/videos/ and media is in /project/assets/)
-    const jviParent = vscode.Uri.file(path.dirname(path.dirname(document.uri.fsPath)));
-    if (
-      jviParent.fsPath !== '/' &&
-      !localResourceRoots.some((root) => root.fsPath === jviParent.fsPath)
-    ) {
-      localResourceRoots.push(jviParent);
-    }
-
-    // Add project root directory (find by looking for package.json or .git)
+    const jviDir = path.dirname(document.uri.fsPath);
+    const jviParent = path.dirname(jviDir);
     const detectedProjectRoot = this.findProjectRoot(document.uri.fsPath);
-    if (
-      detectedProjectRoot &&
-      !localResourceRoots.some((root) => root.fsPath === detectedProjectRoot)
-    ) {
-      localResourceRoots.push(vscode.Uri.file(detectedProjectRoot));
-    }
-
-    webviewPanel.webview.options = {
+    await this.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots,
-    };
+      extraRoots: [
+        vscode.Uri.file(jviDir),
+        ...(jviParent !== path.parse(jviParent).root ? [vscode.Uri.file(jviParent)] : []),
+        ...(detectedProjectRoot ? [vscode.Uri.file(detectedProjectRoot)] : []),
+      ],
+    });
 
     // 从 EditorRegistry 获取或创建 VideoEditorModel
     let model = editorRegistry.getEditorByUri(document.uri) as VideoEditorModel | undefined;
@@ -470,7 +453,13 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     // Create message handler
-    const messageHandler = new MessageHandler(webviewPanel.webview, model, this.context, client);
+    const messageHandler = new MessageHandler(
+      webviewPanel.webview,
+      model,
+      this.context,
+      client,
+      this.localResourceAccess,
+    );
 
     // Set up the webview HTML content
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);

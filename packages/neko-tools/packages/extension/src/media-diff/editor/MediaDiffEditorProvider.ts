@@ -12,7 +12,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { getMediaType } from '@neko/shared';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  createDefaultLocalResourceAccessService,
+  injectLocaleAttribute,
+  type LocalResourceAccessService,
+} from '@neko/shared/vscode/extension';
 import type { IMediaDiffService } from '../services/MediaDiffService';
 import {
   type IMediaDiffEditorSessionFactory,
@@ -39,6 +43,7 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
   private localCompareFiles: Map<string, vscode.Uri> = new Map();
   private isDisposed = false;
   private disposePromise: Promise<void> | null = null;
+  private readonly localResourceAccess: LocalResourceAccessService;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -47,6 +52,10 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
   ) {
     this.diffService = diffService;
     this.sessionFactory = sessionFactory;
+    this.localResourceAccess = createDefaultLocalResourceAccessService({
+      extensionUri: context.extensionUri,
+      context,
+    });
     // Restore persisted local compare files
     this.restoreLocalCompareFiles();
   }
@@ -134,17 +143,17 @@ export class MediaDiffEditorProvider implements vscode.CustomReadonlyEditorProvi
       }
     }
 
-    // Configure webview
-    const localResourceRoots = [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')];
-
-    if (vscode.workspace.workspaceFolders) {
-      localResourceRoots.push(...vscode.workspace.workspaceFolders.map((f) => f.uri));
-    }
-
-    webviewPanel.webview.options = {
+    await this.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots,
-    };
+      extraRoots: [
+        ...(document.uri.scheme === 'file'
+          ? [vscode.Uri.file(path.dirname(document.uri.fsPath))]
+          : []),
+        ...(previousUri?.scheme === 'file'
+          ? [vscode.Uri.file(path.dirname(previousUri.fsPath))]
+          : []),
+      ],
+    });
 
     // Set webview HTML
     webviewPanel.webview.html = this.getHtmlForWebview(

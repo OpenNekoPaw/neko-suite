@@ -18,7 +18,7 @@
  * - neko-puppet → face parameter tools
  */
 
-import type * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import {
   DEFAULT_PLUGIN_SKILL_PROVIDER_EXTENSION_IDS,
   createPluginSkillDiscoveryTools,
@@ -32,6 +32,8 @@ import { getRootLogger } from '../base';
 import { createDocumentReaderService } from '../services/DocumentReaderService';
 import { getEngineClientProvider } from '../services/engineClientProvider';
 import { createReadDocumentTool } from '../tools/readDocumentTool';
+import { createReadDocumentImageTool } from '../tools/readDocumentImageTool';
+import { createReadImageTool } from '../tools/readImageTool';
 
 /**
  * Register neko-agent's own meta-tools.
@@ -42,13 +44,21 @@ export function registerExtensionTools(
   _platform: Platform,
   context?: vscode.ExtensionContext,
 ): void {
+  const documentReader = createDocumentReaderService(getEngineClientProvider(), context);
   const tools = createPluginSkillDiscoveryTools(
     createVSCodePluginSkillCatalogueSource(),
     getRootLogger().child('PluginSkillDiscovery'),
   );
   tools.push(
     createReadDocumentTool({
-      reader: createDocumentReaderService(getEngineClientProvider(), context),
+      reader: documentReader,
+    }),
+    createReadImageTool({
+      platform: _platform,
+    }),
+    createReadDocumentImageTool({
+      reader: documentReader,
+      platform: _platform,
     }),
   );
   for (const tool of tools) {
@@ -63,8 +73,12 @@ export function registerExtensionToolGroups(toolGroupRegistry: IToolGroupRegistr
   toolGroupRegistry.register({
     name: 'document-reading',
     description:
-      'Document reading tools for EPUB, PDF, DOC/DOCX, PPT/PPTX, Excel, text, Final Draft, and comic archives',
-    tools: [TOOL_NAMES_SYSTEM.READ_DOCUMENT],
+      'Document and image reading tools for EPUB, PDF, DOC/DOCX, PPT/PPTX, Excel, text, Final Draft, comic archives, and image pages',
+    tools: [
+      TOOL_NAMES_SYSTEM.READ_DOCUMENT,
+      TOOL_NAMES_SYSTEM.READ_IMAGE,
+      TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
+    ],
     alwaysActive: true,
     priority: 100,
     loadingTier: 'resident',

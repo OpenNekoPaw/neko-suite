@@ -26,7 +26,12 @@ export function activate(context: vscode.ExtensionContext) {
   const trackingService = new TrackingService(logger, vmcPort);
   registerTrackingCommands(context, trackingService);
 
-  const provider = new LivePanelProvider(context.extensionUri, logger, trackingService);
+  const provider = new LivePanelProvider(
+    context.extensionUri,
+    context.globalStorageUri,
+    logger,
+    trackingService,
+  );
 
   context.subscriptions.push(
     trackingService,

@@ -441,10 +441,7 @@ export abstract class AISdkAdapter implements Adapter {
                 mediaType: part.mimeType ?? 'video/mp4',
               };
             } else {
-              return {
-                type: 'image' as const,
-                image: part.imageUrl,
-              };
+              return toAISdkImagePart(part.imageUrl, part.detail);
             }
           }),
         });
@@ -524,5 +521,58 @@ export abstract class AISdkAdapter implements Adapter {
       default:
         return 'stop';
     }
+  }
+}
+
+function toAISdkImagePart(
+  imageUrl: string,
+  detail: 'auto' | 'low' | 'high' | undefined,
+): {
+  type: 'image';
+  image: string | Uint8Array | URL;
+  mediaType?: string;
+  providerOptions?: { openai: { imageDetail: 'auto' | 'low' | 'high' } };
+} {
+  const dataUrl = parseImageDataUrl(imageUrl);
+  const image = dataUrl ? dataUrl.base64Content : toUrlIfPossible(imageUrl);
+  return {
+    type: 'image',
+    image,
+    ...(dataUrl ? { mediaType: dataUrl.mediaType } : {}),
+    ...(detail ? { providerOptions: { openai: { imageDetail: detail } } } : {}),
+  };
+}
+
+function parseImageDataUrl(
+  value: string,
+): { mediaType: string; base64Content: string } | undefined {
+  if (!value.startsWith('data:')) {
+    return undefined;
+  }
+
+  const commaIndex = value.indexOf(',');
+  if (commaIndex < 0) {
+    return undefined;
+  }
+
+  const header = value.slice(0, commaIndex);
+  const base64Content = value.slice(commaIndex + 1);
+  if (!header.endsWith(';base64') || base64Content.length === 0) {
+    return undefined;
+  }
+
+  const mediaType = header.slice('data:'.length, -';base64'.length);
+  if (!mediaType.startsWith('image/')) {
+    return undefined;
+  }
+
+  return { mediaType, base64Content };
+}
+
+function toUrlIfPossible(value: string): string | URL {
+  try {
+    return new URL(value);
+  } catch {
+    return value;
   }
 }

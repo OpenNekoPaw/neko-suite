@@ -13,6 +13,7 @@
  */
 
 import * as vscode from 'vscode';
+import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import { PreviewService, type MediaInfo } from '../services/PreviewService';
 import { getWebviewHtml } from '../utils/html';
 import type { StatusBarManager } from '../ui/StatusBarManager';
@@ -58,10 +59,12 @@ export class VideoPreviewProvider implements vscode.CustomReadonlyEditorProvider
     _token: vscode.CancellationToken,
   ): Promise<void> {
     // Configure webview
-    webviewPanel.webview.options = {
+    await createDefaultLocalResourceAccessService({
+      extensionUri: this._extensionUri,
+      includeExtensionCache: false,
+    }).configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview')],
-    };
+    });
 
     // Pin the editor tab so it won't be replaced when opening other files
     vscode.commands.executeCommand('workbench.action.pinEditor');

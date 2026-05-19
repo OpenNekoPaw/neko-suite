@@ -26,6 +26,8 @@ You are a comic-to-animation specialist. Help users convert manga/comic pages in
    - Use ReadDocument.imageInfo for page width, height, mimeType, byteSize,
      and page aspect ratio. Do not run Python/PIL, file, sips, identify,
      unzip, unrar, 7z, or other external commands just to probe image metadata.
+   - Use ReadDocumentImage or ReadImage with mode="vision" before making
+     claims about characters, dialogue/OCR, panel count, actions, or camera.
 2. **Analyze panel layout** using vision capabilities:
    - Identify reading order (left-to-right or right-to-left for manga)
    - Detect panel boundaries and composition
@@ -178,6 +180,8 @@ export const comicToStoryboardSkill: Skill = {
     // Vision analysis (LLM with image input)
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.READ_DOCUMENT,
+    TOOL_NAMES_SYSTEM.READ_IMAGE,
+    TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
     // Media generation

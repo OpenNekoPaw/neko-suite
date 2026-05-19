@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import type { EngineClient } from '@neko/neko-client';
+import type { LocalResourceAccessService } from '@neko/shared/vscode/extension';
 import { VideoEditorModel } from './videoEditorModel';
 import {
   MessageFromWebview,
@@ -38,6 +39,7 @@ export class MessageHandler {
     private readonly model: VideoEditorModel,
     private readonly _context: vscode.ExtensionContext,
     private readonly engineClient: EngineClient | null = null,
+    private readonly localResourceAccess?: LocalResourceAccessService,
   ) {}
 
   /**
@@ -153,7 +155,11 @@ export class MessageHandler {
     params?: Record<string, unknown>;
   }): Promise<void> {
     if (!this._aiActionHandler) {
-      this._aiActionHandler = new AIActionHandler(this.webview, this.model.uri);
+      this._aiActionHandler = new AIActionHandler(
+        this.webview,
+        this.model.uri,
+        this._context.globalStorageUri,
+      );
     }
     await this._aiActionHandler.handleAction(
       message.actionId,
@@ -232,11 +238,23 @@ export class MessageHandler {
       }
 
       // Use webview URI for all media types (no base64 encoding)
-      const webviewUri = this.webview.asWebviewUri(fileUri);
+      const projector = this.localResourceAccess?.createSyncProjector(
+        this.webview,
+        this.webview.options.localResourceRoots ?? [],
+        { caller: 'neko-cut.request-file' },
+      );
+      const webviewUri = projector?.(fileUri.fsPath);
+      if (!webviewUri) {
+        logger.warn(`Unauthorized media file path: ${absolutePath}`);
+        this.sendError(
+          `File is outside authorized media roots. Add its folder as a media library or move it next to the project: ${filePath}`,
+        );
+        return;
+      }
       this.webview.postMessage({
         type: 'fileUri',
         path: filePath,
-        uri: webviewUri.toString(),
+        uri: webviewUri,
       });
     } catch (error) {
       logger.error('File request error', error);

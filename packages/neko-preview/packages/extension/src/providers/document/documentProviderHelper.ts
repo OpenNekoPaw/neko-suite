@@ -14,6 +14,7 @@
  */
 
 import * as vscode from 'vscode';
+import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import type {
   AgentContextPayload,
   DocumentContentKind,
@@ -58,11 +59,12 @@ export async function setupDocumentWebview(
   const filePath = document.uri.fsPath;
   const fileName = filePath.split('/').pop() ?? filePath;
 
-  // Configure webview
-  webviewPanel.webview.options = {
+  await createDefaultLocalResourceAccessService({
+    extensionUri,
+    context: options?.context,
+  }).configureWebview(webviewPanel.webview, {
     enableScripts: true,
-    localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')],
-  };
+  });
 
   // workspaceState key for this file's reading progress
   const stateKey = `preview:state:${document.uri.toString()}`;

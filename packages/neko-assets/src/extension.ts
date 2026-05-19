@@ -314,6 +314,7 @@ export async function activate(
 
   // 8. Build typed extension API (returned to VSCode as exports)
   const _onDidChangeEntities = new vscode.EventEmitter<void>();
+  const _onDidChangeMediaLibraryRoots = new vscode.EventEmitter<void>();
 
   // Bridge command for components that can't import entityChangeEmitter directly
   context.subscriptions.push(
@@ -325,7 +326,12 @@ export async function activate(
   context.subscriptions.push(_onDidChangeEntities);
 
   if (mediaSettingsService) {
-    context.subscriptions.push(mediaSettingsService.onDidChange(() => _onDidChangeEntities.fire()));
+    context.subscriptions.push(
+      mediaSettingsService.onDidChange(() => {
+        _onDidChangeEntities.fire();
+        _onDidChangeMediaLibraryRoots.fire();
+      }),
+    );
   }
 
   const api: import('@neko/shared').NekoAssetsAPI = {
@@ -345,6 +351,8 @@ export async function activate(
       if (!thumbnailService) return undefined;
       return (await thumbnailService.getCached(filePath)) ?? undefined;
     },
+    getMediaLibraryRoots: async () =>
+      mediaSettingsService ? mediaSettingsService.getWebviewResourceRoots() : [],
     resolveEntityUri: async (uri) => {
       if (!library) return undefined;
       const parsed = parseEntityUri(uri);
@@ -422,11 +430,15 @@ export async function activate(
       return entity ? buildRepresentationPackageDetail(entity) : undefined;
     },
     onDidChangeEntities: _onDidChangeEntities.event,
+    onDidChangeMediaLibraryRoots: _onDidChangeMediaLibraryRoots.event,
   };
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.getCharacterThumbnail', (name: string) =>
       api.getCharacterThumbnail(name),
+    ),
+    vscode.commands.registerCommand('neko.assets.getMediaLibraryRoots', () =>
+      api.getMediaLibraryRoots(),
     ),
   );
 

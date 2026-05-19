@@ -1,23 +1,196 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
 import * as vscode from 'vscode';
-import { createChatLocalResourceRoots } from '../chatProvider';
+import { ChatViewProvider, createChatLocalResourceAccess } from '../chatProvider';
 
 describe('chatProvider', () => {
-  it('authorizes the extension, document image cache, and workspace roots', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('configures unified chat roots for extension assets, caches, workspace, and media libraries', async () => {
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-assets',
+      extensionUri: vscode.Uri.file('/ext/neko-assets'),
+      extensionPath: '/ext/neko-assets',
+      isActive: true,
+      packageJSON: {},
+      extensionKind: 1,
+      exports: {
+        getMediaLibraryRoots: vi.fn(async () => ['/external/media-library']),
+        onDidChangeMediaLibraryRoots: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      activate: vi.fn(),
+    } as any);
     const extensionUri = vscode.Uri.file('/ext/neko-agent');
     const context = {
       globalStorageUri: vscode.Uri.file('/global/neko-agent'),
     } as vscode.ExtensionContext;
+    const webview = vscode.createMockWebview();
 
-    const roots = createChatLocalResourceRoots(extensionUri, context).map((uri) => uri.fsPath);
+    const access = createChatLocalResourceAccess(extensionUri, context);
+    await access.configureChatWebview(webview as any);
+    const roots = webview.options.localResourceRoots?.map((uri) => uri.fsPath);
 
     expect(roots).toEqual([
-      '/ext/neko-agent',
-      '/global/neko-agent/document-image-cache',
+      '/ext/neko-agent/dist/webview',
       '/mock/workspace',
+      '/external/media-library',
+      '/global/neko-agent',
+      '/global/neko-agent/document-image-cache',
+      '/mock/workspace/.neko/.cache',
     ]);
+    expect(access.toWebviewUri(webview as any, '/external/media-library/page.jpg', 'test')).toBe(
+      'file:///external/media-library/page.jpg',
+    );
+
+    access.dispose();
+  });
+
+  it('re-authorizes document image cache paths when a restored webview has stale roots', async () => {
+    const extensionUri = vscode.Uri.file('/ext/neko-agent');
+    const context = {
+      globalStorageUri: vscode.Uri.file('/global/neko-agent'),
+    } as vscode.ExtensionContext;
+    const webview = vscode.createMockWebview();
+    webview.options = {
+      localResourceRoots: [vscode.Uri.file('/ext/neko-agent/dist/webview')],
+    };
+
+    const access = createChatLocalResourceAccess(extensionUri, context);
+    const uri = access.toWebviewUri(
+      webview as any,
+      '/global/neko-agent/document-image-cache/neko_epub_1/page.jpg',
+      'test',
+    );
+
+    expect(uri).toBe('file:///global/neko-agent/document-image-cache/neko_epub_1/page.jpg');
+    expect(webview.options.localResourceRoots?.map((root) => root.fsPath)).toEqual([
+      '/ext/neko-agent/dist/webview',
+      '/global/neko-agent',
+      '/global/neko-agent/document-image-cache',
+    ]);
+
+    access.dispose();
+  });
+
+  it('projects document cache paths using the computed roots even when webview options are stale', async () => {
+    const extensionUri = vscode.Uri.file('/ext/neko-agent');
+    const context = {
+      globalStorageUri: vscode.Uri.file('/global/neko-agent'),
+    } as vscode.ExtensionContext;
+    const staleRoots = [vscode.Uri.file('/ext/neko-agent/dist/webview')];
+    const webview = vscode.createMockWebview();
+    Object.defineProperty(webview, 'options', {
+      configurable: true,
+      get: () => ({ localResourceRoots: staleRoots }),
+      set: vi.fn(),
+    });
+
+    const access = createChatLocalResourceAccess(extensionUri, context);
+    const uri = access.toWebviewUri(
+      webview as any,
+      '/global/neko-agent/document-image-cache/neko_epub_1/page.jpg',
+      'neko-agent.conversation',
+    );
+
+    expect(uri).toBe('file:///global/neko-agent/document-image-cache/neko_epub_1/page.jpg');
+
+    access.dispose();
+  });
+
+  it('authorizes document cache paths when global storage uses a non-file uri scheme', async () => {
+    const extensionUri = vscode.Uri.file('/ext/neko-agent');
+    const context = {
+      globalStorageUri: {
+        scheme: 'vscode-userdata',
+        fsPath: '/global/neko-agent',
+        path: '/global/neko-agent',
+        toString: () => 'vscode-userdata:/global/neko-agent',
+      },
+    } as vscode.ExtensionContext;
+    const webview = vscode.createMockWebview();
+    webview.options = {
+      localResourceRoots: [vscode.Uri.file('/ext/neko-agent/dist/webview')],
+    };
+
+    const access = createChatLocalResourceAccess(extensionUri, context);
+    const uri = access.toWebviewUri(
+      webview as any,
+      '/global/neko-agent/document-image-cache/neko_epub_1/page.jpg',
+      'neko-agent.stream-tool-result',
+    );
+
+    expect(uri).toBe('file:///global/neko-agent/document-image-cache/neko_epub_1/page.jpg');
+    expect(webview.options.localResourceRoots?.map((root) => root.scheme)).toEqual([
+      'file',
+      'file',
+    ]);
+    expect(webview.options.localResourceRoots?.map((root) => root.fsPath)).toContain(
+      '/global/neko-agent/document-image-cache',
+    );
+
+    access.dispose();
+  });
+
+  it('waits for local resource roots before loading chat HTML and message handlers', async () => {
+    let finishConfigure!: () => void;
+    const configureChatWebview = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishConfigure = resolve;
+        }),
+    );
+    const localResourceAccess = {
+      service: {},
+      configureChatWebview,
+      createProjector: vi.fn(),
+      toWebviewUri: vi.fn(),
+      toWebviewAsset: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const webview = vscode.createMockWebview();
+    const view = {
+      webview,
+      visible: true,
+      onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+    };
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: localResourceAccess as never,
+    });
+
+    provider.resolveWebviewView(view as never, {} as never, {} as never);
+
+    expect(configureChatWebview).toHaveBeenCalledWith(webview);
+    expect(webview.html).toBe('');
+    expect(webview.onDidReceiveMessage).not.toHaveBeenCalled();
+
+    finishConfigure();
+    await Promise.resolve();
+
+    expect(webview.html).toContain('<!DOCTYPE html>');
+    expect(webview.onDidReceiveMessage).toHaveBeenCalled();
+
+    provider.dispose();
   });
 });
+
+function createMockContext(): vscode.ExtensionContext {
+  const store = new Map<string, unknown>();
+  const memento = {
+    get: vi.fn(
+      <T>(key: string, defaultValue?: T): T | undefined => (store.get(key) as T) ?? defaultValue,
+    ),
+    update: vi.fn(async (key: string, value: unknown) => {
+      store.set(key, value);
+    }),
+  };
+  return {
+    globalStorageUri: vscode.Uri.file('/global/neko-agent'),
+    workspaceState: memento,
+    globalState: memento,
+    subscriptions: [],
+  } as unknown as vscode.ExtensionContext;
+}

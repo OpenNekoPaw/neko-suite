@@ -15,7 +15,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { AssetEntity, AssetVariant, VariantComparisonResult } from '@neko/shared';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  createDefaultLocalResourceAccessService,
+  injectLocaleAttribute,
+  type LocalResourceAccessService,
+} from '@neko/shared/vscode/extension';
 import {
   type IAssetVariantDiffSession,
   type IAssetVariantDiffSessionFactory,
@@ -91,6 +95,7 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
   private comparisonStates: Map<string, ComparisonState> = new Map();
   private isDisposed = false;
   private disposePromise: Promise<void> | null = null;
+  private readonly localResourceAccess: LocalResourceAccessService;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -103,6 +108,10 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
     sessionFactory?: IAssetVariantDiffSessionFactory,
   ) {
     this.sessionFactory = sessionFactory ?? new AssetVariantDiffSessionFactory(compareVariants);
+    this.localResourceAccess = createDefaultLocalResourceAccessService({
+      extensionUri: context.extensionUri,
+      context,
+    });
     // Restore persisted comparison states
     this.restoreComparisonStates();
   }
@@ -211,17 +220,10 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
     // Set panel title
     webviewPanel.title = `${variantA.name} ↔ ${variantB.name}`;
 
-    // Configure webview
-    const localResourceRoots = [vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview')];
-
-    if (vscode.workspace.workspaceFolders) {
-      localResourceRoots.push(...vscode.workspace.workspaceFolders.map((f) => f.uri));
-    }
-
-    webviewPanel.webview.options = {
+    await this.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots,
-    };
+      extraRoots: collectVariantFileRoots(variantA, variantB),
+    });
 
     // Set webview HTML
     webviewPanel.webview.html = this.getHtmlForWebview(
@@ -300,8 +302,13 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
 
     const fileA = variantA.files[0];
     const fileB = variantB.files[0];
-    const imageUriA = fileA ? webview.asWebviewUri(vscode.Uri.file(fileA.path)) : null;
-    const imageUriB = fileB ? webview.asWebviewUri(vscode.Uri.file(fileB.path)) : null;
+    const project = this.localResourceAccess.createSyncProjector(
+      webview,
+      webview.options.localResourceRoots ?? [],
+      { caller: 'neko-tools.asset-variant-diff' },
+    );
+    const imageUriA = fileA ? project(fileA.path) : null;
+    const imageUriB = fileB ? project(fileB.path) : null;
     const initialState = JSON.stringify({
       entity: {
         id: entity.id,
@@ -326,8 +333,8 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
         fileName: fileB?.name ?? null,
         filePath: fileB?.path ?? null,
       },
-      imageUriA: imageUriA?.toString() ?? null,
-      imageUriB: imageUriB?.toString() ?? null,
+      imageUriA: imageUriA ?? null,
+      imageUriB: imageUriB ?? null,
     });
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'assets', 'assetDiff.js'),
@@ -390,4 +397,14 @@ function getNonce(): string {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return text;
+}
+
+function collectVariantFileRoots(variantA: AssetVariant, variantB: AssetVariant): vscode.Uri[] {
+  const roots = new Map<string, vscode.Uri>();
+  for (const file of [...variantA.files, ...variantB.files]) {
+    if (!file.path || !path.isAbsolute(file.path)) continue;
+    const root = vscode.Uri.file(path.dirname(file.path));
+    roots.set(root.toString(), root);
+  }
+  return [...roots.values()];
 }

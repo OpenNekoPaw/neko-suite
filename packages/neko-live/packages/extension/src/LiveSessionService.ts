@@ -39,6 +39,7 @@ export type LiveSessionEvent =
 
 export interface LiveSessionServiceConfig {
   readonly logger: ILogger;
+  readonly storageUri?: vscode.Uri;
   readonly getEngineClient: () => Promise<EngineClient | undefined>;
   readonly getDeviceManager: () => DeviceManager | undefined;
   readonly ensureDeviceManager: () => Promise<DeviceManager | undefined>;
@@ -86,6 +87,7 @@ export class LiveSessionService implements vscode.Disposable {
       client,
       (elapsedMs) => this.emit({ type: 'recordingProgress', elapsedMs }),
       this.config.logger,
+      this.config.storageUri,
     );
     await this.recordingService.start({
       ...options,

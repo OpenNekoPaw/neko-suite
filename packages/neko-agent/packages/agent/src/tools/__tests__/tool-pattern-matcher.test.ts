@@ -31,6 +31,21 @@ describe('normalizeToolCall', () => {
     );
   });
 
+  it('should normalize ReadImage tool with first image path', () => {
+    expect(normalizeToolCall({ name: 'ReadImage', arguments: { image_paths: ['page.png'] } })).toBe(
+      'ReadImage(page.png)',
+    );
+  });
+
+  it('should normalize ReadDocumentImage tool with file_path', () => {
+    expect(
+      normalizeToolCall({
+        name: 'ReadDocumentImage',
+        arguments: { file_path: 'book.epub', page_indexes: [1] },
+      }),
+    ).toBe('ReadDocumentImage(book.epub)');
+  });
+
   it('should normalize Edit tool with file_path', () => {
     expect(normalizeToolCall({ name: 'Edit', arguments: { file_path: 'src/app.ts' } })).toBe(
       'Edit(src/app.ts)',

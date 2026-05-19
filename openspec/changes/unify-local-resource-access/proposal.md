@@ -18,6 +18,7 @@ This change establishes one local resource access contract so users configure wh
   - project-generated preview cache under workspace `.neko/.cache`,
   - no direct Webview dependency on random system temp directories.
 - Migrate high-risk Webview callers in `neko-agent`, then shared media surfaces in `neko-canvas`, `neko-cut`, `neko-tools`, `neko-story`, and related preview packages.
+- Integrate with the refactored identity and search boundaries by consuming `neko-entity` asset/entity refs and `neko-search` source refs instead of owning those semantics.
 - Preserve existing path-variable usage such as `${WORKSPACE}`, `${PROJECT}`, `${NEKO_HOME}`, and media-library variables.
 - No intentional breaking change to stored project files or existing media-library configuration.
 
@@ -33,7 +34,8 @@ This change establishes one local resource access contract so users configure wh
 
 ## Impact
 
-- Affected packages include `packages/neko-agent`, `packages/neko-assets`, `packages/neko-canvas`, `packages/neko-cut`, `packages/neko-tools`, `packages/neko-story`, and preview/editor packages that expose local files in Webviews.
+- Affected packages include `packages/neko-agent`, `packages/neko-assets`, `packages/neko-entity`, `packages/neko-search`, `packages/neko-canvas`, `packages/neko-cut`, `packages/neko-tools`, `packages/neko-story`, and preview/editor packages that expose local files in Webviews.
 - New or updated Extension Host APIs will replace scattered `localResourceRoots` assembly and direct `webview.asWebviewUri(vscode.Uri.file(...))` calls.
 - `neko-assets` must expose media-library root information through a stable command or provider API.
+- `neko-search` remains responsible for search result/source-ref projection, and `neko-entity` remains responsible for creative identity, bindings, and representation resolution.
 - Tests will cover root collection, path authorization, Webview URI projection, media-library root updates, and prevention of system temp paths leaking into Webview previews.

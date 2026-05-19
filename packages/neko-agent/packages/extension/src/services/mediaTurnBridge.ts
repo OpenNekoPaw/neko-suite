@@ -13,6 +13,7 @@ import { runAgentMediaTurnForWebview } from '@neko/agent/runtime';
 import { getLogger } from '../base';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
+import type { AgentLocalResourceAccess } from './localResourceAccess';
 
 const logger = getLogger('MediaTurnBridge');
 
@@ -20,6 +21,7 @@ export interface MediaTurnBridgeDeps {
   platform?: Platform;
   mediaDeliveryHost: MediaTaskDeliveryHost;
   dashboardWorkItems?: AgentDashboardWorkItemSource;
+  localResourceAccess?: AgentLocalResourceAccess;
 }
 
 export interface ExecuteMediaTurnForWebviewInput {

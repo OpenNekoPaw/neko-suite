@@ -403,8 +403,16 @@ export function createToolRegistry(): ToolRegistry {
 }
 
 function toProviderToolParameters(toolParameters: Tool['parameters']): Record<string, unknown> {
+  const rest: Record<string, unknown> = { ...toolParameters };
+  delete rest['anyOf'];
+  delete rest['oneOf'];
+  delete rest['allOf'];
+  delete rest['enum'];
+  delete rest['not'];
+
   return {
-    ...toolParameters,
+    ...rest,
+    type: 'object',
     properties: { ...toolParameters.properties },
     ...(toolParameters.required ? { required: [...toolParameters.required] } : {}),
   };

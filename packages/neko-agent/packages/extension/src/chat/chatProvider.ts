@@ -61,7 +61,10 @@ import { getSkillFileService } from '../services/SkillFileService';
 import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
 import { postPluginsAvailable } from '../services/pluginTransferBridge';
 import { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
-import { getDocumentImageCacheUri } from '../services/documentCachePaths';
+import {
+  createAgentLocalResourceAccess,
+  type AgentLocalResourceAccess,
+} from '../services/localResourceAccess';
 import { StateTaskDeliveryCursorStorage, TaskDeliveryBridge } from '../services/taskDeliveryBridge';
 import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
@@ -81,12 +84,15 @@ function getCurrentWorkspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
-export function createChatLocalResourceRoots(
+export function createChatLocalResourceAccess(
   extensionUri: vscode.Uri,
   context: vscode.ExtensionContext,
-): vscode.Uri[] {
-  const workspaceFolders = vscode.workspace.workspaceFolders?.map((f) => f.uri) || [];
-  return [extensionUri, getDocumentImageCacheUri(context), ...workspaceFolders];
+): AgentLocalResourceAccess {
+  return createAgentLocalResourceAccess(extensionUri, context);
+}
+
+export interface ChatViewProviderOptions {
+  readonly localResourceAccess?: AgentLocalResourceAccess;
 }
 
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -134,6 +140,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _platform?: Platform;
   private _taskManager?: IRuntimeTaskManager;
   private _configBridge?: ConfigBridge;
+  private readonly _localResourceAccess: AgentLocalResourceAccess;
   private _capabilityRefreshRuntime?: CapabilityRuntimeRefreshRuntime;
   private readonly _dashboardWorkItems = new AgentDashboardWorkItemSource();
   private readonly _taskDeliveryBridge: TaskDeliveryBridge;
@@ -148,11 +155,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _context: vscode.ExtensionContext,
+    options: ChatViewProviderOptions = {},
   ) {
     // Initialize managers
     this._settings = new SettingsManager();
     this._systemPrompt = new SystemPromptManager();
-    this._conversations = new ConversationBridge(_context, getCurrentWorkspaceRoot());
+    this._localResourceAccess =
+      options.localResourceAccess ?? createChatLocalResourceAccess(_extensionUri, _context);
+    this._conversations = new ConversationBridge(
+      _context,
+      getCurrentWorkspaceRoot(),
+      this._localResourceAccess,
+    );
 
     // Load persisted tab state
     this._loadTabState();
@@ -277,6 +291,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           (conversationId) => this._skillHandler.getActiveSkill(conversationId),
           undefined,
           this._dashboardWorkItems,
+          this._localResourceAccess,
         );
         this._dashboardWorkItems.updateDeps({
           platform: this._platform,
@@ -325,6 +340,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           platform: this._platform,
           taskManager: this._taskManager,
           dashboardWorkItems: this._dashboardWorkItems,
+          localResourceAccess: this._localResourceAccess,
         });
         this._fileOperationHandler.updateDeps({ platform: this._platform });
         this._planModeHandler.updateDeps({
@@ -359,12 +375,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._disposeWebviewBindings();
     this._view = webviewView;
 
-    // Include workspace folders and document image cache for generated/read media files.
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: createChatLocalResourceRoots(this._extensionUri, this._context),
-    };
+    void this._initializeResolvedWebview(webviewView);
+  }
 
+  private async _initializeResolvedWebview(webviewView: vscode.WebviewView): Promise<void> {
+    await this._localResourceAccess.configureChatWebview(webviewView.webview);
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
     this._setupMessageHandlers(webviewView.webview);
 
@@ -744,6 +759,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._disposeWebviewBindings();
     this._messages?.dispose();
     this._conversations.dispose();
+    this._localResourceAccess.dispose();
     this._configBridge?.dispose();
     this._configBridge = undefined;
 

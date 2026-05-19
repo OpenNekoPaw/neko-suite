@@ -93,3 +93,22 @@ The system SHALL make local resource authorization failures observable to develo
 
 - **WHEN** a media file cannot be displayed because its containing directory is not an authorized root
 - **THEN** the user-facing surface can present an action or message directing the user to add the directory as a media library or move the file into an approved cache/project location
+
+### Requirement: Search and entity semantics remain upstream of local resource projection
+
+The system SHALL consume already-resolved search source refs, entity representation paths, asset refs, or local file paths from their owning domain services and SHALL NOT make local resource access the authority for project search, creative identity, entity bindings, or representation resolution.
+
+#### Scenario: Search result local resource is projected by host
+
+- **WHEN** a Webview displays a local media or document path that originated from a `neko-search` result
+- **THEN** the Extension Host resolves the search source ref through the search host boundary before passing the resulting local path to the local resource resolver
+
+#### Scenario: Entity representation path is resolved before projection
+
+- **WHEN** a Webview displays a representation for a creative entity
+- **THEN** `neko-entity`, `AssetRefResolver`, or the owning domain package resolves the representation or asset ref before local resource access performs authorization and Webview URI projection
+
+#### Scenario: Local resource service does not read semantic stores
+
+- **WHEN** local resource access authorizes or projects a path
+- **THEN** it MUST NOT read project search cache files, entity fact files, entity binding files, or asset metadata stores as semantic authorities

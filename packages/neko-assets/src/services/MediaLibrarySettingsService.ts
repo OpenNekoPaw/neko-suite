@@ -77,6 +77,16 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
   }
 
   /**
+   * Get roots that are safe to expose as Webview localResourceRoots.
+   */
+  async getWebviewResourceRoots(): Promise<string[]> {
+    const libraries = await this.getResolvedLibraries();
+    return libraries
+      .filter((library) => library.enabled && library.accessible)
+      .map((library) => path.resolve(library.resolvedPath));
+  }
+
+  /**
    * Build PathVariableMap for PathResolver.
    */
   async getPathVariableMap(): Promise<PathVariableMap> {
@@ -106,8 +116,11 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
       throw new Error(`Variable "${entry.variable}" already exists`);
     }
 
+    await this.assertDirectoryReadable(entry.path);
+
     this.settings.mediaLibraries.push(entry);
     await this.writeSettings();
+    await this.fireChanged();
   }
 
   /**
@@ -120,6 +133,7 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
       (e) => e.variable !== variable,
     );
     await this.writeSettings();
+    await this.fireChanged();
   }
 
   /**
@@ -129,8 +143,10 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
     if (!this.localSettings.mediaLibraryOverrides) {
       this.localSettings.mediaLibraryOverrides = {};
     }
+    await this.assertDirectoryReadable(localPath);
     this.localSettings.mediaLibraryOverrides[variable] = localPath;
     await this.writeLocalSettings();
+    await this.fireChanged();
   }
 
   // =========================================================================
@@ -172,11 +188,21 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
 
   private async checkAccessible(dirPath: string): Promise<boolean> {
     try {
+      const stat = await fs.stat(dirPath);
+      if (!stat.isDirectory()) return false;
       await fs.access(dirPath, fs.constants.R_OK);
       return true;
     } catch {
       return false;
     }
+  }
+
+  private async assertDirectoryReadable(dirPath: string): Promise<void> {
+    const stat = await fs.stat(dirPath);
+    if (!stat.isDirectory()) {
+      throw new Error(`Media library path is not a directory: ${dirPath}`);
+    }
+    await fs.access(dirPath, fs.constants.R_OK);
   }
 
   // =========================================================================
@@ -215,6 +241,10 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
 
   private async reload(): Promise<void> {
     await this.load();
+    await this.fireChanged();
+  }
+
+  private async fireChanged(): Promise<void> {
     const libraries = await this.getResolvedLibraries();
     this._onDidChange.fire(libraries);
   }

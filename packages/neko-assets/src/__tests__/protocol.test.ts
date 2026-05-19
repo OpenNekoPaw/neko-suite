@@ -83,6 +83,10 @@ describe('extension.ts -- registerLegacyCommands keeps only valid commands', () 
   it('DOES contain neko.assets.previewMedia command registration', () => {
     expect(extensionSource).toContain("'neko.assets.previewMedia'");
   });
+
+  it('DOES contain internal media-library roots command registration', () => {
+    expect(extensionSource).toContain("'neko.assets.getMediaLibraryRoots'");
+  });
 });
 
 describe('extension.ts -- no cloud sync TreeDataProvider (NKAS-002)', () => {

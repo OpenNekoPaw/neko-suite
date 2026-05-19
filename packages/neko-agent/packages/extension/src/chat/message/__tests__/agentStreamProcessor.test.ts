@@ -188,6 +188,12 @@ describe('AgentStreamProcessor', () => {
     });
 
     it('projects document image paths to webview URIs only for webview delivery', async () => {
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+      });
       const events = toAsyncIterable([
         {
           type: 'tool_call',
@@ -214,6 +220,11 @@ describe('AgentStreamProcessor', () => {
         imagePaths: ['/tmp/page-1.jpg'],
         imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
       });
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        '/tmp/page-1.jpg',
+        'neko-agent.stream-tool-result',
+      );
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toolResult',
@@ -225,6 +236,51 @@ describe('AgentStreamProcessor', () => {
               {
                 path: '/tmp/page-1.jpg',
                 webviewUri: 'webview-uri:/tmp/page-1.jpg',
+                width: 1494,
+                height: 2133,
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('leaves unauthorized document image paths unresolved when unified access rejects them', async () => {
+      const localResourceAccess = {
+        toWebviewUri: vi.fn(() => undefined),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+      });
+      const events = toAsyncIterable([
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-1',
+            success: true,
+            data: {
+              imagePaths: ['/tmp/page-1.jpg'],
+              imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
+            },
+          },
+        },
+      ]);
+
+      await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        '/tmp/page-1.jpg',
+        'neko-agent.stream-tool-result',
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResult',
+          data: {
+            imagePaths: ['/tmp/page-1.jpg'],
+            imageInfo: [
+              {
+                path: '/tmp/page-1.jpg',
                 width: 1494,
                 height: 2133,
               },

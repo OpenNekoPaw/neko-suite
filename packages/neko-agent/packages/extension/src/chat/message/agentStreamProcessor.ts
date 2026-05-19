@@ -28,6 +28,7 @@ import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
+import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -78,6 +79,8 @@ export interface AgentStreamProcessorDeps {
   };
   /** Extension-host mirror for Dashboard task aggregation. */
   dashboardWorkItems?: AgentDashboardWorkItemSource;
+  /** Unified local resource access for Webview URI projection. */
+  localResourceAccess?: AgentLocalResourceAccess;
 }
 
 /**
@@ -115,7 +118,11 @@ export class AgentStreamProcessor {
       conversationId,
       events,
       postMessage: (message) => {
-        const projectedMessage = projectStreamMessageResourcesForWebview(webview, message);
+        const projectedMessage = projectStreamMessageResourcesForWebview(
+          webview,
+          message,
+          this.deps.localResourceAccess,
+        );
         this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         void webview.postMessage(projectedMessage);
       },
@@ -287,9 +294,10 @@ export class AgentStreamProcessor {
 function projectStreamMessageResourcesForWebview(
   webview: vscode.Webview,
   message: AgentEventStreamRuntimeMessage,
+  localResourceAccess?: AgentLocalResourceAccess,
 ): AgentEventStreamRuntimeMessage {
-  const resolveLocalMediaPath = (filePath: string): string =>
-    webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
+  const resolveLocalMediaPath = (filePath: string): string | undefined =>
+    localResourceAccess?.toWebviewUri(webview, filePath, 'neko-agent.stream-tool-result');
 
   if (message.type === 'toolResult' && message.data !== undefined) {
     return {

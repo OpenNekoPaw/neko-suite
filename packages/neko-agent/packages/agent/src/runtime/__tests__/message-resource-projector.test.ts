@@ -153,17 +153,25 @@ describe('message resource projector', () => {
     ]);
   });
 
-  it('falls back to the original path when the host resolver fails', () => {
+  it('does not emit display URLs when the host resolver fails', () => {
     expect(
       projectResourceValue(
-        { url: '/tmp/image.png' },
+        {
+          url: '/tmp/image.png',
+          imagePaths: ['/tmp/page-1.jpg'],
+          imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
+        },
         {
           resolveLocalMediaPath: () => {
             throw new Error('bad uri');
           },
         },
       ),
-    ).toEqual({ url: '/tmp/image.png', localPath: '/tmp/image.png' });
+    ).toEqual({
+      localPath: '/tmp/image.png',
+      imagePaths: ['/tmp/page-1.jpg'],
+      imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
+    });
   });
 
   it('updates matching background task tool results with completed urls', () => {

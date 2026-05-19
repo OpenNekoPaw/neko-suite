@@ -224,3 +224,79 @@ describe('AISdkAdapter reasoning model handling', () => {
     expect(callArgs.maxOutputTokens).toBe(4096);
   });
 });
+
+describe('AISdkAdapter multimodal image handling', () => {
+  let adapter: TestAdapter;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    adapter = new TestAdapter();
+  });
+
+  it('chat() passes data-url images as base64 content instead of downloadable URLs', async () => {
+    const { generateText } = await import('ai');
+    const imageBase64 = Buffer.from('jpeg-bytes').toString('base64');
+    const multimodalMessages: ChatMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'describe this image' },
+          {
+            type: 'image',
+            imageUrl: `data:image/jpeg;base64,${imageBase64}`,
+            detail: 'high',
+          },
+        ],
+      },
+    ];
+
+    await adapter.chat(multimodalMessages, {}, makeModel(), makeProvider());
+
+    const callArgs = vi.mocked(generateText).mock.calls[0]![0];
+    expect(callArgs.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'describe this image' },
+          {
+            type: 'image',
+            image: imageBase64,
+            mediaType: 'image/jpeg',
+            providerOptions: { openai: { imageDetail: 'high' } },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('chat() keeps http image inputs as URL objects for provider-native URL support', async () => {
+    const { generateText } = await import('ai');
+    const imageUrl = 'https://example.test/page.jpg';
+
+    await adapter.chat(
+      [
+        {
+          role: 'user',
+          content: [{ type: 'image', imageUrl, detail: 'low' }],
+        },
+      ],
+      {},
+      makeModel(),
+      makeProvider(),
+    );
+
+    const callArgs = vi.mocked(generateText).mock.calls[0]![0];
+    expect(callArgs.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            image: new URL(imageUrl),
+            providerOptions: { openai: { imageDetail: 'low' } },
+          },
+        ],
+      },
+    ]);
+  });
+});

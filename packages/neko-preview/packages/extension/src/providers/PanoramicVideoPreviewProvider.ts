@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import type { PreviewManifest } from '@neko/shared';
 import { PreviewService } from '../services/PreviewService';
 import type { StatusBarManager } from '../ui/StatusBarManager';
@@ -36,10 +37,12 @@ export class PanoramicVideoPreviewProvider implements vscode.CustomReadonlyEdito
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
-    webviewPanel.webview.options = {
+    await createDefaultLocalResourceAccessService({
+      extensionUri: this._extensionUri,
+      includeExtensionCache: false,
+    }).configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview')],
-    };
+    });
     webviewPanel.webview.html = getWebviewHtml({
       webview: webviewPanel.webview,
       extensionUri: this._extensionUri,

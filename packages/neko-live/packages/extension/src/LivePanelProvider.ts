@@ -16,6 +16,7 @@ import type {
   ILogger,
   TrackingServiceApi,
 } from '@neko/shared';
+import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import { EngineClient } from '@neko/neko-client/EngineClient';
 import { EngineDeviceManager, type DeviceManager } from '@neko/neko-client/device';
 import { LiveSessionService } from './LiveSessionService';
@@ -36,6 +37,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly extensionUri: vscode.Uri,
+    private readonly storageUri: vscode.Uri,
     logger: ILogger,
     private readonly trackingService: TrackingServiceApi,
   ) {
@@ -52,6 +54,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       : undefined;
     this.sessionService = new LiveSessionService({
       logger: this.logger,
+      storageUri: this.storageUri,
       getEngineClient: () => this.ensureEngineClient(),
       getDeviceManager: () => this.deviceManager,
       ensureDeviceManager: () => this.ensureDeviceManager(),
@@ -90,20 +93,19 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
   // ─── WebviewViewProvider ────────────────────────────────────────────────
 
-  public resolveWebviewView(
+  public async resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
-  ): void {
+  ): Promise<void> {
     this.view = webviewView;
 
-    webviewView.webview.options = {
+    await createDefaultLocalResourceAccessService({
+      extensionUri: this.extensionUri,
+      includeExtensionCache: false,
+    }).configureWebview(webviewView.webview, {
       enableScripts: true,
-      localResourceRoots: [
-        this.extensionUri,
-        ...(vscode.workspace.workspaceFolders?.map((f) => f.uri) ?? []),
-      ],
-    };
+    });
 
     webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
     this.setupMessageHandlers(webviewView.webview);
@@ -427,8 +429,9 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       await vscode.workspace.fs.createDirectory(dir);
       return dir.fsPath;
     }
-    const os = await import('os');
-    return os.tmpdir();
+    const dir = vscode.Uri.joinPath(this.storageUri, 'recordings');
+    await vscode.workspace.fs.createDirectory(dir);
+    return dir.fsPath;
   }
 
   // ─── Camera Devices ─────────────────────────────────────────────────────

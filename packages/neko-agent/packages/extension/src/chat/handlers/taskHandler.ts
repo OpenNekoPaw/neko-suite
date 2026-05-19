@@ -29,6 +29,7 @@ import {
 import type { ITaskManager as TaskManager } from '@neko/shared';
 import { getLogger } from '../../base';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
+import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
 
 const logger = getLogger('TaskHandler');
 
@@ -39,6 +40,7 @@ export interface TaskHandlerDeps {
   platform?: Platform;
   taskManager?: TaskManager;
   dashboardWorkItems?: AgentDashboardWorkItemSource;
+  localResourceAccess?: AgentLocalResourceAccess;
 }
 
 /**
@@ -167,7 +169,11 @@ export class TaskHandler {
   }
 
   private toWebviewUri(webview: vscode.Webview, path: string): string | undefined {
-    return webview.asWebviewUri(vscode.Uri.file(path)).toString();
+    if (this.deps.localResourceAccess) {
+      return this.deps.localResourceAccess.toWebviewUri(webview, path, 'neko-agent.task');
+    }
+    logger.warn('Local resource access service unavailable for task media projection', { path });
+    return undefined;
   }
 
   private logRejectedTaskAction(action: string, plan: TaskActionRejectPlan): void {

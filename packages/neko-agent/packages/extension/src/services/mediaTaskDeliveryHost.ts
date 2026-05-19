@@ -38,8 +38,8 @@ import {
   generateAssetId,
   resolveGeneratedDir,
 } from '@neko/platform/media/generated-asset-index';
-import { toWebviewAsset } from '@neko/shared/vscode/extension';
 import { getLogger } from '../base';
+import type { AgentLocalResourceAccess } from './localResourceAccess';
 
 const logger = getLogger('MediaTaskDeliveryHost');
 
@@ -51,6 +51,7 @@ export interface MediaTaskDeliveryHostDeps {
     outputPath: string,
     mediaType: 'audio' | 'video',
   ) => Promise<boolean>;
+  localResourceAccess?: AgentLocalResourceAccess;
 }
 
 export class MediaTaskDeliveryHost {
@@ -113,7 +114,17 @@ export class MediaTaskDeliveryHost {
       return filePath;
     }
     try {
-      return webview.asWebviewUri(vscode.Uri.file(filePath)).toString();
+      if (this.deps.localResourceAccess) {
+        return this.deps.localResourceAccess.toWebviewUri(
+          webview,
+          filePath,
+          'neko-agent.media-task',
+        );
+      }
+      logger.warn('Local resource access service unavailable for media task projection', {
+        filePath,
+      });
+      return undefined;
     } catch {
       logger.warn('Failed to convert path to webview URI:', filePath);
       return filePath;
@@ -152,7 +163,11 @@ export class MediaTaskDeliveryHost {
       workspaceRoot: settingsPlan.workspaceRoot,
       showSaveNotification: settingsPlan.showSaveNotification,
       resolveResultUrl: (url: string) => this.toWebviewMediaUri(webview, url),
-      toViewAsset: (asset: GeneratedAsset) => toWebviewAsset(asset, webview),
+      toViewAsset: (asset: GeneratedAsset) =>
+        this.deps.localResourceAccess?.toWebviewAsset(webview, asset) ?? {
+          ...asset,
+          webviewUri: this.toWebviewMediaUri(webview, asset.path) ?? asset.path,
+        },
     };
   }
 }

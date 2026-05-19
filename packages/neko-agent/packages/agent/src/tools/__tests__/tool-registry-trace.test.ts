@@ -72,3 +72,53 @@ describe('ToolRegistry trace isolation', () => {
     );
   });
 });
+
+describe('ToolRegistry provider schema projection', () => {
+  it('keeps provider tool parameters as top-level object schemas', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ReadImage',
+        description: 'Read image content',
+        category: 'analysis',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          anyOf: [{ required: ['image_paths'] }, { required: ['images'] }],
+          properties: {
+            image_paths: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            mode: {
+              type: 'string',
+              enum: ['metadata', 'vision'],
+            },
+          },
+        },
+        execute: async () => ({ success: true, data: 'ok' }),
+      }),
+    );
+
+    const [definition] = registry.toToolDefinitions();
+    const parameters = definition?.function.parameters;
+
+    expect(parameters).toEqual(
+      expect.objectContaining({
+        type: 'object',
+        properties: expect.objectContaining({
+          mode: expect.objectContaining({
+            enum: ['metadata', 'vision'],
+          }),
+        }),
+      }),
+    );
+    expect(parameters).not.toHaveProperty('anyOf');
+    expect(parameters).not.toHaveProperty('oneOf');
+    expect(parameters).not.toHaveProperty('allOf');
+    expect(parameters).not.toHaveProperty('enum');
+    expect(parameters).not.toHaveProperty('not');
+  });
+});

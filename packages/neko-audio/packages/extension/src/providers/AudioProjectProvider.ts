@@ -39,6 +39,7 @@ import type {
   MixConfigWarning,
   TimelineElement,
 } from '@neko/shared';
+import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import type { MixStreamConfig } from '@neko/shared';
 import type { AudioService } from '../services/AudioService';
 import type {
@@ -305,10 +306,12 @@ export class AudioProjectProvider
     this._activePanels.set(docKey, webviewPanel);
 
     // Configure webview
-    webviewPanel.webview.options = {
+    await createDefaultLocalResourceAccessService({
+      extensionUri: this._extensionUri,
+      includeExtensionCache: false,
+    }).configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview')],
-    };
+    });
 
     vscode.commands.executeCommand('workbench.action.pinEditor');
 

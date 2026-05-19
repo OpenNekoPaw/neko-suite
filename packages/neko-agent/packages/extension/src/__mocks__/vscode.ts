@@ -18,7 +18,13 @@ export const Uri = {
   parse: (value: string) => ({ scheme: 'https', path: value, toString: () => value }),
   joinPath: (base: any, ...segments: string[]) => {
     const joined = [base.fsPath || base.path, ...segments].join('/');
-    return { scheme: 'file', fsPath: joined, path: joined, toString: () => `file://${joined}` };
+    const scheme = base.scheme ?? 'file';
+    return {
+      scheme,
+      fsPath: joined,
+      path: joined,
+      toString: () => (scheme === 'file' ? `file://${joined}` : `${scheme}:${joined}`),
+    };
   },
 };
 

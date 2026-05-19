@@ -33,6 +33,7 @@ export class RecordingService {
     private readonly engineClient: EngineClient | undefined,
     private readonly onProgress: (elapsedMs: number) => void,
     logger: ILogger,
+    private readonly storageUri?: vscode.Uri,
   ) {
     this.logger = logger.child('Recording');
   }
@@ -116,9 +117,11 @@ export class RecordingService {
       return dir.fsPath;
     }
 
-    // Fallback to temp dir
-    const os = await import('os');
-    return os.tmpdir();
+    const dir = this.storageUri
+      ? vscode.Uri.joinPath(this.storageUri, 'recordings')
+      : vscode.Uri.joinPath(vscode.Uri.file(process.cwd()), '.neko', 'recordings');
+    await vscode.workspace.fs.createDirectory(dir);
+    return dir.fsPath;
   }
 
   dispose(): void {

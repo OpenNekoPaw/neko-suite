@@ -28,6 +28,32 @@ export { getVSCodeLocale, injectLocaleAttribute } from './i18n-bridge';
 
 // Webview asset utilities (GeneratedAsset → webviewUri conversion)
 export { toWebviewAsset } from './webview-asset';
+export {
+  VSCodeLocalResourceAccessService,
+  createDefaultLocalResourceAccessService,
+  createExtensionAssetLocalResourceRootProvider,
+  createExtensionCacheLocalResourceRootProvider,
+  createMediaLibraryLocalResourceRootProvider,
+  createStaticLocalResourceRootProvider,
+  createWorkspaceCacheLocalResourceRootProvider,
+  createWorkspaceLocalResourceRootProvider,
+  isRemoteUrl,
+  normalizeLocalFilePath,
+} from './local-resource-access';
+export type {
+  DefaultLocalResourceAccessServiceOptions,
+  LocalResourceAccessLogger,
+  LocalResourceAccessOptions,
+  LocalResourceAccessService,
+  LocalResourceProjectionOptions,
+  LocalResourceProjectionResult,
+  LocalResourceRoot,
+  LocalResourceRootInput,
+  LocalResourceRootKind,
+  LocalResourceRootProvider,
+  LocalResourceWebviewOptions,
+  MediaLibraryLocalResourceRootProviderOptions,
+} from './local-resource-access';
 
 // Character registry utilities (workspace characters.json read/write + lookup)
 export {

@@ -197,6 +197,8 @@ export const TOOL_NAMES_PERCEPTION = {
 export const TOOL_NAMES_SYSTEM = {
   LIST_PLUGIN_SKILLS: 'ListPluginSkills',
   READ_DOCUMENT: 'ReadDocument',
+  READ_IMAGE: 'ReadImage',
+  READ_DOCUMENT_IMAGE: 'ReadDocumentImage',
   // Core file tools (registered by agent core, not extension)
   READ: 'Read',
   WRITE: 'Write',

@@ -18,6 +18,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import type {
   AudioAnalyzeRequestMessage,
   AudioEffectsRequestMessage,
@@ -106,10 +107,12 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
     this._activePanels.add(webviewPanel);
 
     // Configure webview
-    webviewPanel.webview.options = {
+    await createDefaultLocalResourceAccessService({
+      extensionUri: this._extensionUri,
+      includeExtensionCache: false,
+    }).configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview')],
-    };
+    });
 
     // Pin the editor tab
     vscode.commands.executeCommand('workbench.action.pinEditor');
