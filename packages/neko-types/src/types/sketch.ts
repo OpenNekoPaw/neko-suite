@@ -85,6 +85,14 @@ export interface NksLayerData {
   readonly children: NksLayerData[];
   /** Base64-encoded pixel data for raster layers */
   readonly data?: string;
+  /** Base64-encoded normal map data for lighting workflows */
+  readonly normalData?: string;
+  /** Paint only into existing layer alpha */
+  readonly alphaLock?: boolean;
+  /** Adjustment layer filter id */
+  readonly adjustmentFilter?: string;
+  /** Adjustment layer filter parameter overrides */
+  readonly adjustmentParams?: Record<string, number>;
   /** Editable vector source data for vector layers */
   readonly vectorData?: NksVectorLayerData;
 }

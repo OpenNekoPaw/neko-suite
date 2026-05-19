@@ -27,6 +27,7 @@ export const en: MessageBundle = {
   'sketch.panel.layers': 'Layers',
   'sketch.layer.add': 'Add layer',
   'sketch.layer.addVector': 'Add vector layer',
+  'sketch.layer.addBackground': 'Add background',
   'sketch.layer.show': 'Show layer',
   'sketch.layer.hide': 'Hide layer',
   'sketch.layer.lock': 'Lock layer',

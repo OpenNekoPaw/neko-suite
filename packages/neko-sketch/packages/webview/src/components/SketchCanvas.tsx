@@ -80,6 +80,7 @@ import { ContextMenu } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
 import { useTranslation } from '../i18n/I18nContext';
 import { extractRegionSnapshot, findChangedPixelBounds } from '../utils/region-snapshot';
+import { isEditableTarget } from '../utils/editable-target';
 import {
   applyCanvasViewportTransform,
   documentToScreenPoint,
@@ -3095,6 +3096,9 @@ export function SketchCanvas() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) {
+        return;
+      }
       if (e.code === 'Space' && !e.repeat) {
         spaceHeldRef.current = true;
         el.style.cursor = 'grab';

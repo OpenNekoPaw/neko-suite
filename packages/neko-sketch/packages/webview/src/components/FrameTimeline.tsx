@@ -8,6 +8,7 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import { useFramePlayback } from '../hooks/useFramePlayback';
+import { isEditableTarget } from '../utils/editable-target';
 
 export function FrameTimeline() {
   const { t } = useTranslation();
@@ -38,8 +39,7 @@ export function FrameTimeline() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Only handle when no input is focused
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isEditableTarget(e.target)) return;
 
       switch (e.key) {
         case ',':

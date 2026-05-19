@@ -17,6 +17,8 @@ import type { MaskPropertyKeyframe, MaskShapeKeyframe } from '../types/mask';
 import type { ProjectData } from '../types/project';
 import type { CanvasNode, CanvasConnection } from '../types/canvas';
 import type { AudioEffectConfig, AudioEffectType } from '../types/audioMix';
+import type { SketchBlendMode } from '../types/blendMode';
+import type { LayerType, NksVectorLayerData } from '../types/sketch';
 
 // =============================================================================
 // Operation Meta — 操作元数据
@@ -603,22 +605,26 @@ export interface SketchLayerUpdates {
   visible?: boolean;
   locked?: boolean;
   opacity?: number;
-  blendMode?: string;
+  blendMode?: SketchBlendMode;
   offsetX?: number;
   offsetY?: number;
   clippingMask?: boolean;
   maskLayerId?: string | null;
+  alphaLock?: boolean;
+  adjustmentFilter?: string;
+  adjustmentParams?: Record<string, number>;
+  vectorData?: NksVectorLayerData;
 }
 
 /** Sketch 图层快照（不含 texture/pendingData，仅可序列化字段） */
 export interface SketchLayerSnapshot {
   id: string;
   name: string;
-  type: string;
+  type: LayerType;
   visible: boolean;
   locked: boolean;
   opacity: number;
-  blendMode: string;
+  blendMode: SketchBlendMode;
   width: number;
   height: number;
   offsetX: number;
@@ -626,6 +632,10 @@ export interface SketchLayerSnapshot {
   clippingMask: boolean;
   maskLayerId: string | null;
   children: SketchLayerSnapshot[];
+  alphaLock: boolean;
+  adjustmentFilter?: string;
+  adjustmentParams?: Record<string, number>;
+  vectorData?: NksVectorLayerData;
 }
 
 /** 区域像素快照（用于笔画 undo） */

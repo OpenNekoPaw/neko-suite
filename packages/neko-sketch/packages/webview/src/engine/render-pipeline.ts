@@ -115,7 +115,6 @@ export class RenderPipeline implements IRenderPipeline {
     ) => WebGLTexture,
   ): void {
     const gl = this.gl;
-    if (layers.length === 0) return;
 
     // Determine canvas size from first layer or use gl canvas size
     const cw = gl.canvas.width;
@@ -124,6 +123,7 @@ export class RenderPipeline implements IRenderPipeline {
 
     // Render checkerboard to screen first
     this.renderCheckerboard(cw, ch);
+    if (layers.length === 0) return;
 
     // Build viewport transform matrix
     const transform = this.buildViewportTransform(viewport, cw, ch);

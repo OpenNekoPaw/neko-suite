@@ -94,7 +94,7 @@ export function registerCommands(
     }),
   );
 
-  // Keyboard shortcuts forwarded to webview
+  // Command palette actions forwarded to the active webview.
   const keyboardActions = [
     'neko.sketch.deleteSelected',
     'neko.sketch.escape',

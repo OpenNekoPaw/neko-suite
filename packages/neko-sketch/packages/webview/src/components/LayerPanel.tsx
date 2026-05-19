@@ -27,6 +27,7 @@ export function LayerPanel() {
   const setActiveLayer = useSketchStore((s) => s.setActiveLayer);
   const addNewLayer = useSketchStore((s) => s.addNewLayer);
   const addVectorLayer = useSketchStore((s) => s.addVectorLayer);
+  const addBackgroundLayer = useSketchStore((s) => s.addBackgroundLayer);
   const removeLayerById = useSketchStore((s) => s.removeLayerById);
   const updateLayerProps = useSketchStore((s) => s.updateLayerProps);
   const duplicateLayerById = useSketchStore((s) => s.duplicateLayerById);
@@ -120,6 +121,14 @@ export function LayerPanel() {
             title={t('sketch.layer.addVector')}
           >
             <VectorLayerIcon />
+          </button>
+          <button
+            aria-label={t('sketch.layer.addBackground')}
+            className="sketch-icon-button"
+            onClick={() => addBackgroundLayer()}
+            title={t('sketch.layer.addBackground')}
+          >
+            <FillLayerIcon />
           </button>
           <button
             aria-label="Add adjustment layer"
@@ -308,6 +317,24 @@ function VectorLayerIcon() {
       <circle cx="2" cy="9" r="1" />
       <circle cx="6" cy="4" r="1" />
       <circle cx="10" cy="6" r="1" />
+    </svg>
+  );
+}
+
+function FillLayerIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="2" width="8" height="8" fill="currentColor" opacity="0.25" />
+      <rect x="2" y="2" width="8" height="8" />
     </svg>
   );
 }

@@ -6,14 +6,35 @@
  */
 
 import { create } from 'zustand';
-import type { EditOperation, OperationMeta, OperationSource } from '@neko/shared';
+import type {
+  EditOperation,
+  OperationMeta,
+  OperationSource,
+  RegionSnapshot,
+  SketchCanvasUpdateOperation,
+  SketchLayerAddOperation,
+  SketchLayerDuplicateOperation,
+  SketchLayerGroupOperation,
+  SketchLayerMoveOperation,
+  SketchLayerRemoveOperation,
+  SketchLayerSnapshot,
+  SketchLayerUngroupOperation,
+  SketchLayerUpdateOperation,
+  SketchLayerUpdates,
+  SketchStrokeApplyOperation,
+} from '@neko/shared';
+import type { LayerData } from '../types';
 
 // =============================================================================
 // Extension Sync
 // =============================================================================
 
+interface VsCodeApi {
+  postMessage(message: unknown): void;
+}
+
 function postMessage(message: Record<string, unknown>): void {
-  const vscode = (window as any).__vscode_api__;
+  const vscode = (window as unknown as { __vscode_api__?: VsCodeApi }).__vscode_api__;
   if (vscode) {
     vscode.postMessage(message);
   }
@@ -50,17 +71,12 @@ export interface SketchOperationStore {
   clearLog: () => void;
 
   // Convenience builders
-  recordLayerAdd: (layer: Record<string, unknown>, parentId?: string, index?: number) => void;
-  recordLayerRemove: (
-    layerId: string,
-    layer: Record<string, unknown>,
-    parentId?: string,
-    index?: number,
-  ) => void;
+  recordLayerAdd: (layer: LayerData, parentId?: string, index?: number) => void;
+  recordLayerRemove: (layerId: string, layer: LayerData, parentId?: string, index?: number) => void;
   recordLayerUpdate: (
     layerId: string,
-    updates: Record<string, unknown>,
-    before: Record<string, unknown>,
+    updates: SketchLayerUpdates,
+    before: SketchLayerUpdates,
   ) => void;
   recordLayerMove: (
     layerId: string,
@@ -69,15 +85,18 @@ export interface SketchOperationStore {
     oldParentId: string | undefined,
     oldIndex: number,
   ) => void;
-  recordLayerDuplicate: (newLayer: Record<string, unknown>, sourceId: string) => void;
-  recordLayerGroup: (groupLayer: Record<string, unknown>, childIds: string[]) => void;
-  recordLayerUngroup: (
-    groupId: string,
-    groupLayer: Record<string, unknown>,
-    childIds: string[],
+  recordLayerDuplicate: (newLayer: LayerData, sourceId: string) => void;
+  recordLayerGroup: (groupLayer: LayerData, childIds: string[]) => void;
+  recordLayerUngroup: (groupId: string, groupLayer: LayerData, childIds: string[]) => void;
+  recordStrokeApply: (
+    layerId: string,
+    regionAfter: RegionSnapshot,
+    regionBefore: RegionSnapshot,
   ) => void;
-  recordStrokeApply: (layerId: string, regionAfter: unknown, regionBefore: unknown) => void;
-  recordCanvasUpdate: (updates: Record<string, unknown>, before: Record<string, unknown>) => void;
+  recordCanvasUpdate: (
+    updates: SketchCanvasUpdateOperation['payload']['updates'],
+    before: SketchCanvasUpdateOperation['before']['updates'],
+  ) => void;
 }
 
 export const useSketchOperationStore = create<SketchOperationStore>((set, get) => ({
@@ -97,80 +116,125 @@ export const useSketchOperationStore = create<SketchOperationStore>((set, get) =
   clearLog: () => set({ operationLog: [] }),
 
   recordLayerAdd: (layer, parentId, index) => {
-    get().recordOperation({
+    const operation: SketchLayerAddOperation = {
       type: 'sketch.layer.add',
-      meta: createMeta('user', `Add layer: ${(layer as any).name ?? 'Layer'}`),
-      payload: { layer, parentId, index },
-    } as unknown as EditOperation);
+      meta: createMeta('user', `Add layer: ${layer.name}`),
+      payload: { layer: toLayerSnapshot(layer), parentId, index },
+    };
+    get().recordOperation(operation);
   },
 
   recordLayerRemove: (layerId, layer, parentId, index) => {
-    get().recordOperation({
+    const operation: SketchLayerRemoveOperation = {
       type: 'sketch.layer.remove',
-      meta: createMeta('user', `Remove layer: ${(layer as any).name ?? 'Layer'}`),
+      meta: createMeta('user', `Remove layer: ${layer.name}`),
       payload: { layerId },
-      before: { layer, parentId, index },
-    } as unknown as EditOperation);
+      before: { layer: toLayerSnapshot(layer), parentId, index: index ?? 0 },
+    };
+    get().recordOperation(operation);
   },
 
   recordLayerUpdate: (layerId, updates, before) => {
-    get().recordOperation({
+    const operation: SketchLayerUpdateOperation = {
       type: 'sketch.layer.update',
       meta: createMeta('user', 'Update layer'),
-      payload: { layerId, updates },
-      before: { updates: before },
-    } as unknown as EditOperation);
+      payload: { layerId, updates: toLayerUpdatesSnapshot(updates) },
+      before: { updates: toLayerUpdatesSnapshot(before) },
+    };
+    get().recordOperation(operation);
   },
 
   recordLayerMove: (layerId, targetParentId, targetIndex, oldParentId, oldIndex) => {
-    get().recordOperation({
+    const operation: SketchLayerMoveOperation = {
       type: 'sketch.layer.move',
       meta: createMeta('user', 'Move layer'),
       payload: { layerId, targetParentId, targetIndex },
       before: { parentId: oldParentId, index: oldIndex },
-    } as unknown as EditOperation);
+    };
+    get().recordOperation(operation);
   },
 
   recordLayerDuplicate: (newLayer, sourceId) => {
-    get().recordOperation({
+    const operation: SketchLayerDuplicateOperation = {
       type: 'sketch.layer.duplicate',
       meta: createMeta('user', 'Duplicate layer'),
-      payload: { sourceLayerId: sourceId, newLayer },
-    } as unknown as EditOperation);
+      payload: { sourceLayerId: sourceId, newLayer: toLayerSnapshot(newLayer) },
+    };
+    get().recordOperation(operation);
   },
 
   recordLayerGroup: (groupLayer, childIds) => {
-    get().recordOperation({
+    const operation: SketchLayerGroupOperation = {
       type: 'sketch.layer.group',
       meta: createMeta('user', 'Group layers'),
-      payload: { groupLayer, childIds },
-    } as unknown as EditOperation);
+      payload: { groupLayer: toLayerSnapshot(groupLayer), childIds },
+    };
+    get().recordOperation(operation);
   },
 
   recordLayerUngroup: (groupId, groupLayer, childIds) => {
-    get().recordOperation({
+    const operation: SketchLayerUngroupOperation = {
       type: 'sketch.layer.ungroup',
       meta: createMeta('user', 'Ungroup layers'),
       payload: { groupId },
-      before: { groupLayer, childIds },
-    } as unknown as EditOperation);
+      before: { groupLayer: toLayerSnapshot(groupLayer), childIds },
+    };
+    get().recordOperation(operation);
   },
 
   recordStrokeApply: (layerId, regionAfter, regionBefore) => {
-    get().recordOperation({
+    const operation: SketchStrokeApplyOperation = {
       type: 'sketch.stroke.apply',
       meta: createMeta('user', 'Apply stroke'),
       payload: { layerId, regionAfter },
       before: { regionBefore },
-    } as unknown as EditOperation);
+    };
+    get().recordOperation(operation);
   },
 
   recordCanvasUpdate: (updates, before) => {
-    get().recordOperation({
+    const operation: SketchCanvasUpdateOperation = {
       type: 'sketch.canvas.update',
       meta: createMeta('user', 'Update canvas'),
       payload: { updates },
       before: { updates: before },
-    } as unknown as EditOperation);
+    };
+    get().recordOperation(operation);
   },
 }));
+
+export function toLayerSnapshot(layer: LayerData): SketchLayerSnapshot {
+  return {
+    id: layer.id,
+    name: layer.name,
+    type: layer.type,
+    visible: layer.visible,
+    locked: layer.locked,
+    opacity: layer.opacity,
+    blendMode: layer.blendMode,
+    width: layer.width,
+    height: layer.height,
+    offsetX: layer.offsetX,
+    offsetY: layer.offsetY,
+    clippingMask: layer.clippingMask,
+    maskLayerId: layer.maskLayerId,
+    children: layer.children.map(toLayerSnapshot),
+    alphaLock: layer.alphaLock,
+    adjustmentFilter: layer.adjustmentFilter,
+    adjustmentParams: cloneNumberRecord(layer.adjustmentParams),
+    vectorData: layer.vectorData,
+  };
+}
+
+function toLayerUpdatesSnapshot(updates: SketchLayerUpdates): SketchLayerUpdates {
+  return {
+    ...updates,
+    adjustmentParams: cloneNumberRecord(updates.adjustmentParams),
+  };
+}
+
+function cloneNumberRecord(
+  value: Record<string, number> | undefined,
+): Record<string, number> | undefined {
+  return value ? { ...value } : undefined;
+}

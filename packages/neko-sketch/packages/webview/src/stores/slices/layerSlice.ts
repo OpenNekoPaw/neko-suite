@@ -2,6 +2,7 @@
  * Layer Slice - layer tree state and operations
  */
 import type { StateCreator } from 'zustand';
+import type { SketchLayerUpdates } from '@neko/shared';
 import type { LayerData } from '../../types';
 import { t } from '../../i18n';
 import {
@@ -14,6 +15,7 @@ import {
   updateLayer,
   groupLayers,
 } from '../../layer';
+import { findLastEditableLayer, findLayerById } from '../../utils/layer-tree';
 import { useSketchOperationStore } from '../sketchOperationStore';
 
 export interface LayerMergeDownRequest {
@@ -22,6 +24,29 @@ export interface LayerMergeDownRequest {
 }
 
 let nextLayerMergeDownRequestId = 1;
+
+type LayerPropertyUpdates = Partial<
+  Pick<
+    LayerData,
+    | 'name'
+    | 'visible'
+    | 'locked'
+    | 'opacity'
+    | 'blendMode'
+    | 'clippingMask'
+    | 'maskLayerId'
+    | 'alphaLock'
+    | 'adjustmentFilter'
+    | 'adjustmentParams'
+    | 'vectorData'
+  >
+>;
+
+interface LayerPosition {
+  readonly layer: LayerData;
+  readonly parentId?: string;
+  readonly index: number;
+}
 
 export interface LayerSlice {
   // State
@@ -32,29 +57,12 @@ export interface LayerSlice {
   // Actions
   addNewLayer: (name?: string) => void;
   addVectorLayer: (name?: string) => void;
+  addBackgroundLayer: (name?: string) => void;
   removeLayerById: (id: string) => void;
   setActiveLayer: (id: string) => void;
   moveLayerTo: (id: string, index: number) => void;
   duplicateLayerById: (id: string) => void;
-  updateLayerProps: (
-    id: string,
-    updates: Partial<
-      Pick<
-        LayerData,
-        | 'name'
-        | 'visible'
-        | 'locked'
-        | 'opacity'
-        | 'blendMode'
-        | 'clippingMask'
-        | 'maskLayerId'
-        | 'alphaLock'
-        | 'adjustmentFilter'
-        | 'adjustmentParams'
-        | 'vectorData'
-      >
-    >,
-  ) => void;
+  updateLayerProps: (id: string, updates: LayerPropertyUpdates) => void;
   addAdjustmentLayer: (filterId: string, defaultParams: Record<string, number>) => void;
   groupSelectedLayers: (ids: string[]) => void;
   setLayers: (layers: LayerData[]) => void;
@@ -79,7 +87,7 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
       layers: addLayer(state.layers, newLayer),
       activeLayerId: newLayer.id,
     });
-    useSketchOperationStore.getState().recordLayerAdd(newLayer as any);
+    useSketchOperationStore.getState().recordLayerAdd(newLayer, undefined, state.layers.length);
   },
 
   addVectorLayer: (name) => {
@@ -95,18 +103,38 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
       layers: addLayer(state.layers, newLayer),
       activeLayerId: newLayer.id,
     });
-    useSketchOperationStore.getState().recordLayerAdd(newLayer as any);
+    useSketchOperationStore.getState().recordLayerAdd(newLayer, undefined, state.layers.length);
+  },
+
+  addBackgroundLayer: (name) => {
+    const state = get();
+    const canvas = (state as unknown as { canvas: { width: number; height: number } }).canvas;
+    const newLayer = createLayer(
+      name ?? t('sketch.template.layer.background'),
+      canvas?.width ?? 1920,
+      canvas?.height ?? 1080,
+      'fill',
+    );
+    set({
+      layers: [newLayer, ...state.layers],
+      activeLayerId: newLayer.id,
+    });
+    useSketchOperationStore.getState().recordLayerAdd(newLayer, undefined, 0);
   },
 
   removeLayerById: (id) => {
     const state = get();
-    const layer = state.layers.find((l) => l.id === id);
+    const found = findLayerPosition(state.layers, id);
+    const nextLayers = removeLayer(state.layers, id);
+    const nextActiveLayerId = resolveActiveLayerId(nextLayers, state.activeLayerId);
     set({
-      layers: removeLayer(state.layers, id),
-      activeLayerId: state.activeLayerId === id ? null : state.activeLayerId,
+      layers: nextLayers,
+      activeLayerId: nextActiveLayerId,
     });
-    if (layer) {
-      useSketchOperationStore.getState().recordLayerRemove(id, layer as any);
+    if (found) {
+      useSketchOperationStore
+        .getState()
+        .recordLayerRemove(id, found.layer, found.parentId, found.index);
     }
   },
 
@@ -126,18 +154,16 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
     // Find the new layer (last one added)
     const newLayer = newLayers.find((l) => !state.layers.some((ol) => ol.id === l.id));
     if (newLayer) {
-      useSketchOperationStore.getState().recordLayerDuplicate(newLayer as any, id);
+      useSketchOperationStore.getState().recordLayerDuplicate(newLayer, id);
     }
   },
 
   updateLayerProps: (id, updates) => {
     const state = get();
-    const oldLayer = state.layers.find((l) => l.id === id);
-    const before: Record<string, unknown> = {};
+    const oldLayer = findLayerPosition(state.layers, id)?.layer;
+    const before: SketchLayerUpdates = {};
     if (oldLayer) {
-      for (const key of Object.keys(updates)) {
-        before[key] = (oldLayer as any)[key];
-      }
+      beforeLayerUpdates(oldLayer, updates, before);
     }
     set({ layers: updateLayer(state.layers, id, updates) });
     useSketchOperationStore.getState().recordLayerUpdate(id, updates, before);
@@ -165,7 +191,11 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
       layers: groupLayers(state.layers, ids),
     })),
 
-  setLayers: (layers) => set({ layers }),
+  setLayers: (layers) =>
+    set((state) => ({
+      layers,
+      activeLayerId: resolveActiveLayerId(layers, state.activeLayerId),
+    })),
 
   requestMergeLayerDown: (layerId) =>
     set({
@@ -182,3 +212,50 @@ export const createLayerSlice: StateCreator<LayerSlice> = (set, get) => ({
         : {},
     ),
 });
+
+function findLayerPosition(
+  layers: readonly LayerData[],
+  layerId: string,
+  parentId?: string,
+): LayerPosition | null {
+  for (let index = 0; index < layers.length; index++) {
+    const layer = layers[index];
+    if (!layer) continue;
+    if (layer.id === layerId) {
+      return { layer, parentId, index };
+    }
+    const child = findLayerPosition(layer.children, layerId, layer.id);
+    if (child) {
+      return child;
+    }
+  }
+  return null;
+}
+
+function resolveActiveLayerId(
+  layers: readonly LayerData[],
+  currentActiveLayerId: string | null,
+): string | null {
+  if (currentActiveLayerId && findLayerById(layers, currentActiveLayerId)) {
+    return currentActiveLayerId;
+  }
+  return findLastEditableLayer(layers)?.id ?? null;
+}
+
+function beforeLayerUpdates(
+  oldLayer: LayerData,
+  updates: LayerPropertyUpdates,
+  before: SketchLayerUpdates,
+): void {
+  if (updates.name !== undefined) before.name = oldLayer.name;
+  if (updates.visible !== undefined) before.visible = oldLayer.visible;
+  if (updates.locked !== undefined) before.locked = oldLayer.locked;
+  if (updates.opacity !== undefined) before.opacity = oldLayer.opacity;
+  if (updates.blendMode !== undefined) before.blendMode = oldLayer.blendMode;
+  if (updates.clippingMask !== undefined) before.clippingMask = oldLayer.clippingMask;
+  if (updates.maskLayerId !== undefined) before.maskLayerId = oldLayer.maskLayerId;
+  if (updates.alphaLock !== undefined) before.alphaLock = oldLayer.alphaLock;
+  if (updates.adjustmentFilter !== undefined) before.adjustmentFilter = oldLayer.adjustmentFilter;
+  if (updates.adjustmentParams !== undefined) before.adjustmentParams = oldLayer.adjustmentParams;
+  if (updates.vectorData !== undefined) before.vectorData = oldLayer.vectorData;
+}

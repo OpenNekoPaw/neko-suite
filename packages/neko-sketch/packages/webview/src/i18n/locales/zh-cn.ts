@@ -27,6 +27,7 @@ export const zhCN: MessageBundle = {
   'sketch.panel.layers': '图层',
   'sketch.layer.add': '添加图层',
   'sketch.layer.addVector': '添加矢量图层',
+  'sketch.layer.addBackground': '添加背景',
   'sketch.layer.show': '显示图层',
   'sketch.layer.hide': '隐藏图层',
   'sketch.layer.lock': '锁定图层',

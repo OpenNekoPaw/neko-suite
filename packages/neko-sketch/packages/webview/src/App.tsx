@@ -28,6 +28,8 @@ import {
 } from './components';
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
+import { isEditableTarget } from './utils/editable-target';
+import { getSketchKeyboardAction } from './utils/sketch-keyboard-shortcuts';
 import { importImageAsLayer, importImageFromBlob, isImageMimeType } from './utils/image-import';
 import { createTextureStampAssetFromBase64 } from './brush';
 import { exportLayerImageDataBase64 } from './utils/layer-export';
@@ -150,6 +152,20 @@ export function App() {
     vscode.postMessage({ type: 'ready' });
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      const action = getSketchKeyboardAction(event);
+      if (!action) {
+        return;
+      }
+      event.preventDefault();
+      dispatchKeyboardAction(action, store.getState(), vscode);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [store]);
+
   useEffect(() => aiSessionStore.subscribe(setAIRuns), []);
 
   const handleCancelAIRun = useCallback((runId: string) => {
@@ -247,6 +263,9 @@ export function App() {
         }
 
         case 'keyboardAction': {
+          if (isEditableTarget(document.activeElement)) {
+            break;
+          }
           dispatchKeyboardAction(msg.action, store.getState(), vscode);
           break;
         }
