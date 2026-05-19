@@ -432,6 +432,9 @@ function uploadVectorLayerTexture(
   width: number,
   height: number,
 ): WebGLTexture | null {
+  if (paths.length === 0) {
+    return null;
+  }
   const imageData = renderVectorPathsToImageData(paths, width, height);
   if (!imageData) {
     return null;
@@ -1393,6 +1396,19 @@ export function SketchCanvas() {
     for (const layer of vectorLayers) {
       const vectorData = layer.vectorData;
       if (!vectorData) {
+        continue;
+      }
+      if (vectorData.paths.length === 0) {
+        if (layer.texture) {
+          updatedLayers = updateLayerById(updatedLayers, layer.id, (item) => ({
+            ...item,
+            width: canvas.width,
+            height: canvas.height,
+            texture: null,
+          }));
+          changed = true;
+        }
+        vectorTextureSignatureRef.current.delete(layer.id);
         continue;
       }
 

@@ -133,8 +133,9 @@ export class RenderPipeline implements IRenderPipeline {
     const fbos = [this.compFboA!, this.compFboB!];
     const texs = [this.compTexA!, this.compTexB!];
 
-    // Clear initial composite buffer
+    // Clear both ping-pong buffers so skipped transparent layers cannot expose stale pixels.
     this.clear(fbos[0]!);
+    this.clear(fbos[1]!);
 
     for (const layer of layers) {
       if (!layer.visible) continue;

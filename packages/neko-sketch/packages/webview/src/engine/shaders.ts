@@ -106,24 +106,28 @@ vec3 blendExclusion(vec3 b, vec3 l) { return b + l - 2.0*b*l; }
 void main() {
   vec4 base = texture(u_base, v_texCoord);
   vec4 blend = texture(u_blend, v_texCoord);
-  float eff = u_opacity * blend.a;
+  float sourceAlpha = clamp(u_opacity * blend.a, 0.0, 1.0);
 
-  vec3 result;
-  if (u_mode == 0) result = blendNormal(base.rgb, blend.rgb);
-  else if (u_mode == 1) result = blendMultiply(base.rgb, blend.rgb);
-  else if (u_mode == 2) result = blendScreen(base.rgb, blend.rgb);
-  else if (u_mode == 3) result = blendOverlay(base.rgb, blend.rgb);
-  else if (u_mode == 4) result = blendDarken(base.rgb, blend.rgb);
-  else if (u_mode == 5) result = blendLighten(base.rgb, blend.rgb);
-  else if (u_mode == 6) result = blendColorDodge(base.rgb, blend.rgb);
-  else if (u_mode == 7) result = blendColorBurn(base.rgb, blend.rgb);
-  else if (u_mode == 8) result = blendHardLight(base.rgb, blend.rgb);
-  else if (u_mode == 9) result = blendSoftLight(base.rgb, blend.rgb);
-  else if (u_mode == 10) result = blendDifference(base.rgb, blend.rgb);
-  else if (u_mode == 11) result = blendExclusion(base.rgb, blend.rgb);
-  else result = blend.rgb;
+  vec3 blendedRgb;
+  if (u_mode == 0) blendedRgb = blendNormal(base.rgb, blend.rgb);
+  else if (u_mode == 1) blendedRgb = blendMultiply(base.rgb, blend.rgb);
+  else if (u_mode == 2) blendedRgb = blendScreen(base.rgb, blend.rgb);
+  else if (u_mode == 3) blendedRgb = blendOverlay(base.rgb, blend.rgb);
+  else if (u_mode == 4) blendedRgb = blendDarken(base.rgb, blend.rgb);
+  else if (u_mode == 5) blendedRgb = blendLighten(base.rgb, blend.rgb);
+  else if (u_mode == 6) blendedRgb = blendColorDodge(base.rgb, blend.rgb);
+  else if (u_mode == 7) blendedRgb = blendColorBurn(base.rgb, blend.rgb);
+  else if (u_mode == 8) blendedRgb = blendHardLight(base.rgb, blend.rgb);
+  else if (u_mode == 9) blendedRgb = blendSoftLight(base.rgb, blend.rgb);
+  else if (u_mode == 10) blendedRgb = blendDifference(base.rgb, blend.rgb);
+  else if (u_mode == 11) blendedRgb = blendExclusion(base.rgb, blend.rgb);
+  else blendedRgb = blend.rgb;
 
-  fragColor = vec4(mix(base.rgb, result, eff), base.a + (1.0 - base.a) * eff);
+  float outAlpha = sourceAlpha + base.a * (1.0 - sourceAlpha);
+  vec3 outRgb = outAlpha > 0.0
+    ? (blendedRgb * sourceAlpha + base.rgb * base.a * (1.0 - sourceAlpha)) / outAlpha
+    : vec3(0.0);
+  fragColor = vec4(outRgb, outAlpha);
 }
 `;
 
