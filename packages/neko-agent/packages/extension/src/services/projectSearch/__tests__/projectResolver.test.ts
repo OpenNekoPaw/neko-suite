@@ -14,6 +14,11 @@ vi.mock('../../documentPathResolver', () => ({
 describe('resolveProjectSearchContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(vscode.workspace.fs.stat).mockRejectedValue(
+      Object.assign(new Error('missing'), {
+        code: 'ENOENT',
+      }),
+    );
     vscode.workspace.workspaceFolders = [
       { uri: { fsPath: '/workspace-a' }, name: 'a', index: 0 },
       { uri: { fsPath: '/workspace-b' }, name: 'b', index: 1 },
@@ -47,4 +52,27 @@ describe('resolveProjectSearchContext', () => {
     expect(context.projectRoot).toBe('/workspace-a');
     expect(context.fallbackDerived).toBe(true);
   });
+
+  it('infers external Neko project roots from context file markers', async () => {
+    vi.mocked(vscode.workspace.fs.stat).mockImplementation(async (uri: unknown) => {
+      const filePath = isUriLike(uri) ? uri.fsPath : '';
+      if (filePath === '/Users/feng/git/neko-test/neko/assets/library.json') {
+        return { type: vscode.FileType.File } as never;
+      }
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+
+    const context = await resolveProjectSearchContext({
+      text: '小橘',
+      contextFilePath: '~/git/neko-test/cases/test.fountain',
+    });
+
+    expect(context.projectRoot).toBe('/Users/feng/git/neko-test');
+    expect(context.resolvedContextFilePath).toBe('/Users/feng/git/neko-test/cases/test.fountain');
+    expect(context.fallbackDerived).toBe(true);
+  });
 });
+
+function isUriLike(value: unknown): value is { readonly fsPath?: string } {
+  return typeof value === 'object' && value !== null && 'fsPath' in value;
+}

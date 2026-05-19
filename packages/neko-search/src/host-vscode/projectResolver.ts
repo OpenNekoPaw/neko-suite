@@ -5,6 +5,12 @@ import type { ProjectSearchQuery, ProjectSearchQueryContext } from '@neko/shared
 
 const URI_SCHEME_RE = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
+const PROJECT_ROOT_MARKERS = [
+  path.join('neko', 'settings.json'),
+  path.join('neko', 'assets', 'library.json'),
+  '.neko',
+  '.git',
+] as const;
 
 export interface VSCodeProjectSearchContextResolverOptions {
   readonly resolvePath?: (filePath: string) => Promise<string>;
@@ -43,6 +49,18 @@ export async function resolveProjectSearchContext(
     };
   }
 
+  const inferredProjectRoot = contextPath
+    ? await findMarkedProjectRootForPath(contextPath)
+    : undefined;
+  if (inferredProjectRoot) {
+    return {
+      projectRoot: inferredProjectRoot,
+      resolvedContextFilePath: contextPath,
+      contextUri: query.contextUri,
+      fallbackDerived: true,
+    };
+  }
+
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   return {
     projectRoot: workspaceRoot,
@@ -75,6 +93,37 @@ function findWorkspaceRootForPath(filePath: string): string | undefined {
     }
   }
   return best;
+}
+
+async function findMarkedProjectRootForPath(filePath: string): Promise<string | undefined> {
+  let current = path.dirname(filePath);
+  let previous: string | undefined;
+  while (current && current !== previous) {
+    if (await hasProjectRootMarker(current)) {
+      return normalizeLocalPath(current);
+    }
+    previous = current;
+    current = path.dirname(current);
+  }
+  return undefined;
+}
+
+async function hasProjectRootMarker(directory: string): Promise<boolean> {
+  for (const marker of PROJECT_ROOT_MARKERS) {
+    if (await pathExists(path.join(directory, marker))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isPathInside(filePath: string, root: string): boolean {
