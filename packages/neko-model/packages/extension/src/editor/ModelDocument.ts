@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import type { NkmProjectData } from '@neko/shared';
 import { createDefaultNkmProject } from '@neko/shared';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
 import * as path from 'path';
+import { getLogger } from '../logger';
 
-const logger = new ConsoleLogger('ModelDocument', LogLevel.Info);
+const logger = getLogger('ModelDocument');
 
 /**
  * ModelDocument — Custom document for .nkm project files.

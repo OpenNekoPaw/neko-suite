@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { t } from '../i18n/index';
+import { webviewErrorHandler } from '../platform/errors';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -21,7 +22,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[ErrorBoundary] Caught error', error, errorInfo.componentStack);
+    void webviewErrorHandler.handleError(error, {
+      showToUser: false,
+      severity: 'fatal',
+    });
+    void webviewErrorHandler.handleError(
+      new Error(errorInfo.componentStack ?? 'React component stack unavailable'),
+      {
+        showToUser: false,
+        severity: 'error',
+      },
+    );
   }
 
   override render(): ReactNode {

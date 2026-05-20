@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { EngineClient } from '@neko/neko-client';
 import { useModelStore } from '../stores/modelStore';
 
 export interface ViewportOrbitControlsProps {
-  enginePort: number;
+  viewportId?: string;
   onClickSelect?: (normalizedX: number, normalizedY: number) => void;
+  onCameraChange?: () => void;
+  onCameraMutated?: () => void;
 }
 
 const ORBIT_SENSITIVITY = 0.005;
@@ -12,37 +13,32 @@ const PAN_SENSITIVITY = 0.01;
 const ZOOM_SENSITIVITY = 0.002;
 const SEND_INTERVAL_MS = 33;
 const CLICK_THRESHOLD_PX = 4;
+const KEYBOARD_PAN_STEP = 0.08;
+const KEYBOARD_ZOOM_STEP = 0.12;
+
+type DragMode = 'select' | 'orbit' | 'pan' | 'zoom';
 
 export function ViewportOrbitControls({
-  enginePort,
   onClickSelect,
+  onCameraChange,
+  onCameraMutated,
 }: ViewportOrbitControlsProps): React.JSX.Element {
-  const engineClientRef = useRef<EngineClient | null>(null);
   const lastSendRef = useRef(0);
   const pendingSendRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    engineClientRef.current = new EngineClient(enginePort);
     return () => {
-      engineClientRef.current = null;
       if (pendingSendRef.current !== null) {
         clearTimeout(pendingSendRef.current);
         pendingSendRef.current = null;
       }
     };
-  }, [enginePort]);
+  }, []);
 
   const sendCamera = useCallback(() => {
-    const client = engineClientRef.current;
-    if (!client) return;
-
-    const store = useModelStore.getState();
-    const position = store.getCameraPosition();
-    const target = store.cameraTarget;
-
-    void client.updateEditorCamera(position, target).catch(() => {});
-  }, []);
+    onCameraChange?.();
+  }, [onCameraChange]);
 
   const throttledSendCamera = useCallback(() => {
     const now = Date.now();
@@ -63,12 +59,10 @@ export function ViewportOrbitControls({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0 && e.button !== 2) return;
+      const mode = resolveDragMode(e.button, e.altKey, e.shiftKey, e.ctrlKey || e.metaKey);
+      if (!mode) return;
 
-      const isRightButton = e.button === 2;
-      const isPan = isRightButton || e.altKey;
-      const isLeftClick = e.button === 0 && !e.altKey;
-
+      rootRef.current?.focus();
       e.currentTarget.setPointerCapture(e.pointerId);
       e.preventDefault();
 
@@ -92,14 +86,16 @@ export function ViewportOrbitControls({
         lastX = moveEvent.clientX;
         lastY = moveEvent.clientY;
 
-        if (isPan) {
-          const radius = useModelStore.getState().cameraRadius;
-          useModelStore
-            .getState()
-            .panCamera(dx * PAN_SENSITIVITY * radius * 0.1, dy * PAN_SENSITIVITY * radius * 0.1);
-        } else {
+        if (mode === 'pan') {
+          panByPixels(dx, dy);
+        } else if (mode === 'zoom') {
+          zoomByPixels(dy);
+        } else if (mode === 'orbit' || mode === 'select') {
           useModelStore.getState().orbitCamera(-dx * ORBIT_SENSITIVITY, dy * ORBIT_SENSITIVITY);
+        } else {
+          return;
         }
+        onCameraMutated?.();
         throttledSendCamera();
       };
 
@@ -109,7 +105,7 @@ export function ViewportOrbitControls({
 
         if (dragged) {
           sendCamera();
-        } else if (isLeftClick && onClickSelect) {
+        } else if (mode === 'select' && onClickSelect) {
           const rect = rootRef.current?.getBoundingClientRect();
           if (rect) {
             const nx = (upEvent.clientX - rect.left) / Math.max(1, rect.width);
@@ -122,17 +118,65 @@ export function ViewportOrbitControls({
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
     },
-    [throttledSendCamera, sendCamera, onClickSelect],
+    [throttledSendCamera, sendCamera, onClickSelect, onCameraMutated],
   );
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!element) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      zoomByPixels(event.deltaY);
+      onCameraMutated?.();
+      throttledSendCamera();
+    };
+
+    element.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      element.removeEventListener('wheel', handleWheel);
+    };
+  }, [throttledSendCamera, onCameraMutated]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const store = useModelStore.getState();
+      const panStep = store.cameraRadius * KEYBOARD_PAN_STEP;
+      const zoomStep = store.cameraRadius * KEYBOARD_ZOOM_STEP;
+      let handled = true;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          store.panCamera(-panStep, 0);
+          break;
+        case 'ArrowRight':
+          store.panCamera(panStep, 0);
+          break;
+        case 'ArrowUp':
+          store.panCamera(0, panStep);
+          break;
+        case 'ArrowDown':
+          store.panCamera(0, -panStep);
+          break;
+        case '+':
+        case '=':
+          store.zoomCamera(-zoomStep);
+          break;
+        case '-':
+        case '_':
+          store.zoomCamera(zoomStep);
+          break;
+        default:
+          handled = false;
+          break;
+      }
+
+      if (!handled) return;
+      onCameraMutated?.();
       e.preventDefault();
-      const radius = useModelStore.getState().cameraRadius;
-      useModelStore.getState().zoomCamera(e.deltaY * ZOOM_SENSITIVITY * radius);
       throttledSendCamera();
     },
-    [throttledSendCamera],
+    [throttledSendCamera, onCameraMutated],
   );
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -143,10 +187,39 @@ export function ViewportOrbitControls({
     <div
       ref={rootRef}
       className="absolute inset-0"
-      style={{ touchAction: 'none', cursor: 'grab' }}
+      style={{ touchAction: 'none', cursor: 'default' }}
+      tabIndex={0}
       onPointerDown={handlePointerDown}
-      onWheel={handleWheel}
+      onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
     />
   );
+}
+
+function resolveDragMode(
+  button: number,
+  altKey: boolean,
+  shiftKey: boolean,
+  ctrlKey: boolean,
+): DragMode | null {
+  if (altKey && button === 0) return 'orbit';
+  if (altKey && button === 1) return 'pan';
+  if (altKey && button === 2) return 'zoom';
+  if (button === 0) return 'select';
+  if (button === 2) return 'pan';
+  if (button !== 1) return null;
+  if (shiftKey) return 'pan';
+  if (ctrlKey) return 'zoom';
+  return 'orbit';
+}
+
+function panByPixels(dx: number, dy: number): void {
+  const store = useModelStore.getState();
+  const scale = PAN_SENSITIVITY * store.cameraRadius * 0.1;
+  store.panCamera(dx * scale, dy * scale);
+}
+
+function zoomByPixels(deltaY: number): void {
+  const store = useModelStore.getState();
+  store.zoomCamera(deltaY * ZOOM_SENSITIVITY * store.cameraRadius);
 }

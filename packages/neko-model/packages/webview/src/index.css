@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
     font-size: var(--vscode-font-size, 13px);
     color: var(--neko-fg, var(--vscode-editor-foreground, #cccccc));
@@ -37,21 +38,174 @@
     --model-danger: var(--neko-danger, #ff453a);
     --model-danger-soft: color-mix(in srgb, var(--model-danger) 12%, transparent);
     --model-danger-border: color-mix(in srgb, var(--model-danger) 32%, transparent);
+    --model-workbench-bg: color-mix(in srgb, var(--model-bg) 84%, #2a2b2f 16%);
+    --model-topbar-bg: color-mix(in srgb, var(--model-surface) 78%, #303137 22%);
+    --model-topbar-border: var(--model-border);
+    --model-topbar-fg: var(--model-fg);
+    --model-topbar-muted: var(--model-fg-secondary);
+    --model-segment-fg: color-mix(in srgb, var(--model-fg) 86%, var(--model-fg-secondary) 14%);
+    --model-segment-hover: color-mix(in srgb, var(--model-fg) 7%, transparent);
+    --model-segment-active-bg: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-segment-active-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
+    --model-segment-active-fg: var(--model-fg);
+    --model-status-ready: var(--vscode-charts-green, #70d982);
+    --model-status-waiting: var(--vscode-charts-yellow, #d7b85d);
+    --model-status-error: var(--vscode-errorForeground, var(--model-danger));
+    --model-viewport-area-bg: color-mix(in srgb, var(--model-bg) 88%, #17181b 12%);
+    --model-viewport-bg: color-mix(in srgb, var(--model-bg) 90%, #000000 10%);
+    --model-viewport-toolbar-bg: color-mix(in srgb, var(--model-surface) 92%, transparent);
+    --model-viewport-toolbar-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-viewport-toolbar-shadow: var(--neko-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.24));
+    --model-viewport-control-bg: color-mix(in srgb, var(--model-surface) 70%, transparent);
+    --model-viewport-control-hover-bg: color-mix(in srgb, var(--model-elevated) 84%, transparent);
+    --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
+    --model-viewport-control-hover-border: color-mix(in srgb, var(--model-fg) 24%, transparent);
+    --model-viewport-control-active: color-mix(in srgb, var(--model-accent) 74%, var(--model-fg) 26%);
+    --model-viewport-control-shadow: var(--neko-shadow-md, 0 10px 26px rgba(0, 0, 0, 0.28));
+    --model-viewport-pad-bg: color-mix(in srgb, var(--model-surface) 46%, transparent);
+    --model-viewport-pad-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
+    --model-viewport-pad-hover: color-mix(in srgb, var(--model-fg) 9%, transparent);
+    --model-viewport-pad-center: color-mix(in srgb, var(--model-fg) 50%, transparent);
+    --model-dock-bg: var(--model-surface);
+    --model-dock-title-bg: color-mix(in srgb, var(--model-elevated) 82%, var(--model-surface) 18%);
+    --model-dock-title-fg: var(--model-fg);
+    --model-timeline-bg: color-mix(in srgb, var(--model-surface) 92%, var(--model-bg) 8%);
+    --model-timeline-fg: color-mix(in srgb, var(--model-fg) 72%, var(--model-fg-secondary) 28%);
+    --model-ruler-fg: var(--model-fg-secondary);
+    --model-ruler-tick: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-engine-pill-bg: color-mix(in srgb, var(--model-surface) 86%, transparent);
+    --model-engine-pill-hover-bg: color-mix(in srgb, var(--model-elevated) 92%, transparent);
+    --model-engine-pill-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-engine-pill-fg: var(--model-fg);
+    --model-engine-popover-bg: color-mix(in srgb, var(--model-surface) 96%, transparent);
+    --model-engine-popover-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-engine-popover-fg: var(--model-fg-secondary);
+    --model-engine-shadow: var(--neko-shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.34));
+    --model-guide-widget-bg: color-mix(in srgb, var(--model-surface) 58%, transparent);
+    --model-guide-widget-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
+    --model-guide-ruler: color-mix(in srgb, var(--model-fg) 72%, transparent);
+    --model-guide-ruler-text: color-mix(in srgb, var(--model-fg) 82%, transparent);
+    --model-guide-tick: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-guide-center: color-mix(in srgb, var(--model-fg) 50%, transparent);
+    --model-axis-x: rgba(238, 93, 80, 0.82);
+    --model-axis-y: rgba(110, 220, 121, 0.9);
+    --model-axis-z: rgba(91, 176, 255, 0.86);
+  }
+
+  body.vscode-dark,
+  body[data-vscode-theme-kind='vscode-dark'] {
+    color-scheme: dark;
+  }
+
+  body.vscode-light,
+  body[data-vscode-theme-kind='vscode-light'],
+  body.vscode-high-contrast-light,
+  body[data-vscode-theme-kind='vscode-high-contrast-light'] {
+    color-scheme: light;
+    --model-bg: var(--vscode-editor-background, #f3f3f3);
+    --model-surface: color-mix(
+      in srgb,
+      var(--neko-surface, #f6f6f8) 88%,
+      var(--neko-elevated, #ffffff) 12%
+    );
+    --model-elevated: var(--neko-elevated, #ffffff);
+    --model-overlay: color-mix(in srgb, var(--model-surface) 90%, var(--model-bg) 10%);
+    --model-border: var(--neko-border, rgba(0, 0, 0, 0.08));
+    --model-divider: var(--neko-divider, rgba(0, 0, 0, 0.05));
+    --model-fg: var(--neko-fg, #1c1c1e);
+    --model-fg-secondary: var(--neko-fg-secondary, #636366);
+    --model-fg-muted: var(--neko-fg-muted, rgba(28, 28, 30, 0.38));
+    --model-hover: var(--neko-hover, rgba(0, 0, 0, 0.04));
+    --model-selected: var(--neko-accent-soft, rgba(0, 122, 255, 0.14));
+    --model-accent: var(--neko-accent, #007aff);
+    --model-input-bg: color-mix(in srgb, var(--model-elevated) 90%, var(--model-bg) 10%);
+    --model-input-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
+    --model-button-secondary-bg: color-mix(in srgb, var(--model-fg) 5%, transparent);
+    --model-button-secondary-hover: color-mix(in srgb, var(--model-fg) 9%, transparent);
+    --model-danger: var(--neko-danger, #ff3b30);
+    --model-workbench-bg: color-mix(in srgb, var(--model-bg) 86%, #ffffff 14%);
+    --model-topbar-bg: color-mix(in srgb, var(--model-surface) 88%, #ffffff 12%);
+    --model-topbar-border: var(--model-border);
+    --model-topbar-fg: var(--model-fg);
+    --model-topbar-muted: var(--model-fg-secondary);
+    --model-segment-fg: color-mix(in srgb, var(--model-fg) 78%, var(--model-fg-secondary) 22%);
+    --model-segment-hover: color-mix(in srgb, var(--model-fg) 5%, transparent);
+    --model-segment-active-bg: color-mix(in srgb, var(--model-fg) 8%, transparent);
+    --model-segment-active-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
+    --model-segment-active-fg: var(--model-fg);
+    --model-viewport-area-bg: color-mix(in srgb, var(--model-bg) 94%, var(--model-fg) 6%);
+    --model-viewport-bg: color-mix(in srgb, var(--model-bg) 92%, var(--model-fg) 8%);
+    --model-viewport-toolbar-bg: color-mix(in srgb, var(--model-elevated) 94%, transparent);
+    --model-viewport-toolbar-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
+    --model-viewport-control-bg: color-mix(in srgb, var(--model-elevated) 78%, transparent);
+    --model-viewport-control-hover-bg: color-mix(in srgb, var(--model-elevated) 92%, var(--model-fg) 8%);
+    --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
+    --model-viewport-control-hover-border: color-mix(in srgb, var(--model-fg) 24%, transparent);
+    --model-viewport-control-active: var(--model-accent);
+    --model-viewport-pad-bg: color-mix(in srgb, var(--model-elevated) 62%, transparent);
+    --model-viewport-pad-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
+    --model-viewport-pad-hover: color-mix(in srgb, var(--model-fg) 7%, transparent);
+    --model-dock-bg: var(--model-surface);
+    --model-dock-title-bg: color-mix(in srgb, var(--model-elevated) 86%, var(--model-surface) 14%);
+    --model-timeline-bg: color-mix(in srgb, var(--model-surface) 94%, var(--model-bg) 6%);
+    --model-engine-pill-bg: color-mix(in srgb, var(--model-elevated) 86%, transparent);
+    --model-engine-pill-hover-bg: color-mix(in srgb, var(--model-elevated) 96%, var(--model-fg) 4%);
+    --model-engine-popover-bg: color-mix(in srgb, var(--model-elevated) 98%, transparent);
+    --model-guide-widget-bg: color-mix(in srgb, var(--model-elevated) 70%, transparent);
+    --model-axis-x: rgba(208, 61, 51, 0.86);
+    --model-axis-y: rgba(31, 142, 58, 0.88);
+    --model-axis-z: rgba(34, 111, 209, 0.88);
   }
 
   body.vscode-high-contrast,
-  body[data-vscode-theme-kind='vscode-high-contrast'] {
+  body[data-vscode-theme-kind='vscode-high-contrast'],
+  body.vscode-high-contrast-light,
+  body[data-vscode-theme-kind='vscode-high-contrast-light'] {
+    color-scheme: dark light;
     --model-surface: var(--neko-surface, var(--vscode-sideBar-background));
     --model-elevated: var(--neko-elevated, var(--vscode-editorWidget-background));
     --model-overlay: var(--model-surface);
     --model-border: var(--neko-border, var(--vscode-contrastBorder));
     --model-divider: var(--model-border);
+    --model-fg: var(--vscode-editor-foreground);
+    --model-fg-secondary: var(--vscode-editor-foreground);
+    --model-fg-muted: var(--vscode-editor-foreground);
     --model-hover: var(--vscode-list-hoverBackground);
     --model-selected: var(--vscode-list-activeSelectionBackground);
     --model-input-bg: var(--model-elevated);
     --model-input-border: var(--model-border);
     --model-button-secondary-bg: transparent;
     --model-button-secondary-hover: var(--model-hover);
+    --model-workbench-bg: var(--vscode-editor-background);
+    --model-topbar-bg: var(--vscode-sideBar-background);
+    --model-topbar-border: var(--model-border);
+    --model-segment-hover: var(--model-hover);
+    --model-segment-active-bg: var(--model-selected);
+    --model-segment-active-border: var(--model-border);
+    --model-viewport-area-bg: var(--vscode-editor-background);
+    --model-viewport-bg: var(--vscode-editor-background);
+    --model-viewport-toolbar-bg: var(--vscode-editor-background);
+    --model-viewport-toolbar-border: var(--model-border);
+    --model-viewport-toolbar-shadow: none;
+    --model-viewport-control-bg: var(--vscode-editor-background);
+    --model-viewport-control-hover-bg: var(--model-hover);
+    --model-viewport-control-border: var(--model-border);
+    --model-viewport-control-hover-border: var(--model-border);
+    --model-viewport-control-shadow: none;
+    --model-viewport-pad-bg: var(--vscode-editor-background);
+    --model-viewport-pad-border: var(--model-border);
+    --model-viewport-pad-hover: var(--model-hover);
+    --model-dock-bg: var(--vscode-sideBar-background);
+    --model-dock-title-bg: var(--vscode-sideBar-background);
+    --model-timeline-bg: var(--vscode-panel-background);
+    --model-engine-pill-bg: var(--vscode-editor-background);
+    --model-engine-pill-hover-bg: var(--model-hover);
+    --model-engine-pill-border: var(--model-border);
+    --model-engine-popover-bg: var(--vscode-editor-background);
+    --model-engine-popover-border: var(--model-border);
+    --model-engine-shadow: none;
+    --model-guide-widget-bg: var(--vscode-editor-background);
+    --model-guide-widget-border: var(--model-border);
   }
 
   * {
@@ -141,13 +295,11 @@
     flex-direction: column;
     background: var(--model-surface);
     color: var(--model-fg);
-    border-left: 1px solid var(--model-border);
   }
 
   .model-tree-panel {
     background: var(--model-surface);
     color: var(--model-fg);
-    border-right: 1px solid var(--model-border);
   }
 
   .model-bottom-panel {
@@ -332,5 +484,447 @@
     border-left: 2px solid color-mix(in srgb, var(--model-accent) 42%, transparent);
     border-radius: 8px;
     color: var(--model-fg);
+  }
+
+  .model-workbench {
+    display: flex;
+    flex-direction: column;
+    background: var(--model-workbench-bg);
+    color: var(--model-fg);
+  }
+
+  .model-workbench-topbar {
+    display: grid;
+    grid-template-columns:
+      minmax(250px, 0.9fr) minmax(260px, 1fr) minmax(180px, auto)
+      minmax(240px, 0.8fr);
+    align-items: center;
+    min-height: 34px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--model-topbar-border);
+    background: var(--model-topbar-bg);
+    color: var(--model-topbar-fg);
+    font-size: 11px;
+  }
+
+  .model-menu-strip,
+  .model-workspace-tabs,
+  .model-transform-segment,
+  .model-topbar-status {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .model-menu-strip {
+    gap: 2px;
+    padding-left: 9px;
+  }
+
+  .model-app-title {
+    margin-right: 10px;
+    color: var(--model-fg);
+    font-weight: 600;
+  }
+
+  .model-workbench-context {
+    color: var(--model-topbar-muted);
+  }
+
+  .model-workspace-tabs span,
+  .model-transform-segment button {
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    line-height: 1;
+  }
+
+  .model-transform-segment button:hover {
+    background: var(--model-segment-hover);
+  }
+
+  .model-workspace-tabs {
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .model-workspace-tabs span {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .model-workspace-tabs span.active,
+  .model-transform-segment button.active {
+    border-color: var(--model-segment-active-border);
+    background: var(--model-segment-active-bg);
+    color: var(--model-segment-active-fg);
+  }
+
+  .model-topbar-status {
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 0 10px;
+    color: var(--model-topbar-muted);
+  }
+
+  .model-status-ready {
+    color: var(--model-status-ready);
+  }
+
+  .model-status-waiting {
+    color: var(--model-status-waiting);
+  }
+
+  .model-status-error {
+    color: var(--model-status-error);
+  }
+
+  .model-workbench-body {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .model-viewport-area {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    background: var(--model-viewport-area-bg);
+  }
+
+  .model-transform-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0 8px;
+    color: var(--model-segment-fg);
+    font-size: 11px;
+  }
+
+  .model-viewport-shell {
+    position: relative;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    background: var(--model-viewport-bg);
+  }
+
+  .model-viewport-frame,
+  .model-quality-preview-overlay {
+    background: var(--model-viewport-bg);
+  }
+
+  .model-viewport-tools {
+    pointer-events: auto;
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    bottom: 8px;
+    z-index: 30;
+  }
+
+  .model-viewport-toolbar.neko-vtoolbar {
+    height: 100%;
+    border: 1px solid var(--model-viewport-toolbar-border);
+    border-radius: 5px;
+    background: var(--model-viewport-toolbar-bg);
+    box-shadow: var(--model-viewport-toolbar-shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .model-viewport-toolbar .neko-toolbar-btn {
+    height: 34px;
+    border-radius: 3px;
+  }
+
+  .model-viewport-toolbar .neko-toolbar-btn.active::before {
+    left: -1px;
+  }
+
+  .model-viewport-nav-controls {
+    pointer-events: auto;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    z-index: 35;
+    display: flex;
+    transform: translateY(-50%);
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .model-viewport-nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .model-viewport-nav-btn {
+    display: flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--model-viewport-control-border);
+    border-radius: 999px;
+    background: var(--model-viewport-control-bg);
+    color: var(--model-fg);
+    line-height: 1;
+    box-shadow: var(--model-viewport-control-shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .model-viewport-nav-btn:hover {
+    border-color: var(--model-viewport-control-hover-border);
+    background: var(--model-viewport-control-hover-bg);
+  }
+
+  .model-viewport-nav-btn.active {
+    border-color: color-mix(in srgb, var(--model-viewport-control-active) 72%, transparent);
+    color: var(--model-viewport-control-active);
+  }
+
+  .model-viewport-nav-pad {
+    display: grid;
+    grid-template-areas:
+      '. up .'
+      'left center right'
+      '. down .';
+    grid-template-columns: 28px 28px 28px;
+    grid-template-rows: 28px 28px 28px;
+    place-items: center;
+    border: 1px solid var(--model-viewport-pad-border);
+    border-radius: 999px;
+    background: var(--model-viewport-pad-bg);
+    box-shadow: var(--model-viewport-control-shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .model-viewport-nav-pad .model-viewport-nav-btn {
+    width: 28px;
+    height: 28px;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .model-viewport-nav-pad .model-viewport-nav-btn:hover {
+    background: var(--model-viewport-pad-hover);
+  }
+
+  .model-viewport-nav-pad-up {
+    grid-area: up;
+  }
+
+  .model-viewport-nav-pad-left {
+    grid-area: left;
+  }
+
+  .model-viewport-nav-pad-right {
+    grid-area: right;
+  }
+
+  .model-viewport-nav-pad-down {
+    grid-area: down;
+  }
+
+  .model-viewport-nav-pad-center {
+    grid-area: center;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--model-viewport-pad-center);
+  }
+
+  .model-right-dock {
+    display: flex;
+    width: clamp(292px, 24vw, 360px);
+    min-width: 292px;
+    flex-shrink: 0;
+    flex-direction: column;
+    border-left: 1px solid var(--model-border);
+    background: var(--model-dock-bg);
+  }
+
+  .model-dock-pane {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .model-outliner-pane {
+    height: min(34%, 230px);
+    min-height: 150px;
+    border-bottom: 1px solid var(--model-border);
+  }
+
+  .model-properties-pane {
+    flex: 1;
+  }
+
+  .model-dock-title {
+    height: 27px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--model-divider);
+    background: var(--model-dock-title-bg);
+    padding: 6px 9px 0;
+    color: var(--model-dock-title-fg);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .model-dock-content {
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .model-dock-content > .model-side-panel,
+  .model-dock-content > .model-tree-panel {
+    border: 0;
+  }
+
+  .model-dock-content > .model-side-panel[class*='w-64'] {
+    width: 100%;
+  }
+
+  .model-timeline-dock {
+    height: 86px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--model-border);
+    background: var(--model-timeline-bg);
+  }
+
+  .model-timeline-dock.expanded {
+    height: 192px;
+  }
+
+  .model-animation-strip {
+    display: grid;
+    grid-template-rows: 28px 1fr;
+    height: 100%;
+    color: var(--model-timeline-fg);
+    font-size: 11px;
+  }
+
+  .model-frame-ruler {
+    display: grid;
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    align-items: end;
+    border-bottom: 1px solid var(--model-divider);
+    padding: 0 12px 4px;
+    color: var(--model-ruler-fg);
+  }
+
+  .model-frame-ruler span {
+    position: relative;
+  }
+
+  .model-frame-ruler span::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -5px;
+    width: 1px;
+    height: 7px;
+    background: var(--model-ruler-tick);
+  }
+
+  .model-animation-controls {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: 8px 12px;
+  }
+
+  .model-engine-diagnostics {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 40;
+    font-size: 11px;
+  }
+
+  .model-engine-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 25px;
+    border: 1px solid var(--model-engine-pill-border);
+    border-radius: 5px;
+    background: var(--model-engine-pill-bg);
+    padding: 0 9px;
+    color: var(--model-engine-pill-fg);
+    box-shadow: var(--model-engine-shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .model-engine-pill:hover {
+    background: var(--model-engine-pill-hover-bg);
+  }
+
+  .model-engine-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--model-status-waiting);
+  }
+
+  .model-engine-dot.ready {
+    background: var(--model-status-ready);
+  }
+
+  .model-engine-popover {
+    position: absolute;
+    right: 0;
+    bottom: 31px;
+    width: 230px;
+    border: 1px solid var(--model-engine-popover-border);
+    border-radius: 6px;
+    background: var(--model-engine-popover-bg);
+    padding: 8px 10px;
+    color: var(--model-engine-popover-fg);
+    box-shadow: var(--model-engine-shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  @media (max-width: 920px) {
+    .model-workbench-topbar {
+      grid-template-columns: minmax(190px, 1fr) minmax(180px, 0.8fr) auto minmax(150px, 0.7fr);
+    }
+
+    .model-topbar-status span:nth-child(2) {
+      display: none;
+    }
+
+    .model-right-dock {
+      width: 268px;
+      min-width: 268px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .model-workbench-topbar {
+      grid-template-columns: minmax(180px, 1fr) auto auto;
+    }
+
+    .model-workspace-tabs span:not(.active),
+    .model-topbar-status span:first-child {
+      display: none;
+    }
+
+    .model-right-dock {
+      display: none;
+    }
   }
 }

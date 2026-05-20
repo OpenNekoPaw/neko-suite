@@ -11,91 +11,139 @@ import {
   ToolbarSpacer,
 } from '@neko/shared/components';
 import { useModelStore } from '../stores/modelStore';
+import type { ModelState } from '../stores/modelStore';
 import { useTranslation } from '../i18n/I18nContext';
 import { postMessage } from '@neko/shared/vscode';
 
+type ToggleToolKey =
+  | 'face'
+  | 'latency'
+  | 'vrm'
+  | 'bone'
+  | 'shape'
+  | 'text'
+  | 'csg'
+  | 'sculpt'
+  | 'keyframe';
+
 type ToolItem =
   | {
-      key: string;
+      kind: 'toggle';
+      key: ToggleToolKey;
       icon: React.ReactNode;
       titleKey: string;
-      stateKey: string;
-      toggle: string;
       needsVRM?: boolean;
     }
-  | { key: string; icon: React.ReactNode; titleKey: string; action: () => void }
+  | { kind: 'action'; key: string; icon: React.ReactNode; titleKey: string; action: () => void }
   | 'separator'
   | 'spacer';
 
+const TOGGLE_TOOLS: Record<
+  ToggleToolKey,
+  {
+    isActive: (state: ModelState) => boolean;
+    toggle: (state: ModelState) => () => void;
+  }
+> = {
+  face: {
+    isActive: (state) => state.isFaceEditorOpen,
+    toggle: (state) => state.toggleFaceEditor,
+  },
+  latency: {
+    isActive: (state) => state.isLatencyTesterOpen,
+    toggle: (state) => state.toggleLatencyTester,
+  },
+  vrm: {
+    isActive: (state) => state.isExpressionPresetOpen,
+    toggle: (state) => state.toggleExpressionPreset,
+  },
+  bone: {
+    isActive: (state) => state.isBoneExpressionOpen,
+    toggle: (state) => state.toggleBoneExpression,
+  },
+  shape: {
+    isActive: (state) => state.isShapeCreatorOpen,
+    toggle: (state) => state.toggleShapeCreator,
+  },
+  text: {
+    isActive: (state) => state.isTextEditorOpen,
+    toggle: (state) => state.toggleTextEditor,
+  },
+  csg: {
+    isActive: (state) => state.isCsgPanelOpen,
+    toggle: (state) => state.toggleCsgPanel,
+  },
+  sculpt: {
+    isActive: (state) => state.isSculptBrushOpen,
+    toggle: (state) => state.toggleSculptBrush,
+  },
+  keyframe: {
+    isActive: (state) => state.isKeyframeEditorOpen,
+    toggle: (state) => state.toggleKeyframeEditor,
+  },
+};
+
 const TOOLS: ToolItem[] = [
   {
+    kind: 'toggle',
     key: 'face',
     icon: <FaceIcon />,
     titleKey: 'toolbar.faceEditor',
-    stateKey: 'isFaceEditorOpen',
-    toggle: 'toggleFaceEditor',
   },
   {
+    kind: 'toggle',
     key: 'latency',
     icon: <LatencyIcon />,
     titleKey: 'toolbar.latencyTest',
-    stateKey: 'isLatencyTesterOpen',
-    toggle: 'toggleLatencyTester',
   },
   {
+    kind: 'toggle',
     key: 'vrm',
     icon: <VrmIcon />,
     titleKey: 'toolbar.vrmExpression',
-    stateKey: 'isExpressionPresetOpen',
-    toggle: 'toggleExpressionPreset',
     needsVRM: true,
   },
   'separator',
   {
+    kind: 'toggle',
     key: 'bone',
     icon: <BoneIcon />,
     titleKey: 'toolbar.boneExpression',
-    stateKey: 'isBoneExpressionOpen',
-    toggle: 'toggleBoneExpression',
   },
   {
+    kind: 'toggle',
     key: 'shape',
     icon: <ShapeIcon />,
     titleKey: 'toolbar.geometry',
-    stateKey: 'isShapeCreatorOpen',
-    toggle: 'toggleShapeCreator',
   },
   {
+    kind: 'toggle',
     key: 'text',
     icon: <TextIcon />,
     titleKey: 'toolbar.text3d',
-    stateKey: 'isTextEditorOpen',
-    toggle: 'toggleTextEditor',
   },
   {
+    kind: 'toggle',
     key: 'csg',
     icon: <CsgIcon />,
     titleKey: 'toolbar.csg',
-    stateKey: 'isCsgPanelOpen',
-    toggle: 'toggleCsgPanel',
   },
   {
+    kind: 'toggle',
     key: 'sculpt',
     icon: <SculptIcon />,
     titleKey: 'toolbar.sculpt',
-    stateKey: 'isSculptBrushOpen',
-    toggle: 'toggleSculptBrush',
   },
   {
+    kind: 'toggle',
     key: 'keyframe',
     icon: <KeyframeIcon />,
     titleKey: 'toolbar.keyframes',
-    stateKey: 'isKeyframeEditorOpen',
-    toggle: 'toggleKeyframeEditor',
   },
   'spacer',
   'separator',
   {
+    kind: 'action',
     key: 'qualityPreview',
     icon: <QualityPreviewIcon />,
     titleKey: 'toolbar.qualityPreview',
@@ -103,12 +151,14 @@ const TOOLS: ToolItem[] = [
       postMessage({ type: 'scene:capturePreview', width: 1280, height: 720, quality: 90 }),
   },
   {
+    kind: 'action',
     key: 'export',
     icon: <ExportIcon />,
     titleKey: 'toolbar.exportGlb',
     action: () => postMessage({ type: 'exportGlb' }),
   },
   {
+    kind: 'action',
     key: 'save',
     icon: <SaveIcon />,
     titleKey: 'toolbar.saveProject',
@@ -119,19 +169,24 @@ const TOOLS: ToolItem[] = [
   },
 ];
 
-export function Toolbar() {
+interface ToolbarProps {
+  className?: string;
+  width?: number;
+}
+
+export function Toolbar({ className, width }: ToolbarProps = {}) {
   const store = useModelStore();
   const { t } = useTranslation();
   let sepIdx = 0;
   let spacerIdx = 0;
 
   return (
-    <VerticalToolbar>
+    <VerticalToolbar className={className} width={width}>
       {TOOLS.map((item) => {
         if (item === 'separator') return <ToolbarSeparator key={`sep-${sepIdx++}`} />;
         if (item === 'spacer') return <ToolbarSpacer key={`spc-${spacerIdx++}`} />;
 
-        if ('action' in item) {
+        if (item.kind === 'action') {
           return (
             <ToolbarButton
               key={item.key}
@@ -142,8 +197,9 @@ export function Toolbar() {
           );
         }
 
-        const isActive = (store as unknown as Record<string, unknown>)[item.stateKey] as boolean;
-        const toggleFn = (store as unknown as Record<string, unknown>)[item.toggle] as () => void;
+        const tool = TOGGLE_TOOLS[item.key];
+        const isActive = tool.isActive(store);
+        const toggleFn = tool.toggle(store);
         const disabled = item.needsVRM === true && !store.isVRMLoaded;
 
         return (

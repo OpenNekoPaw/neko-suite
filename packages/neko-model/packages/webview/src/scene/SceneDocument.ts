@@ -11,6 +11,7 @@ export interface SceneDocumentContext {
 }
 
 export interface SceneHitTestResult {
+  sceneId?: string;
   viewportId: string;
   revision: number;
   nodeId: string | null;

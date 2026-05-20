@@ -1,5 +1,4 @@
 import type { SceneCapturePreview } from '@neko/neko-client';
-import type { FileSourceRef } from '@neko/neko-client';
 import type {
   EditorKeyframeTrack,
   EnvironmentPlacement,
@@ -20,14 +19,6 @@ export type PlaybackState = 'playing' | 'paused' | 'stopped';
 
 /** Messages from Extension Host to Webview */
 export type ExtensionMessage =
-  | {
-      type: 'loadModel';
-      uri: string;
-      filePath: string;
-      sourceRef?: FileSourceRef;
-      resourceUrl?: string;
-      resourceBaseUrl?: string;
-    }
   | { type: 'enginePort'; port: number }
   | { type: 'keyboardAction'; action: string }
   | { type: 'sceneSnapshot'; snapshot: SceneSnapshot }

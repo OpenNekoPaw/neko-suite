@@ -1,9 +1,22 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient } from '@neko/neko-client';
-import type { FileSourceRef, RegisteredFile } from '@neko/neko-client';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
-import type { EnvironmentPlacement } from '@neko/shared';
+import type {
+  EngineSceneNodeSnapshot,
+  EngineSceneSnapshot,
+  EngineVec3,
+  EnvironmentPlacement,
+  ModelMaterialPatch,
+  ModelNodeTransformPatch,
+  ModelOperationResult,
+  ModelSceneAnimationInfo,
+  ModelSceneGraphSnapshot,
+  ModelSceneMaterialInfo,
+  ModelSceneNodeInfo,
+  ModelSceneNodeKind,
+  ModelViewportCameraUpdate,
+  NekoModelAPI,
+} from '@neko/shared';
 import {
   generateMinimalGlb,
   generateHumanoidGlb,
@@ -16,13 +29,13 @@ import {
   formatModelProjectSrc,
 } from '../importModelAsset';
 import type { VrmExpressionValues } from '../live/vmcMapping';
+import { getLogger } from '../logger';
 
-const logger = new ConsoleLogger('ModelEditorProvider', LogLevel.Info);
+const logger = getLogger('ModelEditorProvider');
 
-interface EngineModelResource {
-  readonly sourceRef?: FileSourceRef;
-  readonly resourceUrl?: string;
-  readonly resourceBaseUrl?: string;
+interface ActiveSceneStream {
+  readonly streamId: string;
+  readonly generation: number;
 }
 
 /**
@@ -40,8 +53,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private activeDocument: vscode.CustomDocument | undefined;
   private queuedModelImport: { uri: vscode.Uri } | undefined;
   private engineClient: EngineClient | undefined;
-  private activeStreamId: string | undefined;
-  private activeModelResourceToken: string | undefined;
+  private activeStream: ActiveSceneStream | undefined;
+  private panelGeneration = 0;
+  private lastSceneSnapshot: EngineSceneSnapshot | undefined;
+  private activeModelPath: string | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -58,6 +73,8 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
+    this.destroyActiveStream('resolve:replaceStream');
+    const generation = ++this.panelGeneration;
     this.activeWebviewPanel = webviewPanel;
     this.activeDocument = document;
 
@@ -77,24 +94,19 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
     webviewPanel.webview.onDidReceiveMessage(
-      (msg) => this.handleWebviewMessage(msg, webviewPanel, document),
+      (msg) => this.handleWebviewMessage(msg, webviewPanel, document, generation),
       undefined,
       this.context.subscriptions,
     );
 
     webviewPanel.onDidDispose(() => {
-      if (this.activeWebviewPanel === webviewPanel) {
-        this.activeWebviewPanel = undefined;
-        this.activeDocument = undefined;
-      }
-      const streamId = this.activeStreamId;
-      if (streamId && this.engineClient) {
-        this.activeStreamId = undefined;
-        this.engineClient
-          .controlStream('streams', streamId, 'destroy')
-          .catch((err) => this.logError('dispose:destroyStream', err));
-      }
-      void this.releaseActiveModelResource();
+      if (!this.isPanelCurrent(webviewPanel, generation)) return;
+      this.panelGeneration++;
+      this.activeWebviewPanel = undefined;
+      this.activeDocument = undefined;
+      this.activeModelPath = undefined;
+      this.lastSceneSnapshot = undefined;
+      this.destroyActiveStream('dispose:destroyStream', generation);
     });
 
     // Try to connect to engine backend
@@ -105,22 +117,27 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
    * Forward keyboard action to active webview
    */
   postKeyboardAction(action: string): void {
-    this.activeWebviewPanel?.webview.postMessage({
+    const panel = this.activeWebviewPanel;
+    if (!panel) return;
+    void this.postToPanel(panel, this.panelGeneration, {
       type: 'keyboardAction',
       action,
     });
   }
 
   applyLiveExpressions(expressions: VrmExpressionValues): void {
-    this.activeWebviewPanel?.webview.postMessage({
+    const panel = this.activeWebviewPanel;
+    if (!panel) return;
+    void this.postToPanel(panel, this.panelGeneration, {
       type: 'liveExpressions',
       expressions,
     });
   }
 
   useEnvironment(placement: EnvironmentPlacement): boolean {
-    if (!this.activeWebviewPanel) return false;
-    void this.activeWebviewPanel.webview.postMessage({
+    const panel = this.activeWebviewPanel;
+    if (!panel) return false;
+    void this.postToPanel(panel, this.panelGeneration, {
       type: 'environmentPlacement',
       placement,
     });
@@ -140,9 +157,28 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   }
 
   async importAsset(uri: vscode.Uri): Promise<boolean> {
-    if (!this.activeWebviewPanel || !this.activeDocument) return false;
-    await this.importModelFile(uri.fsPath, this.activeDocument, this.activeWebviewPanel);
-    return true;
+    const panel = this.activeWebviewPanel;
+    const document = this.activeDocument;
+    if (!panel || !document) return false;
+    const generation = this.panelGeneration;
+    await this.importModelFile(uri.fsPath, document, panel, generation);
+    return this.isPanelCurrent(panel, generation);
+  }
+
+  getModelApi(): NekoModelAPI {
+    return {
+      getSceneGraph: () => this.getSceneGraph(),
+      getNodeProperties: (nodeId) => this.getNodeProperties(nodeId),
+      setNodeTransform: (nodeId, transform) => this.setNodeTransform(nodeId, transform),
+      setNodeVisible: (nodeId, visible) => this.setNodeVisible(nodeId, visible),
+      updateMaterial: (patch) => this.updateMaterial(patch),
+      listAnimations: () => this.listAnimations(),
+      playAnimation: (nameOrIndex) => this.playAnimation(nameOrIndex),
+      stopAnimation: () => this.stopAnimation(),
+      seekAnimation: (timeSeconds) => this.seekAnimation(timeSeconds),
+      updateViewportCamera: (update) => this.updateViewportCamera(update),
+      getActiveModelPath: () => this.getActiveModelPath(),
+    };
   }
 
   /**
@@ -172,7 +208,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     message: { type: string; [key: string]: unknown },
     webviewPanel: vscode.WebviewPanel,
     document: vscode.CustomDocument,
+    generation: number,
   ): Promise<void> {
+    if (!this.isPanelCurrent(webviewPanel, generation)) return;
+
     switch (message.type) {
       case 'ready': {
         const filePath = document.uri.fsPath;
@@ -180,23 +219,22 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
         if (isProject) {
           // Load .nkm project file via engine backend
-          const loaded = await this.loadProjectInEngine(filePath, webviewPanel);
+          const loaded = await this.loadProjectInEngine(filePath, webviewPanel, generation);
 
           // If project has model.src but empty scene, auto-load the referenced model
           if (loaded && loaded.snapshot?.nodes?.length === 0) {
-            await this.tryLoadModelFromProject(filePath, webviewPanel);
+            await this.tryLoadModelFromProject(filePath, webviewPanel, generation);
           }
         } else {
-          await this.postLoadModelMessage(filePath, webviewPanel);
-
-          // Also load in engine backend if available
-          await this.loadModelInEngine(filePath, webviewPanel);
+          await this.loadModelInEngine(filePath, webviewPanel, generation);
         }
 
         const queued = this.queuedModelImport;
         if (queued) {
           this.queuedModelImport = undefined;
-          await this.importModelFile(queued.uri.fsPath, document, webviewPanel);
+          if (this.isPanelCurrent(webviewPanel, generation)) {
+            await this.importModelFile(queued.uri.fsPath, document, webviewPanel, generation);
+          }
         }
         break;
       }
@@ -204,7 +242,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       case 'requestEnginePort': {
         const client = await this.ensureEngineClient();
         if (client) {
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'enginePort',
             port: client.port,
           });
@@ -213,13 +251,16 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       }
 
       case 'streamStarted': {
-        this.activeStreamId = message.streamId as string;
+        this.activeStream = { streamId: message.streamId as string, generation };
         break;
       }
 
       case 'streamDestroyed': {
-        if (this.activeStreamId === (message.streamId as string)) {
-          this.activeStreamId = undefined;
+        if (
+          this.activeStream?.streamId === (message.streamId as string) &&
+          this.activeStream.generation === generation
+        ) {
+          this.activeStream = undefined;
         }
         break;
       }
@@ -265,7 +306,9 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             message.shapeType as string,
             message.params as Record<string, number>,
           );
-          webviewPanel.webview.postMessage({ type: 'sceneSnapshot', snapshot });
+          if (this.rememberSceneSnapshot(snapshot, 'createShape')) {
+            void this.postToPanel(webviewPanel, generation, { type: 'sceneSnapshot', snapshot });
+          }
         } catch (err) {
           this.logError('createShape', err);
         }
@@ -282,7 +325,9 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             message.fontSize as number,
             message.extrusionDepth as number,
           );
-          webviewPanel.webview.postMessage({ type: 'sceneSnapshot', snapshot });
+          if (this.rememberSceneSnapshot(snapshot, 'createTextMesh')) {
+            void this.postToPanel(webviewPanel, generation, { type: 'sceneSnapshot', snapshot });
+          }
         } catch (err) {
           this.logError('createTextMesh', err);
         }
@@ -299,7 +344,9 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             message.entityB as string,
             message.operation as 'union' | 'difference' | 'intersection',
           );
-          webviewPanel.webview.postMessage({ type: 'sceneSnapshot', snapshot });
+          if (this.rememberSceneSnapshot(snapshot, 'csgBoolean')) {
+            void this.postToPanel(webviewPanel, generation, { type: 'sceneSnapshot', snapshot });
+          }
         } catch (err) {
           this.logError('csgBoolean', err);
         }
@@ -328,7 +375,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         const client = await this.ensureEngineClient();
         if (!client) {
           // No engine available, just echo back immediately
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'latency:response',
             timestamp: message.timestamp,
           });
@@ -343,14 +390,14 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             options: {},
           });
           // Echo back to webview
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'latency:response',
             timestamp: message.timestamp,
           });
         } catch (err) {
           this.logError('latency_test', err);
           // Still echo back even on error
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'latency:response',
             timestamp: message.timestamp,
           });
@@ -368,7 +415,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             height: (message.height as number | undefined) ?? 720,
             quality: (message.quality as number | undefined) ?? 90,
           });
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'sceneCapturePreview',
             preview,
           });
@@ -392,7 +439,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           if (saveUri) {
             const binaryStr = Buffer.from(result.data, 'base64');
             await vscode.workspace.fs.writeFile(saveUri, binaryStr);
-            webviewPanel.webview.postMessage({
+            void this.postToPanel(webviewPanel, generation, {
               type: 'exportComplete',
               success: true,
               filePath: saveUri.fsPath,
@@ -400,7 +447,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           }
         } catch (err) {
           this.logError('exportGlb', err);
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'exportComplete',
             success: false,
             error: err instanceof Error ? err.message : String(err),
@@ -420,7 +467,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           });
           if (saveUri) {
             await client.saveProject(saveUri.fsPath, message.editorState);
-            webviewPanel.webview.postMessage({
+            void this.postToPanel(webviewPanel, generation, {
               type: 'projectSaved',
               success: true,
               filePath: saveUri.fsPath,
@@ -428,7 +475,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           }
         } catch (err) {
           this.logError('saveProject', err);
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'projectSaved',
             success: false,
             error: err instanceof Error ? err.message : String(err),
@@ -445,7 +492,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
         try {
           const tracks = await client.getSceneKeyframeTracks(message.clipName as string);
-          webviewPanel.webview.postMessage({ type: 'keyframeTracks', tracks });
+          void this.postToPanel(webviewPanel, generation, { type: 'keyframeTracks', tracks });
         } catch (err) {
           this.logError('requestKeyframeTracks', err);
         }
@@ -464,7 +511,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             message.timestamp as number,
             message.values as number[],
           );
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'keyframeAdded',
             trackProperty: `${message.nodeId as string}.${message.property as string}`,
             keyframeId: result.id,
@@ -484,7 +531,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             message.clipName as string,
             message.keyframeId as string,
           );
-          webviewPanel.webview.postMessage({
+          void this.postToPanel(webviewPanel, generation, {
             type: 'keyframeRemoved',
             trackProperty: '',
             keyframeId: message.keyframeId as string,
@@ -552,7 +599,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           filters: { '3D Models': ['glb', 'gltf', 'vrm'] },
         });
         if (uris?.[0]) {
-          await this.importModelFile(uris[0].fsPath, document, webviewPanel);
+          await this.importModelFile(uris[0].fsPath, document, webviewPanel, generation);
         }
         break;
       }
@@ -569,7 +616,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         const glbPath = path.join(nkmDir, glbName);
         await vscode.workspace.fs.writeFile(vscode.Uri.file(glbPath), glbData);
 
-        await this.importModelFile(glbPath, document, webviewPanel);
+        await this.importModelFile(glbPath, document, webviewPanel, generation);
         break;
       }
 
@@ -582,7 +629,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         const dropPath = path.join(nkmDir2, fileName);
         await vscode.workspace.fs.writeFile(vscode.Uri.file(dropPath), fileData);
 
-        await this.importModelFile(dropPath, document, webviewPanel);
+        await this.importModelFile(dropPath, document, webviewPanel, generation);
         break;
       }
 
@@ -598,7 +645,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     modelPath: string,
     document: vscode.CustomDocument,
     webviewPanel: vscode.WebviewPanel,
+    generation: number,
   ): Promise<void> {
+    if (!this.isPanelCurrent(webviewPanel, generation)) return;
+
     let importPath = path.resolve(modelPath);
 
     // Update model.src in the .nkm project file
@@ -641,12 +691,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       }
     }
 
-    // Send model URI to webview for R3F loading
-    this.addWebviewResourceRoot(webviewPanel, path.dirname(importPath));
-    await this.postLoadModelMessage(importPath, webviewPanel);
-
-    // Also load in engine backend
-    await this.loadModelInEngine(importPath, webviewPanel);
+    await this.loadModelInEngine(importPath, webviewPanel, generation);
   }
 
   private async resolveAvailableImportPath(targetPath: string): Promise<string> {
@@ -672,72 +717,30 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     }
   }
 
-  private addWebviewResourceRoot(webviewPanel: vscode.WebviewPanel, rootPath: string): void {
-    const nextRoot = vscode.Uri.file(rootPath);
-    const currentRoots = webviewPanel.webview.options.localResourceRoots ?? [];
-    const hasRoot = currentRoots.some((root) => root.toString() === nextRoot.toString());
-    if (hasRoot) return;
-
-    webviewPanel.webview.options = {
-      ...webviewPanel.webview.options,
-      localResourceRoots: [...currentRoots, nextRoot],
-    };
+  private isPanelCurrent(webviewPanel: vscode.WebviewPanel, generation: number): boolean {
+    return this.activeWebviewPanel === webviewPanel && this.panelGeneration === generation;
   }
 
-  private async postLoadModelMessage(
-    filePath: string,
+  private postToPanel(
     webviewPanel: vscode.WebviewPanel,
-  ): Promise<EngineModelResource | undefined> {
-    const modelUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(filePath));
-    const engineResource = await this.registerModelResource(filePath);
-    webviewPanel.webview.postMessage({
-      type: 'loadModel',
-      uri: modelUri.toString(),
-      filePath,
-      sourceRef: engineResource?.sourceRef,
-      resourceUrl: engineResource?.resourceUrl,
-      resourceBaseUrl: engineResource?.resourceBaseUrl,
-    });
-    return engineResource;
-  }
-
-  private async registerModelResource(filePath: string): Promise<EngineModelResource | undefined> {
-    const client = await this.ensureEngineClient();
-    if (!client) return undefined;
-
-    try {
-      const registered = await client.registerFile({ filePath, purpose: 'model' });
-      await this.releaseActiveModelResource(client);
-      this.activeModelResourceToken = registered.token;
-      return this.toEngineModelResource(client, filePath, registered);
-    } catch (err) {
-      this.logError('registerModelResource', err);
-      return undefined;
+    generation: number,
+    message: Record<string, unknown>,
+  ): Thenable<boolean> {
+    if (!this.isPanelCurrent(webviewPanel, generation)) {
+      return Promise.resolve(false);
     }
+    return webviewPanel.webview.postMessage(message);
   }
 
-  private async releaseActiveModelResource(client = this.engineClient): Promise<void> {
-    const token = this.activeModelResourceToken;
-    if (!token || !client) return;
-    this.activeModelResourceToken = undefined;
-    await client.unregisterFile(token);
-  }
+  private destroyActiveStream(action: string, generation?: number): void {
+    const activeStream = this.activeStream;
+    if (!activeStream || !this.engineClient) return;
+    if (generation !== undefined && activeStream.generation !== generation) return;
 
-  private toEngineModelResource(
-    client: EngineClient,
-    filePath: string,
-    registered: RegisteredFile,
-  ): EngineModelResource {
-    const fileName = path.basename(filePath);
-    return {
-      sourceRef: { token: registered.token },
-      resourceUrl: client.getFileResourceUrl(registered.token, fileName),
-      resourceBaseUrl: client.getFileResourceBaseUrl(registered.token),
-    };
-  }
-
-  private getWorkspaceFolderUris(): readonly vscode.Uri[] {
-    return (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri);
+    this.activeStream = undefined;
+    this.engineClient
+      .controlStream('streams', activeStream.streamId, 'destroy')
+      .catch((err) => this.logError(action, err));
   }
 
   /**
@@ -746,15 +749,19 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private async loadModelInEngine(
     filePath: string,
     webviewPanel: vscode.WebviewPanel,
+    generation: number,
   ): Promise<void> {
     const client = await this.ensureEngineClient();
     if (!client) return;
+    if (!this.isPanelCurrent(webviewPanel, generation)) return;
 
     try {
       const data = await client.withRegisteredFile({ filePath, purpose: 'model' }, (registered) =>
         client.loadModel({ token: registered.token }),
       );
-      webviewPanel.webview.postMessage({
+      if (!this.rememberSceneSnapshot(data, 'loadModel')) return;
+      this.activeModelPath = filePath;
+      void this.postToPanel(webviewPanel, generation, {
         type: 'sceneSnapshot',
         snapshot: data,
       });
@@ -770,18 +777,22 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private async loadProjectInEngine(
     filePath: string,
     webviewPanel: vscode.WebviewPanel,
-  ): Promise<{ snapshot: { nodes: unknown[] }; editorState: unknown } | undefined> {
+    generation: number,
+  ): Promise<{ snapshot: EngineSceneSnapshot; editorState: unknown } | undefined> {
     const client = await this.ensureEngineClient();
     if (!client) return undefined;
+    if (!this.isPanelCurrent(webviewPanel, generation)) return undefined;
 
     try {
       const result = await client.loadProject(filePath);
-      webviewPanel.webview.postMessage({
+      if (!this.rememberSceneSnapshot(result.snapshot, 'loadProject')) return undefined;
+      this.activeModelPath = filePath;
+      void this.postToPanel(webviewPanel, generation, {
         type: 'projectLoaded',
         snapshot: result.snapshot,
         editorState: result.editorState,
       });
-      return result as { snapshot: { nodes: unknown[] }; editorState: unknown };
+      return result;
     } catch (err) {
       this.logError('loadProject', err);
       return undefined;
@@ -795,7 +806,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private async tryLoadModelFromProject(
     nkmPath: string,
     webviewPanel: vscode.WebviewPanel,
+    generation: number,
   ): Promise<void> {
+    if (!this.isPanelCurrent(webviewPanel, generation)) return;
+
     try {
       const nkmUri = vscode.Uri.file(nkmPath);
       const data = await vscode.workspace.fs.readFile(nkmUri);
@@ -817,19 +831,199 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         return; // Model file doesn't exist
       }
 
-      // Send model URI to webview for R3F loading
-      await this.postLoadModelMessage(modelPath, webviewPanel);
-
-      // Also load in engine backend
-      await this.loadModelInEngine(modelPath, webviewPanel);
+      await this.loadModelInEngine(modelPath, webviewPanel, generation);
     } catch (err) {
       this.logError('tryLoadModelFromProject', err);
     }
   }
 
+  private getWorkspaceFolderUris(): readonly vscode.Uri[] {
+    return (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri);
+  }
+
   private logError(action: string, err: unknown): void {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error(`${action} failed`, msg);
+  }
+
+  private async getSceneGraph(): Promise<ModelSceneGraphSnapshot | undefined> {
+    if (!this.isActive()) return undefined;
+    const snapshot = await this.refreshSceneSnapshot();
+    return snapshot
+      ? mapEngineSceneSnapshotToModelGraph(snapshot, this.activeModelPath)
+      : undefined;
+  }
+
+  private async getNodeProperties(nodeId: string): Promise<ModelSceneNodeInfo | undefined> {
+    const scene = await this.getSceneGraph();
+    return scene?.nodes.find((node) => node.id === nodeId);
+  }
+
+  private async setNodeTransform(
+    nodeId: string,
+    transform: ModelNodeTransformPatch,
+  ): Promise<ModelOperationResult> {
+    if (!this.isActive()) return unavailableModelOperation('No active model editor is available.');
+    const client = await this.ensureEngineClient();
+    const current = await this.getNodeProperties(nodeId);
+    if (!client || !current) {
+      return unavailableModelOperation('No active model scene node is available.');
+    }
+
+    const position = vec3ToTuple(transform.position ?? current.position ?? { x: 0, y: 0, z: 0 });
+    const rotation = quatToTuple(
+      transform.rotation ?? current.rotation ?? { x: 0, y: 0, z: 0, w: 1 },
+    );
+    const scale = vec3ToTuple(transform.scale ?? current.scale ?? { x: 1, y: 1, z: 1 });
+
+    try {
+      await client.updateSceneTransform(nodeId, position, rotation, scale);
+      const snapshot = await this.refreshSceneSnapshot();
+      return { ok: true, revision: snapshot?.revision };
+    } catch (error) {
+      return errorModelOperation(error);
+    }
+  }
+
+  private async setNodeVisible(nodeId: string, visible: boolean): Promise<ModelOperationResult> {
+    if (!this.isActive()) return unavailableModelOperation('No active model editor is available.');
+    const client = await this.ensureEngineClient();
+    if (!client) return unavailableModelOperation('Neko Engine is not available.');
+
+    try {
+      await client.setSceneNodeVisible(nodeId, visible);
+      const snapshot = await this.refreshSceneSnapshot();
+      return { ok: true, revision: snapshot?.revision };
+    } catch (error) {
+      return errorModelOperation(error);
+    }
+  }
+
+  private async updateMaterial(patch: ModelMaterialPatch): Promise<ModelOperationResult> {
+    if (!this.isActive()) return unavailableModelOperation('No active model editor is available.');
+    const client = await this.ensureEngineClient();
+    if (!client) return unavailableModelOperation('Neko Engine is not available.');
+
+    try {
+      const params = patch.params;
+      await client.updateSceneMaterial(patch.materialId, {
+        baseColor: toColor4(params['baseColor']),
+        metallic: toFiniteNumber(params['metallic']),
+        roughness: toFiniteNumber(params['roughness']),
+        emissive: toColor3(params['emissive']),
+        occlusionStrength: toFiniteNumber(params['occlusionStrength']),
+      });
+      const snapshot = await this.refreshSceneSnapshot();
+      return { ok: true, revision: snapshot?.revision };
+    } catch (error) {
+      return errorModelOperation(error);
+    }
+  }
+
+  private async listAnimations(): Promise<readonly ModelSceneAnimationInfo[]> {
+    const scene = await this.getSceneGraph();
+    return scene?.animations ?? [];
+  }
+
+  private async playAnimation(nameOrIndex: string | number): Promise<ModelOperationResult> {
+    if (!this.isActive()) return unavailableModelOperation('No active model editor is available.');
+    const animations = await this.listAnimations();
+    const clip = typeof nameOrIndex === 'number' ? animations[nameOrIndex] : undefined;
+    const clipName = typeof nameOrIndex === 'string' ? nameOrIndex : clip?.name;
+    if (!clipName) return unavailableModelOperation('Animation clip is not available.');
+
+    const client = await this.ensureEngineClient();
+    if (!client) return unavailableModelOperation('Neko Engine is not available.');
+
+    try {
+      await client.crossfadeSceneAnimation(clipName, 0, false);
+      return { ok: true, revision: this.lastSceneSnapshot?.revision };
+    } catch (error) {
+      return errorModelOperation(error);
+    }
+  }
+
+  private async stopAnimation(): Promise<ModelOperationResult> {
+    if (!this.isActive()) return unavailableModelOperation('No active model editor is available.');
+    const client = await this.ensureEngineClient();
+    if (!client) return unavailableModelOperation('Neko Engine is not available.');
+
+    try {
+      const animations = await this.listAnimations();
+      for (const animation of animations) {
+        await client.setSceneBlendWeight(animation.name, 0);
+      }
+      return { ok: true, revision: this.lastSceneSnapshot?.revision };
+    } catch (error) {
+      return errorModelOperation(error);
+    }
+  }
+
+  private async seekAnimation(timeSeconds: number): Promise<ModelOperationResult> {
+    if (!this.isActive()) return unavailableModelOperation('No active model editor is available.');
+    const client = await this.ensureEngineClient();
+    const firstAnimation = (await this.listAnimations())[0];
+    if (!client || !firstAnimation) {
+      return unavailableModelOperation('No active model animation is available.');
+    }
+
+    try {
+      await client.tickScene(firstAnimation.name, timeSeconds);
+      return { ok: true, revision: this.lastSceneSnapshot?.revision };
+    } catch (error) {
+      return errorModelOperation(error);
+    }
+  }
+
+  private async updateViewportCamera(
+    update: ModelViewportCameraUpdate,
+  ): Promise<ModelOperationResult> {
+    if (!this.isActive()) return unavailableModelOperation('No active model editor is available.');
+    const client = await this.ensureEngineClient();
+    if (!client) return unavailableModelOperation('Neko Engine is not available.');
+
+    try {
+      await client.updateEditorCamera(
+        tuple3(update.position),
+        tuple3(update.target),
+        update.fovY,
+        update.viewportId,
+      );
+      return { ok: true, revision: this.lastSceneSnapshot?.revision };
+    } catch (error) {
+      return errorModelOperation(error);
+    }
+  }
+
+  private getActiveModelPath(): string | undefined {
+    return this.isActive() ? this.activeModelPath : undefined;
+  }
+
+  private async refreshSceneSnapshot(): Promise<EngineSceneSnapshot | undefined> {
+    const client = await this.ensureEngineClient();
+    if (!client) return this.lastSceneSnapshot;
+
+    try {
+      const snapshot = await client.getSceneSnapshot();
+      return this.rememberSceneSnapshot(snapshot, 'refreshSceneSnapshot')
+        ? snapshot
+        : this.lastSceneSnapshot;
+    } catch {
+      return this.lastSceneSnapshot;
+    }
+  }
+
+  private rememberSceneSnapshot(
+    snapshot: unknown,
+    source: string,
+  ): snapshot is EngineSceneSnapshot {
+    if (!isEngineSceneSnapshot(snapshot)) {
+      logger.warn(`${source} returned invalid scene snapshot data; ignoring snapshot.`);
+      return false;
+    }
+
+    this.lastSceneSnapshot = snapshot;
+    return true;
   }
 
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
@@ -869,4 +1063,230 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     }
     return text;
   }
+}
+
+/** @internal Exported for focused model API unit tests. */
+export function mapEngineSceneSnapshotToModelGraph(
+  snapshot: EngineSceneSnapshot,
+  activeModelPath: string | undefined,
+): ModelSceneGraphSnapshot {
+  return {
+    sceneId: snapshot.sceneId,
+    nodes: snapshot.nodes.map(sceneNodeToModelNode),
+    materials: collectSceneMaterials(snapshot.nodes),
+    animations: snapshot.animations.map((animation, index) => ({
+      name: animation.name,
+      index,
+      duration: animation.duration,
+    })),
+    activeModelPath,
+    engineSnapshot: snapshot,
+  };
+}
+
+function sceneNodeToModelNode(node: EngineSceneNodeSnapshot): ModelSceneNodeInfo {
+  return {
+    id: node.nodeId,
+    name: node.name,
+    parentId: node.parentId ?? null,
+    visible: node.visible,
+    kind: sceneNodeKind(node.kind),
+    position: node.transform?.position,
+    rotation: node.transform?.rotation,
+    scale: node.transform?.scale,
+    materialIds: node.material?.id ? [node.material.id] : undefined,
+    bounds: node.bounds,
+    worldBounds: node.worldBounds,
+  };
+}
+
+function collectSceneMaterials(
+  nodes: readonly EngineSceneNodeSnapshot[],
+): readonly ModelSceneMaterialInfo[] {
+  const materials = new Map<string, ModelSceneMaterialInfo>();
+  for (const node of nodes) {
+    const material = node.material;
+    if (material?.id && !materials.has(material.id)) {
+      materials.set(material.id, {
+        id: material.id,
+        name: material.uri ?? material.id,
+      });
+    }
+  }
+  return [...materials.values()];
+}
+
+/** @internal Exported for focused model API unit tests. */
+export function isEngineSceneSnapshot(value: unknown): value is EngineSceneSnapshot {
+  if (!isRecord(value)) return false;
+  if (!isNonEmptyString(value['sceneId'])) return false;
+  if (!isFiniteNumber(value['revision'])) return false;
+  if (!Array.isArray(value['nodes']) || !value['nodes'].every(isEngineSceneNodeSnapshot)) {
+    return false;
+  }
+  if (
+    !Array.isArray(value['animations']) ||
+    !value['animations'].every(isEngineAnimationClipInfo)
+  ) {
+    return false;
+  }
+  const activeCamera = value['activeCamera'];
+  return activeCamera === undefined || isEngineCameraState(activeCamera);
+}
+
+function isEngineSceneNodeSnapshot(value: unknown): value is EngineSceneNodeSnapshot {
+  if (!isRecord(value)) return false;
+  if (!isNonEmptyString(value['nodeId'])) return false;
+  if (!isNonEmptyString(value['name'])) return false;
+  if (!Array.isArray(value['children']) || !value['children'].every(isString)) return false;
+  if (typeof value['visible'] !== 'boolean') return false;
+  if (!isOptionalString(value['parentId'])) return false;
+  if (!isOptionalFiniteNumber(value['layerMask'])) return false;
+  if (!isOptionalString(value['kind'])) return false;
+  if (!isOptionalTransform3d(value['transform'])) return false;
+  if (!isOptionalAssetHandle(value['mesh'])) return false;
+  if (!isOptionalAssetHandle(value['material'])) return false;
+  if (!isOptionalBounds3(value['bounds'])) return false;
+  return isOptionalBounds3(value['worldBounds']);
+}
+
+function isEngineAnimationClipInfo(value: unknown): boolean {
+  return isRecord(value) && isNonEmptyString(value['name']) && isFiniteNumber(value['duration']);
+}
+
+function isEngineCameraState(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!isNonEmptyString(value['cameraId'])) return false;
+  if (!isFiniteNumber(value['fov'])) return false;
+  if (!isOptionalVec3(value['position'])) return false;
+  if (!isOptionalVec3(value['target'])) return false;
+  if (!isOptionalVec3(value['up'])) return false;
+  if (!isOptionalFiniteNumber(value['near'])) return false;
+  return isOptionalFiniteNumber(value['far']);
+}
+
+function sceneNodeKind(kind: string | undefined): ModelSceneNodeKind {
+  switch (kind) {
+    case 'mesh':
+    case 'light':
+    case 'camera':
+    case 'bone':
+    case 'empty':
+      return kind;
+    default:
+      return 'unknown';
+  }
+}
+
+function isOptionalTransform3d(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  if (!isOptionalVec3(value['position'])) return false;
+  if (!isOptionalQuat(value['rotation'])) return false;
+  return isOptionalVec3(value['scale']);
+}
+
+function isOptionalBounds3(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  if (!isOptionalVec3(value['min'])) return false;
+  return isOptionalVec3(value['max']);
+}
+
+function isOptionalAssetHandle(value: unknown): boolean {
+  if (value === undefined) return true;
+  return isRecord(value) && isNonEmptyString(value['id']);
+}
+
+function isOptionalVec3(value: unknown): boolean {
+  return value === undefined || isVec3(value);
+}
+
+function isVec3(value: unknown): value is EngineVec3 {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value['x']) &&
+    isFiniteNumber(value['y']) &&
+    isFiniteNumber(value['z'])
+  );
+}
+
+function isOptionalQuat(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (isRecord(value) &&
+      isFiniteNumber(value['x']) &&
+      isFiniteNumber(value['y']) &&
+      isFiniteNumber(value['z']) &&
+      isFiniteNumber(value['w']))
+  );
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || isString(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return value === undefined || isFiniteNumber(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function vec3ToTuple(value: EngineVec3): [number, number, number] {
+  return [value.x, value.y, value.z];
+}
+
+function quatToTuple(value: {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}): [number, number, number, number] {
+  return [value.x, value.y, value.z, value.w];
+}
+
+function tuple3(value: readonly [number, number, number]): [number, number, number] {
+  return [value[0], value[1], value[2]];
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function toColor4(value: unknown): [number, number, number, number] | undefined {
+  return tupleOfNumbers(value, 4) as [number, number, number, number] | undefined;
+}
+
+function toColor3(value: unknown): [number, number, number] | undefined {
+  return tupleOfNumbers(value, 3) as [number, number, number] | undefined;
+}
+
+function tupleOfNumbers(value: unknown, length: number): number[] | undefined {
+  if (!Array.isArray(value) || value.length !== length) return undefined;
+  const numbers = value.filter(
+    (item): item is number => typeof item === 'number' && Number.isFinite(item),
+  );
+  return numbers.length === length ? numbers : undefined;
+}
+
+function unavailableModelOperation(message: string): ModelOperationResult {
+  return { ok: false, message };
+}
+
+function errorModelOperation(error: unknown): ModelOperationResult {
+  return { ok: false, message: error instanceof Error ? error.message : String(error) };
 }

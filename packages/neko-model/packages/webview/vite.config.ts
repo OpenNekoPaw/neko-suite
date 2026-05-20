@@ -1,18 +1,10 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { realpathSync } from 'fs';
 
-// Force all zustand imports to resolve to local v4 copy (which has default export).
-// Root node_modules has zustand v5 (used by other packages), but @react-three/fiber v8
-// requires `import create from 'zustand'` (default import) only available in v4.
+// Force all zustand imports to resolve to the webview package's v4 copy.
+// Root node_modules may host a different major version for other packages.
 const localZustandDir = path.resolve(__dirname, 'node_modules/zustand');
-
-// Resolve the real physical path of three.js (pnpm uses symlinks).
-// With preserveSymlinks:true, Vite treats symlinked paths as distinct modules,
-// so we must pin three to its real path to ensure a single instance across
-// @pixiv/three-vrm, @react-three/fiber, @react-three/drei, and the app code.
-const threePath = realpathSync(path.resolve(__dirname, 'node_modules/three'));
 
 /**
  * Vite plugin to redirect all zustand imports to local v4 copy.
@@ -40,7 +32,6 @@ export default defineConfig({
   base: './',
   resolve: {
     preserveSymlinks: true,
-    dedupe: ['three'],
     alias: [
       { find: '@', replacement: path.resolve(__dirname, './src') },
       { find: '@neko/shared', replacement: path.resolve(__dirname, '../../../neko-types/src') },
@@ -48,7 +39,6 @@ export default defineConfig({
         find: '@neko/neko-client',
         replacement: path.resolve(__dirname, '../../../neko-client/src'),
       },
-      { find: 'three', replacement: threePath },
     ],
   },
   server: {

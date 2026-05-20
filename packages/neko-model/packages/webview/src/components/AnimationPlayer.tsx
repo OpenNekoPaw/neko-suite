@@ -51,9 +51,9 @@ export function AnimationPlayer({
   }
 
   return (
-    <div className="model-bottom-panel absolute bottom-0 left-0 right-0 flex items-center gap-2 p-2 text-xs">
+    <div className="model-animation-player flex min-w-0 flex-1 items-center gap-2 text-xs">
       <select
-        className="px-2 py-1 text-xs"
+        className="min-w-32 px-2 py-1 text-xs"
         value={activeClip ?? ''}
         onChange={(e) => handleClipChange(e.target.value)}
         disabled={disabled}
@@ -98,7 +98,7 @@ export function AnimationPlayer({
       </label>
 
       {activeClip && (
-        <span className="ml-auto text-[var(--model-fg-secondary)]">
+        <span className="ml-auto truncate text-[var(--model-fg-secondary)]">
           {playbackState === 'playing'
             ? t('animation.statusPlaying')
             : playbackState === 'paused'

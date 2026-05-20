@@ -30,6 +30,36 @@ type VisibilityPatch = NonNullable<SceneDelta['updatedVisibility']>[number];
 type ViewportOverlayPatch = NonNullable<SceneDelta['overlay']>;
 type ModelingSessionState = NonNullable<SceneDelta['modelingSessions']>[number];
 type SceneControlStatus = 'disconnected' | 'connecting' | 'ready' | 'error';
+type Vec3 = [number, number, number];
+
+const DEFAULT_CAMERA_THETA = 0;
+const DEFAULT_CAMERA_PHI = Math.PI / 4;
+const DEFAULT_CAMERA_RADIUS = 5;
+const DEFAULT_CAMERA_TARGET: Vec3 = [0, 0.9, 0];
+const EDITOR_CAMERA_FOV_RAD = (45 * Math.PI) / 180;
+const MIN_CAMERA_RADIUS = 0.5;
+const MIN_FRAME_CAMERA_RADIUS = 0.8;
+const MAX_CAMERA_RADIUS = 50;
+const MIN_NODE_EXTENT = 0.05;
+const CAMERA_FIT_PADDING = 1.25;
+const EPSILON = 0.000001;
+
+interface CameraStatePatch {
+  cameraTheta: number;
+  cameraPhi: number;
+  cameraRadius: number;
+  cameraTarget: Vec3;
+}
+
+interface SceneBounds {
+  min: Vec3;
+  max: Vec3;
+}
+
+interface NodeWorldFrame {
+  position: Vec3;
+  scale: Vec3;
+}
 
 export interface PendingTransformPrediction {
   seq: number;
@@ -58,6 +88,7 @@ export interface ModelState {
   lastRenderFrameMeta: RenderFrameMeta | null;
   authoringMetrics: AuthoringPerformanceMetrics;
   authoringMetricsSnapshot: AuthoringMetricsSnapshot;
+  showViewportGrid: boolean;
 
   // Animation
   animationClips: AnimationClipInfo[];
@@ -67,9 +98,7 @@ export interface ModelState {
   // Transform
   transformMode: TransformMode;
 
-  // Model loading
-  modelUrl: string | null;
-  modelResourceBaseUrl: string | null;
+  // Engine preview
   isLoading: boolean;
   qualityPreviewDataUrl: string | null;
   environmentPlacement: EnvironmentPlacement | null;
@@ -89,7 +118,8 @@ export interface ModelState {
   cameraTheta: number;
   cameraPhi: number;
   cameraRadius: number;
-  cameraTarget: [number, number, number];
+  cameraTarget: Vec3;
+  lastAutoFramedSceneSignature: string | null;
 
   // Phase 2 panels
   isBoneExpressionOpen: boolean;
@@ -138,8 +168,7 @@ export interface ModelState {
   // Actions — Transform
   setTransformMode: (mode: TransformMode) => void;
 
-  // Actions — Model
-  setModelUrl: (url: string | null, resourceBaseUrl?: string | null) => void;
+  // Actions — Engine preview
   setLoading: (loading: boolean) => void;
   setQualityPreview: (dataUrl: string | null) => void;
   setEnvironmentPlacement: (placement: EnvironmentPlacement | null) => void;
@@ -186,7 +215,11 @@ export interface ModelState {
   panCamera: (dx: number, dy: number) => void;
   zoomCamera: (deltaRadius: number) => void;
   resetCamera: () => void;
-  getCameraPosition: () => [number, number, number];
+  setViewportGridVisible: (visible: boolean) => void;
+  toggleViewportGrid: () => void;
+  frameSceneCamera: (snapshot: SceneSnapshot) => boolean;
+  markSceneCameraFramed: (snapshot: SceneSnapshot) => void;
+  getCameraPosition: () => Vec3;
 
   // Actions — Project
   getEditorState: () => Record<string, unknown>;
@@ -212,12 +245,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
   lastRenderFrameMeta: null,
   authoringMetrics: new AuthoringPerformanceMetrics(),
   authoringMetricsSnapshot: new AuthoringPerformanceMetrics().snapshot(),
+  showViewportGrid: true,
   animationClips: [],
   activeAnimation: null,
   playbackState: 'stopped',
   transformMode: 'translate',
-  modelUrl: null,
-  modelResourceBaseUrl: null,
   isLoading: false,
   qualityPreviewDataUrl: null,
   environmentPlacement: null,
@@ -233,10 +265,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
   isSculptBrushOpen: false,
   csgOperandA: null,
   csgOperandB: null,
-  cameraTheta: 0,
-  cameraPhi: Math.PI / 4,
-  cameraRadius: 5,
-  cameraTarget: [0, 0.9, 0],
+  cameraTheta: DEFAULT_CAMERA_THETA,
+  cameraPhi: DEFAULT_CAMERA_PHI,
+  cameraRadius: DEFAULT_CAMERA_RADIUS,
+  cameraTarget: defaultCameraTarget(),
+  lastAutoFramedSceneSignature: null,
   keyframeTracks: [],
   selectedKeyframeIds: new Set<string>(),
   isKeyframeEditorOpen: false,
@@ -507,10 +540,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   // Transform actions
   setTransformMode: (mode) => set({ transformMode: mode }),
 
-  // Model actions
-  setModelUrl: (url, resourceBaseUrl = null) =>
-    set({ modelUrl: url, modelResourceBaseUrl: resourceBaseUrl, qualityPreviewDataUrl: null }),
-
+  // Engine preview actions
   setLoading: (loading) => set({ isLoading: loading }),
 
   setQualityPreview: (dataUrl) => set({ qualityPreviewDataUrl: dataUrl }),
@@ -611,30 +641,68 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   panCamera: (dx, dy) =>
     set((state) => {
-      const theta = state.cameraTheta;
-      const rightX = Math.cos(theta);
-      const rightZ = -Math.sin(theta);
-      const [tx, ty, tz] = state.cameraTarget;
+      const position = cameraPositionFromState(state);
+      const forward = normalizeVec3(subVec3(state.cameraTarget, position));
+      const right = normalizeVec3(crossVec3(forward, [0, 1, 0]));
+      const up = normalizeVec3(crossVec3(right, forward));
+      const offset = addVec3(scaleVec3(right, -dx), scaleVec3(up, dy));
+      const [tx, ty, tz] = addVec3(state.cameraTarget, offset);
       return {
-        cameraTarget: [tx - dx * rightX, ty + dy, tz - dx * rightZ] as [number, number, number],
+        cameraTarget: [tx, ty, tz],
       };
     }),
 
   zoomCamera: (deltaRadius) =>
     set((state) => ({
-      cameraRadius: Math.max(0.5, Math.min(50, state.cameraRadius + deltaRadius)),
+      cameraRadius: clampNumber(
+        state.cameraRadius + deltaRadius,
+        MIN_CAMERA_RADIUS,
+        MAX_CAMERA_RADIUS,
+      ),
     })),
 
   resetCamera: () =>
-    set({ cameraTheta: 0, cameraPhi: Math.PI / 4, cameraRadius: 5, cameraTarget: [0, 0.9, 0] }),
+    set({
+      cameraTheta: DEFAULT_CAMERA_THETA,
+      cameraPhi: DEFAULT_CAMERA_PHI,
+      cameraRadius: DEFAULT_CAMERA_RADIUS,
+      cameraTarget: defaultCameraTarget(),
+    }),
+
+  setViewportGridVisible: (visible) => set({ showViewportGrid: visible }),
+
+  toggleViewportGrid: () => set((state) => ({ showViewportGrid: !state.showViewportGrid })),
+
+  frameSceneCamera: (snapshot) => {
+    const signature = sceneFrameSignature(snapshot);
+    if (!signature || signature === get().lastAutoFramedSceneSignature) {
+      return false;
+    }
+
+    const cameraFrame =
+      cameraFrameFromActiveCamera(snapshot.activeCamera) ??
+      cameraFrameFromSceneNodes(snapshot.nodes);
+    if (!cameraFrame) {
+      set({ lastAutoFramedSceneSignature: signature });
+      return false;
+    }
+
+    set({
+      ...cameraFrame,
+      lastAutoFramedSceneSignature: signature,
+    });
+    return true;
+  },
+
+  markSceneCameraFramed: (snapshot) => {
+    const signature = sceneFrameSignature(snapshot);
+    if (signature) {
+      set({ lastAutoFramedSceneSignature: signature });
+    }
+  },
 
   getCameraPosition: () => {
-    const { cameraTheta, cameraPhi, cameraRadius, cameraTarget } = get();
-    return [
-      cameraTarget[0] + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta),
-      cameraTarget[1] + cameraRadius * Math.cos(cameraPhi),
-      cameraTarget[2] + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta),
-    ] as [number, number, number];
+    return cameraPositionFromState(get());
   },
 
   // Project actions
@@ -658,6 +726,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       cameraPhi: s.cameraPhi,
       cameraRadius: s.cameraRadius,
       cameraTarget: s.cameraTarget,
+      showViewportGrid: s.showViewportGrid,
     };
   },
 
@@ -680,9 +749,249 @@ export const useModelStore = create<ModelState>((set, get) => ({
       cameraTheta: (state['cameraTheta'] as number) ?? 0,
       cameraPhi: (state['cameraPhi'] as number) ?? Math.PI / 4,
       cameraRadius: (state['cameraRadius'] as number) ?? 5,
-      cameraTarget: (state['cameraTarget'] as [number, number, number]) ?? [0, 0.9, 0],
+      cameraTarget: vec3FromValue(state['cameraTarget']) ?? defaultCameraTarget(),
+      showViewportGrid: (state['showViewportGrid'] as boolean | undefined) ?? true,
     }),
 }));
+
+function cameraPositionFromState(
+  state: Pick<ModelState, 'cameraTheta' | 'cameraPhi' | 'cameraRadius' | 'cameraTarget'>,
+): Vec3 {
+  const { cameraTheta, cameraPhi, cameraRadius, cameraTarget } = state;
+  return [
+    cameraTarget[0] + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta),
+    cameraTarget[1] + cameraRadius * Math.cos(cameraPhi),
+    cameraTarget[2] + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta),
+  ];
+}
+
+function defaultCameraTarget(): Vec3 {
+  return [...DEFAULT_CAMERA_TARGET];
+}
+
+function sceneFrameSignature(snapshot: SceneSnapshot): string | null {
+  const renderNodes = snapshot.nodes.filter(isRenderableNode);
+  if (renderNodes.length === 0) return null;
+  return [
+    snapshot.sceneId,
+    snapshot.nodes.length,
+    snapshot.nodes
+      .map((node) => {
+        const position = vec3FromValue(node.transform?.position) ?? [0, 0, 0];
+        const scale = vec3FromValue(node.transform?.scale) ?? [1, 1, 1];
+        return [
+          node.nodeId,
+          node.parentId ?? '',
+          node.kind ?? '',
+          formatVec3Signature(position),
+          formatVec3Signature(scale),
+        ].join(':');
+      })
+      .join('|'),
+  ].join('#');
+}
+
+function cameraFrameFromActiveCamera(
+  camera: SceneSnapshot['activeCamera'],
+): CameraStatePatch | null {
+  const position = vec3FromValue(camera?.position);
+  const target = vec3FromValue(camera?.target);
+  if (!position || !target) return null;
+  return cameraFrameFromPositionTarget(position, target);
+}
+
+function cameraFrameFromSceneNodes(nodes: readonly SceneNodeSnapshot[]): CameraStatePatch | null {
+  const bounds = computeSceneBounds(nodes);
+  if (!bounds) return null;
+
+  const center: Vec3 = [
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  ];
+  const diagonal = lengthVec3(subVec3(bounds.max, bounds.min));
+  const fitRadius =
+    diagonal > EPSILON
+      ? (diagonal * 0.5 * CAMERA_FIT_PADDING) / Math.tan(EDITOR_CAMERA_FOV_RAD / 2)
+      : MIN_FRAME_CAMERA_RADIUS;
+
+  return {
+    cameraTheta: DEFAULT_CAMERA_THETA,
+    cameraPhi: DEFAULT_CAMERA_PHI,
+    cameraRadius: clampNumber(
+      Math.max(MIN_FRAME_CAMERA_RADIUS, fitRadius),
+      MIN_CAMERA_RADIUS,
+      MAX_CAMERA_RADIUS,
+    ),
+    cameraTarget: center,
+  };
+}
+
+function computeSceneBounds(nodes: readonly SceneNodeSnapshot[]): SceneBounds | null {
+  const nodeMap = new Map(nodes.map((node) => [node.nodeId, node]));
+  const frameCache = new Map<string, NodeWorldFrame>();
+  let bounds: SceneBounds | null = null;
+
+  for (const node of nodes) {
+    if (!isRenderableNode(node)) continue;
+    const nodeBounds =
+      boundsFromSnapshotNode(node) ?? boundsFromNodeFrame(node, nodeMap, frameCache);
+    bounds = bounds ? mergeBounds(bounds, nodeBounds) : nodeBounds;
+  }
+
+  return bounds;
+}
+
+function boundsFromSnapshotNode(node: SceneNodeSnapshot): SceneBounds | null {
+  const value: unknown = node;
+  if (!isRecord(value)) return null;
+
+  for (const key of ['worldBounds', 'bounds']) {
+    const boundsValue = value[key];
+    if (!isRecord(boundsValue)) continue;
+    const min = vec3FromValue(boundsValue['min']);
+    const max = vec3FromValue(boundsValue['max']);
+    if (min && max) {
+      return normalizeBounds({ min, max });
+    }
+  }
+
+  return null;
+}
+
+function boundsFromNodeFrame(
+  node: SceneNodeSnapshot,
+  nodeMap: ReadonlyMap<string, SceneNodeSnapshot>,
+  frameCache: Map<string, NodeWorldFrame>,
+): SceneBounds {
+  const frame = resolveNodeWorldFrame(node, nodeMap, frameCache);
+  const half: Vec3 = [
+    Math.max(Math.abs(frame.scale[0]), MIN_NODE_EXTENT) * 0.5,
+    Math.max(Math.abs(frame.scale[1]), MIN_NODE_EXTENT) * 0.5,
+    Math.max(Math.abs(frame.scale[2]), MIN_NODE_EXTENT) * 0.5,
+  ];
+  return {
+    min: subVec3(frame.position, half),
+    max: addVec3(frame.position, half),
+  };
+}
+
+function resolveNodeWorldFrame(
+  node: SceneNodeSnapshot,
+  nodeMap: ReadonlyMap<string, SceneNodeSnapshot>,
+  frameCache: Map<string, NodeWorldFrame>,
+): NodeWorldFrame {
+  const cached = frameCache.get(node.nodeId);
+  if (cached) return cached;
+
+  const localPosition = vec3FromValue(node.transform?.position) ?? [0, 0, 0];
+  const localScale = vec3FromValue(node.transform?.scale) ?? [1, 1, 1];
+  const parent = node.parentId ? nodeMap.get(node.parentId) : undefined;
+  if (!parent) {
+    const frame = { position: localPosition, scale: localScale };
+    frameCache.set(node.nodeId, frame);
+    return frame;
+  }
+
+  const parentFrame = resolveNodeWorldFrame(parent, nodeMap, frameCache);
+  const frame = {
+    position: addVec3(parentFrame.position, mulVec3(localPosition, parentFrame.scale)),
+    scale: mulVec3(parentFrame.scale, localScale),
+  };
+  frameCache.set(node.nodeId, frame);
+  return frame;
+}
+
+function cameraFrameFromPositionTarget(position: Vec3, target: Vec3): CameraStatePatch | null {
+  const offset = subVec3(position, target);
+  const radius = lengthVec3(offset);
+  if (radius < EPSILON) return null;
+  return {
+    cameraTheta: Math.atan2(offset[0], offset[2]),
+    cameraPhi: clampNumber(Math.acos(clampNumber(offset[1] / radius, -1, 1)), 0.05, Math.PI - 0.05),
+    cameraRadius: clampNumber(radius, MIN_CAMERA_RADIUS, MAX_CAMERA_RADIUS),
+    cameraTarget: target,
+  };
+}
+
+function mergeBounds(a: SceneBounds, b: SceneBounds): SceneBounds {
+  return {
+    min: [Math.min(a.min[0], b.min[0]), Math.min(a.min[1], b.min[1]), Math.min(a.min[2], b.min[2])],
+    max: [Math.max(a.max[0], b.max[0]), Math.max(a.max[1], b.max[1]), Math.max(a.max[2], b.max[2])],
+  };
+}
+
+function normalizeBounds(bounds: SceneBounds): SceneBounds {
+  return {
+    min: [
+      Math.min(bounds.min[0], bounds.max[0]),
+      Math.min(bounds.min[1], bounds.max[1]),
+      Math.min(bounds.min[2], bounds.max[2]),
+    ],
+    max: [
+      Math.max(bounds.min[0], bounds.max[0]),
+      Math.max(bounds.min[1], bounds.max[1]),
+      Math.max(bounds.min[2], bounds.max[2]),
+    ],
+  };
+}
+
+function isRenderableNode(node: SceneNodeSnapshot): boolean {
+  if (node.visible === false) return false;
+  return node.kind === 'mesh' || Boolean(node.mesh);
+}
+
+function vec3FromValue(value: unknown): Vec3 | null {
+  if (Array.isArray(value)) {
+    const x = finiteNumber(value[0]);
+    const y = finiteNumber(value[1]);
+    const z = finiteNumber(value[2]);
+    return x === null || y === null || z === null ? null : [x, y, z];
+  }
+  if (!isRecord(value)) return null;
+  const x = finiteNumber(value['x']);
+  const y = finiteNumber(value['y']);
+  const z = finiteNumber(value['z']);
+  return x === null || y === null || z === null ? null : [x, y, z];
+}
+
+function formatVec3Signature(value: Vec3): string {
+  return value.map((component) => component.toFixed(4)).join(',');
+}
+
+function lengthVec3(v: Vec3): number {
+  return Math.hypot(v[0], v[1], v[2]);
+}
+
+function addVec3(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function subVec3(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function scaleVec3(v: Vec3, scale: number): Vec3 {
+  return [v[0] * scale, v[1] * scale, v[2] * scale];
+}
+
+function mulVec3(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] * b[0], a[1] * b[1], a[2] * b[2]];
+}
+
+function crossVec3(a: Vec3, b: Vec3): Vec3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+function normalizeVec3(v: Vec3): Vec3 {
+  const length = lengthVec3(v);
+  if (length < EPSILON) return [0, 0, 0];
+  return [v[0] / length, v[1] / length, v[2] / length];
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
 function parseEnvironmentPlacementState(value: unknown): EnvironmentPlacement | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
@@ -717,6 +1026,10 @@ function parseEnvironmentPlacementState(value: unknown): EnvironmentPlacement | 
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function collectRemovedNodeIds(

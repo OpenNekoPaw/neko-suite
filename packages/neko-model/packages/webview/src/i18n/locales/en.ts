@@ -17,6 +17,36 @@ export const en = {
   'toolbar.keyframes': 'Keyframes',
   'toolbar.qualityPreview': 'Engine Quality Preview',
 
+  // Viewport controls
+  'viewport.controls': 'Viewport controls',
+  'viewport.zoomIn': 'Zoom in',
+  'viewport.zoomOut': 'Zoom out',
+  'viewport.pan': 'Pan',
+  'viewport.panUp': 'Pan up',
+  'viewport.panDown': 'Pan down',
+  'viewport.panLeft': 'Pan left',
+  'viewport.panRight': 'Pan right',
+  'viewport.orbit': 'Orbit view',
+  'viewport.grid': 'Show grid',
+  'viewport.resetCamera': 'Reset camera',
+
+  // Workbench
+  'workbench.vscodePanel': 'VSCode Webview panel',
+  'workbench.workspace.layout': 'Layout',
+  'workbench.workspace.modeling': 'Modeling',
+  'workbench.workspace.sculpting': 'Sculpting',
+  'workbench.workspace.animation': 'Animation',
+  'workbench.transform.move': 'Move',
+  'workbench.transform.rotate': 'Rotate',
+  'workbench.transform.scale': 'Scale',
+  'workbench.outliner': 'Outliner',
+  'workbench.properties': 'Properties',
+  'workbench.noSelection': 'No Selection',
+  'workbench.objectCount': '{count} objects',
+  'workbench.syncing': 'Syncing',
+  'workbench.engineOffline': 'Engine offline',
+  'workbench.enginePort': 'Engine :{port}',
+
   // Empty state
   'empty.hint': 'Open a .gltf, .glb, or .vrm file to view',
   'empty.dropHint': 'Drop .gltf, .glb, or .vrm file here, or choose an option below',
@@ -38,6 +68,7 @@ export const en = {
   'animation.statusStopped': 'Stopped',
   'animation.fade': 'Fade',
   'animation.unit': 's',
+  'animation.noClips': 'No animation clips',
 
   // Transform panel
   'transform.noSelection': 'No node selected',
@@ -142,6 +173,17 @@ export const en = {
   // Error boundary
   'error.title': 'Something went wrong',
   'error.retry': 'Try again',
+  'error.cameraUpdateFailed': 'Camera update failed',
+  'error.cameraAckViewportMismatch': 'Camera update response does not match the active viewport',
+  'error.hitTestFailed': 'Hit test failed',
+  'error.webCodecsUnavailable': 'WebCodecs unavailable',
+  'error.engineStreamDisconnected': 'Engine stream disconnected',
+  'error.engineStreamUnavailable': 'Engine stream unavailable',
+  'error.routeAUnavailable': 'Route A unavailable',
+  'error.sceneCommandRejected': 'Scene command rejected',
+  'error.sceneCommandStatus': 'Scene command {status}',
+  'error.sceneControlDisconnected': 'Scene control socket is not connected',
+  'error.noEngineCharacterSelected': 'No Engine character selected',
 
   // Keyframe timeline
   'keyframe.noTracks': 'No keyframe tracks',

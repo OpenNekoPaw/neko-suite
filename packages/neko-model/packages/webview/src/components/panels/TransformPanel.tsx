@@ -45,7 +45,7 @@ export function TransformPanel({
 
   if (!node) {
     return (
-      <div className="model-side-panel w-56 items-center justify-center px-4 text-center text-xs text-[var(--model-fg-secondary)]">
+      <div className="model-side-panel h-full w-full items-center justify-center px-4 text-center text-xs text-[var(--model-fg-secondary)]">
         {t('transform.noSelection')}
       </div>
     );
@@ -64,7 +64,7 @@ export function TransformPanel({
   };
 
   return (
-    <div className="model-side-panel w-56 overflow-y-auto text-xs">
+    <div className="model-side-panel h-full w-full overflow-y-auto text-xs">
       <div className="model-panel-header">
         <div className="font-semibold text-[var(--model-fg)]">{node.name}</div>
         <div className="mt-0.5 break-all text-[10px] text-[var(--model-fg-secondary)]">

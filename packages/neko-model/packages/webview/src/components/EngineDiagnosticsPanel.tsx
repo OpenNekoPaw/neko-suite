@@ -3,6 +3,7 @@ import { useModelStore } from '../stores/modelStore';
 import { useTranslation } from '../i18n/I18nContext';
 
 export function EngineDiagnosticsPanel(): React.JSX.Element {
+  const [expanded, setExpanded] = React.useState(false);
   const sceneRevision = useModelStore((s) => s.sceneRevision);
   const topologyVersions = useModelStore((s) => s.characterTopologyVersions);
   const predictions = useModelStore((s) => s.localPredictions);
@@ -17,29 +18,50 @@ export function EngineDiagnosticsPanel(): React.JSX.Element {
   const modelingSession = formatModelingSession(Object.values(modelingSessions));
 
   return (
-    <div className="pointer-events-none absolute bottom-12 right-3 z-10 min-w-56 rounded border border-[var(--model-border)] bg-[var(--model-panel-bg)]/90 px-3 py-2 text-[11px] text-[var(--model-fg-secondary)] shadow">
-      <div className="mb-1 text-[var(--model-fg)]">{t('diagnostics.title')}</div>
-      <DiagnosticRow label={t('diagnostics.scene')} value={sceneRevision} />
-      <DiagnosticRow label={t('diagnostics.topology')} value={topologyVersion} />
-      <DiagnosticRow label={t('diagnostics.appliedSeq')} value={lastFrameMeta?.appliedSeq ?? 0} />
-      <DiagnosticRow label={t('diagnostics.predictions')} value={predictions.length} />
-      <DiagnosticRow label={t('diagnostics.session')} value={modelingSession} />
-      <DiagnosticRow label={t('diagnostics.quality')} value={qualityTier} />
-      <DiagnosticRow label={t('diagnostics.ackP95')} value={`${metrics.ackP95Ms.toFixed(1)} ms`} />
-      <DiagnosticRow
-        label={t('diagnostics.patchBw')}
-        value={`${metrics.patchBandwidthBytesPerSec} B/s`}
-      />
-      <DiagnosticRow
-        label={t('diagnostics.gpuUpload')}
-        value={`${metrics.gpuUploadMs.toFixed(1)} ms`}
-      />
-      <DiagnosticRow
-        label={t('diagnostics.frameP95')}
-        value={`${metrics.frameLatencyMs.toFixed(1)} ms`}
-      />
-      <DiagnosticRow label={t('diagnostics.dropped')} value={metrics.droppedPredictions} />
-      {topologyWarning && <div className="mt-1 text-[var(--model-danger)]">{topologyWarning}</div>}
+    <div className="model-engine-diagnostics">
+      <button
+        type="button"
+        className="model-engine-pill"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+      >
+        <span className={lastFrameMeta ? 'model-engine-dot ready' : 'model-engine-dot'} />
+        <span>{t('diagnostics.title')}</span>
+        <span>rev {sceneRevision}</span>
+      </button>
+      {expanded && (
+        <div className="model-engine-popover">
+          <DiagnosticRow label={t('diagnostics.scene')} value={sceneRevision} />
+          <DiagnosticRow label={t('diagnostics.topology')} value={topologyVersion} />
+          <DiagnosticRow
+            label={t('diagnostics.appliedSeq')}
+            value={lastFrameMeta?.appliedSeq ?? 0}
+          />
+          <DiagnosticRow label={t('diagnostics.predictions')} value={predictions.length} />
+          <DiagnosticRow label={t('diagnostics.session')} value={modelingSession} />
+          <DiagnosticRow label={t('diagnostics.quality')} value={qualityTier} />
+          <DiagnosticRow
+            label={t('diagnostics.ackP95')}
+            value={`${metrics.ackP95Ms.toFixed(1)} ms`}
+          />
+          <DiagnosticRow
+            label={t('diagnostics.patchBw')}
+            value={`${metrics.patchBandwidthBytesPerSec} B/s`}
+          />
+          <DiagnosticRow
+            label={t('diagnostics.gpuUpload')}
+            value={`${metrics.gpuUploadMs.toFixed(1)} ms`}
+          />
+          <DiagnosticRow
+            label={t('diagnostics.frameP95')}
+            value={`${metrics.frameLatencyMs.toFixed(1)} ms`}
+          />
+          <DiagnosticRow label={t('diagnostics.dropped')} value={metrics.droppedPredictions} />
+          {topologyWarning && (
+            <div className="mt-1 text-[var(--model-danger)]">{topologyWarning}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

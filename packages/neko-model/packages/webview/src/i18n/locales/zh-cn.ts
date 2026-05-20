@@ -17,6 +17,36 @@ export const zhCN = {
   'toolbar.keyframes': '关键帧',
   'toolbar.qualityPreview': '引擎质量预览',
 
+  // Viewport controls
+  'viewport.controls': '视口控制',
+  'viewport.zoomIn': '拉近',
+  'viewport.zoomOut': '拉远',
+  'viewport.pan': '平移',
+  'viewport.panUp': '向上平移',
+  'viewport.panDown': '向下平移',
+  'viewport.panLeft': '向左平移',
+  'viewport.panRight': '向右平移',
+  'viewport.orbit': '旋转视图',
+  'viewport.grid': '显示坐标网格',
+  'viewport.resetCamera': '重置相机',
+
+  // Workbench
+  'workbench.vscodePanel': 'VSCode Webview 面板',
+  'workbench.workspace.layout': '布局',
+  'workbench.workspace.modeling': '建模',
+  'workbench.workspace.sculpting': '雕刻',
+  'workbench.workspace.animation': '动画',
+  'workbench.transform.move': '移动',
+  'workbench.transform.rotate': '旋转',
+  'workbench.transform.scale': '缩放',
+  'workbench.outliner': '大纲视图',
+  'workbench.properties': '属性',
+  'workbench.noSelection': '未选择',
+  'workbench.objectCount': '{count} 个物体',
+  'workbench.syncing': '同步中',
+  'workbench.engineOffline': '引擎离线',
+  'workbench.enginePort': '引擎 :{port}',
+
   // Empty state
   'empty.hint': '打开 .gltf、.glb 或 .vrm 文件进行查看',
   'empty.dropHint': '拖入 .gltf、.glb 或 .vrm 文件，或选择以下方式开始',
@@ -38,6 +68,7 @@ export const zhCN = {
   'animation.statusStopped': '已停止',
   'animation.fade': '淡入淡出',
   'animation.unit': '秒',
+  'animation.noClips': '无动画片段',
 
   // Transform panel
   'transform.noSelection': '未选择节点',
@@ -142,6 +173,17 @@ export const zhCN = {
   // Error boundary
   'error.title': '出现错误',
   'error.retry': '重试',
+  'error.cameraUpdateFailed': '相机更新失败',
+  'error.cameraAckViewportMismatch': '相机更新响应与当前视口不匹配',
+  'error.hitTestFailed': '命中测试失败',
+  'error.webCodecsUnavailable': 'WebCodecs 不可用',
+  'error.engineStreamDisconnected': '引擎视频流已断开',
+  'error.engineStreamUnavailable': '引擎视频流不可用',
+  'error.routeAUnavailable': 'Route A 不可用',
+  'error.sceneCommandRejected': '场景命令被拒绝',
+  'error.sceneCommandStatus': '场景命令 {status}',
+  'error.sceneControlDisconnected': '场景控制连接未建立',
+  'error.noEngineCharacterSelected': '未选择引擎角色',
 
   // Keyframe timeline
   'keyframe.noTracks': '无关键帧轨道',

@@ -31,9 +31,30 @@
     "neko.neko-tools",
     "neko.neko-preview"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onInstallKind:media.model-3d",
+    "onInstallKind:media.model-motion",
+    "onInstallKind:media.model-config"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "neko.installTargets": [
+      {
+        "type": "media",
+        "kind": "model-3d",
+        "activationEvent": "onInstallKind:media.model-3d"
+      },
+      {
+        "type": "media",
+        "kind": "model-motion",
+        "activationEvent": "onInstallKind:media.model-motion"
+      },
+      {
+        "type": "media",
+        "kind": "model-config",
+        "activationEvent": "onInstallKind:media.model-config"
+      }
+    ],
     "customEditors": [
       {
         "viewType": "neko.modelEditor",
@@ -64,6 +85,16 @@
       {
         "command": "neko.model.importAsset",
         "title": "%neko.model.importAsset.title%",
+        "category": "NekoModel"
+      },
+      {
+        "command": "neko.model.exportMotions",
+        "title": "%neko.model.exportMotions.title%",
+        "category": "NekoModel"
+      },
+      {
+        "command": "neko.model.exportConfig",
+        "title": "%neko.model.exportConfig.title%",
         "category": "NekoModel"
       },
       {

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from './i18n/I18nContext';
 import { Toolbar } from './components/Toolbar';
 import { VideoViewport } from './components/VideoViewport';
-import { R3FDevelopmentFallback } from './components/R3FDevelopmentFallback';
 import { AnimationPlayer } from './components/AnimationPlayer';
 import { SceneTree } from './components/SceneTree';
 import { TransformPanel } from './components/panels/TransformPanel';
@@ -16,16 +15,22 @@ import { ShapeCreatorPanel } from './components/shape-creator';
 import { SculptBrushPanel } from './components/sculpt/SculptBrushPanel';
 import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
 import { EngineDiagnosticsPanel } from './components/EngineDiagnosticsPanel';
+import { ViewportGuideOverlay } from './components/ViewportGuideOverlay';
 import { useModelStore } from './stores/modelStore';
-import type { AnimationClipInfo, ExtensionMessage, SceneNodeSnapshot } from './types';
+import type {
+  AnimationClipInfo,
+  ExtensionMessage,
+  SceneNodeSnapshot,
+  SceneSnapshot,
+  TransformMode,
+} from './types';
 import type { SceneCommandEnvelope } from '@neko/shared';
-import type { AnimationClip } from 'three';
-import type { VRM } from '@pixiv/three-vrm';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
 import { postMessage } from '@neko/shared/vscode';
 import { EngineClient, type SceneControlSocket } from '@neko/neko-client';
 import type { EditableNodeTransform } from './scene/SceneEditingTypes';
 import type { ShapeType } from './types/shapeParams';
+import { modelErrorMessage, toError, webviewErrorHandler } from './platform/errors';
 
 /**
  * Root application component for the 3D Model Editor webview.
@@ -34,11 +39,12 @@ import type { ShapeType } from './types/shapeParams';
 export function App(): React.JSX.Element {
   const sceneControlRef = useRef<SceneControlSocket | null>(null);
   const latestRevisionRef = useRef(0);
+  const enginePortRef = useRef<number | null>(null);
   const [enginePort, setEnginePort] = useState<number | null>(null);
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
   const sceneId = useModelStore((s) => s.sceneId);
-  const modelUrl = useModelStore((s) => s.modelUrl);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
+  const showViewportGrid = useModelStore((s) => s.showViewportGrid);
   const sceneNodes = useModelStore((s) => s.sceneNodes);
   const sceneRevision = useModelStore((s) => s.sceneRevision);
   const sceneControlStatus = useModelStore((s) => s.sceneControlStatus);
@@ -62,10 +68,8 @@ export function App(): React.JSX.Element {
   const isSculptBrushOpen = useModelStore((s) => s.isSculptBrushOpen);
   const isKeyframeEditorOpen = useModelStore((s) => s.isKeyframeEditorOpen);
 
-  const setModelUrl = useModelStore((s) => s.setModelUrl);
   const setQualityPreview = useModelStore((s) => s.setQualityPreview);
   const setEnvironmentPlacement = useModelStore((s) => s.setEnvironmentPlacement);
-  const applySceneSnapshot = useModelStore((s) => s.applySceneSnapshot);
   const applySceneDelta = useModelStore((s) => s.applySceneDelta);
   const setSceneControlStatus = useModelStore((s) => s.setSceneControlStatus);
   const addTransformPrediction = useModelStore((s) => s.addTransformPrediction);
@@ -82,11 +86,14 @@ export function App(): React.JSX.Element {
   const pause = useModelStore((s) => s.pause);
   const stop = useModelStore((s) => s.stop);
   const setTransformMode = useModelStore((s) => s.setTransformMode);
-  const setVRMLoaded = useModelStore((s) => s.setVRMLoaded);
 
   useEffect(() => {
     latestRevisionRef.current = sceneRevision;
   }, [sceneRevision]);
+
+  useEffect(() => {
+    enginePortRef.current = enginePort;
+  }, [enginePort]);
 
   useEffect(
     () => () => {
@@ -97,16 +104,72 @@ export function App(): React.JSX.Element {
     [],
   );
 
+  const sendEditorCameraToEngine = useCallback(
+    (port: number) => {
+      const store = useModelStore.getState();
+      const position = store.getCameraPosition();
+      const target = store.cameraTarget;
+      const socket = sceneControlRef.current;
+      const handleCameraError = (error: unknown) => {
+        void webviewErrorHandler.handleError(toError(error), {
+          showToUser: false,
+          severity: 'error',
+        });
+        setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
+      };
+      const sendHttpFallback = async () => {
+        const client = new EngineClient(port);
+        await client.updateEditorCamera(position, target, undefined, 'main');
+      };
+
+      if (!socket) {
+        void sendHttpFallback().catch(handleCameraError);
+        return;
+      }
+
+      void socket
+        .updateViewportCamera({
+          sceneId: store.sceneId,
+          sceneRevision: store.sceneRevision,
+          viewportId: 'main',
+          position,
+          target,
+        })
+        .catch(() => sendHttpFallback())
+        .catch(handleCameraError);
+    },
+    [setSceneControlStatus],
+  );
+
+  const handleViewportCameraMutated = useCallback(() => {
+    setQualityPreview(null);
+  }, [setQualityPreview]);
+
+  const applyEngineSceneSnapshot = useCallback(
+    (snapshot: SceneSnapshot, options?: { restoreCamera?: boolean }) => {
+      const store = useModelStore.getState();
+      store.applySceneSnapshot(snapshot);
+      const framed = options?.restoreCamera === true ? false : store.frameSceneCamera(snapshot);
+      if (options?.restoreCamera === true) {
+        store.markSceneCameraFramed(snapshot);
+      }
+      const currentEnginePort = enginePortRef.current;
+      if (framed && currentEnginePort !== null) {
+        sendEditorCameraToEngine(currentEnginePort);
+      }
+    },
+    [sendEditorCameraToEngine],
+  );
+
   // Listen for messages from extension host
   useEffect(() => {
     const handler = (event: MessageEvent<ExtensionMessage>) => {
       const message = event.data;
       switch (message.type) {
-        case 'loadModel':
-          setModelUrl(message.resourceUrl ?? message.uri, message.resourceBaseUrl ?? null);
-          break;
         case 'enginePort': {
+          enginePortRef.current = message.port;
           setEnginePort(message.port);
+          sendEditorCameraToEngine(message.port);
           sceneControlRef.current?.close(1000, 'reconnecting scene control');
           setSceneControlSocket(null);
           setSceneControlStatus('connecting');
@@ -125,7 +188,7 @@ export function App(): React.JSX.Element {
             onSnapshot: (snapshot) => {
               latestRevisionRef.current = snapshot.revision;
               setSceneControlStatus('ready');
-              useModelStore.getState().applySceneSnapshot(snapshot);
+              applyEngineSceneSnapshot(snapshot);
             },
             onDelta: (delta) => {
               latestRevisionRef.current = delta.revision;
@@ -134,13 +197,22 @@ export function App(): React.JSX.Element {
             },
             onAck: (ack) => {
               if (ack.status === 'rejected') {
-                setSceneControlStatus('error', ack.error ?? 'Scene command rejected');
+                setSceneControlStatus(
+                  'error',
+                  ack.error ?? modelErrorMessage('error.sceneCommandRejected'),
+                );
                 sceneControlRef.current?.resync(useModelStore.getState().sceneId);
                 return;
               }
               latestRevisionRef.current = Math.max(latestRevisionRef.current, ack.revision);
             },
-            onError: (error) => setSceneControlStatus('error', error.message),
+            onError: (error) => {
+              void webviewErrorHandler.handleError(error, {
+                showToUser: false,
+                severity: 'error',
+              });
+              setSceneControlStatus('error', error.message);
+            },
           });
           sceneControlRef.current = socket;
           setSceneControlSocket(socket);
@@ -149,7 +221,7 @@ export function App(): React.JSX.Element {
         case 'sceneSnapshot': {
           // Backend scene snapshot — populate scene tree with ECS data
           const { snapshot } = message;
-          applySceneSnapshot(snapshot);
+          applyEngineSceneSnapshot(snapshot);
           if (snapshot.animations) {
             const clipInfos: AnimationClipInfo[] = snapshot.animations.map((a) => ({
               name: a.name,
@@ -175,10 +247,9 @@ export function App(): React.JSX.Element {
               break;
             case 'resetView': {
               useModelStore.getState().resetCamera();
-              if (enginePort !== null) {
-                const store = useModelStore.getState();
-                const client = new EngineClient(enginePort);
-                void client.updateEditorCamera(store.getCameraPosition(), store.cameraTarget);
+              const currentEnginePort = enginePortRef.current;
+              if (currentEnginePort !== null) {
+                sendEditorCameraToEngine(currentEnginePort);
               }
               break;
             }
@@ -217,7 +288,9 @@ export function App(): React.JSX.Element {
         case 'projectLoaded': {
           // Restore scene and editor state from .nkm project
           const { snapshot: projSnapshot, editorState } = message;
-          applySceneSnapshot(projSnapshot);
+          applyEngineSceneSnapshot(projSnapshot, {
+            restoreCamera: hasRestorableCameraState(editorState),
+          });
           if (projSnapshot.animations) {
             const clipInfos: AnimationClipInfo[] = projSnapshot.animations.map((a) => ({
               name: a.name,
@@ -227,6 +300,10 @@ export function App(): React.JSX.Element {
           }
           if (editorState && typeof editorState === 'object') {
             useModelStore.getState().restoreEditorState(editorState as Record<string, unknown>);
+            const currentEnginePort = enginePortRef.current;
+            if (currentEnginePort !== null) {
+              sendEditorCameraToEngine(currentEnginePort);
+            }
           }
           break;
         }
@@ -247,45 +324,25 @@ export function App(): React.JSX.Element {
 
     return () => window.removeEventListener('message', handler);
   }, [
+    applyEngineSceneSnapshot,
     applySceneDelta,
-    applySceneSnapshot,
     selectNode,
+    sendEditorCameraToEngine,
     setAnimationClips,
-    setModelUrl,
     setQualityPreview,
     setSceneControlStatus,
   ]);
-
-  const handleAnimationsLoaded = useCallback(
-    (clips: AnimationClip[]) => {
-      const clipInfos: AnimationClipInfo[] = clips.map((clip) => ({
-        name: clip.name,
-        duration: clip.duration,
-        channelCount: clip.tracks.length,
-      }));
-      setAnimationClips(clipInfos);
-    },
-    [setAnimationClips],
-  );
-
-  const handleVRMLoaded = useCallback(
-    (vrm: VRM | null) => {
-      setVRMLoaded(vrm !== null);
-    },
-    [setVRMLoaded],
-  );
 
   const selectedNode = sceneNodes.find((n) => n.nodeId === selectedNodeId) ?? null;
   const selectedCharacterId = resolveSelectedCharacterId(selectedNodeId, sceneNodes);
   const selectedTopologyVersion = selectedCharacterId
     ? (characterTopologyVersions[selectedCharacterId] ?? 0)
     : 0;
-
   const sendRouteACommand = useCallback(
     async (envelope: SceneCommandEnvelope): Promise<boolean> => {
       const socket = sceneControlRef.current;
       if (!socket) {
-        setSceneControlStatus('error', 'Scene control socket is not connected');
+        setSceneControlStatus('error', modelErrorMessage('error.sceneControlDisconnected'));
         return false;
       }
 
@@ -299,7 +356,10 @@ export function App(): React.JSX.Element {
         }
         if (ack.status !== 'applied') {
           rollbackLocalPrediction(envelope.seq);
-          setSceneControlStatus('error', ack.error ?? `Scene command ${ack.status}`);
+          setSceneControlStatus(
+            'error',
+            ack.error ?? modelErrorMessage('error.sceneCommandStatus', { status: ack.status }),
+          );
           socket.resync(useModelStore.getState().sceneId);
           return false;
         }
@@ -309,6 +369,10 @@ export function App(): React.JSX.Element {
         return true;
       } catch (error) {
         rollbackLocalPrediction(envelope.seq);
+        void webviewErrorHandler.handleError(toError(error), {
+          showToUser: false,
+          severity: 'error',
+        });
         setSceneControlStatus('error', error instanceof Error ? error.message : String(error));
         return false;
       }
@@ -412,7 +476,7 @@ export function App(): React.JSX.Element {
   const handleSetMorph = useCallback(
     (morphId: string, weight: number) => {
       if (!selectedCharacterId) {
-        setSceneControlStatus('error', 'No Engine character selected');
+        setSceneControlStatus('error', modelErrorMessage('error.noEngineCharacterSelected'));
         return;
       }
       sendCharacterCommand(
@@ -431,7 +495,7 @@ export function App(): React.JSX.Element {
   const handleApplyExpression = useCallback(
     (expression: VRMExpressionPreset, weight: number) => {
       if (!selectedCharacterId) {
-        setSceneControlStatus('error', 'No Engine character selected');
+        setSceneControlStatus('error', modelErrorMessage('error.noEngineCharacterSelected'));
         return;
       }
       sendCharacterCommand(
@@ -450,7 +514,7 @@ export function App(): React.JSX.Element {
   const handleSetBonePose = useCallback(
     (boneId: string, rotation: [number, number, number, number]) => {
       if (!selectedCharacterId) {
-        setSceneControlStatus('error', 'No Engine character selected');
+        setSceneControlStatus('error', modelErrorMessage('error.noEngineCharacterSelected'));
         return;
       }
       sendCharacterCommand(
@@ -581,141 +645,318 @@ export function App(): React.JSX.Element {
   // documents and would otherwise spin up an H264 stream against an empty
   // RenderWorld, which trips wgpu validation in the PBR RenderGraph.
   const hasEngineScene = sceneNodes.length > 0;
+  const shouldRenderEngineViewport = enginePort !== null && hasEngineScene;
   const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
   const panelCommandDisabled = sceneControlStatus !== 'ready';
+  const selectedNodeName = selectedNode?.name ?? null;
+
+  const propertiesPanel = isExpressionPresetOpen ? (
+    <ExpressionPresetPanel
+      onApplyExpression={handleApplyExpression}
+      characterId={selectedCharacterId}
+      disabled={panelCommandDisabled}
+    />
+  ) : isLatencyTesterOpen ? (
+    <LatencyTester />
+  ) : isFaceEditorOpen ? (
+    <FaceEditorPanel
+      characterId={selectedCharacterId}
+      disabled={panelCommandDisabled}
+      onSetMorph={handleSetMorph}
+    />
+  ) : isBoneExpressionOpen ? (
+    <BoneExpressionPanel
+      characterId={selectedCharacterId}
+      disabled={panelCommandDisabled}
+      onSetBonePose={handleSetBonePose}
+    />
+  ) : isShapeCreatorOpen ? (
+    <ShapeCreatorPanel disabled={panelCommandDisabled} onCreateShape={handleCreateShape} />
+  ) : isTextEditorOpen ? (
+    <TextEditorPanel disabled={panelCommandDisabled} onCreateText={handleCreateText} />
+  ) : isCsgPanelOpen ? (
+    <CsgPanel disabled={panelCommandDisabled} onExecuteCsg={handleExecuteCsg} />
+  ) : isSculptBrushOpen ? (
+    <SculptBrushPanel
+      disabled={panelCommandDisabled}
+      enginePort={enginePort}
+      selectedNodeId={selectedNodeId}
+      selectedCharacterId={selectedCharacterId}
+      topologyVersion={selectedTopologyVersion}
+      sceneRevision={sceneRevision}
+      nextSeq={() => useModelStore.getState().allocateSceneCommandSeq()}
+      onBeginSession={(payload) => sendSceneCommand('modeling-begin-session', payload)}
+      onCommitSession={(payload) => sendSceneCommand('modeling-end-session', payload)}
+      onCancelSession={(payload) => sendSceneCommand('modeling-cancel-session', payload)}
+      onCreatePrediction={(prediction) => {
+        createLocalPrediction(prediction);
+      }}
+      onRecordPatchBytes={recordPatchBytes}
+      onDropPrediction={rollbackLocalPrediction}
+    />
+  ) : (
+    <TransformPanel
+      node={selectedNode}
+      transformMode={transformMode}
+      onTransformModeChange={setTransformMode}
+      onTransformCommit={handleTransformCommit}
+      disabled={sceneControlStatus !== 'ready'}
+    />
+  );
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Toolbar */}
-        <Toolbar />
-
-        {/* Scene Tree */}
-        {sceneNodes.length > 0 && (
-          <SceneTree nodes={sceneNodes} selectedNodeId={selectedNodeId} onSelectNode={selectNode} />
-        )}
-
-        {/* 3D Viewport (center) */}
-        <div className="flex-1 relative">
-          {qualityPreviewDataUrl ? (
-            <div className="h-full w-full bg-black">
-              <img
-                src={qualityPreviewDataUrl}
-                alt=""
-                className="h-full w-full object-contain"
-                draggable={false}
+    <div className="model-workbench h-screen w-screen overflow-hidden">
+      <WorkbenchTopBar
+        enginePort={enginePort}
+        hasPendingPrediction={hasPendingPrediction}
+        routeAReady={routeAReady}
+        sceneControlStatus={sceneControlStatus}
+        sceneNodeCount={sceneNodes.length}
+        selectedNodeName={selectedNodeName}
+        transformMode={transformMode}
+        onTransformModeChange={setTransformMode}
+      />
+      <div className="model-workbench-body">
+        <main className="model-viewport-area">
+          <div className="model-viewport-shell">
+            {shouldRenderEngineViewport ? (
+              <VideoViewport
+                enginePort={enginePort}
+                sceneId={sceneId}
+                sceneRevision={sceneRevision}
+                selectedNodeId={selectedNodeId}
+                hasPendingPrediction={hasPendingPrediction}
+                sceneControlSocket={sceneControlSocket}
+                overlay={viewportOverlay}
+                predictions={localPredictions}
+                topologyWarning={topologyWarning}
+                onSelectNode={selectNode}
+                onSceneControlError={(message) => setSceneControlStatus('error', message)}
+                onCameraMutated={handleViewportCameraMutated}
               />
+            ) : (
+              // sceneRevision > 0 means engine has acknowledged the document but
+              // the scene has no nodes yet — surface a precise hint instead of
+              // falling back to the generic drop hint.
+              <ModelEmptyState reason={sceneRevision > 0 ? 'emptyScene' : 'noDocument'} />
+            )}
+            {qualityPreviewDataUrl && shouldRenderEngineViewport ? (
+              <div className="model-quality-preview-overlay pointer-events-none absolute inset-0">
+                <img
+                  src={qualityPreviewDataUrl}
+                  alt=""
+                  className="h-full w-full object-contain opacity-95"
+                  draggable={false}
+                />
+                <ViewportGuideOverlay visible={showViewportGrid} />
+              </div>
+            ) : null}
+            <div className="model-viewport-tools" aria-label="Viewport tools">
+              <Toolbar className="model-viewport-toolbar" width={38} />
             </div>
-          ) : enginePort !== null && (modelUrl || hasEngineScene) ? (
-            <VideoViewport
-              enginePort={enginePort}
-              sceneId={sceneId}
-              sceneRevision={sceneRevision}
+            <EngineDiagnosticsPanel />
+          </div>
+        </main>
+        <RightDock
+          outliner={
+            <SceneTree
+              nodes={sceneNodes}
               selectedNodeId={selectedNodeId}
-              hasPendingPrediction={hasPendingPrediction}
-              sceneControlSocket={sceneControlSocket}
-              overlay={viewportOverlay}
-              predictions={localPredictions}
-              topologyWarning={topologyWarning}
               onSelectNode={selectNode}
-              onSceneControlError={(message) => setSceneControlStatus('error', message)}
+              showHeader={false}
             />
-          ) : modelUrl ? (
-            <R3FDevelopmentFallback
-              url={modelUrl}
-              onAnimationsLoaded={handleAnimationsLoaded}
-              onVRMLoaded={handleVRMLoaded}
-              activeAnimation={activeAnimation}
-              isPlaying={playbackState === 'playing'}
-            />
-          ) : (
-            // sceneRevision > 0 means engine has acknowledged the document but
-            // the scene has no nodes yet — surface a precise hint instead of
-            // falling back to the generic drop hint.
-            <ModelEmptyState reason={sceneRevision > 0 ? 'emptyScene' : 'noDocument'} />
-          )}
-
-          {/* Animation Player (bottom overlay) */}
-          <EngineDiagnosticsPanel />
-          <AnimationPlayer
-            clips={animationClips}
-            activeClip={activeAnimation}
-            playbackState={playbackState}
-            onSelectClip={handleSelectAnimation}
-            onCrossfade={handleCrossfadeAnimation}
-            onPlay={handlePlayAnimation}
-            onPause={handlePauseAnimation}
-            onStop={handleStopAnimation}
-            disabled={!routeAReady}
-          />
-        </div>
-
-        {/* Right Sidebar: Panel routing by priority */}
-        {isExpressionPresetOpen ? (
-          <ExpressionPresetPanel
-            onApplyExpression={handleApplyExpression}
-            characterId={selectedCharacterId}
-            disabled={panelCommandDisabled}
-          />
-        ) : isLatencyTesterOpen ? (
-          <LatencyTester />
-        ) : isFaceEditorOpen ? (
-          <FaceEditorPanel
-            characterId={selectedCharacterId}
-            disabled={panelCommandDisabled}
-            onSetMorph={handleSetMorph}
-          />
-        ) : isBoneExpressionOpen ? (
-          <BoneExpressionPanel
-            characterId={selectedCharacterId}
-            disabled={panelCommandDisabled}
-            onSetBonePose={handleSetBonePose}
-          />
-        ) : isShapeCreatorOpen ? (
-          <ShapeCreatorPanel disabled={panelCommandDisabled} onCreateShape={handleCreateShape} />
-        ) : isTextEditorOpen ? (
-          <TextEditorPanel disabled={panelCommandDisabled} onCreateText={handleCreateText} />
-        ) : isCsgPanelOpen ? (
-          <CsgPanel disabled={panelCommandDisabled} onExecuteCsg={handleExecuteCsg} />
-        ) : isSculptBrushOpen ? (
-          <SculptBrushPanel
-            disabled={panelCommandDisabled}
-            enginePort={enginePort}
-            selectedNodeId={selectedNodeId}
-            selectedCharacterId={selectedCharacterId}
-            topologyVersion={selectedTopologyVersion}
-            sceneRevision={sceneRevision}
-            nextSeq={() => useModelStore.getState().allocateSceneCommandSeq()}
-            onBeginSession={(payload) => sendSceneCommand('modeling-begin-session', payload)}
-            onCommitSession={(payload) => sendSceneCommand('modeling-end-session', payload)}
-            onCancelSession={(payload) => sendSceneCommand('modeling-cancel-session', payload)}
-            onCreatePrediction={(prediction) => {
-              createLocalPrediction(prediction);
-            }}
-            onRecordPatchBytes={recordPatchBytes}
-            onDropPrediction={rollbackLocalPrediction}
-          />
-        ) : (
-          <TransformPanel
-            node={selectedNode}
-            transformMode={transformMode}
-            onTransformModeChange={setTransformMode}
-            onTransformCommit={handleTransformCommit}
-            disabled={sceneControlStatus !== 'ready'}
-          />
-        )}
+          }
+          properties={propertiesPanel}
+        />
       </div>
-
-      {/* Collapsible Keyframe Timeline (bottom panel) */}
-      {isKeyframeEditorOpen && (
-        <div className="h-48 overflow-hidden border-t border-[var(--model-border)]">
+      <TimelineDock expanded={isKeyframeEditorOpen}>
+        {isKeyframeEditorOpen ? (
           <ModelKeyframeTimeline
             disabled={!routeAReady}
             onSeek={handleSeekAnimation}
             onKeyframeMutation={handleKeyframeMutation}
           />
-        </div>
-      )}
+        ) : (
+          <AnimationTimelineStrip clipCount={animationClips.length}>
+            <AnimationPlayer
+              clips={animationClips}
+              activeClip={activeAnimation}
+              playbackState={playbackState}
+              onSelectClip={handleSelectAnimation}
+              onCrossfade={handleCrossfadeAnimation}
+              onPlay={handlePlayAnimation}
+              onPause={handlePauseAnimation}
+              onStop={handleStopAnimation}
+              disabled={!routeAReady}
+            />
+          </AnimationTimelineStrip>
+        )}
+      </TimelineDock>
+    </div>
+  );
+}
+
+type SceneControlStatusView = 'disconnected' | 'connecting' | 'ready' | 'error';
+
+interface WorkbenchTopBarProps {
+  enginePort: number | null;
+  hasPendingPrediction: boolean;
+  routeAReady: boolean;
+  sceneControlStatus: SceneControlStatusView;
+  sceneNodeCount: number;
+  selectedNodeName: string | null;
+  transformMode: TransformMode;
+  onTransformModeChange: (mode: TransformMode) => void;
+}
+
+function WorkbenchTopBar({
+  enginePort,
+  hasPendingPrediction,
+  routeAReady,
+  sceneControlStatus,
+  sceneNodeCount,
+  selectedNodeName,
+  transformMode,
+  onTransformModeChange,
+}: WorkbenchTopBarProps): React.JSX.Element {
+  const { t } = useTranslation();
+  const transportLabel =
+    enginePort === null
+      ? t('workbench.engineOffline')
+      : t('workbench.enginePort', { port: enginePort });
+  const statusTone = routeAReady
+    ? 'model-status-ready'
+    : sceneControlStatus === 'error'
+      ? 'model-status-error'
+      : 'model-status-waiting';
+
+  return (
+    <header className="model-workbench-topbar">
+      <div className="model-menu-strip">
+        <span className="model-app-title">Neko Model</span>
+        <span className="model-workbench-context">{t('workbench.vscodePanel')}</span>
+      </div>
+      <nav className="model-workspace-tabs" aria-label="Workspace">
+        {WORKSPACE_TABS.map((workspace) => (
+          <span key={workspace.key} className={workspace.key === 'modeling' ? 'active' : undefined}>
+            {t(workspace.labelKey)}
+          </span>
+        ))}
+      </nav>
+      <TransformModeControls
+        transformMode={transformMode}
+        onTransformModeChange={onTransformModeChange}
+      />
+      <div className="model-topbar-status">
+        <span className="truncate">{selectedNodeName ?? t('workbench.noSelection')}</span>
+        <span>{t('workbench.objectCount', { count: sceneNodeCount })}</span>
+        <span className={statusTone}>
+          {hasPendingPrediction ? t('workbench.syncing') : transportLabel}
+        </span>
+      </div>
+    </header>
+  );
+}
+
+const WORKSPACE_TABS = [
+  { key: 'layout', labelKey: 'workbench.workspace.layout' },
+  { key: 'modeling', labelKey: 'workbench.workspace.modeling' },
+  { key: 'sculpting', labelKey: 'workbench.workspace.sculpting' },
+  { key: 'animation', labelKey: 'workbench.workspace.animation' },
+] as const;
+
+interface TransformModeControlsProps {
+  transformMode: TransformMode;
+  onTransformModeChange: (mode: TransformMode) => void;
+}
+
+function TransformModeControls({
+  transformMode,
+  onTransformModeChange,
+}: TransformModeControlsProps): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <div className="model-transform-segment" aria-label={t('transform.mode')}>
+      {(['translate', 'rotate', 'scale'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          className={transformMode === mode ? 'active' : undefined}
+          onClick={() => onTransformModeChange(mode)}
+        >
+          {t(MODE_BUTTON_I18N_KEY[mode])}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const MODE_BUTTON_I18N_KEY: Record<TransformMode, string> = {
+  translate: 'workbench.transform.move',
+  rotate: 'workbench.transform.rotate',
+  scale: 'workbench.transform.scale',
+};
+
+interface RightDockProps {
+  outliner: React.ReactNode;
+  properties: React.ReactNode;
+}
+
+function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <aside className="model-right-dock">
+      <section className="model-dock-pane model-outliner-pane">
+        <div className="model-dock-title">{t('workbench.outliner')}</div>
+        <div className="model-dock-content">{outliner}</div>
+      </section>
+      <section className="model-dock-pane model-properties-pane">
+        <div className="model-dock-title">{t('workbench.properties')}</div>
+        <div className="model-dock-content">{properties}</div>
+      </section>
+    </aside>
+  );
+}
+
+function TimelineDock({
+  expanded,
+  children,
+}: {
+  expanded: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <footer className={expanded ? 'model-timeline-dock expanded' : 'model-timeline-dock'}>
+      {children}
+    </footer>
+  );
+}
+
+function AnimationTimelineStrip({
+  clipCount,
+  children,
+}: {
+  clipCount: number;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+
+  return (
+    <div className="model-animation-strip">
+      <div className="model-frame-ruler" aria-hidden="true">
+        {Array.from({ length: 9 }, (_, index) => (
+          <span key={index}>{index * 30}</span>
+        ))}
+      </div>
+      <div className="model-animation-controls">
+        {clipCount > 0 ? (
+          children
+        ) : (
+          <span className="text-[var(--model-fg-muted)]">{t('animation.noClips')}</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -801,4 +1042,16 @@ function resolveSelectedCharacterId(
   return selected.kind === 'character' || selected.kind === 'character-instance'
     ? selected.nodeId
     : selectedNodeId;
+}
+
+function hasRestorableCameraState(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record['cameraTheta'] === 'number' &&
+    typeof record['cameraPhi'] === 'number' &&
+    typeof record['cameraRadius'] === 'number' &&
+    (Array.isArray(record['cameraTarget']) ||
+      (typeof record['cameraTarget'] === 'object' && record['cameraTarget'] !== null))
+  );
 }

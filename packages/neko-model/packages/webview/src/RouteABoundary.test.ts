@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -9,17 +9,22 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(srcRoot, relativePath), 'utf8');
 }
 
+function hasSource(relativePath: string): boolean {
+  return existsSync(resolve(srcRoot, relativePath));
+}
+
 describe('Route A webview boundaries', () => {
   it('keeps App Route A main viewport free of persistent R3F model mounts', () => {
     const app = readSource('App.tsx');
 
     expect(app).not.toMatch(/<Viewport3D\b/);
     expect(app).not.toMatch(/<ModelLoader\b/);
+    expect(app).not.toMatch(/<R3FDevelopmentFallback\b/);
+    expect(app).not.toMatch(/<SourceModelPreview\b/);
     expect(app).toMatch(/<VideoViewport\b/);
-    expect(app).toMatch(/<R3FDevelopmentFallback\b/);
   });
 
-  it('mounts Route A video viewport for engine scene snapshots without a direct model URL', () => {
+  it('mounts Route A video viewport only for engine scene snapshots', () => {
     const app = readSource('App.tsx');
 
     // hasEngineScene must hinge on real scene content, not on revision alone.
@@ -27,17 +32,146 @@ describe('Route A webview boundaries', () => {
     // a stream against an empty RenderWorld from crashing the PBR pipeline.
     expect(app).toMatch(/const hasEngineScene = sceneNodes\.length > 0;/);
     expect(app).not.toMatch(/hasEngineScene = .*sceneRevision\b/);
-    expect(app).toMatch(/enginePort !== null && \(modelUrl \|\| hasEngineScene\)/);
+    expect(app).toMatch(
+      /const shouldRenderEngineViewport = enginePort !== null && hasEngineScene;/,
+    );
+    expect(app).not.toMatch(/enginePort !== null && \(modelUrl \|\| hasEngineScene\)/);
+  });
+
+  it('routes raw GLB/GLTF/VRM documents through Engine loading only', () => {
+    const app = readSource('App.tsx');
+    const types = readSource('types/index.ts');
+    const extension = readSource('../../extension/src/editor/ModelEditorProvider.ts');
+
+    expect(types).not.toMatch(/ModelViewportMode|type: 'loadModel'|FileSourceRef/);
+    expect(app).not.toMatch(/modelViewportMode|setModelUrl|modelUrl|SourceModelPreview/);
+    expect(extension).not.toMatch(
+      /postLoadModelMessage|source-preview|viewportMode|type: 'loadModel'/,
+    );
+    expect(extension).toMatch(
+      /await this\.loadModelInEngine\(filePath, webviewPanel, generation\);/,
+    );
+    expect(extension).toMatch(
+      /await this\.loadModelInEngine\(importPath, webviewPanel, generation\);/,
+    );
+    expect(extension).toMatch(
+      /await this\.loadModelInEngine\(modelPath, webviewPanel, generation\);/,
+    );
+  });
+
+  it('does not ship a visible R3F/Three.js model fallback or dependency path', () => {
+    const componentsIndex = readSource('components/index.ts');
+    const packageJson = readFileSync(resolve(srcRoot, '../package.json'), 'utf8');
+    const viteConfig = readFileSync(resolve(srcRoot, '../vite.config.ts'), 'utf8');
+
+    expect(hasSource('components/R3FDevelopmentFallback.tsx')).toBe(false);
+    expect(hasSource('components/Viewport3D.tsx')).toBe(false);
+    expect(hasSource('components/ModelLoader.tsx')).toBe(false);
+    expect(hasSource('components/TransformGizmo.tsx')).toBe(false);
+    expect(componentsIndex).not.toMatch(/Viewport3D|ModelLoader|TransformGizmo/);
+    expect(`${packageJson}\n${viteConfig}`).not.toMatch(
+      /@react-three\/fiber|@react-three\/drei|@pixiv\/three-vrm|"three"|"@types\/three"/,
+    );
   });
 
   it('keeps VideoViewport as Engine frame canvas plus overlay and interaction layers', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
 
     expect(videoViewport).toMatch(/<canvas/);
+    expect(videoViewport).toMatch(/model-viewport-frame/);
+    expect(videoViewport).toMatch(/<ViewportGuideOverlay\b/);
+    expect(videoViewport).toMatch(/<ViewportNavigationControls\b/);
     expect(videoViewport).toMatch(/<InteractionLayer\b/);
     expect(videoViewport).toMatch(/<OverlayCanvas\b/);
     expect(videoViewport).not.toMatch(/children/);
+    expect(videoViewport).not.toMatch(/bg-black/);
     expect(videoViewport).not.toMatch(/<Viewport3D\b|<ModelLoader\b/);
+  });
+
+  it('drives Blender-style workbench chrome from VSCode light and dark theme tokens', () => {
+    const app = readSource('App.tsx');
+    const css = readSource('index.css');
+    const guideOverlay = readSource('components/ViewportGuideOverlay.tsx');
+
+    expect(css).toMatch(/body\.vscode-dark/);
+    expect(css).toMatch(/body\[data-vscode-theme-kind='vscode-dark'\]/);
+    expect(css).toMatch(/body\.vscode-light/);
+    expect(css).toMatch(/body\[data-vscode-theme-kind='vscode-light'\]/);
+    expect(css).toMatch(/body\[data-vscode-theme-kind='vscode-high-contrast-light'\]/);
+    for (const token of [
+      '--model-workbench-bg',
+      '--model-topbar-bg',
+      '--model-viewport-bg',
+      '--model-dock-bg',
+      '--model-timeline-bg',
+      '--model-guide-widget-bg',
+      '--model-axis-x',
+    ]) {
+      expect(css, token).toMatch(new RegExp(`${token}:`));
+    }
+    expect(css).toMatch(/background: var\(--model-workbench-bg\)/);
+    expect(css).toMatch(/background: var\(--model-topbar-bg\)/);
+    expect(css).toMatch(/background: var\(--model-viewport-bg\)/);
+    expect(css).toMatch(/background: var\(--model-dock-bg\)/);
+    expect(css).toMatch(/background: var\(--model-timeline-bg\)/);
+    expect(app).toMatch(/model-quality-preview-overlay/);
+    expect(app).not.toMatch(/pointer-events-none absolute inset-0 bg-black/);
+    expect(guideOverlay).toMatch(/getComputedStyle/);
+    expect(guideOverlay).toMatch(/MutationObserver/);
+    expect(guideOverlay).toMatch(/--model-guide-widget-bg/);
+  });
+
+  it('sizes Route A stream from the actual webview viewport instead of a fixed canvas', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+
+    expect(videoViewport).toMatch(/new ResizeObserver/);
+    expect(videoViewport).toMatch(/createViewportStreamSize/);
+    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_PIXELS/);
+    expect(videoViewport).toMatch(/resolution:\s*\{\s*width: streamSize\.width/);
+    expect(videoViewport).not.toMatch(
+      /width:\s*1280,\s*\n\s*height:\s*720,\s*\n\s*pixelRatio:\s*window\.devicePixelRatio/,
+    );
+  });
+
+  it('routes viewport camera controls through scene control before HTTP fallback', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const orbitControls = readSource('components/ViewportOrbitControls.tsx');
+    const navigationControls = readSource('components/ViewportNavigationControls.tsx');
+
+    expect(videoViewport).toMatch(/sceneControlSocket\s*\n\s*\.updateViewportCamera/);
+    expect(videoViewport).toMatch(
+      /sceneId,\s*\n\s*sceneRevision,\s*\n\s*viewportId: MAIN_VIEWPORT_ID/,
+    );
+    expect(videoViewport).toMatch(/resolution: viewportSize \?\? undefined/);
+    expect(videoViewport).toMatch(/isViewportCameraAckCompatible/);
+    expect(videoViewport).toMatch(/sceneControlSocket\.requestKeyframe\(MAIN_VIEWPORT_ID\)/);
+    expect(videoViewport).toMatch(
+      /updateEditorCamera\(position, target, undefined, MAIN_VIEWPORT_ID\)/,
+    );
+    expect(orbitControls).not.toMatch(/new EngineClient|updateEditorCamera/);
+    expect(navigationControls).not.toMatch(/new EngineClient|updateEditorCamera/);
+  });
+
+  it('sends hit-test queries with the same viewport contract as the engine stream', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+
+    expect(videoViewport).toMatch(/query\('hitTest', \{/);
+    expect(videoViewport).toMatch(/viewportId: MAIN_VIEWPORT_ID,\s*\n\s*sceneId,/);
+    expect(videoViewport).toMatch(/sceneRevision,\s*\n\s*resolution: viewportSize \?\? undefined/);
+    expect(videoViewport).toMatch(/camera: buildViewportQueryCamera\(\)/);
+  });
+
+  it('keeps quality preview as a non-interactive overlay instead of replacing live Route A stream', () => {
+    const app = readSource('App.tsx');
+
+    expect(app).toMatch(/\{shouldRenderEngineViewport \? \(/);
+    expect(app).toMatch(/<VideoViewport\b/);
+    expect(app).toMatch(/qualityPreviewDataUrl && shouldRenderEngineViewport/);
+    expect(app).toMatch(/pointer-events-none absolute inset-0 bg-black/);
+    expect(app).toMatch(/onCameraMutated=\{handleViewportCameraMutated\}/);
+    expect(app).not.toMatch(
+      /\{qualityPreviewDataUrl \? \(\s*<div className="relative h-full w-full bg-black">/,
+    );
   });
 
   it('removes high-frequency extension postMessage paths from Route A authoring panels', () => {
@@ -66,5 +200,28 @@ describe('Route A webview boundaries', () => {
     expect(store).toMatch(/setEnvironmentPlacement/);
     expect(store).not.toMatch(/yawDeg/);
     expect(store).not.toMatch(/pitchDeg/);
+  });
+
+  it('routes webview runtime errors through shared logger and localized messages', () => {
+    const app = readSource('App.tsx');
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const errorBoundary = readSource('components/ErrorBoundary.tsx');
+    const errors = readSource('platform/errors.ts');
+    const faceEditorPanel = readSource('components/face/FaceEditorPanel.tsx');
+
+    expect(errors).toMatch(/IErrorHandler/);
+    expect(errors).toMatch(/getLogger\('Errors'\)/);
+    expect(errorBoundary).toMatch(/webviewErrorHandler\.handleError/);
+    expect(errorBoundary).not.toMatch(/console\.error/);
+    expect(videoViewport).toMatch(/webviewErrorHandler\.handleError/);
+    expect(faceEditorPanel).toMatch(/getLogger\('FaceEditorPanel'\)/);
+    expect(`${videoViewport}\n${faceEditorPanel}`).not.toMatch(/\bConsoleLogger\b/);
+    expect(app).toMatch(/modelErrorMessage\('error\.sceneControlDisconnected'\)/);
+    expect(app).toMatch(/modelErrorMessage\('error\.noEngineCharacterSelected'\)/);
+    expect(videoViewport).toMatch(/modelErrorMessage\('error\.cameraUpdateFailed'\)/);
+    expect(videoViewport).toMatch(/modelErrorMessage\('error\.engineStreamUnavailable'\)/);
+    expect(videoViewport).not.toMatch(
+      /'Camera update failed'|'Hit test failed'|'WebCodecs unavailable'|'Engine stream unavailable'/,
+    );
   });
 });

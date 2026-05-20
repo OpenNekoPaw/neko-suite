@@ -1,16 +1,16 @@
 import React, { useEffect } from 'react';
-import { ConsoleLogger, LogLevel } from '@neko/shared';
 import { useTranslation } from '../../i18n/I18nContext';
-
-const logger = new ConsoleLogger('FaceEditorPanel', LogLevel.Info);
 import { FaceParameterCategory } from './FaceParameterCategory';
 import { useModelStore } from '../../stores/modelStore';
+import { getLogger } from '../../platform/logger';
 import {
   FACE_PARAMETERS,
   getParametersByCategory,
   getDefaultFaceParams,
   type FaceCategory,
 } from '../../types/faceParameters';
+
+const logger = getLogger('FaceEditorPanel');
 
 interface FaceEditorPanelProps {
   characterId: string | null;

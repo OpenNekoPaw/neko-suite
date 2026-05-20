@@ -1,6 +1,6 @@
 import { createLoggerRegistry } from '@neko/shared';
 
-const registry = createLoggerRegistry('NekoModel');
+const registry = createLoggerRegistry('NekoModelWebview');
 
 export const setRootLogger = registry.setRootLogger;
 export const getRootLogger = registry.getRootLogger;

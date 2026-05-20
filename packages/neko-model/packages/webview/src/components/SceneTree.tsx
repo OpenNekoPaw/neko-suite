@@ -6,6 +6,7 @@ interface SceneTreeProps {
   nodes: SceneNodeSnapshot[];
   selectedNodeId: string | null;
   onSelectNode: (id: string) => void;
+  showHeader?: boolean;
 }
 
 /**
@@ -15,16 +16,19 @@ export function SceneTree({
   nodes,
   selectedNodeId,
   onSelectNode,
+  showHeader = true,
 }: SceneTreeProps): React.JSX.Element {
   const { t } = useTranslation();
   // Build tree structure
   const rootNodes = nodes.filter((n) => !n.parentId);
 
   return (
-    <div className="model-tree-panel w-52 overflow-y-auto text-xs">
-      <div className="border-b border-[var(--model-divider)] p-2 font-semibold text-[var(--model-fg)]">
-        {t('sceneTree.title')}
-      </div>
+    <div className="model-tree-panel h-full w-full overflow-y-auto text-xs">
+      {showHeader && (
+        <div className="border-b border-[var(--model-divider)] p-2 font-semibold text-[var(--model-fg)]">
+          {t('sceneTree.title')}
+        </div>
+      )}
       <div className="p-1">
         {rootNodes.map((node) => (
           <TreeNode

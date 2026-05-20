@@ -30,6 +30,12 @@ describe('modelStore transform prediction layer', () => {
       authoringMetrics: new AuthoringPerformanceMetrics(),
       authoringMetricsSnapshot: new AuthoringPerformanceMetrics().snapshot(),
       lastRenderFrameMeta: null,
+      cameraTheta: 0,
+      cameraPhi: Math.PI / 4,
+      cameraRadius: 5,
+      cameraTarget: [0, 0.9, 0],
+      showViewportGrid: true,
+      lastAutoFramedSceneSignature: null,
     });
   });
 
@@ -236,5 +242,100 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().lastRenderFrameMeta?.diagnostics?.qualityTier).toBe(
       'main-fps-reduced',
     );
+  });
+
+  it('auto-frames tiny imported mesh snapshots for the Engine viewport', () => {
+    const framed = useModelStore.getState().frameSceneCamera({
+      sceneId: 'imported',
+      revision: 3,
+      animations: [],
+      nodes: [
+        {
+          ...node,
+          nodeId: 'root',
+          kind: 'node',
+          transform: {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 0.01, y: 0.01, z: 0.01 },
+          },
+        },
+        {
+          ...node,
+          nodeId: 'mesh',
+          parentId: 'root',
+          kind: 'mesh',
+          transform: {
+            position: { x: 0, y: 0.02, z: -0.12 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 0.01, y: 0.01, z: 0.01 },
+          },
+        },
+      ],
+    });
+
+    const state = useModelStore.getState();
+    expect(framed).toBe(true);
+    expect(state.cameraRadius).toBeGreaterThanOrEqual(0.8);
+    expect(state.cameraRadius).toBeLessThan(2);
+    expect(state.cameraTarget[2]).toBeLessThan(0);
+    expect(state.cameraTarget[1]).toBeCloseTo(0.0002, 4);
+  });
+
+  it('uses active Engine camera when snapshots provide one', () => {
+    useModelStore.getState().frameSceneCamera({
+      sceneId: 'with-camera',
+      revision: 4,
+      animations: [],
+      activeCamera: {
+        cameraId: 'camera',
+        position: { x: 2, y: 3, z: 4 },
+        target: { x: 0, y: 1, z: 0 },
+        up: { x: 0, y: 1, z: 0 },
+        fov: 45,
+      },
+      nodes: [
+        {
+          ...node,
+          nodeId: 'mesh',
+          kind: 'mesh',
+        },
+      ],
+    });
+
+    const state = useModelStore.getState();
+    expect(state.cameraTarget).toEqual([0, 1, 0]);
+    expect(state.getCameraPosition()[0]).toBeCloseTo(2);
+    expect(state.getCameraPosition()[1]).toBeCloseTo(3);
+    expect(state.getCameraPosition()[2]).toBeCloseTo(4);
+  });
+
+  it('pans the orbit target in camera space', () => {
+    useModelStore.setState({
+      cameraTheta: Math.PI / 2,
+      cameraPhi: Math.PI / 2,
+      cameraRadius: 5,
+      cameraTarget: [0, 0, 0],
+    });
+
+    useModelStore.getState().panCamera(1, 0);
+    expect(useModelStore.getState().cameraTarget[2]).toBeCloseTo(1);
+
+    useModelStore.getState().panCamera(0, 1);
+    expect(useModelStore.getState().cameraTarget[1]).toBeCloseTo(1);
+  });
+
+  it('persists the viewport grid visibility in editor state', () => {
+    useModelStore.getState().setViewportGridVisible(false);
+
+    const editorState = useModelStore.getState().getEditorState();
+    expect(editorState['showViewportGrid']).toBe(false);
+
+    useModelStore.getState().restoreEditorState({
+      ...editorState,
+      showViewportGrid: true,
+    });
+
+    expect(useModelStore.getState().showViewportGrid).toBe(true);
   });
 });
