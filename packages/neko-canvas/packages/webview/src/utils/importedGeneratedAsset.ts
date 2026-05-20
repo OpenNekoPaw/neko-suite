@@ -1,8 +1,11 @@
+import { isDocumentArchiveResourceRef, type DocumentArchiveResourceRef } from '@neko/shared';
+
 export interface ImportedGeneratedAssetPayload {
   path: string;
   mediaType: 'image' | 'video' | 'audio';
   name: string;
   originalPath?: string;
+  documentResourceRef?: DocumentArchiveResourceRef;
 }
 
 export function normalizeImportedGeneratedAsset(
@@ -27,6 +30,9 @@ export function normalizeImportedGeneratedAsset(
     name,
     ...(typeof asset.originalPath === 'string' && asset.originalPath
       ? { originalPath: asset.originalPath }
+      : {}),
+    ...(isDocumentArchiveResourceRef(asset.documentResourceRef)
+      ? { documentResourceRef: asset.documentResourceRef }
       : {}),
   };
 }

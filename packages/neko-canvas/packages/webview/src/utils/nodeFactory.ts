@@ -7,7 +7,12 @@ import type {
   ShotCharacter,
   TableColumnDef,
 } from '@neko/shared';
-import { GALLERY_PRESET_CONFIGS, getBuiltInCanvasNodePresetMetadata } from '@neko/shared';
+import {
+  GALLERY_PRESET_CONFIGS,
+  getBuiltInCanvasNodePresetMetadata,
+  isDocumentArchiveResourceRef,
+  parseDocumentResourceStatus,
+} from '@neko/shared';
 import {
   applyCanvasNodePreset,
   createBuiltInCanvasNodePresetRegistry,
@@ -146,7 +151,13 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
           zIndex,
           data: {
             assetPath: asString(data.assetPath, ''),
+            documentResourceRef: isDocumentArchiveResourceRef(data.documentResourceRef)
+              ? data.documentResourceRef
+              : undefined,
+            documentResourceStatus: parseDocumentResourceStatus(data.documentResourceStatus),
+            runtimeAssetPath: asString(data.runtimeAssetPath) || undefined,
             thumbnailPath: asString(data.thumbnailPath) || undefined,
+            runtimeThumbnailPath: asString(data.runtimeThumbnailPath) || undefined,
             mediaType: inferMediaType(data.mediaType),
             duration: typeof data.duration === 'number' ? data.duration : undefined,
           },

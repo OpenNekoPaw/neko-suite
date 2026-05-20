@@ -11,7 +11,10 @@ import {
   createSubtitle,
   createTextExcerpt,
   extractFileBasename,
-  readAssetPath,
+  readDocumentResourceEntryPath,
+  readDocumentResourceRef,
+  readDocumentResourceStatus,
+  readPersistentAssetPath,
   readNumber,
   readRecord,
   readString,
@@ -51,15 +54,22 @@ export const mediaCardPolicy: NodeCardPolicy = {
       return { renderForm: 'waveform', waveformStyle: 'bars' };
     }
 
-    const sourcePath = readString(data, 'thumbnailPath') ?? readString(data, 'assetPath');
+    const sourcePath =
+      readString(data, 'runtimeThumbnailPath') ??
+      readString(data, 'runtimeAssetPath') ??
+      readString(data, 'thumbnailPath') ??
+      readString(data, 'assetPath');
     const title = resolveMediaTitle(node);
     const role: CanvasPreviewRole = mediaType === 'video' ? 'video-poster' : 'image';
+    const documentResourceRef = readDocumentResourceRef(node);
     const source = createAssetPreviewDescriptor({
       id: `node-card:${node.id}:media`,
       role,
       path: sourcePath,
+      stablePath: readString(data, 'thumbnailPath') ?? readPersistentAssetPath(node),
       mediaType,
       title,
+      metadata: documentResourceRef ? { documentResourceRef } : undefined,
     });
 
     if (mediaType === 'video') {
@@ -68,8 +78,12 @@ export const mediaCardPolicy: NodeCardPolicy = {
     return { renderForm: 'asset-thumbnail', aspectRatio: '3/2', source };
   },
   resolveTitle: (node, parent) => resolvePlacementTitle(node, parent) ?? resolveMediaTitle(node),
-  resolveSubtitle: (node) => readString(node.data, 'mediaType'),
-  resolveBadges: (node) => normalizePreviewBadges(node.preview?.badges),
+  resolveSubtitle: (node) =>
+    readDocumentResourceStatus(node)?.message ?? readString(node.data, 'mediaType'),
+  resolveBadges: (node) => [
+    ...normalizePreviewBadges(node.preview?.badges),
+    ...(readDocumentResourceStatus(node) ? [{ label: 'Cache', tone: 'warning' as const }] : []),
+  ],
   resolveActions: () => [
     REMOVE_ACTION,
     {
@@ -228,7 +242,7 @@ function resolveMediaTitle(node: CanvasNode): string {
     return extractFileBasename(node.preview.title);
   }
 
-  const assetPath = readAssetPath(node);
+  const assetPath = readPersistentAssetPath(node) ?? readDocumentResourceEntryPath(node);
   if (assetPath) {
     return extractFileBasename(assetPath);
   }

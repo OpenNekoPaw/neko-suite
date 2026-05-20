@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import type { ContainerSection } from '@neko/shared';
+import type { ContainerSection, DocumentArchiveResourceRef } from '@neko/shared';
 import { NodeHeader } from './NodeHeader';
 import type { NodeHeaderBadge } from './NodeHeader';
 import { ContainerRenderer } from './ContainerRenderer';
@@ -8,7 +8,7 @@ import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { getGlobalVSCodeApi } from '../../utils/vscode';
 import { t } from '../../i18n';
-import { ContainerActionBar } from './node-card';
+import { ContainerActionBar, readDocumentResourceRef } from './node-card';
 
 export interface NodeShellProps {
   section: ContainerSection;
@@ -38,6 +38,9 @@ export function NodeShell({ section, context }: NodeShellProps) {
       type: 'openMediaPreview',
       assetPath: assetInfo.assetPath,
       mediaType: assetInfo.mediaType,
+      ...(assetInfo.documentResourceRef
+        ? { documentResourceRef: assetInfo.documentResourceRef }
+        : {}),
     });
   }, [assetInfo]);
 
@@ -101,18 +104,21 @@ function isControlSection(section: ContainerSection): boolean {
 interface NodeAssetInfo {
   assetPath: string;
   mediaType?: string;
+  documentResourceRef?: DocumentArchiveResourceRef;
 }
 
 function getNodeAssetInfo(node: NodeShellProps['context']['node']): NodeAssetInfo | undefined {
   const data = node.data as Record<string, unknown> | undefined;
   if (!data) return undefined;
 
-  const assetPath = data['assetPath'];
+  const assetPath = data['runtimeAssetPath'] ?? data['assetPath'];
   if (typeof assetPath === 'string' && assetPath) {
     const mediaType = data['mediaType'];
+    const documentResourceRef = readDocumentResourceRef(node);
     return {
       assetPath,
       mediaType: typeof mediaType === 'string' ? mediaType : undefined,
+      ...(documentResourceRef ? { documentResourceRef } : {}),
     };
   }
 

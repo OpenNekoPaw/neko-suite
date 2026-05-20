@@ -16,6 +16,7 @@ import {
   type CanvasStoryboardPayload,
   type CreatedCanvasStoryboard,
 } from '@neko/shared';
+import type { DocumentArchiveResourceRef } from '@neko/shared';
 import {
   createVSCodeLogger,
   VSCodeErrorHandler,
@@ -238,6 +239,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
         return entity ? mapAssetEntityToCanvasAsset(entity) : undefined;
       },
     },
+    importAsset: (asset) => canvasEditorProvider.postImportAsset(asset),
     canvas: {
       create: (config) => createCanvas(config),
       addShape: (canvasId, shape) => canvasEditorProvider.addShape(shape),
@@ -454,7 +456,12 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.canvas.importAsset',
-      async (asset?: { path?: string; type?: string; name?: string }) => {
+      async (asset?: {
+        path?: string;
+        type?: string;
+        name?: string;
+        documentResourceRef?: DocumentArchiveResourceRef;
+      }) => {
         if (!asset?.path) {
           void handleError(new Error('neko.canvas.importAsset: missing asset path'), {
             showToUser: true,
@@ -464,7 +471,7 @@ function registerCommands(
         }
 
         // Forward to the active canvas editor via a public method
-        const accepted = canvasEditorProvider.postImportAsset(asset);
+        const accepted = await canvasEditorProvider.postImportAsset(asset);
         if (!accepted) {
           vscode.window.showInformationMessage(
             'Open a canvas file (.nkc) first, then try "Send to Canvas" again.',

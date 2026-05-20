@@ -11,6 +11,7 @@ export interface PreviewSourceDescriptor {
   role: CanvasPreviewRole;
   variants?: CanvasPreviewVariant[];
   title?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RuntimePreviewVariant extends CanvasPreviewVariant {

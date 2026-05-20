@@ -317,6 +317,52 @@ describe('nodeFactory composable presets', () => {
     expect(JSON.stringify(media.preview)).not.toContain('blob:runtime');
   });
 
+  it('keeps document-linked media references stable while carrying runtime preview paths', () => {
+    const documentResourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'image/page-1.jpg',
+      cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
+      versionPolicy: 'versioned-export' as const,
+    };
+
+    const media = hydrateCanvasNodePreview({
+      ...buildCanvasNode({
+        type: 'media',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'media.basic',
+        data: {
+          assetPath: '',
+          documentResourceRef,
+          runtimeAssetPath:
+            'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+          mediaType: 'image',
+        },
+      }),
+      id: 'media-doc-entry',
+    } as CanvasNode);
+
+    expect(media.data).toMatchObject({
+      assetPath: '',
+      documentResourceRef,
+      runtimeAssetPath:
+        'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+    });
+    expect(media.preview).toMatchObject({
+      title: 'page-1.jpg',
+      capabilities: [
+        expect.objectContaining({
+          kind: 'asset-identity',
+          path: undefined,
+          uri: 'image/page-1.jpg',
+        }),
+        expect.objectContaining({ kind: 'preview' }),
+      ],
+    });
+    expect(JSON.stringify(media.preview)).not.toContain('vscode-resource.vscode-cdn.net');
+  });
+
   it('applies the migrated media preset with asset preview capability', () => {
     const node = buildCanvasNode({
       type: 'media',

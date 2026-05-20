@@ -336,6 +336,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     nodeType: 'media',
     createContent: (node) => {
       const role = getMediaPreviewRole(node);
+      const assetBindingPath = getMediaRuntimeBindingPath(node);
       return {
         id: 'media-root',
         layout: 'stack',
@@ -348,7 +349,10 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                 id: 'media-asset-preview',
                 kind: 'asset-preview',
                 label: 'preset.media.preview',
-                binding: { path: '/assetPath', valueType: 'asset' },
+                binding: {
+                  path: assetBindingPath,
+                  valueType: 'asset',
+                },
                 capabilities: [
                   {
                     kind: 'preview',
@@ -366,7 +370,10 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                         id: 'open-media',
                         label: 'Open',
                         target: 'preview',
-                        assetBinding: { path: '/assetPath', valueType: 'asset' },
+                        assetBinding: {
+                          path: assetBindingPath,
+                          valueType: 'asset',
+                        },
                       },
                     ],
                   },
@@ -379,15 +386,17 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     },
     createPreview: (node) => {
       const data = node.type === 'media' ? node.data : undefined;
+      const persistentPath = data?.assetPath || data?.documentResourceRef?.entryPath;
       return {
-        title: extractBasename(data?.assetPath) || 'Media',
+        title: extractBasename(persistentPath || data?.runtimeAssetPath) || 'Media',
         subtitle: data?.mediaType,
         role: getMediaPreviewRole(node),
         thumbnailVariantId: data?.thumbnailPath,
         capabilities: [
           {
             kind: 'asset-identity',
-            path: data?.assetPath,
+            path: data?.assetPath || undefined,
+            uri: data?.assetPath ? undefined : data?.documentResourceRef?.entryPath,
             mediaType: data?.mediaType,
           },
           {
@@ -705,6 +714,10 @@ function areValuesEqual(left: unknown, right: unknown): boolean {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getMediaRuntimeBindingPath(node: CanvasNodeDraft): JsonPointerPath {
+  return node.type === 'media' && node.data.runtimeAssetPath ? '/runtimeAssetPath' : '/assetPath';
 }
 
 function extractBasename(path: string | undefined): string | undefined {

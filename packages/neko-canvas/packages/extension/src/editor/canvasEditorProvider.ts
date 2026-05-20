@@ -10,6 +10,7 @@ import * as path from 'path';
 import {
   createDefaultLocalResourceAccessService,
   injectLocaleAttribute,
+  normalizeLocalFilePath,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
 import {
@@ -22,6 +23,8 @@ import {
   inferCanvasMediaType,
   inferCanvasModelType,
   inferNkProjectType,
+  isDocumentArchiveResourceRef,
+  isDocumentResourceStatusReason,
   loadNkc,
 } from '@neko/shared';
 import type {
@@ -45,6 +48,8 @@ import type {
   CanvasAgentActiveContextResult,
   CanvasAgentApplyContentResult,
   CanvasAgentContentPayload,
+  DocumentResourceStatusReason,
+  DocumentArchiveResourceRef,
   NekoStoryAPI,
   NekoStoryScriptIndex,
   ScriptScene,
@@ -62,6 +67,24 @@ const logger = getLogger('CanvasEditorProvider');
 
 function readPlaybackMediaType(value: unknown): PlaybackMediaType {
   return value === 'video' || value === 'audio' ? value : 'auto';
+}
+
+function isPathInsideRoot(filePath: string, rootPath: string): boolean {
+  const resolvedFilePath = realpathIfExists(filePath);
+  const resolvedRootPath = realpathIfExists(rootPath);
+  const relative = path.relative(
+    path.normalize(resolvedRootPath),
+    path.normalize(resolvedFilePath),
+  );
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function realpathIfExists(filePath: string): string {
+  try {
+    return fs.realpathSync(filePath);
+  } catch {
+    return path.normalize(filePath);
+  }
 }
 
 /**
@@ -273,6 +296,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   // Track active streams per panel for cleanup
   private _activeStreams = new Map<vscode.WebviewPanel, Map<string, PlaybackHandle>>();
   private readonly localResourceAccess: LocalResourceAccessService;
+  private readonly documentResourceCacheRoots: readonly vscode.Uri[];
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.localResourceAccess = createDefaultLocalResourceAccessService({
@@ -280,6 +304,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       context,
       logger,
     });
+    this.documentResourceCacheRoots = [
+      context.globalStorageUri,
+      vscode.Uri.joinPath(context.globalStorageUri, 'document-image-cache'),
+      ...(vscode.workspace.workspaceFolders ?? []).map((folder) =>
+        vscode.Uri.joinPath(folder.uri, '.neko', '.cache'),
+      ),
+    ];
   }
 
   private async getMediaPlayback(): Promise<MediaPlaybackService | null> {
@@ -420,21 +451,37 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
    * Forward a GeneratedAsset import to the active canvas webview (ADR-5 P0).
    * Returns false if no canvas editor is open.
    */
-  postImportAsset(asset: { path?: string; type?: string; name?: string }): boolean {
-    if (!this.activeWebviewPanel) return false;
-    const webviewAsset = this.toWebviewImportAsset(asset);
-    this.activeWebviewPanel.webview.postMessage({
+  async postImportAsset(asset: {
+    path?: string;
+    type?: string;
+    name?: string;
+    documentResourceRef?: DocumentArchiveResourceRef;
+  }): Promise<boolean> {
+    const activePanel = this.activeWebviewPanel;
+    if (!activePanel) return false;
+    await this.authorizeDocumentResourceRoot(activePanel.webview, asset);
+    const webviewAsset = this.toWebviewImportAsset(activePanel.webview, asset);
+    activePanel.webview.postMessage({
       type: 'importGeneratedAsset',
       asset: webviewAsset,
     });
     return true;
   }
 
-  private toWebviewImportAsset(asset: { path?: string; type?: string; name?: string }): {
+  private toWebviewImportAsset(
+    webview: vscode.Webview,
+    asset: {
+      path?: string;
+      type?: string;
+      name?: string;
+      documentResourceRef?: DocumentArchiveResourceRef;
+    },
+  ): {
     path?: string;
     type?: string;
     name?: string;
     originalPath?: string;
+    documentResourceRef?: DocumentArchiveResourceRef;
   } {
     if (!asset.path) return asset;
     if (
@@ -449,11 +496,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return asset;
     }
 
-    const webviewUri = this.projectLocalResource(
-      this.activeWebviewPanel.webview,
-      asset.path,
-      'neko-canvas.import-asset',
-    );
+    const webviewUri = this.projectLocalResource(webview, asset.path, 'neko-canvas.import-asset');
     if (!webviewUri) return asset;
     return {
       ...asset,
@@ -876,7 +919,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'openMediaPreview': {
         // Open media in neko-preview's customEditor.
-        const assetPath = message.assetPath as string;
+        const assetPath = this.resolveDocumentResourceAssetPath(
+          message.assetPath as string | undefined,
+          message.documentResourceRef,
+        );
         const mediaTypeHint = message.mediaType as string | undefined;
         if (!assetPath) break;
 
@@ -916,7 +962,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'preview:resolveVariant': {
         const requestId = message.requestId as string | undefined;
-        const assetPath = message.assetPath as string | undefined;
+        const assetPath = this.resolveDocumentResourceAssetPath(
+          message.assetPath as string | undefined,
+          message.documentResourceRef,
+        );
         const role = message.role as 'thumbnail' | 'proxy' | 'fov-crop' | undefined;
         const mediaTypeHint = message.mediaType as string | undefined;
         if (!requestId || !assetPath) break;
@@ -1336,7 +1385,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           } | null>('neko.agent.getDndPayload');
 
           if (payload) {
-            this.postImportAsset({ path: payload.path, type: payload.mediaType });
+            await this.postImportAsset({ path: payload.path, type: payload.mediaType });
             await vscode.commands.executeCommand('neko.agent.clearDndPayload');
             logger.info(`DnD drop accepted: ${payload.name}`);
           }
@@ -1351,7 +1400,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       // =================================================================
 
       case 'media:probe': {
-        const assetPath = message.assetPath as string;
+        const assetPath = this.resolveDocumentResourceAssetPath(
+          message.assetPath as string | undefined,
+          message.documentResourceRef,
+        );
         const mediaType = readPlaybackMediaType(message.mediaType);
         if (!assetPath) break;
         try {
@@ -1384,7 +1436,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'media:play': {
-        const assetPath = message.assetPath as string;
+        const assetPath = this.resolveDocumentResourceAssetPath(
+          message.assetPath as string | undefined,
+          message.documentResourceRef,
+        );
         const mediaInfo = message.mediaInfo as Record<string, unknown>;
         const startTime = (message.startTime as number) ?? 0;
         const speed = (message.speed as number) ?? 1.0;
@@ -1480,7 +1535,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'media:captureFrame': {
-        const assetPath = message.assetPath as string;
+        const assetPath = this.resolveDocumentResourceAssetPath(
+          message.assetPath as string | undefined,
+          message.documentResourceRef,
+        );
         const time = (message.time as number) ?? 0;
         if (!assetPath) break;
         try {
@@ -2166,6 +2224,18 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return vscode.Uri.joinPath(docDir, assetPath).fsPath;
   }
 
+  private resolveDocumentResourceAssetPath(
+    assetPath: string | undefined,
+    documentResourceRef: unknown,
+  ): string | undefined {
+    if (assetPath) {
+      return assetPath;
+    }
+    return isDocumentArchiveResourceRef(documentResourceRef)
+      ? documentResourceRef.cachePath
+      : undefined;
+  }
+
   /** Convert stored asset paths to webview URIs so the webview can display them */
   private async normalizeCanvasPathsForLoad(
     data: Record<string, unknown>,
@@ -2191,6 +2261,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           // leave as-is if resolution fails
         }
       }
+      await this.materializeDocumentResourcePreview(nodeData, webview);
     }
   }
 
@@ -2206,11 +2277,85 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     )(source);
   }
 
+  private async authorizeDocumentResourceRoot(
+    webview: vscode.Webview,
+    value: { readonly documentResourceRef?: DocumentArchiveResourceRef },
+  ): Promise<void> {
+    const cachePath = value.documentResourceRef?.cachePath;
+    if (!cachePath) {
+      return;
+    }
+    const root = this.resolveDocumentResourceCacheRoot(cachePath);
+    if (root) {
+      await this.addFeatureRoot(webview, root.fsPath);
+    }
+  }
+
   private async addFeatureRoot(webview: vscode.Webview, rootPath: string): Promise<void> {
     await this.localResourceAccess.configureWebview(webview, {
       enableScripts: true,
       extraRoots: [...(webview.options.localResourceRoots ?? []), vscode.Uri.file(rootPath)],
     });
+  }
+
+  private async materializeDocumentResourcePreview(
+    nodeData: Record<string, unknown>,
+    webview: vscode.Webview,
+  ): Promise<void> {
+    const resourceRef = nodeData['documentResourceRef'];
+    if (!isDocumentArchiveResourceRef(resourceRef) || !resourceRef.cachePath) {
+      return;
+    }
+
+    const cacheRoot = this.resolveDocumentResourceCacheRoot(resourceRef.cachePath);
+    if (!cacheRoot) {
+      this.markDocumentResourceUnavailable(nodeData, 'unauthorized-cache-root');
+      return;
+    }
+    if (!fs.existsSync(resourceRef.cachePath)) {
+      this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
+      return;
+    }
+
+    await this.addFeatureRoot(webview, cacheRoot.fsPath);
+    const runtimePath = this.projectLocalResource(
+      webview,
+      resourceRef.cachePath,
+      'neko-canvas.document-resource-preview',
+    );
+    if (runtimePath) {
+      nodeData['runtimeAssetPath'] = runtimePath;
+      delete nodeData['documentResourceStatus'];
+    } else {
+      this.markDocumentResourceUnavailable(nodeData, 'projection-failed');
+    }
+  }
+
+  private resolveDocumentResourceCacheRoot(cachePath: string): vscode.Uri | undefined {
+    const localPath = normalizeLocalFilePath(cachePath);
+    if (!localPath) {
+      return undefined;
+    }
+    return this.documentResourceCacheRoots.find((root) => isPathInsideRoot(localPath, root.fsPath));
+  }
+
+  private markDocumentResourceUnavailable(
+    nodeData: Record<string, unknown>,
+    reason: DocumentResourceStatusReason,
+  ): void {
+    if (!isDocumentResourceStatusReason(reason)) {
+      return;
+    }
+    delete nodeData['runtimeAssetPath'];
+    delete nodeData['runtimeThumbnailPath'];
+    nodeData['documentResourceStatus'] = {
+      state: 'unavailable',
+      reason,
+      message:
+        reason === 'cache-missing'
+          ? 'Document cache expired. Reopen the source document to regenerate the preview.'
+          : 'Document cache is outside the allowed project or VS Code cache roots.',
+    };
   }
 
   /** Normalize all media node asset paths in canvas data for portable storage */
@@ -2224,7 +2369,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     for (const node of nodes) {
       if (node['type'] !== 'media') continue;
       const nodeData = node['data'] as Record<string, unknown> | undefined;
-      if (!nodeData || typeof nodeData['assetPath'] !== 'string') continue;
+      if (!nodeData) continue;
+
+      delete nodeData['runtimeAssetPath'];
+      delete nodeData['runtimeThumbnailPath'];
+      delete nodeData['documentResourceStatus'];
+      if (isDocumentArchiveResourceRef(nodeData['documentResourceRef'])) {
+        continue;
+      }
+      if (typeof nodeData['assetPath'] !== 'string') continue;
 
       const assetPath = nodeData['assetPath'] as string;
       // Resolve to absolute first (handle webview URIs, relative, etc.)

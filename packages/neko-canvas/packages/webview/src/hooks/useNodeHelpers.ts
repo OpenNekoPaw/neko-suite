@@ -11,6 +11,7 @@ import type {
   CanvasCreateCompositeResult,
   CanvasNode,
   ContainerChildPlacement,
+  DocumentArchiveResourceRef,
   NkProjectType,
 } from '@neko/shared';
 import { GALLERY_PRESET_CONFIGS } from '@neko/shared';
@@ -36,6 +37,10 @@ export interface UseNodeHelpersReturn {
     mediaType: 'image' | 'video' | 'audio',
     uri?: string,
     name?: string,
+    options?: {
+      documentResourceRef?: DocumentArchiveResourceRef;
+      runtimeAssetPath?: string;
+    },
   ) => void;
   addShotAt: (pos: { x: number; y: number }) => void;
   addSceneGroupAt: (pos: { x: number; y: number }) => void;
@@ -93,14 +98,22 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
       mediaType: 'image' | 'video' | 'audio',
       uri?: string,
       name?: string,
+      options?: {
+        documentResourceRef?: DocumentArchiveResourceRef;
+        runtimeAssetPath?: string;
+      },
     ) => {
+      const linkedDocumentResource = options?.documentResourceRef;
+      const runtimePath = options?.runtimeAssetPath ?? (linkedDocumentResource ? uri : undefined);
       addNode(
         buildCanvasNode({
           type: 'media',
           position: pos,
           zIndex: nodeCount,
           data: {
-            assetPath: uri || '',
+            assetPath: linkedDocumentResource ? '' : uri || '',
+            ...(linkedDocumentResource ? { documentResourceRef: linkedDocumentResource } : {}),
+            ...(runtimePath ? { runtimeAssetPath: runtimePath } : {}),
             mediaType,
             thumbnailPath: undefined,
             duration: undefined,

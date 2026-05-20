@@ -1,4 +1,10 @@
-import type { CanvasNode, CanvasPreviewRole } from '@neko/shared';
+import type {
+  CanvasNode,
+  CanvasPreviewRole,
+  DocumentArchiveResourceRef,
+  DocumentResourceStatus,
+} from '@neko/shared';
+import { parseDocumentArchiveResourceRef, parseDocumentResourceStatus } from '@neko/shared';
 import { isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../../preview';
 import type {
   ActionCondition,
@@ -26,7 +32,7 @@ export function evaluateActionCondition(
       return targets.every((node) => readString(node.data, 'generationStatus') !== 'generating');
     }
     case 'has-asset':
-      return Boolean(readAssetPath(ctx.node));
+      return Boolean(readRenderableAssetPath(ctx.node));
   }
 }
 
@@ -63,7 +69,10 @@ export function isRenderablePreviewSource(source: CardPreviewSource): boolean {
 }
 
 export function hasPreviewDescriptorContent(source: PreviewSourceDescriptor): boolean {
-  return Boolean(source.asset?.path ?? source.asset?.uri ?? source.variants?.[0]?.sourcePath);
+  return Boolean(
+    (source.asset?.path ?? source.asset?.uri) ||
+    source.variants?.some((variant) => variant.sourcePath),
+  );
 }
 
 export function getStableSafeVariantUrl(source: PreviewSourceDescriptor): string | undefined {
@@ -76,8 +85,10 @@ export function createAssetPreviewDescriptor(input: {
   id: string;
   role: CanvasPreviewRole;
   path?: string;
+  stablePath?: string;
   mediaType?: string;
   title?: string;
+  metadata?: Record<string, unknown>;
   variants?: PreviewSourceDescriptor['variants'];
 }): PreviewSourceDescriptor {
   return {
@@ -90,8 +101,14 @@ export function createAssetPreviewDescriptor(input: {
           mediaType: input.mediaType,
         }
       : undefined,
-    variants: input.variants && input.variants.length > 0 ? [...input.variants] : undefined,
+    variants:
+      input.variants && input.variants.length > 0
+        ? [...input.variants]
+        : input.stablePath
+          ? [{ id: 'stable-source', role: input.role, sourcePath: input.stablePath }]
+          : undefined,
     title: input.title,
+    metadata: input.metadata,
   };
 }
 
@@ -138,6 +155,37 @@ export function readAssetPath(node: CanvasNode): string | undefined {
   const data = readRecord(node.data);
   const assetPath = data['assetPath'];
   return typeof assetPath === 'string' && assetPath.length > 0 ? assetPath : undefined;
+}
+
+export function readRenderableAssetPath(node: CanvasNode): string | undefined {
+  const data = readRecord(node.data);
+  const runtimeAssetPath = data['runtimeAssetPath'];
+  if (typeof runtimeAssetPath === 'string' && runtimeAssetPath.length > 0) {
+    return runtimeAssetPath;
+  }
+  return readAssetPath(node);
+}
+
+export function readPersistentAssetPath(node: CanvasNode): string | undefined {
+  const data = readRecord(node.data);
+  const assetPath = data['assetPath'];
+  return typeof assetPath === 'string' && assetPath.length > 0 ? assetPath : undefined;
+}
+
+export function readDocumentResourceEntryPath(node: CanvasNode): string | undefined {
+  const resourceRef = readDocumentResourceRef(node);
+  return typeof resourceRef?.entryPath === 'string' && resourceRef.entryPath.length > 0
+    ? resourceRef.entryPath
+    : undefined;
+}
+
+export function readDocumentResourceRef(node: CanvasNode): DocumentArchiveResourceRef | undefined {
+  const data = readRecord(node.data);
+  return parseDocumentArchiveResourceRef(data['documentResourceRef']);
+}
+
+export function readDocumentResourceStatus(node: CanvasNode): DocumentResourceStatus | undefined {
+  return parseDocumentResourceStatus(readRecord(node.data)['documentResourceStatus']);
 }
 
 export function readDocumentPath(node: CanvasNode): string | undefined {

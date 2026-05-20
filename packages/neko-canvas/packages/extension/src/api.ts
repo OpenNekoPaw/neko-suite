@@ -23,6 +23,7 @@ import type {
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
   CreatedCanvasStoryboard,
+  DocumentArchiveResourceRef,
 } from '@neko/shared';
 
 // Types
@@ -100,6 +101,16 @@ export interface NekoCanvasAPI {
      */
     getById(id: string): Promise<Asset | undefined>;
   };
+
+  /**
+   * Import media into the active canvas editor.
+   */
+  importAsset(asset: {
+    path: string;
+    type?: 'image' | 'video' | 'audio' | 'model';
+    name?: string;
+    documentResourceRef?: DocumentArchiveResourceRef;
+  }): Promise<boolean>;
 
   /**
    * Canvas operations

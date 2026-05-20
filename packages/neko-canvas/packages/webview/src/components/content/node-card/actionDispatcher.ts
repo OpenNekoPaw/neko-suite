@@ -4,7 +4,13 @@ import type {
   NodeCardActionDispatcher,
   NodeCardActionId,
 } from './types';
-import { readAssetPath, readDocumentPath, readRecord, readString } from './utils';
+import {
+  readDocumentPath,
+  readDocumentResourceRef,
+  readRecord,
+  readRenderableAssetPath,
+  readString,
+} from './utils';
 
 export const NODE_CARD_ACTION_DISPATCHER: NodeCardActionDispatcher = {
   remove: (ctx) => {
@@ -20,15 +26,17 @@ export const NODE_CARD_ACTION_DISPATCHER: NodeCardActionDispatcher = {
   },
 
   'open-media-preview': (ctx) => {
-    const assetPath = readAssetPath(ctx.node);
+    const assetPath = readRenderableAssetPath(ctx.node);
     if (!assetPath) {
       return;
     }
+    const documentResourceRef = readDocumentResourceRef(ctx.node);
 
     ctx.postMessage({
       type: 'openMediaPreview',
       assetPath,
       mediaType: readString(ctx.node.data, 'mediaType'),
+      ...(documentResourceRef ? { documentResourceRef } : {}),
     });
   },
 

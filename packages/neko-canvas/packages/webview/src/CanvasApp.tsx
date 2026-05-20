@@ -256,7 +256,10 @@ export function CanvasApp() {
     setCanvasData,
     onAddMediaFromExtension: handleAddMediaFromExtension,
     onImportGeneratedAsset: (asset) => {
-      addMediaAt(getViewportCenter(), asset.mediaType, asset.path, asset.name);
+      addMediaAt(getViewportCenter(), asset.mediaType, asset.path, asset.name, {
+        ...(asset.documentResourceRef ? { documentResourceRef: asset.documentResourceRef } : {}),
+        ...(asset.documentResourceRef ? { runtimeAssetPath: asset.path } : {}),
+      });
     },
     onDropAssets: (assets: CanvasDroppedAsset[]) => {
       const pos = dropPositionRef.current ?? getViewportCenter();

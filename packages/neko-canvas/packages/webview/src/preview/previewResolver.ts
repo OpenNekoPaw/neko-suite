@@ -40,6 +40,7 @@ export class WebviewPreviewResolver implements PreviewResolver {
       assetPath: sourcePath,
       role: request.role ?? request.source.role,
       mediaType: request.source.asset?.mediaType,
+      documentResourceRef: request.source.metadata?.['documentResourceRef'],
     });
 
     return {
@@ -99,6 +100,7 @@ interface RuntimeVariantInput {
   assetPath: string;
   role: CanvasPreviewRole;
   mediaType?: string;
+  documentResourceRef?: unknown;
 }
 
 interface RuntimeVariantRequest {
@@ -107,7 +109,7 @@ interface RuntimeVariantRequest {
 }
 
 function createRuntimeVariantRequest(
-  { sourceId, assetPath, role, mediaType }: RuntimeVariantInput,
+  { sourceId, assetPath, role, mediaType, documentResourceRef }: RuntimeVariantInput,
   onSettled: () => void,
 ): RuntimeVariantRequest {
   const vscode = getGlobalVSCodeApi();
@@ -159,6 +161,7 @@ function createRuntimeVariantRequest(
         assetPath,
         role: engineRole,
         mediaType,
+        ...(documentResourceRef ? { documentResourceRef } : {}),
       });
     } catch {
       settle(undefined);

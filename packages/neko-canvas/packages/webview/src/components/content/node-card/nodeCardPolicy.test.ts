@@ -31,9 +31,81 @@ describe('node card policies', () => {
           path: 'assets/ref-thumb.png',
           mediaType: 'image',
         },
+        variants: [{ id: 'stable-source', role: 'image', sourcePath: 'assets/ref-thumb.png' }],
       },
     });
     expect(JSON.stringify(source)).not.toContain('runtimeUrl');
+  });
+
+  it('uses document entry refs as stable media titles while rendering from runtime paths', () => {
+    const node = createMediaNode('media-doc-entry', {
+      assetPath: '',
+      documentResourceRef: {
+        kind: 'document-entry',
+        source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        entryPath: 'image/page-1.jpg',
+        cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
+        versionPolicy: 'versioned-export',
+      },
+      runtimeAssetPath:
+        'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+      mediaType: 'image',
+    });
+
+    const source = mediaCardPolicy.resolvePreviewSource(node);
+
+    expect(mediaCardPolicy.resolveTitle(node)).toBe('page-1.jpg');
+    expect(source).toMatchObject({
+      renderForm: 'asset-thumbnail',
+      source: {
+        asset: {
+          kind: 'asset-identity',
+          path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+          mediaType: 'image',
+        },
+        metadata: { documentResourceRef: expect.objectContaining({ kind: 'document-entry' }) },
+      },
+    });
+    if (source.renderForm !== 'asset-thumbnail') {
+      throw new Error('Expected asset thumbnail preview');
+    }
+    expect(JSON.stringify(source.source.variants ?? [])).not.toContain('cachePath');
+  });
+
+  it('shows document cache expiry without treating cache paths as previews', () => {
+    const node = createMediaNode('media-doc-missing', {
+      assetPath: '',
+      documentResourceRef: {
+        kind: 'document-entry',
+        source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        entryPath: 'image/page-1.jpg',
+        cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
+        versionPolicy: 'versioned-export',
+      },
+      documentResourceStatus: {
+        state: 'unavailable',
+        reason: 'cache-missing',
+        message: 'Document cache expired. Reopen the source document to regenerate the preview.',
+      },
+      mediaType: 'image',
+    });
+
+    const source = mediaCardPolicy.resolvePreviewSource(node);
+
+    expect(source).toMatchObject({
+      renderForm: 'asset-thumbnail',
+      source: {
+        asset: undefined,
+        variants: undefined,
+      },
+    });
+    expect(mediaCardPolicy.resolveSubtitle?.(node)).toBe(
+      'Document cache expired. Reopen the source document to regenerate the preview.',
+    );
+    expect(mediaCardPolicy.resolveBadges?.(node)).toContainEqual({
+      label: 'Cache',
+      tone: 'warning',
+    });
   });
 
   it('maps video media to media-poster and audio to waveform', () => {
@@ -137,6 +209,16 @@ describe('action condition evaluator', () => {
     expect(
       evaluateActionCondition('has-asset', {
         node: createMediaNode('media-1', { assetPath: 'assets/ref.png' }),
+        selection: { nodeIds: [] },
+      }),
+    ).toBe(true);
+    expect(
+      evaluateActionCondition('has-asset', {
+        node: createMediaNode('media-2', {
+          assetPath: '',
+          runtimeAssetPath:
+            'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+        }),
         selection: { nodeIds: [] },
       }),
     ).toBe(true);

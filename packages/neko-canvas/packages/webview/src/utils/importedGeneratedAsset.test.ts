@@ -32,6 +32,31 @@ describe('imported generated asset normalization', () => {
     });
   });
 
+  it('preserves document entry resource refs for linked imports', () => {
+    const documentResourceRef = {
+      kind: 'document-entry',
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+      entryPath: 'image/page-1.jpg',
+      cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
+      versionPolicy: 'versioned-export',
+    };
+
+    expect(
+      normalizeImportedGeneratedAsset({
+        path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+        originalPath: '/tmp/neko_epub_1/0001_page-1.jpg',
+        type: 'image',
+        documentResourceRef,
+      }),
+    ).toEqual({
+      path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+      originalPath: '/tmp/neko_epub_1/0001_page-1.jpg',
+      mediaType: 'image',
+      name: '0001_page-1.jpg',
+      documentResourceRef,
+    });
+  });
+
   it('preserves explicit asset names over derived file names', () => {
     expect(
       normalizeImportedGeneratedAsset({
