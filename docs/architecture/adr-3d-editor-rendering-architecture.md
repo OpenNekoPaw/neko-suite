@@ -2,24 +2,30 @@
 
 ## 状态
 
-Proposed (2026-04-27, revised 2026-04-27 — 当前规范收敛为：VSCode Webview 实时视口播放链路仅支持 raw H.264 + WebCodecs + `H264StreamClient`（`container ∈ {h264-annexb, h264-avcc}`、`frameHeader='neko-h264-v1'`、`initData.format='avcc-record'`、`RenderFrameMeta.durationUs` 必填），音频仅支持独立 PCM f32le + `AudioStreamClient`（`/v1/audio/:stream_id`、`frameHeader='neko-pcm-v1'`，作为 A/V 同步 master clock）；不支持 fMP4 / MSE / `FMP4StreamClient` 作为 3D Webview 实时播放路径，也不支持在视频流中夹带音频。neko-engine 内部媒体处理、探测、转码和离线导出能力不受本 ADR 的 Webview 播放链路约束。)
+Proposed (2026-04-27, revised 2026-05-20 — 当前规范收敛为：VSCode Webview 实时视口播放链路仅支持 raw H.264 + WebCodecs + `H264StreamClient`（`container ∈ {h264-annexb, h264-avcc}`、`frameHeader='neko-h264-v1'`、`initData.format='avcc-record'`、`RenderFrameMeta.durationUs` 必填），音频仅支持独立 PCM f32le + `AudioStreamClient`（`/v1/audio/:stream_id`、`frameHeader='neko-pcm-v1'`，作为 A/V 同步 master clock）；不支持 fMP4 / MSE / `FMP4StreamClient` 作为 3D Webview 实时播放路径，也不支持在视频流中夹带音频。neko-engine 内部媒体处理、探测、转码和离线导出能力不受本 ADR 的 Webview 播放链路约束。)
+
+### 2026-05-20 收敛说明：Engine-only Route A
+
+本 ADR 早期章节保留了 2026-04-27 对 R3F/Three.js 过渡期的审计和迁移讨论；这些内容用于解释历史问题，不再代表当前实现允许的 fallback。当前 `neko-model` Webview 是 Engine-only Route A：可见 3D 内容只能来自 Engine H.264 视频流；Webview 不再打包 `R3FDevelopmentFallback`、`Viewport3D`、`ModelLoader`、R3F `TransformGizmo`，也不再依赖 `@react-three/*`、`three` 或 `@pixiv/three-vrm`。
+
+WebCodecs 或 Engine stream 不可用时，UI 必须进入明确的 Route A unavailable 状态；`scenes:capture` 只允许作为非交互质量预览 overlay。短生命周期预测只能作为 2D overlay、projected bounds、gizmo anchor 或诊断信息出现，必须携带 viewportId、sceneRevision 和 seq，并在 ack / SceneDelta / RenderFrameMeta 对齐后清除。任何重新引入 Webview 侧 glTF 解析、材质渲染、动画 mixer 或可见 R3F 模型 fallback 的改动，都需要先更新本 ADR 并通过 Route A 边界测试。
 
 ### 阶段 1A 落地说明（2026-04-28）
 
 - Route A 实时视口由 Webview 通过 `EngineClient.startSceneRenderStream(ViewportDescriptor)` 直连 Engine，`scenes:stream` 返回 `RenderStreamDescriptor`，视频 WebSocket 固定消费 raw H.264 access unit，客户端按 `codecString`、`container`、`frameHeader` 和可选 `initData` 初始化 WebCodecs。
 - 音频不进入视频包；需要实时音频时使用 `/v1/audio/:stream_id` 与 `AudioStreamDescriptor(codec='pcm-f32le', frameHeader='neko-pcm-v1')`，由 `AudioStreamClient` 独立校验和播放。
 - Webview 视觉真值 surface 为 `VideoViewport` 的 canvas / `VideoFrame`，选择框、gizmo、本地预测和诊断信息绘制在独立 `OverlayCanvas`，并用 `RenderFrameMeta.viewportId / frameId / sceneRevision / appliedSeq` 对齐。
-- WebCodecs 不可用时不切换到 fMP4/MSE；UI 进入明确的 Route A unavailable 状态，保留 R3F 开发 fallback 或 `scenes:capture` 静态质量预览作为 Route C。
+- WebCodecs 不可用时不切换到 fMP4/MSE，也不切换到 R3F/Three.js 模型 fallback；UI 进入明确的 Route A unavailable 状态，`scenes:capture` 静态质量预览只作为非交互 overlay。
 - Extension Host 只负责 VSCode 能力代理、资源 URI、Engine 端口和低频操作，不承载 60fps SceneDelta、视频包、PCM 包或高频 transform dispatch；边界可用 `node scripts/check-3d-route-a-boundaries.mjs` 校验。
 
 ### 阶段 1B 落地说明（2026-04-28）
 
 - `.nkc` / `.nkcdata` 成为角色 authoring 真值：`LayeredCharacterDescription` 保存 descriptor、definition、behavior、geometry、override、material slot、morph、skin weight 和 blend shape 引用；Engine 将其投影到 ECS，ECS 不反向拥有 canonical morph library、override map 或 skin weight atlas。
-- Webview 旧角色面板收敛为控制面：Face、Expression、Bone/IK、Shape/CSG/Text、Animation/Keyframe 和 Inspector 操作编译为 `SceneCommand`、`CharacterCommand` 或 `ModelingSession` 命令，经 `/v1/scenes/control` 直连 Engine；本地 Zustand/R3F 只保存带 revision/seq 的镜像和短生命周期预测。
+- Webview 旧角色面板收敛为控制面：Face、Expression、Bone/IK、Shape/CSG/Text、Animation/Keyframe 和 Inspector 操作编译为 `SceneCommand`、`CharacterCommand` 或 `ModelingSession` 命令，经 `/v1/scenes/control` 直连 Engine；本地 Zustand 只保存带 revision/seq 的镜像和短生命周期 overlay 预测。
 - 自由建模进入 `ModelingSession`：笔刷 patch 走 `VertexBrushPatch` 二进制副通道，语义状态走 `SceneDelta.modelingSessions`，拓扑变更走 `TopologyChangeEvent`；`topologyVersion` 同时约束命令、hit-test、projected bounds、本地预测和导出。
 - `MeshTopologyMigrationService` 是拓扑提交闸门：仅顶点位置变化可保留 morph/skin/UV；Boolean、Decimate、Dynamic Topology 等会显式迁移或失效，并通过 Overlay/诊断面板提示，禁止静默导出损坏的角色数据。
 - Route A Webview 现在是 Engine 渲染结果播放器和控制面：可见 3D 内容只来自 `VideoViewport` 的 Engine H.264 帧；`OverlayCanvas`、`InteractionLayer`、`LocalPredictionLayer` 只负责命令反馈、拾取查询、gizmo anchor、bounds、IK/brush/morph 预测和恢复路径。
-- R3F/Three.js 仅保留两类用途：短生命周期非权威预测/辅助 overlay，以及明确标记为 Route A unavailable 的开发 fallback；fallback 不参与 WYSIWYG 验收、导出、undo/redo 或 authoring commit。
+- R3F/Three.js 不再作为 `neko-model` Webview 的可见模型 fallback 或预测渲染器；短生命周期预测必须以 Engine 视频之上的 overlay 形式表达，不参与 WYSIWYG 验收、导出、undo/redo 或 authoring commit。
 - `CharacterBakingSystem` 是角色导出权威：GLB/VRM/FBX 路径读取 `.nkc`、`.nkcdata`、AssetDatabase、Engine 当前 pose 和 topology migration state；导出器不得读取 GPU cache、Render World 或 Webview prediction。
 
 ## 关联 ADR

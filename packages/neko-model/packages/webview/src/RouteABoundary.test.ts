@@ -167,7 +167,7 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/\{shouldRenderEngineViewport \? \(/);
     expect(app).toMatch(/<VideoViewport\b/);
     expect(app).toMatch(/qualityPreviewDataUrl && shouldRenderEngineViewport/);
-    expect(app).toMatch(/pointer-events-none absolute inset-0 bg-black/);
+    expect(app).toMatch(/model-quality-preview-overlay pointer-events-none absolute inset-0/);
     expect(app).toMatch(/onCameraMutated=\{handleViewportCameraMutated\}/);
     expect(app).not.toMatch(
       /\{qualityPreviewDataUrl \? \(\s*<div className="relative h-full w-full bg-black">/,
