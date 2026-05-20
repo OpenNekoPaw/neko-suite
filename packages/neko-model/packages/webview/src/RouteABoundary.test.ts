@@ -130,6 +130,10 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/new ResizeObserver/);
     expect(videoViewport).toMatch(/createViewportStreamSize/);
     expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_PIXELS/);
+    expect(videoViewport).toMatch(/1920 \* 1080/);
+    expect(videoViewport).toMatch(/MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 1\.5/);
+    expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
+    expect(videoViewport).toMatch(/bucketed % 2 === 0/);
     expect(videoViewport).toMatch(/resolution:\s*\{\s*width: streamSize\.width/);
     expect(videoViewport).not.toMatch(
       /width:\s*1280,\s*\n\s*height:\s*720,\s*\n\s*pixelRatio:\s*window\.devicePixelRatio/,
@@ -151,6 +155,8 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(
       /updateEditorCamera\(position, target, undefined, MAIN_VIEWPORT_ID\)/,
     );
+    expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 16/);
+    expect(navigationControls).toMatch(/CAMERA_SEND_INTERVAL_MS = 16/);
     expect(orbitControls).not.toMatch(/new EngineClient|updateEditorCamera/);
     expect(navigationControls).not.toMatch(/new EngineClient|updateEditorCamera/);
   });

@@ -36,9 +36,10 @@ export interface VideoViewportProps {
 
 const MAIN_VIEWPORT_ID = 'main';
 const DEFAULT_VIEWPORT_STREAM_SIZE = { width: 1280, height: 720, pixelRatio: 1 };
-const MAX_VIEWPORT_STREAM_PIXELS = 1280 * 720;
-const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 1.25;
+const MAX_VIEWPORT_STREAM_PIXELS = 1920 * 1080;
+const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 1.5;
 const VIEWPORT_DIMENSION_BUCKET = 16;
+const VIEWPORT_STREAM_FPS = 60;
 
 type ViewportStreamSize = SceneViewportResolution;
 
@@ -46,10 +47,11 @@ function bucketStreamDimension(value: number): number {
   if (!Number.isFinite(value) || value <= 0) {
     return VIEWPORT_DIMENSION_BUCKET;
   }
-  return Math.max(
+  const bucketed = Math.max(
     VIEWPORT_DIMENSION_BUCKET,
     Math.round(value / VIEWPORT_DIMENSION_BUCKET) * VIEWPORT_DIMENSION_BUCKET,
   );
+  return bucketed % 2 === 0 ? bucketed : bucketed + 1;
 }
 
 function createViewportStreamSize(rect: DOMRectReadOnly): ViewportStreamSize {
@@ -119,7 +121,7 @@ function createViewportDescriptor(
       height: streamSize.height,
       pixelRatio: streamSize.pixelRatio,
     },
-    fps: 30,
+    fps: VIEWPORT_STREAM_FPS,
     colorSpace: 'srgb',
     toneMapping: 'aces',
     postProcess: {

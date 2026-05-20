@@ -17,7 +17,7 @@ export interface ViewportNavigationControlsProps {
   onCameraMutated?: () => void;
 }
 
-const CAMERA_SEND_INTERVAL_MS = 33;
+const CAMERA_SEND_INTERVAL_MS = 16;
 const BUTTON_ZOOM_STEP = 0.16;
 const BUTTON_PAN_STEP = 0.08;
 const BUTTON_ORBIT_STEP = Math.PI / 16;
