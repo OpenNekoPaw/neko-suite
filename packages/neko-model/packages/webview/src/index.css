@@ -5,7 +5,14 @@
 @layer base {
   :root {
     color-scheme: dark;
-    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    font-family: var(
+      --vscode-font-family,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      sans-serif
+    );
     font-size: var(--vscode-font-size, 13px);
     color: var(--neko-fg, var(--vscode-editor-foreground, #cccccc));
     background-color: var(--vscode-editor-background, #1e1e1e);
@@ -60,7 +67,11 @@
     --model-viewport-control-hover-bg: color-mix(in srgb, var(--model-elevated) 84%, transparent);
     --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
     --model-viewport-control-hover-border: color-mix(in srgb, var(--model-fg) 24%, transparent);
-    --model-viewport-control-active: color-mix(in srgb, var(--model-accent) 74%, var(--model-fg) 26%);
+    --model-viewport-control-active: color-mix(
+      in srgb,
+      var(--model-accent) 74%,
+      var(--model-fg) 26%
+    );
     --model-viewport-control-shadow: var(--neko-shadow-md, 0 10px 26px rgba(0, 0, 0, 0.28));
     --model-viewport-pad-bg: color-mix(in srgb, var(--model-surface) 46%, transparent);
     --model-viewport-pad-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
@@ -138,7 +149,11 @@
     --model-viewport-toolbar-bg: color-mix(in srgb, var(--model-elevated) 94%, transparent);
     --model-viewport-toolbar-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
     --model-viewport-control-bg: color-mix(in srgb, var(--model-elevated) 78%, transparent);
-    --model-viewport-control-hover-bg: color-mix(in srgb, var(--model-elevated) 92%, var(--model-fg) 8%);
+    --model-viewport-control-hover-bg: color-mix(
+      in srgb,
+      var(--model-elevated) 92%,
+      var(--model-fg) 8%
+    );
     --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
     --model-viewport-control-hover-border: color-mix(in srgb, var(--model-fg) 24%, transparent);
     --model-viewport-control-active: var(--model-accent);
@@ -477,6 +492,27 @@
   .model-selected-row {
     background: var(--model-selected);
     color: var(--model-fg);
+  }
+
+  .model-tree-visibility-toggle {
+    display: inline-grid;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    place-items: center;
+    color: var(--model-fg-secondary);
+    border-radius: 4px;
+    line-height: 1;
+  }
+
+  .model-tree-visibility-toggle:hover:not(:disabled) {
+    color: var(--model-fg);
+    background: var(--model-hover);
+  }
+
+  .model-tree-visibility-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
   }
 
   .model-quote {
@@ -838,7 +874,9 @@
     position: absolute;
     right: 0;
     bottom: 31px;
-    width: 230px;
+    width: 270px;
+    max-height: min(430px, calc(100vh - 96px));
+    overflow: auto;
     border: 1px solid var(--model-engine-popover-border);
     border-radius: 6px;
     background: var(--model-engine-popover-bg);

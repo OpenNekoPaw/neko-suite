@@ -10,8 +10,8 @@ use tokio::sync::{mpsc, watch};
 use crate::error::{Error, Result};
 use neko_engine_gpu::GpuContext;
 use neko_engine_scene_renderer::{
-    AssetCache, CameraParams, PbrRenderer, RenderWorld, SceneRenderOutput, ViewportDescriptor,
-    ViewportRenderGraphOutput,
+    AssetCache, CameraParams, PbrRenderer, RenderTargetPoolSnapshot, RenderWorld,
+    SceneRenderOutput, ViewportDescriptor, ViewportRenderGraphOutput,
 };
 
 pub const SCENE_EXPORT_QUEUE_CAPACITY: usize = 1;
@@ -247,6 +247,13 @@ impl SceneRenderer {
         .map_err(|e| Error::Other(format!("PBR render failed: {}", e)))?;
         self.record_generation(generation)?;
         Ok(output)
+    }
+
+    pub fn render_target_pool_snapshot(&self) -> RenderTargetPoolSnapshot {
+        self.renderer
+            .lock()
+            .map(|renderer| renderer.render_target_pool_snapshot())
+            .unwrap_or_default()
     }
 
     fn record_generation(&self, generation: u64) -> Result<()> {

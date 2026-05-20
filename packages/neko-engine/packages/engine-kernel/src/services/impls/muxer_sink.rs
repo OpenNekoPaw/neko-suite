@@ -367,6 +367,7 @@ mod tests {
             frame_index: 7,
             width: 1920,
             height: 1080,
+            diagnostics: None,
         }))
     }
 

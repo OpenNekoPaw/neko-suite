@@ -150,6 +150,18 @@ impl HwAccelEncoder {
         self.hw_active
     }
 
+    /// Whether the active encoder session is using the CVPixelBuffer zero-copy path.
+    pub fn is_zero_copy_active(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            self.zero_copy_active
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            false
+        }
+    }
+
     /// Get the active hardware encoder type
     pub fn active_hw_type(&self) -> HwEncoderType {
         if self.hw_active {

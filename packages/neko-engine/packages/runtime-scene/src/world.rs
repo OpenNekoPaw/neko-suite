@@ -20,6 +20,8 @@ use crate::loader::{self, LoadError, LoadResult};
 use crate::modeling_session::{
     ModelingSession, ModelingSessionManager, ModelingSessionStateDelta, TopologyChangeEvent,
 };
+use crate::procedural::{generate_shape, ShapeParams};
+use crate::procedural_mesh::ProceduralMesh;
 use crate::scene_control::{
     advance_scene_revision, ensure_scene_control_resources, extract_scene_delta,
     mark_morph_weights_dirty, mark_node_removed, mark_transform_dirty, mark_visibility_dirty,
@@ -247,13 +249,22 @@ pub trait SceneWorld: Send + Sync {
 /// Implementation using bevy_ecs::World
 pub struct BevySceneWorld {
     world: World,
+    default_procedural_meshes: HashMap<String, ProceduralMesh>,
 }
 
 impl BevySceneWorld {
     pub fn new() -> Self {
         let mut world = World::new();
         ensure_scene_control_resources(&mut world);
-        Self { world }
+        let default_procedural_meshes = spawn_default_cube(&mut world);
+        Self {
+            world,
+            default_procedural_meshes,
+        }
+    }
+
+    pub fn default_procedural_meshes(&self) -> &HashMap<String, ProceduralMesh> {
+        &self.default_procedural_meshes
     }
 
     fn write_playback_state(
@@ -330,6 +341,35 @@ impl BevySceneWorld {
         }
         Err(format!("Clip '{}' not found", clip_name))
     }
+}
+
+fn spawn_default_cube(world: &mut World) -> HashMap<String, ProceduralMesh> {
+    const DEFAULT_CUBE_URI: &str = "procedural://default_cube";
+    const DEFAULT_CUBE_NODE_ID: &str = "default_cube";
+
+    let mesh = generate_shape(&ShapeParams::default_cube());
+    world.spawn((
+        SceneNodeId(DEFAULT_CUBE_NODE_ID.to_string()),
+        NodeName("Cube".to_string()),
+        Transform::default(),
+        GlobalTransform::identity(),
+        Visible(true),
+        MeshRef {
+            asset: crate::asset_database::AssetHandle::for_mesh(DEFAULT_CUBE_URI, 0),
+            uri: DEFAULT_CUBE_URI.to_string(),
+            primitive_index: 0,
+        },
+        MeshBounds {
+            local: SceneBounds3 {
+                min: [-0.5, -0.5, -0.5],
+                max: [0.5, 0.5, 0.5],
+            },
+        },
+    ));
+    rebuild_node_index(world);
+    systems::transform_propagation(world);
+
+    HashMap::from([(DEFAULT_CUBE_URI.to_string(), mesh)])
 }
 
 impl Default for BevySceneWorld {
@@ -730,6 +770,14 @@ impl SceneWorld for BevySceneWorld {
         // Clear existing world
         self.world.clear_all();
         ensure_scene_control_resources(&mut self.world);
+
+        if snapshot.nodes.is_empty() {
+            self.default_procedural_meshes = spawn_default_cube(&mut self.world);
+            advance_scene_revision(&mut self.world);
+            return;
+        }
+
+        self.default_procedural_meshes.clear();
 
         // Rebuild ECS entities from snapshot nodes
         let mut id_to_entity: HashMap<String, Entity> = HashMap::new();
@@ -1278,7 +1326,9 @@ mod tests {
     fn test_bevy_scene_world_new() {
         let mut world = BevySceneWorld::new();
         let snapshot = world.get_snapshot();
-        assert!(snapshot.nodes.is_empty());
+        assert_eq!(snapshot.nodes.len(), 1);
+        assert_eq!(snapshot.nodes[0].id, "default_cube");
+        assert_eq!(snapshot.nodes[0].name, "Cube");
         assert!(snapshot.animations.is_empty());
     }
 
@@ -1286,7 +1336,10 @@ mod tests {
     fn test_bevy_scene_world_default() {
         let mut world = BevySceneWorld::default();
         let snapshot = world.get_snapshot();
-        assert!(snapshot.nodes.is_empty());
+        assert_eq!(snapshot.nodes.len(), 1);
+        assert!(world
+            .default_procedural_meshes()
+            .contains_key("procedural://default_cube"));
     }
 
     #[test]
@@ -1323,6 +1376,7 @@ mod tests {
             .nodes
             .iter()
             .all(|node| node.id != "template_humanoid"));
+        assert!(snapshot.nodes.iter().all(|node| node.id != "default_cube"));
         assert!(snapshot.nodes.iter().any(|node| node.name == "Scene"));
         assert!(snapshot.nodes.iter().any(|node| node.name == "Loaded"));
     }

@@ -89,6 +89,7 @@ impl IImageService for ImageService {
                     height,
                     format: output_format,
                     timestamp: 0.0,
+                    diagnostics: None,
                 })
             } else {
                 Err(Error::Other("GPU context required for capture".to_string()))

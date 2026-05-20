@@ -6,6 +6,8 @@ interface SceneTreeProps {
   nodes: SceneNodeSnapshot[];
   selectedNodeId: string | null;
   onSelectNode: (id: string) => void;
+  onSetNodeVisible?: (id: string, visible: boolean) => void;
+  visibilityDisabled?: boolean;
   showHeader?: boolean;
 }
 
@@ -16,6 +18,8 @@ export function SceneTree({
   nodes,
   selectedNodeId,
   onSelectNode,
+  onSetNodeVisible,
+  visibilityDisabled = false,
   showHeader = true,
 }: SceneTreeProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -37,6 +41,8 @@ export function SceneTree({
             allNodes={nodes}
             selectedNodeId={selectedNodeId}
             onSelectNode={onSelectNode}
+            onSetNodeVisible={onSetNodeVisible}
+            visibilityDisabled={visibilityDisabled}
             depth={0}
           />
         ))}
@@ -50,6 +56,8 @@ interface TreeNodeProps {
   allNodes: SceneNodeSnapshot[];
   selectedNodeId: string | null;
   onSelectNode: (id: string) => void;
+  onSetNodeVisible?: (id: string, visible: boolean) => void;
+  visibilityDisabled: boolean;
   depth: number;
 }
 
@@ -58,10 +66,13 @@ function TreeNode({
   allNodes,
   selectedNodeId,
   onSelectNode,
+  onSetNodeVisible,
+  visibilityDisabled,
   depth,
 }: TreeNodeProps): React.JSX.Element {
   const children = allNodes.filter((n) => n.parentId === node.nodeId);
   const isSelected = selectedNodeId === node.nodeId;
+  const isVisible = node.visible !== false;
 
   const icon =
     node.kind === 'camera'
@@ -87,10 +98,24 @@ function TreeNode({
       <div
         className={`model-selectable-row flex cursor-pointer items-center gap-1 px-1 py-0.5 ${
           isSelected ? 'model-selected-row' : ''
-        }`}
+        } ${isVisible ? '' : 'opacity-55'}`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         onClick={() => onSelectNode(node.nodeId)}
       >
+        <button
+          type="button"
+          className="model-tree-visibility-toggle"
+          disabled={visibilityDisabled || !onSetNodeVisible}
+          title={isVisible ? t('sceneTree.hideNode') : t('sceneTree.showNode')}
+          aria-label={isVisible ? t('sceneTree.hideNode') : t('sceneTree.showNode')}
+          aria-pressed={isVisible}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSetNodeVisible?.(node.nodeId, !isVisible);
+          }}
+        >
+          {isVisible ? '\u25C9' : '\u25CE'}
+        </button>
         <span className="text-[10px] text-[var(--model-fg-secondary)] opacity-80">
           {iconMap[icon]}
         </span>
@@ -103,6 +128,8 @@ function TreeNode({
           allNodes={allNodes}
           selectedNodeId={selectedNodeId}
           onSelectNode={onSelectNode}
+          onSetNodeVisible={onSetNodeVisible}
+          visibilityDisabled={visibilityDisabled}
           depth={depth + 1}
         />
       ))}

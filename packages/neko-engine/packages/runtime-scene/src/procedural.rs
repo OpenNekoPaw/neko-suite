@@ -170,9 +170,9 @@ fn generate_cube(w: f32, h: f32, d: f32) -> ProceduralMesh {
     #[rustfmt::skip]
     let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
         // +X
-        ([ 1.0,  0.0,  0.0], [[ hw, -hh,  hd], [ hw,  hh,  hd], [ hw,  hh, -hd], [ hw, -hh, -hd]]),
+        ([ 1.0,  0.0,  0.0], [[ hw, -hh, -hd], [ hw,  hh, -hd], [ hw,  hh,  hd], [ hw, -hh,  hd]]),
         // -X
-        ([-1.0,  0.0,  0.0], [[-hw, -hh, -hd], [-hw,  hh, -hd], [-hw,  hh,  hd], [-hw, -hh,  hd]]),
+        ([-1.0,  0.0,  0.0], [[-hw, -hh,  hd], [-hw,  hh,  hd], [-hw,  hh, -hd], [-hw, -hh, -hd]]),
         // +Y
         ([ 0.0,  1.0,  0.0], [[-hw,  hh,  hd], [ hw,  hh,  hd], [ hw,  hh, -hd], [-hw,  hh, -hd]]),
         // -Y  (fixed winding: face outward)
@@ -530,6 +530,29 @@ mod tests {
         assert_eq!(mesh.vertex_count(), 24, "cube: 4 vertices * 6 faces");
         assert_eq!(mesh.indices.len(), 36, "cube: 6 indices * 6 faces");
         assert_eq!(mesh.triangle_count(), 12);
+    }
+
+    #[test]
+    fn cube_triangle_winding_matches_declared_normals() {
+        let mesh = generate_shape(&ShapeParams::default_cube());
+        for triangle in mesh.indices.chunks_exact(3) {
+            let v0 = mesh.vertices[triangle[0] as usize];
+            let v1 = mesh.vertices[triangle[1] as usize];
+            let v2 = mesh.vertices[triangle[2] as usize];
+            let p0 = glam::Vec3::from(v0.position);
+            let p1 = glam::Vec3::from(v1.position);
+            let p2 = glam::Vec3::from(v2.position);
+            let face_normal = (p1 - p0).cross(p2 - p0).normalize();
+            let declared_normal = glam::Vec3::from(v0.normal);
+
+            assert!(
+                face_normal.dot(declared_normal) > 0.999,
+                "cube triangle {:?} winding produced normal {:?}, expected {:?}",
+                triangle,
+                face_normal,
+                declared_normal,
+            );
+        }
     }
 
     #[test]

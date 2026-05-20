@@ -6,6 +6,7 @@ export type LocalPredictionKind =
   | 'brush'
   | 'selection'
   | 'snap'
+  | 'visibility'
   | 'topology';
 
 export type LocalPredictionStatus =

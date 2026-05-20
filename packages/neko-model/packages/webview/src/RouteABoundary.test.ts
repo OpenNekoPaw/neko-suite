@@ -24,17 +24,14 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/<VideoViewport\b/);
   });
 
-  it('mounts Route A video viewport only for engine scene snapshots', () => {
+  it('mounts Route A video viewport whenever Engine streaming is available', () => {
     const app = readSource('App.tsx');
 
-    // hasEngineScene must hinge on real scene content, not on revision alone.
-    // An empty .nkm publishes revision>0 with nodes=[]; gating on nodes prevents
-    // a stream against an empty RenderWorld from crashing the PBR pipeline.
-    expect(app).toMatch(/const hasEngineScene = sceneNodes\.length > 0;/);
-    expect(app).not.toMatch(/hasEngineScene = .*sceneRevision\b/);
-    expect(app).toMatch(
-      /const shouldRenderEngineViewport = enginePort !== null && hasEngineScene;/,
-    );
+    expect(app).toMatch(/const shouldRenderEngineViewport = enginePort !== null;/);
+    expect(app).toMatch(/\{enginePort !== null \? \(/);
+    expect(app).not.toMatch(/const hasEngineScene = sceneNodes\.length > 0;/);
+    expect(app).not.toMatch(/<ModelEmptyState\b/);
+    expect(app).not.toMatch(/emptyScene|noDocument/);
     expect(app).not.toMatch(/enginePort !== null && \(modelUrl \|\| hasEngineScene\)/);
   });
 
@@ -188,10 +185,23 @@ describe('Route A webview boundaries', () => {
     expect(sceneTypes).toMatch(/helperPassesEnabled\?: boolean/);
   });
 
+  it('routes scene tree visibility toggles through Route A scene control', () => {
+    const app = readSource('App.tsx');
+    const sceneTree = readSource('components/SceneTree.tsx');
+    const sceneDocument = readSource('scene/SceneDocument.ts');
+
+    expect(app).toMatch(/sendSceneCommand\('visibility-set', \{ nodeId, visible \}\)/);
+    expect(app).toMatch(/onSetNodeVisible=\{handleSetNodeVisible\}/);
+    expect(sceneTree).toMatch(/model-tree-visibility-toggle/);
+    expect(sceneTree).toMatch(/onSetNodeVisible\?\.\(node\.nodeId, !isVisible\)/);
+    expect(sceneDocument).toMatch(/createEnvelope\(this\.context, 'visibility-set'/);
+    expect(sceneTree).not.toMatch(/postMessage\(/);
+  });
+
   it('keeps quality preview as a non-interactive overlay instead of replacing live Route A stream', () => {
     const app = readSource('App.tsx');
 
-    expect(app).toMatch(/\{shouldRenderEngineViewport \? \(/);
+    expect(app).toMatch(/\{enginePort !== null \? \(/);
     expect(app).toMatch(/<VideoViewport\b/);
     expect(app).toMatch(/qualityPreviewDataUrl && shouldRenderEngineViewport/);
     expect(app).toMatch(/model-quality-preview-overlay pointer-events-none absolute inset-0/);

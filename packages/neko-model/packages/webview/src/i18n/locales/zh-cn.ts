@@ -27,7 +27,7 @@ export const zhCN = {
   'viewport.panLeft': '向左平移',
   'viewport.panRight': '向右平移',
   'viewport.orbit': '旋转视图',
-  'viewport.grid': '显示引擎地面网格',
+  'viewport.grid': '显示引擎 3D 网格',
   'viewport.resetCamera': '重置相机',
 
   // Workbench
@@ -56,6 +56,8 @@ export const zhCN = {
 
   // Scene tree
   'sceneTree.title': '场景',
+  'sceneTree.hideNode': '隐藏节点渲染',
+  'sceneTree.showNode': '显示节点渲染',
 
   // Animation player
   'animation.selectPlaceholder': '-- 选择动画 --',
@@ -163,10 +165,20 @@ export const zhCN = {
   'diagnostics.predictions': '预测',
   'diagnostics.session': '会话',
   'diagnostics.quality': '质量',
+  'diagnostics.path': '路径',
   'diagnostics.ackP95': '确认 p95',
   'diagnostics.patchBw': '补丁带宽',
   'diagnostics.gpuUpload': 'GPU 上传',
+  'diagnostics.render': '渲染',
+  'diagnostics.convert': '转换',
+  'diagnostics.encode': '编码',
+  'diagnostics.decode': '解码',
+  'diagnostics.draw': '绘制',
+  'diagnostics.gpuWait': 'GPU 等待',
   'diagnostics.frameP95': '帧 p95',
+  'diagnostics.iosurfaceCreations': 'IOSurface',
+  'diagnostics.textureAllocations': '纹理分配',
+  'diagnostics.queueDepth': '队列深度',
   'diagnostics.dropped': '丢弃',
 
   // Error boundary

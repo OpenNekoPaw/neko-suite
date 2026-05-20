@@ -15,7 +15,11 @@
  * PTS, DTS, and duration are in microseconds.
  */
 
-import type { RenderFrameMeta, RenderStreamDescriptor } from '@neko/shared';
+import type {
+  RenderFrameMeta,
+  RenderStreamDescriptor,
+  EngineRenderFrameDiagnostics,
+} from '@neko/shared';
 import { getLogger } from './utils/logger';
 
 const logger = getLogger('H264');
@@ -128,7 +132,7 @@ export interface H264StreamClientConfig {
   /** Legacy codec override for non-3D callers without a descriptor */
   codecString?: string;
   /** Callback when a frame is decoded */
-  onFrame?: (frame: VideoFrame) => void;
+  onFrame?: (frame: VideoFrame, meta?: RenderFrameMeta) => void;
   /** Callback when packet metadata is aligned to a decoded frame */
   onFrameMeta?: (meta: RenderFrameMeta) => void;
   /** Callback on connection state change */
@@ -149,6 +153,7 @@ export interface H264StreamClientStats {
   isDecoderReady: boolean;
   avgDecodeTimeMs: number;
   avgLatencyMs: number;
+  decodeQueueDepth: number;
   hardwareAcceleration: boolean;
 }
 
@@ -156,7 +161,7 @@ type NormalizedH264StreamClientConfig = H264StreamClientConfig & {
   width: number;
   height: number;
   codecString: string;
-  onFrame: (frame: VideoFrame) => void;
+  onFrame: (frame: VideoFrame, meta?: RenderFrameMeta) => void;
   onFrameMeta: (meta: RenderFrameMeta) => void;
   onConnectionChange: (connected: boolean) => void;
   onError: (error: Error) => void;
@@ -194,6 +199,7 @@ export class H264StreamClient {
     isDecoderReady: false,
     avgDecodeTimeMs: 0,
     avgLatencyMs: 0,
+    decodeQueueDepth: 0,
     hardwareAcceleration: false,
   };
 
@@ -207,6 +213,7 @@ export class H264StreamClient {
   private latencySamples: number[] = [];
   private pendingFrames: Map<number, number> = new Map(); // pts -> receiveTime
   private pendingFrameMeta: Map<number, RenderFrameMeta> = new Map();
+  private pendingFrameDiagnostics: Map<number, EngineRenderFrameDiagnostics> = new Map();
 
   // Reconnection
   private reconnectAttempts = 0;
@@ -287,6 +294,8 @@ export class H264StreamClient {
 
     this.pendingFrames.clear();
     this.decodeStartTimes.clear();
+    this.pendingFrameMeta.clear();
+    this.pendingFrameDiagnostics.clear();
     this.decodeTimeSamples = [];
     this.latencySamples = [];
     this.stats.isConnected = false;
@@ -400,6 +409,10 @@ export class H264StreamClient {
       this.ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
           this.handlePacket(event.data);
+          return;
+        }
+        if (typeof event.data === 'string') {
+          this.handleTextMessage(event.data);
         }
       };
 
@@ -528,15 +541,27 @@ export class H264StreamClient {
     const meta = this.pendingFrameMeta.get(frame.timestamp);
     if (meta) {
       this.pendingFrameMeta.delete(frame.timestamp);
-      this.config.onFrameMeta(meta);
+      const diagnostics = this.pendingFrameDiagnostics.get(frame.timestamp);
+      this.pendingFrameDiagnostics.delete(frame.timestamp);
+      const enrichedMeta = mergeRenderFrameDiagnostics(meta, {
+        ...(diagnostics ?? {}),
+        decodeTimeMs: this.latestDecodeTimeMs(),
+        queueDepth: this.stats.decodeQueueDepth,
+      });
+      this.config.onFrameMeta(enrichedMeta);
+      this.config.onFrame(frame, enrichedMeta);
+    } else {
+      // Pass frame to scheduler (caller is responsible for closing)
+      this.config.onFrame(frame);
     }
     if (this.pendingFrameMeta.size > 100) {
       const oldest = Math.min(...this.pendingFrameMeta.keys());
       this.pendingFrameMeta.delete(oldest);
     }
-
-    // Pass frame to scheduler (caller is responsible for closing)
-    this.config.onFrame(frame);
+    if (this.pendingFrameDiagnostics.size > 100) {
+      const oldest = Math.min(...this.pendingFrameDiagnostics.keys());
+      this.pendingFrameDiagnostics.delete(oldest);
+    }
   }
 
   private decoderConfig(): H264VideoDecoderConfig {
@@ -560,8 +585,32 @@ export class H264StreamClient {
 
   private shouldDropQueuedRouteAFrame(packet: ParsedH264Packet): boolean {
     if (!this.descriptor || !this.decoder) return false;
+    this.stats.decodeQueueDepth = this.decoder.decodeQueueSize;
     if (this.decoder.decodeQueueSize <= ROUTE_A_MAX_DECODE_QUEUE) return false;
     return !packet.isKeyframe;
+  }
+
+  private handleTextMessage(data: string): void {
+    const message = parseJsonObject(data);
+    if (!message || message.type !== 'renderFrameDiagnostics') {
+      return;
+    }
+    const ptsUs = readFiniteNumber(message.ptsUs);
+    const diagnostics = isRenderFrameDiagnostics(message.diagnostics)
+      ? message.diagnostics
+      : undefined;
+    if (ptsUs === undefined || !diagnostics) {
+      return;
+    }
+    const existing = this.pendingFrameDiagnostics.get(ptsUs);
+    this.pendingFrameDiagnostics.set(ptsUs, {
+      ...existing,
+      ...diagnostics,
+    });
+  }
+
+  private latestDecodeTimeMs(): number | undefined {
+    return this.decodeTimeSamples[this.decodeTimeSamples.length - 1];
   }
 
   private tryReconnect(): void {
@@ -605,4 +654,38 @@ export class H264StreamClient {
     }
     this.streamEndFired = false;
   }
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeRenderFrameDiagnostics(
+  meta: RenderFrameMeta,
+  diagnostics: EngineRenderFrameDiagnostics,
+): RenderFrameMeta {
+  return {
+    ...meta,
+    diagnostics: {
+      ...meta.diagnostics,
+      ...diagnostics,
+    },
+  };
+}
+
+function isRenderFrameDiagnostics(value: unknown): value is EngineRenderFrameDiagnostics {
+  return isRecord(value);
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

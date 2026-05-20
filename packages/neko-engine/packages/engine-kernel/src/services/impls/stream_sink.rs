@@ -1,6 +1,7 @@
 //! Stream sink for realtime preview output.
 
 use std::sync::Mutex;
+use std::time::Instant;
 
 use tokio::sync::broadcast;
 
@@ -12,7 +13,7 @@ use crate::encoder::{
 use crate::error::{Error, Result};
 use crate::preview::PreviewPipelineConfig;
 use crate::services::pipeline_sink::PipelineSink;
-use neko_engine_types::{FrameFormat, PipelineOutput, VideoGpuFrame, VideoOutput};
+use neko_engine_types::{FrameFormat, GpuRenderPath, PipelineOutput, VideoGpuFrame, VideoOutput};
 
 /// Realtime H.264 stream sink.
 pub struct StreamSink {
@@ -138,6 +139,9 @@ impl StreamSink {
             return Err(Error::Other("StreamSink is closed".to_string()));
         }
 
+        let width = state.width;
+        let height = state.height;
+        let fps = state.fps;
         let gpu_handle = frame.lease.native_encoder_handle()?;
         let encoder = state.encoder.as_mut().ok_or(Error::EncoderNotInitialized)?;
 
@@ -148,14 +152,25 @@ impl StreamSink {
             )));
         }
 
+        let encode_started = Instant::now();
         let packets = encoder.encode_frame_gpu(gpu_handle, frame.pts)?;
+        let encode_time_ms = encode_started.elapsed().as_secs_f32() * 1000.0;
         for mut packet in packets {
             packet.pts = frame.pts;
             packet.dts = frame.pts;
             if packet.duration <= 0 {
                 packet.duration = frame.duration;
             }
-            let output = pack_encoded_packet(&packet, state.width, state.height, state.fps);
+            let mut diagnostics = frame.diagnostics.clone();
+            if let Some(diagnostics) = diagnostics.as_mut() {
+                diagnostics.encode_time_ms = encode_time_ms;
+                diagnostics.render_path = if encoder.is_zero_copy_active() {
+                    GpuRenderPath::GpuZeroCopy
+                } else {
+                    GpuRenderPath::PartialZeroCopy
+                };
+            }
+            let output = pack_encoded_packet(&packet, width, height, fps, diagnostics);
             let _ = self.tx.send(output);
         }
 
@@ -171,7 +186,7 @@ impl StreamSink {
     ) -> Result<()> {
         let packets = encoder.flush()?;
         for packet in packets {
-            let output = pack_encoded_packet(&packet, width, height, fps);
+            let output = pack_encoded_packet(&packet, width, height, fps, None);
             let _ = self.tx.send(output);
         }
         Ok(())
@@ -264,7 +279,13 @@ fn acquire_preview_encoder(config: &EncoderConfig) -> Result<HwAccelEncoder> {
     Ok(encoder)
 }
 
-fn pack_encoded_packet(packet: &EncodedPacket, width: u32, height: u32, fps: f64) -> FrameData {
+fn pack_encoded_packet(
+    packet: &EncodedPacket,
+    width: u32,
+    height: u32,
+    fps: f64,
+    diagnostics: Option<neko_engine_types::RenderFrameDiagnostics>,
+) -> FrameData {
     let header_size = 8 + 8 + 1 + 8;
     let duration_us = if packet.duration > 0 {
         packet.duration
@@ -284,6 +305,7 @@ fn pack_encoded_packet(packet: &EncodedPacket, width: u32, height: u32, fps: f64
         height,
         format: FrameFormat::H264,
         timestamp: packet.pts as f64 / 1_000_000.0,
+        diagnostics,
     }
 }
 
@@ -315,6 +337,7 @@ mod tests {
             frame_index: 0,
             width: 1920,
             height: 1080,
+            diagnostics: None,
         }))
     }
 
@@ -432,7 +455,7 @@ mod tests {
             stream_index: 0,
         };
 
-        let frame = pack_encoded_packet(&packet, 1280, 720, 30.0);
+        let frame = pack_encoded_packet(&packet, 1280, 720, 30.0, None);
         assert_eq!(frame.width, 1280);
         assert_eq!(frame.height, 720);
         assert_eq!(frame.format, FrameFormat::H264);

@@ -27,6 +27,7 @@ pub mod render_extract;
 pub mod render_graph;
 pub mod render_graph_presets;
 pub mod render_systems;
+pub mod render_target_pool;
 pub mod render_world;
 pub mod vertex;
 pub mod viewport;
@@ -51,14 +52,15 @@ pub use render_graph_presets::{
     RESOURCE_TONEMAPPED_COLOR,
 };
 pub use render_systems::{RenderSystemLabel, RENDER_SYSTEM_ORDER};
+pub use render_target_pool::{RenderTargetLease, RenderTargetPool, RenderTargetPoolSnapshot};
 pub use render_world::{
     DrawItem, GpuMaterialHandle, GpuMeshHandle, RenderCameraData, RenderInstance, RenderLightData,
     RenderLightKind, RenderMaterialData, RenderWorld,
 };
 pub use vertex::PbrVertex;
 pub use viewport::{
-    build_viewport_render_graph, SceneToneMapping, ViewportDebugView, ViewportDescriptor,
-    ViewportPostProcess, ViewportRenderGraphOutput, ViewportRenderGraphPlan,
+    build_viewport_render_graph, SceneColorSpace, SceneToneMapping, ViewportDebugView,
+    ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput, ViewportRenderGraphPlan,
     ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
 };
 
@@ -79,11 +81,11 @@ pub struct SceneRenderGraphExecution {
 /// Output from a 3D scene render pass
 pub struct SceneRenderOutput {
     /// Color buffer (Rgba16Float, matches TextureCompositor)
-    pub color_texture: wgpu::Texture,
+    pub color_texture: RenderTargetLease,
     /// Color texture view for sampling
     pub color_view: wgpu::TextureView,
     /// Depth buffer (Depth32Float, for post-processing DOF etc.)
-    pub depth_texture: wgpu::Texture,
+    pub depth_texture: RenderTargetLease,
     /// Output width in pixels
     pub width: u32,
     /// Output height in pixels
@@ -104,8 +106,9 @@ impl SceneRenderOutput {
         blend_mode: BlendMode,
         z_index: i32,
     ) -> GpuLayer {
+        let color_texture = self.color_texture.into_texture();
         GpuLayer::from_rgba(
-            self.color_texture,
+            color_texture,
             self.width,
             self.height,
             transform,

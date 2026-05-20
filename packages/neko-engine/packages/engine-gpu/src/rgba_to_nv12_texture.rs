@@ -20,7 +20,8 @@
 
 use crate::error::{GpuError as Error, GpuResult as Result};
 use crate::{DefaultPlatformGpuMediaBridge, GpuContext, PlatformGpuMediaBridge};
-use neko_engine_types::GpuOutputHandle;
+use neko_engine_types::{GpuFrameKeepAlive, GpuOutputHandle};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 #[cfg(target_os = "macos")]
@@ -255,6 +256,15 @@ pub struct RgbaToNv12RenderUniforms {
     pub _padding: u32,
 }
 
+/// Per-frame RGBA->NV12 bridge diagnostics.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RgbaToNv12TextureConvertStats {
+    pub iosurface_creations: u64,
+    pub gpu_wait_time_ms: f32,
+    pub reused_backing: bool,
+    pub transient_backing: bool,
+}
+
 /// GPU RGBA to NV12 texture converter for zero-copy encoding
 ///
 /// This converter uses a **Dual Render Pass Pipeline** for Y and UV planes
@@ -284,13 +294,21 @@ pub struct RgbaToNv12TextureConverter {
     sampler: wgpu::Sampler,
     /// Cached texture dimensions
     texture_size: (u32, u32),
+    /// Number of IOSurface backing stores created by this converter.
+    iosurface_creations: u64,
     /// IOSurface exporter
     exporter: MacOsTextureExporter,
     /// Platform bridge for encoder handle wrapping and capability reporting.
     bridge: DefaultPlatformGpuMediaBridge,
-    /// Persistent IOSurface backing store (reused across frames)
-    output_backing: Option<IOSurfaceBackingStore>,
+    /// Ring of persistent IOSurface backing stores.
+    ///
+    /// VideoToolbox may consume the previous frame asynchronously after
+    /// `send_frame()` returns. A small ring prevents the next render from
+    /// overwriting the same IOSurface while the encoder still references it.
+    output_backings: VecDeque<Arc<IOSurfaceBackingStore>>,
 }
+
+const ENCODER_BACKING_RING_SIZE: usize = 3;
 
 #[cfg(target_os = "macos")]
 impl RgbaToNv12TextureConverter {
@@ -448,9 +466,10 @@ impl RgbaToNv12TextureConverter {
             uniform_buffer,
             sampler,
             texture_size: (0, 0),
+            iosurface_creations: 0,
             exporter,
             bridge,
-            output_backing: None,
+            output_backings: VecDeque::with_capacity(ENCODER_BACKING_RING_SIZE),
         })
     }
 
@@ -486,30 +505,28 @@ impl RgbaToNv12TextureConverter {
         height: u32,
         color_space: u32,
     ) -> Result<GpuOutputHandle> {
-        // Wait for any pending GPU work (compositor) to complete before reading input texture
-        self.ctx.device().poll(wgpu::Maintain::Wait);
+        self.convert_to_encoder_handle_with_owner(input_texture, width, height, color_space)
+            .map(|(handle, _backing, _stats)| handle)
+    }
 
-        // Ensure IOSurface backing store exists (persistent, reused across frames)
-        if self.output_backing.is_none()
-            || self.output_backing.as_ref().unwrap().width != width
-            || self.output_backing.as_ref().unwrap().height != height
-        {
-            self.output_backing = Some(self.exporter.create_backing_store(width, height)?);
-            self.texture_size = (width, height);
-            tracing::info!(
-                "Created IOSurface backing store for true zero-copy: {}x{}",
-                width,
-                height
-            );
-        }
+    /// Convert RGBA texture to an encoder-ready platform handle and retain the
+    /// IOSurface owner for the returned frame lease.
+    pub fn convert_to_encoder_handle_with_owner(
+        &mut self,
+        input_texture: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+        color_space: u32,
+    ) -> Result<(
+        GpuOutputHandle,
+        Arc<dyn GpuFrameKeepAlive>,
+        RgbaToNv12TextureConvertStats,
+    )> {
+        let (backing, retain_for_reuse, reused_backing) =
+            self.acquire_output_backing(width, height)?;
 
-        let backing = self.output_backing.as_ref().unwrap();
-
-        // Import IOSurface as wgpu render targets FRESH EACH FRAME
-        // This avoids wgpu internal cache conflicts with IOSurface lifecycle
         let (iosurface_y, iosurface_uv) = backing.import_as_render_targets(self.ctx.device())?;
 
-        // Update uniforms
         let uniforms = RgbaToNv12RenderUniforms {
             output_width: width as f32,
             output_height: height as f32,
@@ -520,11 +537,9 @@ impl RgbaToNv12TextureConverter {
             .queue()
             .write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
-        // Create IOSurface texture views for direct rendering
         let y_view = iosurface_y.create_view(&wgpu::TextureViewDescriptor::default());
         let uv_view = iosurface_uv.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Create bind group (shared by both passes)
         let bind_group = self
             .ctx
             .device()
@@ -554,16 +569,11 @@ impl RgbaToNv12TextureConverter {
                     label: Some("RGBA to NV12 Direct Render Encoder"),
                 });
 
-        // ========== True Zero-Copy: Direct Render to IOSurface ==========
-        // Pass 1: Y plane (full resolution) - renders directly to IOSurface
-        // Pass 2: UV plane (half resolution) - renders directly to IOSurface
-
-        // Y plane render pass - direct to IOSurface
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("RGBA to Y (IOSurface Direct)"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &y_view, // Direct render to IOSurface-backed texture
+                    view: &y_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -576,15 +586,14 @@ impl RgbaToNv12TextureConverter {
             });
             pass.set_pipeline(&self.y_render_pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
-            pass.draw(0..3, 0..1); // Fullscreen triangle
+            pass.draw(0..3, 0..1);
         }
 
-        // UV plane render pass - direct to IOSurface
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("RGBA to UV (IOSurface Direct)"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &uv_view, // Direct render to IOSurface-backed texture
+                    view: &uv_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -592,7 +601,7 @@ impl RgbaToNv12TextureConverter {
                             g: 0.5,
                             b: 0.0,
                             a: 1.0,
-                        }), // Neutral UV (128, 128)
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -602,33 +611,87 @@ impl RgbaToNv12TextureConverter {
             });
             pass.set_pipeline(&self.uv_render_pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
-            pass.draw(0..3, 0..1); // Fullscreen triangle
+            pass.draw(0..3, 0..1);
         }
 
-        // Submit wgpu commands and wait for completion
-        self.ctx.queue().submit(std::iter::once(encoder.finish()));
-        self.ctx.device().poll(wgpu::Maintain::Wait);
+        let wait_started = std::time::Instant::now();
+        let submission = self.ctx.queue().submit(std::iter::once(encoder.finish()));
+        self.ctx.device().poll(wgpu::Maintain::wait_for(submission));
+        let gpu_wait_time_ms = wait_started.elapsed().as_secs_f32() * 1000.0;
 
-        // Note: wgpu poll(Wait) ensures GPU commands are complete.
-        // No need to call backing.synchronize() - it creates a new Metal command queue
-        // each frame which causes "Context leak detected" warnings.
-        //
-        // The IOSurface is already synchronized because:
-        // 1. wgpu uses Metal internally on macOS
-        // 2. poll(Wait) waits for all Metal commands to complete
-        // 3. IOSurface-backed textures are directly written by the render pass
-
-        // Note: iosurface_y and iosurface_uv (wgpu textures) are dropped here
-        // This is intentional - fresh import each frame avoids wgpu cache conflicts
-
-        self.bridge
+        let handle = self
+            .bridge
             .export_encoder_handle(backing.io_surface_handle(), width, height)
+            .map_err(|error| {
+                if retain_for_reuse {
+                    self.output_backings.push_back(Arc::clone(&backing));
+                }
+                error
+            })?;
+
+        if retain_for_reuse {
+            self.output_backings.push_back(Arc::clone(&backing));
+        }
+
+        Ok((
+            handle,
+            backing as Arc<dyn GpuFrameKeepAlive>,
+            RgbaToNv12TextureConvertStats {
+                iosurface_creations: self.iosurface_creations,
+                gpu_wait_time_ms,
+                reused_backing,
+                transient_backing: !retain_for_reuse,
+            },
+        ))
     }
 
     /// Get the cached output texture dimensions
     #[allow(dead_code)]
     pub fn cached_dimensions(&self) -> Option<(u32, u32)> {
-        self.output_backing.as_ref().map(|b| (b.width, b.height))
+        (!self.output_backings.is_empty()).then_some(self.texture_size)
+    }
+
+    fn acquire_output_backing(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<(Arc<IOSurfaceBackingStore>, bool, bool)> {
+        if self.texture_size != (width, height) {
+            self.output_backings.clear();
+            self.texture_size = (width, height);
+        }
+
+        if let Some(index) = self
+            .output_backings
+            .iter()
+            .position(|backing| Arc::strong_count(backing) == 1)
+        {
+            let backing = self
+                .output_backings
+                .remove(index)
+                .ok_or_else(|| Error::Other("IOSurface backing ring index vanished".to_string()))?;
+            return Ok((backing, true, true));
+        }
+
+        let backing = Arc::new(self.exporter.create_backing_store(width, height)?);
+        self.iosurface_creations = self.iosurface_creations.saturating_add(1);
+        let retain_for_reuse = self.output_backings.len() < ENCODER_BACKING_RING_SIZE;
+        if retain_for_reuse {
+            tracing::info!(
+                "Created IOSurface backing store for true zero-copy: {}x{} ({}/{})",
+                width,
+                height,
+                self.output_backings.len() + 1,
+                ENCODER_BACKING_RING_SIZE
+            );
+        } else {
+            tracing::debug!(
+                "Created transient IOSurface backing store because all reusable surfaces are busy: {}x{}",
+                width,
+                height
+            );
+        }
+        Ok((backing, retain_for_reuse, false))
     }
 }
 
@@ -665,6 +728,23 @@ impl RgbaToNv12TextureConverter {
         _height: u32,
         _color_space: u32,
     ) -> Result<GpuOutputHandle> {
+        Err(Error::UnsupportedCapability(format!(
+            "zero-copy NV12 encoder bridge is not implemented on {}",
+            std::env::consts::OS
+        )))
+    }
+
+    pub fn convert_to_encoder_handle_with_owner(
+        &mut self,
+        _input_texture: &wgpu::TextureView,
+        _width: u32,
+        _height: u32,
+        _color_space: u32,
+    ) -> Result<(
+        GpuOutputHandle,
+        Arc<dyn GpuFrameKeepAlive>,
+        RgbaToNv12TextureConvertStats,
+    )> {
         Err(Error::UnsupportedCapability(format!(
             "zero-copy NV12 encoder bridge is not implemented on {}",
             std::env::consts::OS

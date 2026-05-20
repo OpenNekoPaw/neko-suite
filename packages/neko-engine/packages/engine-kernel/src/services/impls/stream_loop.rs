@@ -515,6 +515,7 @@ pub fn pack_h264_frame(
         height,
         format: FrameFormat::H264,
         timestamp: pts_us as f64 / 1_000_000.0,
+        diagnostics: None,
     }
 }
 
@@ -546,6 +547,7 @@ pub fn pack_pcm_f32le_stream_frame(
         height: channels as u32,
         format: FrameFormat::PcmF32,
         timestamp: pts_seconds,
+        diagnostics: None,
     }
 }
 

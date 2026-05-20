@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/scene.proto
-// Source hash: 074ed620c672df75
+// Source hash: 6c350c9a5ea1d1ba
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -734,6 +734,15 @@ export interface EngineRenderFrameDiagnostics {
   qualityTier?: string;
   droppedFramesSinceLast?: number;
   gpuUploadTimeMs?: number;
+  renderPath?: string;
+  iosurfaceCreations?: number;
+  textureAllocations?: number;
+  renderTimeMs?: number;
+  convertTimeMs?: number;
+  decodeTimeMs?: number;
+  drawTimeMs?: number;
+  queueDepth?: number;
+  gpuWaitTimeMs?: number;
 }
 
 export interface EngineRenderFrameMeta {

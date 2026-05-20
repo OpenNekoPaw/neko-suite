@@ -52,9 +52,9 @@ pub mod gpu {
     pub use neko_engine_gpu::{GpuInfo, GpuInfo as GpuDeviceInfo};
     pub use neko_engine_scene_renderer::{
         CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
-        DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneToneMapping,
-        ViewportDebugView, ViewportDescriptor, ViewportPostProcess, ViewportRenderMode,
-        ViewportWorkMode,
+        DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
+        SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportPostProcess,
+        ViewportRenderMode, ViewportWorkMode,
     };
 }
 

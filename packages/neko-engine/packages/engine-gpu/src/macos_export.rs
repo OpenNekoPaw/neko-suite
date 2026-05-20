@@ -111,6 +111,13 @@ pub struct IOSurfaceBackingStore {
     pub height: u32,
 }
 
+// The backing store is an immutable owner for an IOSurface and its Metal plane
+// textures after construction. Frame leases move it across worker/sink threads
+// only to retain native resource lifetime while VideoToolbox consumes the
+// IOSurface handle.
+unsafe impl Send for IOSurfaceBackingStore {}
+unsafe impl Sync for IOSurfaceBackingStore {}
+
 impl IOSurfaceBackingStore {
     /// Get the IOSurface handle for VideoToolbox
     pub fn io_surface_handle(&self) -> usize {

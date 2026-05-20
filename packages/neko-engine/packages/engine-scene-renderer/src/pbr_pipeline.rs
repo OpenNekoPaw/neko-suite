@@ -7,9 +7,10 @@ use crate::asset_cache::{AssetCache, GpuAlphaMode};
 use crate::{
     build_viewport_render_graph, extract_render_world, CameraParams, CompiledRenderPass,
     PostProcessChain, PostProcessSettings, RenderGraphError, RenderGraphExecutor, RenderLightKind,
-    RenderSystemLabel, RenderWorld, SceneRenderGraphExecution, SceneRenderOutput, SceneToneMapping,
-    ToneMapping, ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput,
-    ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
+    RenderSystemLabel, RenderTargetLease, RenderTargetPool, RenderTargetPoolSnapshot, RenderWorld,
+    SceneColorSpace, SceneRenderGraphExecution, SceneRenderOutput, SceneToneMapping, ToneMapping,
+    ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput, ViewportRenderGraphVariant,
+    ViewportRenderMode, ViewportWorkMode,
 };
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
@@ -23,8 +24,14 @@ const MAX_LIGHTS: usize = 16;
 
 /// Maximum joints per skeleton for GPU skinning
 const MAX_JOINTS: usize = 256;
-const VIEWPORT_GRID_EXTENT: f32 = 20.0;
-const VIEWPORT_GRID_STEP: f32 = 1.0;
+const VIEWPORT_GRID_EXTENT: f32 = 5.0;
+const VIEWPORT_GRID_STEP: f32 = 0.1;
+const VIEWPORT_GRID_HALF_STEPS: u32 = 50;
+const VIEWPORT_GRID_COORD_COUNT: u32 = VIEWPORT_GRID_HALF_STEPS * 2 + 1;
+const VIEWPORT_GRID_VERTEX_COUNT: u32 = VIEWPORT_GRID_COORD_COUNT * 2 * 2 * 3;
+const DEFAULT_KEY_LIGHT_INTENSITY: f32 = 3.5;
+const DEFAULT_FILL_LIGHT_INTENSITY: f32 = 1.0;
+const DEFAULT_RIM_LIGHT_INTENSITY: f32 = 1.4;
 
 const SCENE_COLOR_CONVERT_SHADER: &str = r#"
 struct VertexOutput {
@@ -87,107 +94,111 @@ struct ViewportGridUniforms {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) ndc: vec2<f32>,
-}
-
-struct FragmentOutput {
     @location(0) color: vec4<f32>,
-    @builtin(frag_depth) depth: f32,
 }
 
 @group(0) @binding(0) var<uniform> grid: ViewportGridUniforms;
 
+const GRID_MAJOR_EVERY: u32 = 5u;
+
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    let half_steps = u32(grid.extent / grid.step + 0.5);
+    let coord_count = half_steps * 2u + 1u;
+    let line_vertex = vertex_index % 2u;
+    let line_index = vertex_index / 2u;
+    let plane_line_count = coord_count * 2u;
+    let plane = line_index / plane_line_count;
+    let local_line = line_index % plane_line_count;
+    let direction = local_line / coord_count;
+    let coord_index = local_line % coord_count;
+    let offset = (f32(coord_index) - f32(half_steps)) * grid.step;
+    let world = plane_point(plane, direction, offset, line_vertex);
+
     var out: VertexOutput;
-    var pos: vec2<f32>;
-    switch vertex_index {
-        case 0u: {
-            pos = vec2<f32>(-1.0, -1.0);
-        }
-        case 1u: {
-            pos = vec2<f32>(3.0, -1.0);
-        }
-        default: {
-            pos = vec2<f32>(-1.0, 3.0);
-        }
-    }
-    out.position = vec4<f32>(pos, 0.0, 1.0);
-    out.ndc = pos;
+    out.position = grid.view_projection * vec4<f32>(world, 1.0);
+    out.color = line_color(plane, direction, coord_index, half_steps);
     return out;
 }
 
-fn unproject(ndc: vec3<f32>) -> vec3<f32> {
-    let world = grid.inv_view_projection * vec4<f32>(ndc, 1.0);
-    return world.xyz / world.w;
+fn plane_point(plane: u32, direction: u32, offset: f32, endpoint: u32) -> vec3<f32> {
+    let span = select(-grid.extent, grid.extent, endpoint == 1u);
+    if (plane == 0u) {
+        if (direction == 0u) {
+            return vec3<f32>(span, 0.0, offset);
+        }
+        return vec3<f32>(offset, 0.0, span);
+    }
+    if (plane == 1u) {
+        if (direction == 0u) {
+            return vec3<f32>(span, offset, 0.0);
+        }
+        return vec3<f32>(offset, span, 0.0);
+    }
+    if (direction == 0u) {
+        return vec3<f32>(0.0, offset, span);
+    }
+    return vec3<f32>(0.0, span, offset);
 }
 
-fn aa_line(coord: vec2<f32>) -> f32 {
-    let min_derivative = vec2<f32>(1.0 / max(max(grid.viewport_size.x, grid.viewport_size.y), 1.0));
-    let derivative = max(fwidth(coord), min_derivative);
-    let cell = abs(fract(coord - 0.5) - 0.5) / derivative;
-    return 1.0 - clamp(min(cell.x, cell.y), 0.0, 1.0);
+fn plane_normal(plane: u32) -> vec3<f32> {
+    if (plane == 0u) {
+        return vec3<f32>(0.0, 1.0, 0.0);
+    }
+    if (plane == 1u) {
+        return vec3<f32>(0.0, 0.0, 1.0);
+    }
+    return vec3<f32>(1.0, 0.0, 0.0);
 }
 
-fn aa_axis(distance: f32) -> f32 {
-    let width = max(fwidth(distance) * 1.5, 0.0001);
-    return 1.0 - smoothstep(0.0, width, abs(distance));
+fn plane_visibility(plane: u32) -> f32 {
+    let camera_to_grid = -grid.camera_position;
+    let view_dir = camera_to_grid / max(length(camera_to_grid), 0.00001);
+    let incidence = abs(dot(view_dir, plane_normal(plane)));
+    return smoothstep(0.04, 0.18, incidence);
+}
+
+fn is_x_axis(plane: u32, direction: u32) -> bool {
+    return (plane == 0u && direction == 0u) || (plane == 1u && direction == 0u);
+}
+
+fn is_y_axis(plane: u32, direction: u32) -> bool {
+    return (plane == 1u && direction == 1u) || (plane == 2u && direction == 1u);
+}
+
+fn is_z_axis(plane: u32, direction: u32) -> bool {
+    return (plane == 0u && direction == 1u) || (plane == 2u && direction == 0u);
+}
+
+fn line_color(plane: u32, direction: u32, coord_index: u32, half_steps: u32) -> vec4<f32> {
+    let on_axis = coord_index == half_steps;
+    let major = (coord_index % GRID_MAJOR_EVERY) == 0u;
+    var color = vec3<f32>(0.34, 0.38, 0.42);
+    var alpha = 0.10;
+
+    if (major) {
+        color = vec3<f32>(0.42, 0.47, 0.52);
+        alpha = 0.18;
+    }
+    if (on_axis && is_x_axis(plane, direction)) {
+        color = vec3<f32>(0.72, 0.24, 0.22);
+        alpha = 0.42;
+    }
+    if (on_axis && is_y_axis(plane, direction)) {
+        color = vec3<f32>(0.25, 0.72, 0.32);
+        alpha = 0.42;
+    }
+    if (on_axis && is_z_axis(plane, direction)) {
+        color = vec3<f32>(0.24, 0.48, 0.88);
+        alpha = 0.42;
+    }
+
+    return vec4<f32>(color, alpha * plane_visibility(plane));
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> FragmentOutput {
-    let near_world = unproject(vec3<f32>(in.ndc, 0.0));
-    let far_world = unproject(vec3<f32>(in.ndc, 1.0));
-    let ray = far_world - near_world;
-    let parallel = abs(ray.y) < 0.00001;
-    let ray_y = select(ray.y, 1.0, parallel);
-    let t = -near_world.y / ray_y;
-
-    let world = near_world + ray * t;
-    let edge_distance = max(abs(world.x), abs(world.z));
-
-    let clip = grid.view_projection * vec4<f32>(world, 1.0);
-    let clip_w = select(clip.w, 1.0, abs(clip.w) < 0.00001);
-    let depth = clip.z / clip_w;
-
-    let minor = aa_line(world.xz / grid.step);
-    let major = aa_line(world.xz / (grid.step * 5.0));
-    let x_axis = aa_axis(world.z);
-    let z_axis = aa_axis(world.x);
-    let edge_fade = 1.0 - smoothstep(grid.extent * 0.72, grid.extent, edge_distance);
-
-    var color = vec3<f32>(0.34, 0.38, 0.42);
-    var alpha = minor * 0.20;
-    if (major > minor) {
-        color = vec3<f32>(0.42, 0.47, 0.52);
-        alpha = max(alpha, major * 0.32);
-    }
-    if (x_axis > max(minor, major)) {
-        color = vec3<f32>(0.72, 0.24, 0.22);
-        alpha = max(alpha, x_axis * 0.58);
-    }
-    if (z_axis > max(max(minor, major), x_axis)) {
-        color = vec3<f32>(0.24, 0.48, 0.88);
-        alpha = max(alpha, z_axis * 0.56);
-    }
-
-    let valid =
-        !parallel &&
-        t >= 0.0 &&
-        t <= 1.0 &&
-        edge_distance <= grid.extent &&
-        clip.w > 0.0 &&
-        depth >= 0.0 &&
-        depth <= 1.0;
-    alpha = alpha * edge_fade * select(0.0, 1.0, valid);
-    if (alpha <= 0.01) {
-        discard;
-    }
-
-    var out: FragmentOutput;
-    out.color = vec4<f32>(color, alpha);
-    out.depth = depth;
-    return out;
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    return in.color;
 }
 "#;
 
@@ -203,6 +214,7 @@ pub struct PbrRenderer {
     color_convert_pipeline: wgpu::RenderPipeline,
     viewport_grid_pipeline: wgpu::RenderPipeline,
     post_process_chain: PostProcessChain,
+    render_target_pool: RenderTargetPool,
     ctx: Arc<GpuContext>,
 }
 
@@ -583,7 +595,7 @@ impl PbrRenderer {
                     })],
                 }),
                 primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    topology: wgpu::PrimitiveTopology::LineList,
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: None,
@@ -594,7 +606,7 @@ impl PbrRenderer {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth32Float,
                     depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    depth_compare: wgpu::CompareFunction::Less,
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState {
                         constant: 0,
@@ -618,10 +630,15 @@ impl PbrRenderer {
                 color_convert_pipeline,
                 viewport_grid_pipeline,
                 post_process_chain: PostProcessChain::new(Arc::clone(&ctx)),
+                render_target_pool: RenderTargetPool::default(),
                 ctx,
             },
             material_bgl,
         )
+    }
+
+    pub fn render_target_pool_snapshot(&self) -> RenderTargetPoolSnapshot {
+        self.render_target_pool.snapshot()
     }
 
     /// Render a scene to a texture.
@@ -765,38 +782,15 @@ impl PbrRenderer {
         let device = self.ctx.device();
 
         // Create render targets
-        let color_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("pbr_color_target"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba16Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let color_texture = self.acquire_color_target(
+            "pbr_color_target",
+            width,
+            height,
+            wgpu::TextureFormat::Rgba16Float,
+        );
         let color_view = color_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("pbr_depth_target"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
+        let depth_texture = self.acquire_depth_target("pbr_depth_target", width, height);
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // Pre-collect draw data (buffers + bind groups must outlive render pass).
@@ -830,7 +824,7 @@ impl PbrRenderer {
                 }],
             });
 
-            let light_uniforms = self.collect_lights(render_world);
+            let light_uniforms = Self::collect_lights(render_world);
             let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("pbr_light_buffer"),
                 contents: bytemuck::bytes_of(&light_uniforms),
@@ -936,8 +930,39 @@ impl PbrRenderer {
         })
     }
 
+    fn acquire_color_target(
+        &self,
+        label: &str,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+    ) -> RenderTargetLease {
+        self.render_target_pool.acquire(
+            self.ctx.device(),
+            label,
+            width,
+            height,
+            format,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
+        )
+    }
+
+    fn acquire_depth_target(&self, label: &str, width: u32, height: u32) -> RenderTargetLease {
+        self.render_target_pool.acquire(
+            self.ctx.device(),
+            label,
+            width,
+            height,
+            wgpu::TextureFormat::Depth32Float,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+    }
+
     /// Collect light data from Render World into GPU uniform struct.
-    fn collect_lights(&self, render_world: &RenderWorld) -> LightUniformsGpu {
+    fn collect_lights(render_world: &RenderWorld) -> LightUniformsGpu {
         let mut uniforms = LightUniformsGpu {
             lights: [LightGpu::zeroed(); MAX_LIGHTS],
             count: 0,
@@ -974,20 +999,42 @@ impl PbrRenderer {
             idx += 1;
         }
 
-        // Add a default directional light if scene has no lights
+        // Add a neutral editor light rig when the asset has no authored lights.
         if idx == 0 {
             uniforms.lights[0] = LightGpu {
                 position: [0.0; 3],
                 kind: 0, // directional
-                direction: [0.3, -1.0, 0.4],
-                intensity: 1.0,
+                direction: [0.35, -1.0, 0.45],
+                intensity: DEFAULT_KEY_LIGHT_INTENSITY,
                 color: [1.0, 1.0, 1.0],
                 range: 0.0,
                 inner_cone: 0.0,
                 outer_cone: 0.0,
                 _padding: [0.0; 2],
             };
-            idx = 1;
+            uniforms.lights[1] = LightGpu {
+                position: [0.0; 3],
+                kind: 0, // directional
+                direction: [-0.8, -0.45, -0.2],
+                intensity: DEFAULT_FILL_LIGHT_INTENSITY,
+                color: [0.82, 0.9, 1.0],
+                range: 0.0,
+                inner_cone: 0.0,
+                outer_cone: 0.0,
+                _padding: [0.0; 2],
+            };
+            uniforms.lights[2] = LightGpu {
+                position: [0.0; 3],
+                kind: 0, // directional
+                direction: [0.15, -0.25, -1.0],
+                intensity: DEFAULT_RIM_LIGHT_INTENSITY,
+                color: [1.0, 0.92, 0.86],
+                range: 0.0,
+                inner_cone: 0.0,
+                outer_cone: 0.0,
+                _padding: [0.0; 2],
+            };
+            idx = 3;
         }
 
         uniforms.count = idx as u32;
@@ -1185,7 +1232,7 @@ impl PbrRenderer {
         });
         render_pass.set_pipeline(&self.viewport_grid_pipeline);
         render_pass.set_bind_group(0, &grid_bind_group, &[]);
-        render_pass.draw(0..3, 0..1);
+        render_pass.draw(0..VIEWPORT_GRID_VERTEX_COUNT, 0..1);
     }
 }
 
@@ -1316,7 +1363,7 @@ struct PbrRenderGraphPassExecutor<'a> {
     background_color: Option<[f32; 4]>,
     post_process_settings: PostProcessSettings,
     output: Option<SceneRenderOutput>,
-    intermediate_textures: Vec<wgpu::Texture>,
+    intermediate_textures: Vec<RenderTargetLease>,
     intermediate_views: Vec<wgpu::TextureView>,
 }
 
@@ -1570,27 +1617,9 @@ impl PbrRenderGraphPassExecutor<'_> {
         label: &str,
         current: &SceneRenderOutput,
         format: wgpu::TextureFormat,
-    ) -> wgpu::Texture {
+    ) -> RenderTargetLease {
         self.renderer
-            .ctx
-            .device()
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some(label),
-                size: wgpu::Extent3d {
-                    width: current.width,
-                    height: current.height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            })
+            .acquire_color_target(label, current.width, current.height, format)
     }
 }
 
@@ -1601,6 +1630,7 @@ fn default_pbr_viewport_descriptor() -> ViewportDescriptor {
         render_mode: ViewportRenderMode::Pbr,
         debug_view: None,
         fps: 60,
+        color_space: SceneColorSpace::Srgb,
         tone_mapping: SceneToneMapping::Aces,
         post_process: ViewportPostProcess::default(),
         layer_mask: None,
@@ -1671,4 +1701,37 @@ pub enum PbrRenderError {
     RenderGraph(#[from] RenderGraphError),
     #[error("Render failed: {0}")]
     RenderFailed(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_scene_uses_editor_light_rig() {
+        let render_world = RenderWorld::default();
+        let uniforms = PbrRenderer::collect_lights(&render_world);
+
+        assert_eq!(uniforms.count, 3);
+        assert_eq!(uniforms.lights[0].kind, 0);
+        assert_eq!(uniforms.lights[1].kind, 0);
+        assert_eq!(uniforms.lights[2].kind, 0);
+        assert_eq!(uniforms.lights[0].intensity, DEFAULT_KEY_LIGHT_INTENSITY);
+        assert_eq!(uniforms.lights[1].intensity, DEFAULT_FILL_LIGHT_INTENSITY);
+        assert_eq!(uniforms.lights[2].intensity, DEFAULT_RIM_LIGHT_INTENSITY);
+    }
+
+    #[test]
+    fn viewport_helper_grid_is_three_dimensional() {
+        assert_eq!(VIEWPORT_GRID_STEP, 0.1);
+        assert_eq!(VIEWPORT_GRID_EXTENT, 5.0);
+        assert_eq!(VIEWPORT_GRID_VERTEX_COUNT, 1212);
+        assert!(VIEWPORT_GRID_SHADER.contains("fn plane_point"));
+        assert!(VIEWPORT_GRID_SHADER.contains("fn line_color"));
+        assert!(VIEWPORT_GRID_SHADER.contains("fn plane_visibility"));
+        assert!(VIEWPORT_GRID_SHADER.contains("plane == 0u"));
+        assert!(VIEWPORT_GRID_SHADER.contains("plane == 1u"));
+        assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(0.0, offset, span)"));
+        assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(0.0, span, offset)"));
+    }
 }

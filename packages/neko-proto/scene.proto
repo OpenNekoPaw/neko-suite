@@ -767,6 +767,7 @@ message ViewportDescriptor {
   ViewportPostProcess post_process = 10;
   optional uint32 layer_mask = 11;
   ViewportWorkMode work_mode = 12;
+  optional bool helper_passes_enabled = 13;
 }
 
 enum H264Container {
@@ -838,6 +839,15 @@ message RenderFrameDiagnostics {
   optional string quality_tier = 3;
   optional uint32 dropped_frames_since_last = 4;
   optional float gpu_upload_time_ms = 5;
+  optional string render_path = 6;
+  optional uint64 iosurface_creations = 7;
+  optional uint64 texture_allocations = 8;
+  optional float render_time_ms = 9;
+  optional float convert_time_ms = 10;
+  optional float decode_time_ms = 11;
+  optional float draw_time_ms = 12;
+  optional uint32 queue_depth = 13;
+  optional float gpu_wait_time_ms = 14;
 }
 
 message RenderFrameMeta {

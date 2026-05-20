@@ -755,6 +755,7 @@ impl ITimelineService for TimelineService {
             height: snapshot.height,
             format: snapshot.format,
             timestamp: snapshot.pts as f64 / 1_000_000.0,
+            diagnostics: None,
         })
     }
 

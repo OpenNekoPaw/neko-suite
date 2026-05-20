@@ -1,5 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { SHAPE_PARAMS, SHAPE_ICONS, type ShapeType } from '../../types/shapeParams';
+import {
+  SHAPE_PARAMS,
+  SHAPE_ICONS,
+  type ShapeParamDef,
+  type ShapeType,
+} from '../../types/shapeParams';
 import { useTranslation } from '../../i18n/I18nContext';
 
 const SHAPE_TYPES: ShapeType[] = ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'plane'];
@@ -29,8 +34,8 @@ export function ShapeCreatorPanel({
     setParams(buildDefaults(type));
   }, []);
 
-  const handleParamChange = useCallback((name: string, value: number) => {
-    setParams((prev) => ({ ...prev, [name]: value }));
+  const handleParamChange = useCallback((def: ShapeParamDef, value: number) => {
+    setParams((prev) => ({ ...prev, [def.name]: normalizeShapeParamValue(def, value) }));
   }, []);
 
   const handleCreate = useCallback(() => {
@@ -66,26 +71,43 @@ export function ShapeCreatorPanel({
 
         <div className="model-panel-section">
           <div className="model-section-title mb-2">{t('shape.parameters')}</div>
-          {paramDefs.map((def) => (
-            <div key={def.name} className="mb-2">
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="text-[10px] text-[var(--model-fg-secondary)]">{def.label}</span>
-                <span className="text-[10px] text-[var(--model-fg-secondary)]">
-                  {(params[def.name] ?? def.default).toFixed(def.step < 1 ? 2 : 0)}
-                </span>
+          {paramDefs.map((def) => {
+            const value = params[def.name] ?? def.default;
+            return (
+              <div key={def.name} className="mb-2">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] text-[var(--model-fg-secondary)]">{def.label}</span>
+                  <span className="text-[10px] text-[var(--model-fg-secondary)]">
+                    {formatShapeParamValue(value, def.step)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={def.min}
+                    max={def.max}
+                    step={def.step}
+                    value={value}
+                    onChange={(event) => handleParamChange(def, parseFloat(event.target.value))}
+                    disabled={disabled}
+                    className="model-range min-w-0 flex-1"
+                  />
+                  <input
+                    type="number"
+                    min={def.min}
+                    max={def.max}
+                    step={def.step}
+                    value={formatShapeParamValue(value, def.step)}
+                    onChange={(event) =>
+                      handleParamChange(def, parseFloat(event.currentTarget.value))
+                    }
+                    disabled={disabled}
+                    className="model-input w-16 px-1.5 py-0.5 text-right text-[10px]"
+                  />
+                </div>
               </div>
-              <input
-                type="range"
-                min={def.min}
-                max={def.max}
-                step={def.step}
-                value={params[def.name] ?? def.default}
-                onChange={(e) => handleParamChange(def.name, parseFloat(e.target.value))}
-                disabled={disabled}
-                className="model-range"
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="px-3 py-3">
@@ -105,4 +127,24 @@ function buildDefaults(type: ShapeType): Record<string, number> {
     defaults[def.name] = def.default;
   }
   return defaults;
+}
+
+export function normalizeShapeParamValue(def: ShapeParamDef, value: number): number {
+  if (!Number.isFinite(value)) {
+    return def.default;
+  }
+  const clamped = Math.min(def.max, Math.max(def.min, value));
+  if (def.step <= 0) {
+    return clamped;
+  }
+  const stepsFromMin = Math.round((clamped - def.min) / def.step);
+  const stepped = def.min + stepsFromMin * def.step;
+  return Number(formatShapeParamValue(Math.min(def.max, Math.max(def.min, stepped)), def.step));
+}
+
+function formatShapeParamValue(value: number, step: number): string {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+  return value.toFixed(step < 1 ? 2 : 0);
 }

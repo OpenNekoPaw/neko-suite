@@ -279,6 +279,7 @@ mod tests {
                 frame_index: self.frame_index,
                 width: 2,
                 height: 2,
+                diagnostics: None,
             };
             self.frame_index += 1;
             Ok((frame, GpuPipelineTiming::default()))

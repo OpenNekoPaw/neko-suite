@@ -76,6 +76,7 @@ fn panoramic_stream_video_output(
         frame_index,
         width: output.width,
         height: output.height,
+        diagnostics: None,
     }))
 }
 
@@ -278,6 +279,7 @@ impl IVideoService for VideoService {
                     height: out_h,
                     format: output_format,
                     timestamp: time_seconds,
+                    diagnostics: None,
                 })
             } else {
                 // CPU fallback - decode to CPU frame
@@ -333,6 +335,7 @@ impl IVideoService for VideoService {
                     height: 0,
                     format: FrameFormat::Rgba, // Marker; actual data is JSON
                     timestamp: 0.0,
+                    diagnostics: None,
                 }])
             }
             ExtractType::Frame { time } => {

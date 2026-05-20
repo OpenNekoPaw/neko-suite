@@ -36,6 +36,7 @@ type CapturedVideoDecoderConfig = VideoDecoderConfig & {
 
 const supportDecoderConfigs: CapturedVideoDecoderConfig[] = [];
 const configuredDecoderConfigs: CapturedVideoDecoderConfig[] = [];
+const fakeWebSockets: FakeWebSocket[] = [];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -59,7 +60,7 @@ class FakeVideoDecoder {
   ondequeue: ((this: VideoDecoder, ev: Event) => unknown) | null = null;
   state: CodecState = 'unconfigured';
 
-  constructor(_init: VideoDecoderInit) {}
+  constructor(private readonly init: VideoDecoderInit) {}
 
   static isConfigSupported(config: VideoDecoderConfig): Promise<VideoDecoderSupport> {
     supportDecoderConfigs.push(captureDecoderConfig(config));
@@ -75,7 +76,14 @@ class FakeVideoDecoder {
     this.state = 'closed';
   }
 
-  decode(_chunk: EncodedVideoChunk): void {}
+  decode(chunk: EncodedVideoChunk): void {
+    this.init.output({
+      timestamp: chunk.timestamp,
+      displayWidth: renderDescriptor.width,
+      displayHeight: renderDescriptor.height,
+      close: vi.fn(),
+    } as unknown as VideoFrame);
+  }
 
   flush(): Promise<void> {
     return Promise.resolve();
@@ -97,10 +105,22 @@ class FakeWebSocket {
   onerror: ((event: unknown) => void) | null = null;
   onclose: ((event: { code: number }) => void) | null = null;
 
-  constructor(readonly url: string) {}
+  constructor(readonly url: string) {
+    fakeWebSockets.push(this);
+  }
 
   close(): void {
     this.onclose?.({ code: 1000 });
+  }
+}
+
+class FakeEncodedVideoChunk {
+  readonly timestamp: number;
+  readonly duration?: number;
+
+  constructor(init: EncodedVideoChunkInit) {
+    this.timestamp = init.timestamp;
+    this.duration = init.duration;
   }
 }
 
@@ -143,8 +163,10 @@ describe('stream descriptor clients', () => {
   beforeEach(() => {
     supportDecoderConfigs.length = 0;
     configuredDecoderConfigs.length = 0;
+    fakeWebSockets.length = 0;
     vi.stubGlobal('VideoDecoder', FakeVideoDecoder);
     vi.stubGlobal('WebSocket', FakeWebSocket);
+    vi.stubGlobal('EncodedVideoChunk', FakeEncodedVideoChunk);
   });
 
   afterEach(() => {
@@ -332,4 +354,66 @@ describe('stream descriptor clients', () => {
 
     expect(meta.diagnostics?.qualityTier).toBe('auxiliary-reduced');
   });
+
+  it('merges stream diagnostics text messages into decoded frame metadata', async () => {
+    const metas: RenderFrameMeta[] = [];
+    const frameMetas: RenderFrameMeta[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      onFrameMeta: (meta) => metas.push(meta),
+      onFrame: (_frame, meta) => {
+        if (meta) {
+          frameMetas.push(meta);
+        }
+      },
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    socket?.onmessage?.({
+      data: JSON.stringify({
+        type: 'renderFrameDiagnostics',
+        ptsUs: 66_666,
+        diagnostics: {
+          renderPath: 'gpu-zero-copy',
+          iosurfaceCreations: 2,
+          textureAllocations: 3,
+          renderTimeMs: 4.5,
+          convertTimeMs: 1.2,
+          encodeTimeMs: 0.9,
+          queueDepth: 4,
+        },
+      }),
+    });
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+
+    expect(metas[0]?.diagnostics).toMatchObject({
+      renderPath: 'gpu-zero-copy',
+      iosurfaceCreations: 2,
+      textureAllocations: 3,
+      renderTimeMs: 4.5,
+      convertTimeMs: 1.2,
+      encodeTimeMs: 0.9,
+      queueDepth: 0,
+    });
+    expect(metas[0]?.diagnostics?.decodeTimeMs).toBeTypeOf('number');
+    expect(frameMetas[0]).toEqual(metas[0]);
+
+    client.dispose();
+  });
 });
+
+function createH264Packet(ptsUs: number, durationUs: number, isKeyframe: boolean): ArrayBuffer {
+  const data = new ArrayBuffer(25 + 4);
+  const view = new DataView(data);
+  view.setBigInt64(0, BigInt(ptsUs), true);
+  view.setBigInt64(8, BigInt(ptsUs), true);
+  view.setUint8(16, isKeyframe ? 1 : 0);
+  view.setBigInt64(17, BigInt(durationUs), true);
+  return data;
+}

@@ -9,37 +9,133 @@ export interface ShapeParamDef {
   step: number;
 }
 
+const MODEL_LINEAR_MIN = 0.01;
+const MODEL_EXTENT_MAX = 5;
+const MODEL_RADIUS_MAX = 2.5;
+const MODEL_LINEAR_STEP = 0.01;
+
 export const SHAPE_PARAMS: Record<ShapeType, ShapeParamDef[]> = {
   cube: [
-    { name: 'width', label: 'Width', min: 0.1, max: 100, default: 1, step: 0.1 },
-    { name: 'height', label: 'Height', min: 0.1, max: 100, default: 1, step: 0.1 },
-    { name: 'depth', label: 'Depth', min: 0.1, max: 100, default: 1, step: 0.1 },
+    {
+      name: 'width',
+      label: 'Width',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_EXTENT_MAX,
+      default: 1,
+      step: MODEL_LINEAR_STEP,
+    },
+    {
+      name: 'height',
+      label: 'Height',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_EXTENT_MAX,
+      default: 1,
+      step: MODEL_LINEAR_STEP,
+    },
+    {
+      name: 'depth',
+      label: 'Depth',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_EXTENT_MAX,
+      default: 1,
+      step: MODEL_LINEAR_STEP,
+    },
   ],
   sphere: [
-    { name: 'radius', label: 'Radius', min: 0.1, max: 50, default: 1, step: 0.1 },
+    {
+      name: 'radius',
+      label: 'Radius',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_RADIUS_MAX,
+      default: 0.5,
+      step: MODEL_LINEAR_STEP,
+    },
     { name: 'segments', label: 'Segments', min: 4, max: 128, default: 32, step: 1 },
     { name: 'rings', label: 'Rings', min: 2, max: 64, default: 16, step: 1 },
   ],
   cylinder: [
-    { name: 'radiusTop', label: 'Top Radius', min: 0, max: 50, default: 1, step: 0.1 },
-    { name: 'radiusBottom', label: 'Bottom Radius', min: 0, max: 50, default: 1, step: 0.1 },
-    { name: 'height', label: 'Height', min: 0.1, max: 100, default: 2, step: 0.1 },
+    {
+      name: 'radiusTop',
+      label: 'Top Radius',
+      min: 0,
+      max: MODEL_RADIUS_MAX,
+      default: 0.5,
+      step: MODEL_LINEAR_STEP,
+    },
+    {
+      name: 'radiusBottom',
+      label: 'Bottom Radius',
+      min: 0,
+      max: MODEL_RADIUS_MAX,
+      default: 0.5,
+      step: MODEL_LINEAR_STEP,
+    },
+    {
+      name: 'height',
+      label: 'Height',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_EXTENT_MAX,
+      default: 1,
+      step: MODEL_LINEAR_STEP,
+    },
     { name: 'segments', label: 'Segments', min: 3, max: 128, default: 32, step: 1 },
   ],
   cone: [
-    { name: 'radius', label: 'Radius', min: 0.1, max: 50, default: 1, step: 0.1 },
-    { name: 'height', label: 'Height', min: 0.1, max: 100, default: 2, step: 0.1 },
+    {
+      name: 'radius',
+      label: 'Radius',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_RADIUS_MAX,
+      default: 0.5,
+      step: MODEL_LINEAR_STEP,
+    },
+    {
+      name: 'height',
+      label: 'Height',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_EXTENT_MAX,
+      default: 1,
+      step: MODEL_LINEAR_STEP,
+    },
     { name: 'segments', label: 'Segments', min: 3, max: 128, default: 32, step: 1 },
   ],
   torus: [
-    { name: 'majorRadius', label: 'Major Radius', min: 0.1, max: 50, default: 1, step: 0.1 },
-    { name: 'minorRadius', label: 'Minor Radius', min: 0.01, max: 25, default: 0.3, step: 0.01 },
+    {
+      name: 'majorRadius',
+      label: 'Major Radius',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_RADIUS_MAX,
+      default: 0.5,
+      step: MODEL_LINEAR_STEP,
+    },
+    {
+      name: 'minorRadius',
+      label: 'Minor Radius',
+      min: MODEL_LINEAR_MIN,
+      max: 1,
+      default: 0.2,
+      step: MODEL_LINEAR_STEP,
+    },
     { name: 'majorSegments', label: 'Major Segments', min: 3, max: 128, default: 32, step: 1 },
     { name: 'minorSegments', label: 'Minor Segments', min: 3, max: 64, default: 16, step: 1 },
   ],
   plane: [
-    { name: 'width', label: 'Width', min: 0.1, max: 100, default: 2, step: 0.1 },
-    { name: 'depth', label: 'Depth', min: 0.1, max: 100, default: 2, step: 0.1 },
+    {
+      name: 'width',
+      label: 'Width',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_EXTENT_MAX,
+      default: 1,
+      step: MODEL_LINEAR_STEP,
+    },
+    {
+      name: 'depth',
+      label: 'Depth',
+      min: MODEL_LINEAR_MIN,
+      max: MODEL_EXTENT_MAX,
+      default: 1,
+      step: MODEL_LINEAR_STEP,
+    },
     { name: 'segmentsW', label: 'Width Segments', min: 1, max: 128, default: 1, step: 1 },
     { name: 'segmentsD', label: 'Depth Segments', min: 1, max: 128, default: 1, step: 1 },
   ],

@@ -345,6 +345,7 @@ impl PreviewPipeline {
             frame_index: self.frame_count,
             width: gpu_result.width,
             height: gpu_result.height,
+            diagnostics: None,
         };
 
         self.frame_count += 1;

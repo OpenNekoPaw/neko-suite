@@ -33,6 +33,21 @@ pub enum SceneToneMapping {
     None,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SceneColorSpace {
+    Srgb,
+    Rec709,
+    P3,
+}
+
+impl SceneColorSpace {
+    pub const fn nv12_matrix_id(self) -> u32 {
+        match self {
+            Self::Srgb | Self::Rec709 | Self::P3 => 1,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewportWorkMode {
     EditParametric,
@@ -62,6 +77,7 @@ pub struct ViewportDescriptor {
     pub render_mode: ViewportRenderMode,
     pub debug_view: Option<ViewportDebugView>,
     pub fps: u32,
+    pub color_space: SceneColorSpace,
     pub tone_mapping: SceneToneMapping,
     pub post_process: ViewportPostProcess,
     pub layer_mask: Option<u32>,
@@ -105,8 +121,11 @@ pub fn build_viewport_render_graph(
     let post_process = variant == ViewportRenderGraphVariant::StandardPbr
         && (descriptor.tone_mapping != SceneToneMapping::None
             || descriptor.post_process.any_enabled());
-    let color_convert = output == ViewportRenderGraphOutput::RealtimeStream;
-    let encoder_copy = output == ViewportRenderGraphOutput::RealtimeStream;
+    // Realtime stream frames now hand the final RenderGraph color target
+    // directly to the RGBA->NV12 IOSurface bridge. Keeping the old RGBA8
+    // conversion/copy passes here adds latency and extra texture churn.
+    let color_convert = false;
+    let encoder_copy = false;
     let brush_preview = descriptor.work_mode == ViewportWorkMode::EditFree;
 
     let (graph, live_output) =
@@ -165,6 +184,7 @@ mod tests {
             render_mode: ViewportRenderMode::Pbr,
             debug_view: None,
             fps: 60,
+            color_space: SceneColorSpace::Srgb,
             tone_mapping: SceneToneMapping::Aces,
             post_process: ViewportPostProcess::default(),
             layer_mask: None,
@@ -189,16 +209,14 @@ mod tests {
         assert!(plan.helper_passes);
         assert!(!plan.brush_preview);
         assert!(plan.post_process);
-        assert!(plan.color_convert);
-        assert!(plan.encoder_copy);
+        assert!(!plan.color_convert);
+        assert!(!plan.encoder_copy);
         assert_eq!(
             ids,
             vec![
                 "render.pbr_forward",
                 "render.viewport_helpers",
-                "render.post_process",
-                "render.color_convert",
-                "render.encoder_copy"
+                "render.post_process"
             ]
         );
     }
@@ -264,17 +282,9 @@ mod tests {
         assert!(unlit_plan.helper_passes);
         assert!(!unlit_plan.brush_preview);
         assert!(!unlit_plan.post_process);
-        assert!(unlit_plan.color_convert);
-        assert!(unlit_plan.encoder_copy);
-        assert_eq!(
-            ids,
-            vec![
-                "render.pbr_forward",
-                "render.viewport_helpers",
-                "render.color_convert",
-                "render.encoder_copy"
-            ]
-        );
+        assert!(!unlit_plan.color_convert);
+        assert!(!unlit_plan.encoder_copy);
+        assert_eq!(ids, vec!["render.pbr_forward", "render.viewport_helpers"]);
     }
 
     #[test]

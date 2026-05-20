@@ -8,6 +8,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{AudioCodec, FrameFormat, VideoCodec};
@@ -50,6 +51,50 @@ pub enum PipelineOutput {
     Video(VideoOutput),
     /// Audio output variants.
     Audio(AudioOutput),
+}
+
+/// High-level realtime render path label for diagnostics.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GpuRenderPath {
+    /// Render output is converted to an encoder-owned GPU surface without CPU copies.
+    GpuZeroCopy,
+    /// GPU surface is used, but the encoder falls back to CPU-visible IOSurface memory.
+    PartialZeroCopy,
+    /// CPU readback/encode fallback path.
+    LegacyCpu,
+}
+
+impl GpuRenderPath {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GpuZeroCopy => "gpu-zero-copy",
+            Self::PartialZeroCopy => "partial-zero-copy",
+            Self::LegacyCpu => "legacy-cpu",
+        }
+    }
+}
+
+impl Default for GpuRenderPath {
+    fn default() -> Self {
+        Self::LegacyCpu
+    }
+}
+
+/// Engine-owned per-frame diagnostics. Sinks may attach these to stream
+/// metadata without exposing GPU implementation types to clients.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderFrameDiagnostics {
+    pub render_path: GpuRenderPath,
+    pub iosurface_creations: u64,
+    pub texture_allocations: u64,
+    pub render_time_ms: f32,
+    pub convert_time_ms: f32,
+    pub encode_time_ms: f32,
+    pub gpu_wait_time_ms: f32,
+    pub dropped_frames_since_last: u32,
+    pub queue_depth: u32,
 }
 
 /// Video output variants, from GPU-resident hot-path frames to terminal artifacts.
@@ -146,6 +191,15 @@ pub trait GpuFrameReadback: fmt::Debug + Send + Sync {
     fn height(&self) -> u32;
 }
 
+/// Opaque owner kept alive for the lifetime of a GPU frame lease.
+///
+/// Platform bridges can attach native resources such as IOSurface backing
+/// stores here without exposing platform-specific types through the pure
+/// `engine-types` contract.
+pub trait GpuFrameKeepAlive: Send + Sync {}
+
+impl<T: Send + Sync> GpuFrameKeepAlive for T {}
+
 /// Cloneable GPU frame lease.
 #[derive(Clone)]
 pub struct GpuFrameLease {
@@ -155,6 +209,7 @@ pub struct GpuFrameLease {
 struct GpuFrameLeaseInner {
     handle: GpuOutputHandle,
     readback: Option<Arc<dyn GpuFrameReadback>>,
+    keepalives: Vec<Arc<dyn GpuFrameKeepAlive>>,
 }
 
 impl GpuFrameLease {
@@ -164,6 +219,18 @@ impl GpuFrameLease {
             inner: Arc::new(GpuFrameLeaseInner {
                 handle,
                 readback: None,
+                keepalives: Vec::new(),
+            }),
+        }
+    }
+
+    /// Create a lease from a platform handle and an opaque native owner.
+    pub fn with_keepalive(handle: GpuOutputHandle, keepalive: Arc<dyn GpuFrameKeepAlive>) -> Self {
+        Self {
+            inner: Arc::new(GpuFrameLeaseInner {
+                handle,
+                readback: None,
+                keepalives: vec![keepalive],
             }),
         }
     }
@@ -177,6 +244,25 @@ impl GpuFrameLease {
             inner: Arc::new(GpuFrameLeaseInner {
                 handle,
                 readback: readback.map(|target| target as Arc<dyn GpuFrameReadback>),
+                keepalives: Vec::new(),
+            }),
+        }
+    }
+
+    /// Create a lease with both terminal readback and an opaque native owner.
+    pub fn with_readback_and_keepalive<R>(
+        handle: GpuOutputHandle,
+        readback: Option<Arc<R>>,
+        keepalive: Arc<dyn GpuFrameKeepAlive>,
+    ) -> Self
+    where
+        R: GpuFrameReadback + 'static,
+    {
+        Self {
+            inner: Arc::new(GpuFrameLeaseInner {
+                handle,
+                readback: readback.map(|target| target as Arc<dyn GpuFrameReadback>),
+                keepalives: vec![keepalive],
             }),
         }
     }
@@ -222,6 +308,7 @@ impl fmt::Debug for GpuFrameLease {
         f.debug_struct("GpuFrameLease")
             .field("handle", &self.inner.handle)
             .field("has_readback", &self.inner.readback.is_some())
+            .field("keepalive_count", &self.inner.keepalives.len())
             .field("strong_count", &Arc::strong_count(&self.inner))
             .finish()
     }
@@ -242,6 +329,8 @@ pub struct VideoGpuFrame {
     pub width: u32,
     /// Output height.
     pub height: u32,
+    /// Optional producer-side diagnostics for realtime streams.
+    pub diagnostics: Option<RenderFrameDiagnostics>,
 }
 
 /// Terminal preview artifact.

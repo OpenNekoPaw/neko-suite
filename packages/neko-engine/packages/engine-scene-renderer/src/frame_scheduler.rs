@@ -265,7 +265,7 @@ impl BudgetWeights {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{SceneToneMapping, ViewportPostProcess, ViewportRenderMode};
+    use crate::{SceneColorSpace, SceneToneMapping, ViewportPostProcess, ViewportRenderMode};
 
     fn descriptor(work_mode: ViewportWorkMode, fps: u32) -> ViewportDescriptor {
         ViewportDescriptor {
@@ -274,6 +274,7 @@ mod tests {
             render_mode: ViewportRenderMode::Pbr,
             debug_view: None,
             fps,
+            color_space: SceneColorSpace::Srgb,
             tone_mapping: SceneToneMapping::Aces,
             post_process: ViewportPostProcess::default(),
             layer_mask: None,

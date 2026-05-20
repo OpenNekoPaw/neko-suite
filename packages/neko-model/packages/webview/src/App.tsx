@@ -27,6 +27,7 @@ import type { VRMExpressionPreset } from './types/vrmExpressions';
 import { postMessage } from '@neko/shared/vscode';
 import { EngineClient, type SceneControlSocket } from '@neko/neko-client';
 import type { EditableNodeTransform } from './scene/SceneEditingTypes';
+import type { LocalPredictionInput } from './scene/LocalPredictionLayer';
 import type { ShapeType } from './types/shapeParams';
 import { modelErrorMessage, toError, webviewErrorHandler } from './platform/errors';
 
@@ -542,7 +543,7 @@ export function App(): React.JSX.Element {
     ) => {
       const seq = useModelStore.getState().allocateSceneCommandSeq();
       createLocalPrediction({
-        kind: type.startsWith('modeling-') ? 'topology' : 'camera',
+        kind: sceneCommandPredictionKind(type),
         seq,
         viewportId: 'main',
         sceneRevision: latestRevisionRef.current,
@@ -580,6 +581,13 @@ export function App(): React.JSX.Element {
   const handleExecuteCsg = useCallback(
     (operation: 'union' | 'difference' | 'intersection', operandA: string, operandB: string) => {
       sendSceneCommand('modeling-topology-op', { operation, operands: [operandA, operandB] });
+    },
+    [sendSceneCommand],
+  );
+
+  const handleSetNodeVisible = useCallback(
+    (nodeId: string, visible: boolean) => {
+      sendSceneCommand('visibility-set', { nodeId, visible });
     },
     [sendSceneCommand],
   );
@@ -637,12 +645,7 @@ export function App(): React.JSX.Element {
     [sendSceneCommand],
   );
 
-  // Only treat the engine scene as render-ready when it actually has nodes.
-  // A revision-only snapshot (revision>0, nodes=[]) is published for empty .nkm
-  // documents and would otherwise spin up an H264 stream against an empty
-  // RenderWorld, which trips wgpu validation in the PBR RenderGraph.
-  const hasEngineScene = sceneNodes.length > 0;
-  const shouldRenderEngineViewport = enginePort !== null && hasEngineScene;
+  const shouldRenderEngineViewport = enginePort !== null;
   const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
   const panelCommandDisabled = sceneControlStatus !== 'ready';
   const selectedNodeName = selectedNode?.name ?? null;
@@ -714,7 +717,7 @@ export function App(): React.JSX.Element {
       <div className="model-workbench-body">
         <main className="model-viewport-area">
           <div className="model-viewport-shell">
-            {shouldRenderEngineViewport ? (
+            {enginePort !== null ? (
               <VideoViewport
                 enginePort={enginePort}
                 sceneId={sceneId}
@@ -729,12 +732,7 @@ export function App(): React.JSX.Element {
                 onSceneControlError={(message) => setSceneControlStatus('error', message)}
                 onCameraMutated={handleViewportCameraMutated}
               />
-            ) : (
-              // sceneRevision > 0 means engine has acknowledged the document but
-              // the scene has no nodes yet — surface a precise hint instead of
-              // falling back to the generic drop hint.
-              <ModelEmptyState reason={sceneRevision > 0 ? 'emptyScene' : 'noDocument'} />
-            )}
+            ) : null}
             {qualityPreviewDataUrl && shouldRenderEngineViewport ? (
               <div className="model-quality-preview-overlay pointer-events-none absolute inset-0">
                 <img
@@ -757,6 +755,8 @@ export function App(): React.JSX.Element {
               nodes={sceneNodes}
               selectedNodeId={selectedNodeId}
               onSelectNode={selectNode}
+              onSetNodeVisible={handleSetNodeVisible}
+              visibilityDisabled={panelCommandDisabled}
               showHeader={false}
             />
           }
@@ -899,74 +899,6 @@ function AnimationTimelineStrip({
   );
 }
 
-/** Empty state UI — import, template, or drag-drop */
-function ModelEmptyState({ reason = 'noDocument' }: { reason?: 'noDocument' | 'emptyScene' }) {
-  const { t } = useTranslation();
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  const handleImport = useCallback(() => {
-    postMessage({ type: 'model:import' });
-  }, []);
-
-  const handleTemplate = useCallback((templateId: string) => {
-    postMessage({ type: 'model:template', templateId });
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file && /\.(glb|gltf|vrm)$/i.test(file.name)) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(',')[1] ?? '';
-        postMessage({ type: 'model:dropFile', name: file.name, data: base64 });
-      };
-      reader.readAsDataURL(file);
-    }
-  }, []);
-
-  const btnClass = 'model-btn-secondary px-4 py-2';
-  const primaryBtnClass = 'model-btn-primary px-4 py-2';
-
-  return (
-    <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={`flex h-full flex-col items-center justify-center gap-5 text-sm transition-colors ${
-        isDragOver ? 'bg-[var(--model-selected)]' : 'bg-[var(--model-bg)]'
-      }`}
-    >
-      <div className="max-w-sm text-center text-[var(--model-fg-secondary)]">
-        {t(reason === 'emptyScene' ? 'empty.emptyScene' : 'empty.dropHint')}
-      </div>
-
-      <div className="flex gap-3">
-        <button type="button" onClick={handleImport} className={primaryBtnClass}>
-          {t('empty.import')}
-        </button>
-        <button type="button" onClick={() => handleTemplate('blank')} className={btnClass}>
-          {t('empty.templateBlank')}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function resolveSelectedCharacterId(
   selectedNodeId: string | null,
   sceneNodes: readonly SceneNodeSnapshot[],
@@ -977,6 +909,18 @@ function resolveSelectedCharacterId(
   return selected.kind === 'character' || selected.kind === 'character-instance'
     ? selected.nodeId
     : selectedNodeId;
+}
+
+function sceneCommandPredictionKind(
+  type: NonNullable<SceneCommandEnvelope['command']>['type'],
+): LocalPredictionInput['kind'] {
+  if (type.startsWith('modeling-')) {
+    return 'topology';
+  }
+  if (type === 'visibility-set') {
+    return 'visibility';
+  }
+  return 'camera';
 }
 
 function hasRestorableCameraState(value: unknown): boolean {

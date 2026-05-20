@@ -27,7 +27,7 @@ export const en = {
   'viewport.panLeft': 'Pan left',
   'viewport.panRight': 'Pan right',
   'viewport.orbit': 'Orbit view',
-  'viewport.grid': 'Show Engine ground grid',
+  'viewport.grid': 'Show Engine 3D grid',
   'viewport.resetCamera': 'Reset camera',
 
   // Workbench
@@ -56,6 +56,8 @@ export const en = {
 
   // Scene tree
   'sceneTree.title': 'Scene',
+  'sceneTree.hideNode': 'Hide node rendering',
+  'sceneTree.showNode': 'Show node rendering',
 
   // Animation player
   'animation.selectPlaceholder': '-- Select Animation --',
@@ -163,10 +165,20 @@ export const en = {
   'diagnostics.predictions': 'predictions',
   'diagnostics.session': 'session',
   'diagnostics.quality': 'quality',
+  'diagnostics.path': 'path',
   'diagnostics.ackP95': 'ack p95',
   'diagnostics.patchBw': 'patch bw',
   'diagnostics.gpuUpload': 'gpu upload',
+  'diagnostics.render': 'render',
+  'diagnostics.convert': 'convert',
+  'diagnostics.encode': 'encode',
+  'diagnostics.decode': 'decode',
+  'diagnostics.draw': 'draw',
+  'diagnostics.gpuWait': 'gpu wait',
   'diagnostics.frameP95': 'frame p95',
+  'diagnostics.iosurfaceCreations': 'IOSurface',
+  'diagnostics.textureAllocations': 'texture allocs',
+  'diagnostics.queueDepth': 'queue depth',
   'diagnostics.dropped': 'dropped',
 
   // Error boundary

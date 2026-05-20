@@ -244,7 +244,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Emissive
     let emissive = textureSample(emissive_tex, material_sampler, in.uv).rgb * material.emissive_factor;
 
-    let ambient = vec3<f32>(0.03) * base_color.rgb * ao_factor;
+    // Editor viewport baseline ambient. This is intentionally neutral and
+    // modest; it keeps unlit sides readable without flattening authored lights.
+    let ambient = vec3<f32>(0.18) * base_color.rgb * ao_factor;
     let color = ambient + lo + emissive;
 
     let output_alpha = select(1.0, base_color.a, material.alpha_mode == 2u);

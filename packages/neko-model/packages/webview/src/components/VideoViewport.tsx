@@ -342,7 +342,7 @@ export function VideoViewport({
               useModelStore.getState().commitLocalPredictionsThrough(meta.appliedSeq);
             }
           },
-          onFrame: (frame) => {
+          onFrame: (frame, meta) => {
             if (disposed) {
               frame.close();
               return;
@@ -362,7 +362,20 @@ export function VideoViewport({
 
             const ctx = canvas.getContext('2d');
             if (ctx) {
+              const drawStarted = performance.now();
               ctx.drawImage(frame, 0, 0, width, height);
+              const drawTimeMs = performance.now() - drawStarted;
+              if (meta) {
+                const drawnMeta = {
+                  ...meta,
+                  diagnostics: {
+                    ...meta.diagnostics,
+                    drawTimeMs,
+                  },
+                };
+                setFrameMeta(drawnMeta);
+                useModelStore.getState().updateLastRenderFrameMeta(drawnMeta);
+              }
               setHasEngineFrame(true);
             }
             frame.close();

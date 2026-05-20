@@ -156,6 +156,7 @@ export interface ModelState {
   recordPatchBytes: (bytes: number, atMs?: number) => void;
   recordGpuUpload: (ms: number) => void;
   recordRenderFrameMeta: (meta: RenderFrameMeta) => void;
+  updateLastRenderFrameMeta: (meta: RenderFrameMeta) => void;
   incrementDroppedPrediction: () => void;
 
   // Actions — Animation
@@ -518,6 +519,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
         authoringMetricsSnapshot: state.authoringMetrics.snapshot(),
       };
     }),
+
+  updateLastRenderFrameMeta: (meta) => set({ lastRenderFrameMeta: meta }),
 
   incrementDroppedPrediction: () =>
     set((state) => {

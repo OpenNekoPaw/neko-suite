@@ -56,6 +56,21 @@ describe('SceneDocument object model', () => {
     );
   });
 
+  it('compiles node visibility edits to scene command envelopes', async () => {
+    const { document, sendCommand } = createDocument();
+
+    await document.node('node_1').setVisible(false);
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({
+          type: 'visibility-set',
+          payloadJson: JSON.stringify({ nodeId: 'node_1', visible: false }),
+        }),
+      }),
+    );
+  });
+
   it('routes handle queries through viewport-scoped control queries', async () => {
     const { document, query } = createDocument();
 

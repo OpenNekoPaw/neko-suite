@@ -20,7 +20,8 @@ use neko_engine_scene_renderer::{
 };
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
-    FrameFormat, GpuFrameLease, GpuOutputHandle, PipelineOutput, VideoGpuFrame, VideoOutput,
+    FrameFormat, GpuFrameLease, GpuOutputHandle, GpuRenderPath, PipelineOutput,
+    RenderFrameDiagnostics, VideoGpuFrame, VideoOutput,
 };
 use neko_runtime_media::encode_rgba_to_jpeg;
 use neko_runtime_scene::access::{
@@ -50,6 +51,8 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 const CONTROL_ACK_SAMPLE_CAPACITY: usize = 128;
+#[cfg(target_os = "macos")]
+const SCENE_STREAM_ENCODER_BRIDGE_CACHE_LIMIT: usize = 4;
 
 #[derive(Debug, Default)]
 struct ControlAckMetrics {
@@ -210,6 +213,9 @@ pub struct SceneService {
     /// Editor camera override for viewport orbit controls.
     /// Read by the scene stream producer on each frame.
     editor_camera: RwLock<Option<CameraParams>>,
+    /// Persistent macOS encoder bridge for realtime scene streams.
+    #[cfg(target_os = "macos")]
+    stream_encoder_bridges: Mutex<HashMap<String, RgbaToNv12TextureConverter>>,
 }
 
 impl SceneService {
@@ -217,8 +223,12 @@ impl SceneService {
     pub fn new() -> Self {
         let (realtime_snapshot_watch, _snapshot_rx) =
             SceneSnapshotWatch::new(SceneRenderSnapshot::default());
+        let computation = SceneComputation::new();
+        let default_meshes = computation
+            .data(|world| world.default_procedural_meshes().clone())
+            .unwrap_or_default();
         Self {
-            computation: SceneComputation::new(),
+            computation,
             gpu_ctx: None,
             scene_renderer: None,
             asset_database: Mutex::new(AssetDatabase::default()),
@@ -226,9 +236,11 @@ impl SceneService {
             render_extract_cache: Mutex::new(SharedRenderExtractCache::default()),
             realtime_snapshot_watch,
             export_frame_queue: SceneExportFrameQueue::bounded(),
-            procedural_meshes: Mutex::new(HashMap::new()),
+            procedural_meshes: Mutex::new(default_meshes),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
+            #[cfg(target_os = "macos")]
+            stream_encoder_bridges: Mutex::new(HashMap::new()),
         }
     }
 
@@ -236,18 +248,34 @@ impl SceneService {
     pub fn with_gpu(ctx: Arc<GpuContext>) -> Self {
         let (realtime_snapshot_watch, _snapshot_rx) =
             SceneSnapshotWatch::new(SceneRenderSnapshot::default());
+        let computation = SceneComputation::new();
+        let default_meshes = computation
+            .data(|world| world.default_procedural_meshes().clone())
+            .unwrap_or_default();
+        let scene_renderer = SceneRenderer::new(Arc::clone(&ctx));
+        for (uri, mesh) in &default_meshes {
+            if let Err(error) = scene_renderer.register_procedural_mesh(uri, 0, mesh) {
+                tracing::warn!(
+                    "Failed to register default scene mesh '{}' in GPU cache: {}",
+                    uri,
+                    error
+                );
+            }
+        }
         Self {
-            computation: SceneComputation::new(),
-            gpu_ctx: Some(Arc::clone(&ctx)),
-            scene_renderer: Some(SceneRenderer::new(ctx)),
+            computation,
+            gpu_ctx: Some(ctx),
+            scene_renderer: Some(scene_renderer),
             asset_database: Mutex::new(AssetDatabase::default()),
             control_ack_metrics: ControlAckMetrics::default(),
             render_extract_cache: Mutex::new(SharedRenderExtractCache::default()),
             realtime_snapshot_watch,
             export_frame_queue: SceneExportFrameQueue::bounded(),
-            procedural_meshes: Mutex::new(HashMap::new()),
+            procedural_meshes: Mutex::new(default_meshes),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
+            #[cfg(target_os = "macos")]
+            stream_encoder_bridges: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -529,6 +557,7 @@ impl SceneService {
         duration_us: i64,
         frame_index: u64,
         viewport: &ViewportDescriptor,
+        dropped_frames_since_last: u32,
     ) -> Result<PipelineOutput> {
         let frame = self.render_scene_stream_gpu_frame(
             output_size,
@@ -538,6 +567,7 @@ impl SceneService {
             duration_us,
             frame_index,
             viewport,
+            dropped_frames_since_last,
         )?;
         Ok(PipelineOutput::Video(VideoOutput::GpuFrame(frame)))
     }
@@ -552,7 +582,9 @@ impl SceneService {
         duration_us: i64,
         frame_index: u64,
         viewport: &ViewportDescriptor,
+        dropped_frames_since_last: u32,
     ) -> Result<VideoGpuFrame> {
+        let render_started = Instant::now();
         let output = self.render_frame_internal(
             None,
             0.0,
@@ -561,25 +593,73 @@ impl SceneService {
             background_color,
             Some((viewport, ViewportRenderGraphOutput::RealtimeStream)),
         )?;
+        let render_time_ms = render_started.elapsed().as_secs_f32() * 1000.0;
+        let pool_snapshot = self
+            .scene_renderer
+            .as_ref()
+            .map(|renderer| renderer.render_target_pool_snapshot());
         let ctx = self
             .gpu_ctx
             .as_ref()
             .ok_or_else(|| Error::Other("GPU not available for scene stream".to_string()))?;
-        let mut converter = RgbaToNv12TextureConverter::new(Arc::clone(ctx))?;
-        let gpu_handle = converter.convert_to_encoder_handle(
-            &output.color_view,
+        let bridge_key = scene_stream_encoder_bridge_key(
+            viewport,
             output.width,
             output.height,
-            1,
-        )?;
+            viewport.color_space.nv12_matrix_id(),
+        );
+        let mut bridges = self.stream_encoder_bridges.lock().map_err(|e| {
+            Error::Other(format!("Scene stream encoder bridge lock poisoned: {}", e))
+        })?;
+        if !bridges.contains_key(&bridge_key)
+            && bridges.len() >= SCENE_STREAM_ENCODER_BRIDGE_CACHE_LIMIT
+        {
+            prune_scene_stream_encoder_bridges(&mut bridges, &viewport.viewport_id);
+        }
+        let converter = match bridges.get_mut(&bridge_key) {
+            Some(converter) => converter,
+            None => {
+                bridges.insert(
+                    bridge_key.clone(),
+                    RgbaToNv12TextureConverter::new(Arc::clone(ctx))?,
+                );
+                bridges.get_mut(&bridge_key).ok_or_else(|| {
+                    Error::Other("Scene stream encoder bridge unavailable".to_string())
+                })?
+            }
+        };
+        let convert_started = Instant::now();
+        let (gpu_handle, backing_owner, convert_stats) = converter
+            .convert_to_encoder_handle_with_owner(
+                &output.color_view,
+                output.width,
+                output.height,
+                viewport.color_space.nv12_matrix_id(),
+            )?;
+        let convert_time_ms = convert_started.elapsed().as_secs_f32() * 1000.0;
 
         Ok(VideoGpuFrame {
-            lease: GpuFrameLease::new(gpu_handle),
+            lease: GpuFrameLease::with_keepalive(gpu_handle, backing_owner),
             pts: pts_us,
             duration: duration_us,
             frame_index,
             width: output.width,
             height: output.height,
+            diagnostics: Some(RenderFrameDiagnostics {
+                render_path: GpuRenderPath::GpuZeroCopy,
+                iosurface_creations: convert_stats.iosurface_creations,
+                texture_allocations: pool_snapshot
+                    .map(|snapshot| snapshot.texture_allocations)
+                    .unwrap_or_default(),
+                render_time_ms,
+                convert_time_ms,
+                encode_time_ms: 0.0,
+                gpu_wait_time_ms: convert_stats.gpu_wait_time_ms,
+                dropped_frames_since_last,
+                queue_depth: pool_snapshot
+                    .map(|snapshot| snapshot.active_leases as u32)
+                    .unwrap_or_default(),
+            }),
         })
     }
 
@@ -593,6 +673,7 @@ impl SceneService {
         _duration_us: i64,
         _frame_index: u64,
         _viewport: &ViewportDescriptor,
+        _dropped_frames_since_last: u32,
     ) -> Result<VideoGpuFrame> {
         Err(Error::UnsupportedCapability(format!(
             "scene GPU stream output is not implemented on {}",
@@ -621,6 +702,35 @@ fn pack_scene_h264_frame(
         height,
         format: FrameFormat::H264,
         timestamp: pts_us as f64 / 1_000_000.0,
+        diagnostics: None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn scene_stream_encoder_bridge_key(
+    viewport: &ViewportDescriptor,
+    width: u32,
+    height: u32,
+    color_space: u32,
+) -> String {
+    format!(
+        "{}:{}x{}:{}",
+        viewport.viewport_id, width, height, color_space
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn prune_scene_stream_encoder_bridges(
+    bridges: &mut HashMap<String, RgbaToNv12TextureConverter>,
+    active_viewport_id: &str,
+) {
+    let stale_key = bridges
+        .keys()
+        .find(|key| !key.starts_with(active_viewport_id))
+        .cloned()
+        .or_else(|| bridges.keys().next().cloned());
+    if let Some(key) = stale_key {
+        bridges.remove(&key);
     }
 }
 
@@ -719,6 +829,13 @@ impl ISceneService for SceneService {
                 .lock()
                 .map_err(|e| Error::Other(format!("Asset database lock poisoned: {}", e)))?;
             *database = load_result.asset_database;
+        }
+        {
+            let mut meshes = self
+                .procedural_meshes
+                .lock()
+                .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
+            meshes.clear();
         }
 
         if let Some(renderer) = &self.scene_renderer {
@@ -976,6 +1093,7 @@ impl ISceneService for SceneService {
         duration_us: i64,
         frame_index: u64,
         viewport: &ViewportDescriptor,
+        dropped_frames_since_last: u32,
     ) -> Result<PipelineOutput> {
         SceneService::render_scene_stream_gpu_output(
             self,
@@ -986,6 +1104,7 @@ impl ISceneService for SceneService {
             duration_us,
             frame_index,
             viewport,
+            dropped_frames_since_last,
         )
     }
 
@@ -1149,8 +1268,10 @@ impl ISceneService for SceneService {
         let project = NkmProject::load(Path::new(path))
             .map_err(|e| Error::Other(format!("Project load failed: {}", e)))?;
 
-        self.computation
-            .creative(|world| world.restore_snapshot(&project.scene_snapshot))?;
+        let default_meshes = self.computation.creative(|world| {
+            world.restore_snapshot(&project.scene_snapshot);
+            world.default_procedural_meshes().clone()
+        })?;
 
         // Restore procedural meshes and re-register in GPU cache
         {
@@ -1159,6 +1280,7 @@ impl ISceneService for SceneService {
                 .lock()
                 .map_err(|e| Error::Other(format!("Procedural meshes lock poisoned: {}", e)))?;
             *pm = project.procedural_meshes.clone();
+            pm.extend(default_meshes);
 
             if let Some(renderer) = &self.scene_renderer {
                 for (uri, mesh) in &*pm {

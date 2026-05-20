@@ -497,6 +497,7 @@ fn rendered_output_to_encoder_video_output(
             frame_index: output.frame_index,
             width: output.width,
             height: output.height,
+            diagnostics: None,
         }));
     }
 

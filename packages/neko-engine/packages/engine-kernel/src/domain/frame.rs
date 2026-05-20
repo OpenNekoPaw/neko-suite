@@ -1,6 +1,7 @@
 //! Frame data types
 
 use neko_engine_types::FrameFormat;
+use neko_engine_types::RenderFrameDiagnostics;
 
 /// Decoded frame data — output of capture/extract/composite operations
 #[derive(Debug, Clone)]
@@ -15,6 +16,8 @@ pub struct FrameData {
     pub format: FrameFormat,
     /// Timestamp in seconds
     pub timestamp: f64,
+    /// Optional producer-side render diagnostics for realtime streams.
+    pub diagnostics: Option<RenderFrameDiagnostics>,
 }
 
 impl FrameData {
@@ -26,6 +29,7 @@ impl FrameData {
             height,
             format,
             timestamp: 0.0,
+            diagnostics: None,
         }
     }
 

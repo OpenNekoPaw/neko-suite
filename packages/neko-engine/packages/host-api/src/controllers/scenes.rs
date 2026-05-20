@@ -8,8 +8,8 @@ use crate::registry::StreamRegistry;
 use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig};
 use neko_engine_kernel::contracts::gpu::{
     CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
-    DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneToneMapping,
-    ViewportDebugView, ViewportDescriptor, ViewportPostProcess, ViewportRenderMode,
+    DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
+    SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportPostProcess, ViewportRenderMode,
     ViewportWorkMode,
 };
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
@@ -347,6 +347,7 @@ fn stream_options_to_viewport_descriptor(
         render_mode: parse_render_mode(&opts.render_mode),
         debug_view: opts.debug_view.as_deref().and_then(parse_debug_view),
         fps: fps.round().clamp(1.0, 240.0) as u32,
+        color_space: parse_color_space(&opts.color_space),
         tone_mapping: parse_tone_mapping(&opts.tone_mapping),
         post_process: parse_post_process(opts.post_process.as_ref()),
         layer_mask: opts.layer_mask,
@@ -384,6 +385,14 @@ fn parse_tone_mapping(value: &str) -> SceneToneMapping {
         "reinhard" => SceneToneMapping::Reinhard,
         "none" => SceneToneMapping::None,
         _ => SceneToneMapping::Aces,
+    }
+}
+
+fn parse_color_space(value: &str) -> SceneColorSpace {
+    match value {
+        "rec709" => SceneColorSpace::Rec709,
+        "p3" => SceneColorSpace::P3,
+        _ => SceneColorSpace::Srgb,
     }
 }
 
@@ -546,6 +555,7 @@ fn spawn_scene_stream_producer(
                                     duration_us,
                                     frame_id,
                                     &viewport,
+                                    load.dropped_frames,
                                 )
                             }
                         })
@@ -1822,6 +1832,7 @@ mod tests {
                 render_mode: ViewportRenderMode::Pbr,
                 debug_view: None,
                 fps: 60,
+                color_space: SceneColorSpace::Srgb,
                 tone_mapping: SceneToneMapping::Aces,
                 post_process: ViewportPostProcess {
                     bloom: true,
@@ -1879,6 +1890,7 @@ mod tests {
                 render_mode: ViewportRenderMode::Pbr,
                 debug_view: None,
                 fps: 30,
+                color_space: SceneColorSpace::Srgb,
                 tone_mapping: SceneToneMapping::Aces,
                 post_process: ViewportPostProcess::default(),
                 layer_mask: None,
@@ -1926,6 +1938,7 @@ mod tests {
                 render_mode: ViewportRenderMode::Pbr,
                 debug_view: None,
                 fps: 60,
+                color_space: SceneColorSpace::Srgb,
                 tone_mapping: SceneToneMapping::Aces,
                 post_process: ViewportPostProcess {
                     bloom: true,

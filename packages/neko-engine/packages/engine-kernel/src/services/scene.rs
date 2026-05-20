@@ -109,6 +109,7 @@ pub trait ISceneService: Send + Sync {
         duration_us: i64,
         frame_index: u64,
         viewport: &ViewportDescriptor,
+        dropped_frames_since_last: u32,
     ) -> crate::error::Result<PipelineOutput>;
 
     /// Set the editor camera used by realtime scene stream rendering.
