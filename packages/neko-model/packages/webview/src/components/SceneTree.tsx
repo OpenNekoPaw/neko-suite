@@ -11,6 +11,11 @@ interface SceneTreeProps {
   showHeader?: boolean;
 }
 
+interface VisibilityLabels {
+  hide: string;
+  show: string;
+}
+
 /**
  * Scene hierarchy tree panel (left sidebar).
  */
@@ -23,6 +28,10 @@ export function SceneTree({
   showHeader = true,
 }: SceneTreeProps): React.JSX.Element {
   const { t } = useTranslation();
+  const visibilityLabels: VisibilityLabels = {
+    hide: t('sceneTree.hideNode'),
+    show: t('sceneTree.showNode'),
+  };
   // Build tree structure
   const rootNodes = nodes.filter((n) => !n.parentId);
 
@@ -43,6 +52,7 @@ export function SceneTree({
             onSelectNode={onSelectNode}
             onSetNodeVisible={onSetNodeVisible}
             visibilityDisabled={visibilityDisabled}
+            visibilityLabels={visibilityLabels}
             depth={0}
           />
         ))}
@@ -58,6 +68,7 @@ interface TreeNodeProps {
   onSelectNode: (id: string) => void;
   onSetNodeVisible?: (id: string, visible: boolean) => void;
   visibilityDisabled: boolean;
+  visibilityLabels: VisibilityLabels;
   depth: number;
 }
 
@@ -68,11 +79,13 @@ function TreeNode({
   onSelectNode,
   onSetNodeVisible,
   visibilityDisabled,
+  visibilityLabels,
   depth,
 }: TreeNodeProps): React.JSX.Element {
   const children = allNodes.filter((n) => n.parentId === node.nodeId);
   const isSelected = selectedNodeId === node.nodeId;
   const isVisible = node.visible !== false;
+  const visibilityLabel = isVisible ? visibilityLabels.hide : visibilityLabels.show;
 
   const icon =
     node.kind === 'camera'
@@ -106,8 +119,8 @@ function TreeNode({
           type="button"
           className="model-tree-visibility-toggle"
           disabled={visibilityDisabled || !onSetNodeVisible}
-          title={isVisible ? t('sceneTree.hideNode') : t('sceneTree.showNode')}
-          aria-label={isVisible ? t('sceneTree.hideNode') : t('sceneTree.showNode')}
+          title={visibilityLabel}
+          aria-label={visibilityLabel}
           aria-pressed={isVisible}
           onClick={(event) => {
             event.stopPropagation();
@@ -130,6 +143,7 @@ function TreeNode({
           onSelectNode={onSelectNode}
           onSetNodeVisible={onSetNodeVisible}
           visibilityDisabled={visibilityDisabled}
+          visibilityLabels={visibilityLabels}
           depth={depth + 1}
         />
       ))}
