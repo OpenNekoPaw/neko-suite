@@ -32,6 +32,8 @@
     "neko.neko-engine"
   ],
   "activationEvents": [
+    "onInstallKind:media.puppet-model",
+    "onInstallKind:media.puppet-config",
     "onInstallKind:media.puppet-motion"
   ],
   "main": "./dist/extension.js",
@@ -39,8 +41,18 @@
     "neko.installTargets": [
       {
         "type": "media",
+        "kind": "puppet-model",
+        "activationEvent": "onInstallKind:media.puppet-model"
+      },
+      {
+        "type": "media",
         "kind": "puppet-motion",
         "activationEvent": "onInstallKind:media.puppet-motion"
+      },
+      {
+        "type": "media",
+        "kind": "puppet-config",
+        "activationEvent": "onInstallKind:media.puppet-config"
       }
     ],
     "customEditors": [
@@ -50,6 +62,9 @@
         "selector": [
           {
             "filenamePattern": "*.nkp"
+          },
+          {
+            "filenamePattern": "*.nkp.puppet.bundle"
           },
           {
             "filenamePattern": "*.inp"
@@ -65,6 +80,26 @@
       {
         "command": "neko.puppet.new",
         "title": "%neko.puppet.new.title%",
+        "category": "NekoPuppet"
+      },
+      {
+        "command": "neko.puppet.importLive2dBundle",
+        "title": "%neko.puppet.importLive2dBundle.title%",
+        "category": "NekoPuppet"
+      },
+      {
+        "command": "neko.puppet.exportModel",
+        "title": "%neko.puppet.exportModel.title%",
+        "category": "NekoPuppet"
+      },
+      {
+        "command": "neko.puppet.exportMotions",
+        "title": "%neko.puppet.exportMotions.title%",
+        "category": "NekoPuppet"
+      },
+      {
+        "command": "neko.puppet.exportConfig",
+        "title": "%neko.puppet.exportConfig.title%",
         "category": "NekoPuppet"
       },
       {

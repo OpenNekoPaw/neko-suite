@@ -1,8 +1,8 @@
 /**
- * NekoPuppet Extension - 2D skeletal puppet animation editor (INP/MOC3)
+ * NekoPuppet Extension - 2D skeletal puppet animation editor (MOC3, legacy INP)
  *
  * Main entry point for the NekoPuppet extension.
- * Provides custom editor for .nkp and .inp files.
+ * Provides custom editor for .nkp/.moc3 files and legacy .inp reads.
  */
 import * as vscode from 'vscode';
 import {
@@ -43,7 +43,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
     logger: logger.child('LiveMode'),
   });
 
-  // Register custom editor for .nkp and .inp files
+  // Register custom editor for .nkp/.moc3 files and legacy .inp reads.
   context.subscriptions.push(
     liveModeService,
     vscode.window.registerCustomEditorProvider(

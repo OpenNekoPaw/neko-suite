@@ -7,6 +7,7 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import type { ExtensionToWebviewMessage } from './types';
 import { usePuppetStore } from './stores/puppet-store';
+import { decodeMoc3ExternalTextures } from './utils/moc3-textures';
 import { AnimationPanel } from './components/AnimationPanel';
 import { ParameterPanel } from './components/ParameterPanel';
 import { PuppetNodeTree } from './components/PuppetNodeTree';
@@ -27,6 +28,10 @@ interface VsCodeApi {
   getState(): unknown;
   setState(state: unknown): void;
 }
+
+type PendingPuppetLoad =
+  | Extract<ExtensionToWebviewMessage, { type: 'loadPuppet' }>
+  | Extract<ExtensionToWebviewMessage, { type: 'loadPuppetSource' }>;
 
 /** Debounce timer ref for parameter save */
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -52,17 +57,23 @@ function PuppetWaitingPlaceholder() {
   return <span>{t('puppet.status.loading')}</span>;
 }
 
-/** Empty state UI — import, template, or drag-drop */
+function PuppetLoadErrorPlaceholder({ message }: { message: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 px-6 text-center">
+      <div className="text-sm font-medium">{t('puppet.status.loadFailed')}</div>
+      <div className="max-w-xl text-xs opacity-70 break-words">{message}</div>
+    </div>
+  );
+}
+
+/** Empty state UI — import or drag-drop */
 function PuppetEmptyState() {
   const { t } = useTranslation();
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleImport = useCallback(() => {
     vscode.postMessage({ type: 'puppet:import' });
-  }, []);
-
-  const handleTemplate = useCallback((templateId: string) => {
-    vscode.postMessage({ type: 'puppet:template', templateId });
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -81,7 +92,7 @@ function PuppetEmptyState() {
     e.stopPropagation();
     setIsDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.inp') || file.name.endsWith('.moc3'))) {
+    if (file && file.name.endsWith('.moc3')) {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
@@ -92,10 +103,6 @@ function PuppetEmptyState() {
     }
   }, []);
 
-  const btnClass =
-    'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
-    'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] ' +
-    'hover:bg-[var(--vscode-button-secondaryHoverBackground)]';
   const primaryBtnClass =
     'px-4 py-2 rounded text-xs cursor-pointer transition-colors ' +
     'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] ' +
@@ -116,12 +123,6 @@ function PuppetEmptyState() {
         <button type="button" onClick={handleImport} className={primaryBtnClass}>
           {t('puppet.empty.import')}
         </button>
-        <button type="button" onClick={() => handleTemplate('blank')} className={btnClass}>
-          {t('puppet.empty.templateBlank')}
-        </button>
-        <button type="button" onClick={() => handleTemplate('humanoid')} className={btnClass}>
-          {t('puppet.empty.templateHumanoid')}
-        </button>
       </div>
     </div>
   );
@@ -132,11 +133,85 @@ export function PuppetApp() {
   const { onPlay, onStop, onSeek, onCrossfade } = usePuppetPlayback(controllerRef.current);
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const noPuppetSource = usePuppetStore((s) => s.noPuppetSource);
+  const loadError = usePuppetStore((s) => s.loadError);
   const isKeyframeEditorOpen = usePuppetStore((s) => s.isKeyframeEditorOpen);
   const toggleKeyframeEditor = usePuppetStore((s) => s.toggleKeyframeEditor);
 
   /** Pending parameter overrides received before puppet loads */
   const pendingStateRef = useRef<Record<string, number> | null>(null);
+  /** Pending puppet source received before the engine port is ready. */
+  const pendingLoadRef = useRef<PendingPuppetLoad | null>(null);
+
+  const applyLoadedPuppet = useCallback(async (ctrl: PuppetController) => {
+    const store = usePuppetStore.getState();
+
+    // Get initial deformed meshes for rendering
+    const meshes = await ctrl.getMeshes();
+    store.setDeformedMeshes(meshes);
+
+    // Load parameters and animations
+    const params = await ctrl.getParameters();
+    store.setPuppetParameters(params);
+    vscode.postMessage({
+      type: 'puppet:parametersLoaded',
+      parameters: params.map((param) => param.name),
+    });
+
+    // Apply pending parameter overrides if any
+    const pending = pendingStateRef.current;
+    if (pending) {
+      pendingStateRef.current = null;
+      for (const p of params) {
+        const override = pending[p.name];
+        if (override !== undefined) {
+          store.updateParameterValue(p.name, override);
+          void ctrl.setParameter(p.name, override);
+        }
+      }
+    }
+
+    const anims = await ctrl.getAnimations();
+    store.setAnimations(anims);
+  }, []);
+
+  const loadPuppetMessage = useCallback(
+    async (msg: PendingPuppetLoad, ctrl: PuppetController): Promise<void> => {
+      const store = usePuppetStore.getState();
+      store.setLoadError(null);
+      store.setPuppetLoaded(false);
+      store.setPuppetSnapshot(null);
+      store.setDeformedMeshes([]);
+      store.setPuppetParameters([]);
+      store.setAnimations([]);
+      store.setPreviewFrame(null);
+      store.setTextures([]);
+
+      try {
+        const texturePromise =
+          msg.textures !== undefined
+            ? decodeMoc3ExternalTextures(msg.textures)
+            : Promise.resolve<ImageBitmap[]>([]);
+        const snapshotPromise =
+          msg.type === 'loadPuppetSource'
+            ? ctrl.loadSource(msg.source)
+            : ctrl.load(base64ToArrayBuffer(msg.data));
+        const [snapshot, textures] = await Promise.all([snapshotPromise, texturePromise]);
+
+        store.setTextures(textures);
+        store.setPuppetSnapshot(snapshot);
+        if (msg.auxiliary) {
+          await ctrl.loadAuxiliary(msg.auxiliary);
+        }
+        store.setPuppetLoaded(true);
+        store.setNoPuppetSource(false);
+        await applyLoadedPuppet(ctrl);
+      } catch (error) {
+        store.setPuppetLoaded(false);
+        store.setLoadError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [applyLoadedPuppet],
+  );
 
   // Notify extension that webview is ready
   useEffect(() => {
@@ -144,109 +219,99 @@ export function PuppetApp() {
   }, []);
 
   // Handle messages from extension
-  const handleMessage = useCallback((event: MessageEvent<ExtensionToWebviewMessage>) => {
-    const msg = event.data;
-    switch (msg.type) {
-      case 'enginePort': {
-        const engine = new EngineClient(msg.port);
-        controllerRef.current = new PuppetController(engine);
-        break;
-      }
-
-      case 'loadPuppet':
-      case 'loadPuppetSource': {
-        const ctrl = controllerRef.current;
-        if (!ctrl) {
-          // Request engine port first, then retry
-          vscode.postMessage({ type: 'requestEnginePort' });
+  const handleMessage = useCallback(
+    (event: MessageEvent<ExtensionToWebviewMessage>) => {
+      const msg = event.data;
+      switch (msg.type) {
+        case 'enginePort': {
+          const engine = new EngineClient(msg.port);
+          const ctrl = new PuppetController(engine);
+          controllerRef.current = ctrl;
+          const pending = pendingLoadRef.current;
+          if (pending) {
+            pendingLoadRef.current = null;
+            void loadPuppetMessage(pending, ctrl);
+          }
           break;
         }
 
-        const load =
-          msg.type === 'loadPuppetSource'
-            ? () => ctrl.loadSource(msg.source)
-            : () => {
-                const binaryStr = atob(msg.data);
-                const bytes = new Uint8Array(binaryStr.length);
-                for (let i = 0; i < binaryStr.length; i++) {
-                  bytes[i] = binaryStr.charCodeAt(i);
-                }
-                return ctrl.load(bytes.buffer);
-              };
-
-        void load().then(async (snapshot) => {
+        case 'engineUnavailable': {
           const store = usePuppetStore.getState();
-          store.setPuppetSnapshot(snapshot);
-          store.setPuppetLoaded(true);
-          store.setNoPuppetSource(false);
-
-          // Get initial deformed meshes for rendering
-          const meshes = await ctrl.getMeshes();
-          store.setDeformedMeshes(meshes);
-
-          // Load parameters and animations
-          const params = await ctrl.getParameters();
-          store.setPuppetParameters(params);
-          vscode.postMessage({
-            type: 'puppet:parametersLoaded',
-            parameters: params.map((param) => param.name),
-          });
-
-          // Apply pending parameter overrides if any
-          const pending = pendingStateRef.current;
-          if (pending) {
-            pendingStateRef.current = null;
-            for (const p of params) {
-              const override = pending[p.name];
-              if (override !== undefined) {
-                store.updateParameterValue(p.name, override);
-                void ctrl.setParameter(p.name, override);
-              }
-            }
-          }
-
-          const anims = await ctrl.getAnimations();
-          store.setAnimations(anims);
-        });
-        break;
-      }
-
-      case 'loadState': {
-        // Parameter overrides from .nkp project
-        const store = usePuppetStore.getState();
-        if (store.puppetLoaded && controllerRef.current) {
-          // Apply immediately
-          const ctrl = controllerRef.current;
-          for (const [name, value] of Object.entries(msg.parameters)) {
-            store.updateParameterValue(name, value);
-            void ctrl.setParameter(name, value);
-          }
-        } else {
-          // Buffer until puppet loads
-          pendingStateRef.current = msg.parameters;
+          store.setPuppetLoaded(false);
+          store.setLoadError(msg.message ?? i18nService.t('puppet.status.engineUnavailable'));
+          break;
         }
-        break;
-      }
 
-      case 'noPuppetSource': {
-        usePuppetStore.getState().setNoPuppetSource(true);
-        break;
-      }
+        case 'loadPuppet':
+        case 'loadPuppetSource': {
+          const ctrl = controllerRef.current;
+          if (!ctrl) {
+            pendingLoadRef.current = msg;
+            vscode.postMessage({ type: 'requestEnginePort' });
+            break;
+          }
 
-      case 'puppetImported': {
-        usePuppetStore.getState().setNoPuppetSource(false);
-        break;
-      }
+          void loadPuppetMessage(msg, ctrl);
+          break;
+        }
 
-      case 'setLocale': {
-        setLocale(msg.locale as SupportedLocale);
-        break;
-      }
+        case 'loadPuppetTextures': {
+          const store = usePuppetStore.getState();
+          store.setLoadError(null);
+          void decodeMoc3ExternalTextures(msg.textures)
+            .then((textures) => {
+              usePuppetStore.getState().setTextures(textures);
+            })
+            .catch((error) => {
+              usePuppetStore
+                .getState()
+                .setLoadError(error instanceof Error ? error.message : String(error));
+            });
+          break;
+        }
 
-      default:
-        break;
-    }
-  }, []);
+        case 'loadState': {
+          // Parameter overrides from .nkp project
+          const store = usePuppetStore.getState();
+          if (store.puppetLoaded && controllerRef.current) {
+            // Apply immediately
+            const ctrl = controllerRef.current;
+            for (const [name, value] of Object.entries(msg.parameters)) {
+              store.updateParameterValue(name, value);
+              void ctrl.setParameter(name, value);
+            }
+          } else {
+            // Buffer until puppet loads
+            pendingStateRef.current = msg.parameters;
+          }
+          break;
+        }
+
+        case 'noPuppetSource': {
+          const store = usePuppetStore.getState();
+          store.setLoadError(null);
+          store.setNoPuppetSource(true);
+          break;
+        }
+
+        case 'puppetImported': {
+          const store = usePuppetStore.getState();
+          store.setLoadError(null);
+          store.setNoPuppetSource(false);
+          break;
+        }
+
+        case 'setLocale': {
+          setLocale(msg.locale as SupportedLocale);
+          break;
+        }
+
+        default:
+          break;
+      }
+    },
+    [loadPuppetMessage],
+  );
 
   useEffect(() => {
     window.addEventListener('message', handleMessage);
@@ -272,7 +337,11 @@ export function PuppetApp() {
       <div className="flex flex-col h-screen w-screen overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
           {/* Main content area */}
-          {noPuppetSource ? (
+          {loadError ? (
+            <div className="flex-1 flex items-center justify-center text-sm text-[var(--vscode-errorForeground)]">
+              <PuppetLoadErrorPlaceholder message={loadError} />
+            </div>
+          ) : noPuppetSource ? (
             <div className="flex-1 flex items-center justify-center text-sm opacity-50">
               <PuppetEmptyState />
             </div>
@@ -328,4 +397,13 @@ export function PuppetApp() {
       </div>
     </I18nProvider>
   );
+}
+
+function base64ToArrayBuffer(data: string): ArrayBuffer {
+  const binaryStr = atob(data);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return bytes.buffer;
 }

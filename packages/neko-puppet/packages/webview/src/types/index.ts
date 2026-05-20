@@ -3,12 +3,25 @@
  *
  * Defines the messages exchanged between extension host and puppet webview.
  */
+import type { PuppetAuxiliaryJsonData, PuppetExternalTextureData } from '@neko/shared';
 
 /** Messages from extension → webview */
 export type ExtensionToWebviewMessage =
-  | { type: 'loadPuppet'; data: string }
-  | { type: 'loadPuppetSource'; source: string }
+  | {
+      type: 'loadPuppet';
+      data: string;
+      textures?: readonly PuppetExternalTextureData[];
+      auxiliary?: PuppetAuxiliaryJsonData;
+    }
+  | {
+      type: 'loadPuppetSource';
+      source: string;
+      textures?: readonly PuppetExternalTextureData[];
+      auxiliary?: PuppetAuxiliaryJsonData;
+    }
+  | { type: 'loadPuppetTextures'; textures: readonly PuppetExternalTextureData[] }
   | { type: 'enginePort'; port: number }
+  | { type: 'engineUnavailable'; message?: string }
   | { type: 'setLocale'; locale: string }
   | { type: 'loadState'; parameters: Record<string, number> }
   | { type: 'noPuppetSource' }
@@ -21,5 +34,4 @@ export type WebviewToExtensionMessage =
   | { type: 'state:save'; parameters: Record<string, number> }
   | { type: 'puppet:parametersLoaded'; parameters: string[] }
   | { type: 'puppet:import' }
-  | { type: 'puppet:template'; templateId: string }
   | { type: 'puppet:dropFile'; name: string; data: string };

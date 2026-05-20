@@ -29,12 +29,12 @@ export const zhCN: MessageBundle = {
   'puppet.morph.stopped': '已停止',
 
   // Import
-  'puppet.import.title': '导入 Puppet (.inp / .moc3)',
-  'puppet.import.dropHint': '拖入 .inp 或 .moc3 文件或点击导入',
+  'puppet.import.title': '导入 Puppet (.moc3)',
+  'puppet.import.dropHint': '拖入 .moc3 文件或点击导入',
 
   // Empty state
-  'puppet.empty.hint': '拖入 .inp 或 .moc3 文件，或选择以下方式开始',
-  'puppet.empty.import': '导入文件',
+  'puppet.empty.hint': '拖入 .moc3 文件，或选择以下方式开始',
+  'puppet.empty.import': '导入 MOC3',
   'puppet.empty.templateBlank': '空白骨架',
   'puppet.empty.templateHumanoid': '简单人形',
 
@@ -42,4 +42,6 @@ export const zhCN: MessageBundle = {
   'puppet.status.ready': '就绪',
   'puppet.status.loading': '正在加载 Puppet...',
   'puppet.status.loaded': 'Puppet 已加载',
+  'puppet.status.loadFailed': 'Puppet 加载失败',
+  'puppet.status.engineUnavailable': 'Neko Engine 不可用。请启动引擎后重新打开 Puppet。',
 };

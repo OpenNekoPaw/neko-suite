@@ -1,4 +1,8 @@
 {
   "neko.puppet.editor.title": "Puppet 编辑器",
-  "neko.puppet.new.title": "新建 Puppet"
+  "neko.puppet.new.title": "新建 Puppet",
+  "neko.puppet.importLive2dBundle.title": "导入 Live2D Bundle",
+  "neko.puppet.exportModel.title": "导出 Puppet 模型包",
+  "neko.puppet.exportMotions.title": "导出 Puppet 动作包",
+  "neko.puppet.exportConfig.title": "导出 Puppet 配置包"
 }

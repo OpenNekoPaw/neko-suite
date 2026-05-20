@@ -12,7 +12,12 @@
  */
 
 import { H264StreamClient, type EngineClient } from '@neko/neko-client';
-import type { EditorKeyframeTrack, ParameterCurveInfo, EasingType } from '@neko/shared';
+import type {
+  EditorKeyframeTrack,
+  EasingType,
+  ParameterCurveInfo,
+  PuppetAuxiliaryJsonData,
+} from '@neko/shared';
 import type {
   AnimationClipInfo,
   DeformedMesh,
@@ -28,6 +33,9 @@ export interface IPuppetController {
 
   /** Load an INP/MOC3 puppet from an engine-resolved local source. */
   loadSource(source: string): Promise<PuppetSnapshot>;
+
+  /** Load Live2D auxiliary JSON after the MOC3 source has been loaded. */
+  loadAuxiliary(auxiliary: PuppetAuxiliaryJsonData): Promise<void>;
 
   /** Set a parameter value (triggers deformation) */
   setParameter(name: string, value: number): Promise<void>;
@@ -135,6 +143,10 @@ export class PuppetController implements IPuppetController {
     const raw = await this.engine.loadPuppetSource(source);
     this.snapshot = raw as unknown as PuppetSnapshot;
     return this.snapshot;
+  }
+
+  async loadAuxiliary(auxiliary: PuppetAuxiliaryJsonData): Promise<void> {
+    await this.engine.loadPuppetAuxiliary(auxiliary);
   }
 
   async setParameter(name: string, value: number): Promise<void> {

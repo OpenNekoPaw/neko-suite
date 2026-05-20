@@ -2,18 +2,15 @@
  * Puppet Editor Provider - Custom editor for .nkp puppet project files
  *
  * Implements VSCode CustomEditorProvider to open Neko Puppet project files (.nkp)
- * with full read-write support. Also supports read-only opening of .inp files.
+ * with full read-write support. Also supports legacy read-only opening of .inp files.
  *
- * .nkp is a JSON project format that references an external .inp binary file
+ * .nkp is a JSON project format that references an external .moc3 binary file
  * and persists parameter overrides and viewport state.
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import {
-  injectLocaleAttribute,
-  generateMinimalInp,
-  generateHumanoidInp,
-} from '@neko/shared/vscode/extension';
+import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import { Live2dBundleLoader } from '../live2d';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PuppetEditorProvider');
@@ -68,6 +65,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   private _activeDocument: PuppetDocument | undefined;
   private enginePort: number | undefined;
   private activeParameterNames = new Set<string>();
+  private readonly live2dBundleLoader = new Live2dBundleLoader();
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
     vscode.CustomDocumentContentChangeEvent<PuppetDocument>
@@ -224,6 +222,11 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         const port = await this.ensureEnginePort();
         if (port) {
           webviewPanel.webview.postMessage({ type: 'enginePort', port });
+        } else {
+          webviewPanel.webview.postMessage({
+            type: 'engineUnavailable',
+            message: 'Neko Engine frame server is not available.',
+          });
         }
 
         if (document.isInpFile) {
@@ -232,12 +235,14 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
             source: document.uri.fsPath,
           });
         } else if (document.projectData) {
-          // .nkp project: resolve .inp src and load
+          // .nkp project: resolve puppet source and load
           const srcPath = document.projectData.puppet.src;
           if (srcPath) {
             await this.loadInpFromProject(document, webviewPanel);
+          } else if (document.projectData.puppet.bundle) {
+            await this.loadLive2dBundleFromProject(document, webviewPanel);
           } else {
-            // No .inp linked — webview shows import UI
+            // No puppet source linked — webview shows import UI
             webviewPanel.webview.postMessage({ type: 'noPuppetSource' });
           }
 
@@ -254,6 +259,11 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         const port = await this.ensureEnginePort();
         if (port) {
           webviewPanel.webview.postMessage({ type: 'enginePort', port });
+        } else {
+          webviewPanel.webview.postMessage({
+            type: 'engineUnavailable',
+            message: 'Neko Engine frame server is not available.',
+          });
         }
         break;
       }
@@ -280,66 +290,49 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
       }
 
       case 'puppet:import': {
-        // Open file dialog to select .inp file
+        // Open file dialog to select a new MOC3 source. Legacy .inp remains readable
+        // when an existing file/project already points to it, but is not promoted here.
         if (document.isInpFile) break;
         const uris = await vscode.window.showOpenDialog({
           canSelectFiles: true,
           canSelectFolders: false,
           canSelectMany: false,
           filters: {
-            [vscode.l10n.t('neko.puppet.import.filter')]: ['inp', 'moc3'],
+            [vscode.l10n.t('neko.puppet.import.filter')]: ['moc3', 'zip'],
           },
         });
 
         if (uris && uris[0] && document.projectData) {
-          // Compute relative path from .nkp to .inp
+          if (uris[0].fsPath.toLowerCase().endsWith('.zip')) {
+            await this.importLive2dBundleIntoProject(document, webviewPanel, uris[0]);
+            break;
+          }
+
+          // Compute relative path from .nkp to .moc3
           const nkpDir = path.dirname(document.uri.fsPath);
           const relativePath = path.relative(nkpDir, uris[0].fsPath).replace(/\\/g, '/');
           document.projectData.puppet.src = `./${relativePath}`;
           document.dirty = true;
           this._onDidChangeCustomDocument.fire({ document });
 
-          // Load the selected .inp
+          // Load the selected MOC3
           await this.loadInpFromProject(document, webviewPanel);
 
           // Notify webview that puppet was imported
           webviewPanel.webview.postMessage({
             type: 'puppetImported',
-            name: path.basename(uris[0].fsPath).replace(/\.(inp|moc3)$/, ''),
+            name: path.basename(uris[0].fsPath).replace(/\.moc3$/, ''),
           });
         }
         break;
       }
 
-      case 'puppet:template': {
-        // Generate .inp from template and load it
-        if (document.isInpFile || !document.projectData) break;
-        const templateId = message.templateId as string;
-        const name = path.basename(document.uri.fsPath, '.nkp');
-        const inpData =
-          templateId === 'humanoid' ? generateHumanoidInp(name) : generateMinimalInp(name);
-
-        // Write .inp alongside .nkp
-        const nkpDir = path.dirname(document.uri.fsPath);
-        const inpName = `${name}.inp`;
-        const inpUri = vscode.Uri.file(path.join(nkpDir, inpName));
-        await vscode.workspace.fs.writeFile(inpUri, inpData);
-
-        // Update project reference
-        document.projectData.puppet.src = `./${inpName}`;
-        document.dirty = true;
-        this._onDidChangeCustomDocument.fire({ document });
-
-        // Load and notify
-        await this.loadInpFromProject(document, webviewPanel);
-        webviewPanel.webview.postMessage({ type: 'puppetImported', name });
-        break;
-      }
-
       case 'puppet:dropFile': {
-        // Save dropped .inp file and load it
+        // Save dropped .moc3 file and load it. Legacy .inp can still be opened directly,
+        // but new import/drop entrypoints only promote MOC3.
         if (document.isInpFile || !document.projectData) break;
         const fileName = message.name as string;
+        if (!fileName.endsWith('.moc3')) break;
         const base64Data = message.data as string;
         const fileData = Buffer.from(base64Data, 'base64');
 
@@ -357,7 +350,7 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         await this.loadInpFromProject(document, webviewPanel);
         webviewPanel.webview.postMessage({
           type: 'puppetImported',
-          name: path.basename(fileName).replace(/\.(inp|moc3)$/, ''),
+          name: path.basename(fileName).replace(/\.moc3$/, ''),
         });
         break;
       }
@@ -368,7 +361,8 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
   }
 
   /**
-   * Resolve .inp path from .nkp project and let the webview load it through engine source refs.
+   * Resolve puppet source path from .nkp project and let the webview load it.
+   * Existing .inp references remain readable for compatibility.
    */
   private async loadInpFromProject(
     document: PuppetDocument,
@@ -384,6 +378,65 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     } catch (err) {
       logger.error(`Failed to read .inp from project: ${err}`);
     }
+  }
+
+  private async loadLive2dBundleFromProject(
+    document: PuppetDocument,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    const bundlePath = document.projectData?.puppet.bundle?.path;
+    if (!bundlePath) return;
+
+    try {
+      const nkpDir = path.dirname(document.uri.fsPath);
+      const bundleAbsPath = path.resolve(nkpDir, bundlePath);
+      const bundleBytes = await vscode.workspace.fs.readFile(vscode.Uri.file(bundleAbsPath));
+      const loaded = this.live2dBundleLoader.loadLive2dBundle(bundlePath, bundleBytes);
+      document.projectData.puppet.bundle = loaded.projectData.puppet.bundle;
+      document.projectData.bundleIndex = loaded.projectData.bundleIndex;
+      webviewPanel.webview.postMessage({
+        type: 'loadPuppet',
+        data: loaded.runtime.mocData,
+        textures: loaded.runtime.textures,
+        auxiliary: loaded.runtime.auxiliary,
+      });
+    } catch (err) {
+      logger.error(`Failed to load Live2D bundle from project: ${err}`);
+      webviewPanel.webview.postMessage({
+        type: 'engineUnavailable',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private async importLive2dBundleIntoProject(
+    document: PuppetDocument,
+    webviewPanel: vscode.WebviewPanel,
+    bundleUri: vscode.Uri,
+  ): Promise<void> {
+    const bundleBytes = await vscode.workspace.fs.readFile(bundleUri);
+    const nkpDir = path.dirname(document.uri.fsPath);
+    const relativePath = './' + path.relative(nkpDir, bundleUri.fsPath).replace(/\\/g, '/');
+    const loaded = this.live2dBundleLoader.loadLive2dBundle(relativePath, bundleBytes);
+
+    document.projectData = {
+      ...document.projectData!,
+      puppet: loaded.projectData.puppet,
+      bundleIndex: loaded.projectData.bundleIndex,
+    };
+    document.dirty = true;
+    this._onDidChangeCustomDocument.fire({ document });
+
+    webviewPanel.webview.postMessage({
+      type: 'loadPuppet',
+      data: loaded.runtime.mocData,
+      textures: loaded.runtime.textures,
+      auxiliary: loaded.runtime.auxiliary,
+    });
+    webviewPanel.webview.postMessage({
+      type: 'puppetImported',
+      name: path.basename(bundleUri.fsPath).replace(/\.zip$/i, ''),
+    });
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {

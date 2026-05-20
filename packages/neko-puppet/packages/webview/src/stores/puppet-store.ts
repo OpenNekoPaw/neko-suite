@@ -24,6 +24,8 @@ export interface PuppetStore {
   isPlayingPhysics: boolean;
   /** Whether the .nkp has no puppet.src linked (shows import UI) */
   noPuppetSource: boolean;
+  /** Last load failure, shown instead of leaving the editor in an endless loading state. */
+  loadError: string | null;
   /** Decoded texture images from INP TEX_SECT */
   textures: ImageBitmap[];
   /** Canvas viewport (zoom + pan) */
@@ -59,6 +61,7 @@ export interface PuppetStore {
   updateParameterValue: (name: string, value: number) => void;
   setPlayingPhysics: (playing: boolean) => void;
   setNoPuppetSource: (noPuppetSource: boolean) => void;
+  setLoadError: (message: string | null) => void;
   setTextures: (textures: ImageBitmap[]) => void;
   setViewport: (viewport: { zoom: number; panX: number; panY: number }) => void;
 
@@ -84,6 +87,7 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   deformedMeshes: [],
   isPlayingPhysics: false,
   noPuppetSource: false,
+  loadError: null,
   textures: [],
   viewport: { zoom: 2, panX: 0, panY: 0 },
 
@@ -115,7 +119,17 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
 
   setPlayingPhysics: (playing) => set({ isPlayingPhysics: playing }),
   setNoPuppetSource: (noPuppetSource) => set({ noPuppetSource }),
-  setTextures: (textures) => set({ textures }),
+  setLoadError: (message) => set({ loadError: message }),
+  setTextures: (textures) =>
+    set((state) => {
+      const nextTextures = new Set(textures);
+      for (const texture of state.textures) {
+        if (!nextTextures.has(texture)) {
+          texture.close();
+        }
+      }
+      return { textures };
+    }),
   setViewport: (viewport) => set({ viewport }),
 
   setAnimations: (clips) => set({ animations: clips }),
@@ -144,6 +158,7 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
         puppetSnapshot: null,
         puppetParameters: [],
         deformedMeshes: [],
+        loadError: null,
         textures: [],
         viewport: { zoom: 2, panX: 0, panY: 0 },
         isPlayingPhysics: false,

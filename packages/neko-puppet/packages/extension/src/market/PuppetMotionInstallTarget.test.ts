@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AssetManifest } from '@neko/shared';
-import { PuppetMotionInstallTarget } from './PuppetMotionInstallTarget';
+import type { AssetManifest, MediaKind } from '@neko/shared';
+import {
+  PuppetConfigInstallTarget,
+  PuppetModelInstallTarget,
+  PuppetMotionInstallTarget,
+} from './PuppetMediaInstallTarget';
 
 describe('PuppetMotionInstallTarget', () => {
   it('routes only puppet-motion media packages and reloads presets', async () => {
@@ -16,13 +20,52 @@ describe('PuppetMotionInstallTarget', () => {
   });
 });
 
+describe('PuppetMediaInstallTarget', () => {
+  it('routes puppet model, motion, and config media packages to separate preset roots', () => {
+    const cases = [
+      {
+        kind: 'puppet-model',
+        target: new PuppetModelInstallTarget('/tmp/puppet-model'),
+        expected: '/tmp/puppet-model/studio/sakura',
+      },
+      {
+        kind: 'puppet-motion',
+        target: new PuppetMotionInstallTarget('/tmp/puppet-motion'),
+        expected: '/tmp/puppet-motion/studio/sakura',
+      },
+      {
+        kind: 'puppet-config',
+        target: new PuppetConfigInstallTarget('/tmp/puppet-config'),
+        expected: '/tmp/puppet-config/studio/sakura',
+      },
+    ] as const;
+
+    for (const entry of cases) {
+      const manifest = puppetMediaManifest(entry.kind);
+      expect(() => entry.target.validateManifest(manifest)).not.toThrow();
+      expect(entry.target.getInstallPath(manifest)).toBe(entry.expected);
+    }
+  });
+
+  it('rejects mismatched puppet media kinds', () => {
+    const target = new PuppetModelInstallTarget('/tmp/puppet-model');
+    expect(() => target.validateManifest(puppetMediaManifest('puppet-config'))).toThrow(
+      'cannot install media kind',
+    );
+  });
+});
+
 function puppetMotionManifest(): AssetManifest {
+  return puppetMediaManifest('puppet-motion', 'walk-cycle');
+}
+
+function puppetMediaManifest(mediaKind: MediaKind, name = 'sakura'): AssetManifest {
   return {
-    id: '@studio/walk-cycle',
-    name: 'walk-cycle',
+    id: `@studio/${name}`,
+    name,
     version: '1.0.0',
     type: 'media',
-    source: { kind: 'local', path: '/tmp/walk-cycle' },
+    source: { kind: 'local', path: `/tmp/${name}` },
     distributionKind: 'archive',
     distribution: {
       license: 'MIT',
@@ -34,7 +77,7 @@ function puppetMotionManifest(): AssetManifest {
     typeMetadata: {
       type: 'media',
       data: {
-        mediaKind: 'puppet-motion',
+        mediaKind,
         fileSize: 1,
       },
     },

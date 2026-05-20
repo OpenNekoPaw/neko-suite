@@ -1,4 +1,8 @@
 {
   "neko.puppet.editor.title": "Puppet Editor",
-  "neko.puppet.new.title": "New Puppet"
+  "neko.puppet.new.title": "New Puppet",
+  "neko.puppet.importLive2dBundle.title": "Import Live2D Bundle",
+  "neko.puppet.exportModel.title": "Export Puppet Model Package",
+  "neko.puppet.exportMotions.title": "Export Puppet Motion Package",
+  "neko.puppet.exportConfig.title": "Export Puppet Config Package"
 }

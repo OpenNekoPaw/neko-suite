@@ -29,12 +29,12 @@ export const en: MessageBundle = {
   'puppet.morph.stopped': 'Stopped',
 
   // Import
-  'puppet.import.title': 'Import Puppet (.inp / .moc3)',
-  'puppet.import.dropHint': 'Drop .inp or .moc3 file or click to import',
+  'puppet.import.title': 'Import Puppet (.moc3)',
+  'puppet.import.dropHint': 'Drop .moc3 file or click to import',
 
   // Empty state
-  'puppet.empty.hint': 'Drop .inp or .moc3 file here or choose an option below',
-  'puppet.empty.import': 'Import File',
+  'puppet.empty.hint': 'Drop .moc3 file here or choose an option below',
+  'puppet.empty.import': 'Import MOC3',
   'puppet.empty.templateBlank': 'Blank Skeleton',
   'puppet.empty.templateHumanoid': 'Simple Humanoid',
 
@@ -42,4 +42,7 @@ export const en: MessageBundle = {
   'puppet.status.ready': 'Ready',
   'puppet.status.loading': 'Loading puppet...',
   'puppet.status.loaded': 'Puppet loaded',
+  'puppet.status.loadFailed': 'Failed to load puppet',
+  'puppet.status.engineUnavailable':
+    'Neko Engine is not available. Start the engine and reopen the puppet.',
 };
