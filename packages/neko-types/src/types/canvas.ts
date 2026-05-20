@@ -5,6 +5,7 @@ import type {
   NodePreviewDescriptor,
 } from './canvas-layered';
 import type { NkProjectType } from './canvas-drop';
+import type { DocumentArchiveResourceRef } from './document-reading';
 
 // =============================================================================
 // Canvas Types - Infinite Canvas Editor Data Model
@@ -33,6 +34,44 @@ export type CanvasNodeType =
   | 'model'
   | 'canvas-embed'
   | 'project';
+
+export type DocumentResourceStatusReason =
+  | 'cache-missing'
+  | 'unauthorized-cache-root'
+  | 'projection-failed';
+
+export interface DocumentResourceStatus {
+  state: 'unavailable';
+  reason?: DocumentResourceStatusReason;
+  message?: string;
+}
+
+export function isDocumentResourceStatusReason(
+  value: unknown,
+): value is DocumentResourceStatusReason {
+  return (
+    value === 'cache-missing' ||
+    value === 'unauthorized-cache-root' ||
+    value === 'projection-failed'
+  );
+}
+
+export function parseDocumentResourceStatus(value: unknown): DocumentResourceStatus | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const status = value as Record<string, unknown>;
+  if (status['state'] !== 'unavailable') {
+    return undefined;
+  }
+  const reason = status['reason'];
+  const message = status['message'];
+  return {
+    state: 'unavailable',
+    ...(isDocumentResourceStatusReason(reason) ? { reason } : {}),
+    ...(typeof message === 'string' ? { message } : {}),
+  };
+}
 
 /**
  * Connection anchor position on a node
@@ -109,10 +148,18 @@ export interface CanvasNodeBase {
 export interface MediaCanvasNode extends CanvasNodeBase {
   type: 'media';
   data: {
-    /** Relative path to the media file */
+    /** Relative path to the media file. Empty when documentResourceRef is the persistent source. */
     assetPath: string;
+    /** Stable reference to a document/archive entry when the media is linked from a container. */
+    documentResourceRef?: DocumentArchiveResourceRef;
+    /** Runtime-only document cache status. Not persisted. */
+    documentResourceStatus?: DocumentResourceStatus;
+    /** Runtime-only preview URI/path materialized from documentResourceRef. Not persisted. */
+    runtimeAssetPath?: string;
     /** Relative path to thumbnail image */
     thumbnailPath?: string;
+    /** Runtime-only thumbnail URI/path. Not persisted. */
+    runtimeThumbnailPath?: string;
     /** Media type hint */
     mediaType?: 'video' | 'image' | 'audio';
     /** Duration in seconds (for video/audio) */

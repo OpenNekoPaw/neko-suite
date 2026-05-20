@@ -23,6 +23,28 @@ export type DocumentFormat =
   | 'url'
   | 'unknown';
 
+export const DOCUMENT_FORMATS = [
+  'pdf',
+  'epub',
+  'cbz',
+  'cbr',
+  'docx',
+  'doc',
+  'pptx',
+  'ppt',
+  'text',
+  'markdown',
+  'fountain',
+  'html',
+  'json',
+  'yaml',
+  'xlsx',
+  'xls',
+  'fdx',
+  'url',
+  'unknown',
+] as const satisfies readonly DocumentFormat[];
+
 export interface DocumentFileIdentity {
   readonly fileId: string;
   readonly sizeBytes?: number;
@@ -107,6 +129,34 @@ export interface DocumentRange {
 
 export type DocumentContentKind = 'text' | 'image' | 'mixed';
 
+export type DocumentArchiveResourceVersionPolicy =
+  | 'read-only-source'
+  | 'versioned-export'
+  | 'replace-reference';
+
+export const DOCUMENT_ARCHIVE_RESOURCE_VERSION_POLICIES = [
+  'read-only-source',
+  'versioned-export',
+  'replace-reference',
+] as const satisfies readonly DocumentArchiveResourceVersionPolicy[];
+
+export interface DocumentArchiveResourceRef {
+  readonly kind: 'document-entry';
+  readonly source: DocumentSourceRef;
+  readonly entryPath?: string;
+  readonly locator?: DocumentLocator;
+  readonly cachePath?: string;
+  readonly versionPolicy?: DocumentArchiveResourceVersionPolicy;
+}
+
+export interface CreateDocumentEntryResourceRefInput {
+  readonly source?: DocumentSourceRef;
+  readonly locator?: DocumentLocator;
+  readonly entryPath?: string;
+  readonly cachePath: string;
+  readonly versionPolicy?: DocumentArchiveResourceVersionPolicy;
+}
+
 export interface DocumentImageInfo {
   readonly path: string;
   readonly width?: number;
@@ -114,6 +164,7 @@ export interface DocumentImageInfo {
   readonly mimeType?: string;
   readonly byteSize?: number;
   readonly locator?: DocumentLocator;
+  readonly resourceRef?: DocumentArchiveResourceRef;
 }
 
 export interface DocumentExcerpt {
@@ -215,4 +266,357 @@ export interface DocumentContextData {
   readonly locator?: DocumentLocator;
   readonly range?: DocumentRange;
   readonly excerpt?: DocumentExcerpt;
+}
+
+export function isDocumentFormat(value: unknown): value is DocumentFormat {
+  return typeof value === 'string' && includesString(DOCUMENT_FORMATS, value);
+}
+
+export function isDocumentArchiveResourceVersionPolicy(
+  value: unknown,
+): value is DocumentArchiveResourceVersionPolicy {
+  return (
+    typeof value === 'string' && includesString(DOCUMENT_ARCHIVE_RESOURCE_VERSION_POLICIES, value)
+  );
+}
+
+export function isDocumentArchiveResourceRef(value: unknown): value is DocumentArchiveResourceRef {
+  return parseDocumentArchiveResourceRef(value) !== undefined;
+}
+
+export function parseDocumentArchiveResourceRef(
+  value: unknown,
+): DocumentArchiveResourceRef | undefined {
+  const resource = asRecord(value);
+  if (!resource || resource['kind'] !== 'document-entry') {
+    return undefined;
+  }
+
+  const source = parseDocumentSourceRef(resource['source']);
+  if (!source) {
+    return undefined;
+  }
+
+  const entryPath = readOptionalStringField(resource, 'entryPath');
+  const cachePath = readOptionalStringField(resource, 'cachePath');
+  const versionPolicy = readOptionalVersionPolicyField(resource, 'versionPolicy');
+  const locator = readOptionalLocatorField(resource, 'locator');
+  if (entryPath === null || cachePath === null || versionPolicy === null || locator === null) {
+    return undefined;
+  }
+
+  return {
+    kind: 'document-entry',
+    source,
+    ...(entryPath ? { entryPath } : {}),
+    ...(locator ? { locator } : {}),
+    ...(cachePath ? { cachePath } : {}),
+    ...(versionPolicy ? { versionPolicy } : {}),
+  };
+}
+
+export function createDocumentEntryResourceRef(
+  input: CreateDocumentEntryResourceRefInput,
+): DocumentArchiveResourceRef | undefined {
+  if (!input.source || input.cachePath.length === 0) {
+    return undefined;
+  }
+
+  const source = parseDocumentSourceRef(input.source);
+  const locator = input.locator ? parseDocumentLocator(input.locator) : undefined;
+  const versionPolicy = input.versionPolicy ?? 'versioned-export';
+  if (!source || !isDocumentArchiveResourceVersionPolicy(versionPolicy)) {
+    return undefined;
+  }
+
+  return {
+    kind: 'document-entry',
+    source,
+    ...(input.entryPath ? { entryPath: input.entryPath } : {}),
+    ...(locator ? { locator } : {}),
+    cachePath: input.cachePath,
+    versionPolicy,
+  };
+}
+
+export function parseDocumentSourceRef(value: unknown): DocumentSourceRef | undefined {
+  const source = asRecord(value);
+  if (!source) {
+    return undefined;
+  }
+
+  const filePath = readRequiredString(source['filePath']);
+  const format = source['format'];
+  if (!filePath || !isDocumentFormat(format)) {
+    return undefined;
+  }
+
+  const fileId = readOptionalStringField(source, 'fileId');
+  const uri = readOptionalStringField(source, 'uri');
+  const token = readOptionalStringField(source, 'token');
+  const rangeUrl = readOptionalStringField(source, 'rangeUrl');
+  const entryBaseUrl = readOptionalStringField(source, 'entryBaseUrl');
+  const identity = readOptionalFileIdentityField(source, 'identity');
+  if (
+    fileId === null ||
+    uri === null ||
+    token === null ||
+    rangeUrl === null ||
+    entryBaseUrl === null ||
+    identity === null
+  ) {
+    return undefined;
+  }
+
+  return {
+    filePath,
+    format,
+    ...(fileId ? { fileId } : {}),
+    ...(identity ? { identity } : {}),
+    ...(uri ? { uri } : {}),
+    ...(token ? { token } : {}),
+    ...(rangeUrl ? { rangeUrl } : {}),
+    ...(entryBaseUrl ? { entryBaseUrl } : {}),
+  };
+}
+
+export function parseDocumentLocator(value: unknown): DocumentLocator | undefined {
+  const locator = asRecord(value);
+  if (!locator || typeof locator['kind'] !== 'string') {
+    return undefined;
+  }
+
+  switch (locator['kind']) {
+    case 'page':
+      return parsePageLocator(locator);
+    case 'chapter':
+      return parseChapterLocator(locator);
+    case 'slide':
+      return parseSlideLocator(locator);
+    case 'text-range':
+      return parseTextRangeLocator(locator);
+    case 'region':
+      return parseRegionLocator(locator);
+    default:
+      return undefined;
+  }
+}
+
+function parsePageLocator(locator: Record<string, unknown>): DocumentPageLocator | undefined {
+  if (!isFiniteNumber(locator['pageNumber']) || !isFiniteNumber(locator['pageIndex'])) {
+    return undefined;
+  }
+
+  const entryName = readOptionalStringField(locator, 'entryName');
+  if (entryName === null) {
+    return undefined;
+  }
+
+  return {
+    kind: 'page',
+    pageNumber: locator['pageNumber'],
+    pageIndex: locator['pageIndex'],
+    ...(entryName ? { entryName } : {}),
+  };
+}
+
+function parseChapterLocator(locator: Record<string, unknown>): DocumentChapterLocator | undefined {
+  const chapterHref = readRequiredString(locator['chapterHref']);
+  if (!chapterHref) {
+    return undefined;
+  }
+
+  const spineIndex = readOptionalNumberField(locator, 'spineIndex');
+  const title = readOptionalStringField(locator, 'title');
+  const cfi = readOptionalStringField(locator, 'cfi');
+  if (spineIndex === null || title === null || cfi === null) {
+    return undefined;
+  }
+
+  return {
+    kind: 'chapter',
+    chapterHref,
+    ...(spineIndex !== undefined ? { spineIndex } : {}),
+    ...(title ? { title } : {}),
+    ...(cfi ? { cfi } : {}),
+  };
+}
+
+function parseSlideLocator(locator: Record<string, unknown>): DocumentSlideLocator | undefined {
+  if (!isFiniteNumber(locator['slideNumber']) || !isFiniteNumber(locator['slideIndex'])) {
+    return undefined;
+  }
+
+  return {
+    kind: 'slide',
+    slideNumber: locator['slideNumber'],
+    slideIndex: locator['slideIndex'],
+  };
+}
+
+function parseTextRangeLocator(
+  locator: Record<string, unknown>,
+): DocumentTextRangeLocator | undefined {
+  const startChar = readOptionalNumberField(locator, 'startChar');
+  const endChar = readOptionalNumberField(locator, 'endChar');
+  const startLine = readOptionalNumberField(locator, 'startLine');
+  const endLine = readOptionalNumberField(locator, 'endLine');
+  const paragraphIndex = readOptionalNumberField(locator, 'paragraphIndex');
+  const heading = readOptionalStringField(locator, 'heading');
+  if (
+    startChar === null ||
+    endChar === null ||
+    startLine === null ||
+    endLine === null ||
+    paragraphIndex === null ||
+    heading === null
+  ) {
+    return undefined;
+  }
+
+  return {
+    kind: 'text-range',
+    ...(startChar !== undefined ? { startChar } : {}),
+    ...(endChar !== undefined ? { endChar } : {}),
+    ...(startLine !== undefined ? { startLine } : {}),
+    ...(endLine !== undefined ? { endLine } : {}),
+    ...(paragraphIndex !== undefined ? { paragraphIndex } : {}),
+    ...(heading ? { heading } : {}),
+  };
+}
+
+function parseRegionLocator(locator: Record<string, unknown>): DocumentRegionLocator | undefined {
+  if (!isFiniteNumber(locator['pageNumber'])) {
+    return undefined;
+  }
+
+  const pageIndex = readOptionalNumberField(locator, 'pageIndex');
+  const entryName = readOptionalStringField(locator, 'entryName');
+  const region = parseDocumentRegion(locator['region']);
+  if (pageIndex === null || entryName === null || !region) {
+    return undefined;
+  }
+
+  return {
+    kind: 'region',
+    pageNumber: locator['pageNumber'],
+    ...(pageIndex !== undefined ? { pageIndex } : {}),
+    ...(entryName ? { entryName } : {}),
+    region,
+  };
+}
+
+function parseDocumentRegion(value: unknown): DocumentRegion | undefined {
+  const region = asRecord(value);
+  if (
+    !region ||
+    !isFiniteNumber(region['x']) ||
+    !isFiniteNumber(region['y']) ||
+    !isFiniteNumber(region['width']) ||
+    !isFiniteNumber(region['height'])
+  ) {
+    return undefined;
+  }
+
+  return {
+    x: region['x'],
+    y: region['y'],
+    width: region['width'],
+    height: region['height'],
+  };
+}
+
+function parseDocumentFileIdentity(value: unknown): DocumentFileIdentity | undefined {
+  const identity = asRecord(value);
+  if (!identity) {
+    return undefined;
+  }
+
+  const fileId = readRequiredString(identity['fileId']);
+  if (!fileId) {
+    return undefined;
+  }
+
+  const sizeBytes = readOptionalNumberField(identity, 'sizeBytes');
+  const mtimeMs = readOptionalNumberField(identity, 'mtimeMs');
+  const hash = readOptionalStringField(identity, 'hash');
+  if (sizeBytes === null || mtimeMs === null || hash === null) {
+    return undefined;
+  }
+
+  return {
+    fileId,
+    ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+    ...(mtimeMs !== undefined ? { mtimeMs } : {}),
+    ...(hash ? { hash } : {}),
+  };
+}
+
+function readOptionalFileIdentityField(
+  record: Record<string, unknown>,
+  key: string,
+): DocumentFileIdentity | undefined | null {
+  if (!(key in record)) {
+    return undefined;
+  }
+  return parseDocumentFileIdentity(record[key]) ?? null;
+}
+
+function readOptionalLocatorField(
+  record: Record<string, unknown>,
+  key: string,
+): DocumentLocator | undefined | null {
+  if (!(key in record)) {
+    return undefined;
+  }
+  return parseDocumentLocator(record[key]) ?? null;
+}
+
+function readOptionalVersionPolicyField(
+  record: Record<string, unknown>,
+  key: string,
+): DocumentArchiveResourceVersionPolicy | undefined | null {
+  if (!(key in record)) {
+    return undefined;
+  }
+  const value = record[key];
+  return isDocumentArchiveResourceVersionPolicy(value) ? value : null;
+}
+
+function readOptionalStringField(
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined | null {
+  if (!(key in record)) {
+    return undefined;
+  }
+  return typeof record[key] === 'string' ? record[key] : null;
+}
+
+function readOptionalNumberField(
+  record: Record<string, unknown>,
+  key: string,
+): number | undefined | null {
+  if (!(key in record)) {
+    return undefined;
+  }
+  return isFiniteNumber(record[key]) ? record[key] : null;
+}
+
+function readRequiredString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function includesString<T extends readonly string[]>(values: T, value: string): value is T[number] {
+  return values.includes(value as T[number]);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

@@ -50,6 +50,7 @@ import type {
   SketchAIProgressMessage,
 } from './sketch-ai';
 import type { NekoModelAPI } from './model-agent-api';
+import type { DocumentArchiveResourceRef } from './document-reading';
 
 export interface NekoDisposableLike {
   dispose(): void;
@@ -243,6 +244,13 @@ export type CanvasNodeUpdateData =
   | Partial<SceneGroupCanvasNode['data']>
   | Partial<GalleryCanvasNode['data']>;
 
+export interface CanvasImportAssetRequest {
+  readonly path: string;
+  readonly type?: 'image' | 'video' | 'audio' | 'model';
+  readonly name?: string;
+  readonly documentResourceRef?: DocumentArchiveResourceRef;
+}
+
 /**
  * Fired when an asset is added, updated, or removed from the canvas asset library.
  * Distinct from the asset-registry AssetChangeEvent to avoid naming conflicts.
@@ -290,6 +298,11 @@ export interface NekoCanvasAPI {
      */
     getById(id: string): Promise<Asset | null>;
   };
+
+  /**
+   * Import media into the active canvas editor.
+   */
+  importAsset(asset: CanvasImportAssetRequest): Promise<boolean>;
 
   canvas: {
     /**

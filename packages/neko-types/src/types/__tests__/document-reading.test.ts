@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
+  DocumentArchiveResourceRef,
   DocumentBatchCursor,
   DocumentContextData,
   DocumentImageInfo,
@@ -7,6 +8,13 @@ import type {
   DocumentManifest,
   DocumentReadResult,
   DocumentSourceRef,
+} from '../document-reading';
+import {
+  createDocumentEntryResourceRef,
+  isDocumentArchiveResourceRef,
+  isDocumentArchiveResourceVersionPolicy,
+  isDocumentFormat,
+  parseDocumentArchiveResourceRef,
 } from '../document-reading';
 
 describe('document reading contracts', () => {
@@ -94,6 +102,84 @@ describe('document reading contracts', () => {
     expect(result.imageInfo?.[0]?.width).toBe(1494);
     expect(result.excerpt?.imageInfo?.[0]?.mimeType).toBe('image/jpeg');
     expect(result.returnedTextChars).toBe(12);
+  });
+
+  it('keeps archive entry references separate from extracted cache paths', () => {
+    const source: DocumentSourceRef = {
+      filePath: '${BOOKS}/comic.epub',
+      format: 'epub',
+      fileId: 'comic-v1',
+    };
+    const resourceRef: DocumentArchiveResourceRef = {
+      kind: 'document-entry',
+      source,
+      entryPath: 'image/page-1.jpg',
+      locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 0 },
+      cachePath: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+      versionPolicy: 'versioned-export',
+    };
+    const imageInfo: DocumentImageInfo = {
+      path: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+      mimeType: 'image/jpeg',
+      resourceRef,
+    };
+
+    expect(imageInfo.path).toBe(resourceRef.cachePath);
+    expect(imageInfo.resourceRef?.source.filePath).toBe('${BOOKS}/comic.epub');
+    expect(imageInfo.resourceRef?.entryPath).toBe('image/page-1.jpg');
+    expect(imageInfo.resourceRef?.versionPolicy).toBe('versioned-export');
+  });
+
+  it('parses and validates archive entry references at shared boundaries', () => {
+    const parsed = parseDocumentArchiveResourceRef({
+      kind: 'document-entry',
+      source: {
+        filePath: '${BOOKS}/comic.epub',
+        format: 'epub',
+        identity: { fileId: 'comic-v1', sizeBytes: 1024, mtimeMs: 1000 },
+      },
+      entryPath: 'image/page-1.jpg',
+      cachePath: '/tmp/page-1.jpg',
+      locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 0 },
+      versionPolicy: 'versioned-export',
+    });
+
+    expect(parsed?.source.identity?.fileId).toBe('comic-v1');
+    expect(parsed?.locator?.kind).toBe('chapter');
+    expect(isDocumentArchiveResourceRef(parsed)).toBe(true);
+    expect(
+      parseDocumentArchiveResourceRef({
+        kind: 'document-entry',
+        source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        entryPath: 12,
+      }),
+    ).toBeUndefined();
+    expect(
+      parseDocumentArchiveResourceRef({
+        kind: 'document-entry',
+        source: { filePath: '${BOOKS}/comic.epub', format: 'bad-format' },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('builds archive entry references with a default version policy', () => {
+    const ref = createDocumentEntryResourceRef({
+      source: {
+        filePath: '${BOOKS}/comic.cbz',
+        format: 'cbz',
+      },
+      entryPath: 'page-1.png',
+      cachePath: '/tmp/page-1.png',
+      locator: { kind: 'page', pageNumber: 1, pageIndex: 0 },
+    });
+
+    expect(ref?.kind).toBe('document-entry');
+    expect(ref?.versionPolicy).toBe('versioned-export');
+    expect(ref?.locator?.kind).toBe('page');
+    expect(createDocumentEntryResourceRef({ cachePath: '/tmp/page-1.png' })).toBeUndefined();
+    expect(isDocumentFormat('xlsx')).toBe(true);
+    expect(isDocumentFormat('zip')).toBe(false);
+    expect(isDocumentArchiveResourceVersionPolicy('replace-reference')).toBe(true);
   });
 
   it('allows preview context to carry source locator and legacy excerpt data together', () => {
