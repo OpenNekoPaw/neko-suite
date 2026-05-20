@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMinimalGlb, generateHumanoidGlb } from '../glb-template';
+import { generateMinimalGlb, generateDefaultCubeGlb, generateHumanoidGlb } from '../glb-template';
 
 const GLB_MAGIC = 0x46546c67; // "glTF"
 const CHUNK_TYPE_JSON = 0x4e4f534a;
@@ -70,6 +70,31 @@ describe('generateMinimalGlb', () => {
   it('total length is 4-byte aligned', () => {
     const result = generateMinimalGlb('Test');
     expect(result.length % 4).toBe(0);
+  });
+});
+
+describe('generateDefaultCubeGlb', () => {
+  it('produces valid GLB with a renderable cube mesh', () => {
+    const result = generateDefaultCubeGlb('CubeScene');
+    const { json } = parseGlb(result);
+
+    expect(json.scenes[0].name).toBe('CubeScene');
+    expect(json.nodes).toHaveLength(1);
+    expect(json.nodes[0]).toMatchObject({ name: 'Cube', mesh: 0 });
+    expect(json.meshes).toHaveLength(1);
+    expect(json.meshes[0].name).toBe('Cube');
+    expect(json.meshes[0].primitives[0].attributes.POSITION).toBe(0);
+    expect(json.meshes[0].primitives[0].indices).toBe(2);
+    expect(json.materials[0]).toMatchObject({ name: 'Default Gray' });
+    expect(json.buffers[0].byteLength).toBeGreaterThan(0);
+  });
+
+  it('includes cube bounds for engine camera framing', () => {
+    const result = generateDefaultCubeGlb('CubeScene');
+    const { json } = parseGlb(result);
+
+    expect(json.accessors[0].min).toEqual([-1, -1, -1]);
+    expect(json.accessors[0].max).toEqual([1, 1, 1]);
   });
 });
 

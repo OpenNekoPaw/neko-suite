@@ -76,6 +76,7 @@ describe('Route A webview boundaries', () => {
 
   it('keeps VideoViewport as Engine frame canvas plus overlay and interaction layers', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
+    const guideOverlay = readSource('components/ViewportGuideOverlay.tsx');
 
     expect(videoViewport).toMatch(/<canvas/);
     expect(videoViewport).toMatch(/model-viewport-frame/);
@@ -86,6 +87,8 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).not.toMatch(/children/);
     expect(videoViewport).not.toMatch(/bg-black/);
     expect(videoViewport).not.toMatch(/<Viewport3D\b|<ModelLoader\b/);
+    expect(guideOverlay).toMatch(/screen-hud/);
+    expect(guideOverlay).not.toMatch(/blender-grid/);
   });
 
   it('drives Blender-style workbench chrome from VSCode light and dark theme tokens', () => {
@@ -158,7 +161,25 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/query\('hitTest', \{/);
     expect(videoViewport).toMatch(/viewportId: MAIN_VIEWPORT_ID,\s*\n\s*sceneId,/);
     expect(videoViewport).toMatch(/sceneRevision,\s*\n\s*resolution: viewportSize \?\? undefined/);
-    expect(videoViewport).toMatch(/camera: buildViewportQueryCamera\(\)/);
+    expect(videoViewport).not.toMatch(/buildViewportQueryCamera|camera:/);
+  });
+
+  it('treats viewport grid as an Engine helper pass instead of a Webview overlay', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const engineClient = readFileSync(
+      resolve(srcRoot, '../../../../neko-client/src/EngineClient.ts'),
+      'utf8',
+    );
+    const sceneTypes = readFileSync(
+      resolve(srcRoot, '../../../../neko-types/src/generated/scene.engine.ts'),
+      'utf8',
+    );
+
+    expect(videoViewport).toMatch(/helperPassesEnabled/);
+    expect(videoViewport).toMatch(/useModelStore\(\(state\) => state\.showViewportGrid\)/);
+    expect(videoViewport).not.toMatch(/<ViewportGuideOverlay visible=\{showViewportGrid\}/);
+    expect(engineClient).toMatch(/helperPassesEnabled: viewport\.helperPassesEnabled/);
+    expect(sceneTypes).toMatch(/helperPassesEnabled\?: boolean/);
   });
 
   it('keeps quality preview as a non-interactive overlay instead of replacing live Route A stream', () => {

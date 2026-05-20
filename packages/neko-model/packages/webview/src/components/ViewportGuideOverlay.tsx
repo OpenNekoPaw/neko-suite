@@ -84,7 +84,7 @@ export function ViewportGuideOverlay({
     <canvas
       ref={canvasRef}
       className="pointer-events-none absolute inset-0 h-full w-full"
-      data-route-a-guide-overlay="blender-grid"
+      data-route-a-guide-overlay="screen-hud"
       aria-hidden="true"
     />
   );

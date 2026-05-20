@@ -15,14 +15,12 @@ import { ShapeCreatorPanel } from './components/shape-creator';
 import { SculptBrushPanel } from './components/sculpt/SculptBrushPanel';
 import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
 import { EngineDiagnosticsPanel } from './components/EngineDiagnosticsPanel';
-import { ViewportGuideOverlay } from './components/ViewportGuideOverlay';
 import { useModelStore } from './stores/modelStore';
 import type {
   AnimationClipInfo,
   ExtensionMessage,
   SceneNodeSnapshot,
   SceneSnapshot,
-  TransformMode,
 } from './types';
 import type { SceneCommandEnvelope } from '@neko/shared';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
@@ -44,7 +42,6 @@ export function App(): React.JSX.Element {
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
-  const showViewportGrid = useModelStore((s) => s.showViewportGrid);
   const sceneNodes = useModelStore((s) => s.sceneNodes);
   const sceneRevision = useModelStore((s) => s.sceneRevision);
   const sceneControlStatus = useModelStore((s) => s.sceneControlStatus);
@@ -713,8 +710,6 @@ export function App(): React.JSX.Element {
         sceneControlStatus={sceneControlStatus}
         sceneNodeCount={sceneNodes.length}
         selectedNodeName={selectedNodeName}
-        transformMode={transformMode}
-        onTransformModeChange={setTransformMode}
       />
       <div className="model-workbench-body">
         <main className="model-viewport-area">
@@ -748,7 +743,6 @@ export function App(): React.JSX.Element {
                   className="h-full w-full object-contain opacity-95"
                   draggable={false}
                 />
-                <ViewportGuideOverlay visible={showViewportGrid} />
               </div>
             ) : null}
             <div className="model-viewport-tools" aria-label="Viewport tools">
@@ -805,8 +799,6 @@ interface WorkbenchTopBarProps {
   sceneControlStatus: SceneControlStatusView;
   sceneNodeCount: number;
   selectedNodeName: string | null;
-  transformMode: TransformMode;
-  onTransformModeChange: (mode: TransformMode) => void;
 }
 
 function WorkbenchTopBar({
@@ -816,8 +808,6 @@ function WorkbenchTopBar({
   sceneControlStatus,
   sceneNodeCount,
   selectedNodeName,
-  transformMode,
-  onTransformModeChange,
 }: WorkbenchTopBarProps): React.JSX.Element {
   const { t } = useTranslation();
   const transportLabel =
@@ -834,19 +824,7 @@ function WorkbenchTopBar({
     <header className="model-workbench-topbar">
       <div className="model-menu-strip">
         <span className="model-app-title">Neko Model</span>
-        <span className="model-workbench-context">{t('workbench.vscodePanel')}</span>
       </div>
-      <nav className="model-workspace-tabs" aria-label="Workspace">
-        {WORKSPACE_TABS.map((workspace) => (
-          <span key={workspace.key} className={workspace.key === 'modeling' ? 'active' : undefined}>
-            {t(workspace.labelKey)}
-          </span>
-        ))}
-      </nav>
-      <TransformModeControls
-        transformMode={transformMode}
-        onTransformModeChange={onTransformModeChange}
-      />
       <div className="model-topbar-status">
         <span className="truncate">{selectedNodeName ?? t('workbench.noSelection')}</span>
         <span>{t('workbench.objectCount', { count: sceneNodeCount })}</span>
@@ -857,46 +835,6 @@ function WorkbenchTopBar({
     </header>
   );
 }
-
-const WORKSPACE_TABS = [
-  { key: 'layout', labelKey: 'workbench.workspace.layout' },
-  { key: 'modeling', labelKey: 'workbench.workspace.modeling' },
-  { key: 'sculpting', labelKey: 'workbench.workspace.sculpting' },
-  { key: 'animation', labelKey: 'workbench.workspace.animation' },
-] as const;
-
-interface TransformModeControlsProps {
-  transformMode: TransformMode;
-  onTransformModeChange: (mode: TransformMode) => void;
-}
-
-function TransformModeControls({
-  transformMode,
-  onTransformModeChange,
-}: TransformModeControlsProps): React.JSX.Element {
-  const { t } = useTranslation();
-
-  return (
-    <div className="model-transform-segment" aria-label={t('transform.mode')}>
-      {(['translate', 'rotate', 'scale'] as const).map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          className={transformMode === mode ? 'active' : undefined}
-          onClick={() => onTransformModeChange(mode)}
-        >
-          {t(MODE_BUTTON_I18N_KEY[mode])}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-const MODE_BUTTON_I18N_KEY: Record<TransformMode, string> = {
-  translate: 'workbench.transform.move',
-  rotate: 'workbench.transform.rotate',
-  scale: 'workbench.transform.scale',
-};
 
 interface RightDockProps {
   outliner: React.ReactNode;
@@ -1023,9 +961,6 @@ function ModelEmptyState({ reason = 'noDocument' }: { reason?: 'noDocument' | 'e
         </button>
         <button type="button" onClick={() => handleTemplate('blank')} className={btnClass}>
           {t('empty.templateBlank')}
-        </button>
-        <button type="button" onClick={() => handleTemplate('humanoid')} className={btnClass}>
-          {t('empty.templateHumanoid')}
         </button>
       </div>
     </div>

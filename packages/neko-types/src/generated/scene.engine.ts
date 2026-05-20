@@ -688,6 +688,7 @@ export interface EngineViewportDescriptor {
   postProcess?: EngineViewportPostProcess;
   layerMask?: number;
   workMode: EngineViewportWorkMode;
+  helperPassesEnabled?: boolean;
 }
 
 export interface EngineH264InitData {

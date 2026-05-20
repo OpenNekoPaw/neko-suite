@@ -9,20 +9,10 @@ describe('InteractionLayer query helpers', () => {
         7,
         { left: 10, top: 20, width: 200, height: 100 },
         { clientX: 110, clientY: 70 },
-        {
-          position: { x: 0, y: 1, z: 3 },
-          target: { x: 0, y: 0, z: 0 },
-          fov: 45,
-        },
       ),
     ).toEqual({
       viewportId: 'main',
       sceneRevision: 7,
-      camera: {
-        position: { x: 0, y: 1, z: 3 },
-        target: { x: 0, y: 0, z: 0 },
-        fov: 45,
-      },
       x: 0.5,
       y: 0.5,
     });

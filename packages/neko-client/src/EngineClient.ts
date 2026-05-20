@@ -487,6 +487,7 @@ function viewportDescriptorToOptions(viewport: ViewportDescriptor): Record<strin
     postProcess: viewport.postProcess,
     layerMask: viewport.layerMask,
     workMode: viewport.workMode,
+    helperPassesEnabled: viewport.helperPassesEnabled,
   };
 }
 

@@ -495,9 +495,7 @@
 
   .model-workbench-topbar {
     display: grid;
-    grid-template-columns:
-      minmax(250px, 0.9fr) minmax(260px, 1fr) minmax(180px, auto)
-      minmax(240px, 0.8fr);
+    grid-template-columns: minmax(140px, 1fr) minmax(260px, auto);
     align-items: center;
     min-height: 34px;
     flex-shrink: 0;
@@ -508,8 +506,6 @@
   }
 
   .model-menu-strip,
-  .model-workspace-tabs,
-  .model-transform-segment,
   .model-topbar-status {
     display: flex;
     align-items: center;
@@ -526,42 +522,6 @@
     margin-right: 10px;
     color: var(--model-fg);
     font-weight: 600;
-  }
-
-  .model-workbench-context {
-    color: var(--model-topbar-muted);
-  }
-
-  .model-workspace-tabs span,
-  .model-transform-segment button {
-    height: 24px;
-    padding: 0 8px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    background: transparent;
-    color: inherit;
-    line-height: 1;
-  }
-
-  .model-transform-segment button:hover {
-    background: var(--model-segment-hover);
-  }
-
-  .model-workspace-tabs {
-    justify-content: center;
-    gap: 2px;
-  }
-
-  .model-workspace-tabs span {
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .model-workspace-tabs span.active,
-  .model-transform-segment button.active {
-    border-color: var(--model-segment-active-border);
-    background: var(--model-segment-active-bg);
-    color: var(--model-segment-active-fg);
   }
 
   .model-topbar-status {
@@ -596,16 +556,6 @@
     flex: 1;
     flex-direction: column;
     background: var(--model-viewport-area-bg);
-  }
-
-  .model-transform-segment {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    padding: 0 8px;
-    color: var(--model-segment-fg);
-    font-size: 11px;
   }
 
   .model-viewport-shell {
@@ -900,7 +850,7 @@
 
   @media (max-width: 920px) {
     .model-workbench-topbar {
-      grid-template-columns: minmax(190px, 1fr) minmax(180px, 0.8fr) auto minmax(150px, 0.7fr);
+      grid-template-columns: minmax(140px, 1fr) minmax(210px, auto);
     }
 
     .model-topbar-status span:nth-child(2) {
@@ -915,10 +865,9 @@
 
   @media (max-width: 720px) {
     .model-workbench-topbar {
-      grid-template-columns: minmax(180px, 1fr) auto auto;
+      grid-template-columns: minmax(120px, 1fr) minmax(120px, auto);
     }
 
-    .model-workspace-tabs span:not(.active),
     .model-topbar-status span:first-child {
       display: none;
     }

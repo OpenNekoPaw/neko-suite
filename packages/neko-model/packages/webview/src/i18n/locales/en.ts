@@ -27,7 +27,7 @@ export const en = {
   'viewport.panLeft': 'Pan left',
   'viewport.panRight': 'Pan right',
   'viewport.orbit': 'Orbit view',
-  'viewport.grid': 'Show grid',
+  'viewport.grid': 'Show Engine ground grid',
   'viewport.resetCamera': 'Reset camera',
 
   // Workbench
@@ -50,10 +50,9 @@ export const en = {
   // Empty state
   'empty.hint': 'Open a .gltf, .glb, or .vrm file to view',
   'empty.dropHint': 'Drop .gltf, .glb, or .vrm file here, or choose an option below',
-  'empty.emptyScene': 'This scene is empty. Add a template or import a model to start.',
+  'empty.emptyScene': 'This scene is empty. Create the default cube or import a model to start.',
   'empty.import': 'Import File',
-  'empty.templateBlank': 'Blank Scene',
-  'empty.templateHumanoid': 'Simple Humanoid',
+  'empty.templateBlank': 'Default Cube',
 
   // Scene tree
   'sceneTree.title': 'Scene',

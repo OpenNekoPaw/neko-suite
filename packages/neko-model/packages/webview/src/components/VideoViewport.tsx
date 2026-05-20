@@ -10,7 +10,6 @@ import {
 } from '@neko/neko-client';
 import type { LocalPredictionSnapshot } from '../scene/LocalPredictionLayer';
 import { InteractionLayer, isCompatibleViewportQueryResult } from './InteractionLayer';
-import { buildViewportQueryCamera } from './InteractionLayer';
 import { OverlayCanvas } from './OverlayCanvas';
 import { ViewportOrbitControls } from './ViewportOrbitControls';
 import { ViewportGuideOverlay } from './ViewportGuideOverlay';
@@ -109,6 +108,7 @@ function createViewportDescriptor(
   cameraPosition: [number, number, number],
   cameraTarget: [number, number, number],
   streamSize: ViewportStreamSize,
+  helperPassesEnabled: boolean,
 ): ViewportDescriptor {
   return {
     viewportId: MAIN_VIEWPORT_ID,
@@ -127,6 +127,7 @@ function createViewportDescriptor(
       ssao: true,
       taa: true,
     },
+    helperPassesEnabled,
     workMode: 'edit-parametric',
     cameraRef: {
       kind: 'editorCamera',
@@ -168,7 +169,7 @@ export function VideoViewport({
   const [routeAUnavailableReason, setRouteAUnavailableReason] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [viewportSize, setViewportSize] = useState<ViewportStreamSize | null>(null);
-  const showViewportGrid = useModelStore((state) => state.showViewportGrid);
+  const helperPassesEnabled = useModelStore((state) => state.showViewportGrid);
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -259,7 +260,6 @@ export function VideoViewport({
           resolution: viewportSize ?? undefined,
           x: normalizedX,
           y: normalizedY,
-          camera: buildViewportQueryCamera(),
         })) as SceneHitTestResult;
         if (isCompatibleViewportQueryResult(result, sceneId, MAIN_VIEWPORT_ID, sceneRevision)) {
           onSelectNode(result.nodeId);
@@ -313,6 +313,7 @@ export function VideoViewport({
             store.getCameraPosition(),
             store.cameraTarget,
             viewportSize,
+            helperPassesEnabled,
           ),
         );
         if (disposed) {
@@ -404,7 +405,7 @@ export function VideoViewport({
         );
       }
     };
-  }, [enginePort, retryToken, sceneId, viewportSize]);
+  }, [enginePort, retryToken, sceneId, viewportSize, helperPassesEnabled]);
 
   if (routeAUnavailable) {
     return (
@@ -421,7 +422,7 @@ export function VideoViewport({
             {modelErrorMessage('error.retry')}
           </button>
         </div>
-        <ViewportGuideOverlay visible={showViewportGrid} />
+        <ViewportGuideOverlay visible />
         <ViewportNavigationControls
           viewportId={MAIN_VIEWPORT_ID}
           onCameraChange={sendViewportCamera}
@@ -435,7 +436,7 @@ export function VideoViewport({
   return (
     <div ref={viewportRef} className="model-viewport-frame relative h-full w-full overflow-hidden">
       <canvas ref={canvasRef} className="h-full w-full" aria-hidden={!hasEngineFrame} />
-      <ViewportGuideOverlay visible={showViewportGrid} />
+      <ViewportGuideOverlay visible />
       <InteractionLayer
         viewportId={MAIN_VIEWPORT_ID}
         sceneId={sceneId}

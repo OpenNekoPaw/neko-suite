@@ -211,6 +211,111 @@ function generateCylinder(
   return { positions, normals, indices };
 }
 
+/** Generate an axis-aligned cube centered at origin. */
+function generateCube(
+  width: number,
+  height: number,
+  depth: number,
+): { positions: number[]; normals: number[]; indices: number[] } {
+  const hx = width / 2;
+  const hy = height / 2;
+  const hz = depth / 2;
+  const positions = [
+    // +X
+    hx,
+    -hy,
+    -hz,
+    hx,
+    -hy,
+    hz,
+    hx,
+    hy,
+    hz,
+    hx,
+    hy,
+    -hz,
+    // -X
+    -hx,
+    -hy,
+    hz,
+    -hx,
+    -hy,
+    -hz,
+    -hx,
+    hy,
+    -hz,
+    -hx,
+    hy,
+    hz,
+    // +Y
+    -hx,
+    hy,
+    -hz,
+    hx,
+    hy,
+    -hz,
+    hx,
+    hy,
+    hz,
+    -hx,
+    hy,
+    hz,
+    // -Y
+    -hx,
+    -hy,
+    hz,
+    hx,
+    -hy,
+    hz,
+    hx,
+    -hy,
+    -hz,
+    -hx,
+    -hy,
+    -hz,
+    // +Z
+    hx,
+    -hy,
+    hz,
+    -hx,
+    -hy,
+    hz,
+    -hx,
+    hy,
+    hz,
+    hx,
+    hy,
+    hz,
+    // -Z
+    -hx,
+    -hy,
+    -hz,
+    hx,
+    -hy,
+    -hz,
+    hx,
+    hy,
+    -hz,
+    -hx,
+    hy,
+    -hz,
+  ];
+  const normals = [
+    ...Array(4).fill([1, 0, 0]).flat(),
+    ...Array(4).fill([-1, 0, 0]).flat(),
+    ...Array(4).fill([0, 1, 0]).flat(),
+    ...Array(4).fill([0, -1, 0]).flat(),
+    ...Array(4).fill([0, 0, 1]).flat(),
+    ...Array(4).fill([0, 0, -1]).flat(),
+  ];
+  const indices: number[] = [];
+  for (let face = 0; face < 6; face += 1) {
+    const base = face * 4;
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  return { positions, normals, indices };
+}
+
 /** Pack multiple meshes into a single binary buffer + glTF descriptor arrays. */
 function packMeshes(
   geometries: { positions: number[]; normals: number[]; indices: number[] }[],
@@ -355,6 +460,25 @@ function packMeshes(
 export function generateMinimalGlb(name: string): Uint8Array {
   const nodes: GltfNode[] = [{ name: 'Root' }];
   return packGlb(buildGltfJson(name, nodes, [0]));
+}
+
+/**
+ * Generate Blender-style default scene content: a single renderable cube.
+ * Used for empty neko-model projects so Route A always starts with scene data.
+ */
+export function generateDefaultCubeGlb(name: string): Uint8Array {
+  const packed = packMeshes([generateCube(2, 2, 2)], [0.78, 0.78, 0.78, 1.0]);
+  const nodes: GltfNode[] = [{ name: 'Cube', mesh: 0 }];
+  const json = {
+    ...buildGltfJson(name, nodes, [0]),
+    buffers: packed.buffers,
+    bufferViews: packed.bufferViews,
+    accessors: packed.accessors,
+    meshes: [{ name: 'Cube', primitives: packed.meshes[0]?.primitives ?? [] }],
+    materials: [{ ...packed.materials[0], name: 'Default Gray' }],
+  };
+
+  return packGlb(json, packed.binData);
 }
 
 /**

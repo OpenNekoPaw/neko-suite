@@ -98,6 +98,7 @@ export {
   generateMinimalInp,
   generateHumanoidInp,
   generateMinimalGlb,
+  generateDefaultCubeGlb,
   generateHumanoidGlb,
 } from './templates';
 

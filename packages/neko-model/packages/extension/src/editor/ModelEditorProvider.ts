@@ -18,7 +18,7 @@ import type {
   NekoModelAPI,
 } from '@neko/shared';
 import {
-  generateMinimalGlb,
+  generateDefaultCubeGlb,
   generateHumanoidGlb,
   injectLocaleAttribute,
 } from '@neko/shared/vscode/extension';
@@ -221,9 +221,17 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           // Load .nkm project file via engine backend
           const loaded = await this.loadProjectInEngine(filePath, webviewPanel, generation);
 
-          // If project has model.src but empty scene, auto-load the referenced model
+          // Empty projects start with Blender-style default scene content.
           if (loaded && loaded.snapshot?.nodes?.length === 0) {
-            await this.tryLoadModelFromProject(filePath, webviewPanel, generation);
+            const restored = await this.tryLoadModelFromProject(filePath, webviewPanel, generation);
+            if (!restored) {
+              await this.ensureDefaultCubeModelForProject(
+                filePath,
+                document,
+                webviewPanel,
+                generation,
+              );
+            }
           }
         } else {
           await this.loadModelInEngine(filePath, webviewPanel, generation);
@@ -608,7 +616,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         const templateId = message.templateId as string;
         const name = path.basename(document.uri.fsPath, '.nkm');
         const glbData =
-          templateId === 'humanoid' ? generateHumanoidGlb(name) : generateMinimalGlb(name);
+          templateId === 'humanoid' ? generateHumanoidGlb(name) : generateDefaultCubeGlb(name);
 
         // Write .glb alongside .nkm
         const nkmDir = path.dirname(document.uri.fsPath);
@@ -750,23 +758,25 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     filePath: string,
     webviewPanel: vscode.WebviewPanel,
     generation: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const client = await this.ensureEngineClient();
-    if (!client) return;
-    if (!this.isPanelCurrent(webviewPanel, generation)) return;
+    if (!client) return false;
+    if (!this.isPanelCurrent(webviewPanel, generation)) return false;
 
     try {
       const data = await client.withRegisteredFile({ filePath, purpose: 'model' }, (registered) =>
         client.loadModel({ token: registered.token }),
       );
-      if (!this.rememberSceneSnapshot(data, 'loadModel')) return;
+      if (!this.rememberSceneSnapshot(data, 'loadModel')) return false;
       this.activeModelPath = filePath;
       void this.postToPanel(webviewPanel, generation, {
         type: 'sceneSnapshot',
         snapshot: data,
       });
+      return true;
     } catch (err) {
       this.logError('loadModel', err);
+      return false;
     }
   }
 
@@ -807,8 +817,8 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     nkmPath: string,
     webviewPanel: vscode.WebviewPanel,
     generation: number,
-  ): Promise<void> {
-    if (!this.isPanelCurrent(webviewPanel, generation)) return;
+  ): Promise<boolean> {
+    if (!this.isPanelCurrent(webviewPanel, generation)) return false;
 
     try {
       const nkmUri = vscode.Uri.file(nkmPath);
@@ -818,7 +828,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       };
 
       const modelSrc = project.model?.src;
-      if (!modelSrc) return;
+      if (!modelSrc) return false;
 
       // Resolve relative path from .nkm directory
       const nkmDir = path.dirname(nkmPath);
@@ -828,13 +838,33 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       try {
         await vscode.workspace.fs.stat(vscode.Uri.file(modelPath));
       } catch {
-        return; // Model file doesn't exist
+        return false; // Model file doesn't exist
       }
 
-      await this.loadModelInEngine(modelPath, webviewPanel, generation);
+      const loaded = await this.loadModelInEngine(modelPath, webviewPanel, generation);
+      return loaded;
     } catch (err) {
       this.logError('tryLoadModelFromProject', err);
+      return false;
     }
+  }
+
+  /**
+   * Create Blender-style default content for a new empty .nkm project.
+   */
+  private async ensureDefaultCubeModelForProject(
+    nkmPath: string,
+    document: vscode.CustomDocument,
+    webviewPanel: vscode.WebviewPanel,
+    generation: number,
+  ): Promise<void> {
+    if (!this.isPanelCurrent(webviewPanel, generation)) return;
+
+    const nkmDir = path.dirname(nkmPath);
+    const name = path.basename(nkmPath, '.nkm');
+    const glbPath = await this.resolveAvailableImportPath(path.join(nkmDir, `${name}.glb`));
+    await vscode.workspace.fs.writeFile(vscode.Uri.file(glbPath), generateDefaultCubeGlb(name));
+    await this.importModelFile(glbPath, document, webviewPanel, generation);
   }
 
   private getWorkspaceFolderUris(): readonly vscode.Uri[] {

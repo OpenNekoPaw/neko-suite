@@ -1,26 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import type { SceneControlSocket } from '@neko/neko-client';
 import type { SceneHitTestResult } from '../scene/SceneDocument';
-import { useModelStore } from '../stores/modelStore';
 
 export interface ViewportQueryBase extends Record<string, unknown> {
   viewportId: string;
   sceneId?: string;
   sceneRevision: number;
   resolution?: ViewportQueryResolution;
-  camera?: ViewportQueryCamera;
 }
 
 export interface ViewportPointerQuery extends ViewportQueryBase {
   x: number;
   y: number;
   nodeIds?: string[];
-}
-
-export interface ViewportQueryCamera {
-  position: { x: number; y: number; z: number };
-  target: { x: number; y: number; z: number };
-  fov: number;
 }
 
 export interface ViewportQueryResolution {
@@ -52,14 +44,12 @@ export function InteractionLayer({
 
   useEffect(() => {
     if (!socket || !selectedNodeId) return;
-    const camera = buildViewportQueryCamera();
     void socket.query('projectedBounds', {
       viewportId,
       sceneId,
       sceneRevision,
       resolution: resolution ?? undefined,
       nodeIds: [selectedNodeId],
-      camera,
     });
     void socket.query('gizmoAnchor', {
       viewportId,
@@ -67,7 +57,6 @@ export function InteractionLayer({
       sceneRevision,
       resolution: resolution ?? undefined,
       nodeIds: [selectedNodeId],
-      camera,
     });
   }, [sceneId, sceneRevision, resolution, selectedNodeId, socket, viewportId]);
 
@@ -85,12 +74,10 @@ export function buildViewportPointerQuery(
   sceneRevision: number,
   rect: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
   event: Pick<React.PointerEvent, 'clientX' | 'clientY'>,
-  camera: ViewportQueryCamera = buildViewportQueryCamera(),
 ): ViewportPointerQuery {
   return {
     viewportId,
     sceneRevision,
-    camera,
     x: clamp01((event.clientX - rect.left) / Math.max(1, rect.width)),
     y: clamp01((event.clientY - rect.top) / Math.max(1, rect.height)),
   };
@@ -111,15 +98,4 @@ export function isCompatibleViewportQueryResult(
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
-}
-
-export function buildViewportQueryCamera(): ViewportQueryCamera {
-  const store = useModelStore.getState();
-  const position = store.getCameraPosition();
-  const target = store.cameraTarget;
-  return {
-    position: { x: position[0], y: position[1], z: position[2] },
-    target: { x: target[0], y: target[1], z: target[2] },
-    fov: 45,
-  };
 }
