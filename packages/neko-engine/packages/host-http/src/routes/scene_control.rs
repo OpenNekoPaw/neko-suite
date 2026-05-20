@@ -761,7 +761,7 @@ impl CameraBasis {
 fn camera_basis(snapshot: &Value, payload: Option<&Value>) -> CameraBasis {
     let default_camera = default_camera_state();
     let camera = payload
-        .and_then(|payload| payload.get("camera"))
+        .and_then(|payload| payload.get("engineCamera"))
         .or_else(|| snapshot.get("activeCamera"))
         .unwrap_or(&default_camera);
     let position = camera
@@ -2168,7 +2168,7 @@ mod tests {
             Some(&json!({
                 "nodeIds": ["mesh_1"],
                 "viewportId": "ortho",
-                "camera": {
+                "engineCamera": {
                     "position": { "x": 0.0, "y": 0.0, "z": 5.0 },
                     "target": { "x": 0.0, "y": 0.0, "z": 0.0 },
                     "up": { "x": 0.0, "y": 1.0, "z": 0.0 },
@@ -2188,5 +2188,48 @@ mod tests {
             perspective["bounds"][0]["min"]["x"],
             orthographic["bounds"][0]["min"]["x"]
         );
+    }
+
+    #[test]
+    fn hit_test_ignores_webview_supplied_camera_payload() {
+        let snapshot = snapshot_to_contract(
+            json!({
+                "activeCamera": {
+                    "position": { "x": 0.0, "y": 0.0, "z": 5.0 },
+                    "target": { "x": 0.0, "y": 0.0, "z": 0.0 },
+                    "up": { "x": 0.0, "y": 1.0, "z": 0.0 },
+                    "fov": 45.0,
+                    "aspect": 1.0
+                },
+                "nodes": [{
+                    "id": "mesh_1",
+                    "name": "Mesh",
+                    "position": [0.0, 0.0, 0.0],
+                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                    "scale": [1.0, 1.0, 1.0],
+                    "visible": true,
+                    "has_mesh": true
+                }]
+            }),
+            22,
+        );
+
+        let hit = hit_test_result(
+            &snapshot,
+            Some(&json!({
+                "x": 0.5,
+                "y": 0.5,
+                "camera": {
+                    "position": { "x": 100.0, "y": 100.0, "z": 100.0 },
+                    "target": { "x": 100.0, "y": 100.0, "z": 99.0 },
+                    "fov": 45.0
+                }
+            })),
+            "scene-a",
+            "main",
+            22,
+        );
+
+        assert_eq!(hit["nodeId"], "mesh_1");
     }
 }

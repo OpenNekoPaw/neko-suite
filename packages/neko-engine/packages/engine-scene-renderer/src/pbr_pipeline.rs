@@ -23,6 +23,8 @@ const MAX_LIGHTS: usize = 16;
 
 /// Maximum joints per skeleton for GPU skinning
 const MAX_JOINTS: usize = 256;
+const VIEWPORT_GRID_EXTENT: i32 = 20;
+const VIEWPORT_GRID_STEP: f32 = 1.0;
 
 const SCENE_COLOR_CONVERT_SHADER: &str = r#"
 struct VertexOutput {
@@ -72,6 +74,40 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
+const VIEWPORT_GRID_SHADER: &str = r#"
+struct CameraUniforms {
+    view: mat4x4<f32>,
+    projection: mat4x4<f32>,
+    camera_position: vec3<f32>,
+    _padding: f32,
+}
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) color: vec4<f32>,
+}
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) color: vec4<f32>,
+}
+
+@group(0) @binding(0) var<uniform> camera: CameraUniforms;
+
+@vertex
+fn vs_main(in: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = camera.projection * camera.view * vec4<f32>(in.position, 1.0);
+    out.color = in.color;
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    return in.color;
+}
+"#;
+
 /// PBR forward renderer
 pub struct PbrRenderer {
     render_pipelines: PbrPipelineSet,
@@ -82,6 +118,9 @@ pub struct PbrRenderer {
     joint_bind_group_layout: wgpu::BindGroupLayout,
     color_convert_bind_group_layout: wgpu::BindGroupLayout,
     color_convert_pipeline: wgpu::RenderPipeline,
+    viewport_grid_pipeline: wgpu::RenderPipeline,
+    viewport_grid_vertex_buffer: wgpu::Buffer,
+    viewport_grid_vertex_count: u32,
     post_process_chain: PostProcessChain,
     ctx: Arc<GpuContext>,
 }
@@ -137,6 +176,13 @@ struct LightUniformsGpu {
     _padding: [u32; 7],
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct ViewportGridVertex {
+    position: [f32; 3],
+    color: [f32; 4],
+}
+
 // Compile-time guards: keep the Rust uniform layouts in lockstep with the
 // WGSL struct sizes the shaders bind to. WGSL uniform layout aligns vec3 on
 // 16-byte boundaries and rounds the outer struct to a 16-byte multiple, so
@@ -177,6 +223,27 @@ impl PbrPipelineSet {
             (GpuAlphaMode::Mask, true) => &self.mask_double_sided,
             (GpuAlphaMode::Blend, false) => &self.blend_single_sided,
             (GpuAlphaMode::Blend, true) => &self.blend_double_sided,
+        }
+    }
+}
+
+impl ViewportGridVertex {
+    fn buffer_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<ViewportGridVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
         }
     }
 }
@@ -420,6 +487,66 @@ impl PbrRenderer {
                 multiview: None,
             });
 
+        let viewport_grid_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("viewport_grid_pipeline_layout"),
+                bind_group_layouts: &[&camera_bgl],
+                push_constant_ranges: &[],
+            });
+        let viewport_grid_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("viewport_grid_shader"),
+            source: wgpu::ShaderSource::Wgsl(VIEWPORT_GRID_SHADER.into()),
+        });
+        let viewport_grid_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("viewport_grid_pipeline"),
+                layout: Some(&viewport_grid_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &viewport_grid_shader,
+                    entry_point: "vs_main",
+                    buffers: &[ViewportGridVertex::buffer_layout()],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &viewport_grid_shader,
+                    entry_point: "fs_main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba16Float,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::LineList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: false,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState {
+                        constant: 0,
+                        slope_scale: 0.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            });
+        let viewport_grid_vertices = viewport_grid_vertices();
+        let viewport_grid_vertex_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("viewport_grid_vertices"),
+                contents: bytemuck::cast_slice(&viewport_grid_vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let viewport_grid_vertex_count = viewport_grid_vertices.len() as u32;
+
         (
             Self {
                 render_pipelines,
@@ -430,6 +557,9 @@ impl PbrRenderer {
                 joint_bind_group_layout: joint_bgl,
                 color_convert_bind_group_layout: color_convert_bgl,
                 color_convert_pipeline,
+                viewport_grid_pipeline,
+                viewport_grid_vertex_buffer,
+                viewport_grid_vertex_count,
                 post_process_chain: PostProcessChain::new(Arc::clone(&ctx)),
                 ctx,
             },
@@ -938,6 +1068,65 @@ impl PbrRenderer {
             self.render_pipelines.get(key.alpha_mode, key.double_sided)
         }
     }
+
+    fn record_viewport_grid_pass(
+        &self,
+        current: &SceneRenderOutput,
+        camera_params: &CameraParams,
+        helper_view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let device = self.ctx.device();
+        let aspect = current.width as f32 / current.height.max(1) as f32;
+        let camera_uniforms = CameraUniformsGpu {
+            view: camera_params.view_matrix().to_cols_array_2d(),
+            projection: camera_params.projection_matrix(aspect).to_cols_array_2d(),
+            camera_position: camera_params.position.to_array(),
+            _padding: 0.0,
+        };
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("viewport_grid_camera_buffer"),
+            contents: bytemuck::bytes_of(&camera_uniforms),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("viewport_grid_camera_bg"),
+            layout: &self.camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+        });
+
+        let depth_view = current
+            .depth_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("viewport_grid_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: helper_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        render_pass.set_pipeline(&self.viewport_grid_pipeline);
+        render_pass.set_bind_group(0, &camera_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.viewport_grid_vertex_buffer.slice(..));
+        render_pass.draw(0..self.viewport_grid_vertex_count, 0..1);
+    }
 }
 
 fn create_pbr_pipeline_set(
@@ -1149,6 +1338,12 @@ impl PbrRenderGraphPassExecutor<'_> {
             },
         );
         let helper_view = helper_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.renderer.record_viewport_grid_pass(
+            &current,
+            self.camera_params,
+            &helper_view,
+            encoder,
+        );
 
         self.intermediate_textures.push(current.color_texture);
         self.intermediate_views.push(current.color_view);
@@ -1368,6 +1563,38 @@ fn post_process_settings_for_descriptor(descriptor: &ViewportDescriptor) -> Post
         },
         ..PostProcessSettings::default()
     }
+}
+
+fn viewport_grid_vertices() -> Vec<ViewportGridVertex> {
+    let mut vertices = Vec::with_capacity(((VIEWPORT_GRID_EXTENT * 2 + 1) * 4) as usize);
+    let extent = VIEWPORT_GRID_EXTENT as f32 * VIEWPORT_GRID_STEP;
+    for index in -VIEWPORT_GRID_EXTENT..=VIEWPORT_GRID_EXTENT {
+        let coord = index as f32 * VIEWPORT_GRID_STEP;
+        let color = if index == 0 {
+            [0.55, 0.62, 0.68, 0.55]
+        } else if index % 5 == 0 {
+            [0.42, 0.47, 0.52, 0.34]
+        } else {
+            [0.34, 0.38, 0.42, 0.22]
+        };
+        vertices.push(ViewportGridVertex {
+            position: [-extent, 0.0, coord],
+            color,
+        });
+        vertices.push(ViewportGridVertex {
+            position: [extent, 0.0, coord],
+            color,
+        });
+        vertices.push(ViewportGridVertex {
+            position: [coord, 0.0, -extent],
+            color,
+        });
+        vertices.push(ViewportGridVertex {
+            position: [coord, 0.0, extent],
+            color,
+        });
+    }
+    vertices
 }
 
 fn empty_graph_execution() -> SceneRenderGraphExecution {

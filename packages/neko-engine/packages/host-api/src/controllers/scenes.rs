@@ -88,6 +88,8 @@ struct SceneStreamOptions {
     layer_mask: Option<u32>,
     #[serde(default = "default_work_mode")]
     work_mode: String,
+    #[serde(default = "default_helper_passes_enabled")]
+    helper_passes_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,6 +123,10 @@ fn default_tone_mapping() -> String {
 
 fn default_work_mode() -> String {
     "edit-parametric".to_string()
+}
+
+fn default_helper_passes_enabled() -> bool {
+    true
 }
 
 fn parse_scene_stream_options(options: Value) -> ApiResult<SceneStreamOptions> {
@@ -265,7 +271,7 @@ impl SceneStreamRuntimeScheduler {
             height: self.base_height,
             fps: self.base_fps,
             h264_quality: 85,
-            helper_passes_enabled: true,
+            helper_passes_enabled: self.base_viewport.helper_passes,
             post_process_enabled: self.base_decision.work_mode != ViewportWorkMode::EditFree,
             quality_tier: SceneStreamQualityTier::Full,
             preserve_control_ack: decision.preserve_control_ack,
@@ -340,7 +346,7 @@ fn stream_options_to_viewport_descriptor(
         post_process: parse_post_process(opts.post_process.as_ref()),
         layer_mask: opts.layer_mask,
         work_mode: parse_work_mode(&opts.work_mode),
-        helper_passes: true,
+        helper_passes: opts.helper_passes_enabled,
     }
 }
 
@@ -1732,6 +1738,30 @@ mod tests {
         let _ = registry
             .destroy(&StreamId::from_string(second_stream_id))
             .await;
+    }
+
+    #[tokio::test]
+    async fn scene_stream_respects_requested_helper_passes() {
+        let (controller, registry) = create_stream_test_controller();
+        let response = controller
+            .handle(
+                "stream",
+                None,
+                serde_json::json!({
+                    "viewportId": "main",
+                    "sceneId": "scene-a",
+                    "helperPassesEnabled": false,
+                    "resolution": { "width": 640, "height": 480, "pixelRatio": 1.0 }
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let data = response.data.as_ref().unwrap().as_object().unwrap();
+        assert_eq!(data["helperPassesEnabled"], false);
+        let stream_id = data["streamId"].as_str().unwrap();
+        let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
     }
 
     #[test]
