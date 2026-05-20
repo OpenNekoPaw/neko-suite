@@ -135,8 +135,17 @@ export class SceneControlSocket {
       }
     };
     socket.onmessage = (event) => this.handleMessage(event.data);
-    socket.onerror = () => this.reportError(new Error('Scene control WebSocket error'));
+    socket.onerror = () => {
+      if (this.manuallyClosed || this.socket !== socket) return;
+      this.reportError(new Error('Scene control WebSocket error'));
+    };
     socket.onclose = () => {
+      if (this.socket === socket) {
+        this.socket = null;
+      }
+      if (this.manuallyClosed || this.socket !== null) {
+        return;
+      }
       this.rejectPending(new Error('Scene control WebSocket closed'));
       if (!this.manuallyClosed && this.config.reconnect) {
         this.reconnectTimer = setTimeout(() => this.connect(), this.config.reconnectDelayMs);

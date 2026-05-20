@@ -26,6 +26,7 @@ export interface VideoViewportProps {
   selectedNodeId: string | null;
   hasPendingPrediction: boolean;
   sceneControlSocket: SceneControlSocket | null;
+  visible: boolean;
   overlay?: NonNullable<SceneDelta['overlay']> | null;
   predictions?: LocalPredictionSnapshot[];
   topologyWarning?: string | null;
@@ -39,6 +40,7 @@ const DEFAULT_VIEWPORT_STREAM_SIZE = { width: 1280, height: 720, pixelRatio: 1 }
 const MAX_VIEWPORT_STREAM_PIXELS = 1920 * 1080;
 const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 1.5;
 const VIEWPORT_DIMENSION_BUCKET = 16;
+const MIN_VISIBLE_VIEWPORT_DIMENSION = 64;
 const VIEWPORT_STREAM_FPS = 60;
 
 type ViewportStreamSize = SceneViewportResolution;
@@ -55,8 +57,15 @@ function bucketStreamDimension(value: number): number {
 }
 
 function createViewportStreamSize(rect: DOMRectReadOnly): ViewportStreamSize {
-  const cssWidth = Math.max(1, rect.width);
-  const cssHeight = Math.max(1, rect.height);
+  const cssWidth = Math.max(0, rect.width);
+  const cssHeight = Math.max(0, rect.height);
+  if (cssWidth < MIN_VISIBLE_VIEWPORT_DIMENSION || cssHeight < MIN_VISIBLE_VIEWPORT_DIMENSION) {
+    return {
+      width: 0,
+      height: 0,
+      pixelRatio: DEFAULT_VIEWPORT_STREAM_SIZE.pixelRatio,
+    };
+  }
   const pixelRatio = Math.min(
     Math.max(window.devicePixelRatio || DEFAULT_VIEWPORT_STREAM_SIZE.pixelRatio, 1),
     MAX_VIEWPORT_DEVICE_PIXEL_RATIO,
@@ -86,6 +95,14 @@ function areViewportStreamSizesEqual(
     left?.width === right.width &&
     left.height === right.height &&
     left.pixelRatio === right.pixelRatio
+  );
+}
+
+function isViewportStreamSizeReady(size: ViewportStreamSize | null): size is ViewportStreamSize {
+  return (
+    size !== null &&
+    size.width >= MIN_VISIBLE_VIEWPORT_DIMENSION &&
+    size.height >= MIN_VISIBLE_VIEWPORT_DIMENSION
   );
 }
 
@@ -126,8 +143,8 @@ function createViewportDescriptor(
     toneMapping: 'aces',
     postProcess: {
       bloom: false,
-      ssao: true,
-      taa: true,
+      ssao: false,
+      taa: false,
     },
     helperPassesEnabled,
     workMode: 'edit-parametric',
@@ -149,6 +166,7 @@ export function VideoViewport({
   selectedNodeId,
   hasPendingPrediction,
   sceneControlSocket,
+  visible,
   overlay = null,
   predictions = [],
   topologyWarning = null,
@@ -160,12 +178,12 @@ export function VideoViewport({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamClientRef = useRef<H264StreamClient | null>(null);
   const streamIdRef = useRef<string | null>(null);
+  const frameMetaRef = useRef<RenderFrameMeta | null>(null);
   // Serialise stream lifecycle across rerenders. Without this, a rapid
   // sceneId change would dispose stream A and start stream B in parallel,
   // letting two RenderGraph submissions race for the same wgpu device queue
   // (observed as duplicate `pbr_render_graph_encoder` validation errors).
   const pendingDestroyRef = useRef<Promise<void>>(Promise.resolve());
-  const [frameMeta, setFrameMeta] = useState<RenderFrameMeta | null>(null);
   const [hasEngineFrame, setHasEngineFrame] = useState(false);
   const [routeAUnavailable, setRouteAUnavailable] = useState(false);
   const [routeAUnavailableReason, setRouteAUnavailableReason] = useState<string | null>(null);
@@ -283,7 +301,7 @@ export function VideoViewport({
     setHasEngineFrame(false);
     setRouteAUnavailable(false);
     setRouteAUnavailableReason(null);
-    setFrameMeta(null);
+    frameMetaRef.current = null;
 
     const start = async () => {
       if (typeof VideoDecoder === 'undefined') {
@@ -291,7 +309,7 @@ export function VideoViewport({
         setRouteAUnavailableReason(modelErrorMessage('error.webCodecsUnavailable'));
         return;
       }
-      if (!viewportSize) {
+      if (!visible || !isViewportStreamSizeReady(viewportSize)) {
         return;
       }
 
@@ -335,7 +353,7 @@ export function VideoViewport({
             // fire; ignore them so we don't pollute the store with frames
             // belonging to a torn-down stream.
             if (disposed) return;
-            setFrameMeta(meta);
+            frameMetaRef.current = meta;
             useModelStore.getState().recordRenderFrameMeta(meta);
             if (meta.appliedSeq > 0) {
               useModelStore.getState().commitPredictionsThrough(meta.appliedSeq);
@@ -373,7 +391,7 @@ export function VideoViewport({
                     drawTimeMs,
                   },
                 };
-                setFrameMeta(drawnMeta);
+                frameMetaRef.current = drawnMeta;
                 useModelStore.getState().updateLastRenderFrameMeta(drawnMeta);
               }
               setHasEngineFrame(true);
@@ -420,7 +438,26 @@ export function VideoViewport({
         );
       }
     };
-  }, [enginePort, retryToken, sceneId, viewportSize, helperPassesEnabled]);
+  }, [enginePort, retryToken, sceneId, viewportSize, helperPassesEnabled, visible]);
+
+  const overlayFrameMeta = React.useMemo<RenderFrameMeta | null>(() => {
+    const streamId = streamIdRef.current;
+    if (!hasEngineFrame || !streamId) {
+      return null;
+    }
+    return (
+      frameMetaRef.current ?? {
+        streamId,
+        viewportId: MAIN_VIEWPORT_ID,
+        frameId: 0,
+        ptsUs: 0,
+        durationUs: 0,
+        isKeyframe: true,
+        sceneRevision,
+        appliedSeq: 0,
+      }
+    );
+  }, [hasEngineFrame, sceneRevision]);
 
   if (routeAUnavailable) {
     return (
@@ -456,7 +493,7 @@ export function VideoViewport({
         viewportId={MAIN_VIEWPORT_ID}
         sceneId={sceneId}
         sceneRevision={sceneRevision}
-        resolution={viewportSize}
+        resolution={isViewportStreamSizeReady(viewportSize) ? viewportSize : null}
         selectedNodeId={selectedNodeId}
         socket={sceneControlSocket}
         onSelectNode={onSelectNode}
@@ -464,18 +501,7 @@ export function VideoViewport({
       />
       <OverlayCanvas
         viewportId={MAIN_VIEWPORT_ID}
-        frameMeta={
-          frameMeta ?? {
-            streamId: streamIdRef.current ?? '',
-            viewportId: MAIN_VIEWPORT_ID,
-            frameId: 0,
-            ptsUs: 0,
-            durationUs: 0,
-            isKeyframe: true,
-            sceneRevision,
-            appliedSeq: 0,
-          }
-        }
+        frameMeta={overlayFrameMeta}
         selectedNodeId={selectedNodeId}
         hasPendingPrediction={hasPendingPrediction}
         overlay={overlay}

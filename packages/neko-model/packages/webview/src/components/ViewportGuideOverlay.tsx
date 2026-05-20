@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useModelStore } from '../stores/modelStore';
 
 type Vec3 = readonly [number, number, number];
@@ -47,9 +47,14 @@ export function ViewportGuideOverlay({
   visible = true,
 }: ViewportGuideOverlayProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const cameraPosition = useModelStore((state) => state.getCameraPosition());
+  const cameraTheta = useModelStore((state) => state.cameraTheta);
+  const cameraPhi = useModelStore((state) => state.cameraPhi);
   const cameraTarget = useModelStore((state) => state.cameraTarget);
   const cameraRadius = useModelStore((state) => state.cameraRadius);
+  const cameraPosition = useMemo(
+    () => cameraPositionFromOrbit(cameraTheta, cameraPhi, cameraRadius, cameraTarget),
+    [cameraPhi, cameraRadius, cameraTarget, cameraTheta],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -88,6 +93,14 @@ export function ViewportGuideOverlay({
       aria-hidden="true"
     />
   );
+}
+
+function cameraPositionFromOrbit(theta: number, phi: number, radius: number, target: Vec3): Vec3 {
+  return [
+    target[0] + radius * Math.sin(phi) * Math.sin(theta),
+    target[1] + radius * Math.cos(phi),
+    target[2] + radius * Math.sin(phi) * Math.cos(theta),
+  ];
 }
 
 function drawGuides(

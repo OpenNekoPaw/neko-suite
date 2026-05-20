@@ -113,6 +113,9 @@ export const zhCN = {
   'bone.poseEdit': '姿态编辑',
   'bone.boneId': '骨骼 ID',
   'bone.applyPose': '应用姿态',
+  'bone.jointTransform': '关节变换',
+  'bone.jointNode': '关节节点',
+  'bone.noJointNodes': '没有可编辑关节',
 
   // CSG panel
   'csg.title': 'CSG 布尔运算',

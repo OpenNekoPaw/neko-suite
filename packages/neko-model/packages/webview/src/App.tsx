@@ -40,8 +40,11 @@ export function App(): React.JSX.Element {
   const sceneControlRef = useRef<SceneControlSocket | null>(null);
   const latestRevisionRef = useRef(0);
   const enginePortRef = useRef<number | null>(null);
+  const initialWebviewVisible = document.visibilityState !== 'hidden';
+  const webviewVisibleRef = useRef(initialWebviewVisible);
   const [enginePort, setEnginePort] = useState<number | null>(null);
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
+  const [webviewVisible, setWebviewVisible] = useState(initialWebviewVisible);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
   const sceneNodes = useModelStore((s) => s.sceneNodes);
@@ -147,6 +150,27 @@ export function App(): React.JSX.Element {
     setQualityPreview(null);
   }, [setQualityPreview]);
 
+  const closeSceneControlSocket = useCallback(
+    (reason: string) => {
+      sceneControlRef.current?.close(1000, reason);
+      sceneControlRef.current = null;
+      setSceneControlSocket(null);
+      setSceneControlStatus('disconnected');
+    },
+    [setSceneControlStatus],
+  );
+
+  const applyWebviewVisibility = useCallback(
+    (visible: boolean) => {
+      webviewVisibleRef.current = visible;
+      setWebviewVisible(visible);
+      if (!visible) {
+        closeSceneControlSocket('webview hidden');
+      }
+    },
+    [closeSceneControlSocket],
+  );
+
   const applyEngineSceneSnapshot = useCallback(
     (snapshot: SceneSnapshot, options?: { restoreCamera?: boolean }) => {
       const store = useModelStore.getState();
@@ -169,6 +193,12 @@ export function App(): React.JSX.Element {
       const message = event.data;
       switch (message.type) {
         case 'enginePort': {
+          if (enginePortRef.current === message.port && sceneControlRef.current) {
+            setEnginePort(message.port);
+            sendEditorCameraToEngine(message.port);
+            break;
+          }
+
           enginePortRef.current = message.port;
           setEnginePort(message.port);
           sendEditorCameraToEngine(message.port);
@@ -209,6 +239,9 @@ export function App(): React.JSX.Element {
               latestRevisionRef.current = Math.max(latestRevisionRef.current, ack.revision);
             },
             onError: (error) => {
+              if (!webviewVisibleRef.current) {
+                return;
+              }
               void webviewErrorHandler.handleError(error, {
                 showToUser: false,
                 severity: 'error',
@@ -218,6 +251,18 @@ export function App(): React.JSX.Element {
           });
           sceneControlRef.current = socket;
           setSceneControlSocket(socket);
+          break;
+        }
+        case 'webviewVisibility': {
+          applyWebviewVisibility(message.visible);
+          if (message.visible) {
+            const currentEnginePort = enginePortRef.current;
+            if (currentEnginePort === null || sceneControlRef.current === null) {
+              postMessage({ type: 'requestEnginePort' });
+            } else {
+              sendEditorCameraToEngine(currentEnginePort);
+            }
+          }
           break;
         }
         case 'sceneSnapshot': {
@@ -328,12 +373,37 @@ export function App(): React.JSX.Element {
   }, [
     applyEngineSceneSnapshot,
     applySceneDelta,
+    applyWebviewVisibility,
     selectNode,
     sendEditorCameraToEngine,
     setAnimationClips,
     setQualityPreview,
     setSceneControlStatus,
   ]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const visible = document.visibilityState !== 'hidden';
+      applyWebviewVisibility(visible);
+      if (!visible) return;
+
+      const currentEnginePort = enginePortRef.current;
+      if (currentEnginePort === null || sceneControlRef.current === null) {
+        postMessage({ type: 'requestEnginePort' });
+      } else {
+        sendEditorCameraToEngine(currentEnginePort);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+    window.addEventListener('pageshow', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+      window.removeEventListener('pageshow', handleVisibilityChange);
+    };
+  }, [applyWebviewVisibility, sendEditorCameraToEngine]);
 
   const selectedNode = sceneNodes.find((n) => n.nodeId === selectedNodeId) ?? null;
   const selectedCharacterId = resolveSelectedCharacterId(selectedNodeId, sceneNodes);
@@ -734,8 +804,12 @@ export function App(): React.JSX.Element {
   ) : isBoneExpressionOpen ? (
     <BoneExpressionPanel
       characterId={selectedCharacterId}
+      sceneNodes={sceneNodes}
+      selectedNodeId={selectedNodeId}
       disabled={panelCommandDisabled}
       onSetBonePose={handleSetBonePose}
+      onSetJointTransform={handleTransformCommit}
+      onSelectJoint={selectNode}
     />
   ) : isShapeCreatorOpen ? (
     <ShapeCreatorPanel disabled={panelCommandDisabled} onCreateShape={handleCreateShape} />
@@ -792,6 +866,7 @@ export function App(): React.JSX.Element {
                 selectedNodeId={selectedNodeId}
                 hasPendingPrediction={hasPendingPrediction}
                 sceneControlSocket={sceneControlSocket}
+                visible={webviewVisible}
                 overlay={viewportOverlay}
                 predictions={localPredictions}
                 topologyWarning={topologyWarning}

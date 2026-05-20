@@ -99,6 +99,21 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       this.context.subscriptions,
     );
 
+    webviewPanel.onDidChangeViewState(
+      (event) => {
+        if (!this.isPanelCurrent(event.webviewPanel, generation)) return;
+        void this.postToPanel(event.webviewPanel, generation, {
+          type: 'webviewVisibility',
+          visible: event.webviewPanel.visible,
+        });
+        if (!event.webviewPanel.visible) {
+          this.destroyActiveStream('hidden:destroyStream', generation);
+        }
+      },
+      undefined,
+      this.context.subscriptions,
+    );
+
     webviewPanel.onDidDispose(() => {
       if (!this.isPanelCurrent(webviewPanel, generation)) return;
       this.panelGeneration++;
@@ -253,6 +268,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           void this.postToPanel(webviewPanel, generation, {
             type: 'enginePort',
             port: client.port,
+          });
+          void this.postToPanel(webviewPanel, generation, {
+            type: 'webviewVisibility',
+            visible: webviewPanel.visible,
           });
         }
         break;

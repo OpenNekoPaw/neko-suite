@@ -185,6 +185,26 @@ describe('Route A webview boundaries', () => {
     expect(sceneTypes).toMatch(/helperPassesEnabled\?: boolean/);
   });
 
+  it('pauses Route A streaming when the VS Code tab is hidden', () => {
+    const app = readSource('App.tsx');
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const modelEditorProvider = readFileSync(
+      resolve(srcRoot, '../../extension/src/editor/ModelEditorProvider.ts'),
+      'utf8',
+    );
+
+    expect(modelEditorProvider).toMatch(/onDidChangeViewState/);
+    expect(modelEditorProvider).toMatch(/type: 'webviewVisibility'/);
+    expect(modelEditorProvider).toMatch(/hidden:destroyStream/);
+    expect(app).toMatch(/webviewVisible/);
+    expect(app).toMatch(/case 'webviewVisibility'/);
+    expect(app).toMatch(/visibilitychange/);
+    expect(app).toMatch(/visible=\{webviewVisible\}/);
+    expect(videoViewport).toMatch(/visible: boolean/);
+    expect(videoViewport).toMatch(/MIN_VISIBLE_VIEWPORT_DIMENSION = 64/);
+    expect(videoViewport).toMatch(/!visible \|\| !isViewportStreamSizeReady\(viewportSize\)/);
+  });
+
   it('routes scene tree visibility toggles through Route A scene control', () => {
     const app = readSource('App.tsx');
     const sceneTree = readSource('components/SceneTree.tsx');
@@ -208,12 +228,16 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/rootMotionEnabled/);
     expect(app).toMatch(/rootNodeId/);
     expect(app).toMatch(/type: 'bone-pose-set'/);
+    expect(app).toMatch(/onSetJointTransform=\{handleTransformCommit\}/);
+    expect(app).toMatch(/sceneNodes=\{sceneNodes\}/);
     expect(app).toMatch(/type: 'addKeyframe'/);
     expect(app).toMatch(/type: 'requestKeyframeTracks'/);
     expect(animationPlayer).toMatch(/onRootMotionChange/);
     expect(animationPlayer).toMatch(/animation\.rootMotion/);
     expect(animationPlayer).toMatch(/onCrossfade\(clipName, fadeDuration\);\s+return;/);
     expect(bonePanel).toMatch(/manualBoneId/);
+    expect(bonePanel).toMatch(/buildJointCandidates/);
+    expect(bonePanel).toMatch(/eulerDegreesToQuaternion/);
     expect(bonePanel).toMatch(/normalizeQuaternion/);
     expect(`${animationPlayer}\n${bonePanel}`).not.toMatch(/postMessage\(/);
   });

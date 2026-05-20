@@ -276,8 +276,8 @@ describe('modelStore transform prediction layer', () => {
 
     const state = useModelStore.getState();
     expect(framed).toBe(true);
-    expect(state.cameraRadius).toBeGreaterThanOrEqual(0.8);
-    expect(state.cameraRadius).toBeLessThan(2);
+    expect(state.cameraRadius).toBeGreaterThanOrEqual(0.12);
+    expect(state.cameraRadius).toBeLessThan(0.5);
     expect(state.cameraTarget[2]).toBeLessThan(0);
     expect(state.cameraTarget[1]).toBeCloseTo(0.0002, 4);
   });
@@ -323,6 +323,16 @@ describe('modelStore transform prediction layer', () => {
 
     useModelStore.getState().panCamera(0, 1);
     expect(useModelStore.getState().cameraTarget[1]).toBeCloseTo(1);
+  });
+
+  it('supports close-up meter-scale zoom below the old 0.5m floor', () => {
+    useModelStore.setState({ cameraRadius: 0.2 });
+
+    useModelStore.getState().zoomCamera(-0.12);
+    expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.08);
+
+    useModelStore.getState().zoomCamera(-1);
+    expect(useModelStore.getState().cameraRadius).toBeCloseTo(0.05);
   });
 
   it('persists the viewport grid visibility in editor state', () => {

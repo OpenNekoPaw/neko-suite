@@ -15,6 +15,8 @@ const SEND_INTERVAL_MS = 16;
 const CLICK_THRESHOLD_PX = 4;
 const KEYBOARD_PAN_STEP = 0.08;
 const KEYBOARD_ZOOM_STEP = 0.12;
+const MIN_KEYBOARD_PAN_STEP = 0.002;
+const MIN_KEYBOARD_ZOOM_STEP = 0.005;
 
 type DragMode = 'select' | 'orbit' | 'pan' | 'zoom';
 
@@ -141,8 +143,8 @@ export function ViewportOrbitControls({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       const store = useModelStore.getState();
-      const panStep = store.cameraRadius * KEYBOARD_PAN_STEP;
-      const zoomStep = store.cameraRadius * KEYBOARD_ZOOM_STEP;
+      const panStep = Math.max(MIN_KEYBOARD_PAN_STEP, store.cameraRadius * KEYBOARD_PAN_STEP);
+      const zoomStep = Math.max(MIN_KEYBOARD_ZOOM_STEP, store.cameraRadius * KEYBOARD_ZOOM_STEP);
       let handled = true;
 
       switch (e.key) {
@@ -221,5 +223,10 @@ function panByPixels(dx: number, dy: number): void {
 
 function zoomByPixels(deltaY: number): void {
   const store = useModelStore.getState();
-  store.zoomCamera(deltaY * ZOOM_SENSITIVITY * store.cameraRadius);
+  const direction = Math.sign(deltaY);
+  const scaledDelta = deltaY * ZOOM_SENSITIVITY * store.cameraRadius;
+  const minDelta = direction * MIN_KEYBOARD_ZOOM_STEP;
+  store.zoomCamera(
+    Math.abs(scaledDelta) >= MIN_KEYBOARD_ZOOM_STEP || direction === 0 ? scaledDelta : minDelta,
+  );
 }

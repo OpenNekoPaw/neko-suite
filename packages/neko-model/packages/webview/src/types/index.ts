@@ -20,6 +20,7 @@ export type PlaybackState = 'playing' | 'paused' | 'stopped';
 /** Messages from Extension Host to Webview */
 export type ExtensionMessage =
   | { type: 'enginePort'; port: number }
+  | { type: 'webviewVisibility'; visible: boolean }
   | { type: 'keyboardAction'; action: string }
   | { type: 'sceneSnapshot'; snapshot: SceneSnapshot }
   | { type: 'sceneDelta'; delta: SceneDelta }

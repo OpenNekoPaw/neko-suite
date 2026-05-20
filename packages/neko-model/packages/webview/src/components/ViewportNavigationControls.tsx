@@ -18,9 +18,11 @@ export interface ViewportNavigationControlsProps {
 }
 
 const CAMERA_SEND_INTERVAL_MS = 16;
-const BUTTON_ZOOM_STEP = 0.16;
-const BUTTON_PAN_STEP = 0.08;
+const BUTTON_ZOOM_STEP = 0.1;
+const BUTTON_PAN_STEP = 0.05;
 const BUTTON_ORBIT_STEP = Math.PI / 16;
+const MIN_BUTTON_ZOOM_STEP = 0.005;
+const MIN_BUTTON_PAN_STEP = 0.002;
 
 export function ViewportNavigationControls({
   onCameraChange,
@@ -73,8 +75,8 @@ export function ViewportNavigationControls({
     [onCameraMutated, queueCameraSend],
   );
 
-  const zoomStep = Math.max(0.05, cameraRadius * BUTTON_ZOOM_STEP);
-  const panStep = Math.max(0.02, cameraRadius * BUTTON_PAN_STEP);
+  const zoomStep = Math.max(MIN_BUTTON_ZOOM_STEP, cameraRadius * BUTTON_ZOOM_STEP);
+  const panStep = Math.max(MIN_BUTTON_PAN_STEP, cameraRadius * BUTTON_PAN_STEP);
 
   return (
     <div className="model-viewport-nav-controls" aria-label={t('viewport.controls')}>

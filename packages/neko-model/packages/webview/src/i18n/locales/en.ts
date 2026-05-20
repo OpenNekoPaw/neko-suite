@@ -113,6 +113,9 @@ export const en = {
   'bone.poseEdit': 'Pose Edit',
   'bone.boneId': 'Bone ID',
   'bone.applyPose': 'Apply Pose',
+  'bone.jointTransform': 'Joint Transform',
+  'bone.jointNode': 'Joint Node',
+  'bone.noJointNodes': 'No editable joints',
 
   // CSG panel
   'csg.title': 'CSG Boolean',

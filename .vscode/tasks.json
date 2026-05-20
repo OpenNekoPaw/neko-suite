@@ -151,6 +151,51 @@
       "detail": "Run Knip + dependency-cruiser quality checks"
     },
     {
+      "label": "openspec:validate",
+      "type": "shell",
+      "command": "openspec validate --all --strict",
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Validate all OpenSpec specs and active changes"
+    },
+    {
+      "label": "test:local-resource-access",
+      "type": "shell",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "test:local-resource-access:shared",
+        "test:local-resource-access:assets",
+        "test:local-resource-access:agent"
+      ],
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Focused tests for unified local resource access"
+    },
+    {
+      "label": "test:local-resource-access:shared",
+      "type": "shell",
+      "command": "pnpm --filter @neko/shared exec vitest run src/vscode/extension/__tests__/local-resource-access.test.ts src/vscode/extension/__tests__/local-resource-access-guardrails.test.ts",
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Shared local resource access service and guardrail tests"
+    },
+    {
+      "label": "test:local-resource-access:assets",
+      "type": "shell",
+      "command": "pnpm --filter neko-assets exec vitest run src/services/MediaLibrarySettingsService.test.ts src/__tests__/protocol.test.ts",
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Assets media library settings and protocol tests"
+    },
+    {
+      "label": "test:local-resource-access:agent",
+      "type": "shell",
+      "command": "pnpm --filter @neko-agent/extension exec vitest run src/chat/message/__tests__/agentStreamProcessor.test.ts src/chat/__tests__/chatProvider.test.ts src/chat/__tests__/agentMessageTurnHandler.test.ts",
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Agent local resource access projection and chat delivery tests"
+    },
+    {
       "label": "lint",
       "type": "shell",
       "command": "pnpm lint",

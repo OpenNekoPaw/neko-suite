@@ -34,13 +34,13 @@ type Vec3 = [number, number, number];
 
 const DEFAULT_CAMERA_THETA = 0;
 const DEFAULT_CAMERA_PHI = Math.PI / 4;
-const DEFAULT_CAMERA_RADIUS = 5;
-const DEFAULT_CAMERA_TARGET: Vec3 = [0, 0.9, 0];
+const DEFAULT_CAMERA_RADIUS = 2.2;
+const DEFAULT_CAMERA_TARGET: Vec3 = [0, 0.8, 0];
 const EDITOR_CAMERA_FOV_RAD = (45 * Math.PI) / 180;
-const MIN_CAMERA_RADIUS = 0.5;
-const MIN_FRAME_CAMERA_RADIUS = 0.8;
-const MAX_CAMERA_RADIUS = 50;
-const MIN_NODE_EXTENT = 0.05;
+const MIN_CAMERA_RADIUS = 0.05;
+const MIN_FRAME_CAMERA_RADIUS = 0.12;
+const MAX_CAMERA_RADIUS = 8;
+const MIN_NODE_EXTENT = 0.01;
 const CAMERA_FIT_PADDING = 1.25;
 const EPSILON = 0.000001;
 
@@ -763,7 +763,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
       rootMotionNodeId: (state['rootMotionNodeId'] as string | null | undefined) ?? null,
       cameraTheta: (state['cameraTheta'] as number) ?? 0,
       cameraPhi: (state['cameraPhi'] as number) ?? Math.PI / 4,
-      cameraRadius: (state['cameraRadius'] as number) ?? 5,
+      cameraRadius: clampNumber(
+        (state['cameraRadius'] as number) ?? DEFAULT_CAMERA_RADIUS,
+        MIN_CAMERA_RADIUS,
+        MAX_CAMERA_RADIUS,
+      ),
       cameraTarget: vec3FromValue(state['cameraTarget']) ?? defaultCameraTarget(),
       showViewportGrid: (state['showViewportGrid'] as boolean | undefined) ?? true,
     }),
