@@ -94,6 +94,8 @@ export interface ModelState {
   animationClips: AnimationClipInfo[];
   activeAnimation: string | null;
   playbackState: PlaybackState;
+  rootMotionEnabled: boolean;
+  rootMotionNodeId: string | null;
 
   // Transform
   transformMode: TransformMode;
@@ -161,7 +163,8 @@ export interface ModelState {
 
   // Actions — Animation
   setAnimationClips: (clips: AnimationClipInfo[]) => void;
-  setActiveAnimation: (name: string | null) => void;
+  setActiveAnimation: (name: string | null, playbackState?: PlaybackState) => void;
+  setRootMotion: (enabled: boolean, rootNodeId: string | null) => void;
   play: () => void;
   pause: () => void;
   stop: () => void;
@@ -250,6 +253,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
   animationClips: [],
   activeAnimation: null,
   playbackState: 'stopped',
+  rootMotionEnabled: true,
+  rootMotionNodeId: null,
   transformMode: 'translate',
   isLoading: false,
   qualityPreviewDataUrl: null,
@@ -531,8 +536,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
   // Animation actions
   setAnimationClips: (clips) => set({ animationClips: clips }),
 
-  setActiveAnimation: (name) =>
-    set({ activeAnimation: name, playbackState: name ? 'paused' : 'stopped' }),
+  setActiveAnimation: (name, playbackState) =>
+    set({ activeAnimation: name, playbackState: playbackState ?? (name ? 'paused' : 'stopped') }),
+
+  setRootMotion: (enabled, rootNodeId) =>
+    set({ rootMotionEnabled: enabled, rootMotionNodeId: rootNodeId }),
 
   play: () => set({ playbackState: 'playing' }),
 
@@ -725,6 +733,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
       currentTimeMs: s.currentTimeMs,
       environmentPlacement: s.environmentPlacement,
       isKeyframeEditorOpen: s.isKeyframeEditorOpen,
+      rootMotionEnabled: s.rootMotionEnabled,
+      rootMotionNodeId: s.rootMotionNodeId,
       cameraTheta: s.cameraTheta,
       cameraPhi: s.cameraPhi,
       cameraRadius: s.cameraRadius,
@@ -749,6 +759,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
       environmentPlacement:
         parseEnvironmentPlacementState(state['environmentPlacement']) ?? get().environmentPlacement,
       isKeyframeEditorOpen: (state['isKeyframeEditorOpen'] as boolean) ?? false,
+      rootMotionEnabled: (state['rootMotionEnabled'] as boolean | undefined) ?? true,
+      rootMotionNodeId: (state['rootMotionNodeId'] as string | null | undefined) ?? null,
       cameraTheta: (state['cameraTheta'] as number) ?? 0,
       cameraPhi: (state['cameraPhi'] as number) ?? Math.PI / 4,
       cameraRadius: (state['cameraRadius'] as number) ?? 5,

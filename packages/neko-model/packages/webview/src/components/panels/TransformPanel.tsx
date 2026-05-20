@@ -70,6 +70,11 @@ export function TransformPanel({
         <div className="mt-0.5 break-all text-[10px] text-[var(--model-fg-secondary)]">
           {node.nodeId}
         </div>
+        {isCharacterNode(node) && (
+          <div className="mt-1 text-[10px] text-[var(--model-fg-secondary)]">
+            {t('transform.characterRoot')}
+          </div>
+        )}
       </div>
 
       <div className="model-panel-section">
@@ -272,4 +277,8 @@ function toNodeTransform(node: SceneNodeSnapshot | null): EditableNodeTransform 
 
 function formatNumber(value: number): string {
   return Number.isFinite(value) ? value.toFixed(3) : '0.000';
+}
+
+function isCharacterNode(node: SceneNodeSnapshot): boolean {
+  return node.kind === 'character' || node.kind === 'character-instance';
 }

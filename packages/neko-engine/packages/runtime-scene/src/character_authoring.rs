@@ -461,6 +461,44 @@ impl CharacterAuthoringStore {
         Ok(description.clone())
     }
 
+    pub fn apply_expression_preset(
+        &mut self,
+        character_id: &str,
+        preset_id: &str,
+        weight: f32,
+        topology_version: u64,
+    ) -> Result<LayeredCharacterDescription, CharacterAuthoringMutationError> {
+        let description = self.description_mut(character_id)?;
+        assert_topology_version(description, character_id, topology_version)?;
+        let morph_weights = description
+            .definition
+            .expression_presets
+            .iter()
+            .find(|preset| preset.preset_id == preset_id)
+            .map(|preset| preset.morph_weights.clone())
+            .unwrap_or_else(|| {
+                vec![MorphWeightEntry {
+                    name: preset_id.to_string(),
+                    weight: 1.0,
+                }]
+            });
+
+        for entry in morph_weights {
+            if let Some(morph) = description
+                .geometry
+                .morph_library
+                .iter_mut()
+                .find(|morph| morph.morph_id == entry.name)
+            {
+                let min = morph.min.unwrap_or(0.0);
+                let max = morph.max.unwrap_or(1.0);
+                morph.default_weight = (entry.weight * weight).clamp(min, max);
+            }
+        }
+
+        Ok(description.clone())
+    }
+
     pub fn apply_override(
         &mut self,
         character_id: &str,

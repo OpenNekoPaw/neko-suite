@@ -21,6 +21,7 @@ import type {
   ExtensionMessage,
   SceneNodeSnapshot,
   SceneSnapshot,
+  WebviewMessage,
 } from './types';
 import type { SceneCommandEnvelope } from '@neko/shared';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
@@ -55,6 +56,8 @@ export function App(): React.JSX.Element {
   const animationClips = useModelStore((s) => s.animationClips);
   const activeAnimation = useModelStore((s) => s.activeAnimation);
   const playbackState = useModelStore((s) => s.playbackState);
+  const rootMotionEnabled = useModelStore((s) => s.rootMotionEnabled);
+  const rootMotionNodeId = useModelStore((s) => s.rootMotionNodeId);
   const transformMode = useModelStore((s) => s.transformMode);
   const isExpressionPresetOpen = useModelStore((s) => s.isExpressionPresetOpen);
   const isLatencyTesterOpen = useModelStore((s) => s.isLatencyTesterOpen);
@@ -80,6 +83,7 @@ export function App(): React.JSX.Element {
   const selectNode = useModelStore((s) => s.selectNode);
   const setAnimationClips = useModelStore((s) => s.setAnimationClips);
   const setActiveAnimation = useModelStore((s) => s.setActiveAnimation);
+  const setRootMotion = useModelStore((s) => s.setRootMotion);
   const play = useModelStore((s) => s.play);
   const pause = useModelStore((s) => s.pause);
   const stop = useModelStore((s) => s.stop);
@@ -592,57 +596,120 @@ export function App(): React.JSX.Element {
     [sendSceneCommand],
   );
 
+  const animationPlaybackPayload = useCallback(
+    (action: string, clipName: string | null) => ({
+      action,
+      clipName,
+      rootMotionEnabled,
+      rootNodeId: rootMotionNodeId,
+    }),
+    [rootMotionEnabled, rootMotionNodeId],
+  );
+
   const handleSelectAnimation = useCallback(
     (clipName: string) => {
       setActiveAnimation(clipName);
       if (clipName) {
-        sendSceneCommand('animation-play', { action: 'select', clipName });
+        sendSceneCommand(
+          'animation-play',
+          animationPlaybackPayload(playbackState === 'playing' ? 'play' : 'select', clipName),
+        );
+        postMessage({ type: 'requestKeyframeTracks', clipName });
       }
     },
-    [sendSceneCommand, setActiveAnimation],
+    [animationPlaybackPayload, playbackState, sendSceneCommand, setActiveAnimation],
   );
 
   const handlePlayAnimation = useCallback(() => {
     if (!activeAnimation) return;
-    sendSceneCommand('animation-play', { action: 'play', clipName: activeAnimation });
+    sendSceneCommand('animation-play', animationPlaybackPayload('play', activeAnimation));
     play();
-  }, [activeAnimation, play, sendSceneCommand]);
+  }, [activeAnimation, animationPlaybackPayload, play, sendSceneCommand]);
 
   const handlePauseAnimation = useCallback(() => {
     if (!activeAnimation) return;
-    sendSceneCommand('animation-play', { action: 'pause', clipName: activeAnimation });
+    sendSceneCommand('animation-play', animationPlaybackPayload('pause', activeAnimation));
     pause();
-  }, [activeAnimation, pause, sendSceneCommand]);
+  }, [activeAnimation, animationPlaybackPayload, pause, sendSceneCommand]);
 
   const handleStopAnimation = useCallback(() => {
-    sendSceneCommand('animation-play', { action: 'stop', clipName: activeAnimation });
+    sendSceneCommand('animation-play', animationPlaybackPayload('stop', activeAnimation));
     stop();
-  }, [activeAnimation, sendSceneCommand, stop]);
+  }, [activeAnimation, animationPlaybackPayload, sendSceneCommand, stop]);
 
   const handleCrossfadeAnimation = useCallback(
     (clipName: string, fadeDuration: number) => {
+      setActiveAnimation(clipName, 'playing');
       sendSceneCommand('animation-play', {
-        action: 'crossfade',
-        clipName,
+        ...animationPlaybackPayload('crossfade', clipName),
         fadeDuration,
         loop: true,
       });
+      postMessage({ type: 'requestKeyframeTracks', clipName });
     },
-    [sendSceneCommand],
+    [animationPlaybackPayload, sendSceneCommand, setActiveAnimation],
   );
 
   const handleSeekAnimation = useCallback(
     (clipName: string, timeMs: number) => {
-      sendSceneCommand('animation-seek', { clipName, timeMs });
+      sendSceneCommand('animation-seek', {
+        clipName,
+        timeMs,
+        rootMotionEnabled,
+        rootNodeId: rootMotionNodeId,
+      });
     },
-    [sendSceneCommand],
+    [sendSceneCommand, rootMotionEnabled, rootMotionNodeId],
+  );
+
+  const handleRootMotionChange = useCallback(
+    (enabled: boolean, rootNodeId: string | null) => {
+      setRootMotion(enabled, rootNodeId);
+      if (activeAnimation) {
+        sendSceneCommand('animation-play', {
+          action: playbackState === 'playing' ? 'play' : 'select',
+          clipName: activeAnimation,
+          rootMotionEnabled: enabled,
+          rootNodeId,
+        });
+      }
+    },
+    [activeAnimation, playbackState, sendSceneCommand, setRootMotion],
   );
 
   const handleKeyframeMutation = useCallback(
     (operation: 'add' | 'remove' | 'update', payload: Record<string, unknown>) => {
-      sendSceneCommand('animation-play', { action: `keyframe:${operation}`, ...payload });
+      switch (operation) {
+        case 'add':
+          postMessage({
+            type: 'addKeyframe',
+            clipName: String(payload['clipName'] ?? ''),
+            nodeId: String(payload['nodeId'] ?? ''),
+            property: String(payload['property'] ?? ''),
+            timestamp: Number(payload['timestamp'] ?? 0),
+            values: Array.isArray(payload['values']) ? payload['values'].map(Number) : [],
+          } satisfies WebviewMessage);
+          break;
+        case 'remove':
+          postMessage({
+            type: 'removeKeyframe',
+            clipName: String(payload['clipName'] ?? ''),
+            keyframeId: String(payload['keyframeId'] ?? ''),
+          } satisfies WebviewMessage);
+          break;
+        case 'update':
+          postMessage({
+            type: 'updateKeyframe',
+            clipName: String(payload['clipName'] ?? ''),
+            keyframeId: String(payload['keyframeId'] ?? ''),
+            timestamp: typeof payload['timestamp'] === 'number' ? payload['timestamp'] : undefined,
+            values: Array.isArray(payload['values']) ? payload['values'].map(Number) : undefined,
+            easing: typeof payload['easing'] === 'string' ? payload['easing'] : undefined,
+          } satisfies WebviewMessage);
+          break;
+      }
     },
-    [sendSceneCommand],
+    [],
   );
 
   const shouldRenderEngineViewport = enginePort !== null;
@@ -774,8 +841,12 @@ export function App(): React.JSX.Element {
           <AnimationTimelineStrip clipCount={animationClips.length}>
             <AnimationPlayer
               clips={animationClips}
+              nodes={sceneNodes}
               activeClip={activeAnimation}
               playbackState={playbackState}
+              rootMotionEnabled={rootMotionEnabled}
+              rootMotionNodeId={rootMotionNodeId}
+              onRootMotionChange={handleRootMotionChange}
               onSelectClip={handleSelectAnimation}
               onCrossfade={handleCrossfadeAnimation}
               onPlay={handlePlayAnimation}

@@ -27,6 +27,10 @@ export function BoneExpressionPanel({
   const [eyebrowRaise, setEyebrowRaise] = useState(0);
   const [eyebrowLower, setEyebrowLower] = useState(0);
   const [eyebrowFurrow, setEyebrowFurrow] = useState(0);
+  const [manualBoneId, setManualBoneId] = useState('hips');
+  const [manualRotation, setManualRotation] = useState<[number, number, number, number]>([
+    0, 0, 0, 1,
+  ]);
   const eyeTrackRef = useRef<HTMLDivElement>(null);
 
   const controlsDisabled = disabled || !characterId;
@@ -169,9 +173,82 @@ export function BoneExpressionPanel({
             disabled={controlsDisabled}
           />
         </div>
+
+        <div className="model-panel-section">
+          <div className="model-section-title mb-2">{t('bone.poseEdit')}</div>
+          <label className="mb-2 block text-[10px] text-[var(--model-fg-secondary)]">
+            {t('bone.boneId')}
+            <input
+              className="model-input mt-1 w-full px-2 py-1 text-xs"
+              value={manualBoneId}
+              disabled={controlsDisabled}
+              onChange={(event) => setManualBoneId(event.currentTarget.value)}
+            />
+          </label>
+          <div className="grid grid-cols-4 gap-1">
+            {(['x', 'y', 'z', 'w'] as const).map((axis, index) => (
+              <QuaternionField
+                key={axis}
+                label={axis.toUpperCase()}
+                value={manualRotation[index] ?? 0}
+                disabled={controlsDisabled}
+                onChange={(value) =>
+                  setManualRotation((rotation) => {
+                    const next: [number, number, number, number] = [...rotation];
+                    next[index] = value;
+                    return next;
+                  })
+                }
+              />
+            ))}
+          </div>
+          <button
+            className="model-btn-primary mt-2 w-full px-2 py-1 text-xs"
+            disabled={controlsDisabled || manualBoneId.trim().length === 0}
+            onClick={() => onSetBonePose(manualBoneId.trim(), normalizeQuaternion(manualRotation))}
+          >
+            {t('bone.applyPose')}
+          </button>
+        </div>
       </div>
     </div>
   );
+}
+
+function QuaternionField({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}): React.JSX.Element {
+  return (
+    <label className="text-[10px] text-[var(--model-fg-secondary)]">
+      {label}
+      <input
+        type="number"
+        step={0.001}
+        value={Number.isFinite(value) ? value : 0}
+        disabled={disabled}
+        onChange={(event) => onChange(Number.parseFloat(event.currentTarget.value) || 0)}
+        className="model-input mt-1 w-full px-1 py-0.5 text-center text-[10px]"
+      />
+    </label>
+  );
+}
+
+function normalizeQuaternion(
+  rotation: [number, number, number, number],
+): [number, number, number, number] {
+  const length = Math.hypot(rotation[0], rotation[1], rotation[2], rotation[3]);
+  if (!Number.isFinite(length) || length <= 0.000001) {
+    return [0, 0, 0, 1];
+  }
+  return [rotation[0] / length, rotation[1] / length, rotation[2] / length, rotation[3] / length];
 }
 
 function EyebrowSlider({

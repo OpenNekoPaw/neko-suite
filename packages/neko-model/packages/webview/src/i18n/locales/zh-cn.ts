@@ -70,6 +70,8 @@ export const zhCN = {
   'animation.fade': '淡入淡出',
   'animation.unit': '秒',
   'animation.noClips': '无动画片段',
+  'animation.rootMotion': 'Root Motion',
+  'animation.rootAuto': '自动根节点',
 
   // Transform panel
   'transform.noSelection': '未选择节点',
@@ -84,6 +86,7 @@ export const zhCN = {
   'transform.light': '灯光',
   'transform.camera': '相机',
   'transform.skeleton': '骨骼',
+  'transform.characterRoot': '角色根节点：编辑位置即可移动整个人物。',
 
   // Face editor
   'face.title': '面部编辑器',
@@ -107,6 +110,9 @@ export const zhCN = {
   'bone.raise': '上扬',
   'bone.lower': '下压',
   'bone.furrow': '皱眉',
+  'bone.poseEdit': '姿态编辑',
+  'bone.boneId': '骨骼 ID',
+  'bone.applyPose': '应用姿态',
 
   // CSG panel
   'csg.title': 'CSG 布尔运算',

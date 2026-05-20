@@ -273,6 +273,8 @@ impl BevySceneWorld {
         time_cursor: f32,
         playing: bool,
         looping: bool,
+        root_motion_enabled: bool,
+        root_node_id: Option<String>,
     ) {
         let Some(entity) = self.playback_state_entity() else {
             return;
@@ -292,6 +294,8 @@ impl BevySceneWorld {
                 evaluated_time,
                 playing,
                 looping,
+                root_motion_enabled,
+                root_node_id,
             });
     }
 
@@ -711,7 +715,7 @@ impl SceneWorld for BevySceneWorld {
     fn tick(&mut self, clip_name: &str, time: f32) -> SceneDelta {
         // Advance animation
         systems::animation_tick(&mut self.world, clip_name, time);
-        self.write_playback_state(clip_name, time, true, true);
+        self.write_playback_state(clip_name, time, true, true, true, None);
 
         // Propagate transforms
         systems::transform_propagation(&mut self.world);
@@ -983,7 +987,7 @@ impl SceneWorld for BevySceneWorld {
                 loop_anim,
             ));
 
-        self.write_playback_state(clip_name, 0.0, true, loop_anim);
+        self.write_playback_state(clip_name, 0.0, true, loop_anim, true, None);
 
         Ok(())
     }

@@ -198,6 +198,26 @@ describe('Route A webview boundaries', () => {
     expect(sceneTree).not.toMatch(/postMessage\(/);
   });
 
+  it('routes animation playback, pose edits, and Root Motion through Route A scene control', () => {
+    const app = readSource('App.tsx');
+    const animationPlayer = readSource('components/AnimationPlayer.tsx');
+    const bonePanel = readSource('components/bone-expression/BoneExpressionPanel.tsx');
+
+    expect(app).toMatch(/sendSceneCommand\('animation-play'/);
+    expect(app).toMatch(/sendSceneCommand\('animation-seek'/);
+    expect(app).toMatch(/rootMotionEnabled/);
+    expect(app).toMatch(/rootNodeId/);
+    expect(app).toMatch(/type: 'bone-pose-set'/);
+    expect(app).toMatch(/type: 'addKeyframe'/);
+    expect(app).toMatch(/type: 'requestKeyframeTracks'/);
+    expect(animationPlayer).toMatch(/onRootMotionChange/);
+    expect(animationPlayer).toMatch(/animation\.rootMotion/);
+    expect(animationPlayer).toMatch(/onCrossfade\(clipName, fadeDuration\);\s+return;/);
+    expect(bonePanel).toMatch(/manualBoneId/);
+    expect(bonePanel).toMatch(/normalizeQuaternion/);
+    expect(`${animationPlayer}\n${bonePanel}`).not.toMatch(/postMessage\(/);
+  });
+
   it('keeps quality preview as a non-interactive overlay instead of replacing live Route A stream', () => {
     const app = readSource('App.tsx');
 

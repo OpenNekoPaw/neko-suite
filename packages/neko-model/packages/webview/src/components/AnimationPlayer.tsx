@@ -4,8 +4,12 @@ import { useTranslation } from '../i18n/I18nContext';
 
 interface AnimationPlayerProps {
   clips: AnimationClipInfo[];
+  nodes: readonly { nodeId: string; name: string }[];
   activeClip: string | null;
   playbackState: PlaybackState;
+  rootMotionEnabled: boolean;
+  rootMotionNodeId: string | null;
+  onRootMotionChange: (enabled: boolean, rootNodeId: string | null) => void;
   onSelectClip: (name: string) => void;
   onCrossfade: (clipName: string, fadeDuration: number) => void;
   onPlay: () => void;
@@ -22,8 +26,12 @@ interface AnimationPlayerProps {
  */
 export function AnimationPlayer({
   clips,
+  nodes,
   activeClip,
   playbackState,
+  rootMotionEnabled,
+  rootMotionNodeId,
+  onRootMotionChange,
   onSelectClip,
   onCrossfade,
   onPlay,
@@ -38,6 +46,7 @@ export function AnimationPlayer({
       // If currently playing, crossfade to the new clip instead of stop+play
       if (playbackState === 'playing' && activeClip && clipName !== activeClip) {
         onCrossfade(clipName, fadeDuration);
+        return;
       }
       onSelectClip(clipName);
     },
@@ -96,6 +105,30 @@ export function AnimationPlayer({
         />
         {t('animation.unit')}
       </label>
+
+      <label className="flex items-center gap-1 text-[var(--model-fg-secondary)]">
+        <input
+          type="checkbox"
+          checked={rootMotionEnabled}
+          onChange={(e) => onRootMotionChange(e.target.checked, rootMotionNodeId)}
+          disabled={disabled}
+        />
+        {t('animation.rootMotion')}
+      </label>
+
+      <select
+        className="min-w-24 px-2 py-1 text-xs"
+        value={rootMotionNodeId ?? ''}
+        onChange={(e) => onRootMotionChange(rootMotionEnabled, e.target.value || null)}
+        disabled={disabled || !rootMotionEnabled}
+      >
+        <option value="">{t('animation.rootAuto')}</option>
+        {nodes.map((node) => (
+          <option key={node.nodeId} value={node.nodeId}>
+            {node.name}
+          </option>
+        ))}
+      </select>
 
       {activeClip && (
         <span className="ml-auto truncate text-[var(--model-fg-secondary)]">

@@ -9,9 +9,10 @@ use crate::character_authoring::{
     CharacterAuthoringStore, LayeredCharacterDescription,
 };
 use crate::components::{
-    CharacterInstanceId, CharacterMaterialLayers, CharacterMorphWeights, CharacterOverrides,
-    SceneNodeId, SkeletonPose, Transform, Visible,
+    AnimationProperty, AnimationTarget, CharacterInstanceId, CharacterMaterialLayers,
+    CharacterMorphWeights, CharacterOverrides, SceneNodeId, SkeletonPose, Transform, Visible,
 };
+use crate::hierarchy::Parent;
 use crate::modeling_session::{ModelingSessionManager, TopologyOperation};
 use crate::systems;
 use crate::world::{
@@ -117,6 +118,15 @@ pub enum SceneCommandEvent {
         node_id: String,
         visible: bool,
     },
+    SetAnimationPlayback {
+        action: AnimationPlaybackAction,
+        clip_name: Option<String>,
+        time_ms: Option<f32>,
+        fade_duration: Option<f32>,
+        loop_anim: bool,
+        root_motion_enabled: bool,
+        root_node_id: Option<String>,
+    },
     SetCharacterMorph {
         character_id: String,
         morph_id: String,
@@ -135,6 +145,12 @@ pub enum SceneCommandEvent {
         position: [f32; 3],
         rotation: [f32; 4],
         scale: [f32; 3],
+        topology_version: u64,
+    },
+    ApplyCharacterExpressionPreset {
+        character_id: String,
+        preset_id: String,
+        weight: f32,
         topology_version: u64,
     },
     ApplyCharacterOverride {
@@ -160,6 +176,16 @@ pub enum SceneCommandEvent {
     CancelModelingSession {
         session_id: String,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AnimationPlaybackAction {
+    Select,
+    Play,
+    Pause,
+    Stop,
+    Crossfade,
+    Seek,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,6 +351,8 @@ pub enum CommandApplyError {
     CharacterCommandRejected(String),
     #[error("Modeling command rejected: {0}")]
     ModelingCommandRejected(String),
+    #[error("Animation command rejected: {0}")]
+    AnimationCommandRejected(String),
 }
 
 pub struct CommandApplySystem;
@@ -361,6 +389,26 @@ impl CommandApplySystem {
                     world.entity_mut(entity).insert(Visible(visible));
                 }
                 mark_visibility_dirty(world, &node_id);
+            }
+            SceneCommandEvent::SetAnimationPlayback {
+                action,
+                clip_name,
+                time_ms,
+                fade_duration,
+                loop_anim,
+                root_motion_enabled,
+                root_node_id,
+            } => {
+                apply_animation_playback_command(
+                    world,
+                    action,
+                    clip_name,
+                    time_ms,
+                    fade_duration,
+                    loop_anim,
+                    root_motion_enabled,
+                    root_node_id,
+                )?;
             }
             SceneCommandEvent::SetCharacterMorph {
                 character_id,
@@ -405,6 +453,22 @@ impl CommandApplySystem {
                         position,
                         rotation,
                         scale,
+                        topology_version,
+                    )
+                })?;
+            }
+            SceneCommandEvent::ApplyCharacterExpressionPreset {
+                character_id,
+                preset_id,
+                weight,
+                topology_version,
+            } => {
+                guard_parametric_command(world, Some(&character_id), topology_version)?;
+                apply_character_authoring_command(world, |store| {
+                    store.apply_expression_preset(
+                        &character_id,
+                        &preset_id,
+                        weight,
                         topology_version,
                     )
                 })?;
@@ -752,6 +816,318 @@ fn find_character_entity(
         .iter(world)
         .find_map(|(entity, id)| (id.0 == character_id).then_some(entity))
         .ok_or_else(|| CommandApplyError::CharacterNotFound(character_id.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_animation_playback_command(
+    world: &mut World,
+    action: AnimationPlaybackAction,
+    clip_name: Option<String>,
+    time_ms: Option<f32>,
+    fade_duration: Option<f32>,
+    loop_anim: bool,
+    root_motion_enabled: bool,
+    root_node_id: Option<String>,
+) -> Result<(), CommandApplyError> {
+    let Some(root_entity) = scene_root_entity(world) else {
+        return Err(CommandApplyError::AnimationCommandRejected(
+            "No scene root entity".to_string(),
+        ));
+    };
+
+    match action {
+        AnimationPlaybackAction::Stop => {
+            world
+                .entity_mut(root_entity)
+                .remove::<crate::animation_blend::SceneAnimationBlendState>()
+                .remove::<crate::animation_blend::SceneCrossfadeRequest>()
+                .insert(crate::animation_blend::SceneAnimationPlaybackState {
+                    clip_name: None,
+                    time_cursor: 0.0,
+                    evaluated_time: 0.0,
+                    playing: false,
+                    looping: false,
+                    root_motion_enabled,
+                    root_node_id,
+                });
+            return Ok(());
+        }
+        AnimationPlaybackAction::Pause => {
+            let current = world
+                .get::<crate::animation_blend::SceneAnimationPlaybackState>(root_entity)
+                .cloned()
+                .unwrap_or_default();
+            world.entity_mut(root_entity).insert(
+                crate::animation_blend::SceneAnimationPlaybackState {
+                    playing: false,
+                    root_motion_enabled,
+                    root_node_id: root_node_id.or(current.root_node_id),
+                    ..current
+                },
+            );
+            return Ok(());
+        }
+        AnimationPlaybackAction::Select => {
+            let clip_name = require_clip_name(clip_name)?;
+            validate_clip_exists(world, root_entity, &clip_name)?;
+            write_animation_playback_state(
+                world,
+                root_entity,
+                Some(clip_name),
+                time_ms.unwrap_or_default() / 1000.0,
+                false,
+                loop_anim,
+                root_motion_enabled,
+                root_node_id,
+            );
+            return Ok(());
+        }
+        AnimationPlaybackAction::Seek => {
+            let clip_name = require_clip_name(clip_name.or_else(|| {
+                world
+                    .get::<crate::animation_blend::SceneAnimationPlaybackState>(root_entity)
+                    .and_then(|state| state.clip_name.clone())
+            }))?;
+            let time_seconds = time_ms.unwrap_or_default() / 1000.0;
+            apply_clip_time(
+                world,
+                &clip_name,
+                time_seconds,
+                root_motion_enabled,
+                root_node_id.as_deref(),
+            )?;
+            write_animation_playback_state(
+                world,
+                root_entity,
+                Some(clip_name),
+                time_seconds,
+                false,
+                loop_anim,
+                root_motion_enabled,
+                root_node_id,
+            );
+            return Ok(());
+        }
+        AnimationPlaybackAction::Play | AnimationPlaybackAction::Crossfade => {}
+    }
+
+    let clip_name = require_clip_name(clip_name.or_else(|| {
+        world
+            .get::<crate::animation_blend::SceneAnimationPlaybackState>(root_entity)
+            .and_then(|state| state.clip_name.clone())
+    }))?;
+    let clip_index = validate_clip_exists(world, root_entity, &clip_name)?;
+    let start_seconds = time_ms.unwrap_or_default() / 1000.0;
+
+    if matches!(action, AnimationPlaybackAction::Crossfade) {
+        let fade_duration = fade_duration.unwrap_or(0.3).max(0.0);
+        let has_blend = world
+            .get::<crate::animation_blend::SceneAnimationBlendState>(root_entity)
+            .map(|state| !state.layers.is_empty())
+            .unwrap_or(false);
+        if !has_blend {
+            world.entity_mut(root_entity).insert(
+                crate::animation_blend::SceneAnimationBlendState::new(Vec::new()),
+            );
+        }
+        if let Some(mut blend) =
+            world.get_mut::<crate::animation_blend::SceneAnimationBlendState>(root_entity)
+        {
+            blend.layers.retain(|layer| layer.clip_index != clip_index);
+            blend
+                .layers
+                .push(crate::animation_blend::SceneBlendLayer::new(
+                    clip_index,
+                    start_seconds,
+                    0.0,
+                    loop_anim,
+                ));
+        }
+        world
+            .entity_mut(root_entity)
+            .insert(crate::animation_blend::SceneCrossfadeRequest::new(
+                clip_index,
+                fade_duration,
+                0.0,
+                loop_anim,
+            ));
+    } else {
+        world.entity_mut(root_entity).insert(
+            crate::animation_blend::SceneAnimationBlendState::new(vec![
+                crate::animation_blend::SceneBlendLayer::new(
+                    clip_index,
+                    start_seconds,
+                    1.0,
+                    loop_anim,
+                ),
+            ]),
+        );
+        apply_clip_time(
+            world,
+            &clip_name,
+            start_seconds,
+            root_motion_enabled,
+            root_node_id.as_deref(),
+        )?;
+    }
+
+    write_animation_playback_state(
+        world,
+        root_entity,
+        Some(clip_name),
+        start_seconds,
+        true,
+        loop_anim,
+        root_motion_enabled,
+        root_node_id,
+    );
+    Ok(())
+}
+
+fn scene_root_entity(world: &mut World) -> Option<Entity> {
+    let mut query = world.query_filtered::<Entity, With<crate::components::SceneRoot>>();
+    query.iter(world).next()
+}
+
+fn require_clip_name(clip_name: Option<String>) -> Result<String, CommandApplyError> {
+    clip_name
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| CommandApplyError::AnimationCommandRejected("clipName required".to_string()))
+}
+
+fn validate_clip_exists(
+    world: &mut World,
+    root_entity: Entity,
+    clip_name: &str,
+) -> Result<usize, CommandApplyError> {
+    world
+        .get::<AnimationTarget>(root_entity)
+        .and_then(|target| target.clips.iter().position(|clip| clip.name == clip_name))
+        .ok_or_else(|| {
+            CommandApplyError::AnimationCommandRejected(format!("Clip '{clip_name}' not found"))
+        })
+}
+
+fn apply_clip_time(
+    world: &mut World,
+    clip_name: &str,
+    time_seconds: f32,
+    root_motion_enabled: bool,
+    root_node_id: Option<&str>,
+) -> Result<(), CommandApplyError> {
+    let locked_root = if !root_motion_enabled {
+        resolve_root_motion_node_id(world, root_node_id).and_then(|node_id| {
+            find_indexed_node(world, &node_id)
+                .ok()
+                .and_then(|entity| {
+                    world
+                        .get::<Transform>(entity)
+                        .map(|transform| transform.position)
+                })
+                .map(|position| (node_id, position))
+        })
+    } else {
+        None
+    };
+    systems::animation_tick(world, clip_name, time_seconds);
+    if let Some((node_id, position)) = locked_root {
+        let entity = find_indexed_node(world, &node_id)?;
+        if let Some(mut transform) = world.get_mut::<Transform>(entity) {
+            transform.position = position;
+        }
+    }
+    systems::transform_propagation(world);
+    mark_all_transforms_dirty(world);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_animation_playback_state(
+    world: &mut World,
+    root_entity: Entity,
+    clip_name: Option<String>,
+    time_cursor: f32,
+    playing: bool,
+    looping: bool,
+    root_motion_enabled: bool,
+    root_node_id: Option<String>,
+) {
+    let evaluated_time = clip_name
+        .as_deref()
+        .and_then(|name| clip_duration(world, root_entity, name))
+        .filter(|duration| *duration > 0.0)
+        .map(|duration| time_cursor % duration)
+        .unwrap_or_default();
+    world
+        .entity_mut(root_entity)
+        .insert(crate::animation_blend::SceneAnimationPlaybackState {
+            clip_name,
+            time_cursor,
+            evaluated_time,
+            playing,
+            looping,
+            root_motion_enabled,
+            root_node_id,
+        });
+}
+
+fn clip_duration(world: &mut World, root_entity: Entity, clip_name: &str) -> Option<f32> {
+    world
+        .get::<AnimationTarget>(root_entity)
+        .and_then(|target| {
+            target
+                .clips
+                .iter()
+                .find(|clip| clip.name == clip_name)
+                .map(|clip| clip.duration)
+        })
+}
+
+fn mark_all_transforms_dirty(world: &mut World) {
+    let node_ids: Vec<String> = {
+        let mut query = world.query::<&SceneNodeId>();
+        query.iter(world).map(|node_id| node_id.0.clone()).collect()
+    };
+    for node_id in node_ids {
+        mark_transform_dirty(world, &node_id);
+    }
+}
+
+fn resolve_root_motion_node_id(
+    world: &mut World,
+    explicit_node_id: Option<&str>,
+) -> Option<String> {
+    if let Some(node_id) = explicit_node_id.filter(|value| !value.is_empty()) {
+        return Some(node_id.to_string());
+    }
+
+    let animated_translation_targets: Vec<String> = {
+        let mut query = world.query::<&AnimationTarget>();
+        query
+            .iter(world)
+            .flat_map(|target| target.clips.iter())
+            .flat_map(|clip| clip.channels.iter())
+            .filter(|channel| matches!(channel.property, AnimationProperty::Translation))
+            .map(|channel| channel.target_node.clone())
+            .collect()
+    };
+
+    for node_id in &animated_translation_targets {
+        if is_top_level_scene_node(world, node_id) {
+            return Some(node_id.clone());
+        }
+    }
+    animated_translation_targets.into_iter().next()
+}
+
+fn is_top_level_scene_node(world: &mut World, node_id: &str) -> bool {
+    let Ok(entity) = find_indexed_node(world, node_id) else {
+        return false;
+    };
+    match world.get::<Parent>(entity).map(|parent| parent.0) {
+        None => true,
+        Some(parent) => world.get::<crate::components::SceneRoot>(parent).is_some(),
+    }
 }
 
 fn apply_character_authoring_command(
@@ -1170,6 +1546,60 @@ mod tests {
             .iter()
             .any(|entry| entry.path == "$.descriptor.name"));
         assert!(world.resource::<DirtyTracker>().is_empty());
+    }
+
+    #[test]
+    fn animation_playback_command_locks_auto_root_motion_node() {
+        use crate::components::{
+            AnimationChannel, AnimationClipData, AnimationProperty, AnimationTarget, SceneRoot,
+        };
+
+        let mut world = World::new();
+        let root = world.spawn(SceneRoot).id();
+        let hips = world
+            .spawn((
+                SceneNodeId("hips".to_string()),
+                NodeName("Hips".to_string()),
+                Transform {
+                    position: glam::Vec3::new(10.0, 0.0, 0.0),
+                    ..Default::default()
+                },
+                GlobalTransform::identity(),
+                Parent(root),
+            ))
+            .id();
+        world
+            .entity_mut(root)
+            .insert(crate::hierarchy::Children(vec![hips]));
+        world.entity_mut(root).insert(AnimationTarget {
+            clips: vec![AnimationClipData {
+                name: "Walk".to_string(),
+                duration: 1.0,
+                channels: vec![AnimationChannel::from_flat(
+                    "hips".to_string(),
+                    AnimationProperty::Translation,
+                    &[0.0, 1.0],
+                    &[0.0, 0.0, 0.0, 2.0, 0.0, 0.0],
+                )],
+            }],
+        });
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::SetAnimationPlayback {
+                action: AnimationPlaybackAction::Seek,
+                clip_name: Some("Walk".to_string()),
+                time_ms: Some(500.0),
+                fade_duration: None,
+                loop_anim: true,
+                root_motion_enabled: false,
+                root_node_id: None,
+            },
+        )
+        .unwrap();
+
+        let transform = world.get::<Transform>(hips).unwrap();
+        assert!((transform.position.x - 10.0).abs() < f32::EPSILON);
     }
 
     #[test]

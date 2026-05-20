@@ -104,7 +104,7 @@ pub mod puppet {
 pub mod scene {
     pub use neko_runtime_scene::world::{SceneDelta, TransformUpdate};
     pub use neko_runtime_scene::{
-        SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope, SceneCommandEvent,
-        SceneCommandPhase, TopologyOperation, VertexBrushPatchMetadata,
+        AnimationPlaybackAction, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
+        SceneCommandEvent, SceneCommandPhase, TopologyOperation, VertexBrushPatchMetadata,
     };
 }

@@ -7,8 +7,8 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use neko_engine_kernel::contracts::gpu::CameraParams;
 use neko_engine_kernel::contracts::scene::{
-    SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope, SceneCommandEvent,
-    SceneCommandPhase, SceneDelta, TopologyOperation,
+    AnimationPlaybackAction, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
+    SceneCommandEvent, SceneCommandPhase, SceneDelta, TopologyOperation,
 };
 use neko_host_api::EngineApi;
 use serde::Deserialize;
@@ -1535,6 +1535,8 @@ struct ControlSceneCommand {
     #[serde(rename = "type")]
     command_type: String,
     payload_json: String,
+    #[serde(default)]
+    character_command: Option<CharacterCommandPayload>,
 }
 
 impl ControlSceneCommand {
@@ -1558,6 +1560,20 @@ impl ControlSceneCommand {
                     visible: payload.visible,
                 })
             }
+            "animation-play" => {
+                let payload: AnimationPlaybackPayload = serde_json::from_str(&self.payload_json)
+                    .map_err(|error| format!("invalid animation play command payload: {error}"))?;
+                payload.into_event()
+            }
+            "animation-seek" => {
+                let payload: AnimationSeekPayload = serde_json::from_str(&self.payload_json)
+                    .map_err(|error| format!("invalid animation seek command payload: {error}"))?;
+                Ok(payload.into_event())
+            }
+            "character" => self
+                .character_command
+                .ok_or_else(|| "character command payload required".to_string())?
+                .into_event(),
             "modeling-begin-session" => {
                 let payload: ModelingBeginSessionPayload = serde_json::from_str(&self.payload_json)
                     .map_err(|error| format!("invalid modeling begin session payload: {error}"))?;
@@ -1631,6 +1647,234 @@ struct VisibilityCommandPayload {
     #[serde(alias = "node_id")]
     node_id: String,
     visible: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AnimationPlaybackPayload {
+    action: String,
+    #[serde(default, alias = "clip_name")]
+    clip_name: Option<String>,
+    #[serde(default, alias = "fade_duration")]
+    fade_duration: Option<f32>,
+    #[serde(default, alias = "loop")]
+    loop_anim: Option<bool>,
+    #[serde(default, alias = "root_motion_enabled")]
+    root_motion_enabled: Option<bool>,
+    #[serde(default, alias = "root_node_id")]
+    root_node_id: Option<String>,
+}
+
+impl AnimationPlaybackPayload {
+    fn into_event(self) -> Result<SceneCommandEvent, String> {
+        let action = match self.action.as_str() {
+            "select" => AnimationPlaybackAction::Select,
+            "play" => AnimationPlaybackAction::Play,
+            "pause" => AnimationPlaybackAction::Pause,
+            "stop" => AnimationPlaybackAction::Stop,
+            "crossfade" => AnimationPlaybackAction::Crossfade,
+            other => return Err(format!("unsupported animation action: {other}")),
+        };
+
+        Ok(SceneCommandEvent::SetAnimationPlayback {
+            action,
+            clip_name: self.clip_name,
+            time_ms: None,
+            fade_duration: self.fade_duration,
+            loop_anim: self.loop_anim.unwrap_or(true),
+            root_motion_enabled: self.root_motion_enabled.unwrap_or(true),
+            root_node_id: self.root_node_id,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AnimationSeekPayload {
+    #[serde(default, alias = "clip_name")]
+    clip_name: Option<String>,
+    #[serde(alias = "time_ms")]
+    time_ms: f32,
+    #[serde(default, alias = "root_motion_enabled")]
+    root_motion_enabled: Option<bool>,
+    #[serde(default, alias = "root_node_id")]
+    root_node_id: Option<String>,
+}
+
+impl AnimationSeekPayload {
+    fn into_event(self) -> SceneCommandEvent {
+        SceneCommandEvent::SetAnimationPlayback {
+            action: AnimationPlaybackAction::Seek,
+            clip_name: self.clip_name,
+            time_ms: Some(self.time_ms),
+            fade_duration: None,
+            loop_anim: true,
+            root_motion_enabled: self.root_motion_enabled.unwrap_or(true),
+            root_node_id: self.root_node_id,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CharacterCommandPayload {
+    #[serde(rename = "type")]
+    command_type: String,
+    #[serde(alias = "character_id")]
+    character_id: String,
+    #[serde(default, alias = "topology_version")]
+    topology_version: Option<u64>,
+    #[serde(default, alias = "morph_set")]
+    morph_set: Option<CharacterMorphSetPayload>,
+    #[serde(default, alias = "material_layer")]
+    material_layer: Option<CharacterMaterialLayerPayload>,
+    #[serde(default, alias = "expression_preset")]
+    expression_preset: Option<CharacterExpressionPresetPayload>,
+    #[serde(default, alias = "bone_pose")]
+    bone_pose: Option<CharacterBonePosePayload>,
+    #[serde(default, alias = "override_edit")]
+    override_edit: Option<CharacterOverridePayload>,
+}
+
+impl CharacterCommandPayload {
+    fn into_event(self) -> Result<SceneCommandEvent, String> {
+        match self.command_type.as_str() {
+            "morph-set" => {
+                let morph = self
+                    .morph_set
+                    .ok_or_else(|| "morphSet payload required".to_string())?;
+                Ok(SceneCommandEvent::SetCharacterMorph {
+                    character_id: self.character_id,
+                    morph_id: morph.morph_id,
+                    weight: morph.weight,
+                    topology_version: self.topology_version.unwrap_or_default(),
+                })
+            }
+            "material-layer-set" => {
+                let material_layer = self
+                    .material_layer
+                    .ok_or_else(|| "materialLayer payload required".to_string())?;
+                Ok(SceneCommandEvent::SetCharacterMaterialLayer {
+                    character_id: self.character_id,
+                    slot_id: material_layer.slot_id,
+                    params_json: material_layer.params_json,
+                    topology_version: self.topology_version.unwrap_or_default(),
+                })
+            }
+            "expression-preset-apply" => {
+                let expression = self
+                    .expression_preset
+                    .ok_or_else(|| "expressionPreset payload required".to_string())?;
+                Ok(SceneCommandEvent::ApplyCharacterExpressionPreset {
+                    character_id: self.character_id,
+                    preset_id: expression.preset_id,
+                    weight: expression.weight,
+                    topology_version: self.topology_version.unwrap_or_default(),
+                })
+            }
+            "bone-pose-set" => {
+                let bone_pose = self
+                    .bone_pose
+                    .ok_or_else(|| "bonePose payload required".to_string())?;
+                let transform = bone_pose.transform.unwrap_or_default();
+                Ok(SceneCommandEvent::SetCharacterBonePose {
+                    character_id: self.character_id,
+                    bone_id: bone_pose.bone_id,
+                    position: transform.position.into_array(),
+                    rotation: transform.rotation.into_array(),
+                    scale: transform.scale.into_array(),
+                    topology_version: self.topology_version.unwrap_or_default(),
+                })
+            }
+            "override-apply" => {
+                let override_edit = self
+                    .override_edit
+                    .ok_or_else(|| "overrideEdit payload required".to_string())?;
+                let entry = override_edit
+                    .entries
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| "overrideEdit entries required".to_string())?;
+                Ok(SceneCommandEvent::ApplyCharacterOverride {
+                    character_id: self.character_id,
+                    path: entry.path,
+                    value_type: entry.value_type,
+                    value_json: entry.value_json,
+                    topology_version: self.topology_version.unwrap_or_default(),
+                })
+            }
+            other => Err(format!("unsupported character command type: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CharacterMorphSetPayload {
+    #[serde(alias = "morph_id")]
+    morph_id: String,
+    weight: f32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CharacterMaterialLayerPayload {
+    #[serde(alias = "slot_id")]
+    slot_id: String,
+    #[serde(alias = "params_json")]
+    params_json: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CharacterExpressionPresetPayload {
+    #[serde(alias = "preset_id")]
+    preset_id: String,
+    weight: f32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CharacterBonePosePayload {
+    #[serde(alias = "bone_id")]
+    bone_id: String,
+    #[serde(default)]
+    transform: Option<TransformPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CharacterOverridePayload {
+    #[serde(default)]
+    entries: Vec<CharacterOverrideEntryPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CharacterOverrideEntryPayload {
+    path: String,
+    #[serde(alias = "value_type")]
+    value_type: String,
+    #[serde(alias = "value_json")]
+    value_json: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransformPayload {
+    position: Vec3Payload,
+    rotation: QuatPayload,
+    scale: Vec3Payload,
+}
+
+impl Default for TransformPayload {
+    fn default() -> Self {
+        Self {
+            position: Vec3Payload::Array([0.0, 0.0, 0.0]),
+            rotation: QuatPayload::Array([0.0, 0.0, 0.0, 1.0]),
+            scale: Vec3Payload::Array([1.0, 1.0, 1.0]),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1827,6 +2071,113 @@ mod tests {
                         assert_eq!(position, [1.0, 2.0, 3.0]);
                     }
                     _ => panic!("expected transform event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+    }
+
+    #[test]
+    fn parses_animation_playback_command_with_root_motion() {
+        let message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":8,"baseRevision":3,"command":{"type":"animation-play","payloadJson":"{\"action\":\"play\",\"clipName\":\"Walk\",\"rootMotionEnabled\":false,\"rootNodeId\":\"hips\"}"}}}"#,
+        )
+        .unwrap();
+        match message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::SetAnimationPlayback {
+                        action,
+                        clip_name,
+                        root_motion_enabled,
+                        root_node_id,
+                        ..
+                    } => {
+                        assert_eq!(action, AnimationPlaybackAction::Play);
+                        assert_eq!(clip_name.as_deref(), Some("Walk"));
+                        assert!(!root_motion_enabled);
+                        assert_eq!(root_node_id.as_deref(), Some("hips"));
+                    }
+                    _ => panic!("expected animation playback event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+    }
+
+    #[test]
+    fn parses_character_bone_pose_command() {
+        let message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":9,"baseRevision":3,"command":{"type":"character","payloadJson":"{}","characterCommand":{"type":"bone-pose-set","characterId":"character-a","topologyVersion":3,"bonePose":{"boneId":"jaw","transform":{"position":{"x":0,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1},"scale":{"x":1,"y":1,"z":1}}}}}}}"#,
+        )
+        .unwrap();
+        match message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::SetCharacterBonePose {
+                        character_id,
+                        bone_id,
+                        rotation,
+                        topology_version,
+                        ..
+                    } => {
+                        assert_eq!(character_id, "character-a");
+                        assert_eq!(bone_id, "jaw");
+                        assert_eq!(rotation, [0.0, 0.0, 0.0, 1.0]);
+                        assert_eq!(topology_version, 3);
+                    }
+                    _ => panic!("expected bone pose event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+    }
+
+    #[test]
+    fn parses_character_morph_and_expression_commands() {
+        let morph_message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":10,"baseRevision":3,"command":{"type":"character","payloadJson":"{}","characterCommand":{"type":"morph-set","characterId":"character-a","topologyVersion":3,"morphSet":{"morphId":"Smile","weight":0.7}}}}}"#,
+        )
+        .unwrap();
+        match morph_message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::SetCharacterMorph {
+                        character_id,
+                        morph_id,
+                        weight,
+                        topology_version,
+                    } => {
+                        assert_eq!(character_id, "character-a");
+                        assert_eq!(morph_id, "Smile");
+                        assert!((weight - 0.7).abs() < f32::EPSILON);
+                        assert_eq!(topology_version, 3);
+                    }
+                    _ => panic!("expected morph event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+
+        let expression_message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":11,"baseRevision":3,"command":{"type":"character","payloadJson":"{}","characterCommand":{"type":"expression-preset-apply","characterId":"character-a","topologyVersion":3,"expressionPreset":{"presetId":"happy","weight":1}}}}}"#,
+        )
+        .unwrap();
+        match expression_message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::ApplyCharacterExpressionPreset {
+                        character_id,
+                        preset_id,
+                        weight,
+                        topology_version,
+                    } => {
+                        assert_eq!(character_id, "character-a");
+                        assert_eq!(preset_id, "happy");
+                        assert!((weight - 1.0).abs() < f32::EPSILON);
+                        assert_eq!(topology_version, 3);
+                    }
+                    _ => panic!("expected expression event"),
                 }
             }
             _ => panic!("expected command message"),

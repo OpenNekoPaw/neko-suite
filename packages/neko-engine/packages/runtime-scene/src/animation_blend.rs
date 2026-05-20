@@ -132,13 +132,29 @@ impl<'de> Deserialize<'de> for SceneBlendLayerInfo {
 }
 
 /// ECS component: authoritative animation playback cursor for export/capture.
-#[derive(Debug, Clone, Default, Component, Serialize, Deserialize)]
+#[derive(Debug, Clone, Component, Serialize, Deserialize)]
 pub struct SceneAnimationPlaybackState {
     pub clip_name: Option<String>,
     pub time_cursor: f32,
     pub evaluated_time: f32,
     pub playing: bool,
     pub looping: bool,
+    pub root_motion_enabled: bool,
+    pub root_node_id: Option<String>,
+}
+
+impl Default for SceneAnimationPlaybackState {
+    fn default() -> Self {
+        Self {
+            clip_name: None,
+            time_cursor: 0.0,
+            evaluated_time: 0.0,
+            playing: false,
+            looping: false,
+            root_motion_enabled: true,
+            root_node_id: None,
+        }
+    }
 }
 
 /// ECS component: multi-layer blend state on the scene root entity
@@ -250,6 +266,8 @@ mod tests {
         let state = SceneAnimationPlaybackState::default();
         assert!(state.clip_name.is_none());
         assert!(!state.playing);
+        assert!(state.root_motion_enabled);
+        assert!(state.root_node_id.is_none());
     }
 
     #[test]

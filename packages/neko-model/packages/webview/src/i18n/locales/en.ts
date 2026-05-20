@@ -70,6 +70,8 @@ export const en = {
   'animation.fade': 'Fade',
   'animation.unit': 's',
   'animation.noClips': 'No animation clips',
+  'animation.rootMotion': 'Root Motion',
+  'animation.rootAuto': 'Root auto',
 
   // Transform panel
   'transform.noSelection': 'No node selected',
@@ -84,6 +86,7 @@ export const en = {
   'transform.light': 'Light',
   'transform.camera': 'Camera',
   'transform.skeleton': 'Skeleton',
+  'transform.characterRoot': 'Character root: edit Position to move the whole person.',
 
   // Face editor
   'face.title': 'Face Editor',
@@ -107,6 +110,9 @@ export const en = {
   'bone.raise': 'Raise',
   'bone.lower': 'Lower',
   'bone.furrow': 'Furrow',
+  'bone.poseEdit': 'Pose Edit',
+  'bone.boneId': 'Bone ID',
+  'bone.applyPose': 'Apply Pose',
 
   // CSG panel
   'csg.title': 'CSG Boolean',

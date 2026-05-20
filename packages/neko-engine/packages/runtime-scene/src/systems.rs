@@ -8,7 +8,8 @@ use crate::animation_blend::{
     SceneAnimationBlendState, SceneAnimationPlaybackState, SceneBlendLayer, SceneCrossfadeRequest,
 };
 use crate::components::{
-    AnimationProperty, AnimationTarget, GlobalTransform, MorphWeights, SceneRoot, Transform,
+    AnimationProperty, AnimationTarget, GlobalTransform, MorphWeights, SceneNodeId, SceneRoot,
+    Transform,
 };
 use crate::hierarchy::{Children, Parent};
 use bevy_ecs::prelude::*;
@@ -324,6 +325,12 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
         return;
     }
 
+    let existing_playback = world
+        .get::<SceneAnimationPlaybackState>(root_entity)
+        .cloned()
+        .unwrap_or_default();
+    let locked_root = locked_root_position(world, &existing_playback);
+
     // Read clip data from AnimationTarget (durations + channels)
     let clips: Vec<_> = {
         match world.get::<AnimationTarget>(root_entity) {
@@ -563,6 +570,9 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
         let normalized = *val / *total_weight;
         apply_to_node_transform(world, node_id, |t| t.position = normalized);
     }
+    if let Some((node_id, position)) = locked_root {
+        apply_to_node_transform(world, &node_id, |t| t.position = position);
+    }
     for (node_id, (val, total_weight)) in &rotation_accum {
         if *total_weight <= 0.0 {
             continue;
@@ -612,12 +622,69 @@ pub fn scene_animation_blend_tick(world: &mut World, delta: f32) {
                 evaluated_time,
                 playing: dominant_layer.weight > 0.0,
                 looping: dominant_layer.looping,
+                root_motion_enabled: existing_playback.root_motion_enabled,
+                root_node_id: existing_playback.root_node_id,
             });
     }
 }
 
+fn locked_root_position(
+    world: &mut World,
+    playback: &SceneAnimationPlaybackState,
+) -> Option<(String, glam::Vec3)> {
+    if playback.root_motion_enabled {
+        return None;
+    }
+    resolve_root_motion_node_id(world, playback.root_node_id.as_deref()).and_then(|node_id| {
+        find_entity_by_node_id(world, &node_id)
+            .and_then(|entity| {
+                world
+                    .get::<Transform>(entity)
+                    .map(|transform| transform.position)
+            })
+            .map(|position| (node_id, position))
+    })
+}
+
+fn resolve_root_motion_node_id(
+    world: &mut World,
+    explicit_node_id: Option<&str>,
+) -> Option<String> {
+    if let Some(node_id) = explicit_node_id.filter(|value| !value.is_empty()) {
+        return Some(node_id.to_string());
+    }
+
+    let animated_translation_targets: Vec<String> = {
+        let mut query = world.query::<&AnimationTarget>();
+        query
+            .iter(world)
+            .flat_map(|target| target.clips.iter())
+            .flat_map(|clip| clip.channels.iter())
+            .filter(|channel| matches!(channel.property, AnimationProperty::Translation))
+            .map(|channel| channel.target_node.clone())
+            .collect()
+    };
+
+    for node_id in &animated_translation_targets {
+        if is_top_level_scene_node(world, node_id) {
+            return Some(node_id.clone());
+        }
+    }
+    animated_translation_targets.into_iter().next()
+}
+
+fn is_top_level_scene_node(world: &mut World, node_id: &str) -> bool {
+    let Some(entity) = find_entity_by_node_id(world, node_id) else {
+        return false;
+    };
+    match world.get::<Parent>(entity).map(|parent| parent.0) {
+        None => true,
+        Some(parent) => world.get::<SceneRoot>(parent).is_some(),
+    }
+}
+
 fn find_entity_by_node_id(world: &mut World, node_id: &str) -> Option<Entity> {
-    let mut q = world.query::<(Entity, &crate::components::SceneNodeId)>();
+    let mut q = world.query::<(Entity, &SceneNodeId)>();
     for (entity, id) in q.iter(world) {
         if id.0 == node_id {
             return Some(entity);
@@ -804,5 +871,57 @@ mod tests {
         assert!((mw.weights[1] - 0.0).abs() < f32::EPSILON);
 
         let _ = root; // suppress unused warning
+    }
+
+    #[test]
+    fn scene_animation_blend_tick_preserves_locked_root_motion_position() {
+        let mut world = World::new();
+        let root = world.spawn(SceneRoot).id();
+        let hips = world
+            .spawn((
+                SceneNodeId("hips".to_string()),
+                Transform {
+                    position: glam::Vec3::new(10.0, 0.0, 0.0),
+                    ..Default::default()
+                },
+                GlobalTransform::identity(),
+                Parent(root),
+            ))
+            .id();
+        world.entity_mut(root).insert(Children(vec![hips]));
+
+        let clip = AnimationClipData {
+            name: "Move".to_string(),
+            duration: 1.0,
+            channels: vec![AnimationChannel::from_flat(
+                "hips".to_string(),
+                AnimationProperty::Translation,
+                &[0.0, 1.0],
+                &[0.0, 0.0, 0.0, 2.0, 0.0, 0.0],
+            )],
+        };
+        world.entity_mut(root).insert((
+            AnimationTarget { clips: vec![clip] },
+            SceneAnimationBlendState::new(vec![SceneBlendLayer::new(0, 0.0, 1.0, true)]),
+            SceneAnimationPlaybackState {
+                clip_name: Some("Move".to_string()),
+                playing: true,
+                looping: true,
+                root_motion_enabled: false,
+                root_node_id: None,
+                ..Default::default()
+            },
+        ));
+
+        scene_animation_blend_tick(&mut world, 0.5);
+
+        let transform = world.get::<Transform>(hips).unwrap();
+        assert!((transform.position.x - 10.0).abs() < f32::EPSILON);
+
+        let state = world.get::<SceneAnimationPlaybackState>(root).unwrap();
+        assert_eq!(state.clip_name.as_deref(), Some("Move"));
+        assert!(!state.root_motion_enabled);
+        assert!(state.root_node_id.is_none());
+        assert!(state.playing);
     }
 }
