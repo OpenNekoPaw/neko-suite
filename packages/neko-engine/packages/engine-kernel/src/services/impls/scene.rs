@@ -718,7 +718,7 @@ impl ISceneService for SceneService {
                 .asset_database
                 .lock()
                 .map_err(|e| Error::Other(format!("Asset database lock poisoned: {}", e)))?;
-            database.merge(load_result.asset_database);
+            *database = load_result.asset_database;
         }
 
         if let Some(renderer) = &self.scene_renderer {

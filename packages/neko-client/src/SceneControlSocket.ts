@@ -42,8 +42,45 @@ export interface SceneControlReadyMessage {
   lastClientRevision?: number;
 }
 
+export interface SceneViewportResolution {
+  width: number;
+  height: number;
+  pixelRatio: number;
+}
+
+export interface SceneViewportCameraUpdate {
+  sceneId?: string;
+  sceneRevision?: number;
+  viewportId?: string;
+  position: [number, number, number];
+  target: [number, number, number];
+  up?: [number, number, number];
+  fovY?: number;
+  resolution?: SceneViewportResolution;
+}
+
+export interface SceneViewportCameraAck {
+  type: 'viewportCameraAck';
+  requestId?: string;
+  sceneId?: string;
+  viewportId?: string;
+  status?: 'applied' | 'rejected';
+  revision?: number;
+  acceptedRevision?: number;
+  error?: string;
+}
+
+export class SceneViewportCameraRejectedError extends Error {
+  override name = 'SceneViewportCameraRejectedError';
+}
+
 interface PendingAck {
   resolve: (ack: SceneCommandAck) => void;
+  reject: (error: Error) => void;
+}
+
+interface PendingViewportCamera {
+  resolve: (ack: SceneViewportCameraAck) => void;
   reject: (error: Error) => void;
 }
 
@@ -70,7 +107,9 @@ export class SceneControlSocket {
   private manuallyClosed = false;
   private lastKnownRevision: number | undefined;
   private readonly pendingAcks = new Map<number, PendingAck>();
+  private readonly pendingViewportCameras = new Map<string, PendingViewportCamera>();
   private readonly pendingQueries = new Map<string, PendingQuery>();
+  private nextViewportCameraRequestId = 1;
   private nextQueryId = 1;
 
   constructor(config: SceneControlSocketConfig) {
@@ -146,6 +185,22 @@ export class SceneControlSocket {
     });
   }
 
+  updateViewportCamera(
+    update: SceneViewportCameraUpdate,
+    requestId?: string,
+  ): Promise<SceneViewportCameraAck> {
+    const id = requestId ?? `viewport-camera-${this.nextViewportCameraRequestId++}`;
+    return new Promise((resolve, reject) => {
+      this.pendingViewportCameras.set(id, { resolve, reject });
+      try {
+        this.send({ type: 'viewportCamera', requestId: id, ...cameraUpdateToMessage(update) });
+      } catch (error) {
+        this.pendingViewportCameras.delete(id);
+        reject(toError(error));
+      }
+    });
+  }
+
   resync(sceneId = this.config.sceneId): void {
     this.send({ type: 'resync', sceneId });
   }
@@ -207,6 +262,9 @@ export class SceneControlSocket {
         break;
       case 'queryResult':
         this.handleQueryResult(message);
+        break;
+      case 'viewportCameraAck':
+        this.handleViewportCameraAck(message);
         break;
       case 'renderFrameMeta':
         this.handleRenderFrameMeta(message.meta);
@@ -272,6 +330,23 @@ export class SceneControlSocket {
     pending.resolve(message.result ?? message.snapshot ?? message);
   }
 
+  private handleViewportCameraAck(message: SceneControlSocketMessage): void {
+    const ack = message as SceneViewportCameraAck;
+    const requestId = typeof message.requestId === 'string' ? message.requestId : undefined;
+    if (!requestId) return;
+
+    const pending = this.pendingViewportCameras.get(requestId);
+    if (!pending) return;
+    this.pendingViewportCameras.delete(requestId);
+    if (ack.status === 'rejected') {
+      pending.reject(
+        new SceneViewportCameraRejectedError(ack.error ?? 'Viewport camera update rejected'),
+      );
+      return;
+    }
+    pending.resolve(ack);
+  }
+
   private handleRenderFrameMeta(value: unknown): void {
     if (!isRecord(value)) {
       this.reportError(new Error('Invalid render frame metadata'));
@@ -315,6 +390,10 @@ export class SceneControlSocket {
       pending.reject(error);
     }
     this.pendingAcks.clear();
+    for (const pending of this.pendingViewportCameras.values()) {
+      pending.reject(error);
+    }
+    this.pendingViewportCameras.clear();
     for (const pending of this.pendingQueries.values()) {
       pending.reject(error);
     }
@@ -341,6 +420,16 @@ export class SceneControlSocket {
         this.pendingQueries.delete(requestId);
         pending.reject(error);
       }
+      const pendingViewportCamera = this.pendingViewportCameras.get(requestId);
+      if (pendingViewportCamera) {
+        this.pendingViewportCameras.delete(requestId);
+        pendingViewportCamera.reject(error);
+      }
+    } else if (this.pendingViewportCameras.size > 0) {
+      for (const pending of this.pendingViewportCameras.values()) {
+        pending.reject(error);
+      }
+      this.pendingViewportCameras.clear();
     }
     this.reportError(error);
   }
@@ -357,6 +446,19 @@ function parseJsonObject(data: string): SceneControlSocketMessage | null {
 
 function stripUndefined(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
+function cameraUpdateToMessage(update: SceneViewportCameraUpdate): Record<string, unknown> {
+  return stripUndefined({
+    sceneId: update.sceneId,
+    sceneRevision: update.sceneRevision,
+    viewportId: update.viewportId,
+    position: update.position,
+    target: update.target,
+    up: update.up,
+    fovY: update.fovY,
+    resolution: update.resolution,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

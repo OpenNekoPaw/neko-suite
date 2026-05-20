@@ -288,7 +288,13 @@ pub async fn handle_general_resource(
     Path((token, resource_path)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    serve_resource_token(registry.file_access().clone(), token, resource_path, headers).await
+    serve_resource_token(
+        registry.file_access().clone(),
+        token,
+        resource_path,
+        headers,
+    )
+    .await
 }
 
 async fn serve_resource_token(

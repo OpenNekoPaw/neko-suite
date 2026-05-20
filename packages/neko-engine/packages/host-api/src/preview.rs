@@ -292,7 +292,6 @@ impl PreviewFileRegistry {
         }
         Ok(())
     }
-
 }
 
 impl Default for PreviewFileRegistry {
@@ -316,7 +315,9 @@ mod registry_tests {
             .to_path_buf()]));
         let registry = PreviewFileRegistry::from_file_access(files.clone());
 
-        let token = registry.register(file_path.clone()).expect("register token");
+        let token = registry
+            .register(file_path.clone())
+            .expect("register token");
 
         assert_eq!(
             registry.lookup_token(&token).expect("preview lookup"),

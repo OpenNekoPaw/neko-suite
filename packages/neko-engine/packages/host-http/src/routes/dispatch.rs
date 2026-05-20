@@ -219,7 +219,11 @@ mod tests {
 
         let Json(response) = handle_resource_dispatch(
             State(engine),
-            Path(("files".to_string(), "missing-token".to_string(), "stat".to_string())),
+            Path((
+                "files".to_string(),
+                "missing-token".to_string(),
+                "stat".to_string(),
+            )),
             None,
         )
         .await;

@@ -28,27 +28,27 @@ mod offsets {
 
     // Deformer offsets
     pub const DEFORMER_IDS: usize = 0x68;
-    pub const DEFORMER_KEYFORM_BINDING_SOURCES_INDICES: usize = 0x6C;
-    pub const DEFORMER_IS_VISIBLE: usize = 0x70;
-    pub const DEFORMER_IS_ENABLED: usize = 0x74;
-    pub const DEFORMER_PARENT_PART_INDICES: usize = 0x78;
-    pub const DEFORMER_PARENT_DEFORMER_INDICES: usize = 0x7C;
-    pub const DEFORMER_TYPES: usize = 0x80;
-    pub const DEFORMER_SPECIFIC_SOURCES_INDICES: usize = 0x84;
+    pub const DEFORMER_KEYFORM_BINDING_SOURCES_INDICES: usize = 0x70;
+    pub const DEFORMER_IS_VISIBLE: usize = 0x74;
+    pub const DEFORMER_IS_ENABLED: usize = 0x78;
+    pub const DEFORMER_PARENT_PART_INDICES: usize = 0x7C;
+    pub const DEFORMER_PARENT_DEFORMER_INDICES: usize = 0x80;
+    pub const DEFORMER_TYPES: usize = 0x84;
+    pub const DEFORMER_SPECIFIC_SOURCES_INDICES: usize = 0x88;
 
     // Warp deformer offsets
-    pub const WARP_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES: usize = 0x88;
-    pub const WARP_DEFORMER_KEYFORM_SOURCES_BEGIN: usize = 0x8C;
-    pub const WARP_DEFORMER_KEYFORM_SOURCES_COUNT: usize = 0x90;
-    pub const WARP_DEFORMER_VERTEX_COUNTS: usize = 0x94;
-    pub const WARP_DEFORMER_ROWS: usize = 0x98;
-    pub const WARP_DEFORMER_COLUMNS: usize = 0x9C;
+    pub const WARP_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES: usize = 0x8C;
+    pub const WARP_DEFORMER_KEYFORM_SOURCES_BEGIN: usize = 0x90;
+    pub const WARP_DEFORMER_KEYFORM_SOURCES_COUNT: usize = 0x94;
+    pub const WARP_DEFORMER_VERTEX_COUNTS: usize = 0x98;
+    pub const WARP_DEFORMER_ROWS: usize = 0x9C;
+    pub const WARP_DEFORMER_COLUMNS: usize = 0xA0;
 
     // Rotation deformer offsets
-    pub const ROTATION_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES: usize = 0xA0;
-    pub const ROTATION_DEFORMER_KEYFORM_SOURCES_BEGIN: usize = 0xA4;
-    pub const ROTATION_DEFORMER_KEYFORM_SOURCES_COUNT: usize = 0xA8;
-    pub const ROTATION_DEFORMER_BASE_ANGLES: usize = 0xAC;
+    pub const ROTATION_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES: usize = 0xA4;
+    pub const ROTATION_DEFORMER_KEYFORM_SOURCES_BEGIN: usize = 0xA8;
+    pub const ROTATION_DEFORMER_KEYFORM_SOURCES_COUNT: usize = 0xAC;
+    pub const ROTATION_DEFORMER_BASE_ANGLES: usize = 0xB0;
 
     // ArtMesh offsets
     pub const ART_MESH_IDS: usize = 0xC4;
@@ -61,10 +61,10 @@ mod offsets {
     pub const ART_MESH_PARENT_DEFORMER_INDICES: usize = 0xE0;
     pub const ART_MESH_TEXTURE_INDICES: usize = 0xE4;
     pub const ART_MESH_DRAWABLE_FLAGS: usize = 0xE8;
-    pub const ART_MESH_VERTEX_COUNTS: usize = 0xEC;
+    pub const ART_MESH_POSITION_INDEX_SOURCES_COUNT: usize = 0xEC;
     pub const ART_MESH_UV_SOURCES_BEGIN: usize = 0xF0;
     pub const ART_MESH_POSITION_INDEX_SOURCES_BEGIN: usize = 0xF4;
-    pub const ART_MESH_POSITION_INDEX_SOURCES_COUNT: usize = 0xF8;
+    pub const ART_MESH_VERTEX_COUNTS: usize = 0xF8;
 
     // Parameter offsets
     pub const PARAMETER_IDS: usize = 0x108;
@@ -76,14 +76,20 @@ mod offsets {
     pub const PARAMETER_BINDING_SOURCES_COUNT: usize = 0x124;
 
     // Parameter binding offsets
-    pub const PARAMETER_BINDING_KEYS_SOURCES_BEGIN: usize = 0x128;
-    pub const PARAMETER_BINDING_KEYS_SOURCES_COUNT: usize = 0x12C;
+    pub const KEYFORM_BINDING_INDICES: usize = 0x160;
+    pub const KEYFORM_BINDING_BAND_SOURCES_BEGIN: usize = 0x164;
+    pub const KEYFORM_BINDING_BAND_SOURCES_COUNT: usize = 0x168;
+    pub const PARAMETER_BINDING_KEYS_SOURCES_BEGIN: usize = 0x16C;
+    pub const PARAMETER_BINDING_KEYS_SOURCES_COUNT: usize = 0x170;
 
     // Keyform position / UV data
-    pub const KEYFORM_POSITION_SOURCES_BEGIN: usize = 0x130;
-    pub const UV_SOURCES_BEGIN: usize = 0x164;
-    pub const POSITION_INDEX_SOURCES_BEGIN: usize = 0x168;
+    pub const WARP_DEFORMER_KEYFORM_POSITION_SOURCES_BEGIN: usize = 0x130;
+    pub const ROTATION_DEFORMER_KEYFORM_ANGLES: usize = 0x138;
+    pub const ART_MESH_KEYFORM_POSITION_SOURCES_BEGIN: usize = 0x158;
+    pub const KEYFORM_POSITION_SOURCES_XYS: usize = 0x15C;
     pub const KEY_VALUES: usize = 0x174;
+    pub const UV_SOURCES_BEGIN: usize = 0x178;
+    pub const POSITION_INDEX_SOURCES_BEGIN: usize = 0x17C;
 
     // Draw order
     pub const DRAW_ORDER_GROUP_OBJECT_INDICES: usize = 0x158;
@@ -166,6 +172,7 @@ pub struct Moc3WarpDeformer {
     pub columns: u32,
     pub keyform_sources_begin: i32,
     pub keyform_sources_count: i32,
+    pub keyform_position_sources_begin: i32,
     pub keyform_binding_sources_index: i32,
 }
 
@@ -175,6 +182,7 @@ pub struct Moc3RotationDeformer {
     pub base_angle: f32,
     pub keyform_sources_begin: i32,
     pub keyform_sources_count: i32,
+    pub keyform_angles_begin: i32,
     pub keyform_binding_sources_index: i32,
 }
 
@@ -192,6 +200,7 @@ pub struct Moc3ArtMesh {
     pub uv_sources_begin: i32,
     pub position_index_sources_begin: i32,
     pub position_index_sources_count: i32,
+    pub keyform_position_sources_begin: i32,
     pub keyform_sources_begin: i32,
     pub keyform_sources_count: i32,
     pub keyform_binding_sources_index: i32,
@@ -200,8 +209,29 @@ pub struct Moc3ArtMesh {
 /// Parsed parameter binding
 #[derive(Debug, Clone)]
 pub struct Moc3ParameterBinding {
+    pub keyform_binding_index: i32,
     pub keys_sources_begin: i32,
     pub keys_sources_count: i32,
+}
+
+/// Parsed key form binding.
+///
+/// Parameters/deformers/art meshes point into this table first. It then points
+/// into a binding band row, which contains key value ranges for interpolation.
+#[derive(Debug, Clone)]
+pub struct Moc3KeyformBinding {
+    pub band_sources_begin: i32,
+    pub band_sources_count: i32,
+}
+
+/// Parsed key form position source.
+///
+/// MOC3 key form position begin fields point into this table first. Each row
+/// then points into the flat XY float array where coordinates live.
+#[derive(Debug, Clone)]
+pub struct Moc3KeyformPositionSource {
+    pub xys_begin: i32,
+    pub xys_count: i32,
 }
 
 /// Complete parsed MOC3 data
@@ -216,14 +246,18 @@ pub struct Moc3Data {
     pub rotation_deformers: Vec<Moc3RotationDeformer>,
     pub art_meshes: Vec<Moc3ArtMesh>,
     pub parameter_bindings: Vec<Moc3ParameterBinding>,
+    pub keyform_bindings: Vec<Moc3KeyformBinding>,
+    pub warp_deformer_keyform_position_sources: Vec<Moc3KeyformPositionSource>,
+    pub rotation_deformer_keyform_angles: Vec<f32>,
+    pub art_mesh_keyform_position_sources: Vec<Moc3KeyformPositionSource>,
     /// Flat array of key values (shared across all bindings)
     pub key_values: Vec<f32>,
     /// Flat array of UV coordinates (x, y pairs)
     pub uvs: Vec<Vec2>,
     /// Flat array of position indices (triangle indices)
     pub position_indices: Vec<u16>,
-    /// Flat array of keyform vertex positions (x, y pairs)
-    pub keyform_positions: Vec<Vec2>,
+    /// Flat array of keyform XY values.
+    pub keyform_position_xys: Vec<f32>,
 }
 
 // ─── Safe binary reader ──────────────────────────────────────────────────────
@@ -356,6 +390,14 @@ pub fn parse_moc3(data: &[u8]) -> Result<Moc3Data, LoadError> {
     // Read parameter bindings
     let parameter_bindings = read_parameter_bindings(&r, &counts)?;
 
+    // Read keyform binding and position source indirection tables
+    let keyform_bindings = read_keyform_bindings(&r, &counts)?;
+    let warp_deformer_keyform_position_sources =
+        read_warp_deformer_keyform_position_sources(&r, &counts)?;
+    let rotation_deformer_keyform_angles = read_rotation_deformer_keyform_angles(&r, &counts)?;
+    let art_mesh_keyform_position_sources = read_art_mesh_keyform_position_sources(&r, &counts)?;
+    let keyform_position_xys = read_keyform_position_xys(&r, &counts)?;
+
     // Read key values
     let key_values = read_key_values(&r, &counts)?;
 
@@ -364,9 +406,6 @@ pub fn parse_moc3(data: &[u8]) -> Result<Moc3Data, LoadError> {
 
     // Read position indices
     let position_indices = read_position_indices(&r, &counts)?;
-
-    // Read keyform positions
-    let keyform_positions = read_keyform_positions(&r, &counts)?;
 
     Ok(Moc3Data {
         version,
@@ -378,10 +417,14 @@ pub fn parse_moc3(data: &[u8]) -> Result<Moc3Data, LoadError> {
         rotation_deformers,
         art_meshes,
         parameter_bindings,
+        keyform_bindings,
+        warp_deformer_keyform_position_sources,
+        rotation_deformer_keyform_angles,
+        art_mesh_keyform_position_sources,
         key_values,
         uvs,
         position_indices,
-        keyform_positions,
+        keyform_position_xys,
     })
 }
 
@@ -497,6 +540,8 @@ fn read_warp_deformers(
     let cols_addr = r.read_ptr(offsets::WARP_DEFORMER_COLUMNS)? as usize;
     let begin_addr = r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_SOURCES_BEGIN)? as usize;
     let count_addr = r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_SOURCES_COUNT)? as usize;
+    let position_begin_addr =
+        r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_POSITION_SOURCES_BEGIN)? as usize;
     let binding_addr = r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
 
     let mut warps = Vec::with_capacity(n);
@@ -507,6 +552,7 @@ fn read_warp_deformers(
             columns: r.read_u32_le(cols_addr + i * 4)?,
             keyform_sources_begin: r.read_i32_le(begin_addr + i * 4)?,
             keyform_sources_count: r.read_i32_le(count_addr + i * 4)?,
+            keyform_position_sources_begin: r.read_i32_le(position_begin_addr + i * 4)?,
             keyform_binding_sources_index: r.read_i32_le(binding_addr + i * 4)?,
         });
     }
@@ -521,6 +567,7 @@ fn read_rotation_deformers(
     let angle_addr = r.read_ptr(offsets::ROTATION_DEFORMER_BASE_ANGLES)? as usize;
     let begin_addr = r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_SOURCES_BEGIN)? as usize;
     let count_addr = r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_SOURCES_COUNT)? as usize;
+    let angles_begin_addr = r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_ANGLES)? as usize;
     let binding_addr =
         r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
 
@@ -530,6 +577,7 @@ fn read_rotation_deformers(
             base_angle: r.read_f32_le(angle_addr + i * 4)?,
             keyform_sources_begin: r.read_i32_le(begin_addr + i * 4)?,
             keyform_sources_count: r.read_i32_le(count_addr + i * 4)?,
+            keyform_angles_begin: r.read_i32_le(angles_begin_addr + i * 4)?,
             keyform_binding_sources_index: r.read_i32_le(binding_addr + i * 4)?,
         });
     }
@@ -549,6 +597,8 @@ fn read_art_meshes(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<Moc3Art
     let uv_begin_addr = r.read_ptr(offsets::ART_MESH_UV_SOURCES_BEGIN)? as usize;
     let idx_begin_addr = r.read_ptr(offsets::ART_MESH_POSITION_INDEX_SOURCES_BEGIN)? as usize;
     let idx_count_addr = r.read_ptr(offsets::ART_MESH_POSITION_INDEX_SOURCES_COUNT)? as usize;
+    let position_begin_addr =
+        r.read_ptr(offsets::ART_MESH_KEYFORM_POSITION_SOURCES_BEGIN)? as usize;
     let kf_begin_addr = r.read_ptr(offsets::ART_MESH_KEYFORM_SOURCES_BEGIN)? as usize;
     let kf_count_addr = r.read_ptr(offsets::ART_MESH_KEYFORM_SOURCES_COUNT)? as usize;
     let kf_binding_addr = r.read_ptr(offsets::ART_MESH_KEYFORM_BINDING_SOURCES_INDICES)? as usize;
@@ -567,6 +617,7 @@ fn read_art_meshes(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<Moc3Art
             uv_sources_begin: r.read_i32_le(uv_begin_addr + i * 4)?,
             position_index_sources_begin: r.read_i32_le(idx_begin_addr + i * 4)?,
             position_index_sources_count: r.read_i32_le(idx_count_addr + i * 4)?,
+            keyform_position_sources_begin: r.read_i32_le(position_begin_addr + i * 4)?,
             keyform_sources_begin: r.read_i32_le(kf_begin_addr + i * 4)?,
             keyform_sources_count: r.read_i32_le(kf_count_addr + i * 4)?,
             keyform_binding_sources_index: r.read_i32_le(kf_binding_addr + i * 4)?,
@@ -580,17 +631,97 @@ fn read_parameter_bindings(
     counts: &ElementCounts,
 ) -> Result<Vec<Moc3ParameterBinding>, LoadError> {
     let n = counts.parameter_bindings as usize;
+    let indices_addr = r.read_ptr(offsets::KEYFORM_BINDING_INDICES)? as usize;
     let begin_addr = r.read_ptr(offsets::PARAMETER_BINDING_KEYS_SOURCES_BEGIN)? as usize;
     let count_addr = r.read_ptr(offsets::PARAMETER_BINDING_KEYS_SOURCES_COUNT)? as usize;
 
     let mut bindings = Vec::with_capacity(n);
     for i in 0..n {
         bindings.push(Moc3ParameterBinding {
+            keyform_binding_index: r.read_i32_le(indices_addr + i * 4)?,
             keys_sources_begin: r.read_i32_le(begin_addr + i * 4)?,
             keys_sources_count: r.read_i32_le(count_addr + i * 4)?,
         });
     }
     Ok(bindings)
+}
+
+fn read_keyform_bindings(
+    r: &SafeReader,
+    counts: &ElementCounts,
+) -> Result<Vec<Moc3KeyformBinding>, LoadError> {
+    let n = counts.keyform_bindings as usize;
+    let begin_addr = r.read_ptr(offsets::KEYFORM_BINDING_BAND_SOURCES_BEGIN)? as usize;
+    let count_addr = r.read_ptr(offsets::KEYFORM_BINDING_BAND_SOURCES_COUNT)? as usize;
+
+    let mut bindings = Vec::with_capacity(n);
+    for i in 0..n {
+        bindings.push(Moc3KeyformBinding {
+            band_sources_begin: r.read_i32_le(begin_addr + i * 4)?,
+            band_sources_count: r.read_i32_le(count_addr + i * 4)?,
+        });
+    }
+    Ok(bindings)
+}
+
+fn read_warp_deformer_keyform_position_sources(
+    r: &SafeReader,
+    counts: &ElementCounts,
+) -> Result<Vec<Moc3KeyformPositionSource>, LoadError> {
+    let n = counts.warp_deformer_keyforms as usize;
+    let begin_addr = r.read_ptr(offsets::WARP_DEFORMER_KEYFORM_POSITION_SOURCES_BEGIN)? as usize;
+    read_position_sources(r, begin_addr, n)
+}
+
+fn read_rotation_deformer_keyform_angles(
+    r: &SafeReader,
+    counts: &ElementCounts,
+) -> Result<Vec<f32>, LoadError> {
+    let n = counts.rotation_deformer_keyforms as usize;
+    let addr = r.read_ptr(offsets::ROTATION_DEFORMER_KEYFORM_ANGLES)? as usize;
+    let mut values = Vec::with_capacity(n);
+    for i in 0..n {
+        values.push(r.read_f32_le(addr + i * 4)?);
+    }
+    Ok(values)
+}
+
+fn read_art_mesh_keyform_position_sources(
+    r: &SafeReader,
+    counts: &ElementCounts,
+) -> Result<Vec<Moc3KeyformPositionSource>, LoadError> {
+    let n = counts.art_mesh_keyforms as usize;
+    let begin_addr = r.read_ptr(offsets::ART_MESH_KEYFORM_POSITION_SOURCES_BEGIN)? as usize;
+    read_position_sources(r, begin_addr, n)
+}
+
+fn read_position_sources(
+    r: &SafeReader,
+    begin_addr: usize,
+    n: usize,
+) -> Result<Vec<Moc3KeyformPositionSource>, LoadError> {
+    let mut sources = Vec::with_capacity(n);
+    for i in 0..n {
+        let row_addr = begin_addr + i * 8;
+        sources.push(Moc3KeyformPositionSource {
+            xys_begin: r.read_i32_le(row_addr)?,
+            xys_count: r.read_i32_le(row_addr + 4)?,
+        });
+    }
+    Ok(sources)
+}
+
+fn read_keyform_position_xys(
+    r: &SafeReader,
+    counts: &ElementCounts,
+) -> Result<Vec<f32>, LoadError> {
+    let n = counts.keyform_positions as usize;
+    let addr = r.read_ptr(offsets::KEYFORM_POSITION_SOURCES_XYS)? as usize;
+    let mut values = Vec::with_capacity(n);
+    for i in 0..n {
+        values.push(r.read_f32_le(addr + i * 4)?);
+    }
+    Ok(values)
 }
 
 fn read_key_values(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<f32>, LoadError> {
@@ -623,18 +754,6 @@ fn read_position_indices(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<u
         indices.push(r.read_u16_le(addr + i * 2)?);
     }
     Ok(indices)
-}
-
-fn read_keyform_positions(r: &SafeReader, counts: &ElementCounts) -> Result<Vec<Vec2>, LoadError> {
-    let n = counts.keyform_positions as usize;
-    let addr = r.read_ptr(offsets::KEYFORM_POSITION_SOURCES_BEGIN)? as usize;
-    let mut positions = Vec::with_capacity(n);
-    for i in 0..n {
-        let x = r.read_f32_le(addr + i * 8)?;
-        let y = r.read_f32_le(addr + i * 8 + 4)?;
-        positions.push(Vec2::new(x, y));
-    }
-    Ok(positions)
 }
 
 // ─── Utility functions ───────────────────────────────────────────────────────

@@ -6,6 +6,7 @@
 pub mod access;
 pub mod animation_blend;
 pub mod asset_database;
+pub mod bounds;
 pub mod character_authoring;
 pub mod character_baking;
 pub mod components;
@@ -29,6 +30,7 @@ mod architecture_tests;
 mod contract_tests;
 
 pub use asset_database::*;
+pub use bounds::*;
 pub use character_authoring::*;
 pub use character_baking::*;
 pub use components::*;

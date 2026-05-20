@@ -23,10 +23,19 @@ const allowedBinaryReadFiles = new Map<string, string[]>([
     'packages/neko-model/packages/extension/src/editor/ModelEditorProvider.ts',
     ['vscode.workspace.fs.readFile'],
   ],
+  // Reads `.nkm` project JSON for model motion/config export. Runtime model
+  // source bytes are still registered through EngineClient file access.
+  ['packages/neko-model/packages/extension/src/extension.ts', ['vscode.workspace.fs.readFile']],
   // Reads `.nkp` project JSON for CustomDocument open/revert. `.inp/.moc3`
   // binary source loads are sent as `loadPuppetSource`.
   [
     'packages/neko-puppet/packages/extension/src/editor/puppetEditorProvider.ts',
+    ['vscode.workspace.fs.readFile'],
+  ],
+  // Live2D ZIP bundle import is intentionally host-owned: the extension host
+  // validates ZIP metadata and resolves archive entries to runtime bytes.
+  [
+    'packages/neko-puppet/packages/extension/src/commands/index.ts',
     ['vscode.workspace.fs.readFile'],
   ],
   // Reads `.nkm/.nkp` avatar project JSON for live session selection; puppet/model
@@ -68,7 +77,9 @@ function listSourceFiles(root: string): string[] {
       }
       return listSourceFiles(relPath);
     }
-    return /\.(ts|tsx)$/.test(entry.name) ? [relPath] : [];
+    return /\.(test|spec)\.(ts|tsx)$/.test(entry.name) || !/\.(ts|tsx)$/.test(entry.name)
+      ? []
+      : [relPath];
   });
 }
 
@@ -119,7 +130,9 @@ describe('engine file access architecture boundary', () => {
       'packages/neko-puppet/packages/extension/src/editor/puppetEditorProvider.ts',
     );
     expect(puppetProvider).toContain("type: 'loadPuppetSource'");
-    expect(puppetProvider).not.toContain("type: 'loadPuppet',");
+    expect(puppetProvider).toContain('loadLive2dBundleFromProject');
+    expect(puppetProvider).toContain("type: 'loadPuppet',");
+    expect(puppetProvider).toContain('loaded.runtime.mocData');
 
     const liveProvider = readSource(
       'packages/neko-live/packages/extension/src/LivePanelProvider.ts',
@@ -132,6 +145,6 @@ describe('engine file access architecture boundary', () => {
     );
     expect(modelProvider).toContain("purpose: 'model'");
     expect(modelProvider).toContain('client.loadModel({ token: registered.token })');
-    expect(modelProvider).toContain('resourceBaseUrl');
+    expect(modelProvider).not.toContain("type: 'loadModel'");
   });
 });

@@ -38,9 +38,13 @@ struct MaterialUniforms {
     metallic_factor: f32,
     roughness_factor: f32,
     occlusion_strength: f32,
-    _pad0: f32,
+    alpha_cutoff: f32,
+    alpha_mode: u32,
+    _pad_alpha0: u32,
+    _pad_alpha1: u32,
+    _pad_alpha2: u32,
     emissive_factor: vec3<f32>,
-    _pad1: f32,
+    _pad_emissive: f32,
 }
 @group(2) @binding(0) var<uniform> material: MaterialUniforms;
 @group(2) @binding(1) var base_color_tex: texture_2d<f32>;
@@ -167,6 +171,9 @@ fn fresnel_schlick(cos_theta: f32, f0: vec3<f32>) -> vec3<f32> {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let base_color_sample = textureSample(base_color_tex, material_sampler, in.uv);
     let base_color = base_color_sample * material.base_color_factor;
+    if base_color.a < material.alpha_cutoff {
+        discard;
+    }
 
     let mr_sample = textureSample(metallic_roughness_tex, material_sampler, in.uv);
     let metallic = mr_sample.b * material.metallic_factor;
@@ -240,5 +247,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ambient = vec3<f32>(0.03) * base_color.rgb * ao_factor;
     let color = ambient + lo + emissive;
 
-    return vec4<f32>(color, base_color.a);
+    let output_alpha = select(1.0, base_color.a, material.alpha_mode == 2u);
+    return vec4<f32>(color, output_alpha);
 }

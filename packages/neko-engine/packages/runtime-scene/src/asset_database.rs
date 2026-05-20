@@ -4,6 +4,7 @@
 //! in engine-kernel are derived from these descriptors and must not become the
 //! metadata source for exporters or inspectors.
 
+use crate::bounds::SceneBounds3;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -104,6 +105,8 @@ pub struct MeshDescriptor {
     pub uri: String,
     pub primitive_index: usize,
     pub topology_version: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_bounds: Option<SceneBounds3>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,6 +218,16 @@ pub struct MaterialDescriptor {
     pub normal_texture: Option<AssetHandle>,
     pub occlusion_texture: Option<AssetHandle>,
     pub emissive_texture: Option<AssetHandle>,
+    pub alpha_mode: MaterialAlphaMode,
+    pub alpha_cutoff: f32,
+    pub double_sided: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MaterialAlphaMode {
+    Opaque,
+    Mask,
+    Blend,
 }
 
 impl MaterialDescriptor {
@@ -233,6 +246,9 @@ impl MaterialDescriptor {
             normal_texture: None,
             occlusion_texture: None,
             emissive_texture: None,
+            alpha_mode: MaterialAlphaMode::Opaque,
+            alpha_cutoff: 0.5,
+            double_sided: false,
         }
     }
 

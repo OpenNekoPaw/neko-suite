@@ -4,8 +4,8 @@
 //! at the same resolution. `strength` is forwarded as a diagnostic hint only —
 //! the ONNX model encodes a fixed denoising level baked at export time.
 
-use ndarray::Array4;
 use crate::{Error, Result};
+use ndarray::Array4;
 use ort::value::Tensor as OrtTensor;
 
 const TILE_SIZE: u32 = 512;

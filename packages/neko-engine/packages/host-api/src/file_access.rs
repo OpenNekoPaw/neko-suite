@@ -95,7 +95,9 @@ impl FileAccessRegistry {
     }
 
     pub fn stat_token(&self, token: &str) -> ApiResult<Option<RegisteredFile>> {
-        Ok(self.lookup_record(token)?.map(|record| record.to_registered_file()))
+        Ok(self
+            .lookup_record(token)?
+            .map(|record| record.to_registered_file()))
     }
 
     pub fn resolve_path(&self, path: PathBuf) -> ApiResult<PathBuf> {
@@ -108,8 +110,9 @@ impl FileAccessRegistry {
         path: PathBuf,
         purpose: FileAccessPurpose,
     ) -> ApiResult<RegisteredFile> {
-        let metadata = std::fs::metadata(&path)
-            .map_err(|error| ApiError::NotFound(format!("File access source not found: {error}")))?;
+        let metadata = std::fs::metadata(&path).map_err(|error| {
+            ApiError::NotFound(format!("File access source not found: {error}"))
+        })?;
         let mime_type = mime_for_path(&path);
         let record = FileAccessRecord {
             token: token.clone(),
@@ -142,8 +145,9 @@ impl FileAccessRegistry {
         expires_at: Option<SystemTime>,
     ) -> ApiResult<()> {
         let path = canonical_file_path(path)?;
-        let metadata = std::fs::metadata(&path)
-            .map_err(|error| ApiError::NotFound(format!("File access source not found: {error}")))?;
+        let metadata = std::fs::metadata(&path).map_err(|error| {
+            ApiError::NotFound(format!("File access source not found: {error}"))
+        })?;
         let record = FileAccessRecord {
             token: token.clone(),
             path,
@@ -438,6 +442,9 @@ mod tests {
                 .expect_err("capacity rejected"),
             ApiError::ServiceError(message) if message.contains("registry is full")
         ));
-        assert_eq!(registry.token_count().expect("token count"), MAX_FILE_TOKENS);
+        assert_eq!(
+            registry.token_count().expect("token count"),
+            MAX_FILE_TOKENS
+        );
     }
 }

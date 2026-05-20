@@ -9,8 +9,8 @@ use bevy_ecs::prelude::*;
 use glam::{Mat4, Vec3};
 use neko_runtime_scene::asset_database::AssetDatabase;
 use neko_runtime_scene::components::{
-    Camera, CameraProjection, GlobalTransform, Light, LightKind, MaterialRef, MeshRef, SceneNodeId,
-    Skeleton, Visible,
+    Camera, CameraProjection, GlobalTransform, Light, LightKind, MaterialRef, MeshPrimitiveRefs,
+    MeshRef, SceneNodeId, Skeleton, Visible,
 };
 use neko_runtime_scene::SceneRevision;
 use std::collections::{HashMap, HashSet};
@@ -53,65 +53,134 @@ fn extract_instances(
     render_world: &mut RenderWorld,
 ) {
     let skeleton_joint_matrices = extract_skeleton_joint_matrices(world);
-    let fallback_joint_matrices = skeleton_joint_matrices.values().next().cloned();
     let mut material_handles = HashSet::new();
     let mut query = world.query::<(
         Entity,
         &SceneNodeId,
         &GlobalTransform,
-        &MeshRef,
+        Option<&MeshPrimitiveRefs>,
+        Option<&MeshRef>,
         Option<&MaterialRef>,
         Option<&Visible>,
     )>();
 
-    for (entity, node_id, global_transform, mesh_ref, material_ref, visible) in query.iter(world) {
+    for (entity, node_id, global_transform, primitive_refs, mesh_ref, material_ref, visible) in
+        query.iter(world)
+    {
         if visible.is_some_and(|visible| !visible.0) {
             continue;
         }
 
-        let material = material_ref.map(|material| GpuMaterialHandle {
-            uri: material.uri.clone(),
-            material_index: material.material_index,
-        });
-
-        if let Some(material_ref) = material_ref {
-            if material_handles.insert(material_ref.asset.clone()) {
-                if let Some(descriptor) = asset_database.material(&material_ref.asset) {
-                    render_world.materials.push(RenderMaterialData {
-                        handle: GpuMaterialHandle {
-                            uri: material_ref.uri.clone(),
-                            material_index: material_ref.material_index,
-                        },
-                        uniforms: MaterialUniforms {
-                            base_color_factor: descriptor.base_color_factor,
-                            metallic_factor: descriptor.metallic_factor,
-                            roughness_factor: descriptor.roughness_factor,
-                            occlusion_strength: descriptor.occlusion_strength,
-                            _pad0: 0.0,
-                            emissive_factor: descriptor.emissive_factor,
-                            _pad1: 0.0,
-                        },
-                    });
-                }
+        if let Some(primitive_refs) =
+            primitive_refs.filter(|primitive_refs| !primitive_refs.primitives.is_empty())
+        {
+            for primitive in &primitive_refs.primitives {
+                push_material(
+                    asset_database,
+                    render_world,
+                    &mut material_handles,
+                    primitive.material.as_ref(),
+                );
+                push_instance(
+                    render_world,
+                    entity,
+                    node_id,
+                    global_transform,
+                    &primitive.mesh,
+                    primitive.material.as_ref(),
+                    &skeleton_joint_matrices,
+                );
             }
+            continue;
         }
 
-        render_world.push_instance(RenderInstance {
-            node_id: node_id.0.clone(),
-            world_transform: global_transform.0,
-            mesh: GpuMeshHandle {
-                uri: mesh_ref.uri.clone(),
-                primitive_index: mesh_ref.primitive_index,
-            },
-            material,
-            visible: true,
-            layer_mask: None,
-            joint_matrices: skeleton_joint_matrices
-                .get(&entity)
-                .cloned()
-                .or_else(|| fallback_joint_matrices.clone()),
-        });
+        if let Some(mesh_ref) = mesh_ref {
+            push_material(
+                asset_database,
+                render_world,
+                &mut material_handles,
+                material_ref,
+            );
+            push_instance(
+                render_world,
+                entity,
+                node_id,
+                global_transform,
+                mesh_ref,
+                material_ref,
+                &skeleton_joint_matrices,
+            );
+        }
     }
+}
+
+fn push_material(
+    asset_database: &AssetDatabase,
+    render_world: &mut RenderWorld,
+    material_handles: &mut HashSet<neko_runtime_scene::asset_database::AssetHandle>,
+    material_ref: Option<&MaterialRef>,
+) {
+    let Some(material_ref) = material_ref else {
+        return;
+    };
+
+    if material_handles.insert(material_ref.asset.clone()) {
+        if let Some(descriptor) = asset_database.material(&material_ref.asset) {
+            render_world.materials.push(RenderMaterialData {
+                handle: GpuMaterialHandle {
+                    uri: material_ref.uri.clone(),
+                    material_index: material_ref.material_index,
+                },
+                uniforms: MaterialUniforms {
+                    base_color_factor: descriptor.base_color_factor,
+                    metallic_factor: descriptor.metallic_factor,
+                    roughness_factor: descriptor.roughness_factor,
+                    occlusion_strength: descriptor.occlusion_strength,
+                    alpha_cutoff: descriptor.alpha_cutoff,
+                    alpha_mode: material_alpha_mode_uniform(descriptor.alpha_mode),
+                    _pad0: [0; 3],
+                    emissive_factor: descriptor.emissive_factor,
+                    _pad1: 0.0,
+                },
+            });
+        }
+    }
+}
+
+fn material_alpha_mode_uniform(mode: neko_runtime_scene::asset_database::MaterialAlphaMode) -> u32 {
+    match mode {
+        neko_runtime_scene::asset_database::MaterialAlphaMode::Opaque => 0,
+        neko_runtime_scene::asset_database::MaterialAlphaMode::Mask => 1,
+        neko_runtime_scene::asset_database::MaterialAlphaMode::Blend => 2,
+    }
+}
+
+fn push_instance(
+    render_world: &mut RenderWorld,
+    entity: Entity,
+    node_id: &SceneNodeId,
+    global_transform: &GlobalTransform,
+    mesh_ref: &MeshRef,
+    material_ref: Option<&MaterialRef>,
+    skeleton_joint_matrices: &HashMap<Entity, Vec<Mat4>>,
+) {
+    let material = material_ref.map(|material| GpuMaterialHandle {
+        uri: material.uri.clone(),
+        material_index: material.material_index,
+    });
+
+    render_world.push_instance(RenderInstance {
+        node_id: node_id.0.clone(),
+        world_transform: global_transform.0,
+        mesh: GpuMeshHandle {
+            uri: mesh_ref.uri.clone(),
+            primitive_index: mesh_ref.primitive_index,
+        },
+        material,
+        visible: true,
+        layer_mask: None,
+        joint_matrices: skeleton_joint_matrices.get(&entity).cloned(),
+    });
 }
 
 fn extract_skeleton_joint_matrices(world: &mut World) -> HashMap<Entity, Vec<Mat4>> {
@@ -235,7 +304,9 @@ fn projection_matrix(camera: &Camera) -> Mat4 {
 mod tests {
     use super::*;
     use neko_runtime_scene::asset_database::{AssetDescriptor, AssetHandle, MaterialDescriptor};
-    use neko_runtime_scene::components::{NodeName, Transform};
+    use neko_runtime_scene::components::{
+        MeshPrimitiveRef, MeshPrimitiveRefs, NodeName, Transform,
+    };
 
     #[test]
     fn extract_render_world_copies_simulation_data_without_mutating_ecs() {
@@ -295,5 +366,201 @@ mod tests {
             [0.2, 0.3, 0.4, 1.0]
         );
         assert!(simulation.get_resource::<SceneRevision>().is_some());
+    }
+
+    #[test]
+    fn extract_render_world_emits_one_instance_per_mesh_primitive_ref() {
+        let mut simulation = World::new();
+        let mesh_handle_0 = AssetHandle::for_mesh("model.glb", 0);
+        let mesh_handle_1 = AssetHandle::for_mesh("model.glb", 1);
+        let material_handle_0 = AssetHandle::for_material("model.glb", 0);
+        let material_handle_1 = AssetHandle::for_material("model.glb", 1);
+        let mut database = AssetDatabase::default();
+        database.insert_descriptor(AssetDescriptor::Material(MaterialDescriptor::new(
+            material_handle_0.clone(),
+        )));
+        database.insert_descriptor(AssetDescriptor::Material(MaterialDescriptor::new(
+            material_handle_1.clone(),
+        )));
+
+        simulation.spawn((
+            SceneNodeId("multi_primitive_node".to_string()),
+            GlobalTransform(Mat4::IDENTITY),
+            MeshPrimitiveRefs {
+                primitives: vec![
+                    MeshPrimitiveRef {
+                        mesh: MeshRef {
+                            asset: mesh_handle_0,
+                            uri: "model.glb".to_string(),
+                            primitive_index: 0,
+                        },
+                        material: Some(MaterialRef {
+                            asset: material_handle_0,
+                            uri: "model.glb".to_string(),
+                            material_index: 0,
+                        }),
+                    },
+                    MeshPrimitiveRef {
+                        mesh: MeshRef {
+                            asset: mesh_handle_1,
+                            uri: "model.glb".to_string(),
+                            primitive_index: 1,
+                        },
+                        material: Some(MaterialRef {
+                            asset: material_handle_1,
+                            uri: "model.glb".to_string(),
+                            material_index: 1,
+                        }),
+                    },
+                ],
+            },
+        ));
+
+        let mut render_world = RenderWorld::default();
+        let stats = extract_render_world(
+            &mut simulation,
+            &database,
+            &CameraParams::default(),
+            &mut render_world,
+        );
+
+        assert_eq!(stats.instances, 2);
+        assert_eq!(stats.materials, 2);
+        assert_eq!(render_world.instances[0].mesh.primitive_index, 0);
+        assert_eq!(
+            render_world.instances[0]
+                .material
+                .as_ref()
+                .map(|material| material.material_index),
+            Some(0)
+        );
+        assert_eq!(render_world.instances[1].mesh.primitive_index, 1);
+        assert_eq!(
+            render_world.instances[1]
+                .material
+                .as_ref()
+                .map(|material| material.material_index),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn route_a_sample_extracts_multi_primitive_alpha_material_contract() {
+        let mut simulation = World::new();
+        let mesh_handle_0 = AssetHandle::for_mesh("route_a_sample.glb", 0);
+        let mesh_handle_1 = AssetHandle::for_mesh("route_a_sample.glb", 1);
+        let material_handle_0 = AssetHandle::for_material("route_a_sample.glb", 0);
+        let material_handle_1 = AssetHandle::for_material("route_a_sample.glb", 1);
+        let mut database = AssetDatabase::default();
+
+        let mut glass = MaterialDescriptor::new(material_handle_0.clone());
+        glass.base_color_factor = [0.2, 0.4, 0.8, 0.5];
+        glass.alpha_mode = neko_runtime_scene::asset_database::MaterialAlphaMode::Blend;
+        glass.double_sided = true;
+        database.insert_descriptor(AssetDescriptor::Material(glass));
+
+        let mut cutout = MaterialDescriptor::new(material_handle_1.clone());
+        cutout.alpha_mode = neko_runtime_scene::asset_database::MaterialAlphaMode::Mask;
+        cutout.alpha_cutoff = 0.35;
+        database.insert_descriptor(AssetDescriptor::Material(cutout));
+
+        simulation.spawn((
+            SceneNodeId("route_a_node".to_string()),
+            GlobalTransform(Mat4::IDENTITY),
+            MeshPrimitiveRefs {
+                primitives: vec![
+                    MeshPrimitiveRef {
+                        mesh: MeshRef {
+                            asset: mesh_handle_0,
+                            uri: "route_a_sample.glb".to_string(),
+                            primitive_index: 0,
+                        },
+                        material: Some(MaterialRef {
+                            asset: material_handle_0,
+                            uri: "route_a_sample.glb".to_string(),
+                            material_index: 0,
+                        }),
+                    },
+                    MeshPrimitiveRef {
+                        mesh: MeshRef {
+                            asset: mesh_handle_1,
+                            uri: "route_a_sample.glb".to_string(),
+                            primitive_index: 1,
+                        },
+                        material: Some(MaterialRef {
+                            asset: material_handle_1,
+                            uri: "route_a_sample.glb".to_string(),
+                            material_index: 1,
+                        }),
+                    },
+                ],
+            },
+        ));
+
+        let mut render_world = RenderWorld::default();
+        let stats = extract_render_world(
+            &mut simulation,
+            &database,
+            &CameraParams::default(),
+            &mut render_world,
+        );
+
+        assert_eq!(stats.instances, 2);
+        assert_eq!(stats.materials, 2);
+        assert_eq!(render_world.instances[0].node_id, "route_a_node");
+        assert_eq!(render_world.instances[1].node_id, "route_a_node");
+
+        let glass = render_world
+            .materials
+            .iter()
+            .find(|material| material.handle.material_index == 0)
+            .unwrap();
+        let cutout = render_world
+            .materials
+            .iter()
+            .find(|material| material.handle.material_index == 1)
+            .unwrap();
+        assert_eq!(glass.uniforms.alpha_mode, 2);
+        assert_eq!(glass.uniforms.base_color_factor[3], 0.5);
+        assert_eq!(cutout.uniforms.alpha_mode, 1);
+        assert!((cutout.uniforms.alpha_cutoff - 0.35).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn extract_render_world_does_not_reuse_skeleton_from_unrelated_entity() {
+        let mut simulation = World::new();
+        let joint = simulation
+            .spawn((GlobalTransform(Mat4::from_translation(Vec3::new(
+                5.0, 0.0, 0.0,
+            ))),))
+            .id();
+        simulation.spawn((
+            SceneNodeId("skinned_owner".to_string()),
+            GlobalTransform(Mat4::IDENTITY),
+            Skeleton {
+                joint_entities: vec![joint],
+                inverse_bind_matrices: vec![Mat4::IDENTITY],
+            },
+        ));
+        simulation.spawn((
+            SceneNodeId("unrelated_mesh".to_string()),
+            GlobalTransform(Mat4::IDENTITY),
+            MeshRef {
+                asset: AssetHandle::for_mesh("model.glb", 0),
+                uri: "model.glb".to_string(),
+                primitive_index: 0,
+            },
+        ));
+
+        let mut render_world = RenderWorld::default();
+        extract_render_world(
+            &mut simulation,
+            &AssetDatabase::default(),
+            &CameraParams::default(),
+            &mut render_world,
+        );
+
+        assert_eq!(render_world.instances.len(), 1);
+        assert!(render_world.instances[0].joint_matrices.is_none());
     }
 }

@@ -16,8 +16,8 @@
 //! path is derived by replacing `encoder_model.onnx` with `decoder_model_merged.onnx`
 //! (or `decoder_model.onnx`) in the same directory.
 
-use ndarray::Array2;
 use crate::{Error, Result};
+use ndarray::Array2;
 use ort::value::Tensor as OrtTensor;
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::collections::HashMap;

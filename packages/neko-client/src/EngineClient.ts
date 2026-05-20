@@ -218,6 +218,7 @@ const logger = getLogger('EngineClient');
 type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
 type SceneAnimationClipInfo = SceneSnapshot['animations'][number];
 type SceneCameraState = NonNullable<SceneSnapshot['activeCamera']>;
+type SceneBounds3 = NonNullable<SceneNodeSnapshot['worldBounds']>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -279,6 +280,14 @@ function toQuat(value: unknown, fallback: { x: number; y: number; z: number; w: 
   return fallback;
 }
 
+function normalizeBounds3(value: unknown): SceneBounds3 | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    min: toVec3(value.min, { x: 0, y: 0, z: 0 }),
+    max: toVec3(value.max, { x: 0, y: 0, z: 0 }),
+  };
+}
+
 function normalizeSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
   if (!isRecord(value)) return null;
 
@@ -288,11 +297,11 @@ function normalizeSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
 
   const kind = getString(
     value.kind,
-    getBoolean(value.hasMesh, false)
+    getBoolean(value.hasMesh ?? value.has_mesh, false)
       ? 'mesh'
-      : getBoolean(value.hasLight, false)
+      : getBoolean(value.hasLight ?? value.has_light, false)
         ? 'light'
-        : getBoolean(value.hasCamera, false)
+        : getBoolean(value.hasCamera ?? value.has_camera, false)
           ? 'camera'
           : 'node',
   );
@@ -320,6 +329,8 @@ function normalizeSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
       ? { id: getString(value.material.id), uri: getString(value.material.uri), kind: 'material' }
       : undefined,
     kind,
+    bounds: normalizeBounds3(value.bounds),
+    worldBounds: normalizeBounds3(value.worldBounds ?? value.world_bounds),
   };
 }
 
@@ -1144,6 +1155,42 @@ export class EngineClient {
     this.assertOk(resp, 'scenes:transform');
   }
 
+  /** Set visibility for a scene node. Dispatches `scenes:set_visible`. */
+  async setSceneNodeVisible(nodeId: string, visible: boolean): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'set_visible',
+      options: { node_id: nodeId, visible },
+    });
+    this.assertOk(resp, 'scenes:set_visible');
+  }
+
+  /** Update material parameters for a scene node. Dispatches `scenes:update_material`. */
+  async updateSceneMaterial(
+    nodeId: string,
+    params: {
+      baseColor?: readonly [number, number, number, number];
+      metallic?: number;
+      roughness?: number;
+      emissive?: readonly [number, number, number];
+      occlusionStrength?: number;
+    },
+  ): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'update_material',
+      options: {
+        node_id: nodeId,
+        base_color: params.baseColor,
+        metallic: params.metallic,
+        roughness: params.roughness,
+        emissive: params.emissive,
+        occlusion_strength: params.occlusionStrength,
+      },
+    });
+    this.assertOk(resp, 'scenes:update_material');
+  }
+
   /**
    * Get available animation clips.
    * Dispatches `scenes:animate`.
@@ -1176,11 +1223,12 @@ export class EngineClient {
     position: [number, number, number],
     target: [number, number, number],
     fovY?: number,
+    viewportId?: string,
   ): Promise<void> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'update_camera',
-      options: { position, target, fovY },
+      options: { position, target, fovY, viewportId },
     });
     this.assertOk(resp, 'scenes:update_camera');
   }
@@ -1189,17 +1237,14 @@ export class EngineClient {
    * Create a parametric shape in the 3D scene.
    * Dispatches `scenes:create_shape`.
    */
-  async createShape(
-    shapeType: string,
-    params: Record<string, number>,
-  ): Promise<Record<string, unknown>> {
+  async createShape(shapeType: string, params: Record<string, number>): Promise<SceneSnapshot> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'create_shape',
       options: { type: shapeType, ...params },
     });
     this.assertOk(resp, 'scenes:create_shape');
-    return (resp.data as Record<string, unknown>) ?? {};
+    return normalizeSceneSnapshot(resp.data);
   }
 
   /**
@@ -1210,14 +1255,14 @@ export class EngineClient {
     text: string,
     fontSize: number,
     extrusionDepth: number,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<SceneSnapshot> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'create_text',
       options: { text, fontSize, extrusionDepth },
     });
     this.assertOk(resp, 'scenes:create_text');
-    return (resp.data as Record<string, unknown>) ?? {};
+    return normalizeSceneSnapshot(resp.data);
   }
 
   /**
@@ -1228,14 +1273,14 @@ export class EngineClient {
     entityA: string,
     entityB: string,
     operation: 'union' | 'difference' | 'intersection',
-  ): Promise<Record<string, unknown>> {
+  ): Promise<SceneSnapshot> {
     const resp = await this.dispatch({
       group: 'scenes',
       action: 'csg_boolean',
       options: { entityA, entityB, operation },
     });
     this.assertOk(resp, 'scenes:csg_boolean');
-    return (resp.data as Record<string, unknown>) ?? {};
+    return normalizeSceneSnapshot(resp.data);
   }
 
   /**
@@ -1329,6 +1374,28 @@ export class EngineClient {
     });
     this.assertOk(resp, 'puppets:load_source');
     return (resp.data as Record<string, unknown>) ?? {};
+  }
+
+  /**
+   * Load Live2D auxiliary JSON after a MOC3 puppet is loaded.
+   * Dispatches `puppets:load_auxiliary`.
+   */
+  async loadPuppetAuxiliary(options: {
+    expressions?: readonly (readonly [string, string])[];
+    motions?: readonly (readonly [string, string])[];
+    physics?: string;
+  }): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'load_auxiliary',
+      options: {},
+      body: {
+        expressions: options.expressions ?? [],
+        motions: options.motions ?? [],
+        physics: options.physics,
+      },
+    });
+    this.assertOk(resp, 'puppets:load_auxiliary');
   }
 
   /**

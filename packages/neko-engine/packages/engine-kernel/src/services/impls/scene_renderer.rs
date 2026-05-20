@@ -155,7 +155,7 @@ impl SceneRenderer {
             .lock()
             .map_err(|e| Error::Other(format!("Asset cache lock poisoned: {}", e)))?;
         cache
-            .load_gltf(path)
+            .replace_gltf(path)
             .map_err(|error| Error::Other(error.to_string()))
     }
 

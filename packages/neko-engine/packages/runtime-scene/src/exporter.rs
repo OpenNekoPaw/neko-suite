@@ -4,8 +4,8 @@
 //! then packs them into GLB container format.
 
 use crate::asset_database::{
-    AssetDatabase, AssetHandle, ImageDescriptor, MaterialDescriptor, TextureDescriptor,
-    TextureSamplerDescriptor,
+    AssetDatabase, AssetHandle, ImageDescriptor, MaterialAlphaMode, MaterialDescriptor,
+    TextureDescriptor, TextureSamplerDescriptor,
 };
 use crate::character_authoring::NkcCharacterFile;
 use crate::character_baking::{
@@ -740,6 +740,25 @@ fn push_material(
         "emissiveFactor".to_string(),
         serde_json::json!(material.emissive_factor),
     );
+    if material.alpha_mode != MaterialAlphaMode::Opaque {
+        material_json.insert(
+            "alphaMode".to_string(),
+            serde_json::json!(match material.alpha_mode {
+                MaterialAlphaMode::Opaque => "OPAQUE",
+                MaterialAlphaMode::Mask => "MASK",
+                MaterialAlphaMode::Blend => "BLEND",
+            }),
+        );
+    }
+    if material.alpha_mode == MaterialAlphaMode::Mask {
+        material_json.insert(
+            "alphaCutoff".to_string(),
+            serde_json::json!(material.alpha_cutoff),
+        );
+    }
+    if material.double_sided {
+        material_json.insert("doubleSided".to_string(), serde_json::json!(true));
+    }
 
     if let Some(texture) = material
         .normal_texture
@@ -1199,6 +1218,8 @@ mod tests {
                 has_light: false,
                 has_camera: false,
                 has_skeleton: false,
+                bounds: None,
+                world_bounds: None,
             },
             mesh_uri: None,
             material_handle: None,
@@ -1230,6 +1251,8 @@ mod tests {
                 has_light: false,
                 has_camera: false,
                 has_skeleton: false,
+                bounds: None,
+                world_bounds: None,
             },
             mesh_uri: Some(mesh_uri.clone()),
             material_handle: None,
@@ -1266,6 +1289,8 @@ mod tests {
                 has_light: false,
                 has_camera: false,
                 has_skeleton: false,
+                bounds: None,
+                world_bounds: None,
             },
             mesh_uri: Some(mesh_uri.clone()),
             material_handle: Some(material_handle.clone()),
@@ -1303,6 +1328,8 @@ mod tests {
                 has_light: false,
                 has_camera: false,
                 has_skeleton: false,
+                bounds: None,
+                world_bounds: None,
             },
             mesh_uri: Some(mesh_uri.clone()),
             material_handle: Some(material_handle.clone()),
@@ -1398,6 +1425,8 @@ mod tests {
                 has_light: true,
                 has_camera: true,
                 has_skeleton: false,
+                bounds: None,
+                world_bounds: None,
             },
             mesh_uri: None,
             material_handle: None,
@@ -1580,6 +1609,8 @@ mod tests {
                 has_light: false,
                 has_camera: false,
                 has_skeleton: false,
+                bounds: None,
+                world_bounds: None,
             },
             mesh_uri: None,
             material_handle: None,
@@ -1615,6 +1646,8 @@ mod tests {
                 has_light: false,
                 has_camera: false,
                 has_skeleton: false,
+                bounds: None,
+                world_bounds: None,
             },
             mesh_uri: None,
             material_handle: None,

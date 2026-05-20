@@ -261,4 +261,100 @@ describe('SceneControlSocket', () => {
 
     await expect(promise).resolves.toEqual(result);
   });
+
+  it('sends viewport camera updates and resolves ack by request id', async () => {
+    const fake = new FakeWebSocket();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.updateViewportCamera(
+      {
+        sceneId: 'scene-a',
+        sceneRevision: 8,
+        viewportId: 'main',
+        position: [0, 1, 5],
+        target: [0, 0, 0],
+        resolution: { width: 960, height: 540, pixelRatio: 1.25 },
+      },
+      'camera-1',
+    );
+
+    expect(parseSent(fake, 1)).toEqual({
+      type: 'viewportCamera',
+      requestId: 'camera-1',
+      sceneId: 'scene-a',
+      sceneRevision: 8,
+      viewportId: 'main',
+      position: [0, 1, 5],
+      target: [0, 0, 0],
+      resolution: { width: 960, height: 540, pixelRatio: 1.25 },
+    });
+
+    const ack = {
+      type: 'viewportCameraAck',
+      requestId: 'camera-1',
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      status: 'applied',
+      revision: 9,
+      acceptedRevision: 9,
+    } as const;
+    fake.emit(ack);
+
+    await expect(promise).resolves.toEqual(ack);
+  });
+
+  it('rejects viewport camera updates when engine reports rejection', async () => {
+    const fake = new FakeWebSocket();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.updateViewportCamera(
+      {
+        viewportId: 'main',
+        position: [0, 0, 0],
+        target: [0, 0, 0],
+      },
+      'camera-2',
+    );
+    fake.emit({
+      type: 'viewportCameraAck',
+      requestId: 'camera-2',
+      viewportId: 'main',
+      status: 'rejected',
+      error: 'camera position and target must be distinct',
+    });
+
+    await expect(promise).rejects.toThrow('camera position and target must be distinct');
+  });
+
+  it('rejects pending viewport camera updates on generic scene control errors', async () => {
+    const fake = new FakeWebSocket();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.updateViewportCamera({
+      viewportId: 'main',
+      position: [0, 1, 5],
+      target: [0, 0, 0],
+    });
+    fake.emit({ type: 'error', error: 'unsupported scene control message: viewportCamera' });
+
+    await expect(promise).rejects.toThrow('unsupported scene control message');
+  });
 });

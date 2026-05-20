@@ -101,7 +101,10 @@ impl Controller for PuppetsController {
                     "puppets:load_source",
                 )?;
                 let data = std::fs::read(&path).map_err(|error| {
-                    ApiError::ServiceError(format!("Failed to read puppet source {:?}: {error}", path))
+                    ApiError::ServiceError(format!(
+                        "Failed to read puppet source {:?}: {error}",
+                        path
+                    ))
                 })?;
 
                 let service = self.service()?;

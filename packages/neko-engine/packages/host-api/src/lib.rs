@@ -39,7 +39,7 @@ mod session;
 
 pub use engine::EngineApi;
 pub use error::{ApiError, ApiResult};
-pub use file_access::{FileAccessRegistry, FileAccessRecord};
+pub use file_access::{FileAccessRecord, FileAccessRegistry};
 pub use registry::{ResourceRegistry, StreamRegistry};
 pub use router::ActionRouter;
 pub use session::{Session, SessionConfig, SessionManager};

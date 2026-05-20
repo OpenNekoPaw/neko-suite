@@ -94,8 +94,7 @@ pub fn build_router_with_preview_roots(
         )
         .route(
             "/v1/files/:token",
-            get(preview_file::handle_general_file)
-                .delete(preview_file::handle_file_unregister),
+            get(preview_file::handle_general_file).delete(preview_file::handle_file_unregister),
         )
         .route(
             "/v1/files/:token/entries/*path",

@@ -36,14 +36,34 @@ pub struct MaterialUniforms {
     pub metallic_factor: f32,        // 4
     pub roughness_factor: f32,       // 4
     pub occlusion_strength: f32,     // 4
-    pub _pad0: f32,                  // 4 (align to 16)
+    pub alpha_cutoff: f32,           // 4
+    pub alpha_mode: u32,             // 4
+    pub _pad0: [u32; 3],             // 12 (align next vec3 to 16)
     pub emissive_factor: [f32; 3],   // 12
     pub _pad1: f32,                  // 4 (align to 16)
+}
+
+const _: () = {
+    assert!(std::mem::size_of::<MaterialUniforms>() == 64);
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GpuAlphaMode {
+    Opaque,
+    Mask,
+    Blend,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GpuMaterialPipelineState {
+    pub alpha_mode: GpuAlphaMode,
+    pub double_sided: bool,
 }
 
 /// GPU-ready PBR material
 pub struct GpuMaterial {
     pub uniforms: MaterialUniforms,
+    pub pipeline_state: GpuMaterialPipelineState,
     pub uniform_buffer: wgpu::Buffer,
     pub base_color_texture: Option<(wgpu::Texture, wgpu::TextureView)>,
     pub metallic_roughness_texture: Option<(wgpu::Texture, wgpu::TextureView)>,
@@ -95,6 +115,15 @@ impl AssetCache {
             default_sampler,
             placeholder_texture,
         }
+    }
+
+    /// Drop all model-derived GPU resources.
+    ///
+    /// Placeholder resources and pipeline-owned layouts are retained because
+    /// they are cache infrastructure, not scene/model payload.
+    pub fn clear(&mut self) {
+        self.meshes.clear();
+        self.materials.clear();
     }
 
     /// Load all meshes and materials from a glTF file into GPU buffers.
@@ -156,6 +185,12 @@ impl AssetCache {
         );
 
         Ok(())
+    }
+
+    /// Replace the active model payload with a single glTF asset.
+    pub fn replace_gltf(&mut self, path: &Path) -> Result<(), AssetCacheError> {
+        self.clear();
+        self.load_gltf(path)
     }
 
     /// Get a cached GPU mesh by (uri, primitive_index)
@@ -471,15 +506,29 @@ impl AssetCache {
             .occlusion_texture()
             .map(|t| t.strength())
             .unwrap_or(1.0);
+        let alpha_mode = gpu_alpha_mode(material.alpha_mode());
+        let base_color_factor = pbr.base_color_factor();
+        let pipeline_alpha_mode = gpu_pipeline_alpha_mode(alpha_mode, base_color_factor[3]);
+        let alpha_cutoff = match alpha_mode {
+            GpuAlphaMode::Mask => material.alpha_cutoff().unwrap_or(0.5),
+            GpuAlphaMode::Blend if pipeline_alpha_mode != GpuAlphaMode::Blend => 0.01,
+            GpuAlphaMode::Opaque | GpuAlphaMode::Blend => 0.0,
+        };
 
         let uniforms = MaterialUniforms {
-            base_color_factor: pbr.base_color_factor(),
+            base_color_factor,
             metallic_factor: pbr.metallic_factor(),
             roughness_factor: pbr.roughness_factor(),
             occlusion_strength,
-            _pad0: 0.0,
+            alpha_cutoff,
+            alpha_mode: gpu_alpha_mode_uniform(pipeline_alpha_mode),
+            _pad0: [0; 3],
             emissive_factor: emissive,
             _pad1: 0.0,
+        };
+        let pipeline_state = GpuMaterialPipelineState {
+            alpha_mode: pipeline_alpha_mode,
+            double_sided: material.double_sided(),
         };
 
         let uniform_buffer =
@@ -524,6 +573,7 @@ impl AssetCache {
 
         GpuMaterial {
             uniforms,
+            pipeline_state,
             uniform_buffer,
             base_color_texture,
             metallic_roughness_texture,
@@ -541,9 +591,15 @@ impl AssetCache {
             metallic_factor: 0.0,
             roughness_factor: 0.5,
             occlusion_strength: 1.0,
-            _pad0: 0.0,
+            alpha_cutoff: 0.0,
+            alpha_mode: gpu_alpha_mode_uniform(GpuAlphaMode::Opaque),
+            _pad0: [0; 3],
             emissive_factor: [0.0, 0.0, 0.0],
             _pad1: 0.0,
+        };
+        let pipeline_state = GpuMaterialPipelineState {
+            alpha_mode: GpuAlphaMode::Opaque,
+            double_sided: false,
         };
 
         let uniform_buffer =
@@ -560,6 +616,7 @@ impl AssetCache {
 
         GpuMaterial {
             uniforms,
+            pipeline_state,
             uniform_buffer,
             base_color_texture: None,
             metallic_roughness_texture: None,
@@ -756,6 +813,29 @@ impl AssetCache {
     }
 }
 
+fn gpu_alpha_mode(mode: gltf::material::AlphaMode) -> GpuAlphaMode {
+    match mode {
+        gltf::material::AlphaMode::Opaque => GpuAlphaMode::Opaque,
+        gltf::material::AlphaMode::Mask => GpuAlphaMode::Mask,
+        gltf::material::AlphaMode::Blend => GpuAlphaMode::Blend,
+    }
+}
+
+fn gpu_alpha_mode_uniform(mode: GpuAlphaMode) -> u32 {
+    match mode {
+        GpuAlphaMode::Opaque => 0,
+        GpuAlphaMode::Mask => 1,
+        GpuAlphaMode::Blend => 2,
+    }
+}
+
+fn gpu_pipeline_alpha_mode(mode: GpuAlphaMode, base_color_alpha: f32) -> GpuAlphaMode {
+    match mode {
+        GpuAlphaMode::Blend if base_color_alpha >= 0.999 => GpuAlphaMode::Mask,
+        other => other,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MeshDirtyUploadPlan {
     pub byte_offset: u64,
@@ -827,5 +907,21 @@ mod tests {
         };
 
         assert!(MeshDirtyUploadPlan::for_pbr_vertices(&region, 8).is_err());
+    }
+
+    #[test]
+    fn opaque_blend_materials_render_as_cutout_for_realtime_depth() {
+        assert_eq!(
+            gpu_pipeline_alpha_mode(GpuAlphaMode::Blend, 1.0),
+            GpuAlphaMode::Mask
+        );
+        assert_eq!(
+            gpu_pipeline_alpha_mode(GpuAlphaMode::Blend, 0.5),
+            GpuAlphaMode::Blend
+        );
+        assert_eq!(
+            gpu_pipeline_alpha_mode(GpuAlphaMode::Opaque, 1.0),
+            GpuAlphaMode::Opaque
+        );
     }
 }

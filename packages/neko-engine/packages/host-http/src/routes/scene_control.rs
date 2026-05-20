@@ -5,6 +5,7 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
+use neko_engine_kernel::contracts::gpu::CameraParams;
 use neko_engine_kernel::contracts::scene::{
     SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope, SceneCommandEvent,
     SceneCommandPhase, SceneDelta, TopologyOperation,
@@ -162,6 +163,92 @@ async fn handle_client_message(
         SceneControlClientMessage::Resync { scene_id } => {
             send_snapshot(socket, engine, scene_id, "snapshot").await
         }
+        SceneControlClientMessage::ViewportCamera {
+            request_id,
+            scene_id,
+            scene_revision,
+            viewport_id,
+            position,
+            target,
+            up,
+            fov_y,
+            resolution,
+        } => {
+            let camera = ViewportCameraPayload {
+                request_id,
+                scene_id,
+                scene_revision,
+                viewport_id,
+                position,
+                target,
+                up,
+                fov_y,
+                resolution,
+            };
+            let engine_revision = current_revision(engine);
+            let scene_id = camera
+                .scene_id
+                .clone()
+                .unwrap_or_else(|| "default".to_string());
+            let viewport_id = camera
+                .viewport_id
+                .clone()
+                .unwrap_or_else(|| "main".to_string());
+            let request_id = camera.request_id.clone();
+            if matches!(camera.scene_revision, Some(revision) if revision > engine_revision) {
+                return send_viewport_camera_ack(
+                    socket,
+                    request_id.clone(),
+                    &scene_id,
+                    &viewport_id,
+                    "rejected",
+                    engine_revision,
+                    Some("scene revision is ahead of engine revision"),
+                )
+                .await;
+            }
+            let camera = match camera.into_camera_params() {
+                Ok(camera) => camera,
+                Err(error) => {
+                    return send_viewport_camera_ack(
+                        socket,
+                        request_id.clone(),
+                        &scene_id,
+                        &viewport_id,
+                        "rejected",
+                        engine_revision,
+                        Some(&error),
+                    )
+                    .await
+                }
+            };
+            let service = match engine.scene_service() {
+                Some(service) => service,
+                None => {
+                    return send_viewport_camera_ack(
+                        socket,
+                        request_id.clone(),
+                        &scene_id,
+                        &viewport_id,
+                        "rejected",
+                        engine_revision,
+                        Some("scene service is not available"),
+                    )
+                    .await
+                }
+            };
+            service.set_editor_camera(camera);
+            send_viewport_camera_ack(
+                socket,
+                request_id,
+                &scene_id,
+                &viewport_id,
+                "applied",
+                engine_revision,
+                None,
+            )
+            .await
+        }
         SceneControlClientMessage::RequestKeyframe { viewport_id } => {
             send_json(
                 socket,
@@ -227,27 +314,47 @@ fn scene_query_result(
     let snapshot = engine.scene_snapshot_value()?;
     let snapshot = snapshot_to_contract(snapshot, revision);
     let viewport_id = payload_string(payload, "viewportId").unwrap_or_else(|| "main".to_string());
+    let scene_id = payload_string(payload, "sceneId")
+        .or_else(|| {
+            snapshot
+                .get("sceneId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "default".to_string());
 
     match query {
-        "hit-test" | "hitTest" => Ok(hit_test_result(&snapshot, payload, &viewport_id, revision)),
+        "hit-test" | "hitTest" => Ok(hit_test_result(
+            &snapshot,
+            payload,
+            &scene_id,
+            &viewport_id,
+            revision,
+        )),
         "projected-bounds" | "projectedBounds" => Ok(projected_bounds_result(
             &snapshot,
             payload,
+            &scene_id,
             &viewport_id,
             revision,
         )),
         "gizmo-anchor" | "gizmoAnchor" => Ok(gizmo_anchor_result(
             &snapshot,
             payload,
+            &scene_id,
             &viewport_id,
             revision,
         )),
-        "active-camera" | "activeCamera" => {
-            Ok(active_camera_result(&snapshot, &viewport_id, revision))
-        }
+        "active-camera" | "activeCamera" => Ok(active_camera_result(
+            &snapshot,
+            &scene_id,
+            &viewport_id,
+            revision,
+        )),
         "overlay-state" | "overlayState" => Ok(overlay_state_result(
             &snapshot,
             payload,
+            &scene_id,
             &viewport_id,
             revision,
         )),
@@ -337,6 +444,7 @@ struct NodeBounds {
 fn hit_test_result(
     snapshot: &Value,
     payload: Option<&Value>,
+    scene_id: &str,
     viewport_id: &str,
     revision: u64,
 ) -> Value {
@@ -359,6 +467,7 @@ fn hit_test_result(
 
     match picked {
         Some((node, bounds, hit)) => json!({
+            "sceneId": scene_id,
             "viewportId": viewport_id,
             "revision": revision,
             "nodeId": node.get("nodeId").and_then(Value::as_str),
@@ -367,6 +476,7 @@ fn hit_test_result(
             "normal": vec3_to_value(surface_normal(bounds, hit.position))
         }),
         None => json!({
+            "sceneId": scene_id,
             "viewportId": viewport_id,
             "revision": revision,
             "nodeId": Value::Null,
@@ -380,6 +490,7 @@ fn hit_test_result(
 fn projected_bounds_result(
     snapshot: &Value,
     payload: Option<&Value>,
+    scene_id: &str,
     viewport_id: &str,
     revision: u64,
 ) -> Value {
@@ -392,6 +503,7 @@ fn projected_bounds_result(
         .collect();
 
     json!({
+        "sceneId": scene_id,
         "viewportId": viewport_id,
         "revision": revision,
         "bounds": bounds
@@ -401,6 +513,7 @@ fn projected_bounds_result(
 fn gizmo_anchor_result(
     snapshot: &Value,
     payload: Option<&Value>,
+    scene_id: &str,
     viewport_id: &str,
     revision: u64,
 ) -> Value {
@@ -413,14 +526,21 @@ fn gizmo_anchor_result(
         .collect();
 
     json!({
+        "sceneId": scene_id,
         "viewportId": viewport_id,
         "revision": revision,
         "anchors": anchors
     })
 }
 
-fn active_camera_result(snapshot: &Value, viewport_id: &str, revision: u64) -> Value {
+fn active_camera_result(
+    snapshot: &Value,
+    scene_id: &str,
+    viewport_id: &str,
+    revision: u64,
+) -> Value {
     json!({
+        "sceneId": scene_id,
         "viewportId": viewport_id,
         "revision": revision,
         "activeCamera": snapshot
@@ -433,20 +553,23 @@ fn active_camera_result(snapshot: &Value, viewport_id: &str, revision: u64) -> V
 fn overlay_state_result(
     snapshot: &Value,
     payload: Option<&Value>,
+    scene_id: &str,
     viewport_id: &str,
     revision: u64,
 ) -> Value {
     let selected_node_ids = payload_string_array(payload, "selectedNodeIds");
-    let projected_bounds = projected_bounds_result(snapshot, payload, viewport_id, revision)
-        .get("bounds")
-        .cloned()
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let gizmo_anchors = gizmo_anchor_result(snapshot, payload, viewport_id, revision)
+    let projected_bounds =
+        projected_bounds_result(snapshot, payload, scene_id, viewport_id, revision)
+            .get("bounds")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(Vec::new()));
+    let gizmo_anchors = gizmo_anchor_result(snapshot, payload, scene_id, viewport_id, revision)
         .get("anchors")
         .cloned()
         .unwrap_or_else(|| Value::Array(Vec::new()));
 
     json!({
+        "sceneId": scene_id,
         "viewportId": viewport_id,
         "revision": revision,
         "selectedNodeIds": selected_node_ids,
@@ -696,6 +819,16 @@ fn camera_basis(snapshot: &Value, payload: Option<&Value>) -> CameraBasis {
 fn camera_aspect(camera: &Value, payload: Option<&Value>) -> f64 {
     if let Some(aspect) =
         payload_number(payload, "aspect").or_else(|| camera.get("aspect").and_then(Value::as_f64))
+    {
+        return aspect.max(0.01);
+    }
+    if let Some(aspect) = payload
+        .and_then(|payload| payload.get("resolution"))
+        .and_then(|resolution| {
+            let width = resolution.get("width").and_then(Value::as_f64)?;
+            let height = resolution.get("height").and_then(Value::as_f64)?;
+            (height > 0.0).then_some(width / height)
+        })
     {
         return aspect.max(0.01);
     }
@@ -1291,6 +1424,30 @@ async fn send_json(socket: &mut WebSocket, value: Value) -> bool {
     }
 }
 
+async fn send_viewport_camera_ack(
+    socket: &mut WebSocket,
+    request_id: Option<String>,
+    scene_id: &str,
+    viewport_id: &str,
+    status: &str,
+    revision: u64,
+    error: Option<&str>,
+) -> bool {
+    let mut ack = json!({
+        "type": "viewportCameraAck",
+        "requestId": request_id,
+        "sceneId": scene_id,
+        "viewportId": viewport_id,
+        "status": status,
+        "revision": revision,
+        "acceptedRevision": revision
+    });
+    if let Some(error) = error {
+        ack["error"] = Value::String(error.to_string());
+    }
+    send_json(socket, ack).await
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 enum SceneControlClientMessage {
@@ -1315,6 +1472,24 @@ enum SceneControlClientMessage {
     Resync {
         #[serde(default, rename = "sceneId")]
         scene_id: Option<String>,
+    },
+    ViewportCamera {
+        #[serde(default, rename = "requestId")]
+        request_id: Option<String>,
+        #[serde(default, rename = "sceneId")]
+        scene_id: Option<String>,
+        #[serde(default, rename = "sceneRevision")]
+        scene_revision: Option<u64>,
+        #[serde(default, rename = "viewportId")]
+        viewport_id: Option<String>,
+        position: Vec3Payload,
+        target: Vec3Payload,
+        #[serde(default)]
+        up: Option<Vec3Payload>,
+        #[serde(default, rename = "fovY", alias = "fovYRad", alias = "fov_y")]
+        fov_y: Option<f32>,
+        #[serde(default)]
+        resolution: Option<ViewportResolutionPayload>,
     },
     RequestKeyframe {
         #[serde(default, rename = "viewportId")]
@@ -1494,6 +1669,74 @@ fn default_before_hash() -> String {
     "unknown".to_string()
 }
 
+#[derive(Debug)]
+struct ViewportCameraPayload {
+    request_id: Option<String>,
+    scene_id: Option<String>,
+    scene_revision: Option<u64>,
+    viewport_id: Option<String>,
+    position: Vec3Payload,
+    target: Vec3Payload,
+    up: Option<Vec3Payload>,
+    fov_y: Option<f32>,
+    resolution: Option<ViewportResolutionPayload>,
+}
+
+impl ViewportCameraPayload {
+    fn into_camera_params(self) -> Result<CameraParams, String> {
+        if let Some(resolution) = self.resolution {
+            resolution.validate()?;
+        }
+        let position = vec3_payload_to_glam("position", self.position)?;
+        let target = vec3_payload_to_glam("target", self.target)?;
+        let up = match self.up {
+            Some(up) => vec3_payload_to_glam("up", up)?,
+            None => glam::Vec3::Y,
+        };
+
+        if position.distance_squared(target) <= 1.0e-8 {
+            return Err("camera position and target must be distinct".to_string());
+        }
+        if up.length_squared() <= 1.0e-8 {
+            return Err("camera up vector must be non-zero".to_string());
+        }
+
+        Ok(CameraParams {
+            position,
+            target,
+            up: up.normalize(),
+            fov_y: normalize_camera_fov_y(self.fov_y)?,
+            ..CameraParams::default()
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewportResolutionPayload {
+    width: f32,
+    height: f32,
+    #[serde(default, rename = "pixelRatio", alias = "pixel_ratio")]
+    pixel_ratio: Option<f32>,
+}
+
+impl ViewportResolutionPayload {
+    fn validate(&self) -> Result<(), String> {
+        if !self.width.is_finite() || !self.height.is_finite() {
+            return Err("viewport resolution must contain finite numbers".to_string());
+        }
+        if self.width <= 0.0 || self.height <= 0.0 {
+            return Err("viewport resolution must be positive".to_string());
+        }
+        if let Some(pixel_ratio) = self.pixel_ratio {
+            if !pixel_ratio.is_finite() || pixel_ratio <= 0.0 {
+                return Err("viewport pixelRatio must be a positive finite number".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum Vec3Payload {
@@ -1508,6 +1751,27 @@ impl Vec3Payload {
             Vec3Payload::Object { x, y, z } => [x, y, z],
         }
     }
+}
+
+fn vec3_payload_to_glam(field: &str, payload: Vec3Payload) -> Result<glam::Vec3, String> {
+    let value = payload.into_array();
+    if !value.iter().all(|component| component.is_finite()) {
+        return Err(format!("camera {field} must contain finite numbers"));
+    }
+    Ok(glam::Vec3::from(value))
+}
+
+fn normalize_camera_fov_y(value: Option<f32>) -> Result<f32, String> {
+    let value = value.unwrap_or_else(|| 45.0_f32.to_radians());
+    if !value.is_finite() {
+        return Err("camera fovY must be finite".to_string());
+    }
+    let radians = if value > std::f32::consts::PI {
+        value.to_radians()
+    } else {
+        value
+    };
+    Ok(radians.clamp(1.0_f32.to_radians(), 179.0_f32.to_radians()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1567,6 +1831,141 @@ mod tests {
             }
             _ => panic!("expected command message"),
         }
+    }
+
+    #[test]
+    fn parses_viewport_camera_message_to_camera_params() {
+        let message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"viewportCamera","sceneId":"scene-a","sceneRevision":8,"viewportId":"main","position":[0,1,5],"target":{"x":0,"y":0,"z":0},"up":[0,1,0],"fovY":45,"resolution":{"width":960,"height":540,"pixelRatio":1.25}}"#,
+        )
+        .unwrap();
+
+        match message {
+            SceneControlClientMessage::ViewportCamera {
+                scene_id,
+                scene_revision,
+                viewport_id,
+                position,
+                target,
+                up,
+                fov_y,
+                resolution,
+                ..
+            } => {
+                assert_eq!(scene_id.as_deref(), Some("scene-a"));
+                assert_eq!(scene_revision, Some(8));
+                assert_eq!(viewport_id.as_deref(), Some("main"));
+                assert_eq!(resolution.as_ref().map(|value| value.width), Some(960.0));
+                let params = ViewportCameraPayload {
+                    request_id: None,
+                    scene_id,
+                    scene_revision,
+                    viewport_id,
+                    position,
+                    target,
+                    up,
+                    fov_y,
+                    resolution,
+                }
+                .into_camera_params()
+                .unwrap();
+                assert_eq!(params.position.to_array(), [0.0, 1.0, 5.0]);
+                assert_eq!(params.target.to_array(), [0.0, 0.0, 0.0]);
+                assert!((params.fov_y - 45.0_f32.to_radians()).abs() < f32::EPSILON);
+            }
+            _ => panic!("expected viewport camera message"),
+        }
+    }
+
+    #[test]
+    fn rejects_degenerate_viewport_camera_payload() {
+        let message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"viewportCamera","position":[1,1,1],"target":[1,1,1]}"#,
+        )
+        .unwrap();
+
+        match message {
+            SceneControlClientMessage::ViewportCamera {
+                scene_id,
+                scene_revision,
+                viewport_id,
+                position,
+                target,
+                up,
+                fov_y,
+                resolution,
+                ..
+            } => {
+                let error = ViewportCameraPayload {
+                    request_id: None,
+                    scene_id,
+                    scene_revision,
+                    viewport_id,
+                    position,
+                    target,
+                    up,
+                    fov_y,
+                    resolution,
+                }
+                .into_camera_params()
+                .unwrap_err();
+                assert!(error.contains("position and target"));
+            }
+            _ => panic!("expected viewport camera message"),
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_viewport_camera_resolution() {
+        let message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"viewportCamera","position":[0,1,5],"target":[0,0,0],"resolution":{"width":0,"height":540,"pixelRatio":1}}"#,
+        )
+        .unwrap();
+
+        match message {
+            SceneControlClientMessage::ViewportCamera {
+                scene_id,
+                scene_revision,
+                viewport_id,
+                position,
+                target,
+                up,
+                fov_y,
+                resolution,
+                ..
+            } => {
+                let error = ViewportCameraPayload {
+                    request_id: None,
+                    scene_id,
+                    scene_revision,
+                    viewport_id,
+                    position,
+                    target,
+                    up,
+                    fov_y,
+                    resolution,
+                }
+                .into_camera_params()
+                .unwrap_err();
+                assert!(error.contains("resolution"));
+            }
+            _ => panic!("expected viewport camera message"),
+        }
+    }
+
+    #[test]
+    fn camera_aspect_reads_nested_viewport_resolution() {
+        let payload = json!({
+            "resolution": {
+                "width": 1024.0,
+                "height": 512.0,
+                "pixelRatio": 1.0
+            }
+        });
+
+        assert!(
+            (camera_aspect(&default_camera_state(), Some(&payload)) - 2.0).abs() < f64::EPSILON
+        );
     }
 
     #[test]
@@ -1663,7 +2062,14 @@ mod tests {
             15,
         );
 
-        let hit = hit_test_result(&snapshot, Some(&json!({ "x": 0.5, "y": 0.5 })), "side", 15);
+        let hit = hit_test_result(
+            &snapshot,
+            Some(&json!({ "x": 0.5, "y": 0.5 })),
+            "scene-a",
+            "side",
+            15,
+        );
+        assert_eq!(hit["sceneId"], "scene-a");
         assert_eq!(hit["viewportId"], "side");
         assert_eq!(hit["revision"], 15);
         assert_eq!(hit["nodeId"], "mesh_1");
@@ -1677,9 +2083,11 @@ mod tests {
                 "nodeIds": ["mesh_1"],
                 "selectedNodeIds": ["mesh_1"]
             })),
+            "scene-a",
             "side",
             15,
         );
+        assert_eq!(overlay["sceneId"], "scene-a");
         assert_eq!(overlay["viewportId"], "side");
         assert_eq!(overlay["revision"], 15);
         assert_eq!(overlay["selectedNodeIds"][0], "mesh_1");
@@ -1704,12 +2112,19 @@ mod tests {
             20,
         );
 
-        let center = hit_test_result(&snapshot, Some(&json!({ "x": 0.5, "y": 0.5 })), "main", 20);
+        let center = hit_test_result(
+            &snapshot,
+            Some(&json!({ "x": 0.5, "y": 0.5 })),
+            "scene-a",
+            "main",
+            20,
+        );
         assert_eq!(center["nodeId"], "mesh_1");
 
         let empty = hit_test_result(
             &snapshot,
             Some(&json!({ "x": 0.95, "y": 0.95 })),
+            "scene-a",
             "main",
             20,
         );
@@ -1744,6 +2159,7 @@ mod tests {
         let perspective = projected_bounds_result(
             &snapshot,
             Some(&json!({ "nodeIds": ["mesh_1"], "viewportId": "persp" })),
+            "scene-a",
             "persp",
             21,
         );
@@ -1761,6 +2177,7 @@ mod tests {
                     "aspect": 1.0
                 }
             })),
+            "scene-a",
             "ortho",
             21,
         );

@@ -240,10 +240,11 @@ fn create_deformer_entities(
                     let vc = wd.vertex_count as usize;
                     let key_forms = build_deformer_key_forms(
                         moc3,
-                        wd.keyform_sources_begin,
+                        wd.keyform_position_sources_begin,
                         wd.keyform_sources_count,
                         vc,
                         wd.keyform_binding_sources_index,
+                        KeyformSourceKind::Warp,
                     );
                     let param_name = find_binding_parameter(moc3, wd.keyform_binding_sources_index)
                         .unwrap_or_default();
@@ -258,14 +259,7 @@ fn create_deformer_entities(
             parser::DeformerType::Rotation => {
                 if specific_idx < moc3.rotation_deformers.len() {
                     let rd = &moc3.rotation_deformers[specific_idx];
-                    // Rotation key forms store angle as a single value
-                    let key_forms = build_deformer_key_forms(
-                        moc3,
-                        rd.keyform_sources_begin,
-                        rd.keyform_sources_count,
-                        1, // 1 value per key form (angle)
-                        rd.keyform_binding_sources_index,
-                    );
+                    let key_forms = build_rotation_key_forms(moc3, rd);
                     let param_name = find_binding_parameter(moc3, rd.keyform_binding_sources_index)
                         .unwrap_or_default();
                     world.entity_mut(entity).insert(RotationDeformer {
@@ -299,32 +293,31 @@ fn create_deformer_entities(
     deformer_entities
 }
 
+enum KeyformSourceKind {
+    Warp,
+    ArtMesh,
+}
+
 /// Build key forms for a deformer using its keyform position data.
 fn build_deformer_key_forms(
     moc3: &Moc3Data,
-    kf_begin: i32,
+    position_begin: i32,
     kf_count: i32,
     vertex_count: usize,
     binding_index: i32,
+    kind: KeyformSourceKind,
 ) -> Vec<KeyFormData> {
-    if kf_begin < 0 || kf_count <= 0 || vertex_count == 0 {
+    if position_begin < 0 || kf_count <= 0 || vertex_count == 0 {
         return Vec::new();
     }
 
-    let kf_begin = kf_begin as usize;
+    let position_begin = position_begin as usize;
     let kf_count = kf_count as usize;
     let binding_key_values = get_binding_key_values(moc3, binding_index);
 
     let mut key_forms = Vec::with_capacity(kf_count);
     for kf_idx in 0..kf_count {
-        let pos_start = (kf_begin + kf_idx) * vertex_count;
-        let pos_end = pos_start + vertex_count;
-
-        let vertices: Vec<Vec2> = if pos_end <= moc3.keyform_positions.len() {
-            moc3.keyform_positions[pos_start..pos_end].to_vec()
-        } else {
-            vec![Vec2::ZERO; vertex_count]
-        };
+        let vertices = read_keyform_vertices(moc3, position_begin + kf_idx, vertex_count, &kind);
 
         let param_value = binding_key_values
             .get(kf_idx)
@@ -345,22 +338,59 @@ fn build_deformer_key_forms(
     key_forms
 }
 
-/// Build key forms for an art mesh by extracting vertex positions from
-/// the flat keyform_positions array.
+fn build_rotation_key_forms(
+    moc3: &Moc3Data,
+    rotation: &parser::Moc3RotationDeformer,
+) -> Vec<KeyFormData> {
+    if rotation.keyform_angles_begin < 0 || rotation.keyform_sources_count <= 0 {
+        return Vec::new();
+    }
+
+    let begin = rotation.keyform_angles_begin as usize;
+    let count = rotation.keyform_sources_count as usize;
+    let binding_key_values = get_binding_key_values(moc3, rotation.keyform_binding_sources_index);
+
+    let mut key_forms = Vec::with_capacity(count);
+    for kf_idx in 0..count {
+        let angle = moc3
+            .rotation_deformer_keyform_angles
+            .get(begin + kf_idx)
+            .copied()
+            .unwrap_or(0.0);
+        let param_value = binding_key_values
+            .get(kf_idx)
+            .copied()
+            .unwrap_or(kf_idx as f32);
+
+        key_forms.push(KeyFormData {
+            param_value,
+            vertices: vec![Vec2::new(angle, 0.0)],
+        });
+    }
+
+    key_forms.sort_by(|a, b| {
+        a.param_value
+            .partial_cmp(&b.param_value)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    key_forms
+}
+
+/// Build key forms for an art mesh by resolving keyform position sources.
 fn build_art_mesh_key_forms(
     moc3: &Moc3Data,
     mesh_idx: usize,
     vertex_count: usize,
 ) -> Vec<KeyFormData> {
     let art_mesh = &moc3.art_meshes[mesh_idx];
-    let kf_begin = art_mesh.keyform_sources_begin;
+    let position_begin = art_mesh.keyform_position_sources_begin;
     let kf_count = art_mesh.keyform_sources_count;
 
-    if kf_begin < 0 || kf_count <= 0 || vertex_count == 0 {
+    if position_begin < 0 || kf_count <= 0 || vertex_count == 0 {
         return Vec::new();
     }
 
-    let kf_begin = kf_begin as usize;
+    let position_begin = position_begin as usize;
     let kf_count = kf_count as usize;
 
     // Get the key values for this art mesh's binding
@@ -368,15 +398,12 @@ fn build_art_mesh_key_forms(
 
     let mut key_forms = Vec::with_capacity(kf_count);
     for kf_idx in 0..kf_count {
-        // Each key form has `vertex_count` positions in the flat array
-        let pos_start = (kf_begin + kf_idx) * vertex_count;
-        let pos_end = pos_start + vertex_count;
-
-        let vertices: Vec<Vec2> = if pos_end <= moc3.keyform_positions.len() {
-            moc3.keyform_positions[pos_start..pos_end].to_vec()
-        } else {
-            vec![Vec2::ZERO; vertex_count]
-        };
+        let vertices = read_keyform_vertices(
+            moc3,
+            position_begin + kf_idx,
+            vertex_count,
+            &KeyformSourceKind::ArtMesh,
+        );
 
         // Map key form index to parameter value
         let param_value = binding_key_values
@@ -397,6 +424,51 @@ fn build_art_mesh_key_forms(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     key_forms
+}
+
+/// Resolve a keyform source index into vertex/control-point positions.
+///
+/// The MOC3 keyform begin/count fields index into a keyform source table.
+/// Each source table row then points into a flat XY float array.
+fn read_keyform_vertices(
+    moc3: &Moc3Data,
+    source_index: usize,
+    vertex_count: usize,
+    kind: &KeyformSourceKind,
+) -> Vec<Vec2> {
+    let source = match kind {
+        KeyformSourceKind::Warp => moc3
+            .warp_deformer_keyform_position_sources
+            .get(source_index),
+        KeyformSourceKind::ArtMesh => moc3.art_mesh_keyform_position_sources.get(source_index),
+    };
+    let Some(source) = source else {
+        return vec![Vec2::ZERO; vertex_count];
+    };
+    if source.xys_begin < 0 || source.xys_count <= 0 {
+        return vec![Vec2::ZERO; vertex_count];
+    }
+
+    let begin = source.xys_begin as usize;
+    let count = source.xys_count as usize;
+    if begin + count > moc3.keyform_position_xys.len() {
+        return vec![Vec2::ZERO; vertex_count];
+    }
+
+    let mut vertices = Vec::with_capacity(vertex_count);
+    for xy in moc3.keyform_position_xys[begin..begin + count].chunks(2) {
+        let x = xy.first().copied().unwrap_or(0.0);
+        let y = xy.get(1).copied().unwrap_or(0.0);
+        vertices.push(Vec2::new(x, y));
+        if vertices.len() == vertex_count {
+            break;
+        }
+    }
+
+    while vertices.len() < vertex_count {
+        vertices.push(Vec2::ZERO);
+    }
+    vertices
 }
 
 /// Find the parameter name associated with a keyform binding index
@@ -427,15 +499,22 @@ fn get_binding_key_values(moc3: &Moc3Data, binding_index: i32) -> Vec<f32> {
         return Vec::new();
     }
     let idx = binding_index as usize;
-    if idx >= moc3.parameter_bindings.len() {
+    if idx >= moc3.keyform_bindings.len() {
         return Vec::new();
     }
-    let binding = &moc3.parameter_bindings[idx];
-    if binding.keys_sources_begin < 0 || binding.keys_sources_count <= 0 {
+    let binding = &moc3.keyform_bindings[idx];
+    if binding.band_sources_begin < 0 || binding.band_sources_count <= 0 {
         return Vec::new();
     }
-    let begin = binding.keys_sources_begin as usize;
-    let count = binding.keys_sources_count as usize;
+    let band_idx = binding.band_sources_begin as usize;
+    let Some(band) = moc3.parameter_bindings.get(band_idx) else {
+        return Vec::new();
+    };
+    if band.keys_sources_begin < 0 || band.keys_sources_count <= 0 {
+        return Vec::new();
+    }
+    let begin = band.keys_sources_begin as usize;
+    let count = band.keys_sources_count as usize;
     if begin + count <= moc3.key_values.len() {
         moc3.key_values[begin..begin + count].to_vec()
     } else {
@@ -480,10 +559,14 @@ mod tests {
             rotation_deformers: Vec::new(),
             art_meshes: Vec::new(),
             parameter_bindings: Vec::new(),
+            keyform_bindings: Vec::new(),
+            warp_deformer_keyform_position_sources: Vec::new(),
+            rotation_deformer_keyform_angles: Vec::new(),
+            art_mesh_keyform_position_sources: Vec::new(),
             key_values: Vec::new(),
             uvs: Vec::new(),
             position_indices: Vec::new(),
-            keyform_positions: Vec::new(),
+            keyform_position_xys: Vec::new(),
         };
         assert!(find_binding_parameter(&moc3, -1).is_none());
     }
@@ -529,13 +612,18 @@ mod tests {
             rotation_deformers: Vec::new(),
             art_meshes: Vec::new(),
             parameter_bindings: vec![parser::Moc3ParameterBinding {
+                keyform_binding_index: 0,
                 keys_sources_begin: 0,
                 keys_sources_count: 3,
             }],
+            keyform_bindings: Vec::new(),
+            warp_deformer_keyform_position_sources: Vec::new(),
+            rotation_deformer_keyform_angles: Vec::new(),
+            art_mesh_keyform_position_sources: Vec::new(),
             key_values: vec![-30.0, 0.0, 30.0],
             uvs: Vec::new(),
             position_indices: Vec::new(),
-            keyform_positions: Vec::new(),
+            keyform_position_xys: Vec::new(),
         };
         assert_eq!(
             find_binding_parameter(&moc3, 0),
@@ -576,15 +664,80 @@ mod tests {
             rotation_deformers: Vec::new(),
             art_meshes: Vec::new(),
             parameter_bindings: vec![parser::Moc3ParameterBinding {
+                keyform_binding_index: 0,
                 keys_sources_begin: 0,
                 keys_sources_count: 3,
             }],
+            keyform_bindings: vec![parser::Moc3KeyformBinding {
+                band_sources_begin: 0,
+                band_sources_count: 1,
+            }],
+            warp_deformer_keyform_position_sources: Vec::new(),
+            rotation_deformer_keyform_angles: Vec::new(),
+            art_mesh_keyform_position_sources: Vec::new(),
             key_values: vec![-30.0, 0.0, 30.0],
             uvs: Vec::new(),
             position_indices: Vec::new(),
-            keyform_positions: Vec::new(),
+            keyform_position_xys: Vec::new(),
         };
         let values = get_binding_key_values(&moc3, 0);
         assert_eq!(values, vec![-30.0, 0.0, 30.0]);
+    }
+
+    #[test]
+    fn test_read_keyform_vertices_uses_source_table() {
+        let moc3 = Moc3Data {
+            version: 3,
+            counts: parser::ElementCounts {
+                parts: 0,
+                deformers: 0,
+                warp_deformers: 0,
+                rotation_deformers: 0,
+                art_meshes: 0,
+                parameters: 0,
+                part_keyforms: 0,
+                warp_deformer_keyforms: 0,
+                rotation_deformer_keyforms: 0,
+                art_mesh_keyforms: 0,
+                keyform_positions: 2,
+                parameter_binding_indices: 0,
+                keyform_bindings: 8,
+                parameter_bindings: 0,
+                keys: 0,
+                uvs: 0,
+                position_indices: 0,
+                drawable_masks: 0,
+                draw_order_groups: 0,
+                draw_order_group_objects: 0,
+            },
+            parameters: Vec::new(),
+            parts: Vec::new(),
+            deformers: Vec::new(),
+            warp_deformers: Vec::new(),
+            rotation_deformers: Vec::new(),
+            art_meshes: Vec::new(),
+            parameter_bindings: Vec::new(),
+            keyform_bindings: Vec::new(),
+            warp_deformer_keyform_position_sources: Vec::new(),
+            rotation_deformer_keyform_angles: Vec::new(),
+            art_mesh_keyform_position_sources: vec![
+                parser::Moc3KeyformPositionSource {
+                    xys_begin: 4,
+                    xys_count: 4,
+                },
+                parser::Moc3KeyformPositionSource {
+                    xys_begin: 0,
+                    xys_count: 4,
+                },
+            ],
+            key_values: Vec::new(),
+            uvs: Vec::new(),
+            position_indices: Vec::new(),
+            keyform_position_xys: vec![9.0, 9.0, 8.0, 8.0, 1.0, 2.0, 3.0, 4.0],
+        };
+
+        let vertices = read_keyform_vertices(&moc3, 0, 2, &KeyformSourceKind::ArtMesh);
+
+        assert_eq!(vertices, vec![Vec2::new(1.0, 2.0), Vec2::new(3.0, 4.0)]);
     }
 }

@@ -49,10 +49,14 @@ export { PlaybackPerformanceMonitor, type PerformanceSnapshot } from './Playback
 // 3D scene control WebSocket client
 export {
   SceneControlSocket,
+  SceneViewportCameraRejectedError,
   type SceneControlReadyMessage,
   type SceneControlSocketConfig,
   type SceneControlWebSocketFactory,
   type SceneControlWebSocketLike,
+  type SceneViewportResolution,
+  type SceneViewportCameraAck,
+  type SceneViewportCameraUpdate,
 } from './SceneControlSocket';
 
 export {

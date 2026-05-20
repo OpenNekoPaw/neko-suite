@@ -1,6 +1,6 @@
 //! ECS components for 3D scene entities
 
-use crate::asset_database::AssetHandle;
+use crate::{asset_database::AssetHandle, bounds::SceneBounds3};
 use bevy_ecs::prelude::*;
 use glam::{Mat4, Quat, Vec3};
 use neko_engine_types::easing::EasingType;
@@ -71,6 +71,25 @@ pub struct MaterialRef {
     pub asset: AssetHandle,
     pub uri: String,
     pub material_index: usize,
+}
+
+/// Mesh primitive and material pair attached to one glTF node.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MeshPrimitiveRef {
+    pub mesh: MeshRef,
+    pub material: Option<MaterialRef>,
+}
+
+/// All renderable primitives attached to one glTF node.
+#[derive(Component, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MeshPrimitiveRefs {
+    pub primitives: Vec<MeshPrimitiveRef>,
+}
+
+/// Local-space bounds for all mesh primitives attached to one scene node.
+#[derive(Component, Clone, Debug, Serialize, Deserialize)]
+pub struct MeshBounds {
+    pub local: SceneBounds3,
 }
 
 /// Light types

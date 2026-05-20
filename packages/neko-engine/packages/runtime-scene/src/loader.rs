@@ -4,12 +4,14 @@
 
 use crate::asset_database::{
     composite_primitive_id, AssetDatabase, AssetDescriptor, AssetHandle, AssetKind, AssetMetadata,
-    ImageDescriptor, MaterialDescriptor, MeshDescriptor, TextureColorSpace, TextureDescriptor,
-    TextureSamplerDescriptor,
+    ImageDescriptor, MaterialAlphaMode, MaterialDescriptor, MeshDescriptor, TextureColorSpace,
+    TextureDescriptor, TextureSamplerDescriptor,
 };
+use crate::bounds::SceneBounds3;
 use crate::components::*;
 use crate::hierarchy::Children;
 use bevy_ecs::prelude::*;
+use gltf::mesh::Semantic;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -160,6 +162,7 @@ fn build_asset_database(
                 uri: uri.to_string(),
                 primitive_index: composite_id,
                 topology_version: 1,
+                local_bounds: primitive_bounds(&primitive),
             }));
 
             let mut metadata = AssetMetadata::new(AssetKind::Mesh);
@@ -203,6 +206,9 @@ fn build_asset_database(
         descriptor.emissive_texture = material
             .emissive_texture()
             .map(|info| AssetHandle::for_texture(uri, info.texture().index()));
+        descriptor.alpha_mode = material_alpha_mode(material.alpha_mode());
+        descriptor.alpha_cutoff = material.alpha_cutoff().unwrap_or(0.5);
+        descriptor.double_sided = material.double_sided();
 
         let dependencies = [
             descriptor.base_color_texture.clone(),
@@ -254,6 +260,14 @@ fn collect_texture_color_spaces(document: &gltf::Document) -> HashMap<usize, Tex
     }
 
     spaces
+}
+
+fn material_alpha_mode(mode: gltf::material::AlphaMode) -> MaterialAlphaMode {
+    match mode {
+        gltf::material::AlphaMode::Opaque => MaterialAlphaMode::Opaque,
+        gltf::material::AlphaMode::Mask => MaterialAlphaMode::Mask,
+        gltf::material::AlphaMode::Blend => MaterialAlphaMode::Blend,
+    }
 }
 
 fn image_descriptor(
@@ -402,21 +416,52 @@ fn spawn_node(
     // the cache (visible as a single floating capsule in the viewport).
     if let Some(mesh) = node.mesh() {
         let mesh_index = mesh.index();
+        let mut primitive_refs = Vec::new();
+        let mut mesh_bounds: Option<SceneBounds3> = None;
         for primitive in mesh.primitives() {
             let composite_id = composite_primitive_id(mesh_index, primitive.index());
-            world.entity_mut(entity).insert(MeshRef {
+            let mesh_ref = MeshRef {
                 asset: AssetHandle::for_mesh(uri, composite_id),
                 uri: uri.to_string(),
                 primitive_index: composite_id,
+            };
+
+            let material_ref = primitive.material().index().map(|material| MaterialRef {
+                asset: AssetHandle::for_material(uri, material),
+                uri: uri.to_string(),
+                material_index: material,
             });
 
-            if let Some(material) = primitive.material().index() {
-                world.entity_mut(entity).insert(MaterialRef {
-                    asset: AssetHandle::for_material(uri, material),
-                    uri: uri.to_string(),
-                    material_index: material,
+            primitive_refs.push(MeshPrimitiveRef {
+                mesh: mesh_ref,
+                material: material_ref,
+            });
+
+            if let Some(bounds) = primitive_bounds(&primitive) {
+                mesh_bounds = Some(match mesh_bounds {
+                    Some(existing) => existing.union(bounds),
+                    None => bounds,
                 });
             }
+        }
+
+        if let Some(primary) = primitive_refs.first() {
+            world.entity_mut(entity).insert(primary.mesh.clone());
+            if let Some(material) = &primary.material {
+                world.entity_mut(entity).insert(material.clone());
+            }
+        }
+
+        if !primitive_refs.is_empty() {
+            world.entity_mut(entity).insert(MeshPrimitiveRefs {
+                primitives: primitive_refs,
+            });
+        }
+
+        if let Some(bounds) = mesh_bounds {
+            world
+                .entity_mut(entity)
+                .insert(MeshBounds { local: bounds });
         }
     }
 
@@ -490,6 +535,26 @@ fn decompose_gltf_transform(transform: gltf::scene::Transform) -> Transform {
         rotation: glam::Quat::from_array(rotation),
         scale: glam::Vec3::from(scale),
     }
+}
+
+fn primitive_bounds(primitive: &gltf::Primitive<'_>) -> Option<SceneBounds3> {
+    let position_accessor = primitive.get(&Semantic::Positions)?;
+    let min = json_vec3(position_accessor.min()?)?;
+    let max = json_vec3(position_accessor.max()?)?;
+    Some(SceneBounds3::new(min, max))
+}
+
+fn json_vec3(value: serde_json::Value) -> Option<[f32; 3]> {
+    let values = value.as_array()?;
+    if values.len() != 3 {
+        return None;
+    }
+
+    Some([
+        values.first()?.as_f64()? as f32,
+        values.get(1)?.as_f64()? as f32,
+        values.get(2)?.as_f64()? as f32,
+    ])
 }
 
 /// Read inverse bind matrices from a glTF skin.
@@ -697,6 +762,317 @@ mod tests {
         let image = database.image(&image_handle).unwrap();
         assert_eq!(image.mime_type.as_deref(), Some("image/png"));
         assert!(image.data.as_ref().is_some_and(|data| !data.is_empty()));
+    }
+
+    #[test]
+    fn build_asset_database_registers_mesh_bounds_from_position_accessor() {
+        let model_path = std::path::PathBuf::from("bounded.gltf");
+        let uri = "bounded.gltf";
+        let gltf = gltf::Gltf::from_slice(
+            br#"{
+                "asset": { "version": "2.0" },
+                "meshes": [{
+                    "primitives": [{
+                        "attributes": { "POSITION": 0 }
+                    }]
+                }],
+                "buffers": [{
+                    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                    "byteLength": 36
+                }],
+                "bufferViews": [
+                    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 }
+                ],
+                "accessors": [{
+                    "bufferView": 0,
+                    "componentType": 5126,
+                    "count": 3,
+                    "type": "VEC3",
+                    "min": [-2, -1, 0.5],
+                    "max": [2, 3, 4.5]
+                }]
+            }"#,
+        )
+        .unwrap();
+
+        let database = build_asset_database(&gltf.document, &[], &model_path, uri);
+        let mesh = database
+            .mesh(&AssetHandle::for_mesh(uri, composite_primitive_id(0, 0)))
+            .unwrap();
+
+        assert_eq!(mesh.local_bounds.unwrap().min, [-2.0, -1.0, 0.5]);
+        assert_eq!(mesh.local_bounds.unwrap().max, [2.0, 3.0, 4.5]);
+    }
+
+    #[test]
+    fn load_gltf_preserves_all_primitives_on_node() {
+        let dir = tempfile::tempdir().unwrap();
+        let model_path = dir.path().join("multi_primitive.gltf");
+        std::fs::write(
+            &model_path,
+            r#"{
+                "asset": { "version": "2.0" },
+                "scenes": [{ "nodes": [0] }],
+                "scene": 0,
+                "nodes": [{ "mesh": 0, "name": "MultiPrimitiveNode" }],
+                "meshes": [{
+                    "primitives": [
+                        {
+                            "attributes": { "POSITION": 0 },
+                            "indices": 1,
+                            "material": 0
+                        },
+                        {
+                            "attributes": { "POSITION": 2 },
+                            "indices": 3,
+                            "material": 1
+                        }
+                    ]
+                }],
+                "materials": [
+                    { "name": "Body" },
+                    { "name": "Accent" }
+                ],
+                "buffers": [{
+                    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                    "byteLength": 80
+                }],
+                "bufferViews": [
+                    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+                    { "buffer": 0, "byteOffset": 36, "byteLength": 6, "target": 34963 },
+                    { "buffer": 0, "byteOffset": 44, "byteLength": 24, "target": 34962 },
+                    { "buffer": 0, "byteOffset": 68, "byteLength": 6, "target": 34963 }
+                ],
+                "accessors": [
+                    {
+                        "bufferView": 0,
+                        "componentType": 5126,
+                        "count": 3,
+                        "type": "VEC3",
+                        "min": [0, 0, 0],
+                        "max": [1, 1, 0]
+                    },
+                    {
+                        "bufferView": 1,
+                        "componentType": 5123,
+                        "count": 3,
+                        "type": "SCALAR"
+                    },
+                    {
+                        "bufferView": 2,
+                        "componentType": 5126,
+                        "count": 2,
+                        "type": "VEC3",
+                        "min": [0, 0, 0],
+                        "max": [1, 0, 0]
+                    },
+                    {
+                        "bufferView": 3,
+                        "componentType": 5123,
+                        "count": 3,
+                        "type": "SCALAR"
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        let mut world = World::new();
+        load_gltf(&mut world, &model_path).unwrap();
+
+        let mut query = world.query::<(&SceneNodeId, &MeshRef, &MaterialRef, &MeshPrimitiveRefs)>();
+        let (_, mesh_ref, material_ref, primitive_refs) = query
+            .iter(&world)
+            .find(|(node_id, _, _, _)| node_id.0 == "node_0")
+            .unwrap();
+
+        assert_eq!(mesh_ref.primitive_index, composite_primitive_id(0, 0));
+        assert_eq!(material_ref.material_index, 0);
+        assert_eq!(primitive_refs.primitives.len(), 2);
+        assert_eq!(
+            primitive_refs.primitives[0].mesh.primitive_index,
+            composite_primitive_id(0, 0)
+        );
+        assert_eq!(
+            primitive_refs.primitives[0]
+                .material
+                .as_ref()
+                .map(|material| material.material_index),
+            Some(0)
+        );
+        assert_eq!(
+            primitive_refs.primitives[1].mesh.primitive_index,
+            composite_primitive_id(0, 1)
+        );
+        assert_eq!(
+            primitive_refs.primitives[1]
+                .material
+                .as_ref()
+                .map(|material| material.material_index),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn load_gltf_attaches_union_mesh_bounds_to_node() {
+        let dir = tempfile::tempdir().unwrap();
+        let model_path = dir.path().join("bounded_node.gltf");
+        std::fs::write(
+            &model_path,
+            r#"{
+                "asset": { "version": "2.0" },
+                "scenes": [{ "nodes": [0] }],
+                "scene": 0,
+                "nodes": [{ "mesh": 0, "name": "BoundedNode" }],
+                "meshes": [{
+                    "primitives": [
+                        { "attributes": { "POSITION": 0 } },
+                        { "attributes": { "POSITION": 1 } }
+                    ]
+                }],
+                "buffers": [{
+                    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                    "byteLength": 72
+                }],
+                "bufferViews": [
+                    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+                    { "buffer": 0, "byteOffset": 36, "byteLength": 36, "target": 34962 }
+                ],
+                "accessors": [
+                    {
+                        "bufferView": 0,
+                        "componentType": 5126,
+                        "count": 3,
+                        "type": "VEC3",
+                        "min": [-1, -2, -3],
+                        "max": [1, 2, 3]
+                    },
+                    {
+                        "bufferView": 1,
+                        "componentType": 5126,
+                        "count": 3,
+                        "type": "VEC3",
+                        "min": [4, 0, -1],
+                        "max": [6, 1, 1]
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        let mut world = World::new();
+        load_gltf(&mut world, &model_path).unwrap();
+
+        let mut query = world.query::<(&SceneNodeId, &MeshBounds)>();
+        let (_, bounds) = query
+            .iter(&world)
+            .find(|(node_id, _)| node_id.0 == "node_0")
+            .unwrap();
+
+        assert_eq!(bounds.local.min, [-1.0, -2.0, -3.0]);
+        assert_eq!(bounds.local.max, [6.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn route_a_sample_loads_multi_primitive_transparency_and_bounds_contract() {
+        let dir = tempfile::tempdir().unwrap();
+        let model_path = dir.path().join("route_a_sample.gltf");
+        std::fs::write(
+            &model_path,
+            r#"{
+                "asset": { "version": "2.0" },
+                "scenes": [{ "nodes": [0] }],
+                "scene": 0,
+                "nodes": [{
+                    "mesh": 0,
+                    "name": "TransparentMultiPrimitive",
+                    "translation": [2, 0, 0]
+                }],
+                "meshes": [{
+                    "primitives": [
+                        {
+                            "attributes": { "POSITION": 0 },
+                            "material": 0
+                        },
+                        {
+                            "attributes": { "POSITION": 1 },
+                            "material": 1
+                        }
+                    ]
+                }],
+                "materials": [
+                    {
+                        "name": "Glass",
+                        "alphaMode": "BLEND",
+                        "doubleSided": true,
+                        "pbrMetallicRoughness": {
+                            "baseColorFactor": [0.2, 0.4, 0.8, 0.5]
+                        }
+                    },
+                    {
+                        "name": "Cutout",
+                        "alphaMode": "MASK",
+                        "alphaCutoff": 0.35,
+                        "pbrMetallicRoughness": {
+                            "baseColorFactor": [1, 1, 1, 1]
+                        }
+                    }
+                ],
+                "buffers": [{
+                    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                    "byteLength": 72
+                }],
+                "bufferViews": [
+                    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+                    { "buffer": 0, "byteOffset": 36, "byteLength": 36, "target": 34962 }
+                ],
+                "accessors": [
+                    {
+                        "bufferView": 0,
+                        "componentType": 5126,
+                        "count": 3,
+                        "type": "VEC3",
+                        "min": [-1, 0, -1],
+                        "max": [1, 2, 1]
+                    },
+                    {
+                        "bufferView": 1,
+                        "componentType": 5126,
+                        "count": 3,
+                        "type": "VEC3",
+                        "min": [3, -1, -0.5],
+                        "max": [4, 1, 0.5]
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        let mut world = World::new();
+        let result = load_gltf(&mut world, &model_path).unwrap();
+
+        let glass = result
+            .asset_database
+            .material(&AssetHandle::for_material(&model_path.to_string_lossy(), 0))
+            .unwrap();
+        let cutout = result
+            .asset_database
+            .material(&AssetHandle::for_material(&model_path.to_string_lossy(), 1))
+            .unwrap();
+        assert_eq!(glass.alpha_mode, MaterialAlphaMode::Blend);
+        assert_eq!(glass.base_color_factor[3], 0.5);
+        assert!(glass.double_sided);
+        assert_eq!(cutout.alpha_mode, MaterialAlphaMode::Mask);
+        assert!((cutout.alpha_cutoff - 0.35).abs() < f32::EPSILON);
+
+        let mut query = world.query::<(&SceneNodeId, &MeshPrimitiveRefs, &MeshBounds)>();
+        let (_, primitive_refs, bounds) = query
+            .iter(&world)
+            .find(|(node_id, _, _)| node_id.0 == "node_0")
+            .unwrap();
+        assert_eq!(primitive_refs.primitives.len(), 2);
+        assert_eq!(bounds.local.min, [-1.0, -1.0, -1.0]);
+        assert_eq!(bounds.local.max, [4.0, 2.0, 1.0]);
     }
 
     #[test]

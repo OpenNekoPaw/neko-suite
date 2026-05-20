@@ -3,7 +3,7 @@
 //! Renders a bevy_ecs World's visible meshes using metallic-roughness PBR.
 //! Outputs to Rgba16Float texture (matching TextureCompositor format).
 
-use crate::asset_cache::AssetCache;
+use crate::asset_cache::{AssetCache, GpuAlphaMode};
 use crate::{
     build_viewport_render_graph, extract_render_world, CameraParams, CompiledRenderPass,
     PostProcessChain, PostProcessSettings, RenderGraphError, RenderGraphExecutor, RenderLightKind,
@@ -74,8 +74,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 /// PBR forward renderer
 pub struct PbrRenderer {
-    render_pipeline: wgpu::RenderPipeline,
-    skinned_render_pipeline: wgpu::RenderPipeline,
+    render_pipelines: PbrPipelineSet,
+    skinned_render_pipelines: PbrPipelineSet,
     camera_bind_group_layout: wgpu::BindGroupLayout,
     model_bind_group_layout: wgpu::BindGroupLayout,
     light_bind_group_layout: wgpu::BindGroupLayout,
@@ -151,6 +151,35 @@ const _: () = {
     // LightUniforms: 16 lights (1024) + count (4) + vec3 alignment+padding (28) = 1056
     assert!(std::mem::size_of::<LightUniformsGpu>() == 1056);
 };
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DrawPipelineKey {
+    skinned: bool,
+    alpha_mode: GpuAlphaMode,
+    double_sided: bool,
+}
+
+struct PbrPipelineSet {
+    opaque_single_sided: wgpu::RenderPipeline,
+    opaque_double_sided: wgpu::RenderPipeline,
+    mask_single_sided: wgpu::RenderPipeline,
+    mask_double_sided: wgpu::RenderPipeline,
+    blend_single_sided: wgpu::RenderPipeline,
+    blend_double_sided: wgpu::RenderPipeline,
+}
+
+impl PbrPipelineSet {
+    fn get(&self, alpha_mode: GpuAlphaMode, double_sided: bool) -> &wgpu::RenderPipeline {
+        match (alpha_mode, double_sided) {
+            (GpuAlphaMode::Opaque, false) => &self.opaque_single_sided,
+            (GpuAlphaMode::Opaque, true) => &self.opaque_double_sided,
+            (GpuAlphaMode::Mask, false) => &self.mask_single_sided,
+            (GpuAlphaMode::Mask, true) => &self.mask_double_sided,
+            (GpuAlphaMode::Blend, false) => &self.blend_single_sided,
+            (GpuAlphaMode::Blend, true) => &self.blend_double_sided,
+        }
+    }
+}
 
 impl PbrRenderer {
     /// Create a new PBR renderer.
@@ -328,68 +357,21 @@ impl PbrRenderer {
             source: wgpu::ShaderSource::Wgsl(skinned_shader_src.into()),
         });
 
-        let depth_stencil = wgpu::DepthStencilState {
-            format: wgpu::TextureFormat::Depth32Float,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        };
+        let render_pipelines = create_pbr_pipeline_set(
+            device,
+            &pipeline_layout,
+            &shader_module,
+            &[super::vertex::PbrVertex::buffer_layout()],
+            "pbr",
+        );
 
-        let primitive = wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
-            polygon_mode: wgpu::PolygonMode::Fill,
-            unclipped_depth: false,
-            conservative: false,
-        };
-
-        let fragment_targets = [Some(wgpu::ColorTargetState {
-            format: wgpu::TextureFormat::Rgba16Float,
-            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-            write_mask: wgpu::ColorWrites::ALL,
-        })];
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("pbr_render_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader_module,
-                entry_point: "vs_main",
-                buffers: &[super::vertex::PbrVertex::buffer_layout()],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader_module,
-                entry_point: "fs_main",
-                targets: &fragment_targets,
-            }),
-            primitive,
-            depth_stencil: Some(depth_stencil.clone()),
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-        });
-
-        let skinned_render_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("pbr_skinned_render_pipeline"),
-                layout: Some(&skinned_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &skinned_shader_module,
-                    entry_point: "vs_main",
-                    buffers: &[super::vertex::SkinnedPbrVertex::buffer_layout()],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &skinned_shader_module,
-                    entry_point: "fs_main",
-                    targets: &fragment_targets,
-                }),
-                primitive,
-                depth_stencil: Some(depth_stencil),
-                multisample: wgpu::MultisampleState::default(),
-                multiview: None,
-            });
+        let skinned_render_pipelines = create_pbr_pipeline_set(
+            device,
+            &skinned_pipeline_layout,
+            &skinned_shader_module,
+            &[super::vertex::SkinnedPbrVertex::buffer_layout()],
+            "pbr_skinned",
+        );
 
         let color_convert_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene_color_convert_bgl"),
@@ -440,8 +422,8 @@ impl PbrRenderer {
 
         (
             Self {
-                render_pipeline,
-                skinned_render_pipeline,
+                render_pipelines,
+                skinned_render_pipelines,
                 camera_bind_group_layout: camera_bgl,
                 model_bind_group_layout: model_bgl,
                 light_bind_group_layout: light_bgl,
@@ -728,18 +710,14 @@ impl PbrRenderer {
                 render_pass.set_bind_group(0, camera_bind_group, &[]);
                 render_pass.set_bind_group(3, light_bind_group, &[]);
 
-                // Issue draw calls, switching pipeline for skinned vs non-skinned meshes
-                let mut current_skinned = false;
-                render_pass.set_pipeline(&self.render_pipeline);
+                // Draw opaque/masked geometry first; blended surfaces render
+                // after depth has been established and do not write depth.
+                let mut current_pipeline: Option<DrawPipelineKey> = None;
 
                 for call in &draw_calls {
-                    if call.is_skinned != current_skinned {
-                        if call.is_skinned {
-                            render_pass.set_pipeline(&self.skinned_render_pipeline);
-                        } else {
-                            render_pass.set_pipeline(&self.render_pipeline);
-                        }
-                        current_skinned = call.is_skinned;
+                    if current_pipeline != Some(call.pipeline_key) {
+                        render_pass.set_pipeline(self.pipeline_for(call.pipeline_key));
+                        current_pipeline = Some(call.pipeline_key);
                         // Re-bind shared groups after pipeline switch
                         render_pass.set_bind_group(0, camera_bind_group, &[]);
                         render_pass.set_bind_group(3, light_bind_group, &[]);
@@ -748,7 +726,7 @@ impl PbrRenderer {
                     render_pass.set_bind_group(1, &call.model_bind_group, &[]);
                     render_pass.set_bind_group(2, call.material_bind_group, &[]);
 
-                    if call.is_skinned {
+                    if call.pipeline_key.skinned {
                         if let Some(ref jbg) = call.joint_bind_group {
                             render_pass.set_bind_group(4, jbg, &[]);
                         }
@@ -938,14 +916,146 @@ impl PbrRenderer {
                 index_buffer: &gpu_mesh.index_buffer,
                 index_count: gpu_mesh.index_count,
                 index_format: gpu_mesh.index_format,
-                is_skinned: gpu_mesh.is_skinned && joint_bind_group.is_some(),
+                pipeline_key: DrawPipelineKey {
+                    skinned: gpu_mesh.is_skinned && joint_bind_group.is_some(),
+                    alpha_mode: gpu_material.pipeline_state.alpha_mode,
+                    double_sided: gpu_material.pipeline_state.double_sided,
+                },
                 joint_bind_group,
                 _joint_buffer: joint_buffer,
             });
         }
 
+        calls.sort_by_key(|call| call.sort_key());
         calls
     }
+
+    fn pipeline_for(&self, key: DrawPipelineKey) -> &wgpu::RenderPipeline {
+        if key.skinned {
+            self.skinned_render_pipelines
+                .get(key.alpha_mode, key.double_sided)
+        } else {
+            self.render_pipelines.get(key.alpha_mode, key.double_sided)
+        }
+    }
+}
+
+fn create_pbr_pipeline_set(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader_module: &wgpu::ShaderModule,
+    vertex_buffers: &[wgpu::VertexBufferLayout<'_>],
+    label_prefix: &str,
+) -> PbrPipelineSet {
+    PbrPipelineSet {
+        opaque_single_sided: create_pbr_pipeline(
+            device,
+            layout,
+            shader_module,
+            vertex_buffers,
+            &format!("{label_prefix}_opaque_single_sided"),
+            GpuAlphaMode::Opaque,
+            false,
+        ),
+        opaque_double_sided: create_pbr_pipeline(
+            device,
+            layout,
+            shader_module,
+            vertex_buffers,
+            &format!("{label_prefix}_opaque_double_sided"),
+            GpuAlphaMode::Opaque,
+            true,
+        ),
+        mask_single_sided: create_pbr_pipeline(
+            device,
+            layout,
+            shader_module,
+            vertex_buffers,
+            &format!("{label_prefix}_mask_single_sided"),
+            GpuAlphaMode::Mask,
+            false,
+        ),
+        mask_double_sided: create_pbr_pipeline(
+            device,
+            layout,
+            shader_module,
+            vertex_buffers,
+            &format!("{label_prefix}_mask_double_sided"),
+            GpuAlphaMode::Mask,
+            true,
+        ),
+        blend_single_sided: create_pbr_pipeline(
+            device,
+            layout,
+            shader_module,
+            vertex_buffers,
+            &format!("{label_prefix}_blend_single_sided"),
+            GpuAlphaMode::Blend,
+            false,
+        ),
+        blend_double_sided: create_pbr_pipeline(
+            device,
+            layout,
+            shader_module,
+            vertex_buffers,
+            &format!("{label_prefix}_blend_double_sided"),
+            GpuAlphaMode::Blend,
+            true,
+        ),
+    }
+}
+
+fn create_pbr_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader_module: &wgpu::ShaderModule,
+    vertex_buffers: &[wgpu::VertexBufferLayout<'_>],
+    label: &str,
+    alpha_mode: GpuAlphaMode,
+    double_sided: bool,
+) -> wgpu::RenderPipeline {
+    let depth_stencil = wgpu::DepthStencilState {
+        format: wgpu::TextureFormat::Depth32Float,
+        depth_write_enabled: alpha_mode != GpuAlphaMode::Blend,
+        depth_compare: wgpu::CompareFunction::Less,
+        stencil: wgpu::StencilState::default(),
+        bias: wgpu::DepthBiasState::default(),
+    };
+
+    let primitive = wgpu::PrimitiveState {
+        topology: wgpu::PrimitiveTopology::TriangleList,
+        strip_index_format: None,
+        front_face: wgpu::FrontFace::Ccw,
+        cull_mode: (!double_sided).then_some(wgpu::Face::Back),
+        polygon_mode: wgpu::PolygonMode::Fill,
+        unclipped_depth: false,
+        conservative: false,
+    };
+
+    let fragment_targets = [Some(wgpu::ColorTargetState {
+        format: wgpu::TextureFormat::Rgba16Float,
+        blend: (alpha_mode == GpuAlphaMode::Blend).then_some(wgpu::BlendState::ALPHA_BLENDING),
+        write_mask: wgpu::ColorWrites::ALL,
+    })];
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader_module,
+            entry_point: "vs_main",
+            buffers: vertex_buffers,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: shader_module,
+            entry_point: "fs_main",
+            targets: &fragment_targets,
+        }),
+        primitive,
+        depth_stencil: Some(depth_stencil),
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+    })
 }
 
 struct PbrRenderGraphPassExecutor<'a> {
@@ -1281,10 +1391,20 @@ struct DrawCall<'a> {
     index_buffer: &'a wgpu::Buffer,
     index_count: u32,
     index_format: wgpu::IndexFormat,
-    is_skinned: bool,
+    pipeline_key: DrawPipelineKey,
     joint_bind_group: Option<wgpu::BindGroup>,
     /// Owned buffer for joint matrices (must outlive render pass)
     _joint_buffer: Option<wgpu::Buffer>,
+}
+
+impl DrawCall<'_> {
+    fn sort_key(&self) -> u8 {
+        match self.pipeline_key.alpha_mode {
+            GpuAlphaMode::Opaque => 0,
+            GpuAlphaMode::Mask => 1,
+            GpuAlphaMode::Blend => 2,
+        }
+    }
 }
 
 /// PBR rendering errors

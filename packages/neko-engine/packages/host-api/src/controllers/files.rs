@@ -63,9 +63,7 @@ impl Controller for FilesController {
                     .map(ToOwned::to_owned)
                     .or(opts.token)
                     .ok_or_else(|| {
-                        ApiError::InvalidRequest(
-                            "token required for files:unregister".to_string(),
-                        )
+                        ApiError::InvalidRequest("token required for files:unregister".to_string())
                     })?;
                 self.registry.unregister_token(&token)?;
                 Ok(ActionResponse::ok(
@@ -81,9 +79,10 @@ impl Controller for FilesController {
                     .ok_or_else(|| {
                         ApiError::InvalidRequest("token required for files:stat".to_string())
                     })?;
-                let registered = self.registry.stat_token(&token)?.ok_or_else(|| {
-                    ApiError::NotFound(format!("File token not found: {token}"))
-                })?;
+                let registered = self
+                    .registry
+                    .stat_token(&token)?
+                    .ok_or_else(|| ApiError::NotFound(format!("File token not found: {token}")))?;
                 Ok(ActionResponse::ok("", serde_json::to_value(registered)?))
             }
             "resolve" => {

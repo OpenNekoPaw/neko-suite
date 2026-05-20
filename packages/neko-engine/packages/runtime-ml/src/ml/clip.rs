@@ -11,8 +11,8 @@
 //! Token IDs must be provided by the caller (use an external BPE tokeniser or
 //! the CLIP tokeniser bundled with the model package).
 
-use ndarray::{Array3, Array4};
 use crate::{Error, Result};
+use ndarray::{Array3, Array4};
 use ort::value::Tensor as OrtTensor;
 
 // ImageNet normalisation constants.

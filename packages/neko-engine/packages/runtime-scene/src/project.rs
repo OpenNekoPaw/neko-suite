@@ -137,6 +137,8 @@ mod tests {
                     has_light: false,
                     has_camera: false,
                     has_skeleton: false,
+                    bounds: None,
+                    world_bounds: None,
                 }],
                 animations: vec![],
             },

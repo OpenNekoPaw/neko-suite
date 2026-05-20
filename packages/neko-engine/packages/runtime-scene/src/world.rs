@@ -12,6 +12,7 @@ use crate::animation_blend::{
     SceneAnimationBlendState, SceneAnimationPlaybackState, SceneBlendLayer, SceneBlendLayerInfo,
     SceneCrossfadeRequest,
 };
+use crate::bounds::SceneBounds3;
 use crate::components::*;
 use crate::hierarchy;
 use crate::ik::{self, IkChain, IkChainInfo, IkSolverType};
@@ -53,6 +54,14 @@ pub struct SceneNodeSnapshot {
     pub has_light: bool,
     pub has_camera: bool,
     pub has_skeleton: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bounds: Option<SceneBounds3>,
+    #[serde(
+        default,
+        rename = "worldBounds",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub world_bounds: Option<SceneBounds3>,
 }
 
 /// Info about an animation clip
@@ -554,6 +563,8 @@ impl RawWorldAccess for BevySceneWorld {
 
 impl SceneWorld for BevySceneWorld {
     fn load_model(&mut self, path: &Path) -> Result<LoadResult, LoadError> {
+        self.world.clear_all();
+        ensure_scene_control_resources(&mut self.world);
         let result = loader::load_gltf(&mut self.world, path)?;
         rebuild_node_index(&mut self.world);
         systems::transform_propagation(&mut self.world);
@@ -576,13 +587,31 @@ impl SceneWorld for BevySceneWorld {
             Option<&Light>,
             Option<&Camera>,
             Option<&Skeleton>,
+            Option<&MeshBounds>,
+            Option<&GlobalTransform>,
         )>();
 
-        for (_entity, node_id, name, transform, parent, visible, mesh, light, camera, skeleton) in
-            query.iter(&self.world)
+        for (
+            _entity,
+            node_id,
+            name,
+            transform,
+            parent,
+            visible,
+            mesh,
+            light,
+            camera,
+            skeleton,
+            mesh_bounds,
+            global_transform,
+        ) in query.iter(&self.world)
         {
             let parent_id =
                 parent.and_then(|p| self.world.get::<SceneNodeId>(p.0).map(|id| id.0.clone()));
+            let bounds = mesh_bounds.map(|bounds| bounds.local);
+            let world_bounds = bounds
+                .zip(global_transform)
+                .map(|(bounds, global)| bounds.transform(global.0));
 
             nodes.push(SceneNodeSnapshot {
                 id: node_id.0.clone(),
@@ -596,6 +625,8 @@ impl SceneWorld for BevySceneWorld {
                 has_light: light.is_some(),
                 has_camera: camera.is_some(),
                 has_skeleton: skeleton.is_some(),
+                bounds,
+                world_bounds,
             });
         }
 
@@ -698,6 +729,7 @@ impl SceneWorld for BevySceneWorld {
     fn restore_snapshot(&mut self, snapshot: &SceneSnapshot) {
         // Clear existing world
         self.world.clear_all();
+        ensure_scene_control_resources(&mut self.world);
 
         // Rebuild ECS entities from snapshot nodes
         let mut id_to_entity: HashMap<String, Entity> = HashMap::new();
@@ -1258,6 +1290,44 @@ mod tests {
     }
 
     #[test]
+    fn load_model_replaces_existing_scene_entities() {
+        let mut scene = BevySceneWorld::new();
+        {
+            let ecs = scene.ecs_world_mut_raw();
+            ecs.spawn((
+                SceneNodeId("template_humanoid".to_string()),
+                NodeName("Template Humanoid".to_string()),
+                Transform::default(),
+                GlobalTransform::identity(),
+                Visible(true),
+            ));
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let model_path = dir.path().join("loaded.gltf");
+        std::fs::write(
+            &model_path,
+            r#"{
+                "asset": { "version": "2.0" },
+                "scenes": [{ "nodes": [0] }],
+                "scene": 0,
+                "nodes": [{ "name": "Loaded" }]
+            }"#,
+        )
+        .unwrap();
+
+        scene.load_model(&model_path).unwrap();
+        let snapshot = scene.get_snapshot();
+
+        assert!(snapshot
+            .nodes
+            .iter()
+            .all(|node| node.id != "template_humanoid"));
+        assert!(snapshot.nodes.iter().any(|node| node.name == "Scene"));
+        assert!(snapshot.nodes.iter().any(|node| node.name == "Loaded"));
+    }
+
+    #[test]
     fn tick_writes_engine_playback_state_and_evaluated_pose() {
         let mut scene = BevySceneWorld::new();
         let (root, target) = {
@@ -1299,5 +1369,45 @@ mod tests {
 
         let transform = ecs.get::<Transform>(target).unwrap();
         assert!((transform.position.x - 0.25).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn snapshot_includes_local_and_world_mesh_bounds() {
+        let mut scene = BevySceneWorld::new();
+        {
+            let ecs = scene.ecs_world_mut_raw();
+            ecs.spawn((
+                SceneNodeId("node_0".to_string()),
+                NodeName("Mesh".to_string()),
+                Transform {
+                    position: Vec3::new(10.0, 0.0, 0.0),
+                    rotation: glam::Quat::IDENTITY,
+                    scale: Vec3::new(2.0, 3.0, 4.0),
+                },
+                GlobalTransform::identity(),
+                Visible(true),
+                MeshRef {
+                    asset: crate::asset_database::AssetHandle::for_mesh("mesh.glb", 0),
+                    uri: "mesh.glb".to_string(),
+                    primitive_index: 0,
+                },
+                MeshBounds {
+                    local: SceneBounds3::new([-1.0, -2.0, -3.0], [1.0, 2.0, 3.0]),
+                },
+            ));
+        }
+        systems::transform_propagation(scene.ecs_world_mut_raw());
+
+        let snapshot = scene.get_snapshot();
+        let node = snapshot
+            .nodes
+            .iter()
+            .find(|node| node.id == "node_0")
+            .unwrap();
+
+        assert_eq!(node.bounds.unwrap().min, [-1.0, -2.0, -3.0]);
+        assert_eq!(node.bounds.unwrap().max, [1.0, 2.0, 3.0]);
+        assert_eq!(node.world_bounds.unwrap().min, [8.0, -6.0, -12.0]);
+        assert_eq!(node.world_bounds.unwrap().max, [12.0, 6.0, 12.0]);
     }
 }

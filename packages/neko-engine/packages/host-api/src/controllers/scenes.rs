@@ -450,6 +450,7 @@ fn spawn_scene_stream_producer(
         let mut control_ack = ControlAckHealthSample::default();
         let mut settings = runtime_scheduler.settings(0, load, control_ack);
         let mut frame_id = 0u64;
+        let mut next_frame_at = Instant::now();
         let mut stream_sink = match stream_registry.get_sender(&stream_id).await {
             Some(tx) => match scene_stream_sink_config(settings)
                 .and_then(|sink_config| StreamSink::new(sink_config, tx))
@@ -468,9 +469,11 @@ fn spawn_scene_stream_producer(
         };
 
         loop {
+            let now = Instant::now();
+            let delay = next_frame_at.saturating_duration_since(now);
             tokio::select! {
                 _ = cancel_token.cancelled() => break,
-                _ = tokio::time::sleep(settings.frame_duration()) => {
+                _ = tokio::time::sleep(delay) => {
                     let frame_started = Instant::now();
                     let service = Arc::clone(&scene_service);
                     let camera = service.get_editor_camera();
@@ -582,7 +585,25 @@ fn spawn_scene_stream_producer(
                     }
 
                     let elapsed_ms = frame_started.elapsed().as_secs_f32() * 1000.0;
-                    let dropped_frames = dropped_frames_for_elapsed(elapsed_ms, settings.frame_duration());
+                    let frame_duration = settings.frame_duration();
+                    let schedule_lag = frame_started.saturating_duration_since(next_frame_at);
+                    next_frame_at = next_frame_at
+                        .checked_add(frame_duration)
+                        .unwrap_or_else(Instant::now);
+                    let post_frame_lag = Instant::now().saturating_duration_since(next_frame_at);
+                    if post_frame_lag >= frame_duration {
+                        let skipped_intervals = post_frame_lag.as_nanos() / frame_duration.as_nanos().max(1);
+                        let skipped_intervals = skipped_intervals.min(u32::MAX as u128) as u32;
+                        let skip_duration = frame_duration
+                            .checked_mul(skipped_intervals)
+                            .unwrap_or_default();
+                        next_frame_at = next_frame_at.checked_add(skip_duration).unwrap_or_else(Instant::now);
+                    }
+                    let dropped_frames = dropped_frames_for_elapsed(elapsed_ms, frame_duration)
+                        .saturating_add(dropped_frames_for_elapsed(
+                            schedule_lag.as_secs_f32() * 1000.0,
+                            frame_duration,
+                        ));
                     load = FrameLoadSample {
                         gpu_frame_ms: elapsed_ms,
                         encode_ms: 0.0,
@@ -609,6 +630,10 @@ fn spawn_scene_stream_producer(
                     }
                     settings = next_settings;
                     frame_id = frame_id.saturating_add(1);
+                    let now = Instant::now();
+                    if next_frame_at < now {
+                        next_frame_at = now;
+                    }
                 }
             }
         }
@@ -623,7 +648,7 @@ fn scene_stream_sink_config(
         height: settings.height,
         fps: settings.fps,
         bitrate: (settings.width as u64) * (settings.height as u64) * 4,
-        gop_size: settings.fps.round().max(1.0) as u32,
+        gop_size: 1,
     })
 }
 
@@ -1650,7 +1675,7 @@ mod tests {
         assert_eq!(config.width, 1280);
         assert_eq!(config.height, 720);
         assert_eq!(config.fps, 30.0);
-        assert_eq!(config.gop_size, 30);
+        assert_eq!(config.gop_size, 1);
         assert_eq!(config.bitrate, 1280 * 720 * 4);
     }
 
