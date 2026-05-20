@@ -119,7 +119,7 @@ describe('plugin transfer runtime', () => {
         target: 'cut',
         payload: { kind: 'canvasStoryboard', storyboard },
       }),
-    ).toEqual({ status: 'unsupported', target: 'cut' });
+    ).toEqual({ status: 'unsupported', target: 'cut', reason: 'unsupported-structured-target' });
   });
 
   it('builds structured cut storyboard transfer plans', () => {
@@ -152,7 +152,135 @@ describe('plugin transfer runtime', () => {
         target: 'canvas',
         payload: { kind: 'cutStoryboard', storyboard },
       }),
-    ).toEqual({ status: 'unsupported', target: 'canvas' });
+    ).toEqual({
+      status: 'unsupported',
+      target: 'canvas',
+      reason: 'unsupported-structured-target',
+    });
+  });
+
+  it('routes Canvas text, prompt, and structured content payloads to importAgentContent', () => {
+    const target = {
+      plugin: 'canvas' as const,
+      nodeId: 'shot-1',
+      fieldPath: '/generationPrompt',
+      mode: 'replace' as const,
+    };
+    const provenance = { source: 'agent' as const, messageId: 'msg-1' };
+
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'canvas',
+        payload: {
+          kind: 'canvasPrompt',
+          prompt: 'soft rim light, cinematic',
+          title: 'Optimized prompt',
+          target,
+          provenance,
+        },
+      }),
+    ).toEqual({
+      status: 'execute-command',
+      command: 'neko.canvas.importAgentContent',
+      payload: {
+        kind: 'prompt',
+        prompt: 'soft rim light, cinematic',
+        title: 'Optimized prompt',
+        target,
+        provenance,
+      },
+    });
+
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'canvas',
+        payload: {
+          kind: 'canvasText',
+          text: 'Beat note',
+          format: 'markdown',
+          target: { mode: 'insert', insertionPoint: { x: 120, y: 240 } },
+        },
+      }),
+    ).toEqual({
+      status: 'execute-command',
+      command: 'neko.canvas.importAgentContent',
+      payload: {
+        kind: 'text',
+        text: 'Beat note',
+        format: 'markdown',
+        target: { mode: 'insert', insertionPoint: { x: 120, y: 240 } },
+      },
+    });
+
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'canvas',
+        payload: {
+          kind: 'canvasStructuredContent',
+          content: { shots: [{ id: 'shot-a' }] },
+          format: 'json',
+        },
+      }),
+    ).toEqual({
+      status: 'execute-command',
+      command: 'neko.canvas.importAgentContent',
+      payload: {
+        kind: 'structured',
+        content: { shots: [{ id: 'shot-a' }] },
+        format: 'json',
+      },
+    });
+  });
+
+  it('rejects unsupported content targets and targetless replace payloads', () => {
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'cut',
+        payload: {
+          kind: 'canvasPrompt',
+          prompt: 'timeline prompt',
+        },
+      }),
+    ).toEqual({ status: 'unsupported', target: 'cut', reason: 'unsupported-content-target' });
+
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'canvas',
+        payload: {
+          kind: 'canvasText',
+          text: 'Replace something',
+          target: { mode: 'replace' },
+        },
+      }),
+    ).toEqual({
+      status: 'unsupported',
+      target: 'canvas',
+      reason: 'replace-mode-requires-explicit-target',
+    });
+  });
+
+  it('preserves Canvas target metadata on asset imports', () => {
+    expect(
+      buildRuntimePluginTransferPlan({
+        target: 'canvas',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/tmp/frame.png', mediaType: 'image', name: 'Frame' },
+          target: { containerId: 'scene-1', mode: 'create-child' },
+          provenance: { source: 'agent', toolCallId: 'tool-1' },
+        },
+      }),
+    ).toEqual({
+      status: 'execute-command',
+      command: 'neko.canvas.importAsset',
+      payload: {
+        path: '/tmp/frame.png',
+        type: 'image',
+        name: 'Frame',
+        target: { containerId: 'scene-1', mode: 'create-child' },
+        provenance: { source: 'agent', toolCallId: 'tool-1' },
+      },
+    });
   });
 
   it('expands asset batch transfers into single-asset inputs', () => {
@@ -175,6 +303,52 @@ describe('plugin transfer runtime', () => {
       {
         target: 'cut',
         payload: { kind: 'singleAsset', asset: { path: '/tmp/b.wav', mediaType: 'audio' } },
+      },
+    ]);
+  });
+
+  it('expands asset batches while carrying batch target defaults without overriding asset targets', () => {
+    expect(
+      expandRuntimePluginTransferInputs({
+        target: 'canvas',
+        payload: {
+          kind: 'assetBatch',
+          target: { containerId: 'scene-1', mode: 'create-child' },
+          provenance: { source: 'agent', messageId: 'msg-1' },
+          assets: [
+            { path: '/tmp/a.png', mediaType: 'image' },
+            {
+              path: '/tmp/b.png',
+              mediaType: 'image',
+              target: { nodeId: 'media-2', mode: 'replace' },
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      {
+        target: 'canvas',
+        payload: {
+          kind: 'singleAsset',
+          asset: {
+            path: '/tmp/a.png',
+            mediaType: 'image',
+          },
+          target: { containerId: 'scene-1', mode: 'create-child' },
+          provenance: { source: 'agent', messageId: 'msg-1' },
+        },
+      },
+      {
+        target: 'canvas',
+        payload: {
+          kind: 'singleAsset',
+          asset: {
+            path: '/tmp/b.png',
+            mediaType: 'image',
+            target: { nodeId: 'media-2', mode: 'replace' },
+          },
+          provenance: { source: 'agent', messageId: 'msg-1' },
+        },
       },
     ]);
   });

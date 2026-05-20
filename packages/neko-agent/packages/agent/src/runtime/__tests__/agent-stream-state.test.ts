@@ -93,6 +93,47 @@ describe('agent stream state reducer', () => {
     });
   });
 
+  it('finalizes fenced composite content into standalone content blocks', () => {
+    const state = createAgentStreamProjectionState();
+
+    applyAgentStreamEventToState(
+      state,
+      {
+        type: 'text',
+        content:
+          'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"Shot 1","mediaRefs":[{"toolCallId":"read-1","assetIndex":0}]}]}\n```',
+      },
+      { now: () => 10 },
+    );
+
+    finalizeAgentStreamProjectionState(state);
+
+    expect(state.accumulatedResponse).toBe('Storyboard');
+    expect(state.contentBlocks).toEqual([
+      {
+        id: 'block-text-10',
+        type: 'text',
+        timestamp: 10,
+        content: 'Storyboard',
+        isStreaming: false,
+      },
+      {
+        id: 'block-text-10-composite-1',
+        type: 'composite',
+        timestamp: 10,
+        composite: {
+          template: 'storyboard-table',
+          sections: [
+            {
+              heading: 'Shot 1',
+              mediaRefs: [{ toolCallId: 'read-1', assetIndex: 0 }],
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it('applies delayed tool result backfill to collected calls and blocks', () => {
     const state = createAgentStreamProjectionState();
 

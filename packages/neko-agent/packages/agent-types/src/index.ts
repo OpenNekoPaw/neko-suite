@@ -17,6 +17,12 @@ export type {
   CompositeTemplate,
   MediaRef,
 } from './message';
+export {
+  COMPOSITE_CONTENT_FENCE_LANGUAGES,
+  extractCompositeContentBlocks,
+  parseCompositeContentJson,
+  type CompositeContentExtraction,
+} from './composite-content-contract';
 export type {
   CloseCurrentConversationTabInput,
   CloseCurrentConversationTabProjection,
@@ -458,17 +464,22 @@ export {
   type NekoPluginKey,
   type PluginTransferAssetRef,
   type PluginTransferCanvasImportAssetPayload,
+  type PluginTransferCanvasAgentContentPayload,
   type PluginTransferCommand,
   type PluginTransferCommandPayload,
   type PluginTransferCommandPlanMap,
+  type PluginTransferContentFormat,
   type PluginTransferCutImportGeneratedClipPayload,
   type PluginTransferCutStoryboardPayload,
   type PluginTransferCutStoryboardShot,
   type PluginTransferCutStoryboardShotBase,
   type PluginTransferMediaType,
   type PluginTransferPathImportAssetPayload,
+  type PluginTransferProvenance,
   type PluginTransferCommandPlan,
   type PluginTransferPayload,
+  type PluginTransferTargetMode,
+  type PluginTransferTargetRef,
   type PluginTransferTarget,
   type ProjectPluginsAvailableInput,
 } from './plugin-transfer-contract';

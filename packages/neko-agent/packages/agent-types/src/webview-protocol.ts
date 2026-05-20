@@ -42,12 +42,23 @@ import type { DashboardTask } from '@neko/shared/types/dashboard-task';
 import type { AgentWorkflowRun } from './workflow';
 import type {
   PluginTransferAssetRef,
+  PluginTransferContentFormat,
   PluginTransferCutStoryboardPayload,
   PluginTransferCutStoryboardShot,
   PluginTransferPayload,
+  PluginTransferProvenance,
+  PluginTransferTargetMode,
+  PluginTransferTargetRef,
 } from './plugin-transfer-contract';
 
 export type ProtocolModelCategory = ModelType;
+
+const ALL_PLUGIN_TRANSFER_CONTENT_FORMATS = [
+  'plain',
+  'markdown',
+  'json',
+  'prompt',
+] as const satisfies readonly PluginTransferContentFormat[];
 export type MediaModelCategory = Exclude<ProtocolModelCategory, 'llm'>;
 export type AgentMediaModelCategory = Extract<MediaModelCategory, 'image' | 'video' | 'audio'>;
 
@@ -172,6 +183,11 @@ export interface FilePathWebviewMessage {
   filePath: string;
 }
 
+export interface RevealAssetWebviewMessage {
+  type: 'revealAsset';
+  assetId: string;
+}
+
 export interface OpenUrlWebviewMessage {
   type: 'openUrl';
   url: string;
@@ -251,6 +267,7 @@ export type WebviewToExtensionMessage =
   | OpenFileWebviewMessage
   | RevealDocumentLocatorWebviewMessage
   | FilePathWebviewMessage
+  | RevealAssetWebviewMessage
   | OpenUrlWebviewMessage
   | SetPromptModeWebviewMessage
   | SendToPluginWebviewMessage
@@ -789,6 +806,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'openFile',
   'revealDocumentLocator',
   'revealFile',
+  'revealAsset',
   'openUrl',
   'setPromptMode',
   'sendToPlugin',
@@ -1085,6 +1103,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseRevealDocumentLocatorMessage(raw);
     case 'revealFile':
       return parseFilePathMessage('revealFile', raw);
+    case 'revealAsset':
+      return parseRevealAssetMessage(raw);
     case 'openUrl':
       return parseOpenUrlMessage(raw);
     case 'setPromptMode':
@@ -1328,6 +1348,11 @@ function parseFilePathMessage(
   return filePath ? { type, filePath } : null;
 }
 
+function parseRevealAssetMessage(raw: Record<string, unknown>): RevealAssetWebviewMessage | null {
+  const assetId = requiredString(raw.assetId);
+  return assetId ? { type: 'revealAsset', assetId } : null;
+}
+
 function parseOpenUrlMessage(raw: Record<string, unknown>): OpenUrlWebviewMessage | null {
   const url = requiredString(raw.url);
   return url ? { type: 'openUrl', url } : null;
@@ -1362,7 +1387,15 @@ function parsePluginTransferPayload(value: unknown): PluginTransferPayload | nul
 
   if (value.kind === 'singleAsset') {
     const asset = parsePluginTransferAssetRef(value.asset);
-    return asset ? { kind: 'singleAsset', asset } : null;
+    const target = parseOptionalPluginTransferTargetRef(value.target);
+    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+    if (!asset || target === null || provenance === null) return null;
+    return {
+      kind: 'singleAsset',
+      asset,
+      ...(target !== undefined ? { target } : {}),
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
   }
 
   if (value.kind === 'assetBatch') {
@@ -1373,17 +1406,104 @@ function parsePluginTransferPayload(value: unknown): PluginTransferPayload | nul
       if (!asset) return null;
       assets.push(asset);
     }
-    return { kind: 'assetBatch', assets };
+    const target = parseOptionalPluginTransferTargetRef(value.target);
+    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+    if (target === null || provenance === null) return null;
+    return {
+      kind: 'assetBatch',
+      assets,
+      ...(target !== undefined ? { target } : {}),
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
   }
 
   if (value.kind === 'canvasStoryboard') {
     if (!isCanvasStoryboardPayload(value.storyboard)) return null;
-    return { kind: 'canvasStoryboard', storyboard: value.storyboard };
+    const target = parseOptionalPluginTransferTargetRef(value.target);
+    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+    if (target === null || provenance === null) return null;
+    return {
+      kind: 'canvasStoryboard',
+      storyboard: value.storyboard,
+      ...(target !== undefined ? { target } : {}),
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
   }
 
   if (value.kind === 'cutStoryboard') {
     const storyboard = parseCutStoryboardPayload(value.storyboard);
-    return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
+    const target = parseOptionalPluginTransferTargetRef(value.target);
+    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+    if (!storyboard || target === null || provenance === null) return null;
+    return {
+      kind: 'cutStoryboard',
+      storyboard,
+      ...(target !== undefined ? { target } : {}),
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
+  }
+
+  if (value.kind === 'canvasText') {
+    const text = requiredString(value.text);
+    const title = optionalStringStrict(value.title);
+    const format = parseOptionalPluginTransferContentFormat(value.format, [
+      'plain',
+      'markdown',
+      'json',
+    ] as const);
+    const target = parseOptionalPluginTransferTargetRef(value.target);
+    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+    if (!text || title === null || format === null || target === null || provenance === null) {
+      return null;
+    }
+    return {
+      kind: 'canvasText',
+      text,
+      ...(title !== undefined ? { title } : {}),
+      ...(format !== undefined ? { format } : {}),
+      ...(target !== undefined ? { target } : {}),
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
+  }
+
+  if (value.kind === 'canvasPrompt') {
+    const prompt = requiredString(value.prompt);
+    const title = optionalStringStrict(value.title);
+    const target = parseOptionalPluginTransferTargetRef(value.target);
+    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+    if (!prompt || title === null || target === null || provenance === null) return null;
+    return {
+      kind: 'canvasPrompt',
+      prompt,
+      ...(title !== undefined ? { title } : {}),
+      ...(target !== undefined ? { target } : {}),
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
+  }
+
+  if (value.kind === 'canvasStructuredContent') {
+    const title = optionalStringStrict(value.title);
+    const format = parseOptionalPluginTransferContentFormat(value.format);
+    const target = parseOptionalPluginTransferTargetRef(value.target);
+    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+    if (
+      !('content' in value) ||
+      value.content === undefined ||
+      title === null ||
+      format === null ||
+      target === null ||
+      provenance === null
+    ) {
+      return null;
+    }
+    return {
+      kind: 'canvasStructuredContent',
+      content: value.content,
+      ...(title !== undefined ? { title } : {}),
+      ...(format !== undefined ? { format } : {}),
+      ...(target !== undefined ? { target } : {}),
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
   }
 
   return null;
@@ -1394,20 +1514,181 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
   const path = requiredString(value.path);
   const mediaType = optionalStringStrict(value.mediaType);
   const name = optionalStringStrict(value.name);
-  if (!path || mediaType === null || name === null) return null;
+  const target = parseOptionalPluginTransferTargetRef(value.target);
+  const provenance = parseOptionalPluginTransferProvenance(value.provenance);
+  if (!path || mediaType === null || name === null || target === null || provenance === null) {
+    return null;
+  }
+  const suffix = {
+    ...(target !== undefined ? { target } : {}),
+    ...(provenance !== undefined ? { provenance } : {}),
+  };
   if (mediaType !== undefined) {
     if (!isPluginTransferMediaType(mediaType)) return null;
-    if (name !== undefined) return { path, mediaType, name };
-    return { path, mediaType };
+    if (name !== undefined) return { path, mediaType, name, ...suffix };
+    return { path, mediaType, ...suffix };
   }
-  if (name !== undefined) return { path, name };
-  return { path };
+  if (name !== undefined) return { path, name, ...suffix };
+  return { path, ...suffix };
 }
 
 function isPluginTransferMediaType(
   value: string,
 ): value is NonNullable<PluginTransferAssetRef['mediaType']> {
   return value === 'image' || value === 'video' || value === 'audio' || value === 'model';
+}
+
+function parseOptionalPluginTransferTargetRef(
+  value: unknown,
+): PluginTransferTargetRef | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const plugin = optionalStringStrict(value.plugin);
+  const canvasId = optionalStringStrict(value.canvasId);
+  const nodeId = optionalStringStrict(value.nodeId);
+  const containerId = optionalStringStrict(value.containerId);
+  const slotId = optionalStringStrict(value.slotId);
+  const fieldPath = optionalStringStrict(value.fieldPath);
+  const mode = optionalStringStrict(value.mode);
+  const insertionPoint = parseOptionalTransferInsertionPoint(value.insertionPoint);
+  if (
+    plugin === null ||
+    canvasId === null ||
+    nodeId === null ||
+    containerId === null ||
+    slotId === null ||
+    fieldPath === null ||
+    mode === null ||
+    insertionPoint === null
+  ) {
+    return null;
+  }
+  if (plugin !== undefined && !isPluginTransferTarget(plugin)) return null;
+  if (mode !== undefined && !isPluginTransferTargetMode(mode)) return null;
+  const parsedFieldPath = parseOptionalJsonPointerPath(fieldPath);
+  if (parsedFieldPath === null) return null;
+  const parsedPlugin = plugin as NonNullable<PluginTransferTargetRef['plugin']> | undefined;
+  const parsedMode = mode as PluginTransferTargetMode | undefined;
+  return {
+    ...(parsedPlugin !== undefined ? { plugin: parsedPlugin } : {}),
+    ...(canvasId !== undefined ? { canvasId } : {}),
+    ...(nodeId !== undefined ? { nodeId } : {}),
+    ...(containerId !== undefined ? { containerId } : {}),
+    ...(slotId !== undefined ? { slotId } : {}),
+    ...(parsedFieldPath !== undefined ? { fieldPath: parsedFieldPath } : {}),
+    ...(insertionPoint !== undefined ? { insertionPoint } : {}),
+    ...(parsedMode !== undefined ? { mode: parsedMode } : {}),
+  };
+}
+
+function parseOptionalJsonPointerPath(
+  value: string | undefined,
+): NonNullable<PluginTransferTargetRef['fieldPath']> | undefined | null {
+  if (value === undefined) return undefined;
+  return isJsonPointerPath(value) ? value : null;
+}
+
+function parseOptionalTransferInsertionPoint(
+  value: unknown,
+): PluginTransferTargetRef['insertionPoint'] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  if (
+    typeof value.x !== 'number' ||
+    !Number.isFinite(value.x) ||
+    typeof value.y !== 'number' ||
+    !Number.isFinite(value.y)
+  ) {
+    return null;
+  }
+  return { x: value.x, y: value.y };
+}
+
+function parseOptionalPluginTransferProvenance(
+  value: unknown,
+): PluginTransferProvenance | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const source = optionalStringStrict(value.source);
+  const conversationId = optionalStringStrict(value.conversationId);
+  const messageId = optionalStringStrict(value.messageId);
+  const toolCallId = optionalStringStrict(value.toolCallId);
+  const label = optionalStringStrict(value.label);
+  if (
+    source === null ||
+    conversationId === null ||
+    messageId === null ||
+    toolCallId === null ||
+    label === null
+  ) {
+    return null;
+  }
+  if (source !== undefined && !isPluginTransferProvenanceSource(source)) return null;
+  const parsedSource = source as NonNullable<PluginTransferProvenance['source']> | undefined;
+  return {
+    ...(parsedSource !== undefined ? { source: parsedSource } : {}),
+    ...(conversationId !== undefined ? { conversationId } : {}),
+    ...(messageId !== undefined ? { messageId } : {}),
+    ...(toolCallId !== undefined ? { toolCallId } : {}),
+    ...(label !== undefined ? { label } : {}),
+  };
+}
+
+function parseOptionalPluginTransferContentFormat(
+  value: unknown,
+): PluginTransferContentFormat | undefined | null;
+function parseOptionalPluginTransferContentFormat<TFormat extends PluginTransferContentFormat>(
+  value: unknown,
+  allowed: readonly TFormat[],
+): TFormat | undefined | null;
+function parseOptionalPluginTransferContentFormat<TFormat extends PluginTransferContentFormat>(
+  value: unknown,
+  allowed?: readonly TFormat[],
+): TFormat | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null;
+  const formats = allowed ?? ALL_PLUGIN_TRANSFER_CONTENT_FORMATS;
+  return (formats as readonly string[]).includes(value) ? (value as TFormat) : null;
+}
+
+function isPluginTransferTarget(
+  value: string,
+): value is NonNullable<PluginTransferTargetRef['plugin']> {
+  return (
+    value === 'canvas' ||
+    value === 'cut' ||
+    value === 'sketch' ||
+    value === 'model' ||
+    value === 'explorer'
+  );
+}
+
+function isPluginTransferTargetMode(value: string): value is PluginTransferTargetMode {
+  return (
+    value === 'insert' ||
+    value === 'append' ||
+    value === 'replace' ||
+    value === 'apply' ||
+    value === 'create-child'
+  );
+}
+
+function isJsonPointerPath(
+  value: string,
+): value is NonNullable<PluginTransferTargetRef['fieldPath']> {
+  return value === '' || value.startsWith('/');
+}
+
+function isPluginTransferProvenanceSource(
+  value: string,
+): value is NonNullable<PluginTransferProvenance['source']> {
+  return (
+    value === 'agent' ||
+    value === 'webview' ||
+    value === 'tool' ||
+    value === 'user' ||
+    value === 'plugin'
+  );
 }
 
 function isCanvasStoryboardPayload(value: unknown): value is CanvasStoryboardPayload {

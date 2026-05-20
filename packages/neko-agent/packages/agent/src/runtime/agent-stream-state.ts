@@ -1,4 +1,10 @@
-import type { AgentPhase, ContentBlock, Plan, ToolCall } from '@neko-agent/types';
+import {
+  extractCompositeContentBlocks,
+  type AgentPhase,
+  type ContentBlock,
+  type Plan,
+  type ToolCall,
+} from '@neko-agent/types';
 import type { AgentEvent } from '../session';
 import { createPlanContentBlockFromToolResultData } from '../plan';
 import { applyToolResultBackfillToResult } from './tool-result-backfill';
@@ -285,15 +291,23 @@ export function applyAgentStreamEventToState(
 export function finalizeAgentStreamProjectionState(
   state: AgentStreamProjectionState,
 ): AgentStreamProjectionState {
+  const finalizedBlocks: ContentBlock[] = [];
   for (const block of state.contentBlocks) {
     if (block.type === 'text' && block.isStreaming) {
-      block.isStreaming = false;
+      finalizedBlocks.push(...finalizeTextContentBlock(block));
+      continue;
     }
     if (block.type === 'thinking' && !block.isThinkingComplete) {
       block.isThinkingComplete = true;
     }
+    finalizedBlocks.push(block);
   }
 
+  state.contentBlocks = finalizedBlocks;
+  state.accumulatedResponse = finalizedBlocks
+    .filter((block) => block.type === 'text')
+    .map((block) => block.content ?? '')
+    .join('');
   state.currentTextBlockId = null;
   state.currentThinkingBlockId = null;
   return state;
@@ -487,6 +501,28 @@ function findContentBlock(
   blockId: string,
 ): ContentBlock | undefined {
   return state.contentBlocks.find((block) => block.id === blockId);
+}
+
+function finalizeTextContentBlock(block: ContentBlock): ContentBlock[] {
+  const content = block.content ?? '';
+  const extracted = extractCompositeContentBlocks(content);
+  const nextBlocks: ContentBlock[] = [];
+  if (extracted.text.length > 0) {
+    nextBlocks.push({
+      ...block,
+      content: extracted.text,
+      isStreaming: false,
+    });
+  }
+  nextBlocks.push(
+    ...extracted.composites.map((composite, index) => ({
+      id: `${block.id}-composite-${index + 1}`,
+      type: 'composite' as const,
+      timestamp: block.timestamp,
+      composite,
+    })),
+  );
+  return nextBlocks;
 }
 
 function getNow(options: AgentStreamStateOptions): number {

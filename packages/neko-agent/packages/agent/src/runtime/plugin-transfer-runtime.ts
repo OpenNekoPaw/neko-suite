@@ -10,6 +10,7 @@ import {
   type PluginTransferCommandPlan,
   type PluginTransferPayload,
   type PluginTransferAssetRef,
+  type PluginTransferTargetRef,
   type PluginsAvailableMessage,
   type PluginsAvailable,
   type ProjectPluginsAvailableInput,
@@ -80,7 +81,7 @@ export function buildRuntimePluginTransferPlan(
         payload: payload.storyboard,
       };
     }
-    return { status: 'unsupported', target: input.target };
+    return { status: 'unsupported', target: input.target, reason: 'unsupported-structured-target' };
   }
 
   if (payload.kind === 'cutStoryboard') {
@@ -91,7 +92,60 @@ export function buildRuntimePluginTransferPlan(
         payload: payload.storyboard,
       };
     }
-    return { status: 'unsupported', target: input.target };
+    return { status: 'unsupported', target: input.target, reason: 'unsupported-structured-target' };
+  }
+
+  if (
+    payload.kind === 'canvasText' ||
+    payload.kind === 'canvasPrompt' ||
+    payload.kind === 'canvasStructuredContent'
+  ) {
+    if (input.target !== 'canvas') {
+      return { status: 'unsupported', target: input.target, reason: 'unsupported-content-target' };
+    }
+    const safetyFailure = validateCanvasContentTransferTarget(payload.target);
+    if (safetyFailure) {
+      return safetyFailure;
+    }
+    if (payload.kind === 'canvasText') {
+      return {
+        status: 'execute-command',
+        command: 'neko.canvas.importAgentContent',
+        payload: {
+          kind: 'text',
+          text: payload.text,
+          ...(payload.title ? { title: payload.title } : {}),
+          ...(payload.format ? { format: payload.format } : {}),
+          ...(payload.target ? { target: payload.target } : {}),
+          ...(payload.provenance ? { provenance: payload.provenance } : {}),
+        },
+      };
+    }
+    if (payload.kind === 'canvasPrompt') {
+      return {
+        status: 'execute-command',
+        command: 'neko.canvas.importAgentContent',
+        payload: {
+          kind: 'prompt',
+          prompt: payload.prompt,
+          ...(payload.title ? { title: payload.title } : {}),
+          ...(payload.target ? { target: payload.target } : {}),
+          ...(payload.provenance ? { provenance: payload.provenance } : {}),
+        },
+      };
+    }
+    return {
+      status: 'execute-command',
+      command: 'neko.canvas.importAgentContent',
+      payload: {
+        kind: 'structured',
+        content: payload.content,
+        ...(payload.title ? { title: payload.title } : {}),
+        ...(payload.format ? { format: payload.format } : {}),
+        ...(payload.target ? { target: payload.target } : {}),
+        ...(payload.provenance ? { provenance: payload.provenance } : {}),
+      },
+    };
   }
 
   assertSingleTransferPayload(payload);
@@ -104,6 +158,12 @@ export function buildRuntimePluginTransferPlan(
         path: payload.asset.path,
         ...(payload.asset.mediaType ? { type: payload.asset.mediaType } : {}),
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
+        ...((payload.target ?? payload.asset.target)
+          ? { target: payload.target ?? payload.asset.target }
+          : {}),
+        ...((payload.provenance ?? payload.asset.provenance)
+          ? { provenance: payload.provenance ?? payload.asset.provenance }
+          : {}),
       },
     };
   }
@@ -155,16 +215,23 @@ export function buildRuntimePluginTransferPlan(
 export function expandRuntimePluginTransferInputs(
   input: ExpandPluginTransferInputsInput,
 ): readonly BuildPluginTransferPlanInput[] {
-  if (input.payload?.kind !== 'assetBatch') return [input];
-  return input.payload.assets.map((asset) => ({
+  if (input.payload?.kind !== 'assetBatch') {
+    return [input as BuildPluginTransferPlanInput];
+  }
+  const batch = input.payload;
+  return batch.assets.map((asset) => ({
     target: input.target,
-    payload: { kind: 'singleAsset', asset },
+    payload: {
+      kind: 'singleAsset',
+      asset,
+      ...resolveBatchTransferDefaults(asset, batch),
+    },
   }));
 }
 
 function assertSingleTransferPayload(
   payload: RuntimePluginTransferBuildPayload,
-): asserts payload is { readonly kind: 'singleAsset'; readonly asset: PluginTransferAssetRef } {
+): asserts payload is Extract<PluginTransferPayload, { kind: 'singleAsset' }> {
   if (payload.kind !== 'singleAsset') {
     throw new Error(`Unsupported plugin transfer payload kind: ${payload.kind}`);
   }
@@ -174,6 +241,30 @@ function isPluginTransferMediaType(
   value: string | undefined,
 ): value is 'image' | 'video' | 'audio' | 'model' {
   return value === 'image' || value === 'video' || value === 'audio' || value === 'model';
+}
+
+function resolveBatchTransferDefaults(
+  asset: PluginTransferAssetRef,
+  batch: Extract<PluginTransferPayload, { kind: 'assetBatch' }>,
+): Pick<Extract<PluginTransferPayload, { kind: 'singleAsset' }>, 'target' | 'provenance'> {
+  return {
+    ...(!asset.target && batch.target ? { target: batch.target } : {}),
+    ...(!asset.provenance && batch.provenance ? { provenance: batch.provenance } : {}),
+  };
+}
+
+function validateCanvasContentTransferTarget(
+  target: PluginTransferTargetRef | undefined,
+): PluginTransferCommandPlan | null {
+  if (!target) return null;
+  if (target.mode === 'replace' && !target.nodeId && !target.slotId && !target.fieldPath) {
+    return {
+      status: 'unsupported',
+      target: 'canvas',
+      reason: 'replace-mode-requires-explicit-target',
+    };
+  }
+  return null;
 }
 
 export function buildRuntimePluginSlashCommandDispatch(

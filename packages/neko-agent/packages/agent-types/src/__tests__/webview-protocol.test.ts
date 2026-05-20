@@ -435,6 +435,25 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
+  it('parses asset reveal messages', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'revealAsset',
+        assetId: 'asset-1',
+      }),
+    ).toEqual({
+      type: 'revealAsset',
+      assetId: 'asset-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'revealAsset',
+        assetId: '',
+      }),
+    ).toBeNull();
+  });
+
   it('parses structured send-to-plugin payloads', () => {
     expect(
       parseWebviewToExtensionMessage({
@@ -459,6 +478,22 @@ describe('webview protocol projectors', () => {
         ],
       },
     });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasPrompt',
+          prompt: 'invalid target path',
+          target: {
+            nodeId: 'shot-1',
+            fieldPath: 'generationPrompt',
+            mode: 'replace',
+          },
+        },
+      }),
+    ).toBeNull();
 
     expect(
       parseWebviewToExtensionMessage({
@@ -627,6 +662,149 @@ describe('webview protocol projectors', () => {
               },
             ],
           },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('parses target-aware Canvas content transfer payloads', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasPrompt',
+          prompt: 'soft rim light, cinematic close-up',
+          title: 'Optimized prompt',
+          target: {
+            plugin: 'canvas',
+            nodeId: 'shot-1',
+            fieldPath: '/generationPrompt',
+            mode: 'replace',
+          },
+          provenance: {
+            source: 'agent',
+            conversationId: 'conv-1',
+            messageId: 'msg-1',
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'canvas',
+      payload: {
+        kind: 'canvasPrompt',
+        prompt: 'soft rim light, cinematic close-up',
+        title: 'Optimized prompt',
+        target: {
+          plugin: 'canvas',
+          nodeId: 'shot-1',
+          fieldPath: '/generationPrompt',
+          mode: 'replace',
+        },
+        provenance: {
+          source: 'agent',
+          conversationId: 'conv-1',
+          messageId: 'msg-1',
+        },
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasText',
+          text: 'Storyboard note',
+          format: 'markdown',
+          target: {
+            containerId: 'scene-1',
+            mode: 'create-child',
+            insertionPoint: { x: 100, y: 200 },
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'canvas',
+      payload: {
+        kind: 'canvasText',
+        text: 'Storyboard note',
+        format: 'markdown',
+        target: {
+          containerId: 'scene-1',
+          mode: 'create-child',
+          insertionPoint: { x: 100, y: 200 },
+        },
+      },
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasStructuredContent',
+          content: { beats: ['opening'] },
+          format: 'json',
+        },
+      }),
+    ).toEqual({
+      type: 'sendToPlugin',
+      target: 'canvas',
+      payload: {
+        kind: 'canvasStructuredContent',
+        content: { beats: ['opening'] },
+        format: 'json',
+      },
+    });
+  });
+
+  it('rejects malformed Canvas content transfer targets', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasText',
+          text: 'Prompt-only format is invalid for plain text payloads',
+          format: 'prompt',
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasStructuredContent',
+          content: undefined,
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasPrompt',
+          prompt: 'hello',
+          target: { mode: 'erase' },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasPrompt',
+          prompt: 'hello',
+          target: { insertionPoint: { x: Number.NaN, y: 10 } },
         },
       }),
     ).toBeNull();
