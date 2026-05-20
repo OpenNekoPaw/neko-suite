@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {
   applyStoryboardPayloadToCanvas,
+  type CanvasAgentContentPayload,
   getPanoramicPreviewRoute,
   type ApplyCanvasStoryboardOptions,
   type CanvasStoryboardExecutionSummary,
@@ -262,6 +263,8 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       createComposite: (request) => canvasEditorProvider.createComposite(request),
       updateBlock: (request) => canvasEditorProvider.updateBlock(request),
       extractStructuredContent: (request) => canvasEditorProvider.extractStructuredContent(request),
+      getActiveContext: (request) => canvasEditorProvider.getActiveContext(request),
+      applyAgentContent: (payload) => canvasEditorProvider.applyAgentContent(payload),
       generateImage: (nodeId, childNodeId) =>
         canvasEditorProvider.generateImageForNode(nodeId, childNodeId),
       generateBatch: (nodeIds) => canvasEditorProvider.generateBatchForNodes(nodeIds),
@@ -490,6 +493,22 @@ function registerCommands(
           `importStoryboard: mode=${created.mode} scenes=${created.scenesCreated} shots=${created.totalShots}`,
         );
         return created;
+      },
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.importAgentContent',
+      async (payload?: CanvasAgentContentPayload) => {
+        if (!payload) {
+          throw new Error('neko.canvas.importAgentContent: missing content payload');
+        }
+        const result = await canvasEditorProvider.applyAgentContent(payload);
+        getRootLogger().info(
+          `importAgentContent: kind=${payload.kind} mode=${result.mode} changed=${String(result.changed)}`,
+        );
+        return result;
       },
     ),
   );

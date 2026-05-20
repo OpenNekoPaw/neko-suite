@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { CanvasData, CanvasDroppedAsset, CanvasViewport } from '@neko/shared';
+import { createCanvasAgentActiveContext } from './utils/canvasAgentOperations';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
 import { ContextMenu } from './components/common/ContextMenu';
@@ -419,6 +420,17 @@ export function CanvasApp() {
     updateBlock: (request) => useCanvasStore.getState().updateBlock(request),
     extractStructuredContent: (request) =>
       useCanvasStore.getState().extractStructuredContent(request),
+    getActiveContext: (request) => {
+      const state = useCanvasStore.getState();
+      return createCanvasAgentActiveContext({
+        nodes: state.canvasData?.nodes ?? [],
+        selectedNodeIds: state.selection.nodeIds,
+        viewport: state.canvasData?.viewport,
+        insertionPoint: getViewportCenter(),
+        request,
+      });
+    },
+    applyAgentContent: (payload) => useCanvasStore.getState().applyAgentContent(payload),
   });
 
   // =========================================================================

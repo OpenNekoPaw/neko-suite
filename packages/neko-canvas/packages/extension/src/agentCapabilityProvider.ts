@@ -23,6 +23,8 @@ import type {
   StoryScenePlan,
   JsonPointerPath,
   CanvasStoryboardExecutionSummaryRequest,
+  CanvasAgentContentFormat,
+  CanvasAgentMutationMode,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
@@ -477,6 +479,18 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         description:
           'Update a composable Canvas block through its binding or an explicit JSON Pointer path into node.data.',
         category: 'project',
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['nodeId'],
+          confirmationModes: ['replace', 'apply'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+          ],
+          reason: 'Resolve a stable Canvas node id and writable field path before updating data.',
+        },
         parameters: {
           type: 'object',
           properties: {
@@ -549,6 +563,137 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             return {
               success: false,
               error: `Failed to extract structured content: ${String(err)}`,
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+        description:
+          'Read compact active Canvas context: selected nodes, insertion point, viewport, focused container, and targetable fields for follow-up mutations.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            includeSelection: {
+              type: 'boolean',
+              description: 'Include selected node ids and compact selected node summaries.',
+            },
+            includeFocusedContainer: {
+              type: 'boolean',
+              description:
+                'Include focused container summary and child constraints when available.',
+            },
+            includeNodeDetails: {
+              type: 'boolean',
+              description:
+                'Include slightly richer node summaries; large media data remains omitted.',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.getActiveContext({
+              includeSelection: args.includeSelection as boolean | undefined,
+              includeFocusedContainer: args.includeFocusedContainer as boolean | undefined,
+              includeNodeDetails: args.includeNodeDetails as boolean | undefined,
+            });
+            return { success: true, data };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to get active Canvas context: ${String(err)}`,
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
+        description:
+          'Apply Agent-generated text, optimized prompts, or structured content to an explicit Canvas node, container, field path, or viewport insertion point.',
+        category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['target'],
+          allowedFallbacks: ['selection', 'viewport-insertion', 'explicit-user-input'],
+          confirmationModes: ['replace', 'apply'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+          ],
+          reason:
+            'Use structured Canvas context to resolve nodeId, containerId, fieldPath, and insertionPoint before mutating.',
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            kind: {
+              type: 'string',
+              enum: ['text', 'prompt', 'structured'],
+              description: 'Content kind to apply.',
+            },
+            text: { type: 'string', description: 'Text content when kind=text.' },
+            prompt: { type: 'string', description: 'Prompt content when kind=prompt.' },
+            contentJson: {
+              type: 'string',
+              description: 'JSON string for structured content when kind=structured.',
+            },
+            title: { type: 'string', description: 'Optional content title.' },
+            format: {
+              type: 'string',
+              enum: ['plain', 'markdown', 'json', 'prompt'],
+              description: 'Content format hint.',
+            },
+            nodeId: { type: 'string', description: 'Explicit Canvas node target.' },
+            containerId: { type: 'string', description: 'Explicit Canvas container target.' },
+            slotId: { type: 'string', description: 'Explicit Canvas slot target.' },
+            fieldPath: {
+              type: 'string',
+              description: 'JSON Pointer path into node.data, such as /generationPrompt.',
+            },
+            mode: {
+              type: 'string',
+              enum: ['insert', 'append', 'replace', 'apply', 'create-child'],
+              description: 'Mutation mode. replace/apply require explicit target data.',
+            },
+            x: { type: 'number', description: 'Canvas insertion X coordinate.' },
+            y: { type: 'number', description: 'Canvas insertion Y coordinate.' },
+          },
+          required: ['kind'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const data = await api.nodes.applyAgentContent({
+              kind: args.kind === 'prompt' || args.kind === 'structured' ? args.kind : 'text',
+              text: args.text as string | undefined,
+              prompt: args.prompt as string | undefined,
+              content: args.kind === 'structured' ? parseToolValue(args.contentJson) : undefined,
+              title: args.title as string | undefined,
+              format: args.format as CanvasAgentContentFormat | undefined,
+              target: {
+                nodeId: args.nodeId as string | undefined,
+                containerId: args.containerId as string | undefined,
+                slotId: args.slotId as string | undefined,
+                fieldPath: normalizeJsonPointerPath(args.fieldPath),
+                mode: args.mode as CanvasAgentMutationMode | undefined,
+                insertionPoint:
+                  typeof args.x === 'number' && typeof args.y === 'number'
+                    ? { x: args.x, y: args.y }
+                    : undefined,
+              },
+              provenance: { source: 'tool', label: TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT },
+            });
+            return { success: true, data };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to apply Agent content to Canvas: ${String(err)}`,
             };
           }
         },

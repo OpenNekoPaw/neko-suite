@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { CanvasNode } from '@neko/shared';
 import { getContainerChildIds, getDefaultCanvasNodePresetName } from '@neko/shared';
 import {
+  applyCanvasAgentContent,
   createCanvasComposite,
+  createCanvasAgentActiveContext,
   deriveCanvasNode,
   extractStructuredCanvasContent,
   updateCanvasBlock,
@@ -275,5 +277,104 @@ describe('canvasAgentOperations', () => {
     expect(gallerySummary?.bindings?.some((binding) => binding.path === '/characterName')).toBe(
       true,
     );
+  });
+
+  it('queries compact active context with stable node and container summaries', () => {
+    const scene = {
+      ...node('scene-1', 'scene', 100, 100),
+      container: { policy: 'scene', childIds: ['shot-1'] },
+      data: { sceneTitle: 'Arrival', sceneNumber: 1 },
+    } as unknown as CanvasNode;
+    const shot = { ...node('shot-1', 'shot'), parentId: 'scene-1' } as CanvasNode;
+
+    const result = createCanvasAgentActiveContext({
+      nodes: [scene, shot],
+      selectedNodeIds: ['shot-1'],
+      viewport: { pan: { x: 10, y: 20 }, zoom: 1.5 },
+      insertionPoint: { x: 320, y: 240 },
+      request: { includeFocusedContainer: true },
+    });
+
+    expect(result.selectedNodeIds).toEqual(['shot-1']);
+    expect(result.selectedNodes[0]).toMatchObject({
+      id: 'shot-1',
+      type: 'shot',
+      parentId: 'scene-1',
+    });
+    expect(result.selectedNodes[0]?.targetableFields?.map((field) => field.path)).toContain(
+      '/generationPrompt',
+    );
+    expect(result.focusedContainer).toMatchObject({
+      id: 'scene-1',
+      policy: 'scene',
+      childIds: ['shot-1'],
+    });
+    expect(result.focusedContainer?.acceptedChildTypes).toContain('text');
+    expect(result.insertionPoint).toEqual({ x: 320, y: 240 });
+  });
+
+  it('applies prompt content to a validated Shot field without replacing unrelated data', () => {
+    const shot = node('shot-1', 'shot');
+
+    const result = applyCanvasAgentContent(
+      { nodes: [shot], connections: [], generateId: ids() },
+      {
+        kind: 'prompt',
+        prompt: 'cinematic rim light',
+        target: { nodeId: 'shot-1', fieldPath: '/generationPrompt', mode: 'replace' },
+      },
+    );
+
+    const nextShot = result.nodes.find((item) => item.id === 'shot-1') as CanvasNode;
+    expect(result.result).toMatchObject({ changed: true, mode: 'replace', nodeId: 'shot-1' });
+    expect(nextShot.data).toMatchObject({
+      visualDescription: 'A quiet hallway',
+      generationPrompt: 'cinematic rim light',
+    });
+  });
+
+  it('inserts Agent text into a container through generic membership actions', () => {
+    const scene = {
+      ...node('scene-1', 'scene', 100, 100),
+      container: { policy: 'scene', childIds: [] },
+      data: { sceneTitle: 'Arrival', sceneNumber: 1 },
+    } as unknown as CanvasNode;
+
+    const result = applyCanvasAgentContent(
+      { nodes: [scene], connections: [], generateId: ids() },
+      {
+        kind: 'text',
+        text: 'Beat note',
+        format: 'markdown',
+        target: {
+          containerId: 'scene-1',
+          mode: 'create-child',
+          insertionPoint: { x: 160, y: 220 },
+        },
+      },
+    );
+
+    const created = result.nodes.find((item) => item.id === 'generated-1') as CanvasNode;
+    const nextScene = result.nodes.find((item) => item.id === 'scene-1') as CanvasNode;
+    expect(result.result.createdNodeIds).toEqual(['generated-1']);
+    expect(created.type).toBe('text');
+    expect(created.parentId).toBe('scene-1');
+    expect(created.data).toMatchObject({ content: 'Beat note', format: 'markdown' });
+    expect(getContainerChildIds(nextScene)).toEqual(['generated-1']);
+  });
+
+  it('rejects invalid Agent content targets atomically', () => {
+    const shot = node('shot-1', 'shot');
+
+    expect(() =>
+      applyCanvasAgentContent(
+        { nodes: [shot], connections: [], generateId: ids() },
+        {
+          kind: 'text',
+          text: 'bad write',
+          target: { nodeId: 'shot-1', fieldPath: '/generatedImage', mode: 'replace' },
+        },
+      ),
+    ).toThrow(/not targetable/);
   });
 });

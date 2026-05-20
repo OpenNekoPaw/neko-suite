@@ -41,6 +41,10 @@ import type {
   CanvasStoryboardExecutionSummaryRequest,
   CanvasStoryboardPayload,
   CreatedCanvasStoryboard,
+  CanvasAgentActiveContextRequest,
+  CanvasAgentActiveContextResult,
+  CanvasAgentApplyContentResult,
+  CanvasAgentContentPayload,
   NekoStoryAPI,
   NekoStoryScriptIndex,
   ScriptScene,
@@ -603,6 +607,42 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         payload: request,
       },
     );
+  }
+
+  async getActiveContext(
+    request: CanvasAgentActiveContextRequest = {},
+  ): Promise<CanvasAgentActiveContextResult> {
+    if (!this.activeWebviewPanel) {
+      return {
+        documentUri: this.activeDocument?.uri.toString(),
+        selectedNodeIds: [],
+        selectedNodes: [],
+      };
+    }
+    return this.sendRequest<CanvasAgentActiveContextResult>('nodes.getActiveContext', {
+      payload: request,
+    });
+  }
+
+  async applyAgentContent(
+    payload: CanvasAgentContentPayload,
+  ): Promise<CanvasAgentApplyContentResult> {
+    if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    const result = await this.sendRequest<CanvasAgentApplyContentResult>(
+      'nodes.applyAgentContent',
+      {
+        payload,
+      },
+    );
+    this._onDidChangeCanvas.fire({
+      type: result.createdNodeIds?.length ? 'add' : 'update',
+      nodeId: result.nodeId,
+      nodeIds: result.createdNodeIds,
+      entityType: 'node',
+      reason: 'agentContentApplied',
+      operationType: 'nodes.applyAgentContent',
+    });
+    return result;
   }
 
   async getStoryboardExecutionSummary(

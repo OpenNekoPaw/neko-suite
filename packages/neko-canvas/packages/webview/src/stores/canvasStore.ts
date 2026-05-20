@@ -3,6 +3,8 @@ import type {
   CanvasData,
   CanvasNode,
   CanvasConnection,
+  CanvasAgentApplyContentResult,
+  CanvasAgentContentPayload,
   CanvasViewport,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
@@ -49,6 +51,7 @@ import {
   createCanvasComposite,
   deriveCanvasNode,
   extractStructuredCanvasContent,
+  applyCanvasAgentContent,
   updateCanvasBlock,
 } from '../utils/canvasAgentOperations';
 
@@ -177,6 +180,8 @@ export interface CanvasStore {
   extractStructuredContent: (
     request: CanvasExtractStructuredContentRequest,
   ) => CanvasExtractStructuredContentResult;
+  /** Apply Agent-generated text, prompt, or structured content through shared target validation. */
+  applyAgentContent: (payload: CanvasAgentContentPayload) => CanvasAgentApplyContentResult | null;
 
   // ==================== Viewport Actions ====================
   setViewport: (viewport: Partial<CanvasViewport>) => void;
@@ -1242,6 +1247,53 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         request.nodeIds ??
         (selection.nodeIds.length > 0 ? selection.nodeIds : nodes.map((node) => node.id)),
     });
+  },
+
+  applyAgentContent: (payload) => {
+    const { canvasData } = get();
+    if (!canvasData) return null;
+
+    const mutation = applyCanvasAgentContent(
+      {
+        nodes: canvasData.nodes,
+        connections: canvasData.connections,
+        generateId,
+      },
+      payload,
+    );
+    recordHistory(canvasData);
+
+    set({
+      canvasData: {
+        ...canvasData,
+        nodes: mutation.nodes,
+        connections: mutation.connections,
+      },
+      selection: mutation.result.nodeId
+        ? { nodeIds: [mutation.result.nodeId], connectionIds: [] }
+        : get().selection,
+    });
+
+    const previousNodeIds = new Set(canvasData.nodes.map((node) => node.id));
+    const ops = useCanvasOperationStore.getState();
+    for (const node of mutation.nodes) {
+      if (!previousNodeIds.has(node.id)) {
+        ops.recordNodeAdd(node);
+      }
+    }
+    if (mutation.result.nodeId && previousNodeIds.has(mutation.result.nodeId)) {
+      const before = canvasData.nodes.find((node) => node.id === mutation.result.nodeId);
+      const after = mutation.nodes.find((node) => node.id === mutation.result.nodeId);
+      if (before && after) {
+        ops.recordNodeUpdate(
+          mutation.result.nodeId,
+          { data: after.data } as Partial<CanvasNode>,
+          { data: before.data } as Partial<CanvasNode>,
+        );
+      }
+    }
+
+    return mutation.result;
   },
 
   // ==================== Viewport Actions ====================

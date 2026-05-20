@@ -17,6 +17,8 @@ import type {
   CanvasCreateCompositeRequest,
   CanvasDeriveNodeRequest,
   CanvasExtractStructuredContentRequest,
+  CanvasAgentActiveContextRequest,
+  CanvasAgentContentPayload,
   FieldBinding,
   CanvasUpdateBlockRequest,
 } from '@neko/shared';
@@ -82,6 +84,8 @@ export interface UseVSCodeMessagesOptions {
   createComposite?: (request: CanvasCreateCompositeRequest) => unknown;
   updateBlock?: (request: CanvasUpdateBlockRequest) => unknown;
   extractStructuredContent?: (request: CanvasExtractStructuredContentRequest) => unknown;
+  getActiveContext?: (request?: CanvasAgentActiveContextRequest) => unknown;
+  applyAgentContent?: (payload: CanvasAgentContentPayload) => unknown;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, childNodeId?: string) => void;
 }
@@ -168,6 +172,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     createComposite,
     updateBlock,
     extractStructuredContent,
+    getActiveContext,
+    applyAgentContent,
     onUpdateNodeImage,
   } = options;
 
@@ -207,6 +213,10 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   updateBlockRef.current = updateBlock;
   const extractStructuredContentRef = useRef(extractStructuredContent);
   extractStructuredContentRef.current = extractStructuredContent;
+  const getActiveContextRef = useRef(getActiveContext);
+  getActiveContextRef.current = getActiveContext;
+  const applyAgentContentRef = useRef(applyAgentContent);
+  applyAgentContentRef.current = applyAgentContent;
   const onUpdateNodeImageRef = useRef(onUpdateNodeImage);
   onUpdateNodeImageRef.current = onUpdateNodeImage;
 
@@ -444,6 +454,51 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               );
               if (!isRecord(result)) {
                 throw new Error('Structured content extraction failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'nodes.getActiveContext': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const result = getActiveContextRef.current?.(
+                (message.payload as CanvasAgentActiveContextRequest | undefined) ?? {},
+              );
+              if (!isRecord(result)) {
+                throw new Error('Active context query failed');
+              }
+              vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            break;
+          }
+          case 'nodes.applyAgentContent': {
+            const requestId = message._requestId as number | undefined;
+            if (requestId === undefined) break;
+            try {
+              const result = withOperationSource('ai', () =>
+                applyAgentContentRef.current?.(
+                  (message.payload as CanvasAgentContentPayload | undefined) ?? {
+                    kind: 'text',
+                    text: '',
+                  },
+                ),
+              );
+              if (!isRecord(result)) {
+                throw new Error('Agent content application failed');
               }
               vscode.postMessage({ type: '_response', _requestId: requestId, ...result });
             } catch (error) {

@@ -4,6 +4,10 @@
 import * as vscode from 'vscode';
 import type {
   ApplyCanvasStoryboardOptions,
+  CanvasAgentActiveContextRequest,
+  CanvasAgentActiveContextResult,
+  CanvasAgentApplyContentResult,
+  CanvasAgentContentPayload,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasDeriveNodeRequest,
@@ -171,6 +175,12 @@ export interface NekoCanvasAPI {
     extractStructuredContent(
       request: CanvasExtractStructuredContentRequest,
     ): Promise<CanvasExtractStructuredContentResult>;
+    /** Return compact, read-only active Canvas context for Agent planning */
+    getActiveContext(
+      request?: CanvasAgentActiveContextRequest,
+    ): Promise<CanvasAgentActiveContextResult>;
+    /** Apply Agent-generated text, prompt, or structured content to a validated Canvas target */
+    applyAgentContent(payload: CanvasAgentContentPayload): Promise<CanvasAgentApplyContentResult>;
     /** Trigger image generation for a ShotNode or a gallery child node */
     generateImage(nodeId: string, childNodeId?: string): Promise<void>;
     /** Trigger batch image generation for multiple nodes */

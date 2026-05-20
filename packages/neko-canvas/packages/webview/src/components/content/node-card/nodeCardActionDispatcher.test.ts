@@ -230,6 +230,7 @@ function createCanvasStore(canvasData: CanvasData | null = null): CanvasStore {
     createComposite: vi.fn(),
     updateBlock: vi.fn(),
     extractStructuredContent: vi.fn(),
+    applyAgentContent: vi.fn(),
     setViewport: vi.fn(),
     panCanvas: vi.fn(),
     zoomCanvas: vi.fn(),

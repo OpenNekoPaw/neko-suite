@@ -1,5 +1,13 @@
 import type {
   CanvasBlock,
+  CanvasAgentActiveContextRequest,
+  CanvasAgentActiveContextResult,
+  CanvasAgentApplyContentResult,
+  CanvasAgentContentPayload,
+  CanvasAgentContainerSummary,
+  CanvasAgentMutationMode,
+  CanvasAgentNodeSummary,
+  CanvasAgentTargetRef,
   CanvasConnection,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
@@ -17,22 +25,40 @@ import type {
 import {
   getBuiltInCanvasNodePresetMetadata,
   getContainerChildIds,
+  getContainerPolicyName,
   getDefaultCanvasNodePresetName,
   getNodeParentId,
   isJsonPointerPath,
+  type CanvasNodeType,
   readFieldBinding,
   readJsonPointer,
+  writeJsonPointer,
   writeFieldBinding,
 } from '@neko/shared';
-import { createContainerComposite } from './containerActions';
+import { addContainerChild, createContainerComposite } from './containerActions';
 import { autoArrangeContainer, findFreePosition } from './containerLayout';
 import { hydrateCanvasNodePreview, refreshCanvasNodePreview } from './canvasPresetRegistry';
 import { buildCanvasNode } from './nodeFactory';
+import {
+  canContainerAcceptChild,
+  createBuiltInContainerPolicyRegistry,
+  getContainerPolicy,
+} from './containerPolicies';
 
 export interface CanvasAgentOperationContext {
   nodes: CanvasNode[];
   connections: CanvasConnection[];
   generateId: () => string;
+}
+
+export interface CanvasAgentActiveContextInput {
+  nodes: CanvasNode[];
+  selectedNodeIds: readonly string[];
+  viewport?: CanvasAgentActiveContextResult['viewport'];
+  insertionPoint?: CanvasAgentActiveContextResult['insertionPoint'];
+  documentUri?: string;
+  canvasId?: string;
+  request?: CanvasAgentActiveContextRequest;
 }
 
 export interface CanvasAgentMutationResult<T> {
@@ -42,6 +68,81 @@ export interface CanvasAgentMutationResult<T> {
 }
 
 const DERIVE_GAP = 60;
+const CONTAINER_POLICIES = createBuiltInContainerPolicyRegistry();
+const DEFAULT_AGENT_INSERT_POSITION = { x: 0, y: 0 };
+const TARGETABLE_FIELD_PATHS_BY_TYPE: Partial<Record<CanvasNodeType, readonly JsonPointerPath[]>> =
+  {
+    annotation: ['/content'],
+    text: ['/content'],
+    shot: [
+      '/generationPrompt',
+      '/visualDescription',
+      '/characterAction',
+      '/dialogue',
+      '/voiceOver',
+      '/soundCue',
+      '/visualStyle',
+    ],
+    scene: ['/sceneTitle', '/location', '/timeOfDay'],
+    storyboard: ['/title', '/description'],
+    artboard: ['/name', '/description'],
+    table: ['/label'],
+    script: ['/title'],
+    document: ['/title'],
+    model: ['/modelName'],
+    'canvas-embed': ['/canvasTitle'],
+    project: ['/title'],
+  };
+
+export function createCanvasAgentActiveContext(
+  input: CanvasAgentActiveContextInput,
+): CanvasAgentActiveContextResult {
+  const includeSelection = input.request?.includeSelection !== false;
+  const selectedNodeIds = includeSelection
+    ? input.selectedNodeIds.filter((nodeId) => input.nodes.some((node) => node.id === nodeId))
+    : [];
+  const selectedNodes = selectedNodeIds
+    .map((nodeId) => input.nodes.find((node) => node.id === nodeId))
+    .filter((node): node is CanvasNode => Boolean(node))
+    .map((node) => summarizeCanvasAgentNode(node, input.request?.includeNodeDetails === true));
+
+  const result: CanvasAgentActiveContextResult = {
+    selectedNodeIds,
+    selectedNodes,
+    ...(input.documentUri ? { documentUri: input.documentUri } : {}),
+    ...(input.canvasId ? { canvasId: input.canvasId } : {}),
+    ...(input.insertionPoint ? { insertionPoint: input.insertionPoint } : {}),
+    ...(input.viewport ? { viewport: input.viewport } : {}),
+  };
+
+  if (input.request?.includeFocusedContainer !== false) {
+    const focusedContainer = findFocusedContainer(input.nodes, selectedNodeIds);
+    if (focusedContainer) {
+      result.focusedContainer = summarizeCanvasAgentContainer(focusedContainer);
+    }
+  }
+
+  return result;
+}
+
+export function applyCanvasAgentContent(
+  context: CanvasAgentOperationContext,
+  payload: CanvasAgentContentPayload,
+): CanvasAgentMutationResult<CanvasAgentApplyContentResult> {
+  validatePayloadContent(payload);
+  const target = normalizeCanvasAgentTarget(payload.target);
+  const mode = resolveMutationMode(target);
+
+  if (mode === 'replace' || mode === 'apply' || (mode === 'append' && target?.nodeId)) {
+    return applyContentToNodeTarget(context, payload, target, mode);
+  }
+
+  if (target?.slotId) {
+    throw new Error(`Unsupported Canvas slot target "${target.slotId}"`);
+  }
+
+  return insertContentNode(context, payload, target, mode);
+}
 
 export function deriveCanvasNode(
   context: CanvasAgentOperationContext,
@@ -113,6 +214,318 @@ export function deriveCanvasNode(
     nodes: nextNodes,
     connections: nextConnections,
   };
+}
+
+export function summarizeCanvasAgentNode(
+  node: CanvasNode,
+  includeDetails = false,
+): CanvasAgentNodeSummary {
+  const childIds = getContainerChildIds(node);
+  const summary: CanvasAgentNodeSummary = {
+    id: node.id,
+    type: node.type,
+    preset: node.preset,
+    title: getNodeTitle(node),
+    summary: getNodeSummary(node),
+    parentId: getNodeParentId(node),
+    childIds: childIds.length > 0 ? childIds : undefined,
+    targetableFields: getTargetableFields(node),
+  };
+
+  if (!includeDetails) {
+    return summary;
+  }
+
+  return {
+    ...summary,
+    summary: summary.summary ?? renderNodeDataSummary(node),
+  };
+}
+
+export function summarizeCanvasAgentContainer(node: CanvasNode): CanvasAgentContainerSummary {
+  const policyName = getContainerPolicyName(node);
+  const policy = getContainerPolicy(CONTAINER_POLICIES, policyName);
+  const childIds = getContainerChildIds(node);
+  return {
+    id: node.id,
+    type: node.type,
+    preset: node.preset,
+    policy: policyName,
+    childIds,
+    ...(policy?.acceptedNodeTypes ? { acceptedChildTypes: policy.acceptedNodeTypes } : {}),
+    slots: [
+      {
+        id: 'children',
+        label: 'Children',
+        childIds,
+      },
+    ],
+  };
+}
+
+function applyContentToNodeTarget(
+  context: CanvasAgentOperationContext,
+  payload: CanvasAgentContentPayload,
+  target: CanvasAgentTargetRef | undefined,
+  mode: CanvasAgentMutationMode,
+): CanvasAgentMutationResult<CanvasAgentApplyContentResult> {
+  if (!target?.nodeId) {
+    throw new Error(`${mode} mode requires an explicit Canvas node target`);
+  }
+  if (target.slotId) {
+    throw new Error(`Unsupported Canvas slot target "${target.slotId}"`);
+  }
+
+  const node = context.nodes.find((candidate) => candidate.id === target.nodeId);
+  if (!node) {
+    throw new Error(`Target node "${target.nodeId}" not found`);
+  }
+
+  const fieldPath = target.fieldPath ?? defaultFieldPathForPayload(node, payload);
+  if (!fieldPath) {
+    throw new Error(`No writable field available for ${payload.kind} content on ${node.type}`);
+  }
+  assertTargetableField(node, fieldPath);
+
+  const nextValue =
+    mode === 'append'
+      ? appendCanvasAgentContentValue(node, fieldPath, payload)
+      : coerceCanvasAgentContentValue(payload, fieldPath);
+  const written = writeJsonPointer(node.data, fieldPath, nextValue);
+  const nextNode = refreshCanvasNodePreview({
+    ...node,
+    data: written.data as Record<string, unknown>,
+  } as CanvasNode);
+
+  return {
+    result: {
+      changed: written.changed,
+      mode,
+      nodeId: node.id,
+      target: { ...target, fieldPath },
+    },
+    nodes: context.nodes.map((candidate) => (candidate.id === node.id ? nextNode : candidate)),
+    connections: context.connections,
+  };
+}
+
+function insertContentNode(
+  context: CanvasAgentOperationContext,
+  payload: CanvasAgentContentPayload,
+  target: CanvasAgentTargetRef | undefined,
+  mode: CanvasAgentMutationMode,
+): CanvasAgentMutationResult<CanvasAgentApplyContentResult> {
+  const position = target?.insertionPoint ?? DEFAULT_AGENT_INSERT_POSITION;
+  const nodeId = context.generateId();
+  const node = hydrateCanvasNodePreview({
+    ...createNodeSpec({
+      type: 'text',
+      position,
+      data: {
+        content: renderCanvasAgentContent(payload),
+        format: payload.format === 'markdown' ? 'markdown' : 'plain',
+      },
+    }),
+    id: nodeId,
+    zIndex: (context.nodes.length + 1) * 10,
+  } as CanvasNode);
+
+  let nextNodes = [...context.nodes, node];
+  if (target?.containerId) {
+    const container = context.nodes.find((candidate) => candidate.id === target.containerId);
+    if (!container) {
+      throw new Error(`Target container "${target.containerId}" not found`);
+    }
+    const policy = getContainerPolicy(CONTAINER_POLICIES, getContainerPolicyName(container));
+    if (!canContainerAcceptChild(policy, node)) {
+      throw new Error(`Target container "${target.containerId}" does not accept text nodes`);
+    }
+    const added = addContainerChild(nextNodes, target.containerId, nodeId);
+    if (!added.changed) {
+      throw new Error(added.error ?? 'Failed to add content node to container');
+    }
+    nextNodes = added.nodes;
+  }
+
+  return {
+    result: {
+      changed: true,
+      mode,
+      nodeId,
+      containerId: target?.containerId,
+      createdNodeIds: [nodeId],
+      target,
+    },
+    nodes: nextNodes,
+    connections: context.connections,
+  };
+}
+
+function validatePayloadContent(payload: CanvasAgentContentPayload): void {
+  if (payload.kind === 'text' && typeof payload.text !== 'string') {
+    throw new Error('Canvas Agent text payload requires text');
+  }
+  if (payload.kind === 'prompt' && typeof payload.prompt !== 'string') {
+    throw new Error('Canvas Agent prompt payload requires prompt');
+  }
+  if (payload.kind === 'structured' && !Object.prototype.hasOwnProperty.call(payload, 'content')) {
+    throw new Error('Canvas Agent structured payload requires content');
+  }
+}
+
+function normalizeCanvasAgentTarget(
+  target: CanvasAgentTargetRef | undefined,
+): CanvasAgentTargetRef | undefined {
+  if (!target) return undefined;
+  if (target.fieldPath && !isJsonPointerPath(target.fieldPath)) {
+    throw new Error(`Invalid JSON Pointer field path "${target.fieldPath}"`);
+  }
+  if (target.fieldPath && !target.nodeId) {
+    throw new Error('Canvas fieldPath targets require nodeId');
+  }
+  if (
+    target.insertionPoint &&
+    (!Number.isFinite(target.insertionPoint.x) || !Number.isFinite(target.insertionPoint.y))
+  ) {
+    throw new Error('Canvas insertionPoint must contain finite coordinates');
+  }
+  if (target.mode === 'replace' && !target.nodeId && !target.slotId && !target.fieldPath) {
+    throw new Error('replace mode requires an explicit target');
+  }
+  return {
+    ...target,
+    ...(target.fieldPath ? { fieldPath: target.fieldPath } : {}),
+  };
+}
+
+function resolveMutationMode(target: CanvasAgentTargetRef | undefined): CanvasAgentMutationMode {
+  if (target?.mode) return target.mode;
+  return target?.nodeId ? 'apply' : 'insert';
+}
+
+function defaultFieldPathForPayload(
+  node: CanvasNode,
+  payload: CanvasAgentContentPayload,
+): JsonPointerPath | undefined {
+  if (payload.kind === 'prompt' && node.type === 'shot') {
+    return '/generationPrompt';
+  }
+  if (payload.kind === 'text' || payload.kind === 'structured') {
+    if (node.type === 'text' || node.type === 'annotation') {
+      return '/content';
+    }
+    if (node.type === 'shot') {
+      return '/visualDescription';
+    }
+  }
+  return getTargetableFields(node)[0]?.path;
+}
+
+function assertTargetableField(node: CanvasNode, fieldPath: JsonPointerPath): void {
+  const paths = new Set(getTargetableFields(node).map((field) => field.path));
+  if (!paths.has(fieldPath)) {
+    throw new Error(`Field "${fieldPath}" is not targetable on ${node.type} node "${node.id}"`);
+  }
+}
+
+function appendCanvasAgentContentValue(
+  node: CanvasNode,
+  fieldPath: JsonPointerPath,
+  payload: CanvasAgentContentPayload,
+): unknown {
+  const current = readJsonPointer(node.data, fieldPath);
+  const next = coerceCanvasAgentContentValue(payload, fieldPath);
+  if (typeof current.value === 'string') {
+    const currentText = current.value.trimEnd();
+    const nextText = String(next).trimStart();
+    return currentText ? `${currentText}\n${nextText}` : nextText;
+  }
+  if (Array.isArray(current.value)) {
+    return [...current.value, next];
+  }
+  return next;
+}
+
+function coerceCanvasAgentContentValue(
+  payload: CanvasAgentContentPayload,
+  fieldPath: JsonPointerPath,
+): unknown {
+  if (payload.kind === 'text') {
+    return payload.text ?? '';
+  }
+  if (payload.kind === 'prompt') {
+    return payload.prompt ?? '';
+  }
+  if (payload.format === 'json' && !expectsStringField(fieldPath)) {
+    return payload.content;
+  }
+  return renderCanvasAgentContent(payload);
+}
+
+function renderCanvasAgentContent(payload: CanvasAgentContentPayload): string {
+  if (payload.kind === 'text') return payload.text ?? '';
+  if (payload.kind === 'prompt') return payload.prompt ?? '';
+  if (typeof payload.content === 'string') return payload.content;
+  return JSON.stringify(payload.content ?? null, null, 2);
+}
+
+function expectsStringField(fieldPath: JsonPointerPath): boolean {
+  return !fieldPath.endsWith('/characters') && !fieldPath.endsWith('/emotion');
+}
+
+function findFocusedContainer(
+  nodes: readonly CanvasNode[],
+  selectedNodeIds: readonly string[],
+): CanvasNode | undefined {
+  for (const nodeId of selectedNodeIds) {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) continue;
+    if (node.container) return node;
+    const parentId = getNodeParentId(node);
+    if (!parentId) continue;
+    const parent = nodes.find((candidate) => candidate.id === parentId);
+    if (parent?.container) return parent;
+  }
+  return nodes.find((node) => node.container);
+}
+
+function getTargetableFields(
+  node: CanvasNode,
+): NonNullable<CanvasAgentNodeSummary['targetableFields']> {
+  const fields = new Map<
+    JsonPointerPath,
+    { path: JsonPointerPath; label?: string; valueType?: string }
+  >();
+  for (const path of TARGETABLE_FIELD_PATHS_BY_TYPE[node.type] ?? []) {
+    fields.set(path, { path, label: labelFromFieldPath(path), valueType: 'string' });
+  }
+  for (const binding of collectBindings(node) ?? []) {
+    if (!fields.has(binding.path)) {
+      fields.set(binding.path, {
+        path: binding.path,
+        ...(binding.label ? { label: binding.label } : {}),
+        valueType: inferValueType(binding.value),
+      });
+    }
+  }
+  return Array.from(fields.values());
+}
+
+function labelFromFieldPath(path: JsonPointerPath): string {
+  const leaf = path.split('/').filter(Boolean).pop();
+  return leaf ?? 'root';
+}
+
+function inferValueType(value: unknown): string {
+  if (Array.isArray(value)) return 'array';
+  if (value === null) return 'unknown';
+  return typeof value;
+}
+
+function renderNodeDataSummary(node: CanvasNode): string | undefined {
+  const data = sanitizeData(node.data as Record<string, unknown>);
+  const serialized = JSON.stringify(data);
+  return serialized.length > 500 ? `${serialized.slice(0, 500)}...` : serialized;
 }
 
 export function createCanvasComposite(

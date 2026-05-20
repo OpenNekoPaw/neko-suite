@@ -5,6 +5,20 @@ import { join } from 'path';
 const providerSource = readFileSync(join(__dirname, '../agentCapabilityProvider.ts'), 'utf-8');
 
 describe('agentCapabilityProvider storyboard export contracts', () => {
+  it('registers the target-aware Agent content command and editor provider bridge', () => {
+    const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
+    const editorProviderSource = readFileSync(
+      join(__dirname, '../editor/canvasEditorProvider.ts'),
+      'utf-8',
+    );
+
+    expect(extensionSource).toContain("'neko.canvas.importAgentContent'");
+    expect(extensionSource).toContain('canvasEditorProvider.applyAgentContent(payload)');
+    expect(editorProviderSource).toContain("'nodes.getActiveContext'");
+    expect(editorProviderSource).toContain("'nodes.applyAgentContent'");
+    expect(editorProviderSource).toContain("operationType: 'nodes.applyAgentContent'");
+  });
+
   it('syncs shot timeline import metadata after neko-cut import', () => {
     expect(providerSource).toContain('applyCanvasTimelineSyncToCanvas');
     expect(providerSource).toContain(
@@ -18,6 +32,17 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT');
+  });
+
+  it('marks Canvas query and mutation tools with target-aware safety metadata', () => {
+    expect(providerSource).toContain("safetyKind: 'read-only-query'");
+    expect(providerSource).toContain("safetyKind: 'confirmation-gated'");
+    expect(providerSource).toContain('targetRequirements');
+    expect(providerSource).toContain('queryBeforeMutate');
+    expect(providerSource).toContain('allowedFallbacks');
+    expect(providerSource).toContain('preferredQueryTools');
   });
 
   it('drives preset schemas from shared registry constants', () => {
