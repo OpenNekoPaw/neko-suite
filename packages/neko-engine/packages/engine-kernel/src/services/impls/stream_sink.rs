@@ -50,35 +50,66 @@ impl StreamSink {
         })
     }
 
-    /// Reconfigure encoder state, flushing the previous encoder before swapping.
+    /// Reconfigure encoder state, retiring the previous hardware session before
+    /// opening the replacement. This avoids blocking on a new hardware encoder
+    /// while the old one still owns the platform encoder resource.
     pub fn reconfigure(&self, config: PreviewPipelineConfig) -> Result<()> {
         let new_encoder_config = preview_encoder_config(&config);
+
+        let retired = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| Error::Other("StreamSink state lock poisoned".to_string()))?;
+            if state.closed {
+                return Err(Error::Other("StreamSink is closed".to_string()));
+            }
+
+            if state.encoder.is_some()
+                && state.width == config.width
+                && state.height == config.height
+                && (state.fps - config.fps).abs() < f64::EPSILON
+                && state.config.bitrate == config.bitrate
+                && state.config.gop_size == config.gop_size
+            {
+                state.config = config;
+                return Ok(());
+            }
+
+            state.encoder.take().map(|encoder| {
+                (
+                    encoder,
+                    state.encoder_config.clone(),
+                    state.width,
+                    state.height,
+                    state.fps,
+                )
+            })
+        };
+
+        if let Some((old_encoder, old_config, old_width, old_height, old_fps)) = retired {
+            global_encoder_pool().discard(old_encoder);
+            tracing::debug!(
+                "StreamSink retired encoder before reconfigure ({}x{} @ {:.2}fps, {}bps, previous_runtime={}x{} @ {:.2}fps)",
+                old_config.width,
+                old_config.height,
+                old_config.fps,
+                old_config.bitrate,
+                old_width,
+                old_height,
+                old_fps
+            );
+        }
+
+        let new_encoder = acquire_preview_encoder(&new_encoder_config)?;
 
         let mut state = self
             .state
             .lock()
             .map_err(|_| Error::Other("StreamSink state lock poisoned".to_string()))?;
         if state.closed {
+            global_encoder_pool().discard(new_encoder);
             return Err(Error::Other("StreamSink is closed".to_string()));
-        }
-
-        if state.width == config.width
-            && state.height == config.height
-            && (state.fps - config.fps).abs() < f64::EPSILON
-            && state.config.bitrate == config.bitrate
-            && state.config.gop_size == config.gop_size
-        {
-            state.config = config;
-            return Ok(());
-        }
-
-        let new_encoder = acquire_preview_encoder(&new_encoder_config)?;
-
-        if let Some(mut old_encoder) = state.encoder.take() {
-            let flush_result =
-                self.flush_encoder(&mut old_encoder, state.width, state.height, state.fps);
-            global_encoder_pool().release(old_encoder, state.encoder_config.clone());
-            flush_result?;
         }
 
         state.encoder = Some(new_encoder);
@@ -195,7 +226,7 @@ impl PipelineSink for StreamSink {
         let mut flush_result = Ok(());
         if let Some(mut encoder) = state.encoder.take() {
             flush_result = self.flush_encoder(&mut encoder, width, height, fps);
-            global_encoder_pool().release(encoder, state.encoder_config.clone());
+            global_encoder_pool().discard(encoder);
         }
         state.closed = true;
         flush_result
@@ -224,7 +255,7 @@ fn preview_encoder_config(config: &PreviewPipelineConfig) -> EncoderConfig {
 fn acquire_preview_encoder(config: &EncoderConfig) -> Result<HwAccelEncoder> {
     let encoder = global_encoder_pool().acquire(config)?;
     if !encoder.supports_gpu_input() {
-        global_encoder_pool().release(encoder, config.clone());
+        global_encoder_pool().discard(encoder);
         return Err(Error::UnsupportedCapability(
             "zero-copy GPU preview encoding requires a hardware encoder with GPU input support"
                 .to_string(),
@@ -357,15 +388,36 @@ mod tests {
     }
 
     #[test]
-    fn stream_sink_close_flushes_encoder_before_pool_release() {
+    fn stream_sink_close_flushes_encoder_before_discard() {
         let source = include_str!("stream_sink.rs");
         let close_start = source.find("fn close(&self) -> Result<()>").unwrap();
         let close_body = &source[close_start..];
         let flush_pos = close_body.find("self.flush_encoder").unwrap();
-        let release_pos = close_body.find("global_encoder_pool().release").unwrap();
+        let discard_pos = close_body.find("global_encoder_pool().discard").unwrap();
         assert!(
-            flush_pos < release_pos,
-            "StreamSink::close must flush encoder buffered frames before releasing it to the pool"
+            flush_pos < discard_pos,
+            "StreamSink::close must flush encoder buffered frames before discarding it"
+        );
+    }
+
+    #[test]
+    fn stream_sink_reconfigure_discards_old_encoder_before_acquiring_replacement() {
+        let source = include_str!("stream_sink.rs");
+        let reconfigure_start = source.find("pub fn reconfigure").unwrap();
+        let reconfigure_end = source[reconfigure_start..]
+            .find("/// Whether the encoder is currently open.")
+            .map(|offset| reconfigure_start + offset)
+            .unwrap();
+        let reconfigure_body = &source[reconfigure_start..reconfigure_end];
+        let discard_pos = reconfigure_body
+            .find("global_encoder_pool().discard(old_encoder)")
+            .unwrap();
+        let acquire_pos = reconfigure_body
+            .find("let new_encoder = acquire_preview_encoder")
+            .unwrap();
+        assert!(
+            discard_pos < acquire_pos,
+            "StreamSink::reconfigure must release the old hardware session before acquiring a new one"
         );
     }
 

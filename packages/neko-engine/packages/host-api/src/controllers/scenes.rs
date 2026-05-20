@@ -462,14 +462,26 @@ fn spawn_scene_stream_producer(
         let mut settings = runtime_scheduler.settings(0, load, control_ack);
         let mut frame_id = 0u64;
         let mut next_frame_at = Instant::now();
+        let mut last_sink_config: Option<PreviewPipelineConfig> = None;
         let mut stream_sink = match stream_registry.get_sender(&stream_id).await {
-            Some(tx) => match scene_stream_sink_config(settings)
-                .and_then(|sink_config| StreamSink::new(sink_config, tx))
-            {
-                Ok(sink) => Some(sink),
+            Some(tx) => match scene_stream_sink_config(settings) {
+                Ok(sink_config) => match StreamSink::new(sink_config.clone(), tx) {
+                    Ok(sink) => {
+                        last_sink_config = Some(sink_config);
+                        Some(sink)
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            "Scene stream {} GPU sink unavailable, using legacy H.264 path: {}",
+                            stream_id.as_str(),
+                            err
+                        );
+                        None
+                    }
+                },
                 Err(err) => {
                     tracing::warn!(
-                        "Scene stream {} GPU sink unavailable, using legacy H.264 path: {}",
+                        "Scene stream {} GPU sink config unavailable, using legacy H.264 path: {}",
                         stream_id.as_str(),
                         err
                     );
@@ -495,13 +507,27 @@ fn spawn_scene_stream_producer(
                     let viewport = runtime_scheduler.viewport_descriptor_for_settings(settings);
                     if let Some(sink) = stream_sink.as_ref() {
                         if let Ok(sink_config) = scene_stream_sink_config(settings) {
-                            if let Err(err) = sink.reconfigure(sink_config) {
-                                tracing::warn!(
-                                    "Scene stream {} GPU sink reconfigure failed, using legacy H.264 path: {}",
+                            if last_sink_config.as_ref() != Some(&sink_config) {
+                                tracing::info!(
+                                    "Scene stream {} GPU sink reconfigure ({}x{} @ {:.1}fps, {}bps, gop={})",
                                     stream_id.as_str(),
-                                    err
+                                    sink_config.width,
+                                    sink_config.height,
+                                    sink_config.fps,
+                                    sink_config.bitrate,
+                                    sink_config.gop_size
                                 );
-                                stream_sink = None;
+                                if let Err(err) = sink.reconfigure(sink_config.clone()) {
+                                    tracing::warn!(
+                                        "Scene stream {} GPU sink reconfigure failed, using legacy H.264 path: {}",
+                                        stream_id.as_str(),
+                                        err
+                                    );
+                                    stream_sink = None;
+                                    last_sink_config = None;
+                                } else {
+                                    last_sink_config = Some(sink_config);
+                                }
                             }
                         }
                     }

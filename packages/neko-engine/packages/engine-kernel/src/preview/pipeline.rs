@@ -25,7 +25,7 @@ use neko_engine_gpu::GpuContext;
 use neko_engine_types::{GpuFrameLease, VideoGpuFrame};
 
 /// Preview pipeline configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PreviewPipelineConfig {
     /// Output width
     pub width: u32,

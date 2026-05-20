@@ -24,9 +24,17 @@ use std::time::{Duration, Instant};
 struct EncoderSignature {
     width: u32,
     height: u32,
+    fps_millis: u64,
+    bitrate: u64,
     codec: u8, // discriminant of VideoCodec
+    pixel_format: u8,
+    preset: u8,
+    profile: Option<String>,
     gop_size: Option<u32>,
     max_b_frames: Option<u32>,
+    hw_encoder: u8,
+    use_zero_copy_gpu: bool,
+    global_header: bool,
 }
 
 impl EncoderSignature {
@@ -34,6 +42,8 @@ impl EncoderSignature {
         Self {
             width: config.width,
             height: config.height,
+            fps_millis: (config.fps.max(0.0) * 1000.0).round() as u64,
+            bitrate: config.bitrate,
             codec: match config.codec {
                 VideoCodec::H264 => 0,
                 VideoCodec::H265 => 1,
@@ -41,8 +51,37 @@ impl EncoderSignature {
                 VideoCodec::Vp9 => 3,
                 VideoCodec::ProRes => 4,
             },
+            pixel_format: match config.pixel_format {
+                crate::encoder::PixelFormat::Nv12 => 0,
+                crate::encoder::PixelFormat::Yuv420p => 1,
+                crate::encoder::PixelFormat::Yuv422p => 2,
+                crate::encoder::PixelFormat::Yuv444p => 3,
+                crate::encoder::PixelFormat::Rgba => 4,
+                crate::encoder::PixelFormat::Bgra => 5,
+                crate::encoder::PixelFormat::Rgb24 => 6,
+                crate::encoder::PixelFormat::P010le => 7,
+            },
+            preset: match config.preset {
+                crate::encoder::EncoderPreset::Ultrafast => 0,
+                crate::encoder::EncoderPreset::Fast => 1,
+                crate::encoder::EncoderPreset::Medium => 2,
+                crate::encoder::EncoderPreset::Slow => 3,
+                crate::encoder::EncoderPreset::Veryslow => 4,
+            },
+            profile: config.profile.clone(),
             gop_size: config.gop_size,
             max_b_frames: config.max_b_frames,
+            hw_encoder: match config.hw_encoder {
+                crate::encoder::HwEncoderType::None => 0,
+                crate::encoder::HwEncoderType::Auto => 1,
+                crate::encoder::HwEncoderType::VideoToolbox => 2,
+                crate::encoder::HwEncoderType::Nvenc => 3,
+                crate::encoder::HwEncoderType::Vaapi => 4,
+                crate::encoder::HwEncoderType::Qsv => 5,
+                crate::encoder::HwEncoderType::Amf => 6,
+            },
+            use_zero_copy_gpu: config.use_zero_copy_gpu,
+            global_header: config.global_header,
         }
     }
 }
@@ -154,6 +193,16 @@ impl EncoderPool {
         });
     }
 
+    /// Close an encoder without returning it to the pool.
+    ///
+    /// Realtime preview reconfiguration uses this path to release platform
+    /// hardware encoder resources before opening a differently configured
+    /// session. Returning those retired encoders to the pool can transiently
+    /// keep VideoToolbox/NVENC sessions alive and stall the next open.
+    pub fn discard(&self, mut encoder: HwAccelEncoder) {
+        Encoder::close(&mut encoder);
+    }
+
     /// Clean up idle encoders that have exceeded the timeout
     pub fn cleanup_idle(&self) {
         let mut pool = self.lock_available();
@@ -186,18 +235,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_encoder_signature_matching() {
+    fn test_encoder_signature_separates_runtime_session_parameters() {
         let config_a = EncoderConfig::new(1920, 1080, 30.0, VideoCodec::H264);
-        let config_b = EncoderConfig::new(1920, 1080, 60.0, VideoCodec::H264);
-        let config_c = EncoderConfig::new(1280, 720, 30.0, VideoCodec::H264);
+        let config_b = EncoderConfig::new(1920, 1080, 30.0, VideoCodec::H264);
+        let config_c = EncoderConfig::new(1920, 1080, 60.0, VideoCodec::H264);
+        let config_d = EncoderConfig::new(1920, 1080, 30.0, VideoCodec::H264)
+            .with_bitrate(config_a.bitrate.saturating_mul(2));
+        let config_e = EncoderConfig::new(1280, 720, 30.0, VideoCodec::H264);
 
         let sig_a = EncoderSignature::from_config(&config_a);
         let sig_b = EncoderSignature::from_config(&config_b);
         let sig_c = EncoderSignature::from_config(&config_c);
+        let sig_d = EncoderSignature::from_config(&config_d);
+        let sig_e = EncoderSignature::from_config(&config_e);
 
-        // Same dimensions + codec → match (fps doesn't affect encoder session)
         assert_eq!(sig_a, sig_b);
-        // Different dimensions → no match
         assert_ne!(sig_a, sig_c);
+        assert_ne!(sig_a, sig_d);
+        assert_ne!(sig_a, sig_e);
     }
 }
