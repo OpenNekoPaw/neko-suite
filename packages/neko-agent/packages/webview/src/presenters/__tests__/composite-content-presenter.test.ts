@@ -67,6 +67,137 @@ describe('composite content presenter', () => {
     ]);
   });
 
+  it('projects storyboard media refs from document image pages and generated variants', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        sections: [
+          {
+            heading: 'Shot 1',
+            content: 'Use the original page, color pass, and final generated keyframe.',
+            mediaRefs: [
+              {
+                toolCallId: 'read-doc',
+                assetIndex: 0,
+                caption: '原始页图',
+                role: 'original',
+              },
+              {
+                toolCallId: 'colorize',
+                assetIndex: 0,
+                caption: '上色图',
+                role: 'colorized',
+              },
+              {
+                toolCallId: 'generate',
+                assetIndex: 0,
+                caption: '生成图',
+                role: 'generated',
+              },
+            ],
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-doc',
+          name: 'ReadDocument',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              filePath: '/books/story.epub',
+              imagePaths: ['/cache/page-1.jpg'],
+              imagePathWebviewUris: ['webview://page-1.jpg'],
+              imageInfo: [
+                {
+                  path: '/cache/page-1.jpg',
+                  width: 1493,
+                  height: 2133,
+                  mimeType: 'image/jpeg',
+                  locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+                },
+              ],
+            },
+          },
+        }),
+        toolBlock(makeImageToolCall('colorize', 'color-1', 'webview://color.png')),
+        toolBlock(makeImageToolCall('generate', 'generated-1', 'webview://generated.png')),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    expect(projection.data.sections[0]?.media).toMatchObject([
+      {
+        toolCallId: 'read-doc',
+        type: 'image',
+        src: 'webview://page-1.jpg',
+        localPath: '/cache/page-1.jpg',
+        mimeType: 'image/jpeg',
+        caption: '原始页图',
+        role: 'original',
+      },
+      {
+        toolCallId: 'colorize',
+        src: 'webview://color.png',
+        caption: '上色图',
+        role: 'colorized',
+      },
+      {
+        toolCallId: 'generate',
+        src: 'webview://generated.png',
+        caption: '生成图',
+        role: 'generated',
+      },
+    ]);
+  });
+
+  it('projects read image results when webview URIs are available on image entries', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'gallery',
+        sections: [
+          {
+            mediaRefs: [{ toolCallId: 'read-image', assetIndex: 0 }],
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-image',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              mode: 'metadata',
+              analysis: 'describe',
+              images: [
+                {
+                  path: '/images/reference.png',
+                  webviewUri: 'webview://reference.png',
+                  label: 'reference',
+                  mimeType: 'image/png',
+                  byteSize: 100,
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        toolCallId: 'read-image',
+        type: 'image',
+        src: 'webview://reference.png',
+        localPath: '/images/reference.png',
+        caption: 'reference',
+      }),
+    ]);
+  });
+
   it('projects gallery assets and bounds missing media diagnostics', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {
@@ -216,9 +347,13 @@ describe('composite content presenter', () => {
   });
 });
 
-function makeImageToolCall(): ToolCall {
+function makeImageToolCall(
+  id = 'call-1',
+  assetId = 'asset-1',
+  webviewUri = 'webview://asset-1.png',
+): ToolCall {
   return {
-    id: 'call-1',
+    id,
     name: 'GenerateImage',
     arguments: { prompt: 'cat' },
     result: {
@@ -226,17 +361,17 @@ function makeImageToolCall(): ToolCall {
       data: {
         assets: [
           {
-            id: 'asset-1',
+            id: assetId,
             type: 'generated-image',
             path: '/repo/.neko/generated/image/out.png',
-            webviewUri: 'webview://asset-1.png',
+            webviewUri,
             mimeType: 'image/png',
             generatedAt: '2026-01-01T00:00:00.000Z',
             width: 1024,
             height: 1024,
             ratio: '1:1',
             assetRef: {
-              assetId: 'asset-1',
+              assetId,
               uri: '${WORKSPACE}/.neko/generated/image/out.png',
               mimeType: 'image/png',
             },

@@ -82,6 +82,7 @@ function projectSearchItemToMentionCandidate(
     ...(item.thumbnailUri ? { thumbnailUri: item.thumbnailUri } : {}),
     navigationData: stringifyNavigationData({
       ...item.navigationData,
+      ...(type === 'asset' ? { assetId: assetIdForProjectItem(item) } : {}),
       projectRoot: item.projectRoot,
       partition: item.source.partition,
       sourceId: item.source.sourceId,
@@ -90,6 +91,20 @@ function projectSearchItemToMentionCandidate(
       freshness: item.freshness,
     }),
   };
+}
+
+function assetIdForProjectItem(item: ProjectSearchItem): string | undefined {
+  return (
+    readString(item.navigationData?.['assetId']) ??
+    readString(item.source.metadata?.['assetId']) ??
+    (item.source.partition === 'asset-library' ? item.source.sourceId : undefined) ??
+    parseAssetIdFromItemId(item.id)
+  );
+}
+
+function parseAssetIdFromItemId(id: string): string | undefined {
+  const prefix = 'asset:';
+  return id.startsWith(prefix) ? id.slice(prefix.length) : undefined;
 }
 
 function mentionTypeForProjectItem(item: ProjectSearchItem): ProjectMentionExtraType {

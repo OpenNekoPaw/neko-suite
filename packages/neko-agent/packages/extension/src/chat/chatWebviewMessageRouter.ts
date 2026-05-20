@@ -43,6 +43,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'openFile',
   'revealDocumentLocator',
   'revealFile',
+  'revealAsset',
   'openConfigFile',
   'openUrl',
   'revealContextSource',

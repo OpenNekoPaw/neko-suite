@@ -218,22 +218,30 @@ function MediaPreview({
 }) {
   const label = media.caption ?? media.label ?? media.assetId ?? 'Media';
   const className = compact ? 'max-h-[120px]' : 'max-h-[180px]';
+  const roleLabel = formatMediaRole(media.role);
 
   if (media.type === 'image') {
     return (
-      <button
-        type="button"
-        className="block w-full overflow-hidden rounded bg-[var(--vscode-editor-background)]"
-        onClick={() => openMedia(media)}
-        title={label}
-      >
-        <img
-          src={media.src}
-          alt={label}
-          className={`w-full object-cover ${className}`}
-          loading="lazy"
-        />
-      </button>
+      <div className="min-w-0">
+        <button
+          type="button"
+          className="block w-full overflow-hidden rounded bg-[var(--vscode-editor-background)]"
+          onClick={() => openMedia(media)}
+          title={label}
+        >
+          <img
+            src={media.src}
+            alt={label}
+            className={`w-full object-cover ${className}`}
+            loading="lazy"
+          />
+        </button>
+        {roleLabel && (
+          <div className="mt-0.5 truncate text-[9px] leading-tight text-[var(--agent-fg-secondary)]">
+            {roleLabel}
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -276,6 +284,19 @@ function MediaPreview({
       {label}
     </button>
   );
+}
+
+function formatMediaRole(role: string | undefined): string | undefined {
+  switch (role) {
+    case 'original':
+      return 'Original';
+    case 'colorized':
+      return 'Color';
+    case 'generated':
+      return 'Generated';
+    default:
+      return role;
+  }
 }
 
 function MediaTransferActions({

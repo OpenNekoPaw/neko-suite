@@ -25,6 +25,9 @@ import {
 } from '@/presenters/message-attachment-presenter';
 import { AgentContextChip } from '@/components/ChatView/InputArea/AgentContextChip';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { SendToMenu } from '@/components/ChatView/SendToMenu';
+import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
+import { projectAssistantMarkdownCanvasTransferPayload } from '@/presenters/storyboard-transfer-presenter';
 
 interface MessageItemProps {
   message: Message;
@@ -114,6 +117,9 @@ function ContentBlockRenderer({
   projection,
   conversationId,
   workItemIds,
+  pluginsAvailable,
+  contextChips,
+  ambientNodes,
   onAcceptDiff,
   onRejectDiff,
   onApprovePlanStep,
@@ -125,6 +131,9 @@ function ContentBlockRenderer({
   projection: ContentBlockUiProjection;
   conversationId: string | null;
   workItemIds?: string[];
+  pluginsAvailable?: PluginsAvailable;
+  contextChips?: ReturnType<typeof useMessageActions>['contextChips'];
+  ambientNodes?: ReturnType<typeof useMessageActions>['ambientNodes'];
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
   onApprovePlanStep?: (planId: string, stepId: string) => void;
@@ -145,6 +154,20 @@ function ContentBlockRenderer({
       return (
         <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]/60 rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
+          {!projection.renderStreaming && pluginsAvailable?.canvas && (
+            <div className="mt-1.5 border-t border-[var(--agent-divider)] pt-1">
+              <SendToMenu
+                payload={projectAssistantMarkdownCanvasTransferPayload({
+                  content: projection.content,
+                  target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
+                  provenance: { source: 'webview', label: 'assistant-text-block' },
+                })}
+                mediaType="image"
+                plugins={pluginsAvailable}
+                allowedTargets={['canvas']}
+              />
+            </div>
+          )}
         </div>
       );
 
@@ -226,6 +249,8 @@ function AssistantContentBlocks({
   onApproveAllPlanSteps,
   onRejectAllPlanSteps,
   pluginsAvailable,
+  contextChips,
+  ambientNodes,
 }: {
   message: Message;
   isStreaming?: boolean;
@@ -238,6 +263,8 @@ function AssistantContentBlocks({
   onApproveAllPlanSteps?: (planId: string) => void;
   onRejectAllPlanSteps?: (planId: string) => void;
   pluginsAvailable?: PluginsAvailable;
+  contextChips?: ReturnType<typeof useMessageActions>['contextChips'];
+  ambientNodes?: ReturnType<typeof useMessageActions>['ambientNodes'];
 }) {
   // If contentBlocks available, render them in order
   if (message.contentBlocks && message.contentBlocks.length > 0) {
@@ -258,6 +285,9 @@ function AssistantContentBlocks({
             projection={projection}
             conversationId={conversationId}
             workItemIds={message.workItemIds}
+            pluginsAvailable={pluginsAvailable}
+            contextChips={contextChips}
+            ambientNodes={ambientNodes}
             onAcceptDiff={onAcceptDiff}
             onRejectDiff={onRejectDiff}
             onApprovePlanStep={onApprovePlanStep}
@@ -318,6 +348,8 @@ export const MessageItem = memo(function MessageItem({
     onApproveAllPlanSteps,
     onRejectAllPlanSteps,
     pluginsAvailable,
+    contextChips,
+    ambientNodes,
     workItems,
   } = useMessageActions();
   // 找出与这条消息关联的工作项
@@ -439,6 +471,8 @@ export const MessageItem = memo(function MessageItem({
               onApproveAllPlanSteps={onApproveAllPlanSteps}
               onRejectAllPlanSteps={onRejectAllPlanSteps}
               pluginsAvailable={pluginsAvailable}
+              contextChips={contextChips}
+              ambientNodes={ambientNodes}
             />
           )}
 

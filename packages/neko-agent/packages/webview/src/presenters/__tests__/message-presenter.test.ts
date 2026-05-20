@@ -446,6 +446,51 @@ describe('message presenter', () => {
     });
   });
 
+  it('projects fenced composite content into content blocks when streaming completes', () => {
+    const created = projectStreamingTextIntoMessages({
+      messages: [],
+      streamingMessageId: null,
+      messageId: 'msg-1',
+      content:
+        'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"Shot 1","mediaRefs":[{"toolCallId":"read-1","assetIndex":0,"caption":"原图"}]}]}\n```',
+      now: () => 1000,
+    });
+
+    const completed = projectStreamingCompleteIntoMessages({
+      messages: created.messages,
+      streamingMessageId: 'msg-1',
+    });
+
+    expect(completed.messages).toMatchObject([
+      {
+        id: 'msg-1',
+        content: 'Storyboard',
+        isStreaming: false,
+        contentBlocks: [
+          {
+            id: 'block-msg-1',
+            type: 'text',
+            content: 'Storyboard',
+            isStreaming: false,
+          },
+          {
+            id: 'block-msg-1-composite-1',
+            type: 'composite',
+            composite: {
+              template: 'storyboard-table',
+              sections: [
+                {
+                  heading: 'Shot 1',
+                  mediaRefs: [{ toolCallId: 'read-1', assetIndex: 0, caption: '原图' }],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
   it('appends queued system messages', () => {
     expect(
       projectQueuedMessageIntoMessages({

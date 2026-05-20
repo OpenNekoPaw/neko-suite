@@ -16,6 +16,7 @@ import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
 import { getTaskWorkItemById, selectRelatedSubAgentWorkItems } from '@/components/AgentWorkItem';
 import { projectToolCallDisplayState } from '@/presenters/tool-call-presenter';
 import { getLogger } from '../../../utils/logger';
+import { CopyIcon } from '@neko/shared/icons';
 import {
   FileIcon,
   ChevronIcon,
@@ -46,6 +47,10 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
 
   const handleOpenFile = useCallback((filePath: string) => {
     VSCodeMessages.openFile(filePath);
+  }, []);
+
+  const handleCopyText = useCallback((text: string) => {
+    void navigator.clipboard.writeText(text);
   }, []);
 
   const handleConfirm = useCallback(
@@ -80,6 +85,7 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
     audioUrls,
     localPaths,
     documentThumbnails,
+    copyText,
     isFileTool,
     filePath,
     summary,
@@ -221,6 +227,20 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
             </button>
           )}
 
+          {copyText && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCopyText(copyText);
+              }}
+              className={compactActionClass}
+              title="Copy result summary"
+            >
+              <CopyIcon className="h-3 w-3" />
+              <span>Copy</span>
+            </button>
+          )}
+
           {toolCall.result?.duration && (
             <span className="shrink-0 text-[10px] text-[var(--agent-fg-secondary)]">
               {toolCall.result.duration}ms
@@ -246,8 +266,17 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
           <div className="border-t border-[var(--agent-divider)] px-3 py-2 text-[10px]">
             {Object.keys(toolCall.arguments).length > 0 && (
               <div className="mb-2">
-                <div className="mb-0.5 text-[var(--agent-fg-secondary)] opacity-80">
-                  {t('chat.toolCall.args')}
+                <div className="mb-0.5 flex items-center gap-2 text-[var(--agent-fg-secondary)] opacity-80">
+                  <span>{t('chat.toolCall.args')}</span>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded border border-[var(--agent-input-border)] px-1 py-0.5 text-[9px] text-[var(--agent-fg)] hover:bg-[var(--agent-hover)]"
+                    title="Copy input JSON"
+                    onClick={() => handleCopyText(argsJson)}
+                  >
+                    <CopyIcon className="h-3 w-3" />
+                    <span>JSON</span>
+                  </button>
                 </div>
                 <pre className="agent-code-block max-h-[150px] w-full max-w-full overflow-x-auto p-1.5 font-mono">
                   {argsJson}
@@ -256,7 +285,18 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
             )}
             {resultJson && (
               <div>
-                <div className="mb-0.5 text-[var(--agent-fg-secondary)] opacity-80">Result</div>
+                <div className="mb-0.5 flex items-center gap-2 text-[var(--agent-fg-secondary)] opacity-80">
+                  <span>Result</span>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded border border-[var(--agent-input-border)] px-1 py-0.5 text-[9px] text-[var(--agent-fg)] hover:bg-[var(--agent-hover)]"
+                    title="Copy output JSON"
+                    onClick={() => handleCopyText(resultJson)}
+                  >
+                    <CopyIcon className="h-3 w-3" />
+                    <span>JSON</span>
+                  </button>
+                </div>
                 <pre className="agent-code-block max-h-[150px] w-full max-w-full overflow-x-auto p-1.5 font-mono">
                   {resultJson}
                 </pre>

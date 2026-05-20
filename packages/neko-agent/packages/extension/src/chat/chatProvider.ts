@@ -534,6 +534,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           return;
         }
 
+        if (message.type === 'getConfig') {
+          postPluginsAvailable(webview);
+        }
+
         // 1. Delegate config messages to ConfigBridge
         if (this._configBridge) {
           const handled = await this._configBridge.handleMessage(message, postMessageFn);

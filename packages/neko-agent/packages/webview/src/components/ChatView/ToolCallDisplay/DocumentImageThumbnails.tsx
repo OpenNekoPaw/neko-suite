@@ -1,5 +1,9 @@
 import { memo, useCallback } from 'react';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { CopyIcon, FileIcon } from '@neko/shared/icons';
+import { SendToMenu } from '@/components/ChatView/SendToMenu';
+import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
+import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import type { DocumentImageThumbnailProjection } from '@/presenters/tool-call-presenter';
 
 interface DocumentImageThumbnailsProps {
@@ -7,6 +11,8 @@ interface DocumentImageThumbnailsProps {
 }
 
 function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnailsProps) {
+  const { pluginsAvailable, contextChips, ambientNodes } = useMessageActions();
+
   const handleOpen = useCallback((thumbnail: DocumentImageThumbnailProjection) => {
     if (!thumbnail.locator) return;
     VSCodeMessages.revealDocumentLocator({
@@ -14,6 +20,10 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
       locator: thumbnail.locator,
       ...(thumbnail.source ? { source: thumbnail.source } : {}),
     });
+  }, []);
+
+  const handleCopy = useCallback(async (value: string) => {
+    await navigator.clipboard.writeText(value);
   }, []);
 
   if (thumbnails.length === 0) return null;
@@ -26,38 +36,156 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
           const byteSize = formatByteSize(thumbnail.byteSize);
           const title = [thumbnail.label, dimensions, byteSize].filter(Boolean).join(' · ');
           return (
-            <button
+            <div
               key={thumbnail.id}
-              type="button"
-              disabled={!thumbnail.locator}
-              onClick={() => handleOpen(thumbnail)}
-              className="group w-20 shrink-0 overflow-hidden rounded border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] text-left transition-colors hover:border-[var(--agent-accent)] disabled:cursor-default disabled:hover:border-[var(--agent-input-border)]"
-              title={title || thumbnail.path}
+              className="group w-20 shrink-0 overflow-hidden rounded border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] text-left transition-colors hover:border-[var(--agent-accent)]"
             >
-              <div className="relative h-28 w-full bg-[var(--agent-bg)]">
-                <img
-                  src={thumbnail.src}
-                  alt={thumbnail.label}
-                  loading="lazy"
-                  draggable={false}
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute left-1 top-1 rounded bg-black/65 px-1 py-0.5 text-[9px] font-medium leading-none text-white">
-                  {thumbnail.label}
-                </span>
-              </div>
+              <button
+                type="button"
+                disabled={!thumbnail.locator}
+                onClick={() => handleOpen(thumbnail)}
+                className="block w-full disabled:cursor-default"
+                title={
+                  thumbnail.locator ? `Open ${title || thumbnail.label}` : title || thumbnail.path
+                }
+              >
+                <div className="relative h-28 w-full bg-[var(--agent-bg)]">
+                  <img
+                    src={thumbnail.src}
+                    alt={thumbnail.label}
+                    loading="lazy"
+                    draggable={false}
+                    className="h-full w-full object-cover"
+                  />
+                  <span className="absolute left-1 top-1 rounded bg-black/65 px-1 py-0.5 text-[9px] font-medium leading-none text-white">
+                    {thumbnail.label}
+                  </span>
+                </div>
+              </button>
               {(dimensions || byteSize) && (
                 <div className="space-y-0.5 px-1.5 py-1 text-[9px] leading-tight text-[var(--agent-fg-secondary)]">
                   {dimensions && <div className="truncate">{dimensions}</div>}
                   {byteSize && <div className="truncate">{byteSize}</div>}
                 </div>
               )}
-            </button>
+              <div className="flex border-t border-[var(--agent-input-border)]">
+                <ThumbnailActionButton
+                  title="Copy reference JSON"
+                  onClick={() => handleCopy(thumbnail.referenceJson)}
+                >
+                  <CopyIcon className="h-3 w-3" />
+                </ThumbnailActionButton>
+                <ThumbnailActionButton
+                  title="Copy image path"
+                  onClick={() => handleCopy(thumbnail.path)}
+                >
+                  <FileIcon className="h-3 w-3" />
+                </ThumbnailActionButton>
+                <ThumbnailActionButton
+                  title="Copy thumbnail summary"
+                  onClick={() => handleCopy(formatThumbnailSummary(thumbnail))}
+                >
+                  <span className="text-[9px] font-medium leading-none">i</span>
+                </ThumbnailActionButton>
+              </div>
+              {pluginsAvailable?.canvas && (
+                <div className="border-t border-[var(--agent-input-border)] px-1 py-1">
+                  <SendToMenu
+                    payload={{
+                      kind: 'singleAsset',
+                      asset: {
+                        path: thumbnail.path,
+                        mediaType: 'image',
+                        name: getFileName(thumbnail.path),
+                      },
+                      target: projectCanvasContentTransferTarget({
+                        ambientNodes,
+                        contextChips,
+                      }),
+                      provenance: {
+                        source: 'webview',
+                        label: `document-image:${thumbnail.label}`,
+                      },
+                    }}
+                    mediaType="image"
+                    plugins={pluginsAvailable}
+                    allowedTargets={['canvas']}
+                    hidePrefixLabel
+                    className="justify-center"
+                  />
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
     </div>
   );
+}
+
+interface ThumbnailActionButtonProps {
+  children: React.ReactNode;
+  title: string;
+  onClick: () => void;
+}
+
+function ThumbnailActionButton({ children, title, onClick }: ThumbnailActionButtonProps) {
+  return (
+    <button
+      type="button"
+      className="flex h-6 flex-1 items-center justify-center text-[var(--agent-fg-secondary)] transition-colors hover:bg-[var(--agent-hover)] hover:text-[var(--agent-fg)]"
+      title={title}
+      onClick={(event) => {
+        event.stopPropagation();
+        void onClick();
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function formatLocatorReference(thumbnail: DocumentImageThumbnailProjection): string {
+  const locator = thumbnail.locator ? formatLocator(thumbnail.locator) : thumbnail.label;
+  return `${thumbnail.filePath}#${locator}`;
+}
+
+function formatThumbnailSummary(thumbnail: DocumentImageThumbnailProjection): string {
+  const parts = [
+    `Document: ${thumbnail.filePath}`,
+    `Reference: ${formatLocatorReference(thumbnail)}`,
+    `Location: ${thumbnail.locator ? formatLocator(thumbnail.locator) : thumbnail.label}`,
+    `Image: ${thumbnail.path}`,
+  ];
+  const dimensions = formatDimensions(thumbnail.width, thumbnail.height);
+  if (dimensions) parts.push(`Dimensions: ${dimensions}`);
+  const byteSize = formatByteSize(thumbnail.byteSize);
+  if (byteSize) parts.push(`Size: ${byteSize}`);
+  if (thumbnail.mimeType) parts.push(`MIME: ${thumbnail.mimeType}`);
+  return parts.join('\n');
+}
+
+function formatLocator(locator: DocumentImageThumbnailProjection['locator']): string {
+  if (!locator) return 'unknown';
+  switch (locator.kind) {
+    case 'page':
+      return `page:${locator.pageNumber}`;
+    case 'region':
+      return `page:${locator.pageNumber}:region`;
+    case 'chapter':
+      return locator.spineIndex !== undefined
+        ? `chapter:${locator.chapterHref}@${locator.spineIndex}`
+        : `chapter:${locator.chapterHref}`;
+    case 'slide':
+      return `slide:${locator.slideNumber}`;
+    case 'text-range':
+      if (locator.startLine !== undefined || locator.endLine !== undefined) {
+        return `lines:${locator.startLine ?? '?'}-${locator.endLine ?? '?'}`;
+      }
+      return `chars:${locator.startChar ?? '?'}-${locator.endChar ?? '?'}`;
+    default:
+      return 'unknown';
+  }
 }
 
 function formatDimensions(width: number | undefined, height: number | undefined): string {
@@ -69,6 +197,10 @@ function formatByteSize(byteSize: number | undefined): string {
   if (byteSize < 1024) return `${byteSize} B`;
   if (byteSize < 1024 * 1024) return `${Math.round(byteSize / 1024)} KB`;
   return `${(byteSize / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getFileName(path: string): string {
+  return path.split(/[\\/]/).pop() || 'document-image';
 }
 
 export const DocumentImageThumbnails = memo(DocumentImageThumbnailsComponent);

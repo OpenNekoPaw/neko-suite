@@ -49,6 +49,10 @@ Panel 2: ...
 ### Phase 2: Storyboard Generation
 
 5. **Generate video prompts** for each panel:
+   - Match the prompt language to the user's content language. If the
+     storyboard, analysis, or user request is Chinese, write video prompts in
+     Chinese. Do not switch prompt bodies to English unless the user explicitly
+     asks for English or the target generation tool requires English.
    - Emphasize visual consistency (same character designs, art style, color palette)
    - Specify camera movement (static, slow pan, zoom)
    - Include lighting and atmosphere
@@ -60,6 +64,33 @@ Panel 2: ...
    - Reuse character descriptions across scenes
 
 7. **Present storyboard plan** to user for review
+   - Always output a real storyboard structure, not only a prose document.
+     Put concise readable notes first, then append one \`neko-composite\`
+     fenced JSON block. Use \`template: "storyboard-table"\`.
+   - Each storyboard row maps to one \`sections[]\` item with a shot heading
+     and production-ready content. If the row should carry original,
+     colorized, or generated images, add \`sections[].mediaRefs[]\` entries
+     that reference earlier tool calls:
+     \`\`\`neko-composite
+     {
+       "template": "storyboard-table",
+       "title": "Storyboard",
+       "sections": [
+         {
+           "heading": "Shot 1",
+           "content": "Scene/action/prompt notes",
+           "layout": "table-row",
+           "mediaRefs": [
+             { "toolCallId": "read-doc-call-id", "assetIndex": 0, "caption": "Original", "role": "original" },
+             { "toolCallId": "colorized-call-id", "assetIndex": 0, "caption": "Color", "role": "colorized" },
+             { "toolCallId": "generated-call-id", "assetIndex": 0, "caption": "Generated", "role": "generated" }
+           ]
+         }
+       ]
+     }
+     \`\`\`
+   - Use the exact tool call ids from ReadDocument / ReadDocumentImage /
+     ReadImage / generation tools. Do not embed base64 image data in the table.
 
 ### Phase 3: Video Generation (direct atomic-tool composition)
 
@@ -114,17 +145,17 @@ For each panel, identify:
 ## Video Prompt Template
 
 \`\`\`
-[Art Style] style, [Scene Description], [Characters] [Action],
-[Camera Angle], [Lighting], [Atmosphere], [Motion Type],
-consistent character design, maintaining visual continuity
+[艺术风格]，[场景描述]，[角色] [动作]，
+[镜头角度]，[光线]，[氛围]，[运动方式]，
+保持角色设计一致，保持视觉连续性
 \`\`\`
 
 Example:
 \`\`\`
-Anime style, urban rooftop at sunset, teenage girl with long black hair
-standing at edge looking at city skyline, medium shot, warm golden hour
-lighting, melancholic atmosphere, subtle wind movement in hair and clothes,
-consistent character design, maintaining visual continuity
+暗黑童话插画风格，黄昏牧场边缘，金发牧羊少年瑞德握着牧羊杖
+谨慎靠近发光的古老神灯，中景，紫色微光与暖色夕照交织，
+神秘而紧张的氛围，镜头缓慢推进，衣摆和烟雾轻微飘动，
+保持角色设计一致，保持视觉连续性
 \`\`\`
 
 ## Character Consistency Tips

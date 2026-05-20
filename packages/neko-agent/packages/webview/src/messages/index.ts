@@ -304,6 +304,11 @@ export const VSCodeMessages = {
     });
   },
 
+  /** Reveal an asset entity in the asset library view. */
+  revealAsset: (assetId: string) => {
+    postWebviewMessage({ type: 'revealAsset', assetId });
+  },
+
   // ==========================================================================
   // Prompt Mode
   // ==========================================================================

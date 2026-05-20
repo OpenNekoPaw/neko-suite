@@ -175,6 +175,55 @@ describe('chatProvider', () => {
 
     provider.dispose();
   });
+
+  it('reposts plugin availability when the webview requests config', async () => {
+    vi.mocked(vscode.extensions.getExtension).mockImplementation((extensionId: string) =>
+      extensionId === 'neko.neko-canvas'
+        ? ({
+            id: extensionId,
+            extensionUri: vscode.Uri.file('/ext/neko-canvas'),
+            extensionPath: '/ext/neko-canvas',
+            isActive: true,
+            packageJSON: {},
+            extensionKind: 1,
+            exports: {},
+            activate: vi.fn(),
+          } as any)
+        : undefined,
+    );
+    const webview = vscode.createMockWebview();
+    const view = {
+      webview,
+      visible: true,
+      onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+    };
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(view as never, {} as never, {} as never);
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    expect(receiveMessage).toBeDefined();
+
+    vi.mocked(webview.postMessage).mockClear();
+    await receiveMessage?.({ type: 'getConfig' });
+
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'pluginsAvailable',
+      plugins: {
+        canvas: true,
+        cut: false,
+        sketch: false,
+        model: false,
+      },
+    });
+
+    provider.dispose();
+  });
 });
 
 function createMockContext(): vscode.ExtensionContext {
@@ -193,4 +242,15 @@ function createMockContext(): vscode.ExtensionContext {
     globalState: memento,
     subscriptions: [],
   } as unknown as vscode.ExtensionContext;
+}
+
+function createImmediateLocalResourceAccess() {
+  return {
+    service: {},
+    configureChatWebview: vi.fn(async () => {}),
+    createProjector: vi.fn(),
+    toWebviewUri: vi.fn(),
+    toWebviewAsset: vi.fn(),
+    dispose: vi.fn(),
+  };
 }

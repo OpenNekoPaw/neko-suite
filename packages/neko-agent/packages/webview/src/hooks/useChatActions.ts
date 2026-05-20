@@ -12,41 +12,16 @@ import {
   type SetStateAction,
   type MutableRefObject,
 } from 'react';
-import {
-  Message,
-  type MessageContextReference,
-  type SessionMode,
-  type TabType,
-} from '@/components/types';
+import { Message, type SessionMode, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { MessageAttachment } from '@/components/ChatView/InputArea';
 import type { AgentMediaModelSelections } from '@neko-agent/types';
 import { projectMessageModelSelection } from '../presenters/config-message-presenter';
+import { projectContextReferencesFromPayloads } from '../presenters/context-reference-presenter';
 import type { AgentContextPayload } from '@neko/shared';
 
 /** Per-category resolved media model for agent mode */
 export type AgentMediaModels = AgentMediaModelSelections;
-
-function projectContextReferencesFromPayloads(
-  payloads: AgentContextPayload[] | undefined,
-): MessageContextReference[] | undefined {
-  if (!payloads || payloads.length === 0) return undefined;
-  return payloads.map((p) => {
-    const data = p.data as Record<string, unknown> | null | undefined;
-    const nav: Record<string, string> = {};
-    if (data && typeof data === 'object') {
-      if (typeof data['filePath'] === 'string') nav['filePath'] = data['filePath'];
-      if (typeof data['path'] === 'string') nav['path'] = data['path'];
-    }
-    if (p.type === 'canvas-node') nav['nodeId'] = p.id;
-    return {
-      type: p.type,
-      id: p.id,
-      label: p.label,
-      ...(Object.keys(nav).length > 0 ? { navigationData: nav } : {}),
-    };
-  });
-}
 
 export interface UseChatActionsProps {
   inputValue: string;

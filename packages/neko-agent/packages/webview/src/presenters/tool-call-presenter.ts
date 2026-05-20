@@ -32,6 +32,7 @@ export interface DocumentImageThumbnailProjection {
   mimeType?: string;
   locator?: DocumentLocator;
   label: string;
+  referenceJson: string;
 }
 
 export interface ToolCallDisplayProjection {
@@ -49,6 +50,7 @@ export interface ToolCallDisplayProjection {
   audioUrls: string[];
   localPaths: string[];
   documentThumbnails: DocumentImageThumbnailProjection[];
+  copyText: string | null;
   isFileTool: boolean;
   filePath: string | null;
   summary: string;
@@ -71,6 +73,7 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
     resultSuccess && toolCall.name === 'ReadDocument'
       ? extractDocumentImageThumbnails(toolCall.result?.data)
       : [];
+  const copyText = resultSuccess ? extractToolCopyText(toolCall.name, toolCall.result?.data) : null;
 
   return {
     argsJson,
@@ -91,6 +94,7 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
       resultSuccess && shouldShowMediaPreview ? extractToolAudioUrls(toolCall.result?.data) : [],
     localPaths: resultSuccess ? extractToolLocalPaths(toolCall.result?.data) : [],
     documentThumbnails,
+    copyText,
     isFileTool: isFileTool(toolCall.name),
     filePath: extractToolFilePath(toolCall.arguments) || extractToolFilePath(toolCall.result?.data),
     summary: getToolSummary(toolCall.name, toolCall.arguments),
@@ -141,10 +145,57 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
       ...(mimeType ? { mimeType } : {}),
       ...(locator ? { locator } : {}),
       label: formatDocumentThumbnailLabel(locator, index),
+      referenceJson: formatDocumentImageReferenceJson({
+        filePath,
+        source,
+        path,
+        src,
+        index,
+        width,
+        height,
+        byteSize,
+        mimeType,
+        locator,
+      }),
     });
   }
 
   return thumbnails;
+}
+
+function formatDocumentImageReferenceJson(input: {
+  readonly filePath: string;
+  readonly source?: DocumentSourceRef;
+  readonly path: string;
+  readonly src: string;
+  readonly index: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly byteSize?: number;
+  readonly mimeType?: string;
+  readonly locator?: DocumentLocator;
+}): string {
+  return JSON.stringify(
+    {
+      kind: 'document-image-reference',
+      document: {
+        filePath: input.filePath,
+        ...(input.source ? { source: input.source } : {}),
+        ...(input.locator ? { locator: input.locator } : {}),
+      },
+      image: {
+        path: input.path,
+        webviewUri: input.src,
+        index: input.index,
+        ...(input.width !== undefined ? { width: input.width } : {}),
+        ...(input.height !== undefined ? { height: input.height } : {}),
+        ...(input.byteSize !== undefined ? { byteSize: input.byteSize } : {}),
+        ...(input.mimeType ? { mimeType: input.mimeType } : {}),
+      },
+    },
+    null,
+    2,
+  );
 }
 
 export function extractToolFilePath(data: unknown): string | null {
@@ -190,6 +241,11 @@ export function extractToolLocalPaths(data: unknown): string[] {
   }
 
   return [];
+}
+
+export function extractToolCopyText(toolName: string, data: unknown): string | null {
+  if (toolName !== 'ReadDocument') return null;
+  return formatReadDocumentCopyText(data);
 }
 
 export function isImageGenerationTool(toolName: string): boolean {
@@ -266,6 +322,65 @@ function extractToolLocalPath(data: unknown): string | undefined {
   if (localPath) return localPath;
   const url = readString(result, 'url');
   return url && isAbsolutePath(url) ? url : undefined;
+}
+
+function formatReadDocumentCopyText(data: unknown): string | null {
+  const result = asRecord(data);
+  if (!result) return null;
+
+  const lines: string[] = [];
+  const filePath = extractDocumentFilePath(result);
+  if (filePath) lines.push(`Document: ${filePath}`);
+
+  const locator = asDocumentLocator(result.locator);
+  if (locator) lines.push(`Location: ${formatDocumentLocator(locator)}`);
+
+  const text = readString(result, 'text');
+  if (text) lines.push(text);
+
+  const thumbnails = extractDocumentImageThumbnails(data);
+  if (thumbnails.length > 0) {
+    lines.push(
+      ...thumbnails.map((thumbnail) => {
+        const dimensions = formatDimensions(thumbnail.width, thumbnail.height);
+        const byteSize = formatByteSize(thumbnail.byteSize);
+        return [thumbnail.label, dimensions, byteSize, thumbnail.path].filter(Boolean).join(' · ');
+      }),
+    );
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+function formatDocumentLocator(locator: DocumentLocator): string {
+  switch (locator.kind) {
+    case 'page':
+      return `page:${locator.pageNumber}`;
+    case 'region':
+      return `page:${locator.pageNumber}:region`;
+    case 'chapter':
+      return locator.spineIndex !== undefined
+        ? `chapter:${locator.chapterHref}@${locator.spineIndex}`
+        : `chapter:${locator.chapterHref}`;
+    case 'slide':
+      return `slide:${locator.slideNumber}`;
+    case 'text-range':
+      if (locator.startLine !== undefined || locator.endLine !== undefined) {
+        return `lines:${locator.startLine ?? '?'}-${locator.endLine ?? '?'}`;
+      }
+      return `chars:${locator.startChar ?? '?'}-${locator.endChar ?? '?'}`;
+  }
+}
+
+function formatDimensions(width: number | undefined, height: number | undefined): string {
+  return width !== undefined && height !== undefined ? `${width} x ${height}` : '';
+}
+
+function formatByteSize(byteSize: number | undefined): string {
+  if (byteSize === undefined) return '';
+  if (byteSize < 1024) return `${byteSize} B`;
+  if (byteSize < 1024 * 1024) return `${Math.round(byteSize / 1024)} KB`;
+  return `${(byteSize / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function isFilePath(value: string): boolean {

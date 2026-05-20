@@ -29,6 +29,10 @@ export function tryHandleFileAndPluginRoute(
       deps.fileOperationHandler.handleRevealFile(message.filePath);
       return true;
 
+    case 'revealAsset':
+      deps.fileOperationHandler.handleRevealAsset(message.assetId);
+      return true;
+
     case 'openConfigFile':
       deps.fileOperationHandler.handleOpenConfigFile();
       return true;
@@ -40,7 +44,21 @@ export function tryHandleFileAndPluginRoute(
     case 'revealContextSource': {
       const nav = message.navigationData;
       const filePath = nav?.['filePath'] ?? nav?.['path'];
-      if (filePath) {
+      const assetId =
+        message.contextType === 'asset'
+          ? (nav?.['assetId'] ??
+            (nav?.['partition'] === 'asset-library' ? nav?.['sourceId'] : undefined) ??
+            stripAssetIdPrefix(message.contextId))
+          : undefined;
+      if (assetId) {
+        deps.fileOperationHandler.handleRevealAsset(assetId);
+      } else if (
+        message.contextType === 'media' &&
+        nav?.['partition'] === 'media-library' &&
+        filePath
+      ) {
+        void vscode.commands.executeCommand('neko.assets.revealMediaLibraryFile', filePath);
+      } else if (filePath) {
         deps.fileOperationHandler.handleOpenFile(filePath);
       } else if (message.contextType === 'canvas-node' && nav?.['nodeId']) {
         void vscode.commands.executeCommand('neko.canvas.selectNodeFromOutline', nav['nodeId']);
@@ -82,4 +100,9 @@ export function tryHandleFileAndPluginRoute(
     default:
       return false;
   }
+}
+
+function stripAssetIdPrefix(contextId: string): string | undefined {
+  const prefix = 'asset:';
+  return contextId.startsWith(prefix) ? contextId.slice(prefix.length) : contextId || undefined;
 }

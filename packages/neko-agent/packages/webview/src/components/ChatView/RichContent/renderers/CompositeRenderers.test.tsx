@@ -41,6 +41,7 @@ describe('composite rich content renderers', () => {
                     type: 'image',
                     src: 'webview://asset.png',
                     caption: 'Wide',
+                    role: 'original',
                   },
                 ],
                 diagnostics: [],
@@ -63,6 +64,7 @@ describe('composite rich content renderers', () => {
     expect(screen.getByText('Shot 1')).toBeTruthy();
     expect(screen.getByText('Wide establishing frame')).toBeTruthy();
     expect(screen.getByAltText('Wide')).toBeTruthy();
+    expect(screen.getByText('Original')).toBeTruthy();
     expect(screen.getByText('Asset 1 is not available for call-2')).toBeTruthy();
   });
 

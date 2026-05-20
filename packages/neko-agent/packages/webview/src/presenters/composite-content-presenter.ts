@@ -287,6 +287,14 @@ function collectMediaCandidates(toolCall: ToolCall): readonly MediaCandidate[] {
     addCandidate(projectAssetRefCandidate(thumbnailRef, 0, 'thumbnail'));
   }
 
+  for (const candidate of collectDocumentImageCandidates(data)) {
+    addCandidate(candidate);
+  }
+
+  for (const candidate of collectReadImageCandidates(data)) {
+    addCandidate(candidate);
+  }
+
   for (const [index, attachment] of (toolCall.result?.attachments ?? []).entries()) {
     addCandidate(projectAttachmentCandidate(attachment, index));
   }
@@ -302,6 +310,71 @@ function collectMediaCandidates(toolCall: ToolCall): readonly MediaCandidate[] {
   }
 
   return candidates;
+}
+
+function collectDocumentImageCandidates(
+  data: Record<string, unknown> | undefined,
+): readonly MediaCandidate[] {
+  if (!data) return [];
+
+  const imageInfo = readRecordArray(data, 'imageInfo');
+  const imagePaths = readStringArray(data, 'imagePaths');
+  const imagePathWebviewUris = readStringArray(data, 'imagePathWebviewUris');
+  const candidates: MediaCandidate[] = [];
+  const maxLength = Math.max(imageInfo.length, imagePaths.length, imagePathWebviewUris.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const info = imageInfo[index];
+    const candidate = projectDocumentImageCandidate({
+      index,
+      info,
+      path: readString(info, 'path') ?? imagePaths[index],
+      webviewUri: readRenderableUri(info) ?? imagePathWebviewUris[index],
+      label: readString(info, 'label') ?? formatDocumentImageCandidateLabel(info, index),
+    });
+    if (candidate) candidates.push(candidate);
+  }
+
+  return candidates;
+}
+
+function collectReadImageCandidates(
+  data: Record<string, unknown> | undefined,
+): readonly MediaCandidate[] {
+  return readRecordArray(data, 'images').flatMap((image, index) => {
+    const documentImage = asRecord(image['documentImage']);
+    const candidate = projectDocumentImageCandidate({
+      index,
+      info: image,
+      path: readString(image, 'path') ?? readString(documentImage, 'path'),
+      webviewUri:
+        readRenderableUri(image) ??
+        readRenderableUri(documentImage) ??
+        readString(documentImage, 'webviewUri'),
+      label: readString(image, 'label') ?? formatDocumentImageCandidateLabel(documentImage, index),
+    });
+    return candidate ? [candidate] : [];
+  });
+}
+
+function projectDocumentImageCandidate(input: {
+  readonly index: number;
+  readonly info?: Record<string, unknown>;
+  readonly path?: string;
+  readonly webviewUri?: string;
+  readonly label?: string;
+}): MediaCandidate | null {
+  if (!input.path && !input.webviewUri) return null;
+  const mimeType = readString(input.info, 'mimeType') ?? inferImageMimeType(input.path);
+  const src = input.webviewUri && isRenderableUri(input.webviewUri) ? input.webviewUri : undefined;
+  return {
+    assetIndex: input.index,
+    type: 'image',
+    ...(src ? { src } : {}),
+    ...(readAbsolutePath(input.path) ? { localPath: readAbsolutePath(input.path) } : {}),
+    ...(mimeType ? { mimeType } : {}),
+    ...(input.label ? { label: input.label } : {}),
+  };
 }
 
 function projectGeneratedAssetCandidate(
@@ -434,6 +507,41 @@ function inferMediaType(
   return 'unknown';
 }
 
+function inferImageMimeType(path: string | undefined): string | undefined {
+  const lowerPath = path?.toLowerCase() ?? '';
+  if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) return 'image/jpeg';
+  if (lowerPath.endsWith('.png')) return 'image/png';
+  if (lowerPath.endsWith('.webp')) return 'image/webp';
+  if (lowerPath.endsWith('.gif')) return 'image/gif';
+  if (lowerPath.endsWith('.bmp')) return 'image/bmp';
+  if (lowerPath.endsWith('.svg')) return 'image/svg+xml';
+  return undefined;
+}
+
+function formatDocumentImageCandidateLabel(
+  info: Record<string, unknown> | undefined,
+  index: number,
+): string {
+  const locator = asRecord(info?.['locator']);
+  if (locator) {
+    const kind = readString(locator, 'kind');
+    if (kind === 'page') {
+      const pageNumber = readFiniteNumber(locator, 'pageNumber');
+      return pageNumber === undefined ? `page ${index + 1}` : `page ${pageNumber}`;
+    }
+    if (kind === 'chapter') {
+      return (
+        readString(locator, 'title') ?? readString(locator, 'chapterHref') ?? `image ${index + 1}`
+      );
+    }
+    if (kind === 'slide') {
+      const slideNumber = readFiniteNumber(locator, 'slideNumber');
+      return slideNumber === undefined ? `slide ${index + 1}` : `slide ${slideNumber}`;
+    }
+  }
+  return `image ${index + 1}`;
+}
+
 function isModelMimeType(mimeType: string | undefined): boolean {
   return (
     mimeType === 'model/gltf-binary' ||
@@ -482,6 +590,14 @@ function readStringArray(record: Record<string, unknown> | undefined, key: strin
 function readString(record: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = record?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readFiniteNumber(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function readAbsolutePath(value: string | undefined): string | undefined {

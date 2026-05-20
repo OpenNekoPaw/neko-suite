@@ -12,6 +12,8 @@ import {
 import { CONFIG_BRIDGE_MESSAGE_TYPES } from '../../services/configBridge';
 import { sendGeneratedAssetToPlugin } from '../../services/pluginTransferBridge';
 
+vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
+
 vi.mock('../../services/pluginTransferBridge', () => ({
   sendGeneratedAssetToPlugin: vi.fn(),
 }));
@@ -52,6 +54,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleOpenFile: vi.fn(),
       handleRevealDocumentLocator: vi.fn(),
       handleRevealFile: vi.fn(),
+      handleRevealAsset: vi.fn(),
       handleOpenConfigFile: vi.fn(),
       handleOpenUrl: vi.fn(),
       handleDownloadSvg: vi.fn(),
@@ -264,6 +267,59 @@ describe('handleChatWebviewMessage', () => {
       locator,
       source: { filePath: '/books/a.pdf', format: 'pdf' },
     });
+  });
+
+  it('routes explicit asset reveals to the file operation handler', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage({ type: 'revealAsset', assetId: 'asset-1' }, deps);
+
+    expect(deps.fileOperationHandler.handleRevealAsset).toHaveBeenCalledWith('asset-1');
+  });
+
+  it('routes asset context source reveals through asset-library navigation data', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'revealContextSource',
+        contextType: 'asset',
+        contextId: 'asset:asset-1',
+        navigationData: {
+          partition: 'asset-library',
+          sourceId: 'asset-1',
+          filePath: '${ASSETS}/hero.png',
+        },
+      },
+      deps,
+    );
+
+    expect(deps.fileOperationHandler.handleRevealAsset).toHaveBeenCalledWith('asset-1');
+    expect(deps.fileOperationHandler.handleOpenFile).not.toHaveBeenCalled();
+  });
+
+  it('routes media library context source reveals to the media library tree', () => {
+    const deps = createDeps();
+    vi.mocked(vscode.commands.executeCommand).mockClear();
+
+    handleChatWebviewMessage(
+      {
+        type: 'revealContextSource',
+        contextType: 'media',
+        contextId: 'media-1',
+        navigationData: {
+          partition: 'media-library',
+          filePath: '/refs/hero.png',
+        },
+      },
+      deps,
+    );
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'neko.assets.revealMediaLibraryFile',
+      '/refs/hero.png',
+    );
+    expect(deps.fileOperationHandler.handleOpenFile).not.toHaveBeenCalled();
   });
 
   it('rejects plugin slash commands without an explicit conversationId', () => {

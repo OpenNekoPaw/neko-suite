@@ -115,6 +115,11 @@ describe('projectMentionSearch', () => {
           source: 'asset-library',
           mediaType: 'image',
           entityType: 'character',
+          navigationData: expect.objectContaining({
+            assetId: 'asset-1',
+            partition: 'asset-library',
+            sourceId: 'asset-1',
+          }),
         }),
         expect.objectContaining({
           type: 'entity',

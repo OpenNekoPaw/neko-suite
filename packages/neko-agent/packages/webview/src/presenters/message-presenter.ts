@@ -1,4 +1,9 @@
-import type { ContentBlock, Message, ToolCall } from '@neko-agent/types';
+import {
+  extractCompositeContentBlocks,
+  type ContentBlock,
+  type Message,
+  type ToolCall,
+} from '@neko-agent/types';
 import type { Plan, PlanStatus } from '@neko-agent/types';
 import { type AgentWorkItem } from '@neko-agent/types';
 export {
@@ -632,17 +637,46 @@ function findOrCreateStreamingContentBlock(
 }
 
 function completeStreamingMessage(message: Message): Message {
-  const contentBlocks = (message.contentBlocks ?? []).map((block) => ({
-    ...block,
-    isStreaming: false,
-    isThinkingComplete: block.type === 'thinking' ? true : block.isThinkingComplete,
-  }));
+  const contentBlocks = (message.contentBlocks ?? []).flatMap((block) =>
+    completeStreamingContentBlock(block),
+  );
 
   return {
     ...message,
     isStreaming: false,
+    content: contentBlocks
+      .filter((block) => block.type === 'text')
+      .map((block) => block.content ?? '')
+      .join(''),
     contentBlocks,
   };
+}
+
+function completeStreamingContentBlock(block: ContentBlock): ContentBlock[] {
+  if (block.type === 'text') {
+    const extracted = extractCompositeContentBlocks(block.content ?? '');
+    const blocks: ContentBlock[] = [];
+    if (extracted.text.length > 0) {
+      blocks.push({ ...block, content: extracted.text, isStreaming: false });
+    }
+    blocks.push(
+      ...extracted.composites.map((composite, index) => ({
+        id: `${block.id}-composite-${index + 1}`,
+        type: 'composite' as const,
+        timestamp: block.timestamp,
+        composite,
+      })),
+    );
+    return blocks;
+  }
+
+  return [
+    {
+      ...block,
+      isStreaming: false,
+      isThinkingComplete: block.type === 'thinking' ? true : block.isThinkingComplete,
+    },
+  ];
 }
 
 function findTargetMessageForToolCall(

@@ -8,12 +8,16 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
+import type { AgentContextPayload } from '@neko/shared';
 
 export interface MessageActionsContextValue {
   activeConversationId?: string | null;
   // Unified work items (media tasks, tool background tasks, subagents)
   workItems?: AgentWorkItem[];
   pluginsAvailable?: PluginsAvailable;
+  contextChips?: readonly AgentContextPayload[];
+  ambientNodes?: readonly AmbientCanvasNodeProjection[];
   // Task actions
   onCancelTask?: (taskId: string) => void;
   onRetryTask?: (taskId: string) => void;
@@ -40,6 +44,8 @@ export function MessageActionsProvider({
       activeConversationId: actions.activeConversationId,
       workItems: actions.workItems,
       pluginsAvailable: actions.pluginsAvailable,
+      contextChips: actions.contextChips,
+      ambientNodes: actions.ambientNodes,
       onCancelTask: actions.onCancelTask,
       onRetryTask: actions.onRetryTask,
       onViewTaskResult: actions.onViewTaskResult,
@@ -55,6 +61,8 @@ export function MessageActionsProvider({
       actions.activeConversationId,
       actions.workItems,
       actions.pluginsAvailable,
+      actions.contextChips,
+      actions.ambientNodes,
       actions.onCancelTask,
       actions.onRetryTask,
       actions.onViewTaskResult,

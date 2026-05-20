@@ -6,6 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FileOperationHandler } from '../fileOperationHandler';
 import { handleError } from '../../../base';
 
+vi.mock('vscode', async () => await import('../../../__mocks__/vscode'));
+
 // Mock the logger
 vi.mock('../../../base', () => ({
   getLogger: () => ({
@@ -151,6 +153,24 @@ describe('FileOperationHandler', () => {
         locator,
         source: { filePath: '/tmp/book.pdf', format: 'pdf' },
       });
+    });
+  });
+
+  describe('handleRevealAsset', () => {
+    it('delegates asset reveal to neko-assets', async () => {
+      const { commands } = await import('vscode');
+
+      await handler.handleRevealAsset('asset-1');
+
+      expect(commands.executeCommand).toHaveBeenCalledWith('neko.assets.revealEntity', 'asset-1');
+    });
+
+    it('does nothing for empty asset id', async () => {
+      const { commands } = await import('vscode');
+
+      await handler.handleRevealAsset('');
+
+      expect(commands.executeCommand).not.toHaveBeenCalled();
     });
   });
 

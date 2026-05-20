@@ -39,6 +39,8 @@ interface SendToMenuProps {
   mediaType: PluginTransferMediaType;
   /** Detected installed plugins */
   plugins: PluginsAvailable;
+  /** Hide the leading "Send to" text for compact contexts such as thumbnails. */
+  hidePrefixLabel?: boolean;
   className?: string;
 }
 
@@ -50,6 +52,7 @@ function SendToMenuComponent({
   allowedTargets,
   mediaType,
   plugins,
+  hidePrefixLabel = false,
   className,
 }: SendToMenuProps) {
   const handleSendTo = useCallback(
@@ -72,6 +75,11 @@ function SendToMenuComponent({
     plugins,
     ...(payload?.kind === 'canvasStoryboard' ? { structuredKind: 'canvasStoryboard' } : {}),
     ...(payload?.kind === 'cutStoryboard' ? { structuredKind: 'cutStoryboard' } : {}),
+    ...(payload?.kind === 'canvasText' ||
+    payload?.kind === 'canvasPrompt' ||
+    payload?.kind === 'canvasStructuredContent'
+      ? { structuredKind: 'canvasContent' }
+      : {}),
   });
   const targets = allowedTargets
     ? projection.targets.filter((target) => allowedTargets.includes(target.id))
@@ -81,9 +89,11 @@ function SendToMenuComponent({
 
   return (
     <div className={`flex items-center gap-1 ${className ?? ''}`}>
-      <span className="text-[9px] text-[var(--vscode-descriptionForeground)] shrink-0">
-        Send to
-      </span>
+      {!hidePrefixLabel && (
+        <span className="text-[9px] text-[var(--vscode-descriptionForeground)] shrink-0">
+          Send to
+        </span>
+      )}
       {targets.map((target) => (
         <button
           key={target.id}

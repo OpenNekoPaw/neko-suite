@@ -13,6 +13,9 @@ import { PlanReview } from '@/components/ChatView/PlanReview';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
+import { SendToMenu } from '@/components/ChatView/SendToMenu';
+import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
+import { projectAssistantMarkdownCanvasTransferPayload } from '@/presenters/storyboard-transfer-presenter';
 import {
   projectContentBlockUi,
   type ContentBlockHeaderIconKind,
@@ -130,6 +133,9 @@ function renderBlockContent(
     | 'onModifyPlanStep'
     | 'onApproveAllPlanSteps'
     | 'onRejectAllPlanSteps'
+    | 'pluginsAvailable'
+    | 'contextChips'
+    | 'ambientNodes'
   >,
   workItemIds?: string[],
 ) {
@@ -143,6 +149,23 @@ function renderBlockContent(
       return (
         <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)] rounded-tl-sm">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
+          {!projection.renderStreaming && callbacks.pluginsAvailable?.canvas && (
+            <div className="mt-1.5 border-t border-[var(--agent-divider)] pt-1">
+              <SendToMenu
+                payload={projectAssistantMarkdownCanvasTransferPayload({
+                  content: projection.content,
+                  target: projectCanvasContentTransferTarget({
+                    ambientNodes: callbacks.ambientNodes,
+                    contextChips: callbacks.contextChips,
+                  }),
+                  provenance: { source: 'webview', label: 'assistant-text-block' },
+                })}
+                mediaType="image"
+                plugins={callbacks.pluginsAvailable}
+                allowedTargets={['canvas']}
+              />
+            </div>
+          )}
         </div>
       );
 

@@ -3,6 +3,8 @@ import {
   projectStoryboardScenesAssetBatch,
   projectStoryboardScenesCutTimelinePayload,
   projectStoryboardScenesTransferPayload,
+  projectAssistantMarkdownCanvasTransferPayload,
+  projectMarkdownStoryboardTransferPayload,
   projectStoryboardTableAssetBatch,
   projectStoryboardTableCutTimelinePayload,
   projectStoryboardTableTransferPayload,
@@ -180,6 +182,85 @@ describe('storyboard transfer presenter', () => {
           },
         ],
       },
+    });
+  });
+
+  it('projects markdown storyboard tables to canvas storyboard payloads', () => {
+    const payload = projectMarkdownStoryboardTransferPayload(`
+## 瑞德发现神灯
+
+| 镜头 | 画面 | 时长 | 景别 | 提示词 | 对白 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 瑞德在黄昏牧场发现古老神灯 | 4 秒 | LS | wide anime frame, magic lamp glow | 这是什么？ |
+| 2 | 神灯喷出紫色烟雾，瑞德后退 | 3 秒 | CU | close-up, purple smoke, surprised boy |  |
+`);
+
+    expect(payload).toEqual({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        mode: 'semantic',
+        sourceScriptUri: 'agent://markdown/storyboard-table',
+        scenes: [
+          {
+            sceneId: 'agent-markdown-scene-1-1',
+            sceneTitle: '瑞德发现神灯',
+            sceneNumber: 1,
+            shotPlans: [
+              {
+                shotNumber: 1,
+                duration: 4,
+                visualDescription: '瑞德在黄昏牧场发现古老神灯',
+                characters: [],
+                shotScale: 'LS',
+                characterAction: '瑞德在黄昏牧场发现古老神灯',
+                emotion: [],
+                sceneTags: ['瑞德发现神灯'],
+                dialogue: '这是什么？',
+                generationPrompt: 'wide anime frame, magic lamp glow',
+              },
+              {
+                shotNumber: 2,
+                duration: 3,
+                visualDescription: '神灯喷出紫色烟雾，瑞德后退',
+                characters: [],
+                shotScale: 'CU',
+                characterAction: '神灯喷出紫色烟雾，瑞德后退',
+                emotion: [],
+                sceneTags: ['瑞德发现神灯'],
+                generationPrompt: 'close-up, purple smoke, surprised boy',
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('prefers markdown storyboard payloads and falls back to canvas text for prose', () => {
+    expect(
+      projectAssistantMarkdownCanvasTransferPayload({
+        content: `
+| 镜头 | 画面 |
+| --- | --- |
+| 1 | 角色进入森林 |
+`,
+        target: { plugin: 'canvas', mode: 'insert' },
+        provenance: { source: 'webview', label: 'assistant-text-block' },
+      }),
+    ).toMatchObject({ kind: 'canvasStoryboard' });
+
+    expect(
+      projectAssistantMarkdownCanvasTransferPayload({
+        content: '建议采用 60 秒标准序章版：既能保留传说说明，也能完整呈现悬念。',
+        target: { plugin: 'canvas', mode: 'insert' },
+        provenance: { source: 'webview', label: 'assistant-text-block' },
+      }),
+    ).toEqual({
+      kind: 'canvasText',
+      text: '建议采用 60 秒标准序章版：既能保留传说说明，也能完整呈现悬念。',
+      format: 'markdown',
+      target: { plugin: 'canvas', mode: 'insert' },
+      provenance: { source: 'webview', label: 'assistant-text-block' },
     });
   });
 });

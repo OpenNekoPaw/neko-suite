@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { projectPluginTransferMenu } from '../plugin-transfer-presenter';
+import {
+  projectCanvasContentTransferTarget,
+  projectPluginTransferMenu,
+} from '../plugin-transfer-presenter';
 
 describe('plugin transfer presenter', () => {
   it('projects plugin transfer menu targets by media type and availability', () => {
@@ -80,5 +83,60 @@ describe('plugin transfer presenter', () => {
         structuredKind: 'cutStoryboard',
       }).targets.map((target) => target.id),
     ).toEqual(['cut']);
+  });
+
+  it('limits Canvas content payloads to Canvas without relying on media type routing', () => {
+    expect(
+      projectPluginTransferMenu({
+        mediaType: 'model',
+        plugins: { canvas: true, cut: true, model: true },
+        structuredKind: 'canvasContent',
+      }).targets.map((target) => target.id),
+    ).toEqual(['canvas']);
+
+    expect(
+      projectPluginTransferMenu({
+        mediaType: 'image',
+        plugins: { canvas: false, cut: true },
+        structuredKind: 'canvasContent',
+      }).targets,
+    ).toEqual([]);
+  });
+
+  it('projects Canvas content transfer targets from selected node context', () => {
+    expect(
+      projectCanvasContentTransferTarget({
+        ambientNodes: [{ nodeId: 'shot-1', type: 'shot', summary: 'Shot 1' }],
+      }),
+    ).toEqual({ plugin: 'canvas', nodeId: 'shot-1', mode: 'append' });
+
+    expect(
+      projectCanvasContentTransferTarget({
+        ambientNodes: [{ nodeId: 'scene-1', type: 'scene', summary: 'Scene 1' }],
+      }),
+    ).toEqual({ plugin: 'canvas', containerId: 'scene-1', mode: 'create-child' });
+
+    expect(
+      projectCanvasContentTransferTarget({
+        contextChips: [
+          {
+            type: 'canvas-node',
+            id: 'gallery-1',
+            label: 'Gallery',
+            summary: 'Gallery',
+            data: { type: 'gallery' },
+          },
+        ],
+      }),
+    ).toEqual({ plugin: 'canvas', containerId: 'gallery-1', mode: 'create-child' });
+
+    expect(
+      projectCanvasContentTransferTarget({
+        ambientNodes: [
+          { nodeId: 'shot-1', type: 'shot', summary: 'Shot 1' },
+          { nodeId: 'shot-2', type: 'shot', summary: 'Shot 2' },
+        ],
+      }),
+    ).toEqual({ plugin: 'canvas', mode: 'insert' });
   });
 });
