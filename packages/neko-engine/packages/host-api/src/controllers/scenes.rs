@@ -129,6 +129,11 @@ fn default_helper_passes_enabled() -> bool {
     true
 }
 
+const SCENE_STREAM_MIN_BITRATE_BPS: u64 = 6_000_000;
+const SCENE_STREAM_MAX_BITRATE_BPS: u64 = 36_000_000;
+const SCENE_STREAM_TARGET_BITS_PER_PIXEL: u64 = 8;
+const SCENE_STREAM_LOW_LATENCY_GOP_SECONDS: f64 = 0.5;
+
 fn parse_scene_stream_options(options: Value) -> ApiResult<SceneStreamOptions> {
     let value = options
         .get("viewport")
@@ -653,9 +658,26 @@ fn scene_stream_sink_config(
         width: settings.width,
         height: settings.height,
         fps: settings.fps,
-        bitrate: (settings.width as u64) * (settings.height as u64) * 4,
-        gop_size: 1,
+        bitrate: scene_stream_bitrate(settings),
+        gop_size: scene_stream_gop_size(settings.fps),
     })
+}
+
+fn scene_stream_bitrate(settings: SceneStreamRuntimeSettings) -> u64 {
+    let pixels = (settings.width as u64).saturating_mul(settings.height as u64);
+    let fps_scale = (normalize_stream_fps(settings.fps) / 30.0).clamp(0.5, 2.0);
+    let target = (pixels as f64
+        * SCENE_STREAM_TARGET_BITS_PER_PIXEL as f64
+        * fps_scale
+        * (settings.h264_quality as f64 / 85.0))
+        .round() as u64;
+    target.clamp(SCENE_STREAM_MIN_BITRATE_BPS, SCENE_STREAM_MAX_BITRATE_BPS)
+}
+
+fn scene_stream_gop_size(fps: f64) -> u32 {
+    (normalize_stream_fps(fps) * SCENE_STREAM_LOW_LATENCY_GOP_SECONDS)
+        .round()
+        .clamp(1.0, 60.0) as u32
 }
 
 fn dropped_frames_for_elapsed(elapsed_ms: f32, frame_duration: Duration) -> u32 {
@@ -1681,8 +1703,8 @@ mod tests {
         assert_eq!(config.width, 1280);
         assert_eq!(config.height, 720);
         assert_eq!(config.fps, 30.0);
-        assert_eq!(config.gop_size, 1);
-        assert_eq!(config.bitrate, 1280 * 720 * 4);
+        assert_eq!(config.gop_size, 15);
+        assert_eq!(config.bitrate, 7_372_800);
     }
 
     #[tokio::test]

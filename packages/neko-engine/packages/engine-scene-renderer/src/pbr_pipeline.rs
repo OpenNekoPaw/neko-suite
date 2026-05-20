@@ -23,7 +23,7 @@ const MAX_LIGHTS: usize = 16;
 
 /// Maximum joints per skeleton for GPU skinning
 const MAX_JOINTS: usize = 256;
-const VIEWPORT_GRID_EXTENT: i32 = 20;
+const VIEWPORT_GRID_EXTENT: f32 = 20.0;
 const VIEWPORT_GRID_STEP: f32 = 1.0;
 
 const SCENE_COLOR_CONVERT_SHADER: &str = r#"
@@ -75,36 +75,119 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 "#;
 
 const VIEWPORT_GRID_SHADER: &str = r#"
-struct CameraUniforms {
-    view: mat4x4<f32>,
-    projection: mat4x4<f32>,
+struct ViewportGridUniforms {
+    view_projection: mat4x4<f32>,
+    inv_view_projection: mat4x4<f32>,
     camera_position: vec3<f32>,
+    extent: f32,
+    viewport_size: vec2<f32>,
+    step: f32,
     _padding: f32,
-}
-
-struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) color: vec4<f32>,
 }
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) color: vec4<f32>,
+    @location(0) ndc: vec2<f32>,
 }
 
-@group(0) @binding(0) var<uniform> camera: CameraUniforms;
+struct FragmentOutput {
+    @location(0) color: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+}
+
+@group(0) @binding(0) var<uniform> grid: ViewportGridUniforms;
 
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
-    out.position = camera.projection * camera.view * vec4<f32>(in.position, 1.0);
-    out.color = in.color;
+    var pos: vec2<f32>;
+    switch vertex_index {
+        case 0u: {
+            pos = vec2<f32>(-1.0, -1.0);
+        }
+        case 1u: {
+            pos = vec2<f32>(3.0, -1.0);
+        }
+        default: {
+            pos = vec2<f32>(-1.0, 3.0);
+        }
+    }
+    out.position = vec4<f32>(pos, 0.0, 1.0);
+    out.ndc = pos;
     return out;
 }
 
+fn unproject(ndc: vec3<f32>) -> vec3<f32> {
+    let world = grid.inv_view_projection * vec4<f32>(ndc, 1.0);
+    return world.xyz / world.w;
+}
+
+fn aa_line(coord: vec2<f32>) -> f32 {
+    let min_derivative = vec2<f32>(1.0 / max(max(grid.viewport_size.x, grid.viewport_size.y), 1.0));
+    let derivative = max(fwidth(coord), min_derivative);
+    let cell = abs(fract(coord - 0.5) - 0.5) / derivative;
+    return 1.0 - clamp(min(cell.x, cell.y), 0.0, 1.0);
+}
+
+fn aa_axis(distance: f32) -> f32 {
+    let width = max(fwidth(distance) * 1.5, 0.0001);
+    return 1.0 - smoothstep(0.0, width, abs(distance));
+}
+
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
+fn fs_main(in: VertexOutput) -> FragmentOutput {
+    let near_world = unproject(vec3<f32>(in.ndc, 0.0));
+    let far_world = unproject(vec3<f32>(in.ndc, 1.0));
+    let ray = far_world - near_world;
+    let parallel = abs(ray.y) < 0.00001;
+    let ray_y = select(ray.y, 1.0, parallel);
+    let t = -near_world.y / ray_y;
+
+    let world = near_world + ray * t;
+    let edge_distance = max(abs(world.x), abs(world.z));
+
+    let clip = grid.view_projection * vec4<f32>(world, 1.0);
+    let clip_w = select(clip.w, 1.0, abs(clip.w) < 0.00001);
+    let depth = clip.z / clip_w;
+
+    let minor = aa_line(world.xz / grid.step);
+    let major = aa_line(world.xz / (grid.step * 5.0));
+    let x_axis = aa_axis(world.z);
+    let z_axis = aa_axis(world.x);
+    let edge_fade = 1.0 - smoothstep(grid.extent * 0.72, grid.extent, edge_distance);
+
+    var color = vec3<f32>(0.34, 0.38, 0.42);
+    var alpha = minor * 0.20;
+    if (major > minor) {
+        color = vec3<f32>(0.42, 0.47, 0.52);
+        alpha = max(alpha, major * 0.32);
+    }
+    if (x_axis > max(minor, major)) {
+        color = vec3<f32>(0.72, 0.24, 0.22);
+        alpha = max(alpha, x_axis * 0.58);
+    }
+    if (z_axis > max(max(minor, major), x_axis)) {
+        color = vec3<f32>(0.24, 0.48, 0.88);
+        alpha = max(alpha, z_axis * 0.56);
+    }
+
+    let valid =
+        !parallel &&
+        t >= 0.0 &&
+        t <= 1.0 &&
+        edge_distance <= grid.extent &&
+        clip.w > 0.0 &&
+        depth >= 0.0 &&
+        depth <= 1.0;
+    alpha = alpha * edge_fade * select(0.0, 1.0, valid);
+    if (alpha <= 0.01) {
+        discard;
+    }
+
+    var out: FragmentOutput;
+    out.color = vec4<f32>(color, alpha);
+    out.depth = depth;
+    return out;
 }
 "#;
 
@@ -119,8 +202,6 @@ pub struct PbrRenderer {
     color_convert_bind_group_layout: wgpu::BindGroupLayout,
     color_convert_pipeline: wgpu::RenderPipeline,
     viewport_grid_pipeline: wgpu::RenderPipeline,
-    viewport_grid_vertex_buffer: wgpu::Buffer,
-    viewport_grid_vertex_count: u32,
     post_process_chain: PostProcessChain,
     ctx: Arc<GpuContext>,
 }
@@ -133,6 +214,18 @@ struct CameraUniformsGpu {
     view: [[f32; 4]; 4],
     projection: [[f32; 4]; 4],
     camera_position: [f32; 3],
+    _padding: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct ViewportGridUniformsGpu {
+    view_projection: [[f32; 4]; 4],
+    inv_view_projection: [[f32; 4]; 4],
+    camera_position: [f32; 3],
+    extent: f32,
+    viewport_size: [f32; 2],
+    step: f32,
     _padding: f32,
 }
 
@@ -176,13 +269,6 @@ struct LightUniformsGpu {
     _padding: [u32; 7],
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct ViewportGridVertex {
-    position: [f32; 3],
-    color: [f32; 4],
-}
-
 // Compile-time guards: keep the Rust uniform layouts in lockstep with the
 // WGSL struct sizes the shaders bind to. WGSL uniform layout aligns vec3 on
 // 16-byte boundaries and rounds the outer struct to a 16-byte multiple, so
@@ -190,6 +276,8 @@ struct ViewportGridVertex {
 const _: () = {
     // Camera: mat4 (64) + mat4 (64) + vec3 padded to vec4 (16) = 144
     assert!(std::mem::size_of::<CameraUniformsGpu>() == 144);
+    // Viewport grid: 2 mat4 (128) + vec3+f32 (16) + vec2+f32+f32 (16) = 160
+    assert!(std::mem::size_of::<ViewportGridUniformsGpu>() == 160);
     // Model: mat4 (64) + 3 vec4 (48) = 112
     assert!(std::mem::size_of::<ModelUniformsGpu>() == 112);
     // Light: vec3+u32 + vec3+f32 + vec3+f32 + 3*f32 + vec2 = 4*16 = 64
@@ -223,27 +311,6 @@ impl PbrPipelineSet {
             (GpuAlphaMode::Mask, true) => &self.mask_double_sided,
             (GpuAlphaMode::Blend, false) => &self.blend_single_sided,
             (GpuAlphaMode::Blend, true) => &self.blend_double_sided,
-        }
-    }
-}
-
-impl ViewportGridVertex {
-    fn buffer_layout<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<ViewportGridVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
         }
     }
 }
@@ -504,7 +571,7 @@ impl PbrRenderer {
                 vertex: wgpu::VertexState {
                     module: &viewport_grid_shader,
                     entry_point: "vs_main",
-                    buffers: &[ViewportGridVertex::buffer_layout()],
+                    buffers: &[],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &viewport_grid_shader,
@@ -516,7 +583,7 @@ impl PbrRenderer {
                     })],
                 }),
                 primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::LineList,
+                    topology: wgpu::PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: None,
@@ -538,14 +605,6 @@ impl PbrRenderer {
                 multisample: wgpu::MultisampleState::default(),
                 multiview: None,
             });
-        let viewport_grid_vertices = viewport_grid_vertices();
-        let viewport_grid_vertex_buffer =
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("viewport_grid_vertices"),
-                contents: bytemuck::cast_slice(&viewport_grid_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let viewport_grid_vertex_count = viewport_grid_vertices.len() as u32;
 
         (
             Self {
@@ -558,8 +617,6 @@ impl PbrRenderer {
                 color_convert_bind_group_layout: color_convert_bgl,
                 color_convert_pipeline,
                 viewport_grid_pipeline,
-                viewport_grid_vertex_buffer,
-                viewport_grid_vertex_count,
                 post_process_chain: PostProcessChain::new(Arc::clone(&ctx)),
                 ctx,
             },
@@ -1078,23 +1135,27 @@ impl PbrRenderer {
     ) {
         let device = self.ctx.device();
         let aspect = current.width as f32 / current.height.max(1) as f32;
-        let camera_uniforms = CameraUniformsGpu {
-            view: camera_params.view_matrix().to_cols_array_2d(),
-            projection: camera_params.projection_matrix(aspect).to_cols_array_2d(),
+        let view_projection = camera_params.projection_matrix(aspect) * camera_params.view_matrix();
+        let grid_uniforms = ViewportGridUniformsGpu {
+            view_projection: view_projection.to_cols_array_2d(),
+            inv_view_projection: view_projection.inverse().to_cols_array_2d(),
             camera_position: camera_params.position.to_array(),
+            extent: VIEWPORT_GRID_EXTENT,
+            viewport_size: [current.width as f32, current.height as f32],
+            step: VIEWPORT_GRID_STEP,
             _padding: 0.0,
         };
-        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("viewport_grid_camera_buffer"),
-            contents: bytemuck::bytes_of(&camera_uniforms),
+        let grid_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("viewport_grid_uniform_buffer"),
+            contents: bytemuck::bytes_of(&grid_uniforms),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("viewport_grid_camera_bg"),
+        let grid_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("viewport_grid_bg"),
             layout: &self.camera_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: camera_buffer.as_entire_binding(),
+                resource: grid_buffer.as_entire_binding(),
             }],
         });
 
@@ -1123,9 +1184,8 @@ impl PbrRenderer {
             occlusion_query_set: None,
         });
         render_pass.set_pipeline(&self.viewport_grid_pipeline);
-        render_pass.set_bind_group(0, &camera_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.viewport_grid_vertex_buffer.slice(..));
-        render_pass.draw(0..self.viewport_grid_vertex_count, 0..1);
+        render_pass.set_bind_group(0, &grid_bind_group, &[]);
+        render_pass.draw(0..3, 0..1);
     }
 }
 
@@ -1563,38 +1623,6 @@ fn post_process_settings_for_descriptor(descriptor: &ViewportDescriptor) -> Post
         },
         ..PostProcessSettings::default()
     }
-}
-
-fn viewport_grid_vertices() -> Vec<ViewportGridVertex> {
-    let mut vertices = Vec::with_capacity(((VIEWPORT_GRID_EXTENT * 2 + 1) * 4) as usize);
-    let extent = VIEWPORT_GRID_EXTENT as f32 * VIEWPORT_GRID_STEP;
-    for index in -VIEWPORT_GRID_EXTENT..=VIEWPORT_GRID_EXTENT {
-        let coord = index as f32 * VIEWPORT_GRID_STEP;
-        let color = if index == 0 {
-            [0.55, 0.62, 0.68, 0.55]
-        } else if index % 5 == 0 {
-            [0.42, 0.47, 0.52, 0.34]
-        } else {
-            [0.34, 0.38, 0.42, 0.22]
-        };
-        vertices.push(ViewportGridVertex {
-            position: [-extent, 0.0, coord],
-            color,
-        });
-        vertices.push(ViewportGridVertex {
-            position: [extent, 0.0, coord],
-            color,
-        });
-        vertices.push(ViewportGridVertex {
-            position: [coord, 0.0, -extent],
-            color,
-        });
-        vertices.push(ViewportGridVertex {
-            position: [coord, 0.0, extent],
-            color,
-        });
-    }
-    vertices
 }
 
 fn empty_graph_execution() -> SceneRenderGraphExecution {
