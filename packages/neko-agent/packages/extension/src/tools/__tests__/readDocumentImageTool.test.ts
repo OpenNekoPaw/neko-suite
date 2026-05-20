@@ -8,6 +8,11 @@ const PNG_1X1 = new Uint8Array([
   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
 ]);
 
+const JPEG_1X1 = new Uint8Array([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x08, 0x08, 0x00, 0x01, 0x00,
+  0x01, 0x03, 0x01, 0x11, 0x00, 0xff, 0xd9,
+]);
+
 function createReader(overrides: Partial<IDocumentReaderService> = {}): IDocumentReaderService {
   return {
     supports: vi.fn(() => true),
@@ -130,5 +135,59 @@ describe('createReadDocumentImageTool', () => {
     expect(result.success).toBe(true);
     expect(reader.getManifest).not.toHaveBeenCalled();
     expect(readFile).toHaveBeenCalledWith('/cache/direct.png');
+  });
+
+  it('passes vision preprocessing options through to ReadImage', async () => {
+    const reader = createReader();
+    const readFile = vi.fn(async () => PNG_1X1);
+    const imageProcessor = {
+      metadata: vi.fn(async () => ({ width: 1, height: 1 })),
+      toJpeg: vi.fn(async () => JPEG_1X1),
+    };
+    const service = {
+      chat: vi.fn(async () => ({
+        message: { role: 'assistant', content: 'page analysis' },
+      })),
+    };
+    const platform = {
+      createService: vi.fn(() => service),
+    };
+    const tool = createReadDocumentImageTool({
+      reader,
+      readFile,
+      imageProcessor,
+      platform: platform as never,
+    });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      image_paths: ['/cache/direct.png'],
+      mode: 'vision',
+      preprocess: 'auto',
+      max_long_edge: 768,
+      quality: 75,
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(imageProcessor.toJpeg).toHaveBeenCalledWith({
+      buffer: PNG_1X1,
+      jpegQuality: 75,
+    });
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        images: [
+          expect.objectContaining({
+            analysis: 'page analysis',
+            visionInput: expect.objectContaining({
+              preprocess: 'auto',
+              mimeType: 'image/jpeg',
+              maxLongEdge: 768,
+              jpegQuality: 75,
+            }),
+            documentImage: expect.objectContaining({ path: '/cache/direct.png' }),
+          }),
+        ],
+      }),
+    );
   });
 });

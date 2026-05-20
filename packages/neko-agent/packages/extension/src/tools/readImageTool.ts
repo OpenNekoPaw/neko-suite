@@ -1,17 +1,29 @@
 import * as fs from 'fs/promises';
 import { createTool, TOOL_NAMES_SYSTEM, type Tool, type ToolResult } from '@neko/shared';
 import { probeImageMetadata, type ImageMetadata } from '@neko/platform/document';
+import {
+  DEFAULT_VISION_PREPROCESS_POLICY,
+  planVisionImagePreprocess,
+  resolveVisionImageAttachmentMediaType,
+  type VisionImageProcessor,
+  type VisionPreprocessPolicy,
+} from '@neko/platform/media';
 import type { Platform } from '@neko/platform';
-import { resolveVisionImageAttachmentMediaType } from '@neko/platform/media/vision-preprocess-policy';
 import { resolveDocumentPath } from '../services/documentPathResolver';
+import { createSharpVisionImageProcessor } from '../services/visionImageProcessor';
 
 export const DEFAULT_READ_IMAGE_LIMIT = 4;
 export const MAX_READ_IMAGE_LIMIT = 16;
 export const MAX_READ_IMAGE_BYTES = 20 * 1024 * 1024;
+export const MIN_READ_IMAGE_LONG_EDGE = 256;
+export const MAX_READ_IMAGE_LONG_EDGE = 4096;
+export const MIN_READ_IMAGE_JPEG_QUALITY = 40;
+export const MAX_READ_IMAGE_JPEG_QUALITY = 95;
 
 export interface ReadImageToolDeps {
   readonly platform?: Platform;
   readonly readFile?: (filePath: string) => Promise<Uint8Array>;
+  readonly imageProcessor?: VisionImageProcessor;
 }
 
 export interface ReadImageInputImage {
@@ -27,6 +39,7 @@ export interface ReadImageResultImage {
   readonly height?: number;
   readonly mimeType?: string;
   readonly byteSize: number;
+  readonly visionInput?: ReadImageVisionInputSummary;
   readonly analysis?: string;
   readonly metadata?: Record<string, unknown>;
 }
@@ -41,12 +54,31 @@ export interface ReadImageResultData {
 
 export type ReadImageMode = 'metadata' | 'vision';
 export type ReadImageAnalysisKind = 'describe' | 'ocr' | 'panels' | 'storyboard' | 'custom';
+export type ReadImagePreprocessMode = 'auto' | 'none';
+
+export interface ReadImageVisionInputSummary {
+  readonly preprocess: ReadImagePreprocessMode;
+  readonly transformed: boolean;
+  readonly mimeType: string;
+  readonly byteSize: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly maxLongEdge?: number;
+  readonly jpegQuality?: number;
+}
 
 interface LoadedImage {
   readonly input: ReadImageInputImage;
   readonly resolvedPath: string;
   readonly bytes: Uint8Array;
   readonly metadata: ImageMetadata;
+}
+
+interface PreparedVisionImage {
+  readonly image: LoadedImage;
+  readonly bytes: Uint8Array;
+  readonly mimeType: string;
+  readonly summary: ReadImageVisionInputSummary;
 }
 
 export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
@@ -103,6 +135,26 @@ export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
           minimum: 1,
           maximum: MAX_READ_IMAGE_LIMIT,
         },
+        preprocess: {
+          type: 'string',
+          enum: ['auto', 'none'],
+          description:
+            'Vision mode only. auto (default) downscales oversized inputs and normalizes model payloads to JPEG; none sends original bytes.',
+        },
+        max_long_edge: {
+          type: 'integer',
+          description:
+            'Vision mode preprocessing target for the longest edge. Used with preprocess="auto".',
+          minimum: MIN_READ_IMAGE_LONG_EDGE,
+          maximum: MAX_READ_IMAGE_LONG_EDGE,
+        },
+        quality: {
+          type: 'integer',
+          description:
+            'Vision mode JPEG quality used by preprocessing. Used with preprocess="auto".',
+          minimum: MIN_READ_IMAGE_JPEG_QUALITY,
+          maximum: MAX_READ_IMAGE_JPEG_QUALITY,
+        },
       },
     },
     execute: async (args) => executeReadImage(deps, args),
@@ -121,6 +173,7 @@ export async function executeReadImage(
     1,
     MAX_READ_IMAGE_LIMIT,
   );
+  const preprocessOptions = readVisionPreprocessOptions(args);
   const images = readInputImages(args);
   if (images.length === 0) {
     return { success: false, error: 'Missing required field: image_paths or images' };
@@ -147,6 +200,9 @@ export async function executeReadImage(
           error: 'ReadImage vision mode requires an active AI platform service.',
         };
       }
+      const prepared = await Promise.all(
+        loaded.map((image) => prepareVisionImage(deps, image, preprocessOptions)),
+      );
 
       const response = await service.chat([
         {
@@ -156,14 +212,18 @@ export async function executeReadImage(
               type: 'text',
               text: buildVisionPrompt({ analysis, prompt: readString(args['prompt']) }),
             },
-            ...loaded.flatMap((image, index) => [
+            ...prepared.flatMap((preparedImage, index) => [
               {
                 type: 'text' as const,
-                text: `Image ${index + 1}${image.input.label ? ` (${image.input.label})` : ''}: ${image.resolvedPath}`,
+                text: formatVisionImageLabel(preparedImage.image, index),
               },
               {
                 type: 'image' as const,
-                imageUrl: toDataUrl(image.metadata.mimeType, image.resolvedPath, image.bytes),
+                imageUrl: toDataUrl(
+                  preparedImage.mimeType,
+                  preparedImage.image.resolvedPath,
+                  preparedImage.bytes,
+                ),
                 detail: 'high' as const,
               },
             ]),
@@ -176,7 +236,11 @@ export async function executeReadImage(
         data: {
           mode,
           analysis,
-          images: results.map((result) => ({ ...result, analysis: analysisText })),
+          images: results.map((result, index) => ({
+            ...result,
+            ...(prepared[index] ? { visionInput: prepared[index].summary } : {}),
+            analysis: analysisText,
+          })),
           imageCount: images.length,
           imagePathsTruncated: selected.length < images.length,
         } satisfies ReadImageResultData,
@@ -214,6 +278,70 @@ async function loadImage(
   return { input, resolvedPath, bytes, metadata };
 }
 
+async function prepareVisionImage(
+  deps: ReadImageToolDeps,
+  image: LoadedImage,
+  options: ReadVisionPreprocessOptions,
+): Promise<PreparedVisionImage> {
+  if (options.mode === 'none') {
+    const mimeType =
+      image.metadata.mimeType ?? resolveVisionImageAttachmentMediaType(image.resolvedPath);
+    return {
+      image,
+      bytes: image.bytes,
+      mimeType,
+      summary: {
+        preprocess: 'none',
+        transformed: false,
+        mimeType,
+        byteSize: image.bytes.byteLength,
+        ...(image.metadata.width !== undefined ? { width: image.metadata.width } : {}),
+        ...(image.metadata.height !== undefined ? { height: image.metadata.height } : {}),
+      },
+    };
+  }
+
+  const policy = createVisionPreprocessPolicy(options);
+  const plan = planVisionImagePreprocess(
+    {
+      width: image.metadata.width ?? 0,
+      height: image.metadata.height ?? 0,
+      byteLength: image.bytes.byteLength,
+    },
+    policy,
+  );
+  const processor = deps.imageProcessor ?? createSharpVisionImageProcessor();
+  const processedBytes = await processor.toJpeg({
+    buffer: image.bytes,
+    jpegQuality: plan.jpegQuality,
+    ...(plan.shouldResize && {
+      resize: {
+        width: plan.maxWidth,
+        height: plan.maxHeight,
+        fit: 'inside',
+        withoutEnlargement: true,
+      },
+    }),
+  });
+  const processedMetadata = probeImageMetadata(processedBytes);
+
+  return {
+    image,
+    bytes: processedBytes,
+    mimeType: plan.outputMediaType,
+    summary: {
+      preprocess: 'auto',
+      transformed: true,
+      mimeType: plan.outputMediaType,
+      byteSize: processedBytes.byteLength,
+      ...(processedMetadata?.width !== undefined ? { width: processedMetadata.width } : {}),
+      ...(processedMetadata?.height !== undefined ? { height: processedMetadata.height } : {}),
+      maxLongEdge: policy.maxLongEdge,
+      jpegQuality: plan.jpegQuality,
+    },
+  };
+}
+
 function readInputImages(args: Record<string, unknown>): ReadImageInputImage[] {
   const structured = args['images'];
   if (Array.isArray(structured)) {
@@ -241,6 +369,49 @@ function readAnalysisKind(value: unknown): ReadImageAnalysisKind {
   return value === 'ocr' || value === 'panels' || value === 'storyboard' || value === 'custom'
     ? value
     : 'describe';
+}
+
+interface ReadVisionPreprocessOptions {
+  readonly mode: ReadImagePreprocessMode;
+  readonly maxLongEdge: number;
+  readonly quality?: number;
+}
+
+function readVisionPreprocessOptions(args: Record<string, unknown>): ReadVisionPreprocessOptions {
+  return {
+    mode: args['preprocess'] === 'none' ? 'none' : 'auto',
+    maxLongEdge: readBoundedInteger(
+      args['max_long_edge'],
+      DEFAULT_VISION_PREPROCESS_POLICY.maxLongEdge,
+      MIN_READ_IMAGE_LONG_EDGE,
+      MAX_READ_IMAGE_LONG_EDGE,
+    ),
+    ...(typeof args['quality'] === 'number' && Number.isInteger(args['quality'])
+      ? {
+          quality: readBoundedInteger(
+            args['quality'],
+            DEFAULT_VISION_PREPROCESS_POLICY.resizedImageQuality,
+            MIN_READ_IMAGE_JPEG_QUALITY,
+            MAX_READ_IMAGE_JPEG_QUALITY,
+          ),
+        }
+      : {}),
+  };
+}
+
+function createVisionPreprocessPolicy(
+  options: ReadVisionPreprocessOptions,
+): VisionPreprocessPolicy {
+  return {
+    ...DEFAULT_VISION_PREPROCESS_POLICY,
+    maxLongEdge: options.maxLongEdge,
+    ...(options.quality !== undefined
+      ? {
+          resizedImageQuality: options.quality,
+          normalizedImageQuality: options.quality,
+        }
+      : {}),
+  };
 }
 
 function readBoundedInteger(value: unknown, fallback: number, min: number, max: number): number {
@@ -275,6 +446,12 @@ function buildVisionPrompt(input: {
   return input.prompt && input.analysis !== 'custom'
     ? `${base}\n\nAdditional instruction: ${input.prompt}`
     : base;
+}
+
+function formatVisionImageLabel(image: LoadedImage, index: number): string {
+  return `Image ${index + 1}${image.input.label ? ` (${image.input.label})` : ''}: ${
+    image.resolvedPath
+  }`;
 }
 
 function toDataUrl(mimeType: string | undefined, filePath: string, bytes: Uint8Array): string {

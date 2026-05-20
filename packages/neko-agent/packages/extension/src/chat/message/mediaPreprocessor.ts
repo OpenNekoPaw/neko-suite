@@ -14,11 +14,11 @@ import { getLogger } from '../../base';
 import type { EngineClient } from '@neko/neko-client/EngineClient';
 import {
   VisionPreprocessor,
-  type VisionImageProcessor,
   type VisionMediaProcessOptions,
   type VisionProcessedMedia,
   type VisionVideoProcessor,
 } from '@neko/platform/media';
+import { createSharpVisionImageProcessor } from '../../services/visionImageProcessor';
 
 const logger = getLogger('MediaPreprocessor');
 
@@ -35,7 +35,7 @@ export class MediaPreprocessor {
   constructor(engineClient: EngineClient | null) {
     this.preprocessor = new VisionPreprocessor({
       readFile: (filePath) => fs.promises.readFile(filePath),
-      imageProcessor: createSharpImageProcessor(),
+      imageProcessor: createSharpVisionImageProcessor(),
       videoProcessor: createEngineVideoProcessor(engineClient),
       logger,
     });
@@ -63,23 +63,6 @@ export class MediaPreprocessor {
   async processVideo(filePath: string, opts?: MediaProcessOptions): Promise<ProcessedMedia> {
     return this.preprocessor.processVideo(filePath, opts);
   }
-}
-
-function createSharpImageProcessor(): VisionImageProcessor {
-  return {
-    metadata: async (buffer) => {
-      const sharp = (await import('sharp')).default;
-      return sharp(buffer).metadata();
-    },
-    toJpeg: async (input) => {
-      const sharp = (await import('sharp')).default;
-      let image = sharp(input.buffer);
-      if (input.resize) {
-        image = image.resize(input.resize);
-      }
-      return image.jpeg({ quality: input.jpegQuality }).toBuffer();
-    },
-  };
 }
 
 function createEngineVideoProcessor(

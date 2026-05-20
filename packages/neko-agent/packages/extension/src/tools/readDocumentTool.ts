@@ -110,7 +110,13 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
         },
         include_metadata: {
           type: 'boolean',
-          description: 'Whether to include extracted document metadata. Default true.',
+          description:
+            'Whether to include extracted document metadata in content/range/next results. Default true.',
+        },
+        include_manifest: {
+          type: 'boolean',
+          description:
+            'Whether range/next results should include the full document manifest. Default false; use mode="manifest" when structure is needed.',
         },
         include_image_paths: {
           type: 'boolean',
@@ -150,6 +156,7 @@ async function executeReadDocument(
     MAX_READ_DOCUMENT_CHARS,
   );
   const includeMetadata = readBoolean(args['include_metadata'], true);
+  const includeManifest = readBoolean(args['include_manifest'], false);
   const includeImagePaths = readBoolean(args['include_image_paths'], true);
   const imagePathLimit = readBoundedInteger(
     args['image_path_limit'],
@@ -195,6 +202,8 @@ async function executeReadDocument(
             },
           }),
           {
+            includeMetadata,
+            includeManifest,
             includeImagePaths,
             imagePathLimit,
           },
@@ -210,6 +219,8 @@ async function executeReadDocument(
       return {
         success: true,
         data: formatDocumentReadResult(await reader.readNext(cursor), {
+          includeMetadata,
+          includeManifest,
           includeImagePaths,
           imagePathLimit,
         }),
@@ -239,15 +250,13 @@ async function executeReadDocument(
 function formatDocumentReadResult(
   result: DocumentReadResult,
   options: {
+    readonly includeMetadata: boolean;
+    readonly includeManifest: boolean;
     readonly includeImagePaths: boolean;
     readonly imagePathLimit: number;
   },
 ): DocumentReadResult {
   const imagePaths = result.imagePaths ?? [];
-  if (imagePaths.length === 0) {
-    return result;
-  }
-
   const visibleImagePaths = options.includeImagePaths
     ? imagePaths.slice(0, options.imagePathLimit)
     : [];
@@ -257,23 +266,37 @@ function formatDocumentReadResult(
     options.imagePathLimit,
   );
 
-  return {
-    ...result,
-    imagePaths: visibleImagePaths,
-    imageInfo: visibleImageInfo,
-    excerpt: result.excerpt
+  const metadata =
+    options.includeMetadata && (result.metadata || imagePaths.length > 0)
       ? {
-          ...result.excerpt,
-          imagePaths: visibleImagePaths,
-          imageInfo: visibleImageInfo,
+          ...result.metadata,
+          ...(imagePaths.length > 0
+            ? {
+                imagePathCount: imagePaths.length,
+                imagePathsTruncated: visibleImagePaths.length < imagePaths.length,
+              }
+            : {}),
         }
-      : result.excerpt,
-    metadata: {
-      ...result.metadata,
-      imagePathCount: imagePaths.length,
-      imagePathsTruncated: visibleImagePaths.length < imagePaths.length,
-    },
-  };
+      : undefined;
+
+  const excerpt = result.excerpt
+    ? stripUndefinedProperties({
+        ...result.excerpt,
+        ...(Object.prototype.hasOwnProperty.call(result.excerpt, 'imagePaths')
+          ? { imagePaths: visibleImagePaths }
+          : {}),
+        imageInfo: undefined,
+      })
+    : result.excerpt;
+
+  return stripUndefinedProperties({
+    ...result,
+    imagePaths: imagePaths.length > 0 ? visibleImagePaths : undefined,
+    imageInfo: imagePaths.length > 0 ? visibleImageInfo : undefined,
+    excerpt,
+    metadata,
+    manifest: options.includeManifest ? result.manifest : undefined,
+  });
 }
 
 function filterImageInfoByVisiblePaths(
@@ -391,6 +414,10 @@ function truncateText(text: string, maxChars: number): { text: string; truncated
     text: `${text.slice(0, maxChars)}\n\n[ReadDocument truncated ${text.length - maxChars} characters]`,
     truncated: true,
   };
+}
+
+function stripUndefinedProperties<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 }
 
 function readNonEmptyString(value: unknown): string | null {

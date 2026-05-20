@@ -10,6 +10,10 @@ import {
 import type { Platform } from '@neko/platform';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
 import {
+  MAX_READ_IMAGE_JPEG_QUALITY,
+  MAX_READ_IMAGE_LONG_EDGE,
+  MIN_READ_IMAGE_JPEG_QUALITY,
+  MIN_READ_IMAGE_LONG_EDGE,
   executeReadImage,
   type ReadImageAnalysisKind,
   type ReadImageMode,
@@ -88,6 +92,26 @@ export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): To
           minimum: 1,
           maximum: MAX_READ_DOCUMENT_IMAGE_LIMIT,
         },
+        preprocess: {
+          type: 'string',
+          enum: ['auto', 'none'],
+          description:
+            'Vision mode only. auto (default) downscales oversized page images and normalizes model payloads to JPEG; none sends original bytes.',
+        },
+        max_long_edge: {
+          type: 'integer',
+          description:
+            'Vision mode preprocessing target for the longest page-image edge. Used with preprocess="auto".',
+          minimum: MIN_READ_IMAGE_LONG_EDGE,
+          maximum: MAX_READ_IMAGE_LONG_EDGE,
+        },
+        quality: {
+          type: 'integer',
+          description:
+            'Vision mode JPEG quality used by preprocessing. Used with preprocess="auto".',
+          minimum: MIN_READ_IMAGE_JPEG_QUALITY,
+          maximum: MAX_READ_IMAGE_JPEG_QUALITY,
+        },
       },
       required: ['file_path'],
     },
@@ -147,6 +171,13 @@ export async function executeReadDocumentImage(
       mode,
       analysis,
       ...(readString(args['prompt']) ? { prompt: readString(args['prompt']) } : {}),
+      ...(readString(args['preprocess']) ? { preprocess: readString(args['preprocess']) } : {}),
+      ...(readNumber(args['max_long_edge']) !== undefined
+        ? { max_long_edge: readNumber(args['max_long_edge']) }
+        : {}),
+      ...(readNumber(args['quality']) !== undefined
+        ? { quality: readNumber(args['quality']) }
+        : {}),
       max_images: maxImages,
     });
 
@@ -311,6 +342,10 @@ function readBoundedInteger(value: unknown, fallback: number, min: number, max: 
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

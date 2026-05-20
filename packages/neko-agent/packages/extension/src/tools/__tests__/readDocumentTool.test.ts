@@ -280,10 +280,6 @@ describe('createReadDocumentTool', () => {
         ],
         excerpt: expect.objectContaining({
           imagePaths: ['/tmp/1.jpg', '/tmp/2.jpg'],
-          imageInfo: [
-            { path: '/tmp/1.jpg', width: 100, height: 200, mimeType: 'image/jpeg', byteSize: 10 },
-            { path: '/tmp/2.jpg', width: 110, height: 210, mimeType: 'image/jpeg', byteSize: 11 },
-          ],
         }),
         metadata: expect.objectContaining({
           imagePathCount: 3,
@@ -329,8 +325,103 @@ describe('createReadDocumentTool', () => {
         imageInfo: [],
         excerpt: expect.objectContaining({
           imagePaths: [],
-          imageInfo: [],
         }),
+      }),
+    );
+  });
+
+  it('omits range manifests by default and honors include_metadata=false', async () => {
+    const reader = createReader({
+      readRange: vi.fn(async () => ({
+        source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+        locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
+        text: 'Chapter range',
+        imagePaths: ['/tmp/1.jpg'],
+        imageInfo: [{ path: '/tmp/1.jpg', width: 100, height: 200 }],
+        totalTextChars: 13,
+        returnedTextChars: 13,
+        truncated: false,
+        metadata: { title: 'Demo EPUB' },
+        manifest: {
+          source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+          format: 'epub',
+          fileId: 'book-1',
+          chapterCount: 1,
+          units: [
+            {
+              kind: 'chapter',
+              locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
+            },
+          ],
+          capabilities: {
+            supportsManifest: true,
+            supportsRangeRead: true,
+            supportsCursorRead: true,
+          },
+        },
+      })),
+    });
+    const tool = createReadDocumentTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      mode: 'range',
+      include_metadata: false,
+      range: { locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 } },
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        text: 'Chapter range',
+        imagePaths: ['/tmp/1.jpg'],
+        imageInfo: [{ path: '/tmp/1.jpg', width: 100, height: 200 }],
+      }),
+    );
+    expect(result.data).not.toHaveProperty('metadata');
+    expect(result.data).not.toHaveProperty('manifest');
+  });
+
+  it('can explicitly include range manifests when requested', async () => {
+    const reader = createReader({
+      readRange: vi.fn(async () => ({
+        source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+        locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
+        text: 'Chapter range',
+        returnedTextChars: 13,
+        truncated: false,
+        manifest: {
+          source: { filePath: '/books/demo.epub', format: 'epub', fileId: 'book-1' },
+          format: 'epub',
+          fileId: 'book-1',
+          chapterCount: 1,
+          units: [
+            {
+              kind: 'chapter',
+              locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
+            },
+          ],
+          capabilities: {
+            supportsManifest: true,
+            supportsRangeRead: true,
+            supportsCursorRead: true,
+          },
+        },
+      })),
+    });
+    const tool = createReadDocumentTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      mode: 'range',
+      include_manifest: true,
+      range: { locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 } },
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        manifest: expect.objectContaining({ chapterCount: 1 }),
       }),
     );
   });
@@ -460,5 +551,71 @@ describe('createReadDocumentTool', () => {
     expect(result.success).toBe(true);
     expect(reader.readNext).toHaveBeenCalledWith(cursor);
     expect(result.data).toEqual(expect.objectContaining({ text: 'Next batch' }));
+  });
+
+  it('omits next manifests by default to keep cursor batches compact', async () => {
+    const reader = createReader({
+      readNext: vi.fn(async (cursor) => ({
+        source: cursor.source,
+        text: 'Next batch',
+        imagePaths: ['/tmp/page-1.jpg'],
+        imageInfo: [{ path: '/tmp/page-1.jpg', width: 100, height: 200 }],
+        returnedTextChars: 10,
+        truncated: false,
+        metadata: { title: 'Book' },
+        manifest: {
+          source: cursor.source,
+          format: 'epub',
+          fileId: 'book-1',
+          chapterCount: 2,
+          units: [
+            {
+              kind: 'chapter',
+              locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
+            },
+            {
+              kind: 'chapter',
+              locator: { kind: 'chapter', chapterHref: 'chapter-2', spineIndex: 1 },
+            },
+          ],
+          capabilities: {
+            supportsManifest: true,
+            supportsRangeRead: true,
+            supportsCursorRead: true,
+          },
+        },
+        cursor: { ...cursor, done: true, batchIndex: cursor.batchIndex + 1 },
+      })),
+    });
+    const tool = createReadDocumentTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/books/demo.epub',
+      mode: 'next',
+      cursor: {
+        source: { filePath: '/books/demo.epub', format: 'epub' as const, fileId: 'book-1' },
+        strategy: 'manifest-order' as const,
+        next: { kind: 'chapter' as const, chapterHref: 'chapter-1', spineIndex: 0 },
+        batchIndex: 0,
+        done: false,
+        fileId: 'book-1',
+      },
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        text: 'Next batch',
+        imagePaths: ['/tmp/page-1.jpg'],
+        imageInfo: [{ path: '/tmp/page-1.jpg', width: 100, height: 200 }],
+        cursor: expect.objectContaining({ done: true }),
+        metadata: expect.objectContaining({
+          title: 'Book',
+          imagePathCount: 1,
+          imagePathsTruncated: false,
+        }),
+      }),
+    );
+    expect(result.data).not.toHaveProperty('manifest');
   });
 });
