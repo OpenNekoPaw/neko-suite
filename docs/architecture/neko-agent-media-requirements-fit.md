@@ -455,6 +455,16 @@ interface AgentCapabilityProvider {
 - 子包可以独立演进、独立测试
 - 后续市场化分发也更自然，`neko-market` 可以分发 Skill / Provider / 模型配置
 
+### 结构化查询优先（2026-05-19 补充）
+
+能力提供者协议不仅负责“注册哪些工具”，也负责告诉 Agent **如何安全地查询再修改**。对可编辑项目状态，子包应提供 read-only query 工具暴露稳定 ID、当前选择、容器/轨道/节点摘要和可写字段；mutation 工具应声明 `safetyKind`、`targetRequirements` 和 `queryBeforeMutate`。截图、OCR、缩略图和渲染快照只能作为视觉证据，不能替代结构化 query，也不能作为 nodeId、clipId、fieldPath、slotId 的来源。
+
+当前对齐状态：
+
+- Canvas 已新增 `CanvasGetActiveContext` 和 `CanvasApplyAgentContent`，Agent/Webview 只发送 typed payload + target intent，Canvas 自己校验节点、字段、容器和变更事件。
+- Assets 已新增最小 provider：`ListAssets`、`GetAsset`、`ImportAsset` 通过 `NekoAssetsAPI`，不让 Agent 直接读写资产库内部实现。
+- Model 暂不新增 provider：当前稳定面只有 `neko.model.importAsset` 命令，尚无 `NekoModelAPI` scene snapshot query / import API 契约。Agent 可继续通过 transfer planner 调用已有导入命令；真正的 Model query/provider 需要等 API 契约先落地。
+
 ---
 
 ## 五、后续是否还会有新增子包 / 新增 AI 功能

@@ -1248,3 +1248,53 @@ async function sendFileChip(uri, intent, typeOverride?) {
 | `neko-preview/.../CbzViewer.tsx` | base64 → pageNumber + region |
 | `neko-preview/.../EpubViewer.tsx` | 移除 inline 图片采集 + 新增双栏模式 |
 | `neko-preview/.../useDocumentSelection.ts` | sendImageToAi → sendRegionToAi + sendPageRefToAi |
+
+---
+
+## 8. Target-Aware Transfer And Query-First Mutations
+
+**状态**: 2026-05-19 targeted transfer change
+
+Agent 输出可以直接发送到 Canvas，但发送路径必须保持“typed intent”，不能让 Agent 或 Agent Webview 拼 Canvas patch。实际目标解析、字段校验、容器策略、变更事件由目标插件负责。
+
+### 8.1 Query-first, evidence-second
+
+当 Agent 需要编辑项目状态时，必须先使用结构化查询工具拿稳定 ID 和可写目标，再调用 mutation 工具：
+
+1. Canvas: `CanvasGetActiveContext` / `CanvasGetNode` → `CanvasApplyAgentContent`
+2. Assets: `ListAssets` / `GetAsset` → `ImportAsset` 或跨插件 asset transfer
+3. Model: 当前仅支持 `neko.model.importAsset` 命令式资产导入；scene snapshot query 和 Model Agent provider 等待 `NekoModelAPI` 契约落地
+
+截图、OCR、缩略图、viewport render snapshot 只作为视觉证据或验证层，不能作为 nodeId、containerId、fieldPath、slotId 的来源。需要看画面时可以在结构化 mutation 之后请求截图验证，但不能用截图推断可写目标。
+
+### 8.2 Shared Canvas service path
+
+Canvas 的 Agent 内容导入只有一条共享服务路径：
+
+```mermaid
+flowchart LR
+  Agent["Agent / Webview typed payload"] --> Runtime["plugin transfer planner"]
+  Runtime --> Command["neko.canvas.importAgentContent"]
+  Command --> Provider["CanvasEditorProvider.applyAgentContent"]
+  Provider --> Webview["nodes.applyAgentContent request"]
+  Webview --> Service["canvasAgentOperations.applyCanvasAgentContent"]
+  Service --> Store["canvasStore state + change event"]
+```
+
+同一服务同时服务 UI 按钮和 Agent 工具，避免 UI-only 与 Agent-only 两套校验逻辑。`replace` / `apply` 等模式需要显式 target 或确认；`insert` 可以使用当前选择、容器目标或 viewport insertion fallback。
+
+### 8.3 Provider metadata audit
+
+Agent-facing tools must declare enough safety metadata for planning:
+
+| Provider | Current state | Follow-up |
+|----------|---------------|-----------|
+| `neko-canvas` | Query tools include `isReadOnly`, `isConcurrencySafe`, `safetyKind`; content mutation includes `targetRequirements` and `queryBeforeMutate` | Continue migrating older create/update tools to explicit `safetyKind` as they are touched |
+| `neko-assets` | `ListAssets` / `GetAsset` are read-only queries; `ImportAsset` is confirmation-gated and requires `filePath` | Add richer asset search filters only through `NekoAssetsAPI` |
+| `neko-model` | Has `neko.model.importAsset`; no stable `NekoModelAPI` / scene snapshot provider yet | Defer Agent provider until scene snapshot query + model asset import API are typed |
+| `neko-cut` | Timeline query/delete metadata exists for core tools | Add `safetyKind` / `queryBeforeMutate` during next timeline tool pass |
+| `neko-story` | Script index and search are read-only; generation plan tools are read-only projections | Mark apply/suggestion mutations with confirmation metadata when expanded |
+| `neko-sketch` | AI tools have concurrency metadata for generation/selection | Add target requirements for inpaint/style/layer tools where selection masks are required |
+| `neko-audio` | Basic query/destructive metadata exists; several mutations still rely on fail-closed defaults | Add explicit safety classes for import/effect/mix operations |
+| `neko-puppet` | Provider exists but parameter mutations currently lack explicit safety metadata | Mark query/mutation split before adding automatic execution policy |
+| `neko-engine` | Effect/transcribe/analysis tools have read-only/concurrency metadata | Add confirmation metadata to custom shader registration |
