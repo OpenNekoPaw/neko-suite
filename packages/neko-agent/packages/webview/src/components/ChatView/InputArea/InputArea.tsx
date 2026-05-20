@@ -24,6 +24,7 @@ import { useInputHistory } from '@/hooks/useInputHistory';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 import { projectInputAreaUi } from '@/presenters/input-area-presenter';
 import { projectSessionMediaModelPickerState } from '@/presenters/media-model-presenter';
+import { projectClipboardTextToContextPayload } from '@/presenters/clipboard-context-presenter';
 import type { AgentContextPayload } from '@neko/shared';
 
 interface InputAreaProps {
@@ -412,9 +413,19 @@ export function InputArea({
     [updateAttachedFiles],
   );
 
-  // Handle paste for images
+  // Handle structured references and pasted images.
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
+      const text = e.clipboardData?.getData('text/plain');
+      if (text && onAddContextChip) {
+        const payload = projectClipboardTextToContextPayload(text);
+        if (payload) {
+          e.preventDefault();
+          onAddContextChip(payload);
+          return;
+        }
+      }
+
       const items = e.clipboardData?.items;
       if (!items) return;
 
@@ -440,7 +451,7 @@ export function InputArea({
         }
       }
     },
-    [updateAttachedFiles],
+    [onAddContextChip, updateAttachedFiles],
   );
 
   // Insert slash command

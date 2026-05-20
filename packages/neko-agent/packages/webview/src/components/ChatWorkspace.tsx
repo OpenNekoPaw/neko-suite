@@ -417,6 +417,8 @@ export function ChatWorkspace({
         onClearActiveSkill={skillActions.handleClearActiveSkill}
         workItems={workItems}
         pluginsAvailable={pluginsAvailable}
+        contextChips={contextChips}
+        ambientNodes={ambientNodes}
         onCancelTask={(taskId) => {
           if (activeConversationId) {
             VSCodeMessages.cancelTask(taskId, activeConversationId);

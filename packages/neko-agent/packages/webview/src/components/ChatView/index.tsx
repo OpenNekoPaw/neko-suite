@@ -8,6 +8,7 @@ import { DropZone } from '@/components/ChatView/DropZone';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { AgentContextPayload } from '@neko/shared';
+import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import { SkillIndicator, type ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import { AgentStateIndicatorCompact } from '@/components/ChatView/AgentStateIndicator';
 interface ChatViewProps {
@@ -23,6 +24,8 @@ interface ChatViewProps {
   // Unified work items
   workItems?: AgentWorkItem[];
   pluginsAvailable?: PluginsAvailable;
+  contextChips?: readonly AgentContextPayload[];
+  ambientNodes?: readonly AmbientCanvasNodeProjection[];
   onCancelTask?: (taskId: string) => void;
   onRetryTask?: (taskId: string) => void;
   onViewTaskResult?: (taskId: string) => void;
@@ -62,6 +65,8 @@ export function ChatView({
   onClearActiveSkill,
   workItems,
   pluginsAvailable,
+  contextChips,
+  ambientNodes,
   onCancelTask,
   onRetryTask,
   onViewTaskResult,
@@ -117,6 +122,8 @@ export function ChatView({
             activeConversationId={activeConversationId}
             workItems={workItems}
             pluginsAvailable={pluginsAvailable}
+            contextChips={contextChips}
+            ambientNodes={ambientNodes}
             onCancelTask={onCancelTask}
             onRetryTask={onRetryTask}
             onViewTaskResult={onViewTaskResult}
