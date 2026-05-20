@@ -21,9 +21,11 @@ pub use backend::{
     DefaultExportRenderBackendFactory, ExportAudioBackend, ExportAudioBackendFactory,
     ExportAudioEncodeBackend, ExportAudioEncodeBackendFactory, ExportBackendBundle,
     ExportEncodeBackend, ExportEncodeBackendFactory, ExportRenderBackend,
-    ExportRenderBackendFactory, ExportRenderedFrame,
+    ExportRenderBackendFactory, ExportRenderServicePorts, ExportRenderedFrame,
 };
-pub use gpu_export_pipeline::GpuExportPipeline;
+pub use gpu_export_pipeline::{
+    GpuExportPipeline, PuppetRenderPort, RenderServicePorts, SceneRenderPort,
+};
 pub use neko_engine_gpu::EffectDispatcher;
 pub use neko_engine_gpu::GpuPipelineTiming;
 pub use service::ExportService;

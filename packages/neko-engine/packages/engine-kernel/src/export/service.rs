@@ -20,7 +20,10 @@ use neko_engine_types::{
     VideoOutput,
 };
 
-use super::backend::{build_audio_encoder_config, build_export_metadata, ExportBackendBundle};
+use super::backend::{
+    build_audio_encoder_config, build_export_metadata, ExportBackendBundle,
+    ExportRenderServicePorts,
+};
 use super::types::{
     ExportJobConfig, ExportMetadata, ExportProgress, ExportStartResponse, ExportState, ExportStats,
     QueueEntry, QueueStatus,
@@ -165,6 +168,16 @@ impl ExportService {
     /// Create with existing GPU context
     pub fn with_gpu_context(gpu_ctx: Arc<GpuContext>) -> Self {
         Self::with_backend_bundle(Arc::new(ExportBackendBundle::with_gpu_context(gpu_ctx)))
+    }
+
+    /// Create with existing GPU context and injected scene/puppet render services.
+    pub fn with_gpu_context_and_render_services(
+        gpu_ctx: Arc<GpuContext>,
+        render_services: ExportRenderServicePorts,
+    ) -> Self {
+        Self::with_backend_bundle(Arc::new(
+            ExportBackendBundle::with_gpu_context_and_render_services(gpu_ctx, render_services),
+        ))
     }
 
     /// Create with existing GPU context and export sink factory.

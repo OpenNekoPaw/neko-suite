@@ -13,6 +13,7 @@ use crate::components::{
 };
 use crate::hierarchy::{Children, Parent};
 use bevy_ecs::prelude::*;
+use neko_engine_types::transform_propagation::propagate_transform_hierarchy;
 use std::collections::HashMap;
 
 /// Stable labels for simulation-side scene systems.
@@ -58,52 +59,37 @@ pub const SIMULATION_SYSTEM_ORDER: &[SimulationSystemLabel] = &[
 /// Root entities (no Parent) get GlobalTransform = local Transform.
 /// Children multiply parent's GlobalTransform x local Transform.
 pub fn transform_propagation(world: &mut World) {
-    // Phase 1: update roots (entities with Transform but no Parent)
     let roots: Vec<Entity> = world
         .query_filtered::<Entity, (With<Transform>, Without<Parent>)>()
         .iter(world)
         .collect();
 
-    for root in roots {
-        let local = world
-            .get::<Transform>(root)
-            .map(|t| t.to_matrix())
-            .unwrap_or(glam::Mat4::IDENTITY);
-        if let Some(mut global) = world.get_mut::<GlobalTransform>(root) {
-            global.0 = local;
-        } else {
-            world.entity_mut(root).insert(GlobalTransform(local));
-        }
-        propagate_children(world, root);
-    }
-}
+    let mut globals = Vec::new();
+    propagate_transform_hierarchy(
+        &roots,
+        glam::Mat4::IDENTITY,
+        |entity| {
+            world
+                .get::<Children>(entity)
+                .map(|children| children.0.clone())
+                .unwrap_or_default()
+        },
+        |entity| {
+            world
+                .get::<Transform>(entity)
+                .map(|transform| transform.to_matrix())
+        },
+        |entity, global| globals.push((entity, global)),
+    );
 
-fn propagate_children(world: &mut World, parent: Entity) {
-    let parent_global = world
-        .get::<GlobalTransform>(parent)
-        .map(|g| g.0)
-        .unwrap_or(glam::Mat4::IDENTITY);
-
-    let child_entities: Vec<Entity> = world
-        .get::<Children>(parent)
-        .map(|c| c.0.clone())
-        .unwrap_or_default();
-
-    for child in child_entities {
-        let local = world
-            .get::<Transform>(child)
-            .map(|t| t.to_matrix())
-            .unwrap_or(glam::Mat4::IDENTITY);
-        let child_global = parent_global * local;
-
-        if let Some(mut global) = world.get_mut::<GlobalTransform>(child) {
-            global.0 = child_global;
+    for (entity, global_matrix) in globals {
+        if let Some(mut global) = world.get_mut::<GlobalTransform>(entity) {
+            global.0 = global_matrix;
         } else {
             world
-                .entity_mut(child)
-                .insert(GlobalTransform(child_global));
+                .entity_mut(entity)
+                .insert(GlobalTransform(global_matrix));
         }
-        propagate_children(world, child);
     }
 }
 
@@ -783,6 +769,54 @@ mod tests {
         assert!((pos.x - 10.0).abs() < f32::EPSILON);
         assert!((pos.y - 5.0).abs() < f32::EPSILON);
         assert!((pos.z - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_transform_propagation_multi_level() {
+        let mut world = World::new();
+
+        let root = world
+            .spawn((
+                Transform {
+                    position: glam::Vec3::new(2.0, 0.0, 0.0),
+                    ..Default::default()
+                },
+                GlobalTransform::identity(),
+            ))
+            .id();
+
+        let child = world
+            .spawn((
+                Transform {
+                    position: glam::Vec3::new(0.0, 3.0, 0.0),
+                    ..Default::default()
+                },
+                GlobalTransform::identity(),
+                Parent(root),
+            ))
+            .id();
+
+        let grandchild = world
+            .spawn((
+                Transform {
+                    position: glam::Vec3::new(0.0, 0.0, 4.0),
+                    ..Default::default()
+                },
+                GlobalTransform::identity(),
+                Parent(child),
+            ))
+            .id();
+
+        world.entity_mut(root).insert(Children(vec![child]));
+        world.entity_mut(child).insert(Children(vec![grandchild]));
+
+        transform_propagation(&mut world);
+
+        let grandchild_global = world.get::<GlobalTransform>(grandchild).unwrap();
+        let pos = grandchild_global.0.w_axis;
+        assert!((pos.x - 2.0).abs() < f32::EPSILON);
+        assert!((pos.y - 3.0).abs() < f32::EPSILON);
+        assert!((pos.z - 4.0).abs() < f32::EPSILON);
     }
 
     #[test]

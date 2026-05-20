@@ -20,7 +20,7 @@ use crate::domain::{
     ShapeShadowData, ShapeStrokeData, Timeline,
 };
 use crate::error::{Error, Result};
-use crate::services::{ISceneService, SceneService};
+use crate::services::PuppetRenderTiming;
 use crate::telemetry::spans::span;
 use neko_engine_codec::decoder::{global_pool, HwAccelDecoder, HwAccelType};
 use neko_engine_gpu::{
@@ -31,13 +31,47 @@ use neko_engine_gpu::{
     Transform2D, TransitionParams, TransitionType,
 };
 use neko_engine_gpu::{GpuPipelineTiming, LayerTexturePool, Nv12FrameResult};
-use neko_engine_scene_renderer::CameraParams;
+use neko_engine_puppet_renderer::PuppetRenderOutput;
+use neko_engine_scene_renderer::{CameraParams, SceneRenderOutput};
 use neko_engine_types::{BlendMode, GpuOutputHandle, TrackType};
 
 use super::types::ExportSettings;
 
 #[cfg(test)]
 mod tests;
+
+/// Narrow Scene3D render port used by GPU export.
+pub trait SceneRenderPort: Send + Sync {
+    /// Render the current scene state into a compositor-compatible output.
+    fn render_scene3d_frame(
+        &self,
+        clip_name: Option<&str>,
+        time: f32,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+    ) -> Result<SceneRenderOutput>;
+}
+
+/// Narrow Puppet render port used by GPU export.
+pub trait PuppetRenderPort: Send + Sync {
+    /// Render the current puppet state into a compositor-compatible output.
+    fn render_puppet_layer_output(
+        &self,
+        width: u32,
+        height: u32,
+        timing: PuppetRenderTiming,
+    ) -> Result<PuppetRenderOutput>;
+}
+
+/// Render service ports used by GPU export for domain-specific layers.
+#[derive(Clone, Default)]
+pub struct RenderServicePorts {
+    /// Scene3D render service port.
+    pub scene: Option<Arc<dyn SceneRenderPort>>,
+    /// Puppet render service port.
+    pub puppet: Option<Arc<dyn PuppetRenderPort>>,
+}
 
 /// GPU-centric export pipeline (Facade)
 ///
@@ -82,8 +116,8 @@ pub struct GpuExportPipeline {
     effect_dispatcher: Option<EffectDispatcher>,
     /// Texture-based transition processor for GPU zero-copy transitions
     transition_processor: TextureTransitionProcessor,
-    /// Scene service for 3D element rendering
-    scene_service: Option<Arc<SceneService>>,
+    /// Domain render services for Scene3D/Puppet elements.
+    render_ports: RenderServicePorts,
     /// Zero-copy RGBA→NV12 converter (macOS only, outputs to IOSurface)
     #[cfg(target_os = "macos")]
     zerocopy_converter: Option<neko_engine_gpu::RgbaToNv12TextureConverter>,
@@ -95,7 +129,7 @@ impl GpuExportPipeline {
         timeline: Timeline,
         settings: ExportSettings,
         ctx: Arc<GpuContext>,
-        scene_service: Option<Arc<SceneService>>,
+        render_ports: RenderServicePorts,
     ) -> Result<Self> {
         let total_frames = timeline.total_frames_at_fps(settings.fps);
         let output_width = settings.width;
@@ -126,7 +160,7 @@ impl GpuExportPipeline {
             shape_rasterizer: None,
             effect_dispatcher,
             transition_processor,
-            scene_service,
+            render_ports,
             #[cfg(target_os = "macos")]
             zerocopy_converter: None,
         })
@@ -321,11 +355,30 @@ impl GpuExportPipeline {
             }
         }
 
+        // Render 2D puppet elements
+        let puppet_z_start = (media_elements.len()
+            + text_elements.len()
+            + subtitle_elements.len()
+            + scene3d_elements.len()) as i32;
+        let puppet_elements = self.collect_visible_puppet(time, puppet_z_start);
+        if !puppet_elements.is_empty() {
+            tracing::debug!(
+                "Rendering {} puppet elements at time {:.2}s",
+                puppet_elements.len(),
+                time
+            );
+            for (puppet, z_idx) in &puppet_elements {
+                let layer = self.render_puppet_to_gpu_layer(puppet, time, *z_idx)?;
+                gpu_layers.push(layer);
+            }
+        }
+
         // Render shape elements (vector graphics)
         let shape_z_start = (media_elements.len()
             + text_elements.len()
             + subtitle_elements.len()
-            + scene3d_elements.len()) as i32;
+            + scene3d_elements.len()
+            + puppet_elements.len()) as i32;
         let shape_elements = self.collect_visible_shapes(time, shape_z_start);
         if !shape_elements.is_empty() {
             tracing::debug!(
@@ -745,6 +798,31 @@ impl GpuExportPipeline {
         result
     }
 
+    /// Collect visible 2D puppet elements at a given time
+    fn collect_visible_puppet(&self, time: f64, z_index_start: i32) -> Vec<(Element, i32)> {
+        let mut result = Vec::new();
+        let mut z_index = z_index_start;
+
+        for track in &self.timeline.tracks {
+            if track.muted || !matches!(track.track_type, TrackType::Puppet) {
+                continue;
+            }
+
+            for element in &track.elements {
+                if !element.is_visible_at(time) {
+                    continue;
+                }
+
+                if element.is_puppet() {
+                    result.push((element.clone(), z_index));
+                    z_index += 1;
+                }
+            }
+        }
+
+        result
+    }
+
     /// Collect visible shape elements at a given time
     fn collect_visible_shapes(&self, time: f64, z_index_start: i32) -> Vec<(Element, i32)> {
         let mut result = Vec::new();
@@ -1094,7 +1172,7 @@ impl GpuExportPipeline {
             _ => return None,
         };
 
-        let service = self.scene_service.as_ref()?;
+        let service = self.render_ports.scene.as_ref()?;
 
         // Calculate animation time: relative to element start, scaled by speed
         let source_time = element.get_source_time(time);
@@ -1111,7 +1189,7 @@ impl GpuExportPipeline {
 
         // Render the 3D scene
         let output = service
-            .render_frame(
+            .render_scene3d_frame(
                 scene_data.animation_clip.as_deref(),
                 scene_time,
                 (self.output_width, self.output_height),
@@ -1157,6 +1235,81 @@ impl GpuExportPipeline {
         );
 
         Some(layer)
+    }
+
+    /// Render a 2D puppet element to a GpuLayer.
+    fn render_puppet_to_gpu_layer(
+        &self,
+        element: &Element,
+        time: f64,
+        z_index: i32,
+    ) -> Result<GpuLayer> {
+        let puppet_data = match &element.element_type {
+            ElementType::Puppet(p) => p,
+            _ => {
+                return Err(Error::InvalidParameter(
+                    "render_puppet_to_gpu_layer requires a puppet element".to_string(),
+                ));
+            }
+        };
+
+        let service = self.render_ports.puppet.as_ref().ok_or_else(|| {
+            Error::UnsupportedCapability(
+                "GPU export requires an injected puppet render service for Puppet elements"
+                    .to_string(),
+            )
+        })?;
+
+        let source_time = element.get_source_time(time);
+        let animation_time_s = source_time * puppet_data.animation_speed;
+        let duration_us = (1_000_000.0 / self.settings.fps).round() as i64;
+        let frame_index = (time * self.settings.fps).floor().max(0.0) as u64;
+        let timing = PuppetRenderTiming {
+            pts: (animation_time_s * 1_000_000.0).round() as i64,
+            duration: duration_us,
+            frame_index,
+        };
+
+        let output = service
+            .render_puppet_layer_output(self.output_width, self.output_height, timing)
+            .map_err(|error| {
+                Error::Other(format!(
+                    "Puppet render failed for '{}': {}",
+                    puppet_data.src, error
+                ))
+            })?;
+
+        let transform = if !element.transform.is_identity() {
+            Self::element_transform_2d(element)
+        } else {
+            Transform2D {
+                x: self.output_width as f32 / 2.0,
+                y: self.output_height as f32 / 2.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+                anchor_x: 0.5,
+                anchor_y: 0.5,
+                _padding: 0.0,
+            }
+        };
+
+        let layer = output.into_gpu_layer(
+            transform,
+            element.opacity as f32,
+            element.blend_mode,
+            z_index,
+        );
+
+        tracing::debug!(
+            "Rendered puppet '{}' to {}x{} (z_index={})",
+            puppet_data.src,
+            self.output_width,
+            self.output_height,
+            z_index
+        );
+
+        Ok(layer)
     }
 
     /// Decode a media element to a GPU layer with timing breakdown

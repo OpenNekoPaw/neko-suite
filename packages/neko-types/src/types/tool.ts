@@ -4,6 +4,7 @@
 
 import type { ToolDefinition } from './platform';
 import type { AgentTraceContext } from './agent-trace';
+import type { CreativeDomainMetadata } from './domain-routing';
 
 /**
  * Tool category
@@ -219,6 +220,8 @@ export interface Tool {
   queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
   /** Behavioral traits for creative permission system */
   traits?: ToolTraits;
+  /** Serializable creative-domain metadata for orchestration routing. */
+  domain?: CreativeDomainMetadata;
 
   // --- Concurrency & safety metadata (Fail-Closed: all default false) ---
 

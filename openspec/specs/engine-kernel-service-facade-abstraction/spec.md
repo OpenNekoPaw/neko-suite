@@ -16,6 +16,11 @@ The engine kernel facade SHALL expose host-facing service handles through servic
 - **THEN** it may instantiate concrete services inside the factory
 - **THEN** it returns trait-object handles from `KernelServices`
 
+#### Scenario: Export receives render service ports
+- **WHEN** the kernel service graph is used to create export backends
+- **THEN** scene and puppet render capabilities are passed as trait-object service ports where the traits cover the required methods
+- **THEN** concrete service structs remain factory-local or explicitly documented temporary adapter details
+
 ### Requirement: Host Controllers Depend On Service Contracts
 Host controllers SHALL depend on service trait contracts for injected kernel services.
 
@@ -29,6 +34,11 @@ Host controllers SHALL depend on service trait contracts for injected kernel ser
 - **THEN** they can use `ServiceFactory` trait handles or explicit fake implementations
 - **THEN** direct concrete service construction remains outside production host wiring
 
+#### Scenario: Export tests can inject render fakes
+- **WHEN** export tests need scene or puppet render behavior
+- **THEN** they can inject fake service-port implementations or backend adapters
+- **THEN** they do not need to construct full scene or puppet runtime worlds for orchestration tests
+
 ### Requirement: Facade Abstraction Regression Tests
 The engine SHALL protect the trait-object facade boundary with architecture tests.
 
@@ -39,6 +49,10 @@ The engine SHALL protect the trait-object facade boundary with architecture test
 #### Scenario: Host controller concrete handle regression is detected
 - **WHEN** architecture tests inspect host-api controller sources
 - **THEN** they fail if controller fields or constructors use concrete kernel service handles where service traits are available
+
+#### Scenario: Export concrete handle regression is detected
+- **WHEN** architecture tests inspect export backend/factory wiring
+- **THEN** they fail if production export orchestration stores concrete scene or puppet service handles where trait-object render service ports are available
 
 ### Requirement: Kernel Dead-Code Guardrail Remains Active
 The engine kernel SHALL avoid crate-wide dead-code suppression after facade abstraction so new unused implementation code remains visible during review.

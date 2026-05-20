@@ -10,6 +10,7 @@
 // ToolDefinition is used for function calling with full schema
 
 import type { AgentTraceContext } from './agent-trace';
+import type { CreativeDomainMetadata } from './domain-routing';
 
 /**
  * Chat message format
@@ -62,6 +63,11 @@ export interface ToolCall {
  */
 export interface ToolDefinition {
   type: 'function';
+  /**
+   * Serializable creative-domain metadata for orchestration policy. Provider
+   * adapters must not merge this into function.parameters.
+   */
+  domain?: CreativeDomainMetadata;
   function: {
     name: string;
     description: string;

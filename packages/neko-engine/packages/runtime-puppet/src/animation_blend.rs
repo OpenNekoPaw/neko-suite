@@ -5,8 +5,9 @@
 
 use bevy_ecs::prelude::*;
 use neko_engine_types::animation::{
+    deserialize_blend_layer_info_with_unit, serialize_blend_layer_info_with_unit,
     AnimationBlendLayer, AnimationBlendLayerInfo, AnimationBlendState as SharedAnimationBlendState,
-    AnimationCrossfadeRequest, AnimationDuration,
+    AnimationCrossfadeRequest, AnimationDurationUnit,
 };
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
@@ -17,20 +18,22 @@ pub struct BlendLayer(AnimationBlendLayer);
 
 impl BlendLayer {
     pub fn new(clip_index: usize, elapsed_ms: f32, weight: f32, looping: bool) -> Self {
-        Self(AnimationBlendLayer::new(
+        Self(AnimationBlendLayer::new_with_unit(
             clip_index,
-            AnimationDuration::from_millis(elapsed_ms),
+            elapsed_ms,
+            AnimationDurationUnit::Milliseconds,
             weight,
             looping,
         ))
     }
 
     pub fn elapsed_ms(&self) -> f32 {
-        self.0.elapsed.as_millis()
+        self.0.elapsed_in_unit(AnimationDurationUnit::Milliseconds)
     }
 
     pub fn set_elapsed_ms(&mut self, elapsed_ms: f32) {
-        self.0.elapsed = AnimationDuration::from_millis(elapsed_ms);
+        self.0
+            .set_elapsed_in_unit(elapsed_ms, AnimationDurationUnit::Milliseconds);
     }
 }
 
@@ -54,9 +57,10 @@ pub struct BlendLayerInfo(AnimationBlendLayerInfo);
 
 impl BlendLayerInfo {
     pub fn new(clip_name: impl Into<String>, elapsed_ms: f32, weight: f32, looping: bool) -> Self {
-        Self(AnimationBlendLayerInfo::new(
+        Self(AnimationBlendLayerInfo::new_with_unit(
             clip_name,
-            AnimationDuration::from_millis(elapsed_ms),
+            elapsed_ms,
+            AnimationDurationUnit::Milliseconds,
             weight,
             looping,
         ))
@@ -67,7 +71,7 @@ impl BlendLayerInfo {
     }
 
     pub fn elapsed_ms(&self) -> f32 {
-        self.0.elapsed.as_millis()
+        self.0.elapsed_in_unit(AnimationDurationUnit::Milliseconds)
     }
 
     pub fn weight(&self) -> f32 {
@@ -84,21 +88,12 @@ impl Serialize for BlendLayerInfo {
     where
         S: serde::Serializer,
     {
-        #[derive(Serialize)]
-        struct BlendLayerInfoSerde<'a> {
-            clip_name: &'a str,
-            elapsed_ms: f32,
-            weight: f32,
-            looping: bool,
-        }
-
-        BlendLayerInfoSerde {
-            clip_name: self.clip_name(),
-            elapsed_ms: self.elapsed_ms(),
-            weight: self.weight(),
-            looping: self.looping(),
-        }
-        .serialize(serializer)
+        serialize_blend_layer_info_with_unit(
+            &self.0,
+            "elapsed_ms",
+            AnimationDurationUnit::Milliseconds,
+            serializer,
+        )
     }
 }
 
@@ -107,21 +102,12 @@ impl<'de> Deserialize<'de> for BlendLayerInfo {
     where
         D: serde::Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        struct BlendLayerInfoSerde {
-            clip_name: String,
-            elapsed_ms: f32,
-            weight: f32,
-            looping: bool,
-        }
-
-        let value = BlendLayerInfoSerde::deserialize(deserializer)?;
-        Ok(Self::new(
-            value.clip_name,
-            value.elapsed_ms,
-            value.weight,
-            value.looping,
-        ))
+        deserialize_blend_layer_info_with_unit(
+            "elapsed_ms",
+            AnimationDurationUnit::Milliseconds,
+            deserializer,
+        )
+        .map(Self)
     }
 }
 
@@ -162,25 +148,28 @@ impl CrossfadeRequest {
         fade_elapsed_ms: f32,
         loop_anim: bool,
     ) -> Self {
-        Self(AnimationCrossfadeRequest::new(
+        Self(AnimationCrossfadeRequest::new_with_unit(
             target_clip_index,
-            AnimationDuration::from_millis(fade_duration_ms),
-            AnimationDuration::from_millis(fade_elapsed_ms),
+            fade_duration_ms,
+            fade_elapsed_ms,
+            AnimationDurationUnit::Milliseconds,
             loop_anim,
         ))
     }
 
     pub fn fade_duration_ms(&self) -> f32 {
-        self.0.fade_duration.as_millis()
+        self.0
+            .fade_duration_in_unit(AnimationDurationUnit::Milliseconds)
     }
 
     pub fn fade_elapsed_ms(&self) -> f32 {
-        self.0.fade_elapsed.as_millis()
+        self.0
+            .fade_elapsed_in_unit(AnimationDurationUnit::Milliseconds)
     }
 
     pub fn advance_ms(&mut self, delta_ms: f32) {
-        let elapsed = self.fade_elapsed_ms() + delta_ms;
-        self.0.fade_elapsed = AnimationDuration::from_millis(elapsed);
+        self.0
+            .advance_in_unit(delta_ms, AnimationDurationUnit::Milliseconds);
     }
 }
 

@@ -30,6 +30,7 @@ pub mod registry;
 pub mod request;
 pub mod stream;
 pub mod task;
+pub mod transform_propagation;
 pub mod waveform;
 
 // Re-export commonly used types
@@ -51,4 +52,5 @@ pub use puppet::*;
 pub use request::*;
 pub use stream::*;
 pub use task::*;
+pub use transform_propagation::*;
 pub use waveform::*;

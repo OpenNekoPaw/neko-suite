@@ -89,21 +89,6 @@ impl ServiceFactory {
         let timeline_service =
             Arc::new(TimelineService::new(gpu_ctx.clone(), task_service.clone()));
 
-        let export_service: Option<Arc<dyn IExportService>> = gpu_ctx
-            .as_ref()
-            .map(|ctx| Arc::new(ExportService::new(Arc::clone(ctx))) as Arc<dyn IExportService>);
-        let effects_service: Option<Arc<dyn IEffectsService>> =
-            gpu_ctx
-                .as_ref()
-                .and_then(|ctx| match EffectsService::new(Arc::clone(ctx)) {
-                    Ok(service) => Some(Arc::new(service) as Arc<dyn IEffectsService>),
-                    Err(error) => {
-                        tracing::warn!("Effects service initialization failed: {}", error);
-                        None
-                    }
-                });
-        let effect_registry = Arc::new(EffectRegistry::with_builtins());
-
         let scene_service: Option<Arc<dyn ISceneService>> = Some(Arc::new(match &gpu_ctx {
             Some(ctx) => SceneService::with_gpu(Arc::clone(ctx)),
             None => SceneService::new(),
@@ -115,6 +100,25 @@ impl ServiceFactory {
             None => PuppetService::new(),
         })
             as Arc<dyn IPuppetService>);
+
+        let export_service: Option<Arc<dyn IExportService>> = gpu_ctx.as_ref().map(|ctx| {
+            Arc::new(ExportService::with_render_services(
+                Arc::clone(ctx),
+                scene_service.clone(),
+                puppet_service.clone(),
+            )) as Arc<dyn IExportService>
+        });
+        let effects_service: Option<Arc<dyn IEffectsService>> =
+            gpu_ctx
+                .as_ref()
+                .and_then(|ctx| match EffectsService::new(Arc::clone(ctx)) {
+                    Ok(service) => Some(Arc::new(service) as Arc<dyn IEffectsService>),
+                    Err(error) => {
+                        tracing::warn!("Effects service initialization failed: {}", error);
+                        None
+                    }
+                });
+        let effect_registry = Arc::new(EffectRegistry::with_builtins());
 
         let camera_service: Arc<dyn ICameraService> = Arc::new(CameraService::new());
         let midi_service: Arc<dyn IMidiService> = Arc::new(MidiService::new());

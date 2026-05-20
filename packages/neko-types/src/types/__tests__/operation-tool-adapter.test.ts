@@ -8,8 +8,11 @@ import type {
 } from '../operation-tool-adapter';
 import {
   createOperationToolAdapterRegistry,
+  createDomainRouter,
+  getOperationToolCreativeDomain,
   isOperationTool,
   isOperationToolPlanTraceable,
+  operationToolDomainMetadata,
 } from '../operation-tool-adapter';
 
 const operationTool: OperationTool = {
@@ -130,5 +133,50 @@ describe('operation tool adapter contracts', () => {
 
     registry.unregister('timeline');
     expect(registry.findPlanner(intent, context)).toBeUndefined();
+  });
+
+  it('maps operation domains to normalized creative domains', () => {
+    expect(operationToolDomainMetadata('model')).toEqual({
+      id: 'scene',
+      source: 'operation-tool',
+      operationDomain: 'model',
+      servicePortId: 'scene-render',
+    });
+    expect(operationToolDomainMetadata('puppet')).toEqual({
+      id: 'puppet',
+      source: 'operation-tool',
+      operationDomain: 'puppet',
+      servicePortId: 'puppet-render',
+    });
+    expect(getOperationToolCreativeDomain(operationTool)).toEqual(
+      expect.objectContaining({
+        id: 'timeline',
+        operationDomain: 'timeline',
+      }),
+    );
+  });
+
+  it('routes domain metadata to service port identity without runtime imports', () => {
+    const router = createDomainRouter();
+    const plan = router.route(
+      {
+        id: 'intent-model-1',
+        domain: operationToolDomainMetadata('model'),
+      },
+      [
+        {
+          id: 'scene-tools',
+          domain: { id: 'scene', source: 'capability' },
+          servicePortId: 'scene-render',
+        },
+      ],
+    );
+
+    expect(plan).toEqual({
+      intentId: 'intent-model-1',
+      domain: operationToolDomainMetadata('model'),
+      servicePortId: 'scene-render',
+      capabilityId: 'scene-tools',
+    });
   });
 });

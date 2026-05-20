@@ -4,7 +4,7 @@
 TBD - created by archiving change decouple-engine-export-preview-orchestration. Update Purpose after archive.
 ## Requirements
 ### Requirement: Export Orchestration Backend Boundary
-Export orchestration SHALL depend on focused backend contracts instead of directly constructing every concrete GPU, codec, and sink implementation.
+Export orchestration SHALL depend on focused backend contracts instead of directly constructing every concrete GPU, codec, sink, scene, or puppet implementation.
 
 #### Scenario: Export can inject a fake backend
 - **WHEN** export orchestration is tested with a fake render or sink backend
@@ -14,6 +14,10 @@ Export orchestration SHALL depend on focused backend contracts instead of direct
 - **WHEN** production export code uses the default backend adapters
 - **THEN** it uses the existing GPU export, encode, mux, and sink implementations
 - **THEN** existing submit, flush, close, cancel, and progress behavior remains compatible
+
+#### Scenario: Export can inject scene and puppet render ports
+- **WHEN** a GPU export pipeline is created for a timeline that may contain Scene3D or Puppet elements
+- **THEN** export backend construction can provide scene and puppet render service ports without direct service construction inside the pipeline
 
 ### Requirement: Preview Orchestration Backend Boundary
 Preview orchestration SHALL route preview requests through focused backend contracts that isolate concrete renderers and provider implementations.
@@ -40,6 +44,10 @@ The engine SHALL include architecture guardrails that prevent export and preview
 - **THEN** they fail if preview orchestration imports renderer internals that should be accessed through a backend adapter
 - **THEN** provider registry contracts remain the preferred routing surface
 
+#### Scenario: Export pipeline does not construct domain services
+- **WHEN** architecture checks inspect GPU export pipeline code
+- **THEN** they fail if the pipeline constructs SceneService or PuppetService directly instead of receiving injected service ports or documented adapter handles
+
 ### Requirement: Zero-Copy And Sink Semantics Are Preserved
 Export and preview decoupling SHALL NOT introduce CPU readback fallback or alter sink lifecycle semantics.
 
@@ -51,3 +59,8 @@ Export and preview decoupling SHALL NOT introduce CPU readback fallback or alter
 #### Scenario: Sink lifecycle behavior remains covered
 - **WHEN** validation runs for this change
 - **THEN** targeted tests cover MuxerSink flush/close behavior, StreamSink close flush behavior, SnapshotSink terminal behavior, and unsupported output errors
+
+#### Scenario: Mixed domain export preserves zero-copy policy
+- **WHEN** Scene3D and Puppet layers are exported in the same GPU frame
+- **THEN** each layer follows the existing GPU-handle composition policy
+- **THEN** the mixed export path does not introduce a CPU composition fallback

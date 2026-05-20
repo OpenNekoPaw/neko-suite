@@ -547,6 +547,77 @@ fn export_module_does_not_depend_on_service_impls() {
 }
 
 #[test]
+fn gpu_export_pipeline_receives_domain_render_ports() {
+    let pipeline_rs = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/export/gpu_export_pipeline.rs");
+    let source = fs::read_to_string(&pipeline_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", pipeline_rs.display(), err));
+
+    for required in [
+        "pub trait SceneRenderPort",
+        "pub trait PuppetRenderPort",
+        "render_ports: RenderServicePorts",
+        "collect_visible_puppet",
+        "render_puppet_to_gpu_layer",
+    ] {
+        assert!(
+            source.contains(required),
+            "GpuExportPipeline must keep injected render-port contract `{}`",
+            required
+        );
+    }
+
+    for forbidden in [
+        "SceneService::new(",
+        "SceneService::with_gpu(",
+        "PuppetService::new(",
+        "PuppetService::with_gpu(",
+        "Arc<SceneService>",
+        "Arc<PuppetService>",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "GpuExportPipeline must not construct or store concrete service `{}`",
+            forbidden
+        );
+    }
+}
+
+#[test]
+fn export_backend_adapts_trait_services_to_render_ports_only() {
+    let backend_rs = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/export/backend.rs");
+    let source = fs::read_to_string(&backend_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", backend_rs.display(), err));
+
+    for required in [
+        "ExportRenderServicePorts",
+        "SceneServiceRenderPort",
+        "PuppetServiceRenderPort",
+        "impl SceneRenderPort for SceneServiceRenderPort",
+        "impl PuppetRenderPort for PuppetServiceRenderPort",
+    ] {
+        assert!(
+            source.contains(required),
+            "export backend must keep documented render-port adapter `{}`",
+            required
+        );
+    }
+
+    for forbidden in [
+        "SceneService::new(",
+        "SceneService::with_gpu(",
+        "PuppetService::new(",
+        "PuppetService::with_gpu(",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "export backend must receive service ports rather than constructing `{}`",
+            forbidden
+        );
+    }
+}
+
+#[test]
 fn export_service_uses_backend_adapters_for_concrete_construction() {
     assert_no_pattern(
         "src/export/service.rs",
@@ -660,10 +731,14 @@ fn engine_types_does_not_gain_implementation_dependencies() {
         .unwrap_or_else(|err| panic!("failed to read {}: {}", types_manifest.display(), err));
 
     for forbidden in [
+        "bevy",
+        "bevy_ecs",
         "wgpu",
         "ffmpeg",
         "tokio",
         "neko-engine-kernel",
+        "neko-runtime-scene",
+        "neko-runtime-puppet",
         "neko-engine-audio",
         "host-api",
         "host-http",
@@ -673,6 +748,31 @@ fn engine_types_does_not_gain_implementation_dependencies() {
             !manifest.contains(forbidden),
             "{} must not depend on implementation crate `{}`",
             types_manifest.display(),
+            forbidden
+        );
+    }
+}
+
+#[test]
+fn engine_types_animation_sources_remain_runtime_and_ecs_free() {
+    let animation_rs = packages_dir().join("engine-types/src/animation.rs");
+    let source = fs::read_to_string(&animation_rs)
+        .unwrap_or_else(|err| panic!("failed to read {}: {}", animation_rs.display(), err));
+
+    for forbidden in [
+        "bevy",
+        "bevy_ecs",
+        "neko_runtime_scene",
+        "neko_runtime_puppet",
+        "neko-runtime-scene",
+        "neko-runtime-puppet",
+        "SceneBlendLayer",
+        "BlendLayerInfoSerde",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "{} must keep animation DTOs runtime/ECS-free; found `{}`",
+            relative_to_packages(&animation_rs),
             forbidden
         );
     }

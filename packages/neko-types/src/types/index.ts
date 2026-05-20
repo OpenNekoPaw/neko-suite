@@ -93,6 +93,7 @@ export * from './subagent';
 
 // Tool types
 export * from './tool';
+export * from './domain-routing';
 
 // MCP types
 export * from './mcp';

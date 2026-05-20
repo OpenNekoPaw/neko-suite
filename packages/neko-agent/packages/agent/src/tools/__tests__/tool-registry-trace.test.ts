@@ -121,4 +121,39 @@ describe('ToolRegistry provider schema projection', () => {
     expect(parameters).not.toHaveProperty('enum');
     expect(parameters).not.toHaveProperty('not');
   });
+
+  it('projects optional domain metadata outside provider parameters', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ModelInspectScene',
+        description: 'Inspect the active 3D scene.',
+        category: 'analysis',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        domain: {
+          id: 'scene',
+          source: 'engine-tool',
+          servicePortId: 'scene-render',
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            nodeId: { type: 'string' },
+          },
+        },
+        execute: async () => ({ success: true, data: 'ok' }),
+      }),
+    );
+
+    const [definition] = registry.toToolDefinitions();
+
+    expect(definition?.domain).toEqual({
+      id: 'scene',
+      source: 'engine-tool',
+      servicePortId: 'scene-render',
+    });
+    expect(definition?.function.parameters).not.toHaveProperty('domain');
+  });
 });

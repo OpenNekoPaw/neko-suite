@@ -5,6 +5,13 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Runtime-facing duration unit used by compatibility accessors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnimationDurationUnit {
+    Seconds,
+    Milliseconds,
+}
+
 /// Explicit animation duration stored in milliseconds.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AnimationDuration {
@@ -33,6 +40,22 @@ impl AnimationDuration {
     pub fn as_millis(self) -> f32 {
         self.millis
     }
+
+    /// Creates a duration from a unit-tagged runtime value.
+    pub fn from_unit(value: f32, unit: AnimationDurationUnit) -> Self {
+        match unit {
+            AnimationDurationUnit::Seconds => Self::from_seconds(value),
+            AnimationDurationUnit::Milliseconds => Self::from_millis(value),
+        }
+    }
+
+    /// Returns this duration using the requested runtime unit.
+    pub fn as_unit(self, unit: AnimationDurationUnit) -> f32 {
+        match unit {
+            AnimationDurationUnit::Seconds => self.as_seconds(),
+            AnimationDurationUnit::Milliseconds => self.as_millis(),
+        }
+    }
 }
 
 impl Default for AnimationDuration {
@@ -59,6 +82,29 @@ impl AnimationBlendLayer {
             looping,
         }
     }
+
+    pub fn new_with_unit(
+        clip_index: usize,
+        elapsed: f32,
+        unit: AnimationDurationUnit,
+        weight: f32,
+        looping: bool,
+    ) -> Self {
+        Self::new(
+            clip_index,
+            AnimationDuration::from_unit(elapsed, unit),
+            weight,
+            looping,
+        )
+    }
+
+    pub fn elapsed_in_unit(&self, unit: AnimationDurationUnit) -> f32 {
+        self.elapsed.as_unit(unit)
+    }
+
+    pub fn set_elapsed_in_unit(&mut self, elapsed: f32, unit: AnimationDurationUnit) {
+        self.elapsed = AnimationDuration::from_unit(elapsed, unit);
+    }
 }
 
 /// Frontend-facing blend layer info with explicit duration semantics.
@@ -83,6 +129,25 @@ impl AnimationBlendLayerInfo {
             weight,
             looping,
         }
+    }
+
+    pub fn new_with_unit(
+        clip_name: impl Into<String>,
+        elapsed: f32,
+        unit: AnimationDurationUnit,
+        weight: f32,
+        looping: bool,
+    ) -> Self {
+        Self::new(
+            clip_name,
+            AnimationDuration::from_unit(elapsed, unit),
+            weight,
+            looping,
+        )
+    }
+
+    pub fn elapsed_in_unit(&self, unit: AnimationDurationUnit) -> f32 {
+        self.elapsed.as_unit(unit)
     }
 }
 
@@ -127,6 +192,120 @@ impl AnimationCrossfadeRequest {
             loop_anim,
         }
     }
+
+    pub fn new_with_unit(
+        target_clip_index: usize,
+        fade_duration: f32,
+        fade_elapsed: f32,
+        unit: AnimationDurationUnit,
+        loop_anim: bool,
+    ) -> Self {
+        Self::new(
+            target_clip_index,
+            AnimationDuration::from_unit(fade_duration, unit),
+            AnimationDuration::from_unit(fade_elapsed, unit),
+            loop_anim,
+        )
+    }
+
+    pub fn fade_duration_in_unit(&self, unit: AnimationDurationUnit) -> f32 {
+        self.fade_duration.as_unit(unit)
+    }
+
+    pub fn fade_elapsed_in_unit(&self, unit: AnimationDurationUnit) -> f32 {
+        self.fade_elapsed.as_unit(unit)
+    }
+
+    pub fn advance_in_unit(&mut self, delta: f32, unit: AnimationDurationUnit) {
+        let elapsed = self.fade_elapsed_in_unit(unit) + delta;
+        self.fade_elapsed = AnimationDuration::from_unit(elapsed, unit);
+    }
+}
+
+/// Serializer helper for runtime-specific blend layer info units/field names.
+pub fn serialize_blend_layer_info_with_unit<S>(
+    info: &AnimationBlendLayerInfo,
+    elapsed_field: &'static str,
+    unit: AnimationDurationUnit,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::SerializeStruct;
+
+    let mut state = serializer.serialize_struct("AnimationBlendLayerInfo", 4)?;
+    state.serialize_field("clip_name", &info.clip_name)?;
+    state.serialize_field(elapsed_field, &info.elapsed_in_unit(unit))?;
+    state.serialize_field("weight", &info.weight)?;
+    state.serialize_field("looping", &info.looping)?;
+    state.end()
+}
+
+/// Deserializer helper for runtime-specific blend layer info units/field names.
+pub fn deserialize_blend_layer_info_with_unit<'de, D>(
+    elapsed_field: &'static str,
+    unit: AnimationDurationUnit,
+    deserializer: D,
+) -> Result<AnimationBlendLayerInfo, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error as DeError, MapAccess, Visitor};
+    use std::fmt;
+
+    struct BlendLayerInfoVisitor {
+        elapsed_field: &'static str,
+        unit: AnimationDurationUnit,
+    }
+
+    impl<'de> Visitor<'de> for BlendLayerInfoVisitor {
+        type Value = AnimationBlendLayerInfo;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(
+                formatter,
+                "blend layer info with clip_name, {}, weight, and looping",
+                self.elapsed_field
+            )
+        }
+
+        fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            let mut clip_name: Option<String> = None;
+            let mut elapsed: Option<f32> = None;
+            let mut weight: Option<f32> = None;
+            let mut looping: Option<bool> = None;
+
+            while let Some(key) = map.next_key::<String>()? {
+                match key.as_str() {
+                    "clip_name" => clip_name = Some(map.next_value()?),
+                    key if key == self.elapsed_field => elapsed = Some(map.next_value()?),
+                    "weight" => weight = Some(map.next_value()?),
+                    "looping" => looping = Some(map.next_value()?),
+                    _ => {
+                        let _ = map.next_value::<serde::de::IgnoredAny>()?;
+                    }
+                }
+            }
+
+            let clip_name = clip_name.ok_or_else(|| M::Error::missing_field("clip_name"))?;
+            let elapsed = elapsed.ok_or_else(|| M::Error::missing_field(self.elapsed_field))?;
+            let weight = weight.ok_or_else(|| M::Error::missing_field("weight"))?;
+            let looping = looping.ok_or_else(|| M::Error::missing_field("looping"))?;
+
+            Ok(AnimationBlendLayerInfo::new_with_unit(
+                clip_name, elapsed, self.unit, weight, looping,
+            ))
+        }
+    }
+
+    deserializer.deserialize_map(BlendLayerInfoVisitor {
+        elapsed_field,
+        unit,
+    })
 }
 
 #[cfg(test)]
@@ -181,5 +360,147 @@ mod tests {
         assert!(json.contains("\"target_clip_index\":2"));
         assert!(json.contains("\"fade_duration\":{\"millis\":500.0}"));
         assert!(json.contains("\"fade_elapsed\":{\"millis\":125.0}"));
+    }
+
+    #[test]
+    fn blend_layer_supports_unit_tagged_accessors() {
+        let mut layer =
+            AnimationBlendLayer::new_with_unit(1, 0.5, AnimationDurationUnit::Seconds, 0.25, true);
+
+        assert_close(
+            layer.elapsed_in_unit(AnimationDurationUnit::Milliseconds),
+            500.0,
+        );
+
+        layer.set_elapsed_in_unit(750.0, AnimationDurationUnit::Milliseconds);
+        assert_close(layer.elapsed_in_unit(AnimationDurationUnit::Seconds), 0.75);
+    }
+
+    #[test]
+    fn crossfade_supports_unit_tagged_accessors() {
+        let mut request = AnimationCrossfadeRequest::new_with_unit(
+            4,
+            250.0,
+            100.0,
+            AnimationDurationUnit::Milliseconds,
+            true,
+        );
+
+        request.advance_in_unit(0.05, AnimationDurationUnit::Seconds);
+
+        assert_eq!(request.target_clip_index, 4);
+        assert_close(
+            request.fade_duration_in_unit(AnimationDurationUnit::Seconds),
+            0.25,
+        );
+        assert_close(
+            request.fade_elapsed_in_unit(AnimationDurationUnit::Milliseconds),
+            150.0,
+        );
+        assert!(request.loop_anim);
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct SecondsBlendLayerInfo(AnimationBlendLayerInfo);
+
+    impl Serialize for SecondsBlendLayerInfo {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serialize_blend_layer_info_with_unit(
+                &self.0,
+                "elapsed",
+                AnimationDurationUnit::Seconds,
+                serializer,
+            )
+        }
+    }
+
+    impl<'de> Deserialize<'de> for SecondsBlendLayerInfo {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserialize_blend_layer_info_with_unit(
+                "elapsed",
+                AnimationDurationUnit::Seconds,
+                deserializer,
+            )
+            .map(Self)
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct MillisBlendLayerInfo(AnimationBlendLayerInfo);
+
+    impl Serialize for MillisBlendLayerInfo {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serialize_blend_layer_info_with_unit(
+                &self.0,
+                "elapsed_ms",
+                AnimationDurationUnit::Milliseconds,
+                serializer,
+            )
+        }
+    }
+
+    impl<'de> Deserialize<'de> for MillisBlendLayerInfo {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserialize_blend_layer_info_with_unit(
+                "elapsed_ms",
+                AnimationDurationUnit::Milliseconds,
+                deserializer,
+            )
+            .map(Self)
+        }
+    }
+
+    #[test]
+    fn blend_layer_info_serializes_runtime_specific_elapsed_field() {
+        let info = AnimationBlendLayerInfo::new_with_unit(
+            "walk",
+            0.5,
+            AnimationDurationUnit::Seconds,
+            0.7,
+            true,
+        );
+
+        let seconds_json = serde_json::to_string(&SecondsBlendLayerInfo(info.clone())).unwrap();
+        assert!(seconds_json.contains("\"elapsed\":0.5"));
+        assert!(!seconds_json.contains("elapsed_ms"));
+
+        let millis_json = serde_json::to_string(&MillisBlendLayerInfo(info)).unwrap();
+        assert!(millis_json.contains("\"elapsed_ms\":500.0"));
+        assert!(!millis_json.contains("\"elapsed\":"));
+    }
+
+    #[test]
+    fn blend_layer_info_deserializes_runtime_specific_elapsed_field() {
+        let seconds: SecondsBlendLayerInfo = serde_json::from_str(
+            r#"{"clip_name":"walk","elapsed":0.5,"weight":0.7,"looping":true}"#,
+        )
+        .unwrap();
+        assert_close(
+            seconds
+                .0
+                .elapsed_in_unit(AnimationDurationUnit::Milliseconds),
+            500.0,
+        );
+
+        let millis: MillisBlendLayerInfo = serde_json::from_str(
+            r#"{"clip_name":"walk","elapsed_ms":500.0,"weight":0.7,"looping":true}"#,
+        )
+        .unwrap();
+        assert_close(
+            millis.0.elapsed_in_unit(AnimationDurationUnit::Seconds),
+            0.5,
+        );
     }
 }

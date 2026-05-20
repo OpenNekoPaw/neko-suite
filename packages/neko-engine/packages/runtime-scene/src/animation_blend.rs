@@ -6,8 +6,9 @@
 
 use bevy_ecs::prelude::*;
 use neko_engine_types::animation::{
+    deserialize_blend_layer_info_with_unit, serialize_blend_layer_info_with_unit,
     AnimationBlendLayer, AnimationBlendLayerInfo, AnimationBlendState, AnimationCrossfadeRequest,
-    AnimationDuration,
+    AnimationDurationUnit,
 };
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
@@ -18,20 +19,22 @@ pub struct SceneBlendLayer(AnimationBlendLayer);
 
 impl SceneBlendLayer {
     pub fn new(clip_index: usize, elapsed_seconds: f32, weight: f32, looping: bool) -> Self {
-        Self(AnimationBlendLayer::new(
+        Self(AnimationBlendLayer::new_with_unit(
             clip_index,
-            AnimationDuration::from_seconds(elapsed_seconds),
+            elapsed_seconds,
+            AnimationDurationUnit::Seconds,
             weight,
             looping,
         ))
     }
 
     pub fn elapsed_seconds(&self) -> f32 {
-        self.0.elapsed.as_seconds()
+        self.0.elapsed_in_unit(AnimationDurationUnit::Seconds)
     }
 
     pub fn set_elapsed_seconds(&mut self, elapsed_seconds: f32) {
-        self.0.elapsed = AnimationDuration::from_seconds(elapsed_seconds);
+        self.0
+            .set_elapsed_in_unit(elapsed_seconds, AnimationDurationUnit::Seconds);
     }
 }
 
@@ -60,9 +63,10 @@ impl SceneBlendLayerInfo {
         weight: f32,
         looping: bool,
     ) -> Self {
-        Self(AnimationBlendLayerInfo::new(
+        Self(AnimationBlendLayerInfo::new_with_unit(
             clip_name,
-            AnimationDuration::from_seconds(elapsed_seconds),
+            elapsed_seconds,
+            AnimationDurationUnit::Seconds,
             weight,
             looping,
         ))
@@ -73,7 +77,7 @@ impl SceneBlendLayerInfo {
     }
 
     pub fn elapsed_seconds(&self) -> f32 {
-        self.0.elapsed.as_seconds()
+        self.0.elapsed_in_unit(AnimationDurationUnit::Seconds)
     }
 
     pub fn weight(&self) -> f32 {
@@ -90,21 +94,12 @@ impl Serialize for SceneBlendLayerInfo {
     where
         S: serde::Serializer,
     {
-        #[derive(Serialize)]
-        struct SceneBlendLayerInfoSerde<'a> {
-            clip_name: &'a str,
-            elapsed: f32,
-            weight: f32,
-            looping: bool,
-        }
-
-        SceneBlendLayerInfoSerde {
-            clip_name: self.clip_name(),
-            elapsed: self.elapsed_seconds(),
-            weight: self.weight(),
-            looping: self.looping(),
-        }
-        .serialize(serializer)
+        serialize_blend_layer_info_with_unit(
+            &self.0,
+            "elapsed",
+            AnimationDurationUnit::Seconds,
+            serializer,
+        )
     }
 }
 
@@ -113,21 +108,12 @@ impl<'de> Deserialize<'de> for SceneBlendLayerInfo {
     where
         D: serde::Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        struct SceneBlendLayerInfoSerde {
-            clip_name: String,
-            elapsed: f32,
-            weight: f32,
-            looping: bool,
-        }
-
-        let value = SceneBlendLayerInfoSerde::deserialize(deserializer)?;
-        Ok(Self::new(
-            value.clip_name,
-            value.elapsed,
-            value.weight,
-            value.looping,
-        ))
+        deserialize_blend_layer_info_with_unit(
+            "elapsed",
+            AnimationDurationUnit::Seconds,
+            deserializer,
+        )
+        .map(Self)
     }
 }
 
@@ -192,25 +178,26 @@ impl SceneCrossfadeRequest {
         fade_elapsed_seconds: f32,
         loop_anim: bool,
     ) -> Self {
-        Self(AnimationCrossfadeRequest::new(
+        Self(AnimationCrossfadeRequest::new_with_unit(
             target_clip_index,
-            AnimationDuration::from_seconds(fade_duration_seconds),
-            AnimationDuration::from_seconds(fade_elapsed_seconds),
+            fade_duration_seconds,
+            fade_elapsed_seconds,
+            AnimationDurationUnit::Seconds,
             loop_anim,
         ))
     }
 
     pub fn fade_duration_seconds(&self) -> f32 {
-        self.0.fade_duration.as_seconds()
+        self.0.fade_duration_in_unit(AnimationDurationUnit::Seconds)
     }
 
     pub fn fade_elapsed_seconds(&self) -> f32 {
-        self.0.fade_elapsed.as_seconds()
+        self.0.fade_elapsed_in_unit(AnimationDurationUnit::Seconds)
     }
 
     pub fn advance_seconds(&mut self, delta_seconds: f32) {
-        let elapsed = self.fade_elapsed_seconds() + delta_seconds;
-        self.0.fade_elapsed = AnimationDuration::from_seconds(elapsed);
+        self.0
+            .advance_in_unit(delta_seconds, AnimationDurationUnit::Seconds);
     }
 }
 

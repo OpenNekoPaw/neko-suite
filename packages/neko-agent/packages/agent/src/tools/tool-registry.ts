@@ -268,6 +268,7 @@ export class ToolRegistry implements IToolRegistry {
 
     return tools.map((tool) => ({
       type: 'function' as const,
+      ...(tool.domain ? { domain: tool.domain } : {}),
       function: {
         name: tool.name,
         description: tool.description,

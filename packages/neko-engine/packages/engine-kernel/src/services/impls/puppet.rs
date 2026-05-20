@@ -41,10 +41,38 @@ const PUPPET_GPU_PIPELINE_ID: &str = "puppet-renderer";
 
 /// Concrete puppet service backed by bevy_ecs
 pub struct PuppetService {
-    world: Mutex<BevyPuppetWorld>,
+    computation: PuppetComputation,
     command_state: Mutex<PuppetCommandState>,
     gpu_ctx: Option<Arc<GpuContext>>,
     puppet_renderer: Option<PuppetRenderer>,
+}
+
+struct PuppetComputation {
+    world: Mutex<BevyPuppetWorld>,
+}
+
+impl PuppetComputation {
+    fn new() -> Self {
+        Self {
+            world: Mutex::new(BevyPuppetWorld::new()),
+        }
+    }
+
+    fn creative<R>(&self, f: impl FnOnce(&mut BevyPuppetWorld) -> Result<R>) -> Result<R> {
+        let mut world = self.lock_world()?;
+        f(&mut world)
+    }
+
+    fn data<R>(&self, f: impl FnOnce(&mut BevyPuppetWorld) -> Result<R>) -> Result<R> {
+        let mut world = self.lock_world()?;
+        f(&mut world)
+    }
+
+    fn lock_world(&self) -> Result<MutexGuard<'_, BevyPuppetWorld>> {
+        self.world
+            .lock()
+            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))
+    }
 }
 
 #[derive(Debug)]
@@ -65,7 +93,7 @@ impl Default for PuppetCommandState {
 impl PuppetService {
     pub fn new() -> Self {
         Self {
-            world: Mutex::new(BevyPuppetWorld::new()),
+            computation: PuppetComputation::new(),
             command_state: Mutex::new(PuppetCommandState::default()),
             gpu_ctx: None,
             puppet_renderer: None,
@@ -75,7 +103,7 @@ impl PuppetService {
     /// Create with GPU rendering support.
     pub fn with_gpu(ctx: Arc<GpuContext>) -> Self {
         Self {
-            world: Mutex::new(BevyPuppetWorld::new()),
+            computation: PuppetComputation::new(),
             command_state: Mutex::new(PuppetCommandState::default()),
             gpu_ctx: Some(Arc::clone(&ctx)),
             puppet_renderer: Some(PuppetRenderer::new(ctx)),
@@ -294,13 +322,9 @@ impl PuppetService {
             });
         }
 
-        let result = {
-            let mut world = self
-                .world
-                .lock()
-                .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-            Self::apply_command_to_world(&mut world, envelope.command)
-        };
+        let result = self
+            .computation
+            .creative(|world| Self::apply_command_to_world(world, envelope.command));
 
         match result {
             Ok(result) => {
@@ -333,15 +357,11 @@ impl PuppetService {
         height: u32,
         timing: PuppetRenderTiming,
     ) -> Result<PuppetRenderRequest> {
-        let (snapshot, deformed_meshes) = {
-            let mut world = self
-                .world
-                .lock()
-                .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
+        let (snapshot, deformed_meshes) = self.computation.data(|world| {
             let snapshot = world.get_snapshot();
             let deformed_meshes = world.get_deformed_meshes();
-            (snapshot, deformed_meshes)
-        };
+            Ok((snapshot, deformed_meshes))
+        })?;
         let meshes = extract_renderer_meshes(&snapshot.meshes, &deformed_meshes)?;
         Ok(PuppetRenderRequest {
             width,
@@ -606,12 +626,7 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_snapshot(&self) -> Result<PuppetSnapshot> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-
-        Ok(world.get_snapshot())
+        self.computation.data(|world| Ok(world.get_snapshot()))
     }
 
     fn set_parameter(&self, name: &str, value: f32) -> Result<()> {
@@ -622,12 +637,7 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_parameters(&self) -> Result<Vec<ParameterInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-
-        Ok(world.get_parameters())
+        self.computation.data(|world| Ok(world.get_parameters()))
     }
 
     fn tick(&self, delta_ms: f32) -> Result<PuppetDelta> {
@@ -635,12 +645,8 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_deformed_meshes(&self) -> Result<Vec<DeformedMesh>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-
-        Ok(world.get_deformed_meshes())
+        self.computation
+            .data(|world| Ok(world.get_deformed_meshes()))
     }
 
     fn render_gpu_frame(
@@ -651,6 +657,16 @@ impl IPuppetService for PuppetService {
     ) -> Result<VideoOutput> {
         let (ctx, output) = self.render_output(width, height, timing)?;
         Ok(output.into_video_output(ctx))
+    }
+
+    fn render_composite_gpu_layer_output(
+        &self,
+        width: u32,
+        height: u32,
+        timing: PuppetRenderTiming,
+    ) -> Result<PuppetRenderOutput> {
+        let (_ctx, output) = self.render_output(width, height, timing)?;
+        Ok(output)
     }
 
     fn submit_rendered_frame_to_sink(
@@ -720,12 +736,7 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_animations(&self) -> Result<Vec<AnimationClipInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-
-        Ok(world.get_animations())
+        self.computation.data(|world| Ok(world.get_animations()))
     }
 
     fn play_animation(&self, name: &str, loop_anim: bool) -> Result<()> {
@@ -744,12 +755,8 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_keyframe_tracks(&self, clip_name: &str) -> Result<Vec<ParameterCurveInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-
-        world.get_keyframe_tracks(clip_name).map_err(Error::Other)
+        self.computation
+            .data(|world| world.get_keyframe_tracks(clip_name).map_err(Error::Other))
     }
 
     fn add_keyframe(
@@ -828,12 +835,7 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_blend_state(&self) -> Result<Vec<BlendLayerInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-
-        Ok(world.get_blend_state())
+        self.computation.data(|world| Ok(world.get_blend_state()))
     }
 
     fn set_node_opacity(&self, node_id: &str, opacity: f32) -> Result<()> {
@@ -851,12 +853,7 @@ impl IPuppetService for PuppetService {
     }
 
     fn get_expressions(&self) -> Result<Vec<ExpressionInfo>> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-
-        Ok(world.get_expressions())
+        self.computation.data(|world| Ok(world.get_expressions()))
     }
 
     fn set_expression(&self, name: &str) -> Result<()> {
@@ -883,21 +880,16 @@ impl IPuppetService for PuppetService {
     }
 
     fn export_motion3(&self, clip_name: &str) -> Result<String> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-        world.export_motion3(clip_name).map_err(Error::Other)
+        self.computation
+            .data(|world| world.export_motion3(clip_name).map_err(Error::Other))
     }
 
     fn export_expression3(&self, expression_name: &str) -> Result<String> {
-        let mut world = self
-            .world
-            .lock()
-            .map_err(|e| Error::Other(format!("Puppet world lock poisoned: {}", e)))?;
-        world
-            .export_expression3(expression_name)
-            .map_err(Error::Other)
+        self.computation.data(|world| {
+            world
+                .export_expression3(expression_name)
+                .map_err(Error::Other)
+        })
     }
 }
 
@@ -1023,6 +1015,33 @@ mod tests {
 
         assert!(delta.deformed_meshes.is_empty());
         assert_eq!(service.current_revision().unwrap(), 1);
+    }
+
+    #[test]
+    fn data_queries_use_computation_boundary() {
+        let service = PuppetService::new();
+
+        assert!(service.get_snapshot().unwrap().nodes.is_empty());
+        assert!(service.get_parameters().unwrap().is_empty());
+        assert!(service.get_deformed_meshes().unwrap().is_empty());
+        assert!(service.get_animations().unwrap().is_empty());
+        assert!(service.get_blend_state().unwrap().is_empty());
+        assert!(service.get_expressions().unwrap().is_empty());
+    }
+
+    #[test]
+    fn computation_lock_poisoning_maps_to_service_error() {
+        let computation = PuppetComputation::new();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = computation.world.lock().unwrap();
+            panic!("poison puppet computation world");
+        }));
+
+        let err = computation
+            .data(|world| Ok(world.get_snapshot()))
+            .unwrap_err();
+
+        assert!(err.to_string().contains("Puppet world lock poisoned"));
     }
 
     #[test]

@@ -3,6 +3,7 @@
 //! Provides an interface for loading, querying, and manipulating 2D puppets.
 //! Mirrors the ISceneService pattern for 3D scenes.
 
+use neko_engine_puppet_renderer::PuppetRenderOutput;
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{PuppetCommandAck, PuppetCommandEnvelope};
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
@@ -104,6 +105,14 @@ pub trait IPuppetService: Send + Sync {
         height: u32,
         timing: PuppetRenderTiming,
     ) -> crate::error::Result<VideoOutput>;
+
+    /// Render the current puppet state into a compositor-compatible GPU texture.
+    fn render_composite_gpu_layer_output(
+        &self,
+        width: u32,
+        height: u32,
+        timing: PuppetRenderTiming,
+    ) -> crate::error::Result<PuppetRenderOutput>;
 
     /// Render the current puppet state and submit it to a PipelineSink.
     fn submit_rendered_frame_to_sink(

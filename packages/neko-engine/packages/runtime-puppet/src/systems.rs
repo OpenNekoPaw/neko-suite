@@ -10,6 +10,7 @@ use crate::hierarchy;
 use bevy_ecs::prelude::*;
 use glam::{Mat3, Vec2};
 use neko_engine_types::easing::{Easing, EasingType};
+use neko_engine_types::transform_propagation::propagate_transform_hierarchy;
 
 /// Reset all puppet parameters to their default values.
 ///
@@ -40,46 +41,34 @@ type ClipBlendData = (f32, Vec<AnimCurveData>);
 /// Phase 1: Find root entities (Transform2D but no Parent)
 /// Phase 2: Recursively multiply parent GlobalTransform2D × child local Transform2D
 pub fn transform_propagation_2d(world: &mut World) {
-    // Phase 1: find roots
     let roots: Vec<Entity> = {
         let mut query =
             world.query_filtered::<Entity, (With<Transform2D>, Without<hierarchy::Parent>)>();
         query.iter(world).collect()
     };
 
-    // Phase 2: propagate from each root
-    for root in roots {
-        propagate_recursive(world, root, Mat3::IDENTITY);
-    }
-}
+    let mut globals = Vec::new();
+    propagate_transform_hierarchy(
+        &roots,
+        Mat3::IDENTITY,
+        |entity| {
+            world
+                .get::<hierarchy::Children>(entity)
+                .map(|children| children.0.clone())
+                .unwrap_or_default()
+        },
+        |entity| world.get::<Transform2D>(entity).map(compute_local_matrix),
+        |entity, global| globals.push((entity, global)),
+    );
 
-/// Recursively compute GlobalTransform2D for entity and its children
-fn propagate_recursive(world: &mut World, entity: Entity, parent_global: Mat3) {
-    let local_mat = {
-        let transform = match world.get::<Transform2D>(entity) {
-            Some(t) => t,
-            None => return,
-        };
-        compute_local_matrix(transform)
-    };
-
-    let global = parent_global * local_mat;
-
-    // Update GlobalTransform2D
-    if let Some(mut gt) = world.get_mut::<GlobalTransform2D>(entity) {
-        gt.0 = global;
-    } else {
-        world.entity_mut(entity).insert(GlobalTransform2D(global));
-    }
-
-    // Recurse into children
-    let children: Vec<Entity> = world
-        .get::<hierarchy::Children>(entity)
-        .map(|c| c.0.clone())
-        .unwrap_or_default();
-
-    for child in children {
-        propagate_recursive(world, child, global);
+    for (entity, global_matrix) in globals {
+        if let Some(mut global) = world.get_mut::<GlobalTransform2D>(entity) {
+            global.0 = global_matrix;
+        } else {
+            world
+                .entity_mut(entity)
+                .insert(GlobalTransform2D(global_matrix));
+        }
     }
 }
 
@@ -1013,6 +1002,51 @@ mod tests {
         // Child world position should be parent(10,0) + child(5,0) = (15,0)
         assert!((child_gt.0.col(2).x - 15.0).abs() < 1e-6);
         assert!(child_gt.0.col(2).y.abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_transform_propagation_multi_level() {
+        let mut world = World::new();
+        let root = world
+            .spawn((
+                Transform2D {
+                    position: Vec2::new(2.0, 0.0),
+                    rotation: 0.0,
+                    scale: Vec2::ONE,
+                },
+                GlobalTransform2D::default(),
+            ))
+            .id();
+
+        let child = world
+            .spawn((
+                Transform2D {
+                    position: Vec2::new(0.0, 3.0),
+                    rotation: 0.0,
+                    scale: Vec2::ONE,
+                },
+                GlobalTransform2D::default(),
+            ))
+            .id();
+
+        let grandchild = world
+            .spawn((
+                Transform2D {
+                    position: Vec2::new(4.0, 0.0),
+                    rotation: 0.0,
+                    scale: Vec2::ONE,
+                },
+                GlobalTransform2D::default(),
+            ))
+            .id();
+
+        set_parent(&mut world, child, root);
+        set_parent(&mut world, grandchild, child);
+        transform_propagation_2d(&mut world);
+
+        let grandchild_gt = world.get::<GlobalTransform2D>(grandchild).unwrap();
+        assert!((grandchild_gt.0.col(2).x - 6.0).abs() < 1e-6);
+        assert!((grandchild_gt.0.col(2).y - 3.0).abs() < 1e-6);
     }
 
     #[test]

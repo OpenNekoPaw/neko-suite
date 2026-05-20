@@ -1,6 +1,9 @@
 import type { EditOperation } from '../operations/types';
 import type { DecisionRationale } from './decision-rationale';
+import type { CreativeDomainMetadata, CreativeDomainId } from './domain-routing';
 import type { Tool } from './tool';
+
+export { createDomainRouter } from './domain-routing';
 
 export type OperationToolDomain =
   | 'timeline'
@@ -64,6 +67,7 @@ export interface IOperationToolAdapterRegistry {
 export interface OperationToolMetadata {
   readonly kind: 'operation';
   readonly domain: OperationToolDomain;
+  readonly creativeDomain?: CreativeDomainMetadata;
   readonly editOperationTypes: readonly EditOperation['type'][];
   readonly requiresRationale: true;
   readonly reversible: boolean;
@@ -126,4 +130,39 @@ export function isOperationTool(tool: Tool): tool is OperationTool {
 
 export function isOperationToolPlanTraceable(plan: OperationToolPlan): boolean {
   return plan.rationaleId.length > 0 && plan.operations.length > 0;
+}
+
+export function mapOperationToolDomainToCreativeDomain(
+  domain: OperationToolDomain,
+): CreativeDomainId {
+  switch (domain) {
+    case 'model':
+      return 'scene';
+    case 'puppet':
+      return 'puppet';
+    case 'sketch':
+      return 'sketch';
+    case 'canvas':
+      return 'canvas';
+    case 'audio':
+      return 'audio';
+    case 'timeline':
+      return 'timeline';
+    case 'project':
+      return 'project';
+  }
+}
+
+export function operationToolDomainMetadata(domain: OperationToolDomain): CreativeDomainMetadata {
+  const id = mapOperationToolDomainToCreativeDomain(domain);
+  return {
+    id,
+    source: 'operation-tool',
+    operationDomain: domain,
+    servicePortId: id === 'scene' ? 'scene-render' : id === 'puppet' ? 'puppet-render' : undefined,
+  };
+}
+
+export function getOperationToolCreativeDomain(tool: OperationTool): CreativeDomainMetadata {
+  return tool.operation.creativeDomain ?? operationToolDomainMetadata(tool.operation.domain);
 }

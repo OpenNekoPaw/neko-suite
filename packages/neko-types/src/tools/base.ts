@@ -7,6 +7,7 @@
  * - Standard interface implementation
  */
 
+import type { CreativeDomainMetadata } from '../types/domain-routing';
 import type {
   Tool,
   ToolCategory,
@@ -145,6 +146,7 @@ export function createTool(config: {
   targetRequirements?: ToolTargetRequirements;
   queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
   traits?: ToolTraits;
+  domain?: CreativeDomainMetadata;
   isConcurrencySafe?: boolean;
   isReadOnly?: boolean;
   isDestructive?: boolean;
@@ -164,6 +166,7 @@ export function createTool(config: {
     isReadOnly: config.isReadOnly ?? false,
     isDestructive: config.isDestructive ?? false,
     ...(config.traits && { traits: config.traits }),
+    ...(config.domain && { domain: config.domain }),
     execute: config.execute,
   };
 }
@@ -199,6 +202,7 @@ export interface BuildToolConfig {
   /** Preferred structured query tools to run before this mutation. */
   queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
   traits?: ToolTraits;
+  domain?: CreativeDomainMetadata;
   execute: (args: Record<string, unknown>, options?: ToolExecuteOptions) => Promise<ToolResult>;
 }
 
@@ -238,6 +242,7 @@ export function buildTool(config: BuildToolConfig): Tool {
     parameters: config.parameters,
     category: config.category,
     traits: config.traits,
+    domain: config.domain,
     safetyKind: config.safetyKind,
     targetRequirements: config.targetRequirements,
     queryBeforeMutate: config.queryBeforeMutate,

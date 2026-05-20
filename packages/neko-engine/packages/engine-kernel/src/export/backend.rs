@@ -13,12 +13,17 @@ use std::sync::Arc;
 
 use crate::encoder::{AsyncExportPipeline, CompositedFrame, EncodedPacket, PipelineConfig};
 use crate::error::{Error, Result};
+use crate::services::{IPuppetService, ISceneService, PuppetRenderTiming};
 use neko_engine_audio::{AudioEncoder, FfmpegAudioEncoder};
 use neko_engine_gpu::{GpuBudgetController, GpuContext};
+use neko_engine_puppet_renderer::PuppetRenderOutput;
+use neko_engine_scene_renderer::{CameraParams, SceneRenderOutput};
 use neko_engine_types::{AudioEncoderConfig, GpuOutputHandle, SampleFormat};
 
 use super::audio_mixer::{AudioMixer, MixedAudioFrame};
-use super::gpu_export_pipeline::GpuExportPipeline;
+use super::gpu_export_pipeline::{
+    GpuExportPipeline, PuppetRenderPort, RenderServicePorts, SceneRenderPort,
+};
 use super::sink_factory::{DefaultExportSinkFactory, ExportSinkFactory};
 use super::types::{ExportJobConfig, ExportMetadata};
 use neko_engine_gpu::GpuPipelineTiming;
@@ -140,11 +145,83 @@ pub struct ExportBackendBundle {
     pub sink_factory: Arc<dyn ExportSinkFactory>,
 }
 
+/// Service ports injected into export backends for domain rendering.
+#[derive(Clone, Default)]
+pub struct ExportRenderServicePorts {
+    /// Scene3D render service port.
+    pub scene: Option<Arc<dyn ISceneService>>,
+    /// Puppet render service port.
+    pub puppet: Option<Arc<dyn IPuppetService>>,
+}
+
+impl From<ExportRenderServicePorts> for RenderServicePorts {
+    fn from(ports: ExportRenderServicePorts) -> Self {
+        Self {
+            scene: ports.scene.map(|service| {
+                Arc::new(SceneServiceRenderPort { service }) as Arc<dyn SceneRenderPort>
+            }),
+            puppet: ports.puppet.map(|service| {
+                Arc::new(PuppetServiceRenderPort { service }) as Arc<dyn PuppetRenderPort>
+            }),
+        }
+    }
+}
+
+struct SceneServiceRenderPort {
+    service: Arc<dyn ISceneService>,
+}
+
+impl SceneRenderPort for SceneServiceRenderPort {
+    fn render_scene3d_frame(
+        &self,
+        clip_name: Option<&str>,
+        time: f32,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+    ) -> Result<SceneRenderOutput> {
+        self.service.render_frame(
+            clip_name,
+            time,
+            output_size,
+            camera_override,
+            background_color,
+        )
+    }
+}
+
+struct PuppetServiceRenderPort {
+    service: Arc<dyn IPuppetService>,
+}
+
+impl PuppetRenderPort for PuppetServiceRenderPort {
+    fn render_puppet_layer_output(
+        &self,
+        width: u32,
+        height: u32,
+        timing: PuppetRenderTiming,
+    ) -> Result<PuppetRenderOutput> {
+        self.service
+            .render_composite_gpu_layer_output(width, height, timing)
+    }
+}
+
 impl ExportBackendBundle {
     /// Create production backends using the existing kernel implementations.
     pub fn with_gpu_context(gpu_ctx: Arc<GpuContext>) -> Self {
+        Self::with_gpu_context_and_render_services(gpu_ctx, ExportRenderServicePorts::default())
+    }
+
+    /// Create production backends using injected scene and puppet render services.
+    pub fn with_gpu_context_and_render_services(
+        gpu_ctx: Arc<GpuContext>,
+        render_services: ExportRenderServicePorts,
+    ) -> Self {
         Self {
-            render_factory: Arc::new(DefaultExportRenderBackendFactory::new(gpu_ctx)),
+            render_factory: Arc::new(DefaultExportRenderBackendFactory::new(
+                gpu_ctx,
+                render_services,
+            )),
             audio_factory: Arc::new(DefaultExportAudioBackendFactory),
             audio_encode_factory: Arc::new(DefaultExportAudioEncodeBackendFactory),
             encode_factory: Arc::new(DefaultExportEncodeBackendFactory),
@@ -167,12 +244,16 @@ impl ExportBackendBundle {
 /// Production render backend factory.
 pub struct DefaultExportRenderBackendFactory {
     gpu_ctx: Arc<GpuContext>,
+    render_services: ExportRenderServicePorts,
 }
 
 impl DefaultExportRenderBackendFactory {
     /// Create a default render backend factory.
-    pub fn new(gpu_ctx: Arc<GpuContext>) -> Self {
-        Self { gpu_ctx }
+    pub fn new(gpu_ctx: Arc<GpuContext>, render_services: ExportRenderServicePorts) -> Self {
+        Self {
+            gpu_ctx,
+            render_services,
+        }
     }
 }
 
@@ -183,7 +264,7 @@ impl ExportRenderBackendFactory for DefaultExportRenderBackendFactory {
                 config.timeline.clone(),
                 config.settings.clone(),
                 Arc::clone(&self.gpu_ctx),
-                None,
+                self.render_services.clone().into(),
             )?,
         }))
     }

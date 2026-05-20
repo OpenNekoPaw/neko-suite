@@ -6,8 +6,10 @@
 use std::sync::Arc;
 
 use crate::error::Result;
-use crate::export::{ExportJobConfig, ExportProgress, ExportStartResponse, QueueEntry};
-use crate::services::IExportService;
+use crate::export::{
+    ExportJobConfig, ExportProgress, ExportRenderServicePorts, ExportStartResponse, QueueEntry,
+};
+use crate::services::{IExportService, IPuppetService, ISceneService};
 use async_trait::async_trait;
 use neko_engine_gpu::GpuContext;
 
@@ -23,6 +25,24 @@ impl ExportService {
     /// Create a new export service with GPU context
     pub fn new(gpu_ctx: Arc<GpuContext>) -> Self {
         let inner = Arc::new(crate::export::ExportService::with_gpu_context(gpu_ctx));
+        Self { inner }
+    }
+
+    /// Create a new export service with injected domain render services.
+    pub fn with_render_services(
+        gpu_ctx: Arc<GpuContext>,
+        scene_service: Option<Arc<dyn ISceneService>>,
+        puppet_service: Option<Arc<dyn IPuppetService>>,
+    ) -> Self {
+        let inner = Arc::new(
+            crate::export::ExportService::with_gpu_context_and_render_services(
+                gpu_ctx,
+                ExportRenderServicePorts {
+                    scene: scene_service,
+                    puppet: puppet_service,
+                },
+            ),
+        );
         Self { inner }
     }
 }

@@ -13,7 +13,7 @@ mod sprite_batch;
 use std::sync::{Arc, Mutex};
 
 use neko_engine_gpu::error::{Error, Result};
-use neko_engine_gpu::{GpuContext, GpuReadbackTarget};
+use neko_engine_gpu::{BlendMode, GpuContext, GpuLayer, GpuReadbackTarget, Transform2D};
 use neko_engine_types::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame, VideoOutput};
 
 pub use atlas_cache::{PuppetAtlasCache, PuppetTextureAtlas, PuppetTextureAtlasInput};
@@ -134,6 +134,25 @@ pub struct PuppetRenderOutput {
 }
 
 impl PuppetRenderOutput {
+    /// Convert puppet render output into a 2D compositing layer (zero-copy).
+    pub fn into_gpu_layer(
+        self,
+        transform: Transform2D,
+        opacity: f32,
+        blend_mode: BlendMode,
+        z_index: i32,
+    ) -> GpuLayer {
+        GpuLayer::from_rgba(
+            self.color_texture,
+            self.width,
+            self.height,
+            transform,
+            opacity,
+            blend_mode,
+            z_index,
+        )
+    }
+
     /// Convert to a PipelineSink-compatible GPU video output.
     pub fn into_video_output(self, ctx: Arc<GpuContext>) -> VideoOutput {
         let readback = GpuReadbackTarget::new(ctx, self.color_texture, self.width, self.height);
