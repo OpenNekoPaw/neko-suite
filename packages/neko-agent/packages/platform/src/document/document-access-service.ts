@@ -1,15 +1,16 @@
 import * as path from 'node:path';
-import type {
-  DocumentBatchCursor,
-  DocumentFormat,
-  DocumentImageInfo,
-  DocumentLocator,
-  DocumentManifest,
-  DocumentManifestCapabilities,
-  DocumentManifestUnit,
-  DocumentRange,
-  DocumentReadResult,
-  DocumentSourceRef,
+import {
+  createDocumentEntryResourceRef,
+  type DocumentBatchCursor,
+  type DocumentFormat,
+  type DocumentImageInfo,
+  type DocumentLocator,
+  type DocumentManifest,
+  type DocumentManifestCapabilities,
+  type DocumentManifestUnit,
+  type DocumentRange,
+  type DocumentReadResult,
+  type DocumentSourceRef,
 } from '@neko/shared';
 import { probeImageMetadata } from './image-metadata';
 import {
@@ -580,13 +581,16 @@ export class DocumentAccessService implements IDocumentAccessService {
       imageRefs.map((image) => [image.entryPath, image.locator] as const),
     );
     const imagePaths = images.map((image) => image.path);
-    const imageInfo = images.map((image, index) =>
-      createImageInfo(
-        image.path,
-        image.bytes,
-        image.entryName ? locatorByEntryPath.get(image.entryName) : imageRefs[index]?.locator,
-      ),
-    );
+    const imageInfo = images.map((image, index) => {
+      const locator = image.entryName
+        ? locatorByEntryPath.get(image.entryName)
+        : imageRefs[index]?.locator;
+      return createImageInfo(image.path, image.bytes, {
+        source,
+        locator,
+        entryPath: image.entryName,
+      });
+    });
     const readableText = text.trim().length > 0 ? text : '';
     const result = this.makeTextResult(source, range, readableText, range.limit?.maxChars, {
       metadata: data.metadata,
@@ -684,11 +688,16 @@ export class DocumentAccessService implements IDocumentAccessService {
       const pageIndex =
         selectedIndexByEntryName.get(image.entryName ?? '') ?? selection.startPageIndex + index;
       const entryName = image.entryName ?? selection.entries[index]?.name;
-      return createImageInfo(image.path, image.bytes, {
+      const locator: DocumentLocator = {
         kind: 'page',
         pageNumber: pageIndex + 1,
         pageIndex,
         ...(entryName ? { entryName } : {}),
+      };
+      return createImageInfo(image.path, image.bytes, {
+        source,
+        locator,
+        entryPath: entryName,
       });
     });
     const text =
@@ -1257,16 +1266,27 @@ function dedupeEpubImageRefs(
 function createImageInfo(
   filePath: string,
   bytes: Uint8Array,
-  locator?: DocumentLocator,
+  resource?: {
+    readonly source?: DocumentSourceRef;
+    readonly locator?: DocumentLocator;
+    readonly entryPath?: string;
+  },
 ): DocumentImageInfo {
   const metadata = probeImageMetadata(bytes);
+  const resourceRef = createDocumentEntryResourceRef({
+    source: resource?.source,
+    locator: resource?.locator,
+    entryPath: resource?.entryPath,
+    cachePath: filePath,
+  });
   return {
     path: filePath,
     byteSize: metadata?.byteSize ?? bytes.length,
     ...(metadata?.mimeType ? { mimeType: metadata.mimeType } : {}),
     ...(metadata?.width !== undefined ? { width: metadata.width } : {}),
     ...(metadata?.height !== undefined ? { height: metadata.height } : {}),
-    ...(locator ? { locator } : {}),
+    ...(resource?.locator ? { locator: resource.locator } : {}),
+    ...(resourceRef ? { resourceRef } : {}),
   };
 }
 

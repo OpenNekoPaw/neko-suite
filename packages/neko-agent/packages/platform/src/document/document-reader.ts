@@ -1,5 +1,9 @@
 import * as path from 'node:path';
-import type { DocumentImageInfo } from '@neko/shared';
+import {
+  createDocumentEntryResourceRef,
+  type DocumentFormat,
+  type DocumentImageInfo,
+} from '@neko/shared';
 import { probeImageMetadata } from './image-metadata';
 
 export interface DocumentContent {
@@ -118,6 +122,7 @@ type UnknownFunction = (...args: unknown[]) => unknown;
 
 interface ExtractedImage {
   readonly path: string;
+  readonly entryName?: string;
   readonly info: DocumentImageInfo;
 }
 
@@ -526,7 +531,13 @@ export class DocumentReaderRuntime implements IDocumentReader {
       );
       const imageBytes = entry.getData();
       await this.deps.writeBinaryFile(imgPath, imageBytes);
-      images.push(createExtractedImage(imgPath, imageBytes));
+      images.push(
+        createExtractedImage(imgPath, imageBytes, {
+          sourceFilePath: filePath,
+          sourceFormat: 'epub',
+          entryPath,
+        }),
+      );
     }
 
     this.deps.logger?.info('Extracted EPUB images', { images: images.length, tmpDir });
@@ -535,7 +546,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
 
   private async extractZipImages(
     filePath: string,
-    tmpPrefix: string,
+    tmpPrefix: DocumentFormat,
     includeEntry: (entryPath: string) => boolean,
   ): Promise<ExtractedImage[]> {
     try {
@@ -574,7 +585,13 @@ export class DocumentReaderRuntime implements IDocumentReader {
         );
         const imageBytes = entry.getData();
         await this.deps.writeBinaryFile(imgPath, imageBytes);
-        images.push(createExtractedImage(imgPath, imageBytes));
+        images.push(
+          createExtractedImage(imgPath, imageBytes, {
+            sourceFilePath: filePath,
+            sourceFormat: tmpPrefix,
+            entryPath: entry.name,
+          }),
+        );
       }
 
       this.deps.logger?.info('Extracted document images', {
@@ -618,7 +635,13 @@ export class DocumentReaderRuntime implements IDocumentReader {
         const imageBytes = entry.getData();
         await this.deps.writeBinaryFile(imgPath, imageBytes);
         imagePaths.push(imgPath);
-        imageInfo.push(createImageInfo(imgPath, imageBytes));
+        imageInfo.push(
+          createImageInfo(imgPath, imageBytes, {
+            sourceFilePath: filePath,
+            sourceFormat: 'cbz',
+            entryPath: entry.name,
+          }),
+        );
       }
 
       this.deps.logger?.info('Extracted CBZ archive', { pages: entries.length, tmpDir });
@@ -679,7 +702,13 @@ export class DocumentReaderRuntime implements IDocumentReader {
         const imageBytes = file.extract[1];
         await this.deps.writeBinaryFile(imgPath, imageBytes);
         imagePaths.push(imgPath);
-        imageInfo.push(createImageInfo(imgPath, imageBytes));
+        imageInfo.push(
+          createImageInfo(imgPath, imageBytes, {
+            sourceFilePath: filePath,
+            sourceFormat: 'cbr',
+            entryPath: file.fileHeader.name,
+          }),
+        );
       }
 
       this.deps.logger?.info('Extracted CBR archive', { pages: imageFiles.length, tmpDir });
@@ -941,21 +970,47 @@ export function dedupeStrings(values: readonly string[]): string[] {
   return Array.from(new Set(values));
 }
 
-function createExtractedImage(filePath: string, bytes: Uint8Array): ExtractedImage {
+interface DocumentImageResourceInput {
+  readonly sourceFilePath: string;
+  readonly sourceFormat: DocumentFormat;
+  readonly entryPath?: string;
+}
+
+function createExtractedImage(
+  filePath: string,
+  bytes: Uint8Array,
+  resource?: DocumentImageResourceInput,
+): ExtractedImage {
   return {
     path: filePath,
-    info: createImageInfo(filePath, bytes),
+    ...(resource?.entryPath ? { entryName: resource.entryPath } : {}),
+    info: createImageInfo(filePath, bytes, resource),
   };
 }
 
-function createImageInfo(filePath: string, bytes: Uint8Array): DocumentImageInfo {
+function createImageInfo(
+  filePath: string,
+  bytes: Uint8Array,
+  resource?: DocumentImageResourceInput,
+): DocumentImageInfo {
   const metadata = probeImageMetadata(bytes);
+  const resourceRef = createDocumentEntryResourceRef({
+    source: resource
+      ? {
+          filePath: resource.sourceFilePath,
+          format: resource.sourceFormat,
+        }
+      : undefined,
+    entryPath: resource?.entryPath,
+    cachePath: filePath,
+  });
   return {
     path: filePath,
     byteSize: metadata?.byteSize ?? bytes.length,
     ...(metadata?.mimeType ? { mimeType: metadata.mimeType } : {}),
     ...(metadata?.width !== undefined ? { width: metadata.width } : {}),
     ...(metadata?.height !== undefined ? { height: metadata.height } : {}),
+    ...(resourceRef ? { resourceRef } : {}),
   };
 }
 

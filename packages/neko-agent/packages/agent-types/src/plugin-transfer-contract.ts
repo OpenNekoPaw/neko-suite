@@ -2,6 +2,7 @@ import type {
   CanvasAgentContentPayload,
   CanvasAgentTargetRef,
   CanvasStoryboardPayload,
+  DocumentArchiveResourceRef,
 } from '@neko/shared';
 
 export const NEKO_PLUGIN_EXTENSION_IDS = {
@@ -31,12 +32,19 @@ export interface PluginTransferProvenance {
   readonly messageId?: string;
   readonly toolCallId?: string;
   readonly label?: string;
+  readonly metadata?: Record<string, unknown>;
 }
 
 export interface PluginTransferAssetRef {
   readonly path: string;
   readonly mediaType?: PluginTransferMediaType;
   readonly name?: string;
+  /**
+   * Canonical structured source reference for document/archive-derived assets.
+   * Provenance metadata may mirror this field for backward-compatible routing,
+   * but consumers should prefer this top-level asset field when present.
+   */
+  readonly documentResourceRef?: DocumentArchiveResourceRef;
   readonly target?: PluginTransferTargetRef;
   readonly provenance?: PluginTransferProvenance;
 }
@@ -119,6 +127,7 @@ export interface PluginTransferCanvasImportAssetPayload {
   readonly path: string;
   readonly type?: PluginTransferMediaType;
   readonly name?: string;
+  readonly documentResourceRef?: DocumentArchiveResourceRef;
   readonly target?: PluginTransferTargetRef;
   readonly provenance?: PluginTransferProvenance;
 }

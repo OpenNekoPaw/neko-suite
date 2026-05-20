@@ -97,6 +97,9 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                         path: thumbnail.path,
                         mediaType: 'image',
                         name: getFileName(thumbnail.path),
+                        ...(thumbnail.resourceRef
+                          ? { documentResourceRef: thumbnail.resourceRef }
+                          : {}),
                       },
                       target: projectCanvasContentTransferTarget({
                         ambientNodes,
@@ -105,6 +108,13 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                       provenance: {
                         source: 'webview',
                         label: `document-image:${thumbnail.label}`,
+                        ...(thumbnail.resourceRef
+                          ? {
+                              metadata: {
+                                documentResourceRef: thumbnail.resourceRef,
+                              },
+                            }
+                          : {}),
                       },
                     }}
                     mediaType="image"

@@ -10,6 +10,13 @@ describe('clipboard-context-presenter', () => {
           filePath: '/books/a.epub',
           source: { filePath: '/books/a.epub', format: 'epub' },
           locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+          resourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            entryPath: 'image/Page_1.jpg',
+            cachePath: '/tmp/page-1.jpg',
+            versionPolicy: 'versioned-export',
+          },
         },
         image: {
           path: '/tmp/page-1.jpg',
@@ -34,6 +41,13 @@ describe('clipboard-context-presenter', () => {
           filePath: '/books/a.epub',
           source: { filePath: '/books/a.epub', format: 'epub' },
           locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+          resourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            entryPath: 'image/Page_1.jpg',
+            cachePath: '/tmp/page-1.jpg',
+            versionPolicy: 'versioned-export',
+          },
         },
         image: {
           path: '/tmp/page-1.jpg',
@@ -43,11 +57,19 @@ describe('clipboard-context-presenter', () => {
           height: 2133,
           byteSize: 1024,
           mimeType: 'image/jpeg',
+          resourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            entryPath: 'image/Page_1.jpg',
+            cachePath: '/tmp/page-1.jpg',
+            versionPolicy: 'versioned-export',
+          },
         },
         navigationData: {
           source: 'epub',
           filePath: '/books/a.epub',
           imagePath: '/tmp/page-1.jpg',
+          entryPath: 'image/Page_1.jpg',
         },
       },
     });

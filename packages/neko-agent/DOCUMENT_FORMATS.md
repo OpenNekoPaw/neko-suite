@@ -41,6 +41,18 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 
 图片基础元数据由内部 TypeScript 头部解析器生成，覆盖 JPEG、PNG、WebP、GIF、BMP。Skill 应直接使用 `ReadDocument.imageInfo` 判断分辨率、页比例和格式，不应调用 Python/PIL、系统 `file`、`sips`、`identify` 等外部命令补探测。
 
+## ZIP/容器资源引用策略
+
+EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当前策略是“原始容器只读、图片解压到缓存路径、操作携带结构化引用”：
+
+- 不注册 `zip://`、`epub://` 等 VSCode 虚拟路径作为主数据通道。VSCode Webview、Canvas `<img>`、ReadImage 和文件跳转都需要可授权的实体路径或明确的 Extension Host 命令，虚拟路径容易在 Webview CSP、粘贴、调试和跨插件传递中断开。
+- `imageInfo.path` 继续表示当前可读的缓存实体文件，例如 `/tmp/neko_epub_*/0001_page.jpg`，用于预览、视觉分析、复制图片路径和发送到 Canvas。
+- `imageInfo.resourceRef` 表示稳定来源，包含 `source`、容器内 `entryPath`、可选 `locator`、当前 `cachePath` 和 `versionPolicy`。复制 JSON、粘贴上下文和发送到 Canvas 时都应保留它，避免只剩临时路径而丢失“来自哪本书/哪一页/哪个包内条目”的信息。
+- 粘贴时如果只有路径，Agent 只能把它当作普通本地文件；如果 JSON 引用里带 `resourceRef`，Agent 可以继续跳转、定位 entry、解释来源，并为后续替换引用做准备。
+- 跳转到资产库或文档索引页应使用 `navigationData` 中的 `source/filePath/entryPath`，由 Extension Host 或对应资源库命令解析；不要尝试让 Webview 直接打开容器内虚拟文件。
+
+重新打包不做原地修改。后续写回或替换容器内图片时，应生成带版本的新导出文件，例如 `comic.v2.epub` 或工作区管理的导出副本，再把引用切换到新 `DocumentSourceRef` / `entryPath`。`versionPolicy: "versioned-export"` 表示当前引用遵循这种版本化导出策略；旧缓存路径只作为本次读取的实体副本，不作为长期数据源。
+
 ## 结构化读取
 
 `ReadDocument` 保留全文读取模式，也支持结构化模式：

@@ -10,13 +10,16 @@ import type {
   AgentContextType,
   CanvasStoryboardPayload,
   ChatModelOption,
-  DocumentFileIdentity,
   DocumentLocator,
-  DocumentRegion,
   DocumentSourceRef,
   MessageAttachment,
   ModelType,
   SkillSummary,
+} from '@neko/shared';
+import {
+  parseDocumentArchiveResourceRef,
+  parseDocumentLocator,
+  parseDocumentSourceRef,
 } from '@neko/shared';
 import type { AgentPhase } from './phase';
 import type { Message } from './message';
@@ -825,7 +828,6 @@ const DRAG_MEDIA_TYPES: ReadonlyArray<DragStartWebviewMessage['asset']['mediaTyp
   'video',
   'audio',
 ];
-
 export function isSessionMode(value: unknown): value is SessionMode {
   return typeof value === 'string' && SESSION_MODES.includes(value as SessionMode);
 }
@@ -1331,7 +1333,7 @@ function parseRevealDocumentLocatorMessage(
   const filePath = requiredString(raw.filePath);
   const locator = parseDocumentLocator(raw.locator);
   const source = raw.source === undefined ? undefined : parseDocumentSourceRef(raw.source);
-  if (!filePath || !locator || source === null) return null;
+  if (!filePath || !locator || (raw.source !== undefined && source === undefined)) return null;
   return {
     type: 'revealDocumentLocator',
     filePath,
@@ -1514,12 +1516,24 @@ function parsePluginTransferAssetRef(value: unknown): PluginTransferAssetRef | n
   const path = requiredString(value.path);
   const mediaType = optionalStringStrict(value.mediaType);
   const name = optionalStringStrict(value.name);
+  const documentResourceRef =
+    value.documentResourceRef === undefined
+      ? undefined
+      : parseDocumentArchiveResourceRef(value.documentResourceRef);
   const target = parseOptionalPluginTransferTargetRef(value.target);
   const provenance = parseOptionalPluginTransferProvenance(value.provenance);
-  if (!path || mediaType === null || name === null || target === null || provenance === null) {
+  if (
+    !path ||
+    mediaType === null ||
+    name === null ||
+    (value.documentResourceRef !== undefined && documentResourceRef === undefined) ||
+    target === null ||
+    provenance === null
+  ) {
     return null;
   }
   const suffix = {
+    ...(documentResourceRef !== undefined ? { documentResourceRef } : {}),
     ...(target !== undefined ? { target } : {}),
     ...(provenance !== undefined ? { provenance } : {}),
   };
@@ -1614,12 +1628,15 @@ function parseOptionalPluginTransferProvenance(
   const messageId = optionalStringStrict(value.messageId);
   const toolCallId = optionalStringStrict(value.toolCallId);
   const label = optionalStringStrict(value.label);
+  const metadata =
+    value.metadata === undefined ? undefined : parseJsonMetadataRecord(value.metadata);
   if (
     source === null ||
     conversationId === null ||
     messageId === null ||
     toolCallId === null ||
-    label === null
+    label === null ||
+    metadata === null
   ) {
     return null;
   }
@@ -1631,7 +1648,13 @@ function parseOptionalPluginTransferProvenance(
     ...(messageId !== undefined ? { messageId } : {}),
     ...(toolCallId !== undefined ? { toolCallId } : {}),
     ...(label !== undefined ? { label } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
   };
+}
+
+function parseJsonMetadataRecord(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  return value;
 }
 
 function parseOptionalPluginTransferContentFormat(
@@ -1984,120 +2007,6 @@ function parseOpenFileOptions(value: unknown): OpenFileWebviewMessage['options']
     options.column = value.column;
   }
   return options;
-}
-
-function parseDocumentSourceRef(raw: unknown): DocumentSourceRef | null {
-  if (!isRecord(raw)) return null;
-  const filePath = requiredString(raw.filePath);
-  const format = requiredString(raw.format);
-  if (!filePath || !format) return null;
-  const fileId = optionalString(raw.fileId);
-  const uri = optionalString(raw.uri);
-  const token = optionalString(raw.token);
-  const rangeUrl = optionalString(raw.rangeUrl);
-  const entryBaseUrl = optionalString(raw.entryBaseUrl);
-  const identity = raw.identity === undefined ? undefined : parseDocumentFileIdentity(raw.identity);
-  if (identity === null) return null;
-  return {
-    filePath,
-    format: format as DocumentSourceRef['format'],
-    ...(fileId ? { fileId } : {}),
-    ...(uri ? { uri } : {}),
-    ...(token ? { token } : {}),
-    ...(rangeUrl ? { rangeUrl } : {}),
-    ...(entryBaseUrl ? { entryBaseUrl } : {}),
-    ...(identity ? { identity } : {}),
-  };
-}
-
-function parseDocumentFileIdentity(raw: unknown): DocumentFileIdentity | null {
-  if (!isRecord(raw)) return null;
-  const fileId = requiredString(raw.fileId);
-  if (!fileId) return null;
-  const hash = optionalString(raw.hash);
-  return {
-    fileId,
-    ...(isFiniteNumber(raw.sizeBytes) ? { sizeBytes: raw.sizeBytes } : {}),
-    ...(isFiniteNumber(raw.mtimeMs) ? { mtimeMs: raw.mtimeMs } : {}),
-    ...(hash ? { hash } : {}),
-  };
-}
-
-function parseDocumentLocator(raw: unknown): DocumentLocator | null {
-  if (!isRecord(raw) || typeof raw.kind !== 'string') return null;
-  switch (raw.kind) {
-    case 'page': {
-      if (!isFiniteNumber(raw.pageNumber) || !isFiniteNumber(raw.pageIndex)) return null;
-      const entryName = optionalString(raw.entryName);
-      return {
-        kind: 'page',
-        pageNumber: raw.pageNumber,
-        pageIndex: raw.pageIndex,
-        ...(entryName ? { entryName } : {}),
-      };
-    }
-    case 'chapter': {
-      const chapterHref = requiredString(raw.chapterHref);
-      if (!chapterHref) return null;
-      const title = optionalString(raw.title);
-      const cfi = optionalString(raw.cfi);
-      return {
-        kind: 'chapter',
-        chapterHref,
-        ...(isFiniteNumber(raw.spineIndex) ? { spineIndex: raw.spineIndex } : {}),
-        ...(title ? { title } : {}),
-        ...(cfi ? { cfi } : {}),
-      };
-    }
-    case 'slide': {
-      if (!isFiniteNumber(raw.slideNumber) || !isFiniteNumber(raw.slideIndex)) return null;
-      return { kind: 'slide', slideNumber: raw.slideNumber, slideIndex: raw.slideIndex };
-    }
-    case 'text-range': {
-      const heading = optionalString(raw.heading);
-      return {
-        kind: 'text-range',
-        ...(isFiniteNumber(raw.startChar) ? { startChar: raw.startChar } : {}),
-        ...(isFiniteNumber(raw.endChar) ? { endChar: raw.endChar } : {}),
-        ...(isFiniteNumber(raw.startLine) ? { startLine: raw.startLine } : {}),
-        ...(isFiniteNumber(raw.endLine) ? { endLine: raw.endLine } : {}),
-        ...(isFiniteNumber(raw.paragraphIndex) ? { paragraphIndex: raw.paragraphIndex } : {}),
-        ...(heading ? { heading } : {}),
-      };
-    }
-    case 'region': {
-      const region = parseDocumentRegion(raw.region);
-      if (!isFiniteNumber(raw.pageNumber) || !region) return null;
-      const entryName = optionalString(raw.entryName);
-      return {
-        kind: 'region',
-        pageNumber: raw.pageNumber,
-        ...(isFiniteNumber(raw.pageIndex) ? { pageIndex: raw.pageIndex } : {}),
-        ...(entryName ? { entryName } : {}),
-        region,
-      };
-    }
-    default:
-      return null;
-  }
-}
-
-function parseDocumentRegion(raw: unknown): DocumentRegion | null {
-  if (!isRecord(raw)) return null;
-  if (
-    !isFiniteNumber(raw.x) ||
-    !isFiniteNumber(raw.y) ||
-    !isFiniteNumber(raw.width) ||
-    !isFiniteNumber(raw.height)
-  ) {
-    return null;
-  }
-  return {
-    x: raw.x,
-    y: raw.y,
-    width: raw.width,
-    height: raw.height,
-  };
 }
 
 function isConversationOnlyMessageType(

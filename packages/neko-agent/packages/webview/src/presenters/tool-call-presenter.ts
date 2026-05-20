@@ -1,5 +1,10 @@
 import type { ToolCall } from '@/components/types';
-import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
+import type { DocumentArchiveResourceRef, DocumentLocator, DocumentSourceRef } from '@neko/shared';
+import {
+  parseDocumentArchiveResourceRef,
+  parseDocumentLocator,
+  parseDocumentSourceRef,
+} from '@neko/shared';
 import {
   AUDIO_GENERATION_TOOLS,
   FILE_TOOLS,
@@ -31,6 +36,7 @@ export interface DocumentImageThumbnailProjection {
   byteSize?: number;
   mimeType?: string;
   locator?: DocumentLocator;
+  resourceRef?: DocumentArchiveResourceRef;
   label: string;
   referenceJson: string;
 }
@@ -112,7 +118,7 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
   const filePath = extractDocumentFilePath(result);
   if (!filePath) return [];
 
-  const source = asDocumentSourceRef(result.source);
+  const source = parseDocumentSourceRef(result.source);
   const imageInfo = Array.isArray(result.imageInfo) ? result.imageInfo : [];
   const imagePaths = Array.isArray(result.imagePaths) ? result.imagePaths : [];
   const imagePathWebviewUris = Array.isArray(result.imagePathWebviewUris)
@@ -127,11 +133,12 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
     const src = readString(info, 'webviewUri') ?? readStringFromArray(imagePathWebviewUris, index);
     if (!path || !src) continue;
 
-    const locator = asDocumentLocator(info?.locator);
+    const locator = parseDocumentLocator(info?.locator);
     const width = readFiniteNumber(info, 'width');
     const height = readFiniteNumber(info, 'height');
     const byteSize = readFiniteNumber(info, 'byteSize');
     const mimeType = readString(info, 'mimeType');
+    const resourceRef = parseDocumentArchiveResourceRef(info?.resourceRef);
     thumbnails.push({
       id: `${path}:${index}`,
       index,
@@ -144,6 +151,7 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
       ...(byteSize !== undefined ? { byteSize } : {}),
       ...(mimeType ? { mimeType } : {}),
       ...(locator ? { locator } : {}),
+      ...(resourceRef ? { resourceRef } : {}),
       label: formatDocumentThumbnailLabel(locator, index),
       referenceJson: formatDocumentImageReferenceJson({
         filePath,
@@ -156,6 +164,7 @@ export function extractDocumentImageThumbnails(data: unknown): DocumentImageThum
         byteSize,
         mimeType,
         locator,
+        resourceRef,
       }),
     });
   }
@@ -174,6 +183,7 @@ function formatDocumentImageReferenceJson(input: {
   readonly byteSize?: number;
   readonly mimeType?: string;
   readonly locator?: DocumentLocator;
+  readonly resourceRef?: DocumentArchiveResourceRef;
 }): string {
   return JSON.stringify(
     {
@@ -182,6 +192,7 @@ function formatDocumentImageReferenceJson(input: {
         filePath: input.filePath,
         ...(input.source ? { source: input.source } : {}),
         ...(input.locator ? { locator: input.locator } : {}),
+        ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
       },
       image: {
         path: input.path,
@@ -191,6 +202,7 @@ function formatDocumentImageReferenceJson(input: {
         ...(input.height !== undefined ? { height: input.height } : {}),
         ...(input.byteSize !== undefined ? { byteSize: input.byteSize } : {}),
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
+        ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
       },
     },
     null,
@@ -332,7 +344,7 @@ function formatReadDocumentCopyText(data: unknown): string | null {
   const filePath = extractDocumentFilePath(result);
   if (filePath) lines.push(`Document: ${filePath}`);
 
-  const locator = asDocumentLocator(result.locator);
+  const locator = parseDocumentLocator(result.locator);
   if (locator) lines.push(`Location: ${formatDocumentLocator(locator)}`);
 
   const text = readString(result, 'text');
@@ -418,20 +430,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 function extractDocumentFilePath(result: Record<string, unknown>): string | null {
   const source = asRecord(result.source);
   return readString(result, 'filePath') ?? readString(source, 'filePath') ?? null;
-}
-
-function asDocumentSourceRef(value: unknown): DocumentSourceRef | undefined {
-  const source = asRecord(value);
-  const filePath = readString(source, 'filePath');
-  const format = readString(source, 'format');
-  if (!filePath || !format) return undefined;
-  return source as unknown as DocumentSourceRef;
-}
-
-function asDocumentLocator(value: unknown): DocumentLocator | undefined {
-  const locator = asRecord(value);
-  if (!locator || typeof locator.kind !== 'string') return undefined;
-  return locator as unknown as DocumentLocator;
 }
 
 function formatDocumentThumbnailLabel(locator: DocumentLocator | undefined, index: number): string {

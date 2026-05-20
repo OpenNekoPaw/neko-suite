@@ -329,6 +329,13 @@ describe('document-reader runtime', () => {
         height: 2133,
         mimeType: 'image/jpeg',
         byteSize: makeJpeg(1494, 2133).length,
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/doc/comic.epub', format: 'epub' },
+          entryPath: 'image/page-1.jpg',
+          cachePath: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
     ]);
     expect(result.metadata?.['imageCount']).toBe(1);
@@ -381,6 +388,13 @@ describe('document-reader runtime', () => {
         height: 240,
         mimeType: 'image/jpeg',
         byteSize: makeJpeg(320, 240).length,
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/doc/report.docx', format: 'docx' },
+          entryPath: 'word/media/image1.jpg',
+          cachePath: '/tmp/neko_docx_1777248000000/0001_image1.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
       {
         path: '/tmp/neko_docx_1777248000000/0002_image2.png',
@@ -388,6 +402,13 @@ describe('document-reader runtime', () => {
         height: 600,
         mimeType: 'image/png',
         byteSize: makePng(800, 600).length,
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/doc/report.docx', format: 'docx' },
+          entryPath: 'word/media/image2.png',
+          cachePath: '/tmp/neko_docx_1777248000000/0002_image2.png',
+          versionPolicy: 'versioned-export',
+        },
       },
     ]);
     expect(result.metadata?.['imageCount']).toBe(2);
@@ -432,6 +453,13 @@ describe('document-reader runtime', () => {
       height: 768,
       mimeType: 'image/png',
       byteSize: makePng(1024, 768).length,
+      resourceRef: {
+        kind: 'document-entry',
+        source: { filePath: '/doc/deck.pptx', format: 'pptx' },
+        entryPath: 'ppt/media/image1.png',
+        cachePath: '/tmp/neko_pptx_1777248000000/0001_image1.png',
+        versionPolicy: 'versioned-export',
+      },
     });
     expect(xlsx.imagePaths).toEqual(['/tmp/neko_xlsx_1777248000000/0001_image1.png']);
     expect(xlsx.imageInfo?.[0]).toEqual({
@@ -440,6 +468,13 @@ describe('document-reader runtime', () => {
       height: 768,
       mimeType: 'image/png',
       byteSize: makePng(1024, 768).length,
+      resourceRef: {
+        kind: 'document-entry',
+        source: { filePath: '/doc/sheet.xlsx', format: 'xlsx' },
+        entryPath: 'xl/media/image1.png',
+        cachePath: '/tmp/neko_xlsx_1777248000000/0001_image1.png',
+        versionPolicy: 'versioned-export',
+      },
     });
   });
 });
@@ -686,6 +721,23 @@ describe('document access service', () => {
           spineIndex: 0,
           title: 'html/page-1.xhtml',
         },
+        resourceRef: {
+          kind: 'document-entry',
+          source: {
+            filePath: '/doc/comic.epub',
+            format: 'epub',
+            fileId: '/doc/comic.epub',
+          },
+          entryPath: 'image/Page_1.jpg',
+          locator: {
+            kind: 'chapter',
+            chapterHref: 'Page_1',
+            spineIndex: 0,
+            title: 'html/page-1.xhtml',
+          },
+          cachePath: '/tmp/neko_epub_1777248000000/0001_Page_1.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
     ]);
     expect(result.excerpt).toEqual(
@@ -807,6 +859,18 @@ describe('document access service', () => {
         mimeType: 'image/jpeg',
         byteSize: makeJpeg(1001, 2001).length,
         locator: { kind: 'page', pageNumber: 1, pageIndex: 0, entryName: '001.jpg' },
+        resourceRef: {
+          kind: 'document-entry',
+          source: {
+            filePath: '/doc/comic.cbz',
+            format: 'cbz',
+            fileId: '/doc/comic.cbz',
+          },
+          entryPath: '001.jpg',
+          locator: { kind: 'page', pageNumber: 1, pageIndex: 0, entryName: '001.jpg' },
+          cachePath: '/tmp/neko_cbz_1777248000000/0001_001.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
       {
         path: '/tmp/neko_cbz_1777248000000/0002_002.jpg',
@@ -815,6 +879,18 @@ describe('document access service', () => {
         mimeType: 'image/jpeg',
         byteSize: makeJpeg(1002, 2002).length,
         locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
+        resourceRef: {
+          kind: 'document-entry',
+          source: {
+            filePath: '/doc/comic.cbz',
+            format: 'cbz',
+            fileId: '/doc/comic.cbz',
+          },
+          entryPath: '002.jpg',
+          locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
+          cachePath: '/tmp/neko_cbz_1777248000000/0002_002.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
     ]);
     expect(writes).toHaveLength(2);
@@ -865,6 +941,18 @@ describe('document access service', () => {
         mimeType: 'image/jpeg',
         byteSize: makeJpeg(1002, 2002).length,
         locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
+        resourceRef: {
+          kind: 'document-entry',
+          source: {
+            filePath: '/doc/comic.cbr',
+            format: 'cbr',
+            fileId: '/doc/comic.cbr',
+          },
+          entryPath: '002.jpg',
+          locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
+          cachePath: '/tmp/neko_cbr_1777248000000/0001_002.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
     ]);
     expect(result.metadata?.['format']).toBe('cbr');

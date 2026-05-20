@@ -25,6 +25,13 @@ describe('tool-call-presenter', () => {
                 chapterHref: 'Page_1',
                 spineIndex: 1,
               },
+              resourceRef: {
+                kind: 'document-entry',
+                source: { filePath: '/books/a.epub', format: 'epub' },
+                entryPath: 'image/Page_1.jpg',
+                cachePath: '/tmp/page-1.jpg',
+                versionPolicy: 'versioned-export',
+              },
             },
           ],
         },
@@ -46,6 +53,13 @@ describe('tool-call-presenter', () => {
           chapterHref: 'Page_1',
           spineIndex: 1,
         },
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/books/a.epub', format: 'epub' },
+          entryPath: 'image/Page_1.jpg',
+          cachePath: '/tmp/page-1.jpg',
+          versionPolicy: 'versioned-export',
+        },
       }),
     ]);
     expect(projection.copyText).toContain('Document: /books/a.epub');
@@ -62,6 +76,13 @@ describe('tool-call-presenter', () => {
           chapterHref: 'Page_1',
           spineIndex: 1,
         },
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/books/a.epub', format: 'epub' },
+          entryPath: 'image/Page_1.jpg',
+          cachePath: '/tmp/page-1.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
       image: {
         path: '/tmp/page-1.jpg',
@@ -71,6 +92,13 @@ describe('tool-call-presenter', () => {
         height: 2133,
         byteSize: 1024,
         mimeType: 'image/jpeg',
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/books/a.epub', format: 'epub' },
+          entryPath: 'image/Page_1.jpg',
+          cachePath: '/tmp/page-1.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
     });
   });

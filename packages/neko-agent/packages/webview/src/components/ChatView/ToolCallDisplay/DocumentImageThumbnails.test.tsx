@@ -33,6 +33,13 @@ describe('DocumentImageThumbnails', () => {
               byteSize: 1024,
               mimeType: 'image/jpeg',
               label: 'C2',
+              resourceRef: {
+                kind: 'document-entry',
+                source: { filePath: '/books/a.epub', format: 'epub' },
+                entryPath: 'image/Page_1.jpg',
+                cachePath: '/tmp/page-1.jpg',
+                versionPolicy: 'versioned-export',
+              },
               referenceJson: '{}',
             },
           ]}
@@ -54,6 +61,13 @@ describe('DocumentImageThumbnails', () => {
           path: '/tmp/page-1.jpg',
           mediaType: 'image',
           name: 'page-1.jpg',
+          documentResourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            entryPath: 'image/Page_1.jpg',
+            cachePath: '/tmp/page-1.jpg',
+            versionPolicy: 'versioned-export',
+          },
         },
         target: {
           plugin: 'canvas',
@@ -62,6 +76,15 @@ describe('DocumentImageThumbnails', () => {
         provenance: {
           source: 'webview',
           label: 'document-image:C2',
+          metadata: {
+            documentResourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/books/a.epub', format: 'epub' },
+              entryPath: 'image/Page_1.jpg',
+              cachePath: '/tmp/page-1.jpg',
+              versionPolicy: 'versioned-export',
+            },
+          },
         },
       },
     });

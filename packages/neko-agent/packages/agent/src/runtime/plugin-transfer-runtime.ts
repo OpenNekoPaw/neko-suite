@@ -16,6 +16,7 @@ import {
   type ProjectPluginsAvailableInput,
   type RegisteredPluginSlashCommand,
 } from '@neko-agent/types';
+import { isDocumentArchiveResourceRef, type DocumentArchiveResourceRef } from '@neko/shared';
 
 type RuntimePluginTransferBuildPayload = Exclude<PluginTransferPayload, { kind: 'assetBatch' }>;
 
@@ -151,6 +152,7 @@ export function buildRuntimePluginTransferPlan(
   assertSingleTransferPayload(payload);
 
   if (input.target === 'canvas') {
+    const documentResourceRef = readDocumentResourceRef(payload.asset, payload.provenance);
     return {
       status: 'execute-command',
       command: 'neko.canvas.importAsset',
@@ -158,6 +160,7 @@ export function buildRuntimePluginTransferPlan(
         path: payload.asset.path,
         ...(payload.asset.mediaType ? { type: payload.asset.mediaType } : {}),
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
+        ...(documentResourceRef ? { documentResourceRef } : {}),
         ...((payload.target ?? payload.asset.target)
           ? { target: payload.target ?? payload.asset.target }
           : {}),
@@ -251,6 +254,18 @@ function resolveBatchTransferDefaults(
     ...(!asset.target && batch.target ? { target: batch.target } : {}),
     ...(!asset.provenance && batch.provenance ? { provenance: batch.provenance } : {}),
   };
+}
+
+function readDocumentResourceRef(
+  asset: PluginTransferAssetRef,
+  payloadProvenance: PluginTransferAssetRef['provenance'] | undefined,
+): DocumentArchiveResourceRef | undefined {
+  const candidates = [
+    asset.documentResourceRef,
+    asset.provenance?.metadata?.['documentResourceRef'],
+    payloadProvenance?.metadata?.['documentResourceRef'],
+  ];
+  return candidates.find(isDocumentArchiveResourceRef);
 }
 
 function validateCanvasContentTransferTarget(

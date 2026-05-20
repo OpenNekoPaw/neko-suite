@@ -1,4 +1,5 @@
 import type { AgentContextPayload, DocumentLocator } from '@neko/shared';
+import { parseDocumentArchiveResourceRef } from '@neko/shared';
 
 export function projectClipboardTextToContextPayload(text: string): AgentContextPayload | null {
   const value = parseJsonObject(text);
@@ -28,6 +29,9 @@ function projectDocumentImageReference(value: Record<string, unknown>): AgentCon
   if (!filePath || !imagePath) return null;
 
   const locator = parseDocumentLocator(document.locator);
+  const resourceRef =
+    parseDocumentArchiveResourceRef(image.resourceRef) ??
+    parseDocumentArchiveResourceRef(document.resourceRef);
   const label = locator ? formatDocumentLocator(locator) : basename(imagePath);
   const sourceFormat = readString(source?.format);
   const data = {
@@ -36,6 +40,7 @@ function projectDocumentImageReference(value: Record<string, unknown>): AgentCon
       filePath,
       ...(source ? { source } : {}),
       ...(locator ? { locator } : {}),
+      ...(resourceRef ? { resourceRef } : {}),
     },
     image: {
       path: imagePath,
@@ -45,11 +50,13 @@ function projectDocumentImageReference(value: Record<string, unknown>): AgentCon
       ...optionalNumberField('height', image.height),
       ...optionalNumberField('byteSize', image.byteSize),
       ...optionalStringField('mimeType', image.mimeType),
+      ...(resourceRef ? { resourceRef } : {}),
     },
     navigationData: {
       source: sourceFormat ?? 'document',
       filePath,
       imagePath,
+      ...(resourceRef?.entryPath ? { entryPath: resourceRef.entryPath } : {}),
     },
   };
 

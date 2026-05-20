@@ -260,14 +260,31 @@ describe('plugin transfer runtime', () => {
   });
 
   it('preserves Canvas target metadata on asset imports', () => {
+    const documentResourceRef = {
+      kind: 'document-entry',
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+      entryPath: 'image/page-1.jpg',
+      cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
+      versionPolicy: 'versioned-export',
+    };
+
     expect(
       buildRuntimePluginTransferPlan({
         target: 'canvas',
         payload: {
           kind: 'singleAsset',
-          asset: { path: '/tmp/frame.png', mediaType: 'image', name: 'Frame' },
+          asset: {
+            path: '/tmp/frame.png',
+            mediaType: 'image',
+            name: 'Frame',
+            documentResourceRef,
+          },
           target: { containerId: 'scene-1', mode: 'create-child' },
-          provenance: { source: 'agent', toolCallId: 'tool-1' },
+          provenance: {
+            source: 'agent',
+            toolCallId: 'tool-1',
+            metadata: { documentResourceRef },
+          },
         },
       }),
     ).toEqual({
@@ -277,8 +294,13 @@ describe('plugin transfer runtime', () => {
         path: '/tmp/frame.png',
         type: 'image',
         name: 'Frame',
+        documentResourceRef,
         target: { containerId: 'scene-1', mode: 'create-child' },
-        provenance: { source: 'agent', toolCallId: 'tool-1' },
+        provenance: {
+          source: 'agent',
+          toolCallId: 'tool-1',
+          metadata: { documentResourceRef },
+        },
       },
     });
   });

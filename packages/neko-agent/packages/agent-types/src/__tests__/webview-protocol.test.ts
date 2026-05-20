@@ -541,7 +541,18 @@ describe('webview protocol projectors', () => {
         target: 'model',
         payload: {
           kind: 'singleAsset',
-          asset: { path: '/repo/character.glb', mediaType: 'model', name: 'Character' },
+          asset: {
+            path: '/repo/character.glb',
+            mediaType: 'model',
+            name: 'Character',
+            documentResourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/books/a.epub', format: 'epub' },
+              entryPath: 'models/character.glb',
+              cachePath: '/tmp/character.glb',
+              versionPolicy: 'versioned-export',
+            },
+          },
         },
       }),
     ).toEqual({
@@ -549,7 +560,18 @@ describe('webview protocol projectors', () => {
       target: 'model',
       payload: {
         kind: 'singleAsset',
-        asset: { path: '/repo/character.glb', mediaType: 'model', name: 'Character' },
+        asset: {
+          path: '/repo/character.glb',
+          mediaType: 'model',
+          name: 'Character',
+          documentResourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            entryPath: 'models/character.glb',
+            cachePath: '/tmp/character.glb',
+            versionPolicy: 'versioned-export',
+          },
+        },
       },
     });
 
@@ -665,6 +687,25 @@ describe('webview protocol projectors', () => {
         },
       }),
     ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'singleAsset',
+          asset: {
+            path: '/repo/frame.png',
+            mediaType: 'image',
+            documentResourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/books/a.epub', format: 'zip' },
+              entryPath: 'images/frame.png',
+            },
+          },
+        },
+      }),
+    ).toBeNull();
   });
 
   it('parses target-aware Canvas content transfer payloads', () => {
@@ -686,6 +727,15 @@ describe('webview protocol projectors', () => {
             source: 'agent',
             conversationId: 'conv-1',
             messageId: 'msg-1',
+            metadata: {
+              documentResourceRef: {
+                kind: 'document-entry',
+                source: { filePath: '/books/a.epub', format: 'epub' },
+                entryPath: 'image/Page_1.jpg',
+                cachePath: '/tmp/page-1.jpg',
+                versionPolicy: 'versioned-export',
+              },
+            },
           },
         },
       }),
@@ -706,6 +756,15 @@ describe('webview protocol projectors', () => {
           source: 'agent',
           conversationId: 'conv-1',
           messageId: 'msg-1',
+          metadata: {
+            documentResourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/books/a.epub', format: 'epub' },
+              entryPath: 'image/Page_1.jpg',
+              cachePath: '/tmp/page-1.jpg',
+              versionPolicy: 'versioned-export',
+            },
+          },
         },
       },
     });
@@ -805,6 +864,21 @@ describe('webview protocol projectors', () => {
           kind: 'canvasPrompt',
           prompt: 'hello',
           target: { insertionPoint: { x: Number.NaN, y: 10 } },
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: {
+          kind: 'canvasPrompt',
+          prompt: 'hello',
+          provenance: {
+            source: 'agent',
+            metadata: ['not', 'a', 'record'],
+          },
         },
       }),
     ).toBeNull();

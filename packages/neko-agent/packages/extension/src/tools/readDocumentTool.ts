@@ -1,4 +1,10 @@
-import { TOOL_NAMES_SYSTEM, createTool, type Tool, type ToolResult } from '@neko/shared';
+import {
+  TOOL_NAMES_SYSTEM,
+  createTool,
+  isDocumentFormat,
+  type Tool,
+  type ToolResult,
+} from '@neko/shared';
 import { isDocumentUrl } from '@neko/platform/document';
 import type {
   DocumentBatchCursor,
@@ -36,28 +42,6 @@ interface ReadDocumentToolData {
 }
 
 type ReadDocumentMode = 'content' | 'manifest' | 'range' | 'next';
-
-const DOCUMENT_FORMATS = new Set<DocumentSourceRef['format']>([
-  'pdf',
-  'epub',
-  'cbz',
-  'cbr',
-  'docx',
-  'doc',
-  'pptx',
-  'ppt',
-  'text',
-  'markdown',
-  'fountain',
-  'html',
-  'json',
-  'yaml',
-  'xlsx',
-  'xls',
-  'fdx',
-  'url',
-  'unknown',
-]);
 
 export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
   return createTool({
@@ -669,10 +653,6 @@ function readDocumentLimit(value: unknown): DocumentRange['limit'] | null | unde
     maxChars,
     maxImages,
   };
-}
-
-function isDocumentFormat(value: string): value is DocumentSourceRef['format'] {
-  return DOCUMENT_FORMATS.has(value as DocumentSourceRef['format']);
 }
 
 function readPositiveInteger(value: unknown): number | null {
