@@ -43,6 +43,37 @@ describe('createTool', () => {
     expect(tool.isReadOnly).toBe(true);
     expect(tool.isDestructive).toBe(false);
   });
+
+  it('should preserve declarative safety and query-before-mutate metadata', () => {
+    const tool = createTool({
+      name: 'ApplyContent',
+      description: 'apply content',
+      parameters: dummyParams,
+      category: 'project',
+      safetyKind: 'confirmation-gated',
+      targetRequirements: {
+        required: ['target'],
+        allowedFallbacks: ['selection'],
+        confirmationModes: ['replace'],
+      },
+      queryBeforeMutate: {
+        preferredQueryTools: ['GetActiveContext'],
+        reason: 'Resolve a stable target before applying content.',
+      },
+      execute: dummyExecute,
+    });
+
+    expect(tool.safetyKind).toBe('confirmation-gated');
+    expect(tool.targetRequirements).toEqual({
+      required: ['target'],
+      allowedFallbacks: ['selection'],
+      confirmationModes: ['replace'],
+    });
+    expect(tool.queryBeforeMutate).toEqual({
+      preferredQueryTools: ['GetActiveContext'],
+      reason: 'Resolve a stable target before applying content.',
+    });
+  });
 });
 
 // =============================================================================
@@ -191,6 +222,24 @@ describe('buildTool', () => {
     });
 
     expect(tool.traits).toEqual(traits);
+  });
+
+  it('should preserve extended planning metadata', () => {
+    const tool = buildTool({
+      name: 'UpdateNode',
+      description: 'update node',
+      parameters: dummyParams,
+      category: 'project',
+      safety: 'safeWrite',
+      safetyKind: 'confirmation-gated',
+      targetRequirements: { required: ['nodeId'] },
+      queryBeforeMutate: { preferredQueryTools: ['GetNode'] },
+      execute: dummyExecute,
+    });
+
+    expect(tool.safetyKind).toBe('confirmation-gated');
+    expect(tool.targetRequirements).toEqual({ required: ['nodeId'] });
+    expect(tool.queryBeforeMutate).toEqual({ preferredQueryTools: ['GetNode'] });
   });
 
   it('should set correct name, description, parameters, category', () => {

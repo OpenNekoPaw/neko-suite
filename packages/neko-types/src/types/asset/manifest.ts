@@ -113,8 +113,30 @@ export type MediaKind =
   | 'image'
   | 'sequence'
   | '3d-model'
+  | 'model-3d'
+  | 'model-motion'
+  | 'model-config'
+  | 'puppet-model'
   | 'puppet-motion'
+  | 'puppet-config'
+  | 'voice-pack'
   | 'document';
+
+export const MEDIA_KINDS: readonly MediaKind[] = [
+  'video',
+  'audio',
+  'image',
+  'sequence',
+  '3d-model',
+  'model-3d',
+  'model-motion',
+  'model-config',
+  'puppet-model',
+  'puppet-motion',
+  'puppet-config',
+  'voice-pack',
+  'document',
+] as const;
 
 export interface MediaMetadata {
   mediaKind: MediaKind;
@@ -127,7 +149,22 @@ export interface MediaMetadata {
     format: 'glb' | 'gltf' | 'fbx' | 'obj' | 'vrm' | 'mmd';
     vertexCount?: number;
   };
+  'model-3d'?: {
+    format: 'glb' | 'gltf' | 'fbx' | 'obj' | 'vrm' | 'mmd';
+    vertexCount?: number;
+    rigged?: boolean;
+  };
+  'model-motion'?: { format: 'gltf-animation' | 'nkma' | 'vrma'; duration?: number };
+  'model-config'?: { format: 'vrm-expression' | 'material-preset' | 'nkm-config' };
+  'puppet-model'?: { format: 'moc3' | 'nkp' | 'live2d-bundle'; textureCount?: number };
   'puppet-motion'?: { format: 'inp' | 'live2d' | 'nkpup'; duration: number };
+  'puppet-config'?: { format: 'exp3' | 'physics3' | 'live2d-config' | 'nkp-config' };
+  'voice-pack'?: {
+    format: 'wav' | 'ogg' | 'flac' | 'voice-pack';
+    language?: string;
+    clipCount?: number;
+    hasVisemes?: boolean;
+  };
   document?: {
     subtype: 'markdown' | 'pdf' | 'word' | 'pptx' | 'xlsx' | 'epub' | 'cbz' | 'fdx';
     pageCount?: number;
@@ -353,9 +390,24 @@ export interface PresetMetadata {
 }
 
 export type BundleInstallPolicy = 'all' | 'pick';
+export type BundleType =
+  | 'style-pack'
+  | 'workflow-pack'
+  | 'character-pack'
+  | 'motion-pack'
+  | 'mixed';
+
+export const BUNDLE_TYPES: readonly BundleType[] = [
+  'style-pack',
+  'workflow-pack',
+  'character-pack',
+  'motion-pack',
+  'mixed',
+] as const;
 
 export interface BundleMetadata {
   installPolicy: BundleInstallPolicy;
+  bundleType?: BundleType;
   recommended?: string[];
 }
 
@@ -743,6 +795,8 @@ export interface LegacyAssetTypeMigration {
 }
 
 const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
+const MEDIA_KIND_SET = new Set<string>(MEDIA_KINDS);
+const BUNDLE_TYPE_SET = new Set<string>(BUNDLE_TYPES);
 const DISTRIBUTION_KIND_SET = new Set<string>(DISTRIBUTION_KINDS);
 const DISTRIBUTION_MODE_SET = new Set<string>(DISTRIBUTION_MODES);
 const PLUGIN_PERMISSION_SET = new Set<string>(PLUGIN_PERMISSIONS);
@@ -806,6 +860,14 @@ export function isAssetType(value: unknown): value is AssetType {
 
 export function isDistributionKind(value: unknown): value is DistributionKind {
   return typeof value === 'string' && DISTRIBUTION_KIND_SET.has(value);
+}
+
+export function isMediaKind(value: unknown): value is MediaKind {
+  return typeof value === 'string' && MEDIA_KIND_SET.has(value);
+}
+
+export function isBundleType(value: unknown): value is BundleType {
+  return typeof value === 'string' && BUNDLE_TYPE_SET.has(value);
 }
 
 export function isPluginPermission(value: unknown): value is PluginPermission {
@@ -1197,7 +1259,9 @@ function validateTypeMetadata(
   const data = manifest['typeMetadata']['data'];
   switch (manifest['type']) {
     case 'media':
-      requireString(data, 'typeMetadata.data.mediaKind', issues, 'mediaKind');
+      if (!isMediaKind(data['mediaKind'])) {
+        issues.push({ field: 'typeMetadata.data.mediaKind', message: 'must be a known MediaKind' });
+      }
       requireNumber(data, 'typeMetadata.data.fileSize', issues, 'fileSize');
       break;
     case 'starter':
@@ -1251,6 +1315,12 @@ function validateTypeMetadata(
       break;
     case 'bundle':
       requireString(data, 'typeMetadata.data.installPolicy', issues, 'installPolicy');
+      if (data['bundleType'] !== undefined && !isBundleType(data['bundleType'])) {
+        issues.push({
+          field: 'typeMetadata.data.bundleType',
+          message: 'must be a known BundleType',
+        });
+      }
       break;
   }
 }

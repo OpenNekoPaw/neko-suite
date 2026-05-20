@@ -5,6 +5,9 @@
  * Defines the hierarchical structure: Entity → Variant → File
  */
 
+import type { BundleEntryLocator, MediaAssetStorageMode } from '../bundle-locator';
+import type { CharacterAssetDimension, CharacterAssetMediaKind } from '../media-import';
+
 // =============================================================================
 // Entity Categories
 // =============================================================================
@@ -278,6 +281,21 @@ export interface MediaFileMetadata {
   language?: string;
 }
 
+export interface CharacterAssetDimensionMetadata {
+  /** Character asset dimension represented by this file. */
+  assetDimension?: CharacterAssetDimension;
+  /** Domain media kind used by Market, Search, and Agent tools. */
+  mediaKind?: CharacterAssetMediaKind;
+  /** Storage mode for direct files, bundle-memory entries, and market assets. */
+  storageMode?: MediaAssetStorageMode;
+  /** Bundle entry metadata for bundle-memory assets. */
+  bundleLocator?: BundleEntryLocator;
+  /** Original import source path or package id when available. */
+  sourceOrigin?: string;
+  /** Content hash for source recovery and stale reference checks. */
+  sourceHash?: string;
+}
+
 /** Asset file - concrete media resource */
 export interface AssetFile {
   /** Unique file ID */
@@ -302,6 +320,8 @@ export interface AssetFile {
   lastCheckedAt?: number;
   /** Remap history when path was relocated */
   remap?: AssetFileRemap;
+  /** Puppet/model character asset metadata used by Search, Market, and Agent. */
+  characterAsset?: CharacterAssetDimensionMetadata;
 }
 
 /** Asset variant - different representation of the same entity */
@@ -411,6 +431,8 @@ export interface AddFileOptions {
   purpose?: FilePurpose;
   /** Pre-extracted metadata (skip extraction) */
   metadata?: Partial<MediaFileMetadata>;
+  /** Puppet/model asset dimension metadata for Search, Market, and Agent. */
+  characterAsset?: CharacterAssetDimensionMetadata;
 }
 
 // =============================================================================

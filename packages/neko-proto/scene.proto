@@ -32,6 +32,11 @@ message Vec3 {
   float z = 3;
 }
 
+message Bounds3 {
+  Vec3 min = 1;
+  Vec3 max = 2;
+}
+
 message Quat {
   float x = 1;
   float y = 2;
@@ -409,6 +414,8 @@ message SceneNodeSnapshot {
   optional AssetHandle mesh = 8;
   optional AssetHandle material = 9;
   optional string kind = 10;
+  optional Bounds3 bounds = 11;
+  optional Bounds3 world_bounds = 12;
 }
 
 message SceneSnapshot {

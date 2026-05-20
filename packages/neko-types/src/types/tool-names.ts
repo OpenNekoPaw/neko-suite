@@ -66,6 +66,8 @@ export const TOOL_NAMES_CANVAS = {
   CANVAS_CREATE_COMPOSITE: 'canvas_create_composite',
   CANVAS_UPDATE_BLOCK: 'canvas_update_block',
   CANVAS_EXTRACT_STRUCTURED_CONTENT: 'canvas_extract_structured_content',
+  CANVAS_GET_ACTIVE_CONTEXT: 'canvas_get_active_context',
+  CANVAS_APPLY_AGENT_CONTENT: 'canvas_apply_agent_content',
   CANVAS_GET_STORYBOARD_EXECUTION_SUMMARY: 'canvas_get_storyboard_execution_summary',
   CANVAS_GENERATE_IMAGE: 'canvas_generate_image',
   CANVAS_GENERATE_BATCH: 'canvas_generate_batch',
@@ -142,6 +144,16 @@ export const TOOL_NAMES_ASSETS = {
   LIST_ASSETS: 'ListAssets',
   GET_ASSET: 'GetAsset',
   IMPORT_ASSET: 'ImportAsset',
+} as const;
+
+// =============================================================================
+// NekoModel — 3D Scene Operations
+// =============================================================================
+
+export const TOOL_NAMES_MODEL = {
+  MODEL_SCENE_QUERY: 'model_scene_query',
+  MODEL_NODE_MANIPULATE: 'model_node_manipulate',
+  MODEL_ANIMATION_CONTROL: 'model_animation_control',
 } as const;
 
 // =============================================================================
@@ -251,6 +263,7 @@ export const TOOL_NAMES = {
   ...TOOL_NAMES_STORY,
   ...TOOL_NAMES_SKETCH,
   ...TOOL_NAMES_ASSETS,
+  ...TOOL_NAMES_MODEL,
   ...TOOL_NAMES_TRANSCRIBE,
   ...TOOL_NAMES_AUDIO,
   ...TOOL_NAMES_PERCEPTION,

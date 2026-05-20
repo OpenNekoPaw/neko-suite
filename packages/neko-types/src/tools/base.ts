@@ -12,7 +12,10 @@ import type {
   ToolCategory,
   ToolExecuteOptions,
   ToolParameters,
+  ToolQueryBeforeMutateGuidance,
   ToolResult,
+  ToolSafetyKind,
+  ToolTargetRequirements,
   ToolTraits,
 } from '../types/tool';
 
@@ -138,6 +141,9 @@ export function createTool(config: {
   parameters: ToolParameters;
   category: ToolCategory;
   requiresConfirmation?: boolean;
+  safetyKind?: ToolSafetyKind;
+  targetRequirements?: ToolTargetRequirements;
+  queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
   traits?: ToolTraits;
   isConcurrencySafe?: boolean;
   isReadOnly?: boolean;
@@ -150,6 +156,9 @@ export function createTool(config: {
     parameters: config.parameters,
     category: config.category,
     requiresConfirmation: config.requiresConfirmation ?? false,
+    ...(config.safetyKind ? { safetyKind: config.safetyKind } : {}),
+    ...(config.targetRequirements ? { targetRequirements: config.targetRequirements } : {}),
+    ...(config.queryBeforeMutate ? { queryBeforeMutate: config.queryBeforeMutate } : {}),
     // Fail-Closed: default all safety flags to false
     isConcurrencySafe: config.isConcurrencySafe ?? false,
     isReadOnly: config.isReadOnly ?? false,
@@ -183,6 +192,12 @@ export interface BuildToolConfig {
   isReadOnly?: boolean;
   /** Override preset's isDestructive */
   isDestructive?: boolean;
+  /** Declarative safety class for permission and planning policy. */
+  safetyKind?: ToolSafetyKind;
+  /** Target data needed before executing stateful mutation tools. */
+  targetRequirements?: ToolTargetRequirements;
+  /** Preferred structured query tools to run before this mutation. */
+  queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
   traits?: ToolTraits;
   execute: (args: Record<string, unknown>, options?: ToolExecuteOptions) => Promise<ToolResult>;
 }
@@ -223,6 +238,9 @@ export function buildTool(config: BuildToolConfig): Tool {
     parameters: config.parameters,
     category: config.category,
     traits: config.traits,
+    safetyKind: config.safetyKind,
+    targetRequirements: config.targetRequirements,
+    queryBeforeMutate: config.queryBeforeMutate,
     execute: config.execute,
     // Preset provides base, explicit flags override
     requiresConfirmation: config.requiresConfirmation ?? preset?.requiresConfirmation,

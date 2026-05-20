@@ -140,6 +140,12 @@ export * from './mediaDiffProtocol';
 // Asset management types
 export * from './asset';
 
+// Bundle locators and character asset import contracts
+export * from './bundle-locator';
+export * from './media-import';
+export * from './asset-export';
+export * from './project-asset-dependency-manifest';
+
 // Context manager types (token budget and lifecycle management)
 export * from './context-manager';
 
@@ -189,6 +195,7 @@ export * from './keyframe-editor';
 
 // 3D Model project types (.nkm project format)
 export * from './model-project';
+export * from './model-agent-api';
 
 // 3D scene authoring and viewport contracts
 export * from './scene';

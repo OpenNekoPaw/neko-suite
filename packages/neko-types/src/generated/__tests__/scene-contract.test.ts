@@ -46,6 +46,8 @@ describe('scene contract fixtures', () => {
     expect(roundtripped.revision).toBe(40);
     expect(roundtripped.nodes.map((node) => node.nodeId)).toEqual(['node-root', 'node-mesh']);
     expect(roundtripped.nodes[1]?.mesh?.id).toBe('mesh-main');
+    expect(roundtripped.nodes[1]?.worldBounds?.min).toEqual({ x: 2, y: 4, z: 4.5 });
+    expect(roundtripped.nodes[1]?.worldBounds?.max).toEqual({ x: 4, y: 6, z: 5.5 });
   });
 
   it('preserves SceneDelta patch fields through JSON roundtrip', () => {

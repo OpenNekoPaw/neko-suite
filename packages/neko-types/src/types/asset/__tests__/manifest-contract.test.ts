@@ -5,6 +5,8 @@ import {
   getLegacyAssetTypeMigration,
   isAssetType,
   isDistributionKind,
+  isBundleType,
+  isMediaKind,
   parseAssetManifest,
   validatePluginPermissionDeclarations,
   validateAssetManifest,
@@ -206,6 +208,103 @@ describe('AssetManifest v4 contract', () => {
         { field: 'typeMetadata.data.size', message: 'must be a number' },
       ]),
     );
+  });
+
+  it('accepts puppet, model, and voice media kinds for character assets', () => {
+    const kinds = [
+      'puppet-model',
+      'puppet-config',
+      'model-3d',
+      'model-motion',
+      'model-config',
+      'voice-pack',
+    ] as const;
+
+    for (const mediaKind of kinds) {
+      const result = validateAssetManifest(
+        validManifest({
+          id: `@studio/${mediaKind}`,
+          name: mediaKind,
+          type: 'media',
+          typeMetadata: {
+            type: 'media',
+            data: { mediaKind, fileSize: 1 },
+          },
+        }),
+      );
+
+      expect(isMediaKind(mediaKind)).toBe(true);
+      expect(result.issues).toEqual([]);
+      expect(result.valid).toBe(true);
+    }
+  });
+
+  it('rejects unknown media kinds during shared manifest validation', () => {
+    const result = validateAssetManifest(
+      validManifest({
+        type: 'media',
+        typeMetadata: {
+          type: 'media',
+          data: { mediaKind: 'zip-blunder', fileSize: 1 } as never,
+        },
+      }),
+    );
+
+    expect(isMediaKind('zip-blunder')).toBe(false);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContainEqual({
+      field: 'typeMetadata.data.mediaKind',
+      message: 'must be a known MediaKind',
+    });
+  });
+
+  it('accepts character-pack and motion-pack bundle metadata', () => {
+    for (const bundleType of ['character-pack', 'motion-pack'] as const) {
+      const result = validateAssetManifest(
+        validManifest({
+          id: `@studio/${bundleType}`,
+          name: bundleType,
+          type: 'bundle',
+          distributionKind: 'orchestration',
+          typeMetadata: {
+            type: 'bundle',
+            data: { installPolicy: 'all', bundleType },
+          },
+          contents: [
+            {
+              packageId: '@studio/asset',
+              version: '^1.0.0',
+              role: bundleType === 'character-pack' ? 'model' : 'motion',
+            },
+          ],
+        }),
+      );
+
+      expect(isBundleType(bundleType)).toBe(true);
+      expect(result.issues).toEqual([]);
+      expect(result.valid).toBe(true);
+    }
+  });
+
+  it('rejects unknown bundle metadata type', () => {
+    const result = validateAssetManifest(
+      validManifest({
+        type: 'bundle',
+        distributionKind: 'orchestration',
+        typeMetadata: {
+          type: 'bundle',
+          data: { installPolicy: 'all', bundleType: 'loot-box' } as never,
+        },
+        contents: [{ packageId: '@studio/asset', version: '^1.0.0' }],
+      }),
+    );
+
+    expect(isBundleType('loot-box')).toBe(false);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContainEqual({
+      field: 'typeMetadata.data.bundleType',
+      message: 'must be a known BundleType',
+    });
   });
 
   it('validates plugin metadata as native cdylib metadata', () => {

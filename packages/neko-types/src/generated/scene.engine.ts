@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/scene.proto
-// Source hash: 96b5b5d25eacac05
+// Source hash: 074ed620c672df75
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -124,6 +124,11 @@ export interface EngineVec3 {
   x: number;
   y: number;
   z: number;
+}
+
+export interface EngineBounds3 {
+  min?: EngineVec3;
+  max?: EngineVec3;
 }
 
 export interface EngineQuat {
@@ -425,6 +430,8 @@ export interface EngineSceneNodeSnapshot {
   mesh?: EngineAssetHandle;
   material?: EngineAssetHandle;
   kind?: string;
+  bounds?: EngineBounds3;
+  worldBounds?: EngineBounds3;
 }
 
 export interface EngineSceneSnapshot {

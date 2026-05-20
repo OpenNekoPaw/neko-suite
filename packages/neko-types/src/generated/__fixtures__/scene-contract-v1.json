@@ -28,6 +28,14 @@
         "visible": true,
         "mesh": { "id": "mesh-main", "uri": "assets/model.glb", "kind": "mesh" },
         "material": { "id": "mat-main", "uri": "assets/model.glb#material0", "kind": "material" },
+        "bounds": {
+          "min": { "x": -1, "y": 0, "z": -0.5 },
+          "max": { "x": 1, "y": 2, "z": 0.5 }
+        },
+        "worldBounds": {
+          "min": { "x": 2, "y": 4, "z": 4.5 },
+          "max": { "x": 4, "y": 6, "z": 5.5 }
+        },
         "kind": "mesh"
       }
     ],

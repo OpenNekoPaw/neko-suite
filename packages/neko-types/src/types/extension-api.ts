@@ -10,7 +10,6 @@
  * - neko-agent discovers and calls these APIs via vscode.extensions.getExtension()
  */
 
-import type { Event } from 'vscode';
 import type {
   CanvasNode,
   CanvasNodeType,
@@ -19,6 +18,10 @@ import type {
   GalleryCanvasNode,
 } from './canvas';
 import type {
+  CanvasAgentActiveContextRequest,
+  CanvasAgentActiveContextResult,
+  CanvasAgentApplyContentResult,
+  CanvasAgentContentPayload,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasDeriveNodeRequest,
@@ -46,6 +49,13 @@ import type {
   SketchAIImageResultRequest,
   SketchAIProgressMessage,
 } from './sketch-ai';
+import type { NekoModelAPI } from './model-agent-api';
+
+export interface NekoDisposableLike {
+  dispose(): void;
+}
+
+export type NekoEventLike<T> = (listener: (event: T) => void) => NekoDisposableLike;
 
 // =============================================================================
 // NekoEngine API
@@ -362,6 +372,18 @@ export interface NekoCanvasAPI {
     ): Promise<CanvasExtractStructuredContentResult>;
 
     /**
+     * Return compact, read-only active Canvas context for Agent planning.
+     */
+    getActiveContext(
+      request?: CanvasAgentActiveContextRequest,
+    ): Promise<CanvasAgentActiveContextResult>;
+
+    /**
+     * Apply Agent-generated text, prompt, or structured content to a validated Canvas target.
+     */
+    applyAgentContent(payload: CanvasAgentContentPayload): Promise<CanvasAgentApplyContentResult>;
+
+    /**
      * Trigger image generation for a ShotNode or a specific GalleryCell.
      * Delegates to BatchGenerationScheduler.
      */
@@ -376,7 +398,7 @@ export interface NekoCanvasAPI {
      * Fired whenever the canvas selection changes.
      * Ambient context listener for neko-agent.
      */
-    onSelectionChange: Event<CanvasNode[]>;
+    onSelectionChange: NekoEventLike<CanvasNode[]>;
   };
 
   /**
@@ -387,12 +409,12 @@ export interface NekoCanvasAPI {
     /**
      * Fired whenever an asset is added, updated, or deleted in the project library.
      */
-    onDidChangeAssets: Event<NekoCanvasAssetChangeEvent>;
+    onDidChangeAssets: NekoEventLike<NekoCanvasAssetChangeEvent>;
 
     /**
      * Fired whenever nodes or shapes on the active canvas are added, updated, or deleted.
      */
-    onDidChangeCanvas: Event<CanvasChangeEvent>;
+    onDidChangeCanvas: NekoEventLike<CanvasChangeEvent>;
   };
 }
 
@@ -699,6 +721,12 @@ export interface NekoPuppetAPI {
 }
 
 // =============================================================================
+// NekoModel API
+// =============================================================================
+
+export type { NekoModelAPI };
+
+// =============================================================================
 // NekoAssets API
 // =============================================================================
 
@@ -777,6 +805,7 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_STORY: 'neko.neko-story',
   NEKO_SKETCH: 'neko.neko-sketch',
   NEKO_PUPPET: 'neko.neko-puppet',
+  NEKO_MODEL: 'neko.neko-model',
   NEKO_AUTH: 'neko.neko-auth',
   NEKO_ASSETS: 'neko.neko-assets',
 } as const;
