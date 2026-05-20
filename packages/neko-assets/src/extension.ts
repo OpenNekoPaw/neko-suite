@@ -35,7 +35,7 @@ import {
   migrateStorageLayout,
   parseEntityUri,
 } from '@neko/shared';
-import type { ResolvedEntityRef } from '@neko/shared';
+import type { ImportedAssetDescriptor } from '@neko/shared';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
 import { ThumbnailService } from './services/ThumbnailService';
 import { MediaMetadataCache } from './services/MediaMetadataCache';
@@ -43,9 +43,12 @@ import { MediaLibrarySearchService } from './services/MediaLibrarySearchService'
 import { AssetHealthMonitor, createFileAccessChecker } from './services/AssetHealthMonitor';
 import { MediaLibrarySettingsService } from './services/MediaLibrarySettingsService';
 import { AssetFileDecorationProvider } from './providers/AssetFileDecorationProvider';
-import { AssetManagerTreeProvider } from './providers/AssetManagerTreeProvider';
+import { AssetManagerTreeProvider, type AssetTreeItem } from './providers/AssetManagerTreeProvider';
 import { AssetHistoryTreeProvider } from './providers/AssetHistoryTreeProvider';
-import { MediaLibraryTreeProvider } from './providers/MediaLibraryTreeProvider';
+import {
+  MediaLibraryTreeProvider,
+  type MediaLibraryItem,
+} from './providers/MediaLibraryTreeProvider';
 import { VscodeGitService } from './services/VscodeGitService';
 import {
   createVSCodeLogger,
@@ -62,6 +65,11 @@ import {
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { openAssetPreview } from './utils/preview';
+import { createNekoAssetsCapabilityProvider } from './agentCapabilityProvider';
+import { MediaImportDispatcher } from './services/ImportDispatcher';
+import { ProjectAssetDependencyManifestService } from './services/ProjectAssetDependencyManifestService';
+import { CharacterAssetExportService } from './services/CharacterAssetExportService';
+import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 
 const logger = getLogger('Extension');
 
@@ -78,6 +86,19 @@ let mediaSettingsService:
 let healthMonitor: AssetHealthMonitor | null = null;
 /** Entity change event emitter — module-level so command handlers + API can both fire */
 let entityChangeEmitter: import('vscode').EventEmitter<void> | null = null;
+let dependencyManifestService: ProjectAssetDependencyManifestService | null = null;
+let characterAssetExportService: CharacterAssetExportService | null = null;
+const runningTasks = new Set<Promise<void>>();
+
+function trackExtensionTask(label: string, task: PromiseLike<unknown>): void {
+  const tracked = Promise.resolve(task).catch((error) => {
+    logger.warn(`${label} failed (non-fatal):`, error);
+  });
+  runningTasks.add(tracked);
+  void tracked.finally(() => {
+    runningTasks.delete(tracked);
+  });
+}
 
 // =============================================================================
 // Node.js IFileSystem Adapter
@@ -181,6 +202,55 @@ export async function activate(
 
       await library.initialize();
       logger.info(`AssetLibrary initialized at ${layout.project.assetLibrary}`);
+      dependencyManifestService = new ProjectAssetDependencyManifestService({
+        projectRoot: workspaceRoot,
+        fs: {
+          readFile: async (filePath) => vscode.workspace.fs.readFile(vscode.Uri.file(filePath)),
+          writeFile: async (filePath, data) =>
+            vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), data),
+          createDirectory: async (dirPath) =>
+            vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+          exists: async (filePath) => {
+            try {
+              await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        },
+        market: {
+          isInstalled: (packageId) => {
+            const market = vscode.extensions.getExtension<{ isInstalled(id: string): boolean }>(
+              'neko.neko-market',
+            );
+            return market?.exports?.isInstalled(packageId) ?? false;
+          },
+        },
+      });
+      const entityServices = createVSCodeEntityServices({ projectRoot: workspaceRoot });
+      characterAssetExportService = new CharacterAssetExportService({
+        fs: {
+          readFile: async (filePath) => vscode.workspace.fs.readFile(vscode.Uri.file(filePath)),
+          writeFile: async (filePath, data) =>
+            vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), data),
+          createDirectory: async (dirPath) =>
+            vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+          exists: async (filePath) => {
+            try {
+              await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        },
+        library,
+        characters: {
+          list: () => entityServices.store.loadCharacters().then((file) => file.characters),
+        },
+        bindings: entityServices.bindings,
+      });
 
       // Initialize AssetDiffService with Git integration
       const gitService = new VscodeGitService();
@@ -214,11 +284,12 @@ export async function activate(
     const assetManagerProvider = new AssetManagerTreeProvider(library, thumbnailService!);
     const assetHistoryProvider = new AssetHistoryTreeProvider(library, thumbnailService!);
 
+    const assetManagerTree = vscode.window.createTreeView('neko.assetManager', {
+      treeDataProvider: assetManagerProvider,
+      showCollapseAll: true,
+    });
     context.subscriptions.push(
-      vscode.window.createTreeView('neko.assetManager', {
-        treeDataProvider: assetManagerProvider,
-        showCollapseAll: true,
-      }),
+      assetManagerTree,
       vscode.window.createTreeView('neko.assetHistory', {
         treeDataProvider: assetHistoryProvider,
       }),
@@ -235,7 +306,13 @@ export async function activate(
     );
 
     // Register asset manager context menu commands (entity/variant CRUD)
-    registerAssetManagerCommands(context, library, assetManagerProvider, assetHistoryProvider);
+    registerAssetManagerCommands(
+      context,
+      library,
+      assetManagerProvider,
+      assetHistoryProvider,
+      assetManagerTree,
+    );
   }
 
   // 4. Initialize Media Library Settings (P1)
@@ -252,7 +329,9 @@ export async function activate(
     });
 
     // Run initial health check now that path variables are available
-    healthMonitor?.runInitialCheck();
+    if (healthMonitor) {
+      trackExtensionTask('Initial asset health check', healthMonitor.runInitialCheck());
+    }
 
     // Initialize PathResolver for portable cache keys
     const cachePathResolver = new PathResolver();
@@ -277,9 +356,7 @@ export async function activate(
       storageLayout.project.cache.searchIndex,
     );
     context.subscriptions.push(searchService);
-    void searchService.warmup().catch((error) => {
-      logger.warn('Media library search warmup failed (non-fatal):', error);
-    });
+    trackExtensionTask('Media library search warmup', searchService.warmup());
 
     // Register Media Library TreeView
     const mediaLibraryProvider = new MediaLibraryTreeProvider({
@@ -297,7 +374,7 @@ export async function activate(
     context.subscriptions.push(mediaLibraryTree, mediaLibraryProvider);
 
     // Register media library commands
-    registerMediaLibraryCommands(context, settingsService);
+    registerMediaLibraryCommands(context, settingsService, mediaLibraryProvider, mediaLibraryTree);
 
     // Register search command
     registerSearchCommand(context, searchService);
@@ -442,6 +519,18 @@ export async function activate(
     ),
   );
 
+  try {
+    const capabilityProvider = createNekoAssetsCapabilityProvider(api);
+    trackExtensionTask(
+      'neko-agent capability registration',
+      vscode.commands.executeCommand('neko.agent.registerCapabilities', capabilityProvider),
+    );
+  } catch {
+    // neko-agent not installed — capability registration silently skipped
+  }
+
+  trackExtensionTask('Market install target registration', registerMarketInstallTargets(context));
+
   logger.info('Extension activated, API exported');
   return api;
 }
@@ -455,6 +544,7 @@ function registerAssetManagerCommands(
   lib: AssetLibrary,
   assetManagerProvider: AssetManagerTreeProvider,
   assetHistoryProvider: AssetHistoryTreeProvider,
+  assetManagerTree: vscode.TreeView<AssetTreeItem>,
 ): void {
   const refresh = () => {
     assetManagerProvider.refresh();
@@ -505,6 +595,52 @@ function registerAssetManagerCommands(
   }
 
   // --- entity commands -------------------------------------------------------
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.revealEntity', async (entityId?: unknown) => {
+      if (typeof entityId !== 'string' || entityId.trim().length === 0) {
+        vscode.window.showWarningMessage('Asset id is required.');
+        return;
+      }
+      const item = await assetManagerProvider.getEntityTreeItem(entityId.trim());
+      if (!item) {
+        vscode.window.showWarningMessage(`Asset not found: ${entityId}`);
+        return;
+      }
+      await assetManagerTree.reveal(item, { focus: true, select: true, expand: true });
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.entity.copyReference', async (item?: unknown) => {
+      const entity = getEntity(item);
+      if (!entity) return;
+      const storedPath = entity.variants[0]?.files[0]?.path;
+      const resolvedPath = storedPath ? lib.resolvePath(storedPath) : undefined;
+      await vscode.env.clipboard.writeText(
+        JSON.stringify(
+          {
+            kind: 'asset-reference',
+            assetId: entity.id,
+            label: entity.name,
+            category: entity.category,
+            ...(storedPath ? { path: storedPath } : {}),
+            ...(resolvedPath ? { resolvedPath } : {}),
+            ...(entity.variants[0]?.files[0]?.mediaType
+              ? { mediaType: entity.variants[0].files[0].mediaType }
+              : {}),
+            source: {
+              partition: 'asset-library',
+              sourceId: entity.id,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      vscode.window.showInformationMessage('Asset reference copied to clipboard.');
+    }),
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.entity.preview', async (item?: unknown) => {
@@ -848,6 +984,22 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
       if (!uri || !library) return;
 
       try {
+        const dispatcher = createMediaImportDispatcher();
+        const validation = dispatcher.validateFormat(uri.fsPath);
+        if (validation.supported) {
+          const workspaceFolderPaths = (vscode.workspace.workspaceFolders ?? []).map(
+            (folder) => folder.uri.fsPath,
+          );
+          await dispatcher.importFile({
+            sourcePath: uri.fsPath,
+            workspaceFolderPaths,
+          });
+          vscode.window.showInformationMessage(
+            `Imported media asset: ${path.basename(uri.fsPath)}`,
+          );
+          return;
+        }
+
         const result = await library.importFile(uri.fsPath);
         await library.flush();
         entityChangeEmitter?.fire();
@@ -857,6 +1009,297 @@ function registerAssetCommands(context: vscode.ExtensionContext): void {
       } catch (error) {
         await handleError(error, { showToUser: true });
       }
+    }),
+    vscode.commands.registerCommand('neko.assets.validateAssetDependencies', async () => {
+      if (!dependencyManifestService) {
+        vscode.window.showWarningMessage('No workspace asset dependency manifest is available.');
+        return;
+      }
+      const result = await dependencyManifestService.validate();
+      if (result.issues.length === 0) {
+        vscode.window.showInformationMessage('All project asset dependencies are recoverable.');
+        return result;
+      }
+
+      const selected = await vscode.window.showQuickPick(
+        result.issues.map((issue) => ({
+          label: `$(${issue.code === 'missing-market-package' ? 'package' : 'warning'}) ${issue.code}`,
+          description: issue.dependencyId,
+          detail: issue.message,
+          issue,
+        })),
+        {
+          title: `Asset Dependency Recovery (${result.issues.length} issues)`,
+          placeHolder: 'Select an issue to inspect',
+        },
+      );
+      if (selected) {
+        const target =
+          selected.issue.packageId ?? selected.issue.path ?? selected.issue.dependencyId;
+        await vscode.env.clipboard.writeText(target);
+        vscode.window.showInformationMessage('Dependency recovery reference copied to clipboard.');
+      }
+      return result;
+    }),
+    vscode.commands.registerCommand('neko.assets.exportEntity', async (input?: unknown) =>
+      exportNkEntity(input),
+    ),
+    vscode.commands.registerCommand('neko.assets.exportCharacterPack', async (input?: unknown) =>
+      exportCharacterPack(input),
+    ),
+    vscode.commands.registerCommand('neko.entity.export', async (input?: unknown) =>
+      exportNkEntity(input),
+    ),
+    vscode.commands.registerCommand('neko.entity.exportCharacterPack', async (input?: unknown) =>
+      exportCharacterPack(input),
+    ),
+  );
+}
+
+async function exportNkEntity(input: unknown): Promise<unknown> {
+  if (!characterAssetExportService) {
+    vscode.window.showWarningMessage('No workspace character asset export service is available.');
+    return undefined;
+  }
+
+  try {
+    const args = parseCharacterAssetExportArgs(input);
+    const workspaceRoot = args.projectRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      vscode.window.showWarningMessage('Open a workspace before exporting an entity.');
+      return undefined;
+    }
+    const characterName = args.characterName ?? args.name ?? (await promptCharacterName());
+    if (!args.entityId && !characterName) return undefined;
+
+    const outputPath =
+      args.outputPath ??
+      (await promptSavePath(
+        path.join(
+          workspaceRoot,
+          'neko',
+          'exports',
+          `${slugify(characterName ?? args.entityId ?? 'character')}.nkentity`,
+        ),
+        { 'Neko Entity': ['nkentity'] },
+      ));
+    if (!outputPath) return undefined;
+
+    const result = await characterAssetExportService.exportEntity({
+      projectRoot: workspaceRoot,
+      outputPath,
+      ...(args.entityId ? { entityId: args.entityId } : {}),
+      ...(characterName ? { characterName } : {}),
+      ...(args.name ? { name: args.name } : {}),
+    });
+    vscode.window.showInformationMessage(`Exported entity: ${result.outputPath}`);
+    return result;
+  } catch (error) {
+    await handleError(error, { showToUser: true });
+    return undefined;
+  }
+}
+
+interface CharacterAssetExportCommandArgs {
+  readonly projectRoot?: string;
+  readonly entityId?: string;
+  readonly characterName?: string;
+  readonly outputPath?: string;
+  readonly name?: string;
+  readonly bundleId?: string;
+  readonly version?: string;
+}
+
+function parseCharacterAssetExportArgs(input: unknown): CharacterAssetExportCommandArgs {
+  if (!isRecord(input)) return {};
+  const projectRoot = readStringField(input, 'projectRoot');
+  const entityId = readStringField(input, 'entityId');
+  const characterName = readStringField(input, 'characterName');
+  const outputPath = readStringField(input, 'outputPath');
+  const name = readStringField(input, 'name');
+  const bundleId = readStringField(input, 'bundleId');
+  const version = readStringField(input, 'version');
+  return {
+    ...(projectRoot ? { projectRoot } : {}),
+    ...(entityId ? { entityId } : {}),
+    ...(characterName ? { characterName } : {}),
+    ...(outputPath ? { outputPath } : {}),
+    ...(name ? { name } : {}),
+    ...(bundleId ? { bundleId } : {}),
+    ...(version ? { version } : {}),
+  };
+}
+
+async function promptCharacterName(): Promise<string | undefined> {
+  const value = await vscode.window.showInputBox({
+    title: 'Export Character Asset',
+    prompt: 'Character name',
+  });
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+async function promptSavePath(
+  defaultPath: string,
+  filters: Record<string, readonly string[]>,
+): Promise<string | undefined> {
+  const uri = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(defaultPath),
+    filters,
+  });
+  return uri?.fsPath;
+}
+
+function readStringField(input: Record<string, unknown>, key: string): string | undefined {
+  const value = input[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function slugify(value: string): string {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'character'
+  );
+}
+
+async function exportCharacterPack(input: unknown): Promise<unknown> {
+  if (!characterAssetExportService) {
+    vscode.window.showWarningMessage('No workspace character asset export service is available.');
+    return undefined;
+  }
+
+  try {
+    const args = parseCharacterAssetExportArgs(input);
+    const workspaceRoot = args.projectRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      vscode.window.showWarningMessage('Open a workspace before exporting a character pack.');
+      return undefined;
+    }
+    const characterName = args.characterName ?? args.name ?? (await promptCharacterName());
+    if (!args.entityId && !characterName) return undefined;
+
+    const outputPath =
+      args.outputPath ??
+      (await promptSavePath(
+        path.join(
+          workspaceRoot,
+          'neko',
+          'exports',
+          `${slugify(characterName ?? args.entityId ?? 'character')}-character-pack.zip`,
+        ),
+        { 'Character Pack': ['zip'] },
+      ));
+    if (!outputPath) return undefined;
+
+    const result = await characterAssetExportService.exportCharacterPack({
+      projectRoot: workspaceRoot,
+      outputPath,
+      ...(args.entityId ? { entityId: args.entityId } : {}),
+      ...(characterName ? { characterName } : {}),
+      ...(args.name ? { name: args.name } : {}),
+      ...(args.bundleId ? { bundleId: args.bundleId } : {}),
+      ...(args.version ? { version: args.version } : {}),
+    });
+    vscode.window.showInformationMessage(`Exported character pack: ${result.outputPath}`);
+    return result;
+  } catch (error) {
+    await handleError(error, { showToUser: true });
+    return undefined;
+  }
+}
+
+function createMediaImportDispatcher(): MediaImportDispatcher {
+  return new MediaImportDispatcher({
+    fs: {
+      readFile: async (filePath) => vscode.workspace.fs.readFile(vscode.Uri.file(filePath)),
+      writeFile: async (filePath, data) =>
+        vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), data),
+      createDirectory: async (dirPath) =>
+        vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+      exists: async (filePath) => {
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    },
+    commands: {
+      executeCommand: (command, ...args) => vscode.commands.executeCommand(command, ...args),
+    },
+    assetRegistrar: {
+      registerImportedAsset: registerImportedAssetDescriptor,
+    },
+  });
+}
+
+async function registerImportedAssetDescriptor(descriptor: ImportedAssetDescriptor): Promise<void> {
+  if (!library || !descriptor.path) return;
+  const category =
+    descriptor.mediaKind.startsWith('puppet-') || descriptor.mediaKind.startsWith('model-')
+      ? 'character'
+      : 'object';
+  await library.importFile(descriptor.path, {
+    entityInput: {
+      name: path.basename(descriptor.path).replace(/\.[^.]+$/i, ''),
+      category,
+      tags: [descriptor.mediaKind, descriptor.dimension],
+    },
+    variantInput: {
+      name: descriptor.dimension,
+      tags: [descriptor.storageMode],
+    },
+    fileOptions: {
+      purpose: descriptor.dimension === 'model' ? 'main' : 'source',
+      characterAsset: {
+        assetDimension: descriptor.dimension,
+        mediaKind: descriptor.mediaKind,
+        storageMode: descriptor.storageMode,
+        ...(descriptor.locator ? { bundleLocator: descriptor.locator } : {}),
+        sourceOrigin: descriptor.path,
+        ...(descriptor.sourceHash ? { sourceHash: descriptor.sourceHash } : {}),
+      },
+    },
+  });
+  await library.flush();
+  await registerProjectAssetDependency(descriptor);
+  entityChangeEmitter?.fire();
+}
+
+async function registerProjectAssetDependency(descriptor: ImportedAssetDescriptor): Promise<void> {
+  if (!dependencyManifestService || !descriptor.path) return;
+  const originalSourcePath =
+    typeof descriptor.metadata?.['originalSourcePath'] === 'string'
+      ? descriptor.metadata['originalSourcePath']
+      : descriptor.path;
+  const importDestination =
+    typeof descriptor.metadata?.['importDestination'] === 'string'
+      ? descriptor.metadata['importDestination']
+      : descriptor.storageMode === 'disk'
+        ? descriptor.path
+        : undefined;
+  const files = Array.isArray(descriptor.metadata?.['files'])
+    ? descriptor.metadata['files'].filter((entry): entry is string => typeof entry === 'string')
+    : undefined;
+
+  await dependencyManifestService.upsert(
+    dependencyManifestService.createImportDependency({
+      id: `${descriptor.mediaKind}:${descriptor.dimension}:${descriptor.path}`,
+      originalFile: originalSourcePath,
+      mediaKind: descriptor.mediaKind,
+      dimensions: [descriptor.dimension],
+      storageMode: descriptor.storageMode,
+      ...(descriptor.sourceHash ? { contentHash: descriptor.sourceHash } : {}),
+      ...(importDestination ? { importDestination } : {}),
+      ...(files ? { files } : {}),
     }),
   );
 }
@@ -883,6 +1326,8 @@ function suggestVariableName(name: string): string {
 function registerMediaLibraryCommands(
   context: vscode.ExtensionContext,
   settingsService: MediaLibrarySettingsService,
+  mediaLibraryProvider: MediaLibraryTreeProvider,
+  mediaLibraryTree: vscode.TreeView<MediaLibraryItem>,
 ): void {
   const { t } = require('./i18n');
 
@@ -1042,6 +1487,20 @@ function registerMediaLibraryCommands(
     }),
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.assets.revealMediaLibraryFile',
+      async (filePath?: unknown) => {
+        if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+          vscode.window.showWarningMessage('Media library file path is required.');
+          return;
+        }
+        const item = mediaLibraryProvider.getMediaFileTreeItem(filePath.trim());
+        await mediaLibraryTree.reveal(item, { focus: true, select: true, expand: true });
+      },
+    ),
+  );
+
   // Copy File Path
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.copyFilePath', async (item?: unknown) => {
@@ -1049,6 +1508,33 @@ function registerMediaLibraryCommands(
       if (items.length === 0) return;
       await vscode.env.clipboard.writeText(items[0].filePath);
       vscode.window.showInformationMessage(t('mediaLibrary.copyPath.success'));
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('neko.assets.copyFileReference', async (item?: unknown) => {
+      const items = getMediaFileItems(item, undefined);
+      if (items.length === 0) return;
+      const filePath = items[0].filePath;
+      const portablePath = library?.contractPath(filePath) ?? filePath;
+      const mediaType = detectMediaType(filePath);
+      await vscode.env.clipboard.writeText(
+        JSON.stringify(
+          {
+            kind: 'media-library-file-reference',
+            path: portablePath,
+            resolvedPath: filePath,
+            name: path.basename(filePath),
+            mediaType,
+            source: {
+              partition: 'media-library',
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      vscode.window.showInformationMessage('Media library file reference copied to clipboard.');
     }),
   );
 
@@ -1490,12 +1976,22 @@ function registerInternalCommands(context: vscode.ExtensionContext): void {
 // =============================================================================
 
 export async function deactivate(): Promise<void> {
-  if (library) {
-    try {
-      await library.flush();
-    } catch (error) {
-      logger.error('Failed to flush library on deactivate:', error);
+  try {
+    if (runningTasks.size > 0) {
+      await Promise.allSettled([...runningTasks]);
+      runningTasks.clear();
     }
+    await library?.flush();
+  } catch (error) {
+    logger.error('Failed to flush library on deactivate:', error);
+  } finally {
+    dependencyManifestService = null;
+    characterAssetExportService = null;
+    diffService = null;
+    thumbnailService = null;
+    mediaSettingsService = null;
+    healthMonitor = null;
+    entityChangeEmitter = null;
     library = null;
   }
 }

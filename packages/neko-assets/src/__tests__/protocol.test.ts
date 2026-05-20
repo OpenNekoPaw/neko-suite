@@ -53,6 +53,12 @@ describe('neko-assets package.json -- required commands are present', () => {
     expect(declaredCommands).toContain('neko.assets.previewMedia');
   });
 
+  it('declares structured copy and reveal commands used by Agent', () => {
+    expect(declaredCommands).toContain('neko.assets.copyFileReference');
+    expect(declaredCommands).toContain('neko.assets.entity.copyReference');
+    expect(declaredCommands).toContain('neko.assets.revealMediaLibraryFile');
+  });
+
   it('has a non-trivial number of commands registered', () => {
     expect(declaredCommands.length).toBeGreaterThan(10);
   });
@@ -86,6 +92,15 @@ describe('extension.ts -- registerLegacyCommands keeps only valid commands', () 
 
   it('DOES contain internal media-library roots command registration', () => {
     expect(extensionSource).toContain("'neko.assets.getMediaLibraryRoots'");
+  });
+
+  it('DOES contain Agent-facing asset reveal and reference copy registrations', () => {
+    expect(extensionSource).toContain("'neko.assets.revealEntity'");
+    expect(extensionSource).toContain("'neko.assets.revealMediaLibraryFile'");
+    expect(extensionSource).toContain("'neko.assets.copyFileReference'");
+    expect(extensionSource).toContain("'neko.assets.entity.copyReference'");
+    expect(extensionSource).toContain('assetManagerTree.reveal');
+    expect(extensionSource).toContain('mediaLibraryTree.reveal');
   });
 });
 
@@ -141,5 +156,13 @@ describe('extension activation (NKAS-007)', () => {
 
   it('sets up error handler during activation', () => {
     expect(extensionSource).toContain('setErrorHandler');
+  });
+});
+
+describe('extension deactivate lifecycle', () => {
+  it('clears workspace-scoped dependency and character export services', () => {
+    expect(extensionSource).toMatch(
+      /export\s+async\s+function\s+deactivate\(\):\s+Promise<void>\s*{[\s\S]*dependencyManifestService\s*=\s*null;[\s\S]*characterAssetExportService\s*=\s*null;/,
+    );
   });
 });

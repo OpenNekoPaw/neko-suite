@@ -71,6 +71,7 @@ export class FileService {
       createdAt: Date.now(),
       status: 'online',
       lastCheckedAt: Date.now(),
+      ...(options?.characterAsset ? { characterAsset: options.characterAsset } : {}),
     };
 
     await this.storage.saveFile(variantId, file);

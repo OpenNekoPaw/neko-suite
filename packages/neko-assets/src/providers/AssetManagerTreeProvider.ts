@@ -15,7 +15,7 @@ import { createThumbnailTooltip } from '../utils/thumbnailTooltip';
 // Tree Item Types
 // =============================================================================
 
-type AssetTreeItem = CategoryItem | EntityItem | VariantItem;
+export type AssetTreeItem = CategoryItem | EntityItem | VariantItem;
 
 class CategoryItem extends vscode.TreeItem {
   constructor(
@@ -151,6 +151,25 @@ export class AssetManagerTreeProvider
 
   refresh(): void {
     this._onDidChangeTreeData.fire(undefined);
+  }
+
+  async getEntityTreeItem(entityId: string): Promise<AssetTreeItem | undefined> {
+    const entity = await this.library.getEntity(entityId);
+    return entity ? new EntityItem(entity) : undefined;
+  }
+
+  async getParent(element: AssetTreeItem): Promise<AssetTreeItem | undefined> {
+    if (element instanceof CategoryItem) {
+      return undefined;
+    }
+    if (element instanceof EntityItem) {
+      const entities = await this.library.getByCategory(element.entity.category);
+      return new CategoryItem(element.entity.category, entities.length);
+    }
+    if (element instanceof VariantItem) {
+      return new EntityItem(element.entity);
+    }
+    return undefined;
   }
 
   private debouncedRefresh(): void {

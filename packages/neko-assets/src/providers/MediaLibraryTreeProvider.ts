@@ -46,7 +46,7 @@ export interface MediaLibraryDeps {
 // Tree Item Types
 // =============================================================================
 
-type MediaLibraryItem = LibraryRootItem | DirectoryItem | MediaFileItem;
+export type MediaLibraryItem = LibraryRootItem | DirectoryItem | MediaFileItem;
 
 class LibraryRootItem extends vscode.TreeItem {
   readonly type = 'libraryRoot' as const;
@@ -224,6 +224,23 @@ export class MediaLibraryTreeProvider
     return element;
   }
 
+  getMediaFileTreeItem(filePath: string): MediaLibraryItem {
+    return new MediaFileItem(filePath, path.basename(filePath));
+  }
+
+  async getParent(element: MediaLibraryItem): Promise<MediaLibraryItem | undefined> {
+    if (element instanceof LibraryRootItem) {
+      return undefined;
+    }
+    if (element instanceof DirectoryItem) {
+      return this.getParentForPath(element.dirPath);
+    }
+    if (element instanceof MediaFileItem) {
+      return this.getParentForPath(element.filePath);
+    }
+    return undefined;
+  }
+
   async getChildren(element?: MediaLibraryItem): Promise<MediaLibraryItem[]> {
     if (!element) {
       return this.getRootItems();
@@ -265,6 +282,26 @@ export class MediaLibraryTreeProvider
       return [this.createPlaceholder()];
     }
     return libraries.filter((lib) => lib.enabled).map((lib) => new LibraryRootItem(lib));
+  }
+
+  private async getParentForPath(targetPath: string): Promise<MediaLibraryItem | undefined> {
+    const parentPath = path.dirname(targetPath);
+    const root = await this.findLibraryRootForPath(targetPath);
+    if (!root) return undefined;
+    if (normalizePath(parentPath) === normalizePath(root.library.resolvedPath)) {
+      return root;
+    }
+    return new DirectoryItem(parentPath, path.basename(parentPath));
+  }
+
+  private async findLibraryRootForPath(targetPath: string): Promise<LibraryRootItem | undefined> {
+    const libraries = await this.settingsService.getResolvedLibraries();
+    const normalizedTarget = normalizePath(targetPath);
+    const candidates = libraries
+      .filter((library) => library.enabled && library.accessible)
+      .filter((library) => normalizedTarget.startsWith(normalizePath(library.resolvedPath)))
+      .sort((a, b) => b.resolvedPath.length - a.resolvedPath.length);
+    return candidates[0] ? new LibraryRootItem(candidates[0]) : undefined;
   }
 
   private async listDirectory(dirPath: string): Promise<MediaLibraryItem[]> {
@@ -465,4 +502,8 @@ export class MediaLibraryTreeProvider
     }
     this.disposables = [];
   }
+}
+
+function normalizePath(value: string): string {
+  return path.resolve(value);
 }

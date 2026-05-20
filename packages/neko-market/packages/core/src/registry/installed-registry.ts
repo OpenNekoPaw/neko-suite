@@ -25,6 +25,7 @@ import type {
   InstalledPackage,
   InstalledPackageRefState,
   InstalledRegistryData,
+  MediaKind,
 } from '@neko/shared';
 import { getLegacyAssetTypeMigration, isAssetType, isPluginPermission } from '@neko/shared';
 
@@ -39,6 +40,22 @@ export interface RemovedReferenceState {
 // =============================================================================
 
 const REGISTRY_VERSION = 1;
+
+const MEDIA_KINDS: readonly MediaKind[] = [
+  'video',
+  'audio',
+  'image',
+  'sequence',
+  '3d-model',
+  'model-3d',
+  'model-motion',
+  'model-config',
+  'puppet-model',
+  'puppet-motion',
+  'puppet-config',
+  'voice-pack',
+  'document',
+] as const;
 
 // =============================================================================
 // Implementation
@@ -371,11 +388,7 @@ function buildMigratedTypeMetadata(
 
   switch (metadataPatch.type) {
     case 'media': {
-      const mediaKind = readEnum(
-        data['mediaKind'],
-        ['video', 'audio', 'image', 'sequence', '3d-model', 'puppet-motion', 'document'] as const,
-        'image',
-      );
+      const mediaKind = readEnum(data['mediaKind'], MEDIA_KINDS, 'image');
       const mediaData: MediaMetadata = {
         mediaKind,
         fileSize: readNumber(data['fileSize'], 0),

@@ -134,19 +134,26 @@ describe('InstallTargetContributionRegistry', () => {
     const targets = new InstallTargetRegistry();
     const contributions = new InstallTargetContributionRegistry(targets);
     const media = new MediaInstallTarget('/tmp/media');
+    const puppetModel = createTarget('media');
     const puppetMotion = createTarget('media');
+    const modelAsset = createTarget('media');
+    const voicePack = createTarget('media');
 
     contributions.registerBuiltin(media);
-    const disposable = contributions.registerInstallTarget(
-      puppetMotion,
-      'neko.neko-puppet',
-      'puppet-motion',
-    );
+    const disposables = [
+      contributions.registerInstallTarget(puppetModel, 'neko.neko-puppet', 'puppet-model'),
+      contributions.registerInstallTarget(puppetMotion, 'neko.neko-puppet', 'puppet-motion'),
+      contributions.registerInstallTarget(modelAsset, 'neko.neko-model', 'model-3d'),
+      contributions.registerInstallTarget(voicePack, 'neko.neko-assets', 'voice-pack'),
+    ];
 
     expect(contributions.resolveTarget(mediaManifest('image'))).toBe(media);
+    expect(contributions.resolveTarget(mediaManifest('puppet-model'))).toBe(puppetModel);
     expect(contributions.resolveTarget(mediaManifest('puppet-motion'))).toBe(puppetMotion);
+    expect(contributions.resolveTarget(mediaManifest('model-3d'))).toBe(modelAsset);
+    expect(contributions.resolveTarget(mediaManifest('voice-pack'))).toBe(voicePack);
 
-    disposable.dispose();
+    disposables.forEach((disposable) => disposable.dispose());
     expect(contributions.resolveTarget(mediaManifest('puppet-motion'))).toBe(media);
   });
 
@@ -218,7 +225,9 @@ function manifest(type: AssetManifest['type'], shaderKind: 'standalone' | 'prese
   };
 }
 
-function mediaManifest(mediaKind: 'image' | 'puppet-motion'): AssetManifest {
+function mediaManifest(
+  mediaKind: 'image' | 'puppet-model' | 'puppet-motion' | 'model-3d' | 'voice-pack',
+): AssetManifest {
   return {
     id: `@test/${mediaKind}`,
     name: mediaKind,

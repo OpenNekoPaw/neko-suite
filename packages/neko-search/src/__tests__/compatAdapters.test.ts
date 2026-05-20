@@ -202,6 +202,108 @@ describe('compatibility project search adapters', () => {
       expect.objectContaining({ filePath: '/workspace/neko/assets/library.json' }),
     );
   });
+
+  it('projects puppet and model asset dimensions through the asset-library partition', async () => {
+    const adapters = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: makeJsonReader({
+        '/workspace/neko/assets/library.json': {
+          entities: [
+            {
+              id: 'asset-puppet',
+              name: 'Sakura Live2D',
+              category: 'character',
+              variants: [
+                {
+                  id: 'variant-model',
+                  files: [
+                    {
+                      id: 'file-model',
+                      path: '.neko/imports/puppets/sakura.zip',
+                      mediaType: 'document',
+                      characterAsset: {
+                        assetDimension: 'model',
+                        mediaKind: 'puppet-model',
+                        storageMode: 'bundle-memory',
+                        bundleLocator: {
+                          bundlePath: './sakura.zip',
+                          entryPath: 'avatars/sakura/sakura.moc3',
+                          fragmentRef: './sakura.zip#avatars/sakura/sakura.moc3',
+                        },
+                        sourceHash: 'sha256:sakura',
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              id: 'asset-model',
+              name: 'Hero VRM',
+              category: 'character',
+              variants: [
+                {
+                  id: 'variant-vrm',
+                  files: [
+                    {
+                      id: 'file-vrm',
+                      path: '.neko/imports/models/hero.vrm',
+                      mediaType: 'document',
+                      characterAsset: {
+                        assetDimension: 'model',
+                        mediaKind: 'model-3d',
+                        storageMode: 'disk',
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+    expect(adapters.filter((adapter) => adapter.partition === 'asset-library')).toHaveLength(1);
+
+    const assetAdapter = adapters.find((adapter) => adapter.partition === 'asset-library')!;
+    const puppetItems = await assetAdapter.query(
+      { text: 'puppet-model', projectRoot: '/workspace' },
+      { projectRoot: '/workspace' },
+    );
+    const modelItems = await assetAdapter.query(
+      { text: 'model-3d', projectRoot: '/workspace' },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(puppetItems[0]).toEqual(
+      expect.objectContaining({
+        source: expect.objectContaining({ partition: 'asset-library' }),
+        metadata: expect.objectContaining({
+          assetDimension: 'model',
+          mediaKind: 'puppet-model',
+          storageMode: 'bundle-memory',
+          bundleLocator: expect.objectContaining({
+            fragmentRef: './sakura.zip#avatars/sakura/sakura.moc3',
+          }),
+          sourceHash: 'sha256:sakura',
+        }),
+        navigationData: expect.objectContaining({
+          assetDimension: 'model',
+          mediaKind: 'puppet-model',
+          storageMode: 'bundle-memory',
+        }),
+      }),
+    );
+    expect(modelItems[0]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          assetDimension: 'model',
+          mediaKind: 'model-3d',
+          storageMode: 'disk',
+        }),
+      }),
+    );
+  });
 });
 
 function makeJsonReader(files: Record<string, unknown>) {

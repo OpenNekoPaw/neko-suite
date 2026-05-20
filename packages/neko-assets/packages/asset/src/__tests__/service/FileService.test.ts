@@ -85,6 +85,33 @@ describe('FileService', () => {
       expect(file.metadata.fileSize).toBe(1024000);
     });
 
+    it('should persist character asset dimension metadata', async () => {
+      const file = await fileService.add(testVariant.id, '/assets/hero.glb', {
+        characterAsset: {
+          assetDimension: 'model',
+          mediaKind: 'model-3d',
+          storageMode: 'disk',
+          sourceOrigin: '/imports/hero.glb',
+          sourceHash: 'sha256:hero',
+        },
+      });
+
+      expect(file.characterAsset).toEqual({
+        assetDimension: 'model',
+        mediaKind: 'model-3d',
+        storageMode: 'disk',
+        sourceOrigin: '/imports/hero.glb',
+        sourceHash: 'sha256:hero',
+      });
+      await expect(storage.getFile(testVariant.id, file.id)).resolves.toMatchObject({
+        characterAsset: {
+          assetDimension: 'model',
+          mediaKind: 'model-3d',
+          storageMode: 'disk',
+        },
+      });
+    });
+
     it('should throw error for non-existent variant', async () => {
       await expect(fileService.add('non-existent', '/path/to/file.png')).rejects.toThrow(
         'Variant not found',

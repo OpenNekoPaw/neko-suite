@@ -32,9 +32,18 @@
     "neko.neko-tools",
     "neko.neko-preview"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onInstallKind:media.voice-pack"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "neko.installTargets": [
+      {
+        "type": "media",
+        "kind": "voice-pack",
+        "activationEvent": "onInstallKind:media.voice-pack"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -99,6 +108,24 @@
         "icon": "$(check-all)"
       },
       {
+        "command": "neko.assets.validateAssetDependencies",
+        "title": "%neko.assets.validateAssetDependencies%",
+        "category": "Neko Assets",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "neko.assets.exportEntity",
+        "title": "%neko.assets.exportEntity%",
+        "category": "Neko Assets",
+        "icon": "$(symbol-class)"
+      },
+      {
+        "command": "neko.assets.exportCharacterPack",
+        "title": "%neko.assets.exportCharacterPack%",
+        "category": "Neko Assets",
+        "icon": "$(package)"
+      },
+      {
         "command": "neko.assets.relocateFile",
         "title": "%neko.assets.relocateFile%",
         "category": "Neko Assets",
@@ -143,6 +170,16 @@
         "category": "Neko Assets"
       },
       {
+        "command": "neko.assets.copyFileReference",
+        "title": "%neko.assets.copyFileReference%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.revealMediaLibraryFile",
+        "title": "%neko.assets.revealMediaLibraryFile%",
+        "category": "Neko Assets"
+      },
+      {
         "command": "neko.assets.previewMediaLibraryFile",
         "title": "%neko.assets.previewMediaLibraryFile%",
         "category": "Neko Assets"
@@ -184,6 +221,11 @@
       {
         "command": "neko.assets.entity.addToCanvas",
         "title": "%neko.assets.entity.addToCanvas%",
+        "category": "Neko Assets"
+      },
+      {
+        "command": "neko.assets.entity.copyReference",
+        "title": "%neko.assets.entity.copyReference%",
         "category": "Neko Assets"
       },
       {
@@ -284,6 +326,11 @@
           "command": "neko.assets.validateAll",
           "when": "view == neko.assetManager",
           "group": "navigation"
+        },
+        {
+          "command": "neko.assets.validateAssetDependencies",
+          "when": "view == neko.assetManager",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -328,6 +375,11 @@
           "group": "4_utils"
         },
         {
+          "command": "neko.assets.copyFileReference",
+          "when": "viewItem =~ /^mediaLibrary:file:/",
+          "group": "4_utils@2"
+        },
+        {
           "command": "neko.assets.relocateFile",
           "when": "viewItem == variant:hasOffline",
           "group": "inline"
@@ -346,6 +398,11 @@
           "command": "neko.assets.entity.addToCanvas",
           "when": "viewItem == entity",
           "group": "1_preview@3"
+        },
+        {
+          "command": "neko.assets.entity.copyReference",
+          "when": "viewItem == entity",
+          "group": "1_preview@4"
         },
         {
           "command": "neko.assets.entity.rename",
@@ -485,7 +542,8 @@
   "dependencies": {
     "@neko/asset": "workspace:*",
     "@neko/entity": "workspace:*",
-    "@neko/shared": "workspace:*"
+    "@neko/shared": "workspace:*",
+    "adm-zip": "^0.5.16"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

@@ -59,6 +59,20 @@ interface AssetFileRecord {
   readonly path?: string;
   readonly mediaType?: string;
   readonly purpose?: string;
+  readonly characterAsset?: CharacterAssetRecord;
+}
+
+interface CharacterAssetRecord {
+  readonly assetDimension?: string;
+  readonly mediaKind?: string;
+  readonly storageMode?: string;
+  readonly bundleLocator?: {
+    readonly bundlePath?: string;
+    readonly entryPath?: string;
+    readonly fragmentRef?: string;
+  };
+  readonly sourceOrigin?: string;
+  readonly sourceHash?: string;
 }
 
 interface MediaSearchIndexData {
@@ -358,6 +372,7 @@ class AssetLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
       const variants = readVariants(entity.variants);
       const defaultVariant = variants[0];
       const primaryFile = defaultVariant?.files[0];
+      const characterAsset = primaryFile?.characterAsset;
       const mediaType =
         readAssetMediaType(primaryFile?.mediaType) ?? detectMediaTypeSafe(primaryFile?.path);
       const thumbnailUri = defaultVariant?.thumbnailPath
@@ -387,18 +402,40 @@ class AssetLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
           aliases,
           variants.map((variant) => variant.name ?? ''),
           variants.flatMap((variant) => variant.files.map((file) => file.name ?? file.path ?? '')),
+          variants.flatMap((variant) =>
+            variant.files.flatMap((file) => [
+              file.characterAsset?.assetDimension,
+              file.characterAsset?.mediaKind,
+              file.characterAsset?.storageMode,
+              file.characterAsset?.bundleLocator?.fragmentRef,
+            ]),
+          ),
         ]),
         navigationData: {
           assetId: id,
           ...(category ? { category } : {}),
           ...(primaryFile?.id ? { fileId: primaryFile.id } : {}),
           ...(defaultVariant?.id ? { variantId: defaultVariant.id } : {}),
+          ...(characterAsset?.assetDimension
+            ? { assetDimension: characterAsset.assetDimension }
+            : {}),
+          ...(characterAsset?.mediaKind ? { mediaKind: characterAsset.mediaKind } : {}),
+          ...(characterAsset?.storageMode ? { storageMode: characterAsset.storageMode } : {}),
+          ...(characterAsset?.bundleLocator ? { bundleLocator: characterAsset.bundleLocator } : {}),
         },
         ...(thumbnailUri ? { thumbnailUri } : {}),
         freshness: 'fresh',
         metadata: {
           ...(mediaType ? { mediaType } : {}),
           ...(category ? { category } : {}),
+          ...(characterAsset?.assetDimension
+            ? { assetDimension: characterAsset.assetDimension }
+            : {}),
+          ...(characterAsset?.mediaKind ? { mediaKind: characterAsset.mediaKind } : {}),
+          ...(characterAsset?.storageMode ? { storageMode: characterAsset.storageMode } : {}),
+          ...(characterAsset?.bundleLocator ? { bundleLocator: characterAsset.bundleLocator } : {}),
+          ...(characterAsset?.sourceOrigin ? { sourceOrigin: characterAsset.sourceOrigin } : {}),
+          ...(characterAsset?.sourceHash ? { sourceHash: characterAsset.sourceHash } : {}),
         },
       };
       if (matchesProjectSearchItem(item, query)) {
@@ -869,7 +906,27 @@ function readAssetFiles(value: unknown): readonly AssetFileRecord[] {
       path: optionalString(item.path),
       mediaType: optionalString(item.mediaType),
       purpose: optionalString(item.purpose),
+      characterAsset: readCharacterAsset(item.characterAsset),
     }));
+}
+
+function readCharacterAsset(value: unknown): CharacterAssetRecord | undefined {
+  if (!isRecord(value)) return undefined;
+  const bundleLocator = isRecord(value.bundleLocator)
+    ? {
+        bundlePath: optionalString(value.bundleLocator.bundlePath),
+        entryPath: optionalString(value.bundleLocator.entryPath),
+        fragmentRef: optionalString(value.bundleLocator.fragmentRef),
+      }
+    : undefined;
+  return {
+    assetDimension: optionalString(value.assetDimension),
+    mediaKind: optionalString(value.mediaKind),
+    storageMode: optionalString(value.storageMode),
+    ...(bundleLocator ? { bundleLocator } : {}),
+    sourceOrigin: optionalString(value.sourceOrigin),
+    sourceHash: optionalString(value.sourceHash),
+  };
 }
 
 function readStringArray(value: unknown): readonly string[] {

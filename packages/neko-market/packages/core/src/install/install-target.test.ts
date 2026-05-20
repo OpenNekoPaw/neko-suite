@@ -89,6 +89,36 @@ describe('InstallTargetRegistry', () => {
     expect(registry.registeredTypes()).toEqual(['shader']);
   });
 
+  it('should route character asset media kinds through kind-level targets', () => {
+    const registry = new InstallTargetRegistry();
+    const genericMediaTarget: IInstallTarget<'media'> = {
+      type: 'media',
+      getInstallPath: () => '/media/generic',
+    };
+    const puppetTarget: IInstallTarget<'media'> = {
+      type: 'media',
+      getInstallPath: () => '/media/puppet-model',
+    };
+    const modelTarget: IInstallTarget<'media'> = {
+      type: 'media',
+      getInstallPath: () => '/media/model-3d',
+    };
+    const voiceTarget: IInstallTarget<'media'> = {
+      type: 'media',
+      getInstallPath: () => '/media/voice-pack',
+    };
+
+    registry.register(genericMediaTarget);
+    registry.register(puppetTarget, 'puppet-model');
+    registry.register(modelTarget, 'model-3d');
+    registry.register(voiceTarget, 'voice-pack');
+
+    expect(registry.getForManifest(mediaManifest('puppet-model'))).toBe(puppetTarget);
+    expect(registry.getForManifest(mediaManifest('model-3d'))).toBe(modelTarget);
+    expect(registry.getForManifest(mediaManifest('voice-pack'))).toBe(voiceTarget);
+    expect(registry.getForManifest(mediaManifest('image'))).toBe(genericMediaTarget);
+  });
+
   it('should preserve optional target manifest validators', () => {
     const registry = new InstallTargetRegistry();
     registry.register(mockProviderTarget);
@@ -109,3 +139,25 @@ describe('InstallTargetRegistry', () => {
     ).not.toThrow();
   });
 });
+
+function mediaManifest(
+  mediaKind: 'image' | 'puppet-model' | 'model-3d' | 'voice-pack',
+): AssetManifest {
+  return {
+    id: `@test/${mediaKind}`,
+    name: mediaKind,
+    version: '1.0.0',
+    type: 'media',
+    source: { kind: 'local', path: '/tmp/package' },
+    distributionKind: 'archive',
+    typeMetadata: {
+      type: 'media',
+      data: {
+        mediaKind,
+        fileSize: 1,
+      },
+    },
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
