@@ -25,6 +25,26 @@ describe('panoramic preview routing contracts', () => {
     });
   });
 
+  it('routes half-panorama filename hints only when pano context is present', () => {
+    expect(getPanoramicPreviewRoute({ filePath: '/assets/scene.halfpano.png' })).toMatchObject({
+      kind: 'image',
+      confidence: 'high',
+      signal: 'trusted-filename',
+    });
+    expect(getPanoramicPreviewRoute({ filePath: '/assets/photo.180pano.jpg' })).toMatchObject({
+      kind: 'image',
+      confidence: 'high',
+      signal: 'trusted-filename',
+    });
+    expect(getPanoramicPreviewRoute({ filePath: '/assets/city.pano180.jpg' })).toMatchObject({
+      kind: 'image',
+      confidence: 'high',
+      signal: 'trusted-filename',
+    });
+    expect(getPanoramicPreviewRoute({ filePath: '/assets/photo_180.jpg' })).toBeNull();
+    expect(getPanoramicPreviewRoute({ filePath: '/assets/IMG_1800.jpg' })).toBeNull();
+  });
+
   it('routes GPano XMP as high-confidence metadata without requiring filename hints', () => {
     const metadataText = `
       <rdf:Description

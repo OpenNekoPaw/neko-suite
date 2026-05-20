@@ -1,7 +1,10 @@
 //! CPU-only preview image variant generation.
 
 use crate::error::{MediaError, Result};
-use crate::image_analysis::{default_panorama_view_state, PanoramaViewState, PreviewDimensions};
+use crate::image_analysis::{
+    default_panorama_view_state, PanoramaCoverageAngle, PanoramaViewState, PreviewDimensions,
+    PreviewProjectionType,
+};
 use image::{imageops::FilterType, DynamicImage, ImageFormat, Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
@@ -43,6 +46,8 @@ pub enum ImageVariantFormat {
 pub struct ImageVariantRequest {
     pub role: ImageVariantRole,
     pub view_state: Option<PanoramaViewState>,
+    pub projection_type: Option<PreviewProjectionType>,
+    pub coverage_angle: Option<PanoramaCoverageAngle>,
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub quality: Option<u8>,
@@ -138,6 +143,15 @@ pub fn generate_preview_variant(
                 .view_state
                 .clone()
                 .unwrap_or_else(default_panorama_view_state);
+            let projection_type = request
+                .projection_type
+                .clone()
+                .unwrap_or(PreviewProjectionType::Equirectangular);
+            let coverage = request
+                .coverage_angle
+                .clone()
+                .unwrap_or_else(PanoramaCoverageAngle::full)
+                .normalized();
             let width = request.width.unwrap_or(1024);
             let height = request.height.unwrap_or(1024);
             render_fov_crop(
@@ -145,6 +159,8 @@ pub fn generate_preview_variant(
                 width,
                 height,
                 &view_state,
+                &projection_type,
+                &coverage,
             )
         }
         ImageVariantRole::Source => load_preview_image(source_path)?,
@@ -233,7 +249,16 @@ fn render_fov_crop(
     width: u32,
     height: u32,
     view_state: &PanoramaViewState,
+    projection_type: &PreviewProjectionType,
+    coverage: &PanoramaCoverageAngle,
 ) -> RgbaImage {
+    if !matches!(
+        projection_type,
+        PreviewProjectionType::Equirectangular | PreviewProjectionType::Cylindrical
+    ) {
+        return resize_exact(source.clone(), width, height);
+    }
+
     let width = width.max(1);
     let height = height.max(1);
     let mut out = RgbaImage::new(width, height);
@@ -245,6 +270,8 @@ fn render_fov_crop(
     let tan_half_fov = (fov * 0.5).tan();
     let yaw = view_state.yaw_deg.to_radians();
     let pitch = view_state.pitch_deg.to_radians();
+    let wrap_horizontal = matches!(projection_type, PreviewProjectionType::Equirectangular)
+        && coverage.horizontal_deg >= 360.0;
 
     for y in 0..height {
         for x in 0..width {
@@ -253,23 +280,58 @@ fn render_fov_crop(
             let direction = normalize3([nx, ny, -1.0]);
             let direction = rotate_x(direction, pitch);
             let direction = rotate_y(direction, yaw);
-            let u = 0.5 + direction[2].atan2(direction[0]) / (2.0 * PI);
-            let v = 0.5 - direction[1].clamp(-1.0, 1.0).asin() / PI;
-            out.put_pixel(x, y, sample_equirect(source, u, v));
+            let (u, v) = projected_uv(direction, projection_type, coverage);
+            out.put_pixel(x, y, sample_projected(source, u, v, wrap_horizontal));
         }
     }
     out
 }
 
-fn sample_equirect(source: &RgbaImage, u: f64, v: f64) -> Rgba<u8> {
+fn projected_uv(
+    direction: [f64; 3],
+    projection_type: &PreviewProjectionType,
+    coverage: &PanoramaCoverageAngle,
+) -> (f64, f64) {
+    let coverage = coverage.clone().normalized();
+    let coverage_h = coverage.horizontal_deg.to_radians();
+    let coverage_v = coverage.vertical_deg.to_radians();
+    let lon = direction[2].atan2(direction[0]);
+    let u = 0.5 + lon / coverage_h;
+    match projection_type {
+        PreviewProjectionType::Cylindrical => {
+            let xz_len = (direction[0] * direction[0] + direction[2] * direction[2]).sqrt();
+            let tan_v = if xz_len <= f64::EPSILON {
+                direction[1].signum() * f64::MAX
+            } else {
+                direction[1] / xz_len
+            };
+            let half_v = coverage_v * 0.5;
+            (u, 0.5 - tan_v / (2.0 * half_v.tan()))
+        }
+        PreviewProjectionType::Equirectangular => {
+            let v = 0.5 - direction[1].clamp(-1.0, 1.0).asin() / coverage_v;
+            (u, v)
+        }
+        PreviewProjectionType::Flat
+        | PreviewProjectionType::Cubemap
+        | PreviewProjectionType::Fisheye
+        | PreviewProjectionType::Unknown => (u, 0.5),
+    }
+}
+
+fn sample_projected(source: &RgbaImage, u: f64, v: f64, wrap_horizontal: bool) -> Rgba<u8> {
     let width = source.width();
     let height = source.height();
-    let wrapped_u = u.rem_euclid(1.0);
+    let sampled_u = if wrap_horizontal {
+        u.rem_euclid(1.0)
+    } else {
+        u.clamp(0.0, 1.0)
+    };
     let clamped_v = v.clamp(0.0, 1.0);
-    let x = (wrapped_u * width as f64).floor() as u32 % width;
+    let x = (sampled_u * (width.saturating_sub(1)) as f64).round() as u32;
     let y = ((clamped_v * (height.saturating_sub(1)) as f64).round() as u32)
         .min(height.saturating_sub(1));
-    *source.get_pixel(x, y)
+    *source.get_pixel(x.min(width.saturating_sub(1)), y)
 }
 
 fn normalize3(value: [f64; 3]) -> [f64; 3] {
@@ -353,6 +415,8 @@ mod tests {
             &ImageVariantRequest {
                 role: ImageVariantRole::Thumbnail,
                 view_state: None,
+                projection_type: None,
+                coverage_angle: None,
                 width: Some(4),
                 height: Some(2),
                 quality: Some(82),
@@ -365,6 +429,77 @@ mod tests {
         assert_eq!(
             (artifact.dimensions.width, artifact.dimensions.height),
             (4, 2)
+        );
+        assert!(artifact.path.exists());
+        assert!(artifact.file_size_bytes > 0);
+    }
+
+    #[test]
+    fn projected_uv_uses_coverage_for_equirectangular() {
+        let coverage = PanoramaCoverageAngle {
+            horizontal_deg: 180.0,
+            vertical_deg: 90.0,
+        };
+        let (u, v) = projected_uv(
+            normalize3([0.0, 1.0, -1.0]),
+            &PreviewProjectionType::Equirectangular,
+            &coverage,
+        );
+
+        assert!((u - 0.0).abs() < 0.0001);
+        assert!((v - 0.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn projected_uv_uses_cylindrical_perspective_mapping() {
+        let coverage = PanoramaCoverageAngle {
+            horizontal_deg: 180.0,
+            vertical_deg: 90.0,
+        };
+        let (u, v) = projected_uv(
+            normalize3([0.0, 0.5, -1.0]),
+            &PreviewProjectionType::Cylindrical,
+            &coverage,
+        );
+
+        assert!((u - 0.0).abs() < 0.0001);
+        assert!((v - 0.25).abs() < 0.0001);
+    }
+
+    #[test]
+    fn fov_crop_accepts_cylindrical_projection_override() {
+        let dir = tempdir().expect("tempdir");
+        let image_path = dir.path().join("preview.png");
+        let output_path = dir.path().join("crop.jpg");
+        let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(8, 4, Rgb([20, 40, 60]));
+        image.save(&image_path).expect("save image");
+
+        let artifact = generate_preview_variant(
+            &image_path,
+            &output_path,
+            &ImageVariantRequest {
+                role: ImageVariantRole::FovCrop,
+                view_state: Some(PanoramaViewState {
+                    mode: crate::image_analysis::PanoramaViewMode::Cylindrical,
+                    ..default_panorama_view_state()
+                }),
+                projection_type: Some(PreviewProjectionType::Cylindrical),
+                coverage_angle: Some(PanoramaCoverageAngle {
+                    horizontal_deg: 180.0,
+                    vertical_deg: 65.0,
+                }),
+                width: Some(4),
+                height: Some(4),
+                quality: Some(82),
+                format: ImageVariantFormat::Jpeg,
+            },
+        )
+        .expect("generate cylindrical crop");
+
+        assert_eq!(artifact.mime_type, "image/jpeg");
+        assert_eq!(
+            (artifact.dimensions.width, artifact.dimensions.height),
+            (4, 4)
         );
         assert!(artifact.path.exists());
         assert!(artifact.file_size_bytes > 0);

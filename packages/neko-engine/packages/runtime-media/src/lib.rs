@@ -36,9 +36,9 @@ pub use diff::{diff_media, ContentDiff, DiffCategory, DiffResult, FieldDiff};
 pub use error::{MediaError, Result};
 pub use image_analysis::{
     contains_gpano_metadata, default_panorama_view_state, infer_projection,
-    manual_projection_metadata, probe_dimensions, PanoramaViewMode, PanoramaViewState,
-    PreviewDimensions, PreviewProjectionConfidence, PreviewProjectionMetadata,
-    PreviewProjectionType, PreviewToneMapping, ProjectionInferenceInput,
+    manual_projection_metadata, parse_gpano_coverage, probe_dimensions, PanoramaCoverageAngle,
+    PanoramaViewMode, PanoramaViewState, PreviewDimensions, PreviewProjectionConfidence,
+    PreviewProjectionMetadata, PreviewProjectionType, PreviewToneMapping, ProjectionInferenceInput,
 };
 pub use image_diff::{diff_image_content, ImageContentDiff};
 pub use image_variant::{

@@ -3,11 +3,14 @@ import * as path from 'path';
 import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import type {
   EnvironmentPlacement,
+  PanoramaCoverageAngle,
   PanoramaViewState,
   PreviewManifest,
   PreviewProjectionType,
   PreviewVariantRequest,
+  UpdatePreviewAssetMetadataRequest,
 } from '@neko/shared';
+import { normalizeCoverageAngle, normalizePanoramaViewModeForProjection } from '@neko/shared';
 import { PreviewService } from '../services/PreviewService';
 import type { StatusBarManager } from '../ui/StatusBarManager';
 import { getWebviewHtml } from '../utils/html';
@@ -84,11 +87,9 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
             if (!manifest) return;
             const projectionType = parseProjectionType(message.projectionType);
             if (!projectionType) return;
-            const updated = await this.persistProjectionDecision(
-              webviewPanel,
-              manifest.assetId,
+            const updated = await this.persistAssetMetadata(webviewPanel, manifest.assetId, {
               projectionType,
-            );
+            });
             if (updated) activeManifest = updated;
             break;
           }
@@ -97,10 +98,46 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
             if (!manifest) return;
             const viewState = parsePanoramaViewState(message.viewState);
             if (!viewState) return;
-            const updated = await this.persistDefaultView(
+            const updated = await this.persistAssetMetadata(webviewPanel, manifest.assetId, {
+              defaultViewState: normalizeViewStateForProjection(
+                manifest.projection.type,
+                viewState,
+              ),
+            });
+            if (updated) activeManifest = updated;
+            break;
+          }
+          case 'panorama:updateAsset': {
+            const manifest = activeManifest ?? (await manifestPromise);
+            if (!manifest) return;
+            let projectionType: PreviewProjectionType | undefined;
+            if (message.projectionType !== undefined) {
+              const parsedProjectionType = parseProjectionType(message.projectionType);
+              if (!parsedProjectionType) return;
+              projectionType = parsedProjectionType;
+            }
+            const defaultViewState =
+              message.defaultViewState === undefined
+                ? undefined
+                : parsePanoramaViewState(message.defaultViewState);
+            if (message.defaultViewState !== undefined && !defaultViewState) return;
+            const effectiveProjectionType = projectionType ?? manifest.projection.type;
+            let coverageAngle: PanoramaCoverageAngle | undefined;
+            if (message.coverageAngle !== undefined) {
+              const parsedCoverageAngle = parseCoverageAngle(message.coverageAngle);
+              if (!parsedCoverageAngle) return;
+              coverageAngle = parsedCoverageAngle;
+            }
+            const updated = await this.persistAssetMetadata(
               webviewPanel,
               manifest.assetId,
-              viewState,
+              buildMetadataUpdate(
+                projectionType,
+                coverageAngle,
+                defaultViewState
+                  ? normalizeViewStateForProjection(effectiveProjectionType, defaultViewState)
+                  : undefined,
+              ),
             );
             if (updated) activeManifest = updated;
             break;
@@ -140,42 +177,13 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
     });
   }
 
-  private async persistProjectionDecision(
+  private async persistAssetMetadata(
     webviewPanel: vscode.WebviewPanel,
     assetId: string,
-    projectionType: PreviewProjectionType,
+    request: UpdatePreviewAssetMetadataRequest,
   ): Promise<PreviewManifest | null> {
     try {
-      const manifest = await this._previewService?.updatePreviewAssetMetadata(assetId, {
-        projectionType,
-      });
-      if (!manifest) return null;
-      await webviewPanel.webview.postMessage({
-        type: 'panorama:init',
-        payload: {
-          manifest,
-          engineBaseUrl: this._previewService?.getPreviewBaseUrl() ?? null,
-        },
-      });
-      return manifest;
-    } catch (error) {
-      await webviewPanel.webview.postMessage({
-        type: 'panorama:error',
-        payload: { message: error instanceof Error ? error.message : String(error) },
-      });
-      return null;
-    }
-  }
-
-  private async persistDefaultView(
-    webviewPanel: vscode.WebviewPanel,
-    assetId: string,
-    viewState: PanoramaViewState,
-  ): Promise<PreviewManifest | null> {
-    try {
-      const manifest = await this._previewService?.updatePreviewAssetMetadata(assetId, {
-        defaultViewState: viewState,
-      });
+      const manifest = await this._previewService?.updatePreviewAssetMetadata(assetId, request);
       if (!manifest) return null;
       await webviewPanel.webview.postMessage({
         type: 'panorama:init',
@@ -253,6 +261,7 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
       const manifest = await this._previewService.registerPreviewAsset({
         source: filePath,
         kind: 'image',
+        explicitOpen: true,
       });
       this._statusBar.show({
         fileName,
@@ -283,12 +292,24 @@ export class PanoramicImagePreviewProvider implements vscode.CustomReadonlyEdito
 }
 
 function parseProjectionType(value: unknown): PreviewProjectionType | null {
-  return value === 'equirectangular' || value === 'flat' ? value : null;
+  return value === 'equirectangular' ||
+    value === 'cylindrical' ||
+    value === 'flat' ||
+    value === 'cubemap' ||
+    value === 'fisheye' ||
+    value === 'unknown'
+    ? value
+    : null;
 }
 
 function parsePanoramaViewState(value: unknown): PanoramaViewState | null {
   if (!isRecord(value)) return null;
-  if (value.mode !== 'sphere' && value.mode !== 'flat' && value.mode !== 'little-planet') {
+  if (
+    value.mode !== 'sphere' &&
+    value.mode !== 'flat' &&
+    value.mode !== 'little-planet' &&
+    value.mode !== 'cylindrical'
+  ) {
     return null;
   }
   const yawDeg = finiteNumber(value.yawDeg);
@@ -328,12 +349,34 @@ function parseVariantRequest(value: unknown): PreviewVariantRequest | null {
   ) {
     return null;
   }
-  const request: PreviewVariantRequest = { role };
   const viewState = parsePanoramaViewState(value.viewState);
-  if (viewState) request.viewState = viewState;
+  const projectionType =
+    value.projectionType === undefined ? undefined : parseProjectionType(value.projectionType);
+  if (value.projectionType !== undefined && !projectionType) return null;
+  const coverageAngle =
+    value.coverageAngle === undefined ? undefined : parseCoverageAngle(value.coverageAngle);
+  if (value.coverageAngle !== undefined && !coverageAngle) return null;
   const width = finiteNumber(value.width);
   const height = finiteNumber(value.height);
   const quality = finiteNumber(value.quality);
+
+  const request: {
+    role: PreviewVariantRequest['role'];
+    viewState?: PanoramaViewState;
+    projectionType?: PreviewProjectionType;
+    coverageAngle?: PanoramaCoverageAngle;
+    width?: number;
+    height?: number;
+    quality?: number;
+    format?: PreviewVariantRequest['format'];
+  } = { role };
+  if (viewState) {
+    request.viewState = projectionType
+      ? normalizeViewStateForProjection(projectionType, viewState)
+      : viewState;
+  }
+  if (projectionType) request.projectionType = projectionType;
+  if (coverageAngle) request.coverageAngle = coverageAngle;
   if (width !== null) request.width = width;
   if (height !== null) request.height = height;
   if (quality !== null) request.quality = quality;
@@ -341,6 +384,46 @@ function parseVariantRequest(value: unknown): PreviewVariantRequest | null {
     request.format = value.format;
   }
   return request;
+}
+
+function parseCoverageAngle(value: unknown): PanoramaCoverageAngle | null {
+  if (!isRecord(value)) return null;
+  const horizontalDeg = finiteNumber(value.horizontalDeg);
+  const verticalDeg = finiteNumber(value.verticalDeg);
+  if (horizontalDeg === null || verticalDeg === null) return null;
+  return normalizeCoverageAngle({ horizontalDeg, verticalDeg });
+}
+
+function normalizeViewStateForProjection(
+  projectionType: PreviewProjectionType,
+  viewState: PanoramaViewState,
+): PanoramaViewState {
+  return {
+    ...viewState,
+    mode: normalizePanoramaViewModeForProjection(projectionType, viewState.mode),
+  };
+}
+
+function buildMetadataUpdate(
+  projectionType: PreviewProjectionType | undefined,
+  coverageAngle: PanoramaCoverageAngle | undefined,
+  defaultViewState: PanoramaViewState | undefined,
+): UpdatePreviewAssetMetadataRequest {
+  const update: {
+    projectionType?: PreviewProjectionType;
+    coverageAngle?: PanoramaCoverageAngle;
+    defaultViewState?: PanoramaViewState;
+  } = {};
+  if (projectionType !== undefined) {
+    update.projectionType = projectionType;
+  }
+  if (coverageAngle !== undefined) {
+    update.coverageAngle = coverageAngle;
+  }
+  if (defaultViewState !== undefined) {
+    update.defaultViewState = defaultViewState;
+  }
+  return update;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

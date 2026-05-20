@@ -41,4 +41,40 @@ describe('ViewStateController', () => {
       'toneMapping',
     ]);
   });
+
+  it('clamps yaw and pitch for partial coverage', () => {
+    const controller = new ViewStateController(
+      { yawDeg: 90, pitchDeg: 90, fovDeg: 60 },
+      { horizontalDeg: 180, verticalDeg: 90 },
+    );
+
+    expect(controller.state.yawDeg).toBe(60);
+    expect(controller.state.pitchDeg).toBe(15);
+  });
+
+  it('uses viewport aspect when clamping horizontal coverage', () => {
+    const square = new ViewStateController(
+      { yawDeg: 90, fovDeg: 60 },
+      { horizontalDeg: 180, verticalDeg: 180 },
+      1,
+    );
+    const wide = new ViewStateController(
+      { yawDeg: 90, fovDeg: 60 },
+      { horizontalDeg: 180, verticalDeg: 180 },
+      2,
+    );
+
+    expect(square.state.yawDeg).toBe(60);
+    expect(wide.state.yawDeg).toBeLessThan(square.state.yawDeg);
+  });
+
+  it('keeps full coverage yaw wrapping behavior', () => {
+    const controller = new ViewStateController(
+      { yawDeg: 270, pitchDeg: 120 },
+      { horizontalDeg: 360, verticalDeg: 180 },
+    );
+
+    expect(controller.state.yawDeg).toBe(-90);
+    expect(controller.state.pitchDeg).toBe(89);
+  });
 });

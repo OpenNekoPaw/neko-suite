@@ -422,6 +422,7 @@ fn uniforms_for_state(
         mode: match view_state.mode {
             PanoramaViewMode::Flat => 1,
             PanoramaViewMode::Sphere => 0,
+            PanoramaViewMode::Cylindrical => 0,
             PanoramaViewMode::LittlePlanet => 2,
         },
         _padding: 0,

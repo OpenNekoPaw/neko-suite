@@ -7,7 +7,7 @@ use neko_runtime_media::{
     default_panorama_view_state, generate_preview_variant as generate_runtime_variant,
     generated_proxy_needed, infer_dynamic_range, infer_projection, is_exr_path, is_hdr_path,
     probe_dimensions, read_sidecar, write_sidecar_update, ImageVariantFormat, ImageVariantRequest,
-    ImageVariantRole, PanoramaViewState, PreviewDimensions, PreviewDynamicRange,
+    ImageVariantRole, PanoramaCoverageAngle, PanoramaViewState, PreviewDimensions, PreviewDynamicRange,
     PreviewProjectionMetadata, PreviewProjectionType, ProjectionInferenceInput,
 };
 use serde::{Deserialize, Serialize};
@@ -159,6 +159,7 @@ impl PreviewFileRegistry {
             &record.path,
             body.projection_type.clone(),
             body.default_view_state.clone(),
+            body.coverage_angle.clone(),
         )
         .map_err(|error| ApiError::Internal(error.to_string()))?;
         let existing_variants: Vec<PreviewVariant> = record
@@ -364,6 +365,8 @@ pub struct RegisterPreviewAssetRequest {
 pub struct PreviewVariantRequest {
     pub role: PreviewVariantRole,
     pub view_state: Option<PanoramaViewState>,
+    pub projection_type: Option<PreviewProjectionType>,
+    pub coverage_angle: Option<PanoramaCoverageAngle>,
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub quality: Option<u8>,
@@ -374,6 +377,7 @@ pub struct PreviewVariantRequest {
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePreviewAssetMetadataRequest {
     pub projection_type: Option<PreviewProjectionType>,
+    pub coverage_angle: Option<PanoramaCoverageAngle>,
     pub default_view_state: Option<PanoramaViewState>,
 }
 
@@ -651,6 +655,8 @@ fn generate_initial_proxy(
     let request = PreviewVariantRequest {
         role: PreviewVariantRole::Proxy,
         view_state: manifest.default_view_state.clone(),
+        projection_type: Some(manifest.projection.projection_type.clone()),
+        coverage_angle: manifest.projection.coverage_angle.clone(),
         width: None,
         height: None,
         quality: Some(82),
@@ -687,6 +693,14 @@ fn generate_preview_variant(
         &ImageVariantRequest {
             role,
             view_state: request.view_state.clone(),
+            projection_type: request
+                .projection_type
+                .clone()
+                .or_else(|| Some(manifest.projection.projection_type.clone())),
+            coverage_angle: request
+                .coverage_angle
+                .clone()
+                .or_else(|| manifest.projection.coverage_angle.clone()),
             width: request.width,
             height: request.height,
             quality: request.quality,
@@ -752,11 +766,16 @@ fn probe_projection(
     path: &Path,
     request: &RegisterPreviewAssetRequest,
 ) -> PreviewProjectionMetadata {
-    let sidecar_projection = read_sidecar(path).and_then(|sidecar| sidecar.projection_type);
+    let sidecar = read_sidecar(path);
+    let sidecar_projection = sidecar
+        .as_ref()
+        .and_then(|sidecar| sidecar.projection_type.clone());
+    let sidecar_coverage_angle = sidecar.and_then(|sidecar| sidecar.coverage_angle);
     infer_projection(
         path,
         &ProjectionInferenceInput {
             sidecar_projection,
+            sidecar_coverage_angle,
             expected_projection: request.expected_projection.clone(),
             explicit_open: request.explicit_open.unwrap_or(false),
         },
@@ -1004,10 +1023,15 @@ mod tests {
         image.save(&image_path).expect("save image");
         write_sidecar_update(
             &image_path,
-            Some(PreviewProjectionType::Flat),
+            Some(PreviewProjectionType::Cylindrical),
             Some(PanoramaViewState {
                 yaw_deg: 42.0,
+                mode: RuntimePanoramaViewMode::Cylindrical,
                 ..default_panorama_view_state()
+            }),
+            Some(PanoramaCoverageAngle {
+                horizontal_deg: 180.0,
+                vertical_deg: 65.0,
             }),
         )
         .expect("write sidecar");
@@ -1024,7 +1048,7 @@ mod tests {
 
         assert_eq!(
             manifest.projection.projection_type,
-            PreviewProjectionType::Flat
+            PreviewProjectionType::Cylindrical
         );
         assert_eq!(
             manifest.projection.confidence,
@@ -1036,6 +1060,13 @@ mod tests {
                 .as_ref()
                 .map(|state| state.yaw_deg),
             Some(42.0)
+        );
+        assert_eq!(
+            manifest.projection.coverage_angle,
+            Some(PanoramaCoverageAngle {
+                horizontal_deg: 180.0,
+                vertical_deg: 65.0,
+            })
         );
     }
 
@@ -1104,6 +1135,8 @@ mod tests {
                 PreviewVariantRequest {
                     role: PreviewVariantRole::Thumbnail,
                     view_state: None,
+                    projection_type: None,
+                    coverage_angle: None,
                     width: Some(128),
                     height: Some(64),
                     quality: Some(80),
@@ -1125,6 +1158,52 @@ mod tests {
         registry
             .unregister_asset(&manifest.asset_id)
             .expect("cleanup generated variant");
+    }
+
+    #[test]
+    fn request_variant_accepts_projection_and_coverage_override() {
+        let dir = tempdir().expect("tempdir");
+        let image_path = dir.path().join("preview.jpg");
+        let image: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(8, 4, Rgb([20, 20, 20]));
+        image.save(&image_path).expect("save image");
+        let registry = PreviewFileRegistry::with_allowed_roots(vec![dir.path().to_path_buf()]);
+        let manifest = registry
+            .register_asset(RegisterPreviewAssetRequest {
+                source: image_path.to_string_lossy().to_string(),
+                kind: Some(PreviewAssetKind::Image),
+                expected_projection: None,
+                explicit_open: None,
+            })
+            .expect("register asset");
+
+        let variant = registry
+            .request_variant(
+                &manifest.asset_id,
+                PreviewVariantRequest {
+                    role: PreviewVariantRole::FovCrop,
+                    view_state: Some(PanoramaViewState {
+                        mode: RuntimePanoramaViewMode::Cylindrical,
+                        ..default_panorama_view_state()
+                    }),
+                    projection_type: Some(PreviewProjectionType::Cylindrical),
+                    coverage_angle: Some(PanoramaCoverageAngle {
+                        horizontal_deg: 180.0,
+                        vertical_deg: 65.0,
+                    }),
+                    width: Some(64),
+                    height: Some(64),
+                    quality: Some(80),
+                    format: Some("jpeg".to_string()),
+                },
+            )
+            .expect("build fov crop");
+
+        assert_eq!(variant.role, PreviewVariantRole::FovCrop);
+        assert_eq!(
+            variant.dimensions.as_ref().map(|d| (d.width, d.height)),
+            Some((64, 64))
+        );
+        assert!(variant.token.is_some());
     }
 
     fn write_test_hdr(path: &Path) {

@@ -41,7 +41,8 @@ export interface PanoramicPreviewDimensions {
 const SUPPORTED_PANORAMIC_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'hdr', 'exr']);
 const SUPPORTED_PANORAMIC_VIDEO_EXTENSIONS = new Set(['mp4', 'mov', 'mkv', 'webm', 'm4v']);
 const HDR_IMAGE_EXTENSIONS = new Set(['hdr', 'exr']);
-const TRUSTED_FILENAME_HINT = /(^|[._-])(pano|360|equirect|equirectangular)([._-]|$)/i;
+const TRUSTED_FILENAME_HINT =
+  /(^|[._-])(pano|360|halfpano|180pano|pano180|equirect|equirectangular)([._-]|$)/i;
 
 export function getPanoramicPreviewRoute(
   input: PanoramicPreviewRouteInput,

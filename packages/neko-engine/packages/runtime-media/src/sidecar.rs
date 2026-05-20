@@ -1,7 +1,7 @@
 //! Preview sidecar metadata read/write helpers.
 
 use crate::error::Result;
-use crate::image_analysis::{PanoramaViewState, PreviewProjectionType};
+use crate::image_analysis::{PanoramaCoverageAngle, PanoramaViewState, PreviewProjectionType};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 pub struct PreviewAssetSidecar {
     pub projection_type: Option<PreviewProjectionType>,
     pub default_view_state: Option<PanoramaViewState>,
+    pub coverage_angle: Option<PanoramaCoverageAngle>,
 }
 
 pub fn read_sidecar(path: &Path) -> Option<PreviewAssetSidecar> {
@@ -23,6 +24,7 @@ pub fn write_sidecar_update(
     path: &Path,
     projection_type: Option<PreviewProjectionType>,
     default_view_state: Option<PanoramaViewState>,
+    coverage_angle: Option<PanoramaCoverageAngle>,
 ) -> Result<PreviewAssetSidecar> {
     let mut sidecar = read_sidecar(path).unwrap_or_default();
     if projection_type.is_some() {
@@ -30,6 +32,9 @@ pub fn write_sidecar_update(
     }
     if default_view_state.is_some() {
         sidecar.default_view_state = default_view_state;
+    }
+    if let Some(coverage_angle) = coverage_angle {
+        sidecar.coverage_angle = Some(coverage_angle.normalized());
     }
     let sidecar_path = sidecar_path(path);
     let body = serde_json::to_vec_pretty(&sidecar)?;
@@ -48,7 +53,9 @@ pub fn sidecar_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::image_analysis::{default_panorama_view_state, PreviewProjectionType};
+    use crate::image_analysis::{
+        default_panorama_view_state, PanoramaCoverageAngle, PreviewProjectionType,
+    };
     use tempfile::tempdir;
 
     #[test]
@@ -61,6 +68,10 @@ mod tests {
             &image_path,
             Some(PreviewProjectionType::Flat),
             Some(default_panorama_view_state()),
+            Some(PanoramaCoverageAngle {
+                horizontal_deg: 720.0,
+                vertical_deg: 65.0,
+            }),
         )
         .expect("write sidecar");
         let sidecar = read_sidecar(&image_path).expect("read sidecar");
@@ -69,6 +80,13 @@ mod tests {
         assert_eq!(
             sidecar.default_view_state.map(|state| state.fov_deg),
             Some(75.0)
+        );
+        assert_eq!(
+            sidecar.coverage_angle,
+            Some(PanoramaCoverageAngle {
+                horizontal_deg: 360.0,
+                vertical_deg: 65.0,
+            })
         );
     }
 }

@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import type { PanoramaViewMode, PreviewManifest, PreviewVariant } from '@neko/shared';
-import { DEFAULT_PANORAMA_VIEW_STATE } from '@neko/shared';
+import type {
+  PanoramaCoverageAngle,
+  PanoramaViewMode,
+  PanoramaViewState,
+  PreviewDimensions,
+  PreviewManifest,
+  PreviewProjectionType,
+  PreviewVariant,
+} from '@neko/shared';
+import {
+  DEFAULT_PANORAMA_COVERAGE_ANGLE,
+  DEFAULT_PANORAMA_VIEW_STATE,
+  allowedPanoramaViewModesForProjection,
+  defaultPanoramaViewModeForProjection,
+  normalizeCoverageAngle,
+  normalizePanoramaViewModeForProjection,
+} from '@neko/shared';
 import { ViewStateController } from './viewStateController';
-import { WebglPanoramaRenderer } from './webglPanoramaRenderer';
+import { WebglPanoramaRenderer, type WebglPanoramaMode } from './webglPanoramaRenderer';
 import { postMessage } from '../shared/useVscodeMessage';
 import { useExtensionMessage } from '../shared/useVscodeMessage';
 
@@ -11,14 +26,24 @@ interface PanoramicViewerProps {
   engineBaseUrl: string | null;
 }
 
-const MODES: readonly PanoramaViewMode[] = ['sphere', 'flat', 'little-planet'];
+const DEFAULT_CYLINDRICAL_VERTICAL_COVERAGE_DEG = 60;
+const MIN_CYLINDRICAL_HORIZONTAL_COVERAGE_DEG = 90;
+const MAX_CYLINDRICAL_HORIZONTAL_COVERAGE_DEG = 270;
 
 export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProps): JSX.Element {
-  const controllerRef = useRef(
-    new ViewStateController(manifest.defaultViewState ?? DEFAULT_PANORAMA_VIEW_STATE),
-  );
-  const controller = controllerRef.current;
+  const initialProjectionType = initialProjectionTypeForManifest(manifest);
+  const initialCoverageAngle = coverageAngleForViewerProjection(manifest, initialProjectionType);
+  const initialViewState = initialViewStateForProjection(initialProjectionType, manifest);
+  const controllerRef = useRef<ViewStateController | null>(null);
+  let controller = controllerRef.current;
+  if (!controller) {
+    controller = new ViewStateController(initialViewState, initialCoverageAngle);
+    controllerRef.current = controller;
+  }
+
   const [viewState, setViewState] = useState(controller.state);
+  const [projectionType, setProjectionType] =
+    useState<PreviewProjectionType>(initialProjectionType);
   const [dragging, setDragging] = useState(false);
   const [webglAvailable, setWebglAvailable] = useState(false);
   const [variantNotice, setVariantNotice] = useState<string | null>(null);
@@ -28,6 +53,8 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
   const rendererRef = useRef<WebglPanoramaRenderer | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const sourceUrl = resolveSourceUrl(manifest, engineBaseUrl);
+  const coverageAngle = coverageAngleForViewerProjection(manifest, projectionType);
+  const modeTabs = viewerModesForProjection(projectionType);
 
   useExtensionMessage((message) => {
     if (message.type === 'panorama:variantReady') {
@@ -42,8 +69,16 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
   });
 
   useEffect(() => {
-    setViewState(controller.reset(manifest.defaultViewState ?? DEFAULT_PANORAMA_VIEW_STATE));
-  }, [controller, manifest.defaultViewState]);
+    const nextProjectionType = initialProjectionTypeForManifest(manifest);
+    const nextCoverageAngle = coverageAngleForViewerProjection(manifest, nextProjectionType);
+    setProjectionType(nextProjectionType);
+    controller.setCoverage(nextCoverageAngle);
+    setViewState(controller.reset(initialViewStateForProjection(nextProjectionType, manifest)));
+  }, [controller, manifest]);
+
+  useEffect(() => {
+    setViewState(controller.setCoverage(coverageAngle));
+  }, [controller, coverageAngle.horizontalDeg, coverageAngle.verticalDeg]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -59,10 +94,9 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
     image.onload = () => {
       imageRef.current = image;
       renderer.setImage(image);
-      renderer.render(
-        controllerRef.current.state,
-        controllerRef.current.state.mode === 'little-planet' ? 'little-planet' : 'sphere',
-      );
+      const nextViewState = syncViewportAspect(controller, canvas);
+      setViewState(nextViewState);
+      renderer.render(nextViewState, webglModeForViewState(nextViewState), coverageAngle);
       setWebglAvailable(true);
     };
     image.onerror = () => {
@@ -75,15 +109,32 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
       rendererRef.current = null;
       imageRef.current = null;
     };
-  }, [sourceUrl]);
+  }, [controller, sourceUrl]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const viewport = canvas?.parentElement;
+    if (!canvas || !viewport) return;
+
+    const updateAspect = () => {
+      setViewState(syncViewportAspect(controller, canvas));
+    };
+    updateAspect();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateAspect);
+      return () => window.removeEventListener('resize', updateAspect);
+    }
+
+    const observer = new ResizeObserver(updateAspect);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [controller, sourceUrl]);
 
   useEffect(() => {
     if (viewState.mode === 'flat') return;
-    rendererRef.current?.render(
-      viewState,
-      viewState.mode === 'little-planet' ? 'little-planet' : 'sphere',
-    );
-  }, [viewState]);
+    rendererRef.current?.render(viewState, webglModeForViewState(viewState), coverageAngle);
+  }, [coverageAngle.horizontalDeg, coverageAngle.verticalDeg, viewState]);
 
   if (manifest.status === 'unsupported' || manifest.error) {
     return (
@@ -165,16 +216,32 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
         <div>
           <h1>{manifest.sourceName}</h1>
           <p>
-            {manifest.projection.type} · {manifest.projection.confidence}
+            {projectionType} ·{' '}
+            {projectionType === manifest.projection.type
+              ? manifest.projection.confidence
+              : 'unsaved'}
           </p>
         </div>
         <div className="mode-tabs">
-          {MODES.map((mode) => (
+          {modeTabs.map((mode) => (
             <button
               key={mode}
               type="button"
               className={viewState.mode === mode ? 'is-active' : ''}
-              onClick={() => setViewState(controller.setMode(mode))}
+              onClick={() => {
+                const nextProjectionType = projectionTypeForViewMode(mode, projectionType);
+                const nextCoverageAngle = coverageAngleForViewerProjection(
+                  manifest,
+                  nextProjectionType,
+                );
+                setProjectionType(nextProjectionType);
+                controller.setCoverage(nextCoverageAngle);
+                setViewState(
+                  controller.setMode(
+                    normalizePanoramaViewModeForProjection(nextProjectionType, mode),
+                  ),
+                );
+              }}
             >
               {modeLabel(mode)}
             </button>
@@ -193,6 +260,12 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
             <dt>Size</dt>
             <dd>{formatBytes(manifest.media.fileSizeBytes)}</dd>
           </div>
+          {!isDefaultCoverageAngle(coverageAngle) ? (
+            <div>
+              <dt>Coverage</dt>
+              <dd>{formatCoverageAngle(coverageAngle)}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>View</dt>
             <dd>
@@ -223,9 +296,10 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
               type="button"
               onClick={() =>
                 postMessage({
-                  type: 'panorama:confirmProjection',
+                  type: 'panorama:updateAsset',
                   assetId: manifest.assetId,
-                  projectionType: 'equirectangular',
+                  projectionType,
+                  coverageAngle,
                 })
               }
             >
@@ -236,9 +310,18 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
         <button
           type="button"
           className="reset-button"
-          onClick={() =>
-            setViewState(controller.reset(manifest.defaultViewState ?? DEFAULT_PANORAMA_VIEW_STATE))
-          }
+          onClick={() => {
+            const nextProjectionType = initialProjectionTypeForManifest(manifest);
+            const nextCoverageAngle = coverageAngleForViewerProjection(
+              manifest,
+              nextProjectionType,
+            );
+            setProjectionType(nextProjectionType);
+            controller.setCoverage(nextCoverageAngle);
+            setViewState(
+              controller.reset(initialViewStateForProjection(nextProjectionType, manifest)),
+            );
+          }}
         >
           Reset View
         </button>
@@ -247,9 +330,11 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
             type="button"
             onClick={() =>
               postMessage({
-                type: 'panorama:saveDefaultView',
+                type: 'panorama:updateAsset',
                 assetId: manifest.assetId,
-                viewState,
+                projectionType,
+                coverageAngle,
+                defaultViewState: normalizeViewStateForProjection(projectionType, viewState),
               })
             }
           >
@@ -263,7 +348,9 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
                 assetId: manifest.assetId,
                 request: {
                   role: 'fov-crop',
-                  viewState,
+                  viewState: normalizeViewStateForProjection(projectionType, viewState),
+                  projectionType,
+                  coverageAngle,
                   width: 512,
                   height: 512,
                   format: 'jpeg',
@@ -281,7 +368,9 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
                 assetId: manifest.assetId,
                 request: {
                   role: 'screenshot',
-                  viewState,
+                  viewState: normalizeViewStateForProjection(projectionType, viewState),
+                  projectionType,
+                  coverageAngle,
                   width: 1920,
                   height: 1080,
                   format: 'jpeg',
@@ -309,6 +398,42 @@ export function PanoramicViewer({ manifest, engineBaseUrl }: PanoramicViewerProp
   );
 }
 
+export function viewerModesForProjection(
+  projectionType: PreviewProjectionType,
+): readonly PanoramaViewMode[] {
+  const allowedModes = allowedPanoramaViewModesForProjection(projectionType);
+  if (projectionType === 'cylindrical') {
+    return allowedModes;
+  }
+  return allowedModes.includes('cylindrical') ? allowedModes : [...allowedModes, 'cylindrical'];
+}
+
+export function projectionTypeForViewMode(
+  mode: PanoramaViewMode,
+  fallbackProjectionType: PreviewProjectionType,
+): PreviewProjectionType {
+  switch (mode) {
+    case 'cylindrical':
+      return 'cylindrical';
+    case 'sphere':
+    case 'little-planet':
+      return 'equirectangular';
+    case 'flat':
+      return fallbackProjectionType;
+  }
+}
+
+export function coverageAngleForViewerProjection(
+  manifest: PreviewManifest,
+  projectionType: PreviewProjectionType,
+): PanoramaCoverageAngle {
+  const manifestCoverage = normalizeCoverageAngle(manifest.projection.coverageAngle);
+  if (projectionType !== 'cylindrical' || !isDefaultCoverageAngle(manifestCoverage)) {
+    return manifestCoverage;
+  }
+  return estimateCylindricalCoverage(manifest.media.dimensions);
+}
+
 function resolveSourceUrl(manifest: PreviewManifest, engineBaseUrl: string | null): string | null {
   const url =
     manifest.sourceUrl ??
@@ -321,7 +446,7 @@ function resolveSourceUrl(manifest: PreviewManifest, engineBaseUrl: string | nul
   return `${engineBaseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-function imageStyle(viewState: ReturnType<ViewStateController['reset']>): CSSProperties {
+function imageStyle(viewState: PanoramaViewState): CSSProperties {
   if (viewState.mode === 'flat') {
     return {
       transform: `translate(${viewState.yawDeg * 0.2}px, ${viewState.pitchDeg * 0.2}px) scale(${90 / viewState.fovDeg})`,
@@ -334,6 +459,12 @@ function imageStyle(viewState: ReturnType<ViewStateController['reset']>): CSSPro
       borderRadius: '50%',
       aspectRatio: '1 / 1',
       objectFit: 'cover',
+      filter: `brightness(${Math.pow(2, viewState.exposure * 0.12)})`,
+    };
+  }
+  if (viewState.mode === 'cylindrical') {
+    return {
+      transform: `translateX(${viewState.yawDeg * 0.25}px) translateY(${viewState.pitchDeg * 0.25}px) scale(${100 / viewState.fovDeg})`,
       filter: `brightness(${Math.pow(2, viewState.exposure * 0.12)})`,
     };
   }
@@ -352,6 +483,8 @@ function modeLabel(mode: PanoramaViewMode): string {
       return 'Flat';
     case 'little-planet':
       return 'Planet';
+    case 'cylindrical':
+      return 'Cylinder';
   }
 }
 
@@ -381,10 +514,92 @@ function variantReadyMessage(variant: PreviewVariant): string {
   return `${variant.role} ${dimensions}`;
 }
 
+function initialProjectionTypeForManifest(manifest: PreviewManifest): PreviewProjectionType {
+  return manifest.projection.type;
+}
+
+function initialViewStateForProjection(
+  projectionType: PreviewProjectionType,
+  manifest: PreviewManifest,
+): PanoramaViewState {
+  const mode = normalizePanoramaViewModeForProjection(
+    projectionType,
+    manifest.defaultViewState?.mode ?? defaultPanoramaViewModeForProjection(projectionType),
+  );
+  return {
+    ...DEFAULT_PANORAMA_VIEW_STATE,
+    ...manifest.defaultViewState,
+    mode,
+  };
+}
+
+function normalizeViewStateForProjection(
+  projectionType: PreviewProjectionType,
+  viewState: PanoramaViewState,
+): PanoramaViewState {
+  return {
+    ...viewState,
+    mode: normalizePanoramaViewModeForProjection(projectionType, viewState.mode),
+  };
+}
+
+function webglModeForViewState(viewState: PanoramaViewState): WebglPanoramaMode {
+  switch (viewState.mode) {
+    case 'little-planet':
+      return 'little-planet';
+    case 'cylindrical':
+      return 'cylindrical';
+    case 'sphere':
+    case 'flat':
+      return 'sphere';
+  }
+}
+
+function syncViewportAspect(
+  controller: ViewStateController,
+  canvas: HTMLCanvasElement,
+): PanoramaViewState {
+  const rect = canvas.getBoundingClientRect();
+  return controller.setViewportAspect(
+    rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 1,
+  );
+}
+
+function estimateCylindricalCoverage(dimensions?: PreviewDimensions): PanoramaCoverageAngle {
+  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
+    return DEFAULT_PANORAMA_COVERAGE_ANGLE;
+  }
+  const aspect = dimensions.width / dimensions.height;
+  const horizontalDeg = clamp(
+    aspect * DEFAULT_CYLINDRICAL_VERTICAL_COVERAGE_DEG,
+    MIN_CYLINDRICAL_HORIZONTAL_COVERAGE_DEG,
+    MAX_CYLINDRICAL_HORIZONTAL_COVERAGE_DEG,
+  );
+  return normalizeCoverageAngle({
+    horizontalDeg,
+    verticalDeg: horizontalDeg / aspect,
+  });
+}
+
+function isDefaultCoverageAngle(coverageAngle: PanoramaCoverageAngle): boolean {
+  return (
+    coverageAngle.horizontalDeg === DEFAULT_PANORAMA_COVERAGE_ANGLE.horizontalDeg &&
+    coverageAngle.verticalDeg === DEFAULT_PANORAMA_COVERAGE_ANGLE.verticalDeg
+  );
+}
+
+function formatCoverageAngle(coverageAngle: PanoramaCoverageAngle): string {
+  return `${coverageAngle.horizontalDeg.toFixed(0)} deg x ${coverageAngle.verticalDeg.toFixed(0)} deg`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 function applyKeyboardView(
   event: KeyboardEvent,
   controller: ViewStateController,
-): ReturnType<ViewStateController['reset']> | null {
+): PanoramaViewState | null {
   switch (event.key) {
     case 'ArrowLeft':
       return controller.applyDrag(18, 0);

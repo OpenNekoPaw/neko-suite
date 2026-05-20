@@ -1,6 +1,7 @@
-import type { PanoramaViewState } from '@neko/shared';
+import type { PanoramaCoverageAngle, PanoramaViewState } from '@neko/shared';
+import { DEFAULT_PANORAMA_COVERAGE_ANGLE } from '@neko/shared';
 
-export type WebglPanoramaMode = 'sphere' | 'little-planet';
+export type WebglPanoramaMode = 'sphere' | 'little-planet' | 'cylindrical';
 
 interface RendererState {
   readonly gl: WebGL2RenderingContext;
@@ -12,6 +13,7 @@ interface RendererState {
     readonly yawPitchFov: WebGLUniformLocation;
     readonly exposure: WebGLUniformLocation;
     readonly mode: WebGLUniformLocation;
+    readonly coverage: WebGLUniformLocation;
   };
 }
 
@@ -33,6 +35,7 @@ uniform vec2 uResolution;
 uniform vec4 uYawPitchFov;
 uniform float uExposure;
 uniform int uMode;
+uniform vec2 uCoverage;
 in vec2 vUv;
 out vec4 outColor;
 
@@ -53,7 +56,14 @@ vec3 rotateY(vec3 p, float a) {
 vec2 sphereUv(vec3 direction) {
   float longitude = atan(direction.z, direction.x);
   float latitude = asin(clamp(direction.y, -1.0, 1.0));
-  return vec2(0.5 + longitude / (2.0 * PI), 0.5 - latitude / PI);
+  return vec2(0.5 + longitude / radians(uCoverage.x), 0.5 - latitude / radians(uCoverage.y));
+}
+
+vec2 cylinderUv(vec3 direction) {
+  float longitude = atan(direction.z, direction.x);
+  float tanV = direction.y / max(length(direction.xz), 0.00001);
+  float halfVertical = radians(uCoverage.y) * 0.5;
+  return vec2(0.5 + longitude / radians(uCoverage.x), 0.5 - tanV / (2.0 * tan(halfVertical)));
 }
 
 vec4 samplePano(vec2 uv) {
@@ -83,6 +93,14 @@ void main() {
   vec3 direction = normalize(vec3(p.x * tan(fov * 0.5), -p.y * tan(fov * 0.5), -1.0));
   direction = rotateX(direction, pitch);
   direction = rotateY(direction, yaw);
+  if (uMode == 2) {
+    vec2 uv = cylinderUv(direction);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+      discard;
+    }
+    outColor = samplePano(uv);
+    return;
+  }
   outColor = samplePano(sphereUv(direction));
 }
 `;
@@ -107,7 +125,17 @@ export class WebglPanoramaRenderer {
     const yawPitchFov = gl.getUniformLocation(program, 'uYawPitchFov');
     const exposure = gl.getUniformLocation(program, 'uExposure');
     const mode = gl.getUniformLocation(program, 'uMode');
-    if (!vao || !buffer || !texture || !resolution || !yawPitchFov || !exposure || !mode) {
+    const coverage = gl.getUniformLocation(program, 'uCoverage');
+    if (
+      !vao ||
+      !buffer ||
+      !texture ||
+      !resolution ||
+      !yawPitchFov ||
+      !exposure ||
+      !mode ||
+      !coverage
+    ) {
       return false;
     }
 
@@ -132,7 +160,7 @@ export class WebglPanoramaRenderer {
       program,
       vao,
       texture,
-      uniforms: { resolution, yawPitchFov, exposure, mode },
+      uniforms: { resolution, yawPitchFov, exposure, mode, coverage },
     };
     return true;
   }
@@ -146,7 +174,11 @@ export class WebglPanoramaRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   }
 
-  render(viewState: PanoramaViewState, mode: WebglPanoramaMode): void {
+  render(
+    viewState: PanoramaViewState,
+    mode: WebglPanoramaMode,
+    coverage: PanoramaCoverageAngle = DEFAULT_PANORAMA_COVERAGE_ANGLE,
+  ): void {
     if (!this.state || !this.image) return;
     const { gl, program, vao, uniforms } = this.state;
     const width = this.canvas.clientWidth || this.canvas.width;
@@ -162,10 +194,20 @@ export class WebglPanoramaRenderer {
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.useProgram(program);
     gl.bindVertexArray(vao);
+    gl.bindTexture(gl.TEXTURE_2D, this.state.texture);
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_WRAP_S,
+      (mode === 'sphere' || mode === 'little-planet') && coverage.horizontalDeg >= 360
+        ? gl.REPEAT
+        : gl.CLAMP_TO_EDGE,
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.uniform2f(uniforms.resolution, this.canvas.width, this.canvas.height);
     gl.uniform4f(uniforms.yawPitchFov, viewState.yawDeg, viewState.pitchDeg, viewState.fovDeg, 0);
     gl.uniform1f(uniforms.exposure, viewState.exposure);
-    gl.uniform1i(uniforms.mode, mode === 'little-planet' ? 1 : 0);
+    gl.uniform1i(uniforms.mode, mode === 'little-planet' ? 1 : mode === 'cylindrical' ? 2 : 0);
+    gl.uniform2f(uniforms.coverage, coverage.horizontalDeg, coverage.verticalDeg);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 

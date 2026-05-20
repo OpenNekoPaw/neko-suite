@@ -7,8 +7,10 @@
 import type { DocumentExtensionMessage, DocumentWebviewMessage } from './document-types';
 import type {
   EnvironmentPlacement,
+  PanoramaCoverageAngle,
   PanoramaViewState,
   PreviewManifest,
+  PreviewProjectionType,
   PreviewVariant,
   PreviewVariantRequest,
 } from '@neko/shared';
@@ -178,13 +180,21 @@ export interface EofMessage {
 export interface PanoramaConfirmProjectionMessage {
   type: 'panorama:confirmProjection';
   assetId: string;
-  projectionType: 'equirectangular' | 'flat';
+  projectionType: PreviewProjectionType;
 }
 
 export interface PanoramaSaveDefaultViewMessage {
   type: 'panorama:saveDefaultView';
   assetId: string;
   viewState: PanoramaViewState;
+}
+
+export interface PanoramaUpdateAssetMessage {
+  type: 'panorama:updateAsset';
+  assetId: string;
+  projectionType?: PreviewProjectionType;
+  coverageAngle?: PanoramaCoverageAngle;
+  defaultViewState?: PanoramaViewState;
 }
 
 export interface PanoramaRequestVariantMessage {
@@ -213,6 +223,7 @@ export type WebviewMessage =
   | EofMessage
   | PanoramaConfirmProjectionMessage
   | PanoramaSaveDefaultViewMessage
+  | PanoramaUpdateAssetMessage
   | PanoramaRequestVariantMessage
   | PanoramaSendToModelMessage
   | DocumentWebviewMessage;

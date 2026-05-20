@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type {
   EnvironmentPlacement,
+  PanoramaCoverageAngle,
   PanoramaViewState,
   PreviewManifest,
   PreviewProjectionMetadata,
   PreviewVariant,
 } from '../../index';
-import { DEFAULT_PANORAMA_VIEW_STATE } from '../../index';
+import {
+  DEFAULT_PANORAMA_COVERAGE_ANGLE,
+  DEFAULT_PANORAMA_VIEW_STATE,
+  allowedPanoramaViewModesForProjection,
+  normalizeCoverageAngle,
+  normalizePanoramaViewModeForProjection,
+} from '../../index';
 
 function expectJsonSerializable(value: unknown): void {
   expect(JSON.parse(JSON.stringify(value))).toEqual(value);
@@ -24,6 +31,7 @@ describe('engine-first preview shared contracts', () => {
       type: 'equirectangular',
       confidence: 'explicit',
       source: 'metadata',
+      coverageAngle: DEFAULT_PANORAMA_COVERAGE_ANGLE,
     };
     const variant: PreviewVariant = {
       id: 'variant-source',
@@ -56,6 +64,7 @@ describe('engine-first preview shared contracts', () => {
     };
 
     expect(manifest.projection.type).toBe('equirectangular');
+    expect(manifest.projection.coverageAngle).toEqual(DEFAULT_PANORAMA_COVERAGE_ANGLE);
     expect(manifest.variants[0]?.viewState?.yawDeg).toBe(45);
     expectJsonSerializable(manifest);
   });
@@ -70,6 +79,66 @@ describe('engine-first preview shared contracts', () => {
 
     expect(projection.confidence).toBe('manual');
     expectJsonSerializable(projection);
+  });
+
+  it('models cylindrical projection coverage and variant overrides', () => {
+    const coverage: PanoramaCoverageAngle = { horizontalDeg: 180, verticalDeg: 65 };
+    const projection: PreviewProjectionMetadata = {
+      type: 'cylindrical',
+      confidence: 'manual',
+      source: 'manual',
+      coverageAngle: coverage,
+    };
+    const request = {
+      role: 'fov-crop' as const,
+      projectionType: 'cylindrical' as const,
+      coverageAngle: coverage,
+      viewState: {
+        ...DEFAULT_PANORAMA_VIEW_STATE,
+        mode: 'cylindrical' as const,
+      },
+      width: 512,
+      height: 512,
+      format: 'jpeg' as const,
+    };
+
+    expect(projection.type).toBe('cylindrical');
+    expect(request.projectionType).toBe('cylindrical');
+    expectJsonSerializable(projection);
+    expectJsonSerializable(request);
+  });
+
+  it('normalizes invalid panorama coverage values', () => {
+    expect(normalizeCoverageAngle()).toEqual(DEFAULT_PANORAMA_COVERAGE_ANGLE);
+    expect(normalizeCoverageAngle({ horizontalDeg: 0, verticalDeg: -10 })).toEqual(
+      DEFAULT_PANORAMA_COVERAGE_ANGLE,
+    );
+    expect(normalizeCoverageAngle({ horizontalDeg: Number.NaN, verticalDeg: Infinity })).toEqual(
+      DEFAULT_PANORAMA_COVERAGE_ANGLE,
+    );
+    expect(normalizeCoverageAngle({ horizontalDeg: 720, verticalDeg: 270 })).toEqual(
+      DEFAULT_PANORAMA_COVERAGE_ANGLE,
+    );
+    expect(normalizeCoverageAngle({ horizontalDeg: 180, verticalDeg: 65 })).toEqual({
+      horizontalDeg: 180,
+      verticalDeg: 65,
+    });
+  });
+
+  it('normalizes view modes against projection type', () => {
+    expect(allowedPanoramaViewModesForProjection('equirectangular')).toEqual([
+      'sphere',
+      'flat',
+      'little-planet',
+    ]);
+    expect(allowedPanoramaViewModesForProjection('cylindrical')).toEqual(['cylindrical', 'flat']);
+    expect(normalizePanoramaViewModeForProjection('cylindrical', 'little-planet')).toBe(
+      'cylindrical',
+    );
+    expect(normalizePanoramaViewModeForProjection('flat', 'sphere')).toBe('flat');
+    expect(normalizePanoramaViewModeForProjection('equirectangular', 'little-planet')).toBe(
+      'little-planet',
+    );
   });
 
   it('keeps preview view state separate from model environment placement', () => {

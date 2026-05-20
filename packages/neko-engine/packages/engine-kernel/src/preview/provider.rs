@@ -143,12 +143,16 @@ impl PreviewProvider for ImagePreviewProvider {
     }
 
     fn generate(&self, request: &PreviewRequest) -> Result<PreviewArtifact> {
-        let sidecar_projection =
-            read_sidecar(&request.source).and_then(|sidecar| sidecar.projection_type);
+        let sidecar = read_sidecar(&request.source);
+        let sidecar_projection = sidecar
+            .as_ref()
+            .and_then(|sidecar| sidecar.projection_type.clone());
+        let sidecar_coverage_angle = sidecar.and_then(|sidecar| sidecar.coverage_angle);
         let projection = infer_projection(
             &request.source,
             &ProjectionInferenceInput {
                 sidecar_projection,
+                sidecar_coverage_angle,
                 expected_projection: request.expected_projection.clone(),
                 explicit_open: request.explicit_open,
             },
@@ -161,6 +165,8 @@ impl PreviewProvider for ImagePreviewProvider {
                 &ImageVariantRequest {
                     role: variant.role.clone(),
                     view_state: None,
+                    projection_type: Some(projection.projection_type.clone()),
+                    coverage_angle: projection.coverage_angle.clone(),
                     width: variant.width,
                     height: variant.height,
                     quality: variant.quality,
@@ -241,12 +247,16 @@ impl PreviewProvider for VideoPreviewProvider {
     }
 
     fn generate(&self, request: &PreviewRequest) -> Result<PreviewArtifact> {
-        let sidecar_projection =
-            read_sidecar(&request.source).and_then(|sidecar| sidecar.projection_type);
+        let sidecar = read_sidecar(&request.source);
+        let sidecar_projection = sidecar
+            .as_ref()
+            .and_then(|sidecar| sidecar.projection_type.clone());
+        let sidecar_coverage_angle = sidecar.and_then(|sidecar| sidecar.coverage_angle);
         let projection = infer_projection(
             &request.source,
             &ProjectionInferenceInput {
                 sidecar_projection,
+                sidecar_coverage_angle,
                 expected_projection: request.expected_projection.clone(),
                 explicit_open: request.explicit_open,
             },

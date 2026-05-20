@@ -9,7 +9,13 @@ export type PreviewAssetKind = 'image' | 'video' | 'audio' | 'document' | 'unkno
 
 export type PreviewManifestStatus = 'ready' | 'requires-proxy' | 'stream-required' | 'unsupported';
 
-export type PreviewProjectionType = 'flat' | 'equirectangular' | 'cubemap' | 'fisheye' | 'unknown';
+export type PreviewProjectionType =
+  | 'flat'
+  | 'equirectangular'
+  | 'cylindrical'
+  | 'cubemap'
+  | 'fisheye'
+  | 'unknown';
 
 export type PreviewProjectionConfidence =
   | 'explicit'
@@ -22,7 +28,7 @@ export type PreviewDynamicRange = 'sdr' | 'hdr' | 'unknown';
 
 export type PreviewToneMapping = 'none' | 'aces' | 'reinhard' | 'filmic';
 
-export type PanoramaViewMode = 'sphere' | 'flat' | 'little-planet';
+export type PanoramaViewMode = 'sphere' | 'flat' | 'little-planet' | 'cylindrical';
 
 export type PreviewVariantRole =
   | 'source'
@@ -39,6 +45,11 @@ export interface PreviewDimensions {
   readonly height: number;
 }
 
+export interface PanoramaCoverageAngle {
+  readonly horizontalDeg: number;
+  readonly verticalDeg: number;
+}
+
 export interface PreviewProjectionMetadata {
   readonly type: PreviewProjectionType;
   readonly confidence: PreviewProjectionConfidence;
@@ -46,6 +57,7 @@ export interface PreviewProjectionMetadata {
   readonly requiresConfirmation?: boolean;
   readonly croppedAreaPixels?: PreviewDimensions;
   readonly fullPanoPixels?: PreviewDimensions;
+  readonly coverageAngle?: PanoramaCoverageAngle;
 }
 
 export interface PreviewCodecMetadata {
@@ -152,12 +164,15 @@ export interface RegisterPreviewAssetRequest {
 
 export interface UpdatePreviewAssetMetadataRequest {
   readonly projectionType?: PreviewProjectionType;
+  readonly coverageAngle?: PanoramaCoverageAngle;
   readonly defaultViewState?: PanoramaViewState;
 }
 
 export interface PreviewVariantRequest {
   readonly role: PreviewVariantRole;
   readonly viewState?: PanoramaViewState;
+  readonly projectionType?: PreviewProjectionType;
+  readonly coverageAngle?: PanoramaCoverageAngle;
   readonly width?: number;
   readonly height?: number;
   readonly quality?: number;
@@ -183,3 +198,63 @@ export const DEFAULT_PANORAMA_VIEW_STATE: PanoramaViewState = {
   exposure: 0,
   toneMapping: 'aces',
 };
+
+export const DEFAULT_PANORAMA_COVERAGE_ANGLE: PanoramaCoverageAngle = {
+  horizontalDeg: 360,
+  verticalDeg: 180,
+};
+
+export function normalizeCoverageAngle(
+  raw?: Partial<PanoramaCoverageAngle> | null,
+): PanoramaCoverageAngle {
+  return {
+    horizontalDeg: normalizeCoverageComponent(raw?.horizontalDeg, 360),
+    verticalDeg: normalizeCoverageComponent(raw?.verticalDeg, 180),
+  };
+}
+
+export function allowedPanoramaViewModesForProjection(
+  projectionType: PreviewProjectionType,
+): readonly PanoramaViewMode[] {
+  switch (projectionType) {
+    case 'equirectangular':
+      return ['sphere', 'flat', 'little-planet'];
+    case 'cylindrical':
+      return ['cylindrical', 'flat'];
+    case 'flat':
+    case 'cubemap':
+    case 'fisheye':
+    case 'unknown':
+      return ['flat'];
+  }
+}
+
+export function defaultPanoramaViewModeForProjection(
+  projectionType: PreviewProjectionType,
+): PanoramaViewMode {
+  switch (projectionType) {
+    case 'equirectangular':
+      return 'sphere';
+    case 'cylindrical':
+      return 'cylindrical';
+    case 'flat':
+    case 'cubemap':
+    case 'fisheye':
+    case 'unknown':
+      return 'flat';
+  }
+}
+
+export function normalizePanoramaViewModeForProjection(
+  projectionType: PreviewProjectionType,
+  mode: PanoramaViewMode,
+): PanoramaViewMode {
+  const allowedModes = allowedPanoramaViewModesForProjection(projectionType);
+  return allowedModes.includes(mode) ? mode : defaultPanoramaViewModeForProjection(projectionType);
+}
+
+function normalizeCoverageComponent(value: unknown, max: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.min(value, max)
+    : max;
+}
