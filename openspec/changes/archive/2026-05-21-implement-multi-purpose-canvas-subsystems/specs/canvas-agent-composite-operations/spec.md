@@ -48,6 +48,17 @@ The Canvas Agent active context SHALL provide compact optional summaries of subs
 - **WHEN** the active Canvas contains behavior metadata and selected behavior nodes
 - **THEN** the result may include blackboard summary data needed for behavior debugging
 
+### Requirement: Agent prompt fragments describe Canvas subsystem conventions
+Canvas SHALL contribute Agent prompt fragments through its `AgentCapabilityProvider` so mixed-purpose Canvas conventions are available before the Agent explicitly calls Canvas context tools. Prompt fragments MUST remain advisory context and MUST NOT replace tool parameter validation.
+
+#### Scenario: Agent receives subsystem guidance
+- **WHEN** the Canvas capability provider is registered with Agent runtime
+- **THEN** it may contribute prompt guidance that tells the Agent to inspect active subsystems, request subsystem metadata when needed, and respect projection adapter write-back boundaries
+
+#### Scenario: Prompt fragments remain additive
+- **WHEN** an older Agent runtime ignores provider prompt fragments
+- **THEN** Canvas tools continue to validate node types, connection types, and projection boundaries at execution time
+
 ### Requirement: Agent operations preserve projected source boundaries
 Agent-facing operations over projected Canvas graphs SHALL route source-owned mutations through projection adapters. Agent tools MUST NOT treat projected `.nkc` cache data as the authoritative source for entity or memory facts.
 

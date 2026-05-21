@@ -6,6 +6,19 @@ The new product direction adds narrative flow, behavior debugging, entity relati
 
 This design follows `docs/architecture/adr-canvas-kind-multi-purpose.md`: `.nkc` remains the single Canvas file extension, nodes from different libraries may coexist, and subsystems activate from the node types that are actually present.
 
+## Implementation Status
+
+Implemented and archived on 2026-05-21. Follow-up review fixes were applied after the initial archive to close the P0/P1/P2 findings:
+
+- Narrative and Storyboard Webview registrations now both explicitly reuse the shared built-in manifest as the source of truth.
+- Narrative variable IDs use UUID-first generation instead of timestamp-only IDs.
+- Canvas subsystem loading no longer double-triggers from `nodes` plus derived subsystem keys, and load failures are logged through the Webview logger.
+- Floating panel drag listeners are cleaned up on pointer end/cancel and unmount.
+- `NekoCanvasCapabilityProvider` contributes prompt fragments so Agent sessions automatically receive mixed-purpose Canvas subsystem guidance.
+- Projection write-back response/error routing, regeneration error status, malformed subsystem status input, and prompt fragments are covered by source-contract tests.
+- Storyboard node-library descriptor icons use Webview-side SVG React nodes rather than raw emoji strings.
+- `FloatingPanelFrame` no longer carries an unused `activeSubsystemIds` prop; playback controllers remain the only subsystem UI slot that receives active subsystem ids.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -100,14 +113,14 @@ The toolbar/status/viewport behavior must remain compatible with the ongoing uni
 5. Add narrative subsystem, then entity projection, then behavior and memory in separate phases.
 6. For rollback, keep v2.0/v2.1 JSON fields optional and preserve unknown fields on load/save. If a subsystem rollout is disabled, Canvas should still open files and render unsupported nodes through fallback.
 
-## Open Questions
+## Resolved Implementation Choices
 
-- Whether built-in subsystem manifests should live in `@neko/shared` or an Extension-side manifest registry for the first implementation.
-- Exact JSON schema for `AgentToolDef` in subsystem manifests.
-- Whether floating panel positions should persist in `.nkc` viewport-adjacent state or workspace state.
-- Whether the first implementation should include narrative playback in the same phase as narrative nodes or split playback into a later phase.
+- Built-in subsystem manifests live in `@neko/shared` as pure shared contracts. Webview registrations import and reuse those manifests instead of becoming a second source of truth.
+- `AgentToolDef` remains a serializable manifest descriptor for this phase. Dynamic provider-backed Agent tools are deferred until a concrete marketplace/runtime subsystem requires them.
+- Floating panel positions are session-local Webview state in this phase. Persisting them in `.nkc` viewport-adjacent state or workspace state remains a future UX decision.
+- Narrative playback is split: toolbar injection and placeholder controls are present, while runtime stepping, choice pause state, and path highlighting remain a later narrative runtime task.
 
-## Deferred Follow-ups Before Archive
+## Deferred Follow-ups After Archive
 
 - Entity graph runtime remains adapter-driven infrastructure only in this change. Follow-up work should add concrete `neko-assets` projection adapters, entity/slot/occurrence renderers, representation and coverage panels, and source-owned write-back commands.
 - Behavior runtime is limited to shared node/connection contracts and placeholder subsystem activation in this change. Follow-up work should add behavior node renderers, transition/child rule execution, blackboard editing, debug overlays, playback mode integration, and behavior Agent tools.

@@ -1,7 +1,8 @@
 # canvas-projected-graphs Specification
 
 ## Purpose
-TBD - created by archiving change implement-multi-purpose-canvas-subsystems. Update Purpose after archive.
+Defines projected Canvas graph behavior where `.nkc` stores layout/cache state while entity or memory JSON remains the source of truth through projection adapters.
+
 ## Requirements
 ### Requirement: Projected Canvas files separate layout cache from source of truth
 The system SHALL support projected Canvas files for entity and memory graph views where external JSON remains the source of truth and the `.nkc` file stores layout, viewport, and cache metadata only. Projected Canvas data MUST be marked with `projected: true`.

@@ -1,10 +1,27 @@
 # ADR: 多用途画布 — 节点库 + 子系统按需激活
 
-> 状态：**Proposed (2026-05-21)**
+> 状态：**Accepted / Implemented (2026-05-21)**
 > 关联：[adr-canvas-block-container.md](./adr-canvas-block-container.md) · [adr-canvas-generic-container-card.md](./adr-canvas-generic-container-card.md) · [adr-canvas-preview-boundary.md](./adr-canvas-preview-boundary.md) · [format-strategy.md](./format-strategy.md) · [adr-asset-federation.md](./adr-asset-federation.md) · [adr-structured-data-persistence.md](./adr-structured-data-persistence.md) · [agent-memory-unification.md](./agent-memory-unification.md) · [adr-unified-viewport-protocol.md](./adr-unified-viewport-protocol.md) · [adr-webview-ui-design-system.md](./adr-webview-ui-design-system.md)
-> 实现提案：[implement-multi-purpose-canvas-subsystems](../../openspec/changes/implement-multi-purpose-canvas-subsystems/)
+> 实现提案：已归档 [implement-multi-purpose-canvas-subsystems](../../openspec/changes/archive/2026-05-21-implement-multi-purpose-canvas-subsystems/)
 
 ---
+
+## 实现状态（2026-05-21）
+
+OpenSpec change `implement-multi-purpose-canvas-subsystems` 已实施并归档。当前落地边界如下：
+
+| 范围 | 状态 | 说明 |
+|------|------|------|
+| `.nkc` v2.1 契约 | 已实现 | `CANVAS_VERSION` 与 NKC migrator 对齐到 `2.1`；`CanvasData` 增加 `projected`、`narrative`、`behavior`、`entityGraph`、`memoryGraph` optional 字段；v1→v2→v2.1 迁移链保持无破坏 |
+| 子系统 Manifest | 已实现 | `CanvasSubsystemManifest`、内建 manifest 和扫描/summary 工具位于共享契约层；保持纯数据，不包含 React、VSCode API、predicate 或布局算法 |
+| Webview Registration | 已实现 | Storyboard 和 Narrative 通过 `WebviewSubsystemRegistration` 显式复用共享 manifest；Behavior / Entity / Memory 先以 placeholder registration 激活边界 |
+| 类型扩展与 fallback | 已实现 | Core / Registered 双层 node 与 connection union 已落地；结构完整 unknown node 在普通模式 warning + fallback 渲染，strict mode 可升级为 error |
+| UI shell | 已实现首版 | 顶部工具栏、分组节点库、浮动面板宿主、内联连接编辑、节点展开 hook 已接入；Storyboard descriptor 图标已收敛为 Webview 侧 SVG React icon，避免 raw emoji 渲染差异 |
+| Narrative 首切片 | 已实现首版 | Narrative 节点、choice 连接属性、FlowTraversal、变量浮动面板已落地；播放控制目前是工具栏 slot + disabled placeholder，运行时步进/路径高亮仍属后续 P1 |
+| 投影画布边界 | 已实现基础设施 | `ProjectionAdapter` / write-back / source-changed / cache regeneration 通过共享 DTO + Extension API 边界实现；具体 entity/memory adapter 仍由对应包后续实现 |
+| Agent 集成 | 已实现 | Active context 增加 `nodeTypeSummary`、`activeSubsystems`、`selectedNodeTypes` 和可选 metadata summary；`NekoCanvasCapabilityProvider.getPromptFragments()` 注入多用途 Canvas 子系统上下文 |
+
+Review follow-up 已收口：Narrative/Storyboard manifest 注册路径统一、变量 ID 改为 UUID 优先、子系统加载双触发与静默吞错已修、浮动面板 drag listener 可清理、projection write-back / status boundary / promptFragments 已补契约测试、`FloatingPanelFrame` 死 prop 已移除。
 
 ## 一、背景与动机
 
@@ -325,14 +342,16 @@ interface CanvasSubsystemManifest {
 }
 
 // webview/src/subsystems/ — Layer 2（Webview 侧，依赖 React）
-interface WebviewSubsystemRegistration extends CanvasSubsystemManifest {
-  nodeRenderers: Record<string, React.LazyExoticComponent<React.ComponentType>>;
+interface WebviewSubsystemRegistration {
+  manifest: CanvasSubsystemManifest;  // 复用 L0 manifest，避免第二事实源
+  nodeRenderers?: NodeRendererRegistry;
+  nodeTypeDescriptors?: NodeTypeDescriptorRegistry;  // Webview runtime descriptor，可包含 React icon
   floatingPanels?: FloatingPanelDef[];  // VariablePanel / BlackboardPanel 等
   playbackController?: PlaybackController;  // 注入到工具栏播放区域
 }
 ```
 
-Extension Host 侧只读取 `CanvasSubsystemManifest`（Agent 工具注册、类型验证）；Webview 侧加载 `WebviewSubsystemRegistration`（渲染器、面板、播放控制）。内建 Manifest 注册表放在 `@neko/shared` 或 `packages/neko-canvas/packages/extension/src/subsystems/manifestRegistry.ts`，Webview registration 只复用 Manifest 数据；Extension Host 不 import `webview/src/subsystems/*`。
+Extension Host 侧只读取 `CanvasSubsystemManifest`（Agent 工具注册、类型验证）；Webview 侧加载 `WebviewSubsystemRegistration`（渲染器、描述符、面板、播放控制）。内建 Manifest 注册表已放在 `@neko/shared`，Webview registration 只通过 `manifest` 字段复用 Manifest 数据；Extension Host 不 import `webview/src/subsystems/*`。
 
 ### 3.3 按需加载
 
@@ -365,14 +384,14 @@ Vite code-splitting 确保未激活的子系统不进 initial bundle。
 
 ### 4.1 版本对齐
 
-当前版本源：
+当前版本源已对齐：
 
 | 位置 | 值 | 含义 |
 |------|---|------|
-| `packages/neko-types/src/nkc/migrator.ts:12` | `CURRENT_NKC_VERSION = '2.0'` | migrator 维护的权威版本 |
-| `packages/neko-types/src/types/canvas.ts:636` | `CANVAS_VERSION = '1.0'` | **过时**，需统一到 migrator |
+| `packages/neko-types/src/nkc/migrator.ts` | `CURRENT_NKC_VERSION = '2.1'` | migrator 维护的权威版本 |
+| `packages/neko-types/src/types/canvas.ts` | `CANVAS_VERSION = '2.1'` | 与 migrator 权威版本同步 |
 
-**决策**：以 `CURRENT_NKC_VERSION` 为权威版本源。本 ADR 扩展定义为 **v2.1**（v2.0 的 optional extension），在 `NkcVersion` union 中追加 `'2.1'`。`CANVAS_VERSION` 常量同步更新为 `'2.1'`，消除双版本源不一致。
+**决策**：以 `CURRENT_NKC_VERSION` 为权威版本源。本 ADR 扩展定义为 **v2.1**（v2.0 的 optional extension），`NkcVersion` union 已追加 `'2.1'`，`CANVAS_VERSION` 常量已同步更新为 `'2.1'`，消除双版本源不一致。
 
 ### 4.2 节点类型扩展契约
 
@@ -412,10 +431,9 @@ type RegisteredConnectionType =
   | 'derived-from'; // memory: 推理链
 
 // Unknown node 处理
-// 当前 validator (nkc/validator.ts:153) 对未知类型是 severity: 'error'
-// 需修改为：结构完整的 unknown node → severity: 'warning'（可打开、fallback 渲染）
-//          结构不完整（缺 id/position/size）→ 保持 severity: 'error'
-//          严格模式（导出/保存前校验）→ unknown node 升级为 error
+// 结构完整的 unknown node → severity: 'warning'（可打开、fallback 渲染）
+// 结构不完整（缺 id/position/size）→ 保持 severity: 'error'
+// 严格模式（导出/保存前校验）→ unknown node 升级为 error
 ```
 
 子系统通过 `CanvasSubsystemManifest` 注册 descriptor、validation rule；Webview 侧通过 `WebviewSubsystemRegistration` 注册 renderer、panel、playback。unknown node 使用 fallback renderer（显示类型名 + 原始数据摘要）但 validator 保留 warning，不静默吞错。
@@ -636,7 +654,7 @@ canvas_bind_entity({ entityId, slotRole, assetUri })
 
 ### 7.2 上下文自动适配
 
-当前 `CanvasAgentActiveContextResult`（`canvas-agent-operations.ts:176`）包含 `selectedNodeIds` / `selectedNodes` / `focusedContainer` / `viewport`，但缺少子系统感知字段。需要**契约先行**扩展：
+`CanvasAgentActiveContextResult`（`canvas-agent-operations.ts`）已在保留 `selectedNodeIds` / `selectedNodes` / `focusedContainer` / `viewport` 等旧字段的基础上，增加子系统感知字段：
 
 ```typescript
 // CanvasAgentActiveContextResult 扩展字段（v2.1 新增）

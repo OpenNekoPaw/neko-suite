@@ -65,3 +65,11 @@ The Canvas Webview SHALL provide UI slots for subsystem-provided node library gr
 #### Scenario: Subsystem panel opens as floating panel
 - **WHEN** an active subsystem declares a floating panel
 - **THEN** the panel can be shown, hidden, and dragged without occupying a permanent right-side property panel
+
+#### Scenario: Runtime descriptors own visual icons
+- **WHEN** a subsystem contributes node-library descriptors with visual icons
+- **THEN** those icons are Webview runtime values and are not serialized into the shared `CanvasSubsystemManifest`
+
+#### Scenario: Floating panel host avoids unused subsystem state
+- **WHEN** a floating panel component is rendered
+- **THEN** the host passes only the declared floating-panel props and does not thread active subsystem state through frame internals unless a panel contract requires it

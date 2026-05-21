@@ -1,7 +1,8 @@
 # canvas-subsystem-activation Specification
 
 ## Purpose
-TBD - created by archiving change implement-multi-purpose-canvas-subsystems. Update Purpose after archive.
+Defines how Canvas activates built-in storyboard, narrative, behavior, entity, and memory subsystems from actual node types while keeping shared manifests pure and Webview runtime registrations lazy-loaded.
+
 ## Requirements
 ### Requirement: Canvas subsystem manifests are pure shared contracts
 The system SHALL define built-in Canvas subsystem manifests as serializable shared contracts that contain trigger node types, connection type descriptors, validation rule descriptors, auto-arrange strategy identifiers, Agent tool descriptors, and metadata defaults. Manifest contracts MUST NOT contain React components, VSCode API types, predicate functions, layout algorithms, or other runtime-only objects.
@@ -68,3 +69,11 @@ The Canvas Webview SHALL provide UI slots for subsystem-provided node library gr
 #### Scenario: Subsystem panel opens as floating panel
 - **WHEN** an active subsystem declares a floating panel
 - **THEN** the panel can be shown, hidden, and dragged without occupying a permanent right-side property panel
+
+#### Scenario: Runtime descriptors own visual icons
+- **WHEN** a subsystem contributes node-library descriptors with visual icons
+- **THEN** those icons are Webview runtime values and are not serialized into the shared `CanvasSubsystemManifest`
+
+#### Scenario: Floating panel host avoids unused subsystem state
+- **WHEN** a floating panel component is rendered
+- **THEN** the host passes only the declared floating-panel props and does not thread active subsystem state through frame internals unless a panel contract requires it

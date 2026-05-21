@@ -70,3 +70,16 @@
 - [x] 8.3 Add or update architecture documentation links from the ADR to the implemented OpenSpec change where appropriate.
 - [x] 8.4 Verify `openspec validate implement-multi-purpose-canvas-subsystems --strict` passes after implementation updates.
 - [x] 8.5 Record any deferred entity, behavior, or memory subsystem work as follow-up tasks before archive.
+
+## 9. Post-Archive Review Closure
+
+- [x] 9.1 Unify Narrative and Storyboard Webview registration paths around shared built-in manifests.
+- [x] 9.2 Replace timestamp-only Narrative variable IDs with UUID-first ID generation.
+- [x] 9.3 Remove duplicate subsystem load triggering from `CanvasApp` and log subsystem load failures.
+- [x] 9.4 Clean up floating panel drag listeners on pointer end/cancel and unmount.
+- [x] 9.5 Add Canvas Agent prompt fragments for mixed-purpose subsystem context.
+- [x] 9.6 Add contract coverage for projection write-back responses, regeneration error status, malformed subsystem status input, and prompt fragments.
+- [x] 9.7 Style inline connection editor controls with Canvas design tokens.
+- [x] 9.8 Mark placeholder Narrative playback controls with a P1 TODO for runtime stepping.
+- [x] 9.9 Replace Storyboard descriptor raw emoji with Webview-side SVG React icons.
+- [x] 9.10 Remove the unused `FloatingPanelFrame.activeSubsystemIds` prop path.
