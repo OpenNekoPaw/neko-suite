@@ -7,6 +7,7 @@ import type {
   CanvasAgentContainerSummary,
   CanvasAgentMutationMode,
   CanvasAgentNodeSummary,
+  CanvasAgentSubsystemMetadataSummary,
   CanvasAgentTargetRef,
   CanvasConnection,
   CanvasCreateCompositeRequest,
@@ -28,10 +29,12 @@ import {
   getContainerPolicyName,
   getDefaultCanvasNodePresetName,
   getNodeParentId,
+  isCanvasNodeType,
   isJsonPointerPath,
   type CanvasNodeType,
   readFieldBinding,
   readJsonPointer,
+  summarizeCanvasSubsystems,
   writeJsonPointer,
   writeFieldBinding,
 } from '@neko/shared';
@@ -53,6 +56,13 @@ export interface CanvasAgentOperationContext {
 
 export interface CanvasAgentActiveContextInput {
   nodes: CanvasNode[];
+  connections?: readonly CanvasConnection[];
+  canvasData?: {
+    narrative?: CanvasAgentSubsystemMetadataSummary['narrative'];
+    behavior?: CanvasAgentSubsystemMetadataSummary['behavior'];
+    entityGraph?: CanvasAgentSubsystemMetadataSummary['entityGraph'];
+    memoryGraph?: CanvasAgentSubsystemMetadataSummary['memoryGraph'];
+  };
   selectedNodeIds: readonly string[];
   viewport?: CanvasAgentActiveContextResult['viewport'];
   insertionPoint?: CanvasAgentActiveContextResult['insertionPoint'];
@@ -105,10 +115,16 @@ export function createCanvasAgentActiveContext(
     .map((nodeId) => input.nodes.find((node) => node.id === nodeId))
     .filter((node): node is CanvasNode => Boolean(node))
     .map((node) => summarizeCanvasAgentNode(node, input.request?.includeNodeDetails === true));
+  const subsystemSummary = summarizeCanvasSubsystems({ nodes: input.nodes });
+  const selectedNodeTypes = uniqueStrings(selectedNodes.map((node) => node.type));
 
   const result: CanvasAgentActiveContextResult = {
+    nodeTypeSummary: subsystemSummary.nodeTypeSummary,
+    activeSubsystems: subsystemSummary.activeSubsystems,
     selectedNodeIds,
+    selectedNodeTypes,
     selectedNodes,
+    connections: input.connections ? [...input.connections] : undefined,
     ...(input.documentUri ? { documentUri: input.documentUri } : {}),
     ...(input.canvasId ? { canvasId: input.canvasId } : {}),
     ...(input.insertionPoint ? { insertionPoint: input.insertionPoint } : {}),
@@ -120,6 +136,14 @@ export function createCanvasAgentActiveContext(
     if (focusedContainer) {
       result.focusedContainer = summarizeCanvasAgentContainer(focusedContainer);
     }
+  }
+
+  const subsystemMetadata = summarizeSubsystemMetadata(input.canvasData);
+  if (
+    input.request?.includeSubsystemMetadata === true &&
+    Object.keys(subsystemMetadata).length > 0
+  ) {
+    result.subsystemMetadata = subsystemMetadata;
   }
 
   return result;
@@ -148,6 +172,7 @@ export function deriveCanvasNode(
   context: CanvasAgentOperationContext,
   request: CanvasDeriveNodeRequest,
 ): CanvasAgentMutationResult<CanvasDeriveNodeResult> {
+  assertCanvasNodeType(request.targetType);
   const sourceNode = context.nodes.find((node) => node.id === request.sourceNodeId);
   if (!sourceNode) {
     throw new Error(`Source node "${request.sourceNodeId}" not found`);
@@ -161,6 +186,11 @@ export function deriveCanvasNode(
   const targetPreset = getBuiltInCanvasNodePresetMetadata(targetPresetName);
   if (!targetPreset || !targetPresetName) {
     throw new Error(`Unsupported target preset "${targetPresetName ?? 'unknown'}"`);
+  }
+  if (request.targetType && targetPreset.nodeType !== request.targetType) {
+    throw new Error(
+      `Target preset "${targetPresetName}" creates "${targetPreset.nodeType}", not "${request.targetType}"`,
+    );
   }
   if (sourcePreset && !sourcePreset.deriveTargets.includes(targetPresetName)) {
     throw new Error(`Preset "${sourcePreset.name}" cannot derive "${targetPresetName}"`);
@@ -532,6 +562,11 @@ export function createCanvasComposite(
   context: CanvasAgentOperationContext,
   request: CanvasCreateCompositeRequest,
 ): CanvasAgentMutationResult<CanvasCreateCompositeResult> {
+  assertCanvasNodeType(request.containerType);
+  for (const child of request.children) {
+    assertCanvasNodeType(child.type);
+  }
+
   const containerPresetName =
     request.containerPreset ??
     (request.containerType
@@ -564,17 +599,26 @@ export function createCanvasComposite(
     const childPresetName =
       child.preset ?? (child.type ? getDefaultCanvasNodePresetName(child.type) : undefined);
     const childPreset = getBuiltInCanvasNodePresetMetadata(childPresetName);
-    if (!childPreset || !childPresetName) {
+    if (childPresetName && !childPreset) {
       throw new Error(`Unsupported child preset "${childPresetName ?? 'unknown'}"`);
+    }
+    if (childPreset && child.type && childPreset.nodeType !== child.type) {
+      throw new Error(
+        `Child preset "${childPresetName}" creates "${childPreset.nodeType}", not "${child.type}"`,
+      );
+    }
+    const childType = childPreset?.nodeType ?? child.type;
+    if (!childType) {
+      throw new Error('Child node type or preset is required');
     }
 
     const childId = child.id ?? context.generateId();
     const childPosition =
-      child.position ?? defaultChildPosition(containerNode, index, childPreset.nodeType);
+      child.position ?? defaultChildPosition(containerNode, index, childType);
     return hydrateCanvasNodePreview({
       ...createNodeSpec({
         ...child,
-        type: childPreset.nodeType,
+        type: childType,
         preset: childPresetName,
         position: childPosition,
       }),
@@ -676,6 +720,7 @@ function createNodeSpec(spec: {
   position?: { x: number; y: number };
   data?: Record<string, unknown>;
 }): Omit<CanvasNode, 'id'> {
+  assertCanvasNodeType(spec.type);
   const preset = spec.preset;
   if (preset && !getBuiltInCanvasNodePresetMetadata(preset)) {
     throw new Error(`Unsupported preset "${preset}"`);
@@ -688,6 +733,59 @@ function createNodeSpec(spec: {
     zIndex: 1,
     preset,
   });
+}
+
+function assertCanvasNodeType(type: CanvasNodeType | undefined): void {
+  if (type !== undefined && !isCanvasNodeType(type)) {
+    throw new Error(`Unsupported Canvas node type "${type}"`);
+  }
+}
+
+function uniqueStrings<T extends string>(values: readonly T[]): T[] {
+  return Array.from(new Set(values));
+}
+
+function summarizeSubsystemMetadata(
+  canvasData: CanvasAgentActiveContextInput['canvasData'] | undefined,
+): CanvasAgentSubsystemMetadataSummary {
+  if (!canvasData) {
+    return {};
+  }
+
+  return {
+    ...(canvasData.narrative
+      ? {
+          narrative: {
+            entryNodeId: canvasData.narrative.entryNodeId,
+            variables: canvasData.narrative.variables.slice(0, 50),
+          },
+        }
+      : {}),
+    ...(canvasData.behavior
+      ? {
+          behavior: {
+            rootNodeId: canvasData.behavior.rootNodeId,
+            blackboard: canvasData.behavior.blackboard.slice(0, 50),
+          },
+        }
+      : {}),
+    ...(canvasData.entityGraph
+      ? {
+          entityGraph: {
+            entityScope: [...canvasData.entityGraph.entityScope],
+            bindingSource: canvasData.entityGraph.bindingSource,
+          },
+        }
+      : {}),
+    ...(canvasData.memoryGraph
+      ? {
+          memoryGraph: {
+            queryContext: canvasData.memoryGraph.queryContext,
+            timeRange: canvasData.memoryGraph.timeRange,
+          },
+        }
+      : {}),
+  };
 }
 
 function createDeriveData(

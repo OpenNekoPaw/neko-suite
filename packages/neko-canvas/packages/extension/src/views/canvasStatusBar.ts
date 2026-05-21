@@ -16,6 +16,7 @@ export interface CanvasStatusInfo {
   connectionCount: number;
   zoom: number;
   selectedCount: number;
+  subsystemSummary?: string;
 }
 
 // =============================================================================
@@ -27,6 +28,7 @@ const ID = {
   connectionCount: 'neko.canvas.connectionCount',
   zoom: 'neko.canvas.zoom',
   selection: 'neko.canvas.selection',
+  subsystems: 'neko.canvas.subsystems',
 } as const;
 
 // =============================================================================
@@ -68,6 +70,14 @@ export class CanvasStatusBar implements vscode.Disposable {
         tooltip: 'Selected items',
         visible: 'conditional',
       },
+      {
+        id: ID.subsystems,
+        alignment: vscode.StatusBarAlignment.Left,
+        priority: 97,
+        name: 'Canvas Subsystems',
+        tooltip: 'Active Canvas subsystems',
+        visible: 'conditional',
+      },
     ]);
   }
 
@@ -82,6 +92,13 @@ export class CanvasStatusBar implements vscode.Disposable {
       this.group.setVisible(ID.selection, true);
     } else {
       this.group.setVisible(ID.selection, false);
+    }
+
+    if (info.subsystemSummary) {
+      this.group.update(ID.subsystems, `$(symbol-namespace) ${info.subsystemSummary}`);
+      this.group.setVisible(ID.subsystems, true);
+    } else {
+      this.group.setVisible(ID.subsystems, false);
     }
   }
 

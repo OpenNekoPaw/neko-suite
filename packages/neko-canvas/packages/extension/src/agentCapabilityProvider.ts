@@ -25,6 +25,7 @@ import type {
   CanvasStoryboardExecutionSummaryRequest,
   CanvasAgentContentFormat,
   CanvasAgentMutationMode,
+  CanvasConnection,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
@@ -39,8 +40,10 @@ import {
   createStoryboardPayload,
   extractCanvasNodeGenerationLineage,
   getNodeParentId,
-  resolveCharacterBindingsForNames,
+  isCanvasNodeType,
+  traverseNarrativeFlow,
 } from '@neko/shared';
+import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { getRootLogger } from './utils/logger';
 
 /**
@@ -112,6 +115,16 @@ function normalizeJsonPointerPath(value: unknown): JsonPointerPath | undefined {
     return value as JsonPointerPath;
   }
   throw new Error(`Invalid JSON Pointer path "${value}"`);
+}
+
+function readOptionalCanvasNodeType(value: unknown, label = 'node type'): CanvasNodeType | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (isCanvasNodeType(value)) {
+    return value;
+  }
+  throw new Error(`Unsupported Canvas ${label} "${String(value)}"`);
 }
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
@@ -253,7 +266,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         } satisfies ToolParameters,
         async execute(args) {
           try {
-            const data = await api.nodes.list(args.type as CanvasNodeType | undefined);
+            const data = await api.nodes.list(readOptionalCanvasNodeType(args.type));
             return { success: true, data };
           } catch (err) {
             return { success: false, error: `Failed to list nodes: ${String(err)}` };
@@ -343,8 +356,12 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         } satisfies ToolParameters,
         async execute(args) {
           try {
+            const nodeType = readOptionalCanvasNodeType(args.type);
+            if (!nodeType) {
+              throw new Error('Canvas node creation requires a node type');
+            }
             const data = await api.nodes.create(
-              args.type as CanvasNodeType,
+              nodeType,
               { x: args.x as number, y: args.y as number },
               args.data as object,
               args.preset as string | undefined,
@@ -370,6 +387,12 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               description:
                 'Optional target preset from the registered global derive candidates. Source-specific preset rules are enforced at runtime.',
             },
+            targetType: {
+              type: 'string',
+              enum: [...CANVAS_AGENT_CREATE_NODE_TYPES],
+              description:
+                'Optional registered Canvas node type. Used only when no targetPreset is provided.',
+            },
             data: {
               type: 'object',
               description: 'Optional data overrides merged into the derived node defaults.',
@@ -386,6 +409,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             const data = await api.nodes.derive({
               sourceNodeId: args.sourceNodeId as string,
               targetPreset: args.targetPreset as string | undefined,
+              targetType: readOptionalCanvasNodeType(args.targetType, 'derive target type'),
               data: args.data as Record<string, unknown> | undefined,
               connect: args.connect as boolean | undefined,
             });
@@ -449,7 +473,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                   const value = isRecord(child) ? child : {};
                   return {
                     preset: value.preset as string | undefined,
-                    type: value.type as CanvasNodeType | undefined,
+                    type: readOptionalCanvasNodeType(value.type, 'child node type'),
                     position:
                       typeof value.x === 'number' && typeof value.y === 'number'
                         ? { x: value.x, y: value.y }
@@ -570,7 +594,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
       {
         name: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
         description:
-          'Read compact active Canvas context: selected nodes, insertion point, viewport, focused container, and targetable fields for follow-up mutations.',
+          'Read compact active Canvas context: selected nodes, subsystem summaries, insertion point, viewport, focused container, and targetable fields for follow-up mutations.',
         category: 'project',
         isReadOnly: true,
         isConcurrencySafe: true,
@@ -592,6 +616,11 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               description:
                 'Include slightly richer node summaries; large media data remains omitted.',
             },
+            includeSubsystemMetadata: {
+              type: 'boolean',
+              description:
+                'Include bounded subsystem metadata summaries for narrative, behavior, entity, and memory graphs.',
+            },
           },
         } satisfies ToolParameters,
         async execute(args) {
@@ -600,12 +629,51 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               includeSelection: args.includeSelection as boolean | undefined,
               includeFocusedContainer: args.includeFocusedContainer as boolean | undefined,
               includeNodeDetails: args.includeNodeDetails as boolean | undefined,
+              includeSubsystemMetadata: args.includeSubsystemMetadata as boolean | undefined,
             });
             return { success: true, data };
           } catch (err) {
             return {
               success: false,
               error: `Failed to get active Canvas context: ${String(err)}`,
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE,
+        description:
+          'Traverse narrative flow nodes in a mixed Canvas. Ignores storyboard, behavior, entity, and memory nodes.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            startNodeId: {
+              type: 'string',
+              description: 'Optional narrative node id used as traversal start.',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const nodes = await api.nodes.list();
+            const context = await api.nodes.getActiveContext({ includeNodeDetails: false });
+            const connections = Array.isArray((context as { connections?: unknown }).connections)
+              ? ((context as { connections: CanvasConnection[] }).connections)
+              : [];
+            const data = traverseNarrativeFlow(
+              nodes,
+              connections,
+              typeof args.startNodeId === 'string' ? args.startNodeId : undefined,
+            );
+            return { success: true, data };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to traverse narrative flow: ${String(err)}`,
             };
           }
         },

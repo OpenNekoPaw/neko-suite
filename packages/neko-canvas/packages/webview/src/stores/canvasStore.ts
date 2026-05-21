@@ -27,6 +27,7 @@ import {
   getContainerPolicyName,
   getNodeParentId,
   isContainerNode,
+  applyCanvasSubsystemMetadataDefaults,
 } from '@neko/shared';
 import { useHistoryStore } from './historyStore';
 import { useCanvasOperationStore } from './canvasOperationStore';
@@ -86,6 +87,8 @@ export interface CanvasStore {
   pendingConnectionSource: { nodeId: string; anchor: string } | null;
   /** Currently playing media node ID (only one at a time) */
   activePlayingNodeId: string | null;
+  /** Explicit inline expanded node, used by the subsystem-aware shell. */
+  expandedNodeId: string | null;
   /** Generation prompt panel state */
   generationPanelState: GenerationPanelState;
   /** Content overlay state (fullscreen node content viewer) */
@@ -199,6 +202,10 @@ export interface CanvasStore {
   // ==================== Media Playback ====================
   /** Set the currently playing media node (null to clear) */
   setActivePlayingNode: (nodeId: string | null) => void;
+
+  // ==================== Inline Node Expansion ====================
+  setExpandedNodeId: (nodeId: string | null) => void;
+  toggleExpandedNode: (nodeId: string) => void;
 
   // ==================== History Actions ====================
   undo: () => void;
@@ -381,6 +388,10 @@ function recordChangedNodesForAudit(previousNodes: CanvasNode[], nextNodes: Canv
   }
 }
 
+function withSubsystemMetadataDefaults(canvasData: CanvasData): CanvasData {
+  return applyCanvasSubsystemMetadataDefaults(canvasData);
+}
+
 // =============================================================================
 // Store
 // =============================================================================
@@ -392,6 +403,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   isConnecting: false,
   pendingConnectionSource: null,
   activePlayingNodeId: null,
+  expandedNodeId: null,
   generationPanelState: { visible: false, nodeId: null, childNodeId: null },
   contentOverlayState: { visible: false, nodeId: null },
 
@@ -416,7 +428,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   // ==================== Data Actions ====================
   setCanvasData: (data) => {
-    set({ canvasData: data });
+    set({ canvasData: withSubsystemMetadataDefaults(data) });
   },
 
   updateCanvasData: (updates) => {
@@ -436,10 +448,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const newNode = hydrateCanvasNodePreview({ ...node, id } as CanvasNode);
 
     set({
-      canvasData: {
+      canvasData: withSubsystemMetadataDefaults({
         ...canvasData,
         nodes: [...canvasData.nodes, newNode],
-      },
+      }),
     });
 
     useCanvasOperationStore.getState().recordNodeAdd(newNode);
@@ -460,10 +472,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
 
     set({
-      canvasData: {
+      canvasData: withSubsystemMetadataDefaults({
         ...canvasData,
         nodes: [...canvasData.nodes, ...newNodes],
-      },
+      }),
     });
 
     const ops = useCanvasOperationStore.getState();
@@ -1149,11 +1161,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     recordHistory(canvasData);
 
     set({
-      canvasData: {
+      canvasData: withSubsystemMetadataDefaults({
         ...canvasData,
         nodes: mutation.nodes,
         connections: mutation.connections,
-      },
+      }),
       selection: { nodeIds: [mutation.result.nodeId], connectionIds: [] },
     });
 
@@ -1185,11 +1197,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     recordHistory(canvasData);
 
     set({
-      canvasData: {
+      canvasData: withSubsystemMetadataDefaults({
         ...canvasData,
         nodes: mutation.nodes,
         connections: mutation.connections,
-      },
+      }),
       selection: { nodeIds: [mutation.result.containerId], connectionIds: [] },
     });
 
@@ -1264,11 +1276,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     recordHistory(canvasData);
 
     set({
-      canvasData: {
+      canvasData: withSubsystemMetadataDefaults({
         ...canvasData,
         nodes: mutation.nodes,
         connections: mutation.connections,
-      },
+      }),
       selection: mutation.result.nodeId
         ? { nodeIds: [mutation.result.nodeId], connectionIds: [] }
         : get().selection,
@@ -1374,6 +1386,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     } else {
       set({
         selection: { nodeIds: [id], connectionIds: [] },
+        expandedNodeId: id,
       });
     }
   },
@@ -1394,6 +1407,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     } else {
       set({
         selection: { nodeIds: [], connectionIds: [id] },
+        expandedNodeId: null,
       });
     }
   },
@@ -1401,12 +1415,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selectNodes: (ids) => {
     set({
       selection: { nodeIds: ids, connectionIds: [] },
+      expandedNodeId: ids.length === 1 ? ids[0]! : null,
     });
   },
 
   clearSelection: () => {
     set({
       selection: { nodeIds: [], connectionIds: [] },
+      expandedNodeId: null,
     });
   },
 
@@ -1432,12 +1448,22 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ),
       },
       selection: { nodeIds: [], connectionIds: [] },
+      expandedNodeId: null,
     });
   },
 
   // ==================== Media Playback ====================
   setActivePlayingNode: (nodeId) => {
     set({ activePlayingNodeId: nodeId });
+  },
+
+  setExpandedNodeId: (nodeId) => {
+    set({ expandedNodeId: nodeId });
+  },
+
+  toggleExpandedNode: (nodeId) => {
+    const { expandedNodeId } = get();
+    set({ expandedNodeId: expandedNodeId === nodeId ? null : nodeId });
   },
 
   // ==================== History Actions ====================

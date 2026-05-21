@@ -74,7 +74,7 @@ describe('NKC layered migration', () => {
     const migration = migrateNkc(validV1Canvas);
 
     expect(migration.migrated).toBe(true);
-    expect(migration.data.version).toBe('2.0');
+    expect(migration.data.version).toBe('2.1');
 
     const migratedScene = migration.data.nodes.find((node) => node.id === 'scene-1');
     const migratedShot = migration.data.nodes.find((node) => node.id === 'shot-1');
@@ -101,7 +101,7 @@ describe('NKC layered migration', () => {
 
     expect(result.validation.valid).toBe(true);
     expect(result.migration?.migrated).toBe(true);
-    expect(result.data.version).toBe('2.0');
+    expect(result.data.version).toBe('2.1');
   });
 
   it('mirrors legacy group child IDs without removing legacy data', () => {

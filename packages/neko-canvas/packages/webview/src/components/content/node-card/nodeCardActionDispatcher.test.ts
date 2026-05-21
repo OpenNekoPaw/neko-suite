@@ -221,6 +221,7 @@ function createCanvasStore(canvasData: CanvasData | null = null): CanvasStore {
     isConnecting: false,
     pendingConnectionSource: null,
     activePlayingNodeId: null,
+    expandedNodeId: null,
     generationPanelState: { visible: false, nodeId: null },
     contentOverlayState: { visible: false, nodeId: null },
     openGenerationPanel: vi.fn(),
@@ -271,6 +272,8 @@ function createCanvasStore(canvasData: CanvasData | null = null): CanvasStore {
     clearSelection: vi.fn(),
     deleteSelected: vi.fn(),
     setActivePlayingNode: vi.fn(),
+    setExpandedNodeId: vi.fn(),
+    toggleExpandedNode: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
   };

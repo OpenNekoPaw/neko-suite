@@ -25,7 +25,12 @@ import {
   inferNkProjectType,
   isDocumentArchiveResourceRef,
   isDocumentResourceStatusReason,
+  isCanvasNodeType,
+  isProjectedCanvasData,
+  isProjectedCanvasSource,
   loadNkc,
+  createProjectionAdapterRegistry,
+  summarizeCanvasSubsystems,
 } from '@neko/shared';
 import type {
   CanvasCreateCompositeRequest,
@@ -35,6 +40,7 @@ import type {
   CanvasDeriveNodeResult,
   CanvasExtractStructuredContentRequest,
   CanvasExtractStructuredContentResult,
+  CanvasData,
   CanvasNode,
   CanvasNodeType,
   CanvasUpdateBlockRequest,
@@ -50,6 +56,14 @@ import type {
   CanvasAgentContentPayload,
   DocumentResourceStatusReason,
   DocumentArchiveResourceRef,
+  ProjectionAdapter,
+  ProjectionAdapterRegistry,
+  ProjectionDisposable,
+  ProjectionSourceChangeEvent,
+  ProjectionWriteBack,
+  ProjectionWriteBackResult,
+  ProjectedCanvasData,
+  ProjectedCanvasSource,
   NekoStoryAPI,
   NekoStoryScriptIndex,
   ScriptScene,
@@ -69,6 +83,12 @@ function readPlaybackMediaType(value: unknown): PlaybackMediaType {
   return value === 'video' || value === 'audio' ? value : 'auto';
 }
 
+function assertCanvasNodeType(type: CanvasNodeType | undefined): void {
+  if (type !== undefined && !isCanvasNodeType(type)) {
+    throw new Error(`Unsupported Canvas node type "${type}"`);
+  }
+}
+
 function isPathInsideRoot(filePath: string, rootPath: string): boolean {
   const resolvedFilePath = realpathIfExists(filePath);
   const resolvedRootPath = realpathIfExists(rootPath);
@@ -85,6 +105,47 @@ function realpathIfExists(filePath: string): string {
   } catch {
     return path.normalize(filePath);
   }
+}
+
+function readCanvasSubsystemSummary(
+  canvasData: Record<string, unknown>,
+  nodes: readonly unknown[],
+): string | undefined {
+  const reportedStatus = canvasData._subsystemStatus;
+  if (
+    reportedStatus &&
+    typeof reportedStatus === 'object' &&
+    !Array.isArray(reportedStatus) &&
+    Array.isArray((reportedStatus as { activeSubsystems?: unknown }).activeSubsystems)
+  ) {
+    const activeSubsystems = (
+      reportedStatus as { activeSubsystems: readonly unknown[] }
+    ).activeSubsystems.filter((item): item is string => typeof item === 'string');
+    return activeSubsystems.length > 0 ? activeSubsystems.join(', ') : undefined;
+  }
+
+  const structurallyTypedNodes = nodes.filter(
+    (node): node is CanvasNode =>
+      typeof node === 'object' &&
+      node !== null &&
+      !Array.isArray(node) &&
+      typeof (node as { type?: unknown }).type === 'string' &&
+      isCanvasNodeType((node as { type: string }).type),
+  );
+  const summary = summarizeCanvasSubsystems({ nodes: structurallyTypedNodes });
+  return summary.activeSubsystems.length > 0 ? summary.activeSubsystems.join(', ') : undefined;
+}
+
+function createProjectionSourceKey(source: ProjectedCanvasSource): string {
+  return `${source.kind}:${source.uri}`;
+}
+
+function hashProjectionSource(value: string): string {
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(index);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 /**
@@ -297,6 +358,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private _activeStreams = new Map<vscode.WebviewPanel, Map<string, PlaybackHandle>>();
   private readonly localResourceAccess: LocalResourceAccessService;
   private readonly documentResourceCacheRoots: readonly vscode.Uri[];
+  private readonly projectionAdapters: ProjectionAdapterRegistry = createProjectionAdapterRegistry();
+  private readonly projectionSubscriptions = new Map<string, ProjectionDisposable>();
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.localResourceAccess = createDefaultLocalResourceAccessService({
@@ -553,6 +616,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   async listNodes(type?: CanvasNodeType): Promise<CanvasNode[]> {
     if (!this.activeWebviewPanel) return [];
+    assertCanvasNodeType(type);
     const result = await this.sendRequest<{ nodes: CanvasNode[] }>('nodes.list', {
       nodeType: type,
     });
@@ -578,6 +642,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     preset?: string,
   ): Promise<string> {
     if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    assertCanvasNodeType(type);
     const result = await this.sendRequest<{ nodeId: string }>('nodes.create', {
       payload: { type, position, data, preset },
     });
@@ -587,6 +652,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   async deriveNode(request: CanvasDeriveNodeRequest): Promise<CanvasDeriveNodeResult> {
     if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    assertCanvasNodeType(request.targetType);
     const result = await this.sendRequest<CanvasDeriveNodeResult>('nodes.derive', {
       payload: request,
     });
@@ -604,6 +670,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     request: CanvasCreateCompositeRequest,
   ): Promise<CanvasCreateCompositeResult> {
     if (!this.activeWebviewPanel) throw new Error('No active canvas editor');
+    assertCanvasNodeType(request.containerType);
+    for (const child of request.children) {
+      assertCanvasNodeType(child.type);
+    }
     const result = await this.sendRequest<CanvasCreateCompositeResult>('nodes.createComposite', {
       payload: request,
     });
@@ -686,6 +756,132 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       operationType: 'nodes.applyAgentContent',
     });
     return result;
+  }
+
+  registerProjectionAdapter(adapter: ProjectionAdapter): ProjectionDisposable {
+    const registration = this.projectionAdapters.register(adapter);
+    const key = createProjectionSourceKey({ kind: adapter.kind, uri: adapter.sourceUri });
+    const existing = this.projectionSubscriptions.get(key);
+    existing?.dispose();
+    this.projectionSubscriptions.set(
+      key,
+      adapter.onSourceChanged((event) => this.handleProjectionSourceChanged(event)),
+    );
+    return {
+      dispose: () => {
+        registration.dispose();
+        const subscription = this.projectionSubscriptions.get(key);
+        subscription?.dispose();
+        this.projectionSubscriptions.delete(key);
+      },
+    };
+  }
+
+  async openProjectedCanvas(source: ProjectedCanvasSource): Promise<ProjectedCanvasData> {
+    const adapter = this.getProjectionAdapter(source);
+    const projected = await adapter.project();
+    const cacheUri = this.getProjectionCacheUri(source);
+    const data: ProjectedCanvasData = {
+      ...projected,
+      projected: true,
+      projectionSource: source,
+      projectionStatus: {
+        ...(projected.projectionStatus ?? { state: 'clean' }),
+        state: 'clean',
+        cacheUri: cacheUri.toString(),
+        updatedAt: Date.now(),
+      },
+    };
+    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(cacheUri.fsPath)));
+    await vscode.workspace.fs.writeFile(
+      cacheUri,
+      Buffer.from(JSON.stringify(data, null, 2), 'utf-8'),
+    );
+    return data;
+  }
+
+  async writeProjectionBack(
+    source: ProjectedCanvasSource,
+    changes: readonly ProjectionWriteBack[],
+  ): Promise<ProjectionWriteBackResult> {
+    const adapter = this.getProjectionAdapter(source);
+    return adapter.writeBack(changes);
+  }
+
+  private getProjectionAdapter(source: ProjectedCanvasSource): ProjectionAdapter {
+    const adapter = this.projectionAdapters.get(source.kind, source.uri);
+    if (!adapter) {
+      throw new Error(`No ${source.kind} projection adapter registered for ${source.uri}`);
+    }
+    return adapter;
+  }
+
+  private getProjectionCacheUri(source: ProjectedCanvasSource): vscode.Uri {
+    const workspace = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const root = workspace
+      ? vscode.Uri.joinPath(workspace, '.neko', '.cache')
+      : vscode.Uri.joinPath(this.context.globalStorageUri, 'projected-canvas-cache');
+    return vscode.Uri.joinPath(root, `${source.kind}-${hashProjectionSource(source.uri)}.nkc`);
+  }
+
+  private handleProjectionSourceChanged(event: ProjectionSourceChangeEvent): void {
+    this.activeWebviewPanel?.webview.postMessage({
+      type: 'projectionSourceChanged',
+      event,
+    });
+    this._onDidChangeCanvas.fire({
+      type: 'update',
+      entityType: 'operation',
+      reason: 'projectionSourceChanged',
+      operationType: 'projection.source.changed',
+      documentUri: this.activeDocument?.uri.toString(),
+    });
+  }
+
+  private async tryRegenerateProjectedCanvas(
+    data: ProjectedCanvasData,
+    webview: vscode.Webview,
+  ): Promise<void> {
+    const adapter = this.projectionAdapters.get(
+      data.projectionSource.kind,
+      data.projectionSource.uri,
+    );
+    if (!adapter) {
+      return;
+    }
+
+    try {
+      const projected = await adapter.project();
+      const cacheUri = this.getProjectionCacheUri(data.projectionSource);
+      const nextData: ProjectedCanvasData = {
+        ...projected,
+        projected: true,
+        projectionSource: data.projectionSource,
+        viewport: data.viewport ?? projected.viewport,
+        projectionStatus: {
+          state: 'clean',
+          cacheUri: cacheUri.toString(),
+          updatedAt: Date.now(),
+        },
+      };
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(cacheUri.fsPath)));
+      await vscode.workspace.fs.writeFile(
+        cacheUri,
+        Buffer.from(JSON.stringify(nextData, null, 2), 'utf-8'),
+      );
+      webview.postMessage({ type: 'update', data: nextData });
+      this.syncOutline(nextData as unknown as Record<string, unknown>);
+      this.syncStatusBar(nextData as unknown as Record<string, unknown>);
+    } catch (error) {
+      webview.postMessage({
+        type: 'projectionStatus',
+        status: {
+          state: 'writeback-error',
+          message: error instanceof Error ? error.message : String(error),
+          updatedAt: Date.now(),
+        },
+      });
+    }
   }
 
   async getStoryboardExecutionSummary(
@@ -875,19 +1071,24 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             );
           }
           if (data) {
+            const canvasRecord = data as unknown as Record<string, unknown>;
             await this.normalizeCanvasPathsForLoad(
-              data as Record<string, unknown>,
+              canvasRecord,
               document.uri,
               webviewPanel.webview,
             );
+            if (isProjectedCanvasData(data)) {
+              await this.tryRegenerateProjectedCanvas(data, webviewPanel.webview);
+            }
           }
           webviewPanel.webview.postMessage({ type: 'update', data });
           // Sync outline & status bar on initial load
           if (data) {
-            this.syncOutline(data as Record<string, unknown>);
-            this.syncStatusBar(data as Record<string, unknown>);
+            const canvasRecord = data as unknown as Record<string, unknown>;
+            this.syncOutline(canvasRecord);
+            this.syncStatusBar(canvasRecord);
           }
-          this.reportCanvasReady(document.uri, data as Record<string, unknown> | null);
+          this.reportCanvasReady(document.uri, data as unknown as Record<string, unknown> | null);
         } catch {
           // File is empty or invalid JSON — send null to use defaults
           webviewPanel.webview.postMessage({ type: 'update', data: null });
@@ -900,8 +1101,15 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         try {
           const data = message.data as Record<string, unknown>;
           await this.normalizeCanvasPathsForSave(data, document.uri);
+          const projectedCanvas = data as unknown as CanvasData;
+          const targetUri = isProjectedCanvasData(projectedCanvas)
+            ? this.getProjectionCacheUri(projectedCanvas.projectionSource)
+            : document.uri;
           const content = JSON.stringify(data, null, 2);
-          await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'));
+          if (targetUri.toString() !== document.uri.toString()) {
+            await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(targetUri.fsPath)));
+          }
+          await vscode.workspace.fs.writeFile(targetUri, Buffer.from(content, 'utf-8'));
           // Sync outline & status bar on every save
           this.syncOutline(data);
           this.syncStatusBar(data);
@@ -915,6 +1123,28 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const data = message.data as Record<string, unknown>;
         this.syncStatusBar(data);
         this.syncOutline(data);
+        break;
+      }
+      case 'projection.writeBack': {
+        const requestId = message._requestId as number | undefined;
+        if (requestId === undefined) break;
+        try {
+          const source = message.source;
+          const changes = Array.isArray(message.changes)
+            ? (message.changes as ProjectionWriteBack[])
+            : [];
+          if (!isProjectedCanvasSource(source)) {
+            throw new Error('Invalid projected Canvas source');
+          }
+          const result = await this.writeProjectionBack(source, changes);
+          webviewPanel.webview.postMessage({ type: '_response', _requestId: requestId, result });
+        } catch (error) {
+          webviewPanel.webview.postMessage({
+            type: '_response',
+            _requestId: requestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         break;
       }
       case 'openMediaPreview': {
@@ -2523,12 +2753,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const viewport = (canvasData.viewport ?? { zoom: 1 }) as Record<string, unknown>;
     const selection = (canvasData._selection ?? {}) as Record<string, unknown>;
     const selectedNodeIds = (selection.nodeIds ?? []) as unknown[];
+    const subsystemSummary = readCanvasSubsystemSummary(canvasData, nodes);
 
     this.statusBar.update({
       nodeCount: nodes.length,
       connectionCount: connections.length,
       zoom: Number(viewport.zoom ?? 1),
       selectedCount: selectedNodeIds.length,
+      subsystemSummary,
     });
   }
 

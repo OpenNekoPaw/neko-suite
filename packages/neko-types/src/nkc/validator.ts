@@ -6,6 +6,7 @@
 // =============================================================================
 
 import type { ValidationResult, ValidationError } from '../config/config-adapter';
+import { CANVAS_CONNECTION_TYPES, CANVAS_NODE_TYPES } from '../types/canvas';
 
 // =============================================================================
 // Type Guards (internal helpers)
@@ -35,27 +36,11 @@ function isArray(v: unknown): v is unknown[] {
 // Allowed values
 // =============================================================================
 
-const ALLOWED_NODE_TYPES = new Set([
-  // Core nodes
-  'media',
-  'storyboard',
-  'annotation',
-  'group',
-  // Rich content
-  'text',
-  'artboard',
-  // Storyboard system
-  'shot',
-  'scene',
-  'gallery',
-  // Content reference
-  'script',
-  'document',
-  'model',
-  'canvas-embed',
-]);
+const ALLOWED_NODE_TYPES = new Set<string>(CANVAS_NODE_TYPES);
 
 const ALLOWED_ANCHOR_VALUES = new Set(['top', 'right', 'bottom', 'left']);
+
+const ALLOWED_CONNECTION_TYPES = new Set<string>(CANVAS_CONNECTION_TYPES);
 
 // =============================================================================
 // Validate options
@@ -100,9 +85,20 @@ function validateRoot(
     validateViewport(data['viewport'], 'viewport', errors);
   }
 
+  // projected — optional boolean marker for projected Canvas caches
+  if (data['projected'] !== undefined && !isBoolean(data['projected'])) {
+    errors.push({ field: 'projected', message: 'must be a boolean', severity: 'error' });
+  }
+
   // linkedProject — optional string
   if (data['linkedProject'] !== undefined && !isString(data['linkedProject'])) {
     errors.push({ field: 'linkedProject', message: 'must be a string', severity: 'error' });
+  }
+
+  for (const field of ['narrative', 'behavior', 'entityGraph', 'memoryGraph']) {
+    if (data[field] !== undefined && !isRecord(data[field])) {
+      errors.push({ field, message: 'must be an object', severity: 'error' });
+    }
   }
 }
 
@@ -142,18 +138,18 @@ function validateNode(
     return;
   }
 
+  const structuralErrors: ValidationError[] = [];
+
   // id — required string
   if (!isString(node['id'])) {
-    errors.push({ field: `${path}.id`, message: 'must be a string', severity: 'error' });
+    structuralErrors.push({ field: `${path}.id`, message: 'must be a string', severity: 'error' });
   }
 
   // type — required, must be in allowed set
   if (!isString(node['type'])) {
-    errors.push({ field: `${path}.type`, message: 'must be a string', severity: 'error' });
-  } else if (!ALLOWED_NODE_TYPES.has(node['type'])) {
-    errors.push({
+    structuralErrors.push({
       field: `${path}.type`,
-      message: `invalid node type: "${node['type']}"`,
+      message: 'must be a string',
       severity: 'error',
     });
   }
@@ -161,32 +157,74 @@ function validateNode(
   // position — required object with x/y
   const position = node['position'];
   if (!isRecord(position)) {
-    errors.push({ field: `${path}.position`, message: 'must be an object', severity: 'error' });
+    structuralErrors.push({
+      field: `${path}.position`,
+      message: 'must be an object',
+      severity: 'error',
+    });
   } else {
     if (!isNumber(position['x'])) {
-      errors.push({ field: `${path}.position.x`, message: 'must be a number', severity: 'error' });
+      structuralErrors.push({
+        field: `${path}.position.x`,
+        message: 'must be a number',
+        severity: 'error',
+      });
     }
     if (!isNumber(position['y'])) {
-      errors.push({ field: `${path}.position.y`, message: 'must be a number', severity: 'error' });
+      structuralErrors.push({
+        field: `${path}.position.y`,
+        message: 'must be a number',
+        severity: 'error',
+      });
     }
   }
 
   // size — required object with width/height
   const size = node['size'];
   if (!isRecord(size)) {
-    errors.push({ field: `${path}.size`, message: 'must be an object', severity: 'error' });
+    structuralErrors.push({
+      field: `${path}.size`,
+      message: 'must be an object',
+      severity: 'error',
+    });
   } else {
     if (!isNumber(size['width'])) {
-      errors.push({ field: `${path}.size.width`, message: 'must be a number', severity: 'error' });
+      structuralErrors.push({
+        field: `${path}.size.width`,
+        message: 'must be a number',
+        severity: 'error',
+      });
     }
     if (!isNumber(size['height'])) {
-      errors.push({ field: `${path}.size.height`, message: 'must be a number', severity: 'error' });
+      structuralErrors.push({
+        field: `${path}.size.height`,
+        message: 'must be a number',
+        severity: 'error',
+      });
     }
   }
 
   // zIndex — required number
   if (!isNumber(node['zIndex'])) {
-    errors.push({ field: `${path}.zIndex`, message: 'must be a number', severity: 'error' });
+    structuralErrors.push({
+      field: `${path}.zIndex`,
+      message: 'must be a number',
+      severity: 'error',
+    });
+  }
+
+  errors.push(...structuralErrors);
+
+  if (
+    structuralErrors.length === 0 &&
+    isString(node['type']) &&
+    !ALLOWED_NODE_TYPES.has(node['type'])
+  ) {
+    warnings.push({
+      field: `${path}.type`,
+      message: `unknown node type: "${node['type']}"`,
+      severity: 'warning',
+    });
   }
 
   // rotation — optional number
@@ -248,7 +286,7 @@ function validateConnection(
   connection: unknown,
   path: string,
   errors: ValidationError[],
-  _warnings: ValidationError[],
+  warnings: ValidationError[],
 ): void {
   if (!isRecord(connection)) {
     errors.push({ field: path, message: 'must be an object', severity: 'error' });
@@ -293,6 +331,18 @@ function validateConnection(
       severity: 'error',
     });
   }
+
+  if (connection['type'] !== undefined) {
+    if (!isString(connection['type'])) {
+      errors.push({ field: `${path}.type`, message: 'must be a string', severity: 'error' });
+    } else if (!ALLOWED_CONNECTION_TYPES.has(connection['type'])) {
+      warnings.push({
+        field: `${path}.type`,
+        message: `unknown connection type: "${connection['type']}"`,
+        severity: 'warning',
+      });
+    }
+  }
 }
 
 // =============================================================================
@@ -334,11 +384,16 @@ export function validateNkc(data: unknown, options: NkcValidateOptions = {}): Va
     }
   }
 
-  const effectiveErrors = options.strict ? [...errors, ...warnings] : errors;
+  const effectiveErrors = options.strict
+    ? [
+        ...errors,
+        ...warnings.map((warning): ValidationError => ({ ...warning, severity: 'error' })),
+      ]
+    : errors;
 
   return {
     valid: effectiveErrors.length === 0,
-    errors: effectiveErrors.filter((e) => e.severity === 'error'),
+    errors: effectiveErrors,
     warnings: options.strict ? [] : warnings,
   };
 }

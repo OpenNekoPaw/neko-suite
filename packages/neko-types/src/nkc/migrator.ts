@@ -7,9 +7,9 @@
 import type { CanvasData, CanvasNode } from '../types/canvas';
 import type { ContainerCapability } from '../types/canvas-layered';
 
-export type NkcVersion = '1.0' | '2.0';
+export type NkcVersion = '1.0' | '2.0' | '2.1';
 
-export const CURRENT_NKC_VERSION: NkcVersion = '2.0';
+export const CURRENT_NKC_VERSION: NkcVersion = '2.1';
 
 export interface NkcMigrationStep {
   from: string;
@@ -48,25 +48,45 @@ export function migrateNkc(data: CanvasData): NkcMigrationResult {
     };
   }
 
-  const migrated = migrateNkcV1ToV2(data);
+  const steps: NkcMigrationStep[] = [];
+  let migrated: CanvasData = data;
+
+  if (fromVersion === '2.0') {
+    migrated = migrateNkcV2ToV2_1(migrated);
+    steps.push({
+      from: '2.0',
+      to: '2.1',
+      description: 'Normalized NKC v2.0 Canvas data to the v2.1 optional extension version.',
+    });
+  } else {
+    migrated = migrateNkcV1ToV2(migrated);
+    steps.push({
+      from: fromVersion,
+      to: '2.0',
+      description:
+        'Mirrored legacy Scene/Group/Shot containment into parentId and container.childIds.',
+    });
+
+    migrated = migrateNkcV2ToV2_1(migrated);
+    steps.push({
+      from: '2.0',
+      to: '2.1',
+      description: 'Normalized NKC v2.0 Canvas data to the v2.1 optional extension version.',
+    });
+  }
 
   return {
     data: migrated,
     fromVersion,
     toVersion: CURRENT_NKC_VERSION,
     migrated: true,
-    steps: [
-      {
-        from: fromVersion,
-        to: CURRENT_NKC_VERSION,
-        description:
-          'Mirrored legacy Scene/Group/Shot containment into parentId and container.childIds.',
-      },
-    ],
+    steps,
     warnings:
-      fromVersion === '1.0' || fromVersion === undefined
+      fromVersion === '1.0' || fromVersion === '2.0'
         ? []
-        : [`Unknown NKC version "${fromVersion}" migrated with the v1-to-v2 compatibility path.`],
+        : [
+            `Unknown NKC version "${fromVersion}" migrated with the v1-to-v2-to-v2.1 compatibility path.`,
+          ],
   };
 }
 
@@ -83,8 +103,17 @@ export function migrateNkcV1ToV2(data: CanvasData): CanvasData {
 
   return {
     ...data,
-    version: CURRENT_NKC_VERSION,
+    version: '2.0',
     nodes: data.nodes.map((node) => mirrorLegacyOrganization(node, legacyParentByChildId)),
+    connections: data.connections.map((connection) => ({ ...connection })),
+  };
+}
+
+export function migrateNkcV2ToV2_1(data: CanvasData): CanvasData {
+  return {
+    ...data,
+    version: CURRENT_NKC_VERSION,
+    nodes: data.nodes.map((node) => ({ ...node })),
     connections: data.connections.map((connection) => ({ ...connection })),
   };
 }

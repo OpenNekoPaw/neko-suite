@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { CanvasNode, CanvasNodeType, CanvasViewport } from '@neko/shared';
+import type { NodeTypeDescriptorRegistry } from './nodeTypeDescriptor';
 
 export interface NodeRendererCommonProps {
   viewport: CanvasViewport;
@@ -22,12 +23,15 @@ export interface NodeRendererCommonProps {
   onRotateEnd?: (nodeId: string, rotation: number) => void;
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: (nodeId: string) => void;
 }
 
 export interface NodeRendererContext extends NodeRendererCommonProps {
   node: CanvasNode;
   allNodes: CanvasNode[];
   selectedNodeIds: string[];
+  nodeTypeDescriptors?: NodeTypeDescriptorRegistry;
   onScriptLoadScenes?: (nodeId: string, scriptPath: string) => void;
   onScriptOpen?: (scriptPath: string) => void;
   onScriptNavigateToScene?: (linkedSceneGroupId: string) => void;

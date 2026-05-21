@@ -29,7 +29,10 @@ export type { ModelNodeProps } from './ModelNode';
 export { CanvasEmbedNode } from './CanvasEmbedNode';
 export type { CanvasEmbedNodeProps } from './CanvasEmbedNode';
 
-export { createBuiltInNodeRendererRegistry, renderCanvasNode } from './nodeRendererRegistry';
+export { FallbackNode } from './FallbackNode';
+export type { FallbackNodeProps } from './FallbackNode';
+
+export { renderCanvasNode } from './nodeRendererRegistry';
 export type {
   NodeRenderer,
   NodeRendererCommonProps,

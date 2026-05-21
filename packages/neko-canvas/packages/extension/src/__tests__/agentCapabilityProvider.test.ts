@@ -3,6 +3,10 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const providerSource = readFileSync(join(__dirname, '../agentCapabilityProvider.ts'), 'utf-8');
+const toolNamesSource = readFileSync(
+  join(__dirname, '../../../../../neko-types/src/types/tool-names.ts'),
+  'utf-8',
+);
 
 describe('agentCapabilityProvider storyboard export contracts', () => {
   it('registers the target-aware Agent content command and editor provider bridge', () => {
@@ -34,6 +38,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE');
   });
 
   it('marks Canvas query and mutation tools with target-aware safety metadata', () => {
@@ -50,5 +55,26 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('CANVAS_AGENT_DERIVE_TARGET_PRESETS');
     expect(providerSource).toContain('CANVAS_AGENT_CONTAINER_PRESETS');
     expect(providerSource).not.toContain("'shot',\n                'scene'");
+  });
+
+  it('validates Canvas Agent node type inputs at the provider boundary', () => {
+    expect(providerSource).toContain('isCanvasNodeType');
+    expect(providerSource).toContain('readOptionalCanvasNodeType(args.type)');
+    expect(providerSource).toContain("readOptionalCanvasNodeType(value.type, 'child node type')");
+    expect(providerSource).toContain("readOptionalCanvasNodeType(args.targetType, 'derive target type')");
+  });
+
+  it('requests additive subsystem metadata only when callers opt in', () => {
+    expect(providerSource).toContain('includeSubsystemMetadata');
+    expect(providerSource).toContain(
+      'includeSubsystemMetadata: args.includeSubsystemMetadata as boolean | undefined',
+    );
+  });
+
+  it('registers narrative traversal as a read-only mixed Canvas tool', () => {
+    expect(providerSource).toContain('traverseNarrativeFlow');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE');
+    expect(toolNamesSource).toContain("CANVAS_NARRATIVE_TRAVERSE: 'canvas_narrative_traverse'");
+    expect(providerSource).toContain('Ignores storyboard, behavior, entity, and memory nodes');
   });
 });

@@ -236,7 +236,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       getById: async (id) => {
         const entities = await getAssetEntities();
         const entity = entities.find((candidate) => candidate.id === id);
-        return entity ? mapAssetEntityToCanvasAsset(entity) : undefined;
+        return entity ? mapAssetEntityToCanvasAsset(entity) : null;
       },
     },
     importAsset: (asset) => canvasEditorProvider.postImportAsset(asset),
@@ -271,6 +271,11 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
         canvasEditorProvider.generateImageForNode(nodeId, childNodeId),
       generateBatch: (nodeIds) => canvasEditorProvider.generateBatchForNodes(nodeIds),
       onSelectionChange: canvasEditorProvider.onSelectionChange,
+    },
+    projections: {
+      registerAdapter: (adapter) => canvasEditorProvider.registerProjectionAdapter(adapter),
+      open: (source) => canvasEditorProvider.openProjectedCanvas(source),
+      writeBack: (source, changes) => canvasEditorProvider.writeProjectionBack(source, changes),
     },
     events: {
       onDidChangeAssets: new vscode.EventEmitter<import('./api').AssetChangeEvent>().event,
@@ -479,7 +484,7 @@ function registerCommands(
           return;
         }
 
-        logger.info(`importAsset: received ${asset.path} (${asset.type ?? 'unknown'})`);
+        getRootLogger().info(`importAsset: received ${asset.path} (${asset.type ?? 'unknown'})`);
       },
     ),
   );
@@ -660,7 +665,7 @@ function registerCommands(
           await vscode.commands.executeCommand('vscode.openWith', uri, 'neko.audioPreview');
         }
       } catch (error) {
-        logger.error(`Failed to open media preview: ${error}`);
+        getRootLogger().error(`Failed to open media preview: ${error}`);
       }
     }),
   );

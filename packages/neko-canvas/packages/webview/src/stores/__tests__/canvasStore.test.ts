@@ -341,6 +341,33 @@ describe('canvasStore scene container actions', () => {
     });
     expect(JSON.stringify(summary)).not.toContain('blob:runtime-preview');
   });
+
+  it('applies subsystem metadata defaults when trigger nodes are loaded or added', () => {
+    useCanvasStore.getState().setCanvasData(
+      createCanvasData([
+        {
+          id: 'choice-1',
+          type: 'choice',
+          position: { x: 0, y: 0 },
+          size: { width: 220, height: 120 },
+          zIndex: 1,
+          data: {},
+        },
+      ]),
+    );
+
+    expect(useCanvasStore.getState().canvasData?.narrative).toEqual({ variables: [] });
+
+    useCanvasStore.getState().addNode({
+      type: 'state',
+      position: { x: 260, y: 0 },
+      size: { width: 220, height: 120 },
+      zIndex: 2,
+      data: {},
+    });
+
+    expect(useCanvasStore.getState().canvasData?.behavior).toEqual({ blackboard: [] });
+  });
 });
 
 describe('playbackStore runtime handoff', () => {

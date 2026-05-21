@@ -21,8 +21,10 @@ import type {
   CanvasAgentContentPayload,
   FieldBinding,
   CanvasUpdateBlockRequest,
+  ProjectedCanvasStatus,
+  ProjectionSourceChangeEvent,
 } from '@neko/shared';
-import { isJsonPointerPath } from '@neko/shared';
+import { isCanvasNodeType, isJsonPointerPath } from '@neko/shared';
 import { setLocale } from '../i18n';
 import { useCanvasOperationStore } from '../stores/canvasOperationStore';
 import {
@@ -86,6 +88,8 @@ export interface UseVSCodeMessagesOptions {
   extractStructuredContent?: (request: CanvasExtractStructuredContentRequest) => unknown;
   getActiveContext?: (request?: CanvasAgentActiveContextRequest) => unknown;
   applyAgentContent?: (payload: CanvasAgentContentPayload) => unknown;
+  onProjectionStatus?: (status: ProjectedCanvasStatus) => void;
+  onProjectionSourceChanged?: (event: ProjectionSourceChangeEvent) => void;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, childNodeId?: string) => void;
 }
@@ -174,6 +178,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     extractStructuredContent,
     getActiveContext,
     applyAgentContent,
+    onProjectionStatus,
+    onProjectionSourceChanged,
     onUpdateNodeImage,
   } = options;
 
@@ -217,6 +223,10 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   getActiveContextRef.current = getActiveContext;
   const applyAgentContentRef = useRef(applyAgentContent);
   applyAgentContentRef.current = applyAgentContent;
+  const onProjectionStatusRef = useRef(onProjectionStatus);
+  onProjectionStatusRef.current = onProjectionStatus;
+  const onProjectionSourceChangedRef = useRef(onProjectionSourceChanged);
+  onProjectionSourceChangedRef.current = onProjectionSourceChanged;
   const onUpdateNodeImageRef = useRef(onUpdateNodeImage);
   onUpdateNodeImageRef.current = onUpdateNodeImage;
 
@@ -317,6 +327,18 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               onTimelineSyncRef.current?.(message.payload as CanvasTimelineSyncPayload);
             }
             break;
+          case 'projectionStatus':
+            if (isRecord(message.status)) {
+              onProjectionStatusRef.current?.(message.status as unknown as ProjectedCanvasStatus);
+            }
+            break;
+          case 'projectionSourceChanged':
+            if (isRecord(message.event)) {
+              onProjectionSourceChangedRef.current?.(
+                message.event as unknown as ProjectionSourceChangeEvent,
+              );
+            }
+            break;
 
           // ----------------------------------------------------------------
           // nodes.* — request/response API for MCP Canvas tools
@@ -327,6 +349,14 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             const requestId = message._requestId as number | undefined;
             if (requestId === undefined) break;
             const typeFilter = message.nodeType as string | undefined;
+            if (typeFilter !== undefined && !isCanvasNodeType(typeFilter)) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: `Unsupported Canvas node type "${typeFilter}"`,
+              });
+              break;
+            }
             const nodes = getNodesRef.current?.(typeFilter) ?? [];
             vscode.postMessage({ type: '_response', _requestId: requestId, nodes });
             break;
@@ -355,23 +385,40 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             if (requestId === undefined) break;
             const payload = (message.payload as
               | {
-                  type?: CanvasNodeType;
+                  type?: unknown;
                   position?: { x: number; y: number };
                   data?: Record<string, unknown>;
                   preset?: string;
                 }
               | undefined) ?? { data: {} };
-            const id = withOperationSource(
-              'ai',
-              () =>
-                createNodeRef.current?.({
-                  type: payload.type ?? 'annotation',
-                  position: payload.position ?? { x: 0, y: 0 },
-                  data: payload.data ?? {},
-                  preset: payload.preset,
-                }) ?? '',
-            );
-            vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
+            const type = payload.type ?? 'annotation';
+            if (!isCanvasNodeType(type)) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: `Unsupported Canvas node type "${String(type)}"`,
+              });
+              break;
+            }
+            try {
+              const id = withOperationSource(
+                'ai',
+                () =>
+                  createNodeRef.current?.({
+                    type,
+                    position: payload.position ?? { x: 0, y: 0 },
+                    data: payload.data ?? {},
+                    preset: payload.preset,
+                  }) ?? '',
+              );
+              vscode.postMessage({ type: '_response', _requestId: requestId, nodeId: id });
+            } catch (error) {
+              vscode.postMessage({
+                type: '_response',
+                _requestId: requestId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
             break;
           }
           case 'nodes.derive': {

@@ -99,6 +99,9 @@
   --connection-default:   color-mix(in srgb, var(--neko-fg-secondary) 76%, transparent);
   --connection-sequence:  #30d158;
   --connection-reference: #ff9f0a;
+  --connection-choice:    #f97316;
+  --connection-transition:#38bdf8;
+  --connection-association:#a855f7;
 
   /* ── Scrollbar ───────────────────────────────────────────────────────────── */
   --scrollbar-bg:   color-mix(in srgb, var(--neko-fg) 12%, transparent);

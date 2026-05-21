@@ -16,6 +16,7 @@
  *   NKV-007: toolbar can pick .nkc files into canvas-embed nodes
  *   NKV-008: toolbar pickers cover script/document/model reference nodes
  *   NKV-009: composable Agent node operations use payload wrappers
+ *   NKV-010: projected Canvas write-back routes through projection adapters
  */
 
 import { describe, it, expect } from 'vitest';
@@ -28,6 +29,7 @@ const webviewSource = readFileSync(
   join(__dirname, '../../../webview/src/hooks/useVSCodeMessages.ts'),
   'utf-8',
 );
+const canvasAppSource = readFileSync(join(__dirname, '../../../webview/src/CanvasApp.tsx'), 'utf-8');
 const operationStoreSource = readFileSync(
   join(__dirname, '../../../webview/src/stores/canvasOperationStore.ts'),
   'utf-8',
@@ -58,7 +60,8 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('consumes payload wrapper in webview', () => {
       expect(webviewSource).toContain('const payload = (message.payload as');
-      expect(webviewSource).toContain('type: payload.type ??');
+      expect(webviewSource).toContain("const type = payload.type ?? 'annotation'");
+      expect(webviewSource).toContain('type,');
       expect(webviewSource).toContain('position: payload.position ??');
       expect(webviewSource).toContain('data: payload.data ?? {}');
       expect(webviewSource).toContain('preset: payload.preset');
@@ -169,9 +172,8 @@ describe('canvasEditorProvider message contracts', () => {
         "sendRequest<CanvasCreateCompositeResult>('nodes.createComposite'",
       );
       expect(providerSource).toContain("sendRequest<CanvasUpdateBlockResult>('nodes.updateBlock'");
-      expect(providerSource).toContain(
-        "sendRequest<CanvasExtractStructuredContentResult>('nodes.extractStructuredContent'",
-      );
+      expect(providerSource).toContain('sendRequest<CanvasExtractStructuredContentResult>');
+      expect(providerSource).toContain("'nodes.extractStructuredContent'");
       expect(providerSource).toContain('payload: request');
     });
 
@@ -186,6 +188,39 @@ describe('canvasEditorProvider message contracts', () => {
     it('sendRequest rejects typed errors returned by the webview', () => {
       expect(providerSource).toContain("typeof (value as { error?: unknown }).error === 'string'");
       expect(providerSource).toContain('reject(new Error((value as { error: string }).error));');
+    });
+
+    it('validates registered node types before cross-boundary Agent operations', () => {
+      expect(providerSource).toContain('assertCanvasNodeType(type)');
+      expect(providerSource).toContain('assertCanvasNodeType(request.targetType)');
+      expect(providerSource).toContain('assertCanvasNodeType(request.containerType)');
+      expect(providerSource).toContain('assertCanvasNodeType(child.type)');
+      expect(webviewSource).toContain('isCanvasNodeType(typeFilter)');
+      expect(webviewSource).toContain('isCanvasNodeType(type)');
+    });
+  });
+
+  describe('NKV-010: projected Canvas contracts', () => {
+    it('exposes projection adapter registration and write-back through the extension API', () => {
+      const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
+      expect(extensionSource).toContain('projections: {');
+      expect(extensionSource).toContain('registerProjectionAdapter(adapter)');
+      expect(extensionSource).toContain('openProjectedCanvas(source)');
+      expect(extensionSource).toContain('writeProjectionBack(source, changes)');
+    });
+
+    it('routes projected write-back requests through the provider instead of mutating JSON in webview', () => {
+      expect(providerSource).toContain("case 'projection.writeBack'");
+      expect(providerSource).toContain('this.writeProjectionBack(source, changes)');
+      expect(providerSource).toContain('adapter.writeBack(changes)');
+      expect(canvasAppSource).toContain("type: 'projection.writeBack'");
+    });
+
+    it('saves projected canvas layout to cache path rather than the source document', () => {
+      expect(providerSource).toContain('this.getProjectionCacheUri(');
+      expect(providerSource).toContain('const projectedCanvas = data as unknown as CanvasData');
+      expect(providerSource).toContain('isProjectedCanvasData(projectedCanvas)');
+      expect(providerSource).toContain("'.neko', '.cache'");
     });
   });
 

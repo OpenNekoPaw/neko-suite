@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { ContainerSection, DocumentArchiveResourceRef } from '@neko/shared';
 import { NodeHeader } from './NodeHeader';
 import type { NodeHeaderBadge } from './NodeHeader';
@@ -18,10 +18,10 @@ export interface NodeShellProps {
 export function NodeShell({ section, context }: NodeShellProps) {
   const descriptors = useMemo(() => createBuiltInNodeTypeDescriptors(), []);
   const openContentOverlay = useCanvasStore((s) => s.openContentOverlay);
-  const [isCollapsed, setIsCollapsed] = useState(() => context.node.container?.collapsed ?? false);
+  const setExpandedNodeId = useCanvasStore((s) => s.setExpandedNodeId);
 
   const { node } = context;
-  const descriptor = descriptors[node.type];
+  const descriptor = context.nodeTypeDescriptors?.[node.type] ?? descriptors[node.type];
   const preview = node.preview;
 
   const tagLabel = descriptor?.tagLabel ?? node.type.toUpperCase();
@@ -30,6 +30,18 @@ export function NodeShell({ section, context }: NodeShellProps) {
   const badges = (preview?.badges ?? []) as NodeHeaderBadge[];
 
   const assetInfo = useMemo(() => getNodeAssetInfo(node), [node]);
+  const isExpanded = context.isSelected && context.isExpanded === true;
+  const isCollapsed =
+    context.isExpanded === undefined ? (node.container?.collapsed ?? false) : !isExpanded;
+
+  const handleToggleInlineEditor = useCallback(() => {
+    if (isExpanded) {
+      setExpandedNodeId(null);
+      return;
+    }
+    context.onSelectNode?.(node.id, false);
+    setExpandedNodeId(node.id);
+  }, [context, isExpanded, node.id, setExpandedNodeId]);
 
   const handleOpenPreview = useCallback(() => {
     if (!assetInfo) return;
@@ -61,7 +73,7 @@ export function NodeShell({ section, context }: NodeShellProps) {
         badges={badges}
         collapsible={true}
         isCollapsed={isCollapsed}
-        onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
+        onToggleCollapse={handleToggleInlineEditor}
         onOpenPreview={assetInfo ? handleOpenPreview : undefined}
         onExpand={() => openContentOverlay(node.id)}
       />

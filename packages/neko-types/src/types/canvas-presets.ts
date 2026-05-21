@@ -1,4 +1,4 @@
-import type { CanvasNodeType } from './canvas';
+import { CANVAS_NODE_TYPES, type CanvasNodeType } from './canvas';
 import type { ContainerPolicyName } from './canvas-layered';
 
 export type CanvasPresetCreationMode = 'legacy' | 'composable';
@@ -162,7 +162,7 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
 const CANVAS_NODE_PRESET_NAMES = BUILT_IN_CANVAS_NODE_PRESETS.map((preset) => preset.name);
 
 export const CANVAS_AGENT_CREATE_NODE_TYPES = uniqueStrings(
-  BUILT_IN_CANVAS_NODE_PRESETS.map((preset) => preset.nodeType),
+  CANVAS_NODE_TYPES,
 ) as readonly CanvasNodeType[];
 
 export const CANVAS_AGENT_NODE_PRESETS = CANVAS_NODE_PRESET_NAMES;

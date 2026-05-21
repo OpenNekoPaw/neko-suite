@@ -1,4 +1,5 @@
 import type { CanvasBlock, CanvasNode, ContainerSection } from '@neko/shared';
+import type { NodeTypeDescriptorRegistry } from '../nodes/nodeTypeDescriptor';
 
 export interface FieldBindingUpdate {
   path: string;
@@ -9,7 +10,9 @@ export interface NodeContentRenderContext {
   node: CanvasNode;
   allNodes: CanvasNode[];
   selectedNodeIds: string[];
+  nodeTypeDescriptors?: NodeTypeDescriptorRegistry;
   isSelected: boolean;
+  isExpanded?: boolean;
   depth: number;
   previewSurfaceKind?: 'inline' | 'overlay';
   onUpdateBinding?: (update: FieldBindingUpdate) => void;

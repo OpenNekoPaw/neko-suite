@@ -7,13 +7,16 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { CanvasNode, CanvasConnection, CanvasViewport as ViewportType } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
-import { createBuiltInNodeRendererRegistry, renderCanvasNode } from './nodes';
-import { ConnectionLayer } from './connections';
+import { renderCanvasNode } from './nodes';
+import type { NodeRendererRegistry } from './nodes';
+import type { NodeTypeDescriptorRegistry } from './nodes/nodeTypeDescriptor';
+import { ConnectionLayer, InlineConnectionEditor } from './connections';
 import { useViewportTransform } from '../hooks/useViewportTransform';
 import { useViewportCulling } from '../hooks/useViewportCulling';
 import { useConnectionDrag } from '../hooks/useConnectionDrag';
 import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
 import { isNodeDrawnInsideContainer } from '../utils/canvasOrganization';
+import { createBuiltInWebviewSubsystemRegistry } from '../subsystems';
 
 // =============================================================================
 // Types
@@ -49,6 +52,7 @@ export interface InfiniteCanvasProps {
   /** Called on mouseup when node rotation ends */
   onNodeRotateEnd?: (nodeId: string, rotation: number) => void;
   onConnectionSelect?: (connectionId: string) => void;
+  onConnectionUpdate?: (connectionId: string, updates: Partial<CanvasConnection>) => void;
   onConnectionStart?: (nodeId: string, anchor: string) => void;
   onConnectionComplete?: (
     sourceNodeId: string,
@@ -84,6 +88,7 @@ export interface InfiniteCanvasProps {
   onModelCheckInstalled?: (nodeId: string, modelPath: string) => void;
   /** Called to remove a child node from its container */
   onRemoveContainerChild?: (containerId: string, childId: string) => void;
+  expandedNodeId?: string | null;
 }
 
 // =============================================================================
@@ -106,6 +111,7 @@ export function InfiniteCanvas({
   onNodeRotate,
   onNodeRotateEnd,
   onConnectionSelect,
+  onConnectionUpdate,
   onConnectionStart,
   onConnectionComplete,
   onConnectionCancel,
@@ -120,10 +126,17 @@ export function InfiniteCanvas({
   onCanvasEmbedOpen,
   onModelCheckInstalled,
   onRemoveContainerChild,
+  expandedNodeId,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const nodeRendererRegistryRef = useRef(createBuiltInNodeRendererRegistry());
+  const webviewSubsystemRegistryRef = useRef(createBuiltInWebviewSubsystemRegistry());
+  const [nodeRendererRegistry, setNodeRendererRegistry] = useState<NodeRendererRegistry>({});
+  const [nodeTypeDescriptorRegistry, setNodeTypeDescriptorRegistry] =
+    useState<NodeTypeDescriptorRegistry>(() =>
+      webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors(),
+    );
+  const activeSubsystemKey = webviewSubsystemRegistryRef.current.getActiveSubsystems({ nodes }).join('|');
 
   // Viewport transform hook
   const { state: viewportState, handlers: viewportHandlers } = useViewportTransform({
@@ -190,6 +203,36 @@ export function InfiniteCanvas({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    webviewSubsystemRegistryRef.current
+      .loadForCanvas({ nodes })
+      .then((registrations) => {
+        if (cancelled) return;
+
+        const nextRegistry: NodeRendererRegistry = {};
+        for (const registration of registrations) {
+          Object.assign(nextRegistry, registration.nodeRenderers);
+        }
+        setNodeRendererRegistry(nextRegistry);
+        setNodeTypeDescriptorRegistry({
+          ...webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors(),
+          ...Object.assign({}, ...registrations.map((registration) => registration.nodeTypeDescriptors)),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNodeRendererRegistry({});
+          setNodeTypeDescriptorRegistry(webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors());
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSubsystemKey, nodes]);
+
   // Handle canvas click (deselect)
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent) => {
@@ -247,13 +290,23 @@ export function InfiniteCanvas({
           onConnectionSelect={onConnectionSelect}
         />
 
+        <InlineConnectionEditor
+          connection={
+            selectedConnectionIds.length === 1
+              ? connections.find((connection) => connection.id === selectedConnectionIds[0]) ?? null
+              : null
+          }
+          nodes={nodes}
+          onUpdateConnection={(connectionId, updates) => onConnectionUpdate?.(connectionId, updates)}
+        />
+
         {/* Node layer - 使用裁剪后的可见节点; container-managed children are summarized by containers */}
         {visibleNodes
           .filter((node) => !isNodeDrawnInsideContainer(node))
           .map((node) => {
             const isSelected = selectedNodeIds.includes(node.id);
 
-            return renderNode(nodeRendererRegistryRef.current, {
+            return renderNode(nodeRendererRegistry, {
               node,
               allNodes: nodes,
               viewport,
@@ -275,7 +328,9 @@ export function InfiniteCanvas({
               onCanvasEmbedOpen,
               onModelCheckInstalled,
               onRemoveContainerChild,
+              isExpanded: expandedNodeId === node.id,
               selectedNodeIds,
+              nodeTypeDescriptors: nodeTypeDescriptorRegistry,
             });
           })}
       </CanvasViewport>
@@ -317,7 +372,7 @@ export function InfiniteCanvas({
 // =============================================================================
 
 function renderNode(
-  registry: ReturnType<typeof createBuiltInNodeRendererRegistry>,
+  registry: NodeRendererRegistry,
   context: Parameters<typeof renderCanvasNode>[1],
 ): React.ReactNode {
   return renderCanvasNode(registry, context);

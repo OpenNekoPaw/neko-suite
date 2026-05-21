@@ -12,28 +12,85 @@ import type { DocumentArchiveResourceRef } from './document-reading';
 // =============================================================================
 
 /**
+ * JSON-serializable value used by persisted Canvas extension fields.
+ */
+export type CanvasSerializableValue =
+  | string
+  | number
+  | boolean
+  | null
+  | CanvasSerializableValue[]
+  | { [key: string]: CanvasSerializableValue };
+
+export type CanvasSerializableRecord = {
+  [key: string]: CanvasSerializableValue;
+};
+
+/**
  * Canvas node type discriminator
  */
-export type CanvasNodeType =
+export const CORE_CANVAS_NODE_TYPES = [
   // Core nodes
-  | 'media'
-  | 'storyboard'
-  | 'annotation'
-  | 'group'
+  'media',
+  'storyboard',
+  'annotation',
+  'group',
   // Rich content nodes
-  | 'text'
-  | 'artboard'
-  | 'table'
+  'text',
+  'artboard',
+  'table',
   // Storyboard system
-  | 'shot'
-  | 'scene'
-  | 'gallery'
+  'shot',
+  'scene',
+  'gallery',
   // Content reference nodes
-  | 'script'
-  | 'document'
-  | 'model'
-  | 'canvas-embed'
-  | 'project';
+  'script',
+  'document',
+  'model',
+  'canvas-embed',
+  'project',
+] as const;
+
+export type CoreCanvasNodeType = (typeof CORE_CANVAS_NODE_TYPES)[number];
+
+/**
+ * Built-in subsystem node types registered by shared Canvas contracts.
+ */
+export const REGISTERED_CANVAS_NODE_TYPES = [
+  // Narrative subsystem
+  'choice',
+  'merge',
+  'narrative-scene',
+  'narrative-note',
+  // Behavior subsystem
+  'state',
+  'trigger',
+  'action',
+  'condition',
+  'composite',
+  // Entity graph subsystem
+  'entity',
+  'representation-slot',
+  'occurrence',
+  'generated-asset',
+  // Memory graph subsystem
+  'memory',
+  'conversation',
+  'fact',
+] as const;
+
+export type RegisteredCanvasNodeType = (typeof REGISTERED_CANVAS_NODE_TYPES)[number];
+
+export const CANVAS_NODE_TYPES = [
+  ...CORE_CANVAS_NODE_TYPES,
+  ...REGISTERED_CANVAS_NODE_TYPES,
+] as const;
+
+export type CanvasNodeType = CoreCanvasNodeType | RegisteredCanvasNodeType;
+
+export function isCanvasNodeType(value: unknown): value is CanvasNodeType {
+  return typeof value === 'string' && CANVAS_NODE_TYPES.includes(value as CanvasNodeType);
+}
 
 export type DocumentResourceStatusReason =
   | 'cache-missing'
@@ -81,7 +138,35 @@ export type ConnectionAnchor = 'top' | 'right' | 'bottom' | 'left';
 /**
  * Connection type for styling
  */
-export type ConnectionType = 'default' | 'sequence' | 'reference';
+export const CORE_CONNECTION_TYPES = ['default', 'sequence', 'reference'] as const;
+
+export type CoreConnectionType = (typeof CORE_CONNECTION_TYPES)[number];
+
+/**
+ * Built-in subsystem connection types registered by shared Canvas contracts.
+ */
+export const REGISTERED_CONNECTION_TYPES = [
+  'choice',
+  'transition',
+  'child',
+  'association',
+  'derived-from',
+] as const;
+
+export type RegisteredConnectionType = (typeof REGISTERED_CONNECTION_TYPES)[number];
+
+export const CANVAS_CONNECTION_TYPES = [
+  ...CORE_CONNECTION_TYPES,
+  ...REGISTERED_CONNECTION_TYPES,
+] as const;
+
+export type ConnectionType = CoreConnectionType | RegisteredConnectionType;
+
+export function isCanvasConnectionType(value: unknown): value is ConnectionType {
+  return (
+    typeof value === 'string' && CANVAS_CONNECTION_TYPES.includes(value as ConnectionType)
+  );
+}
 
 /**
  * Data type that can flow through a port
@@ -541,6 +626,15 @@ export interface ProjectCanvasNode extends CanvasNodeBase {
 }
 
 /**
+ * Generic node shape for built-in subsystem nodes before their domain-specific
+ * data interfaces are introduced.
+ */
+export interface RegisteredCanvasNode extends CanvasNodeBase {
+  type: RegisteredCanvasNodeType;
+  data: CanvasSerializableRecord;
+}
+
+/**
  * Union type of all canvas node types
  */
 export type CanvasNode =
@@ -558,7 +652,8 @@ export type CanvasNode =
   | DocumentCanvasNode
   | ModelCanvasNode
   | CanvasEmbedCanvasNode
-  | ProjectCanvasNode;
+  | ProjectCanvasNode
+  | RegisteredCanvasNode;
 
 // =============================================================================
 // Connection Types
@@ -590,6 +685,18 @@ export interface CanvasConnection {
   sourceEndpoint?: CanvasConnectionEndpoint;
   /** Optional target endpoint for future node/port/block/field references. */
   targetEndpoint?: CanvasConnectionEndpoint;
+  /** Optional subsystem extension data. Edge ownership remains top-level. */
+  extension?: CanvasSerializableRecord;
+  /** Narrative choice label rendered on branch connections. */
+  choiceText?: string;
+  /** Subsystem condition expression for narrative or behavior connections. */
+  condition?: string;
+  /** Priority used by default path or transition ordering. */
+  priority?: number;
+  /** Memory association weight. */
+  weight?: number;
+  /** Memory association decay factor. */
+  decay?: number;
 }
 
 // =============================================================================
@@ -607,6 +714,49 @@ export interface CanvasViewport {
 }
 
 // =============================================================================
+// Subsystem Metadata
+// =============================================================================
+
+export interface NarrativeVariable {
+  id: string;
+  name: string;
+  value: CanvasSerializableValue;
+}
+
+export interface NarrativeMetadata {
+  entryNodeId?: string;
+  variables: NarrativeVariable[];
+}
+
+export interface BlackboardVariable {
+  id: string;
+  name: string;
+  value: CanvasSerializableValue;
+}
+
+export interface BehaviorMetadata {
+  rootNodeId?: string;
+  blackboard: BlackboardVariable[];
+}
+
+export type EntityGraphScope = 'character' | 'scene' | 'object' | 'location' | 'style';
+
+export interface EntityGraphMetadata {
+  entityScope: EntityGraphScope[];
+  bindingSource: string;
+}
+
+export interface MemoryGraphTimeRange {
+  start: string;
+  end: string;
+}
+
+export interface MemoryGraphMetadata {
+  queryContext?: string;
+  timeRange?: MemoryGraphTimeRange;
+}
+
+// =============================================================================
 // Canvas Data (File Format)
 // =============================================================================
 
@@ -618,6 +768,8 @@ export interface CanvasData {
   version: string;
   /** Canvas name */
   name: string;
+  /** Whether this Canvas is projected from an external source of truth. */
+  projected?: boolean;
   /** Viewport state for restoring view */
   viewport?: CanvasViewport;
   /** All nodes on the canvas */
@@ -626,6 +778,14 @@ export interface CanvasData {
   connections: CanvasConnection[];
   /** Linked video project path (relative) */
   linkedProject?: string;
+  /** Narrative subsystem metadata. */
+  narrative?: NarrativeMetadata;
+  /** Behavior subsystem metadata. */
+  behavior?: BehaviorMetadata;
+  /** Entity graph subsystem metadata. */
+  entityGraph?: EntityGraphMetadata;
+  /** Memory graph subsystem metadata. */
+  memoryGraph?: MemoryGraphMetadata;
 }
 
 // =============================================================================
@@ -633,7 +793,7 @@ export interface CanvasData {
 // =============================================================================
 
 /** Current canvas file format version */
-export const CANVAS_VERSION = '1.0';
+export const CANVAS_VERSION = '2.1';
 
 /** Default canvas data for new files */
 export const DEFAULT_CANVAS_DATA: CanvasData = {

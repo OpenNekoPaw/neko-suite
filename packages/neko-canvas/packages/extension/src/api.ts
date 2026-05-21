@@ -24,6 +24,12 @@ import type {
   CanvasUpdateBlockResult,
   CreatedCanvasStoryboard,
   DocumentArchiveResourceRef,
+  ProjectionAdapter,
+  ProjectionDisposable,
+  ProjectionWriteBack,
+  ProjectionWriteBackResult,
+  ProjectedCanvasData,
+  ProjectedCanvasSource,
 } from '@neko/shared';
 
 // Types
@@ -99,7 +105,7 @@ export interface NekoCanvasAPI {
     /**
      * Get asset by ID
      */
-    getById(id: string): Promise<Asset | undefined>;
+    getById(id: string): Promise<Asset | null>;
   };
 
   /**
@@ -198,6 +204,18 @@ export interface NekoCanvasAPI {
     generateBatch(nodeIds: string[]): Promise<void>;
     /** Fired whenever the canvas selection changes */
     onSelectionChange: vscode.Event<CanvasNode[]>;
+  };
+
+  /**
+   * Projected Canvas graph operations. Adapters own source-specific JSON mutation.
+   */
+  projections: {
+    registerAdapter(adapter: ProjectionAdapter): ProjectionDisposable;
+    open(source: ProjectedCanvasSource): Promise<ProjectedCanvasData>;
+    writeBack(
+      source: ProjectedCanvasSource,
+      changes: readonly ProjectionWriteBack[],
+    ): Promise<ProjectionWriteBackResult>;
   };
 
   /**

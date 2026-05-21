@@ -1,5 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import type { CanvasData, CanvasDroppedAsset, CanvasViewport } from '@neko/shared';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import type {
+  CanvasAutoArrangeStrategyId,
+  CanvasData,
+  CanvasDroppedAsset,
+  CanvasNodeType,
+  CanvasSubsystemId,
+  CanvasViewport,
+  ProjectedCanvasStatus,
+} from '@neko/shared';
 import { createCanvasAgentActiveContext } from './utils/canvasAgentOperations';
 import { useCanvasStore } from './stores/canvasStore';
 import { InfiniteCanvas, ZoomControls, MiniMap } from './components';
@@ -10,8 +18,15 @@ import {
   type GenerationParams,
 } from './components/panels/GenerationPromptPanel';
 import { ContentOverlay } from './components/panels/ContentOverlay';
-import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
+import {
+  CanvasTopToolbar,
+  type AutoArrangeChoice,
+  type CanvasInteractionTool,
+} from './components/toolbar/CanvasTopToolbar';
+import { NodeLibraryPanel } from './components/panels/NodeLibraryPanel';
+import { FloatingPanelHost } from './components/panels/FloatingPanelHost';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
+import { useNodeExpand } from './hooks/useNodeExpand';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
 import { useNodeHelpers } from './hooks/useNodeHelpers';
 import { useClipboard } from './hooks/useClipboard';
@@ -22,6 +37,9 @@ import type { VSCodeAPI } from './hooks/useVSCodeMessages';
 import { buildCanvasNode } from './utils/nodeFactory';
 import { appendSelectedGenerationCandidate } from './utils/generationHistory';
 import { setGlobalVSCodeApi } from './utils/vscode';
+import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
+import type { FloatingPanelDefinition, PlaybackControllerDefinition } from './subsystems';
+import type { NodeTypeDescriptorRegistry } from './components/nodes/nodeTypeDescriptor';
 import {
   screenToCanvas as screenToCanvasMath,
   getViewportCenter as getViewportCenterMath,
@@ -39,6 +57,8 @@ const DEFAULT_CANVAS_DATA: CanvasData = {
   nodes: [],
   connections: [],
 };
+
+const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
 
 declare const acquireVsCodeApi: () => {
   postMessage: (message: unknown) => void;
@@ -65,11 +85,17 @@ export function CanvasApp() {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
-  // Hand tool: drag-to-pan mode (toggle with H key)
-  const [isPanMode, setIsPanMode] = useState(false);
+  // Interaction tool: select/marquee by default, hand tool pans on drag.
+  const [interactionTool, setInteractionTool] = useState<CanvasInteractionTool>('select');
   // Minimap width tracks ZoomControls width for alignment
   const zoomControlsRef = useRef<HTMLDivElement>(null);
   const [miniMapWidth, setMiniMapWidth] = useState(200);
+  const [subsystemNodeTypeDescriptors, setSubsystemNodeTypeDescriptors] =
+    useState<NodeTypeDescriptorRegistry>({});
+  const [floatingPanels, setFloatingPanels] = useState<readonly FloatingPanelDefinition[]>([]);
+  const [playbackControllers, setPlaybackControllers] = useState<
+    readonly PlaybackControllerDefinition[]
+  >([]);
 
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -87,6 +113,7 @@ export function CanvasApp() {
     addNode,
     createComposite,
     updateNode,
+    updateConnection,
     deleteSelected,
     updateNodeData,
     startConnection,
@@ -117,6 +144,61 @@ export function CanvasApp() {
   const viewport = canvasData?.viewport ?? { pan: { x: 0, y: 0 }, zoom: 1 };
   const selectedNodeIds = selection.nodeIds;
   const selectedConnectionIds = selection.connectionIds;
+  const { expandedNodeId } = useNodeExpand();
+  const activeSubsystemIds = useMemo(
+    () => WEBVIEW_SUBSYSTEM_REGISTRY.getActiveSubsystems({ nodes }),
+    [nodes],
+  );
+  const activeSubsystemKey = activeSubsystemIds.join('|');
+  const isPanMode = interactionTool === 'pan';
+  const nodeTypeSummary = useMemo(
+    () => WEBVIEW_SUBSYSTEM_REGISTRY.getNodeTypeSummary({ nodes }),
+    [nodes],
+  );
+  const autoArrangeChoices = useMemo<readonly AutoArrangeChoice[]>(
+    () =>
+      WEBVIEW_SUBSYSTEM_REGISTRY.manifests
+        .filter((manifest) => manifest.autoArrangeStrategy)
+        .map((manifest) => ({
+          id: manifest.autoArrangeStrategy!,
+          label: `${manifest.label} · ${manifest.autoArrangeStrategy}`,
+          subsystemId: manifest.id,
+        })),
+    [],
+  );
+  const coreNodeTypeDescriptors = useMemo(
+    () => WEBVIEW_SUBSYSTEM_REGISTRY.getCoreNodeTypeDescriptors(),
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    WEBVIEW_SUBSYSTEM_REGISTRY.loadForCanvas({ nodes })
+      .then((registrations) => {
+        if (cancelled) return;
+        setSubsystemNodeTypeDescriptors(
+          Object.assign({}, ...registrations.map((registration) => registration.nodeTypeDescriptors)),
+        );
+        setFloatingPanels(registrations.flatMap((registration) => registration.floatingPanels ?? []));
+        setPlaybackControllers(
+          registrations.flatMap((registration) =>
+            registration.playbackController ? [registration.playbackController] : [],
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSubsystemNodeTypeDescriptors({});
+          setFloatingPanels([]);
+          setPlaybackControllers([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSubsystemKey, nodes]);
 
   // =========================================================================
   // Container size tracking  (moved after useVSCodeMessages — see below)
@@ -155,6 +237,43 @@ export function CanvasApp() {
   // =========================================================================
 
   const buildPromptResolverRef = useRef<((prompt: string) => void) | null>(null);
+  const projectionRequestIdRef = useRef(0);
+  const projectionResolversRef = useRef(
+    new Map<
+      number,
+      {
+        resolve: (value: unknown) => void;
+        reject: (error: Error) => void;
+      }
+    >(),
+  );
+
+  const requestProjectionWriteBack = useCallback(
+    (changes: unknown[]): Promise<unknown> => {
+      if (!vscode || !canvasData?.projected) {
+        return Promise.reject(new Error('Projected Canvas is not active'));
+      }
+      const source = (canvasData as { projectionSource?: unknown }).projectionSource;
+      const requestId = ++projectionRequestIdRef.current;
+      return new Promise((resolve, reject) => {
+        projectionResolversRef.current.set(requestId, { resolve, reject });
+        vscode.postMessage({
+          type: 'projection.writeBack',
+          _requestId: requestId,
+          source,
+          changes,
+        });
+        setTimeout(() => {
+          const pending = projectionResolversRef.current.get(requestId);
+          if (pending) {
+            projectionResolversRef.current.delete(requestId);
+            pending.reject(new Error('Projection write-back timeout'));
+          }
+        }, 30000);
+      });
+    },
+    [canvasData],
+  );
 
   // =========================================================================
   // Node helpers
@@ -191,30 +310,6 @@ export function CanvasApp() {
     deleteSelected,
   });
 
-  // =========================================================================
-  // Media add handlers (toolbar / extension)
-  // =========================================================================
-
-  const handleAddText = useCallback(() => {
-    addTextAt(getViewportCenter());
-  }, [addTextAt, getViewportCenter]);
-
-  const handleAddShot = useCallback(() => {
-    addShotAt(getViewportCenter());
-  }, [addShotAt, getViewportCenter]);
-
-  const handleAddSceneGroup = useCallback(() => {
-    addSceneGroupAt(getViewportCenter());
-  }, [addSceneGroupAt, getViewportCenter]);
-
-  const handleAddGallery = useCallback(() => {
-    addGalleryAt(getViewportCenter());
-  }, [addGalleryAt, getViewportCenter]);
-
-  const handleAddTable = useCallback(() => {
-    addTableAt(getViewportCenter());
-  }, [addTableAt, getViewportCenter]);
-
   const handleAddMediaFromExtension = useCallback(
     (mediaType: string, uri: string, name: string) => {
       addMediaAt(getViewportCenter(), mediaType as 'image' | 'video' | 'audio', uri, name);
@@ -227,6 +322,62 @@ export function CanvasApp() {
       vscode.postMessage({ type: 'pickFile' });
     }
   }, []);
+
+  const handleCreateLibraryNode = useCallback(
+    (type: CanvasNodeType) => {
+      const currentNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+      const node = buildCanvasNode({
+        type,
+        position: getViewportCenter(),
+        data: {},
+        zIndex: currentNodes.length,
+      });
+      const id = addNode(node);
+      if (id) {
+        selectNode(id);
+        reportAction('node.create', type);
+      }
+    },
+    [addNode, getViewportCenter, reportAction, selectNode],
+  );
+
+  const handleLoadSubsystem = useCallback((subsystemId: CanvasSubsystemId) => {
+    void WEBVIEW_SUBSYSTEM_REGISTRY.load(subsystemId)
+      .then((registration) => {
+        setSubsystemNodeTypeDescriptors((current) => ({
+          ...current,
+          ...(registration.nodeTypeDescriptors ?? {}),
+        }));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const handleAutoArrange = useCallback(
+    (strategyId: CanvasAutoArrangeStrategyId) => {
+      reportAction('canvas.autoArrange', strategyId);
+    },
+    [reportAction],
+  );
+
+  const handleProjectionHealthCheck = useCallback(() => {
+    if (!canvasData?.projected) return;
+    void requestProjectionWriteBack([]).then(
+      () => {
+        useCanvasStore.getState().updateCanvasData({
+          projectionStatus: { state: 'clean', updatedAt: Date.now() },
+        } as Partial<CanvasData>);
+      },
+      (error) => {
+        useCanvasStore.getState().updateCanvasData({
+          projectionStatus: {
+            state: 'writeback-error',
+            message: error instanceof Error ? error.message : String(error),
+            updatedAt: Date.now(),
+          },
+        } as Partial<CanvasData>);
+      },
+    );
+  }, [canvasData?.projected, requestProjectionWriteBack]);
 
   // =========================================================================
   // Drag & Drop
@@ -292,6 +443,29 @@ export function CanvasApp() {
     onBuildPromptResult: (prompt) => {
       buildPromptResolverRef.current?.(prompt);
       buildPromptResolverRef.current = null;
+    },
+    onProjectionStatus: (status: ProjectedCanvasStatus) => {
+      const state = useCanvasStore.getState();
+      if (!state.canvasData) return;
+      state.updateCanvasData({
+        projectionStatus: {
+          ...((state.canvasData as { projectionStatus?: ProjectedCanvasStatus })
+            .projectionStatus ?? { state: 'clean' }),
+          ...status,
+        },
+      } as Partial<CanvasData>);
+    },
+    onProjectionSourceChanged: () => {
+      const state = useCanvasStore.getState();
+      if (!state.canvasData?.projected) return;
+      state.updateCanvasData({
+        projectionStatus: {
+          ...((state.canvasData as { projectionStatus?: ProjectedCanvasStatus })
+            .projectionStatus ?? { state: 'clean' }),
+          state: 'source-changed',
+          updatedAt: Date.now(),
+        },
+      } as Partial<CanvasData>);
     },
     onGenerationProgress: ({ nodeId, childNodeId, status, dataUrl }) => {
       const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === nodeId);
@@ -427,6 +601,15 @@ export function CanvasApp() {
       const state = useCanvasStore.getState();
       return createCanvasAgentActiveContext({
         nodes: state.canvasData?.nodes ?? [],
+        connections: state.canvasData?.connections ?? [],
+        canvasData: state.canvasData
+          ? {
+              narrative: state.canvasData.narrative,
+              behavior: state.canvasData.behavior,
+              entityGraph: state.canvasData.entityGraph,
+              memoryGraph: state.canvasData.memoryGraph,
+            }
+          : undefined,
         selectedNodeIds: state.selection.nodeIds,
         viewport: state.canvasData?.viewport,
         insertionPoint: getViewportCenter(),
@@ -442,6 +625,24 @@ export function CanvasApp() {
   // Canvas container is only mounted once isReady=true, so deps=[isReady] ensures
   // the ResizeObserver is attached after the element appears in the DOM.
   // =========================================================================
+
+  useEffect(() => {
+    if (!vscode) return;
+    const handleMessage = (event: MessageEvent) => {
+      const message = event.data as { type?: unknown; _requestId?: unknown; error?: unknown };
+      if (message.type !== '_response' || typeof message._requestId !== 'number') return;
+      const pending = projectionResolversRef.current.get(message._requestId);
+      if (!pending) return;
+      projectionResolversRef.current.delete(message._requestId);
+      if (typeof message.error === 'string') {
+        pending.reject(new Error(message.error));
+      } else {
+        pending.resolve(event.data);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   useEffect(() => {
     const container = canvasContainerRef.current;
@@ -709,7 +910,7 @@ export function CanvasApp() {
           (active as HTMLElement)?.isContentEditable
         )
           return;
-        setIsPanMode((prev) => !prev);
+        setInteractionTool((prev) => (prev === 'pan' ? 'select' : 'pan'));
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -744,7 +945,7 @@ export function CanvasApp() {
   const lastSyncRef = useRef<string>('');
   useEffect(() => {
     if (!vscode || !canvasData) return;
-    const fingerprint = `${nodes.length}:${connections.length}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}`;
+    const fingerprint = `${nodes.length}:${connections.length}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}:${activeSubsystemKey}`;
     if (fingerprint === lastSyncRef.current) return;
     lastSyncRef.current = fingerprint;
     vscode.postMessage({
@@ -754,9 +955,22 @@ export function CanvasApp() {
         connections: canvasData.connections,
         viewport: canvasData.viewport,
         _selection: { nodeIds: selectedNodeIds },
+        _subsystemStatus: {
+          activeSubsystems: activeSubsystemIds,
+          nodeTypeSummary,
+        },
       },
     });
-  }, [nodes.length, connections.length, viewport.zoom, selectedNodeIds, canvasData]);
+  }, [
+    nodes.length,
+    connections.length,
+    viewport.zoom,
+    selectedNodeIds,
+    canvasData,
+    activeSubsystemIds,
+    activeSubsystemKey,
+    nodeTypeSummary,
+  ]);
 
   // =========================================================================
   // Notify extension of selection changes for ambient agent context
@@ -915,19 +1129,26 @@ export function CanvasApp() {
 
   return (
     <div className="w-full h-full flex flex-col">
+      <CanvasTopToolbar
+        interactionTool={interactionTool}
+        onInteractionToolChange={setInteractionTool}
+        onUndo={undo}
+        onRedo={redo}
+        onImportFile={handleImportFile}
+        autoArrangeChoices={autoArrangeChoices}
+        onAutoArrange={handleAutoArrange}
+        playbackControllers={playbackControllers}
+        activeSubsystemIds={activeSubsystemIds}
+      />
       {/* Main content area */}
       <div ref={rootRef} className="flex-1 flex overflow-hidden">
-        <CanvasToolbar
-          onAddText={handleAddText}
-          onUndo={undo}
-          onRedo={redo}
-          onAddShot={handleAddShot}
-          onAddSceneGroup={handleAddSceneGroup}
-          onAddGallery={handleAddGallery}
-          onAddTable={handleAddTable}
-          onImportFile={handleImportFile}
-          isPanMode={isPanMode}
-          onTogglePanMode={() => setIsPanMode((prev) => !prev)}
+        <NodeLibraryPanel
+          coreDescriptors={coreNodeTypeDescriptors}
+          subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
+          nodeTypeDescriptors={subsystemNodeTypeDescriptors}
+          activeSubsystemIds={activeSubsystemIds}
+          onCreateNode={handleCreateLibraryNode}
+          onLoadSubsystem={handleLoadSubsystem}
         />
 
         <div
@@ -968,6 +1189,8 @@ export function CanvasApp() {
             onCanvasEmbedOpen={handleCanvasEmbedOpen}
             onModelCheckInstalled={handleModelCheckInstalled}
             onRemoveContainerChild={handleRemoveContainerChild}
+            onConnectionUpdate={updateConnection}
+            expandedNodeId={expandedNodeId}
             isPanMode={isPanMode}
           />
 
@@ -1026,6 +1249,38 @@ export function CanvasApp() {
             />
           )}
 
+          <FloatingPanelHost panels={floatingPanels} activeSubsystemIds={activeSubsystemIds} />
+
+          <div
+            className="absolute right-3 bottom-3 z-10 rounded px-2 py-1 text-xs pointer-events-none"
+            style={{
+              backgroundColor: 'var(--glass-bg-light)',
+              border: '1px solid var(--glass-border)',
+              color: 'var(--toolbar-fg-secondary)',
+            }}
+          >
+            {activeSubsystemIds.length > 0
+              ? `${t('status.subsystems')}: ${activeSubsystemIds.join(', ')}`
+              : t('status.noSubsystems')}
+          </div>
+
+          {canvasData?.projected && (
+            <button
+              type="button"
+              className="absolute right-3 bottom-10 z-10 rounded px-2 py-1 text-xs"
+              style={{
+                backgroundColor: 'var(--glass-bg-light)',
+                border: '1px solid var(--glass-border)',
+                color: 'var(--toolbar-fg)',
+              }}
+              onClick={handleProjectionHealthCheck}
+            >
+              {formatProjectionStatus(
+                (canvasData as { projectionStatus?: ProjectedCanvasStatus }).projectionStatus,
+              )}
+            </button>
+          )}
+
           {/* Generation Prompt Panel (E6: ControlNet / Video / image generation) */}
           <GenerationPromptPanel
             visible={generationPanelState.visible}
@@ -1079,4 +1334,11 @@ export function CanvasApp() {
       </div>
     </div>
   );
+}
+
+function formatProjectionStatus(status: ProjectedCanvasStatus | undefined): string {
+  if (!status) {
+    return `${t('status.projected')}: clean`;
+  }
+  return `${t('status.projected')}: ${status.state}${status.message ? ` · ${status.message}` : ''}`;
 }

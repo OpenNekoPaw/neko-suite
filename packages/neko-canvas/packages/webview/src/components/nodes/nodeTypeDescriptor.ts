@@ -39,7 +39,7 @@ export interface NodeTypeDescriptor {
 /**
  * Complete registry of all node type descriptors.
  */
-export type NodeTypeDescriptorRegistry = Record<CanvasNodeType, NodeTypeDescriptor>;
+export type NodeTypeDescriptorRegistry = Partial<Record<CanvasNodeType, NodeTypeDescriptor>>;
 
 // =============================================================================
 // Accessor utilities

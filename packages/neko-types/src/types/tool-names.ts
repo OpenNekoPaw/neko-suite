@@ -68,6 +68,7 @@ export const TOOL_NAMES_CANVAS = {
   CANVAS_EXTRACT_STRUCTURED_CONTENT: 'canvas_extract_structured_content',
   CANVAS_GET_ACTIVE_CONTEXT: 'canvas_get_active_context',
   CANVAS_APPLY_AGENT_CONTENT: 'canvas_apply_agent_content',
+  CANVAS_NARRATIVE_TRAVERSE: 'canvas_narrative_traverse',
   CANVAS_GET_STORYBOARD_EXECUTION_SUMMARY: 'canvas_get_storyboard_execution_summary',
   CANVAS_GENERATE_IMAGE: 'canvas_generate_image',
   CANVAS_GENERATE_BATCH: 'canvas_generate_batch',

@@ -4,6 +4,7 @@ import type {
   ContainerDeleteBehavior,
   ContainerPolicyName,
 } from '@neko/shared';
+import { CANVAS_NODE_TYPES } from '@neko/shared';
 
 export interface ContainerPolicy {
   name: ContainerPolicyName;
@@ -25,6 +26,7 @@ const BUILT_IN_CONTAINER_POLICIES: ContainerPolicy[] = [
   },
   {
     name: 'group',
+    acceptedNodeTypes: [...CANVAS_NODE_TYPES],
     deleteBehavior: 'release-children',
     layoutMode: 'manual',
     allowNestedContainers: true,

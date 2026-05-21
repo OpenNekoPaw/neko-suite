@@ -313,6 +313,76 @@ describe('canvasAgentOperations', () => {
     expect(result.insertionPoint).toEqual({ x: 320, y: 240 });
   });
 
+  it('keeps old active context callers compatible while adding subsystem summaries', () => {
+    const scene = node('scene-1', 'scene');
+    const choice = node('choice-1', 'choice');
+    const state = node('state-1', 'state');
+
+    const result = createCanvasAgentActiveContext({
+      nodes: [scene, choice, state],
+      selectedNodeIds: ['choice-1', 'missing'],
+    });
+
+    expect(result.selectedNodeIds).toEqual(['choice-1']);
+    expect(result.selectedNodes).toHaveLength(1);
+    expect(result.nodeTypeSummary).toMatchObject({
+      scene: 1,
+      choice: 1,
+      state: 1,
+    });
+    expect(result.activeSubsystems).toEqual(['storyboard', 'narrative', 'behavior']);
+    expect(result.selectedNodeTypes).toEqual(['choice']);
+    expect(result.subsystemMetadata).toBeUndefined();
+  });
+
+  it('returns bounded subsystem metadata summaries only when requested', () => {
+    const variables = Array.from({ length: 60 }, (_, index) => ({
+      id: `var-${index}`,
+      name: `var${index}`,
+      value: index,
+    }));
+    const blackboard = Array.from({ length: 55 }, (_, index) => ({
+      id: `bb-${index}`,
+      name: `bb${index}`,
+      value: index,
+    }));
+
+    const compact = createCanvasAgentActiveContext({
+      nodes: [node('choice-1', 'choice')],
+      selectedNodeIds: ['choice-1'],
+      canvasData: {
+        narrative: { entryNodeId: 'choice-1', variables },
+      },
+    });
+    expect(compact.subsystemMetadata).toBeUndefined();
+
+    const detailed = createCanvasAgentActiveContext({
+      nodes: [node('choice-1', 'choice'), node('state-1', 'state')],
+      selectedNodeIds: ['choice-1'],
+      canvasData: {
+        narrative: { entryNodeId: 'choice-1', variables },
+        behavior: { rootNodeId: 'state-1', blackboard },
+        entityGraph: { entityScope: ['character'], bindingSource: 'assets/entities.json' },
+        memoryGraph: {
+          queryContext: 'scene memories',
+          timeRange: { start: '2026-01-01', end: '2026-01-31' },
+        },
+      },
+      request: { includeSubsystemMetadata: true },
+    });
+
+    expect(detailed.subsystemMetadata?.narrative).toMatchObject({
+      entryNodeId: 'choice-1',
+    });
+    expect(detailed.subsystemMetadata?.narrative?.variables).toHaveLength(50);
+    expect(detailed.subsystemMetadata?.behavior?.blackboard).toHaveLength(50);
+    expect(detailed.subsystemMetadata?.entityGraph).toEqual({
+      entityScope: ['character'],
+      bindingSource: 'assets/entities.json',
+    });
+    expect(detailed.subsystemMetadata?.memoryGraph?.queryContext).toBe('scene memories');
+  });
+
   it('applies prompt content to a validated Shot field without replacing unrelated data', () => {
     const shot = node('shot-1', 'shot');
 
@@ -376,5 +446,53 @@ describe('canvasAgentOperations', () => {
         },
       ),
     ).toThrow(/not targetable/);
+  });
+
+  it('rejects unregistered Agent node operation types before mutation', () => {
+    const source = node('shot-1', 'shot');
+    const invalidType = 'future-node' as CanvasNode['type'];
+
+    expect(() =>
+      deriveCanvasNode(
+        { nodes: [source], connections: [], generateId: ids() },
+        { sourceNodeId: 'shot-1', targetType: invalidType },
+      ),
+    ).toThrow(/Unsupported Canvas node type/);
+
+    expect(() =>
+      createCanvasComposite(
+        { nodes: [], connections: [], generateId: ids() },
+        {
+          containerType: invalidType,
+          children: [],
+        },
+      ),
+    ).toThrow(/Unsupported Canvas node type/);
+
+    expect(() =>
+      createCanvasComposite(
+        { nodes: [], connections: [], generateId: ids() },
+        {
+          containerType: 'group',
+          children: [{ type: invalidType }],
+        },
+      ),
+    ).toThrow(/Unsupported Canvas node type/);
+  });
+
+  it('creates registered subsystem nodes through Agent create defaults', () => {
+    const result = createCanvasComposite(
+      { nodes: [], connections: [], generateId: ids() },
+      {
+        containerType: 'group',
+        children: [{ type: 'choice', data: { label: 'Branch A' } }],
+      },
+    );
+
+    const choice = result.nodes.find((item) => item.type === 'choice');
+    expect(choice?.data).toMatchObject({
+      label: 'Branch A',
+      choices: [],
+    });
   });
 });

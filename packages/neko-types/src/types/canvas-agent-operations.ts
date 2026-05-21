@@ -1,5 +1,14 @@
-import type { CanvasNode, CanvasNodeType } from './canvas';
+import type {
+  BehaviorMetadata,
+  CanvasConnection,
+  CanvasNode,
+  CanvasNodeType,
+  EntityGraphMetadata,
+  MemoryGraphMetadata,
+  NarrativeMetadata,
+} from './canvas';
 import type { FieldBinding, JsonPointerPath } from './canvas-layered';
+import type { CanvasSubsystemId } from './canvas-subsystem';
 
 export interface CanvasPoint {
   x: number;
@@ -171,14 +180,27 @@ export interface CanvasAgentActiveContextRequest {
   includeSelection?: boolean;
   includeFocusedContainer?: boolean;
   includeNodeDetails?: boolean;
+  includeSubsystemMetadata?: boolean;
+}
+
+export interface CanvasAgentSubsystemMetadataSummary {
+  narrative?: Pick<NarrativeMetadata, 'entryNodeId' | 'variables'>;
+  behavior?: Pick<BehaviorMetadata, 'rootNodeId' | 'blackboard'>;
+  entityGraph?: Pick<EntityGraphMetadata, 'entityScope' | 'bindingSource'>;
+  memoryGraph?: Pick<MemoryGraphMetadata, 'queryContext' | 'timeRange'>;
 }
 
 export interface CanvasAgentActiveContextResult {
   documentUri?: string;
   canvasId?: string;
+  nodeTypeSummary?: Readonly<Record<string, number>>;
+  activeSubsystems?: readonly CanvasSubsystemId[];
   selectedNodeIds: string[];
+  selectedNodeTypes?: readonly CanvasNodeType[];
   selectedNodes: CanvasAgentNodeSummary[];
+  connections?: CanvasConnection[];
   focusedContainer?: CanvasAgentContainerSummary;
+  subsystemMetadata?: CanvasAgentSubsystemMetadataSummary;
   insertionPoint?: CanvasAgentInsertionPoint;
   viewport?: {
     pan: CanvasPoint;

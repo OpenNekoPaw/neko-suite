@@ -1,14 +1,19 @@
 import type {
   CanvasNodeType,
+  CanvasSerializableRecord,
+  CanvasSerializableValue,
   GalleryPreset,
   GeneratedImageVersion,
   PortDefinition,
+  RegisteredCanvasNode,
+  RegisteredCanvasNodeType,
   ScriptScene,
   ShotCharacter,
   TableColumnDef,
 } from '@neko/shared';
 import {
   GALLERY_PRESET_CONFIGS,
+  REGISTERED_CANVAS_NODE_TYPES,
   getBuiltInCanvasNodePresetMetadata,
   isDocumentArchiveResourceRef,
   parseDocumentResourceStatus,
@@ -19,6 +24,7 @@ import {
   getCanvasNodePreset,
 } from './canvasPresetRegistry';
 import type { CanvasNodeDraft } from './canvasPresetRegistry';
+import { createBuiltInNodeTypeDescriptors } from '../components/nodes/nodeTypeDescriptors';
 
 const NODE_PRESETS = createBuiltInCanvasNodePresetRegistry();
 
@@ -32,28 +38,40 @@ interface BuildCanvasNodeOptions {
 
 type NodeDefaultSize = { width: number; height: number };
 
-export const NODE_DEFAULT_SIZES: Record<CanvasNodeType, NodeDefaultSize> = {
-  media: { width: 280, height: 200 },
-  storyboard: { width: 240, height: 160 },
-  annotation: { width: 200, height: 100 },
-  group: { width: 320, height: 220 },
-  text: { width: 260, height: 120 },
-  artboard: { width: 640, height: 360 },
-  table: { width: 660, height: 400 },
-  shot: { width: 220, height: 200 },
-  scene: { width: 640, height: 400 },
-  gallery: { width: 290, height: 360 },
-  script: { width: 280, height: 220 },
-  document: { width: 220, height: 280 },
-  model: { width: 240, height: 160 },
-  'canvas-embed': { width: 260, height: 180 },
-  project: { width: 260, height: 180 },
-};
+export const NODE_DEFAULT_SIZES: Partial<Record<CanvasNodeType, NodeDefaultSize>> =
+  Object.fromEntries(
+    Object.entries(createBuiltInNodeTypeDescriptors()).map(([type, descriptor]) => [
+      type,
+      descriptor.defaultSize,
+    ]),
+  ) as Partial<Record<CanvasNodeType, NodeDefaultSize>>;
 
 const DEFAULT_EMPTY_HISTORY: GeneratedImageVersion[] = [];
 const DEFAULT_EMPTY_CHARACTERS: ShotCharacter[] = [];
 const DEFAULT_EMPTY_SCENES: ScriptScene[] = [];
 const DEFAULT_EMPTY_PORTS: PortDefinition[] = [];
+const REGISTERED_NODE_DEFAULT_DATA: Partial<
+  Record<RegisteredCanvasNodeType, CanvasSerializableRecord>
+> = {
+  choice: { label: 'Choice', choices: [] },
+  merge: { label: 'Merge' },
+  'narrative-scene': { title: 'Scene', summary: '' },
+  'narrative-note': { content: '' },
+  state: { name: 'State' },
+  trigger: { event: '' },
+  action: { name: 'Action' },
+  condition: { expression: '' },
+  composite: { name: 'Composite' },
+  entity: { name: 'Entity', entityType: 'character' },
+  'representation-slot': { label: 'Slot', required: false },
+  occurrence: { label: 'Occurrence' },
+  'generated-asset': { assetId: '', label: 'Generated Asset' },
+  memory: { title: 'Memory', content: '' },
+  conversation: { title: 'Conversation' },
+  fact: { statement: '' },
+};
+
+const REGISTERED_NODE_TYPES = new Set<string>(REGISTERED_CANVAS_NODE_TYPES);
 
 function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -445,12 +463,60 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
         },
       };
     default:
-      return {
-        type: 'annotation',
-        position,
-        size: getNodeDefaultSize('annotation'),
-        zIndex,
-        data: { content: '' },
-      };
+      if (isRegisteredCanvasNodeType(type)) {
+        return buildRegisteredCanvasNode({ type, position, data, zIndex });
+      }
+      throw new Error(`Unsupported Canvas node type "${type}"`);
   }
+}
+
+function buildRegisteredCanvasNode(options: {
+  type: RegisteredCanvasNodeType;
+  position: { x: number; y: number };
+  data: Record<string, unknown>;
+  zIndex: number;
+}): Omit<RegisteredCanvasNode, 'id'> {
+  return {
+    type: options.type,
+    position: options.position,
+    size: getNodeDefaultSize(options.type),
+    zIndex: options.zIndex,
+    data: {
+      ...(REGISTERED_NODE_DEFAULT_DATA[options.type] ?? {}),
+      ...toCanvasSerializableRecord(options.data),
+    },
+  };
+}
+
+function isRegisteredCanvasNodeType(type: CanvasNodeType): type is RegisteredCanvasNodeType {
+  return REGISTERED_NODE_TYPES.has(type);
+}
+
+function toCanvasSerializableRecord(data: Record<string, unknown>): CanvasSerializableRecord {
+  const record: CanvasSerializableRecord = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    const serializable = toCanvasSerializableValue(value);
+    if (serializable !== undefined) {
+      record[key] = serializable;
+    }
+  }
+
+  return record;
+}
+
+function toCanvasSerializableValue(value: unknown): CanvasSerializableValue | undefined {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => toCanvasSerializableValue(item) ?? null);
+  }
+  if (typeof value === 'object' && value !== null) {
+    return toCanvasSerializableRecord(value as Record<string, unknown>);
+  }
+  return undefined;
 }
