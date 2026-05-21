@@ -1258,7 +1258,7 @@ export function CanvasApp() {
             />
           )}
 
-          <FloatingPanelHost panels={floatingPanels} activeSubsystemIds={activeSubsystemIds} />
+          <FloatingPanelHost panels={floatingPanels} />
 
           <div
             className="absolute right-3 bottom-3 z-10 rounded px-2 py-1 text-xs pointer-events-none"

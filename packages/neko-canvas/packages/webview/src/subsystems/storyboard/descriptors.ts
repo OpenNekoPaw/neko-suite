@@ -1,11 +1,24 @@
 import type { NodeTypeDescriptorRegistry } from '../../components/nodes/nodeTypeDescriptor';
+import {
+  ArtboardNodeIcon,
+  CanvasEmbedNodeIcon,
+  DocumentNodeIcon,
+  GalleryNodeIcon,
+  ModelNodeIcon,
+  ProjectNodeIcon,
+  SceneNodeIcon,
+  ScriptNodeIcon,
+  ShotNodeIcon,
+  StoryboardNodeIcon,
+  TableNodeIcon,
+} from './icons';
 
 export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
   return {
     storyboard: {
       type: 'storyboard',
       labelKey: 'node.storyboard',
-      icon: '\u{1F3AC}',
+      icon: StoryboardNodeIcon,
       tagLabel: 'BOARD',
       tagColor: '#f59e0b',
       defaultSize: { width: 240, height: 160 },
@@ -13,7 +26,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     artboard: {
       type: 'artboard',
       labelKey: 'node.artboard',
-      icon: '\u{1F5BC}',
+      icon: ArtboardNodeIcon,
       tagLabel: 'ARTBOARD',
       tagColor: '#a855f7',
       defaultSize: { width: 640, height: 360 },
@@ -21,7 +34,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     table: {
       type: 'table',
       labelKey: 'node.table',
-      icon: '\u{1F4CA}',
+      icon: TableNodeIcon,
       tagLabel: 'TABLE',
       tagColor: '#0ea5e9',
       defaultSize: { width: 660, height: 400 },
@@ -29,7 +42,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     shot: {
       type: 'shot',
       labelKey: 'node.shot',
-      icon: '\u{1F3AC}',
+      icon: ShotNodeIcon,
       tagLabel: 'SHOT',
       tagColor: '#ef4444',
       defaultSize: { width: 220, height: 200 },
@@ -37,7 +50,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     scene: {
       type: 'scene',
       labelKey: 'node.sceneGroup',
-      icon: '\u{1F39E}',
+      icon: SceneNodeIcon,
       tagLabel: 'SCENE',
       tagColor: '#10b981',
       defaultSize: { width: 640, height: 400 },
@@ -45,7 +58,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     gallery: {
       type: 'gallery',
       labelKey: 'node.gallery',
-      icon: '\u{1F5BC}',
+      icon: GalleryNodeIcon,
       tagLabel: 'GALLERY',
       tagColor: '#8b5cf6',
       defaultSize: { width: 290, height: 360 },
@@ -53,7 +66,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     script: {
       type: 'script',
       labelKey: 'node.script',
-      icon: '\u{1F4C4}',
+      icon: ScriptNodeIcon,
       tagLabel: 'SCRIPT',
       tagColor: '#10b981',
       defaultSize: { width: 280, height: 220 },
@@ -61,7 +74,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     document: {
       type: 'document',
       labelKey: 'node.document',
-      icon: '\u{1F4DA}',
+      icon: DocumentNodeIcon,
       tagLabel: 'DOC',
       tagColor: '#64748b',
       defaultSize: { width: 220, height: 280 },
@@ -69,7 +82,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     model: {
       type: 'model',
       labelKey: 'node.model',
-      icon: '\u{1F9E0}',
+      icon: ModelNodeIcon,
       tagLabel: 'MODEL',
       tagColor: '#14b8a6',
       defaultSize: { width: 240, height: 160 },
@@ -77,7 +90,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     'canvas-embed': {
       type: 'canvas-embed',
       labelKey: 'node.canvasEmbed',
-      icon: '\u{1F5C2}',
+      icon: CanvasEmbedNodeIcon,
       tagLabel: 'CANVAS',
       tagColor: '#6366f1',
       defaultSize: { width: 260, height: 180 },
@@ -85,7 +98,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
     project: {
       type: 'project',
       labelKey: 'node.project',
-      icon: '\u{1F4E6}',
+      icon: ProjectNodeIcon,
       tagLabel: 'PROJECT',
       tagColor: '#d946ef',
       defaultSize: { width: 260, height: 180 },

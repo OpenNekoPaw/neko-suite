@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isValidElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { renderCanvasNode } from './nodeRendererRegistry';
 import { createStoryboardNodeRendererRegistry } from '../../subsystems/storyboard/renderers';
@@ -24,6 +25,7 @@ describe('nodeRendererRegistry', () => {
     const descriptors = createStoryboardNodeTypeDescriptors();
 
     expect(descriptors.shot?.tagLabel).toBe('SHOT');
+    expect(isValidElement(descriptors.shot?.icon)).toBe(true);
     expect(descriptors.scene?.defaultSize).toEqual({ width: 640, height: 400 });
     expect(descriptors.annotation).toBeUndefined();
   });

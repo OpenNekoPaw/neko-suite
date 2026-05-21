@@ -10,6 +10,7 @@
  * (PropertyPanel depends on i18n + form helpers that would create a cycle).
  */
 
+import type React from 'react';
 import type { CanvasNodeType } from '@neko/shared';
 
 // =============================================================================
@@ -26,8 +27,8 @@ export interface NodeTypeDescriptor {
   type: CanvasNodeType;
   /** i18n key for the display label, resolved via t() at render time */
   labelKey: string;
-  /** Toolbar icon emoji string */
-  icon: string;
+  /** Toolbar/library icon. Strings are supported for legacy descriptors. */
+  icon: React.ReactNode;
   /** Short uppercase tag label for the node header (e.g. "SHOT", "SCENE") */
   tagLabel: string;
   /** Hex color for the type tag in the node header */

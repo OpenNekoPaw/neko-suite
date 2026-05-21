@@ -1,12 +1,10 @@
 import type React from 'react';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CanvasSubsystemId } from '@neko/shared';
 import { CloseIcon } from '@neko/shared/icons';
 import type { FloatingPanelDefinition } from '../../subsystems';
 
 export interface FloatingPanelHostProps {
   panels: readonly FloatingPanelDefinition[];
-  activeSubsystemIds: readonly CanvasSubsystemId[];
 }
 
 interface PanelPosition {
@@ -14,7 +12,7 @@ interface PanelPosition {
   y: number;
 }
 
-export function FloatingPanelHost({ panels, activeSubsystemIds }: FloatingPanelHostProps) {
+export function FloatingPanelHost({ panels }: FloatingPanelHostProps) {
   const [visiblePanelIds, setVisiblePanelIds] = useState<Set<string>>(() => new Set());
   const [positions, setPositions] = useState<Record<string, PanelPosition>>({});
 
@@ -74,7 +72,6 @@ export function FloatingPanelHost({ panels, activeSubsystemIds }: FloatingPanelH
           <FloatingPanelFrame
             key={panel.id}
             panel={panel}
-            activeSubsystemIds={activeSubsystemIds}
             position={positions[panel.id] ?? { x: 260 + index * 24, y: 68 + index * 24 }}
             onMove={(position) =>
               setPositions((current) => ({ ...current, [panel.id]: position }))
@@ -94,13 +91,11 @@ export function FloatingPanelHost({ panels, activeSubsystemIds }: FloatingPanelH
 
 function FloatingPanelFrame({
   panel,
-  activeSubsystemIds: _activeSubsystemIds,
   position,
   onMove,
   onClose,
 }: {
   panel: FloatingPanelDefinition;
-  activeSubsystemIds: readonly CanvasSubsystemId[];
   position: PanelPosition;
   onMove: (position: PanelPosition) => void;
   onClose: () => void;
