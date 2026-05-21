@@ -39,7 +39,7 @@
 - **市场事实**: 2D VTuber 市场（全球 200 万+ VTuber 的多数）以 Live2D (.moc3) 为事实标准，驱动 300+ 商业作品
 - **用户资产**: 大量用户持有 .moc3 模型（委托制作成本 $500-5000），无法迁移到其他格式
 - **VRM 不可替代 Live2D**: VRM 是 3D 格式（neko-model 已支持），Live2D 是 2D 格式（neko-puppet），两者面向不同用户群、不同创作需求，互补而非替代
-- **Inochi2D 风险**: inox2d 原型状态 + Inochi Creator 19 个月无发布 + NLnet 资助已过期，INP 格式通用性极低
+- **Inochi2D 风险**: INP 格式已完全废弃（见 ADR-puppet-model-format-integration），inox2d 依赖已移除
 
 ### 1.2 核心决策
 
@@ -72,7 +72,7 @@
                      ┌─────────────────────────────────────┐
                      │         Extension Host (TS)          │
                      │  PuppetEditorProvider                │
-                     │  ├── .nkp / .inp / .moc3 dispatch   │
+                     │  ├── .nkp / .moc3 dispatch           │
                      │  └── agentCapabilityProvider (不变)  │
                      └──────────────┬──────────────────────┘
                                     │ postMessage / HTTP / WS
@@ -94,7 +94,7 @@
    │                                                            │
    │  ┌──────────┐   ┌───────────┐   ┌──────────────────────┐ │
    │  │loader.rs │   │moc3/      │   │ ECS Components       │ │
-   │  │(INP)     │   │loader.rs  │   │ (格式无关)           │ │
+   │  │(legacy)  │   │loader.rs  │   │ (格式无关)           │ │
    │  │已有      │   │新增       │   │                      │ │
    │  └────┬─────┘   └────┬──────┘   │ PuppetParameters     │ │
    │       │              │          │ MeshData              │ │
@@ -143,7 +143,7 @@ HTTP API → Webview → PuppetCanvas.tsx (零修改)
 
 ### 2.4 AI 集成分析
 
-| 维度 | Live2D (.moc3) | VRM (.vrm) | INP (.inp) |
+| 维度 | Live2D (.moc3) | VRM (.vrm) | INP (.inp) 已废弃 (Deprecated) |
 |------|----------------|-----------|------------|
 | **AI 可读性** | 极低（编译后二进制） | 高（JSON + bin） | 中（JSON payload） |
 | **参数可操作性** | **最高** — 标准化命名（ParamAngleX 等） | 高 — VRM Expression | 高 — 类似 Live2D |
@@ -156,7 +156,7 @@ HTTP API → Webview → PuppetCanvas.tsx (零修改)
 
 ## 3. 分阶段开发计划
 
-### Phase 0: 清理 — 移除 inox2d（1 天）
+### Phase 0: 清理 — 移除 inox2d（已完成）
 
 **复杂度**: S
 
@@ -227,7 +227,7 @@ pub struct DeformAxis {
 
 Phase 1 仅实现 **1D 参数插值**（单轴 key form 线性插值），2D 在 Phase 2。
 
-**验证**: 合成数据单元测试（10+），INP 回归测试全通过
+**验证**: 合成数据单元测试（10+），回归测试全通过
 
 **Done**: .moc3 文件可解析为 ECS 实体，1D key form 插值正确，格式自动检测工作
 
@@ -263,7 +263,7 @@ Phase 1 仅实现 **1D 参数插值**（单轴 key form 线性插值），2D 在
 4. rotation_deformer_update  ← 新增，深度优先序
 5. warp_deformer_update      ← 新增，深度优先序
 6. multi_key_deformation_update ← 新增，叶节点 drawable
-7. parameter_update (现有，处理 INP ParameterBinding)
+7. parameter_update (现有，处理 ParameterBinding)
 8. transform_propagation_2d (现有)
 ```
 
@@ -291,7 +291,7 @@ Phase 1 仅实现 **1D 参数插值**（单轴 key form 线性插值），2D 在
 
 **Motion**: Bezier 段按 30fps 采样为线性关键帧，完全复用现有 `AnimationClip`/`ParameterCurve`
 
-**Physics**: Live2D 链式摆锤（输入参数 → 链节点传播 → 输出参数），比 INP 的 SimplePhysics 更复杂
+**Physics**: Live2D 链式摆锤（输入参数 → 链节点传播 → 输出参数），替代旧 SimplePhysics 实现
 
 #### 修改文件
 
@@ -354,7 +354,7 @@ Phase 1 仅实现 **1D 参数插值**（单轴 key form 线性插值），2D 在
 
 **验证**: 单测（4+），手动: 打开 .moc3 → 启用面部追踪 → 验证响应
 
-**Done**: 面部追踪对 .moc3 和 .inp 均正常工作
+**Done**: 面部追踪对 .moc3 正常工作
 
 ---
 
@@ -470,7 +470,7 @@ Week 8:  集成测试 + 修复 + 文档
 
 | 文件路径 | Phase | 变更摘要 |
 |---------|-------|---------|
-| `runtime-puppet/Cargo.toml` | 0,1 | 移除 inox2d，添加 live2d-parser |
+| `runtime-puppet/Cargo.toml` | 0,1 | 移除 inox2d（已完成），添加 live2d-parser |
 | `runtime-puppet/src/lib.rs` | 0,1 | 更新注释 + 注册 moc3 模块 |
 | `runtime-puppet/src/components.rs` | 1,2 | 新增 MultiKeyDeformation, WarpDeformer 等 |
 | `runtime-puppet/src/systems.rs` | 2,3 | 新增变形/表情/物理系统调用 |

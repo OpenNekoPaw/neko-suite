@@ -15,7 +15,7 @@ Proposed (2026-04-25)
 neko-engine 当前有两个独立的 ECS crate:
 
 - `runtime-scene`:3D 场景 ECS(bevy_ecs + glTF + IK + Animation Blend)
-- `runtime-puppet`:2D 骨骼 ECS(bevy_ecs + inox2d + Animation Blend)
+- `runtime-puppet`:2D 骨骼 ECS(bevy_ecs + MOC3 clean-room parser + Animation Blend)
 
 它们在多处呈现**镜像重复**:
 
@@ -54,12 +54,12 @@ neko-engine 当前有两个独立的 ECS crate:
 
 | 不共享对象 | 原因 |
 |-----------|------|
-| Skeleton(3D) vs ParameterBinding(2D inox2d) | 两种动画范式,数据结构本质不同 |
+| Skeleton(3D) vs ParameterBinding(2D MOC3) | 两种动画范式,数据结构本质不同 |
 | IK 求解器(FABRIK/CCD/TwoBone) | 3D 专属,2D 用参数语义直接表达 |
-| Mesh 形变(2D inox2d 顶点位移) | 2D 专属,3D 用骨骼蒙皮 |
-| GPU 管线(stereo / skinning / inox2d 渲染) | 渲染路径根本不同 |
+| Mesh 形变(2D MOC3 顶点位移) | 2D 专属,3D 用骨骼蒙皮 |
+| GPU 管线(stereo / skinning / MOC3 渲染) | 渲染路径根本不同 |
 | 资产格式(.nkm vs .nkpup vs .nks) | 序列化二进制布局必然不同 |
-| Loader(glTF vs INP vs PSD) | 解析逻辑无可复用部分 |
+| Loader(glTF vs MOC3 vs PSD) | 解析逻辑无可复用部分 |
 
 ## 设计要点
 
@@ -107,7 +107,7 @@ neko-engine 当前有两个独立的 ECS crate:
 
 ### 2. ECS 数据层不强行统一的根因
 
-`Skeleton`(3D 关节驱动)与 `ParameterBinding`(2D inox2d 参数驱动)是**两种本质不同的动画范式**:
+`Skeleton`(3D 关节驱动)与 `ParameterBinding`(2D MOC3 参数驱动)是**两种本质不同的动画范式**:
 
 | | 3D (Skeleton) | 2D (Puppet) |
 |---|---|---|

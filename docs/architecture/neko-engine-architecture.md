@@ -19,7 +19,7 @@
 │runtime-scene │  │runtime-puppet    │  │runtime-media                 │
 │              │  │                  │  │                              │
 │ bevy_ecs     │  │ bevy_ecs         │  │ ffmpeg-next                  │
-│ glTF/VRM     │  │ MOC3/INP         │  │ probe / diff / subtitle     │
+│ glTF/VRM     │  │ MOC3             │  │ probe / diff / subtitle     │
 │ GPU Skinning │  │ Deformers        │  │ JPEG encode                  │
 │ IK / CSG     │  │ Expression       │  │                              │
 │ Animation    │  │ Motion / Physics │  │ (self-contained, no GPU)     │
@@ -166,7 +166,7 @@
 │  │ World        │ │ World        │ │ Microphone   │ │                │  │
 │  │              │ │              │ │ MIDI         │ │ Upscale        │  │
 │  │ glTF loader  │ │ MOC3 parser  │ │ Gamepad      │ │ Denoise        │  │
-│  │ GPU Skinning │ │ INP loader   │ │              │ │ CLIP           │  │
+│  │ GPU Skinning │ │ MOC3 loader  │ │              │ │ CLIP           │  │
 │  │ Animation    │ │ WarpDeformer │ │ cpal/midir/  │ │ Whisper        │  │
 │  │ Blend/Fade   │ │ RotDeformer  │ │ gilrs        │ │                │  │
 │  │ IK (FABRIK/  │ │ Expression   │ │              │ │ ort + ndarray  │  │
@@ -954,7 +954,7 @@ Target: AssetRegistry becomes "format knowledge hub" with engine-extracted metad
 
   Missing extension-to-type mappings (to add):
     .glb/.gltf/.vrm → '3d-model'      .hdr/.exr → 'environment'
-    .moc3/.inp → 'puppet'              .bvh → 'motion'
+    .moc3 → 'puppet'              .bvh → 'motion'
     .cube/.3dl → 'lut'                 .vmd → 'motion'
     .exp3.json → 'expression'          .motion3.json → 'motion'
     .nkmotion → 'motion'               .nkexpr → 'expression'

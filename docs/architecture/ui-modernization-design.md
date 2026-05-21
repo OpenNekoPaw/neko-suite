@@ -682,7 +682,7 @@ packages/neko-tools/themes/
     ├── file-canvas.svg    (.nkc) — 橙色 #F97316，画板 + 中心圆
     ├── file-audio.svg     (.nka) — 绿色 #22C55E，7 根波形竖线
     ├── file-sketch.svg    (.nks) — 粉色 #EC4899，铅笔
-    ├── file-puppet.svg  (.nkp/.inp) — 黄色 #EAB308，关节人偶
+    ├── file-puppet.svg  (.nkp/.moc3) — 黄色 #EAB308，关节人偶
     ├── file-model.svg     (.nkm) — 青色 #06B6D4，等轴测立方体
     ├── file-3d.svg    (.gltf/.glb) — 蓝色 #3B82F6，开口六面体
     ├── file-avatar.svg    (.vrm) — 紫色 #A855F7，人物剪影

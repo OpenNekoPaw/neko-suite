@@ -322,9 +322,9 @@ Quality review 由 Agent 先形成 `AgentObservation` 和 `DecisionRationale`；
 
 补齐面部参数时间线 Operation：
 
-- `puppet.param.add/remove/update/interpolate`（面部 32 参数 + inox2d 动态参数）
+- `puppet.param.add/remove/update/interpolate`（面部 32 参数 + MOC3 动态参数）
 - `puppet.bone.transform.update`（骨骼 FK/IK 关键帧）
-- `puppet.layer.add/remove/visibility`（inox2d 图层）
+- `puppet.layer.add/remove/visibility`（MOC3 图层）
 
 同步 `applyPuppetOperation` + `invertPuppetOperation`，位置 [operations/](../../packages/neko-types/src/operations/)。
 
@@ -342,7 +342,7 @@ Quality review 由 Agent 先形成 `AgentObservation` 和 `DecisionRationale`；
 ### ADR-O3: 双向导出能力
 
 - `neko-model` 补齐 glTF/VRM 导出路径（目前只读）
-- `neko-puppet` 导出 `.nkp` + 可选 inox2d `.psd` 回写
+- `neko-puppet` 导出 `.nkp` + 可选 MOC3 `.psd` 回写
 - 导出触发 `GeneratedAsset` 产出 → 可回流 Agent 上下文
 
 ### ADR-O4: Agent Capability 注册

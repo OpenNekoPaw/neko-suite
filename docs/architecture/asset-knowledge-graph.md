@@ -125,7 +125,7 @@ Entity: alice (character)
 | `.gif/.apng` | 循环动画 | action / style |
 | `.psd` | 多图层 2D | character / scene |
 | `.nksk` | Sketch 工程 | character / scene |
-| `.nkpup / .inp` | 2D 骨骼 | character |
+| `.nkpup / .moc3` | 2D 骨骼 | character |
 | `.gltf/.glb/.fbx` | 3D 模型 | character / prop |
 | `.obj/.stl` | 纯几何 3D | prop / scene |
 | `.bvh/.vmd` | 动作捕捉 | action |

@@ -148,7 +148,7 @@
 | `VideoPreviewProvider`    | .mp4/.mov/.mkv/.webm            | `MediaStream`（全景流）或 `StaticImage`（poster frame）    | HwAccelDecoder + PanoramicRenderer + StreamSink    |
 | `AudioPreviewProvider`    | .mp3/.wav/.flac/.ogg            | `MediaStream`（纯音频流）                                  | 无 GPU                                             |
 | `ScenePreviewProvider`    | .gltf/.glb/.vrm/.nkm            | `ModelScene`（SceneRenderer 快照）                         | SceneRenderer（GPU）                               |
-| `PuppetPreviewProvider`   | .nkp/.inp                       | `ModelScene` 或 `StaticImage`                              | PuppetRenderer（GPU）                              |
+| `PuppetPreviewProvider`   | .nkp/.moc3                      | `ModelScene` 或 `StaticImage`                              | PuppetRenderer（GPU）                              |
 | `DocumentPreviewProvider` | .pdf/.epub/.docx                | `StaticImage` 或 `HtmlDocument`                            | runtime-media（CPU）                               |
 
 CPU 预览路径仍然适用于音频、图片（非全景 thumbnail/proxy）和文档。全景投影渲染、视频、scene 和 puppet 预览必须在 GPU 上执行；如果所需 GPU 路径不可用，provider 必须快速失败，而不是改用 CPU 渲染。

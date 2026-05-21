@@ -192,7 +192,7 @@
 │  │puppet      │ │              │ │device       │ │                   │  │
 │  │            │ │ bevy_ecs     │ │             │ │ ONNX Runtime      │  │
 │  │ bevy_ecs   │ │ glTF/VRM    │ │ Camera      │ │ ├ Upscale/Denoise│  │
-│  │ MOC3/INP   │ │ GPU Skinning│ │ (nokhwa)    │ │ ├ CLIP/Whisper   │  │
+│  │ MOC3       │ │ GPU Skinning│ │ (nokhwa)    │ │ ├ CLIP/Whisper   │  │
 │  │ Deformers  │ │ IK (FABRIK) │ │ Microphone  │ │ ├ Depth/Normal   │  │
 │  │ Expression │ │ Animation   │ │ (cpal)      │ │ ├ Pose/Face      │  │
 │  │ Motion     │ │ Blend+Fade  │ │ MIDI(midir) │ │ └ TripoSR/3DGS  │  │
@@ -267,7 +267,7 @@ See neko-engine-architecture.md for full definitions.
 │  │neko-     │ │neko-     │ │neko-live │ │neko-audio│ │neko-preview  │  │
 │  │puppet    │ │sketch    │ │VTuber    │ │Audio Edit│ │File Preview  │  │
 │  │2D Skeletal│ │2D Paint │ │VMC/ARKit │ │Multi-trk │ │PDF/EPUB/     │  │
-│  │MOC3/INP  │ │Brush/Lyr│ │Recording │ │Spectrum  │ │Video/Image   │  │
+│  │MOC3      │ │Brush/Lyr│ │Recording │ │Spectrum  │ │Video/Image   │  │
 │  │Animation │ │Pressure │ │Tracking  │ │Effects   │ │Waterfall     │  │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────────┘  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────────────┐   │

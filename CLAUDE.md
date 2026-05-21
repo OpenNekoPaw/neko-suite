@@ -151,6 +151,8 @@ Before diving into any domain, consult the corresponding ADR document. For the f
 | Path System | *internalized* | Project files store only relative paths and `${VAR}/path`; PathResolver(@neko/shared L0) handles unified resolution; variable sources: neko/settings.json (media library, git-tracked) + .neko/settings.local.json (local overrides, gitignored); EngineClient/PreviewFileServer auto-expand variables before calling engine; Rust ProjectContext supports standalone CLI execution |
 | Webview UI Design System | [docs/architecture/adr-webview-ui-design-system.md](./docs/architecture/adr-webview-ui-design-system.md) | **Proposed (2026-05-19)**. 13 个 webview 底层栈已统一（React 18 + Tailwind + Vite + Design Tokens + i18n）。组件层缺口：无 PropertyPanel/ColorPicker/NumberInput/TreeView/Dialog/Tooltip 抽象，6 包各自实现属性面板。方案：新建 `@neko/ui` Layer 0 包，shadcn/ui 源码模式 + Radix Primitives（基础控件 a11y）+ 创作领域自建（ColorPicker/NumberInput/PropertyPanel/TreeView/AssetBrowser/Canvas2DContainer）。渐进迁移 4 阶段 ~16d，@neko/shared re-export 保持兼容。 |
 | Panorama Coverage & Cylindrical | [docs/architecture/adr-panorama-coverage-cylindrical.md](./docs/architecture/adr-panorama-coverage-cylindrical.md) | **Proposed (2026-05-20)**. 区分 180°/360° 全景 + 新增 cylindrical 投影类型。PanoramaCoverageAngle 元数据（horizontalDeg/verticalDeg）贯穿 TS 类型→Rust engine→WebGL shader→ViewStateController→UI。Cylindrical shader 线性透视纵向（无极点畸变）；GPano CroppedArea 字段解析自动计算 equirectangular 覆盖；柱状全景仅手动触发（不自动检测）；coverage-aware yaw/pitch clamping（FOV 联动）。6-PR 迁移 ~5.5d。 |
+| Structured Data Persistence | [docs/architecture/adr-structured-data-persistence.md](./docs/architecture/adr-structured-data-persistence.md) | **Proposed (2026-05-20)**. JSON 保持 SSOT，SQLite + sqlite-vec 作为缓存层（`.neko/.cache/neko-cache.db`）。Rust sidecar 拥有 DB 连接（rusqlite），TS 通过 ActionRouter `cache:*` 命令族访问。结构化表 + FTS5 全文搜索 + sqlite-vec 向量 ANN 单 DB 全覆盖。数据三层分类：Tier 1 入库（素材库/实体绑定/关系图/生成物/对话日志/向量嵌入）、Tier 2 按需（proxy/task recovery）、Tier 3 永不入库（配置/项目文件/Memory）。四阶段：P0 基础设施 → P1 媒体索引 → P2 素材库+关系图 → P3 向量+对话。~16 PR。 |
+| 3DGS Application Analysis | [docs/architecture/adr-3dgs-application-analysis.md](./docs/architecture/adr-3dgs-application-analysis.md) | **Proposed (2026-05-20)**. 3DGS 三维度分析：AI 视频参考（极高契合 L4+ControlNet，GEN3C/DiffSplat/MVControl 已验证）、骨骼动画（人体近可用 ASH/HuGS 80FPS，通用研究期）、场景分解（SAGA 4ms/LangSplat 文本驱动，中高成熟度）。核心定位：实拍场景照片级数字孪生，为 AI 视频提供几何控制信号。4 Phase 实施：P1 只读查看器+参考渲染 → P2 AI 视频管线集成 → P3 骨骼动画 → P4 分解+Agent 编辑。 |
 
 ### Rust Engine Development Constraints
 
@@ -165,7 +167,7 @@ Rust Layer (neko-engine)
   +-- engine-kernel:   GPU rendering (wgpu + GPU Skinning), FFmpeg codec, audio/video processing
   +-- engine-types:    Shared Rust DTO types
   +-- runtime-scene:   3D scene ECS (bevy_ecs + glTF + IK + Animation Blend)
-  +-- runtime-puppet:  2D skeletal ECS (bevy_ecs + inox2d + Animation Blend)
+  +-- runtime-puppet:  2D skeletal ECS (bevy_ecs + MOC3 + Animation Blend)
   +-- runtime-device:  Device I/O (camera/mic via cpal, MIDI via midir, gamepad via gilrs)
   +-- runtime-ml:      ML inference (ONNX Runtime — upscale/denoise/CLIP/Whisper)
   +-- runtime-media:   Media domain logic (probe/diff/subtitle/JPEG — no GPU)

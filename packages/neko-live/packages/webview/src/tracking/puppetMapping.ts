@@ -1,14 +1,14 @@
 /**
  * Maps ARKit-compatible blend shape names (from VMC) to puppet parameter names.
  *
- * Supports INP (legacy) and Live2D (.moc3) parameter naming conventions.
+ * Supports Live2D MOC3 parameter naming conventions.
  * Live2D models use standardized names (ParamAngleX, ParamEyeLOpen, etc.).
  *
  * The mapping is applied when avatarType is 'puppet' to translate VMC tracking
  * data into puppet parameter updates sent to the engine.
  */
 
-/** Standard puppet ↔ ARKit mapping (covers both INP and MOC3 naming) */
+/** Standard puppet ↔ ARKit mapping (Live2D MOC3 naming) */
 const ARKIT_TO_PUPPET: Record<string, string> = {
   // Eyes — openness
   eyeBlinkLeft: 'ParamEyeLOpen',
@@ -55,7 +55,7 @@ const AVERAGED_PARAMS: Record<string, [string, string]> = {
  *
  * Maps common alternative names to the canonical Live2D parameter names.
  * Used to auto-detect and map parameters regardless of naming convention
- * in the loaded model (INP models may use different names).
+ * in the loaded model.
  */
 export const LIVE2D_PARAM_ALIASES: Readonly<Record<string, string>> = {
   // Head angles
@@ -84,7 +84,7 @@ export const LIVE2D_PARAM_ALIASES: Readonly<Record<string, string>> = {
   // Extras
   ParamCheek: 'ParamCheek',
   ParamBreath: 'ParamBreath',
-  // INP-style aliases → Live2D canonical
+  // Alternative aliases → Live2D canonical
   eye_open_l: 'ParamEyeLOpen',
   eye_open_r: 'ParamEyeROpen',
   mouth_open: 'ParamMouthOpenY',

@@ -51,7 +51,7 @@ Extension code should not read source media/model/puppet/document/subtitle binar
 
 - subtitle byte ranges in `neko-cut`
 - PDF/EPUB/CBZ/DOCX preview bytes and ZIP entries
-- `.inp` puppet loading in `neko-puppet` and `neko-live`
+- `.moc3` puppet loading in `neko-puppet` and `neko-live`
 - `.gltf/.glb/.vrm` model loading and sibling resources
 - media capture, waveform, preview stream, and transcode inputs
 

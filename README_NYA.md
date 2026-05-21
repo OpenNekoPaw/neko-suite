@@ -228,7 +228,7 @@ VS Code 主人 ←─ HTTP/NAPI ─→ neko-engine（猫娘的 Rust 铠甲）
 | **音频**    | MP3, WAV, OGG, FLAC, AAC, M4A | "耳朵好灵敏喵～"       |
 | **图片**    | PNG, JPG, GIF, WebP, BMP, SVG | "看！猫咪图片！喵！"   |
 | **3D 模型** | glTF, GLB, VRM, .nkm          | "3D 也难不倒猫娘喵！"  |
-| **2D 动画** | INP (Inochi2D), .nks          | "骨骼动画，扭起来喵！" |
+| **2D 动画** | MOC3 (Live2D), .nks           | "骨骼动画，扭起来喵！" |
 | **项目**    | .nkv / .nkc                   | "这是猫娘专属格式喵！" |
 
 ---
@@ -356,7 +356,7 @@ git push origin feature/super-nya-feature
 | [React](https://react.dev/) + [Zustand](https://zustand-demo.pmnd.rs/) + [Tailwind](https://tailwindcss.com/) | "前端三件套，软乎乎的皮毛，喵！"                   |
 | [napi-rs](https://napi.rs/)                                                                                   | "Rust↔Node.js 翻译官，辛苦了，喵！"                |
 | [Vite](https://vitejs.dev/) + [Turborepo](https://turbo.build/) + [Vitest](https://vitest.dev/)               | "构建测试全家桶，高效，喵！"                       |
-| [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) + [inox2d](https://github.com/Inochi2D/inox2d)         | "VRM 和 Live2D 支持，让猫娘动起来了，喵！"         |
+| [@pixiv/three-vrm](https://github.com/pixiv/three-vrm)                                                        | "VRM 支持，让猫娘动起来了，喵！"                   |
 | [cpal](https://github.com/RustAudio/cpal) + [sharp](https://sharp.pixelplumbing.com/)                         | "音频 I/O + 图像处理，感官全开，喵！"              |
 | [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API)                                   | "浏览器原生编解码，超厉害，喵！"                   |
 | 每一位主人                                                                                                    | "谢谢使用猫娘，猫娘会更努力的，喵！！"             |

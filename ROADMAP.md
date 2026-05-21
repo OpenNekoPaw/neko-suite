@@ -46,7 +46,7 @@
 
 | Module          | Status | Progress | Description                                                                                                                                                                                                                                                                         |
 | --------------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **neko-puppet** | Alpha  | 92%      | **8.5K LOC** + 104 Rust tests; **MOC3 loading** (clean-room parser/deformers/expressions/motions/physics) + INP legacy read-only + parameter deformation + animation blending + 60fps streaming + Canvas rendering + **Live Mode (WIP)**; remaining: AI tools (Phase 6) / VTS API (Phase 7) / MOC3 export |
+| **neko-puppet** | Alpha  | 92%      | **8.5K LOC** + 104 Rust tests; **MOC3 loading** (clean-room parser/deformers/expressions/motions/physics) + parameter deformation + animation blending + 60fps streaming + Canvas rendering + **Live Mode (WIP)**; remaining: AI tools (Phase 6) / VTS API (Phase 7) / MOC3 export |
 | **neko-model**  | Alpha  | 87%      | **12.6K LOC** + 49 Rust tests; glTF/VRM + PBR/IBL + CSG + face sculpting + particles + keyframes + **viewport orbit/pan/zoom ✅** + **3D rendering pipeline fixes ✅** + **i18n complete ✅** + **engine rendering control plane ✅** + **Live Mode (WIP)**; remaining: IK UI / Undo / Blender bridging |
 | **neko-live**   | Alpha  | 58%      | **~3K LOC** + 0 tests; VMC+VRM + Puppet integration + recording + **LiveSessionService (WIP)** + **TrackingService extraction (WIP)**; **blocked**: nokhwa crate / MediaPipe / streaming ([ADR](./docs/architecture/adr-device-management.md))                                                        |
 
@@ -318,7 +318,7 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 - Phase 2 Rust Engine: keyframe CRUD + animation blending + EasingType 30+ variants (runtime-puppet 51 tests + runtime-scene 49 tests)
 - Phase 2.5 P0+P1: Template creation + Visible/Opacity/MorphWeights/Material/DeleteNode APIs
 - Phase 2.5 P2: texture hot-swap + physics simulation + material extensions
-- Phase 2.5 Editor UI: VerticalToolbar + Canvas 2D renderer + INP texture parsing
+- Phase 2.5 Editor UI: VerticalToolbar + Canvas 2D renderer
 </details>
 
 - Phase 3.2 remaining: AI MCP Tools (face.generate_params / face.from_image / face.adjust)
@@ -391,7 +391,7 @@ Engine GPU rendering + codec + export. Cut timeline + preview + EditOperation. C
 
 - [ ] **P1 Types + Resolver + Path A**: `ReferenceStrategy` (L0-L5) + `CameraKeyframe` + `CameraMotionAnalysis` types + `ReferenceStrategyResolver` with **dual-axis capability matrix** (reference tier × camera channel) + Agent MCP tool + Seedance/Veo adapters + **`CameraMotionAnalyzer`** (Path A: 3D → cinematic prompt, Tier L1 syntax perception, every generation)
 - [ ] **P2 3D→2D Turnaround + Path B + ControlNet Producer**: runtime-scene `render_views` offscreen action + GalleryNode "Fill from 3D" auto-fill + turnaround cache + L4 → L2 downgrade in adapters + **`KeyframeRenderer` + `CameraPayloadBuilder`** (Path B: 3D → start/end frame, Tier L2 composition perception) + **`ControlNetAssetProducer` interface + `Image2DControlProducer`** (source-agnostic ControlNet asset interface in @neko/shared, absorbs controlnet-pipeline.md §E5)
-- [ ] **P3 Cross-shot Consistency + Path C + 3D/Puppet Producers**: `CharacterBundle.referenceSet` persistent binding + auto injection into `ImageGenerationRequest.characterBindings[]` via characterId lookup + **`MotionSequenceRenderer`** (Path C: depth/normal/RGB-low sequence for Kling O3 + ControlNet-video, Tier L3 spatial perception, opt-in) + **`Scene3DControlProducer`** (wgpu depth/normal/skeleton projection — ground-truth control maps) + **`PuppetControlProducer`** (optional; 2D bone + silhouette for Live2D/INP) + provider ControlNet capability matrix in payload builder
+- [ ] **P3 Cross-shot Consistency + Path C + 3D/Puppet Producers**: `CharacterBundle.referenceSet` persistent binding + auto injection into `ImageGenerationRequest.characterBindings[]` via characterId lookup + **`MotionSequenceRenderer`** (Path C: depth/normal/RGB-low sequence for Kling O3 + ControlNet-video, Tier L3 spatial perception, opt-in) + **`Scene3DControlProducer`** (wgpu depth/normal/skeleton projection — ground-truth control maps) + **`PuppetControlProducer`** (optional; 2D bone + silhouette for Live2D MOC3) + provider ControlNet capability matrix in payload builder
 - [ ] **P4 Quality Gate**: CLIP identity consistency + camera angle LLM scoring + HSV lighting continuity + trajectory fidelity vs 3D ground truth metrics
 
 **Perception decision**: L1 prompt normalization ships with every generation (cheap, universal benefit). L2 keyframe rendering is recommended for multi-shot productions (the main consistency pain point). L3 depth/motion sequence is opt-in only when a 3D scene is bound (avoids over-engineering for concept shots).
@@ -549,7 +549,7 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 - ✅ PuppetViewer (Canvas 2D rendering of inochi2d deformed meshes + z_order sorting + auto-scaling)
 - ✅ puppetMapping (ARKit → inochi2d parameters: eye/mouth/brow/head angle quaternion→euler)
 - ✅ LivePanelProvider puppet management (fs → loadPuppet → openPuppetStream → PuppetDelta forwarding)
-- ✅ Avatar selector supporting 7 formats: `.nkm`/`.nkp` (project files auto-parse `model.src`/`puppet.src`) + `.vrm`/`.glb`/`.gltf` + `.inp`/`.inx`
+- ✅ Avatar selector supporting 5 formats: `.nkm`/`.nkp` (project files auto-parse `model.src`/`puppet.src`) + `.vrm`/`.glb`/`.gltf`
 - ✅ CanvasRecorder (canvas.captureStream + MediaRecorder → WebM VP9 → base64 → disk save)
 - ✅ Microphone recording (EngineClient.recordStart → cpal → WAV)
 - ✅ Recording UI (red border + blinking REC badge + timer + save path display)
@@ -609,11 +609,10 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 ### neko-puppet Long-term Roadmap
 
-**Current state**: ~8,500 lines of production code, 104 Rust tests. Primary format: **Live2D MOC3 (.moc3)** clean-room implementation. INP (.inp) legacy read-only support retained.
+**Current state**: ~8,500 lines of production code, 104 Rust tests. Primary format: **Live2D MOC3 (.moc3)** clean-room implementation.
 
 | Completed Capability                                                                            | LOC                                 | Quality    |
 | ----------------------------------------------------------------------------------------------- | ----------------------------------- | ---------- |
-| INP binary parsing (JSON + TEX_SECT texture extraction)                                         | 704 lines Rust + 65 lines TS        | Production |
 | **MOC3 binary parser** (clean-room, zero unsafe, OpenL2D spec)                                  | ~570 lines Rust                     | Production |
 | **MOC3 loader** (→ format-agnostic ECS entities)                                                | ~370 lines Rust                     | Production |
 | **Key form interpolation** (1D linear)                                                          | ~170 lines Rust                     | Production |
@@ -639,7 +638,7 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 **Phase P.1: Enhanced Editing (Mid-term)**
 
-- [ ] Puppet export (MOC3 writer → save modified puppets; currently read-only; INP deprecated)
+- [ ] Puppet export (MOC3 writer → save modified puppets; currently read-only)
 - [ ] Puppet creation from scratch (drawing tools → mesh → parameter binding, high effort, can delegate to neko-sketch collaboration)
 - [ ] Advanced physics (cloth constraints + collision detection; currently spring/pendulum only)
 - [ ] Video export (currently WebSocket streaming only, lacks H.264 recording to file)
@@ -653,7 +652,6 @@ Phases 0-5.6 all complete (Tailwind + macOS Token + shared components + VSCode t
 
 **Known design constraints**:
 
-- inox2d upstream lacks animation loading → bevy_animation ParameterCurve bridge (completed)
 - Composite-as-mask panic on specific models → load-time detection + skip warning
 - No wgpu renderer → frontend Canvas 2D rendering + Rust data (current approach)
 

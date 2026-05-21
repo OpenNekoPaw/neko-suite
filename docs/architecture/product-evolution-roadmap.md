@@ -3501,7 +3501,7 @@ Risk points:
   ⚠️ Real-time rendering + encoding performance bottleneck
 
 Mitigation:
-  - Puppet: inox2d community has mature implementation, reusable
+  - Puppet: MOC3 clean-room parser implemented, production-ready
   - AI models: Provider abstraction layer exists, can switch providers
   - Performance: Rust + GPU compute ceiling is high enough
 

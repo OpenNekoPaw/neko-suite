@@ -24,7 +24,7 @@ packages/neko-engine/
 │   ├── host-api/     # Rust: Controller 层 + ActionRouter + 资源管理
 │   ├── host-http/    # Rust: axum HTTP/WebSocket 服务
 │   ├── runtime-scene/   # Rust: 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
-│   ├── runtime-puppet/  # Rust: 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
+│   ├── runtime-puppet/  # Rust: 2D 骨骼 ECS（bevy_ecs + MOC3 + bevy_animation）
 │   ├── host-napi/    # Rust: Node.js N-API 绑定（napi-rs）
 │   ├── host-cli/     # Rust: 独立 CLI 二进制
 │   ├── types/          # Rust: 共享 DTO（跨 crate 契约）
@@ -58,7 +58,7 @@ packages/neko-engine/
 │  │    POST /v1/dispatch          — 通用 ActionRequest    │    │
 │  │    POST /v1/:group/:id        — RESTful 资源操作      │    │
 │  │    GET  /v1/streams/:id       — WebSocket 媒体流      │    │
-│  │    POST /v1/puppets/load      — 加载 INP 文件         │    │
+│  │    POST /v1/puppets/load      — 加载 MOC3 文件        │    │
 │  │    POST /v1/puppets/param     — 设置参数              │    │
 │  │    POST /v1/puppets/tick      — 物理步进              │    │
 │  │    POST /v1/puppets/anim/play — 播放动画片段          │    │
@@ -232,7 +232,7 @@ Webview H264StreamClient / AudioStreamClient
 | 编解码 | FFmpeg (ffmpeg-next) + 平台硬件加速 |
 | HTTP 服务 | axum + tokio 异步运行时 |
 | N-API 绑定 | napi-rs（Node.js ≥18） |
-| 2D 骨骼 ECS | bevy_ecs 0.15 + inox2d（BSD 2-Clause）+ bevy_animation |
+| 2D 骨骼 ECS | bevy_ecs 0.15 + MOC3 clean-room parser + bevy_animation |
 | 3D 场景 ECS | bevy_ecs 0.15 + gltf + glam |
 | 序列化 | serde + serde_json |
 | 错误处理 | thiserror + anyhow |

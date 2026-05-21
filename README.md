@@ -295,9 +295,9 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nks)
 │   │       └── webview/       # React 18 + WebGL2 UI
-│   ├── neko-puppet/           # 2D skeletal animation (Live2D MOC3 + INP puppet editor)
+│   ├── neko-puppet/           # 2D skeletal animation (Live2D MOC3 puppet editor)
 │   │   └── packages/
-│   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nkp/.inp/.moc3)
+│   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nkp/.moc3)
 │   │       └── webview/       # React 18 + EngineClient UI
 │   ├── neko-live/             # Virtual production (VMC + VRM + recording)
 │   ├── neko-types/            # Shared types + Logger + i18n + Theme + entity-uri
@@ -413,7 +413,6 @@ Neko Suite is built on the shoulders of many excellent open-source projects:
 - [Bevy ECS](https://bevyengine.org/) - Entity-Component-System framework
 - [glTF-rs](https://github.com/gltf-rs/gltf) - glTF/GLB model parsing
 - [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) - VRM character model support
-- [inox2d](https://github.com/Inochi2D/inox2d) - Inochi2D 2D skeletal characters
 
 ### Frontend
 

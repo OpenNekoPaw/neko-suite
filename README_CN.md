@@ -231,7 +231,7 @@ neko-suite/
 │   │       ├── host-napi/   # Node.js NAPI 绑定
 │   │       ├── host-cli/    # CLI 入口
 │   │       ├── runtime-scene/  # Rust 3D 场景 ECS（bevy_ecs + glTF）
-│   │       ├── runtime-puppet/ # Rust 2D 骨骼 ECS（bevy_ecs + inox2d + bevy_animation）
+│   │       ├── runtime-puppet/ # Rust 2D 骨骼 ECS（bevy_ecs + MOC3 + bevy_animation）
 │   │       ├── types/         # Rust 共享类型
 │   │       └── extension/     # TS VSCode 扩展侧
 │   ├── neko-cut/              # 视频剪辑器
@@ -291,7 +291,7 @@ neko-suite/
 │   │       └── webview/       # React 18 + WebGL2 UI
 │   ├── neko-puppet/           # 2D 骨骼动画（Inochi2D puppet 编辑器）
 │   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nkp/.inp）
+│   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nkp）
 │   │       └── webview/       # React 18 + EngineClient UI
 │   ├── neko-live/             # 虚拟直播（Planned）
 │   ├── neko-types/            # 共享类型 + Logger + i18n + Theme
@@ -329,7 +329,7 @@ neko-suite/
 | **音频**    | MP3, WAV, OGG, FLAC, AAC, M4A       |
 | **图片**    | PNG, JPG, JPEG, GIF, WebP, BMP, SVG |
 | **3D 模型** | glTF, GLB, VRM, .nkm                |
-| **2D 动画** | INP (Inochi2D), .nks (Neko Sketch)  |
+| **2D 动画** | MOC3 (Live2D), .nks (Neko Sketch)  |
 | **项目**    | .nkv (视频项目), .nkc (画布项目)    |
 
 ---
@@ -411,7 +411,6 @@ Neko Suite 站在众多优秀开源项目的肩膀上：
 - [Bevy ECS](https://bevyengine.org/) - 实体-组件-系统框架
 - [glTF-rs](https://github.com/gltf-rs/gltf) - glTF/GLB 模型解析
 - [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) - VRM 角色模型支持
-- [inox2d](https://github.com/Inochi2D/inox2d) - Inochi2D 2D 骨骼角色
 
 ### 前端
 

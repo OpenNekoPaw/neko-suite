@@ -67,7 +67,7 @@ F6  因果可追溯  :  任何输出能溯源到 (intent → plan → op → res
 glTF 骨骼名千人千面                  ─► 强制映射到 Humanoid Standard
    "mixamorig:LeftArm" 等             (Hips/Spine/Chest/L_Shoulder/...)
 
-inox2d 参数名艺术家自取              ─► 已有 32-param 标准,
+MOC3 参数名艺术家自取                ─► 已有 32-param 标准,
                                         但 loader 未强制对齐
 
 3D 面部 22 标准 / 2D 32 标准         ─► 共有 SemanticSlot 抽象
@@ -92,7 +92,7 @@ ML 模型按 id 访问                    ─► CapabilityCard (provider-bridge
 ```
                        ┌─ 骨骼适配 ────────────────────┐
                        │  VRM A → VRM B  (Humanoid 标准间) │
-                       │  VRM   → inox2d (3D→2D 降级)     │
+                       │  VRM   → MOC3 (3D→2D 降级)       │
                        │  VRM   → MMD                     │
                        └──────────────────────────────────┘
                        ┌─ 动画适配 ────────────────────┐
@@ -260,10 +260,10 @@ StateDelta {
 
 | 改造项 | 当前 | 目标 | 优先级 |
 |--------|------|------|--------|
-| 参数名标准化 | INP 原始名 | loader 强制映射到 32 标准参数 | **P0** |
-| 跨 puppet 表情移植 | 不存在 | "笑容 0.7" 在任何 inox2d 模型工作 | **P0** |
+| 参数名标准化 | MOC3 原始名 | loader 强制映射到 32 标准参数 | **P0** |
+| 跨 puppet 表情移植 | 不存在 | "笑容 0.7" 在任何 MOC3 模型工作 | **P0** |
 | 与 3D 模型表情共享 | 无 | SemanticSlot 路由,3D 微笑 ↔ 2D 微笑同槽 | P1 |
-| 形变质量评估 | 无 | inox2d 形变范围越界时 confidence 衰减并报警 | P2 |
+| 形变质量评估 | 无 | MOC3 形变范围越界时 confidence 衰减并报警 | P2 |
 
 #### `runtime-media` (NLE)
 

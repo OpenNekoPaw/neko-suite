@@ -1335,11 +1335,11 @@ export class EngineClient {
   }
 
   // =========================================================================
-  // 2D Puppets (Inochi2D / inox2d)
+  // 2D Puppets (Live2D MOC3)
   // =========================================================================
 
   /**
-   * Load a puppet from INP binary data.
+   * Load a puppet from MOC3 binary data.
    * Dispatches `puppets:load` with base64-encoded data in the body.
    */
   async loadPuppet(data: ArrayBuffer): Promise<Record<string, unknown>> {
@@ -1363,7 +1363,7 @@ export class EngineClient {
 
   /**
    * Load a puppet from an engine-resolved source reference.
-   * Prefer this over forwarding `.inp` bytes through Extension/Webview code.
+   * Prefer this over forwarding `.moc3` bytes through Extension/Webview code.
    */
   async loadPuppetSource(source: string | FileSourceRef): Promise<Record<string, unknown>> {
     const options =

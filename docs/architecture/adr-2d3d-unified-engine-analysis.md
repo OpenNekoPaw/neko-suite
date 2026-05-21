@@ -141,8 +141,8 @@ Intent 层可以携带 domain 数据字段，但不能直接知道 Tool / Servic
 | 形变方式 | Linear Blend Skinning (GPU) | 顶点位移插值 (CPU) |
 | IK | FABRIK / CCD / TwoBone | 不存在（参数即语义） |
 | 刚体单位 | Bone（父子层次树） | Mesh + Drawable |
-| 资产格式 | .nkm (glTF-based) | .nkpup (inox2d-based) |
-| GPU 管线 | Stereo + Skinning | inox2d 渲染 / SpriteBatch |
+| 资产格式 | .nkm (glTF-based) | .nkpup (MOC3-based) |
+| GPU 管线 | Stereo + Skinning | MOC3 渲染 / SpriteBatch |
 
 正确原则仍然是：抽象到 trait / adapter，不抽象到统一数据 type。算法形状同构的部分可共享；领域数据保持分核。
 

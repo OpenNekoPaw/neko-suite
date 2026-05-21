@@ -364,7 +364,7 @@ Respond as JSON: { "score": N, "adjustments": [{ "paramId": "...", "direction": 
      → [3] 三角化网格生成               → 各层 mesh
      → [4] 自动放置变形器               → WarpDeformer 骨架（规则映射）
      → [5] 参数绑定                     → 表情/动作 → 变形器权重
-     → [6] 输出 .inp / .moc3
+     → [6] 输出 .moc3
 ```
 
 | 步骤 | 默认路线 | 离线备用 | 模型 |

@@ -38,7 +38,7 @@ Neko Suite 是深度集成于 VS Code 的创意工作套件，核心挑战是在
 │                                                                 │
 │  engine-kernel:   wgpu GPU · FFmpeg 编解码 · 动画 · GPU Skinning · 导出 · 缓存 │
 │  runtime-scene:  3D 场景 ECS（bevy_ecs + glTF/VRM + IK + Blend）  │
-│  runtime-puppet: 2D 骨骼 ECS（bevy_ecs + inox2d + Blend/Crossfade）│
+│  runtime-puppet: 2D 骨骼 ECS（bevy_ecs + MOC3 + Blend/Crossfade）│
 │  host-http:   axum HTTP/WebSocket 服务（统一端口）             │
 │  host-napi:   Node.js N-API 绑定                              │
 └─────────────────────────────────────────────────────────────────┘
@@ -312,7 +312,7 @@ Extension Host
 | 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
 | 资产管理 | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | 统一 AssetManifest + Handler 注册表模式 |
 | 3D 能力 | *已内化* | bevy_ecs 独立 crate + runtime-scene + R3F 前端；GPU Skinning（双管线 skinned/non-skinned）；FABRIK/CCD/TwoBone IK 求解器；动画混合/Crossfade |
-| 2D 能力 | *已内化* | neko-sketch（绘画）+ neko-puppet（骨骼动画，独立子插件）；runtime-puppet（bevy_ecs + inox2d）；多层动画混合 + Crossfade；WS 实时流供 neko-live |
+| 2D 能力 | *已内化* | neko-sketch（绘画）+ neko-puppet（骨骼动画，独立子插件）；runtime-puppet（bevy_ecs + MOC3 clean-room 解析器）；多层动画混合 + Crossfade；WS 实时流供 neko-live |
 | 角色编辑 | *已内化* | 2D/3D 捏脸、动作调整、绘制、建模能力评估；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享关键帧时间线；.nkm 项目格式；IK 骨骼交互编辑 |
 | 面板放置策略 | [architecture/panel-placement.md](./docs/architecture/panel-placement.md) | 编辑器绑定面板内嵌 Webview，全局面板用 VSCode 原生容器；消除侧栏幽灵数据冲突 |
 | 外部设备访问 | [architecture/device-access.md](./docs/architecture/device-access.md) | Webview 沙箱限制硬件 API，通过 neko-engine Rust sidecar 代理设备 I/O（cpal/nokhwa/midir/gilrs） |

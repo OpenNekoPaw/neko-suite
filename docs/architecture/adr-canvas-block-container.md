@@ -145,7 +145,7 @@ interface AudioBlock extends BlockBase {
 interface Model2DBlock extends BlockBase {
   type: 'model-2d';
   data: {
-    src: string;                // .inp / .psd / .svg
+    src: string;                // .moc3 / .psd / .svg
     thumbnailSrc?: string;
     format: 'inp' | 'psd' | 'svg';
   };

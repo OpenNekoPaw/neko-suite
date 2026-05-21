@@ -280,7 +280,7 @@
 - [ ] **P2: `ControlNetAssetProducer` interface** (@neko/shared): `ControlAsset` / `ControlChannel` types (depth/normal/pose/canny/seg/lineart) + unified producer interface; source-agnostic `produce(channel, context)` returning PNG + optional raw buffer + sidecar metadata
 - [ ] **P2: `Image2DControlProducer`** (runtime-ml): absorbs controlnet-pipeline.md §E5 scope; Depth Anything v2 / OpenPose / Canny / DIS / SAM ONNX backends; output `ControlAsset { source: '2d-onnx', confidence }`
 - [ ] **P3: `Scene3DControlProducer`** (runtime-scene): wgpu depth buffer + geometric normal render pass + skeleton forward projection; output `ControlAsset { source: '3d-render', depthRange, cameraIntrinsics }`; shares offscreen render target with §11 Path C
-- [ ] **P3: `PuppetControlProducer`** (runtime-puppet, optional): 2D bone projection + mesh silhouette for Live2D/INP characters; emits `pose` + `seg` channels
+- [ ] **P3: `PuppetControlProducer`** (runtime-puppet, optional): 2D bone projection + mesh silhouette for Live2D MOC3 characters; emits `pose` + `seg` channels
 - [ ] **P3: ControlNet cache layout**: `.neko/.cache/controlnet/<2d|3d|puppet>/<hash>/<channel>.png` + `<channel>.json` sidecar + opt-in `.bin` raw buffer via `qualityGate.keepRawControlBuffers`
 - [ ] **P3: Provider ControlNet matrix**: extend payload builder with `ControlPayloadHint` per provider (Flux/ComfyUI first-class / Seedance-Veo-Runway implicit via ref images / Kling O3 via video-ref / Sora 2 unsupported)
 - [ ] **P3: `CharacterBundle.referenceSet`**: `{ gallery / lora / turnaround }` persistent binding; depends on adr-character-unified-index.md P1 (characters.json contract)
@@ -369,7 +369,7 @@
 
 - [ ] **Phase 6**: AI-assisted puppet creation — `PuppetListExpressions` + `PuppetSetExpression` agent tools, template import UI ([plan](./docs/development/neko-puppet-moc3-support.md#phase-6))
 - [ ] **Phase 7**: VTube Studio API compatibility — WebSocket endpoint for VTS plugin interop ([plan](./docs/development/neko-puppet-moc3-support.md#phase-7))
-- [ ] Export functionality: MOC3 writer (currently read-only editor; INP format deprecated — legacy read-only support retained)
+- [ ] Export functionality: MOC3 writer (currently read-only editor)
 - [ ] **2D 可复用动作资产**: 独立表情/动作预设集 (存 Live2D 标准参数名) — 支持跨 MOC3 模型复用 + marketplace 分享
 - [ ] Advanced physics: cloth constraints + collision detection
 - [ ] × neko-live deep integration: Puppet as real-time VTuber avatar driver

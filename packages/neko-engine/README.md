@@ -41,10 +41,10 @@ engine-kernel (Rust)
   └── jvi/           → JVI 项目格式解析
 
 runtime-puppet (Rust)  ← 2D 骨骼动画 ECS
-  ├── loader.rs      → INP 解析 → ECS World + AnimationClip 注册
+  ├── loader.rs      → MOC3 解析 → ECS World + AnimationClip 注册
   ├── components.rs  → PuppetNode, Transform2D, ParameterBinding, AnimationTarget
   ├── systems.rs     → parameter_update, physics_tick, animation_tick
-  ├── animation.rs   → bevy_animation AnimationClip → ParameterCurve → inox2d 参数值
+  ├── animation.rs   → bevy_animation AnimationClip → ParameterCurve → MOC3 参数值
   └── world.rs       → PuppetWorld trait + BevyPuppetWorld
 ```
 
@@ -55,7 +55,7 @@ packages/
 ├── engine-types/      # 共享 Rust DTO 类型
 ├── engine-kernel/     # Rust 核心（GPU/FFmpeg/服务层）
 ├── runtime-scene/     # 3D 场景 ECS（bevy_ecs + glTF/VRM loader）
-├── runtime-puppet/    # 2D 骨骼 ECS（bevy_ecs + inox2d）
+├── runtime-puppet/    # 2D 骨骼 ECS（bevy_ecs + MOC3 clean-room parser）
 ├── runtime-device/    # 设备 I/O（cpal/midir/gilrs）
 ├── runtime-ml/        # ML 推理（ONNX Runtime）
 ├── runtime-media/     # 媒体域逻辑（probe/diff/字幕/JPEG）
@@ -97,7 +97,6 @@ packages/
 | `ebur128` | ITU-R BS.1770-4 响度测量 |
 | `bevy_ecs` | 3D/2D 场景 Entity-Component-System |
 | `bevy_animation` | 动画曲线系统（AnimationClip → ParameterCurve） |
-| `inox2d` | Inochi2D 格式解析 + 2D 参数化变形计算 |
 | `gltf` | glTF/GLB 3D 模型解析 |
 | `glam` | 3D 数学库（Vec3/Quat/Mat4） |
 

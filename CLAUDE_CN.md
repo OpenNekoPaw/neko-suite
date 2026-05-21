@@ -146,7 +146,7 @@ Rust 层（neko-engine）
   ├─ engine-kernel:   GPU 渲染(wgpu + GPU Skinning)、FFmpeg 编解码、音视频处理
   ├─ engine-types:    共享 Rust DTO 类型
   ├─ runtime-scene:   3D 场景 ECS（bevy_ecs + glTF + IK + Animation Blend）
-  ├─ runtime-puppet:  2D 骨骼 ECS（bevy_ecs + inox2d + Animation Blend）
+  ├─ runtime-puppet:  2D 骨骼 ECS（bevy_ecs + MOC3 + Animation Blend）
   ├─ runtime-device:  设备 I/O（cpal 麦克风/nokhwa 摄像头、midir MIDI、gilrs 手柄）
   ├─ runtime-ml:      ML 推理（ONNX Runtime — 超分/降噪/CLIP/Whisper）
   ├─ runtime-media:   媒体域逻辑（probe/diff/字幕/JPEG — 无 GPU 依赖）

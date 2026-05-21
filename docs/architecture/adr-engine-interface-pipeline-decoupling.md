@@ -111,7 +111,7 @@ ActionRouter 的 `group:action` 平坦派发是刻意的架构选择，不应迁
 | `.nkv`（视频）   | `JviLoader::load()` → Timeline  | 完整支持（三级：P0/P1/P2，共 15 个操作） | timeline 流 + 导出 |
 | `.nka`（音频）   | 来自 TS 的 `MixdownConfig`      | 无（无状态，项目状态由 TS 持有）         | mix 流 + mix 导出  |
 | `.nkm`（3D）     | runtime-scene 中的 `NkmProject` | 无（基于 ECS）                           | scene 流           |
-| `.nkp`（puppet） | runtime-puppet 的 INP 加载器    | 无（基于 ECS）                           | puppet 流          |
+| `.nkp`（puppet） | runtime-puppet 的 MOC3 加载器   | 无（基于 ECS）                           | puppet 流          |
 
 **关键不对称性**：`.nkv` 具备引擎侧项目状态和 EditOperation；其他格式的状态都在 TS 侧，由引擎作为无状态执行器。
 

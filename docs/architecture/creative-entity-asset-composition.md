@@ -40,7 +40,7 @@ Neko Suite 应采用“统一实体 + 素材实体 + 绑定组合 + 表现解析
 | 素材库存 | `AssetEntity -> AssetVariant -> AssetFile`，支持分类、变体、文件、缩略图、标签、归属范围 |
 | 生成资产 | `GeneratedAsset` 已带 `characterIds` 和 `sourceNodeId`，可追踪生成物归属 |
 | 关系图 | `CreativeEntityGraphService` 已能从 Canvas / Asset / GeneratedAsset 生成跨模态边 |
-| 2D 表现包 | `.nkp` 包装 `.inp/.moc3`，保存参数和 viewport 状态 |
+| 2D 表现包 | `.nkp` 包装 `.moc3`，保存参数和 viewport 状态 |
 | 3D 表现包 | `.nkm` 包装 `.gltf/.glb/.vrm`，保存脸部参数、动画和相机状态 |
 | Live 消费 | `neko-live` 可消费 VRM / Puppet 做实时驱动，但不应拥有实体事实源 |
 
@@ -411,7 +411,7 @@ type RepresentationFileRole =
 Live2D 常见组成：
 
 - `.nkp` 项目包装
-- `.moc3` 或 `.inp` 模型
+- `.moc3` 模型
 - texture atlas
 - physics / expression / motion 文件
 - 预览图、参考图

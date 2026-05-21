@@ -22,7 +22,7 @@ neko-cut       (NLE)         拥有 .nkcut + clip/track/effect
 neko-canvas    (分镜板)      拥有 .nkc + shot-node
 neko-model     (3D)          拥有 .nkm + glTF/HDR
 neko-sketch    (2D 栅格)     拥有 .nks + layer-tree
-neko-puppet    (2D 骨骼)     拥有 .nkpup + INP/animation
+neko-puppet    (2D 骨骼)     拥有 .nkpup + MOC3/animation
 neko-story     (剧本)        拥有 .fountain/.nkst + script-index
 neko-preview   (预览)        渲染权(无项目格式)
 neko-assets    (资产库)      .neko/assets/manifest.json
@@ -43,7 +43,7 @@ neko-agent     (AI)          .neko/{drafts,plans,tasks,memory}
 
 ### 问题 3:缺少跨包共享身份
 
-同一角色 "Anya" 在 neko-model 是 .glb、在 neko-puppet 是 .inp、在 neko-sketch 是肖像图。当前每个子包各自命名,**身份在跨包流转中丢失**。
+同一角色 "Anya" 在 neko-model 是 .glb、在 neko-puppet 是 .moc3、在 neko-sketch 是肖像图。当前每个子包各自命名,**身份在跨包流转中丢失**。
 
 ### 问题 4:Send-to 协议网状化未规划
 
@@ -78,7 +78,7 @@ memory 中已有 `neko.sketch.sendToTimeline` / `sendToCanvas` 等点对点 API,
 | `neko-canvas` | `.nkc` | shot-node / layout / branch / generation-history | image/\* | composed canvas |
 | `neko-model` | `.nkm` | scene / skeleton / animation-clip / face-params (22) / procedural-mesh | glTF/glb/VRM/MMD/HDR | rendered frames / fbx |
 | `neko-sketch` | `.nks` | layer-tree (raster/vector/text/group) / brush / palette / pattern | PSD / png / jpg | layer composites |
-| `neko-puppet` | `.nkpup` | puppet / animation-clip / face-params (32) / pose-snapshot | INP / Live2D | rendered puppet frames |
+| `neko-puppet` | `.nkpup` | puppet / animation-clip / face-params (32) / pose-snapshot | Live2D MOC3 | rendered puppet frames |
 | `neko-story` | `.fountain` / `.nkst` | scene / character-bio / dialogue-tree / script-index | fountain / fdx / .docx | converted timeline |
 | `neko-preview` | — | — | PDF/EPUB/CBZ/HDR/360-image | 渲染缓存 |
 | `neko-assets` | `manifest.json` | asset-entry(meta only) | 任意 | thumbnails / embeddings |
@@ -180,7 +180,7 @@ getPromptFragments()     ←→       (语义片段反映在 ontology)
   neko-canvas    → CanvasAssetHandler     (拥有 .nkc + shot-node)
   neko-model     → ModelAssetHandler      (拥有 .nkm + glTF/HDR)
   neko-sketch    → SketchAssetHandler     (拥有 .nks + 图层/笔刷)
-  neko-puppet    → PuppetAssetHandler     (拥有 .nkpup + INP/动画)
+  neko-puppet    → PuppetAssetHandler     (拥有 .nkpup + MOC3/动画)
   neko-story     → StoryAssetHandler      (拥有 .fountain/.nkst)
   neko-preview   → PreviewAssetHandler    (PDF/HDR/360 仅渲染权)
   neko-agent     → AgentAssetHandler      (drafts/plans/tasks/.nkbg)
@@ -220,8 +220,8 @@ getPromptFragments()     ←→       (语义片段反映在 ontology)
         ▼                        ▼                     ▼
   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
   │ neko-model       │  │ neko-puppet      │  │ neko-sketch      │
-  │ anya-3d.glb      │  │ anya-2d.inp      │  │ anya-portrait.nks│
-  │ form: rigged-3d  │  │ form: inox2d-2d  │  │ form: raster     │
+  │ anya-3d.glb      │  │ anya-2d.moc3     │  │ anya-portrait.nks│
+  │ form: rigged-3d  │  │ form: moc3-2d    │  │ form: raster     │
   └──────────────────┘  └──────────────────┘  └──────────────────┘
 
 身份持久化:.neko/identity-manifest.json(项目级)

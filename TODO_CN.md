@@ -223,7 +223,7 @@
 - [ ] **P2：`ControlNetAssetProducer` 接口**（@neko/shared）：`ControlAsset` / `ControlChannel` 类型（depth/normal/pose/canny/seg/lineart）+ 统一 producer 接口；源无关 `produce(channel, context)` 返回 PNG + 可选 raw buffer + sidecar metadata
 - [ ] **P2：`Image2DControlProducer`**（runtime-ml）：收编 controlnet-pipeline.md §E5 工作；Depth Anything v2 / OpenPose / Canny / DIS / SAM ONNX 后端；输出 `ControlAsset { source: '2d-onnx', confidence }`
 - [ ] **P3：`Scene3DControlProducer`**（runtime-scene）：wgpu 深度缓冲 + 几何法线 render pass + 骨骼正向投影；输出 `ControlAsset { source: '3d-render', depthRange, cameraIntrinsics }`；与 §11 Path C 共享离屏渲染目标
-- [ ] **P3：`PuppetControlProducer`**（runtime-puppet，可选）：2D 骨骼投影 + 网格轮廓（Live2D/INP 角色）；仅输出 `pose` + `seg` 通道
+- [ ] **P3：`PuppetControlProducer`**（runtime-puppet，可选）：2D 骨骼投影 + 网格轮廓（Live2D MOC3 角色）；仅输出 `pose` + `seg` 通道
 - [ ] **P3：ControlNet 缓存布局**：`.neko/.cache/controlnet/<2d|3d|puppet>/<hash>/<channel>.png` + `<channel>.json` sidecar + 可选 `.bin` raw buffer（受 `qualityGate.keepRawControlBuffers` 控制）
 - [ ] **P3：Provider ControlNet 矩阵**：PayloadBuilder 扩展 `ControlPayloadHint`（Flux/ComfyUI 一等支持 / Seedance-Veo-Runway 隐式通过参考图 / Kling O3 走 video-ref / Sora 2 不支持）
 - [ ] **P3：`CharacterBundle.referenceSet`**：`{ gallery / lora / turnaround }` 持久化绑定；依赖 adr-character-unified-index.md P1（characters.json 契约）
@@ -238,7 +238,7 @@
 
 ### neko-puppet（2D 骨骼动画）
 
-- [ ] 导出功能：MOC3 写入器（当前只读编辑器；INP 格式已弃用，保留遗留只读支持）
+- [ ] 导出功能：MOC3 写入器（当前只读编辑器）
 - [ ] 高级物理：布料约束 + 碰撞检测
 - [ ] × neko-live 深度集成：Puppet 作为 VTuber 虚拟形象实时驱动
 

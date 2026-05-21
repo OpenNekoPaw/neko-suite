@@ -8,7 +8,7 @@
 
 ## Completed (2026-04-14)
 
-- [x] **Phase 0**: Remove inox2d ghost dependency — RUSTSEC-2022-0081 resolved
+- [x] **Phase 0**: Remove legacy dependencies — RUSTSEC-2022-0081 resolved
 - [x] **Phase 1**: MOC3 parser + loader + 1D key form interpolation (self-built, zero unsafe)
 - [x] **Phase 2**: WarpDeformer (bilinear grid) + RotationDeformer (pivot rotation) + deformer systems
 - [x] **Phase 3**: Expression (.exp3.json) + Motion (.motion3.json) + Physics (.physics3.json) + API layer
@@ -55,4 +55,4 @@
 - [ ] 2D bilinear interpolation (dual-axis key form interpolation for complex parameter bindings)
 - [ ] Real .moc3 model E2E testing (validate parser against production models)
 - [ ] MOC3 texture loading via model3.json (base64 external PNG → ImageBitmap)
-- [ ] Puppet export (MOC3 writer — currently read-only; INP format deprecated, legacy read-only retained)
+- [ ] Puppet export (MOC3 writer — currently read-only)

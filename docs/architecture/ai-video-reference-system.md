@@ -634,7 +634,7 @@ export interface ControlProduceContext {
 
 **`PuppetControlProducer`** (runtime-puppet, optional extension):
 - Only supports `'pose'` + `'seg'`
-- For 2D skeletal characters (Live2D MOC3 / INP): projects 2D bone transforms + mesh silhouette directly — no 3D required
+- For 2D skeletal characters (Live2D MOC3): projects 2D bone transforms + mesh silhouette directly — no 3D required
 - Useful when a shot uses a puppet character in a 2D background
 
 ### 12.4 Output format decisions

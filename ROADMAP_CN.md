@@ -46,7 +46,7 @@
 
 | 模块            | 状态  | 进度 | 说明                                                                                                                                                                                                        |
 | --------------- | ----- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **neko-puppet** | Alpha | 92%  | **8.5K LOC** + 104 Rust tests；**MOC3 加载**（clean-room 解析器/变形器/表情/动作/物理）+ INP 遗留只读 + 参数变形 + 动画混合 + 60fps 流 + Canvas 渲染 + **Live Mode（进行中）**；剩余：AI 工具(Phase 6) / VTS API(Phase 7) / MOC3 导出 |
+| **neko-puppet** | Alpha | 92%  | **8.5K LOC** + 104 Rust tests；**MOC3 加载**（clean-room 解析器/变形器/表情/动作/物理）+ 参数变形 + 动画混合 + 60fps 流 + Canvas 渲染 + **Live Mode（进行中）**；剩余：AI 工具(Phase 6) / VTS API(Phase 7) / MOC3 导出 |
 | **neko-model**  | Alpha | 87%  | **12.6K LOC** + 49 Rust tests；glTF/VRM + PBR/IBL + CSG + 捏脸 + 粒子 + 关键帧 + **视口控制 ✅** + **3D 渲染管线修复 ✅** + **i18n 完成 ✅** + **引擎渲染控制面 ✅** + **Live Mode（进行中）**；剩余：IK UI / Undo / Blender 桥接 |
 | **neko-live**   | Alpha | 58%  | **~3K LOC** + 0 tests；VMC+VRM + Puppet 联动 + 录制 + **LiveSessionService（进行中）** + **TrackingService 提取（进行中）**；**阻塞**：nokhwa crate / MediaPipe / 推流（[ADR](./docs/architecture/adr-device-management.md)）                     |
 
@@ -292,7 +292,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
   - runtime-puppet: 51 tests（Keyframe CRUD + blend_tick + 8 API actions）
   - runtime-scene: 49 tests（SceneKeyframe + AnimationChannel CRUD + 5 API actions + NkmProject v2）
 - **Phase 2.5 角色编辑能力 P0+P1 ✅**：
-  - 模板创建功能（编辑器内空白状态 UI：导入/模板/拖拽 + INP/GLB 程序化人形模板）
+  - 模板创建功能（编辑器内空白状态 UI：导入/模板/拖拽 + GLB 程序化人形模板）
   - 3D `Visible` 组件 + `set_visible` API + GPU 渲染过滤
   - 2D `set_node_opacity` API（Opacity 运行时修改）
   - 3D `set_morph_weights` API（Morph Target 交互式设置）
@@ -301,12 +301,11 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
   - SCENES +4 actions / PUPPETS +1 action
 - **Phase 2.5 角色编辑 P2 ✅**：
   - 2D 纹理热替换（`puppets:set_texture` API）
-  - 2D 物理模拟（SimplePhysics + PhysicsState 组件 + INP 解析 + rigid/spring pendulum 求解器）
+  - 2D 物理模拟（SimplePhysics + PhysicsState 组件 + rigid/spring pendulum 求解器）
   - 3D 材质扩展（emissive_factor + occlusion_strength + emissive/AO 纹理 + WGSL shader 更新）
 - **Phase 2.5 编辑器 UI ✅**：
   - neko-model：左侧 VerticalToolbar（共享组件）+ i18n 接入 + CSP 修复 + locale 注入
   - neko-puppet：Canvas 2D 渲染器（纹理三角形 affine mapping + blend modes + zoom/pan）
-  - INP TEX_SECT 纹理解析（webview 端 PNG 提取 → ImageBitmap）
 - Phase 3.2 遗留：AI MCP Tools（face.generate_params / face.from_image / face.adjust）
 - Phase 3.4：AI 辅助 3D + 3DGS + MCP 桥接
 
@@ -342,7 +341,7 @@ Engine GPU 渲染 + 编解码 + 导出。Cut 时间线 + 预览 + EditOperation�
 
 - [ ] **P1 类型 + Resolver + Path A**：`ReferenceStrategy`（L0-L5）+ `CameraKeyframe` + `CameraMotionAnalysis` 类型 + `ReferenceStrategyResolver`（**双轴能力矩阵**：参考层次 × 运镜通道）+ Agent MCP 工具 + Seedance/Veo 适配器 + **`CameraMotionAnalyzer`**（Path A：3D → 电影语言提示词，L1 语法层感知，每次生成）
 - [ ] **P2 3D→2D Turnaround + Path B + ControlNet Producer**：runtime-scene `render_views` 离屏 action + GalleryNode "从 3D 模型填充" 自动填充 + turnaround 缓存 + 适配器层 L4 → L2 降级 + **`KeyframeRenderer` + `CameraPayloadBuilder`**（Path B：3D → 首/末帧，L2 构图层感知）+ **`ControlNetAssetProducer` 接口 + `Image2DControlProducer`**（@neko/shared 源无关 ControlNet 产物接口，收编 controlnet-pipeline.md §E5）
-- [ ] **P3 跨镜头一致性 + Path C + 3D/Puppet Producers**：`CharacterBundle.referenceSet` 持久化绑定 + 通过 characterId 查找自动注入 `ImageGenerationRequest.characterBindings[]` + **`MotionSequenceRenderer`**（Path C：depth/normal/低分 RGB 序列供 Kling O3 + ControlNet-video 使用，L3 空间层感知，可选）+ **`Scene3DControlProducer`**（wgpu 深度/法线/骨骼投影 — 真值控制图）+ **`PuppetControlProducer`**（可选；Live2D/INP 2D 骨骼 + 轮廓）+ PayloadBuilder 补齐 Provider ControlNet 能力矩阵
+- [ ] **P3 跨镜头一致性 + Path C + 3D/Puppet Producers**：`CharacterBundle.referenceSet` 持久化绑定 + 通过 characterId 查找自动注入 `ImageGenerationRequest.characterBindings[]` + **`MotionSequenceRenderer`**（Path C：depth/normal/低分 RGB 序列供 Kling O3 + ControlNet-video 使用，L3 空间层感知，可选）+ **`Scene3DControlProducer`**（wgpu 深度/法线/骨骼投影 — 真值控制图）+ **`PuppetControlProducer`**（可选；Live2D MOC3 2D 骨骼 + 轮廓）+ PayloadBuilder 补齐 Provider ControlNet 能力矩阵
 - [ ] **P4 质量门禁**：CLIP 身份一致性 + 机位 LLM 评分 + HSV 光影连续性 + 轨迹与 3D 真值保真度指标
 
 **感知决策**：L1 提示词规范化默认每次生成都执行（成本低，受益普适）。L2 首末帧渲染推荐给多镜头制作（跨镜头一致性是核心痛点）。L3 深度/运动序列仅当绑定 3D 场景时启用（避免概念镜头的过度工程）。
@@ -447,7 +446,7 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 - ✅ PuppetViewer（Canvas 2D 渲染 inochi2d 变形网格 + z_order 排序 + 自动缩放）
 - ✅ puppetMapping（ARKit → inochi2d 参数：眼/口/眉/头部角度四元数→欧拉角）
 - ✅ LivePanelProvider puppet 管理（fs → loadPuppet → openPuppetStream → PuppetDelta 转发）
-- ✅ Avatar 选择器支持 7 种格式：`.nkm`/`.nkp`（项目文件自动解析 `model.src`/`puppet.src`）+ `.vrm`/`.glb`/`.gltf` + `.inp`/`.inx`
+- ✅ Avatar 选择器支持 5 种格式：`.nkm`/`.nkp`（项目文件自动解析 `model.src`/`puppet.src`）+ `.vrm`/`.glb`/`.gltf`
 - ✅ CanvasRecorder（canvas.captureStream + MediaRecorder → WebM VP9 → base64 → 磁盘保存）
 - ✅ 麦克风录制（EngineClient.recordStart → cpal → WAV）
 - ✅ 录制 UI（红色边框 + REC 闪烁徽章 + 计时器 + 保存路径显示）
@@ -508,7 +507,6 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 
 | 已完成能力                                                 | 代码量                 | 质量   |
 | ---------------------------------------------------------- | ---------------------- | ------ |
-| INP 二进制解析（JSON + TEX_SECT 纹理提取）                 | 704 行 Rust + 65 行 TS | 生产级 |
 | bevy_ecs 骨骼世界（参数驱动变形）                          | 840+226 行 Rust        | 生产级 |
 | 动画系统（11 种缓动 + 混合 + 关键帧 CRUD）                 | 401+84 行 Rust         | 生产级 |
 | 物理模拟（spring/rigid pendulum）                          | 系统 815 行含物理 tick | 生产级 |
@@ -518,23 +516,20 @@ Phase 0-5.6 全部完成（Tailwind + macOS Token + 共享组件 + VSCode 主题
 
 **Phase P.1：增强编辑（中期）**
 
-- [ ] Puppet 导出（MOC3 写入器 → 允许保存修改后的 puppet，当前只读；INP 已弃用）
+- [ ] Puppet 导出（MOC3 写入器 → 允许保存修改后的 puppet，当前只读）
 - [ ] Puppet 从零创建（绘图工具 → 网格 → 参数绑定，高工作量，可委托 neko-sketch 协作）
 - [ ] 高级物理（布料约束 + 碰撞检测，当前仅 spring/pendulum）
 - [ ] 视频导出（当前仅 WebSocket 流，缺少 H.264 录制到文件）
-- [ ] inox2d MeshGroup 支持（特定模型可能崩溃，需 load-time 检测 + skip）
 
 **Phase P.2：跨模块集成（长期）**
 
 - [ ] neko-live 深度集成（Puppet 作为 VTuber 虚拟形象，追踪数据 → 参数实时映射）
 - [ ] neko-cut 时间线集成（Puppet 动画片段 → 视频元素）
-- [ ] Spine/Live2D 格式支持评估（当前 ADR-2D-004 仅 inox2d，Spine 许可证受限）
 
 **TS 前端测试缺口**：0 测试文件。
 
 **已知设计约束**：
 
-- inox2d 上游不支持动画加载 → bevy_animation ParameterCurve 桥接（已完成）
 - Composite-as-mask 特定模型 panic → load-time 检测 + skip warning
 - 无 wgpu renderer → 前端 Canvas 2D 渲染 + Rust 数据（当前方案）
 
