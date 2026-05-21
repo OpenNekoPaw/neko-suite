@@ -71,6 +71,14 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     );
   });
 
+  it('contributes prompt fragments for mixed-purpose Canvas subsystem context', () => {
+    expect(providerSource).toContain('getPromptFragments(');
+    expect(providerSource).toContain('neko-canvas:multi-purpose-canvas-subsystems');
+    expect(providerSource).toContain('activeSubsystems');
+    expect(providerSource).toContain('includeSubsystemMetadata: true');
+    expect(providerSource).toContain('projection adapters');
+  });
+
   it('registers narrative traversal as a read-only mixed Canvas tool', () => {
     expect(providerSource).toContain('traverseNarrativeFlow');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE');

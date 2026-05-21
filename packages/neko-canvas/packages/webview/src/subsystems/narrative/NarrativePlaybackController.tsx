@@ -4,6 +4,7 @@ import { t } from '../../i18n';
 import type { PlaybackControllerComponentProps } from '../types';
 
 export default function NarrativePlaybackController(_props: PlaybackControllerComponentProps) {
+  // TODO(P1): Wire controls to narrative playback state once runtime stepping is implemented.
   return (
     <div className="flex items-center gap-1">
       <ToolbarIconButton title={t('toolbar.playbackPrevious')} disabled>

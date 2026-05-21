@@ -4,6 +4,14 @@ import { useCanvasStore } from '../../stores/canvasStore';
 import { t } from '../../i18n';
 import type { FloatingPanelComponentProps } from '../types';
 
+function createNarrativeVariableId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return `var-${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `var-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export default function NarrativeVariablesPanel(_props: FloatingPanelComponentProps) {
   const narrative = useCanvasStore((state) => state.canvasData?.narrative);
   const updateCanvasData = useCanvasStore((state) => state.updateCanvasData);
@@ -40,7 +48,7 @@ export default function NarrativeVariablesPanel(_props: FloatingPanelComponentPr
             updateVariables([
               ...variables,
               {
-                id: `var-${Date.now()}`,
+                id: createNarrativeVariableId(),
                 name: nextVariableName,
                 value: '',
               },

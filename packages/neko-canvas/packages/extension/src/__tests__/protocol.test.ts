@@ -213,7 +213,20 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("case 'projection.writeBack'");
       expect(providerSource).toContain('this.writeProjectionBack(source, changes)');
       expect(providerSource).toContain('adapter.writeBack(changes)');
+      expect(providerSource).toContain(
+        "webviewPanel.webview.postMessage({ type: '_response', _requestId: requestId, result })",
+      );
+      expect(providerSource).toContain(
+        'error: error instanceof Error ? error.message : String(error)',
+      );
       expect(canvasAppSource).toContain("type: 'projection.writeBack'");
+    });
+
+    it('reports projected regeneration failures back to the webview as projection status', () => {
+      expect(providerSource).toContain('tryRegenerateProjectedCanvas(');
+      expect(providerSource).toContain('adapter.project()');
+      expect(providerSource).toContain("type: 'projectionStatus'");
+      expect(providerSource).toContain("state: 'writeback-error'");
     });
 
     it('saves projected canvas layout to cache path rather than the source document', () => {
@@ -221,6 +234,18 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('const projectedCanvas = data as unknown as CanvasData');
       expect(providerSource).toContain('isProjectedCanvasData(projectedCanvas)');
       expect(providerSource).toContain("'.neko', '.cache'");
+    });
+  });
+
+  describe('NKV-011: subsystem status contracts', () => {
+    it('guards malformed webview subsystem status before status-bar summary use', () => {
+      expect(providerSource).toContain('!Array.isArray(reportedStatus)');
+      expect(providerSource).toContain(
+        'Array.isArray((reportedStatus as { activeSubsystems?: unknown }).activeSubsystems)',
+      );
+      expect(providerSource).toContain(
+        "filter((item): item is string => typeof item === 'string')",
+      );
     });
   });
 

@@ -15,6 +15,7 @@ import type {
   Tool,
   ToolGroup,
   ToolParameters,
+  PromptFragment,
   NekoCanvasAPI,
   CanvasNodeType,
   ICapabilityMediaService,
@@ -132,6 +133,21 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly version = '1.0.0';
 
   constructor(private readonly _api: NekoCanvasAPI) {}
+
+  getPromptFragments(_context: AgentCapabilityContext): PromptFragment[] {
+    return [
+      {
+        id: 'neko-canvas:multi-purpose-canvas-subsystems',
+        priority: 70,
+        content: [
+          'Neko Canvas .nkc files can mix storyboard, narrative, behavior, entity, and memory subsystems in one graph.',
+          'Use canvas_get_active_context({ includeSubsystemMetadata: true }) before subsystem-aware edits; inspect activeSubsystems and subsystem metadata before choosing tools or mutations.',
+          'Narrative traversal applies only to narrative nodes and choice connections. It ignores storyboard, behavior, entity, and memory nodes by design.',
+          'Projected Canvas documents are adapter-backed views. Do not assume direct .nkc edits write to the source document; route source write-back through projection adapters.',
+        ].join('\n'),
+      },
+    ];
+  }
 
   getTools(context: AgentCapabilityContext): Tool[] {
     const api = this._api;

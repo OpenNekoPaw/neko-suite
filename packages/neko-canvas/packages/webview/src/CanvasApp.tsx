@@ -45,6 +45,7 @@ import {
   getViewportCenter as getViewportCenterMath,
 } from './utils/viewportMath';
 import { t } from './i18n';
+import { getLogger } from './utils/logger';
 
 // =============================================================================
 // Constants & VSCode API
@@ -59,6 +60,7 @@ const DEFAULT_CANVAS_DATA: CanvasData = {
 };
 
 const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
+const logger = getLogger('CanvasApp');
 
 declare const acquireVsCodeApi: () => {
   postMessage: (message: unknown) => void;
@@ -173,8 +175,12 @@ export function CanvasApp() {
 
   useEffect(() => {
     let cancelled = false;
+    const requestedSubsystemIds = new Set(activeSubsystemKey.split('|').filter(Boolean));
+    const subsystemIds = WEBVIEW_SUBSYSTEM_REGISTRY.manifests
+      .map((manifest) => manifest.id)
+      .filter((id) => requestedSubsystemIds.has(id));
 
-    WEBVIEW_SUBSYSTEM_REGISTRY.loadForCanvas({ nodes })
+    Promise.all(subsystemIds.map((id) => WEBVIEW_SUBSYSTEM_REGISTRY.load(id)))
       .then((registrations) => {
         if (cancelled) return;
         setSubsystemNodeTypeDescriptors(
@@ -187,7 +193,8 @@ export function CanvasApp() {
           ),
         );
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        logger.warn('Failed to load active Canvas subsystems', error);
         if (!cancelled) {
           setSubsystemNodeTypeDescriptors({});
           setFloatingPanels([]);
@@ -198,7 +205,7 @@ export function CanvasApp() {
     return () => {
       cancelled = true;
     };
-  }, [activeSubsystemKey, nodes]);
+  }, [activeSubsystemKey]);
 
   // =========================================================================
   // Container size tracking  (moved after useVSCodeMessages — see below)
@@ -349,7 +356,9 @@ export function CanvasApp() {
           ...(registration.nodeTypeDescriptors ?? {}),
         }));
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        logger.warn(`Failed to load Canvas subsystem "${subsystemId}"`, error);
+      });
   }, []);
 
   const handleAutoArrange = useCallback(

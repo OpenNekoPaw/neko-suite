@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import type React from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasSubsystemId } from '@neko/shared';
 import { CloseIcon } from '@neko/shared/icons';
 import type { FloatingPanelDefinition } from '../../subsystems';
@@ -105,6 +106,39 @@ function FloatingPanelFrame({
   onClose: () => void;
 }) {
   const Component = panel.component;
+  const cleanupDragRef = useRef<(() => void) | null>(null);
+
+  const cleanupDrag = useCallback(() => {
+    cleanupDragRef.current?.();
+    cleanupDragRef.current = null;
+  }, []);
+
+  useEffect(() => cleanupDrag, [cleanupDrag]);
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      cleanupDrag();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      const origin = { x: event.clientX, y: event.clientY };
+      const start = position;
+      const handleMove = (moveEvent: PointerEvent) => {
+        onMove({
+          x: Math.max(8, start.x + moveEvent.clientX - origin.x),
+          y: Math.max(8, start.y + moveEvent.clientY - origin.y),
+        });
+      };
+      const handleEnd = () => cleanupDrag();
+      cleanupDragRef.current = () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleEnd);
+        window.removeEventListener('pointercancel', handleEnd);
+      };
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleEnd);
+      window.addEventListener('pointercancel', handleEnd);
+    },
+    [cleanupDrag, onMove, position],
+  );
 
   return (
     <div
@@ -124,23 +158,7 @@ function FloatingPanelFrame({
           borderBottom: '1px solid var(--toolbar-border)',
           backgroundColor: 'var(--node-header-bg)',
         }}
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId);
-          const origin = { x: event.clientX, y: event.clientY };
-          const start = position;
-          const handleMove = (moveEvent: PointerEvent) => {
-            onMove({
-              x: Math.max(8, start.x + moveEvent.clientX - origin.x),
-              y: Math.max(8, start.y + moveEvent.clientY - origin.y),
-            });
-          };
-          const handleUp = () => {
-            window.removeEventListener('pointermove', handleMove);
-            window.removeEventListener('pointerup', handleUp);
-          };
-          window.addEventListener('pointermove', handleMove);
-          window.addEventListener('pointerup', handleUp);
-        }}
+        onPointerDown={handlePointerDown}
       >
         <span className="min-w-0 flex-1 truncate text-xs font-semibold">{panel.title}</span>
         <button

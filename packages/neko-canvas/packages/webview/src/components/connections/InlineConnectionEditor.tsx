@@ -4,6 +4,13 @@ import { CANVAS_CONNECTION_TYPES, isCanvasConnectionType } from '@neko/shared';
 import { t } from '../../i18n';
 import { getConnectionPathGeometry } from './connectionGeometry';
 
+const INLINE_CONNECTION_CONTROL_CLASS = 'w-full rounded px-2 py-1 text-xs outline-none';
+const INLINE_CONNECTION_CONTROL_STYLE: React.CSSProperties = {
+  border: '1px solid var(--control-border)',
+  backgroundColor: 'var(--control-bg)',
+  color: 'var(--control-fg)',
+};
+
 export interface InlineConnectionEditorProps {
   connection: CanvasConnection | null;
   nodes: readonly CanvasNode[];
@@ -54,7 +61,8 @@ export function InlineConnectionEditor({
             value={connection.label ?? ''}
             placeholder={t('panel.connectionLabelPlaceholder')}
             onChange={(event) => update({ label: event.target.value || undefined })}
-            className="w-full"
+            className={INLINE_CONNECTION_CONTROL_CLASS}
+            style={INLINE_CONNECTION_CONTROL_STYLE}
           />
         </Field>
 
@@ -67,7 +75,8 @@ export function InlineConnectionEditor({
                 update({ type: value });
               }
             }}
-            className="w-full"
+            className={INLINE_CONNECTION_CONTROL_CLASS}
+            style={INLINE_CONNECTION_CONTROL_STYLE}
           >
             {CANVAS_CONNECTION_TYPES.map((type) => (
               <option key={type} value={type}>
@@ -83,14 +92,16 @@ export function InlineConnectionEditor({
               <input
                 value={connection.choiceText ?? ''}
                 onChange={(event) => update({ choiceText: event.target.value || undefined })}
-                className="w-full"
+                className={INLINE_CONNECTION_CONTROL_CLASS}
+                style={INLINE_CONNECTION_CONTROL_STYLE}
               />
             </Field>
             <Field label={t('panel.condition')}>
               <input
                 value={connection.condition ?? ''}
                 onChange={(event) => update({ condition: event.target.value || undefined })}
-                className="w-full"
+                className={INLINE_CONNECTION_CONTROL_CLASS}
+                style={INLINE_CONNECTION_CONTROL_STYLE}
               />
             </Field>
             <Field label={t('panel.priority')}>
@@ -98,7 +109,8 @@ export function InlineConnectionEditor({
                 type="number"
                 value={connection.priority ?? 0}
                 onChange={(event) => update({ priority: Number(event.target.value) })}
-                className="w-full"
+                className={INLINE_CONNECTION_CONTROL_CLASS}
+                style={INLINE_CONNECTION_CONTROL_STYLE}
               />
             </Field>
           </>
@@ -112,7 +124,8 @@ export function InlineConnectionEditor({
                 step="0.1"
                 value={connection.weight ?? 1}
                 onChange={(event) => update({ weight: Number(event.target.value) })}
-                className="w-full"
+                className={INLINE_CONNECTION_CONTROL_CLASS}
+                style={INLINE_CONNECTION_CONTROL_STYLE}
               />
             </Field>
             <Field label={t('panel.decay')}>
@@ -121,7 +134,8 @@ export function InlineConnectionEditor({
                 step="0.1"
                 value={connection.decay ?? 0}
                 onChange={(event) => update({ decay: Number(event.target.value) })}
-                className="w-full"
+                className={INLINE_CONNECTION_CONTROL_CLASS}
+                style={INLINE_CONNECTION_CONTROL_STYLE}
               />
             </Field>
           </>
@@ -132,7 +146,8 @@ export function InlineConnectionEditor({
             <input
               value={connection.condition ?? ''}
               onChange={(event) => update({ condition: event.target.value || undefined })}
-              className="w-full"
+              className={INLINE_CONNECTION_CONTROL_CLASS}
+              style={INLINE_CONNECTION_CONTROL_STYLE}
             />
           </Field>
         )}
