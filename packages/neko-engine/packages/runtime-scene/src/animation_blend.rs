@@ -5,115 +5,43 @@
 //! CrossfadeRequest drives smooth transitions between clips.
 
 use bevy_ecs::prelude::*;
-use neko_engine_types::animation::{
-    deserialize_blend_layer_info_with_unit, serialize_blend_layer_info_with_unit,
-    AnimationBlendLayer, AnimationBlendLayerInfo, AnimationBlendState, AnimationCrossfadeRequest,
-    AnimationDurationUnit,
-};
+use neko_engine_types::animation::AnimationDurationUnit;
+use neko_engine_types::declare_animation_blend_wrappers;
 use serde::{Deserialize, Serialize};
-use std::ops::{Deref, DerefMut};
 
-/// A single animation blend layer — one active clip with a weight.
-#[derive(Debug, Clone)]
-pub struct SceneBlendLayer(AnimationBlendLayer);
-
-impl SceneBlendLayer {
-    pub fn new(clip_index: usize, elapsed_seconds: f32, weight: f32, looping: bool) -> Self {
-        Self(AnimationBlendLayer::new_with_unit(
-            clip_index,
-            elapsed_seconds,
-            AnimationDurationUnit::Seconds,
-            weight,
-            looping,
-        ))
+declare_animation_blend_wrappers! {
+    layer {
+        /// A single animation blend layer — one active clip with a weight.
+        pub struct SceneBlendLayer;
+        unit: AnimationDurationUnit::Seconds;
+        new: new(elapsed_seconds);
+        elapsed: elapsed_seconds;
+        set_elapsed: set_elapsed_seconds;
     }
-
-    pub fn elapsed_seconds(&self) -> f32 {
-        self.0.elapsed_in_unit(AnimationDurationUnit::Seconds)
+    info {
+        /// Frontend-facing blend layer info.
+        pub struct SceneBlendLayerInfo;
+        field: "elapsed";
+        unit: AnimationDurationUnit::Seconds;
+        new: new(elapsed_seconds);
+        elapsed: elapsed_seconds;
     }
-
-    pub fn set_elapsed_seconds(&mut self, elapsed_seconds: f32) {
-        self.0
-            .set_elapsed_in_unit(elapsed_seconds, AnimationDurationUnit::Seconds);
+    state {
+        /// ECS component: multi-layer blend state on the scene root entity.
+        #[derive(Debug, Default, Component)]
+        pub struct SceneAnimationBlendState;
+        target: AnimationBlendState;
+        new: new;
     }
-}
-
-impl Deref for SceneBlendLayer {
-    type Target = AnimationBlendLayer;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for SceneBlendLayer {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-/// Frontend-facing blend layer info
-#[derive(Debug, Clone)]
-pub struct SceneBlendLayerInfo(AnimationBlendLayerInfo);
-
-impl SceneBlendLayerInfo {
-    pub fn new(
-        clip_name: impl Into<String>,
-        elapsed_seconds: f32,
-        weight: f32,
-        looping: bool,
-    ) -> Self {
-        Self(AnimationBlendLayerInfo::new_with_unit(
-            clip_name,
-            elapsed_seconds,
-            AnimationDurationUnit::Seconds,
-            weight,
-            looping,
-        ))
-    }
-
-    pub fn clip_name(&self) -> &str {
-        &self.0.clip_name
-    }
-
-    pub fn elapsed_seconds(&self) -> f32 {
-        self.0.elapsed_in_unit(AnimationDurationUnit::Seconds)
-    }
-
-    pub fn weight(&self) -> f32 {
-        self.0.weight
-    }
-
-    pub fn looping(&self) -> bool {
-        self.0.looping
-    }
-}
-
-impl Serialize for SceneBlendLayerInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serialize_blend_layer_info_with_unit(
-            &self.0,
-            "elapsed",
-            AnimationDurationUnit::Seconds,
-            serializer,
-        )
-    }
-}
-
-impl<'de> Deserialize<'de> for SceneBlendLayerInfo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserialize_blend_layer_info_with_unit(
-            "elapsed",
-            AnimationDurationUnit::Seconds,
-            deserializer,
-        )
-        .map(Self)
+    crossfade {
+        /// ECS component: active crossfade transition on the scene root entity.
+        #[derive(Debug, Component)]
+        pub struct SceneCrossfadeRequest;
+        unit: AnimationDurationUnit::Seconds;
+        new: new(fade_duration_seconds, fade_elapsed_seconds);
+        duration: fade_duration_seconds;
+        elapsed: fade_elapsed_seconds;
+        advance: advance_seconds(delta_seconds);
     }
 }
 
@@ -140,78 +68,6 @@ impl Default for SceneAnimationPlaybackState {
             root_motion_enabled: true,
             root_node_id: None,
         }
-    }
-}
-
-/// ECS component: multi-layer blend state on the scene root entity
-#[derive(Debug, Default, Component)]
-pub struct SceneAnimationBlendState(AnimationBlendState<SceneBlendLayer>);
-
-impl SceneAnimationBlendState {
-    pub fn new(layers: Vec<SceneBlendLayer>) -> Self {
-        Self(AnimationBlendState::new(layers))
-    }
-}
-
-impl Deref for SceneAnimationBlendState {
-    type Target = AnimationBlendState<SceneBlendLayer>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for SceneAnimationBlendState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-/// ECS component: active crossfade transition on the scene root entity
-#[derive(Debug, Component)]
-pub struct SceneCrossfadeRequest(AnimationCrossfadeRequest);
-
-impl SceneCrossfadeRequest {
-    pub fn new(
-        target_clip_index: usize,
-        fade_duration_seconds: f32,
-        fade_elapsed_seconds: f32,
-        loop_anim: bool,
-    ) -> Self {
-        Self(AnimationCrossfadeRequest::new_with_unit(
-            target_clip_index,
-            fade_duration_seconds,
-            fade_elapsed_seconds,
-            AnimationDurationUnit::Seconds,
-            loop_anim,
-        ))
-    }
-
-    pub fn fade_duration_seconds(&self) -> f32 {
-        self.0.fade_duration_in_unit(AnimationDurationUnit::Seconds)
-    }
-
-    pub fn fade_elapsed_seconds(&self) -> f32 {
-        self.0.fade_elapsed_in_unit(AnimationDurationUnit::Seconds)
-    }
-
-    pub fn advance_seconds(&mut self, delta_seconds: f32) {
-        self.0
-            .advance_in_unit(delta_seconds, AnimationDurationUnit::Seconds);
-    }
-}
-
-impl Deref for SceneCrossfadeRequest {
-    type Target = AnimationCrossfadeRequest;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for SceneCrossfadeRequest {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 
@@ -272,7 +128,9 @@ mod tests {
     fn animation_blend_module_uses_shared_contracts() {
         let source = include_str!("animation_blend.rs");
         assert!(source.contains("neko_engine_types::animation"));
-        assert!(!source.contains("pub struct SceneBlendLayer {\n"));
-        assert!(!source.contains("pub struct SceneCrossfadeRequest {\n"));
+        assert!(source.contains("declare_animation_blend_wrappers!"));
+        assert!(!source.contains(concat!("struct ", "SceneBlendLayer(")));
+        assert!(!source.contains(concat!("struct ", "SceneCrossfadeRequest(")));
+        assert!(source.contains("pub struct SceneAnimationPlaybackState"));
     }
 }

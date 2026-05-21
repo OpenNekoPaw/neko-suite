@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 import type {
   AgentCapabilityProvider,
   AgentCapabilityContext,
+  CreativeDomainMetadata,
   Tool,
   ToolResult,
 } from '@neko/shared';
@@ -60,6 +61,30 @@ interface FrameCaptureResponse {
   readonly data?: string;
   readonly base64?: string;
 }
+
+const MEDIA_DOMAIN: CreativeDomainMetadata = {
+  id: 'timeline',
+  source: 'engine-tool',
+  servicePortId: 'media-render',
+};
+
+const AUDIO_DOMAIN: CreativeDomainMetadata = {
+  id: 'audio',
+  source: 'engine-tool',
+  servicePortId: 'audio-render',
+};
+
+const SCENE_DOMAIN: CreativeDomainMetadata = {
+  id: 'scene',
+  source: 'engine-tool',
+  servicePortId: 'scene-render',
+};
+
+const PUPPET_DOMAIN: CreativeDomainMetadata = {
+  id: 'puppet',
+  source: 'engine-tool',
+  servicePortId: 'puppet-render',
+};
 
 /**
  * Dispatch through this extension's command bridge.
@@ -139,6 +164,14 @@ async function extractFrameBase64(
   return data.data ?? data.base64;
 }
 
+async function getSceneSnapshot(): Promise<unknown> {
+  return dispatchEngine('scenes', 'snapshot', {});
+}
+
+async function getPuppetSnapshot(): Promise<unknown> {
+  return dispatchEngine('puppets', 'snapshot', {});
+}
+
 // =============================================================================
 // Tool Factories
 // =============================================================================
@@ -151,6 +184,7 @@ function createEffectsTools(): Tool[] {
         'List all available GPU video effects/shaders. Returns preset IDs, descriptions, and tunable parameters.',
       parameters: { type: 'object', properties: {} },
       category: 'media',
+      domain: MEDIA_DOMAIN,
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(): Promise<ToolResult> {
@@ -174,6 +208,7 @@ function createEffectsTools(): Tool[] {
         required: ['shaderId'],
       },
       category: 'media',
+      domain: MEDIA_DOMAIN,
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
@@ -216,6 +251,7 @@ function createEffectsTools(): Tool[] {
         required: ['id', 'code'],
       },
       category: 'media',
+      domain: MEDIA_DOMAIN,
       isReadOnly: false,
       isConcurrencySafe: false,
       async execute(args): Promise<ToolResult> {
@@ -260,6 +296,7 @@ function createTranscribeTools(): Tool[] {
         required: ['audioSource'],
       },
       category: 'media',
+      domain: AUDIO_DOMAIN,
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
@@ -294,6 +331,7 @@ function createAnalysisTools(): Tool[] {
         required: ['source'],
       },
       category: 'analysis',
+      domain: AUDIO_DOMAIN,
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
@@ -336,6 +374,7 @@ function createAnalysisTools(): Tool[] {
         required: ['source', 'time'],
       },
       category: 'analysis',
+      domain: MEDIA_DOMAIN,
       isReadOnly: true,
       isConcurrencySafe: true,
       async execute(args): Promise<ToolResult> {
@@ -365,6 +404,44 @@ function createAnalysisTools(): Tool[] {
   ];
 }
 
+function createSceneTools(): Tool[] {
+  return [
+    {
+      name: 'InspectScene3D',
+      description:
+        'Inspect the current 3D scene graph and animation state from the engine scene service.',
+      parameters: { type: 'object', properties: {} },
+      category: 'analysis',
+      domain: SCENE_DOMAIN,
+      isReadOnly: true,
+      isConcurrencySafe: true,
+      async execute(): Promise<ToolResult> {
+        const data = await getSceneSnapshot();
+        return { success: true, data };
+      },
+    },
+  ];
+}
+
+function createPuppetTools(): Tool[] {
+  return [
+    {
+      name: 'InspectPuppet2D',
+      description:
+        'Inspect the current 2D puppet document, parameters, meshes, and animation state from the engine puppet service.',
+      parameters: { type: 'object', properties: {} },
+      category: 'analysis',
+      domain: PUPPET_DOMAIN,
+      isReadOnly: true,
+      isConcurrencySafe: true,
+      async execute(): Promise<ToolResult> {
+        const data = await getPuppetSnapshot();
+        return { success: true, data };
+      },
+    },
+  ];
+}
+
 // =============================================================================
 // Provider
 // =============================================================================
@@ -374,7 +451,13 @@ class EngineCapabilityProvider implements AgentCapabilityProvider {
   readonly version = '1.0.0';
 
   getTools(_context: AgentCapabilityContext): Tool[] {
-    return [...createEffectsTools(), ...createTranscribeTools(), ...createAnalysisTools()];
+    return [
+      ...createEffectsTools(),
+      ...createTranscribeTools(),
+      ...createAnalysisTools(),
+      ...createSceneTools(),
+      ...createPuppetTools(),
+    ];
   }
 
   dispose(): void {

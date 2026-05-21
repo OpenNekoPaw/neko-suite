@@ -21,6 +21,13 @@ Mapping:
 - operation `audio` -> creative `audio`
 - operation `project` -> creative `project`
 
+Engine provider registrations:
+
+- `InspectScene3D` -> creative `scene`, service port id `scene-render`
+- `InspectPuppet2D` -> creative `puppet`, service port id `puppet-render`
+- audio analysis/transcription tools -> creative `audio`, service port id `audio-render`
+- media/effects/frame tools -> creative `timeline`, service port id `media-render`
+
 The metadata is serializable orchestration data. It does not expose concrete
 runtime services, Bevy/ECS world handles, or renderer implementations to the
 Intent layer.

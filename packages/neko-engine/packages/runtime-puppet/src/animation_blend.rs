@@ -4,188 +4,46 @@
 //! CrossfadeRequest drives smooth transitions between clips.
 
 use bevy_ecs::prelude::*;
-use neko_engine_types::animation::{
-    deserialize_blend_layer_info_with_unit, serialize_blend_layer_info_with_unit,
-    AnimationBlendLayer, AnimationBlendLayerInfo, AnimationBlendState as SharedAnimationBlendState,
-    AnimationCrossfadeRequest, AnimationDurationUnit,
-};
-use serde::{Deserialize, Serialize};
-use std::ops::{Deref, DerefMut};
+use neko_engine_types::animation::AnimationDurationUnit;
+use neko_engine_types::declare_animation_blend_wrappers;
 
-/// A single animation blend layer — one active clip with a weight.
-#[derive(Debug, Clone)]
-pub struct BlendLayer(AnimationBlendLayer);
-
-impl BlendLayer {
-    pub fn new(clip_index: usize, elapsed_ms: f32, weight: f32, looping: bool) -> Self {
-        Self(AnimationBlendLayer::new_with_unit(
-            clip_index,
-            elapsed_ms,
-            AnimationDurationUnit::Milliseconds,
-            weight,
-            looping,
-        ))
+declare_animation_blend_wrappers! {
+    layer {
+        /// A single animation blend layer — one active clip with a weight.
+        pub struct BlendLayer;
+        unit: AnimationDurationUnit::Milliseconds;
+        new: new(elapsed_ms);
+        elapsed: elapsed_ms;
+        set_elapsed: set_elapsed_ms;
     }
-
-    pub fn elapsed_ms(&self) -> f32 {
-        self.0.elapsed_in_unit(AnimationDurationUnit::Milliseconds)
+    info {
+        /// Frontend-facing blend layer info.
+        pub struct BlendLayerInfo;
+        field: "elapsed_ms";
+        unit: AnimationDurationUnit::Milliseconds;
+        new: new(elapsed_ms);
+        elapsed: elapsed_ms;
     }
-
-    pub fn set_elapsed_ms(&mut self, elapsed_ms: f32) {
-        self.0
-            .set_elapsed_in_unit(elapsed_ms, AnimationDurationUnit::Milliseconds);
+    state {
+        /// ECS component: multi-layer blend state on the puppet root entity.
+        #[derive(Debug, Default, Component)]
+        pub struct AnimationBlendStateComponent;
+        target: AnimationBlendState;
+        new: new;
     }
-}
-
-impl Deref for BlendLayer {
-    type Target = AnimationBlendLayer;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for BlendLayer {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-/// Frontend-facing blend layer info
-#[derive(Debug, Clone)]
-pub struct BlendLayerInfo(AnimationBlendLayerInfo);
-
-impl BlendLayerInfo {
-    pub fn new(clip_name: impl Into<String>, elapsed_ms: f32, weight: f32, looping: bool) -> Self {
-        Self(AnimationBlendLayerInfo::new_with_unit(
-            clip_name,
-            elapsed_ms,
-            AnimationDurationUnit::Milliseconds,
-            weight,
-            looping,
-        ))
-    }
-
-    pub fn clip_name(&self) -> &str {
-        &self.0.clip_name
-    }
-
-    pub fn elapsed_ms(&self) -> f32 {
-        self.0.elapsed_in_unit(AnimationDurationUnit::Milliseconds)
-    }
-
-    pub fn weight(&self) -> f32 {
-        self.0.weight
-    }
-
-    pub fn looping(&self) -> bool {
-        self.0.looping
-    }
-}
-
-impl Serialize for BlendLayerInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serialize_blend_layer_info_with_unit(
-            &self.0,
-            "elapsed_ms",
-            AnimationDurationUnit::Milliseconds,
-            serializer,
-        )
-    }
-}
-
-impl<'de> Deserialize<'de> for BlendLayerInfo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserialize_blend_layer_info_with_unit(
-            "elapsed_ms",
-            AnimationDurationUnit::Milliseconds,
-            deserializer,
-        )
-        .map(Self)
-    }
-}
-
-/// ECS component: multi-layer blend state on the puppet root entity
-#[derive(Debug, Default, Component)]
-pub struct AnimationBlendStateComponent(SharedAnimationBlendState<BlendLayer>);
-
-impl AnimationBlendStateComponent {
-    pub fn new(layers: Vec<BlendLayer>) -> Self {
-        Self(SharedAnimationBlendState::new(layers))
-    }
-}
-
-impl Deref for AnimationBlendStateComponent {
-    type Target = SharedAnimationBlendState<BlendLayer>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for AnimationBlendStateComponent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    crossfade {
+        /// ECS component: active crossfade transition on the puppet root entity.
+        #[derive(Debug, Component)]
+        pub struct CrossfadeRequest;
+        unit: AnimationDurationUnit::Milliseconds;
+        new: new(fade_duration_ms, fade_elapsed_ms);
+        duration: fade_duration_ms;
+        elapsed: fade_elapsed_ms;
+        advance: advance_ms(delta_ms);
     }
 }
 
 pub use AnimationBlendStateComponent as AnimationBlendState;
-
-/// ECS component: active crossfade transition on the puppet root entity
-#[derive(Debug, Component)]
-pub struct CrossfadeRequest(AnimationCrossfadeRequest);
-
-impl CrossfadeRequest {
-    pub fn new(
-        target_clip_index: usize,
-        fade_duration_ms: f32,
-        fade_elapsed_ms: f32,
-        loop_anim: bool,
-    ) -> Self {
-        Self(AnimationCrossfadeRequest::new_with_unit(
-            target_clip_index,
-            fade_duration_ms,
-            fade_elapsed_ms,
-            AnimationDurationUnit::Milliseconds,
-            loop_anim,
-        ))
-    }
-
-    pub fn fade_duration_ms(&self) -> f32 {
-        self.0
-            .fade_duration_in_unit(AnimationDurationUnit::Milliseconds)
-    }
-
-    pub fn fade_elapsed_ms(&self) -> f32 {
-        self.0
-            .fade_elapsed_in_unit(AnimationDurationUnit::Milliseconds)
-    }
-
-    pub fn advance_ms(&mut self, delta_ms: f32) {
-        self.0
-            .advance_in_unit(delta_ms, AnimationDurationUnit::Milliseconds);
-    }
-}
-
-impl Deref for CrossfadeRequest {
-    type Target = AnimationCrossfadeRequest;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for CrossfadeRequest {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -235,7 +93,8 @@ mod tests {
     fn animation_blend_module_uses_shared_contracts() {
         let source = include_str!("animation_blend.rs");
         assert!(source.contains("neko_engine_types::animation"));
-        assert!(!source.contains("pub struct BlendLayer {\n"));
-        assert!(!source.contains("pub struct CrossfadeRequest {\n"));
+        assert!(source.contains("declare_animation_blend_wrappers!"));
+        assert!(!source.contains(concat!("struct ", "BlendLayer(")));
+        assert!(!source.contains(concat!("struct ", "CrossfadeRequest(")));
     }
 }

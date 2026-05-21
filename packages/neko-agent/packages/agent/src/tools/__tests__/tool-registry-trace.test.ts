@@ -156,4 +156,36 @@ describe('ToolRegistry provider schema projection', () => {
     });
     expect(definition?.function.parameters).not.toHaveProperty('domain');
   });
+
+  it('projects engine provider scene and puppet tool domains', async () => {
+    vi.doMock('vscode', () => ({
+      commands: {
+        executeCommand: vi.fn(),
+      },
+    }));
+    const { ToolRegistry } = await import('../tool-registry');
+    const { createEngineCapabilityProvider } =
+      await import('../../../../../../neko-engine/packages/extension/src/agentCapabilityProvider');
+    const registry = new ToolRegistry();
+    for (const tool of createEngineCapabilityProvider().getTools({ extensionContext: undefined })) {
+      registry.register(tool);
+    }
+
+    const definitions = registry.toToolDefinitions();
+    const scene = definitions.find((definition) => definition.function.name === 'InspectScene3D');
+    const puppet = definitions.find((definition) => definition.function.name === 'InspectPuppet2D');
+
+    expect(scene?.domain).toEqual({
+      id: 'scene',
+      source: 'engine-tool',
+      servicePortId: 'scene-render',
+    });
+    expect(puppet?.domain).toEqual({
+      id: 'puppet',
+      source: 'engine-tool',
+      servicePortId: 'puppet-render',
+    });
+    expect(scene?.function.parameters).not.toHaveProperty('domain');
+    expect(puppet?.function.parameters).not.toHaveProperty('domain');
+  });
 });
