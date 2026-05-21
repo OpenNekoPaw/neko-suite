@@ -25,7 +25,6 @@ import { getLogger } from './utils/logger';
 const logger = getLogger('H264');
 
 const H264_HEADER_SIZE = 8 + 8 + 1 + 8; // pts(8) + dts(8) + is_keyframe(1) + duration(8) = 25 bytes
-const ROUTE_A_MAX_DECODE_QUEUE = 2;
 
 interface ParsedH264Packet {
   pts: number;
@@ -470,10 +469,7 @@ export class H264StreamClient {
       logger.info('Keyframe received, decoding resumed');
     }
 
-    if (this.shouldDropQueuedRouteAFrame(packet)) {
-      this.stats.framesDropped++;
-      return;
-    }
+    this.updateDecodeQueueDepth();
 
     // Track timing for performance stats
     this.pendingFrames.set(packet.pts, receiveTime);
@@ -583,11 +579,9 @@ export class H264StreamClient {
     return createRenderFrameMetaFromDescriptor(this.descriptor, packet, this.nextFrameId++);
   }
 
-  private shouldDropQueuedRouteAFrame(packet: ParsedH264Packet): boolean {
-    if (!this.descriptor || !this.decoder) return false;
+  private updateDecodeQueueDepth(): void {
+    if (!this.decoder) return;
     this.stats.decodeQueueDepth = this.decoder.decodeQueueSize;
-    if (this.decoder.decodeQueueSize <= ROUTE_A_MAX_DECODE_QUEUE) return false;
-    return !packet.isKeyframe;
   }
 
   private handleTextMessage(data: string): void {

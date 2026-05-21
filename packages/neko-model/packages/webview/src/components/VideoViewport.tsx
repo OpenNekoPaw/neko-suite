@@ -45,6 +45,11 @@ const VIEWPORT_STREAM_FPS = 60;
 
 type ViewportStreamSize = SceneViewportResolution;
 
+interface PendingPresentationFrame {
+  frame: VideoFrame;
+  meta?: RenderFrameMeta;
+}
+
 function bucketStreamDimension(value: number): number {
   if (!Number.isFinite(value) || value <= 0) {
     return VIEWPORT_DIMENSION_BUCKET;
@@ -179,6 +184,8 @@ export function VideoViewport({
   const streamClientRef = useRef<H264StreamClient | null>(null);
   const streamIdRef = useRef<string | null>(null);
   const frameMetaRef = useRef<RenderFrameMeta | null>(null);
+  const pendingPresentationRef = useRef<PendingPresentationFrame | null>(null);
+  const presentationFrameRef = useRef<number | null>(null);
   // Serialise stream lifecycle across rerenders. Without this, a rapid
   // sceneId change would dispose stream A and start stream B in parallel,
   // letting two RenderGraph submissions race for the same wgpu device queue
@@ -303,6 +310,20 @@ export function VideoViewport({
     setRouteAUnavailableReason(null);
     frameMetaRef.current = null;
 
+    const closePendingPresentation = () => {
+      const pending = pendingPresentationRef.current;
+      pendingPresentationRef.current = null;
+      pending?.frame.close();
+    };
+
+    const cancelPendingPresentation = () => {
+      if (presentationFrameRef.current !== null) {
+        window.cancelAnimationFrame(presentationFrameRef.current);
+        presentationFrameRef.current = null;
+      }
+      closePendingPresentation();
+    };
+
     const start = async () => {
       if (typeof VideoDecoder === 'undefined') {
         setRouteAUnavailable(true);
@@ -343,6 +364,69 @@ export function VideoViewport({
 
         streamIdRef.current = stream.descriptor.streamId;
         postMessage({ type: 'streamStarted', streamId: stream.descriptor.streamId });
+
+        const presentLatestFrame = () => {
+          presentationFrameRef.current = null;
+          const pending = pendingPresentationRef.current;
+          pendingPresentationRef.current = null;
+          if (!pending) return;
+
+          const { frame, meta } = pending;
+          if (disposed) {
+            frame.close();
+            return;
+          }
+
+          const canvas = canvasRef.current;
+          if (!canvas) {
+            frame.close();
+            return;
+          }
+
+          const width = frame.displayWidth || stream.descriptor.width;
+          const height = frame.displayHeight || stream.descriptor.height;
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+          }
+
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const drawStarted = performance.now();
+            ctx.drawImage(frame, 0, 0, width, height);
+            const drawTimeMs = performance.now() - drawStarted;
+            if (meta) {
+              const drawnMeta = {
+                ...meta,
+                diagnostics: {
+                  ...meta.diagnostics,
+                  drawTimeMs,
+                },
+              };
+              frameMetaRef.current = drawnMeta;
+              const store = useModelStore.getState();
+              store.recordRenderFrameMeta(drawnMeta);
+              if (drawnMeta.appliedSeq > 0) {
+                store.commitPredictionsThrough(drawnMeta.appliedSeq);
+                store.commitLocalPredictionsThrough(drawnMeta.appliedSeq);
+              }
+            }
+            setHasEngineFrame(true);
+          }
+          frame.close();
+        };
+
+        const schedulePresentation = (frame: VideoFrame, meta?: RenderFrameMeta) => {
+          const previous = pendingPresentationRef.current;
+          if (previous) {
+            previous.frame.close();
+          }
+          pendingPresentationRef.current = meta ? { frame, meta } : { frame };
+          if (presentationFrameRef.current === null) {
+            presentationFrameRef.current = window.requestAnimationFrame(presentLatestFrame);
+          }
+        };
+
         const h264 = new H264StreamClient({
           websocketUrl: stream.wsUrl,
           descriptor: stream.descriptor,
@@ -354,49 +438,13 @@ export function VideoViewport({
             // belonging to a torn-down stream.
             if (disposed) return;
             frameMetaRef.current = meta;
-            useModelStore.getState().recordRenderFrameMeta(meta);
-            if (meta.appliedSeq > 0) {
-              useModelStore.getState().commitPredictionsThrough(meta.appliedSeq);
-              useModelStore.getState().commitLocalPredictionsThrough(meta.appliedSeq);
-            }
           },
           onFrame: (frame, meta) => {
             if (disposed) {
               frame.close();
               return;
             }
-            const canvas = canvasRef.current;
-            if (!canvas) {
-              frame.close();
-              return;
-            }
-
-            const width = frame.displayWidth || stream.descriptor.width;
-            const height = frame.displayHeight || stream.descriptor.height;
-            if (canvas.width !== width || canvas.height !== height) {
-              canvas.width = width;
-              canvas.height = height;
-            }
-
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              const drawStarted = performance.now();
-              ctx.drawImage(frame, 0, 0, width, height);
-              const drawTimeMs = performance.now() - drawStarted;
-              if (meta) {
-                const drawnMeta = {
-                  ...meta,
-                  diagnostics: {
-                    ...meta.diagnostics,
-                    drawTimeMs,
-                  },
-                };
-                frameMetaRef.current = drawnMeta;
-                useModelStore.getState().updateLastRenderFrameMeta(drawnMeta);
-              }
-              setHasEngineFrame(true);
-            }
-            frame.close();
+            schedulePresentation(frame, meta);
           },
           onError: (error) => {
             if (disposed) return;
@@ -426,6 +474,7 @@ export function VideoViewport({
 
     return () => {
       disposed = true;
+      cancelPendingPresentation();
       streamClientRef.current?.dispose();
       streamClientRef.current = null;
       const streamId = streamIdRef.current;

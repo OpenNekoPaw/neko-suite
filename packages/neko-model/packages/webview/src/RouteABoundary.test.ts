@@ -137,6 +137,22 @@ describe('Route A webview boundaries', () => {
     );
   });
 
+  it('presents Route A decoded frames through requestAnimationFrame backpressure', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const h264Client = readFileSync(
+      resolve(srcRoot, '../../../../neko-client/src/H264StreamClient.ts'),
+      'utf8',
+    );
+
+    expect(videoViewport).toMatch(/pendingPresentationRef/);
+    expect(videoViewport).toMatch(/requestAnimationFrame\(presentLatestFrame\)/);
+    expect(videoViewport).toMatch(/cancelAnimationFrame/);
+    expect(videoViewport).toMatch(/previous\.frame\.close\(\)/);
+    expect(videoViewport).toMatch(/recordRenderFrameMeta\(drawnMeta\)/);
+    expect(videoViewport).not.toMatch(/onFrame:\s*\(frame, meta\) => \{[\s\S]*ctx\.drawImage/);
+    expect(h264Client).not.toMatch(/shouldDropQueuedRouteAFrame/);
+  });
+
   it('routes viewport camera controls through scene control before HTTP fallback', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
     const orbitControls = readSource('components/ViewportOrbitControls.tsx');
