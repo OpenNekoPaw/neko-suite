@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioProjectData, TimelineTrack } from '@neko/shared';
 import { useAudioProjectStore } from '../audioProjectStore';
+import { postMessage } from '../../shared/useVscodeMessage';
 
 vi.mock('../../shared/useVscodeMessage', () => ({
   postMessage: vi.fn(),
@@ -42,7 +43,7 @@ function createAudioElement() {
 
 function createProject(overrides: Partial<AudioProjectData> = {}): AudioProjectData {
   return {
-    version: '2.1',
+    version: '2.2',
     name: 'Project',
     sampleRate: 48000,
     channels: 2,
@@ -59,7 +60,12 @@ function getState() {
 
 describe('audioProjectStore track mix state', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     getState().reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('persists track volume, pan, solo, and effects in AudioProjectData.trackMix', () => {
@@ -138,6 +144,103 @@ describe('audioProjectStore track mix state', () => {
       solo: true,
     });
     expect(getState().opUndoStack.map((operation) => operation.meta.id)).toContain('op-1');
+  });
+
+  it('records transient AI highlights from project sync operations', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    getState().initProject(
+      createProject({
+        tracks: [createTrack({ elements: [createAudioElement()] })],
+        trackMix: {
+          'track-1': {
+            volume: 1,
+            pan: 0,
+            solo: false,
+            effectChain: [
+              {
+                id: 'fx-1',
+                effectType: 'compressor',
+                enabled: true,
+                params: { threshold: -18 },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    getState().syncProject(
+      createProject({
+        tracks: [
+          createTrack({
+            elements: [{ ...createAudioElement(), startTime: 2 }],
+          }),
+        ],
+        trackMix: {
+          'track-1': {
+            volume: 1,
+            pan: 0,
+            solo: false,
+            effectChain: [
+              {
+                id: 'fx-1',
+                effectType: 'compressor',
+                enabled: false,
+                params: { threshold: -18 },
+              },
+            ],
+          },
+        },
+      }),
+      {
+        type: 'batch',
+        meta: { id: 'ai-op-1', timestamp: 1, source: 'ai', description: 'AI edit' },
+        payload: {
+          operations: [
+            {
+              type: 'element.update',
+              meta: { id: 'child-1', timestamp: 1, source: 'ai' },
+              payload: { trackId: 'track-1', elementId: 'clip-1', updates: { startTime: 2 } },
+              before: { updates: { startTime: 0 } },
+            },
+            {
+              type: 'track.mix.effect.update',
+              meta: { id: 'child-2', timestamp: 1, source: 'ai' },
+              payload: { trackId: 'track-1', effectId: 'fx-1', updates: { enabled: false } },
+              before: { updates: { enabled: true } },
+            },
+          ],
+        },
+      },
+    );
+
+    expect(getState().aiOperationHighlights['ai-op-1']).toMatchObject({
+      operationId: 'ai-op-1',
+      trackIds: ['track-1'],
+      elementIds: ['clip-1'],
+      effectIds: ['fx-1'],
+      expiresAt: 5000,
+    });
+    expect(getState().hasAiTrackHighlight('track-1')).toBe(true);
+    expect(getState().hasAiElementHighlight('clip-1')).toBe(true);
+    expect(getState().hasAiEffectHighlight('fx-1')).toBe(true);
+    expect(postMessage).not.toHaveBeenCalled();
+
+    getState().expireAiOperationHighlights(5000);
+    expect(getState().aiOperationHighlights).toEqual({});
+  });
+
+  it('does not create AI highlights for user sync operations', () => {
+    getState().initProject(createProject());
+
+    getState().syncProject(createProject(), {
+      type: 'track.mix.setVolume',
+      meta: { id: 'user-op-1', timestamp: 1, source: 'user' },
+      payload: { trackId: 'track-1', volume: 0.5 },
+      before: { volume: 1 },
+    });
+
+    expect(getState().aiOperationHighlights).toEqual({});
   });
 
   it('drops stale local view state for tracks removed by sync', () => {
@@ -258,6 +361,55 @@ describe('audioProjectStore track mix state', () => {
     expect(getState().audioProjectData?.bpm).toBe(120);
   });
 
+  it('updates BPM from tempoMap and undo restores first tempo event', () => {
+    getState().initProject(
+      createProject({
+        bpm: 90,
+        tempoMap: {
+          ppq: 480,
+          tempoEvents: [{ ticks: 0, bpm: 120 }],
+          timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+        },
+      }),
+    );
+
+    getState().setBpm(142);
+
+    expect(getState().audioProjectData?.bpm).toBe(142);
+    expect(getState().audioProjectData?.tempoMap?.tempoEvents[0]?.bpm).toBe(142);
+    expect(getState().opUndoStack.at(-1)).toMatchObject({
+      type: 'audio.setBpm',
+      before: { bpm: 120 },
+    });
+
+    getState().opUndo();
+    expect(getState().audioProjectData?.tempoMap?.tempoEvents[0]?.bpm).toBe(120);
+  });
+
+  it('updates first time signature event through audio operation', () => {
+    getState().initProject(
+      createProject({
+        tempoMap: {
+          ppq: 480,
+          tempoEvents: [{ ticks: 0, bpm: 120 }],
+          timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+        },
+      }),
+    );
+
+    getState().setTimeSignature(6, 8);
+
+    expect(getState().audioProjectData?.tempoMap?.timeSignatureEvents[0]).toEqual({
+      ticks: 0,
+      numerator: 6,
+      denominator: 8,
+    });
+    expect(getState().opUndoStack.at(-1)).toMatchObject({
+      type: 'audio.setTimeSignature',
+      before: { numerator: 4, denominator: 4 },
+    });
+  });
+
   it('splits clips as one undoable batch operation', () => {
     getState().initProject(
       createProject({
@@ -296,5 +448,177 @@ describe('audioProjectStore track mix state', () => {
 
     getState().opUndo();
     expect(getState().audioProjectData?.tracks[0]?.elements[0]?.duration).toBe(10);
+  });
+
+  it('adds and edits automation lanes through undoable track mix operations', () => {
+    getState().initProject(
+      createProject({
+        trackMix: {
+          'track-1': { volume: 1, pan: 0, solo: false, effectChain: [] },
+        },
+      }),
+    );
+
+    getState().addAutomationLane('track-1', { kind: 'track-volume' });
+    const lane = getState().audioProjectData?.trackMix?.['track-1']?.automation?.[0];
+
+    expect(lane).toMatchObject({
+      enabled: true,
+      target: { kind: 'track-volume' },
+      points: [{ ticks: 0, value: 1, curve: 'linear' }],
+    });
+    expect(getState().opUndoStack.at(-1)?.type).toBe('track.mix.setAutomation');
+
+    getState().addAutomationPoint('track-1', lane!.id, 480, 0.5);
+    expect(getState().audioProjectData?.trackMix?.['track-1']?.automation?.[0]?.points).toEqual([
+      { ticks: 0, value: 1, curve: 'linear' },
+      { ticks: 480, value: 0.5, curve: 'linear' },
+    ]);
+
+    getState().updateAutomationPoint('track-1', lane!.id, 1, { value: 3 });
+    expect(getState().audioProjectData?.trackMix?.['track-1']?.automation?.[0]?.points[1]).toEqual({
+      ticks: 480,
+      value: 2,
+      curve: 'linear',
+    });
+
+    getState().opUndo();
+    expect(getState().audioProjectData?.trackMix?.['track-1']?.automation?.[0]?.points[1]).toEqual({
+      ticks: 480,
+      value: 0.5,
+      curve: 'linear',
+    });
+  });
+
+  it('adds effect-parameter automation only for shared automatable metadata', () => {
+    getState().initProject(
+      createProject({
+        trackMix: {
+          'track-1': {
+            volume: 1,
+            pan: 0,
+            solo: false,
+            effectChain: [
+              {
+                id: 'fx-1',
+                effectType: 'compressor',
+                enabled: true,
+                params: { threshold: -18 },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    getState().addAutomationLane('track-1', {
+      kind: 'effect-param',
+      effectId: 'fx-1',
+      param: 'threshold',
+    });
+    getState().addAutomationLane('track-1', {
+      kind: 'effect-param',
+      effectId: 'fx-1',
+      param: 'missing',
+    });
+
+    expect(getState().audioProjectData?.trackMix?.['track-1']?.automation).toHaveLength(1);
+    expect(getState().audioProjectData?.trackMix?.['track-1']?.automation?.[0]?.target).toEqual({
+      kind: 'effect-param',
+      effectId: 'fx-1',
+      param: 'threshold',
+    });
+  });
+
+  it('syncProject replaces persisted automation from extension state', () => {
+    getState().initProject(
+      createProject({
+        trackMix: {
+          'track-1': {
+            volume: 1,
+            pan: 0,
+            solo: false,
+            effectChain: [],
+            automation: [
+              {
+                id: 'lane-old',
+                enabled: true,
+                target: { kind: 'track-volume' },
+                points: [{ ticks: 0, value: 1, curve: 'linear' }],
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    getState().syncProject(
+      createProject({
+        trackMix: {
+          'track-1': {
+            volume: 1,
+            pan: 0,
+            solo: false,
+            effectChain: [],
+            automation: [
+              {
+                id: 'lane-new',
+                enabled: false,
+                target: { kind: 'track-pan' },
+                points: [{ ticks: 0, value: 0, curve: 'hold' }],
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(getState().audioProjectData?.trackMix?.['track-1']?.automation).toEqual([
+      {
+        id: 'lane-new',
+        enabled: false,
+        target: { kind: 'track-pan' },
+        points: [{ ticks: 0, value: 0, curve: 'hold' }],
+      },
+    ]);
+  });
+
+  it('undo after AI sync uses the existing operation path exactly once', () => {
+    getState().initProject(
+      createProject({
+        trackMix: {
+          'track-1': { volume: 1, pan: 0, solo: false, effectChain: [] },
+        },
+      }),
+    );
+    getState().syncProject(
+      createProject({
+        trackMix: {
+          'track-1': { volume: 0.4, pan: 0, solo: false, effectChain: [] },
+        },
+      }),
+      {
+        type: 'track.mix.setVolume',
+        meta: { id: 'ai-op-undo', timestamp: 1, source: 'ai' },
+        payload: { trackId: 'track-1', volume: 0.4 },
+        before: { volume: 1 },
+      },
+    );
+    expect(postMessage).not.toHaveBeenCalled();
+
+    getState().opUndo();
+
+    expect(getState().audioProjectData?.trackMix?.['track-1']?.volume).toBe(1);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'operationApplied',
+        operation: expect.objectContaining({
+          type: 'track.mix.setVolume',
+          meta: expect.objectContaining({ source: 'undo' }),
+          payload: { trackId: 'track-1', volume: 1 },
+        }),
+      }),
+    );
   });
 });

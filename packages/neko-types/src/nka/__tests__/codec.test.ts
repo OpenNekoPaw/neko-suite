@@ -58,6 +58,11 @@ const VALID_AUDIO_PROJECT: AudioProjectData = {
       ],
     },
   },
+  tempoMap: {
+    ppq: 480,
+    tempoEvents: [{ ticks: 0, bpm: 128 }],
+    timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+  },
   masterVolume: 0.9,
 };
 
@@ -157,6 +162,24 @@ describe('loadNka', () => {
     expect(result.validation.warnings).toHaveLength(0);
   });
 
+  it('should load v2.1 projects and derive a default tempo map from bpm', () => {
+    const data = {
+      ...VALID_AUDIO_PROJECT,
+      version: '2.1',
+      bpm: 132,
+      tempoMap: undefined,
+    };
+    const result = loadNka(JSON.stringify(data));
+
+    expect(result.validation.valid).toBe(true);
+    expect(result.compatibility.mode).toBe('current');
+    expect(result.data.tempoMap).toEqual({
+      ppq: 480,
+      tempoEvents: [{ ticks: 0, bpm: 132 }],
+      timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+    });
+  });
+
   it('should reject unknown effect names', () => {
     const data = {
       ...VALID_AUDIO_PROJECT,
@@ -232,11 +255,75 @@ describe('saveNka', () => {
     const json = saveNka(VALID_AUDIO_PROJECT);
     const parsed = JSON.parse(json) as unknown;
 
-    expect(parsed).toEqual({ ...VALID_AUDIO_PROJECT, version: CURRENT_NKA_VERSION });
+    expect(parsed).toEqual({ ...VALID_AUDIO_PROJECT, version: CURRENT_NKA_VERSION, bpm: 128 });
     // Check indent: second line should start with 2 spaces
     const lines = json.split('\n');
     expect(lines.length).toBeGreaterThan(1);
     expect(lines[1]).toMatch(/^ {2}"/);
+  });
+
+  it('should save v2.2 tempo maps and backfill bpm from the first tempo event', () => {
+    const json = saveNka({
+      ...VALID_AUDIO_PROJECT,
+      bpm: 120,
+      tempoMap: {
+        ppq: 480,
+        tempoEvents: [{ ticks: 0, bpm: 142 }],
+        timeSignatureEvents: [{ ticks: 0, numerator: 6, denominator: 8 }],
+      },
+    });
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+
+    expect(parsed['version']).toBe(CURRENT_NKA_VERSION);
+    expect(parsed['bpm']).toBe(142);
+    expect(parsed['tempoMap']).toEqual({
+      ppq: 480,
+      tempoEvents: [{ ticks: 0, bpm: 142 }],
+      timeSignatureEvents: [{ ticks: 0, numerator: 6, denominator: 8 }],
+    });
+  });
+
+  it('should persist automation lanes without derived seconds', () => {
+    const json = saveNka({
+      ...VALID_AUDIO_PROJECT,
+      trackMix: {
+        'track-1': {
+          volume: 0.75,
+          pan: -0.1,
+          solo: false,
+          effectChain: [
+            {
+              id: 'track-fx-1',
+              effectType: 'compressor',
+              enabled: true,
+              params: { threshold: -18 },
+            },
+          ],
+          automation: [
+            {
+              id: 'lane-1',
+              enabled: true,
+              target: { kind: 'effect-param', effectId: 'track-fx-1', param: 'threshold' },
+              points: [
+                { ticks: 0, value: -24, curve: 'linear' },
+                { ticks: 480, value: -12, curve: 'hold' },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const loaded = loadNka(json);
+
+    expect(loaded.validation.valid).toBe(true);
+    expect(loaded.data.trackMix?.['track-1']?.automation?.[0]?.points[0]).toEqual({
+      ticks: 0,
+      value: -24,
+      curve: 'linear',
+    });
+    expect(
+      Object.hasOwn(loaded.data.trackMix?.['track-1']?.automation?.[0]?.points[0] ?? {}, 'seconds'),
+    ).toBe(false);
   });
 
   it('should respect custom indent option', () => {

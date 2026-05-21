@@ -4,13 +4,21 @@
 
 import type { TimelineElement } from '../types/element';
 import type { AudioProperties } from '../types/audio';
-import type { AudioProjectData } from '../types/audioProject';
-import type { AudioEffectConfig, MixElementConfig, MixStreamConfig } from '../types/audioMix';
+import type { AudioProjectData, AudioTrackMixState } from '../types/audioProject';
+import type {
+  AudioEffectConfig,
+  MixAutomationLaneConfig,
+  MixElementConfig,
+  MixStreamConfig,
+} from '../types/audioMix';
+import type { AudioAutomationLane } from '../types/audioAutomation';
 import {
   isPlannedAudioEffectType,
   normalizeAudioEffectType,
   normalizeRenderableAudioEffectType,
 } from '../types/audioMix';
+import { getAudioEffectParameterMetadata } from '../types/audioEffectParams';
+import { createDefaultTempoMap, ticksToSeconds, type TempoMap } from '../types/audioTempo';
 
 export interface MixConfigContext {
   projectDir: string;
@@ -18,7 +26,11 @@ export interface MixConfigContext {
 }
 
 export interface MixConfigWarning {
-  code: 'planned-effect' | 'unknown-effect';
+  code:
+    | 'planned-effect'
+    | 'unknown-effect'
+    | 'invalid-automation'
+    | 'unsupported-automation';
   message: string;
   effectId?: string;
   effectType: string;
@@ -35,17 +47,20 @@ export function buildMixConfig(
   context: MixConfigContext,
 ): MixConfigBuildResult {
   const warnings: MixConfigWarning[] = [];
+  const tempoMap = data.tempoMap ?? createDefaultTempoMap(data.bpm ?? 120);
 
   const config: MixStreamConfig = {
     tracks: data.tracks.map((track) => {
       const mix = data.trackMix?.[track.id];
+      const effectChain = normalizeEffectChain(mix?.effectChain ?? [], warnings, track.id);
       return {
         id: track.id,
         muted: track.muted,
         solo: mix?.solo ?? false,
         volume: mix?.volume ?? 1,
         pan: mix?.pan ?? 0,
-        effectChain: normalizeEffectChain(mix?.effectChain ?? [], warnings, track.id),
+        effectChain,
+        automation: normalizeAutomationLanes(mix, effectChain, tempoMap, warnings, track.id),
         elements: track.elements
           .filter(isAudioSourceElement)
           .map((element) => toMixElementConfig(element, context)),
@@ -58,6 +73,107 @@ export function buildMixConfig(
   };
 
   return { config, warnings };
+}
+
+function normalizeAutomationLanes(
+  mix: AudioTrackMixState | undefined,
+  effectChain: AudioEffectConfig[],
+  tempoMap: TempoMap,
+  warnings: MixConfigWarning[],
+  trackId: string,
+): MixAutomationLaneConfig[] {
+  return (mix?.automation ?? []).flatMap((lane) => {
+    if (!lane.enabled) {
+      return [];
+    }
+
+    const validation = validateAutomationLane(lane, effectChain);
+    if (!validation.ok) {
+      warnings.push({
+        code: validation.unsupported ? 'unsupported-automation' : 'invalid-automation',
+        message: validation.message,
+        effectId: lane.target.kind === 'effect-param' ? lane.target.effectId : undefined,
+        effectType: lane.target.kind,
+        trackId,
+      });
+      return [];
+    }
+
+    return [
+      {
+        id: lane.id,
+        target: lane.target,
+        enabled: true,
+        points: lane.points.map((point) => ({
+          time: ticksToSeconds(point.ticks, tempoMap),
+          value: point.value,
+          curve: point.curve,
+        })),
+      },
+    ];
+  });
+}
+
+function validateAutomationLane(
+  lane: AudioAutomationLane,
+  effectChain: AudioEffectConfig[],
+): { ok: true } | { ok: false; message: string; unsupported?: boolean } {
+  if (lane.points.some((point) => point.ticks < 0 || !Number.isInteger(point.ticks))) {
+    return { ok: false, message: `Automation lane "${lane.id}" has invalid tick positions.` };
+  }
+
+  for (let index = 1; index < lane.points.length; index += 1) {
+    if (lane.points[index]!.ticks <= lane.points[index - 1]!.ticks) {
+      return { ok: false, message: `Automation lane "${lane.id}" points are not sorted.` };
+    }
+  }
+
+  if (lane.target.kind === 'track-volume') {
+    return validatePointValues(lane, 0, 2);
+  }
+  if (lane.target.kind === 'track-pan') {
+    return validatePointValues(lane, -1, 1);
+  }
+
+  const target = lane.target;
+  const effect = effectChain.find((candidate) => candidate.id === target.effectId);
+  if (!effect) {
+    return {
+      ok: false,
+      message: `Automation lane "${lane.id}" references missing effect "${target.effectId}".`,
+    };
+  }
+  const metadata = getAudioEffectParameterMetadata(effect.effectType, target.param);
+  if (!metadata || !metadata.automatable || metadata.valueKind !== 'number') {
+    return {
+      ok: false,
+      unsupported: true,
+      message: `Effect automation "${effect.effectType}.${target.param}" is not supported by mix rendering yet.`,
+    };
+  }
+
+  return {
+    ok: false,
+    unsupported: true,
+    message: `Effect automation "${effect.effectType}.${target.param}" is not supported by mix rendering yet.`,
+  };
+}
+
+function validatePointValues(
+  lane: AudioAutomationLane,
+  min: number,
+  max: number,
+): { ok: true } | { ok: false; message: string } {
+  const invalid = lane.points.find(
+    (point) => !Number.isFinite(point.value) || point.value < min || point.value > max,
+  );
+  if (invalid) {
+    return {
+      ok: false,
+      message: `Automation lane "${lane.id}" value out of range [${min}, ${max}].`,
+    };
+  }
+  return { ok: true };
 }
 
 function normalizeMasterEffects(

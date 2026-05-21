@@ -1156,6 +1156,8 @@ export class AudioProjectProvider
       case 'audio.marker.remove':
       case 'audio.marker.update':
       case 'audio.setBpm':
+      case 'audio.setTimeSignature':
+      case 'audio.setMasterVolume':
       case 'track.mix.setVolume':
       case 'track.mix.setPan':
       case 'track.mix.setSolo':
@@ -1163,6 +1165,7 @@ export class AudioProjectProvider
       case 'track.mix.effect.remove':
       case 'track.mix.effect.update':
       case 'track.mix.effect.move':
+      case 'track.mix.setAutomation':
         return true;
       case 'batch':
         return operation.payload.operations.every((child) =>

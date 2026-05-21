@@ -44,7 +44,14 @@ function createProject(): AudioProjectData {
         volume: 1,
         pan: 0,
         solo: false,
-        effectChain: [],
+        effectChain: [
+          {
+            id: 'fx-1',
+            effectType: 'compressor',
+            enabled: true,
+            params: { threshold: -18 },
+          },
+        ],
       },
     },
   };
@@ -231,5 +238,104 @@ describe('AudioToolBridge', () => {
     });
 
     expect(result).toEqual({ success: false, error: 'No audio project open' });
+  });
+
+  it('sets track automation through the gateway', async () => {
+    const { gateway, state } = createGateway();
+    const bridge = new AudioToolBridge(gateway, audioService);
+
+    const result = await bridge.executeAgentTool('SetTrackAutomation', {
+      trackId: 'track-1',
+      target: { kind: 'track-volume' },
+      points: [
+        { ticks: 0, value: 1 },
+        { ticks: 480, value: 0.5, curve: 'hold' },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    expect(state.session.projectData.trackMix?.['track-1']?.automation?.[0]).toMatchObject({
+      target: { kind: 'track-volume' },
+      enabled: true,
+      points: [
+        { ticks: 0, value: 1, curve: 'linear' },
+        { ticks: 480, value: 0.5, curve: 'hold' },
+      ],
+    });
+    expect(state.synced[0]?.operation.type).toBe('track.mix.setAutomation');
+  });
+
+  it('sets effect parameter automation with shared metadata validation', async () => {
+    const { gateway, state } = createGateway();
+    const bridge = new AudioToolBridge(gateway, audioService);
+
+    const result = await bridge.executeAgentTool('SetTrackAutomation', {
+      trackId: 'track-1',
+      target: { kind: 'effect-param', effectId: 'fx-1', param: 'threshold' },
+      points: [{ ticks: 0, value: -24 }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(state.session.projectData.trackMix?.['track-1']?.automation?.[0]?.target).toEqual({
+      kind: 'effect-param',
+      effectId: 'fx-1',
+      param: 'threshold',
+    });
+  });
+
+  it('fails automation for missing project, track, effect, unsupported param, out-of-range value, and seconds input', async () => {
+    const { gateway, state } = createGateway();
+    const bridge = new AudioToolBridge(gateway, audioService);
+
+    vi.spyOn(gateway, 'resolveSession').mockResolvedValueOnce(null);
+    await expect(
+      bridge.executeAgentTool('SetTrackAutomation', {
+        trackId: 'track-1',
+        target: { kind: 'track-volume' },
+        points: [{ ticks: 0, value: 1 }],
+      }),
+    ).resolves.toEqual({ success: false, error: 'No audio project open' });
+
+    const missingTrack = await bridge.executeAgentTool('SetTrackAutomation', {
+      trackId: 'missing',
+      target: { kind: 'track-volume' },
+      points: [{ ticks: 0, value: 1 }],
+    });
+    expect(missingTrack.success).toBe(false);
+    expect(missingTrack.error).toContain('missing');
+
+    const missingEffect = await bridge.executeAgentTool('SetTrackAutomation', {
+      trackId: 'track-1',
+      target: { kind: 'effect-param', effectId: 'missing-fx', param: 'threshold' },
+      points: [{ ticks: 0, value: -24 }],
+    });
+    expect(missingEffect.success).toBe(false);
+    expect(missingEffect.error).toContain('missing-fx');
+
+    const unsupportedParam = await bridge.executeAgentTool('SetTrackAutomation', {
+      trackId: 'track-1',
+      target: { kind: 'effect-param', effectId: 'fx-1', param: 'missing' },
+      points: [{ ticks: 0, value: 0 }],
+    });
+    expect(unsupportedParam.success).toBe(false);
+    expect(unsupportedParam.error).toContain('Unsupported automatable parameter');
+
+    const outOfRange = await bridge.executeAgentTool('SetTrackAutomation', {
+      trackId: 'track-1',
+      target: { kind: 'track-pan' },
+      points: [{ ticks: 0, value: 2 }],
+    });
+    expect(outOfRange.success).toBe(false);
+    expect(outOfRange.error).toContain('out of range');
+
+    const secondsOnly = await bridge.executeAgentTool('SetTrackAutomation', {
+      trackId: 'track-1',
+      target: { kind: 'track-volume' },
+      points: [{ seconds: 1, value: 1 }],
+    });
+    expect(secondsOnly.success).toBe(false);
+    expect(secondsOnly.error).toContain('ticks');
+
+    expect(state.synced).toHaveLength(0);
   });
 });

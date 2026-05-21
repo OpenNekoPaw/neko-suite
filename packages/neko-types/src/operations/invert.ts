@@ -71,6 +71,8 @@ import type {
   AudioMarkerRemoveOperation,
   AudioMarkerUpdateOperation,
   AudioSetBpmOperation,
+  AudioSetTimeSignatureOperation,
+  AudioSetMasterVolumeOperation,
   TrackMixOperation,
 } from './types';
 import { invertTrackMixOperation } from './apply-track-mix';
@@ -178,6 +180,7 @@ export function invertOperation(op: EditOperation): EditOperation {
     case 'track.mix.effect.remove':
     case 'track.mix.effect.update':
     case 'track.mix.effect.move':
+    case 'track.mix.setAutomation':
       return invertTrackMixOperation(op as TrackMixOperation, meta);
 
     // =========================================================================
@@ -892,6 +895,35 @@ export function invertOperation(op: EditOperation): EditOperation {
         meta,
         payload: bpmOp.before.bpm === undefined ? {} : { bpm: bpmOp.before.bpm },
         before: { bpm: bpmOp.payload.bpm },
+      };
+    }
+
+    case 'audio.setTimeSignature': {
+      const signatureOp = op as AudioSetTimeSignatureOperation;
+      return {
+        type: 'audio.setTimeSignature',
+        meta,
+        payload: {
+          numerator: signatureOp.before.numerator,
+          denominator: signatureOp.before.denominator,
+        },
+        before: {
+          numerator: signatureOp.payload.numerator,
+          denominator: signatureOp.payload.denominator,
+        },
+      };
+    }
+
+    case 'audio.setMasterVolume': {
+      const volumeOp = op as AudioSetMasterVolumeOperation;
+      return {
+        type: 'audio.setMasterVolume',
+        meta,
+        payload:
+          volumeOp.before.masterVolume === undefined
+            ? {}
+            : { masterVolume: volumeOp.before.masterVolume },
+        before: { masterVolume: volumeOp.payload.masterVolume },
       };
     }
 

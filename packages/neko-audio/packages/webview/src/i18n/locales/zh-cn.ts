@@ -211,6 +211,7 @@ const audio: MessageBundle = {
   'audio.track.moveUp': '上移',
   'audio.track.moveDown': '下移',
   'audio.track.delete': '删除轨道',
+  'audio.automation.toggle': '自动化',
 
   // Clip operations (context menu)
   'audio.clip.mute': '静音片段',

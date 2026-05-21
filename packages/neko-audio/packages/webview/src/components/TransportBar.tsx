@@ -12,6 +12,7 @@ import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { postMessage } from '../shared/useVscodeMessage';
 import { MacButton, MacIconButton } from '@neko/shared/components';
 import { t } from '../i18n';
+import { formatSecondsAsBarBeat, getProjectBpm, getProjectTempoMap } from '../utils/beatGrid';
 
 interface TransportBarProps {
   onTogglePlay: () => void;
@@ -52,11 +53,20 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
 
   const projectData = useAudioProjectStore((s) => s.audioProjectData);
   const setBpm = useAudioProjectStore((s) => s.setBpm);
+  const setTimeSignature = useAudioProjectStore((s) => s.setTimeSignature);
 
   const duration = projectMode
     ? getTotalDuration(projectData?.tracks ?? [])
     : (audioInfo?.duration ?? 0);
   const isPlaying = playbackState === 'playing';
+  const tempoMap = getProjectTempoMap(projectData);
+  const projectBpm = getProjectBpm(projectData);
+  const initialSignature = tempoMap.timeSignatureEvents[0] ?? {
+    ticks: 0,
+    numerator: 4,
+    denominator: 4,
+  };
+  const musicalPosition = formatSecondsAsBarBeat(currentTime, tempoMap);
 
   const handleToggleLoop = useCallback(() => {
     toggleLoop();
@@ -75,6 +85,18 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
     },
     [setBpm],
   );
+
+  const handleTimeSignatureChange = useCallback(
+    (field: 'numerator' | 'denominator', value: number) => {
+      const nextValue = Number.isFinite(value) ? value : 4;
+      setTimeSignature(
+        field === 'numerator' ? nextValue : initialSignature.numerator,
+        field === 'denominator' ? nextValue : initialSignature.denominator,
+      );
+    },
+    [initialSignature.denominator, initialSignature.numerator, setTimeSignature],
+  );
+
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -255,9 +277,33 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
             type="number"
             min="20"
             max="300"
-            value={projectData?.bpm ?? 120}
+            value={projectBpm}
             onChange={handleBpmChange}
             className="w-12 text-[11px] px-1 py-0.5 bg-[var(--btn-bg)] text-[var(--activity-fg)] border border-[var(--btn-border)] rounded-md text-center tabular-nums"
+          />
+          <span className="text-[11px] font-mono text-[var(--activity-inactive)] tabular-nums">
+            {musicalPosition}
+          </span>
+          <input
+            type="number"
+            min="1"
+            max="32"
+            value={initialSignature.numerator}
+            onChange={(event) =>
+              handleTimeSignatureChange('numerator', Number.parseInt(event.target.value, 10))
+            }
+            className="w-9 text-[11px] px-1 py-0.5 bg-[var(--btn-bg)] text-[var(--activity-fg)] border border-[var(--btn-border)] rounded-md text-center tabular-nums"
+          />
+          <span className="text-[11px] text-[var(--activity-inactive)]">/</span>
+          <input
+            type="number"
+            min="1"
+            max="32"
+            value={initialSignature.denominator}
+            onChange={(event) =>
+              handleTimeSignatureChange('denominator', Number.parseInt(event.target.value, 10))
+            }
+            className="w-9 text-[11px] px-1 py-0.5 bg-[var(--btn-bg)] text-[var(--activity-fg)] border border-[var(--btn-border)] rounded-md text-center tabular-nums"
           />
         </>
       )}

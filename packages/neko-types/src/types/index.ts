@@ -43,8 +43,11 @@ export * from './keyframe';
 
 // Audio
 export * from './audio';
+export * from './audioAutomation';
+export * from './audioEffectParams';
 export * from './audioMix';
 export * from './audioProtocol';
+export * from './audioTempo';
 
 // Speed
 export * from './speed';

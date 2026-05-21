@@ -7,6 +7,8 @@
 
 import type { ValidationResult, ValidationError } from '../config/config-adapter';
 import { isEngineAudioEffectType, isKnownAudioEffectType } from '../types/audioMix';
+import type { AudioEffectConfig } from '../types/audioMix';
+import { getAudioEffectParameterMetadata } from '../types/audioEffectParams';
 
 // =============================================================================
 // Type Guards (internal helpers)
@@ -141,6 +143,10 @@ function validateRoot(
         severity: 'error',
       });
     }
+  }
+
+  if (data['tempoMap'] !== undefined) {
+    validateTempoMap(data['tempoMap'], 'tempoMap', errors);
   }
 }
 
@@ -374,10 +380,346 @@ function validateTrackMix(data: Record<string, unknown>, errors: ValidationError
       continue;
     }
 
-    for (let i = 0; i < state['effectChain'].length; i++) {
-      validateMixEffect(state['effectChain'][i], `${statePath}.effectChain[${i}]`, errors);
+    const effectChain = state['effectChain'];
+    for (let i = 0; i < effectChain.length; i++) {
+      validateMixEffect(effectChain[i], `${statePath}.effectChain[${i}]`, errors);
+    }
+
+    if (state['automation'] !== undefined) {
+      validateAutomationLanes(
+        state['automation'],
+        `${statePath}.automation`,
+        effectChain.filter(isAudioEffectConfigLike),
+        errors,
+      );
     }
   }
+}
+
+function validateTempoMap(value: unknown, path: string, errors: ValidationError[]): void {
+  if (!isRecord(value)) {
+    errors.push({ field: path, message: 'must be an object', severity: 'error' });
+    return;
+  }
+
+  if (!isNumber(value['ppq']) || value['ppq'] <= 0 || !Number.isInteger(value['ppq'])) {
+    errors.push({ field: `${path}.ppq`, message: 'must be a positive integer', severity: 'error' });
+  }
+
+  validateTempoEvents(value['tempoEvents'], `${path}.tempoEvents`, errors);
+  validateTimeSignatureEvents(
+    value['timeSignatureEvents'],
+    `${path}.timeSignatureEvents`,
+    errors,
+  );
+}
+
+function validateTempoEvents(value: unknown, path: string, errors: ValidationError[]): void {
+  if (!isArray(value)) {
+    errors.push({ field: path, message: 'must be an array', severity: 'error' });
+    return;
+  }
+
+  if (value.length === 0) {
+    errors.push({ field: path, message: 'must include at least one tempo event', severity: 'error' });
+    return;
+  }
+
+  let previousTicks = -1;
+  let hasTickZero = false;
+  for (let i = 0; i < value.length; i++) {
+    const eventPath = `${path}[${i}]`;
+    const event = value[i];
+    if (!isRecord(event)) {
+      errors.push({ field: eventPath, message: 'must be an object', severity: 'error' });
+      continue;
+    }
+
+    const ticks = event['ticks'];
+    if (!isNumber(ticks) || ticks < 0 || !Number.isInteger(ticks)) {
+      errors.push({
+        field: `${eventPath}.ticks`,
+        message: 'must be a non-negative integer',
+        severity: 'error',
+      });
+    } else {
+      hasTickZero = hasTickZero || ticks === 0;
+      if (ticks <= previousTicks) {
+        errors.push({
+          field: `${eventPath}.ticks`,
+          message: 'must be strictly increasing',
+          severity: 'error',
+        });
+      }
+      previousTicks = ticks;
+    }
+
+    if (!isNumber(event['bpm']) || event['bpm'] < 20 || event['bpm'] > 300) {
+      errors.push({ field: `${eventPath}.bpm`, message: 'must be between 20 and 300', severity: 'error' });
+    }
+  }
+
+  if (!hasTickZero) {
+    errors.push({
+      field: path,
+      message: 'must include a tempo event at tick 0',
+      severity: 'error',
+    });
+  }
+}
+
+function validateTimeSignatureEvents(value: unknown, path: string, errors: ValidationError[]): void {
+  if (!isArray(value)) {
+    errors.push({ field: path, message: 'must be an array', severity: 'error' });
+    return;
+  }
+
+  if (value.length === 0) {
+    errors.push({
+      field: path,
+      message: 'must include at least one time signature event',
+      severity: 'error',
+    });
+    return;
+  }
+
+  let previousTicks = -1;
+  let hasTickZero = false;
+  for (let i = 0; i < value.length; i++) {
+    const eventPath = `${path}[${i}]`;
+    const event = value[i];
+    if (!isRecord(event)) {
+      errors.push({ field: eventPath, message: 'must be an object', severity: 'error' });
+      continue;
+    }
+
+    const ticks = event['ticks'];
+    if (!isNumber(ticks) || ticks < 0 || !Number.isInteger(ticks)) {
+      errors.push({
+        field: `${eventPath}.ticks`,
+        message: 'must be a non-negative integer',
+        severity: 'error',
+      });
+    } else {
+      hasTickZero = hasTickZero || ticks === 0;
+      if (ticks <= previousTicks) {
+        errors.push({
+          field: `${eventPath}.ticks`,
+          message: 'must be strictly increasing',
+          severity: 'error',
+        });
+      }
+      previousTicks = ticks;
+    }
+
+    if (!isNumber(event['numerator']) || event['numerator'] <= 0 || !Number.isInteger(event['numerator'])) {
+      errors.push({
+        field: `${eventPath}.numerator`,
+        message: 'must be a positive integer',
+        severity: 'error',
+      });
+    }
+
+    if (
+      !isNumber(event['denominator']) ||
+      event['denominator'] <= 0 ||
+      !Number.isInteger(event['denominator'])
+    ) {
+      errors.push({
+        field: `${eventPath}.denominator`,
+        message: 'must be a positive integer',
+        severity: 'error',
+      });
+    }
+  }
+
+  if (!hasTickZero) {
+    errors.push({
+      field: path,
+      message: 'must include a time signature event at tick 0',
+      severity: 'error',
+    });
+  }
+}
+
+function validateAutomationLanes(
+  value: unknown,
+  path: string,
+  effectChain: AudioEffectConfig[],
+  errors: ValidationError[],
+): void {
+  if (!isArray(value)) {
+    errors.push({ field: path, message: 'must be an array', severity: 'error' });
+    return;
+  }
+
+  for (let i = 0; i < value.length; i++) {
+    validateAutomationLane(value[i], `${path}[${i}]`, effectChain, errors);
+  }
+}
+
+function validateAutomationLane(
+  lane: unknown,
+  path: string,
+  effectChain: AudioEffectConfig[],
+  errors: ValidationError[],
+): void {
+  if (!isRecord(lane)) {
+    errors.push({ field: path, message: 'must be an object', severity: 'error' });
+    return;
+  }
+
+  if (!isString(lane['id'])) {
+    errors.push({ field: `${path}.id`, message: 'must be a string', severity: 'error' });
+  }
+
+  if (!isBoolean(lane['enabled'])) {
+    errors.push({ field: `${path}.enabled`, message: 'must be a boolean', severity: 'error' });
+  }
+
+  const targetRange = validateAutomationTarget(lane['target'], `${path}.target`, effectChain, errors);
+  const points = lane['points'];
+  if (!isArray(points)) {
+    errors.push({ field: `${path}.points`, message: 'must be an array', severity: 'error' });
+    return;
+  }
+
+  let previousTicks = -1;
+  for (let i = 0; i < points.length; i++) {
+    const pointPath = `${path}.points[${i}]`;
+    const point = points[i];
+    if (!isRecord(point)) {
+      errors.push({ field: pointPath, message: 'must be an object', severity: 'error' });
+      continue;
+    }
+
+    const ticks = point['ticks'];
+    if (!isNumber(ticks) || ticks < 0 || !Number.isInteger(ticks)) {
+      errors.push({
+        field: `${pointPath}.ticks`,
+        message: 'must be a non-negative integer',
+        severity: 'error',
+      });
+    } else {
+      if (ticks <= previousTicks) {
+        errors.push({
+          field: `${pointPath}.ticks`,
+          message: 'must be strictly increasing',
+          severity: 'error',
+        });
+      }
+      previousTicks = ticks;
+    }
+
+    if (!isNumber(point['value'])) {
+      errors.push({ field: `${pointPath}.value`, message: 'must be a number', severity: 'error' });
+    } else if (targetRange && (point['value'] < targetRange.min || point['value'] > targetRange.max)) {
+      errors.push({
+        field: `${pointPath}.value`,
+        message: `must be between ${targetRange.min} and ${targetRange.max}`,
+        severity: 'error',
+      });
+    }
+
+    if (!isAutomationCurve(point['curve'])) {
+      errors.push({
+        field: `${pointPath}.curve`,
+        message: 'must be one of linear, hold, exponential',
+        severity: 'error',
+      });
+    }
+
+    if ('seconds' in point) {
+      errors.push({
+        field: `${pointPath}.seconds`,
+        message: 'must not persist derived seconds',
+        severity: 'error',
+      });
+    }
+  }
+}
+
+function validateAutomationTarget(
+  target: unknown,
+  path: string,
+  effectChain: AudioEffectConfig[],
+  errors: ValidationError[],
+): { min: number; max: number } | undefined {
+  if (!isRecord(target)) {
+    errors.push({ field: path, message: 'must be an object', severity: 'error' });
+    return undefined;
+  }
+
+  if (target['kind'] === 'track-volume') {
+    return { min: 0, max: 2 };
+  }
+  if (target['kind'] === 'track-pan') {
+    return { min: -1, max: 1 };
+  }
+  if (target['kind'] !== 'effect-param') {
+    errors.push({
+      field: `${path}.kind`,
+      message: 'must be track-volume, track-pan, or effect-param',
+      severity: 'error',
+    });
+    return undefined;
+  }
+
+  if (!isString(target['effectId'])) {
+    errors.push({ field: `${path}.effectId`, message: 'must be a string', severity: 'error' });
+    return undefined;
+  }
+  if (!isString(target['param'])) {
+    errors.push({ field: `${path}.param`, message: 'must be a string', severity: 'error' });
+    return undefined;
+  }
+  const effectId = target['effectId'];
+  const param = target['param'];
+
+  const effect = effectChain.find((candidate) => candidate.id === effectId);
+  if (!effect) {
+    errors.push({
+      field: `${path}.effectId`,
+      message: `effect not found: ${effectId}`,
+      severity: 'error',
+    });
+    return undefined;
+  }
+
+  const metadata = getAudioEffectParameterMetadata(effect.effectType, param);
+  if (!metadata || !metadata.automatable || metadata.valueKind !== 'number') {
+    errors.push({
+      field: `${path}.param`,
+      message: `unsupported automatable parameter: ${param}`,
+      severity: 'error',
+    });
+    return undefined;
+  }
+
+  return {
+    min: metadata.min ?? Number.NEGATIVE_INFINITY,
+    max: metadata.max ?? Number.POSITIVE_INFINITY,
+  };
+}
+
+function isAudioEffectConfigLike(value: unknown): value is AudioEffectConfig {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const effectType = value['effectType'];
+
+  return (
+    isString(value['id']) &&
+    isString(effectType) &&
+    isEngineAudioEffectType(effectType) &&
+    isBoolean(value['enabled']) &&
+    isRecord(value['params'])
+  );
+}
+
+function isAutomationCurve(value: unknown): boolean {
+  return value === 'linear' || value === 'hold' || value === 'exponential';
 }
 
 function validateMarker(marker: unknown, path: string, errors: ValidationError[]): void {

@@ -69,7 +69,23 @@ describe('buildMixConfig', () => {
             effectChain: [
               { id: 'fx-1', effectType: 'compressor', enabled: true, params: { ratio: 3 } },
             ],
+            automation: [
+              {
+                id: 'lane-volume',
+                enabled: true,
+                target: { kind: 'track-volume' },
+                points: [
+                  { ticks: 0, value: 0.2, curve: 'linear' },
+                  { ticks: 480, value: 1, curve: 'hold' },
+                ],
+              },
+            ],
           },
+        },
+        tempoMap: {
+          ppq: 480,
+          tempoEvents: [{ ticks: 0, bpm: 120 }],
+          timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
         },
         masterEffectsChain: [
           {
@@ -101,6 +117,17 @@ describe('buildMixConfig', () => {
           pan: 0.25,
           solo: true,
           effectChain: [{ id: 'fx-1', effectType: 'compressor' }],
+          automation: [
+            {
+              id: 'lane-volume',
+              target: { kind: 'track-volume' },
+              enabled: true,
+              points: [
+                { time: 0, value: 0.2, curve: 'linear' },
+                { time: 0.5, value: 1, curve: 'hold' },
+              ],
+            },
+          ],
         },
       ],
     });
@@ -168,5 +195,42 @@ describe('buildMixConfig', () => {
       'planned-effect',
       'unknown-effect',
     ]);
+  });
+
+  it('omits unsupported effect automation with a warning', () => {
+    const result = buildMixConfig(
+      createProject({
+        trackMix: {
+          'track-1': {
+            volume: 1,
+            pan: 0,
+            solo: false,
+            effectChain: [
+              { id: 'fx-1', effectType: 'compressor', enabled: true, params: { threshold: -18 } },
+            ],
+            automation: [
+              {
+                id: 'lane-threshold',
+                enabled: true,
+                target: { kind: 'effect-param', effectId: 'fx-1', param: 'threshold' },
+                points: [{ ticks: 0, value: -24, curve: 'linear' }],
+              },
+            ],
+          },
+        },
+      }),
+      {
+        projectDir: '/project',
+        resolveSourcePath: (src, dir) => `${dir}/${src}`,
+      },
+    );
+
+    expect(result.config.tracks[0]?.automation).toEqual([]);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: 'unsupported-automation',
+        message: expect.stringContaining('not supported by mix rendering yet'),
+      }),
+    );
   });
 });

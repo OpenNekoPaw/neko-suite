@@ -444,6 +444,58 @@
     opacity: 1;
   }
 
+  .neko-ai-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 13px;
+    padding: 0 4px;
+    border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--status-success) 55%, transparent);
+    background: color-mix(in srgb, var(--status-success) 22%, transparent);
+    color: var(--status-success);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  .neko-ai-track-highlight {
+    box-shadow: inset 2px 0 0 var(--status-success);
+  }
+
+  .neko-ai-clip-highlight {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--status-success) 75%, transparent),
+      0 0 0 3px color-mix(in srgb, var(--status-success) 20%, transparent),
+      var(--clip-shadow);
+  }
+
+  .neko-ai-clip-badge {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 13px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--editor-bg) 28%, var(--status-success));
+    color: var(--editor-bg);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  .neko-ai-effect-highlight {
+    color: var(--status-success);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--status-success) 35%, transparent);
+  }
+
   /* Volume fader — thin horizontal range */
   .neko-fader {
     -webkit-appearance: none;

@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import type { AudioInfo, WaveformData } from '../shared/types';
+import { DEFAULT_BEAT_GRID_STATE, type BeatGridSnapMode, type BeatGridState } from '../utils/beatGrid';
 
 // =============================================================================
 // State Types
@@ -54,6 +55,8 @@ export interface AudioStoreState {
   error: string | null;
   /** Timeline zoom level (independent from playback speed) */
   zoom: number;
+  /** Beat-grid snapping state for project timeline editing */
+  beatGrid: BeatGridState;
 
   // Loop
   isLooping: boolean;
@@ -112,6 +115,8 @@ export interface AudioStoreActions {
   setLoading(loading: boolean): void;
   setError(error: string | null): void;
   setZoom(zoom: number): void;
+  setBeatGrid: (updates: Partial<BeatGridState>) => void;
+  setBeatGridSnapMode: (mode: BeatGridSnapMode) => void;
   toggleLoop(): void;
 
   // Project
@@ -157,6 +162,7 @@ const initialState: AudioStoreState = {
   isLoading: true,
   error: null,
   zoom: 1.0,
+  beatGrid: DEFAULT_BEAT_GRID_STATE,
 
   isLooping: false,
 
@@ -197,6 +203,10 @@ export const useAudioStore = create<AudioStoreState & AudioStoreActions>()((set)
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error, isLoading: false }),
   setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(10, zoom)) }),
+  setBeatGrid: (updates) =>
+    set((s) => ({ beatGrid: { ...s.beatGrid, ...updates } })),
+  setBeatGridSnapMode: (mode) =>
+    set((s) => ({ beatGrid: { ...s.beatGrid, enabled: mode !== 'off', mode } })),
   toggleLoop: () => set((s) => ({ isLooping: !s.isLooping })),
 
   // Project

@@ -7,7 +7,11 @@
 
 import { useRef, useCallback, useMemo } from 'react';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
+import { useAudioStore } from '../stores/audioStore';
 import type { TimelineElement } from '@neko/shared';
+import type { BeatGridState } from '../utils/beatGrid';
+import { getProjectTempoMap, snapSecondsToGrid } from '../utils/beatGrid';
+import type { TempoMap } from '@neko/shared';
 
 type Edge = 'left' | 'right' | null;
 
@@ -32,6 +36,50 @@ interface ClipInteractionResult {
   onMouseMove: (e: React.MouseEvent) => void;
 }
 
+export function computeClipInteractionUpdates(
+  type: 'move' | 'resize-left' | 'resize-right',
+  deltaPixels: number,
+  pixelsPerSecond: number,
+  state: {
+    origStartTime: number;
+    origDuration: number;
+    origTrimStart: number;
+  },
+  tempoMap: TempoMap,
+  beatGrid: BeatGridState,
+): Partial<TimelineElement> {
+  const dt = deltaPixels / pixelsPerSecond;
+
+  if (type === 'move') {
+    const newStart = snapSecondsToGrid(
+      Math.max(0, state.origStartTime + dt),
+      tempoMap,
+      beatGrid,
+    );
+    return { startTime: newStart };
+  }
+
+  if (type === 'resize-left') {
+    const clampedDt = Math.max(-state.origTrimStart, Math.min(state.origDuration - 0.01, dt));
+    const snappedStart = snapSecondsToGrid(
+      state.origStartTime + clampedDt,
+      tempoMap,
+      beatGrid,
+    );
+    const snappedDt = snappedStart - state.origStartTime;
+    return {
+      startTime: snappedStart,
+      duration: state.origDuration - snappedDt,
+      trimStart: state.origTrimStart + snappedDt,
+    };
+  }
+
+  const rawEnd = state.origStartTime + Math.max(0.01, state.origDuration + dt);
+  const snappedEnd = snapSecondsToGrid(rawEnd, tempoMap, beatGrid);
+  const newDuration = Math.max(0.01, snappedEnd - state.origStartTime);
+  return { duration: newDuration };
+}
+
 export function useClipInteraction({
   trackId,
   elementId,
@@ -45,6 +93,8 @@ export function useClipInteraction({
   onPreview,
 }: UseClipInteractionOptions): ClipInteractionResult {
   const updateElement = useAudioProjectStore((s) => s.updateElement);
+  const beatGrid = useAudioStore((s) => s.beatGrid);
+  const tempoMap = useAudioProjectStore((s) => getProjectTempoMap(s.audioProjectData));
 
   const dragState = useRef<{
     type: 'move' | 'resize-left' | 'resize-right';
@@ -93,23 +143,14 @@ export function useClipInteraction({
         const state = dragState.current;
         if (!state) return null;
 
-        const dx = clientX - state.startX;
-        const dt = dx / pixelsPerSecond;
-
-        if (state.type === 'move') {
-          const newStart = Math.max(0, state.origStartTime + dt);
-          return { startTime: newStart };
-        } else if (state.type === 'resize-left') {
-          const clampedDt = Math.max(-state.origTrimStart, Math.min(state.origDuration - 0.01, dt));
-          return {
-            startTime: state.origStartTime + clampedDt,
-            duration: state.origDuration - clampedDt,
-            trimStart: state.origTrimStart + clampedDt,
-          };
-        } else {
-          const newDuration = Math.max(0.01, state.origDuration + dt);
-          return { duration: newDuration };
-        }
+        return computeClipInteractionUpdates(
+          state.type,
+          clientX - state.startX,
+          pixelsPerSecond,
+          state,
+          tempoMap,
+          beatGrid,
+        );
       };
 
       const onMove = (me: MouseEvent) => {
@@ -137,6 +178,8 @@ export function useClipInteraction({
       duration,
       trimStart,
       pixelsPerSecond,
+      beatGrid,
+      tempoMap,
       trackId,
       elementId,
       updateElement,

@@ -3,7 +3,12 @@
  * 音频特效类型定义
  */
 
-import type { AudioEffectType as SharedAudioEffectType } from '@neko/shared';
+import {
+  getAudioEffectParameterMetadata,
+  type AudioEffectParameterMetadata,
+  type AudioEffectType as SharedAudioEffectType,
+  type RenderableAudioEffectType,
+} from '@neko/shared';
 
 // =============================================================================
 // Audio Effect Types
@@ -273,6 +278,8 @@ export interface AudioEffectParameterDefinition {
   unit?: string;
   /** Options (for select) */
   options?: Array<{ value: string; labelKey: string }>;
+  /** Whether numeric parameter automation is supported by shared contracts */
+  automatable?: boolean;
 }
 
 // =============================================================================
@@ -305,6 +312,36 @@ export function createAudioEffectInstance(
  */
 export function getAudioEffectDefinition(type: AudioEffectType): AudioEffectDefinition | undefined {
   return AUDIO_EFFECT_DEFINITIONS[type];
+}
+
+function sharedSliderParam(
+  effectType: RenderableAudioEffectType,
+  key: string,
+  fallback: Omit<AudioEffectParameterDefinition, 'key' | 'type'>,
+): AudioEffectParameterDefinition {
+  const metadata = getAudioEffectParameterMetadata(effectType, key);
+  return {
+    key,
+    labelKey: metadata?.labelKey ?? fallback.labelKey,
+    type: 'slider',
+    min: metadata?.min ?? fallback.min,
+    max: metadata?.max ?? fallback.max,
+    step: metadata?.step ?? fallback.step,
+    unit: metadata?.unit ?? fallback.unit,
+    automatable: metadata?.automatable ?? fallback.automatable,
+  };
+}
+
+function defaultParam(metadata: AudioEffectParameterMetadata | undefined, fallback: number): number {
+  return typeof metadata?.defaultValue === 'number' ? metadata.defaultValue : fallback;
+}
+
+function sharedNumericDefault(
+  effectType: RenderableAudioEffectType,
+  key: string,
+  fallback: number,
+): number {
+  return defaultParam(getAudioEffectParameterMetadata(effectType, key), fallback);
 }
 
 // =============================================================================
@@ -357,67 +394,55 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.compressor.description',
     category: 'dynamics',
     defaultParams: {
-      threshold: -24,
-      ratio: 4,
-      attack: 10,
-      release: 100,
-      knee: 10,
-      makeupGain: 0,
+      threshold: sharedNumericDefault('compressor', 'threshold', -24),
+      ratio: sharedNumericDefault('compressor', 'ratio', 4),
+      attack: sharedNumericDefault('compressor', 'attack', 10),
+      release: sharedNumericDefault('compressor', 'release', 100),
+      knee: sharedNumericDefault('compressor', 'knee', 10),
+      makeupGain: sharedNumericDefault('compressor', 'makeupGain', 0),
     },
     parameterDefinitions: [
-      {
-        key: 'threshold',
+      sharedSliderParam('compressor', 'threshold', {
         labelKey: 'audioEffects.params.threshold',
-        type: 'slider',
         min: -60,
         max: 0,
         step: 1,
         unit: 'dB',
-      },
-      {
-        key: 'ratio',
+      }),
+      sharedSliderParam('compressor', 'ratio', {
         labelKey: 'audioEffects.params.ratio',
-        type: 'slider',
         min: 1,
         max: 20,
         step: 0.5,
-      },
-      {
-        key: 'attack',
+      }),
+      sharedSliderParam('compressor', 'attack', {
         labelKey: 'audioEffects.params.attack',
-        type: 'slider',
         min: 0,
         max: 1000,
         step: 1,
         unit: 'ms',
-      },
-      {
-        key: 'release',
+      }),
+      sharedSliderParam('compressor', 'release', {
         labelKey: 'audioEffects.params.release',
-        type: 'slider',
         min: 0,
         max: 3000,
         step: 10,
         unit: 'ms',
-      },
-      {
-        key: 'knee',
+      }),
+      sharedSliderParam('compressor', 'knee', {
         labelKey: 'audioEffects.params.knee',
-        type: 'slider',
         min: 0,
         max: 40,
         step: 1,
         unit: 'dB',
-      },
-      {
-        key: 'makeupGain',
+      }),
+      sharedSliderParam('compressor', 'makeupGain', {
         labelKey: 'audioEffects.params.makeupGain',
-        type: 'slider',
         min: 0,
         max: 40,
         step: 1,
         unit: 'dB',
-      },
+      }),
     ],
   },
 
@@ -427,38 +452,30 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.limiter.description',
     category: 'dynamics',
     defaultParams: {
-      threshold: -6,
-      release: 50,
-      ceiling: -0.3,
+      threshold: sharedNumericDefault('limiter', 'threshold', 0.95),
+      release: sharedNumericDefault('limiter', 'release', 50),
+      ceiling: sharedNumericDefault('limiter', 'ceiling', 1),
     },
     parameterDefinitions: [
-      {
-        key: 'threshold',
+      sharedSliderParam('limiter', 'threshold', {
         labelKey: 'audioEffects.params.threshold',
-        type: 'slider',
-        min: -20,
-        max: 0,
-        step: 0.1,
-        unit: 'dB',
-      },
-      {
-        key: 'release',
+        min: 0,
+        max: 1,
+        step: 0.01,
+      }),
+      sharedSliderParam('limiter', 'release', {
         labelKey: 'audioEffects.params.release',
-        type: 'slider',
         min: 0,
         max: 1000,
         step: 5,
         unit: 'ms',
-      },
-      {
-        key: 'ceiling',
+      }),
+      sharedSliderParam('limiter', 'ceiling', {
         labelKey: 'audioEffects.params.ceiling',
-        type: 'slider',
-        min: -1,
-        max: 0,
-        step: 0.1,
-        unit: 'dB',
-      },
+        min: 0,
+        max: 1,
+        step: 0.01,
+      }),
     ],
   },
 
@@ -468,11 +485,11 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.reverb.description',
     category: 'spatial',
     defaultParams: {
-      roomSize: 0.5,
-      damping: 0.5,
-      wetDry: 0.3,
-      width: 1,
-      preDelay: 0,
+      roomSize: sharedNumericDefault('reverb', 'roomSize', 0.5),
+      damping: sharedNumericDefault('reverb', 'damping', 0.5),
+      wetDry: sharedNumericDefault('reverb', 'wetDry', 0.3),
+      width: sharedNumericDefault('reverb', 'width', 1),
+      preDelay: sharedNumericDefault('reverb', 'preDelay', 0),
       type: 'room',
     },
     parameterDefinitions: [
@@ -488,47 +505,37 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
           { value: 'chamber', labelKey: 'audioEffects.reverbType.chamber' },
         ],
       },
-      {
-        key: 'roomSize',
+      sharedSliderParam('reverb', 'roomSize', {
         labelKey: 'audioEffects.params.roomSize',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
-      {
-        key: 'damping',
+      }),
+      sharedSliderParam('reverb', 'damping', {
         labelKey: 'audioEffects.params.damping',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
-      {
-        key: 'wetDry',
+      }),
+      sharedSliderParam('reverb', 'wetDry', {
         labelKey: 'audioEffects.params.wetDry',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
-      {
-        key: 'width',
+      }),
+      sharedSliderParam('reverb', 'width', {
         labelKey: 'audioEffects.params.width',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
-      {
-        key: 'preDelay',
+      }),
+      sharedSliderParam('reverb', 'preDelay', {
         labelKey: 'audioEffects.params.preDelay',
-        type: 'slider',
         min: 0,
         max: 500,
         step: 5,
         unit: 'ms',
-      },
+      }),
     ],
   },
 
@@ -538,38 +545,32 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.delay.description',
     category: 'spatial',
     defaultParams: {
-      delayTime: 500,
-      feedback: 0.3,
-      wetDry: 0.3,
+      delayTime: sharedNumericDefault('delay', 'delayTime', 500),
+      feedback: sharedNumericDefault('delay', 'feedback', 0.3),
+      wetDry: sharedNumericDefault('delay', 'wetDry', 0.3),
       stereo: true,
       pingPong: false,
     },
     parameterDefinitions: [
-      {
-        key: 'delayTime',
+      sharedSliderParam('delay', 'delayTime', {
         labelKey: 'audioEffects.params.delayTime',
-        type: 'slider',
         min: 0,
         max: 2000,
         step: 10,
         unit: 'ms',
-      },
-      {
-        key: 'feedback',
+      }),
+      sharedSliderParam('delay', 'feedback', {
         labelKey: 'audioEffects.params.feedback',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
-      {
-        key: 'wetDry',
+      }),
+      sharedSliderParam('delay', 'wetDry', {
         labelKey: 'audioEffects.params.wetDry',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
+      }),
       { key: 'stereo', labelKey: 'audioEffects.params.stereo', type: 'boolean' },
       { key: 'pingPong', labelKey: 'audioEffects.params.pingPong', type: 'boolean' },
     ],
@@ -581,55 +582,45 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.chorus.description',
     category: 'modulation',
     defaultParams: {
-      rate: 1.5,
-      depth: 0.5,
-      delay: 25,
-      feedback: 0.2,
-      wetDry: 0.5,
+      rate: sharedNumericDefault('chorus', 'rate', 1.5),
+      depth: sharedNumericDefault('chorus', 'depth', 0.5),
+      delay: sharedNumericDefault('chorus', 'delay', 25),
+      feedback: sharedNumericDefault('chorus', 'feedback', 0.2),
+      wetDry: sharedNumericDefault('chorus', 'wetDry', 0.5),
     },
     parameterDefinitions: [
-      {
-        key: 'rate',
+      sharedSliderParam('chorus', 'rate', {
         labelKey: 'audioEffects.params.rate',
-        type: 'slider',
         min: 0.1,
         max: 10,
         step: 0.1,
         unit: 'Hz',
-      },
-      {
-        key: 'depth',
+      }),
+      sharedSliderParam('chorus', 'depth', {
         labelKey: 'audioEffects.params.depth',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
-      {
-        key: 'delay',
+      }),
+      sharedSliderParam('chorus', 'delay', {
         labelKey: 'audioEffects.params.delay',
-        type: 'slider',
         min: 0,
         max: 50,
         step: 1,
         unit: 'ms',
-      },
-      {
-        key: 'feedback',
+      }),
+      sharedSliderParam('chorus', 'feedback', {
         labelKey: 'audioEffects.params.feedback',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
-      {
-        key: 'wetDry',
+      }),
+      sharedSliderParam('chorus', 'wetDry', {
         labelKey: 'audioEffects.params.wetDry',
-        type: 'slider',
         min: 0,
         max: 1,
         step: 0.01,
-      },
+      }),
     ],
   },
 
@@ -639,8 +630,8 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.distortion.description',
     category: 'modulation',
     defaultParams: {
-      drive: 0.5,
-      outputGain: 0.5,
+      drive: sharedNumericDefault('distortion', 'drive', 12),
+      outputGain: sharedNumericDefault('distortion', 'outputGain', -6),
       type: 'soft',
     },
     parameterDefinitions: [
@@ -655,22 +646,20 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
           { value: 'fuzz', labelKey: 'audioEffects.distortionType.fuzz' },
         ],
       },
-      {
-        key: 'drive',
+      sharedSliderParam('distortion', 'drive', {
         labelKey: 'audioEffects.params.drive',
-        type: 'slider',
         min: 0,
-        max: 1,
-        step: 0.01,
-      },
-      {
-        key: 'outputGain',
+        max: 60,
+        step: 0.1,
+        unit: 'dB',
+      }),
+      sharedSliderParam('distortion', 'outputGain', {
         labelKey: 'audioEffects.params.outputGain',
-        type: 'slider',
-        min: 0,
-        max: 1,
-        step: 0.01,
-      },
+        min: -60,
+        max: 20,
+        step: 0.1,
+        unit: 'dB',
+      }),
     ],
   },
 
@@ -728,27 +717,23 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.highPass.description',
     category: 'filter',
     defaultParams: {
-      frequency: 80,
-      resonance: 1,
+      frequency: sharedNumericDefault('high-pass', 'frequency', 80),
+      resonance: sharedNumericDefault('high-pass', 'resonance', 1),
     },
     parameterDefinitions: [
-      {
-        key: 'frequency',
+      sharedSliderParam('high-pass', 'frequency', {
         labelKey: 'audioEffects.params.frequency',
-        type: 'slider',
         min: 20,
         max: 20000,
         step: 10,
         unit: 'Hz',
-      },
-      {
-        key: 'resonance',
+      }),
+      sharedSliderParam('high-pass', 'resonance', {
         labelKey: 'audioEffects.params.resonance',
-        type: 'slider',
         min: 0,
         max: 20,
         step: 0.1,
-      },
+      }),
     ],
   },
 
@@ -758,27 +743,23 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.lowPass.description',
     category: 'filter',
     defaultParams: {
-      frequency: 5000,
-      resonance: 1,
+      frequency: sharedNumericDefault('low-pass', 'frequency', 5000),
+      resonance: sharedNumericDefault('low-pass', 'resonance', 1),
     },
     parameterDefinitions: [
-      {
-        key: 'frequency',
+      sharedSliderParam('low-pass', 'frequency', {
         labelKey: 'audioEffects.params.frequency',
-        type: 'slider',
         min: 20,
         max: 20000,
         step: 10,
         unit: 'Hz',
-      },
-      {
-        key: 'resonance',
+      }),
+      sharedSliderParam('low-pass', 'resonance', {
         labelKey: 'audioEffects.params.resonance',
-        type: 'slider',
         min: 0,
         max: 20,
         step: 0.1,
-      },
+      }),
     ],
   },
 
@@ -788,29 +769,25 @@ export const AUDIO_EFFECT_DEFINITIONS: Record<AudioEffectType, AudioEffectDefini
     descriptionKey: 'audioEffects.bandPass.description',
     category: 'filter',
     defaultParams: {
-      frequency: 1000,
-      bandwidth: 1,
+      frequency: sharedNumericDefault('band-pass', 'frequency', 1000),
+      bandwidth: sharedNumericDefault('band-pass', 'bandwidth', 1),
       gain: 0,
     },
     parameterDefinitions: [
-      {
-        key: 'frequency',
+      sharedSliderParam('band-pass', 'frequency', {
         labelKey: 'audioEffects.params.frequency',
-        type: 'slider',
         min: 20,
         max: 20000,
         step: 10,
         unit: 'Hz',
-      },
-      {
-        key: 'bandwidth',
+      }),
+      sharedSliderParam('band-pass', 'bandwidth', {
         labelKey: 'audioEffects.params.bandwidth',
-        type: 'slider',
         min: 0.1,
         max: 5,
         step: 0.1,
         unit: 'oct',
-      },
+      }),
       {
         key: 'gain',
         labelKey: 'audioEffects.params.gain',

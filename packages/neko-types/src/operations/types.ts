@@ -16,6 +16,7 @@ import type { EffectParameterKeyframe } from '../types/effects';
 import type { MaskPropertyKeyframe, MaskShapeKeyframe } from '../types/mask';
 import type { ProjectData } from '../types/project';
 import type { CanvasNode, CanvasConnection } from '../types/canvas';
+import type { AudioAutomationLane } from '../types/audioAutomation';
 import type { AudioEffectConfig, AudioEffectType } from '../types/audioMix';
 import type { SketchBlendMode } from '../types/blendMode';
 import type { LayerType, NksVectorLayerData } from '../types/sketch';
@@ -775,6 +776,20 @@ export interface AudioSetBpmOperation {
   before: { bpm?: number };
 }
 
+export interface AudioSetTimeSignatureOperation {
+  type: 'audio.setTimeSignature';
+  meta: OperationMeta;
+  payload: { numerator: number; denominator: number };
+  before: { numerator: number; denominator: number };
+}
+
+export interface AudioSetMasterVolumeOperation {
+  type: 'audio.setMasterVolume';
+  meta: OperationMeta;
+  payload: { masterVolume?: number };
+  before: { masterVolume?: number };
+}
+
 export interface AudioEffectMoveOperation {
   type: 'audio.effect.move';
   meta: OperationMeta;
@@ -810,7 +825,9 @@ export type AudioOperation =
   | AudioMarkerAddOperation
   | AudioMarkerRemoveOperation
   | AudioMarkerUpdateOperation
-  | AudioSetBpmOperation;
+  | AudioSetBpmOperation
+  | AudioSetTimeSignatureOperation
+  | AudioSetMasterVolumeOperation;
 
 // =============================================================================
 // Track Mix Operations — persisted per-track mix state
@@ -867,6 +884,13 @@ export interface TrackMixEffectMoveOperation {
   payload: { trackId: string; effectId: string; fromIndex: number; toIndex: number };
 }
 
+export interface TrackMixSetAutomationOperation {
+  type: 'track.mix.setAutomation';
+  meta: OperationMeta;
+  payload: { trackId: string; automation?: AudioAutomationLane[] };
+  before: { automation?: AudioAutomationLane[] };
+}
+
 export type TrackMixOperation =
   | TrackMixSetVolumeOperation
   | TrackMixSetPanOperation
@@ -874,7 +898,8 @@ export type TrackMixOperation =
   | TrackMixEffectAddOperation
   | TrackMixEffectRemoveOperation
   | TrackMixEffectUpdateOperation
-  | TrackMixEffectMoveOperation;
+  | TrackMixEffectMoveOperation
+  | TrackMixSetAutomationOperation;
 
 // =============================================================================
 // EditOperation 联合类型

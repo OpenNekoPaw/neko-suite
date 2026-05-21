@@ -8,6 +8,12 @@
 import type { AudioProjectData, AudioTrackMixState } from '../types/audioProject';
 import type { ValidationResult } from '../config/config-adapter';
 import type { AudioEffectSnapshot, AudioMarkerSnapshot } from '../operations/types';
+import type {
+  AudioAutomationCurve,
+  AudioAutomationLane,
+  AutomationPoint,
+  AutomationTarget,
+} from '../types/audioAutomation';
 import type { AudioProperties } from '../types/audio';
 import type { TimelineElement } from '../types/element';
 import type {
@@ -22,12 +28,13 @@ import type { TimelineTrack } from '../types/timelineTrack';
 import type { SpeedProperties, TimeRemapKeyframe } from '../types/speed';
 import type { Transition } from '../types/transition';
 import { isEngineAudioEffectType, isKnownAudioEffectType } from '../types/audioMix';
+import { createDefaultTempoMap, type TempoMap } from '../types/audioTempo';
 import { validateNka } from './validator';
 
 /** Current NKA format version */
-export const CURRENT_NKA_VERSION = '2.1';
+export const CURRENT_NKA_VERSION = '2.2';
 
-export const SUPPORTED_NKA_VERSIONS = [CURRENT_NKA_VERSION] as const;
+export const SUPPORTED_NKA_VERSIONS = ['2.1', CURRENT_NKA_VERSION] as const;
 type SupportedNkaVersion = (typeof SUPPORTED_NKA_VERSIONS)[number];
 
 export type NkaCompatibilityMode = 'current' | 'future' | 'invalid';
@@ -235,6 +242,7 @@ function toAudioProjectData(data: Record<string, unknown>): AudioProjectData {
       .filter(isDefined),
     markers: readArray(data, 'markers').map(toAudioMarkerSnapshot).filter(isDefined),
     ...(typeof data['bpm'] === 'number' ? { bpm: data['bpm'] } : {}),
+    tempoMap: toTempoMap(data['tempoMap']) ?? createDefaultTempoMap(readNumber(data, 'bpm', 120)),
     ...(isRecord(data['trackMix']) ? { trackMix: toTrackMix(data['trackMix']) } : {}),
     ...(typeof data['masterVolume'] === 'number' ? { masterVolume: data['masterVolume'] } : {}),
   };
@@ -454,6 +462,9 @@ function toTrackMix(trackMix: Record<string, unknown>): Record<string, AudioTrac
             effectChain: readArray(state, 'effectChain')
               .map(toRenderableAudioEffectConfig)
               .filter(isDefined),
+            ...(isArray(state['automation'])
+              ? { automation: state['automation'].map(toAutomationLane).filter(isDefined) }
+              : {}),
           },
         ] as const;
       })
@@ -473,6 +484,93 @@ function toRenderableAudioEffectConfig(
     effectType: effect['effectType'],
     enabled: readBoolean(effect, 'enabled', true),
     params: isRecord(effect['params']) ? { ...effect['params'] } : {},
+  };
+}
+
+function toTempoMap(value: unknown): TempoMap | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  return {
+    ppq: readNumber(value, 'ppq', 480),
+    tempoEvents: readArray(value, 'tempoEvents')
+      .map((event) => {
+        if (!isRecord(event)) {
+          return undefined;
+        }
+
+        return {
+          ticks: readNumber(event, 'ticks', 0),
+          bpm: readNumber(event, 'bpm', 120),
+        };
+      })
+      .filter(isDefined),
+    timeSignatureEvents: readArray(value, 'timeSignatureEvents')
+      .map((event) => {
+        if (!isRecord(event)) {
+          return undefined;
+        }
+
+        return {
+          ticks: readNumber(event, 'ticks', 0),
+          numerator: readNumber(event, 'numerator', 4),
+          denominator: readNumber(event, 'denominator', 4),
+        };
+      })
+      .filter(isDefined),
+  };
+}
+
+function toAutomationLane(value: unknown): AudioAutomationLane | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const target = toAutomationTarget(value['target']);
+  if (!target) {
+    return undefined;
+  }
+
+  return {
+    id: readString(value, 'id', ''),
+    target,
+    enabled: readBoolean(value, 'enabled', true),
+    points: readArray(value, 'points').map(toAutomationPoint).filter(isDefined),
+  };
+}
+
+function toAutomationTarget(value: unknown): AutomationTarget | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (value['kind'] === 'track-volume') {
+    return { kind: 'track-volume' };
+  }
+  if (value['kind'] === 'track-pan') {
+    return { kind: 'track-pan' };
+  }
+  if (value['kind'] === 'effect-param') {
+    return {
+      kind: 'effect-param',
+      effectId: readString(value, 'effectId', ''),
+      param: readString(value, 'param', ''),
+    };
+  }
+
+  return undefined;
+}
+
+function toAutomationPoint(value: unknown): AutomationPoint | undefined {
+  if (!isRecord(value) || !isAutomationCurve(value['curve'])) {
+    return undefined;
+  }
+
+  return {
+    ticks: readNumber(value, 'ticks', 0),
+    value: readNumber(value, 'value', 0),
+    curve: value['curve'],
   };
 }
 
@@ -688,6 +786,9 @@ function toCameraOverride(
 }
 
 function stripToCurrentSchema(data: AudioProjectData, preserveVersion: boolean): AudioProjectData {
+  const tempoMap = data.tempoMap ?? createDefaultTempoMap(data.bpm ?? 120);
+  const bpm = tempoMap.tempoEvents[0]?.bpm ?? data.bpm;
+
   return {
     version: preserveVersion ? data.version : CURRENT_NKA_VERSION,
     name: data.name,
@@ -716,7 +817,8 @@ function stripToCurrentSchema(data: AudioProjectData, preserveVersion: boolean):
       label: marker.label,
       ...(marker.color !== undefined ? { color: marker.color } : {}),
     })),
-    ...(data.bpm !== undefined ? { bpm: data.bpm } : {}),
+    ...(bpm !== undefined ? { bpm } : {}),
+    tempoMap: stripTempoMap(tempoMap),
     ...(data.trackMix
       ? {
           trackMix: Object.fromEntries(
@@ -732,6 +834,9 @@ function stripToCurrentSchema(data: AudioProjectData, preserveVersion: boolean):
                   enabled: effect.enabled,
                   params: { ...effect.params },
                 })),
+                ...(state.automation !== undefined
+                  ? { automation: state.automation.map(stripAutomationLane) }
+                  : {}),
               },
             ]),
           ),
@@ -876,6 +981,31 @@ function withSerializedVersion(data: AudioProjectData, preserveVersion: boolean)
   return preserveVersion ? data : { ...data, version: CURRENT_NKA_VERSION };
 }
 
+function stripTempoMap(tempoMap: TempoMap): TempoMap {
+  return {
+    ppq: tempoMap.ppq,
+    tempoEvents: tempoMap.tempoEvents.map((event) => ({ ticks: event.ticks, bpm: event.bpm })),
+    timeSignatureEvents: tempoMap.timeSignatureEvents.map((event) => ({
+      ticks: event.ticks,
+      numerator: event.numerator,
+      denominator: event.denominator,
+    })),
+  };
+}
+
+function stripAutomationLane(lane: AudioAutomationLane): AudioAutomationLane {
+  return {
+    id: lane.id,
+    target: { ...lane.target },
+    enabled: lane.enabled,
+    points: lane.points.map((point) => ({
+      ticks: point.ticks,
+      value: point.value,
+      curve: point.curve,
+    })),
+  };
+}
+
 function compareVersions(a: string, b: string): number {
   const aParts = parseVersionParts(a);
   const bParts = parseVersionParts(b);
@@ -923,6 +1053,10 @@ function readArray(data: Record<string, unknown>, key: string): unknown[] {
 
 function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
+}
+
+function isArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1119,6 +1253,10 @@ function isEngineAudioEffectTypeValue(
   value: unknown,
 ): value is AudioTrackMixState['effectChain'][number]['effectType'] {
   return typeof value === 'string' && isEngineAudioEffectType(value);
+}
+
+function isAutomationCurve(value: unknown): value is AudioAutomationCurve {
+  return value === 'linear' || value === 'hold' || value === 'exponential';
 }
 
 function isNumberTuple<T extends number>(

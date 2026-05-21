@@ -62,12 +62,67 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
     }
 
     case 'audio.setBpm': {
+      if (data.tempoMap) {
+        if (op.payload.bpm === undefined) {
+          const { bpm: _bpm, ...rest } = data;
+          return rest;
+        }
+
+        assertFiniteRange('audio BPM', op.payload.bpm, 20, 300);
+        const [firstEvent, ...remainingTempoEvents] = data.tempoMap.tempoEvents;
+        const replacement = { ticks: firstEvent?.ticks ?? 0, bpm: op.payload.bpm };
+        return {
+          ...data,
+          bpm: op.payload.bpm,
+          tempoMap: {
+            ...data.tempoMap,
+            tempoEvents: [replacement, ...remainingTempoEvents],
+          },
+        };
+      }
+
       if (op.payload.bpm === undefined) {
         const { bpm: _bpm, ...rest } = data;
         return rest;
       }
       assertFiniteRange('audio BPM', op.payload.bpm, 20, 300);
       return { ...data, bpm: op.payload.bpm };
+    }
+
+    case 'audio.setTimeSignature': {
+      assertPositiveInteger('time signature numerator', op.payload.numerator, 1, 32);
+      assertPositiveInteger('time signature denominator', op.payload.denominator, 1, 32);
+      const tempoMap =
+        data.tempoMap ??
+        {
+          ppq: 480,
+          tempoEvents: [{ ticks: 0, bpm: data.bpm ?? 120 }],
+          timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+        };
+      const [firstEvent, ...remainingEvents] = tempoMap.timeSignatureEvents;
+      return {
+        ...data,
+        tempoMap: {
+          ...tempoMap,
+          timeSignatureEvents: [
+            {
+              ticks: firstEvent?.ticks ?? 0,
+              numerator: op.payload.numerator,
+              denominator: op.payload.denominator,
+            },
+            ...remainingEvents,
+          ],
+        },
+      };
+    }
+
+    case 'audio.setMasterVolume': {
+      if (op.payload.masterVolume === undefined) {
+        const { masterVolume: _masterVolume, ...rest } = data;
+        return rest;
+      }
+      assertFiniteRange('master volume', op.payload.masterVolume, 0, 2);
+      return { ...data, masterVolume: op.payload.masterVolume };
     }
 
     case 'audio.effect.move': {
@@ -122,6 +177,12 @@ export function applyAudioOperation(data: AudioProjectData, op: AudioOperation):
 
 function assertFiniteRange(label: string, value: number, min: number, max: number): void {
   if (!Number.isFinite(value) || value < min || value > max) {
+    throw OperationError.invalidOperation(`${label} out of range [${min}, ${max}]: ${value}`);
+  }
+}
+
+function assertPositiveInteger(label: string, value: number, min: number, max: number): void {
+  if (!Number.isInteger(value) || value < min || value > max) {
     throw OperationError.invalidOperation(`${label} out of range [${min}, ${max}]: ${value}`);
   }
 }

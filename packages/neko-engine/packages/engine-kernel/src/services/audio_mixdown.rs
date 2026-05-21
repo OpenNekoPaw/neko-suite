@@ -45,7 +45,41 @@ pub struct MixdownTrack {
     pub pan: f32,
     #[serde(default)]
     pub effect_chain: Vec<AudioEffectConfig>,
+    #[serde(default)]
+    pub automation: Vec<MixAutomationLane>,
     pub elements: Vec<MixdownElement>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MixAutomationLane {
+    pub id: String,
+    pub target: MixAutomationTarget,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub points: Vec<MixAutomationPoint>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+pub enum MixAutomationTarget {
+    TrackVolume,
+    TrackPan,
+    EffectParam { effect_id: String, param: String },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MixAutomationPoint {
+    pub time: f64,
+    pub value: f32,
+    #[serde(default = "default_automation_curve")]
+    pub curve: String,
 }
 
 /// Audio element within a mixdown track.
@@ -82,6 +116,10 @@ fn default_sample_rate() -> u32 {
 
 fn default_channels() -> u16 {
     2
+}
+
+fn default_automation_curve() -> String {
+    "linear".to_string()
 }
 
 struct MixdownSource {
@@ -370,10 +408,12 @@ impl AudioMixdown {
                 chain.process(&mut track_buf, self.channels, self.sample_rate);
             }
 
-            // Apply track volume and pan, then sum into master output
-            let (track_gain_l, track_gain_r) = equal_power_pan(track.pan);
-            let track_vol = track.volume;
+            // Apply track volume and pan, then sum into master output.
             for i in 0..needed {
+                let frame_idx = i / ch;
+                let sample_time = time + frame_idx as f64 / self.sample_rate as f64;
+                let (track_vol, track_pan) = evaluate_track_mix(track, sample_time);
+                let (track_gain_l, track_gain_r) = equal_power_pan(track_pan);
                 let pan_gain = if ch >= 2 {
                     if i % 2 == 0 {
                         track_gain_l
@@ -544,6 +584,59 @@ fn equal_power_pan(pan: f32) -> (f32, f32) {
     (angle.cos(), angle.sin())
 }
 
+#[derive(Debug, Clone, Copy)]
+enum AutomationKind {
+    Volume,
+    Pan,
+}
+
+fn evaluate_track_mix(track: &MixdownTrack, time: f64) -> (f32, f32) {
+    let track_vol = evaluate_track_automation(track, AutomationKind::Volume, time)
+        .unwrap_or(track.volume)
+        .clamp(0.0, 10.0);
+    let track_pan = evaluate_track_automation(track, AutomationKind::Pan, time)
+        .unwrap_or(track.pan)
+        .clamp(-1.0, 1.0);
+    (track_vol, track_pan)
+}
+
+fn evaluate_track_automation(track: &MixdownTrack, kind: AutomationKind, time: f64) -> Option<f32> {
+    let lane = track.automation.iter().find(|lane| {
+        lane.enabled
+            && matches!(
+                (&lane.target, kind),
+                (MixAutomationTarget::TrackVolume, AutomationKind::Volume)
+                    | (MixAutomationTarget::TrackPan, AutomationKind::Pan)
+            )
+    })?;
+    evaluate_automation_points(&lane.points, time)
+}
+
+fn evaluate_automation_points(points: &[MixAutomationPoint], time: f64) -> Option<f32> {
+    let first = points.first()?;
+    if time <= first.time {
+        return Some(first.value);
+    }
+
+    for window in points.windows(2) {
+        let left = &window[0];
+        let right = &window[1];
+        if time >= left.time && time <= right.time {
+            if left.curve == "hold" || right.time <= left.time {
+                return Some(left.value);
+            }
+            let t = ((time - left.time) / (right.time - left.time)).clamp(0.0, 1.0) as f32;
+            if left.curve == "exponential" {
+                let shaped = t * t;
+                return Some(left.value + (right.value - left.value) * shaped);
+            }
+            return Some(left.value + (right.value - left.value) * t);
+        }
+    }
+
+    points.last().map(|point| point.value)
+}
+
 #[derive(Debug)]
 struct MixdownSourceEntry {
     key: String,
@@ -558,6 +651,7 @@ fn rebuild_effect_chains(
     config: &MixdownConfig,
 ) -> (EffectChain, HashMap<String, EffectChain>, Vec<String>) {
     let mut warnings = Vec::new();
+    collect_automation_warnings(config, &mut warnings);
     let factory = AudioEffectFactory::with_builtins();
     let master_chain =
         build_lossy_effect_chain(&factory, &config.master_effects, None, &mut warnings);
@@ -579,6 +673,22 @@ fn rebuild_effect_chains(
     }
 
     (master_chain, track_chains, warnings)
+}
+
+fn collect_automation_warnings(config: &MixdownConfig, warnings: &mut Vec<String>) {
+    for track in &config.tracks {
+        for lane in &track.automation {
+            if !lane.enabled {
+                continue;
+            }
+            if matches!(lane.target, MixAutomationTarget::EffectParam { .. }) {
+                warnings.push(format!(
+                    "Unsupported effect automation '{}' in track {} skipped",
+                    lane.id, track.id
+                ));
+            }
+        }
+    }
 }
 
 fn build_lossy_effect_chain(
@@ -609,6 +719,27 @@ fn build_lossy_effect_chain(
 mod tests {
     use super::*;
 
+    fn make_track(id: &str) -> MixdownTrack {
+        MixdownTrack {
+            id: id.into(),
+            muted: false,
+            solo: false,
+            volume: 1.0,
+            pan: 0.0,
+            effect_chain: vec![],
+            automation: vec![],
+            elements: vec![],
+        }
+    }
+
+    fn make_point(time: f64, value: f32, curve: &str) -> MixAutomationPoint {
+        MixAutomationPoint {
+            time,
+            value,
+            curve: curve.to_string(),
+        }
+    }
+
     fn make_config(tracks: Vec<MixdownTrack>) -> MixdownConfig {
         MixdownConfig {
             tracks,
@@ -634,6 +765,147 @@ mod tests {
     }
 
     #[test]
+    fn test_mixdown_config_deserializes_automation() {
+        let config: MixdownConfig = serde_json::from_value(serde_json::json!({
+            "tracks": [
+                {
+                    "id": "track-a",
+                    "muted": false,
+                    "solo": false,
+                    "volume": 1.0,
+                    "pan": 0.0,
+                    "effectChain": [],
+                    "automation": [
+                        {
+                            "id": "volume-lane",
+                            "enabled": true,
+                            "target": { "kind": "track-volume" },
+                            "points": [
+                                { "time": 0.0, "value": 0.25, "curve": "linear" },
+                                { "time": 1.0, "value": 0.75, "curve": "hold" }
+                            ]
+                        },
+                        {
+                            "id": "effect-lane",
+                            "enabled": true,
+                            "target": {
+                                "kind": "effect-param",
+                                "effectId": "fx-1",
+                                "param": "threshold"
+                            },
+                            "points": [
+                                { "time": 0.0, "value": -24.0, "curve": "linear" }
+                            ]
+                        }
+                    ],
+                    "elements": []
+                }
+            ],
+            "masterEffects": [],
+            "masterVolume": 1.0,
+            "sampleRate": 48000,
+            "channels": 2
+        }))
+        .unwrap();
+
+        assert_eq!(config.tracks[0].automation.len(), 2);
+        assert!(matches!(
+            config.tracks[0].automation[0].target,
+            MixAutomationTarget::TrackVolume
+        ));
+        assert!(matches!(
+            config.tracks[0].automation[1].target,
+            MixAutomationTarget::EffectParam { .. }
+        ));
+    }
+
+    #[test]
+    fn test_evaluate_automation_points_uses_deterministic_curves() {
+        let linear = vec![
+            make_point(0.0, 0.0, "linear"),
+            make_point(1.0, 1.0, "linear"),
+        ];
+        assert_eq!(evaluate_automation_points(&linear, -0.5), Some(0.0));
+        assert!((evaluate_automation_points(&linear, 0.5).unwrap() - 0.5).abs() < 0.001);
+        assert_eq!(evaluate_automation_points(&linear, 2.0), Some(1.0));
+
+        let hold = vec![
+            make_point(0.0, 0.25, "hold"),
+            make_point(1.0, 0.75, "linear"),
+        ];
+        assert_eq!(evaluate_automation_points(&hold, 0.5), Some(0.25));
+
+        let exponential = vec![
+            make_point(0.0, 0.0, "exponential"),
+            make_point(1.0, 1.0, "linear"),
+        ];
+        assert!((evaluate_automation_points(&exponential, 0.5).unwrap() - 0.25).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_evaluate_track_mix_applies_enabled_track_automation_only() {
+        let mut track = make_track("track-a");
+        track.volume = 0.8;
+        track.pan = -0.25;
+        track.automation = vec![
+            MixAutomationLane {
+                id: "volume-lane".into(),
+                target: MixAutomationTarget::TrackVolume,
+                enabled: true,
+                points: vec![
+                    make_point(0.0, 0.2, "linear"),
+                    make_point(1.0, 1.0, "linear"),
+                ],
+            },
+            MixAutomationLane {
+                id: "pan-lane".into(),
+                target: MixAutomationTarget::TrackPan,
+                enabled: true,
+                points: vec![
+                    make_point(0.0, -1.0, "linear"),
+                    make_point(1.0, 1.0, "linear"),
+                ],
+            },
+            MixAutomationLane {
+                id: "disabled-volume".into(),
+                target: MixAutomationTarget::TrackVolume,
+                enabled: false,
+                points: vec![make_point(0.0, 2.0, "linear")],
+            },
+        ];
+
+        let (volume, pan) = evaluate_track_mix(&track, 0.5);
+
+        assert!((volume - 0.6).abs() < 0.001);
+        assert!(pan.abs() < 0.001);
+    }
+
+    #[test]
+    fn test_effect_parameter_automation_is_warned_and_ignored_by_track_mix() {
+        let mut track = make_track("track-a");
+        track.volume = 0.7;
+        track.automation = vec![MixAutomationLane {
+            id: "effect-lane".into(),
+            target: MixAutomationTarget::EffectParam {
+                effect_id: "fx-1".into(),
+                param: "threshold".into(),
+            },
+            enabled: true,
+            points: vec![make_point(0.0, -24.0, "linear")],
+        }];
+
+        let mixdown = AudioMixdown::new(make_config(vec![track.clone()]));
+        let (volume, pan) = evaluate_track_mix(&track, 0.5);
+
+        assert_eq!(volume, 0.7);
+        assert_eq!(pan, 0.0);
+        assert!(mixdown
+            .warnings()
+            .iter()
+            .any(|warning| warning.contains("Unsupported effect automation")));
+    }
+
+    #[test]
     fn test_solo_mutes_others() {
         let config = make_config(vec![
             MixdownTrack {
@@ -643,6 +915,7 @@ mod tests {
                 volume: 1.0,
                 pan: 0.0,
                 effect_chain: vec![],
+                automation: vec![],
                 elements: vec![],
             },
             MixdownTrack {
@@ -652,6 +925,7 @@ mod tests {
                 volume: 1.0,
                 pan: 0.0,
                 effect_chain: vec![],
+                automation: vec![],
                 elements: vec![],
             },
         ]);
@@ -720,6 +994,7 @@ mod tests {
                 enabled: true,
                 params: serde_json::json!({}),
             }],
+            automation: vec![],
             elements: vec![],
         }]);
         config.master_effects = vec![AudioEffectConfig {
@@ -759,6 +1034,7 @@ mod tests {
                 enabled: true,
                 params: serde_json::json!({}),
             }],
+            automation: vec![],
             elements: vec![],
         }]);
         let warnings = mixdown.update_config(config_with_warning);
@@ -801,6 +1077,7 @@ mod tests {
             volume: 1.0,
             pan: 0.0,
             effect_chain: vec![],
+            automation: vec![],
             elements: vec![MixdownElement {
                 id: "element-a".into(),
                 src: "/path/that/does/not/exist.wav".into(),
@@ -831,6 +1108,7 @@ mod tests {
             volume: 1.0,
             pan: 0.0,
             effect_chain: vec![],
+            automation: vec![],
             elements: vec![
                 MixdownElement {
                     id: "element-a".into(),

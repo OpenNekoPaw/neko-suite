@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyOperation, invertOperation } from '../index';
 import type { AudioProjectData, TrackMixOperation } from '../index';
+import type { AudioAutomationLane } from '../../types/audioAutomation';
 import type { AudioEffectConfig } from '../../types/audioMix';
 import { createMeta, createTestTrack } from './test-helpers';
 
@@ -221,5 +222,132 @@ describe('applyTrackMixOperation', () => {
       'fx-2',
       'fx-3',
     ]);
+  });
+
+  it('sets automation lanes and undo restores previous collection', () => {
+    const beforeAutomation: AudioAutomationLane[] = [
+      {
+        id: 'lane-old',
+        enabled: true,
+        target: { kind: 'track-pan' },
+        points: [{ ticks: 0, value: 0, curve: 'linear' }],
+      },
+    ];
+    const nextAutomation: AudioAutomationLane[] = [
+      {
+        id: 'lane-volume',
+        enabled: true,
+        target: { kind: 'track-volume' },
+        points: [
+          { ticks: 0, value: 0.4, curve: 'linear' },
+          { ticks: 480, value: 1, curve: 'hold' },
+        ],
+      },
+    ];
+    const project = createAudioProject({
+      trackMix: {
+        'track-1': {
+          volume: 1,
+          pan: 0,
+          solo: false,
+          effectChain: [],
+          automation: beforeAutomation,
+        },
+      },
+    });
+    const op: TrackMixOperation = {
+      type: 'track.mix.setAutomation',
+      meta: createMeta(),
+      payload: { trackId: 'track-1', automation: nextAutomation },
+      before: { automation: beforeAutomation },
+    };
+
+    const updated = applyOperation(project, op) as AudioProjectData;
+    const restored = applyOperation(
+      updated,
+      invertOperation(op) as TrackMixOperation,
+    ) as AudioProjectData;
+
+    expect(updated.trackMix?.['track-1']?.automation).toEqual(nextAutomation);
+    expect(restored.trackMix?.['track-1']?.automation).toEqual(beforeAutomation);
+  });
+
+  it('validates effect parameter automation targets and values', () => {
+    const project = createAudioProject({
+      trackMix: {
+        'track-1': {
+          volume: 1,
+          pan: 0,
+          solo: false,
+          effectChain: [
+            createEffect({ id: 'fx-1', effectType: 'compressor', params: { threshold: -18 } }),
+          ],
+        },
+      },
+    });
+
+    expect(() =>
+      applyOperation(project, {
+        type: 'track.mix.setAutomation',
+        meta: createMeta(),
+        payload: {
+          trackId: 'track-1',
+          automation: [
+            {
+              id: 'lane-1',
+              enabled: true,
+              target: { kind: 'effect-param', effectId: 'fx-1', param: 'threshold' },
+              points: [{ ticks: 0, value: -80, curve: 'linear' }],
+            },
+          ],
+        },
+        before: {},
+      }),
+    ).toThrow('automation point value out of range');
+
+    expect(() =>
+      applyOperation(project, {
+        type: 'track.mix.setAutomation',
+        meta: createMeta(),
+        payload: {
+          trackId: 'track-1',
+          automation: [
+            {
+              id: 'lane-1',
+              enabled: true,
+              target: { kind: 'effect-param', effectId: 'fx-1', param: 'missing' },
+              points: [{ ticks: 0, value: 0, curve: 'linear' }],
+            },
+          ],
+        },
+        before: {},
+      }),
+    ).toThrow('unsupported automatable parameter: missing');
+  });
+
+  it('rejects unsorted automation points', () => {
+    const project = createAudioProject();
+
+    expect(() =>
+      applyOperation(project, {
+        type: 'track.mix.setAutomation',
+        meta: createMeta(),
+        payload: {
+          trackId: 'track-1',
+          automation: [
+            {
+              id: 'lane-1',
+              enabled: true,
+              target: { kind: 'track-volume' },
+              points: [
+                { ticks: 480, value: 1, curve: 'linear' },
+                { ticks: 0, value: 0.5, curve: 'linear' },
+              ],
+            },
+          ],
+        },
+        before: {},
+      }),
+    ).toThrow('automation point ticks must be strictly increasing');
   });
 });

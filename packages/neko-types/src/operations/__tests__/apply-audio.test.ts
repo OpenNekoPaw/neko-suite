@@ -287,6 +287,94 @@ describe('applyAudioOperation', () => {
         }),
       ).toThrow('audio BPM out of range');
     });
+
+    it('updates tempoMap first tempo event when present', () => {
+      const project = createAudioProject({
+        bpm: 120,
+        tempoMap: {
+          ppq: 480,
+          tempoEvents: [{ ticks: 0, bpm: 120 }],
+          timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+        },
+      });
+      const op = {
+        type: 'audio.setBpm' as const,
+        meta: meta(),
+        payload: { bpm: 142 },
+        before: { bpm: 120 },
+      };
+
+      const updated = applyOperation(project, op) as AudioProjectData;
+      const restored = applyOperation(updated, invertOperation(op)) as AudioProjectData;
+
+      expect(updated.bpm).toBe(142);
+      expect(updated.tempoMap?.tempoEvents[0]?.bpm).toBe(142);
+      expect(restored.bpm).toBe(120);
+      expect(restored.tempoMap?.tempoEvents[0]?.bpm).toBe(120);
+    });
+  });
+
+  describe('audio.setMasterVolume', () => {
+    it('sets master volume and roundtrips through invert', () => {
+      const project = createAudioProject({ masterVolume: 0.8 });
+      const op = {
+        type: 'audio.setMasterVolume' as const,
+        meta: meta(),
+        payload: { masterVolume: 1.2 },
+        before: { masterVolume: 0.8 },
+      };
+
+      const updated = applyOperation(project, op) as AudioProjectData;
+      const restored = applyOperation(updated, invertOperation(op)) as AudioProjectData;
+
+      expect(updated.masterVolume).toBe(1.2);
+      expect(restored.masterVolume).toBe(0.8);
+    });
+
+    it('rejects master volume outside persisted range', () => {
+      const project = createAudioProject();
+
+      expect(() =>
+        applyAudioOperation(project, {
+          type: 'audio.setMasterVolume',
+          meta: meta(),
+          payload: { masterVolume: 2.1 },
+          before: {},
+        }),
+      ).toThrow('master volume out of range');
+    });
+  });
+
+  describe('audio.setTimeSignature', () => {
+    it('updates the first time signature event and roundtrips through invert', () => {
+      const project = createAudioProject({
+        tempoMap: {
+          ppq: 480,
+          tempoEvents: [{ ticks: 0, bpm: 120 }],
+          timeSignatureEvents: [{ ticks: 0, numerator: 4, denominator: 4 }],
+        },
+      });
+      const op = {
+        type: 'audio.setTimeSignature' as const,
+        meta: meta(),
+        payload: { numerator: 6, denominator: 8 },
+        before: { numerator: 4, denominator: 4 },
+      };
+
+      const updated = applyOperation(project, op) as AudioProjectData;
+      const restored = applyOperation(updated, invertOperation(op)) as AudioProjectData;
+
+      expect(updated.tempoMap?.timeSignatureEvents[0]).toEqual({
+        ticks: 0,
+        numerator: 6,
+        denominator: 8,
+      });
+      expect(restored.tempoMap?.timeSignatureEvents[0]).toEqual({
+        ticks: 0,
+        numerator: 4,
+        denominator: 4,
+      });
+    });
   });
 
   describe('audio.effect.move', () => {

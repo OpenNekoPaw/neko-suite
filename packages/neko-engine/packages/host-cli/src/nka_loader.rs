@@ -100,6 +100,7 @@ fn to_mixdown_track(
         volume: mix.map(|state| state.volume).unwrap_or(1.0),
         pan: mix.map(|state| state.pan).unwrap_or(0.0),
         effect_chain,
+        automation: Vec::new(),
         elements: track
             .elements
             .iter()

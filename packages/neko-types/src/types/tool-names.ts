@@ -178,6 +178,7 @@ export const TOOL_NAMES_AUDIO = {
   IMPORT_AUDIO: 'ImportAudio',
   SET_TRACK_VOLUME: 'SetTrackVolume',
   SET_TRACK_PAN: 'SetTrackPan',
+  SET_TRACK_AUTOMATION: 'SetTrackAutomation',
   APPLY_TRACK_EFFECT: 'ApplyTrackEffect',
   REMOVE_TRACK_EFFECT: 'RemoveTrackEffect',
   APPLY_MASTER_EFFECT: 'ApplyMasterEffect',

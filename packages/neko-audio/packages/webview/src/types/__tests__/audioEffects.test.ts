@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getAudioEffectParameterMetadata, type RenderableAudioEffectType } from '@neko/shared';
 import {
   createAudioEffectInstance,
   getAudioEffectDefinition,
@@ -129,6 +130,28 @@ describe('AUDIO_EFFECT_DEFINITIONS', () => {
       for (const paramDef of def.parameterDefinitions) {
         expect(paramKeys).toContain(paramDef.key);
       }
+    }
+  });
+
+  it('reuses shared metadata for automatable renderable slider params', () => {
+    const checkedParams: Array<[RenderableAudioEffectType, string]> = [
+      ['compressor', 'threshold'],
+      ['delay', 'delayTime'],
+      ['reverb', 'wetDry'],
+      ['high-pass', 'frequency'],
+    ];
+
+    for (const [effectType, paramKey] of checkedParams) {
+      const definition = AUDIO_EFFECT_DEFINITIONS[effectType as AudioEffectType];
+      const paramDef = definition.parameterDefinitions.find((param) => param.key === paramKey);
+      const metadata = getAudioEffectParameterMetadata(effectType, paramKey);
+
+      expect(paramDef).toBeDefined();
+      expect(metadata).toBeDefined();
+      expect(paramDef?.automatable).toBe(true);
+      expect(paramDef?.min).toBe(metadata?.min);
+      expect(paramDef?.max).toBe(metadata?.max);
+      expect(paramDef?.step).toBe(metadata?.step);
     }
   });
 });

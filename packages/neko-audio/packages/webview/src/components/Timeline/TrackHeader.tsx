@@ -12,15 +12,26 @@ interface TrackHeaderProps {
   uiState: AudioTrackUIState;
   width: number;
   height: number;
+  automationExpanded?: boolean;
+  onToggleAutomation?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-export function TrackHeader({ track, uiState, width, height, onContextMenu }: TrackHeaderProps) {
+export function TrackHeader({
+  track,
+  uiState,
+  width,
+  height,
+  automationExpanded,
+  onToggleAutomation,
+  onContextMenu,
+}: TrackHeaderProps) {
   const toggleTrackField = useAudioProjectStore((s) => s.toggleTrackField);
   const toggleSolo = useAudioProjectStore((s) => s.toggleSolo);
   const setTrackVolume = useAudioProjectStore((s) => s.setTrackVolume);
   const setTrackPan = useAudioProjectStore((s) => s.setTrackPan);
   const removeTrack = useAudioProjectStore((s) => s.removeTrack);
+  const hasAiHighlight = useAudioProjectStore((s) => s.hasAiTrackHighlight(track.id));
   const [draftVolume, setDraftVolume] = useState(uiState.volume);
   const [draftPan, setDraftPan] = useState(uiState.pan);
   const committedVolumeRef = useRef(uiState.volume);
@@ -91,6 +102,7 @@ export function TrackHeader({ track, uiState, width, height, onContextMenu }: Tr
           <span className="text-xs font-medium text-[var(--activity-fg)] truncate flex-1">
             {track.name}
           </span>
+          {hasAiHighlight && <span className="neko-ai-badge">AI</span>}
           {fxCount > 0 && (
             <span className="text-[9px] px-1 rounded bg-[var(--accent)] text-white leading-tight">
               FX {fxCount}
@@ -127,6 +139,13 @@ export function TrackHeader({ track, uiState, width, height, onContextMenu }: Tr
             className="neko-track-btn remove"
           >
             ×
+          </button>
+          <button
+            onClick={onToggleAutomation}
+            title={t('audio.automation.toggle')}
+            className={`neko-track-btn ${automationExpanded ? 'active-solo' : ''}`}
+          >
+            A
           </button>
         </div>
 

@@ -6,6 +6,8 @@
 // Used by both the extension bridge and webview to build mix configs.
 // =============================================================================
 
+import type { AudioAutomationCurve, AutomationTarget } from './audioAutomation';
+
 /** Engine-supported audio effect types accepted by render paths. */
 export const ENGINE_AUDIO_EFFECT_TYPES = [
   'gain',
@@ -78,6 +80,22 @@ export interface AudioEffectConfig {
   params: Record<string, unknown>;
 }
 
+/** Engine-facing automation point with resolved timeline seconds. */
+export interface MixAutomationPointConfig {
+  /** Timeline position in seconds. */
+  time: number;
+  value: number;
+  curve: AudioAutomationCurve;
+}
+
+/** Engine-facing automation lane, independent from .nka edit operations. */
+export interface MixAutomationLaneConfig {
+  id: string;
+  target: AutomationTarget;
+  enabled: boolean;
+  points: MixAutomationPointConfig[];
+}
+
 /** Audio element within a mix track — matches Rust MixdownElement. */
 export interface MixElementConfig {
   id: string;
@@ -114,6 +132,8 @@ export interface MixTrackConfig {
   pan: number;
   /** Per-track effect chain */
   effectChain: AudioEffectConfig[];
+  /** Enabled renderable automation lanes resolved to timeline seconds. */
+  automation: MixAutomationLaneConfig[];
   /** Audio elements in this track */
   elements: MixElementConfig[];
 }
@@ -153,6 +173,7 @@ export function createDefaultMixTrackConfig(
     volume: 1.0,
     pan: 0.0,
     effectChain: [],
+    automation: [],
     elements,
   };
 }

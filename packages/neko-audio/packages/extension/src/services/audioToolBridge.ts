@@ -6,12 +6,16 @@ import * as path from 'path';
 import type {
   AudioEffectConfig,
   AudioEffectSnapshot,
+  AudioAutomationLane,
+  AutomationPoint,
+  AutomationTarget,
   AudioProjectData,
   TimelineTrack,
   TrackType,
 } from '@neko/shared';
 import {
   generateId,
+  getAudioEffectParameterMetadata,
   isPlannedAudioEffectType,
   normalizeAudioEffectType,
   normalizeRenderableAudioEffectType,
@@ -156,6 +160,38 @@ export class AudioToolBridge {
         before: { pan: this.getTrackMix(session.projectData, trackId.value).pan },
       },
     }));
+  }
+
+  async setTrackAutomation(args: ToolArgs): Promise<ToolResult> {
+    const trackId = this.requiredString(args.trackId, 'trackId');
+    if (!trackId.ok) return trackId.result;
+
+    return this.applyProjectOperation(args, (session) => {
+      const mix = this.getTrackMix(session.projectData, trackId.value);
+      const lane = this.createAutomationLane(args, mix);
+      if (!lane.ok) {
+        throw new Error(lane.error);
+      }
+
+      const targetKey = this.automationTargetKey(lane.value.target);
+      const existing = mix.automation ?? [];
+      const nextAutomation = [
+        ...existing.filter((candidate) => this.automationTargetKey(candidate.target) !== targetKey),
+        lane.value,
+      ];
+
+      return {
+        operation: {
+          type: 'track.mix.setAutomation',
+          meta: this.createMeta('Set track automation'),
+          payload: { trackId: trackId.value, automation: nextAutomation },
+          before: {
+            ...(mix.automation === undefined ? {} : { automation: mix.automation }),
+          },
+        },
+        data: { laneId: lane.value.id },
+      };
+    });
   }
 
   async setTrackProperties(args: ToolArgs): Promise<ToolResult> {
@@ -383,6 +419,8 @@ export class AudioToolBridge {
         return this.setTrackVolume(args);
       case TOOL_NAMES_AUDIO.SET_TRACK_PAN:
         return this.setTrackPan(args);
+      case TOOL_NAMES_AUDIO.SET_TRACK_AUTOMATION:
+        return this.setTrackAutomation(args);
       case TOOL_NAMES_AUDIO.APPLY_TRACK_EFFECT:
         return this.applyTrackEffect(args);
       case TOOL_NAMES_AUDIO.REMOVE_TRACK_EFFECT:
@@ -522,6 +560,138 @@ export class AudioToolBridge {
     );
   }
 
+  private createAutomationLane(
+    args: ToolArgs,
+    mix: ReturnType<AudioToolBridge['getTrackMix']>,
+  ): { ok: true; value: AudioAutomationLane } | { ok: false; error: string } {
+    if (this.hasSecondsOnlyPoints(args.points)) {
+      return { ok: false, error: 'Automation points must use ticks; seconds-only timing is not accepted' };
+    }
+
+    const target = this.parseAutomationTarget(args.target);
+    if (!target.ok) return target;
+    const range = this.resolveAutomationRange(target.value, mix);
+    if (!range.ok) return range;
+    const points = this.parseAutomationPoints(args.points, range.value.min, range.value.max);
+    if (!points.ok) return points;
+
+    return {
+      ok: true,
+      value: {
+        id: this.optionalString(args.laneId) ?? `automation-${generateId()}`,
+        target: target.value,
+        enabled: this.optionalBoolean(args.enabled) ?? true,
+        points: points.value,
+      },
+    };
+  }
+
+  private parseAutomationTarget(
+    value: unknown,
+  ): { ok: true; value: AutomationTarget } | { ok: false; error: string } {
+    if (!this.isRecord(value)) {
+      return { ok: false, error: 'target required' };
+    }
+    if (value.kind === 'track-volume') return { ok: true, value: { kind: 'track-volume' } };
+    if (value.kind === 'track-pan') return { ok: true, value: { kind: 'track-pan' } };
+    if (value.kind === 'effect-param') {
+      if (typeof value.effectId !== 'string' || value.effectId.length === 0) {
+        return { ok: false, error: 'target.effectId required' };
+      }
+      if (typeof value.param !== 'string' || value.param.length === 0) {
+        return { ok: false, error: 'target.param required' };
+      }
+      return {
+        ok: true,
+        value: { kind: 'effect-param', effectId: value.effectId, param: value.param },
+      };
+    }
+    return { ok: false, error: `Unsupported automation target kind: ${String(value.kind)}` };
+  }
+
+  private resolveAutomationRange(
+    target: AutomationTarget,
+    mix: ReturnType<AudioToolBridge['getTrackMix']>,
+  ): { ok: true; value: { min: number; max: number } } | { ok: false; error: string } {
+    if (target.kind === 'track-volume') return { ok: true, value: { min: 0, max: 2 } };
+    if (target.kind === 'track-pan') return { ok: true, value: { min: -1, max: 1 } };
+
+    const effect = mix.effectChain.find((candidate) => candidate.id === target.effectId);
+    if (!effect) {
+      return { ok: false, error: `Track effect not found: ${target.effectId}` };
+    }
+    const metadata = getAudioEffectParameterMetadata(effect.effectType, target.param);
+    if (!metadata || !metadata.automatable || metadata.valueKind !== 'number') {
+      return { ok: false, error: `Unsupported automatable parameter: ${target.param}` };
+    }
+    return {
+      ok: true,
+      value: { min: metadata.min ?? Number.NEGATIVE_INFINITY, max: metadata.max ?? Number.POSITIVE_INFINITY },
+    };
+  }
+
+  private parseAutomationPoints(
+    value: unknown,
+    min: number,
+    max: number,
+  ): { ok: true; value: AutomationPoint[] } | { ok: false; error: string } {
+    if (!Array.isArray(value)) {
+      return { ok: false, error: 'points required' };
+    }
+    let previousTicks = -1;
+    const points: AutomationPoint[] = [];
+    for (const [index, rawPoint] of value.entries()) {
+      if (!this.isRecord(rawPoint)) {
+        return { ok: false, error: `points[${index}] must be an object` };
+      }
+      if ('seconds' in rawPoint) {
+        return { ok: false, error: 'Automation points must use ticks, not seconds' };
+      }
+      if (typeof rawPoint.ticks !== 'number' || !Number.isInteger(rawPoint.ticks) || rawPoint.ticks < 0) {
+        return { ok: false, error: `points[${index}].ticks must be a non-negative integer` };
+      }
+      if (rawPoint.ticks <= previousTicks) {
+        return { ok: false, error: 'Automation point ticks must be strictly increasing' };
+      }
+      previousTicks = rawPoint.ticks;
+      if (typeof rawPoint.value !== 'number' || !Number.isFinite(rawPoint.value)) {
+        return { ok: false, error: `points[${index}].value must be a number` };
+      }
+      if (rawPoint.value < min || rawPoint.value > max) {
+        return { ok: false, error: `points[${index}].value out of range [${min}, ${max}]` };
+      }
+      const curve = this.optionalString(rawPoint.curve) ?? 'linear';
+      if (curve !== 'linear' && curve !== 'hold' && curve !== 'exponential') {
+        return { ok: false, error: `Unsupported automation curve: ${curve}` };
+      }
+      points.push({ ticks: rawPoint.ticks, value: rawPoint.value, curve });
+    }
+    return { ok: true, value: points };
+  }
+
+  private hasSecondsOnlyPoints(value: unknown): boolean {
+    return (
+      Array.isArray(value) &&
+      value.some(
+        (point) =>
+          this.isRecord(point) &&
+          typeof point.seconds === 'number' &&
+          typeof point.ticks !== 'number',
+      )
+    );
+  }
+
+  private automationTargetKey(target: AutomationTarget): string {
+    switch (target.kind) {
+      case 'track-volume':
+        return 'track-volume';
+      case 'track-pan':
+        return 'track-pan';
+      case 'effect-param':
+        return `effect-param:${target.effectId}:${target.param}`;
+    }
+  }
+
   private findTrack(data: AudioProjectData, trackId: string): TimelineTrack {
     const track = data.tracks.find((item) => item.id === trackId);
     if (!track) throw new Error(`Track not found: ${trackId}`);
@@ -596,6 +766,10 @@ export class AudioToolBridge {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
   private toErrorMessage(error: unknown): string {

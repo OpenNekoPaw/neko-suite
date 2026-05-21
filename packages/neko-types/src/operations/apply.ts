@@ -136,6 +136,8 @@ export function applyOperation(data: unknown, op: EditOperation): unknown {
     case 'audio.marker.remove':
     case 'audio.marker.update':
     case 'audio.setBpm':
+    case 'audio.setTimeSignature':
+    case 'audio.setMasterVolume':
       return applyAudioOperation(data as AudioProjectData, op);
 
     // Track mix operations
@@ -146,6 +148,7 @@ export function applyOperation(data: unknown, op: EditOperation): unknown {
     case 'track.mix.effect.remove':
     case 'track.mix.effect.update':
     case 'track.mix.effect.move':
+    case 'track.mix.setAutomation':
       return applyTrackMixOperation(data as AudioProjectData, op);
 
     // Batch

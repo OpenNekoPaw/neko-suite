@@ -23,6 +23,7 @@ interface AudioClipProps {
   waveform?: WaveformData;
   locked?: boolean;
   color?: string;
+  aiHighlighted?: boolean;
 }
 
 /** Downsample peaks to fit the clip width */
@@ -86,6 +87,7 @@ export function AudioClip({
   waveform,
   locked,
   color,
+  aiHighlighted,
 }: AudioClipProps) {
   const clipName = element.name || 'Untitled';
   const isMuted = element.muted;
@@ -165,7 +167,7 @@ export function AudioClip({
 
   return (
     <div
-      className="absolute overflow-hidden transition-opacity"
+      className={`absolute overflow-hidden transition-opacity ${aiHighlighted ? 'neko-ai-clip-highlight' : ''}`}
       style={{
         left: previewLeft,
         top: 3,
@@ -187,6 +189,8 @@ export function AudioClip({
       onMouseMove={locked ? undefined : interaction.onMouseMove}
       onContextMenu={locked ? undefined : handleContextMenu}
     >
+      {aiHighlighted && <span className="neko-ai-clip-badge">AI</span>}
+
       {/* Resize edge indicators */}
       {!locked && (
         <>

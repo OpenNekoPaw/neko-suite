@@ -6,6 +6,7 @@ import { useCallback, useRef, useState } from 'react';
 import { shallow } from 'zustand/shallow';
 import { useAudioProjectStore } from '../../stores/audioProjectStore';
 import { AudioClip } from './AudioClip';
+import { AutomationLane } from './AutomationLane';
 import { TrackHeader } from './TrackHeader';
 import { ContextMenu } from '@neko/shared/components';
 import type { MenuItem } from '@neko/shared/components';
@@ -35,6 +36,8 @@ export function TrackLane({
   const reorderTrack = useAudioProjectStore((s) => s.reorderTrack);
   const tracks = useAudioProjectStore((s) => s.audioProjectData?.tracks ?? []);
   const uiState = useAudioProjectStore((s) => s.getTrackUIState(track.id), shallow);
+  const hasAiHighlight = useAudioProjectStore((s) => s.hasAiTrackHighlight(track.id));
+  const aiOperationHighlights = useAudioProjectStore((s) => s.aiOperationHighlights);
 
   const pps = pixelsPerSecond * zoomLevel;
   const trackIndex = tracks.findIndex((tr) => tr.id === track.id);
@@ -45,6 +48,7 @@ export function TrackLane({
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
     null,
   );
+  const [automationExpanded, setAutomationExpanded] = useState(false);
 
   const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
@@ -105,39 +109,55 @@ export function TrackLane({
     [track, trackIndex, tracks.length, toggleTrackField, reorderTrack, removeTrack],
   );
 
+  const automationHeight = automationExpanded ? 88 + (uiState.automation?.length ?? 0) * 44 : 0;
+  const rowHeight = trackHeight + automationHeight;
+
   return (
-    <div className="relative" style={{ opacity: track.muted ? 0.5 : 1 }}>
-      <div className="flex border-b border-[var(--editor-border)]" style={{ height: trackHeight }}>
+    <div
+      className={`relative ${hasAiHighlight ? 'neko-ai-track-highlight' : ''}`}
+      style={{ opacity: track.muted ? 0.5 : 1 }}
+    >
+      <div className="flex border-b border-[var(--editor-border)]" style={{ minHeight: rowHeight }}>
         <TrackHeader
           track={track}
           uiState={uiState}
           width={labelWidth}
-          height={trackHeight}
+          height={rowHeight}
+          automationExpanded={automationExpanded}
+          onToggleAutomation={() => setAutomationExpanded((expanded) => !expanded)}
           onContextMenu={handleHeaderContextMenu}
         />
 
         {/* Element lane */}
-        <div className="flex-1 relative bg-[var(--timeline-bg)]" style={{ width: timelineWidth }}>
-          {track.elements.map((element) => {
-            const left = element.startTime * pps;
-            const width = (element.duration ?? 0) * pps;
-            const waveform = waveforms[element.id];
+        <div className="flex-1 bg-[var(--timeline-bg)]" style={{ width: timelineWidth }}>
+          <div className="relative" style={{ height: trackHeight }}>
+            {track.elements.map((element) => {
+              const left = element.startTime * pps;
+              const width = (element.duration ?? 0) * pps;
+              const waveform = waveforms[element.id];
 
-            return (
-              <AudioClip
-                key={element.id}
-                element={element}
-                trackId={track.id}
-                left={left}
-                width={width}
-                height={trackHeight - 2}
-                pps={pps}
-                waveform={waveform}
-                locked={track.locked}
-                color={uiState.color}
-              />
-            );
-          })}
+              return (
+                <AudioClip
+                  key={element.id}
+                  element={element}
+                  trackId={track.id}
+                  left={left}
+                  width={width}
+                  height={trackHeight - 2}
+                  pps={pps}
+                  waveform={waveform}
+                  locked={track.locked}
+                  color={uiState.color}
+                  aiHighlighted={Object.values(aiOperationHighlights).some((highlight) =>
+                    highlight.elementIds.includes(element.id),
+                  )}
+                />
+              );
+            })}
+          </div>
+          {automationExpanded && (
+            <AutomationLane trackId={track.id} uiState={uiState} pps={pps} width={timelineWidth} />
+          )}
         </div>
 
         {headerMenu && (

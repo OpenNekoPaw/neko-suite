@@ -211,6 +211,7 @@ const audio: MessageBundle = {
   'audio.track.moveUp': 'Move Up',
   'audio.track.moveDown': 'Move Down',
   'audio.track.delete': 'Delete Track',
+  'audio.automation.toggle': 'Automation',
 
   // Clip operations (context menu)
   'audio.clip.mute': 'Mute Clip',

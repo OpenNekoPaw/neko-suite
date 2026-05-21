@@ -5,7 +5,7 @@
  * Unified TransportBar at top with playback controls.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useExtensionMessage, useVscodeReady, postMessage } from '../shared/useVscodeMessage';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
@@ -56,6 +56,13 @@ export function AudioEditor() {
 
   // v2 multi-track project state (must be before any early returns)
   const isV2 = useAudioProjectStore((s) => s.audioProjectData !== null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      useAudioProjectStore.getState().expireAiOperationHighlights();
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Handle messages from Extension Host
   const handleMessage = useCallback(

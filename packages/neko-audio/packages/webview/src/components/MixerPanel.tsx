@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { shallow } from 'zustand/shallow';
-import { useAudioProjectStore, type AudioTrackUIState } from '../stores/audioProjectStore';
+import {
+  useAudioProjectStore,
+  type AiOperationHighlight,
+  type AudioTrackUIState,
+} from '../stores/audioProjectStore';
 import type { TimelineTrack } from '@neko/shared';
 import { t } from '../i18n';
 
@@ -36,6 +40,8 @@ function ChannelStrip({ track }: ChannelStripProps) {
   const toggleSolo = useAudioProjectStore((state) => state.toggleSolo);
   const setTrackVolume = useAudioProjectStore((state) => state.setTrackVolume);
   const setTrackPan = useAudioProjectStore((state) => state.setTrackPan);
+  const hasAiTrackHighlight = useAudioProjectStore((state) => state.hasAiTrackHighlight(track.id));
+  const aiOperationHighlights = useAudioProjectStore((state) => state.aiOperationHighlights);
   const [draftVolume, setDraftVolume] = useState(uiState.volume);
   const [draftPan, setDraftPan] = useState(uiState.pan);
   const committedVolumeRef = useRef(uiState.volume);
@@ -82,11 +88,14 @@ function ChannelStrip({ track }: ChannelStripProps) {
   }, [draftPan, track.id, setTrackPan]);
 
   return (
-    <div className="neko-channel-strip">
+    <div className={`neko-channel-strip ${hasAiTrackHighlight ? 'neko-ai-track-highlight' : ''}`}>
       <div className="neko-channel-color" style={{ backgroundColor: uiState.color }} />
       <div className="neko-channel-head">
-        <span className="neko-channel-name" title={track.name}>
-          {track.name}
+        <span className="flex items-center gap-1 min-w-0">
+          <span className="neko-channel-name" title={track.name}>
+            {track.name}
+          </span>
+          {hasAiTrackHighlight && <span className="neko-ai-badge">AI</span>}
         </span>
         <span
           className="neko-channel-meter"
@@ -111,7 +120,13 @@ function ChannelStrip({ track }: ChannelStripProps) {
         >
           M
         </button>
-        <span className="neko-channel-fx">{formatFx(uiState)}</span>
+        <span
+          className={`neko-channel-fx ${
+            hasHighlightedEffect(uiState, aiOperationHighlights) ? 'neko-ai-effect-highlight' : ''
+          }`}
+        >
+          {formatFx(uiState)}
+        </span>
       </div>
 
       <label className="neko-channel-control">
@@ -164,4 +179,13 @@ function formatPan(pan: number): string {
 function formatFx(uiState: AudioTrackUIState): string {
   const count = uiState.effectChain.filter((effect) => effect.enabled).length;
   return count > 0 ? `FX ${count}` : 'FX';
+}
+
+function hasHighlightedEffect(
+  uiState: AudioTrackUIState,
+  highlights: Record<string, AiOperationHighlight>,
+): boolean {
+  return uiState.effectChain.some((effect) =>
+    Object.values(highlights).some((highlight) => highlight.effectIds.includes(effect.id)),
+  );
 }

@@ -152,6 +152,52 @@ class NekoAudioCapabilityProviderImpl implements AgentCapabilityProvider {
 
       createAudioTool(
         bridge,
+        TOOL_NAMES_AUDIO.SET_TRACK_AUTOMATION,
+        'Set tick-based automation lanes for track volume, track pan, or an effect parameter',
+        {
+          type: 'object',
+          properties: {
+            documentUri: DOCUMENT_URI_PROPERTY,
+            trackId: { type: 'string', description: 'Track ID' },
+            target: {
+              type: 'object',
+              description:
+                'Structured target: {kind:"track-volume"}, {kind:"track-pan"}, or {kind:"effect-param", effectId, param}',
+              properties: {
+                kind: {
+                  type: 'string',
+                  enum: ['track-volume', 'track-pan', 'effect-param'],
+                },
+                effectId: { type: 'string' },
+                param: { type: 'string' },
+              },
+              required: ['kind'],
+            },
+            enabled: { type: 'boolean', description: 'Whether the lane is enabled' },
+            points: {
+              type: 'array',
+              description: 'Automation points using musical ticks, not seconds',
+              items: {
+                type: 'object',
+                properties: {
+                  ticks: { type: 'number', description: 'Non-negative integer tick position' },
+                  value: { type: 'number', description: 'Automation value' },
+                  curve: {
+                    type: 'string',
+                    enum: ['linear', 'hold', 'exponential'],
+                    description: 'Curve from this point to the next',
+                  },
+                },
+                required: ['ticks', 'value'],
+              },
+            },
+          },
+          required: ['trackId', 'target', 'points'],
+        },
+      ),
+
+      createAudioTool(
+        bridge,
         TOOL_NAMES_AUDIO.SET_TRACK_PROPERTIES,
         'Update audio track metadata such as name, mute, lock, hidden, or main-track flag',
         {

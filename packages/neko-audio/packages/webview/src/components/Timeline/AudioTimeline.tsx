@@ -13,9 +13,11 @@ import { TrackLane } from './TrackLane';
 import { PIXELS_PER_SECOND, TRACK_HEIGHT, RULER_HEIGHT, TRACK_LABEL_WIDTH } from '../../constants';
 import { getTotalDuration } from '@neko/shared';
 import { t } from '../../i18n';
+import { getProjectTempoMap } from '../../utils/beatGrid';
 
 export function AudioTimeline() {
   const tracks = useAudioProjectStore((s) => s.audioProjectData?.tracks ?? []);
+  const tempoMap = useAudioProjectStore((s) => getProjectTempoMap(s.audioProjectData));
   const waveforms = useAudioProjectStore((s) => s.waveforms);
   const currentTime = useAudioStore((s) => s.currentTime);
   const playbackState = useAudioStore((s) => s.playbackState);
@@ -115,6 +117,7 @@ export function AudioTimeline() {
             timelineWidth={timelineWidth}
             onSeek={handleSeek}
             scrollRef={tracksRef}
+            tempoMap={tempoMap}
           />
         </div>
       </div>
