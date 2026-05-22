@@ -18,12 +18,14 @@ const narrativeRegistration: WebviewSubsystemRegistration = {
     {
       id: 'narrative.variables',
       title: 'Narrative Variables',
+      titleKey: 'panel.narrativeVariables.title',
       component: lazy(() => import('./narrative/NarrativeVariablesPanel')),
     },
   ],
   playbackController: {
     id: 'narrative.playback',
     title: 'Narrative Playback',
+    titleKey: 'toolbar.narrativePlayback',
     component: lazy(() => import('./narrative/NarrativePlaybackController')),
   },
 };

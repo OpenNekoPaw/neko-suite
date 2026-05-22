@@ -2,6 +2,7 @@ import type React from 'react';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CloseIcon } from '@neko/shared/icons';
 import type { FloatingPanelDefinition } from '../../subsystems';
+import { t } from '../../i18n';
 
 export interface FloatingPanelHostProps {
   panels: readonly FloatingPanelDefinition[];
@@ -61,7 +62,7 @@ export function FloatingPanelHost({ panels }: FloatingPanelHostProps) {
               })
             }
           >
-            {panel.title}
+            {resolvePanelTitle(panel)}
           </button>
         ))}
       </div>
@@ -101,6 +102,7 @@ function FloatingPanelFrame({
   onClose: () => void;
 }) {
   const Component = panel.component;
+  const title = resolvePanelTitle(panel);
   const cleanupDragRef = useRef<(() => void) | null>(null);
 
   const cleanupDrag = useCallback(() => {
@@ -155,14 +157,14 @@ function FloatingPanelFrame({
         }}
         onPointerDown={handlePointerDown}
       >
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold">{panel.title}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold">{title}</span>
         <button
           type="button"
           className="flex h-6 w-6 items-center justify-center rounded"
           style={{ color: 'var(--toolbar-fg-secondary)' }}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t('panel.close')}
         >
           <CloseIcon size={14} />
         </button>
@@ -174,4 +176,8 @@ function FloatingPanelFrame({
       </div>
     </div>
   );
+}
+
+function resolvePanelTitle(panel: FloatingPanelDefinition): string {
+  return panel.titleKey ? t(panel.titleKey) : panel.title;
 }

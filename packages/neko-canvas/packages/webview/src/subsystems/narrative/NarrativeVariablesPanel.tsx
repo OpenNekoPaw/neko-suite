@@ -32,9 +32,17 @@ export default function NarrativeVariablesPanel(_props: FloatingPanelComponentPr
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
-          {t('panel.narrativeVariables')}
-        </span>
+        <div className="min-w-0">
+          <div className="text-xs font-medium" style={{ color: 'var(--toolbar-fg)' }}>
+            {t('panel.narrativeVariables')}
+          </div>
+          <div
+            className="mt-1 text-[11px] leading-snug"
+            style={{ color: 'var(--neko-fg-secondary)' }}
+          >
+            {t('panel.narrativeVariables.description')}
+          </div>
+        </div>
         <button
           type="button"
           className="rounded px-2 py-1 text-xs"
@@ -76,6 +84,7 @@ export default function NarrativeVariablesPanel(_props: FloatingPanelComponentPr
               <input
                 value={variable.name}
                 aria-label={t('panel.variableName')}
+                placeholder={t('panel.variableName')}
                 onChange={(event) =>
                   updateVariables(
                     variables.map((item) =>
@@ -87,6 +96,7 @@ export default function NarrativeVariablesPanel(_props: FloatingPanelComponentPr
               <input
                 value={String(variable.value ?? '')}
                 aria-label={t('panel.variableValue')}
+                placeholder={t('panel.variableValue')}
                 onChange={(event) =>
                   updateVariables(
                     variables.map((item) =>
@@ -106,7 +116,7 @@ export default function NarrativeVariablesPanel(_props: FloatingPanelComponentPr
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={() => updateVariables(variables.filter((item) => item.id !== variable.id))}
               >
-                {t('panel.removePort')}
+                {t('panel.removeVariable')}
               </button>
             </div>
           ))}
