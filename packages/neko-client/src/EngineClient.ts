@@ -14,9 +14,10 @@
  *   const info = await client.probe('videos', '/path/to/file.mp4');
  */
 
-import { PathResolver } from '@neko/shared';
+import { PathResolver, isLiveCompositorScene, isPuppetCommandAck } from '@neko/shared';
 import type {
   AudioStreamDescriptor,
+  NkpProjectData,
   PreviewManifest,
   PreviewVariant,
   PreviewVariantRequest,
@@ -24,10 +25,17 @@ import type {
   UpdatePreviewAssetMetadataRequest,
   RenderStreamDescriptor,
   SceneSnapshot,
+  ViewportCommand,
+  ViewportEvent,
   ViewportDescriptor,
+  LiveCompositorScene,
+  PuppetCommand,
+  PuppetCommandAck,
+  PuppetCommandEnvelope,
 } from '@neko/shared';
 import { SceneControlSocket, type SceneControlSocketConfig } from './SceneControlSocket';
 import { getLogger } from './utils/logger';
+import { isRecord } from './utils/wireReaders';
 import type {
   ActionRequest,
   ActionResponse,
@@ -181,6 +189,20 @@ export interface SceneRenderStreamHandle {
   audioWsUrl?: string;
 }
 
+export interface LiveCompositorStreamOptions {
+  readonly sceneId: string;
+  readonly viewportId: string;
+  readonly sessionId?: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly fps?: number;
+}
+
+export interface LiveCompositorStreamHandle {
+  descriptor: RenderStreamDescriptor;
+  wsUrl: string;
+}
+
 export type PuppetStreamFormat = 'json' | 'h264';
 
 export interface PuppetStreamOptions {
@@ -219,10 +241,6 @@ type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
 type SceneAnimationClipInfo = SceneSnapshot['animations'][number];
 type SceneCameraState = NonNullable<SceneSnapshot['activeCamera']>;
 type SceneBounds3 = NonNullable<SceneNodeSnapshot['worldBounds']>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function getString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -405,6 +423,20 @@ function normalizeSceneCapturePreview(value: unknown): SceneCapturePreview {
   };
 }
 
+function isViewportEventLike(value: unknown): value is ViewportEvent {
+  if (!isRecord(value)) return false;
+  return (
+    value.protocolVersion === 1 &&
+    (value.domain === 'viewport' || value.domain === 'scene') &&
+    typeof value.event === 'string' &&
+    typeof value.sceneId === 'string' &&
+    typeof value.ackSeq === 'number' &&
+    typeof value.revision === 'number' &&
+    typeof value.timestamp === 'number' &&
+    isRecord(value.payload)
+  );
+}
+
 function normalizePuppetExportSummary(value: unknown): PuppetExportSummary {
   if (!isRecord(value)) {
     return { framesSubmitted: 0 };
@@ -412,6 +444,28 @@ function normalizePuppetExportSummary(value: unknown): PuppetExportSummary {
   return {
     framesSubmitted: getNumber(value.frames_submitted ?? value.framesSubmitted),
   };
+}
+
+function assertPuppetCommandApplied(ack: PuppetCommandAck): void {
+  if (ack.status === 'applied') return;
+  throw new Error(ack.error?.message ?? 'puppet command rejected');
+}
+
+function readPuppetCommandAck(value: unknown, action: string): PuppetCommandAck {
+  if (isPuppetCommandAck(value)) return value;
+  throw new Error(`Invalid ${action} response: expected PuppetCommandAck`);
+}
+
+function puppetCommandEnvelopeToOptions(envelope: PuppetCommandEnvelope): Record<string, unknown> {
+  const options: Record<string, unknown> = {
+    seq: envelope.seq,
+    baseRevision: envelope.baseRevision,
+    command: envelope.command,
+  };
+  if (envelope.transactionId !== undefined) {
+    options.transactionId = envelope.transactionId;
+  }
+  return options;
 }
 
 function normalizeAudioStreamDescriptor(value: unknown): AudioStreamDescriptor | undefined {
@@ -471,6 +525,14 @@ function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescr
     postProcessEnabled:
       typeof value.postProcessEnabled === 'boolean' ? value.postProcessEnabled : undefined,
   };
+}
+
+function normalizeLiveCompositorSceneResponse(value: unknown): LiveCompositorScene {
+  const scene = isRecord(value) && value.scene !== undefined ? value.scene : value;
+  if (!isLiveCompositorScene(scene)) {
+    throw new Error('live-compositor returned an invalid scene');
+  }
+  return scene;
 }
 
 function viewportDescriptorToOptions(viewport: ViewportDescriptor): Record<string, unknown> {
@@ -550,6 +612,10 @@ export class EngineClient {
     if (options?.bitrate !== undefined) params.set('bitrate', String(options.bitrate));
     const query = params.toString();
     return `ws://127.0.0.1:${this.port}/v1/puppets/stream${query ? `?${query}` : ''}`;
+  }
+
+  getPuppetControlWsUrl(): string {
+    return `ws://127.0.0.1:${this.port}/v1/puppets/control`;
   }
 
   getSceneControlWsUrl(): string {
@@ -1234,6 +1300,92 @@ export class EngineClient {
     this.assertOk(resp, 'scenes:update_camera');
   }
 
+  async dispatchViewportCommand(command: ViewportCommand): Promise<ViewportEvent> {
+    const resp = await this.dispatch({
+      group: 'viewport',
+      action: 'command',
+      body: command,
+    });
+    this.assertOk(resp, 'viewport:command');
+    if (!isViewportEventLike(resp.data)) {
+      throw new Error('viewport:command returned an invalid ViewportEvent');
+    }
+    return resp.data;
+  }
+
+  async createOrUpdateLiveCompositorScene(scene: LiveCompositorScene): Promise<LiveCompositorScene> {
+    const create = await this.dispatch({
+      group: 'live-compositor',
+      action: 'create',
+      id: scene.sceneId,
+      body: { scene },
+    });
+    if (create.status !== 'error') {
+      return normalizeLiveCompositorSceneResponse(create.data);
+    }
+
+    const update = await this.dispatch({
+      group: 'live-compositor',
+      action: 'update',
+      id: scene.sceneId,
+      body: { scene },
+    });
+    this.assertOk(update, 'live-compositor:update');
+    return normalizeLiveCompositorSceneResponse(update.data);
+  }
+
+  async getLiveCompositorScene(sceneId: string): Promise<LiveCompositorScene> {
+    const resp = await this.dispatch({
+      group: 'live-compositor',
+      action: 'get',
+      id: sceneId,
+    });
+    this.assertOk(resp, 'live-compositor:get');
+    return normalizeLiveCompositorSceneResponse(resp.data);
+  }
+
+  async startLiveCompositorStream(
+    options: LiveCompositorStreamOptions,
+  ): Promise<LiveCompositorStreamHandle> {
+    const resp = await this.dispatch({
+      group: 'live-compositor',
+      action: 'stream',
+      id: options.sceneId,
+      options: {
+        sceneId: options.sceneId,
+        viewportId: options.viewportId,
+        sessionId: options.sessionId,
+        width: options.width,
+        height: options.height,
+        fps: options.fps,
+      },
+    });
+    this.assertOk(resp, 'live-compositor:stream');
+    const descriptor = normalizeSceneRenderStreamDescriptor(resp.data);
+    return {
+      descriptor,
+      wsUrl: this.getStreamWsUrl(descriptor.streamId),
+    };
+  }
+
+  async stopLiveCompositorStream(target: {
+    readonly sceneId?: string;
+    readonly viewportId?: string;
+    readonly streamId?: string;
+  }): Promise<void> {
+    const resp = await this.dispatch({
+      group: 'live-compositor',
+      action: 'stop',
+      id: target.streamId ?? target.sceneId ?? '',
+      options: {
+        sceneId: target.sceneId,
+        viewportId: target.viewportId,
+        streamId: target.streamId,
+      },
+    });
+    this.assertOk(resp, 'live-compositor:stop');
+  }
+
   /**
    * Create a parametric shape in the 3D scene.
    * Dispatches `scenes:create_shape`.
@@ -1377,6 +1529,23 @@ export class EngineClient {
     return (resp.data as Record<string, unknown>) ?? {};
   }
 
+  /** Load a native .nkp v2 project as the authoritative puppet runtime state. */
+  async loadNativePuppetProject(project: NkpProjectData): Promise<Record<string, unknown>> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'native_command',
+      options: {
+        seq: 1,
+        baseRevision: 0,
+        command: { type: 'loadNativeProject', project },
+      } satisfies PuppetCommandEnvelope,
+    });
+    this.assertOk(resp, 'puppets:native_command');
+    const ack = readPuppetCommandAck(resp.data, 'puppets:native_command');
+    assertPuppetCommandApplied(ack);
+    return (ack.result as Record<string, unknown>) ?? {};
+  }
+
   /**
    * Load Live2D auxiliary JSON after a MOC3 puppet is loaded.
    * Dispatches `puppets:load_auxiliary`.
@@ -1424,6 +1593,53 @@ export class EngineClient {
       options: { name, value },
     });
     this.assertOk(resp, 'puppets:param');
+  }
+
+  /** Apply a revision-aware native puppet command envelope. */
+  async applyPuppetCommand(envelope: PuppetCommandEnvelope): Promise<PuppetCommandAck> {
+    const resp = await this.dispatch({
+      group: 'puppets',
+      action: 'native_command',
+      options: puppetCommandEnvelopeToOptions(envelope),
+    });
+    this.assertOk(resp, 'puppets:native_command');
+    return readPuppetCommandAck(resp.data, 'puppets:native_command');
+  }
+
+  /** Apply a native puppet command and throw when the engine rejects it. */
+  async applyPuppetCommandOrThrow(envelope: PuppetCommandEnvelope): Promise<PuppetCommandAck> {
+    const ack = await this.applyPuppetCommand(envelope);
+    assertPuppetCommandApplied(ack);
+    return ack;
+  }
+
+  async setNativePuppetBlendShape(envelope: {
+    seq: number;
+    baseRevision: number;
+    transactionId?: string;
+    name: string;
+    weight: number;
+  }): Promise<PuppetCommandAck> {
+    const { name, weight, ...base } = envelope;
+    return this.applyPuppetCommandOrThrow({
+      ...base,
+      command: { type: 'setNativeBlendShape', name, weight },
+    });
+  }
+
+  async setNativePuppetBoneTransform(envelope: {
+    seq: number;
+    baseRevision: number;
+    transactionId?: string;
+    bone: string;
+    transform: Extract<PuppetCommand, { type: 'setNativeBoneTransform' }>['transform'];
+    mode?: Extract<PuppetCommand, { type: 'setNativeBoneTransform' }>['mode'];
+  }): Promise<PuppetCommandAck> {
+    const { bone, transform, mode, ...base } = envelope;
+    return this.applyPuppetCommandOrThrow({
+      ...base,
+      command: { type: 'setNativeBoneTransform', bone, transform, mode },
+    });
   }
 
   /**

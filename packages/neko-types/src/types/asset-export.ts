@@ -11,9 +11,13 @@ import type {
 // =============================================================================
 
 export type CharacterAssetExportFormat =
+  | 'nkp'
   | 'nkentity'
   | 'asset-package'
   | 'character-pack'
+  | 'spine-json'
+  | 'spritesheet'
+  | 'lottie-plan'
   | 'model-motion'
   | 'model-config'
   | 'puppet-motion'
@@ -35,7 +39,10 @@ export interface CharacterAssetExportedFile {
     | 'motion'
     | 'config'
     | 'source'
-    | 'asset';
+    | 'asset'
+    | 'spine-json'
+    | 'spritesheet'
+    | 'diagnostic';
   readonly mediaKind?: CharacterAssetMediaKind;
   readonly dimension?: CharacterAssetDimension;
 }
@@ -46,6 +53,28 @@ export interface CharacterAssetExportResult {
   readonly manifest?: AssetManifest;
   readonly files: readonly CharacterAssetExportedFile[];
   readonly diagnostics?: readonly string[];
+}
+
+export type NativePuppetExportTarget =
+  | 'nkp'
+  | 'nkentity'
+  | 'spine-json'
+  | 'spritesheet'
+  | 'lottie'
+  | 'character-pack';
+
+export interface NativePuppetExportDiagnostic {
+  readonly code: string;
+  readonly severity: 'info' | 'warning' | 'error' | 'unsupported';
+  readonly message: string;
+}
+
+export interface NativePuppetExportPlan {
+  readonly target: NativePuppetExportTarget;
+  readonly outputPath: string;
+  readonly mutatesSource: false;
+  readonly files: readonly CharacterAssetExportedFile[];
+  readonly diagnostics?: readonly NativePuppetExportDiagnostic[];
 }
 
 export interface NkEntitySummary {
@@ -70,14 +99,43 @@ export interface NkEntityBinding {
   readonly metadata?: Record<string, unknown>;
 }
 
-export interface NkEntityArtifact {
+export interface NkEntityNativePuppetMetadata {
+  readonly rigTemplate?: string;
+  readonly rig_template?: string;
+  readonly blendshapeStandard?: string;
+  readonly blendshape_standard?: string;
+  readonly implementedBlendShapes?: readonly string[];
+  readonly implemented_blendshapes?: readonly string[];
+  readonly animationModel?: 'bone-blendshape' | 'moc3-parameter';
+  readonly animation_model?: 'bone-blendshape' | 'moc3-parameter';
+  readonly sourceKind?: string;
+  readonly source_kind?: string;
+  readonly legacyFallbackRef?: string;
+  readonly legacy_fallback_ref?: string;
+}
+
+export interface NkEntityArtifactMetadata extends Record<string, unknown> {
+  readonly nativePuppet?: NkEntityNativePuppetMetadata;
+  readonly native_puppet?: NkEntityNativePuppetMetadata;
+}
+
+interface NkEntityArtifactBase {
   readonly format: 'nkentity';
-  readonly version: 1;
   readonly entity: NkEntitySummary;
   readonly bindings: readonly NkEntityBinding[];
   readonly exportedAt: string;
-  readonly metadata?: Record<string, unknown>;
+  readonly metadata?: NkEntityArtifactMetadata;
 }
+
+export interface NkEntityArtifactV1 extends NkEntityArtifactBase {
+  readonly version: 1;
+}
+
+export interface NkEntityArtifactV2 extends NkEntityArtifactBase {
+  readonly version: 2;
+}
+
+export type NkEntityArtifact = NkEntityArtifactV1 | NkEntityArtifactV2;
 
 export interface NkEntityExportRequest {
   readonly projectRoot: string;
@@ -103,13 +161,22 @@ export function isNkEntityArtifact(value: unknown): value is NkEntityArtifact {
 
   return (
     value['format'] === 'nkentity' &&
-    value['version'] === 1 &&
+    (value['version'] === 1 || value['version'] === 2) &&
     isNkEntitySummary(value['entity']) &&
     Array.isArray(value['bindings']) &&
     value['bindings'].every((binding) => isNkEntityBinding(binding)) &&
     typeof value['exportedAt'] === 'string' &&
-    (value['metadata'] === undefined || isRecord(value['metadata']))
+    (value['metadata'] === undefined || isNkEntityArtifactMetadata(value['metadata']))
   );
+}
+
+export function migrateNkEntityArtifactToV2(artifact: NkEntityArtifact): NkEntityArtifactV2 {
+  if (artifact.version === 2) return artifact;
+
+  return {
+    ...artifact,
+    version: 2,
+  };
 }
 
 function isNkEntitySummary(value: unknown): value is NkEntitySummary {
@@ -160,12 +227,54 @@ function isEntityAssetBindingRoleValue(value: unknown): value is EntityAssetBind
   return (
     value === 'portrait' ||
     value === 'reference' ||
+    value === 'puppet-bone' ||
     value === 'live2d' ||
     value === 'live3d' ||
     value === 'voice' ||
     value === 'motion' ||
     value === 'style'
   );
+}
+
+function isNkEntityArtifactMetadata(value: unknown): value is NkEntityArtifactMetadata {
+  if (!isRecord(value)) return false;
+  return (
+    (value['nativePuppet'] === undefined ||
+      isNkEntityNativePuppetMetadata(value['nativePuppet'])) &&
+    (value['native_puppet'] === undefined || isNkEntityNativePuppetMetadata(value['native_puppet']))
+  );
+}
+
+function isNkEntityNativePuppetMetadata(value: unknown): value is NkEntityNativePuppetMetadata {
+  if (!isRecord(value)) return false;
+  return (
+    isOptionalString(value['rigTemplate']) &&
+    isOptionalString(value['rig_template']) &&
+    isOptionalString(value['blendshapeStandard']) &&
+    isOptionalString(value['blendshape_standard']) &&
+    isOptionalStringArray(value['implementedBlendShapes']) &&
+    isOptionalStringArray(value['implemented_blendshapes']) &&
+    isOptionalAnimationModel(value['animationModel']) &&
+    isOptionalAnimationModel(value['animation_model']) &&
+    isOptionalString(value['sourceKind']) &&
+    isOptionalString(value['source_kind']) &&
+    isOptionalString(value['legacyFallbackRef']) &&
+    isOptionalString(value['legacy_fallback_ref'])
+  );
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isOptionalStringArray(value: unknown): boolean {
+  return (
+    value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+  );
+}
+
+function isOptionalAnimationModel(value: unknown): boolean {
+  return value === undefined || value === 'bone-blendshape' || value === 'moc3-parameter';
 }
 
 function isCharacterAssetMediaKindValue(value: unknown): value is CharacterAssetMediaKind {

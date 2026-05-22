@@ -222,6 +222,7 @@ export interface CreativeEntitySyncSuggestion {
 export type EntityAssetBindingRole =
   | 'portrait'
   | 'reference'
+  | 'puppet-bone'
   | 'live2d'
   | 'live3d'
   | 'voice'
@@ -259,6 +260,7 @@ export interface EntityAssetBindingFile {
 export type RepresentationKind =
   | 'portrait'
   | 'reference'
+  | 'puppet-bone'
   | 'live2d'
   | 'live3d'
   | 'voice'
@@ -318,10 +320,10 @@ export const DEFAULT_REPRESENTATION_FALLBACKS: Readonly<
   Record<RepresentationTarget, readonly RepresentationKind[]>
 > = {
   story: ['reference', 'portrait'],
-  canvas: ['portrait', 'reference', 'live2d', 'live3d'],
-  agent: ['reference', 'portrait', 'live2d', 'live3d'],
-  live: ['live3d', 'live2d'],
-  cut: ['video', 'live2d', 'live3d', 'portrait'],
+  canvas: ['portrait', 'reference', 'puppet-bone', 'live2d', 'live3d'],
+  agent: ['reference', 'portrait', 'puppet-bone', 'live2d', 'live3d'],
+  live: ['live3d', 'puppet-bone', 'live2d'],
+  cut: ['video', 'puppet-bone', 'live2d', 'live3d', 'portrait'],
 } as const;
 
 export type AssetRefScheme = 'project' | 'market' | 'shared' | 'external';
@@ -454,6 +456,7 @@ export const CREATIVE_ENTITY_KINDS: readonly CreativeEntityKind[] = [
 export const ENTITY_ASSET_BINDING_ROLES: readonly EntityAssetBindingRole[] = [
   'portrait',
   'reference',
+  'puppet-bone',
   'live2d',
   'live3d',
   'voice',
@@ -464,6 +467,7 @@ export const ENTITY_ASSET_BINDING_ROLES: readonly EntityAssetBindingRole[] = [
 export const REPRESENTATION_KINDS: readonly RepresentationKind[] = [
   'portrait',
   'reference',
+  'puppet-bone',
   'live2d',
   'live3d',
   'voice',

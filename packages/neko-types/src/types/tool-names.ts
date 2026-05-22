@@ -158,6 +158,22 @@ export const TOOL_NAMES_MODEL = {
 } as const;
 
 // =============================================================================
+// NekoPuppet — Native 2D Puppet Operations
+// =============================================================================
+
+export const TOOL_NAMES_PUPPET = {
+  PUPPET_QUERY: 'puppet:query',
+  PUPPET_CREATE_NATIVE: 'puppet:create_native',
+  PUPPET_SET_EXPRESSION: 'puppet:set_expression',
+  PUPPET_SET_BLENDSHAPE: 'puppet:set_blendshape',
+  PUPPET_SET_BONE: 'puppet:set_bone',
+  PUPPET_SET_CONTROL_DRIVER: 'puppet:set_control_driver',
+  PUPPET_PLAY_ANIMATION: 'puppet:play_animation',
+  PUPPET_AUTO_RIG: 'puppet:auto_rig',
+  PUPPET_GENERATE_ANIMATION: 'puppet:generate_animation',
+} as const;
+
+// =============================================================================
 // Transcribe — Speech-to-Text
 // =============================================================================
 
@@ -266,6 +282,7 @@ export const TOOL_NAMES = {
   ...TOOL_NAMES_SKETCH,
   ...TOOL_NAMES_ASSETS,
   ...TOOL_NAMES_MODEL,
+  ...TOOL_NAMES_PUPPET,
   ...TOOL_NAMES_TRANSCRIBE,
   ...TOOL_NAMES_AUDIO,
   ...TOOL_NAMES_PERCEPTION,

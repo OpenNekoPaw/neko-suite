@@ -211,6 +211,10 @@
     "isKeyframe": true,
     "sceneRevision": 41,
     "appliedSeq": 7,
+    "sceneId": "scene-main",
+    "frameTimestamp": 1770000000048,
+    "viewTransform": [1, 0, 0, 1, 0, 0],
+    "projectionJson": "{\"kind\":\"perspective\",\"fovY\":45}",
     "diagnostics": {
       "gpuFrameTimeMs": 7.5,
       "encodeTimeMs": 3.1,

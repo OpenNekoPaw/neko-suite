@@ -96,6 +96,10 @@ describe('scene contract fixtures', () => {
     expect(roundtripped.durationUs).toBe(16666);
     expect(roundtripped.sceneRevision).toBe(41);
     expect(roundtripped.appliedSeq).toBe(7);
+    expect(roundtripped.sceneId).toBe('scene-main');
+    expect(roundtripped.frameTimestamp).toBe(1770000000048);
+    expect(roundtripped.viewTransform).toEqual([1, 0, 0, 1, 0, 0]);
+    expect(roundtripped.projectionJson).toContain('perspective');
     expect(roundtripped.diagnostics?.qualityTier).toBe('high');
     expect(roundtripped.diagnostics?.gpuUploadTimeMs).toBe(1.4);
   });

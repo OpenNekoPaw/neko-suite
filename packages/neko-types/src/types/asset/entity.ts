@@ -286,6 +286,18 @@ export interface CharacterAssetDimensionMetadata {
   assetDimension?: CharacterAssetDimension;
   /** Domain media kind used by Market, Search, and Agent tools. */
   mediaKind?: CharacterAssetMediaKind;
+  /** Native puppet rig template advertised to editor, Agent, and export consumers. */
+  rigTemplate?: string;
+  /** BlendShape naming standard for native puppet assets. */
+  blendshapeStandard?: string;
+  /** Implemented BlendShape subset for native puppet assets. */
+  implementedBlendShapes?: readonly string[];
+  /** Native puppet animation model. */
+  animationModel?: 'bone-blendshape' | 'moc3-parameter';
+  /** Source kind preserved from the native puppet import metadata. */
+  sourceKind?: string;
+  /** Optional legacy Live2D fallback asset reference. */
+  legacyFallbackRef?: string;
   /** Storage mode for direct files, bundle-memory entries, and market assets. */
   storageMode?: MediaAssetStorageMode;
   /** Bundle entry metadata for bundle-memory assets. */

@@ -109,6 +109,8 @@ export {
   type FileAccessPurpose,
   type FileSourceRef,
   type EnginePerceptionFacade,
+  type LiveCompositorStreamHandle,
+  type LiveCompositorStreamOptions,
   type PerceptionSimilarityRequest,
   type PerceptionTranscribeRequest,
   type PuppetExportH264Options,
@@ -125,6 +127,8 @@ export {
   type TranscribeResponse,
 } from './EngineClient';
 
+export { isRecord, readFiniteNumber, readString } from './utils/wireReaders';
+
 // High-level media playback (paired video + audio streams)
 export {
   MediaPlaybackService,
@@ -139,6 +143,8 @@ export type {
   PreviewManifest,
   PreviewVariant,
   PreviewVariantRequest,
+  PuppetCommandAck,
+  PuppetCommandEnvelope,
   RegisterPreviewAssetRequest,
   UpdatePreviewAssetMetadataRequest,
 } from '@neko/shared';

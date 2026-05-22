@@ -755,4 +755,10 @@ export interface EngineRenderFrameMeta {
   sceneRevision: number;
   appliedSeq: number;
   diagnostics?: EngineRenderFrameDiagnostics;
+  sceneId?: string;
+  frameTimestamp: number;
+  viewTransform: number[];
+  projectionJson?: string;
+  activePreviewMode?: string;
+  previewPlaybackClockMs?: number;
 }

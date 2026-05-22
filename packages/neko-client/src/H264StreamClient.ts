@@ -21,6 +21,14 @@ import type {
   EngineRenderFrameDiagnostics,
 } from '@neko/shared';
 import { getLogger } from './utils/logger';
+import {
+  descriptorSceneId,
+  isRecord,
+  parseJsonObject,
+  readFiniteNumber,
+  readRenderFrameMeta,
+  trimOldestMapEntry,
+} from './utils/wireReaders';
 
 const logger = getLogger('H264');
 
@@ -101,6 +109,7 @@ export function createRenderFrameMetaFromDescriptor(
 
   const meta: RenderFrameMeta = {
     streamId: descriptor.streamId,
+    sceneId: descriptorSceneId(descriptor),
     viewportId: descriptor.viewportId,
     frameId,
     ptsUs: packet.pts,
@@ -108,6 +117,8 @@ export function createRenderFrameMetaFromDescriptor(
     isKeyframe: packet.isKeyframe,
     sceneRevision: descriptor.initialRevision,
     appliedSeq: 0,
+    frameTimestamp: packet.pts / 1000,
+    viewTransform: [1, 0, 0, 1, 0, 0],
   };
   if (diagnostics) {
     meta.diagnostics = diagnostics;
@@ -212,6 +223,7 @@ export class H264StreamClient {
   private latencySamples: number[] = [];
   private pendingFrames: Map<number, number> = new Map(); // pts -> receiveTime
   private pendingFrameMeta: Map<number, RenderFrameMeta> = new Map();
+  private pendingSidebandFrameMeta: Map<number, RenderFrameMeta> = new Map();
   private pendingFrameDiagnostics: Map<number, EngineRenderFrameDiagnostics> = new Map();
 
   // Reconnection
@@ -294,6 +306,7 @@ export class H264StreamClient {
     this.pendingFrames.clear();
     this.decodeStartTimes.clear();
     this.pendingFrameMeta.clear();
+    this.pendingSidebandFrameMeta.clear();
     this.pendingFrameDiagnostics.clear();
     this.decodeTimeSamples = [];
     this.latencySamples = [];
@@ -575,6 +588,13 @@ export class H264StreamClient {
   }
 
   private createFrameMeta(packet: ParsedH264Packet): RenderFrameMeta | null {
+    const sidebandMeta = this.pendingSidebandFrameMeta.get(packet.pts);
+    if (sidebandMeta) {
+      this.pendingSidebandFrameMeta.delete(packet.pts);
+      this.nextFrameId = Math.max(this.nextFrameId, sidebandMeta.frameId + 1);
+      return sidebandMeta;
+    }
+
     if (!this.descriptor) return null;
     return createRenderFrameMetaFromDescriptor(this.descriptor, packet, this.nextFrameId++);
   }
@@ -586,9 +606,24 @@ export class H264StreamClient {
 
   private handleTextMessage(data: string): void {
     const message = parseJsonObject(data);
-    if (!message || message.type !== 'renderFrameDiagnostics') {
+    if (!message) {
       return;
     }
+
+    if (message.type === 'renderFrameMeta') {
+      const meta = readRenderFrameMeta(message.meta);
+      if (!meta) {
+        return;
+      }
+      this.pendingSidebandFrameMeta.set(meta.ptsUs, meta);
+      trimOldestMapEntry(this.pendingSidebandFrameMeta, 100);
+      return;
+    }
+
+    if (message.type !== 'renderFrameDiagnostics') {
+      return;
+    }
+
     const ptsUs = readFiniteNumber(message.ptsUs);
     const diagnostics = isRenderFrameDiagnostics(message.diagnostics)
       ? message.diagnostics
@@ -601,6 +636,7 @@ export class H264StreamClient {
       ...existing,
       ...diagnostics,
     });
+    trimOldestMapEntry(this.pendingFrameDiagnostics, 100);
   }
 
   private latestDecodeTimeMs(): number | undefined {
@@ -650,15 +686,6 @@ export class H264StreamClient {
   }
 }
 
-function parseJsonObject(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 function mergeRenderFrameDiagnostics(
   meta: RenderFrameMeta,
   diagnostics: EngineRenderFrameDiagnostics,
@@ -674,12 +701,4 @@ function mergeRenderFrameDiagnostics(
 
 function isRenderFrameDiagnostics(value: unknown): value is EngineRenderFrameDiagnostics {
   return isRecord(value);
-}
-
-function readFiniteNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

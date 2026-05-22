@@ -1,6 +1,10 @@
 import type { EditOperation } from '../operations/types';
 import type { DecisionRationale } from './decision-rationale';
-import type { CreativeDomainMetadata, CreativeDomainId } from './domain-routing';
+import {
+  CREATIVE_DOMAIN_SERVICE_PORT_IDS,
+  type CreativeDomainMetadata,
+  type CreativeDomainId,
+} from './domain-routing';
 import type { Tool } from './tool';
 
 export { createDomainRouter } from './domain-routing';
@@ -159,7 +163,7 @@ export function operationToolDomainMetadata(domain: OperationToolDomain): Creati
     id,
     source: 'operation-tool',
     operationDomain: domain,
-    servicePortId: id === 'scene' ? 'scene-render' : id === 'puppet' ? 'puppet-render' : undefined,
+    servicePortId: CREATIVE_DOMAIN_SERVICE_PORT_IDS[id],
   };
 }
 

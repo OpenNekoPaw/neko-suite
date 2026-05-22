@@ -1,13 +1,32 @@
 import type {
+  CharacterPreviewModeStatePayload,
   RenderFrameMeta,
   SceneCommandAck,
   SceneCommandEnvelope,
   SceneDelta,
   SceneSnapshot,
+  ViewportCommand,
+  ViewportEvent,
 } from '@neko/shared';
+import { isCharacterPreviewModeStatePayload, isViewportEvent } from '@neko/shared';
+import {
+  isRecord,
+  parseJsonObject,
+  readBoolean,
+  readFiniteNumber,
+  readRenderFrameMeta,
+  readString,
+  readStringArray,
+} from './utils/wireReaders';
 
 type SceneControlMessageHandler<T> = (message: T) => void;
 type SceneControlErrorHandler = (error: Error) => void;
+type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
+type SceneAnimationClipInfo = SceneSnapshot['animations'][number];
+type SceneCameraState = NonNullable<SceneSnapshot['activeCamera']>;
+type SceneBounds3 = NonNullable<SceneNodeSnapshot['worldBounds']>;
+type SceneVec3 = NonNullable<NonNullable<SceneNodeSnapshot['transform']>['position']>;
+type SceneQuat = NonNullable<NonNullable<SceneNodeSnapshot['transform']>['rotation']>;
 
 export interface SceneControlWebSocketLike {
   readonly readyState: number;
@@ -32,6 +51,8 @@ export interface SceneControlSocketConfig {
   onDelta?: SceneControlMessageHandler<SceneDelta>;
   onSnapshot?: SceneControlMessageHandler<SceneSnapshot>;
   onRenderFrameMeta?: SceneControlMessageHandler<RenderFrameMeta>;
+  onViewportEvent?: SceneControlMessageHandler<ViewportEvent>;
+  onCharacterPreviewState?: SceneControlMessageHandler<CharacterPreviewModeStatePayload>;
   onError?: SceneControlErrorHandler;
 }
 
@@ -218,6 +239,28 @@ export class SceneControlSocket {
     this.send({ type: 'requestKeyframe', viewportId });
   }
 
+  sendViewportCommand(command: ViewportCommand): Promise<ViewportEvent> {
+    const requestId = command.correlationId;
+    return new Promise((resolve, reject) => {
+      this.pendingQueries.set(requestId, {
+        resolve: (result) => {
+          if (isViewportEvent(result)) {
+            resolve(result);
+            return;
+          }
+          reject(new Error('Invalid viewport event result'));
+        },
+        reject,
+      });
+      try {
+        this.send({ type: 'viewportCommand', requestId, command });
+      } catch (error) {
+        this.pendingQueries.delete(requestId);
+        reject(toError(error));
+      }
+    });
+  }
+
   heartbeat(nonce?: string): void {
     this.send({ type: 'heartbeat', nonce });
   }
@@ -258,7 +301,7 @@ export class SceneControlSocket {
 
     switch (message.type) {
       case 'ready':
-        this.config.onReady?.(message as SceneControlReadyMessage);
+        this.handleReady(message);
         break;
       case 'ack':
         this.handleAck(message.ack);
@@ -267,7 +310,7 @@ export class SceneControlSocket {
         this.handleDelta(message.delta);
         break;
       case 'snapshot':
-        this.handleSnapshot(message.snapshot);
+        this.handleSnapshot(readSnapshotMessagePayload(message));
         break;
       case 'queryResult':
         this.handleQueryResult(message);
@@ -277,6 +320,12 @@ export class SceneControlSocket {
         break;
       case 'renderFrameMeta':
         this.handleRenderFrameMeta(message.meta);
+        break;
+      case 'viewportEvent':
+        this.handleViewportEvent(message);
+        break;
+      case 'characterPreviewState':
+        this.handleCharacterPreviewState(message.state ?? message.payload ?? message);
         break;
       case 'heartbeat':
         break;
@@ -288,12 +337,21 @@ export class SceneControlSocket {
     }
   }
 
+  private handleReady(value: unknown): void {
+    const ready = readSceneControlReadyMessage(value);
+    if (!ready) {
+      this.reportError(new Error('Invalid scene control ready message'));
+      return;
+    }
+    this.config.onReady?.(ready);
+  }
+
   private handleAck(value: unknown): void {
-    if (!isRecord(value)) {
+    const ack = readSceneCommandAck(value);
+    if (!ack) {
       this.reportError(new Error('Invalid scene command ack'));
       return;
     }
-    const ack = value as unknown as SceneCommandAck;
     const pending = this.pendingAcks.get(ack.seq);
     if (pending) {
       this.pendingAcks.delete(ack.seq);
@@ -303,11 +361,11 @@ export class SceneControlSocket {
   }
 
   private handleDelta(value: unknown): void {
-    if (!isRecord(value)) {
+    const delta = readSceneDelta(value);
+    if (!delta) {
       this.reportError(new Error('Invalid scene delta'));
       return;
     }
-    const delta = value as unknown as SceneDelta;
     if (!this.shouldApplyDelta(delta.revision)) {
       return;
     }
@@ -316,11 +374,11 @@ export class SceneControlSocket {
   }
 
   private handleSnapshot(value: unknown): void {
-    if (!isRecord(value)) {
+    const snapshot = readSceneSnapshot(value);
+    if (!snapshot) {
       this.reportError(new Error('Invalid scene snapshot'));
       return;
     }
-    const snapshot = value as unknown as SceneSnapshot;
     this.rememberAppliedRevision(snapshot.revision);
     this.config.onSnapshot?.(snapshot);
   }
@@ -337,6 +395,23 @@ export class SceneControlSocket {
     if (!pending) return;
     this.pendingQueries.delete(requestId);
     pending.resolve(message.result ?? message.snapshot ?? message);
+  }
+
+  private handleViewportEvent(message: SceneControlSocketMessage): void {
+    const event = readViewportEvent(message.event ?? message);
+    if (!event) {
+      this.reportError(new Error('Invalid viewport event'));
+      return;
+    }
+    const requestId = readString(message.requestId);
+    if (requestId) {
+      const pending = this.pendingQueries.get(requestId);
+      if (pending) {
+        this.pendingQueries.delete(requestId);
+        pending.resolve(event);
+      }
+    }
+    this.config.onViewportEvent?.(event);
   }
 
   private handleViewportCameraAck(message: SceneControlSocketMessage): void {
@@ -357,12 +432,20 @@ export class SceneControlSocket {
   }
 
   private handleRenderFrameMeta(value: unknown): void {
-    if (!isRecord(value)) {
+    const meta = readRenderFrameMeta(value);
+    if (!meta) {
       this.reportError(new Error('Invalid render frame metadata'));
       return;
     }
-    const meta = value as unknown as RenderFrameMeta;
     this.config.onRenderFrameMeta?.(meta);
+  }
+
+  private handleCharacterPreviewState(value: unknown): void {
+    if (!isCharacterPreviewModeStatePayload(value)) {
+      this.reportError(new Error('Invalid character preview mode state'));
+      return;
+    }
+    this.config.onCharacterPreviewState?.(value);
   }
 
   private shouldApplyDelta(value: unknown): boolean {
@@ -444,15 +527,6 @@ export class SceneControlSocket {
   }
 }
 
-function parseJsonObject(data: string): SceneControlSocketMessage | null {
-  try {
-    const value: unknown = JSON.parse(data);
-    return isRecord(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
 function stripUndefined(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
@@ -470,8 +544,295 @@ function cameraUpdateToMessage(update: SceneViewportCameraUpdate): Record<string
   });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function readSceneControlReadyMessage(value: unknown): SceneControlReadyMessage | null {
+  if (!isRecord(value) || value.type !== 'ready') return null;
+  const ready: SceneControlReadyMessage = { type: 'ready' };
+  const protocol = readString(value.protocol);
+  if (protocol !== undefined) ready.protocol = protocol;
+  const serverRevision = readFiniteNumber(value.serverRevision);
+  if (serverRevision !== undefined) ready.serverRevision = serverRevision;
+  const lastClientRevision = readFiniteNumber(value.lastClientRevision);
+  if (lastClientRevision !== undefined) ready.lastClientRevision = lastClientRevision;
+  return ready;
+}
+
+function readSceneCommandAck(value: unknown): SceneCommandAck | null {
+  if (!isRecord(value)) return null;
+  const seq = readFiniteNumber(value.seq);
+  const appliedSeq = readFiniteNumber(value.appliedSeq);
+  const baseRevision = readFiniteNumber(value.baseRevision);
+  const revision = readFiniteNumber(value.revision);
+  const status = value.status;
+  if (
+    seq === undefined ||
+    appliedSeq === undefined ||
+    baseRevision === undefined ||
+    revision === undefined ||
+    (status !== 'applied' && status !== 'rejected' && status !== 'superseded')
+  ) {
+    return null;
+  }
+  const ack: SceneCommandAck = { seq, appliedSeq, baseRevision, revision, status };
+  const error = readString(value.error);
+  if (error !== undefined) ack.error = error;
+  return ack;
+}
+
+function readSceneDelta(value: unknown): SceneDelta | null {
+  return isSceneDelta(value) ? value : null;
+}
+
+function readViewportEvent(value: unknown): ViewportEvent | null {
+  return isViewportEvent(value) ? value : null;
+}
+
+function readSceneSnapshot(value: unknown): SceneSnapshot | null {
+  if (typeof value === 'string') {
+    return readSceneSnapshot(parseJsonObject(value));
+  }
+  if (!isRecord(value)) return null;
+
+  const nodes = Array.isArray(value.nodes)
+    ? value.nodes
+        .map(readSceneNodeSnapshot)
+        .filter((node): node is SceneNodeSnapshot => node !== null)
+    : [];
+  const animations = Array.isArray(value.animations)
+    ? value.animations
+        .map(readAnimationClipInfo)
+        .filter((clip): clip is SceneAnimationClipInfo => clip !== null)
+    : [];
+
+  const snapshot: SceneSnapshot = {
+    sceneId: readString(value.sceneId) ?? readString(value.scene_id) ?? 'default',
+    revision: readFiniteNumber(value.revision) ?? 0,
+    nodes,
+    animations,
+  };
+
+  const activeCamera = readSceneCameraState(value.activeCamera ?? value.active_camera);
+  if (activeCamera !== undefined) {
+    snapshot.activeCamera = activeCamera;
+  }
+
+  return snapshot;
+}
+
+function readSnapshotMessagePayload(message: SceneControlSocketMessage): unknown {
+  if (message.snapshot !== undefined) {
+    return message.snapshot;
+  }
+  if (message.result !== undefined) {
+    return message.result;
+  }
+  return message;
+}
+
+function isSceneDelta(value: unknown): value is SceneDelta {
+  if (!isRecord(value)) return false;
+  if (readFiniteNumber(value.revision) === undefined) return false;
+  if (value.appliedSeq !== undefined && readFiniteNumber(value.appliedSeq) === undefined) {
+    return false;
+  }
+  return (
+    isOptionalRecordArray(value.updatedTransforms) &&
+    isOptionalRecordArray(value.updatedMorphWeights) &&
+    isOptionalRecord(value.animationState) &&
+    isOptionalRecordArray(value.addedNodes) &&
+    isOptionalStringArray(value.removedNodes) &&
+    isOptionalRecordArray(value.updatedHierarchy) &&
+    isOptionalRecordArray(value.updatedVisibility) &&
+    isOptionalRecordArray(value.updatedLayers) &&
+    isOptionalRecordArray(value.updatedMaterials) &&
+    isOptionalRecordArray(value.updatedAssetReferences) &&
+    isOptionalRecordArray(value.updatedLights) &&
+    isOptionalRecord(value.activeCamera) &&
+    isOptionalRecordArray(value.updatedCameras) &&
+    isOptionalRecordArray(value.topologyChanges) &&
+    isOptionalRecordArray(value.modelingSessions) &&
+    isOptionalRecord(value.overlay) &&
+    isOptionalRecordArray(value.updatedCharacterMorphWeights) &&
+    isOptionalRecordArray(value.updatedCharacterMaterials) &&
+    isOptionalRecordArray(value.updatedSkeletonPose) &&
+    isOptionalRecordArray(value.characterOverrides)
+  );
+}
+
+function readSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
+  if (!isRecord(value)) return null;
+
+  const nodeId = readString(value.nodeId) ?? readString(value.node_id) ?? readString(value.id);
+  if (!nodeId) return null;
+
+  const transform = isRecord(value.transform) ? value.transform : value;
+  const node: SceneNodeSnapshot = {
+    nodeId,
+    name: readString(value.name) ?? nodeId,
+    transform: {
+      position: readVec3(transform.position, { x: 0, y: 0, z: 0 }),
+      rotation: readQuat(transform.rotation, { x: 0, y: 0, z: 0, w: 1 }),
+      scale: readVec3(transform.scale, { x: 1, y: 1, z: 1 }),
+    },
+    children: readStringArray(value.children),
+    visible: readBoolean(value.visible) ?? true,
+    kind: readString(value.kind) ?? inferSceneNodeKind(value),
+  };
+
+  const parentId = readString(value.parentId) ?? readString(value.parent_id);
+  if (parentId) {
+    node.parentId = parentId;
+  }
+
+  const layerMask = readFiniteNumber(value.layerMask) ?? readFiniteNumber(value.layer_mask);
+  if (layerMask !== undefined) {
+    node.layerMask = layerMask;
+  }
+
+  const mesh = readAssetHandle(value.mesh, 'mesh');
+  if (mesh !== undefined) {
+    node.mesh = mesh;
+  }
+
+  const material = readAssetHandle(value.material, 'material');
+  if (material !== undefined) {
+    node.material = material;
+  }
+
+  const bounds = readBounds3(value.bounds);
+  if (bounds !== undefined) {
+    node.bounds = bounds;
+  }
+
+  const worldBounds = readBounds3(value.worldBounds ?? value.world_bounds);
+  if (worldBounds !== undefined) {
+    node.worldBounds = worldBounds;
+  }
+
+  return node;
+}
+
+function readAnimationClipInfo(value: unknown): SceneAnimationClipInfo | null {
+  if (!isRecord(value)) return null;
+  const name = readString(value.name);
+  if (!name) return null;
+  return {
+    name,
+    duration: readFiniteNumber(value.duration) ?? 0,
+  };
+}
+
+function readSceneCameraState(value: unknown): SceneCameraState | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const camera: SceneCameraState = {
+    cameraId:
+      readString(value.cameraId) ?? readString(value.camera_id) ?? readString(value.id) ?? 'camera',
+    position: readVec3(value.position, { x: 0, y: 0, z: 0 }),
+    target: readVec3(value.target, { x: 0, y: 0, z: -1 }),
+    up: readVec3(value.up, { x: 0, y: 1, z: 0 }),
+    fov: readFiniteNumber(value.fov) ?? readFiniteNumber(value.fovY) ?? 45,
+  };
+
+  const near = readFiniteNumber(value.near);
+  if (near !== undefined) {
+    camera.near = near;
+  }
+  const far = readFiniteNumber(value.far);
+  if (far !== undefined) {
+    camera.far = far;
+  }
+
+  return camera;
+}
+
+function readBounds3(value: unknown): SceneBounds3 | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    min: readVec3(value.min, { x: 0, y: 0, z: 0 }),
+    max: readVec3(value.max, { x: 0, y: 0, z: 0 }),
+  };
+}
+
+function readAssetHandle(
+  value: unknown,
+  fallbackKind: 'mesh' | 'material',
+): SceneNodeSnapshot['mesh'] | SceneNodeSnapshot['material'] | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = readString(value.id);
+  if (!id) return undefined;
+  const handle = {
+    id,
+    kind: readString(value.kind) ?? fallbackKind,
+  };
+  const uri = readString(value.uri);
+  return uri === undefined ? handle : { ...handle, uri };
+}
+
+function readVec3(value: unknown, fallback: SceneVec3): SceneVec3 {
+  if (Array.isArray(value)) {
+    return {
+      x: readFiniteNumber(value[0]) ?? fallback.x,
+      y: readFiniteNumber(value[1]) ?? fallback.y,
+      z: readFiniteNumber(value[2]) ?? fallback.z,
+    };
+  }
+  if (isRecord(value)) {
+    return {
+      x: readFiniteNumber(value.x) ?? fallback.x,
+      y: readFiniteNumber(value.y) ?? fallback.y,
+      z: readFiniteNumber(value.z) ?? fallback.z,
+    };
+  }
+  return fallback;
+}
+
+function readQuat(value: unknown, fallback: SceneQuat): SceneQuat {
+  if (Array.isArray(value)) {
+    return {
+      x: readFiniteNumber(value[0]) ?? fallback.x,
+      y: readFiniteNumber(value[1]) ?? fallback.y,
+      z: readFiniteNumber(value[2]) ?? fallback.z,
+      w: readFiniteNumber(value[3]) ?? fallback.w,
+    };
+  }
+  if (isRecord(value)) {
+    return {
+      x: readFiniteNumber(value.x) ?? fallback.x,
+      y: readFiniteNumber(value.y) ?? fallback.y,
+      z: readFiniteNumber(value.z) ?? fallback.z,
+      w: readFiniteNumber(value.w) ?? fallback.w,
+    };
+  }
+  return fallback;
+}
+
+function inferSceneNodeKind(value: Record<string, unknown>): string {
+  if (readBoolean(value.hasMesh ?? value.has_mesh) === true || isRecord(value.mesh)) {
+    return 'mesh';
+  }
+  if (readBoolean(value.hasLight ?? value.has_light) === true) {
+    return 'light';
+  }
+  if (readBoolean(value.hasCamera ?? value.has_camera) === true) {
+    return 'camera';
+  }
+  return 'node';
+}
+
+function isOptionalRecord(value: unknown): boolean {
+  return value === undefined || isRecord(value);
+}
+
+function isOptionalRecordArray(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.every(isRecord));
+}
+
+function isOptionalStringArray(value: unknown): boolean {
+  return value === undefined || isStringArray(value);
+}
+
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
 function toError(error: unknown): Error {

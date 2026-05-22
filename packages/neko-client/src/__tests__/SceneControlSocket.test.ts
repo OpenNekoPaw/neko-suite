@@ -231,6 +231,101 @@ describe('SceneControlSocket', () => {
     expect(onSnapshot).toHaveBeenCalledWith(snapshot);
   });
 
+  it('normalizes minimal legacy snapshots before notifying listeners', () => {
+    const fake = new FakeWebSocket();
+    const onSnapshot = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onSnapshot,
+    });
+    socket.connect();
+    fake.open();
+
+    fake.emit({
+      type: 'snapshot',
+      snapshot: {
+        revision: 5,
+        nodes: [
+          {
+            id: 'mesh-1',
+            parent_id: '',
+            position: [1, 2, 3],
+            has_mesh: true,
+          },
+        ],
+      },
+    });
+
+    expect(onSnapshot).toHaveBeenCalledWith({
+      sceneId: 'default',
+      revision: 5,
+      nodes: [
+        expect.objectContaining({
+          nodeId: 'mesh-1',
+          name: 'mesh-1',
+          children: [],
+          visible: true,
+          kind: 'mesh',
+          transform: expect.objectContaining({
+            position: { x: 1, y: 2, z: 3 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 1, y: 1, z: 1 },
+          }),
+        }),
+      ],
+      animations: [],
+    });
+  });
+
+  it('accepts flattened and string-encoded snapshot messages', () => {
+    const fake = new FakeWebSocket();
+    const onSnapshot = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onSnapshot,
+    });
+    socket.connect();
+    fake.open();
+
+    fake.emit({
+      type: 'snapshot',
+      sceneId: 'flat-scene',
+      revision: 6,
+      nodes: [{ nodeId: 'flat-node', name: 'Flat Node', children: [], visible: true }],
+      animations: [],
+    });
+    fake.emit({
+      type: 'snapshot',
+      snapshot: JSON.stringify({
+        sceneId: 'string-scene',
+        revision: 7,
+        nodes: [{ id: 'string-node' }],
+      }),
+    });
+
+    expect(onSnapshot).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        sceneId: 'flat-scene',
+        revision: 6,
+        nodes: [expect.objectContaining({ nodeId: 'flat-node' })],
+      }),
+    );
+    expect(onSnapshot).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        sceneId: 'string-scene',
+        revision: 7,
+        nodes: [expect.objectContaining({ nodeId: 'string-node' })],
+        animations: [],
+      }),
+    );
+  });
+
   it('sends viewport-scoped query payloads and resolves queryResult by request id', async () => {
     const fake = new FakeWebSocket();
     const socket = new SceneControlSocket({
@@ -356,5 +451,137 @@ describe('SceneControlSocket', () => {
     fake.emit({ type: 'error', error: 'unsupported scene control message: viewportCamera' });
 
     await expect(promise).rejects.toThrow('unsupported scene control message');
+  });
+
+  it('sends viewport protocol commands and resolves viewport events', async () => {
+    const fake = new FakeWebSocket();
+    const onViewportEvent = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onViewportEvent,
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.sendViewportCommand({
+      protocolVersion: 1,
+      domain: 'scene',
+      action: 'scene:model:characterPreview:setMode',
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      seq: 12,
+      correlationId: 'preview-12',
+      timestamp: 100,
+      source: 'user',
+      baseRevision: 4,
+      payload: {
+        characterId: 'character-a',
+        modeId: 'face',
+        viewportId: 'main',
+      },
+    });
+
+    expect(parseSent(fake, 1)).toEqual(
+      expect.objectContaining({
+        type: 'viewportCommand',
+        requestId: 'preview-12',
+      }),
+    );
+
+    const event = {
+      protocolVersion: 1,
+      domain: 'scene',
+      event: 'scene:model:characterPreview:setMode',
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      ackSeq: 12,
+      revision: 4,
+      timestamp: 120,
+      status: 'ack',
+      appliedSeq: 12,
+      payload: {
+        characterId: 'character-a',
+        modeId: 'face',
+        viewportId: 'main',
+        status: 'applied',
+        sceneRevision: 4,
+        cameraPreset: 'face-closeup',
+        renderPreset: 'face-detail',
+        playback: { state: 'idle' },
+        diagnostics: [],
+      },
+    };
+    fake.emit({ type: 'viewportEvent', requestId: 'preview-12', event });
+
+    await expect(promise).resolves.toEqual(event);
+    expect(onViewportEvent).toHaveBeenCalledWith(event);
+  });
+
+  it('validates character preview state messages', () => {
+    const fake = new FakeWebSocket();
+    const onCharacterPreviewState = vi.fn();
+    const onError = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onCharacterPreviewState,
+      onError,
+    });
+    socket.connect();
+    fake.open();
+
+    const state = {
+      characterId: 'character-a',
+      modeId: 'voice-pack',
+      viewportId: 'main',
+      status: 'applied',
+      sceneRevision: 8,
+      cameraPreset: 'voice-performance',
+      renderPreset: 'voice-lipsync',
+      playback: { state: 'unavailable' },
+      diagnostics: [{ code: 'missing-voice-pack', severity: 'warning' }],
+    };
+    fake.emit({ type: 'characterPreviewState', state });
+    fake.emit({ type: 'characterPreviewState', state: { ...state, modeId: 'profile' } });
+
+    expect(onCharacterPreviewState).toHaveBeenCalledWith(state);
+    expect(onError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it('validates render frame metadata and defaults fields omitted by older engines', () => {
+    const fake = new FakeWebSocket();
+    const onRenderFrameMeta = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onRenderFrameMeta,
+    });
+    socket.connect();
+    fake.open();
+
+    fake.emit({
+      type: 'renderFrameMeta',
+      meta: {
+        streamId: 'stream-main',
+        viewportId: 'viewport-main',
+        frameId: 10,
+        ptsUs: 50_000,
+        durationUs: 16_666,
+        isKeyframe: true,
+        sceneRevision: 40,
+        appliedSeq: 12,
+      },
+    });
+
+    expect(onRenderFrameMeta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frameTimestamp: 50,
+        viewTransform: [1, 0, 0, 1, 0, 0],
+      }),
+    );
   });
 });

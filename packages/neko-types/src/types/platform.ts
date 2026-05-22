@@ -11,6 +11,7 @@
 
 import type { AgentTraceContext } from './agent-trace';
 import type { CreativeDomainMetadata } from './domain-routing';
+import type { ToolPlanningMetadata } from './tool-planning';
 
 /**
  * Chat message format
@@ -68,6 +69,11 @@ export interface ToolDefinition {
    * adapters must not merge this into function.parameters.
    */
   domain?: CreativeDomainMetadata;
+  /**
+   * Serializable planner metadata for safety and target preflight. Provider
+   * adapters must not merge this into function.parameters.
+   */
+  planning?: ToolPlanningMetadata;
   function: {
     name: string;
     description: string;

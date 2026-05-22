@@ -1,0 +1,123 @@
+{
+  "command": {
+    "protocolVersion": 1,
+    "domain": "viewport",
+    "action": "viewport:select",
+    "sceneId": "scene-a",
+    "viewportId": "viewport-main",
+    "seq": 42,
+    "correlationId": "select-42",
+    "timestamp": 1770000000000,
+    "source": "user",
+    "baseRevision": 10,
+    "payload": {
+      "position": [120, 80],
+      "selectionMode": "replace"
+    }
+  },
+  "sceneCommand": {
+    "protocolVersion": 1,
+    "domain": "scene",
+    "action": "scene:puppet:dragBone",
+    "sceneId": "scene-a",
+    "viewportId": "viewport-main",
+    "seq": 43,
+    "correlationId": "drag-bone-43",
+    "timestamp": 1770000000016,
+    "source": "user",
+    "baseRevision": 10,
+    "payload": {
+      "boneId": "bone-head",
+      "delta": [2, -1]
+    }
+  },
+  "ackEvent": {
+    "protocolVersion": 1,
+    "domain": "viewport",
+    "event": "ack",
+    "sceneId": "scene-a",
+    "viewportId": "viewport-main",
+    "ackSeq": 42,
+    "revision": 11,
+    "timestamp": 1770000000032,
+    "status": "ack",
+    "appliedSeq": 42,
+    "payload": {
+      "selectedIds": ["node-head"],
+      "hit": {
+        "id": "node-head",
+        "kind": "bone"
+      }
+    }
+  },
+  "errorEvent": {
+    "protocolVersion": 1,
+    "domain": "scene",
+    "event": "error",
+    "sceneId": "scene-a",
+    "viewportId": "viewport-main",
+    "ackSeq": 43,
+    "revision": 10,
+    "timestamp": 1770000000034,
+    "status": "error",
+    "error": {
+      "code": "revisionConflict",
+      "message": "baseRevision 10 does not match current revision 11",
+      "retryable": true
+    },
+    "payload": {}
+  },
+  "frameMeta": {
+    "protocolVersion": 1,
+    "streamId": "stream-main",
+    "sceneId": "scene-a",
+    "viewportId": "viewport-main",
+    "frameId": 1001,
+    "ptsUs": 16666,
+    "durationUs": 16666,
+    "frameTimestamp": 1770000000048,
+    "revision": 11,
+    "sceneRevision": 11,
+    "appliedSeq": 42,
+    "viewTransform": [1, 0, 0, 1, 0, 0],
+    "diagnostics": {
+      "qualityTier": "high"
+    }
+  },
+  "overlays": [
+    {
+      "id": "overlay-bone-head",
+      "kind": "polyline",
+      "sceneId": "scene-a",
+      "viewportId": "viewport-main",
+      "coordinateSpace": "scene",
+      "revision": 11,
+      "appliedSeq": 42,
+      "zIndex": 20,
+      "authoritative": true,
+      "stalePolicy": "hide",
+      "style": {
+        "stroke": "#2f80ed",
+        "lineWidth": 2
+      },
+      "payload": {
+        "points": [[0, 0], [32, 0]]
+      }
+    }
+  ],
+  "toolbar": [
+    {
+      "id": "tool-select",
+      "kind": "toggle",
+      "label": "Select",
+      "icon": "mouse-pointer",
+      "action": "viewport:select",
+      "group": "tools",
+      "order": 10,
+      "toggled": true,
+      "payload": {
+        "mode": "replace"
+      }
+    }
+  ]
+}

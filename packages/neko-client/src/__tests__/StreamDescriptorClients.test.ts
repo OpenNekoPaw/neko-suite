@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioStreamClient } from '../AudioStreamClient';
 import { createRenderFrameMetaFromDescriptor, H264StreamClient } from '../H264StreamClient';
-import type { AudioStreamDescriptor, RenderStreamDescriptor } from '@neko/shared';
+import type { AudioStreamDescriptor, RenderFrameMeta, RenderStreamDescriptor } from '@neko/shared';
 
 const renderDescriptor: RenderStreamDescriptor = {
   streamId: 'scene-video',
@@ -328,6 +328,7 @@ describe('stream descriptor clients', () => {
       ),
     ).toEqual({
       streamId: 'scene-video',
+      sceneId: 'default',
       viewportId: 'main',
       frameId: 4,
       ptsUs: 33_333,
@@ -335,7 +336,28 @@ describe('stream descriptor clients', () => {
       isKeyframe: true,
       sceneRevision: 7,
       appliedSeq: 0,
+      frameTimestamp: 33.333,
+      viewTransform: [1, 0, 0, 1, 0, 0],
     });
+  });
+
+  it('uses descriptor scene id when present on compositor stream descriptors', () => {
+    const liveDescriptor: RenderStreamDescriptor & { sceneId: string } = {
+      ...renderDescriptor,
+      sceneId: 'live-scene-main',
+    };
+
+    expect(
+      createRenderFrameMetaFromDescriptor(
+        liveDescriptor,
+        {
+          pts: 33_333,
+          duration: 33_333,
+          isKeyframe: true,
+        },
+        4,
+      ).sceneId,
+    ).toBe('live-scene-main');
   });
 
   it('carries active scene stream quality tier into frame diagnostics', () => {
@@ -403,6 +425,114 @@ describe('stream descriptor clients', () => {
     });
     expect(metas[0]?.diagnostics?.decodeTimeMs).toBeTypeOf('number');
     expect(frameMetas[0]).toEqual(metas[0]);
+
+    client.dispose();
+  });
+
+  it('aligns engine sideband render frame metadata with decoded compositor frames', async () => {
+    const metas: RenderFrameMeta[] = [];
+    const frameMetas: RenderFrameMeta[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/live-video',
+      descriptor: {
+        ...renderDescriptor,
+        streamId: 'live-video',
+      },
+      width: 1,
+      height: 1,
+      onFrameMeta: (meta) => metas.push(meta),
+      onFrame: (_frame, meta) => {
+        if (meta) {
+          frameMetas.push(meta);
+        }
+      },
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    socket?.onmessage?.({
+      data: JSON.stringify({
+        type: 'renderFrameMeta',
+        meta: {
+          streamId: 'live-video',
+          viewportId: 'viewport-live-main',
+          frameId: 42,
+          ptsUs: 99_999,
+          durationUs: 33_333,
+          isKeyframe: true,
+          sceneRevision: 13,
+          appliedSeq: 70,
+          sceneId: 'live-scene-main',
+          frameTimestamp: 99.999,
+          viewTransform: [1, 0, 0, 1, 0, 0],
+          projectionJson: '{"kind":"live-compositor"}',
+          diagnostics: {
+            renderPath: 'legacy-cpu',
+            queueDepth: 1,
+          },
+        },
+      }),
+    });
+    socket?.onmessage?.({ data: createH264Packet(99_999, 33_333, true) });
+
+    expect(metas[0]).toMatchObject({
+      streamId: 'live-video',
+      viewportId: 'viewport-live-main',
+      frameId: 42,
+      ptsUs: 99_999,
+      sceneRevision: 13,
+      appliedSeq: 70,
+      sceneId: 'live-scene-main',
+      projectionJson: '{"kind":"live-compositor"}',
+      diagnostics: {
+        renderPath: 'legacy-cpu',
+        queueDepth: 0,
+      },
+    });
+    expect(frameMetas[0]).toEqual(metas[0]);
+
+    client.dispose();
+  });
+
+  it('defaults sideband render metadata fields omitted by older engines', async () => {
+    const metas: RenderFrameMeta[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/live-video',
+      descriptor: {
+        ...renderDescriptor,
+        streamId: 'live-video',
+      },
+      width: 1,
+      height: 1,
+      onFrameMeta: (meta) => metas.push(meta),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+
+    socket?.onmessage?.({
+      data: JSON.stringify({
+        type: 'renderFrameMeta',
+        meta: {
+          streamId: 'live-video',
+          viewportId: 'viewport-live-main',
+          frameId: 43,
+          ptsUs: 100_000,
+          durationUs: 33_333,
+          isKeyframe: true,
+          sceneRevision: 14,
+          appliedSeq: 71,
+        },
+      }),
+    });
+    socket?.onmessage?.({ data: createH264Packet(100_000, 33_333, true) });
+
+    expect(metas[0]).toMatchObject({
+      frameTimestamp: 100,
+      viewTransform: [1, 0, 0, 1, 0, 0],
+    });
 
     client.dispose();
   });

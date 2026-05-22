@@ -95,6 +95,7 @@ export * from './subagent';
 // =============================================================================
 
 // Tool types
+export * from './tool-planning';
 export * from './tool';
 export * from './domain-routing';
 
@@ -206,6 +207,7 @@ export * from './model-agent-api';
 
 // 3D scene authoring and viewport contracts
 export * from './scene';
+export * from './model-ai-preview-scene-modes';
 
 // Audio project types (.nka file format)
 export * from './audioProject';
@@ -216,6 +218,10 @@ export * from './proxyProtocol';
 // Engine-first preview contracts
 export * from './preview';
 export * from './panoramic-preview';
+
+// Unified viewport protocol contracts
+export * from './viewport-protocol';
+export * from './live-compositor';
 
 // Extension API types (inter-extension communication)
 export * from './extension-api';
