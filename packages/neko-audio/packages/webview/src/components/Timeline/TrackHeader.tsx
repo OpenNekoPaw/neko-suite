@@ -89,7 +89,7 @@ export function TrackHeader({
 
   return (
     <div
-      className="flex shrink-0 border-r border-[var(--editor-border)] bg-[var(--track-header-bg)] overflow-hidden"
+      className="neko-track-header flex shrink-0 border-r border-[var(--editor-border)] bg-[var(--track-header-bg)] overflow-hidden"
       style={{ width, minWidth: width, height }}
       onContextMenu={onContextMenu}
     >

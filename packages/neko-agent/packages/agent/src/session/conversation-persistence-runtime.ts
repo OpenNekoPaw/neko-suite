@@ -9,6 +9,7 @@ import { createFileConversationStorage } from './file-conversation-storage';
 export interface ConversationPersistenceRuntimeStorage {
   save(record: ConversationRecord): Promise<void>;
   delete(conversationId: string): Promise<void>;
+  flush?(): Promise<void>;
   dispose?(): void | Promise<void>;
 }
 
@@ -66,12 +67,14 @@ export class ConversationPersistenceRuntime {
     if (plan.kind === 'skip') {
       if (plan.reason === 'empty-conversation') {
         await this.options.storage.delete(conversationId);
+        await this.options.storage.flush?.();
         return { kind: 'deleted', conversationId };
       }
       return { kind: 'skip', conversationId, reason: plan.reason };
     }
 
     await this.options.storage.save(plan.record);
+    await this.options.storage.flush?.();
     return { kind: 'saved', conversationId };
   }
 
@@ -86,7 +89,12 @@ export class ConversationPersistenceRuntime {
     }
 
     try {
-      void this.options.storage.save(plan.record).catch((error: unknown) => {
+      void this.options.storage.save(plan.record).then(
+        () => this.options.storage.flush?.(),
+        (error: unknown) => {
+          this.options.onWarning?.({ code: 'save-failed', conversationId, error });
+        },
+      ).catch((error: unknown) => {
         this.options.onWarning?.({ code: 'save-failed', conversationId, error });
       });
     } catch (error: unknown) {
@@ -98,6 +106,7 @@ export class ConversationPersistenceRuntime {
 
   async deleteConversation(conversationId: string): Promise<ConversationPersistenceRuntimeResult> {
     await this.options.storage.delete(conversationId);
+    await this.options.storage.flush?.();
     return { kind: 'deleted', conversationId };
   }
 
@@ -120,7 +129,12 @@ export class ConversationPersistenceRuntime {
 
   private queueDelete(conversationId: string): void {
     try {
-      void this.options.storage.delete(conversationId).catch((error: unknown) => {
+      void this.options.storage.delete(conversationId).then(
+        () => this.options.storage.flush?.(),
+        (error: unknown) => {
+          this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
+        },
+      ).catch((error: unknown) => {
         this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
       });
     } catch (error: unknown) {

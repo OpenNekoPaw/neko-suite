@@ -298,6 +298,7 @@ export {
 export {
   buildAgentExecutionMetadata,
   buildAgentAssistantMessageFromStream,
+  buildAgentErrorAssistantMessage,
   buildAgentHistoryHydrationPlan,
   buildAgentProjectFileSearchPlan,
   buildAgentTurnConfigurationPlan,
@@ -328,6 +329,7 @@ export {
   type AgentHistoryHydrationPlanInput,
   type AgentStreamPersistenceSnapshot,
   type BuildAgentAssistantMessageInput,
+  type BuildAgentErrorAssistantMessageInput,
   type AgentMessageFileReferenceProcessor,
   type AgentProviderCandidate,
   type AgentProjectFileCandidate,

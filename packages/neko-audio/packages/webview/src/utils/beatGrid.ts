@@ -1,7 +1,9 @@
 import {
   createDefaultTempoMap,
+  barBeatToTicks,
   getTempoMapBpm,
   secondsToTicks,
+  ticksPerBar,
   ticksPerBeat,
   ticksToBarBeat,
   ticksToSeconds,
@@ -36,6 +38,66 @@ export function formatBarBeatPosition(position: BarBeatPosition): string {
 
 export function formatSecondsAsBarBeat(seconds: number, tempoMap: TempoMap): string {
   return formatBarBeatPosition(ticksToBarBeat(secondsToTicks(Math.max(0, seconds), tempoMap), tempoMap));
+}
+
+export function getInitialBarDurationSeconds(tempoMap: TempoMap): number {
+  const [firstSignature] = tempoMap.timeSignatureEvents;
+  const signature = firstSignature ?? { ticks: 0, numerator: 4, denominator: 4 };
+  return ticksToSeconds(ticksPerBar(tempoMap.ppq, signature), tempoMap);
+}
+
+export interface VisibleBarBeatLabelInput {
+  tempoMap: TempoMap;
+  visibleStart: number;
+  visibleEnd: number;
+  scrollLeft: number;
+  pixelsPerSecond: number;
+  minLabelSpacingPx?: number;
+}
+
+export interface VisibleBarBeatLabel {
+  seconds: number;
+  label: string;
+}
+
+export function getVisibleBarBeatLabels({
+  tempoMap,
+  visibleStart,
+  visibleEnd,
+  scrollLeft,
+  pixelsPerSecond,
+  minLabelSpacingPx = 70,
+}: VisibleBarBeatLabelInput): VisibleBarBeatLabel[] {
+  if (visibleEnd < visibleStart || pixelsPerSecond <= 0) {
+    return [];
+  }
+
+  const startTicks = secondsToTicks(Math.max(0, visibleStart), tempoMap);
+  const startPosition = ticksToBarBeat(startTicks, tempoMap);
+  const labels: VisibleBarBeatLabel[] = [];
+  let bar = Math.max(1, startPosition.bar);
+  let lastLabelX = Number.NEGATIVE_INFINITY;
+
+  for (let guard = 0; guard < 4096; guard += 1) {
+    const ticks = barBeatToTicks({ bar, beat: 1, tick: 0 }, tempoMap);
+    const seconds = ticksToSeconds(ticks, tempoMap);
+
+    if (seconds > visibleEnd + 0.001) {
+      break;
+    }
+
+    if (seconds >= visibleStart - 0.001) {
+      const x = seconds * pixelsPerSecond - scrollLeft;
+      if (x - lastLabelX >= minLabelSpacingPx) {
+        labels.push({ seconds, label: `${bar}:1:0` });
+        lastLabelX = x;
+      }
+    }
+
+    bar += 1;
+  }
+
+  return labels;
 }
 
 export function snapSecondsToGrid(

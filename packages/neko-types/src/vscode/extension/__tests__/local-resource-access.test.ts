@@ -63,6 +63,9 @@ vi.mock('vscode', () => ({
       },
     ],
   },
+  extensions: {
+    getExtension: vi.fn(),
+  },
   commands: {
     executeCommand: vi.fn(),
   },
@@ -250,6 +253,7 @@ describe('VSCodeLocalResourceAccessService', () => {
 
   it('creates media library roots from the neko-assets command', async () => {
     const vscode = await import('vscode');
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(undefined);
     vi.mocked(vscode.commands.executeCommand).mockResolvedValue(['/media/a', '/media/b']);
     const provider = createMediaLibraryLocalResourceRootProvider();
 
@@ -260,8 +264,54 @@ describe('VSCodeLocalResourceAccessService', () => {
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('neko.assets.getMediaLibraryRoots');
   });
 
+  it('prefers the neko-assets extension API for media library roots', async () => {
+    const vscode = await import('vscode');
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      isActive: true,
+      exports: { getMediaLibraryRoots: vi.fn(async () => ['/media/api']) },
+      activate: vi.fn(),
+    } as never);
+    const provider = createMediaLibraryLocalResourceRootProvider();
+
+    await expect(provider.getRoots()).resolves.toEqual([
+      expect.objectContaining({ uri: expect.objectContaining({ fsPath: '/media/api' }) }),
+    ]);
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('returns empty media library roots without warning when neko-assets is unavailable', async () => {
+    const vscode = await import('vscode');
+    const logger = { warn: vi.fn() };
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(undefined);
+    vi.mocked(vscode.commands.executeCommand).mockRejectedValue(
+      new Error('command neko.assets.getMediaLibraryRoots not found'),
+    );
+    const provider = createMediaLibraryLocalResourceRootProvider({ logger });
+
+    await expect(provider.getRoots()).resolves.toEqual([]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('logs media library root errors from an installed neko-assets extension', async () => {
+    const vscode = await import('vscode');
+    const logger = { warn: vi.fn() };
+    const error = new Error('settings failed');
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      isActive: true,
+      exports: { getMediaLibraryRoots: vi.fn(async () => Promise.reject(error)) },
+      activate: vi.fn(),
+    } as never);
+    const provider = createMediaLibraryLocalResourceRootProvider({ logger });
+
+    await expect(provider.getRoots()).resolves.toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith('Failed to get neko-assets media library roots', {
+      error,
+    });
+  });
+
   it('creates default roots for extension assets, workspace, media libraries, and caches', async () => {
     const vscode = await import('vscode');
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(undefined);
     vi.mocked(vscode.commands.executeCommand).mockResolvedValue(['/media']);
     const service = createDefaultLocalResourceAccessService({
       extensionUri: vscode.Uri.file('/ext'),

@@ -207,6 +207,7 @@ export interface RunAgentMessageTurnRuntimeInput {
   readonly processAttachments: PrepareAgentMessageDispatchInput['processAttachments'];
   readonly createReferencedMediaProcessor?: PrepareAgentMessageDispatchInput['createReferencedMediaProcessor'];
   readonly persistUserMessage: (conversationId: string, message: Message) => void;
+  readonly persistErrorMessage?: (conversationId: string, message: Message) => void;
   readonly executeMediaTurn?: (input: AgentMessageTurnMediaExecutionInput) => Promise<void>;
   readonly executeAgentTurn?: (input: AgentMessageTurnAgentExecutionInput) => Promise<void>;
   readonly postMessage: (message: AgentMessageTurnRuntimeMessage) => void;
@@ -314,6 +315,7 @@ export interface AgentStreamPersistenceSnapshot {
   readonly accumulatedResponse: string;
   readonly accumulatedThinking: string;
   readonly hasError: boolean;
+  readonly errorMessage?: string;
   readonly collectedToolCalls: readonly {
     readonly id: string;
     readonly name: string;
@@ -327,6 +329,12 @@ export interface BuildAgentAssistantMessageInput {
   readonly id: string;
   readonly timestamp: number;
   readonly stream: AgentStreamPersistenceSnapshot;
+}
+
+export interface BuildAgentErrorAssistantMessageInput {
+  readonly id: string;
+  readonly timestamp: number;
+  readonly message?: string;
 }
 
 export interface AgentTurnContextPatchInput {
@@ -710,10 +718,19 @@ export async function runAgentMessageTurnRuntime(
     return { status: 'agent-dispatched' };
   }
 
+  const fallbackMessage = getAgentTurnFallbackMessage('no-provider-configured');
+  input.persistErrorMessage?.(
+    conversationId,
+    buildAgentErrorAssistantMessage({
+      id: input.generateMessageId(),
+      timestamp: input.now?.() ?? Date.now(),
+      message: fallbackMessage,
+    }),
+  );
   input.postMessage(
     buildErrorMessage({
       conversationId,
-      message: getAgentTurnFallbackMessage('no-provider-configured'),
+      message: fallbackMessage,
     }),
   );
   return { status: 'fallback', reason: 'no-agent-runtime' };
@@ -960,18 +977,45 @@ export function buildAgentAssistantMessageFromStream(
   input: BuildAgentAssistantMessageInput,
 ): Message | null {
   const stream = input.stream;
-  if (stream.hasError || !shouldPersistAgentAssistantStream(stream)) {
+  if (!shouldPersistAgentAssistantStream(stream)) {
     return null;
   }
 
   return {
     id: input.id,
     role: 'assistant',
-    content: stream.accumulatedResponse,
+    content: buildAgentAssistantStreamContent(stream),
     timestamp: input.timestamp,
     thinking: stream.accumulatedThinking || undefined,
     toolCalls: stream.collectedToolCalls.length > 0 ? [...stream.collectedToolCalls] : undefined,
     contentBlocks: stream.contentBlocks.length > 0 ? [...stream.contentBlocks] : undefined,
+    ...(stream.hasError ? { isError: true } : {}),
+  };
+}
+
+function buildAgentAssistantStreamContent(stream: AgentStreamPersistenceSnapshot): string {
+  if (!stream.errorMessage) {
+    return stream.accumulatedResponse;
+  }
+
+  if (!stream.accumulatedResponse) {
+    return stream.errorMessage;
+  }
+
+  return `${stream.accumulatedResponse.trimEnd()}\n\n${stream.errorMessage}`;
+}
+
+export function buildAgentErrorAssistantMessage(
+  input: BuildAgentErrorAssistantMessageInput,
+): Message {
+  const content =
+    input.message && input.message.trim().length > 0 ? input.message : 'An error occurred';
+  return {
+    id: input.id,
+    role: 'assistant',
+    content,
+    timestamp: input.timestamp,
+    isError: true,
   };
 }
 
@@ -979,6 +1023,7 @@ export function shouldPersistAgentAssistantStream(stream: AgentStreamPersistence
   return Boolean(
     stream.accumulatedResponse ||
     stream.accumulatedThinking ||
+    (stream.hasError && stream.errorMessage) ||
     stream.collectedToolCalls.length > 0,
   );
 }

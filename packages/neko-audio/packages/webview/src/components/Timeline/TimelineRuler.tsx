@@ -9,12 +9,11 @@ import { useEffect, useMemo, useState, type RefObject } from 'react';
 import { TimelineRuler as SharedRuler } from '@neko/shared/components';
 import { RULER_HEIGHT } from '../../constants';
 import type { TempoMap } from '@neko/shared';
-import { formatSecondsAsBarBeat } from '../../utils/beatGrid';
+import { getVisibleBarBeatLabels } from '../../utils/beatGrid';
 
 interface TimelineRulerProps {
   totalDuration: number;
   zoomLevel: number;
-  timelineWidth: number;
   onSeek: (time: number) => void;
   /** The scrollable tracks container — ruler mirrors its scrollLeft via redraw. */
   scrollRef?: RefObject<HTMLDivElement>;
@@ -24,7 +23,6 @@ interface TimelineRulerProps {
 export function TimelineRuler({
   totalDuration,
   zoomLevel,
-  timelineWidth: _timelineWidth,
   onSeek,
   scrollRef,
   tempoMap,
@@ -43,16 +41,14 @@ export function TimelineRuler({
       totalDuration,
       (scrollLeft + viewportWidth) / pixelsPerSecond,
     );
-    const firstIndex = Math.max(0, Math.floor(visibleStart / labelInterval));
-    const result: Array<{ seconds: number; label: string }> = [];
-    for (let index = firstIndex; ; index += 1) {
-      const seconds = index * labelInterval;
-      if (seconds > visibleEnd + labelInterval) {
-        break;
-      }
-      result.push({ seconds, label: formatSecondsAsBarBeat(seconds, tempoMap) });
-    }
-    return result;
+    return getVisibleBarBeatLabels({
+      tempoMap,
+      visibleStart,
+      visibleEnd,
+      scrollLeft,
+      pixelsPerSecond,
+      minLabelSpacingPx: Math.max(70, labelInterval * pixelsPerSecond),
+    });
   }, [labelInterval, pixelsPerSecond, scrollLeft, tempoMap, totalDuration, viewportWidth]);
 
   useEffect(() => {
@@ -80,6 +76,7 @@ export function TimelineRuler({
         onSeek={onSeek}
         height={RULER_HEIGHT}
         scrollRef={scrollRef}
+        showLabels={false}
       />
       {labels.length > 0 && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden">

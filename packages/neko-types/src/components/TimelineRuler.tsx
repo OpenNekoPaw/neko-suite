@@ -26,6 +26,7 @@ export interface TimelineRulerProps {
    */
   scrollRef?: React.RefObject<HTMLDivElement | null>;
   className?: string;
+  showLabels?: boolean;
 }
 
 // ── Tick interval calculation ─────────────────────────────────────────────────
@@ -69,6 +70,7 @@ export function TimelineRuler({
   height = 24,
   scrollRef,
   className,
+  showLabels = true,
 }: TimelineRulerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -149,13 +151,13 @@ export function TimelineRuler({
       ctx.globalAlpha = isMajor ? 1 : isMinor ? 0.55 : 0.3;
       ctx.fillRect(x, h - tickH - 1, 1, tickH);
 
-      if (isMajor) {
+      if (isMajor && showLabels) {
         ctx.globalAlpha = 0.75;
         ctx.fillText(formatRulerTime(t), x + 3, 3);
       }
     }
     ctx.globalAlpha = 1;
-  }, [duration, pixelsPerSecond, height, scrollRef]);
+  }, [duration, pixelsPerSecond, height, scrollRef, showLabels]);
 
   // Redraw when props change
   useEffect(() => {

@@ -27,10 +27,10 @@ describe('creative entity asset composition contracts', () => {
   it('declares target-aware fallback chains for all resolver targets', () => {
     expect(DEFAULT_REPRESENTATION_FALLBACKS).toEqual({
       story: ['reference', 'portrait'],
-      canvas: ['portrait', 'reference', 'live2d', 'live3d'],
-      agent: ['reference', 'portrait', 'live2d', 'live3d'],
-      live: ['live3d', 'live2d'],
-      cut: ['video', 'live2d', 'live3d', 'portrait'],
+      canvas: ['portrait', 'reference', 'puppet-bone', 'live2d', 'live3d'],
+      agent: ['reference', 'portrait', 'puppet-bone', 'live2d', 'live3d'],
+      live: ['live3d', 'puppet-bone', 'live2d'],
+      cut: ['video', 'puppet-bone', 'live2d', 'live3d', 'portrait'],
     });
   });
 
@@ -58,10 +58,12 @@ describe('creative entity asset composition contracts', () => {
     expect(isCreativeEntityKind('character')).toBe(true);
     expect(isCreativeEntityKind('vehicle')).toBe(false);
     expect(isRepresentationKind('live2d')).toBe(true);
+    expect(isRepresentationKind('puppet-bone')).toBe(true);
     expect(isRepresentationKind('avatar')).toBe(false);
     expect(isAssetRefScheme('market')).toBe(true);
     expect(isAssetRefScheme('file')).toBe(false);
     expect(isEntityAssetBindingRole('portrait')).toBe(true);
+    expect(isEntityAssetBindingRole('puppet-bone')).toBe(true);
     expect(isEntityAssetBindingRole('video')).toBe(false);
   });
 
@@ -198,7 +200,7 @@ describe('creative entity asset composition contracts', () => {
             entityId: 'char_linxia',
             entityKind: 'character',
             assetRef: 'project://assets/linxia',
-            role: 'portrait',
+            role: 'puppet-bone',
             status: 'confirmed',
             source: 'user',
             updatedAt: '2026-05-10T00:00:00.000Z',

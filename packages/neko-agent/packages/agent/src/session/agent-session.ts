@@ -1175,13 +1175,7 @@ export class AgentSession implements IAgentSession {
 
       // Write state snapshot and flush journal
       if (this._journalWriter) {
-        await this._journalWriter.appendEvent(++this._journalSeq, doneEvent);
-        await this._journalWriter.appendSnapshot(++this._journalSeq, {
-          historyLength: this._history.length,
-          executionMode: this._executionMode,
-          versionLogSize: this._versionLog.size,
-        });
-        await this._journalWriter.flush();
+        await this._persistTerminalJournalEvent(doneEvent);
       }
     } catch (error) {
       runCompletionStatus = 'failed';
@@ -1198,10 +1192,12 @@ export class AgentSession implements IAgentSession {
           iterations: iteration,
         }),
       );
-      yield {
+      const errorEvent: AgentEvent = {
         type: 'error',
         error: normalizedError,
       };
+      yield errorEvent;
+      await this._persistTerminalJournalEvent(errorEvent);
     } finally {
       this._closeActiveRun(runCompletionStatus, runCompletionError);
       this._currentTurnPlanningContext = null;
@@ -1609,6 +1605,27 @@ export class AgentSession implements IAgentSession {
     error?: IdcRun['error'],
   ): void {
     this._idcRunLifecycle.closeActiveRun(status, error);
+  }
+
+  private async _persistTerminalJournalEvent(event: AgentEvent): Promise<void> {
+    if (!this._journalWriter) {
+      return;
+    }
+
+    try {
+      await this._journalWriter.appendEvent(++this._journalSeq, event);
+      await this._journalWriter.appendSnapshot(++this._journalSeq, {
+        historyLength: this._history.length,
+        executionMode: this._executionMode,
+        versionLogSize: this._versionLog.size,
+      });
+      await this._journalWriter.flush();
+    } catch (error) {
+      logger.warn('Failed to persist terminal session journal event', {
+        eventType: event.type,
+        error,
+      });
+    }
   }
 
   private _installRuntimeStatePersistence(): void {

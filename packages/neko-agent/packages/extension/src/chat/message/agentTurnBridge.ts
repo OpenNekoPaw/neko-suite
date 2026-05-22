@@ -152,6 +152,9 @@ export class AgentTurnBridge {
             void input.webview.postMessage(message);
           },
           onPhaseChange: this.deps.onPhaseChange,
+          onErrorMessage: (conversationId, message) => {
+            this.deps.conversations.addMessageToConversation(conversationId, message);
+          },
           generateMessageId: this.deps.generateMessageId,
           now: () => Date.now(),
         },

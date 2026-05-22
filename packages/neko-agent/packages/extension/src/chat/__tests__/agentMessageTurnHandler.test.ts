@@ -531,7 +531,8 @@ describe('AgentMessageTurnHandler', () => {
   describe('handleUserMessage() — fallback when no agentManager', () => {
     it('posts an error message when agentManager is undefined', async () => {
       const webview = createMockWebview();
-      const handler = buildHandler({ agentManager: undefined });
+      const conversations = createMockConversations();
+      const handler = buildHandler({ agentManager: undefined, conversations });
 
       await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
 
@@ -541,6 +542,10 @@ describe('AgentMessageTurnHandler', () => {
       }>;
       expect(calls).toContainEqual(
         expect.objectContaining({ type: 'error', conversationId: 'conv-1' }),
+      );
+      expect(conversations.addMessageToConversation).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({ role: 'assistant', isError: true }),
       );
     });
 
@@ -561,8 +566,9 @@ describe('AgentMessageTurnHandler', () => {
   describe('handleUserMessage() — fallback when no configured provider', () => {
     it('posts an error message when provider is not configured', async () => {
       const webview = createMockWebview();
+      const conversations = createMockConversations();
       // providers returns undefined (not configured)
-      const handler = buildHandler({ providers: createMockProviders(false) });
+      const handler = buildHandler({ providers: createMockProviders(false), conversations });
 
       await handler.handleUserMessage(webview as any, createMessageRequest('hello'));
 
@@ -572,6 +578,10 @@ describe('AgentMessageTurnHandler', () => {
       }>;
       expect(calls).toContainEqual(
         expect.objectContaining({ type: 'error', conversationId: 'conv-1' }),
+      );
+      expect(conversations.addMessageToConversation).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({ role: 'assistant', isError: true }),
       );
     });
   });

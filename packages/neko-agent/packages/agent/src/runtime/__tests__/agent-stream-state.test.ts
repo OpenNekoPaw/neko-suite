@@ -93,6 +93,25 @@ describe('agent stream state reducer', () => {
     });
   });
 
+  it('preserves ordinary text block spacing when finalizing', () => {
+    const state = createAgentStreamProjectionState();
+
+    applyAgentStreamEventToState(state, { type: 'text', content: 'First.' }, { now: () => 1 });
+    applyAgentStreamEventToState(
+      state,
+      {
+        type: 'tool_call',
+        toolCall: { id: 'tool-1', name: 'read_file', arguments: {} },
+      },
+      { now: () => 2 },
+    );
+    applyAgentStreamEventToState(state, { type: 'text', content: ' Second.' }, { now: () => 3 });
+
+    finalizeAgentStreamProjectionState(state);
+
+    expect(state.accumulatedResponse).toBe('First. Second.');
+  });
+
   it('finalizes fenced composite content into standalone content blocks', () => {
     const state = createAgentStreamProjectionState();
 
@@ -248,6 +267,7 @@ describe('agent stream state reducer', () => {
       { phaseChange: { phase: 'idle', toolName: undefined } },
     );
     expect(state.hasError).toBe(true);
+    expect(state.errorMessage).toBe('bad');
   });
 
   it('projects agent events to webview protocol messages', () => {

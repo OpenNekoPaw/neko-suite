@@ -110,6 +110,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       accumulatedResponse: streamState.accumulatedResponse,
       accumulatedThinking: streamState.accumulatedThinking,
       hasError: streamState.hasError,
+      ...(streamState.errorMessage ? { errorMessage: streamState.errorMessage } : {}),
       collectedToolCalls: streamState.collectedToolCalls,
       contentBlocks: streamState.contentBlocks,
     };

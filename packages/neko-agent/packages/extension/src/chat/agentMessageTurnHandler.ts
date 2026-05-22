@@ -103,6 +103,9 @@ export class AgentMessageTurnHandler {
       mediaDeliveryHost: this._mediaDeliveryHost,
       dashboardWorkItems: this._dashboardWorkItems,
       localResourceAccess: this._localResourceAccess,
+      conversations: this._conversations,
+      generateMessageId: () => createAgentMessageId(),
+      now: () => Date.now(),
     });
 
     this._streamProcessor = new AgentStreamProcessor({
@@ -188,6 +191,9 @@ export class AgentMessageTurnHandler {
         logger.warn(`Failed to preprocess media: ${filePath}`, error);
       },
       persistUserMessage: (conversationId, message) => {
+        this._conversations.addMessageToConversation(conversationId, message);
+      },
+      persistErrorMessage: (conversationId, message) => {
         this._conversations.addMessageToConversation(conversationId, message);
       },
       postMessage: (message) => {

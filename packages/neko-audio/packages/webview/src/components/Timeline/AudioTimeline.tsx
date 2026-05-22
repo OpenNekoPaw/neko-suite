@@ -5,15 +5,17 @@
  * Left column: track headers. Right column: scrollable element lanes.
  */
 
-import { useRef, useCallback, useMemo, useEffect } from 'react';
+import { useRef, useCallback, useMemo, useEffect, useState, type CSSProperties } from 'react';
 import { useAudioProjectStore } from '../../stores/audioProjectStore';
 import { useAudioStore } from '../../stores/audioStore';
 import { TimelineRuler } from './TimelineRuler';
 import { TrackLane } from './TrackLane';
 import { PIXELS_PER_SECOND, TRACK_HEIGHT, RULER_HEIGHT, TRACK_LABEL_WIDTH } from '../../constants';
 import { getTotalDuration } from '@neko/shared';
-import { t } from '../../i18n';
-import { getProjectTempoMap } from '../../utils/beatGrid';
+import { getInitialBarDurationSeconds, getProjectTempoMap } from '../../utils/beatGrid';
+import { calculateTimelineLayout } from './timelineLayout';
+
+const EMPTY_TRACK_ROW_COUNT = 6;
 
 export function AudioTimeline() {
   const tracks = useAudioProjectStore((s) => s.audioProjectData?.tracks ?? []);
@@ -26,18 +28,55 @@ export function AudioTimeline() {
 
   const tracksRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
 
-  const totalDuration = useMemo(() => {
-    return Math.max(getTotalDuration(tracks), 30);
+  const projectDuration = useMemo(() => {
+    return getTotalDuration(tracks);
   }, [tracks]);
 
-  const timelineWidth = Math.max((totalDuration + 10) * PIXELS_PER_SECOND * zoom, 800);
+  const timelineLayout = useMemo(
+    () =>
+      calculateTimelineLayout({
+        trackCount: tracks.length,
+        contentDuration: projectDuration,
+        zoomLevel: zoom,
+        viewportWidth,
+        labelWidth: TRACK_LABEL_WIDTH,
+        pixelsPerSecond: PIXELS_PER_SECOND,
+      }),
+    [projectDuration, tracks.length, viewportWidth, zoom],
+  );
+  const totalDuration = timelineLayout.rulerDuration;
+  const timelineWidth = timelineLayout.timelineWidth;
+  const timelineGridStyle = useMemo(
+    () =>
+      ({
+        '--neko-timeline-grid-width': `${Math.max(
+          24,
+          getInitialBarDurationSeconds(tempoMap) * PIXELS_PER_SECOND * zoom,
+        )}px`,
+      }) as CSSProperties,
+    [tempoMap, zoom],
+  );
 
   const handleSeek = useCallback((time: number) => {
     useAudioStore.getState().setCurrentTime(time);
   }, []);
 
   const playheadLeft = currentTime * PIXELS_PER_SECOND * zoom;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const update = () => {
+      setViewportWidth(el.clientWidth);
+    };
+    update();
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(el);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   // Ctrl+Wheel zoom
   useEffect(() => {
@@ -114,7 +153,6 @@ export function AudioTimeline() {
           <TimelineRuler
             totalDuration={totalDuration}
             zoomLevel={zoom}
-            timelineWidth={timelineWidth}
             onSeek={handleSeek}
             scrollRef={tracksRef}
             tempoMap={tempoMap}
@@ -134,15 +172,39 @@ export function AudioTimeline() {
               labelWidth={TRACK_LABEL_WIDTH}
               timelineWidth={timelineWidth}
               waveforms={waveforms}
+              gridStyle={timelineGridStyle}
             />
           ))}
 
           {tracks.length === 0 && (
-            <div
-              className="neko-timeline-guides flex items-center justify-center text-[13px] text-[var(--activity-inactive)]"
-              style={{ height: TRACK_HEIGHT * 6, width: '100%' }}
-            >
-              {t('audio.timeline.empty')}
+            <div className="flex flex-col" aria-hidden="true">
+              {Array.from({ length: EMPTY_TRACK_ROW_COUNT }, (_, index) => (
+                <div
+                  key={index}
+                  className="flex border-b border-[var(--editor-border)]"
+                  style={{ height: TRACK_HEIGHT }}
+                >
+                  <div
+                    className="neko-empty-track-header"
+                    style={{ width: TRACK_LABEL_WIDTH, minWidth: TRACK_LABEL_WIDTH }}
+                  >
+                    <div className="neko-empty-track-color" />
+                    <div className="neko-empty-track-body">
+                      <div className="neko-empty-track-name" />
+                      <div className="neko-empty-track-controls">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                      <div className="neko-empty-track-fader" />
+                    </div>
+                  </div>
+                  <div
+                    className="neko-empty-track-lane neko-timeline-bar-grid"
+                    style={{ width: timelineWidth, ...timelineGridStyle }}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </div>

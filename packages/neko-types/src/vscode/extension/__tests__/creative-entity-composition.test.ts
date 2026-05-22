@@ -444,7 +444,7 @@ describe('creative entity composition extension utilities', () => {
     await expect(resolver.resolve({ entityId: 'char_linxia', target: 'live' })).resolves.toEqual({
       status: 'missing-representation',
       entityId: 'char_linxia',
-      missingKinds: ['live3d', 'live2d'],
+      missingKinds: ['live3d', 'puppet-bone', 'live2d'],
       suggestedActions: ['generate', 'import', 'bind-existing', 'dismiss'],
     });
   });

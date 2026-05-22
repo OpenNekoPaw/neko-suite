@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isNkEntityArtifact } from '../asset-export';
+import { isNkEntityArtifact, migrateNkEntityArtifactToV2 } from '../asset-export';
+import { nativePuppetEntityFixture } from '../__fixtures__/native-puppet-contract';
 
 describe('asset export contracts', () => {
   it('validates .nkentity artifacts with bound character assets', () => {
@@ -30,6 +31,35 @@ describe('asset export contracts', () => {
         exportedAt: '2026-05-20T00:00:00.000Z',
       }),
     ).toBe(true);
+  });
+
+  it('validates .nkentity v2 native puppet bindings', () => {
+    const roundTripped = JSON.parse(JSON.stringify(nativePuppetEntityFixture)) as unknown;
+
+    expect(isNkEntityArtifact(roundTripped)).toBe(true);
+    expect(roundTripped).toEqual(nativePuppetEntityFixture);
+  });
+
+  it('migrates .nkentity v1 artifacts to v2 without changing bindings', () => {
+    const legacy = {
+      format: 'nkentity',
+      version: 1,
+      entity: { kind: 'character', name: 'Sakura' },
+      bindings: [
+        {
+          role: 'live2d',
+          ref: './sakura.zip',
+          mediaKind: 'puppet-model',
+          dimension: 'model',
+        },
+      ],
+      exportedAt: '2026-05-20T00:00:00.000Z',
+    } as const;
+
+    expect(migrateNkEntityArtifactToV2(legacy)).toEqual({
+      ...legacy,
+      version: 2,
+    });
   });
 
   it('rejects invalid media kinds in .nkentity bindings', () => {

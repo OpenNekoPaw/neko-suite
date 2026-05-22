@@ -20,6 +20,7 @@ import type { IRuntimeTaskManager } from '../task';
 import type { IOperationToolAdapterRegistry } from '@neko/shared';
 import {
   buildAgentAssistantMessageFromStream,
+  buildAgentErrorAssistantMessage,
   buildAgentHistoryHydrationPlan,
   buildAgentTurnConfigurationPlan,
   buildAgentTurnContextPatch,
@@ -236,6 +237,7 @@ export interface RunAgentTurnForWebviewRuntimeInput<
     TProvider,
     TRunner
   >['onPhaseChange'];
+  readonly onErrorMessage?: (message: Message) => void;
   readonly onExecutionError?: (error: unknown) => void;
 }
 
@@ -265,6 +267,20 @@ export async function runAgentTurnForWebviewRuntime<
   const postMessage = (message: AgentTurnForWebviewRuntimeMessage): void => {
     void input.postMessage(message);
   };
+  const publishErrorMessage = (message: string): void => {
+    const errorMessage = buildAgentErrorAssistantMessage({
+      id: input.generateMessageId(),
+      timestamp: now(),
+      message,
+    });
+    input.onErrorMessage?.(errorMessage);
+    postMessage(
+      buildErrorMessage({
+        conversationId: input.conversationId,
+        message,
+      }),
+    );
+  };
   const postPhase = (event: {
     readonly conversationId: string;
     readonly phase: AgentPhase;
@@ -276,12 +292,7 @@ export async function runAgentTurnForWebviewRuntime<
   };
 
   if (!input.agentManager) {
-    postMessage(
-      buildErrorMessage({
-        conversationId: input.conversationId,
-        message: getAgentTurnFallbackMessage('no-provider-configured'),
-      }),
-    );
+    publishErrorMessage(getAgentTurnFallbackMessage('no-provider-configured'));
     return { status: 'fallback', reason: 'no-provider-configured' };
   }
 
@@ -297,12 +308,7 @@ export async function runAgentTurnForWebviewRuntime<
     });
 
     if (result.status === 'fallback') {
-      postMessage(
-        buildErrorMessage({
-          conversationId: input.conversationId,
-          message: getAgentTurnFallbackMessage(result.reason),
-        }),
-      );
+      publishErrorMessage(getAgentTurnFallbackMessage(result.reason));
     }
 
     return result;
@@ -313,12 +319,7 @@ export async function runAgentTurnForWebviewRuntime<
       phase: 'idle',
       timestamp: now(),
     });
-    postMessage(
-      buildErrorMessage({
-        conversationId: input.conversationId,
-        message: error instanceof Error ? error.message : 'Failed to generate response',
-      }),
-    );
+    publishErrorMessage(error instanceof Error ? error.message : 'Failed to generate response');
     return { status: 'failed', error };
   }
 }
@@ -369,7 +370,7 @@ export async function executeAgentTurn<
     getProvider: (providerId) => input.providerSource.getProvider(providerId),
     getDefaultProvider: () => input.providerSource.getDefaultProvider(),
   });
-  if (!providerSelection.ok) {
+  if (providerSelection.ok === false) {
     logger.warn('neko.agent.turn.execute.failed', {
       conversationId: input.conversationId,
       durationMs: Date.now() - startTime,

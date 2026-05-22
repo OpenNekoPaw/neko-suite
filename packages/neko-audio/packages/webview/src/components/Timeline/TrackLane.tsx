@@ -2,7 +2,7 @@
  * TrackLane — Single track row: header (left) + element lane (right).
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type CSSProperties } from 'react';
 import { shallow } from 'zustand/shallow';
 import { useAudioProjectStore } from '../../stores/audioProjectStore';
 import { AudioClip } from './AudioClip';
@@ -21,6 +21,7 @@ interface TrackLaneProps {
   labelWidth: number;
   timelineWidth: number;
   waveforms: Record<string, WaveformData>;
+  gridStyle?: CSSProperties;
 }
 
 export function TrackLane({
@@ -30,6 +31,7 @@ export function TrackLane({
   labelWidth,
   timelineWidth,
   waveforms,
+  gridStyle,
 }: TrackLaneProps) {
   const toggleTrackField = useAudioProjectStore((s) => s.toggleTrackField);
   const removeTrack = useAudioProjectStore((s) => s.removeTrack);
@@ -129,7 +131,10 @@ export function TrackLane({
         />
 
         {/* Element lane */}
-        <div className="flex-1 bg-[var(--timeline-bg)]" style={{ width: timelineWidth }}>
+        <div
+          className="neko-timeline-bar-grid flex-1 bg-[var(--timeline-bg)]"
+          style={{ width: timelineWidth, ...gridStyle }}
+        >
           <div className="relative" style={{ height: trackHeight }}>
             {track.elements.map((element) => {
               const left = element.startTime * pps;

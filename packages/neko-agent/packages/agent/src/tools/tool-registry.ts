@@ -269,6 +269,15 @@ export class ToolRegistry implements IToolRegistry {
     return tools.map((tool) => ({
       type: 'function' as const,
       ...(tool.domain ? { domain: tool.domain } : {}),
+      ...(tool.safetyKind || tool.targetRequirements || tool.queryBeforeMutate
+        ? {
+            planning: {
+              ...(tool.safetyKind ? { safetyKind: tool.safetyKind } : {}),
+              ...(tool.targetRequirements ? { targetRequirements: tool.targetRequirements } : {}),
+              ...(tool.queryBeforeMutate ? { queryBeforeMutate: tool.queryBeforeMutate } : {}),
+            },
+          }
+        : {}),
       function: {
         name: tool.name,
         description: tool.description,

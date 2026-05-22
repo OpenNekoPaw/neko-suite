@@ -1,4 +1,8 @@
 import {
+  buildAgentErrorAssistantMessage,
+  type BuildAgentErrorAssistantMessageInput,
+} from './message-runtime';
+import {
   buildErrorMessage,
   buildMediaTaskCreatedMessage,
   buildMediaTaskProgressMessage,
@@ -8,6 +12,7 @@ import {
   type MediaModelCategory,
   type MediaTaskCreatedMessage,
   type MediaTaskProgressMessage,
+  type Message,
   type ModelRef,
   type AgentWorkflowIdentity,
 } from '@neko-agent/types';
@@ -75,6 +80,10 @@ export interface RunAgentMediaTurnForWebviewInput<
     input: AgentMediaTurnExecutionInput<TTaskView, TSourceTask>,
   ) => Promise<unknown>;
   readonly postMessage: (message: AgentMediaTurnRuntimeMessage) => void;
+  readonly persistErrorMessage?: (message: Message) => void;
+  readonly buildErrorMessageInput?: (
+    message: string,
+  ) => BuildAgentErrorAssistantMessageInput;
   readonly unavailableMessage?: string;
   readonly failureMessage?: string;
   readonly onExecutionError?: (error: unknown) => void;
@@ -96,14 +105,24 @@ export async function runAgentMediaTurnForWebview<
 >(
   input: RunAgentMediaTurnForWebviewInput<TTaskView, TSourceTask>,
 ): Promise<RunAgentMediaTurnForWebviewResult> {
-  const executeMediaTurn = input.executeMediaTurn;
-  if (!executeMediaTurn) {
+  const publishErrorMessage = (message: string): void => {
+    const errorMessageInput =
+      input.buildErrorMessageInput?.(message) ?? {
+        id: `media-error-${Date.now()}`,
+        timestamp: Date.now(),
+        message,
+      };
+    input.persistErrorMessage?.(buildAgentErrorAssistantMessage(errorMessageInput));
     input.postMessage(
       buildErrorMessage({
         conversationId: input.conversationId,
-        message: input.unavailableMessage ?? 'Media generation is unavailable',
+        message,
       }),
     );
+  };
+  const executeMediaTurn = input.executeMediaTurn;
+  if (!executeMediaTurn) {
+    publishErrorMessage(input.unavailableMessage ?? 'Media generation is unavailable');
     return { status: 'unavailable' };
   }
 
@@ -159,14 +178,8 @@ export async function runAgentMediaTurnForWebview<
     return { status: 'submitted' };
   } catch (error) {
     input.onExecutionError?.(error);
-    input.postMessage(
-      buildErrorMessage({
-        conversationId: input.conversationId,
-        message:
-          error instanceof Error
-            ? error.message
-            : (input.failureMessage ?? 'Media generation failed'),
-      }),
+    publishErrorMessage(
+      error instanceof Error ? error.message : (input.failureMessage ?? 'Media generation failed'),
     );
     return { status: 'failed', error };
   }

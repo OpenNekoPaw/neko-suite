@@ -201,6 +201,7 @@ export class ConversationBridge {
   addMessageToConversation(conversationId: string, message: Message): void {
     // Use incremental addMessage instead of full array copy via updateMessages
     this._conversationManager.addMessage(conversationId, message);
+    this._conversationManager.flush();
     // Queue shared resume-layer persistence (best-effort, non-blocking).
     this._queueConversationPersistence(conversationId);
   }
@@ -210,6 +211,7 @@ export class ConversationBridge {
    */
   updateMessagesForConversation(conversationId: string, messages: Message[]): void {
     this._conversationManager.updateMessages(conversationId, messages);
+    this._conversationManager.flush();
     this._queueConversationPersistence(conversationId);
   }
 

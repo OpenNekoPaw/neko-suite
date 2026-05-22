@@ -110,6 +110,7 @@ export interface AgentTurnHostAdapters<
     readonly toolName?: string;
     readonly timestamp: number;
   }) => void;
+  readonly onErrorMessage?: (conversationId: string, message: Message) => void;
   readonly generateMessageId: () => string;
   readonly now?: () => number;
 }
@@ -219,6 +220,9 @@ export function buildAgentTurnForWebviewRuntimeInput<
     ensureSubAgentEventSubscription: input.host.ensureSubAgentEventSubscription,
     postMessage: input.host.postMessage,
     onPhaseChange: input.host.onPhaseChange,
+    onErrorMessage: (errorMessage) => {
+      input.host.onErrorMessage?.(input.conversationId, errorMessage);
+    },
     generateMessageId: input.host.generateMessageId,
     now: input.host.now,
     ...(input.runtime.taskManager ? { taskManager: input.runtime.taskManager } : {}),

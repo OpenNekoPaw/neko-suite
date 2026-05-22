@@ -41,6 +41,35 @@ describe('conversation-record-projector', () => {
     ]);
   });
 
+  it('excludes persisted error messages from agent history', () => {
+    expect(
+      projectConversationMessagesToAgentHistory([
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: 'Try again',
+          timestamp: 1,
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: 'Provider timed out',
+          timestamp: 2,
+          isError: true,
+        },
+        {
+          id: 'msg-3',
+          role: 'assistant',
+          content: 'Recovered.',
+          timestamp: 3,
+        },
+      ]),
+    ).toEqual([
+      { role: 'user', content: 'Try again' },
+      { role: 'assistant', content: 'Recovered.' },
+    ]);
+  });
+
   it('builds a shared resume-layer save plan', () => {
     const plan = buildConversationRecordSavePlan({
       workDir: '/repo',
@@ -92,6 +121,47 @@ describe('conversation-record-projector', () => {
             content: '[Tool Result for tool-1]: Success\n{\n  "ok": true\n}',
           },
         ],
+      },
+    });
+  });
+
+  it('keeps displayed error messages out of the shared resume-layer save plan', () => {
+    const plan = buildConversationRecordSavePlan({
+      workDir: '/repo',
+      conversation: {
+        id: 'conv-1',
+        title: 'Task',
+        createdAt: 100,
+        updatedAt: 200,
+        messages: [
+          {
+            id: 'msg-1',
+            role: 'user',
+            content: 'Run this',
+            timestamp: 1,
+          },
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            content: 'Provider timed out',
+            timestamp: 2,
+            isError: true,
+          },
+        ],
+      },
+    });
+
+    expect(plan).toEqual({
+      kind: 'save',
+      record: {
+        id: 'conv-1',
+        version: 2,
+        title: 'Task',
+        workDir: '/repo',
+        createdAt: 100,
+        updatedAt: 200,
+        source: 'extension',
+        messages: [{ role: 'user', content: 'Run this' }],
       },
     });
   });

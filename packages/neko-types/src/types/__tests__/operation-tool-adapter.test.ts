@@ -14,6 +14,11 @@ import {
   isOperationToolPlanTraceable,
   operationToolDomainMetadata,
 } from '../operation-tool-adapter';
+import {
+  CREATIVE_DOMAIN_SERVICE_PORT_IDS,
+  PUPPET_RENDER_SERVICE_PORT_ID,
+  SCENE_RENDER_SERVICE_PORT_ID,
+} from '../domain-routing';
 
 const operationTool: OperationTool = {
   kind: 'operation',
@@ -140,14 +145,16 @@ describe('operation tool adapter contracts', () => {
       id: 'scene',
       source: 'operation-tool',
       operationDomain: 'model',
-      servicePortId: 'scene-render',
+      servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
     });
     expect(operationToolDomainMetadata('puppet')).toEqual({
       id: 'puppet',
       source: 'operation-tool',
       operationDomain: 'puppet',
-      servicePortId: 'puppet-render',
+      servicePortId: PUPPET_RENDER_SERVICE_PORT_ID,
     });
+    expect(CREATIVE_DOMAIN_SERVICE_PORT_IDS.scene).toBe(SCENE_RENDER_SERVICE_PORT_ID);
+    expect(CREATIVE_DOMAIN_SERVICE_PORT_IDS.puppet).toBe(PUPPET_RENDER_SERVICE_PORT_ID);
     expect(getOperationToolCreativeDomain(operationTool)).toEqual(
       expect.objectContaining({
         id: 'timeline',
@@ -158,7 +165,7 @@ describe('operation tool adapter contracts', () => {
 
   it('routes domain metadata to service port identity without runtime imports', () => {
     const router = createDomainRouter();
-    const plan = router.route(
+    const result = router.route(
       {
         id: 'intent-model-1',
         domain: operationToolDomainMetadata('model'),
@@ -167,16 +174,121 @@ describe('operation tool adapter contracts', () => {
         {
           id: 'scene-tools',
           domain: { id: 'scene', source: 'capability' },
-          servicePortId: 'scene-render',
+          servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
         },
       ],
     );
 
-    expect(plan).toEqual({
-      intentId: 'intent-model-1',
-      domain: operationToolDomainMetadata('model'),
-      servicePortId: 'scene-render',
-      capabilityId: 'scene-tools',
+    expect(result).toEqual({
+      ok: true,
+      plan: {
+        intentId: 'intent-model-1',
+        domain: operationToolDomainMetadata('model'),
+        servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
+        capabilityId: 'scene-tools',
+      },
     });
+  });
+
+  it('returns explainable domain route failures', () => {
+    const router = createDomainRouter();
+    const sceneCapability = {
+      id: 'scene-tools',
+      domain: { id: 'scene' as const, source: 'capability' as const },
+      servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
+    };
+
+    expect(router.route({ id: 'intent-missing-domain' }, [sceneCapability])).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        reason: 'missing-intent-domain',
+        intentId: 'intent-missing-domain',
+      }),
+    });
+    expect(
+      router.route(
+        { id: 'intent-no-capabilities', domain: operationToolDomainMetadata('model') },
+        [],
+      ),
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        reason: 'no-capabilities',
+        intentId: 'intent-no-capabilities',
+      }),
+    });
+    expect(
+      router.route(
+        {
+          id: 'intent-filter-empty',
+          domain: operationToolDomainMetadata('model'),
+          capabilityIds: ['missing-capability'],
+        },
+        [sceneCapability],
+      ),
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        reason: 'capability-filter-empty',
+        intentId: 'intent-filter-empty',
+        capabilityIds: ['missing-capability'],
+      }),
+    });
+    expect(
+      router.route(
+        {
+          id: 'intent-domain-mismatch',
+          domain: operationToolDomainMetadata('puppet'),
+        },
+        [sceneCapability],
+      ),
+    ).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        reason: 'domain-mismatch',
+        intentId: 'intent-domain-mismatch',
+        domain: operationToolDomainMetadata('puppet'),
+      }),
+    });
+  });
+
+  it('keeps route failure results serializable', () => {
+    const router = createDomainRouter();
+    const result = router.route(
+      {
+        id: 'intent-model-1',
+        domain: operationToolDomainMetadata('model'),
+      },
+      [],
+    );
+
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.reason).toBe('no-capabilities');
+    }
+  });
+
+  it('keeps route success results serializable', () => {
+    const router = createDomainRouter();
+    const result = router.route(
+      {
+        id: 'intent-model-1',
+        domain: operationToolDomainMetadata('model'),
+      },
+      [
+        {
+          id: 'scene-tools',
+          domain: { id: 'scene', source: 'capability' },
+          servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
+        },
+      ],
+    );
+
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.plan.servicePortId).toBe(SCENE_RENDER_SERVICE_PORT_ID);
+    }
   });
 });

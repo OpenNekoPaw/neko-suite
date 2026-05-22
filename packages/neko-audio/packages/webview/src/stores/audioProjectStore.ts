@@ -53,6 +53,7 @@ import {
   deriveAiOperationAffectedEntities,
   type AiOperationAffectedEntityIds,
 } from '../utils/aiOperationFeedback';
+import { TRACK_HEIGHT } from '../constants';
 
 const logger = getLogger('AudioProjectStore');
 
@@ -88,7 +89,7 @@ export interface AiOperationHighlight extends AiOperationAffectedEntityIds {
 function createDefaultTrackViewState(index: number): AudioTrackViewState {
   return {
     color: DEFAULT_TRACK_COLORS[index % DEFAULT_TRACK_COLORS.length]!,
-    height: 80,
+    height: TRACK_HEIGHT,
   };
 }
 

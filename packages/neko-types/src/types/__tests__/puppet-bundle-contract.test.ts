@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { NkpProjectData } from '../puppet';
+import nativePuppetV2Fixture from '../__fixtures__/native-puppet-v2.json';
+import {
+  isNkpNativeProjectData,
+  isNkpProjectData,
+  isPuppetCommandAck,
+  isPuppetCommandEnvelope,
+  type NkpProjectData,
+  type PuppetCommandEnvelope,
+} from '../puppet';
+import { nativePuppetProjectFixture } from '../__fixtures__/native-puppet-contract';
 
 describe('nkp bundle contract', () => {
   it('preserves legacy puppet src compatibility', () => {
@@ -16,6 +25,8 @@ describe('nkp bundle contract', () => {
 
     expect(project.puppet.src).toBe('./model.moc3');
     expect(project.puppet.bundle).toBeUndefined();
+    expect(isNkpProjectData(project)).toBe(true);
+    expect(isNkpNativeProjectData(project)).toBe(false);
   });
 
   it('represents a bundle-memory Live2D source with lightweight bundle index', () => {
@@ -74,5 +85,71 @@ describe('nkp bundle contract', () => {
     expect(project.bundleIndex?.textures[0]?.locator.entryPath).toBe(
       'avatars/sakura/textures/texture_00.png',
     );
+    expect(isNkpProjectData(project)).toBe(true);
+  });
+
+  it('round-trips native .nkp v2 bone + blendshape contracts', () => {
+    const roundTripped = JSON.parse(JSON.stringify(nativePuppetProjectFixture)) as unknown;
+
+    expect(isNkpProjectData(roundTripped)).toBe(true);
+    expect(isNkpNativeProjectData(roundTripped)).toBe(true);
+    expect(roundTripped).toEqual(nativePuppetProjectFixture);
+  });
+
+  it('validates the native .nkp v2 JSON golden fixture', () => {
+    const roundTripped = JSON.parse(JSON.stringify(nativePuppetV2Fixture)) as unknown;
+
+    expect(isNkpNativeProjectData(roundTripped)).toBe(true);
+  });
+
+  it('rejects invalid native blendshape delta shapes', () => {
+    const invalid = {
+      ...nativePuppetProjectFixture,
+      blendShapes: {
+        ...nativePuppetProjectFixture.blendShapes,
+        shapes: [
+          {
+            id: 'shape-bad',
+            name: 'jawOpen',
+            meshId: 'mesh-face',
+            vertexDeltas: [[0]],
+          },
+        ],
+      },
+    };
+
+    expect(isNkpNativeProjectData(invalid)).toBe(false);
+  });
+
+  it('validates native puppet command envelopes and acknowledgements', () => {
+    const envelope: PuppetCommandEnvelope = {
+      seq: 1,
+      baseRevision: 0,
+      transactionId: 'drag-bone-1',
+      command: {
+        type: 'setNativeBoneTransform',
+        bone: 'bone-head',
+        mode: 'offset',
+        transform: { position: [2, -1], rotation: 4 },
+      },
+    };
+
+    expect(isPuppetCommandEnvelope(envelope)).toBe(true);
+    expect(
+      isPuppetCommandEnvelope({
+        ...envelope,
+        command: { type: 'setNativeBlendShapeDelta', name: 'jawOpen', meshId: 'mesh-face' },
+      }),
+    ).toBe(false);
+    expect(
+      isPuppetCommandAck({
+        seq: 1,
+        appliedSeq: 1,
+        baseRevision: 0,
+        revision: 1,
+        status: 'applied',
+        result: null,
+      }),
+    ).toBe(true);
   });
 });

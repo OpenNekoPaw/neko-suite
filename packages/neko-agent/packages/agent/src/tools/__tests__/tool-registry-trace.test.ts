@@ -3,6 +3,8 @@ import {
   CapturedLogTransport,
   ConsoleLogger,
   LogLevel,
+  PUPPET_RENDER_SERVICE_PORT_ID,
+  SCENE_RENDER_SERVICE_PORT_ID,
   createAgentTraceContext,
   createTool,
   type ToolExecuteOptions,
@@ -135,7 +137,7 @@ describe('ToolRegistry provider schema projection', () => {
         domain: {
           id: 'scene',
           source: 'engine-tool',
-          servicePortId: 'scene-render',
+          servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
         },
         parameters: {
           type: 'object',
@@ -152,9 +154,57 @@ describe('ToolRegistry provider schema projection', () => {
     expect(definition?.domain).toEqual({
       id: 'scene',
       source: 'engine-tool',
-      servicePortId: 'scene-render',
+      servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
     });
     expect(definition?.function.parameters).not.toHaveProperty('domain');
+  });
+
+  it('projects planning metadata outside provider parameters', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'PuppetSetBone',
+        description: 'Move a native puppet bone.',
+        category: 'media',
+        safetyKind: 'non-destructive-mutation',
+        targetRequirements: {
+          required: ['puppetId', 'bone'],
+          allowedFallbacks: ['selection'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: ['InspectPuppet2D'],
+          reason: 'Resolve native puppet capability and stable bone ids before editing.',
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            puppetId: { type: 'string' },
+            bone: { type: 'string' },
+          },
+          required: ['puppetId', 'bone'],
+        },
+        execute: async () => ({ success: true, data: 'ok' }),
+      }),
+    );
+
+    const [definition] = registry.toToolDefinitions();
+
+    expect(definition?.planning).toEqual({
+      safetyKind: 'non-destructive-mutation',
+      targetRequirements: {
+        required: ['puppetId', 'bone'],
+        allowedFallbacks: ['selection'],
+      },
+      queryBeforeMutate: {
+        preferredQueryTools: ['InspectPuppet2D'],
+        reason: 'Resolve native puppet capability and stable bone ids before editing.',
+      },
+    });
+    expect(definition?.function.parameters).not.toHaveProperty('planning');
+    expect(definition?.function.parameters).not.toHaveProperty('safetyKind');
+    expect(definition?.function.parameters).not.toHaveProperty('targetRequirements');
+    expect(definition?.function.parameters).not.toHaveProperty('queryBeforeMutate');
   });
 
   it('projects engine provider scene and puppet tool domains', async () => {
@@ -178,12 +228,12 @@ describe('ToolRegistry provider schema projection', () => {
     expect(scene?.domain).toEqual({
       id: 'scene',
       source: 'engine-tool',
-      servicePortId: 'scene-render',
+      servicePortId: SCENE_RENDER_SERVICE_PORT_ID,
     });
     expect(puppet?.domain).toEqual({
       id: 'puppet',
       source: 'engine-tool',
-      servicePortId: 'puppet-render',
+      servicePortId: PUPPET_RENDER_SERVICE_PORT_ID,
     });
     expect(scene?.function.parameters).not.toHaveProperty('domain');
     expect(puppet?.function.parameters).not.toHaveProperty('domain');

@@ -14,6 +14,7 @@ import { getLogger } from '../base';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
+import type { ConversationBridge } from '../chat/conversationBridge';
 
 const logger = getLogger('MediaTurnBridge');
 
@@ -22,6 +23,9 @@ export interface MediaTurnBridgeDeps {
   mediaDeliveryHost: MediaTaskDeliveryHost;
   dashboardWorkItems?: AgentDashboardWorkItemSource;
   localResourceAccess?: AgentLocalResourceAccess;
+  conversations?: ConversationBridge;
+  generateMessageId?: () => string;
+  now?: () => number;
 }
 
 export interface ExecuteMediaTurnForWebviewInput {
@@ -45,6 +49,14 @@ export class MediaTurnBridge {
         this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         void input.webview.postMessage(message);
       },
+      persistErrorMessage: (message) => {
+        this.deps.conversations?.addMessageToConversation(input.conversationId, message);
+      },
+      buildErrorMessageInput: (message) => ({
+        id: this.deps.generateMessageId?.() ?? `media-error-${Date.now()}`,
+        timestamp: this.deps.now?.() ?? Date.now(),
+        message,
+      }),
       ...(media
         ? {
             executeMediaTurn: (runtimeInput) =>

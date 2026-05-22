@@ -20,6 +20,7 @@ export interface AgentStreamProjectionState {
   accumulatedResponse: string;
   accumulatedThinking: string;
   hasError: boolean;
+  errorMessage?: string;
   currentPhase: AgentPhase;
   collectedToolCalls: CollectedToolCall[];
   contentBlocks: ContentBlock[];
@@ -280,6 +281,7 @@ export function applyAgentStreamEventToState(
       return applyToolResultBackfill(state, event);
     case 'error':
       state.hasError = true;
+      state.errorMessage = event.error?.message || 'An error occurred';
       return setPhase(state, 'idle');
     case 'done':
       return setPhase(state, 'idle');
@@ -506,11 +508,12 @@ function findContentBlock(
 function finalizeTextContentBlock(block: ContentBlock): ContentBlock[] {
   const content = block.content ?? '';
   const extracted = extractCompositeContentBlocks(content);
+  const text = extracted.composites.length > 0 ? extracted.text : content;
   const nextBlocks: ContentBlock[] = [];
-  if (extracted.text.length > 0) {
+  if (text.length > 0) {
     nextBlocks.push({
       ...block,
-      content: extracted.text,
+      content: text,
       isStreaming: false,
     });
   }

@@ -1,8 +1,8 @@
 /** Pixels per second at zoom level 1.0 */
 export const PIXELS_PER_SECOND = 50;
 
-/** Height of each track lane in pixels */
-export const TRACK_HEIGHT = 64;
+/** Default height of each track lane in pixels */
+export const TRACK_HEIGHT = 80;
 
 /** Height of the time ruler in pixels */
 export const RULER_HEIGHT = 28;

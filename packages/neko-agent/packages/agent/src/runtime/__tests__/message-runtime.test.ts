@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   appendAmbientCanvasSystemPrompt,
   buildAgentAssistantMessageFromStream,
+  buildAgentErrorAssistantMessage,
   buildAgentExecutionMetadata,
   buildAgentHistoryHydrationPlan,
   buildAgentProjectFileSearchPlan,
@@ -488,6 +489,7 @@ describe('message runtime helpers', () => {
 
   it('falls back with a scoped error when no agent runtime is available', async () => {
     const postMessage = vi.fn();
+    const persistErrorMessage = vi.fn();
 
     await expect(
       runAgentMessageTurnRuntime({
@@ -498,11 +500,21 @@ describe('message runtime helpers', () => {
         },
         processAttachments: async () => ({ textContent: '', imageAttachments: [] }),
         persistUserMessage: vi.fn(),
+        persistErrorMessage,
         postMessage,
-        generateMessageId: () => 'user-1',
+        generateMessageId: vi.fn().mockReturnValueOnce('user-1').mockReturnValueOnce('error-1'),
+        now: () => 123,
       }),
     ).resolves.toEqual({ status: 'fallback', reason: 'no-agent-runtime' });
 
+    expect(persistErrorMessage).toHaveBeenCalledWith('conv-1', {
+      id: 'error-1',
+      role: 'assistant',
+      content:
+        'No AI provider configured. Please go to Settings and add an AI provider (Claude, OpenAI, etc.) with your API key.',
+      timestamp: 123,
+      isError: true,
+    });
     expect(postMessage).toHaveBeenNthCalledWith(1, {
       type: 'thinking',
       conversationId: 'conv-1',
@@ -730,7 +742,7 @@ describe('message runtime helpers', () => {
     });
   });
 
-  it('does not persist empty or failed agent stream results', () => {
+  it('does not persist empty agent stream results', () => {
     const emptyStream = {
       accumulatedResponse: '',
       accumulatedThinking: '',
@@ -747,17 +759,71 @@ describe('message runtime helpers', () => {
         stream: emptyStream,
       }),
     ).toBeNull();
+  });
+
+  it('persists partial failed agent stream results as error messages', () => {
     expect(
       buildAgentAssistantMessageFromStream({
         id: 'msg-error',
         timestamp: 123,
         stream: {
-          ...emptyStream,
           accumulatedResponse: 'Partial',
+          accumulatedThinking: '',
           hasError: true,
+          errorMessage: 'Provider timed out',
+          collectedToolCalls: [],
+          contentBlocks: [],
         },
       }),
-    ).toBeNull();
+    ).toEqual({
+      id: 'msg-error',
+      role: 'assistant',
+      content: 'Partial\n\nProvider timed out',
+      timestamp: 123,
+      isError: true,
+    });
+  });
+
+  it('persists error-only agent stream results as error messages', () => {
+    const stream = {
+      accumulatedResponse: '',
+      accumulatedThinking: '',
+      hasError: true,
+      errorMessage: 'Provider timed out',
+      collectedToolCalls: [],
+      contentBlocks: [],
+    };
+
+    expect(shouldPersistAgentAssistantStream(stream)).toBe(true);
+    expect(
+      buildAgentAssistantMessageFromStream({
+        id: 'msg-error-only',
+        timestamp: 123,
+        stream,
+      }),
+    ).toEqual({
+      id: 'msg-error-only',
+      role: 'assistant',
+      content: 'Provider timed out',
+      timestamp: 123,
+      isError: true,
+    });
+  });
+
+  it('builds standalone assistant error messages', () => {
+    expect(
+      buildAgentErrorAssistantMessage({
+        id: 'msg-error',
+        timestamp: 123,
+        message: 'Failed',
+      }),
+    ).toEqual({
+      id: 'msg-error',
+      role: 'assistant',
+      content: 'Failed',
+      timestamp: 123,
+      isError: true,
+    });
   });
 
   it('builds agent context patch with canvas packet taking precedence over timeline packet', () => {

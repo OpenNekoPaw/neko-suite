@@ -1,6 +1,7 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { NEKO_EXTENSION_IDS, type NekoAssetsAPI } from '../../types/extension-api';
 
 export type LocalResourceRootKind =
   | 'extension-asset'
@@ -37,11 +38,21 @@ export interface LocalResourceAccessOptions {
 export interface MediaLibraryLocalResourceRootProviderOptions {
   readonly id?: string;
   readonly command?: string;
+  readonly extensionId?: string;
   readonly logger?: LocalResourceAccessLogger;
+  readonly getExtension?: (
+    extensionId: string,
+  ) => MediaLibraryExtensionHandle | undefined;
   readonly executeCommand?: (
     command: string,
     ...args: readonly unknown[]
   ) => Promise<unknown> | Thenable<unknown> | unknown;
+}
+
+export interface MediaLibraryExtensionHandle {
+  readonly isActive: boolean;
+  readonly exports: unknown;
+  activate(): Promise<unknown> | Thenable<unknown>;
 }
 
 export interface DefaultLocalResourceAccessServiceOptions {
@@ -288,28 +299,133 @@ export function createMediaLibraryLocalResourceRootProvider(
 ): LocalResourceRootProvider {
   const id = options.id ?? 'neko-assets-media-libraries';
   const command = options.command ?? 'neko.assets.getMediaLibraryRoots';
+  const extensionId = options.extensionId ?? NEKO_EXTENSION_IDS.NEKO_ASSETS;
   const executeCommand =
     options.executeCommand ?? ((name: string) => vscode.commands.executeCommand(name));
+  const extensionLookup = createMediaLibraryExtensionLookup(options.getExtension);
 
   return {
     id,
     async getRoots() {
+      if (extensionLookup) {
+        const extensionResult = await getMediaLibraryRootsFromExtension(
+          extensionLookup,
+          extensionId,
+        );
+        if (extensionResult.kind === 'roots') {
+          return createMediaLibraryRoots(extensionResult.roots, id);
+        }
+        if (extensionResult.kind === 'error') {
+          options.logger?.warn('Failed to get neko-assets media library roots', {
+            error: extensionResult.error,
+          });
+          return [];
+        }
+      }
+
       try {
         const result = await executeCommand(command);
         if (!Array.isArray(result)) return [];
-        return result
-          .filter((root): root is string => typeof root === 'string' && root.trim().length > 0)
-          .map((root) => ({
-            uri: vscode.Uri.file(root),
-            kind: 'media-library' as const,
-            providerId: id,
-          }));
+        return createMediaLibraryRoots(result, id);
       } catch (error) {
+        if (isCommandUnavailableError(error, command)) {
+          return [];
+        }
         options.logger?.warn('Failed to get neko-assets media library roots', { error });
         return [];
       }
     },
   };
+}
+
+function createMediaLibraryRoots(
+  roots: readonly unknown[],
+  providerId: string,
+): LocalResourceRoot[] {
+  return roots
+    .filter((root): root is string => typeof root === 'string' && root.trim().length > 0)
+    .map((root) => ({
+      uri: vscode.Uri.file(root),
+      kind: 'media-library' as const,
+      providerId,
+    }));
+}
+
+function createMediaLibraryExtensionLookup(
+  getExtension: MediaLibraryLocalResourceRootProviderOptions['getExtension'],
+): ((extensionId: string) => MediaLibraryExtensionHandle | undefined) | undefined {
+  if (getExtension) {
+    return getExtension;
+  }
+
+  const extensions = (vscode as { extensions?: unknown }).extensions;
+  if (!isExtensionRegistry(extensions)) {
+    return undefined;
+  }
+
+  return (extensionId: string) => extensions.getExtension(extensionId);
+}
+
+async function getMediaLibraryRootsFromExtension(
+  getExtension: (extensionId: string) => MediaLibraryExtensionHandle | undefined,
+  extensionId: string,
+): Promise<
+  | { readonly kind: 'roots'; readonly roots: readonly unknown[] }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'no-api' }
+  | { readonly kind: 'error'; readonly error: unknown }
+> {
+  const extension = getExtension(extensionId);
+  if (!extension) {
+    return { kind: 'missing' };
+  }
+
+  try {
+    const activatedExports = extension.isActive ? extension.exports : await extension.activate();
+    const api = isMediaLibraryRootsAPI(activatedExports)
+      ? activatedExports
+      : isMediaLibraryRootsAPI(extension.exports)
+        ? extension.exports
+        : undefined;
+
+    if (!api) {
+      return { kind: 'no-api' };
+    }
+
+    return { kind: 'roots', roots: await api.getMediaLibraryRoots() };
+  } catch (error) {
+    return { kind: 'error', error };
+  }
+}
+
+function isExtensionRegistry(value: unknown): value is {
+  getExtension(extensionId: string): MediaLibraryExtensionHandle | undefined;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { getExtension?: unknown }).getExtension === 'function'
+  );
+}
+
+function isMediaLibraryRootsAPI(
+  value: unknown,
+): value is Pick<NekoAssetsAPI, 'getMediaLibraryRoots'> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { getMediaLibraryRoots?: unknown }).getMediaLibraryRoots === 'function'
+  );
+}
+
+function isCommandUnavailableError(error: unknown, command: string): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : String(error);
+  return message.includes(command) && /not found|not registered|unknown command/i.test(message);
 }
 
 export function createDefaultLocalResourceAccessService(

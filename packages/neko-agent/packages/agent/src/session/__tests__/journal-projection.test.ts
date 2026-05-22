@@ -236,6 +236,43 @@ describe('JournalProjection', () => {
     });
   });
 
+  it('keeps a failed turn resumable from the last persisted user message', async () => {
+    const filePath = '/tmp/journals/conv-error.jsonl';
+    const entries: JournalEntry[] = [
+      {
+        eventId: 'evt-user',
+        seq: 1,
+        ts: 1000,
+        type: 'event',
+        event: { type: 'user_message', content: 'Generate a scene outline' },
+      },
+      {
+        eventId: 'evt-error',
+        seq: 2,
+        ts: 1500,
+        type: 'event',
+        event: { type: 'error', error: new Error('Provider timed out') },
+      },
+    ];
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({ [filePath]: entriesToJsonl(entries) }),
+    );
+
+    await expect(projection.projectToHistoryWithEventIds('conv-error')).resolves.toEqual({
+      messages: [{ role: 'user', content: 'Generate a scene outline' }],
+      messageEventIds: [['evt-user']],
+    });
+    await expect(projection.projectToSummary('conv-error')).resolves.toEqual({
+      conversationId: 'conv-error',
+      title: 'Generate a scene outline',
+      createdAt: 1000,
+      updatedAt: 1500,
+      messageCount: 1,
+      source: 'journal-projection',
+    });
+  });
+
   it('projects Agent-first observation, evidence, and rationale graph summaries', async () => {
     const filePath = '/tmp/journals/conv-agent-first.jsonl';
     const entries: JournalEntry[] = [

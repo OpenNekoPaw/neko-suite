@@ -26,15 +26,25 @@ const task = {
 describe('media turn webview runtime', () => {
   it('posts unavailable error when media execution is not injected', async () => {
     const postMessage = vi.fn();
+    const persistErrorMessage = vi.fn();
 
     const result = await runAgentMediaTurnForWebview({
       conversationId: 'conv-1',
       prompt: 'Generate a cat',
       mediaModel,
       postMessage,
+      persistErrorMessage,
+      buildErrorMessageInput: (message) => ({ id: 'error-1', timestamp: 123, message }),
     });
 
     expect(result).toEqual({ status: 'unavailable' });
+    expect(persistErrorMessage).toHaveBeenCalledWith({
+      id: 'error-1',
+      role: 'assistant',
+      content: 'Media generation is unavailable',
+      timestamp: 123,
+      isError: true,
+    });
     expect(postMessage).toHaveBeenCalledWith({
       type: 'error',
       conversationId: 'conv-1',
@@ -121,6 +131,7 @@ describe('media turn webview runtime', () => {
 
   it('posts execution errors through the webview protocol', async () => {
     const postMessage = vi.fn();
+    const persistErrorMessage = vi.fn();
     const error = new Error('Provider failed');
 
     const result = await runAgentMediaTurnForWebview({
@@ -128,12 +139,21 @@ describe('media turn webview runtime', () => {
       prompt: 'Generate a cat',
       mediaModel,
       postMessage,
+      persistErrorMessage,
+      buildErrorMessageInput: (message) => ({ id: 'error-1', timestamp: 123, message }),
       executeMediaTurn: async () => {
         throw error;
       },
     });
 
     expect(result).toEqual({ status: 'failed', error });
+    expect(persistErrorMessage).toHaveBeenCalledWith({
+      id: 'error-1',
+      role: 'assistant',
+      content: 'Provider failed',
+      timestamp: 123,
+      isError: true,
+    });
     expect(postMessage).toHaveBeenCalledWith({
       type: 'error',
       conversationId: 'conv-1',

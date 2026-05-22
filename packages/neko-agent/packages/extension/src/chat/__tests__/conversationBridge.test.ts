@@ -86,6 +86,27 @@ describe('ConversationBridge', () => {
       expect(active?.messages[0]?.content).toBe('hello');
     });
 
+    it('should flush workspace state after adding a message', () => {
+      handler.ensureActive();
+      vi.mocked(ctx.workspaceState.update).mockClear();
+
+      handler.addMessage({ id: 'm1', role: 'user', content: 'hello', timestamp: Date.now() });
+
+      expect(ctx.workspaceState.update).toHaveBeenCalledWith(
+        'conversations',
+        expect.objectContaining({
+          conversations: expect.arrayContaining([
+            [
+              expect.any(String),
+              expect.objectContaining({
+                messages: [expect.objectContaining({ id: 'm1', content: 'hello' })],
+              }),
+            ],
+          ]),
+        }),
+      );
+    });
+
     it('should not crash when no active conversation', () => {
       expect(() =>
         handler.addMessage({ id: 'm1', role: 'user', content: 'hello', timestamp: Date.now() }),
@@ -124,6 +145,29 @@ describe('ConversationBridge', () => {
       expect(handler.get(id)?.messages).toEqual([
         expect.objectContaining({ id: 'm1', content: 'updated' }),
       ]);
+    });
+
+    it('should flush workspace state after replacing messages', () => {
+      const id = handler.ensureActive();
+      vi.mocked(ctx.workspaceState.update).mockClear();
+
+      handler.updateMessagesForConversation(id, [
+        { id: 'm1', role: 'assistant', content: 'partial', timestamp: Date.now(), isError: true },
+      ]);
+
+      expect(ctx.workspaceState.update).toHaveBeenCalledWith(
+        'conversations',
+        expect.objectContaining({
+          conversations: expect.arrayContaining([
+            [
+              id,
+              expect.objectContaining({
+                messages: [expect.objectContaining({ id: 'm1', isError: true })],
+              }),
+            ],
+          ]),
+        }),
+      );
     });
   });
 

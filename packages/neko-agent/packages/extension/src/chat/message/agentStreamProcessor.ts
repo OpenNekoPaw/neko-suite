@@ -40,6 +40,7 @@ export interface StreamProcessingResult {
   accumulatedResponse: string;
   accumulatedThinking: string;
   hasError: boolean;
+  errorMessage?: string;
   collectedToolCalls: readonly CollectedToolCall[];
   contentBlocks: readonly ContentBlock[];
 }

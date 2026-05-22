@@ -70,6 +70,10 @@ export function projectConversationMessagesToAgentHistory(
   const result: AgentHistoryEntry[] = [];
 
   for (const message of messages) {
+    if (message.isError) {
+      continue;
+    }
+
     if (message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0) {
       const toolCalls = message.toolCalls.map((toolCall) => ({
         id: toolCall.id,

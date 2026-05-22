@@ -376,15 +376,24 @@ describe('runAgentTurnForWebviewRuntime', () => {
   it('posts a scoped fallback error when no agent manager is available', async () => {
     const { input } = createBaseInput();
     const postMessage = vi.fn();
+    const onErrorMessage = vi.fn();
 
     await expect(
       runAgentTurnForWebviewRuntime({
         ...input,
         agentManager: undefined,
         postMessage,
+        onErrorMessage,
       }),
     ).resolves.toEqual({ status: 'fallback', reason: 'no-provider-configured' });
 
+    expect(onErrorMessage).toHaveBeenCalledWith({
+      id: 'assistant-1',
+      role: 'assistant',
+      content: AGENT_TURN_FALLBACK_MESSAGE,
+      timestamp: 123,
+      isError: true,
+    });
     expect(postMessage).toHaveBeenCalledWith({
       type: 'error',
       conversationId: 'conv-1',
@@ -401,14 +410,23 @@ describe('runAgentTurnForWebviewRuntime', () => {
       },
     });
     const postMessage = vi.fn();
+    const onErrorMessage = vi.fn();
 
     await expect(
       runAgentTurnForWebviewRuntime({
         ...input,
         postMessage,
+        onErrorMessage,
       }),
     ).resolves.toEqual({ status: 'fallback', reason: 'no-provider-configured' });
 
+    expect(onErrorMessage).toHaveBeenCalledWith({
+      id: 'assistant-1',
+      role: 'assistant',
+      content: AGENT_TURN_FALLBACK_MESSAGE,
+      timestamp: 123,
+      isError: true,
+    });
     expect(postMessage).toHaveBeenCalledWith({
       type: 'error',
       conversationId: 'conv-1',
@@ -475,6 +493,7 @@ describe('runAgentTurnForWebviewRuntime', () => {
     const postMessage = vi.fn();
     const onPhaseChange = vi.fn();
     const onExecutionError = vi.fn();
+    const onErrorMessage = vi.fn();
     const { input } = createBaseInput({
       processStream: vi.fn(async () => {
         throw new Error('stream failed');
@@ -487,10 +506,18 @@ describe('runAgentTurnForWebviewRuntime', () => {
         postMessage,
         onPhaseChange,
         onExecutionError,
+        onErrorMessage,
       }),
     ).resolves.toEqual({ status: 'failed', error: expect.any(Error) });
 
     expect(onExecutionError).toHaveBeenCalledWith(expect.any(Error));
+    expect(onErrorMessage).toHaveBeenCalledWith({
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'stream failed',
+      timestamp: 123,
+      isError: true,
+    });
     expect(onPhaseChange).toHaveBeenCalledWith({
       conversationId: 'conv-1',
       phase: 'idle',
@@ -535,6 +562,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
     }));
     const postMessage = vi.fn();
     const onPhaseChange = vi.fn();
+    const onErrorMessage = vi.fn();
     const taskManager = {} as never;
     const workflow = {
       workflowDefinitionId: 'neko.workflow.idc.v1',
@@ -583,6 +611,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
         ensureSubAgentEventSubscription: vi.fn(),
         postMessage,
         onPhaseChange,
+        onErrorMessage,
         generateMessageId: vi.fn(() => 'assistant-1'),
         now: vi.fn(() => 321),
       },
@@ -602,6 +631,20 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
     expect(runtimeInput.agentManager).toBe(agentManager);
     expect(runtimeInput.taskManager).toBe(taskManager);
     expect(runtimeInput.workflow).toBe(workflow);
+    runtimeInput.onErrorMessage?.({
+      id: 'error-1',
+      role: 'assistant',
+      content: 'Failed',
+      timestamp: 321,
+      isError: true,
+    });
+    expect(onErrorMessage).toHaveBeenCalledWith('conv-1', {
+      id: 'error-1',
+      role: 'assistant',
+      content: 'Failed',
+      timestamp: 321,
+      isError: true,
+    });
 
     const context = await runtimeInput.createContext({
       conversationId: 'conv-1',

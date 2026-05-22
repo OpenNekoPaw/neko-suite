@@ -324,6 +324,7 @@ describe('AgentStreamProcessor', () => {
       const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
       expect(result.hasError).toBe(true);
+      expect(result.errorMessage).toBe('Rate limited');
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('idle', undefined);
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'error', message: 'Rate limited' }),
