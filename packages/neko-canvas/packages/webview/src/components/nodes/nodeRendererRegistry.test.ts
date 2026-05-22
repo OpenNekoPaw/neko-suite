@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { isValidElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { CanvasNode } from '@neko/shared';
 import { renderCanvasNode } from './nodeRendererRegistry';
 import { createStoryboardNodeRendererRegistry } from '../../subsystems/storyboard/renderers';
 import { createStoryboardNodeTypeDescriptors } from '../../subsystems/storyboard/descriptors';
+import behaviorRegistration from '../../subsystems/behavior';
+import entityRegistration from '../../subsystems/entity';
+import memoryRegistration from '../../subsystems/memory';
+import { buildCanvasNode } from '../../utils/nodeFactory';
 
 describe('nodeRendererRegistry', () => {
   it('registers storyboard subsystem node renderers', () => {
@@ -19,6 +24,7 @@ describe('nodeRendererRegistry', () => {
     expect(registry.shot).toBeUndefined();
     expect(registry.scene).toBeUndefined();
     expect(registry.gallery).toBeUndefined();
+    expect(registry.project).toBeUndefined();
   });
 
   it('registers storyboard subsystem node descriptors separately from core', () => {
@@ -52,5 +58,101 @@ describe('nodeRendererRegistry', () => {
     expect(markup).toContain('UNSUPPORTED');
     expect(markup).toContain('future-node');
     expect(markup).toContain('preserved');
+  });
+
+  it('renders placeholder subsystem nodes through registered lightweight cards', () => {
+    const registry = {
+      ...behaviorRegistration.nodeRenderers,
+      ...entityRegistration.nodeRenderers,
+      ...memoryRegistration.nodeRenderers,
+    };
+
+    const markup = renderToStaticMarkup(
+      renderCanvasNode(registry, {
+        node: {
+          id: 'state-1',
+          type: 'state',
+          position: { x: 0, y: 0 },
+          size: { width: 220, height: 140 },
+          zIndex: 1,
+          data: { name: 'Idle', description: 'Wait for player input' },
+        },
+        allNodes: [],
+        selectedNodeIds: [],
+        viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
+        isSelected: false,
+        containerRef: { current: null },
+      }),
+    );
+
+    expect(markup).toContain('STATE');
+    expect(markup).toContain('Idle');
+    expect(markup).toContain('Wait for player input');
+    expect(markup).not.toContain('UNSUPPORTED');
+  });
+
+  it('registers descriptors for placeholder subsystem node types', () => {
+    expect(behaviorRegistration.nodeTypeDescriptors?.state?.labelKey).toBe('node.state');
+    expect(entityRegistration.nodeTypeDescriptors?.['representation-slot']?.labelKey).toBe(
+      'node.representationSlot',
+    );
+    expect(memoryRegistration.nodeTypeDescriptors?.fact?.tagLabel).toBe('FACT');
+  });
+
+  it('uses localized labels for placeholder nodes with no authored title', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'state',
+        position: { x: 0, y: 0 },
+        data: {},
+        zIndex: 1,
+      }),
+      id: 'state-2',
+    };
+
+    const markup = renderToStaticMarkup(
+      renderCanvasNode(behaviorRegistration.nodeRenderers ?? {}, {
+        node,
+        allNodes: [],
+        selectedNodeIds: [],
+        viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
+        isSelected: false,
+        containerRef: { current: null },
+      }),
+    );
+
+    expect(node.data).not.toHaveProperty('name');
+    expect(markup).toContain('State');
+    expect(markup).not.toContain('UNSUPPORTED');
+  });
+
+  it('renders project nodes through composable content instead of fallback cards', () => {
+    const node = {
+      id: 'project-1',
+      type: 'project',
+      position: { x: 0, y: 0 },
+      size: { width: 260, height: 180 },
+      zIndex: 1,
+      data: {
+        projectPath: 'projects/demo.nkv',
+        projectTitle: 'Demo',
+        projectType: 'nkv',
+      },
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      renderCanvasNode({}, {
+        node,
+        allNodes: [node],
+        selectedNodeIds: [],
+        viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
+        isSelected: false,
+        containerRef: { current: null },
+      }),
+    );
+
+    expect(markup).toContain('PROJECT');
+    expect(markup).toContain('data-content-block-id="project-asset-preview"');
+    expect(markup).not.toContain('UNSUPPORTED');
   });
 });

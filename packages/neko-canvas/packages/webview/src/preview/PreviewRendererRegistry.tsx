@@ -9,6 +9,7 @@ import { InlineAudioPlayer } from '../components/media/InlineAudioPlayer';
 import { usePlaybackStore } from '../stores/playbackStore';
 import type { PlaybackSurfaceKind } from '../stores/playbackStore';
 import { getGlobalVSCodeApi } from '../utils/vscode';
+import { t } from '../i18n';
 
 export interface PreviewRendererProps {
   source: PreviewSourceDescriptor;
@@ -662,13 +663,6 @@ function renderAudioPreview({
   );
 }
 
-const PROJECT_TYPE_LABELS: Record<string, string> = {
-  nkv: 'Video Project',
-  nka: 'Audio Project',
-  nkm: '3D Model',
-  nkp: 'Puppet',
-};
-
 function useProjectThumbnail(assetPath: string | undefined, nodeId: string): string | null {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const requestedRef = useRef(false);
@@ -711,7 +705,7 @@ function renderProjectPreview({ source, delegateActions }: PreviewRendererProps)
   const assetPath = source.asset?.path;
   const ext = assetPath?.split('.').pop()?.toLowerCase() ?? '';
   const thumbnailUrl = useProjectThumbnail(assetPath, source.id);
-  const typeLabel = PROJECT_TYPE_LABELS[ext] ?? 'Project';
+  const typeLabel = resolveProjectTypeLabel(source.metadata?.['projectType'], ext);
 
   return (
     <div className="relative flex min-h-[80px] flex-col overflow-hidden rounded border border-[var(--node-border)] bg-black/20">
@@ -745,12 +739,28 @@ function renderProjectPreview({ source, delegateActions }: PreviewRendererProps)
               dispatchPreviewDelegate({ action: delegateActions[0]!, asset: source.asset });
             }}
           >
-            Open
+            {t('preview.open')}
           </button>
         )}
       </div>
     </div>
   );
+}
+
+function resolveProjectTypeLabel(value: unknown, fallbackExt: string): string {
+  const projectType = typeof value === 'string' ? value : fallbackExt;
+  switch (projectType) {
+    case 'nkv':
+      return t('project.type.nkv');
+    case 'nka':
+      return t('project.type.nka');
+    case 'nkm':
+      return t('project.type.nkm');
+    case 'nkp':
+      return t('project.type.nkp');
+    default:
+      return t('node.project');
+  }
 }
 
 function getStableSafeUrl(source: PreviewSourceDescriptor): string | undefined {

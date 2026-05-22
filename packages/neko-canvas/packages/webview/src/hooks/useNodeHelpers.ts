@@ -342,22 +342,24 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
     (
       pos: { x: number; y: number },
       projectPath: string,
-      title = 'Project',
+      title = t('node.project'),
       projectType: NkProjectType,
     ) => {
       const w = 260,
         h = 180;
-      addNode({
-        type: 'project',
-        position: { x: pos.x - w / 2, y: pos.y - h / 2 },
-        size: { width: w, height: h },
-        zIndex: nodeCount,
-        data: {
-          projectPath,
-          projectTitle: title,
-          projectType,
-        },
-      });
+      addNode(
+        buildCanvasNode({
+          type: 'project',
+          position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+          zIndex: nodeCount,
+          data: {
+            projectPath,
+            projectTitle: title,
+            projectType,
+          },
+          preset: 'project.basic',
+        }),
+      );
       reportAction('addNode', 'Add project reference', title || undefined);
     },
     [addNode, nodeCount, reportAction],

@@ -91,6 +91,14 @@ export const BUILT_IN_CANVAS_NODE_PRESETS = [
     ],
   },
   {
+    name: 'project.basic',
+    nodeType: 'project',
+    creationMode: 'composable',
+    label: 'Project Basic',
+    description: 'Composable project reference with thumbnail preview.',
+    deriveTargets: ['project.basic', 'media.basic', 'annotation.basic', 'text.basic'],
+  },
+  {
     name: 'storyboard.legacy',
     nodeType: 'storyboard',
     creationMode: 'legacy',

@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useState } from 'react';
 import type { ContainerSection, DocumentArchiveResourceRef } from '@neko/shared';
 import { NodeHeader } from './NodeHeader';
 import type { NodeHeaderBadge } from './NodeHeader';
@@ -18,7 +18,7 @@ export interface NodeShellProps {
 export function NodeShell({ section, context }: NodeShellProps) {
   const descriptors = useMemo(() => createBuiltInNodeTypeDescriptors(), []);
   const openContentOverlay = useCanvasStore((s) => s.openContentOverlay);
-  const setExpandedNodeId = useCanvasStore((s) => s.setExpandedNodeId);
+  const updateNode = useCanvasStore((s) => s.updateNode);
 
   const { node } = context;
   const descriptor = context.nodeTypeDescriptors?.[node.type] ?? descriptors[node.type];
@@ -30,18 +30,22 @@ export function NodeShell({ section, context }: NodeShellProps) {
   const badges = (preview?.badges ?? []) as NodeHeaderBadge[];
 
   const assetInfo = useMemo(() => getNodeAssetInfo(node), [node]);
-  const isExpanded = context.isSelected && context.isExpanded === true;
-  const isCollapsed =
-    context.isExpanded === undefined ? (node.container?.collapsed ?? false) : !isExpanded;
+  const [isCollapsed, setIsCollapsed] = useState(() => node.container?.collapsed ?? false);
+
+  useEffect(() => {
+    setIsCollapsed(node.container?.collapsed ?? false);
+  }, [node.id, node.container?.collapsed]);
 
   const handleToggleInlineEditor = useCallback(() => {
-    if (isExpanded) {
-      setExpandedNodeId(null);
-      return;
-    }
-    context.onSelectNode?.(node.id, false);
-    setExpandedNodeId(node.id);
-  }, [context, isExpanded, node.id, setExpandedNodeId]);
+    setIsCollapsed((current) => {
+      const next = !current;
+      const updates = createNodeCollapseUpdate(node, next);
+      if (updates) {
+        updateNode(node.id, updates);
+      }
+      return next;
+    });
+  }, [node.container, node.id, updateNode]);
 
   const handleOpenPreview = useCallback(() => {
     if (!assetInfo) return;
@@ -85,7 +89,7 @@ export function NodeShell({ section, context }: NodeShellProps) {
             selectedNodeIds={context.selectedNodeIds}
             isSelected={context.isSelected}
           />
-          {context.isSelected && controlSections.length > 0 && (
+          {controlSections.length > 0 && (
             <div style={{ borderBottom: '1px solid var(--node-divider)' }}>
               {controlSections.map((s) => (
                 <ContainerRenderer
@@ -111,6 +115,21 @@ export function NodeShell({ section, context }: NodeShellProps) {
 
 function isControlSection(section: ContainerSection): boolean {
   return section.visibleWhen === 'selected' && section.layout === 'row';
+}
+
+export function createNodeCollapseUpdate(
+  node: NodeShellProps['context']['node'],
+  collapsed: boolean,
+): Pick<NodeShellProps['context']['node'], 'container'> | undefined {
+  if (!node.container) {
+    return undefined;
+  }
+  return {
+    container: {
+      ...node.container,
+      collapsed,
+    },
+  };
 }
 
 interface NodeAssetInfo {

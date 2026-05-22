@@ -12,12 +12,16 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
   const blockRendererRegistry = useMemo(() => createBuiltInBlockRendererRegistry(), []);
   const [isCollapsed, setIsCollapsed] = useState(() => section.defaultCollapsed ?? false);
 
-  if (!isSectionVisible(section.visibleWhen, context.isSelected)) {
+  if (!isSectionVisible(section.visibleWhen, context)) {
     return null;
   }
 
   if (context.depth > MAX_CONTENT_DEPTH) {
-    return <div className="p-2 text-xs text-red-300">Content depth limit reached</div>;
+    return (
+      <div className="p-2 text-xs" style={{ color: 'var(--danger-fg)' }}>
+        {t('content.depthLimitReached')}
+      </div>
+    );
   }
 
   const sectionCollapsible = section.collapsible === true;
@@ -75,7 +79,7 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
               >
                 {childIds.length === 0 ? (
                   <span className="px-2 py-1 text-xs text-[var(--node-fg-secondary)]">
-                    {resolveLabel(slot.emptyLabel) ?? 'Children'}
+                    {resolveLabel(slot.emptyLabel) ?? t('content.children')}
                   </span>
                 ) : (
                   childIds.map((childId) => {
@@ -112,7 +116,7 @@ function renderContentBlock(
   block: CanvasBlock,
   context: ContainerRendererProps['context'],
 ): React.ReactNode {
-  if (!isSectionVisible(block.visibleWhen, context.isSelected)) {
+  if (!isSectionVisible(block.visibleWhen, context)) {
     return null;
   }
 
@@ -136,11 +140,16 @@ function resolveSlotChildIds(
   return childIds ?? getContainerChildIds(node);
 }
 
-function isSectionVisible(visibleWhen: string | undefined, isSelected: boolean): boolean {
+function isSectionVisible(
+  visibleWhen: string | undefined,
+  context: ContainerRendererProps['context'],
+): boolean {
   return (
     visibleWhen === undefined ||
     visibleWhen === 'always' ||
-    (visibleWhen === 'selected' && isSelected)
+    (visibleWhen === 'selected' &&
+      (context.isSelected || context.previewSurfaceKind === 'inline')) ||
+    (visibleWhen === 'expanded' && context.isExpanded === true)
   );
 }
 

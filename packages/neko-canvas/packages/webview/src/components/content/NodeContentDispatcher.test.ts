@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { AnnotationCanvasNode, CanvasNode, CanvasViewport } from '@neko/shared';
 import { NodeContentDispatcher } from './NodeContentDispatcher';
+import { createNodeCollapseUpdate } from './NodeShell';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import { buildCanvasNode } from '../../utils/nodeFactory';
 
@@ -147,6 +148,98 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data:image/png;base64,aaa');
     expect(markup).toContain('data-content-block-id="shot-generated-preview"');
     expect(markup).not.toContain('Legacy path');
+  });
+
+  it('keeps composable node content visible when the node is not selected', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 2,
+          duration: 3,
+          visualDescription: 'Wide establishing frame',
+          characterAction: 'Look toward the skyline',
+        },
+      }),
+      id: 'shot-unselected',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('data-content-block-id="shot-status"');
+    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).toContain('data-content-block-id="shot-visual-description"');
+    expect(markup).toContain('data-content-block-id="shot-character-action"');
+    expect(markup).toContain('Detail');
+    expect(markup).not.toContain('Legacy path');
+  });
+
+  it('builds persistent container collapse updates without changing non-container nodes', () => {
+    const containerNode = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        data: {},
+      }),
+      id: 'scene-container',
+      container: {
+        policy: 'scene',
+        childIds: ['shot-1'],
+        metadata: { tone: 'quiet' },
+      },
+    } as CanvasNode;
+    const leafNode = buildCanvasNode({
+      type: 'shot',
+      position: { x: 0, y: 0 },
+      zIndex: 1,
+      data: {},
+    }) as CanvasNode;
+
+    expect(createNodeCollapseUpdate(containerNode, true)).toEqual({
+      container: {
+        policy: 'scene',
+        childIds: ['shot-1'],
+        metadata: { tone: 'quiet' },
+        collapsed: true,
+      },
+    });
+    expect(createNodeCollapseUpdate(leafNode, true)).toBeUndefined();
+  });
+
+  it('renders project nodes through the default composable preset when unselected', () => {
+    const node = {
+      id: 'project-1',
+      type: 'project',
+      position: { x: 0, y: 0 },
+      size: { width: 260, height: 180 },
+      zIndex: 0,
+      data: {
+        projectPath: 'projects/demo.nkv',
+        projectTitle: 'Demo',
+        projectType: 'nkv',
+      },
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('data-content-block-id="project-asset-preview"');
+    expect(markup).toContain('Video Project');
+    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('UNSUPPORTED');
   });
 
   it('renders migrated scene child slot summaries and action buttons', () => {
@@ -295,6 +388,19 @@ describe('NodeContentDispatcher', () => {
         }),
         id: 'media-parity',
       },
+      {
+        ...buildCanvasNode({
+          type: 'project',
+          position: { x: 640, y: 260 },
+          zIndex: 0,
+          data: {
+            projectPath: 'projects/demo.nkp',
+            projectTitle: 'Puppet Demo',
+            projectType: 'nkp',
+          },
+        }),
+        id: 'project-parity',
+      },
     ] as CanvasNode[];
 
     const markup = nodes
@@ -308,11 +414,23 @@ describe('NodeContentDispatcher', () => {
       )
       .join('\n');
 
-    expect(markup).toMatchInlineSnapshot(`
-      "<div data-node-id="shot-parity" class="absolute select-none cursor-grab" style="left:0;top:0;width:220px;height:200px;z-index:0;transform-origin:center center"><div class="w-full h-full rounded-lg border-2 shadow-lg overflow-hidden bg-[var(--node-bg)] transition-colors duration-150 border-[var(--node-border)]"><div class="flex min-h-0 flex-col"><div class="flex items-center gap-2 px-3 py-2" style="background-color:var(--node-header-bg);border-bottom:1px solid var(--node-divider)"><button type="button" class="flex-shrink-0 text-[10px]" style="color:var(--node-fg-secondary)">▼</button><span class="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium" style="background-color:#ef444420;color:#ef4444">SHOT</span><span class="min-w-0 flex-1 truncate text-sm font-medium" style="color:var(--node-fg)">Shot 5</span><span class="flex-shrink-0 rounded px-1 py-0.5 text-[9px] leading-none bg-black/30 text-[var(--node-fg-secondary)]">done</span><button type="button" class="flex-shrink-0 rounded px-1 py-0.5 text-xs" style="color:var(--node-fg-secondary)">⛶</button></div><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div data-content-block-id="shot-generated-preview" class="min-w-0"><div class="relative flex min-h-[80px] items-center justify-center overflow-hidden rounded border border-[var(--node-border)] bg-black/20"><img src="data:image/png;base64,shot" alt="Generated Image" class="h-full w-full object-cover"/></div></div></div><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div data-content-block-id="shot-visual-description" class="min-w-0"><label class="flex min-h-0 flex-1 flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Visual</span><textarea class="min-h-[64px] resize-none rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]">Door opens</textarea></label></div><div data-content-block-id="shot-character-action" class="min-w-0"><label class="flex min-h-0 flex-1 flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Action</span><textarea class="min-h-[64px] resize-none rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"></textarea></label></div><div data-content-block-id="shot-characters" class="min-w-0"><ul class="space-y-1 text-xs text-[var(--node-fg-secondary)]"></ul></div><div data-content-block-id="shot-emotion" class="min-w-0"><div class="flex flex-wrap gap-1"></div></div><div data-content-block-id="shot-scene-tags" class="min-w-0"><div class="flex flex-wrap gap-1"></div></div></div></div></div></div><div class="absolute z-30 derive-btn" style="right:-16px;top:50%;transform:translateY(-50%)"><button class="flex items-center justify-center rounded-full" style="width:28px;height:28px;background-color:var(--node-selected, #3b82f6);color:#fff;border:2px solid var(--node-bg, #1e1e1e);font-size:16px;font-weight:bold;line-height:1;cursor:pointer" title="添加后继节点">+</button></div><div data-port-id="img-out" data-port-type="output" data-node-id="shot-parity" data-anchor="right" style="position:absolute;width:14px;height:14px;border-radius:50%;background-color:#f59e0b;border:2px solid var(--node-bg);cursor:crosshair;z-index:10;right:-7px;top:50%;transform:translateY(-50%)" class="transition-all duration-150 scale-75 opacity-60 hover:scale-110 hover:opacity-100" title="Image"></div></div>
-      <div data-node-id="scene-parity" class="absolute select-none cursor-grab" style="left:0;top:260px;width:640px;height:400px;z-index:0;transform-origin:center center"><div class="w-full h-full rounded-lg border-2 shadow-lg overflow-hidden bg-[var(--node-bg)] transition-colors duration-150 border-[var(--node-border)]"><div class="flex min-h-0 flex-col"><div class="flex items-center gap-2 px-3 py-2" style="background-color:var(--node-header-bg);border-bottom:1px solid var(--node-divider)"><button type="button" class="flex-shrink-0 text-[10px]" style="color:var(--node-fg-secondary)">▼</button><span class="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium" style="background-color:#10b98120;color:#10b981">SCENE</span><span class="min-w-0 flex-1 truncate text-sm font-medium" style="color:var(--node-fg)">Arrival</span><span class="flex-shrink-0 rounded px-1 py-0.5 text-[9px] leading-none bg-blue-900/40 text-blue-300">0 shots</span><button type="button" class="flex-shrink-0 rounded px-1 py-0.5 text-xs" style="color:var(--node-fg-secondary)">⛶</button></div><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div class="grid grid-cols-3 gap-1.5"><span class="px-2 py-1 text-xs text-[var(--node-fg-secondary)]">No children</span></div><div class="flex min-w-0 flex-row gap-2 p-2"><div data-content-block-id="scene-number" class="min-w-0"><label class="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Scene</span><input type="number" class="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]" value="1"/></label></div><div data-content-block-id="scene-title" class="min-w-0"><label class="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Title</span><input class="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]" value="Arrival"/></label></div><div data-content-block-id="scene-location" class="min-w-0"><label class="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Location</span><input class="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]" value="Station"/></label></div><div data-content-block-id="scene-time-of-day" class="min-w-0"><label class="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Time</span><input class="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]" value=""/></label></div></div></div></div></div><div class="absolute z-30 derive-btn" style="right:-16px;top:50%;transform:translateY(-50%)"><button class="flex items-center justify-center rounded-full" style="width:28px;height:28px;background-color:var(--node-selected, #3b82f6);color:#fff;border:2px solid var(--node-bg, #1e1e1e);font-size:16px;font-weight:bold;line-height:1;cursor:pointer" title="添加后继节点">+</button></div><div data-port-id="in" data-port-type="input" data-node-id="scene-parity" data-anchor="left" style="position:absolute;width:14px;height:14px;border-radius:50%;background-color:#6b7280;border:2px solid var(--node-bg);cursor:crosshair;z-index:10;left:-7px;top:50%;transform:translateY(-50%)" class="transition-all duration-150 scale-75 opacity-60 hover:scale-110 hover:opacity-100" title="Input"><div class="absolute inset-[3px] rounded-full" style="background-color:var(--node-bg)"></div></div><div data-port-id="out" data-port-type="output" data-node-id="scene-parity" data-anchor="right" style="position:absolute;width:14px;height:14px;border-radius:50%;background-color:#6b7280;border:2px solid var(--node-bg);cursor:crosshair;z-index:10;right:-7px;top:50%;transform:translateY(-50%)" class="transition-all duration-150 scale-75 opacity-60 hover:scale-110 hover:opacity-100" title="Output"></div></div>
-      <div data-node-id="gallery-parity" class="absolute select-none cursor-grab" style="left:320px;top:0;width:290px;height:160px;z-index:0;transform-origin:center center"><div class="w-full h-full rounded-lg border-2 shadow-lg overflow-hidden bg-[var(--node-bg)] transition-colors duration-150 border-[var(--node-border)]"><div class="flex min-h-0 flex-col"><div class="flex items-center gap-2 px-3 py-2" style="background-color:var(--node-header-bg);border-bottom:1px solid var(--node-divider)"><button type="button" class="flex-shrink-0 text-[10px]" style="color:var(--node-fg-secondary)">▼</button><span class="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium" style="background-color:#8b5cf620;color:#8b5cf6">GALLERY</span><span class="min-w-0 flex-1 truncate text-sm font-medium" style="color:var(--node-fg)">Mika</span><span class="flex-shrink-0 rounded px-1 py-0.5 text-[9px] leading-none bg-blue-900/40 text-blue-300">0 cells</span><button type="button" class="flex-shrink-0 rounded px-1 py-0.5 text-xs" style="color:var(--node-fg-secondary)">⛶</button></div><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div class="flex min-w-0 flex-row gap-2 p-2"><div data-content-block-id="gallery-preset" class="min-w-0"><label class="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Preset</span><select class="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"><option value="character-3view" selected="">character-3view</option><option value="character-4view">character-4view</option><option value="expression-9">expression-9</option><option value="turnaround-8">turnaround-8</option><option value="scene-views">scene-views</option><option value="custom">custom</option></select></label></div><div data-content-block-id="gallery-character-name" class="min-w-0"><label class="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Character</span><input class="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]" value="Mika"/></label></div></div><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div class="grid gap-1.5" style="grid-template-columns:repeat(3, 1fr)"><span class="px-2 py-1 text-xs text-[var(--node-fg-secondary)]">No views (drag media here)</span></div></div></div></div></div><div class="absolute z-30 derive-btn" style="right:-16px;top:50%;transform:translateY(-50%)"><button class="flex items-center justify-center rounded-full" style="width:28px;height:28px;background-color:var(--node-selected, #3b82f6);color:#fff;border:2px solid var(--node-bg, #1e1e1e);font-size:16px;font-weight:bold;line-height:1;cursor:pointer" title="添加后继节点">+</button></div><div data-port-id="img-out" data-port-type="output" data-node-id="gallery-parity" data-anchor="right" style="position:absolute;width:14px;height:14px;border-radius:50%;background-color:#f59e0b;border:2px solid var(--node-bg);cursor:crosshair;z-index:10;right:-7px;top:50%;transform:translateY(-50%)" class="transition-all duration-150 scale-75 opacity-60 hover:scale-110 hover:opacity-100" title="Reference"></div></div>
-      <div data-node-id="media-parity" class="absolute select-none cursor-grab" style="left:320px;top:260px;width:280px;height:200px;z-index:0;transform-origin:center center"><div class="w-full h-full rounded-lg border-2 shadow-lg overflow-hidden bg-[var(--node-bg)] transition-colors duration-150 border-[var(--node-border)]"><div class="flex min-h-0 flex-col"><div class="flex items-center gap-2 px-3 py-2" style="background-color:var(--node-header-bg);border-bottom:1px solid var(--node-divider)"><button type="button" class="flex-shrink-0 text-[10px]" style="color:var(--node-fg-secondary)">▼</button><span class="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium" style="background-color:#3b82f620;color:#3b82f6">MEDIA</span><span class="min-w-0 flex-1 truncate text-sm font-medium" style="color:var(--node-fg)">ref.png</span><button type="button" class="flex-shrink-0 rounded px-1 py-0.5 text-xs" style="color:var(--node-fg-secondary)">⛶</button><button type="button" class="flex-shrink-0 rounded px-1 py-0.5 text-xs" style="color:var(--node-fg-secondary)">↗</button></div><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div data-content-block-id="media-asset-preview" class="min-w-0"><div class="flex min-h-[72px] items-center justify-between gap-2 rounded border border-dashed border-[var(--node-border)] bg-black/20 px-2 text-xs text-[var(--node-fg-secondary)]"><span class="min-w-0 truncate">Preview</span></div></div></div></div></div></div><div class="absolute z-30 derive-btn" style="right:-16px;top:50%;transform:translateY(-50%)"><button class="flex items-center justify-center rounded-full" style="width:28px;height:28px;background-color:var(--node-selected, #3b82f6);color:#fff;border:2px solid var(--node-bg, #1e1e1e);font-size:16px;font-weight:bold;line-height:1;cursor:pointer" title="添加后继节点">+</button></div><div data-port-id="out" data-port-type="output" data-node-id="media-parity" data-anchor="right" style="position:absolute;width:14px;height:14px;border-radius:50%;background-color:#6b7280;border:2px solid var(--node-bg);cursor:crosshair;z-index:10;right:-7px;top:50%;transform:translateY(-50%)" class="transition-all duration-150 scale-75 opacity-60 hover:scale-110 hover:opacity-100" title="Output"></div></div>"
-    `);
+    expect(markup).toContain('data-node-id="shot-parity"');
+    expect(markup).toContain('data-content-block-id="shot-status"');
+    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).toContain('data:image/png;base64,shot');
+    expect(markup).toContain('data-content-block-id="shot-visual-description"');
+    expect(markup).toContain('data-node-id="scene-parity"');
+    expect(markup).toContain('No children');
+    expect(markup).toContain('data-content-block-id="scene-title"');
+    expect(markup).toContain('data-node-id="gallery-parity"');
+    expect(markup).toContain('data-content-block-id="gallery-global-prompt"');
+    expect(markup).toContain('Character Profile');
+    expect(markup).toContain('No views (drag media here)');
+    expect(markup).toContain('data-node-id="media-parity"');
+    expect(markup).toContain('data-content-block-id="media-asset-preview"');
+    expect(markup).toContain('data-node-id="project-parity"');
+    expect(markup).toContain('data-content-block-id="project-asset-preview"');
+    expect(markup).toContain('Puppet');
+    expect(markup).not.toContain('Legacy path');
   });
 });

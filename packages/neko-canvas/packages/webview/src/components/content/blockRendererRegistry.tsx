@@ -332,8 +332,32 @@ function createPreviewSource(
       : { kind: 'asset-identity', path },
     role,
     variants: variants.length > 0 ? variants : undefined,
-    title: resolveLabel(context.block.label),
+    title: resolvePreviewSourceTitle(context, path),
+    metadata: resolvePreviewSourceMetadata(context),
   };
+}
+
+function resolvePreviewSourceTitle(
+  context: BlockRendererContext,
+  path: string | undefined,
+): string | undefined {
+  if (context.node.type === 'project') {
+    return (
+      context.node.data.projectTitle || extractBasename(path) || resolveLabel(context.block.label)
+    );
+  }
+
+  return resolveLabel(context.block.label);
+}
+
+function resolvePreviewSourceMetadata(
+  context: BlockRendererContext,
+): Record<string, unknown> | undefined {
+  if (context.node.type === 'project') {
+    return { projectType: context.node.data.projectType };
+  }
+
+  return undefined;
 }
 
 function updateBinding(context: BlockRendererContext, value: unknown): void {
@@ -440,10 +464,23 @@ function getCollectionItemKey(item: unknown, index: number): string {
 
 function resolveLabel(label: string | undefined): string | undefined {
   if (!label) return label;
-  if (label.startsWith('preset.')) return t(label);
-  return label;
+  return isI18nKey(label) ? t(label) : label;
+}
+
+function extractBasename(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  try {
+    const url = new URL(path);
+    return decodeURIComponent(url.pathname.split('/').pop() ?? path);
+  } catch {
+    return path.split('/').pop() ?? path;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isI18nKey(label: string): boolean {
+  return label.startsWith('preset.') || label.startsWith('preview.');
 }

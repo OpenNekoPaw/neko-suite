@@ -366,12 +366,12 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                   {
                     kind: 'delegate',
                     actions: [
-                      {
-                        id: 'open-media',
-                        label: 'Open',
-                        target: 'preview',
-                        assetBinding: {
-                          path: assetBindingPath,
+                    {
+                      id: 'open-media',
+                      label: 'preview.open',
+                      target: 'preview',
+                      assetBinding: {
+                        path: assetBindingPath,
                           valueType: 'asset',
                         },
                       },
@@ -484,7 +484,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                   actions: [
                     {
                       id: 'open-project',
-                      label: 'Open',
+                      label: 'preview.open',
                       target: 'project',
                       assetBinding: {
                         path: '/projectPath' as JsonPointerPath,
@@ -502,7 +502,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     createPreview: (node) => {
       const data = node.type === 'project' ? node.data : undefined;
       return {
-        title: data?.projectTitle ?? 'Project',
+        title: data?.projectTitle || extractBasename(data?.projectPath),
         subtitle: data?.projectType,
         role: 'project-thumbnail' as const,
         thumbnailVariantId: data?.thumbnailData ? 'thumb' : undefined,

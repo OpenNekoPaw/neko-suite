@@ -1140,7 +1140,7 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
     items.push({
       kind: 'action',
       blockId: `container-action:${action.id}`,
-      label: action.label,
+      label: resolveComposableLabel(action.label),
       action: action.id,
     });
   }
@@ -1151,7 +1151,7 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
       items.push({
         kind: 'field',
         blockId: block.id,
-        label: block.label ?? block.id,
+        label: resolveComposableLabel(block.label ?? block.id),
         blockKind: block.kind,
         binding: block.binding,
         value,
@@ -1165,7 +1165,7 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
       items.push({
         kind: 'collection',
         blockId: block.id,
-        label: block.label ?? block.collection.id,
+        label: resolveComposableLabel(block.label ?? block.collection.id),
         collection: block.collection,
         items: Array.isArray(value) ? value : [],
       });
@@ -1177,7 +1177,7 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
         items.push({
           kind: 'action',
           blockId: block.id,
-          label: block.label ?? action,
+          label: resolveComposableLabel(block.label ?? action),
           action,
         });
       }
@@ -1189,7 +1189,7 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
           items.push({
             kind: 'action',
             blockId: `${block.id}:${action.id}`,
-            label: action.label,
+            label: resolveComposableLabel(action.label),
             action: action.id,
           });
         }
@@ -1204,7 +1204,7 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
         items.push({
           kind: 'preview',
           blockId: `${block.id}:${capability.kind}`,
-          label: block.label ?? block.id,
+          label: resolveComposableLabel(block.label ?? block.id),
           role: capability.kind,
         });
       }
@@ -1212,6 +1212,14 @@ export function enumerateComposablePropertyItems(node: CanvasNode): ComposablePr
   }
 
   return items;
+}
+
+function resolveComposableLabel(label: string): string {
+  return isComposableI18nKey(label) ? t(label) : label;
+}
+
+function isComposableI18nKey(label: string): boolean {
+  return label.startsWith('preset.') || label.startsWith('preview.');
 }
 
 export function writeComposablePropertyBinding(

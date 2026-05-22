@@ -15,6 +15,7 @@ import {
   GALLERY_PRESET_CONFIGS,
   REGISTERED_CANVAS_NODE_TYPES,
   getBuiltInCanvasNodePresetMetadata,
+  getDefaultCanvasNodePresetName,
   isDocumentArchiveResourceRef,
   parseDocumentResourceStatus,
 } from '@neko/shared';
@@ -53,21 +54,21 @@ const DEFAULT_EMPTY_PORTS: PortDefinition[] = [];
 const REGISTERED_NODE_DEFAULT_DATA: Partial<
   Record<RegisteredCanvasNodeType, CanvasSerializableRecord>
 > = {
-  choice: { label: 'Choice', choices: [] },
-  merge: { label: 'Merge' },
-  'narrative-scene': { title: 'Scene', summary: '' },
+  choice: { choices: [] },
+  merge: {},
+  'narrative-scene': { summary: '' },
   'narrative-note': { content: '' },
-  state: { name: 'State' },
+  state: {},
   trigger: { event: '' },
-  action: { name: 'Action' },
+  action: {},
   condition: { expression: '' },
-  composite: { name: 'Composite' },
-  entity: { name: 'Entity', entityType: 'character' },
-  'representation-slot': { label: 'Slot', required: false },
-  occurrence: { label: 'Occurrence' },
-  'generated-asset': { assetId: '', label: 'Generated Asset' },
-  memory: { title: 'Memory', content: '' },
-  conversation: { title: 'Conversation' },
+  composite: {},
+  entity: { entityType: 'character' },
+  'representation-slot': { required: false },
+  occurrence: {},
+  'generated-asset': { assetId: '' },
+  memory: { content: '' },
+  conversation: {},
   fact: { statement: '' },
 };
 
@@ -143,7 +144,9 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
   if (options.preset && !getBuiltInCanvasNodePresetMetadata(options.preset)) {
     throw new Error(`Unsupported preset "${options.preset}"`);
   }
-  const preset = getCanvasNodePreset(NODE_PRESETS, options.preset);
+  const presetName =
+    options.preset ?? (type === 'project' ? getDefaultCanvasNodePresetName(type) : undefined);
+  const preset = getCanvasNodePreset(NODE_PRESETS, presetName);
 
   switch (type) {
     case 'annotation':
@@ -438,18 +441,21 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
         },
       };
     case 'project':
-      return {
-        type,
-        position,
-        size: getNodeDefaultSize(type),
-        zIndex,
-        data: {
-          projectPath: asString(data.projectPath, ''),
-          projectTitle: asString(data.projectTitle, ''),
-          projectType: inferProjectType(data.projectType),
-          thumbnailData: asString(data.thumbnailData) || undefined,
+      return applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: getNodeDefaultSize(type),
+          zIndex,
+          data: {
+            projectPath: asString(data.projectPath, ''),
+            projectTitle: asString(data.projectTitle, ''),
+            projectType: inferProjectType(data.projectType),
+            thumbnailData: asString(data.thumbnailData) || undefined,
+          },
         },
-      };
+        preset,
+      );
     case 'group':
       return {
         type,

@@ -5,6 +5,7 @@ import {
   CANVAS_AGENT_CONTAINER_PRESETS,
   CANVAS_AGENT_NODE_PRESETS,
   getBuiltInCanvasNodePresetMetadata,
+  getDefaultCanvasNodePresetName,
 } from '@neko/shared';
 import { buildCanvasNode } from './nodeFactory';
 import { hydrateCanvasNodePreview, refreshCanvasNodePreview } from './canvasPresetRegistry';
@@ -72,14 +73,20 @@ describe('nodeFactory composable presets', () => {
       nodeType: 'media',
       creationMode: 'composable',
     });
+    expect(getBuiltInCanvasNodePresetMetadata('project.basic')).toMatchObject({
+      nodeType: 'project',
+      creationMode: 'composable',
+    });
     expect(getBuiltInCanvasNodePresetMetadata('shot.legacy')).toBeUndefined();
     expect(getBuiltInCanvasNodePresetMetadata('scene.legacy')).toBeUndefined();
     expect(getBuiltInCanvasNodePresetMetadata('gallery.legacy')).toBeUndefined();
     expect(getBuiltInCanvasNodePresetMetadata('media.legacy')).toBeUndefined();
     expect(CANVAS_AGENT_NODE_PRESETS).toContain('shot.basic');
+    expect(CANVAS_AGENT_NODE_PRESETS).toContain('project.basic');
     expect(CANVAS_AGENT_NODE_PRESETS).not.toContain('shot.legacy');
     expect(CANVAS_AGENT_CHILD_PRESETS).toContain('gallery.basic');
     expect(CANVAS_AGENT_CONTAINER_PRESETS).toContain('scene.basic');
+    expect(getDefaultCanvasNodePresetName('project')).toBe('project.basic');
   });
 
   it('adds composable content for the low-risk annotation preset', () => {
@@ -386,6 +393,32 @@ describe('nodeFactory composable presets', () => {
       title: 'ref.png',
       subtitle: 'image',
       role: 'image',
+    });
+  });
+
+  it('applies the migrated project preset by default with asset preview capability', () => {
+    const node = buildCanvasNode({
+      type: 'project',
+      position: { x: 0, y: 0 },
+      zIndex: 0,
+      data: {
+        projectPath: 'projects/demo.nkv',
+        projectTitle: 'Demo',
+        projectType: 'nkv',
+      },
+    });
+
+    expect(node.type).toBe('project');
+    expect(node.preset).toBe('project.basic');
+    expect(node.content?.sections?.[0]?.blocks?.[0]).toMatchObject({
+      id: 'project-asset-preview',
+      kind: 'asset-preview',
+      binding: { path: '/projectPath' },
+    });
+    expect(node.preview).toMatchObject({
+      title: 'Demo',
+      subtitle: 'nkv',
+      role: 'project-thumbnail',
     });
   });
 
