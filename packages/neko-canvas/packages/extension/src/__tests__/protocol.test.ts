@@ -14,7 +14,7 @@
  *   NKV-005: operation bridge uses shared VSCode gateway
  *   NKV-006: timeline import success round-trips through timelineSync
  *   NKV-007: toolbar can pick .nkc files into canvas-embed nodes
- *   NKV-008: toolbar pickers cover script/document/model reference nodes
+ *   NKV-008: toolbar pickers cover file-bound reference nodes
  *   NKV-009: composable Agent node operations use payload wrappers
  *   NKV-010: projected Canvas write-back routes through projection adapters
  */
@@ -156,12 +156,16 @@ describe('canvasEditorProvider message contracts', () => {
 
   describe('NKV-008: reference picker entrypoints', () => {
     it('extension handles script/document/model picker messages', () => {
+      expect(providerSource).toContain("case 'pickMediaFile'");
       expect(providerSource).toContain("case 'pickScriptDocument'");
       expect(providerSource).toContain("case 'pickReferenceDocument'");
       expect(providerSource).toContain("case 'pickModelReference'");
+      expect(providerSource).toContain("case 'pickProjectDocument'");
+      expect(providerSource).toContain("kind: 'media'");
       expect(providerSource).toContain("kind: 'script'");
       expect(providerSource).toContain("kind: 'document'");
       expect(providerSource).toContain("kind: 'model'");
+      expect(providerSource).toContain("kind: 'project'");
     });
   });
 

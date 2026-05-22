@@ -35,6 +35,11 @@ import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
 import type { VSCodeAPI } from './hooks/useVSCodeMessages';
 import { buildCanvasNode } from './utils/nodeFactory';
+import {
+  getNodeLibraryPickerMessageType,
+  isNodeLibraryDirectCreateType,
+  type NodeLibraryPickerMessageType,
+} from './utils/nodeLibraryPolicy';
 import { appendSelectedGenerationCandidate } from './utils/generationHistory';
 import { setGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
@@ -89,6 +94,7 @@ export function CanvasApp() {
 
   // Interaction tool: select/marquee by default, hand tool pans on drag.
   const [interactionTool, setInteractionTool] = useState<CanvasInteractionTool>('select');
+  const [isNodeLibraryVisible, setIsNodeLibraryVisible] = useState(true);
   // Minimap width tracks ZoomControls width for alignment
   const zoomControlsRef = useRef<HTMLDivElement>(null);
   const [miniMapWidth, setMiniMapWidth] = useState(200);
@@ -163,7 +169,10 @@ export function CanvasApp() {
         .filter((manifest) => manifest.autoArrangeStrategy)
         .map((manifest) => ({
           id: manifest.autoArrangeStrategy!,
-          label: `${manifest.label} · ${manifest.autoArrangeStrategy}`,
+          label: t('toolbar.autoArrangeChoice', {
+            subsystem: t(`library.group.${manifest.id}`),
+            strategy: t(`autoArrange.strategy.${manifest.autoArrangeStrategy}`),
+          }),
           subsystemId: manifest.id,
         })),
     [],
@@ -330,12 +339,28 @@ export function CanvasApp() {
     }
   }, []);
 
-  const handleCreateLibraryNode = useCallback(
-    (type: CanvasNodeType) => {
+  const handlePickLibraryNodeSource = useCallback(
+    (_type: CanvasNodeType, pickerMessageType: NodeLibraryPickerMessageType) => {
+      if (vscode) {
+        vscode.postMessage({ type: pickerMessageType });
+      }
+    },
+    [],
+  );
+
+  const createLibraryNodeAt = useCallback(
+    (type: CanvasNodeType, position: { x: number; y: number }) => {
+      if (!isNodeLibraryDirectCreateType(type)) {
+        const pickerMessageType = getNodeLibraryPickerMessageType(type);
+        if (pickerMessageType && vscode) {
+          vscode.postMessage({ type: pickerMessageType });
+        }
+        return;
+      }
       const currentNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
       const node = buildCanvasNode({
         type,
-        position: getViewportCenter(),
+        position,
         data: {},
         zIndex: currentNodes.length,
       });
@@ -345,7 +370,21 @@ export function CanvasApp() {
         reportAction('node.create', type);
       }
     },
-    [addNode, getViewportCenter, reportAction, selectNode],
+    [addNode, reportAction, selectNode],
+  );
+
+  const handleCreateLibraryNode = useCallback(
+    (type: CanvasNodeType) => {
+      createLibraryNodeAt(type, getViewportCenter());
+    },
+    [createLibraryNodeAt, getViewportCenter],
+  );
+
+  const handleDropLibraryNode = useCallback(
+    (type: CanvasNodeType, position: { x: number; y: number }) => {
+      createLibraryNodeAt(type, position);
+    },
+    [createLibraryNodeAt],
   );
 
   const handleLoadSubsystem = useCallback((subsystemId: CanvasSubsystemId) => {
@@ -404,6 +443,7 @@ export function CanvasApp() {
     canvasContainerRef,
     screenToCanvas,
     addMediaAt,
+    onDropNodeType: handleDropLibraryNode,
   });
 
   // =========================================================================
@@ -1143,6 +1183,8 @@ export function CanvasApp() {
         onInteractionToolChange={setInteractionTool}
         onUndo={undo}
         onRedo={redo}
+        isNodeLibraryVisible={isNodeLibraryVisible}
+        onToggleNodeLibrary={() => setIsNodeLibraryVisible((visible) => !visible)}
         onImportFile={handleImportFile}
         autoArrangeChoices={autoArrangeChoices}
         onAutoArrange={handleAutoArrange}
@@ -1151,14 +1193,17 @@ export function CanvasApp() {
       />
       {/* Main content area */}
       <div ref={rootRef} className="flex-1 flex overflow-hidden">
-        <NodeLibraryPanel
-          coreDescriptors={coreNodeTypeDescriptors}
-          subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
-          nodeTypeDescriptors={subsystemNodeTypeDescriptors}
-          activeSubsystemIds={activeSubsystemIds}
-          onCreateNode={handleCreateLibraryNode}
-          onLoadSubsystem={handleLoadSubsystem}
-        />
+        {isNodeLibraryVisible && (
+          <NodeLibraryPanel
+            coreDescriptors={coreNodeTypeDescriptors}
+            subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
+            nodeTypeDescriptors={subsystemNodeTypeDescriptors}
+            activeSubsystemIds={activeSubsystemIds}
+            onCreateNode={handleCreateLibraryNode}
+            onPickNodeSource={handlePickLibraryNodeSource}
+            onLoadSubsystem={handleLoadSubsystem}
+          />
+        )}
 
         <div
           ref={canvasContainerRef}
@@ -1226,8 +1271,8 @@ export function CanvasApp() {
             </div>
           )}
 
-          {/* Bottom-left cluster: MiniMap + ZoomControls (always visible, widths aligned) */}
-          <div className="absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2">
+          {/* Bottom-right cluster: MiniMap + ZoomControls (always visible, widths aligned) */}
+          <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
             <MiniMap
               nodes={nodes}
               viewport={viewport}
@@ -1261,7 +1306,7 @@ export function CanvasApp() {
           <FloatingPanelHost panels={floatingPanels} />
 
           <div
-            className="absolute right-3 bottom-3 z-10 rounded px-2 py-1 text-xs pointer-events-none"
+            className="absolute left-3 bottom-3 z-10 rounded px-2 py-1 text-xs pointer-events-none"
             style={{
               backgroundColor: 'var(--glass-bg-light)',
               border: '1px solid var(--glass-border)',
@@ -1276,7 +1321,7 @@ export function CanvasApp() {
           {canvasData?.projected && (
             <button
               type="button"
-              className="absolute right-3 bottom-10 z-10 rounded px-2 py-1 text-xs"
+              className="absolute left-3 bottom-10 z-10 rounded px-2 py-1 text-xs"
               style={{
                 backgroundColor: 'var(--glass-bg-light)',
                 border: '1px solid var(--glass-border)',

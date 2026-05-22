@@ -14,12 +14,14 @@ export interface PlaybackControllerComponentProps {
 export interface FloatingPanelDefinition {
   readonly id: string;
   readonly title: string;
+  readonly titleKey?: string;
   readonly component: React.LazyExoticComponent<React.ComponentType<FloatingPanelComponentProps>>;
 }
 
 export interface PlaybackControllerDefinition {
   readonly id: string;
   readonly title: string;
+  readonly titleKey?: string;
   readonly component: React.LazyExoticComponent<
     React.ComponentType<PlaybackControllerComponentProps>
   >;

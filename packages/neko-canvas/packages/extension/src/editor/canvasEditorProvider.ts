@@ -1385,6 +1385,72 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         break;
       }
 
+      case 'pickMediaFile': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            Images: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'],
+            Videos: ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'],
+            Audio: ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'media';
+          const mediaType = inferCanvasMediaType(fileName);
+          if (!mediaType) break;
+
+          await this.addFeatureRoot(webviewPanel.webview, path.dirname(uri.fsPath));
+          const webviewUri = this.projectLocalResource(
+            webviewPanel.webview,
+            uri.fsPath,
+            'neko-canvas.pick-media-file',
+          );
+          if (webviewUri) {
+            webviewPanel.webview.postMessage({
+              type: 'dropAssets',
+              assets: [{ kind: 'media', path: webviewUri, name: fileName, mediaType }],
+            });
+          }
+        }
+        break;
+      }
+
+      case 'pickProjectDocument': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          filters: {
+            'Neko Projects': ['nkv', 'nka', 'nkm', 'nkp'],
+            'All Files': ['*'],
+          },
+        });
+
+        if (uris && uris.length > 0) {
+          const uri = uris[0];
+          const fileName = uri.path.split('/').pop() || 'project.nkv';
+          const projectType = inferNkProjectType(fileName);
+          if (!projectType) break;
+
+          const contractedPath = await this.contractAssetPath(uri.fsPath, document.uri);
+          const title = fileName.replace(/\.[^.]+$/, '') || 'Project';
+          webviewPanel.webview.postMessage({
+            type: 'dropAssets',
+            assets: [
+              {
+                kind: 'project',
+                path: contractedPath,
+                name: fileName,
+                title,
+                projectType,
+              },
+            ],
+          });
+        }
+        break;
+      }
+
       case 'pickScriptDocument': {
         const uris = await vscode.window.showOpenDialog({
           canSelectMany: false,

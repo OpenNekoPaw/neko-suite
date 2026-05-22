@@ -11,10 +11,15 @@
  * file system, and asset library into the canvas.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import type { CanvasNodeType } from '@neko/shared';
 import { useFileDrop } from '@neko/shared/components';
 import type { FileDropResult } from '@neko/shared/components';
 import { detectMediaType } from '../utils/mediaType';
+import {
+  hasNodeLibraryDragPayload,
+  readNodeLibraryDragPayload,
+} from '../utils/nodeLibraryDrag';
 import type { VSCodeAPI } from './useVSCodeMessages';
 
 // =============================================================================
@@ -31,6 +36,7 @@ export interface UseDragDropOptions {
     uri?: string,
     name?: string,
   ) => void;
+  onDropNodeType?: (type: CanvasNodeType, position: { x: number; y: number }) => void;
 }
 
 export interface UseDragDropReturn {
@@ -47,9 +53,10 @@ export interface UseDragDropReturn {
 // =============================================================================
 
 export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
-  const { vscode, screenToCanvas, addMediaAt } = options;
+  const { vscode, screenToCanvas, addMediaAt, onDropNodeType } = options;
 
   const dropPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const [isNodeLibraryDragOver, setIsNodeLibraryDragOver] = useState(false);
 
   const handleFileDrop = useCallback(
     (result: FileDropResult, event: React.DragEvent) => {
@@ -131,12 +138,63 @@ export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
 
   const { isDragOver, dropProps } = useFileDrop(handleFileDrop);
 
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (hasNodeLibraryDragPayload(e.dataTransfer)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        setIsNodeLibraryDragOver(true);
+        return;
+      }
+      dropProps.onDragEnter(e);
+    },
+    [dropProps],
+  );
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (hasNodeLibraryDragPayload(e.dataTransfer)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        setIsNodeLibraryDragOver(true);
+        return;
+      }
+      dropProps.onDragOver(e);
+    },
+    [dropProps],
+  );
+
+  const handleDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      if (isNodeLibraryDragLeavingCanvas(e, options.canvasContainerRef.current)) {
+        setIsNodeLibraryDragOver(false);
+      }
+      dropProps.onDragLeave(e);
+    },
+    [dropProps, options.canvasContainerRef],
+  );
+
   // Wrap the drop handler to also check for cross-extension DnD payload (ADR-5 P1).
   // When a drag originates from another VSCode webview iframe, the dataTransfer is
   // empty — so we always notify the extension host to check for a pending DnD payload.
   const handleDropWithCrossExtension = useCallback(
     (e: React.DragEvent) => {
+      const droppedNodeType = readNodeLibraryDragPayload(e.dataTransfer);
+      if (droppedNodeType) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsNodeLibraryDragOver(false);
+        const position = screenToCanvas(e.clientX, e.clientY);
+        dropPositionRef.current = position;
+        onDropNodeType?.(droppedNodeType, position);
+        dropPositionRef.current = null;
+        return;
+      }
+
       // Let useFileDrop handle file/URI/asset drops first
+      setIsNodeLibraryDragOver(false);
       dropProps.onDrop(e);
 
       // Also ask the extension host if there is a cross-extension DnD payload
@@ -144,15 +202,37 @@ export function useDragDrop(options: UseDragDropOptions): UseDragDropReturn {
         vscode.postMessage({ type: 'dnd:drop' });
       }
     },
-    [dropProps, vscode],
+    [dropProps, onDropNodeType, screenToCanvas, vscode],
   );
 
   return {
-    isDragOver,
+    isDragOver: isDragOver || isNodeLibraryDragOver,
     dropPositionRef,
-    handleDragEnter: dropProps.onDragEnter,
-    handleDragOver: dropProps.onDragOver,
-    handleDragLeave: dropProps.onDragLeave,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
     handleDrop: handleDropWithCrossExtension,
   };
+}
+
+export function isNodeLibraryDragLeavingCanvas(
+  event: Pick<React.DragEvent, 'relatedTarget'>,
+  canvasElement: HTMLDivElement | null,
+): boolean {
+  const nextTarget = event.relatedTarget;
+  return (
+    nextTarget === null ||
+    !isDomNode(nextTarget) ||
+    !canvasElement?.contains(nextTarget)
+  );
+}
+
+export function isDomNode(value: EventTarget | null): value is Node {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (typeof Node !== 'undefined') {
+    return value instanceof Node;
+  }
+  return typeof (value as { nodeType?: unknown }).nodeType === 'number';
 }

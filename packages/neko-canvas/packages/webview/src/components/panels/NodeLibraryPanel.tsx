@@ -1,7 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNodeType, CanvasSubsystemManifest } from '@neko/shared';
 import { ChevronDownIcon, ChevronRightIcon } from '@neko/shared/icons';
 import { t } from '../../i18n';
+import { writeNodeLibraryDragPayload } from '../../utils/nodeLibraryDrag';
+import {
+  getNodeLibraryCreationPolicy,
+  isNodeLibraryFileBoundType,
+  isNodeLibraryVisibleCreateType,
+  type NodeLibraryPickerMessageType,
+} from '../../utils/nodeLibraryPolicy';
 import type { NodeTypeDescriptorRegistry } from '../nodes/nodeTypeDescriptor';
 
 export interface NodeLibraryPanelProps {
@@ -10,6 +17,7 @@ export interface NodeLibraryPanelProps {
   nodeTypeDescriptors?: NodeTypeDescriptorRegistry;
   activeSubsystemIds?: readonly string[];
   onCreateNode: (type: CanvasNodeType) => void;
+  onPickNodeSource?: (type: CanvasNodeType, pickerMessageType: NodeLibraryPickerMessageType) => void;
   onLoadSubsystem?: (subsystemId: CanvasSubsystemManifest['id']) => void;
 }
 
@@ -20,17 +28,21 @@ interface NodeLibraryGroup {
   subsystemId?: CanvasSubsystemManifest['id'];
 }
 
+const FILE_REFERENCE_GROUP_ID = 'file-references';
+
 export function NodeLibraryPanel({
   coreDescriptors,
   subsystemManifests,
   nodeTypeDescriptors = {},
   activeSubsystemIds = [],
   onCreateNode,
+  onPickNodeSource,
   onLoadSubsystem,
 }: NodeLibraryPanelProps) {
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(
     () => new Set(['core', 'storyboard']),
   );
+  const requestedSubsystemIdsRef = useRef<Set<CanvasSubsystemManifest['id']>>(new Set());
 
   const groups = useMemo(
     () => createNodeLibraryGroups(coreDescriptors, subsystemManifests),
@@ -41,6 +53,21 @@ export function NodeLibraryPanel({
     () => ({ ...coreDescriptors, ...nodeTypeDescriptors }),
     [coreDescriptors, nodeTypeDescriptors],
   );
+
+  const requestSubsystemLoad = useCallback(
+    (subsystemId: CanvasSubsystemManifest['id']) => {
+      requestSubsystemLoadOnce(requestedSubsystemIdsRef.current, subsystemId, onLoadSubsystem);
+    },
+    [onLoadSubsystem],
+  );
+
+  useEffect(() => {
+    for (const group of groups) {
+      if (group.subsystemId && expandedGroupIds.has(group.id)) {
+        requestSubsystemLoad(group.subsystemId);
+      }
+    }
+  }, [expandedGroupIds, groups, requestSubsystemLoad]);
 
   return (
     <aside
@@ -75,13 +102,16 @@ export function NodeLibraryPanel({
                 onClick={() => {
                   setExpandedGroupIds((current) => {
                     const next = new Set(current);
-                    if (next.has(group.id)) next.delete(group.id);
-                    else next.add(group.id);
+                    if (next.has(group.id)) {
+                      next.delete(group.id);
+                    } else {
+                      next.add(group.id);
+                      if (group.subsystemId) {
+                        requestSubsystemLoad(group.subsystemId);
+                      }
+                    }
                     return next;
                   });
-                  if (group.subsystemId) {
-                    onLoadSubsystem?.(group.subsystemId);
-                  }
                 }}
               >
                 {isExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
@@ -105,21 +135,49 @@ export function NodeLibraryPanel({
                 <div className="mt-1 grid gap-1">
                   {group.nodeTypes.map((nodeType) => {
                     const descriptor = descriptors[nodeType];
+                    const creationPolicy = getNodeLibraryCreationPolicy(nodeType);
+                    const canCreateDirectly = creationPolicy.kind === 'create';
+                    const canPickSource = Boolean(creationPolicy.pickerMessageType);
+                    const isActionable = canCreateDirectly || canPickSource;
+                    const badge = creationPolicy.badgeKey ? t(creationPolicy.badgeKey) : undefined;
+                    const title = t(creationPolicy.titleKey, {
+                      node: resolveNodeLibraryLabel(nodeType, descriptor),
+                    });
                     return (
                       <button
                         key={nodeType}
                         type="button"
+                        draggable={creationPolicy.canDragToCreate}
+                        aria-disabled={!isActionable ? true : undefined}
+                        title={title}
                         className="flex min-h-[34px] w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs"
                         style={{
                           backgroundColor: 'var(--control-bg)',
                           border: '1px solid var(--control-border)',
-                          color: 'var(--control-fg)',
+                          color: canCreateDirectly ? 'var(--control-fg)' : 'var(--toolbar-fg)',
+                          opacity: isActionable ? 1 : 0.72,
                         }}
                         onClick={() => {
                           if (group.subsystemId) {
-                            onLoadSubsystem?.(group.subsystemId);
+                            requestSubsystemLoad(group.subsystemId);
                           }
-                          onCreateNode(nodeType);
+                          if (canCreateDirectly) {
+                            onCreateNode(nodeType);
+                            return;
+                          }
+                          if (creationPolicy.pickerMessageType) {
+                            onPickNodeSource?.(nodeType, creationPolicy.pickerMessageType);
+                          }
+                        }}
+                        onDragStart={(event) => {
+                          if (group.subsystemId) {
+                            requestSubsystemLoad(group.subsystemId);
+                          }
+                          if (!creationPolicy.canDragToCreate) {
+                            event.preventDefault();
+                            return;
+                          }
+                          writeNodeLibraryDragPayload(event.dataTransfer, nodeType);
                         }}
                       >
                         <span
@@ -132,8 +190,19 @@ export function NodeLibraryPanel({
                           {descriptor?.icon ?? nodeType.charAt(0).toUpperCase()}
                         </span>
                         <span className="min-w-0 flex-1 truncate">
-                          {descriptor ? t(descriptor.labelKey) : nodeType}
+                          {resolveNodeLibraryLabel(nodeType, descriptor)}
                         </span>
+                        {badge && (
+                          <span
+                            className="rounded px-1.5 py-0.5 text-[10px]"
+                            style={{
+                              backgroundColor: 'var(--badge-neutral-bg)',
+                              color: 'var(--toolbar-fg-secondary)',
+                            }}
+                          >
+                            {badge}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -152,17 +221,84 @@ export function createNodeLibraryGroups(
   subsystemManifests: readonly CanvasSubsystemManifest[],
 ): readonly NodeLibraryGroup[] {
   const coreNodeTypes = Object.keys(coreDescriptors) as CanvasNodeType[];
-  return [
-    {
+  const fileReferenceNodeTypes: CanvasNodeType[] = [];
+  const fileReferenceNodeTypeSet = new Set<CanvasNodeType>();
+
+  const collectVisibleNodeTypes = (nodeTypes: readonly CanvasNodeType[]): CanvasNodeType[] =>
+    nodeTypes.filter((nodeType) => {
+      if (isNodeLibraryFileBoundType(nodeType)) {
+        if (!fileReferenceNodeTypeSet.has(nodeType)) {
+          fileReferenceNodeTypeSet.add(nodeType);
+          fileReferenceNodeTypes.push(nodeType);
+        }
+        return false;
+      }
+      return isNodeLibraryVisibleCreateType(nodeType);
+    });
+
+  const groups: NodeLibraryGroup[] = [];
+  const coreVisibleNodeTypes = collectVisibleNodeTypes(coreNodeTypes);
+  if (coreVisibleNodeTypes.length > 0) {
+    groups.push({
       id: 'core',
       label: t('library.basic'),
-      nodeTypes: coreNodeTypes,
-    },
-    ...subsystemManifests.map((manifest) => ({
+      nodeTypes: coreVisibleNodeTypes,
+    });
+  }
+
+  for (const manifest of subsystemManifests) {
+    const visibleNodeTypes = collectVisibleNodeTypes(manifest.triggerNodeTypes);
+    if (visibleNodeTypes.length === 0) {
+      continue;
+    }
+    groups.push({
       id: manifest.id,
-      label: manifest.label,
-      nodeTypes: manifest.triggerNodeTypes,
+      label: t(`library.group.${manifest.id}`),
+      nodeTypes: visibleNodeTypes,
       subsystemId: manifest.id,
-    })),
-  ];
+    });
+  }
+
+  if (fileReferenceNodeTypes.length > 0) {
+    groups.push({
+      id: FILE_REFERENCE_GROUP_ID,
+      label: t('library.group.fileReferences'),
+      nodeTypes: fileReferenceNodeTypes,
+    });
+  }
+
+  return groups;
+}
+
+const NODE_TYPE_LABEL_KEY_FALLBACK: Partial<Record<CanvasNodeType, string>> = {
+  annotation: 'node.note',
+  text: 'toolbar.text',
+  scene: 'node.sceneGroup',
+  'canvas-embed': 'node.canvasEmbed',
+  'narrative-scene': 'node.narrativeScene',
+  'narrative-note': 'node.narrativeNote',
+  'representation-slot': 'node.representationSlot',
+  'generated-asset': 'node.generatedAsset',
+};
+
+export function resolveNodeLibraryLabel(
+  nodeType: CanvasNodeType,
+  descriptor?: NodeTypeDescriptorRegistry[CanvasNodeType],
+): string {
+  const key = descriptor?.labelKey ?? NODE_TYPE_LABEL_KEY_FALLBACK[nodeType] ?? `node.${nodeType}`;
+  const label = t(key);
+  return label === key ? nodeType : label;
+}
+
+export function requestSubsystemLoadOnce(
+  requestedSubsystemIds: Set<CanvasSubsystemManifest['id']>,
+  subsystemId: CanvasSubsystemManifest['id'],
+  onLoadSubsystem?: (subsystemId: CanvasSubsystemManifest['id']) => void,
+): boolean {
+  if (requestedSubsystemIds.has(subsystemId)) {
+    return false;
+  }
+  requestedSubsystemIds.add(subsystemId);
+  onLoadSubsystem?.(subsystemId);
+  return true;
 }

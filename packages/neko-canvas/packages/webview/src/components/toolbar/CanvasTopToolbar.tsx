@@ -2,11 +2,11 @@ import { Suspense, useMemo, useState, type ReactNode } from 'react';
 import type { CanvasAutoArrangeStrategyId, CanvasSubsystemId } from '@neko/shared';
 import {
   ChevronDownIcon,
-  PlayIcon,
+  LayersIcon,
   RedoIcon,
+  SettingsIcon,
   UndoIcon,
   UploadIcon,
-  SettingsIcon,
 } from '@neko/shared/icons';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
@@ -25,11 +25,14 @@ export interface CanvasTopToolbarProps {
   onInteractionToolChange: (tool: CanvasInteractionTool) => void;
   onUndo: () => void;
   onRedo: () => void;
+  isNodeLibraryVisible?: boolean;
+  onToggleNodeLibrary?: () => void;
   onImportFile?: () => void;
   autoArrangeChoices: readonly AutoArrangeChoice[];
   onAutoArrange?: (strategyId: CanvasAutoArrangeStrategyId) => void;
   playbackControllers?: readonly PlaybackControllerDefinition[];
   activeSubsystemIds?: readonly CanvasSubsystemId[];
+  onOpenCanvasSettings?: () => void;
 }
 
 export function CanvasTopToolbar({
@@ -37,11 +40,14 @@ export function CanvasTopToolbar({
   onInteractionToolChange,
   onUndo,
   onRedo,
+  isNodeLibraryVisible = true,
+  onToggleNodeLibrary,
   onImportFile,
   autoArrangeChoices,
   onAutoArrange,
   playbackControllers = [],
   activeSubsystemIds = [],
+  onOpenCanvasSettings,
 }: CanvasTopToolbarProps) {
   const canUndo = useHistoryStore((state) => state.canUndo());
   const canRedo = useHistoryStore((state) => state.canRedo());
@@ -55,6 +61,7 @@ export function CanvasTopToolbar({
   );
 
   const PlaybackComponent = activePlayback?.component;
+  const shouldRenderRightControls = Boolean(PlaybackComponent || onOpenCanvasSettings);
 
   return (
     <div
@@ -69,6 +76,7 @@ export function CanvasTopToolbar({
         <ToolButton
           label={t('toolbar.selectTool')}
           active={interactionTool === 'select'}
+          pressed={interactionTool === 'select'}
           onClick={() => onInteractionToolChange('select')}
         >
           <CursorIcon />
@@ -76,6 +84,7 @@ export function CanvasTopToolbar({
         <ToolButton
           label={t('toolbar.handTool')}
           active={interactionTool === 'pan'}
+          pressed={interactionTool === 'pan'}
           onClick={() => onInteractionToolChange('pan')}
         >
           <HandIcon />
@@ -83,6 +92,21 @@ export function CanvasTopToolbar({
       </div>
 
       <ToolbarDivider />
+
+      {onToggleNodeLibrary && (
+        <>
+          <ToolButton
+            label={t('toolbar.toggleNodeLibrary')}
+            active={isNodeLibraryVisible}
+            pressed={isNodeLibraryVisible}
+            onClick={onToggleNodeLibrary}
+          >
+            <LayersIcon size={16} />
+          </ToolButton>
+
+          <ToolbarDivider />
+        </>
+      )}
 
       <ToolButton label={t('toolbar.undo')} disabled={!canUndo} onClick={onUndo}>
         <UndoIcon size={16} />
@@ -133,52 +157,47 @@ export function CanvasTopToolbar({
 
       <div className="min-w-0 flex-1" />
 
-      <div className="flex min-w-[180px] items-center justify-end gap-2">
-        {playbackControllers.length > 1 && (
-          <label className="relative flex items-center">
-            <select
-              className="h-8 min-w-[130px] appearance-none rounded px-2 pr-7 text-xs"
-              style={{
-                backgroundColor: 'var(--control-bg)',
-                borderColor: 'var(--control-border)',
-                color: 'var(--control-fg)',
-              }}
-              value={activePlayback?.id ?? ''}
-              title={t('toolbar.playbackMode')}
-              onChange={(event) => setSelectedPlaybackId(event.target.value || null)}
-            >
-              {playbackControllers.map((controller) => (
-                <option key={controller.id} value={controller.id}>
-                  {controller.title}
-                </option>
-              ))}
-            </select>
-            <ChevronDownIcon size={14} className="pointer-events-none absolute right-2" />
-          </label>
-        )}
+      {shouldRenderRightControls && (
+        <div
+          className="flex min-w-[180px] items-center justify-end gap-2"
+          data-canvas-toolbar-section="playback-settings"
+        >
+          {playbackControllers.length > 1 && (
+            <label className="relative flex items-center">
+              <select
+                className="h-8 min-w-[130px] appearance-none rounded px-2 pr-7 text-xs"
+                style={{
+                  backgroundColor: 'var(--control-bg)',
+                  borderColor: 'var(--control-border)',
+                  color: 'var(--control-fg)',
+                }}
+                value={activePlayback?.id ?? ''}
+                title={t('toolbar.playbackMode')}
+                onChange={(event) => setSelectedPlaybackId(event.target.value || null)}
+              >
+                {playbackControllers.map((controller) => (
+                  <option key={controller.id} value={controller.id}>
+                    {resolvePlaybackControllerTitle(controller)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon size={14} className="pointer-events-none absolute right-2" />
+            </label>
+          )}
 
-        {PlaybackComponent ? (
-          <Suspense fallback={<PlaybackFallback />}>
-            <PlaybackComponent activeSubsystemIds={activeSubsystemIds} />
-          </Suspense>
-        ) : (
-          <div
-            className="flex h-8 items-center gap-1 rounded px-2 text-xs"
-            style={{
-              color: 'var(--toolbar-fg-secondary)',
-              border: '1px solid var(--control-border)',
-              backgroundColor: 'var(--control-bg)',
-            }}
-          >
-            <PlayIcon size={13} />
-            <span>{t('toolbar.noPlayback')}</span>
-          </div>
-        )}
+          {PlaybackComponent && (
+            <Suspense fallback={<PlaybackFallback />}>
+              <PlaybackComponent activeSubsystemIds={activeSubsystemIds} />
+            </Suspense>
+          )}
 
-        <ToolButton label={t('toolbar.canvasSettings')} disabled>
-          <SettingsIcon size={16} />
-        </ToolButton>
-      </div>
+          {onOpenCanvasSettings && (
+            <ToolButton label={t('toolbar.canvasSettings')} onClick={onOpenCanvasSettings}>
+              <SettingsIcon size={16} />
+            </ToolButton>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -186,12 +205,14 @@ export function CanvasTopToolbar({
 function ToolButton({
   label,
   active = false,
+  pressed,
   disabled = false,
   onClick,
   children,
 }: {
   label: string;
   active?: boolean;
+  pressed?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   children: ReactNode;
@@ -201,6 +222,7 @@ function ToolButton({
       type="button"
       title={label}
       aria-label={label}
+      aria-pressed={pressed}
       disabled={disabled}
       className="flex h-8 w-8 items-center justify-center rounded disabled:cursor-not-allowed disabled:opacity-45"
       style={{
@@ -218,6 +240,10 @@ function ToolButton({
 
 function ToolbarDivider() {
   return <div className="h-6 w-px" style={{ backgroundColor: 'var(--toolbar-border)' }} />;
+}
+
+function resolvePlaybackControllerTitle(controller: PlaybackControllerDefinition): string {
+  return controller.titleKey ? t(controller.titleKey) : controller.title;
 }
 
 function PlaybackFallback() {
