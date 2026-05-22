@@ -87,11 +87,11 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 19 �
 
 | 模块            | 职能                                                                                                       | 状态      | 规模                                              |
 | --------------- | ---------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------- |
-| **neko-model**  | 3D 创作 - glTF/VRM 视口 + PBR/IBL + CSG + 捏脸 + 粒子 + 关键帧动画 + IK 求解器                             | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests      |
+| **neko-model**  | 3D 创作 - glTF/VRM 引擎流视口 + PBR/IBL + CSG + AI 捏脸预览场景（Face/Body/Motion/Voice）+ 粒子 + 关键帧动画 + IK 求解器 | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests      |
 | **neko-sketch** | 2D 创作 - 压感手绘 8 笔刷 + 图层 + 选区 + AI 工具 + PSD 导入 + .nks 格式 + 2D 光照                         | Alpha 68% | 31.9K TS/TSX (178 files, 185 tests)               |
 | **neko-audio**  | 音频工作站 - DAW UI（TrackHeader/TrackLane/AudioClip）+ 12 种效果 + 频谱 + AI 降噪 + Agent 工具            | Alpha 82% | 11.1K TS/TSX (60 files, 52 tests)                 |
-| **neko-puppet** | 2D 骨骼动画 - Live2D MOC3 clean-room 解析器 + 变形器 + 表情 + 动作 + 物理 + 60fps 流                       | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests     |
-| **neko-live**   | 虚拟制片 - VMC/VRM 实时驱动 + 2D Puppet 联动 + 录制 + 设备管理                                             | Alpha 58% | 4.4K TS (34 files, 37 tests)                      |
+| **neko-puppet** | 2D 骨骼动画 - `.nkp` v2 Native Puppet（Bone2D + BlendShape + ControlDriver）+ Live2D/MOC3 导入转换兼容 + Agent/导出首版 + 60fps 流 | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests     |
+| **neko-live**   | 虚拟制片 - 引擎 Live Compositor 合成流 + ViewportShell + 设备授权 source refs + 非权威本地 fallback 录制       | Alpha 58% | 4.4K TS (34 files, 37 tests)                      |
 
 ---
 
@@ -109,7 +109,7 @@ VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
                                                 ├─ DSP 效果库（混音管线 solo/pan）
                                                 ├─ 导出管线（GPU export + audio mixer + 响度标准化）
                                                 ├─ runtime-scene 3D 场景（bevy_ecs + glTF/VRM + IK + 动画混合）
-                                                ├─ runtime-puppet 2D 骨骼（bevy_ecs + MOC3 + 60fps WS 流）
+                                                ├─ runtime-puppet 2D Native Puppet（Bone2D + BlendShape + MOC3 导入兼容 + 60fps WS 流）
                                                 ├─ runtime-device 设备 I/O（cpal + midir + gilrs）
                                                 ├─ runtime-media 媒体逻辑（probe/diff/subtitle）
                                                 └─ runtime-ml ONNX 推理（macOS CoreML 加速）
@@ -231,7 +231,7 @@ neko-suite/
 │   │       ├── host-napi/   # Node.js NAPI 绑定
 │   │       ├── host-cli/    # CLI 入口
 │   │       ├── runtime-scene/  # Rust 3D 场景 ECS（bevy_ecs + glTF）
-│   │       ├── runtime-puppet/ # Rust 2D 骨骼 ECS（bevy_ecs + MOC3 + bevy_animation）
+│   │       ├── runtime-puppet/ # Rust 2D Native Puppet ECS（Bone2D + BlendShape + MOC3 导入兼容）
 │   │       ├── types/         # Rust 共享类型
 │   │       └── extension/     # TS VSCode 扩展侧
 │   ├── neko-cut/              # 视频剪辑器
@@ -289,11 +289,11 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nks）
 │   │       └── webview/       # React 18 + WebGL2 UI
-│   ├── neko-puppet/           # 2D 骨骼动画（Inochi2D puppet 编辑器）
+│   ├── neko-puppet/           # 2D 骨骼动画（.nkp v2 native 编辑器 + Live2D/MOC3 导入转换）
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nkp）
 │   │       └── webview/       # React 18 + EngineClient UI
-│   ├── neko-live/             # 虚拟直播（Planned）
+│   ├── neko-live/             # 虚拟直播（Live Compositor 合成流 + fallback 预览）
 │   ├── neko-types/            # 共享类型 + Logger + i18n + Theme
 │   └── neko-proto/            # 协议定义（Protobuf IDL）
 ├── docs/                      # 架构文档
@@ -329,7 +329,7 @@ neko-suite/
 | **音频**    | MP3, WAV, OGG, FLAC, AAC, M4A       |
 | **图片**    | PNG, JPG, JPEG, GIF, WebP, BMP, SVG |
 | **3D 模型** | glTF, GLB, VRM, .nkm                |
-| **2D 动画** | MOC3 (Live2D), .nks (Neko Sketch)  |
+| **2D 动画** | .nkp v2 (Neko Native Puppet), MOC3/Live2D 导入兼容, .nks (Neko Sketch) |
 | **项目**    | .nkv (视频项目), .nkc (画布项目)    |
 
 ---

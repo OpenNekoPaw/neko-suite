@@ -18,6 +18,14 @@ WebCodecs 或 Engine stream 不可用时，UI 必须进入明确的 Route A unav
 - WebCodecs 不可用时不切换到 fMP4/MSE，也不切换到 R3F/Three.js 模型 fallback；UI 进入明确的 Route A unavailable 状态，`scenes:capture` 静态质量预览只作为非交互 overlay。
 - Extension Host 只负责 VSCode 能力代理、资源 URI、Engine 端口和低频操作，不承载 60fps SceneDelta、视频包、PCM 包或高频 transform dispatch；边界可用 `node scripts/check-3d-route-a-boundaries.mjs` 校验。
 
+### AI 角色预览场景（2026-05-22）
+
+Neko Model 的 AI 捏脸/角色创作使用 Engine 权威的语义预览场景，而不是恢复已删除的通用顶部相机工具栏。Webview 只显示紧凑的 `Face / Body / Motion / Voice` selector，并通过 `/v1/scenes/control` 的 `viewportCommand` WebSocket 发送 `scene:model:characterPreview:*` 命令；Extension Host 不转发预览模式、播放时钟或高频状态。
+
+Engine 侧 `ModelPreviewController` 负责校验 `characterId / viewportId / baseRevision / modeId`，应用 face、full-body、motion、voice-pack 的相机/渲染 preset，保存每个模式的手动相机 override，并在 reset 时回到对应 preset。motion/voice 预览只在 Engine state 报告兼容资源时暴露播放控制；缺少 demo clip、voice pack、viseme binding 或音频输出时必须作为结构化 diagnostics 返回，不能用 Webview 本地 R3F/HTML audio 假装为权威输出。
+
+视频流仍由 Engine H.264 render stream 承载；`RenderFrameMeta.activePreviewMode / sceneRevision / appliedSeq / previewPlaybackClockMs` 用于让 selector、overlay 和播放状态与实际帧对齐。voice-pack 音频按既有独立 PCM audio stream 模型扩展，不允许把音频 payload 塞进 H.264 视频流。
+
 ### 阶段 1B 落地说明（2026-04-28）
 
 - `.nkc` / `.nkcdata` 成为角色 authoring 真值：`LayeredCharacterDescription` 保存 descriptor、definition、behavior、geometry、override、material slot、morph、skin weight 和 blend shape 引用；Engine 将其投影到 ECS，ECS 不反向拥有 canonical morph library、override map 或 skin weight atlas。

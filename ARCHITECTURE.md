@@ -38,7 +38,7 @@ Neko Suite is a creative work suite deeply integrated into VS Code. The core cha
 │                                                                 │
 │  engine-kernel:   wgpu GPU · FFmpeg codec · DSP effects · Animation · GPU Skinning · Export │
 │  runtime-scene:  3D Scene ECS (bevy_ecs + glTF/VRM + IK + Blend)  │
-│  runtime-puppet: 2D Skeletal ECS (bevy_ecs + MOC3 + Blend/Crossfade) │
+│  runtime-puppet: 2D Native Puppet ECS (Bone2D + BlendShape + MOC3 import compatibility) │
 │  runtime-device: Device I/O (cpal + midir + gilrs)             │
 │  runtime-media:  Media logic (probe + diff + subtitle)         │
 │  runtime-ml:     ONNX inference (CoreML acceleration)          │
@@ -285,7 +285,8 @@ Extension Host
 | Shared Package Design | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared exports via subpath layers |
 | Asset Management | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | Unified AssetManifest + Handler registry pattern |
 | 3D Capabilities | *Internalized* | bevy_ecs standalone crate + runtime-scene + R3F frontend; GPU Skinning (dual pipeline: skinned/non-skinned); FABRIK/CCD/TwoBone IK solvers; animation blending/crossfade |
-| 2D Capabilities | *Internalized* | neko-sketch (painting) + neko-puppet (skeletal animation, standalone sub-extension); runtime-puppet (bevy_ecs + MOC3 clean-room parser); multi-layer animation blending + crossfade; WS real-time streaming for neko-live |
+| 2D Capabilities | *Internalized* | neko-sketch (painting) + neko-puppet (`.nkp` v2 native Bone2D + BlendShape skeletal animation, standalone sub-extension); runtime-puppet (bevy_ecs native 2D puppet runtime + MOC3/Live2D import compatibility); `.nkentity` v2 `puppet-bone` bindings; first Agent/asset/export paths; WS real-time streaming for neko-live |
+| Live Compositor | [architecture/adr-unified-viewport-protocol.md](./docs/architecture/adr-unified-viewport-protocol.md) | neko-live consumes an engine Live Compositor H.264 stream through `ViewportShell`; devices expose authorized `sourceRef` data only, and local R3F/Puppet/canvas paths remain non-authoritative fallbacks |
 | Character Editing | *Internalized* | 2D/3D face customization, motion adjustment, painting, modeling assessment; standardized facial parameter templates (3D: 22 params / 2D: 32 params); shared keyframe timeline; .nkm project format; IK skeletal interactive editing |
 | VSCode Constraints | [architecture/vscode-constraints.md](./docs/architecture/vscode-constraints.md) | Panel placement: editor-bound → embedded Webview, global → native container; device access: Webview sandbox proxied through neko-engine Rust sidecar (cpal/nokhwa/midir/gilrs) |
 | Engine Pluginization (RFC) | [architecture/engine-plugin-rfc.md](./docs/architecture/engine-plugin-rfc.md) | Capability pluginization instead of kernel pluginization; expose controlled shader/model/format/device/exporter/connector extension points; marketplace distributes, Engine Host activates |

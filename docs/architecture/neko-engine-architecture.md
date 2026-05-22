@@ -19,11 +19,11 @@
 │runtime-scene │  │runtime-puppet    │  │runtime-media                 │
 │              │  │                  │  │                              │
 │ bevy_ecs     │  │ bevy_ecs         │  │ ffmpeg-next                  │
-│ glTF/VRM     │  │ MOC3             │  │ probe / diff / subtitle     │
-│ GPU Skinning │  │ Deformers        │  │ JPEG encode                  │
-│ IK / CSG     │  │ Expression       │  │                              │
-│ Animation    │  │ Motion / Physics │  │ (self-contained, no GPU)     │
-│ Blend/Fade   │  │ Blend/Fade       │  │                              │
+│ glTF/VRM     │  │ Bone2D           │  │ probe / diff / subtitle     │
+│ GPU Skinning │  │ BlendShape       │  │ JPEG encode                  │
+│ IK / CSG     │  │ ControlDriver    │  │                              │
+│ Animation    │  │ IK / Spring      │  │ (self-contained, no GPU)     │
+│ Blend/Fade   │  │ MOC3 import      │  │                              │
 └──────┬───────┘  └──────┬───────────┘  └──────────────┬───────────────┘
        │                 │                              │
        └─────────────────┼──────────────────────────────┘
@@ -165,13 +165,13 @@
 │  │ BevyScene    │ │ BevyPuppet   │ │ Camera       │ │ ONNX Runtime   │  │
 │  │ World        │ │ World        │ │ Microphone   │ │                │  │
 │  │              │ │              │ │ MIDI         │ │ Upscale        │  │
-│  │ glTF loader  │ │ MOC3 parser  │ │ Gamepad      │ │ Denoise        │  │
-│  │ GPU Skinning │ │ MOC3 loader  │ │              │ │ CLIP           │  │
-│  │ Animation    │ │ WarpDeformer │ │ cpal/midir/  │ │ Whisper        │  │
-│  │ Blend/Fade   │ │ RotDeformer  │ │ gilrs        │ │                │  │
-│  │ IK (FABRIK/  │ │ Expression   │ │              │ │ ort + ndarray  │  │
-│  │  CCD/TwoBone)│ │ Motion       │ └──────────────┘ └────────────────┘  │
-│  │ Morph Targets│ │ Physics      │                                       │
+│  │ glTF loader  │ │ Bone2D       │ │ Gamepad      │ │ Denoise        │  │
+│  │ GPU Skinning │ │ BlendShape   │ │              │ │ CLIP           │  │
+│  │ Animation    │ │ SkinWeights  │ │ cpal/midir/  │ │ Whisper        │  │
+│  │ Blend/Fade   │ │ ControlDriver│ │ gilrs        │ │                │  │
+│  │ IK (FABRIK/  │ │ IK/Spring    │ │              │ │ ort + ndarray  │  │
+│  │  CCD/TwoBone)│ │ MOC3 import  │ └──────────────┘ └────────────────┘  │
+│  │ Morph Targets│ │ Compatibility│                                       │
 │  │ CSG Boolean  │ │ Blend/Fade   │  ┌──────────────┐                    │
 │  │ Exporter     │ │ Interpolation│  │runtime-media │                    │
 │  │ Project      │ │              │  │              │                    │

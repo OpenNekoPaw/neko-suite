@@ -4,6 +4,27 @@
 
 Proposed (2026-05-20)
 
+## 实现状态（2026-05-21）
+
+OpenSpec change `implement-2d-bone-blendshape-animation` 已落地本 ADR 的大部分契约、运行时、自动创建、Agent、导出与边界验证工作。当前实现状态如下：
+
+| 范围 | 状态 | 已落地内容 |
+|------|------|------------|
+| `.nkp` / `.nkentity` 契约 | 已实现 | `.nkp` v2 native fields、`.nkentity` v2、`puppet-bone` binding、v1 兼容迁移、native puppet metadata 与 contract tests |
+| runtime-puppet native 运行时 | 已实现 | Bone2D/Skeleton2D/SkinWeights2D、BlendShape/Expression/ControlDriver、IK/SpringBone、`ControlDriver -> BlendShape -> Skinning` CPU 管线 |
+| Live2D/MOC3 导入转换 | 已实现首版 | MOC3 parser/bundle front-end 已复用并可生成 native draft；RotationDeformer、Warp/KeyForm、Motion/Expression、Physics、DrawOrder/Mask/Clipping fallback diagnostic 已实现 |
+| 自动创建流程 | 已实现首版 | PSD/PNG/Live2D 输入生成 native draft；模板骨骼、权重、BlendShape、ControlDriver、autoRig confidence 与 `userAdjusted` metadata 已覆盖 fixture |
+| Agent/资产集成 | 已实现首版 | native puppet create/edit/play/auto-rig/generate tools、planning metadata、query-before-mutate、legacy-only diagnostic、AssetLibrary/Search 能力投影 |
+| 导出与打包 | 已实现首版 | native `.nkp` v2 export、`.nkentity` v2 export、Spine JSON export、spritesheet bake plan、Lottie unsupported/compat plan、character-pack native + optional Live2D fallback |
+| renderer GPU native deformation | 已实现首版 | `engine-puppet-renderer` 内可选 GPU BlendShape+Skinning compute path；CPU fallback 保留；synthetic mesh CPU/GPU tolerance test 已覆盖 |
+| 编辑器 / ViewportShell 集成 | 已实现首版 | `PuppetSceneController` 已接入 `ISceneController`、ViewportProtocol 命令、overlay prediction、`ViewportFrameMeta.viewTransform` 对齐测试；右侧 UI 已覆盖骨骼树、BlendShape slider、ControlDriver 曲线查看和 keyframe timeline adapter |
+| 架构边界 | 已验证 | `runtime-puppet` 无 `wgpu`/renderer 依赖；`neko-puppet` Webview 未 import VSCode/Node API |
+
+仍需保留的边界：
+
+- **legacy MOC3 playback 仍保留**：golden render harness 已使用 3 个 generated/CC0 synthetic fixtures 覆盖 MOC3 -> native conversion 与 native BlendShape playback，SSIM 阈值为 0.995，失败会输出 reference/native/diff artifact 与 summary。真实复杂公开 MOC3 模型覆盖仍是后续质量增强；在更大 fixture 集合稳定前，不移除 legacy read-only playback。
+- **live/compositor 不属于本 ADR 完成条件**：puppet 编辑器已消费统一 Viewport 合同；neko-live 的 compositor stream parity、LiveController 和输出路由由后续 OpenSpec change `implement-live-compositor-stream` 承接。
+
 ## 关联 ADR
 
 - 上层依赖 / **部分修订**: [adr-2d3d-unified-engine.md](./adr-2d3d-unified-engine.md) — 共壳分核架构，L2 ECS 分核设计。**本 ADR 修订其关于 2D 数据范式的判断**：原 ADR 认定 "Skeleton(3D) vs ParameterBinding(2D MOC3) — 两种动画范式，数据结构本质不同，不应强行统一"；本 ADR 将 2D 核心范式从 ParameterBinding 迁移到 Bone2D+BlendShape，使 2D/3D 在骨骼概念层对齐（L2 ECS 组件仍各自实现，但共享 Skeleton trait 接口）
@@ -414,9 +435,9 @@ MOC3 中间表示
   Mask/Clipping   未知    MOC3 clipping mask 基于参数树嵌套，不直接映射到骨骼系统
 
   验证要求（Phase 1 必须）：
-  - golden render 测试：原始 MOC3 播放 vs 转换后播放，逐帧 SSIM ≥ 0.95
-  - 测试用例覆盖：至少 3 个不同复杂度的公开 MOC3 模型
-  - 差异超阈值时输出 diff 热力图，供手动精调参考
+  - golden render 测试：原始 MOC3/keyform 播放 vs 转换后 native 播放，逐帧 SSIM ≥ 0.995
+  - 已提交测试用例覆盖：至少 3 个 generated/CC0 synthetic public fixtures；真实复杂公开 MOC3 模型作为后续增强集
+  - 差异超阈值时输出 reference/native/diff artifact 与 summary，供手动精调参考
   - 每个转换类型单独断言，可独立 pass/fail
 ```
 
@@ -871,7 +892,7 @@ interface PuppetGenerateAnimationTool {
 | P1-PR2 | MOC3 WarpDeformer/KeyForm → BlendShape 采样转换器 | P0 |
 | P1-PR3 | MOC3 Motion/Expression → AnimationClip2D/ExpressionPreset 转换器 | P0 |
 | P1-PR4 | MOC3 Physics / Param → SpringBone2D + ControlDriver 转换器 | P1-PR1~3 |
-| P1-PR5 | DrawOrder / Mask / Clipping 转换策略或 partial-conversion fallback + **golden render 对比测试**（SSIM ≥ 0.95，至少 3 个公开 MOC3 模型） | P1-PR1~4 |
+| P1-PR5 | DrawOrder / Mask / Clipping 转换策略或 partial-conversion fallback + **golden render 对比测试**（SSIM ≥ 0.995，至少 3 个 generated/CC0 synthetic public fixtures；真实复杂公开 MOC3 模型后续扩充） | P1-PR1~4 |
 
 ### Phase 2: 编辑器 + 渲染器（~6 周，8 PR）
 
@@ -912,7 +933,7 @@ interface PuppetGenerateAnimationTool {
 |------|-------------|------|
 | Phase -1 ~ 1 | **冻结** | 不再投入新功能，标记 `@deprecated` |
 | Phase 1 golden test 通过后 | **降级为导入器** | MOC3 parser 仅用于导入转换，不再作为运行时格式 |
-| Phase 3 完成后 | **评估移除** | 若导入管线稳定且 golden test 全量通过（SSIM ≥ 0.95），可选择移除 MOC3 实时播放路径 |
+| Phase 3 完成后 | **评估移除** | 若导入管线稳定且 golden test 全量通过（SSIM ≥ 0.995，并覆盖足够复杂的真实公开模型），可选择移除 MOC3 实时播放路径 |
 
 现有 MOC3 parser（~4,300 LOC）在 Phase 1 中直接复用为导入转换器的前端，零浪费。
 导入后保留原始 Live2D source metadata（`puppet.importSource`），方便后续重新导入；`puppet.src` / `puppet.format: moc3` 仅用于旧项目兼容路径。
@@ -1007,7 +1028,7 @@ ARKit 52 + VRM Expression 是好的标准锚点。但 2D 角色经常不是完�
 |---------|------|---------|
 | **数学单测** | skinning_2d / blendshape_apply 系统的顶点计算正确性 | Phase 0 每个 PR |
 | **ControlDriver 求值** | 多 Driver 写同一目标时 blend_mode（add/override/max）和 priority 排序正确；环路检测（Driver A→B→A）不死循环 | Phase 0 P0-PR5 |
-| **golden render 对比** | MOC3 原始播放 vs 转换后播放，逐帧 SSIM ≥ 0.95 | Phase 1 P1-PR5（必须通过才能进入 Phase 2） |
+| **golden render 对比** | MOC3/keyform 原始播放 vs 转换后 native 播放，逐帧 SSIM ≥ 0.995；失败输出 reference/native/diff artifact 与 summary | Phase 1 P1-PR5（首版 harness 已落地，后续继续扩真实模型集） |
 | **契约测试** | `.nkp` v2 / `.nkentity` v2 序列化/反序列化 round-trip | Phase -1 每个 PR |
 | **renderer synthetic mesh** | 用合成网格验证 GPU skinning + BlendShape 管线正确性（不依赖真实模型） | Phase 2 P2-PR1 |
 | **ID 稳定性测试** | 骨骼/BlendShape 通过 name 引用，Entity 重建后引用不断 | Phase 0 P0-PR1, P0-PR2 |

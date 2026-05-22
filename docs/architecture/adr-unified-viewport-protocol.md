@@ -4,6 +4,22 @@
 
 Proposed (2026-05-20)
 
+## 实现状态（2026-05-21）
+
+OpenSpec change `implement-unified-viewport-protocol` 已落地 V-1/V0 合同、共享 UI shell、model/puppet controller 迁移与核心验证。当前边界如下：
+
+| 范围 | 状态 | 说明 |
+|------|------|------|
+| L0 ViewportProtocol | 已实现 | `@neko/shared` 已定义 `ViewportCommand`、`ViewportEvent`、`ViewportFrameMeta`、input DTO、overlay/toolbar descriptor、`ISceneController` 与 payload guard 扩展点；保持无 React/DOM/VSCode/Node 依赖 |
+| L2 ViewportShell | 已实现 | `@neko/ui` 已提供 `ViewportShell`、`OverlayRenderer`、`ViewportToolbar`、shell-local pan/zoom/quality、overlay stale metadata 与预测生命周期基础 |
+| engine viewport routing | 已实现 | Rust `engine-types` DTO、`viewport_controller` ActionRouter、select/marquee/transform/camera routing、revision/protocol version/multi-viewport tests 已落地 |
+| neko-model 迁移 | 已实现首版 | ModelController 已通过 ViewportShell 接入 engine-stream visual truth、toolbar/overlay/prediction 与 fallback isolation tests |
+| neko-puppet 迁移 | 已实现首版 | PuppetSceneController 已通过 ViewportProtocol 路由 `scene:puppet:*` 命令，覆盖骨骼/BlendShape/vertex/driver/onion-skin overlay prediction、ack/rollback 和 frame metadata 对齐测试 |
+| neko-live compositor 迁移 | 已实现首版 | OpenSpec change `implement-live-compositor-stream` 已落地 LiveController、Live Compositor scene DTO、engine ActionRouter/stream producer、H.264 descriptor consumption、device source refs、output route diagnostics 与 local fallback isolation |
+| 跨包边界 | 已验证 | architecture boundary tests 覆盖 shared L0 无 UI/Node 依赖、Webview 无直接 VSCode import、model/puppet/live 不互相 import controller/webview internals |
+
+因此，本 ADR 当前交付边界收口为 ViewportProtocol、ViewportShell、model/puppet 迁移和 live fallback diagnostic；live compositor parity 由 `implement-live-compositor-stream` 承接并已完成首版。neko-live 的默认视觉真相是引擎 Live Compositor stream；本地 R3F/Puppet/canvas 路径只允许作为明确标记的 non-authoritative fallback，直到 decode/presentation 与 tracking-to-frame 延迟门禁可测并通过。
+
 ## 关联 ADR
 
 - 上层依赖: [adr-2d3d-unified-engine.md](./adr-2d3d-unified-engine.md) — 共壳分核架构，L2 ECS 分核
@@ -167,6 +183,20 @@ Shell-local 交互不要求发送给引擎，可由 ViewportShell 内部状态�
 | `viewport:transform` | Gizmo 拖拽（平移/旋转/缩放） | Y | Y | N |
 | `viewport:camera` | 相机控制 | 2D 约束 | 3D 轨道 | 固定 |
 
+#### V-1 合同落地边界（2026-05-21）
+
+`@neko/shared/types/viewport-protocol.ts` 已作为 L0 纯 DTO 合同落地，覆盖 `ViewportCommand`、`ViewportEvent`、`ViewportFrameMeta`、输入 DTO、overlay descriptor、toolbar descriptor、`ISceneController` 和 payload guard registry。Rust 侧 `engine-types::viewport` 镜像同一组 command/event/frame DTO，并通过同一份 JSON fixture 做 serde parity。
+
+Shell-local 与 Engine-mediated 的边界在合同层固定如下：
+
+| 类别 | 典型操作 | 是否走 `ViewportCommand` | 权威状态 |
+|------|----------|--------------------------|----------|
+| Shell-local navigation | pan、zoom、resize、quality UI 调节 | 否；可作为本地状态或调试日志记录 | ViewportShell 本地状态，不改变 scene revision |
+| Engine-mediated viewport command | select、marquee、transform、camera | 是，`domain: "viewport"` 且 `action` 以 `viewport:` 开头 | Engine scene/viewport state，返回 ack/error event |
+| Engine-mediated scene write | `scene:puppet:*`、`scene:model:*`、`scene:live:*` | 是，`domain: "scene"` 且 `action` 以 `scene:` 开头 | 领域 runtime/scene/compositor 权威状态 |
+
+所有 Engine-mediated 写命令必须携带 `protocolVersion/seq/correlationId/timestamp/source/payload`；需要乐观并发保护的写命令携带 `baseRevision`。`payload` 只保证 JSON 可序列化，领域语义由各自 controller/engine handler 通过 payload guard 扩展点校验，L0 不 import puppet/model/live 实现。
+
 ### 3. `scene` 域命令（领域专属）
 
 由各 SceneController 自行定义和处理：
@@ -270,7 +300,9 @@ function ViewportShell({ controller, streamUrl }: ViewportShellProps) {
 └──────────────────────────────────────┘
 ```
 
-neko-live 告诉引擎"把这些场景合成在一起"，接收一路视频流显示和转发（OBS 虚拟摄像头、RTMP 推流、录制）。不自行渲染任何 3D/2D 内容。
+neko-live 告诉引擎"把这些场景合成在一起"，接收一路 Live Compositor H.264 流显示，并通过 `scene:live:*` 命令管理 preset、layer、tracking overlay 和 output route。Webview 不构造 camera/device 控制 URL，只接收 Extension Host 授权后的 compositor `sourceRef`；OBS 虚拟摄像头、RTMP、录制等输出路线必须带 capability diagnostics，未实现时不能静默退回本地 canvas 伪装成权威输出。
+
+当前首版保留 `LiveLocalFallbackSurface`：仅在 compositor stream 不可用时挂载本地 R3F/Puppet 预览，并显示 non-authoritative fallback 诊断。Webview canvas recording 也以 `authority: "local-fallback"` 标记，不能计入 compositor parity。
 
 **直播延迟预算（本地）**：
 

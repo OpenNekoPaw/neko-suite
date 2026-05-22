@@ -90,8 +90,8 @@ Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 19 packag
 | **neko-model**  | 3D creation - glTF/VRM viewport + PBR/IBL + CSG + face sculpting + particles + keyframe animation + IK solver                 | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests  |
 | **neko-sketch** | 2D creation - pressure-sensitive drawing (8 brushes) + layers + selection + AI tools + PSD import + .nks format + 2D lighting | Alpha 68% | 31.9K TS/TSX (178 files, 185 tests)           |
 | **neko-audio**  | Audio workstation - DAW UI (TrackHeader/TrackLane/AudioClip) + 12 effect types + spectrum + AI denoising + Agent tools        | Alpha 82% | 11.1K TS/TSX (60 files, 52 tests)             |
-| **neko-puppet** | 2D skeletal animation - Live2D MOC3 clean-room parser + deformers + expressions + motions + physics + 60fps streaming         | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests |
-| **neko-live**   | Virtual production - VMC/VRM real-time driving + 2D puppet integration + recording + device management                        | Alpha 58% | 4.4K TS (34 files, 37 tests)                  |
+| **neko-puppet** | 2D skeletal animation - `.nkp` v2 Native Puppet (Bone2D + BlendShape + ControlDriver) + Live2D/MOC3 import compatibility + first Agent/export paths + 60fps streaming | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests |
+| **neko-live**   | Virtual production - engine Live Compositor stream + ViewportShell + authorized device source refs + non-authoritative local fallback recording | Alpha 58% | 4.4K TS (34 files, 37 tests)                  |
 
 ---
 
@@ -109,7 +109,7 @@ VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
                                                 ├─ DSP Effect Library (mix pipeline with solo/pan)
                                                 ├─ Export Pipeline (GPU export + audio mixer + loudness normalization)
                                                 ├─ runtime-scene 3D Scene (bevy_ecs + glTF/VRM + PBR + IK + animation blend)
-                                                ├─ runtime-puppet 2D Skeletal (bevy_ecs + MOC3 + 60fps WS stream)
+                                                ├─ runtime-puppet 2D Native Puppet (Bone2D + BlendShape + MOC3 import compatibility + 60fps WS stream)
                                                 ├─ runtime-device Device I/O (cpal + midir + gilrs)
                                                 ├─ runtime-media Media Logic (probe + diff + subtitle)
                                                 └─ runtime-ml ONNX Inference (macOS CoreML acceleration)
@@ -231,7 +231,7 @@ neko-suite/
 │   │       ├── host-napi/       # Node.js NAPI bindings
 │   │       ├── host-cli/        # CLI entry point
 │   │       ├── runtime-scene/   # 3D scene ECS (bevy_ecs + glTF + IK)
-│   │       ├── runtime-puppet/  # 2D skeletal ECS (bevy_ecs + MOC3)
+│   │       ├── runtime-puppet/  # 2D Native Puppet ECS (Bone2D + BlendShape + MOC3 import compatibility)
 │   │       ├── runtime-device/  # Device I/O (cpal/midir/gilrs)
 │   │       ├── runtime-media/   # Media logic (probe/diff/subtitle)
 │   │       ├── runtime-ml/      # ML inference (ONNX Runtime)
@@ -295,11 +295,11 @@ neko-suite/
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nks)
 │   │       └── webview/       # React 18 + WebGL2 UI
-│   ├── neko-puppet/           # 2D skeletal animation (Live2D MOC3 puppet editor)
+│   ├── neko-puppet/           # 2D skeletal animation (.nkp v2 native editor + Live2D/MOC3 import conversion)
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nkp/.moc3)
 │   │       └── webview/       # React 18 + EngineClient UI
-│   ├── neko-live/             # Virtual production (VMC + VRM + recording)
+│   ├── neko-live/             # Virtual production (Live Compositor stream + fallback preview)
 │   ├── neko-types/            # Shared types + Logger + i18n + Theme + entity-uri
 │   └── neko-proto/            # Protocol definitions (Protobuf IDL)
 ├── docs/                      # Architecture documentation
@@ -335,7 +335,7 @@ neko-suite/
 | **Audio**        | MP3, WAV, OGG, FLAC, AAC, M4A                                             |
 | **Image**        | PNG, JPG, JPEG, GIF, WebP, BMP, SVG                                       |
 | **3D Model**     | glTF, GLB, VRM, .nkm                                                      |
-| **2D Animation** | MOC3 (Live2D), INP (Inochi2D), .nkp (Neko Puppet)                         |
+| **2D Animation** | .nkp v2 (Neko Native Puppet), MOC3/Live2D import compatibility, .nks (Neko Sketch) |
 | **Project**      | .nkv (Video), .nkc (Canvas), .nka (Audio), .nkm (3D Model), .nks (Sketch) |
 
 ---
