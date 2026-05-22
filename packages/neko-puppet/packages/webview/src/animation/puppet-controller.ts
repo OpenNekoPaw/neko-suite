@@ -15,6 +15,9 @@ import { H264StreamClient, type EngineClient } from '@neko/neko-client';
 import type {
   EditorKeyframeTrack,
   EasingType,
+  NkpNativeProjectData,
+  PuppetCommand,
+  PuppetCommandAck,
   ParameterCurveInfo,
   PuppetAuxiliaryJsonData,
 } from '@neko/shared';
@@ -33,6 +36,9 @@ export interface IPuppetController {
 
   /** Load an INP/MOC3 puppet from an engine-resolved local source. */
   loadSource(source: string): Promise<PuppetSnapshot>;
+
+  /** Load a native .nkp v2 project. */
+  loadNativeProject(project: NkpNativeProjectData): Promise<PuppetSnapshot>;
 
   /** Load Live2D auxiliary JSON after the MOC3 source has been loaded. */
   loadAuxiliary(auxiliary: PuppetAuxiliaryJsonData): Promise<void>;
@@ -119,6 +125,14 @@ export interface IPuppetController {
 
   /** Crossfade from the current animation to another clip */
   crossfadeTo(clipName: string, fadeDurationMs: number, loop?: boolean): Promise<void>;
+
+  /** Apply a native puppet command with optimistic revision metadata. */
+  applyNativeCommand(
+    seq: number,
+    baseRevision: number,
+    command: PuppetCommand,
+    transactionId?: string,
+  ): Promise<PuppetCommandAck>;
 }
 
 /** Concrete implementation using EngineClient HTTP dispatch */
@@ -135,13 +149,19 @@ export class PuppetController implements IPuppetController {
 
   async load(data: ArrayBuffer): Promise<PuppetSnapshot> {
     const raw = await this.engine.loadPuppet(data);
-    this.snapshot = raw as unknown as PuppetSnapshot;
+    this.snapshot = readPuppetSnapshot(raw);
     return this.snapshot;
   }
 
   async loadSource(source: string): Promise<PuppetSnapshot> {
     const raw = await this.engine.loadPuppetSource(source);
-    this.snapshot = raw as unknown as PuppetSnapshot;
+    this.snapshot = readPuppetSnapshot(raw);
+    return this.snapshot;
+  }
+
+  async loadNativeProject(project: NkpNativeProjectData): Promise<PuppetSnapshot> {
+    const raw = await this.engine.loadNativePuppetProject(project);
+    this.snapshot = readPuppetSnapshot(raw);
     return this.snapshot;
   }
 
@@ -155,18 +175,18 @@ export class PuppetController implements IPuppetController {
 
   async getParameters(): Promise<ParameterInfo[]> {
     const raw = await this.engine.getPuppetParameters();
-    return raw as unknown as ParameterInfo[];
+    return readParameterInfoArray(raw);
   }
 
   async tick(deltaMs?: number): Promise<DeformedMesh[]> {
     const raw = await this.engine.tickPuppet(deltaMs);
-    const delta = raw as unknown as PuppetDelta;
+    const delta = readPuppetDelta(raw);
     return delta.deformed_meshes;
   }
 
   async getMeshes(): Promise<DeformedMesh[]> {
     const raw = await this.engine.getPuppetMeshes();
-    return raw as unknown as DeformedMesh[];
+    return readDeformedMeshArray(raw);
   }
 
   getSnapshot(): PuppetSnapshot | null {
@@ -179,7 +199,7 @@ export class PuppetController implements IPuppetController {
 
   async getAnimations(): Promise<AnimationClipInfo[]> {
     const raw = await this.engine.getPuppetAnimations();
-    return raw as unknown as AnimationClipInfo[];
+    return readAnimationClipInfoArray(raw);
   }
 
   async playAnimation(name: string, loop = false): Promise<void> {
@@ -202,7 +222,7 @@ export class PuppetController implements IPuppetController {
 
     ws.addEventListener('message', (event: MessageEvent) => {
       try {
-        const delta = JSON.parse(event.data as string) as PuppetDelta;
+        const delta = readPuppetDelta(JSON.parse(event.data as string) as unknown);
         onDelta(delta);
       } catch {
         // Ignore malformed messages
@@ -255,7 +275,7 @@ export class PuppetController implements IPuppetController {
 
   async getKeyframeTracks(clipName: string): Promise<EditorKeyframeTrack[]> {
     const raw = await this.engine.getPuppetKeyframeTracks(clipName);
-    const curves = raw as unknown as ParameterCurveInfo[];
+    const curves = readParameterCurveInfoArray(raw);
     return curves.map((c) => ({
       property: c.param_name,
       label: c.param_name,
@@ -304,6 +324,20 @@ export class PuppetController implements IPuppetController {
 
   async crossfadeTo(clipName: string, fadeDurationMs: number, loop = false): Promise<void> {
     await this.engine.crossfadePuppetAnimation(clipName, fadeDurationMs, loop);
+  }
+
+  async applyNativeCommand(
+    seq: number,
+    baseRevision: number,
+    command: PuppetCommand,
+    transactionId?: string,
+  ): Promise<PuppetCommandAck> {
+    return this.engine.applyPuppetCommandOrThrow({
+      seq,
+      baseRevision,
+      transactionId,
+      command,
+    });
   }
 
   /** Internal: open the WebSocket and wire up reconnect on unexpected close */
@@ -376,7 +410,7 @@ export class PuppetController implements IPuppetController {
     ws.addEventListener('message', (event: MessageEvent) => {
       if (!this.previewActive) return;
       try {
-        const delta = JSON.parse(event.data as string) as PuppetDelta;
+        const delta = readPuppetDelta(JSON.parse(event.data as string) as unknown);
         this.previewOnDelta?.(delta);
       } catch {
         // Ignore malformed frames
@@ -410,4 +444,149 @@ async function canUseH264Preview(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function readPuppetSnapshot(value: unknown): PuppetSnapshot {
+  if (isPuppetSnapshot(value)) return value;
+  throw new Error('Invalid puppet snapshot response');
+}
+
+function readParameterInfoArray(value: unknown): ParameterInfo[] {
+  if (isArrayOf(value, isParameterInfo)) return value;
+  throw new Error('Invalid puppet parameters response');
+}
+
+function readPuppetDelta(value: unknown): PuppetDelta {
+  if (isPuppetDelta(value)) return value;
+  throw new Error('Invalid puppet delta response');
+}
+
+function readDeformedMeshArray(value: unknown): DeformedMesh[] {
+  if (isArrayOf(value, isDeformedMesh)) return value;
+  throw new Error('Invalid puppet meshes response');
+}
+
+function readAnimationClipInfoArray(value: unknown): AnimationClipInfo[] {
+  if (isArrayOf(value, isAnimationClipInfo)) return value;
+  throw new Error('Invalid puppet animations response');
+}
+
+function readParameterCurveInfoArray(value: unknown): ParameterCurveInfo[] {
+  if (isArrayOf(value, isParameterCurveInfo)) return value;
+  throw new Error('Invalid puppet keyframe tracks response');
+}
+
+function isPuppetSnapshot(value: unknown): value is PuppetSnapshot {
+  if (!isRecord(value)) return false;
+  return (
+    (value.format === undefined ||
+      value.format === 'inp' ||
+      value.format === 'moc3' ||
+      value.format === 'native') &&
+    isArrayOf(value.nodes, isPuppetNodeSnapshot) &&
+    isArrayOf(value.parameters, isParameterInfo) &&
+    isArrayOf(value.meshes, isMeshSnapshot)
+  );
+}
+
+function isPuppetDelta(value: unknown): value is PuppetDelta {
+  if (!isRecord(value)) return false;
+  return (
+    isArrayOf(value.deformed_meshes, isDeformedMesh) &&
+    (value.animation_time_ms === undefined || typeof value.animation_time_ms === 'number') &&
+    (value.animation_playing === undefined || typeof value.animation_playing === 'boolean')
+  );
+}
+
+function isPuppetNodeSnapshot(value: unknown): value is PuppetSnapshot['nodes'][number] {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.node_type === 'string' &&
+    isVec2(value.position) &&
+    typeof value.rotation === 'number' &&
+    isVec2(value.scale) &&
+    typeof value.z_order === 'number' &&
+    typeof value.opacity === 'number' &&
+    (value.parent_id === null || typeof value.parent_id === 'string') &&
+    typeof value.has_mesh === 'boolean'
+  );
+}
+
+function isParameterInfo(value: unknown): value is ParameterInfo {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.name === 'string' &&
+    typeof value.min === 'number' &&
+    typeof value.max === 'number' &&
+    typeof value.default === 'number' &&
+    typeof value.current === 'number'
+  );
+}
+
+function isMeshSnapshot(value: unknown): value is PuppetSnapshot['meshes'][number] {
+  if (!isRecord(value)) return false;
+  const textureIndex = value.texture_index;
+  return (
+    typeof value.node_id === 'string' &&
+    isArrayOf(value.vertices, isVec2) &&
+    isArrayOf(value.uvs, isVec2) &&
+    Array.isArray(value.indices) &&
+    value.indices.every((index) => Number.isInteger(index) && index >= 0) &&
+    (textureIndex === null ||
+      (typeof textureIndex === 'number' && Number.isInteger(textureIndex) && textureIndex >= 0))
+  );
+}
+
+function isDeformedMesh(value: unknown): value is DeformedMesh {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.node_id === 'string' &&
+    isArrayOf(value.vertices, isVec2) &&
+    typeof value.blend_mode === 'string' &&
+    typeof value.opacity === 'number' &&
+    typeof value.z_order === 'number'
+  );
+}
+
+function isAnimationClipInfo(value: unknown): value is AnimationClipInfo {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.name === 'string' &&
+    typeof value.duration_ms === 'number' &&
+    typeof value.loop_default === 'boolean'
+  );
+}
+
+function isParameterCurveInfo(value: unknown): value is ParameterCurveInfo {
+  if (!isRecord(value)) return false;
+  return typeof value.param_name === 'string' && isArrayOf(value.keyframes, isKeyframeInfo);
+}
+
+function isKeyframeInfo(value: unknown): value is ParameterCurveInfo['keyframes'][number] {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.time_ms === 'number' &&
+    typeof value.value === 'number' &&
+    typeof value.easing === 'string'
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isArrayOf<T>(value: unknown, guard: (item: unknown) => item is T): value is T[] {
+  return Array.isArray(value) && value.every(guard);
+}
+
+function isVec2(value: unknown): value is [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'number' &&
+    typeof value[1] === 'number'
+  );
 }

@@ -69,3 +69,130 @@ html, body, #root {
   background: var(--sketch-active);
   cursor: pointer;
 }
+
+.puppet-viewport-shell,
+.puppet-viewport-shell .neko-viewport-surface {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.puppet-viewport-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  width: 100%;
+  height: 100%;
+}
+
+.puppet-viewport-toolbar {
+  pointer-events: auto;
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 30;
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--sketch-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--sketch-panel-bg) 92%, transparent);
+  padding: 4px;
+}
+
+.puppet-viewport-toolbar .neko-viewport-toolbar-button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 3px;
+  color: var(--sketch-fg);
+  font-size: 11px;
+}
+
+.puppet-viewport-toolbar .neko-viewport-toolbar-button:hover,
+.puppet-viewport-toolbar .neko-viewport-toolbar-button[aria-pressed='true'] {
+  background: var(--sketch-hover);
+}
+
+.puppet-viewport-shell .neko-viewport-context-menu {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 45;
+  min-width: 150px;
+  border: 1px solid var(--sketch-border);
+  border-radius: 5px;
+  background: var(--sketch-panel-bg);
+  padding: 4px;
+}
+
+.puppet-viewport-shell .neko-viewport-context-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 3px;
+  padding: 0 8px;
+  color: var(--sketch-fg);
+  font-size: 12px;
+  text-align: left;
+}
+
+.puppet-viewport-shell .neko-viewport-context-menu-item:hover:not(:disabled) {
+  background: var(--sketch-hover);
+}
+
+.puppet-fallback-badge {
+  pointer-events: none;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 35;
+  border: 1px solid var(--sketch-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--sketch-panel-bg) 88%, transparent);
+  padding: 3px 7px;
+  color: var(--sketch-fg);
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.control-driver-card {
+  border: 1px solid var(--sketch-border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--sketch-panel-bg) 88%, var(--sketch-bg));
+  padding: 6px;
+}
+
+.control-driver-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--sketch-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  opacity: 0.75;
+}
+
+.control-driver-curve {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 32px;
+  border: 1px solid var(--sketch-border);
+  border-radius: 4px;
+  background: var(--sketch-bg);
+}
+
+.control-driver-grid {
+  stroke: var(--sketch-border);
+  stroke-width: 1;
+}
+
+.control-driver-line {
+  stroke: var(--sketch-active);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

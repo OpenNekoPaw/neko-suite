@@ -19,7 +19,13 @@ export function ParameterPanel({ controller }: ParameterPanelProps) {
   const { t } = useTranslation();
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const parameters = usePuppetStore((s) => s.puppetParameters);
+  const nativeBlendShapes = usePuppetStore((s) => s.nativeBlendShapes);
   const updateParameterValue = usePuppetStore((s) => s.updateParameterValue);
+  const updateNativeBlendShapeWeight = usePuppetStore((s) => s.updateNativeBlendShapeWeight);
+  const setNativeRevision = usePuppetStore((s) => s.setNativeRevision);
+  const nextNativeSeq = usePuppetStore((s) => s.nextNativeSeq);
+  const addPendingNativeCommand = usePuppetStore((s) => s.addPendingNativeCommand);
+  const removePendingNativeCommand = usePuppetStore((s) => s.removePendingNativeCommand);
 
   const handleChange = useCallback(
     (name: string, value: number) => {
@@ -31,21 +37,74 @@ export function ParameterPanel({ controller }: ParameterPanelProps) {
     [controller, updateParameterValue],
   );
 
+  const handleNativeBlendShapeChange = useCallback(
+    (name: string, value: number) => {
+      updateNativeBlendShapeWeight(name, value);
+      const seq = nextNativeSeq();
+      const transactionId = `blendshape:${name}:${seq}`;
+      addPendingNativeCommand(transactionId);
+      const activeController = controller;
+      void controller
+        ?.applyNativeCommand(
+          seq,
+          usePuppetStore.getState().nativeRevision,
+          { type: 'setNativeBlendShape', name, weight: value },
+          transactionId,
+        )
+        .then(async (ack) => {
+          setNativeRevision(ack.revision);
+          const meshes = await activeController?.getMeshes();
+          if (!meshes) return;
+          usePuppetStore.getState().setDeformedMeshes(meshes);
+        })
+        .catch(() => {
+          void activeController?.getMeshes().then((meshes) => {
+            usePuppetStore.getState().setDeformedMeshes(meshes);
+          });
+        })
+        .finally(() => removePendingNativeCommand(transactionId));
+    },
+    [
+      addPendingNativeCommand,
+      controller,
+      nextNativeSeq,
+      removePendingNativeCommand,
+      setNativeRevision,
+      updateNativeBlendShapeWeight,
+    ],
+  );
+
   // Check if any puppet parameters match the standard face parameter template
   const hasFaceParams = useMemo(() => {
     const faceNames = new Set(PUPPET_FACE_PARAMETERS.map((p) => p.name));
     return parameters.some((p) => faceNames.has(p.name));
   }, [parameters]);
 
-  if (!puppetLoaded || parameters.length === 0) return null;
+  if (!puppetLoaded || (parameters.length === 0 && nativeBlendShapes.length === 0)) return null;
 
   return (
     <div className="sketch-panel" role="region" aria-label={t('puppet.panel.parameters')}>
       <h3 className="sketch-panel-title m-0 mb-1">{t('puppet.panel.parameters')}</h3>
 
-      {hasFaceParams ? (
+      {nativeBlendShapes.length > 0 && (
+        <div className="flex flex-col gap-1 mb-2">
+          {nativeBlendShapes.map((shape) => (
+            <ParameterSlider
+              key={`${shape.meshId}:${shape.name}`}
+              name={shape.name}
+              min={0}
+              max={1}
+              value={shape.current}
+              defaultValue={0}
+              onChange={handleNativeBlendShapeChange}
+            />
+          ))}
+        </div>
+      )}
+
+      {parameters.length > 0 && hasFaceParams ? (
         <FaceParameterSection parameters={parameters} onParameterChange={handleChange} />
-      ) : (
+      ) : parameters.length > 0 ? (
         <div className="flex flex-col gap-1">
           {parameters.map((param) => (
             <ParameterSlider
@@ -59,7 +118,7 @@ export function ParameterPanel({ controller }: ParameterPanelProps) {
             />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

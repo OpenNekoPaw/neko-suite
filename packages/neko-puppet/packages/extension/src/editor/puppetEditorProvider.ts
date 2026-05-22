@@ -15,7 +15,7 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger('PuppetEditorProvider');
 
-import type { NkpProjectData } from '@neko/shared';
+import { isNkpNativeProjectData, type NkpProjectData } from '@neko/shared';
 
 /** Custom document for .nkp files */
 class PuppetDocument implements vscode.CustomDocument {
@@ -237,7 +237,12 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         } else if (document.projectData) {
           // .nkp project: resolve puppet source and load
           const srcPath = document.projectData.puppet.src;
-          if (srcPath) {
+          if (isNkpNativeProjectData(document.projectData)) {
+            webviewPanel.webview.postMessage({
+              type: 'loadNativePuppet',
+              project: document.projectData,
+            });
+          } else if (srcPath) {
             await this.loadInpFromProject(document, webviewPanel);
           } else if (document.projectData.puppet.bundle) {
             await this.loadLive2dBundleFromProject(document, webviewPanel);

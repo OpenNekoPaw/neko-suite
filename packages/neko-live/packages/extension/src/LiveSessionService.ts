@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
-import type { DeviceInfo, DeviceSession, DeviceType, ILogger } from '@neko/shared';
+import type {
+  DeviceInfo,
+  DeviceSession,
+  DeviceType,
+  ILogger,
+  LiveCompositorSourceRef,
+} from '@neko/shared';
 import type { EngineClient } from '@neko/neko-client/EngineClient';
 import type { DeviceManager } from '@neko/neko-client/device';
 import { RecordingService, type RecordingOptions, type RecordingResult } from './RecordingService';
@@ -19,18 +25,29 @@ export interface LiveDeviceBinding {
   readonly deviceType: DeviceType;
   readonly label: string;
   readonly sessionId?: string;
-  readonly streamUrl?: string;
+  readonly compositorSourceRef?: LiveCompositorSourceRef;
 }
 
 export interface LiveSessionSnapshot {
   readonly scene: LiveSceneSnapshot;
   readonly recording: {
     readonly active: boolean;
+    readonly authority: LiveRecordingAuthority;
+    readonly diagnostics: readonly LiveRecordingDiagnostic[];
   };
   readonly deviceBindings: Partial<Record<LiveDeviceRole, LiveDeviceBinding>>;
 }
 
 export type LiveScenePatch = Partial<LiveSceneSnapshot>;
+
+export type LiveRecordingAuthority = 'compositor' | 'local-fallback';
+
+export interface LiveRecordingDiagnostic {
+  readonly code: 'fallback-non-authoritative' | 'compositor-recording-unavailable';
+  readonly severity: 'info' | 'warning';
+  readonly message: string;
+  readonly timestamp: number;
+}
 
 export type LiveSessionEvent =
   | { type: 'snapshot'; snapshot: LiveSessionSnapshot }
@@ -57,7 +74,7 @@ export class LiveSessionService implements vscode.Disposable {
   private readonly listeners = new Set<(event: LiveSessionEvent) => void>();
   private snapshot: LiveSessionSnapshot = {
     scene: {},
-    recording: { active: false },
+    recording: { active: false, authority: 'local-fallback', diagnostics: [] },
     deviceBindings: {},
   };
 
@@ -95,7 +112,11 @@ export class LiveSessionService implements vscode.Disposable {
     });
     this.snapshot = {
       ...this.snapshot,
-      recording: { active: true },
+      recording: {
+        active: true,
+        authority: options.authority ?? 'local-fallback',
+        diagnostics: recordingDiagnostics(options.authority ?? 'local-fallback'),
+      },
     };
     this.emit({ type: 'snapshot', snapshot: this.getSnapshot() });
   }
@@ -107,7 +128,11 @@ export class LiveSessionService implements vscode.Disposable {
     this.recordingService = undefined;
     this.snapshot = {
       ...this.snapshot,
-      recording: { active: false },
+      recording: {
+        active: false,
+        authority: this.snapshot.recording.authority,
+        diagnostics: this.snapshot.recording.diagnostics,
+      },
     };
     this.emit({ type: 'snapshot', snapshot: this.getSnapshot() });
     return result;
@@ -121,7 +146,7 @@ export class LiveSessionService implements vscode.Disposable {
       deviceType: device.type,
       label: device.label,
       sessionId: session?.sessionId,
-      streamUrl: session?.streamUrl,
+      compositorSourceRef: createCompositorSourceRef(role, device, session),
     };
     this.snapshot = {
       ...this.snapshot,
@@ -174,7 +199,11 @@ export class LiveSessionService implements vscode.Disposable {
     this.recordingService = undefined;
     this.snapshot = {
       ...this.snapshot,
-      recording: { active: false },
+      recording: {
+        active: false,
+        authority: this.snapshot.recording.authority,
+        diagnostics: this.snapshot.recording.diagnostics,
+      },
       deviceBindings: {},
     };
     this.listeners.clear();
@@ -222,9 +251,47 @@ export class LiveSessionService implements vscode.Disposable {
 function cloneSnapshot(snapshot: LiveSessionSnapshot): LiveSessionSnapshot {
   return {
     scene: { ...snapshot.scene },
-    recording: { ...snapshot.recording },
+    recording: {
+      ...snapshot.recording,
+      diagnostics: [...snapshot.recording.diagnostics],
+    },
     deviceBindings: { ...snapshot.deviceBindings },
   };
+}
+
+function createCompositorSourceRef(
+  role: LiveDeviceRole,
+  device: DeviceInfo,
+  session: DeviceSession | undefined,
+): LiveCompositorSourceRef | undefined {
+  if (role !== 'camera' || !session?.sessionId) return undefined;
+  return {
+    sourceId: `source-camera-${stableSourceId(session.sessionId)}`,
+    kind: 'camera',
+    label: device.label,
+    deviceSessionRef: session.sessionId,
+    metadata: {
+      role,
+      authorized: true,
+      deviceId: device.id,
+    },
+  };
+}
+
+function recordingDiagnostics(authority: LiveRecordingAuthority): readonly LiveRecordingDiagnostic[] {
+  if (authority === 'compositor') return [];
+  return [
+    {
+      code: 'fallback-non-authoritative',
+      severity: 'warning',
+      message: 'Webview canvas recording is a local fallback and is excluded from compositor parity.',
+      timestamp: Date.now(),
+    },
+  ];
+}
+
+function stableSourceId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
 }
 
 function deviceRoleForType(type: DeviceType): LiveDeviceRole {

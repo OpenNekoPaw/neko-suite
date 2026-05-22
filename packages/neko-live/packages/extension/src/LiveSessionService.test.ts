@@ -91,8 +91,18 @@ describe('LiveSessionService', () => {
       role: 'camera',
       deviceId: 'cam-1',
       sessionId: 'camera-session',
-      streamUrl: 'ws://camera',
+      compositorSourceRef: {
+        sourceId: 'source-camera-camera-session',
+        kind: 'camera',
+        deviceSessionRef: 'camera-session',
+        metadata: {
+          authorized: true,
+          deviceId: 'cam-1',
+          role: 'camera',
+        },
+      },
     });
+    expect(service.getSnapshot().deviceBindings.camera?.streamUrl).toBeUndefined();
 
     await service.stopDeviceStream('camera');
 
@@ -117,5 +127,34 @@ describe('LiveSessionService', () => {
         permissionState: 'granted',
       }),
     ).toThrow('Device role camera requires camera');
+  });
+
+  it('labels webview canvas recording as local fallback diagnostics', async () => {
+    const service = new LiveSessionService({
+      logger: createLogger(),
+      getEngineClient: async () => undefined,
+      getDeviceManager: () => undefined,
+      ensureDeviceManager: async () => undefined,
+    });
+
+    await service.startRecording({ includeAudio: false, authority: 'local-fallback' });
+
+    expect(service.getSnapshot().recording).toMatchObject({
+      active: true,
+      authority: 'local-fallback',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'fallback-non-authoritative',
+          severity: 'warning',
+        }),
+      ],
+    });
+
+    const result = await service.stopRecording();
+
+    expect(result).toMatchObject({
+      authority: 'local-fallback',
+      diagnostics: ['fallback-non-authoritative'],
+    });
   });
 });

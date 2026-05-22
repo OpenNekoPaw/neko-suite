@@ -28,6 +28,9 @@ export const en = {
   'recording.noCanvas': 'No rendering canvas available',
   'recording.captureFailed': 'Canvas capture failed',
   'devices.bound': 'Devices: {devices}',
+  'diagnostics.localFallback':
+    'Local preview only. Engine compositor stream is unavailable, so this is not output truth.',
+  'diagnostics.compositorUnavailable': 'Engine compositor stream unavailable',
 
   // Puppet viewer
   'puppet.waiting': 'Waiting for tracking data...',

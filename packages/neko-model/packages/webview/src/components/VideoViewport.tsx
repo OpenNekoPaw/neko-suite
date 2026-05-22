@@ -1,22 +1,30 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RenderFrameMeta, SceneDelta, ViewportDescriptor } from '@neko/shared';
+import type {
+  ViewportMenuItem,
+  ViewportFrameMeta,
+  ViewportSerializableRecord,
+} from '@neko/shared';
+import { OverlayRenderer, ViewportShell } from '@neko/ui';
 import {
   EngineClient,
   H264StreamClient,
   type SceneControlSocket,
-  type SceneViewportCameraAck,
   type SceneViewportResolution,
-  SceneViewportCameraRejectedError,
 } from '@neko/neko-client';
 import type { LocalPredictionSnapshot } from '../scene/LocalPredictionLayer';
-import { InteractionLayer, isCompatibleViewportQueryResult } from './InteractionLayer';
+import { InteractionLayer } from './InteractionLayer';
 import { OverlayCanvas } from './OverlayCanvas';
 import { ViewportOrbitControls } from './ViewportOrbitControls';
 import { ViewportGuideOverlay } from './ViewportGuideOverlay';
 import { ViewportNavigationControls } from './ViewportNavigationControls';
+import { bridgeRenderFrameMetaToViewportFrameMeta } from '@neko/ui';
 import { postMessage } from '@neko/shared/vscode';
 import { useModelStore } from '../stores/modelStore';
-import type { SceneHitTestResult } from '../scene/SceneDocument';
+import {
+  handleModelMenuAction,
+  ModelController,
+} from '../viewport/ModelController';
 import { modelErrorMessage, toError, webviewErrorHandler } from '../platform/errors';
 
 export interface VideoViewportProps {
@@ -111,22 +119,6 @@ function isViewportStreamSizeReady(size: ViewportStreamSize | null): size is Vie
   );
 }
 
-function isViewportCameraAckCompatible(
-  ack: SceneViewportCameraAck,
-  sceneId: string,
-  sceneRevision: number,
-  viewportId: string,
-): boolean {
-  if (ack.sceneId !== undefined && ack.sceneId !== sceneId) {
-    return false;
-  }
-  if (ack.viewportId !== undefined && ack.viewportId !== viewportId) {
-    return false;
-  }
-  const acceptedRevision = ack.acceptedRevision ?? ack.revision;
-  return acceptedRevision === undefined || acceptedRevision >= sceneRevision;
-}
-
 function createViewportDescriptor(
   sceneId: string,
   cameraPosition: [number, number, number],
@@ -197,6 +189,31 @@ export function VideoViewport({
   const [retryToken, setRetryToken] = useState(0);
   const [viewportSize, setViewportSize] = useState<ViewportStreamSize | null>(null);
   const helperPassesEnabled = useModelStore((state) => state.showViewportGrid);
+  const modelController = useMemo(
+    () =>
+      new ModelController({
+        enginePort,
+        sceneId,
+        viewportId: MAIN_VIEWPORT_ID,
+        sceneRevision,
+        resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : null,
+        onSelectNode,
+        onError: onSceneControlError,
+        onMaterialPreview: () => captureMaterialPreview(enginePort, onSceneControlError),
+        sceneControlSocket,
+        getViewportRect: () =>
+          viewportRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, 1, 1),
+      }),
+    [
+      enginePort,
+      sceneId,
+      sceneRevision,
+      viewportSize,
+      onSelectNode,
+      onSceneControlError,
+      sceneControlSocket,
+    ],
+  );
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -229,44 +246,22 @@ export function VideoViewport({
     const position = store.getCameraPosition();
     const target = store.cameraTarget;
 
-    const sendHttpFallback = async () => {
-      const client = new EngineClient(enginePort);
-      await client.updateEditorCamera(position, target, undefined, MAIN_VIEWPORT_ID);
-    };
-
-    if (!sceneControlSocket) {
-      void sendHttpFallback().catch((error: unknown) => {
-        void webviewErrorHandler.handleError(toError(error), {
-          showToUser: false,
-          severity: 'error',
-        });
-        onSceneControlError(modelErrorMessage('error.cameraUpdateFailed'));
-      });
-      return;
-    }
-
-    void sceneControlSocket
-      .updateViewportCamera({
+    const sendSceneControlCamera = async () => {
+      if (!sceneControlSocket) {
+        return;
+      }
+      await sceneControlSocket.updateViewportCamera({
         sceneId,
         sceneRevision,
         viewportId: MAIN_VIEWPORT_ID,
         position,
         target,
-        resolution: viewportSize ?? undefined,
-      })
-      .then((ack) => {
-        if (!isViewportCameraAckCompatible(ack, sceneId, sceneRevision, MAIN_VIEWPORT_ID)) {
-          onSceneControlError(modelErrorMessage('error.cameraAckViewportMismatch'));
-          return;
-        }
-        sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
-      })
-      .catch((error: unknown) => {
-        if (error instanceof SceneViewportCameraRejectedError) {
-          throw error;
-        }
-        return sendHttpFallback();
-      })
+        resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
+      });
+      sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
+    };
+
+    void sendSceneControlCamera()
       .catch((error: unknown) => {
         void webviewErrorHandler.handleError(toError(error), {
           showToUser: false,
@@ -274,33 +269,13 @@ export function VideoViewport({
         });
         onSceneControlError(modelErrorMessage('error.cameraUpdateFailed'));
       });
-  }, [enginePort, sceneControlSocket, sceneId, sceneRevision, viewportSize, onSceneControlError]);
-
-  const handleClickSelect = React.useCallback(
-    async (normalizedX: number, normalizedY: number) => {
-      if (!sceneControlSocket) return;
-      try {
-        const result = (await sceneControlSocket.query('hitTest', {
-          viewportId: MAIN_VIEWPORT_ID,
-          sceneId,
-          sceneRevision,
-          resolution: viewportSize ?? undefined,
-          x: normalizedX,
-          y: normalizedY,
-        })) as SceneHitTestResult;
-        if (isCompatibleViewportQueryResult(result, sceneId, MAIN_VIEWPORT_ID, sceneRevision)) {
-          onSelectNode(result.nodeId);
-        }
-      } catch (error) {
-        void webviewErrorHandler.handleError(toError(error), {
-          showToUser: false,
-          severity: 'warning',
-        });
-        onSceneControlError(modelErrorMessage('error.hitTestFailed'));
-      }
-    },
-    [sceneControlSocket, sceneId, sceneRevision, viewportSize, onSelectNode, onSceneControlError],
-  );
+  }, [
+    sceneControlSocket,
+    sceneId,
+    sceneRevision,
+    viewportSize,
+    onSceneControlError,
+  ]);
 
   useEffect(() => {
     let disposed = false;
@@ -504,9 +479,59 @@ export function VideoViewport({
         isKeyframe: true,
         sceneRevision,
         appliedSeq: 0,
+        frameTimestamp: 0,
+        viewTransform: [1, 0, 0, 1, 0, 0],
       }
     );
   }, [hasEngineFrame, sceneRevision]);
+  const viewportFrameMeta = useMemo<ViewportFrameMeta | null>(
+    () =>
+      overlayFrameMeta
+        ? bridgeRenderFrameMetaToViewportFrameMeta(overlayFrameMeta, sceneId)
+        : null,
+    [overlayFrameMeta, sceneId],
+  );
+  const handleViewportContextMenuAction = React.useCallback(
+    (item: ViewportMenuItem) => {
+      void handleModelMenuAction(item, modelController);
+    },
+    [modelController],
+  );
+  const handleClickSelect = React.useCallback(
+    async (normalizedX: number, normalizedY: number) => {
+      try {
+        const payload: ViewportSerializableRecord = viewportSize
+          ? {
+              viewportId: MAIN_VIEWPORT_ID,
+              sceneId,
+              sceneRevision,
+              x: normalizedX,
+              y: normalizedY,
+              resolution: {
+                width: viewportSize.width,
+                height: viewportSize.height,
+                pixelRatio: viewportSize.pixelRatio,
+              },
+            }
+          : {
+              viewportId: MAIN_VIEWPORT_ID,
+              sceneId,
+              sceneRevision,
+              x: normalizedX,
+              y: normalizedY,
+            };
+        const event = await modelController.sendViewportCommand('viewport:select', payload);
+        await modelController.handleViewportEvent(event);
+      } catch (error) {
+        void webviewErrorHandler.handleError(toError(error), {
+          showToUser: false,
+          severity: 'warning',
+        });
+        onSceneControlError(modelErrorMessage('error.hitTestFailed'));
+      }
+    },
+    [modelController, sceneId, sceneRevision, viewportSize, onSceneControlError],
+  );
 
   if (routeAUnavailable) {
     return (
@@ -536,38 +561,75 @@ export function VideoViewport({
 
   return (
     <div ref={viewportRef} className="model-viewport-frame relative h-full w-full overflow-hidden">
-      <canvas ref={canvasRef} className="h-full w-full" aria-hidden={!hasEngineFrame} />
-      <ViewportGuideOverlay visible />
-      <InteractionLayer
-        viewportId={MAIN_VIEWPORT_ID}
+      <ViewportShell
         sceneId={sceneId}
-        sceneRevision={sceneRevision}
-        resolution={isViewportStreamSizeReady(viewportSize) ? viewportSize : null}
-        selectedNodeId={selectedNodeId}
-        socket={sceneControlSocket}
-        onSelectNode={onSelectNode}
-        onQueryError={(error) => onSceneControlError(error.message)}
-      />
-      <OverlayCanvas
         viewportId={MAIN_VIEWPORT_ID}
-        frameMeta={overlayFrameMeta}
-        selectedNodeId={selectedNodeId}
-        hasPendingPrediction={hasPendingPrediction}
-        overlay={overlay}
-        predictions={predictions}
-        topologyWarning={topologyWarning}
-      />
-      <ViewportOrbitControls
-        viewportId={MAIN_VIEWPORT_ID}
-        onClickSelect={handleClickSelect}
-        onCameraChange={sendViewportCamera}
-        onCameraMutated={onCameraMutated}
-      />
-      <ViewportNavigationControls
-        viewportId={MAIN_VIEWPORT_ID}
-        onCameraChange={sendViewportCamera}
-        onCameraMutated={onCameraMutated}
+        controller={modelController}
+        frameMeta={viewportFrameMeta}
+        className="relative h-full w-full overflow-hidden"
+        surface={{
+          kind: 'custom',
+          node: <canvas ref={canvasRef} className="h-full w-full" aria-hidden={!hasEngineFrame} />,
+        }}
+        onContextMenuAction={handleViewportContextMenuAction}
+        renderOverlayLayer={({ frameMeta, overlays }) => (
+          <>
+            <OverlayRenderer frameMeta={frameMeta} overlays={overlays} />
+            <ViewportGuideOverlay visible />
+            <InteractionLayer
+              viewportId={MAIN_VIEWPORT_ID}
+              sceneId={sceneId}
+              sceneRevision={sceneRevision}
+              resolution={isViewportStreamSizeReady(viewportSize) ? viewportSize : null}
+              selectedNodeId={selectedNodeId}
+              socket={sceneControlSocket}
+              onSelectNode={onSelectNode}
+              onQueryError={(error) => onSceneControlError(error.message)}
+            />
+            <OverlayCanvas
+              viewportId={MAIN_VIEWPORT_ID}
+              frameMeta={overlayFrameMeta}
+              selectedNodeId={selectedNodeId}
+              hasPendingPrediction={hasPendingPrediction}
+              overlay={overlay}
+              predictions={predictions}
+              topologyWarning={topologyWarning}
+            />
+            <ViewportOrbitControls
+              viewportId={MAIN_VIEWPORT_ID}
+              onClickSelect={handleClickSelect}
+              onCameraChange={sendViewportCamera}
+              onCameraMutated={onCameraMutated}
+            />
+            <ViewportNavigationControls
+              viewportId={MAIN_VIEWPORT_ID}
+              onCameraChange={sendViewportCamera}
+              onCameraMutated={onCameraMutated}
+            />
+          </>
+        )}
+        renderToolbar={() => null}
       />
     </div>
   );
+}
+
+async function captureMaterialPreview(
+  enginePort: number,
+  onSceneControlError: (message: string) => void,
+): Promise<void> {
+  try {
+    const preview = await new EngineClient(enginePort).captureScenePreview({
+      width: 1280,
+      height: 720,
+      quality: 90,
+    });
+    useModelStore.getState().setQualityPreview(preview.dataUrl);
+  } catch (error) {
+    void webviewErrorHandler.handleError(toError(error), {
+      showToUser: false,
+      severity: 'warning',
+    });
+    onSceneControlError(modelErrorMessage('error.engineStreamUnavailable'));
+  }
 }

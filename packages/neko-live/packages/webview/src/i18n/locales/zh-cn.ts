@@ -28,6 +28,9 @@ export const zhCN = {
   'recording.noCanvas': '无可用的渲染画布',
   'recording.captureFailed': '画布捕获失败',
   'devices.bound': '设备：{devices}',
+  'diagnostics.localFallback':
+    '仅本地预览。引擎合成流不可用，此画面不是最终输出真相。',
+  'diagnostics.compositorUnavailable': '引擎合成流不可用',
 
   // Puppet viewer
   'puppet.waiting': '等待追踪数据...',

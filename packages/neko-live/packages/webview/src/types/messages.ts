@@ -19,10 +19,15 @@ export type LiveExtensionMessage =
   | { type: 'puppetLoaded'; parameters: PuppetParameter[] }
   | { type: 'puppetDelta'; delta: PuppetDelta }
   | { type: 'recordingStarted' }
-  | { type: 'recordingStopped'; filePath: string }
+  | {
+      type: 'recordingStopped';
+      filePath: string;
+      authority?: 'local-fallback' | 'compositor';
+      diagnostics?: string[];
+    }
   | { type: 'recordingProgress'; elapsedMs: number }
   | { type: 'cameraDevices'; devices: CameraDevice[] }
-  | { type: 'cameraStreamStarted'; streamId: string; wsUrl: string }
+  | { type: 'cameraStreamStarted'; streamId: string; wsUrl?: string }
   | { type: 'cameraStreamStopped' }
   | { type: 'deviceBindingChanged'; role: LiveDeviceRole; binding?: LiveDeviceBinding }
   | { type: 'stopCanvasCapture' };
@@ -37,7 +42,7 @@ export type LiveWebviewMessage =
   | { type: 'selectAvatar' }
   | { type: 'setTrackingMode'; mode: TrackingMode }
   | { type: 'setPuppetParam'; name: string; value: number }
-  | { type: 'startRecording'; includeAudio: boolean }
+  | { type: 'startRecording'; includeAudio: boolean; authority?: 'local-fallback' | 'compositor' }
   | { type: 'stopRecording' }
   | { type: 'listCameraDevices' }
   | { type: 'startCameraCapture'; deviceId?: string }

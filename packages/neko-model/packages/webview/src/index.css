@@ -607,6 +607,81 @@
     background: var(--model-viewport-bg);
   }
 
+  .model-viewport-frame.neko-viewport-shell,
+  .model-viewport-frame .neko-viewport-surface {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .model-viewport-frame .neko-viewport-overlay {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 14;
+    width: 100%;
+    height: 100%;
+  }
+
+  .model-viewport-protocol-toolbar {
+    pointer-events: auto;
+    position: absolute;
+    left: 54px;
+    top: 8px;
+    z-index: 32;
+    display: flex;
+    gap: 4px;
+    border: 1px solid var(--model-viewport-toolbar-border);
+    border-radius: 5px;
+    background: var(--model-viewport-toolbar-bg);
+    box-shadow: var(--model-viewport-toolbar-shadow);
+    backdrop-filter: blur(10px);
+    padding: 4px;
+  }
+
+  .model-viewport-protocol-toolbar .neko-viewport-toolbar-button {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 3px;
+    color: var(--model-fg);
+    font-size: 11px;
+  }
+
+  .model-viewport-protocol-toolbar .neko-viewport-toolbar-button:hover,
+  .model-viewport-protocol-toolbar .neko-viewport-toolbar-button[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--model-accent) 18%, transparent);
+  }
+
+  .model-viewport-frame .neko-viewport-context-menu {
+    pointer-events: auto;
+    position: absolute;
+    z-index: 45;
+    min-width: 150px;
+    border: 1px solid var(--model-border);
+    border-radius: 5px;
+    background: var(--model-elevated);
+    box-shadow: var(--model-viewport-toolbar-shadow);
+    padding: 4px;
+  }
+
+  .model-viewport-frame .neko-viewport-context-menu-item {
+    display: flex;
+    width: 100%;
+    min-height: 26px;
+    align-items: center;
+    border-radius: 3px;
+    padding: 0 8px;
+    color: var(--model-fg);
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .model-viewport-frame .neko-viewport-context-menu-item:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--model-accent) 18%, transparent);
+  }
+
   .model-viewport-tools {
     pointer-events: auto;
     position: absolute;
@@ -632,6 +707,95 @@
 
   .model-viewport-toolbar .neko-toolbar-btn.active::before {
     left: -1px;
+  }
+
+  .model-character-preview-modes {
+    pointer-events: auto;
+    position: absolute;
+    top: 10px;
+    left: 56px;
+    z-index: 31;
+    display: flex;
+    max-width: min(520px, calc(100% - 132px));
+    flex-direction: column;
+    gap: 5px;
+    border: 1px solid var(--model-viewport-toolbar-border);
+    border-radius: 6px;
+    background: var(--model-viewport-toolbar-bg);
+    box-shadow: var(--model-viewport-toolbar-shadow);
+    padding: 6px;
+    backdrop-filter: blur(10px);
+  }
+
+  .model-character-preview-segments {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(58px, 1fr));
+    gap: 3px;
+  }
+
+  .model-character-preview-segments button,
+  .model-character-preview-reset {
+    min-width: 0;
+    min-height: 28px;
+    border-radius: 4px;
+    padding: 0 8px;
+    color: var(--model-fg-secondary);
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .model-character-preview-segments button:hover:not(:disabled),
+  .model-character-preview-segments button.active {
+    background: color-mix(in srgb, var(--model-accent) 20%, transparent);
+    color: var(--model-fg);
+  }
+
+  .model-character-preview-segments button:disabled,
+  .model-character-preview-reset:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .model-character-preview-status {
+    display: flex;
+    min-height: 24px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--model-fg-muted);
+    font-size: 11px;
+  }
+
+  .model-character-preview-playback {
+    display: flex;
+    gap: 4px;
+  }
+
+  .model-character-preview-playback-button {
+    min-height: 24px;
+    border: 1px solid var(--model-viewport-control-border);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--model-accent) 16%, transparent);
+    color: var(--model-fg);
+    font-size: 11px;
+    line-height: 1;
+    padding: 0 7px;
+  }
+
+  .model-character-preview-reset {
+    border: 1px solid var(--model-viewport-control-border);
+    background: color-mix(in srgb, var(--model-viewport-control-bg) 82%, transparent);
+  }
+
+  .model-character-preview-diagnostic {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--model-fg-muted);
+    font-size: 11px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .model-viewport-nav-controls {

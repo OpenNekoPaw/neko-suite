@@ -6,7 +6,14 @@
  */
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePuppetStore } from '../stores/puppet-store';
-import type { DeformedMesh, MeshSnapshot } from '../animation/types';
+import type { DeformedMesh, MeshSnapshot, PuppetNodeSnapshot } from '../animation/types';
+
+export interface PuppetCanvasProps {
+  readonly overlayLayer?: React.ReactNode;
+  readonly toolbarLayer?: React.ReactNode;
+  readonly contextMenuLayer?: React.ReactNode;
+  readonly fallbackLabel?: React.ReactNode;
+}
 
 // ── Blend mode mapping ──────────────────────────────────────────────────────
 
@@ -239,19 +246,64 @@ function renderPreviewFrame(
   ctx.drawImage(frame, x, y, width, height);
 }
 
+function renderNativeBoneOverlay(
+  ctx: CanvasRenderingContext2D,
+  nodes: readonly PuppetNodeSnapshot[],
+  selectedBoneId: string | null,
+): void {
+  const bones = nodes.filter((node) => node.node_type === 'group');
+  if (bones.length === 0) return;
+
+  ctx.save();
+  ctx.lineWidth = 1 / Math.max(ctx.getTransform().a, 1);
+  ctx.strokeStyle = 'rgba(75, 190, 255, 0.85)';
+  ctx.fillStyle = 'rgba(75, 190, 255, 0.95)';
+
+  for (const bone of bones) {
+    if (bone.parent_id) {
+      const parent = nodes.find((node) => node.id === bone.parent_id);
+      if (parent) {
+        ctx.beginPath();
+        ctx.moveTo(parent.position[0], parent.position[1]);
+        ctx.lineTo(bone.position[0], bone.position[1]);
+        ctx.stroke();
+      }
+    }
+
+    ctx.beginPath();
+    ctx.arc(
+      bone.position[0],
+      bone.position[1],
+      bone.id === selectedBoneId ? 3.5 : 2.5,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 // ── React Component ─────────────────────────────────────────────────────────
 
-export function PuppetCanvas() {
+export function PuppetCanvas({
+  overlayLayer = null,
+  toolbarLayer = null,
+  contextMenuLayer = null,
+  fallbackLabel = null,
+}: PuppetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const needsRenderRef = useRef(true);
 
   const meshSnapshots = usePuppetStore((s) => s.puppetSnapshot?.meshes ?? []);
+  const nodes = usePuppetStore((s) => s.puppetSnapshot?.nodes ?? []);
   const deformedMeshes = usePuppetStore((s) => s.deformedMeshes);
   const textures = usePuppetStore((s) => s.textures);
   const viewport = usePuppetStore((s) => s.viewport);
   const previewFrame = usePuppetStore((s) => s.previewFrame);
+  const selectedBoneId = usePuppetStore((s) => s.selectedNativeBoneId);
   const setViewport = usePuppetStore((s) => s.setViewport);
   const solidColors = useMemo(() => buildSolidColorCache(textures), [textures]);
 
@@ -276,6 +328,15 @@ export function PuppetCanvas() {
           renderPreviewFrame(ctx, canvas, previewFrame);
         } else {
           renderPuppet(ctx, canvas, meshSnapshots, deformedMeshes, textures, solidColors, viewport);
+          const dpr = window.devicePixelRatio || 1;
+          const cssW = canvas.width / dpr;
+          const cssH = canvas.height / dpr;
+          ctx.save();
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.translate(cssW / 2 + viewport.panX, cssH / 2 + viewport.panY);
+          ctx.scale(viewport.zoom, viewport.zoom);
+          renderNativeBoneOverlay(ctx, nodes, selectedBoneId);
+          ctx.restore();
         }
       }
       rafRef.current = requestAnimationFrame(loop);
@@ -285,7 +346,16 @@ export function PuppetCanvas() {
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [meshSnapshots, deformedMeshes, textures, solidColors, viewport, previewFrame]);
+  }, [
+    meshSnapshots,
+    nodes,
+    deformedMeshes,
+    textures,
+    solidColors,
+    viewport,
+    previewFrame,
+    selectedBoneId,
+  ]);
 
   // Resize observer — keep canvas size in sync with container
   useEffect(() => {
@@ -353,6 +423,10 @@ export function PuppetCanvas() {
       onMouseDown={handleMouseDown}
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
+      {overlayLayer}
+      {toolbarLayer}
+      {contextMenuLayer}
+      {fallbackLabel}
     </div>
   );
 }

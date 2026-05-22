@@ -40,6 +40,7 @@ export default defineConfig({
         find: '@neko/neko-client',
         replacement: path.resolve(__dirname, '../../../neko-client/src'),
       },
+      { find: '@neko/ui', replacement: path.resolve(__dirname, '../../../neko-ui/src') },
       { find: 'three', replacement: threePath },
     ],
   },
@@ -69,6 +70,6 @@ export default defineConfig({
     modulePreload: false,
   },
   optimizeDeps: {
-    include: ['@neko/shared'],
+    include: ['@neko/shared', '@neko/ui'],
   },
 });

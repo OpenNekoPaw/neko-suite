@@ -1,6 +1,7 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { Viewport3D } from './components/Viewport3D';
-import { PuppetViewer } from './components/PuppetViewer';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { LiveCompositorScene, RenderFrameMeta, ViewportFrameMeta } from '@neko/shared';
+import { EngineClient, H264StreamClient } from '@neko/neko-client';
+import { ViewportShell, bridgeRenderFrameMetaToViewportFrameMeta } from '@neko/ui';
 import { EmptyState } from './components/EmptyState';
 import { TrackingPanel } from './components/TrackingPanel';
 import { useLiveStore } from './stores/liveStore';
@@ -9,11 +10,29 @@ import { vscode } from './vscode-api';
 import { CanvasRecorder } from './recording/CanvasRecorder';
 import { t } from './i18n';
 import { NEKO_LIVE_RENDERER_FALLBACK_ENABLED } from './rendererMigration';
+import { LiveCompositorCanvas, type LiveCompositorCanvasHandle } from './viewport/LiveCompositorCanvas';
+import { LiveController } from './viewport/LiveController';
+import {
+  LIVE_COMPOSITOR_SCENE_ID,
+  LIVE_COMPOSITOR_VIEWPORT_ID,
+  createDefaultLiveCompositorScene,
+} from './viewport/liveCompositorScene';
+import { selectLiveVisualPath, type LiveCompositorStatus } from './viewport/liveVisualPath';
+import { LiveLocalFallbackSurface } from './viewport/LiveLocalFallbackSurface';
 
 const canvasRecorder = new CanvasRecorder();
 
 export function App() {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const liveCanvasRef = useRef<LiveCompositorCanvasHandle>(null);
+  const streamClientRef = useRef<H264StreamClient | null>(null);
+  const liveEngineClientRef = useRef<EngineClient | null>(null);
+  const liveSceneRef = useRef<LiveCompositorScene>(createDefaultLiveCompositorScene());
+  const [enginePort, setEnginePort] = useState<number | null>(null);
+  const [liveScene, setLiveScene] = useState<LiveCompositorScene>(() => liveSceneRef.current);
+  const [frameMeta, setFrameMeta] = useState<ViewportFrameMeta | null>(null);
+  const [compositorStatus, setCompositorStatus] = useState<LiveCompositorStatus>('idle');
+  const [sceneSyncVersion, setSceneSyncVersion] = useState(0);
   const {
     avatarUrl,
     avatarType,
@@ -28,9 +47,168 @@ export function App() {
     setLastRecordingPath,
     setAvatarLoaded,
     setDeviceBinding,
+    deviceBindings,
   } = useLiveStore();
 
   const isRecording = recordingState === 'recording';
+
+  const handleCompositorError = useCallback((message: string) => {
+    vscode.postMessage({ type: 'showWarning', message });
+  }, []);
+
+  const liveController = useMemo(() => {
+    if (enginePort === null) return null;
+    return new LiveController({
+      enginePort,
+      scene: liveSceneRef.current,
+      viewportId: LIVE_COMPOSITOR_VIEWPORT_ID,
+      onSceneChange: setLiveScene,
+      onError: handleCompositorError,
+    });
+  }, [enginePort, handleCompositorError]);
+  const visualPath = selectLiveVisualPath({
+    compositorStatus,
+    hasController: liveController !== null,
+    hasAvatar: avatarUrl !== null,
+    fallbackEnabled: NEKO_LIVE_RENDERER_FALLBACK_ENABLED,
+  });
+
+  useEffect(() => {
+    liveSceneRef.current = liveScene;
+    liveController?.updateScene(liveScene);
+  }, [liveController, liveScene]);
+
+  useEffect(() => {
+    setLiveScene((previous) => {
+      const next = createDefaultLiveCompositorScene({
+        avatarUrl,
+        avatarType,
+        cameraBinding: deviceBindings.camera,
+      });
+      return {
+        ...next,
+        revision: previous.revision,
+        activePresetId: previous.activePresetId ?? next.activePresetId,
+        trackingOverlay: {
+          ...next.trackingOverlay,
+          enabled: previous.trackingOverlay.enabled,
+          visible: previous.trackingOverlay.visible,
+          mode: previous.trackingOverlay.mode,
+        },
+        updatedAt: Date.now(),
+      };
+    });
+    setSceneSyncVersion((version) => version + 1);
+  }, [
+    avatarType,
+    avatarUrl,
+    deviceBindings.camera?.label,
+    deviceBindings.camera?.sessionId,
+    deviceBindings.camera?.compositorSourceRef?.sourceId,
+    deviceBindings.camera?.compositorSourceRef?.deviceSessionRef,
+  ]);
+
+  useEffect(() => {
+    if (enginePort === null || sceneSyncVersion === 0 || compositorStatus === 'idle') return;
+    const client = liveEngineClientRef.current ?? new EngineClient(enginePort);
+    client.createOrUpdateLiveCompositorScene(liveSceneRef.current).catch((error: unknown) => {
+      handleCompositorError(error instanceof Error ? error.message : String(error));
+    });
+  }, [compositorStatus, enginePort, handleCompositorError, sceneSyncVersion]);
+
+  useEffect(() => {
+    if (enginePort === null) return undefined;
+
+    let disposed = false;
+    let streamId: string | undefined;
+    const client = new EngineClient(enginePort);
+    liveEngineClientRef.current = client;
+    setCompositorStatus('starting');
+
+    const start = async (): Promise<void> => {
+      try {
+        const scene = await client.createOrUpdateLiveCompositorScene(liveSceneRef.current);
+        if (disposed) return;
+        setLiveScene(scene);
+
+        const handle = await client.startLiveCompositorStream({
+          sceneId: scene.sceneId,
+          viewportId: LIVE_COMPOSITOR_VIEWPORT_ID,
+          width: scene.canvas.width,
+          height: scene.canvas.height,
+          fps: scene.canvas.fps,
+        });
+        if (disposed) {
+          await client.stopLiveCompositorStream({ streamId: handle.descriptor.streamId });
+          return;
+        }
+
+        streamId = handle.descriptor.streamId;
+        const streamClient = new H264StreamClient({
+          websocketUrl: handle.wsUrl,
+          descriptor: handle.descriptor,
+          width: handle.descriptor.width,
+          height: handle.descriptor.height,
+          onFrame: (frame, meta) => {
+            drawCompositorFrame(liveCanvasRef.current, frame, meta, setFrameMeta);
+          },
+          onFrameMeta: (meta) => {
+            setFrameMeta(bridgeLiveFrameMeta(meta));
+          },
+          onConnectionChange: (connected) => {
+            if (!disposed) {
+              setCompositorStatus(connected ? 'active' : 'unavailable');
+            }
+          },
+          onError: (error) => {
+            if (!disposed) {
+              setCompositorStatus('unavailable');
+              handleCompositorError(`${t('diagnostics.compositorUnavailable')}: ${error.message}`);
+            }
+          },
+        });
+        streamClientRef.current = streamClient;
+        await streamClient.connect();
+      } catch (error) {
+        if (!disposed) {
+          setCompositorStatus('unavailable');
+          handleCompositorError(
+            `${t('diagnostics.compositorUnavailable')}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+    };
+
+    void start();
+
+    return () => {
+      disposed = true;
+      streamClientRef.current?.dispose();
+      streamClientRef.current = null;
+      if (streamId) {
+        void client.stopLiveCompositorStream({ streamId }).catch(() => undefined);
+      }
+      if (liveEngineClientRef.current === client) {
+        liveEngineClientRef.current = null;
+      }
+    };
+  }, [enginePort, handleCompositorError]);
+
+  const handleLiveToolbarAction = useCallback(
+    (item: Parameters<LiveController['handleToolbarAction']>[0]) => {
+      void liveController?.handleToolbarAction(item);
+    },
+    [liveController],
+  );
+
+  const handleLiveMenuAction = useCallback(
+    (item: Parameters<LiveController['handleMenuAction']>[0]) => {
+      void liveController?.handleMenuAction(item);
+    },
+    [liveController],
+  );
 
   // ─── Recording: webview-driven (canvas must exist here) ─────────────
 
@@ -65,7 +243,7 @@ export function App() {
       // Canvas capture started — tell extension host to start audio + progress timer
       setRecordingState('recording');
       setRecordingElapsed(0);
-      vscode.postMessage({ type: 'startRecording', includeAudio });
+      vscode.postMessage({ type: 'startRecording', includeAudio, authority: 'local-fallback' });
     },
     [setRecordingState, setRecordingElapsed],
   );
@@ -83,7 +261,12 @@ export function App() {
         const dataUrl = await CanvasRecorder.blobToDataUrl(blob);
         vscode.postMessage({ type: 'videoRecordingBlob', dataUrl, mimeType: blob.type });
       } catch (err) {
-        console.error('[CanvasRecorder] Failed to encode blob:', err);
+        vscode.postMessage({
+          type: 'showError',
+          message: `${t('recording.captureFailed')}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        });
       }
     }
 
@@ -143,6 +326,7 @@ export function App() {
           break;
 
         case 'enginePort':
+          setEnginePort(msg.port);
           break;
 
         default:
@@ -152,6 +336,7 @@ export function App() {
 
     window.addEventListener('message', handler);
     vscode.postMessage({ type: 'ready' });
+    vscode.postMessage({ type: 'requestEnginePort' });
 
     return () => window.removeEventListener('message', handler);
   }, [
@@ -180,14 +365,23 @@ export function App() {
           transition: 'border-color 0.2s',
         }}
       >
-        {!avatarUrl ? (
-          <EmptyState />
-        ) : NEKO_LIVE_RENDERER_FALLBACK_ENABLED ? (
-          avatarType === 'puppet' ? (
-            <PuppetViewer />
-          ) : (
-            <Viewport3D />
-          )
+        {visualPath === 'compositor' && liveController ? (
+          <ViewportShell
+            className="live-viewport-shell"
+            sceneId={LIVE_COMPOSITOR_SCENE_ID}
+            viewportId={LIVE_COMPOSITOR_VIEWPORT_ID}
+            controller={liveController}
+            frameMeta={frameMeta}
+            surface={{
+              kind: 'custom',
+              node: <LiveCompositorCanvas ref={liveCanvasRef} />,
+              label: 'Live compositor',
+            }}
+            onToolbarAction={handleLiveToolbarAction}
+            onContextMenuAction={handleLiveMenuAction}
+          />
+        ) : visualPath === 'local-fallback' ? (
+          <LiveLocalFallbackSurface avatarType={avatarType ?? undefined} />
         ) : (
           <EmptyState />
         )}
@@ -223,4 +417,24 @@ export function App() {
       <style>{`@keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.4 } }`}</style>
     </div>
   );
+}
+
+function drawCompositorFrame(
+  canvas: LiveCompositorCanvasHandle | null,
+  frame: VideoFrame,
+  meta: RenderFrameMeta | undefined,
+  commitFrameMeta: (meta: ViewportFrameMeta) => void,
+): void {
+  try {
+    canvas?.drawFrame(frame);
+    if (meta) {
+      commitFrameMeta(bridgeLiveFrameMeta(meta));
+    }
+  } finally {
+    frame.close();
+  }
+}
+
+function bridgeLiveFrameMeta(meta: RenderFrameMeta): ViewportFrameMeta {
+  return bridgeRenderFrameMetaToViewportFrameMeta(meta, LIVE_COMPOSITOR_SCENE_ID);
 }

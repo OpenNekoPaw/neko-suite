@@ -8,10 +8,11 @@ import { create } from 'zustand';
 import type {
   AnimationClipInfo,
   DeformedMesh,
+  NativeBlendShapeInfo,
   ParameterInfo,
   PuppetSnapshot,
 } from '../animation/types';
-import type { EditorKeyframeTrack } from '@neko/shared';
+import type { EditorKeyframeTrack, NkpControlDriver } from '@neko/shared';
 
 export type AnimationPlayState = 'idle' | 'playing' | 'paused';
 
@@ -21,6 +22,12 @@ export interface PuppetStore {
   puppetSnapshot: PuppetSnapshot | null;
   puppetParameters: ParameterInfo[];
   deformedMeshes: DeformedMesh[];
+  nativeBlendShapes: NativeBlendShapeInfo[];
+  nativeControlDrivers: readonly NkpControlDriver[];
+  selectedNativeBoneId: string | null;
+  nativeRevision: number;
+  nativeSeq: number;
+  pendingNativeCommandIds: Set<string>;
   isPlayingPhysics: boolean;
   /** Whether the .nkp has no puppet.src linked (shows import UI) */
   noPuppetSource: boolean;
@@ -58,6 +65,14 @@ export interface PuppetStore {
   setPuppetSnapshot: (snapshot: PuppetSnapshot | null) => void;
   setPuppetParameters: (params: ParameterInfo[]) => void;
   setDeformedMeshes: (meshes: DeformedMesh[]) => void;
+  setNativeBlendShapes: (blendShapes: NativeBlendShapeInfo[]) => void;
+  setNativeControlDrivers: (drivers: readonly NkpControlDriver[]) => void;
+  updateNativeBlendShapeWeight: (name: string, weight: number) => void;
+  setSelectedNativeBoneId: (boneId: string | null) => void;
+  setNativeRevision: (revision: number) => void;
+  nextNativeSeq: () => number;
+  addPendingNativeCommand: (id: string) => void;
+  removePendingNativeCommand: (id: string) => void;
   updateParameterValue: (name: string, value: number) => void;
   setPlayingPhysics: (playing: boolean) => void;
   setNoPuppetSource: (noPuppetSource: boolean) => void;
@@ -79,12 +94,18 @@ export interface PuppetStore {
   resetAnimation: () => void;
 }
 
-export const usePuppetStore = create<PuppetStore>()((set) => ({
+export const usePuppetStore = create<PuppetStore>()((set, get) => ({
   // ── Puppet state ─────────────────────────────────────────────────────────
   puppetLoaded: false,
   puppetSnapshot: null,
   puppetParameters: [],
   deformedMeshes: [],
+  nativeBlendShapes: [],
+  nativeControlDrivers: [],
+  selectedNativeBoneId: null,
+  nativeRevision: 0,
+  nativeSeq: 1,
+  pendingNativeCommandIds: new Set<string>(),
   isPlayingPhysics: false,
   noPuppetSource: false,
   loadError: null,
@@ -109,6 +130,31 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
   setPuppetSnapshot: (snapshot) => set({ puppetSnapshot: snapshot }),
   setPuppetParameters: (params) => set({ puppetParameters: params }),
   setDeformedMeshes: (meshes) => set({ deformedMeshes: meshes }),
+  setNativeBlendShapes: (blendShapes) => set({ nativeBlendShapes: blendShapes }),
+  setNativeControlDrivers: (drivers) => set({ nativeControlDrivers: drivers }),
+  updateNativeBlendShapeWeight: (name, weight) =>
+    set((state) => ({
+      nativeBlendShapes: state.nativeBlendShapes.map((shape) =>
+        shape.name === name ? { ...shape, current: weight } : shape,
+      ),
+    })),
+  setSelectedNativeBoneId: (boneId) => set({ selectedNativeBoneId: boneId }),
+  setNativeRevision: (revision) => set({ nativeRevision: revision }),
+  nextNativeSeq: () => {
+    const seq = get().nativeSeq;
+    set({ nativeSeq: seq + 1 });
+    return seq;
+  },
+  addPendingNativeCommand: (id) =>
+    set((state) => ({
+      pendingNativeCommandIds: new Set([...state.pendingNativeCommandIds, id]),
+    })),
+  removePendingNativeCommand: (id) =>
+    set((state) => {
+      const next = new Set(state.pendingNativeCommandIds);
+      next.delete(id);
+      return { pendingNativeCommandIds: next };
+    }),
 
   updateParameterValue: (name, value) =>
     set((state) => ({
@@ -158,6 +204,12 @@ export const usePuppetStore = create<PuppetStore>()((set) => ({
         puppetSnapshot: null,
         puppetParameters: [],
         deformedMeshes: [],
+        nativeBlendShapes: [],
+        nativeControlDrivers: [],
+        selectedNativeBoneId: null,
+        nativeRevision: 0,
+        nativeSeq: 1,
+        pendingNativeCommandIds: new Set<string>(),
         loadError: null,
         textures: [],
         viewport: { zoom: 2, panX: 0, panY: 0 },

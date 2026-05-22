@@ -14,7 +14,14 @@ import type {
   TransformMode,
 } from '../types';
 import type { EditorKeyframeTrack } from '@neko/shared';
-import type { EnvironmentPlacement, RenderFrameMeta } from '@neko/shared';
+import type {
+  CharacterPreviewModeId,
+  CharacterPreviewModeStatePayload,
+  EnvironmentPlacement,
+  RenderFrameMeta,
+  ViewportEvent,
+} from '@neko/shared';
+import { isCharacterPreviewModeStatePayload } from '@neko/shared';
 import {
   AuthoringPerformanceMetrics,
   type AuthoringMetricsSnapshot,
@@ -30,6 +37,7 @@ type VisibilityPatch = NonNullable<SceneDelta['updatedVisibility']>[number];
 type ViewportOverlayPatch = NonNullable<SceneDelta['overlay']>;
 type ModelingSessionState = NonNullable<SceneDelta['modelingSessions']>[number];
 type SceneControlStatus = 'disconnected' | 'connecting' | 'ready' | 'error';
+type CharacterPreviewUiStatus = 'unavailable' | 'pending' | 'applied' | 'rejected';
 type Vec3 = [number, number, number];
 
 const DEFAULT_CAMERA_THETA = 0;
@@ -61,6 +69,14 @@ interface NodeWorldFrame {
   scale: Vec3;
 }
 
+export interface CharacterPreviewUiState {
+  requestedMode: CharacterPreviewModeId | null;
+  appliedMode: CharacterPreviewModeId | null;
+  status: CharacterPreviewUiStatus;
+  state: CharacterPreviewModeStatePayload | null;
+  diagnostics: CharacterPreviewModeStatePayload['diagnostics'];
+}
+
 export interface PendingTransformPrediction {
   seq: number;
   nodeId: string;
@@ -89,6 +105,7 @@ export interface ModelState {
   authoringMetrics: AuthoringPerformanceMetrics;
   authoringMetricsSnapshot: AuthoringMetricsSnapshot;
   showViewportGrid: boolean;
+  characterPreview: CharacterPreviewUiState;
 
   // Animation
   animationClips: AnimationClipInfo[];
@@ -160,6 +177,9 @@ export interface ModelState {
   recordRenderFrameMeta: (meta: RenderFrameMeta) => void;
   updateLastRenderFrameMeta: (meta: RenderFrameMeta) => void;
   incrementDroppedPrediction: () => void;
+  requestCharacterPreviewMode: (modeId: CharacterPreviewModeId) => void;
+  applyCharacterPreviewState: (state: CharacterPreviewModeStatePayload) => void;
+  applyCharacterPreviewEvent: (event: ViewportEvent) => void;
 
   // Actions — Animation
   setAnimationClips: (clips: AnimationClipInfo[]) => void;
@@ -250,6 +270,13 @@ export const useModelStore = create<ModelState>((set, get) => ({
   authoringMetrics: new AuthoringPerformanceMetrics(),
   authoringMetricsSnapshot: new AuthoringPerformanceMetrics().snapshot(),
   showViewportGrid: true,
+  characterPreview: {
+    requestedMode: null,
+    appliedMode: null,
+    status: 'unavailable',
+    state: null,
+    diagnostics: [],
+  },
   animationClips: [],
   activeAnimation: null,
   playbackState: 'stopped',
@@ -521,6 +548,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       }
       return {
         lastRenderFrameMeta: meta,
+        characterPreview: reconcilePreviewFrameMeta(state.characterPreview, meta),
         authoringMetricsSnapshot: state.authoringMetrics.snapshot(),
       };
     }),
@@ -531,6 +559,49 @@ export const useModelStore = create<ModelState>((set, get) => ({
     set((state) => {
       state.authoringMetrics.incrementDroppedPrediction();
       return { authoringMetricsSnapshot: state.authoringMetrics.snapshot() };
+    }),
+
+  requestCharacterPreviewMode: (modeId) =>
+    set((state) => ({
+      characterPreview: {
+        ...state.characterPreview,
+        requestedMode: modeId,
+        status: 'pending',
+      },
+    })),
+
+  applyCharacterPreviewState: (previewState) =>
+    set((state) => ({
+      characterPreview: previewUiStateFromPayload(state.characterPreview, previewState),
+    })),
+
+  applyCharacterPreviewEvent: (event) =>
+    set((state) => {
+      if (isCharacterPreviewModeStatePayload(event.payload)) {
+        return {
+          characterPreview: previewUiStateFromPayload(state.characterPreview, event.payload),
+        };
+      }
+      if (event.status === 'error') {
+        return {
+          characterPreview: {
+            ...state.characterPreview,
+            status: 'rejected',
+            diagnostics: [
+              {
+                code:
+                  event.error?.code === 'stale-revision'
+                    ? 'stale-revision'
+                    : 'scene-control-unavailable',
+                severity: 'error',
+                message: event.error?.message,
+                retryable: event.error?.retryable,
+              },
+            ],
+          },
+        };
+      }
+      return {};
     }),
 
   // Animation actions
@@ -1049,6 +1120,56 @@ function finiteNumber(value: unknown): number | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function previewUiStateFromPayload(
+  current: CharacterPreviewUiState,
+  previewState: CharacterPreviewModeStatePayload,
+): CharacterPreviewUiState {
+  return {
+    requestedMode: previewState.modeId,
+    appliedMode: previewState.status === 'applied' ? previewState.modeId : current.appliedMode,
+    status:
+      previewState.status === 'applied'
+        ? 'applied'
+        : previewState.status === 'rejected'
+          ? 'rejected'
+          : previewState.status === 'unavailable'
+            ? 'unavailable'
+            : 'pending',
+    state: previewState,
+    diagnostics: previewState.diagnostics,
+  };
+}
+
+function reconcilePreviewFrameMeta(
+  current: CharacterPreviewUiState,
+  meta: RenderFrameMeta,
+): CharacterPreviewUiState {
+  const mode = meta.activePreviewMode;
+  if (mode !== 'face' && mode !== 'full-body' && mode !== 'motion' && mode !== 'voice-pack') {
+    return current;
+  }
+  if (current.requestedMode !== mode && current.appliedMode !== mode) {
+    return current;
+  }
+  return {
+    ...current,
+    appliedMode: mode,
+    status: current.status === 'pending' ? 'applied' : current.status,
+    state: current.state
+      ? {
+          ...current.state,
+          status: 'applied',
+          sceneRevision: meta.sceneRevision,
+          appliedSeq: meta.appliedSeq,
+          playback:
+            typeof meta.previewPlaybackClockMs === 'number'
+              ? { ...current.state.playback, clockMs: meta.previewPlaybackClockMs }
+              : current.state.playback,
+        }
+      : current.state,
+  };
 }
 
 function collectRemovedNodeIds(

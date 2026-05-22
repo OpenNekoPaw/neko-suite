@@ -52,6 +52,8 @@ const NODE_TYPE_ICONS: Record<string, string> = {
 export function PuppetNodeTree() {
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const snapshot = usePuppetStore((s) => s.puppetSnapshot);
+  const selectedNativeBoneId = usePuppetStore((s) => s.selectedNativeBoneId);
+  const setSelectedNativeBoneId = usePuppetStore((s) => s.setSelectedNativeBoneId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   if (!puppetLoaded || !snapshot) return null;
@@ -68,8 +70,12 @@ export function PuppetNodeTree() {
             key={root.node.id}
             treeNode={root}
             depth={0}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedId={selectedNativeBoneId ?? selectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              const node = snapshot.nodes.find((item) => item.id === id);
+              setSelectedNativeBoneId(node?.node_type === 'group' ? id : null);
+            }}
           />
         ))}
       </div>

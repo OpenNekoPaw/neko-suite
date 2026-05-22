@@ -6,6 +6,7 @@
  */
 
 export interface PuppetSnapshot {
+  format?: 'inp' | 'moc3' | 'native';
   nodes: PuppetNodeSnapshot[];
   parameters: ParameterInfo[];
   meshes: MeshSnapshot[];
@@ -29,6 +30,12 @@ export interface ParameterInfo {
   min: number;
   max: number;
   default: number;
+  current: number;
+}
+
+export interface NativeBlendShapeInfo {
+  name: string;
+  meshId: string;
   current: number;
 }
 

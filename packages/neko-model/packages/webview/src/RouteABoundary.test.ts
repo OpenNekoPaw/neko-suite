@@ -75,6 +75,8 @@ describe('Route A webview boundaries', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
     const guideOverlay = readSource('components/ViewportGuideOverlay.tsx');
 
+    expect(videoViewport).toMatch(/<ViewportShell\b/);
+    expect(videoViewport).toMatch(/<div ref=\{viewportRef\}/);
     expect(videoViewport).toMatch(/<canvas/);
     expect(videoViewport).toMatch(/model-viewport-frame/);
     expect(videoViewport).toMatch(/<ViewportGuideOverlay\b/);
@@ -86,6 +88,28 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).not.toMatch(/<Viewport3D\b|<ModelLoader\b/);
     expect(guideOverlay).toMatch(/screen-hud/);
     expect(guideOverlay).not.toMatch(/blender-grid/);
+  });
+
+  it('integrates model ViewportShell migration through shared overlays, context menu, and hidden protocol toolbar', () => {
+    const app = readSource('App.tsx');
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
+    const css = readSource('index.css');
+
+    expect(app).toMatch(/<CharacterPreviewModeSelector\b/);
+    expect(videoViewport).toMatch(/controller=\{modelController\}/);
+    expect(videoViewport).toMatch(/frameMeta=\{viewportFrameMeta\}/);
+    expect(videoViewport).toMatch(/<OverlayRenderer frameMeta=\{frameMeta\} overlays=\{overlays\}/);
+    expect(videoViewport).not.toMatch(/<ViewportToolbar/);
+    expect(videoViewport).toMatch(/renderToolbar=\{\(\) => null\}/);
+    expect(videoViewport).toMatch(/onContextMenuAction=\{handleViewportContextMenuAction\}/);
+    expect(videoViewport).toMatch(/captureMaterialPreview\(enginePort, onSceneControlError\)/);
+    expect(videoViewport).toMatch(/routeAUnavailable/);
+    expect(videoViewport).toMatch(/modelErrorMessage\('error\.routeAUnavailable'\)/);
+    expect(videoViewport).not.toMatch(/onToolbarAction=/);
+    expect(modelController).toMatch(/getContextMenu\(request: ViewportContextMenuRequest\)/);
+    expect(modelController).toMatch(/handleModelMenuAction/);
+    expect(css).toMatch(/neko-viewport-context-menu/);
   });
 
   it('drives Blender-style workbench chrome from VSCode light and dark theme tokens', () => {
@@ -153,21 +177,23 @@ describe('Route A webview boundaries', () => {
     expect(h264Client).not.toMatch(/shouldDropQueuedRouteAFrame/);
   });
 
-  it('routes viewport camera controls through scene control before HTTP fallback', () => {
+  it('routes viewport camera controls through scene-control websocket only', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
+    const app = readSource('App.tsx');
     const orbitControls = readSource('components/ViewportOrbitControls.tsx');
     const navigationControls = readSource('components/ViewportNavigationControls.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
 
-    expect(videoViewport).toMatch(/sceneControlSocket\s*\n\s*\.updateViewportCamera/);
-    expect(videoViewport).toMatch(
-      /sceneId,\s*\n\s*sceneRevision,\s*\n\s*viewportId: MAIN_VIEWPORT_ID/,
-    );
-    expect(videoViewport).toMatch(/resolution: viewportSize \?\? undefined/);
-    expect(videoViewport).toMatch(/isViewportCameraAckCompatible/);
+    expect(videoViewport).toMatch(/sceneControlSocket\.updateViewportCamera/);
     expect(videoViewport).toMatch(/sceneControlSocket\.requestKeyframe\(MAIN_VIEWPORT_ID\)/);
-    expect(videoViewport).toMatch(
-      /updateEditorCamera\(position, target, undefined, MAIN_VIEWPORT_ID\)/,
-    );
+    expect(videoViewport).not.toMatch(/sendHttpFallback|updateEditorCamera/);
+    expect(app).toMatch(/socket\s*\n\s*\.updateViewportCamera/);
+    expect(app).not.toMatch(/updateEditorCamera/);
+    expect(videoViewport).not.toMatch(/modelController\s*\n\s*\.updateCamera\(\)/);
+    expect(modelController).toMatch(/'viewport:camera'/);
+    expect(modelController).toMatch(/position: vec3ToTuple\(store\.getCameraPosition\(\)\)/);
+    expect(modelController).toMatch(/target: vec3ToTuple\(store\.cameraTarget\)/);
+    expect(modelController).toMatch(/kind: 'camera'/);
     expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 16/);
     expect(navigationControls).toMatch(/CAMERA_SEND_INTERVAL_MS = 16/);
     expect(orbitControls).not.toMatch(/new EngineClient|updateEditorCamera/);
@@ -176,11 +202,29 @@ describe('Route A webview boundaries', () => {
 
   it('sends hit-test queries with the same viewport contract as the engine stream', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
 
-    expect(videoViewport).toMatch(/query\('hitTest', \{/);
+    expect(videoViewport).toMatch(/const payload: ViewportSerializableRecord = viewportSize/);
+    expect(videoViewport).toMatch(/sendViewportCommand\('viewport:select', payload\)/);
+    expect(videoViewport).toMatch(/sceneControlSocket,\s*\n\s*getViewportRect/);
+    expect(modelController).toMatch(/socket\.query\('hitTest', \{ \.\.\.command\.payload \}\)/);
     expect(videoViewport).toMatch(/viewportId: MAIN_VIEWPORT_ID,\s*\n\s*sceneId,/);
-    expect(videoViewport).toMatch(/sceneRevision,\s*\n\s*resolution: viewportSize \?\? undefined/);
+    expect(videoViewport).toMatch(/sceneRevision,\s*\n\s*x: normalizedX/);
+    expect(videoViewport).toMatch(/resolution:\s*\{\s*\n\s*width: viewportSize\.width/);
     expect(videoViewport).not.toMatch(/buildViewportQueryCamera|camera:/);
+  });
+
+  it('routes model transform commits through scene-control websocket command envelopes', () => {
+    const app = readSource('App.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
+
+    expect(app).toMatch(/const applied = await sendRouteACommand\(\{/);
+    expect(app).toMatch(/coalesceKey: `transform:\$\{nodeId\}`/);
+    expect(app).toMatch(/type: 'transform'/);
+    expect(app).not.toMatch(/new ModelController\(\{\s*enginePort: port/);
+    expect(modelController).toMatch(/socket\.sendCommand\(envelope\)/);
+    expect(modelController).toMatch(/sceneControlSocket === null/);
+    expect(modelController).toMatch(/scene control websocket is disconnected/);
   });
 
   it('treats viewport grid as an Engine helper pass instead of a Webview overlay', () => {

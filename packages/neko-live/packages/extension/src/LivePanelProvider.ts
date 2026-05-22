@@ -381,8 +381,11 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
    * Start audio recording (called after webview confirms canvas capture is active).
    * Video capture runs in webview; audio capture runs via engine.
    */
-  public async startRecording(includeAudio: boolean): Promise<void> {
-    await this.sessionService.startRecording({ includeAudio });
+  public async startRecording(
+    includeAudio: boolean,
+    authority: 'local-fallback' | 'compositor' = 'local-fallback',
+  ): Promise<void> {
+    await this.sessionService.startRecording({ includeAudio, authority });
     // Note: webview already set recording state before sending this message
   }
 
@@ -394,7 +397,12 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
     // Report audio path — video blob arrives separately via videoRecordingBlob
     const filePath = result.audioPath ?? '';
-    this.postMessage({ type: 'recordingStopped', filePath });
+    this.postMessage({
+      type: 'recordingStopped',
+      filePath,
+      authority: result.authority ?? 'local-fallback',
+      diagnostics: result.diagnostics ?? [],
+    });
   }
 
   // ─── Video Blob Save ─────────────────────────────────────────────────────
@@ -416,7 +424,12 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
       const sizeMB = (buffer.length / 1024 / 1024).toFixed(1);
       this.logger.info(vscode.l10n.t('neko.live.recording.videoSaved', filePath, sizeMB));
-      this.postMessage({ type: 'recordingStopped', filePath });
+      this.postMessage({
+        type: 'recordingStopped',
+        filePath,
+        authority: 'local-fallback',
+        diagnostics: ['fallback-non-authoritative'],
+      });
     } catch (err) {
       this.logger.error(vscode.l10n.t('neko.live.recording.videoSaveFailed'), err);
     }
@@ -482,7 +495,6 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
       this.postMessage({
         type: 'cameraStreamStarted',
         streamId: session.sessionId,
-        wsUrl: session.streamUrl ?? '',
       });
     } catch (err) {
       this.logger.error('Failed to start camera capture', err);
@@ -542,7 +554,6 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
         this.postMessage({
           type: 'cameraStreamStarted',
           streamId: session.sessionId,
-          wsUrl: session.streamUrl ?? '',
         });
       }
       vscode.window.showInformationMessage(vscode.l10n.t('neko.live.device.bound', current.label));
@@ -623,6 +634,14 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
             this.logger.debug('Webview ready');
             break;
 
+          case 'requestEnginePort': {
+            const client = await this.ensureEngineClient();
+            if (client) {
+              this.postMessage({ type: 'enginePort', port: client.port });
+            }
+            break;
+          }
+
           case 'startVmcReceiver':
             this.startVmc();
             break;
@@ -651,7 +670,10 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
           }
 
           case 'startRecording':
-            await this.startRecording(message.includeAudio as boolean);
+            await this.startRecording(
+              readBoolean(message.includeAudio) ?? false,
+              readRecordingAuthority(message.authority),
+            );
             break;
 
           case 'stopRecording':
@@ -737,6 +759,14 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     this.deviceManager?.dispose();
     this.disposables.forEach((d) => d.dispose());
   }
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readRecordingAuthority(value: unknown): 'local-fallback' | 'compositor' {
+  return value === 'compositor' ? 'compositor' : 'local-fallback';
 }
 
 function getNonce(): string {

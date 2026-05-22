@@ -15,17 +15,21 @@ import { EngineClient } from '@neko/neko-client/EngineClient';
 export interface RecordingOptions {
   includeAudio: boolean;
   audioDeviceId?: string;
+  authority?: 'local-fallback' | 'compositor';
 }
 
 export interface RecordingResult {
   videoPath?: string;
   audioPath?: string;
+  authority?: 'local-fallback' | 'compositor';
+  diagnostics?: readonly string[];
 }
 
 export class RecordingService {
   private isRecording = false;
   private audioStreamId: string | undefined;
   private recordingStartTime = 0;
+  private authority: RecordingOptions['authority'] = 'local-fallback';
   private progressInterval: ReturnType<typeof setInterval> | undefined;
   private readonly logger: ILogger;
 
@@ -46,6 +50,7 @@ export class RecordingService {
     if (this.isRecording) return undefined;
 
     this.isRecording = true;
+    this.authority = options.authority ?? 'local-fallback';
     this.recordingStartTime = Date.now();
 
     // Start audio recording via engine if requested
@@ -90,7 +95,13 @@ export class RecordingService {
       this.progressInterval = undefined;
     }
 
-    const result: RecordingResult = {};
+    const result: RecordingResult = {
+      authority: this.authority,
+      diagnostics:
+        this.authority === 'local-fallback'
+          ? ['fallback-non-authoritative']
+          : undefined,
+    };
 
     // Stop audio recording
     if (this.audioStreamId && this.engineClient) {

@@ -21,6 +21,11 @@ export const zhCN: MessageBundle = {
   'puppet.parameter.resetDefault': '重置为默认值',
   'puppet.parameter.resetParam': '重置 {name} 为默认值',
 
+  // Control drivers
+  'puppet.panel.controlDrivers': '控制驱动',
+  'puppet.controlDriver.priority': '优先级',
+  'puppet.controlDriver.curvePreview': '控制驱动曲线预览',
+
   // Morph editor
   'puppet.panel.morph': '变形目标',
   'puppet.morph.noTargets': '无变形目标',

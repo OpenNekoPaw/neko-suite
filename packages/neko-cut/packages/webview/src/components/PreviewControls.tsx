@@ -184,9 +184,9 @@ export const PreviewControls = memo(function PreviewControls({
   ];
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-vscode-editor-bg border-b border-vscode-panel-border">
+    <div className="flex items-center px-4 py-2 bg-vscode-editor-bg border-b border-vscode-panel-border">
       {/* Left: Playback Controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 flex-shrink-0">
         <button
           onClick={() => seek(0)}
           className="p-1.5 hover:bg-vscode-toolbar-hover rounded"
@@ -250,8 +250,8 @@ export const PreviewControls = memo(function PreviewControls({
         </span>
       </div>
 
-      {/* Right: Quality Dropdown + Volume Controls + Screenshot + Fullscreen */}
-      <div className="flex items-center gap-2">
+      {/* Center: Quality Dropdown + Volume Controls + Screenshot + Fullscreen */}
+      <div className="flex items-center gap-2 min-w-0 overflow-hidden mx-2 flex-1 justify-end">
         <span className="text-xs text-vscode-description whitespace-nowrap">
           {t('preview.quality')}
         </span>
@@ -405,22 +405,23 @@ export const PreviewControls = memo(function PreviewControls({
           </>
         )}
 
-        {/* Property Panel Toggle */}
-        {onTogglePropertyPanel && (
-          <>
-            <div className="w-px h-4 bg-vscode-panel-border mx-1" />
-            <button
-              onClick={onTogglePropertyPanel}
-              className={`p-1.5 hover:bg-vscode-toolbar-hover rounded ${propertyPanelVisible ? 'text-vscode-accent' : ''}`}
-              title={t('preview.togglePropertyPanel') || 'Toggle Properties'}
-            >
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM15 5v14h-2V5h2z" />
-              </svg>
-            </button>
-          </>
-        )}
       </div>
+
+      {/* Property Panel Toggle — pinned right, never clipped */}
+      {onTogglePropertyPanel && (
+        <div className="flex items-center flex-shrink-0 ml-1">
+          <div className="w-px h-4 bg-vscode-panel-border mx-1" />
+          <button
+            onClick={onTogglePropertyPanel}
+            className={`p-1.5 hover:bg-vscode-toolbar-hover rounded ${propertyPanelVisible ? 'text-vscode-accent' : ''}`}
+            title={t('preview.togglePropertyPanel') || 'Toggle Properties'}
+          >
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+              <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM15 5v14h-2V5h2z" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 });

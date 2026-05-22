@@ -21,6 +21,11 @@ export const en: MessageBundle = {
   'puppet.parameter.resetDefault': 'Reset to default',
   'puppet.parameter.resetParam': 'Reset {name} to default',
 
+  // Control drivers
+  'puppet.panel.controlDrivers': 'Control Drivers',
+  'puppet.controlDriver.priority': 'Priority',
+  'puppet.controlDriver.curvePreview': 'Control driver curve preview',
+
   // Morph editor
   'puppet.panel.morph': 'Morph Targets',
   'puppet.morph.noTargets': 'No morph targets',

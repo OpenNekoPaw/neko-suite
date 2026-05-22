@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from './i18n/I18nContext';
+import type { CharacterPreviewModeId } from '@neko/shared';
 import { Toolbar } from './components/Toolbar';
 import { VideoViewport } from './components/VideoViewport';
 import { AnimationPlayer } from './components/AnimationPlayer';
@@ -15,6 +16,7 @@ import { ShapeCreatorPanel } from './components/shape-creator';
 import { SculptBrushPanel } from './components/sculpt/SculptBrushPanel';
 import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
 import { EngineDiagnosticsPanel } from './components/EngineDiagnosticsPanel';
+import { CharacterPreviewModeSelector } from './components/CharacterPreviewModeSelector';
 import { useModelStore } from './stores/modelStore';
 import type {
   AnimationClipInfo,
@@ -27,6 +29,7 @@ import type { SceneCommandEnvelope } from '@neko/shared';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
 import { postMessage } from '@neko/shared/vscode';
 import { EngineClient, type SceneControlSocket } from '@neko/neko-client';
+import { ModelController } from './viewport/ModelController';
 import type { EditableNodeTransform } from './scene/SceneEditingTypes';
 import type { LocalPredictionInput } from './scene/LocalPredictionLayer';
 import type { ShapeType } from './types/shapeParams';
@@ -71,6 +74,7 @@ export function App(): React.JSX.Element {
   const isCsgPanelOpen = useModelStore((s) => s.isCsgPanelOpen);
   const isSculptBrushOpen = useModelStore((s) => s.isSculptBrushOpen);
   const isKeyframeEditorOpen = useModelStore((s) => s.isKeyframeEditorOpen);
+  const characterPreview = useModelStore((s) => s.characterPreview);
 
   const setQualityPreview = useModelStore((s) => s.setQualityPreview);
   const setEnvironmentPlacement = useModelStore((s) => s.setEnvironmentPlacement);
@@ -110,7 +114,7 @@ export function App(): React.JSX.Element {
   );
 
   const sendEditorCameraToEngine = useCallback(
-    (port: number) => {
+    () => {
       const store = useModelStore.getState();
       const position = store.getCameraPosition();
       const target = store.cameraTarget;
@@ -122,13 +126,8 @@ export function App(): React.JSX.Element {
         });
         setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
       };
-      const sendHttpFallback = async () => {
-        const client = new EngineClient(port);
-        await client.updateEditorCamera(position, target, undefined, 'main');
-      };
 
       if (!socket) {
-        void sendHttpFallback().catch(handleCameraError);
         return;
       }
 
@@ -140,7 +139,6 @@ export function App(): React.JSX.Element {
           position,
           target,
         })
-        .catch(() => sendHttpFallback())
         .catch(handleCameraError);
     },
     [setSceneControlStatus],
@@ -179,9 +177,8 @@ export function App(): React.JSX.Element {
       if (options?.restoreCamera === true) {
         store.markSceneCameraFramed(snapshot);
       }
-      const currentEnginePort = enginePortRef.current;
-      if (framed && currentEnginePort !== null) {
-        sendEditorCameraToEngine(currentEnginePort);
+      if (framed) {
+        sendEditorCameraToEngine();
       }
     },
     [sendEditorCameraToEngine],
@@ -195,13 +192,12 @@ export function App(): React.JSX.Element {
         case 'enginePort': {
           if (enginePortRef.current === message.port && sceneControlRef.current) {
             setEnginePort(message.port);
-            sendEditorCameraToEngine(message.port);
+            sendEditorCameraToEngine();
             break;
           }
 
           enginePortRef.current = message.port;
           setEnginePort(message.port);
-          sendEditorCameraToEngine(message.port);
           sceneControlRef.current?.close(1000, 'reconnecting scene control');
           setSceneControlSocket(null);
           setSceneControlStatus('connecting');
@@ -210,6 +206,7 @@ export function App(): React.JSX.Element {
             sceneId: useModelStore.getState().sceneId,
             onReady: (ready) => {
               setSceneControlStatus('ready');
+              sendEditorCameraToEngine();
               if (
                 typeof ready.serverRevision === 'number' &&
                 ready.serverRevision > latestRevisionRef.current
@@ -238,6 +235,9 @@ export function App(): React.JSX.Element {
               }
               latestRevisionRef.current = Math.max(latestRevisionRef.current, ack.revision);
             },
+            onCharacterPreviewState: (state) => {
+              useModelStore.getState().applyCharacterPreviewState(state);
+            },
             onError: (error) => {
               if (!webviewVisibleRef.current) {
                 return;
@@ -260,7 +260,7 @@ export function App(): React.JSX.Element {
             if (currentEnginePort === null || sceneControlRef.current === null) {
               postMessage({ type: 'requestEnginePort' });
             } else {
-              sendEditorCameraToEngine(currentEnginePort);
+              sendEditorCameraToEngine();
             }
           }
           break;
@@ -294,10 +294,7 @@ export function App(): React.JSX.Element {
               break;
             case 'resetView': {
               useModelStore.getState().resetCamera();
-              const currentEnginePort = enginePortRef.current;
-              if (currentEnginePort !== null) {
-                sendEditorCameraToEngine(currentEnginePort);
-              }
+              sendEditorCameraToEngine();
               break;
             }
           }
@@ -347,10 +344,7 @@ export function App(): React.JSX.Element {
           }
           if (editorState && typeof editorState === 'object') {
             useModelStore.getState().restoreEditorState(editorState as Record<string, unknown>);
-            const currentEnginePort = enginePortRef.current;
-            if (currentEnginePort !== null) {
-              sendEditorCameraToEngine(currentEnginePort);
-            }
+            sendEditorCameraToEngine();
           }
           break;
         }
@@ -391,7 +385,7 @@ export function App(): React.JSX.Element {
       if (currentEnginePort === null || sceneControlRef.current === null) {
         postMessage({ type: 'requestEnginePort' });
       } else {
-        sendEditorCameraToEngine(currentEnginePort);
+        sendEditorCameraToEngine();
       }
     };
 
@@ -459,6 +453,10 @@ export function App(): React.JSX.Element {
 
   const handleTransformCommit = useCallback(
     async (nodeId: string, transform: EditableNodeTransform) => {
+      if (sceneControlRef.current === null) {
+        setSceneControlStatus('error', modelErrorMessage('error.sceneControlDisconnected'));
+        return;
+      }
       const seq = useModelStore.getState().allocateSceneCommandSeq();
       addTransformPrediction({
         seq,
@@ -479,7 +477,7 @@ export function App(): React.JSX.Element {
           scale: transform.scale,
         },
       });
-      const envelope: SceneCommandEnvelope = {
+      const applied = await sendRouteACommand({
         seq,
         baseRevision: latestRevisionRef.current,
         coalesceKey: `transform:${nodeId}`,
@@ -492,11 +490,10 @@ export function App(): React.JSX.Element {
             scale: transform.scale,
           }),
         },
-      };
-
-      const applied = await sendRouteACommand(envelope);
+      });
       if (applied) {
         commitPredictionsThrough(seq);
+        setQualityPreview(null);
       } else {
         rollbackTransformPrediction(seq);
       }
@@ -507,6 +504,8 @@ export function App(): React.JSX.Element {
       createLocalPrediction,
       rollbackTransformPrediction,
       sendRouteACommand,
+      setQualityPreview,
+      setSceneControlStatus,
     ],
   );
 
@@ -707,6 +706,110 @@ export function App(): React.JSX.Element {
     stop();
   }, [activeAnimation, animationPlaybackPayload, sendSceneCommand, stop]);
 
+  const handleCharacterPreviewModeChange = useCallback(
+    (modeId: CharacterPreviewModeId) => {
+      if (!selectedCharacterId) {
+        setSceneControlStatus('error', modelErrorMessage('error.noEngineCharacterSelected'));
+        return;
+      }
+      const socket = sceneControlRef.current;
+      if (!socket || enginePort === null) {
+        useModelStore.getState().applyCharacterPreviewState({
+          characterId: selectedCharacterId,
+          modeId,
+          viewportId: 'main',
+          status: 'unavailable',
+          sceneRevision: latestRevisionRef.current,
+          cameraPreset: previewCameraPreset(modeId),
+          renderPreset: previewRenderPreset(modeId),
+          playback: { state: 'unavailable' },
+          diagnostics: [
+            {
+              code: 'scene-control-unavailable',
+              severity: 'error',
+              message: modelErrorMessage('error.sceneControlDisconnected'),
+              retryable: true,
+            },
+          ],
+          hasCameraOverride: false,
+        });
+        setSceneControlStatus('error', modelErrorMessage('error.sceneControlDisconnected'));
+        return;
+      }
+      const controller = new ModelController({
+        enginePort,
+        sceneId,
+        viewportId: 'main',
+        sceneRevision: latestRevisionRef.current,
+        sceneControlSocket: socket,
+        onError: (message) => setSceneControlStatus('error', message),
+      });
+      void controller.setCharacterPreviewMode(selectedCharacterId, modeId).catch((error) => {
+        void webviewErrorHandler.handleError(toError(error), {
+          showToUser: false,
+          severity: 'warning',
+        });
+      });
+    },
+    [enginePort, sceneId, selectedCharacterId, setSceneControlStatus],
+  );
+
+  const handleCharacterPreviewCameraReset = useCallback(() => {
+    const modeId = characterPreview.requestedMode ?? characterPreview.appliedMode;
+    if (!selectedCharacterId || !modeId || !sceneControlRef.current || enginePort === null) return;
+    const controller = new ModelController({
+      enginePort,
+      sceneId,
+      viewportId: 'main',
+      sceneRevision: latestRevisionRef.current,
+      sceneControlSocket: sceneControlRef.current,
+      onError: (message) => setSceneControlStatus('error', message),
+    });
+    void controller.resetCharacterPreviewCamera(selectedCharacterId, modeId).catch((error) => {
+      void webviewErrorHandler.handleError(toError(error), {
+        showToUser: false,
+        severity: 'warning',
+      });
+    });
+  }, [
+    characterPreview.appliedMode,
+    characterPreview.requestedMode,
+    enginePort,
+    sceneId,
+    selectedCharacterId,
+    setSceneControlStatus,
+  ]);
+
+  const handleCharacterPreviewPlaybackControl = useCallback(
+    (action: 'play' | 'pause' | 'stop') => {
+      const modeId = characterPreview.appliedMode;
+      if (!selectedCharacterId || !modeId || !sceneControlRef.current || enginePort === null) return;
+      const controller = new ModelController({
+        enginePort,
+        sceneId,
+        viewportId: 'main',
+        sceneRevision: latestRevisionRef.current,
+        sceneControlSocket: sceneControlRef.current,
+        onError: (message) => setSceneControlStatus('error', message),
+      });
+      void controller
+        .controlCharacterPreviewPlayback(selectedCharacterId, modeId, action)
+        .catch((error) => {
+          void webviewErrorHandler.handleError(toError(error), {
+            showToUser: false,
+            severity: 'warning',
+          });
+        });
+    },
+    [
+      characterPreview.appliedMode,
+      enginePort,
+      sceneId,
+      selectedCharacterId,
+      setSceneControlStatus,
+    ],
+  );
+
   const handleCrossfadeAnimation = useCallback(
     (clipName: string, fadeDuration: number) => {
       setActiveAnimation(clipName, 'playing');
@@ -888,6 +991,13 @@ export function App(): React.JSX.Element {
             <div className="model-viewport-tools" aria-label="Viewport tools">
               <Toolbar className="model-viewport-toolbar" width={38} />
             </div>
+            <CharacterPreviewModeSelector
+              state={characterPreview}
+              disabled={!routeAReady || !selectedCharacterId}
+              onModeChange={handleCharacterPreviewModeChange}
+              onResetCamera={handleCharacterPreviewCameraReset}
+              onPlaybackControl={handleCharacterPreviewPlaybackControl}
+            />
             <EngineDiagnosticsPanel />
           </div>
         </main>
@@ -1043,6 +1153,32 @@ function AnimationTimelineStrip({
       </div>
     </div>
   );
+}
+
+function previewCameraPreset(modeId: CharacterPreviewModeId) {
+  switch (modeId) {
+    case 'face':
+      return 'face-closeup' as const;
+    case 'full-body':
+      return 'full-body' as const;
+    case 'motion':
+      return 'motion-review' as const;
+    case 'voice-pack':
+      return 'voice-performance' as const;
+  }
+}
+
+function previewRenderPreset(modeId: CharacterPreviewModeId) {
+  switch (modeId) {
+    case 'face':
+      return 'face-detail' as const;
+    case 'full-body':
+      return 'body-silhouette' as const;
+    case 'motion':
+      return 'motion-diagnostics' as const;
+    case 'voice-pack':
+      return 'voice-lipsync' as const;
+  }
 }
 
 function resolveSelectedCharacterId(

@@ -4,6 +4,7 @@
  * Defines the messages exchanged between extension host and puppet webview.
  */
 import type { PuppetAuxiliaryJsonData, PuppetExternalTextureData } from '@neko/shared';
+import type { NkpNativeProjectData } from '@neko/shared';
 
 /** Messages from extension → webview */
 export type ExtensionToWebviewMessage =
@@ -18,6 +19,11 @@ export type ExtensionToWebviewMessage =
       source: string;
       textures?: readonly PuppetExternalTextureData[];
       auxiliary?: PuppetAuxiliaryJsonData;
+    }
+  | {
+      type: 'loadNativePuppet';
+      project: NkpNativeProjectData;
+      textures?: readonly PuppetExternalTextureData[];
     }
   | { type: 'loadPuppetTextures'; textures: readonly PuppetExternalTextureData[] }
   | { type: 'enginePort'; port: number }

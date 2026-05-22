@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildViewportPointerQuery, isCompatibleViewportQueryResult } from './InteractionLayer';
+import {
+  buildViewportPointerQuery,
+  buildViewportPointerQueryFromPosition,
+  isCompatibleViewportQueryResult,
+} from './InteractionLayer';
 
 describe('InteractionLayer query helpers', () => {
   it('routes pointer coordinates through viewport and scene revision scoped payloads', () => {
@@ -9,6 +13,19 @@ describe('InteractionLayer query helpers', () => {
         7,
         { left: 10, top: 20, width: 200, height: 100 },
         { clientX: 110, clientY: 70 },
+      ),
+    ).toEqual({
+      viewportId: 'main',
+      sceneRevision: 7,
+      x: 0.5,
+      y: 0.5,
+    });
+    expect(
+      buildViewportPointerQueryFromPosition(
+        'main',
+        7,
+        { width: 200, height: 100 },
+        [100, 50],
       ),
     ).toEqual({
       viewportId: 'main',

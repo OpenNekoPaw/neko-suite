@@ -9,16 +9,23 @@ import type { ExtensionToWebviewMessage } from './types';
 import { usePuppetStore } from './stores/puppet-store';
 import { decodeMoc3ExternalTextures } from './utils/moc3-textures';
 import { AnimationPanel } from './components/AnimationPanel';
+import { ControlDriverPanel } from './components/ControlDriverPanel';
 import { ParameterPanel } from './components/ParameterPanel';
 import { PuppetNodeTree } from './components/PuppetNodeTree';
 import { PuppetKeyframeTimeline } from './components/PuppetKeyframeTimeline';
 import { PuppetCanvas } from './components/PuppetCanvas';
 import { PuppetController } from './animation';
+import {
+  PuppetSceneController,
+  handlePuppetMenuAction,
+} from './viewport/PuppetSceneController';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
-import type { SupportedLocale } from '@neko/shared';
+import type { NkpNativeProjectData, SupportedLocale } from '@neko/shared';
+import type { ViewportFrameMeta, ViewportMenuItem } from '@neko/shared';
 import { EngineClient } from '@neko/neko-client';
+import { OverlayRenderer, ViewportShell, ViewportToolbar } from '@neko/ui';
 
 // Acquire VSCode API once
 const vscode = (window as unknown as { acquireVsCodeApi: () => VsCodeApi }).acquireVsCodeApi();
@@ -31,7 +38,8 @@ interface VsCodeApi {
 
 type PendingPuppetLoad =
   | Extract<ExtensionToWebviewMessage, { type: 'loadPuppet' }>
-  | Extract<ExtensionToWebviewMessage, { type: 'loadPuppetSource' }>;
+  | Extract<ExtensionToWebviewMessage, { type: 'loadPuppetSource' }>
+  | Extract<ExtensionToWebviewMessage, { type: 'loadNativePuppet' }>;
 
 /** Debounce timer ref for parameter save */
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -52,6 +60,16 @@ function debouncedSaveParameters(): void {
   saveTimer = setTimeout(saveParametersToExtension, 300);
 }
 
+function extractNativeBlendShapes(project: NkpNativeProjectData) {
+  return [...(project.blendShapes.shapes ?? []), ...(project.blendShapes.custom ?? [])].map(
+    (shape) => ({
+      name: shape.name,
+      meshId: shape.meshId,
+      current: 0,
+    }),
+  );
+}
+
 function PuppetWaitingPlaceholder() {
   const { t } = useTranslation();
   return <span>{t('puppet.status.loading')}</span>;
@@ -63,6 +81,17 @@ function PuppetLoadErrorPlaceholder({ message }: { message: string }) {
     <div className="flex flex-col items-center justify-center gap-2 px-6 text-center">
       <div className="text-sm font-medium">{t('puppet.status.loadFailed')}</div>
       <div className="max-w-xl text-xs opacity-70 break-words">{message}</div>
+    </div>
+  );
+}
+
+function PuppetFallbackLabel() {
+  return (
+    <div
+      className="puppet-fallback-badge"
+      data-non-authoritative-preview="local-canvas-fallback"
+    >
+      Local fallback preview
     </div>
   );
 }
@@ -136,6 +165,8 @@ export function PuppetApp() {
   const loadError = usePuppetStore((s) => s.loadError);
   const isKeyframeEditorOpen = usePuppetStore((s) => s.isKeyframeEditorOpen);
   const toggleKeyframeEditor = usePuppetStore((s) => s.toggleKeyframeEditor);
+  const nativeRevision = usePuppetStore((s) => s.nativeRevision);
+  const [controllerVersion, setControllerVersion] = useState(0);
 
   /** Pending parameter overrides received before puppet loads */
   const pendingStateRef = useRef<Record<string, number> | null>(null);
@@ -182,6 +213,9 @@ export function PuppetApp() {
       store.setPuppetSnapshot(null);
       store.setDeformedMeshes([]);
       store.setPuppetParameters([]);
+      store.setNativeBlendShapes([]);
+      store.setNativeControlDrivers([]);
+      store.setNativeRevision(0);
       store.setAnimations([]);
       store.setPreviewFrame(null);
       store.setTextures([]);
@@ -192,14 +226,23 @@ export function PuppetApp() {
             ? decodeMoc3ExternalTextures(msg.textures)
             : Promise.resolve<ImageBitmap[]>([]);
         const snapshotPromise =
-          msg.type === 'loadPuppetSource'
-            ? ctrl.loadSource(msg.source)
-            : ctrl.load(base64ToArrayBuffer(msg.data));
+          msg.type === 'loadNativePuppet'
+            ? ctrl.loadNativeProject(msg.project)
+            : msg.type === 'loadPuppetSource'
+              ? ctrl.loadSource(msg.source)
+              : ctrl.load(base64ToArrayBuffer(msg.data));
         const [snapshot, textures] = await Promise.all([snapshotPromise, texturePromise]);
 
         store.setTextures(textures);
         store.setPuppetSnapshot(snapshot);
-        if (msg.auxiliary) {
+        store.setNativeBlendShapes(
+          msg.type === 'loadNativePuppet' ? extractNativeBlendShapes(msg.project) : [],
+        );
+        store.setNativeControlDrivers(
+          msg.type === 'loadNativePuppet' ? msg.project.controlDrivers : [],
+        );
+        store.setNativeRevision(msg.type === 'loadNativePuppet' ? 1 : 0);
+        if ('auxiliary' in msg && msg.auxiliary) {
           await ctrl.loadAuxiliary(msg.auxiliary);
         }
         store.setPuppetLoaded(true);
@@ -227,6 +270,7 @@ export function PuppetApp() {
           const engine = new EngineClient(msg.port);
           const ctrl = new PuppetController(engine);
           controllerRef.current = ctrl;
+          setControllerVersion((version) => version + 1);
           const pending = pendingLoadRef.current;
           if (pending) {
             pendingLoadRef.current = null;
@@ -243,7 +287,8 @@ export function PuppetApp() {
         }
 
         case 'loadPuppet':
-        case 'loadPuppetSource': {
+        case 'loadPuppetSource':
+        case 'loadNativePuppet': {
           const ctrl = controllerRef.current;
           if (!ctrl) {
             pendingLoadRef.current = msg;
@@ -313,6 +358,37 @@ export function PuppetApp() {
     [loadPuppetMessage],
   );
 
+  const puppetSceneController = React.useMemo(() => {
+    const controller = controllerRef.current;
+    if (!controller) return null;
+    return new PuppetSceneController({
+      sceneId: 'puppet-main',
+      viewportId: 'main',
+      controller,
+      onError: (message) => usePuppetStore.getState().setLoadError(message),
+    });
+  }, [controllerVersion]);
+  const puppetFrameMeta = React.useMemo<ViewportFrameMeta>(
+    () => ({
+      protocolVersion: 1,
+      streamId: 'puppet-local-fallback',
+      sceneId: 'puppet-main',
+      viewportId: 'main',
+      frameId: 0,
+      ptsUs: 0,
+      durationUs: 16666,
+      frameTimestamp: performance.now(),
+      revision: nativeRevision,
+      appliedSeq: 0,
+      viewTransform: [1, 0, 0, 1, 0, 0],
+      diagnostics: { authoritative: false, reason: 'local-canvas-fallback' },
+    }),
+    [nativeRevision],
+  );
+  const handlePuppetContextMenuAction = useCallback((item: ViewportMenuItem) => {
+    handlePuppetMenuAction(item);
+  }, []);
+
   useEffect(() => {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
@@ -345,8 +421,42 @@ export function PuppetApp() {
             <div className="flex-1 flex items-center justify-center text-sm opacity-50">
               <PuppetEmptyState />
             </div>
+          ) : puppetLoaded && puppetSceneController ? (
+            <ViewportShell
+              sceneId="puppet-main"
+              viewportId="main"
+              controller={puppetSceneController}
+              frameMeta={puppetFrameMeta}
+              className="puppet-viewport-shell flex-1 relative overflow-hidden"
+              surface={{
+                kind: 'custom',
+                node: (
+                  <PuppetCanvas
+                    overlayLayer={null}
+                    toolbarLayer={null}
+                    contextMenuLayer={null}
+                    fallbackLabel={<PuppetFallbackLabel />}
+                  />
+                ),
+              }}
+              onContextMenuAction={handlePuppetContextMenuAction}
+              renderOverlayLayer={({ frameMeta, overlays }) => (
+                <OverlayRenderer
+                  className="puppet-viewport-overlay"
+                  frameMeta={frameMeta}
+                  overlays={overlays}
+                />
+              )}
+              renderToolbar={({ items, onAction }) => (
+                <ViewportToolbar
+                  className="puppet-viewport-toolbar"
+                  items={items}
+                  onAction={onAction}
+                />
+              )}
+            />
           ) : puppetLoaded ? (
-            <PuppetCanvas />
+            <PuppetCanvas fallbackLabel={<PuppetFallbackLabel />} />
           ) : (
             <div className="flex-1 flex items-center justify-center text-sm opacity-50">
               <PuppetWaitingPlaceholder />
@@ -359,6 +469,7 @@ export function PuppetApp() {
               <>
                 <PuppetNodeTree />
                 <ParameterPanel controller={controllerRef.current} />
+                <ControlDriverPanel />
                 <AnimationPanel
                   onPlay={onPlay}
                   onStop={onStop}

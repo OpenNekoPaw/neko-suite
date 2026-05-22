@@ -172,6 +172,9 @@ function ViewportNavButton({
   const classes = ['model-viewport-nav-btn', pressed ? 'active' : null, className ?? null]
     .filter(Boolean)
     .join(' ');
+  const handlePointerEvent = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  };
 
   return (
     <button
@@ -180,7 +183,12 @@ function ViewportNavButton({
       title={label}
       aria-label={label}
       aria-pressed={pressed}
-      onClick={onClick}
+      onPointerDown={handlePointerEvent}
+      onPointerUp={handlePointerEvent}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
     >
       {children}
     </button>

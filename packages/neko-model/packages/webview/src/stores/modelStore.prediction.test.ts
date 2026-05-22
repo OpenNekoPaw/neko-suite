@@ -231,6 +231,8 @@ describe('modelStore transform prediction layer', () => {
       isKeyframe: true,
       sceneRevision: 2,
       appliedSeq: 9,
+      frameTimestamp: 0,
+      viewTransform: [1, 0, 0, 1, 0, 0],
       diagnostics: {
         qualityTier: 'main-fps-reduced',
         gpuUploadTimeMs: 2.5,

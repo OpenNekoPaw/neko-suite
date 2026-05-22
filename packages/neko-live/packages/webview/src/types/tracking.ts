@@ -41,7 +41,13 @@ export interface LiveDeviceBinding {
   deviceType: LiveDeviceRole;
   label: string;
   sessionId?: string;
-  streamUrl?: string;
+  compositorSourceRef?: {
+    sourceId: string;
+    kind: 'camera';
+    label?: string;
+    deviceSessionRef?: string;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 /** Puppet mesh data for 2D rendering */

@@ -15,6 +15,7 @@
   "dependencies": {
     "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
+    "@neko/ui": "workspace:*",
     "@pixiv/three-vrm": "^3.5.1",
     "@react-three/drei": "^9.120",
     "@react-three/fiber": "^8.17",

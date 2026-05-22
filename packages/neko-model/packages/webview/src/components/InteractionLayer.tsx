@@ -83,6 +83,20 @@ export function buildViewportPointerQuery(
   };
 }
 
+export function buildViewportPointerQueryFromPosition(
+  viewportId: string,
+  sceneRevision: number,
+  rect: Pick<DOMRect, 'width' | 'height'>,
+  position: readonly [number, number],
+): ViewportPointerQuery {
+  return {
+    viewportId,
+    sceneRevision,
+    x: clamp01(position[0] / Math.max(1, rect.width)),
+    y: clamp01(position[1] / Math.max(1, rect.height)),
+  };
+}
+
 export function isCompatibleViewportQueryResult(
   result: Pick<SceneHitTestResult, 'sceneId' | 'viewportId' | 'revision'>,
   sceneId: string,

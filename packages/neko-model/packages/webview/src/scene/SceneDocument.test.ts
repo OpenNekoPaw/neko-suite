@@ -168,6 +168,8 @@ describe('SceneDocument object model', () => {
         isKeyframe: true,
         sceneRevision: 4,
         appliedSeq: 10,
+        frameTimestamp: 0,
+        viewTransform: [1, 0, 0, 1, 0, 0],
       }),
     ).toBe(true);
     expect(
@@ -180,6 +182,8 @@ describe('SceneDocument object model', () => {
         isKeyframe: true,
         sceneRevision: 4,
         appliedSeq: 10,
+        frameTimestamp: 0,
+        viewTransform: [1, 0, 0, 1, 0, 0],
       }),
     ).toBe(false);
   });
