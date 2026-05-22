@@ -313,6 +313,10 @@ where
 /// The generated wrappers keep domain-specific public names and unit accessors
 /// in runtime crates while centralizing the repetitive DTO delegation and serde
 /// field adaptation in `engine-types`.
+///
+/// TODO(P2): If future animation features need wrapper shapes beyond
+/// layer/info/state/crossfade, extend this shared adapter with focused tests
+/// instead of reintroducing parallel runtime boilerplate.
 #[macro_export]
 macro_rules! declare_animation_blend_wrappers {
     (

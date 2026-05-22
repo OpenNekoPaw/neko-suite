@@ -162,6 +162,12 @@ impl PuppetService {
                     .map_err(|e| Error::Other(format!("Failed to load puppet: {}", e)))?;
                 to_value(snapshot)
             }
+            PuppetCommand::LoadNativeProject { project } => {
+                let snapshot = world
+                    .load_native_project(&project)
+                    .map_err(|e| Error::Other(format!("Failed to load native puppet: {}", e)))?;
+                to_value(snapshot)
+            }
             PuppetCommand::SetParameter { name, value } => {
                 world.set_parameter(&name, value).map_err(Error::Other)?;
                 Ok(Value::Null)
@@ -265,6 +271,84 @@ impl PuppetService {
             }
             PuppetCommand::ClearExpression => {
                 world.clear_expression();
+                Ok(Value::Null)
+            }
+            PuppetCommand::SetNativeBlendShape { name, weight } => {
+                world
+                    .set_native_blendshape_weight(&name, weight)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::SetNativeBlendShapeDelta {
+                name,
+                mesh_id,
+                vertex_index,
+                delta,
+            } => {
+                world
+                    .set_native_blendshape_delta(&name, &mesh_id, vertex_index, delta)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::SetNativeBoneTransform {
+                bone,
+                transform,
+                mode,
+            } => {
+                world
+                    .set_native_bone_transform(&bone, transform, mode)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::SetNativeSkinWeight {
+                mesh_id,
+                vertex_index,
+                joint_indices,
+                joint_weights,
+            } => {
+                world
+                    .set_native_skin_weight(&mesh_id, vertex_index, joint_indices, joint_weights)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::UpsertNativeControlDriver { driver } => {
+                world
+                    .upsert_native_control_driver(driver)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::RemoveNativeControlDriver { id } => {
+                world
+                    .remove_native_control_driver(&id)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::SetNativeTrackingInput { name, value } => {
+                world
+                    .set_native_tracking_input(&name, value)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::SetNativeExpression { name } => {
+                world.set_native_expression(&name).map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::ClearNativeExpression => {
+                world.clear_native_expression().map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::PlayNativeAnimation { name, loop_anim } => {
+                world
+                    .play_native_animation(&name, loop_anim)
+                    .map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::StopNativeAnimation => {
+                world.stop_native_animation().map_err(Error::Other)?;
+                Ok(Value::Null)
+            }
+            PuppetCommand::SeekNativeAnimation { time_ms } => {
+                world.seek_native_animation(time_ms).map_err(Error::Other)?;
                 Ok(Value::Null)
             }
             PuppetCommand::LoadMoc3Auxiliary {
@@ -518,6 +602,7 @@ fn rendered_output_to_encoder_video_output(
             width: output.width,
             height: output.height,
             diagnostics: None,
+            meta: None,
         }));
     }
 
@@ -896,6 +981,12 @@ impl IPuppetService for PuppetService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_types::puppet::{
+        NkpAnimationModel, NkpBlendShapeDef, NkpBlendShapeLibrary, NkpImportSource,
+        NkpImportSourceKind, NkpLayer, NkpLayerMesh, NkpPuppetSource, NkpSkeleton2D,
+        NkpTransform2DEdit, NkpTransformEditMode,
+    };
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_puppet_service_new() {
@@ -1008,6 +1099,61 @@ mod tests {
     }
 
     #[test]
+    fn native_command_applies_and_rejects_stale_revision() {
+        let service = PuppetService::new();
+
+        let loaded = service
+            .apply_puppet_command(PuppetCommandEnvelope {
+                seq: 1,
+                base_revision: 0,
+                transaction_id: Some("load-native".to_string()),
+                command: PuppetCommand::LoadNativeProject {
+                    project: native_fixture_project(),
+                },
+            })
+            .unwrap();
+        assert_eq!(loaded.status, PuppetCommandAckStatus::Applied);
+        assert_eq!(loaded.revision, 1);
+
+        let applied = service
+            .apply_puppet_command(PuppetCommandEnvelope {
+                seq: 2,
+                base_revision: 1,
+                transaction_id: Some("jaw-open".to_string()),
+                command: PuppetCommand::SetNativeBlendShape {
+                    name: "jawOpen".to_string(),
+                    weight: 1.0,
+                },
+            })
+            .unwrap();
+        assert_eq!(applied.status, PuppetCommandAckStatus::Applied);
+        assert_eq!(applied.revision, 2);
+
+        let stale = service
+            .apply_puppet_command(PuppetCommandEnvelope {
+                seq: 3,
+                base_revision: 1,
+                transaction_id: Some("stale-bone".to_string()),
+                command: PuppetCommand::SetNativeBoneTransform {
+                    bone: "bone-head".to_string(),
+                    transform: NkpTransform2DEdit {
+                        position: Some([2.0, 0.0]),
+                        rotation: None,
+                        scale: None,
+                    },
+                    mode: NkpTransformEditMode::Set,
+                },
+            })
+            .unwrap();
+        assert_eq!(stale.status, PuppetCommandAckStatus::Rejected);
+        assert_eq!(
+            stale.error.as_ref().map(|error| error.code),
+            Some(neko_engine_types::PuppetCommandErrorCode::RevisionConflict)
+        );
+        assert_eq!(service.current_revision().unwrap(), 2);
+    }
+
+    #[test]
     fn rest_alias_uses_typed_command_path() {
         let service = PuppetService::new();
 
@@ -1096,5 +1242,88 @@ mod tests {
             .unwrap_err();
 
         assert!(err.to_string().contains("GPU"));
+    }
+
+    fn native_fixture_project() -> neko_engine_types::puppet::NkpProjectData {
+        neko_engine_types::puppet::NkpProjectData {
+            version: "2.0".to_string(),
+            name: "Native Fixture".to_string(),
+            puppet: NkpPuppetSource {
+                src: None,
+                format: Some(neko_engine_types::puppet::PuppetFormat::Native),
+                animation_model: Some(NkpAnimationModel::BoneBlendshape),
+                import_source: Some(NkpImportSource {
+                    kind: NkpImportSourceKind::Generated,
+                    path: None,
+                    content_hash: None,
+                    metadata: None,
+                }),
+                bundle: None,
+            },
+            layers: vec![NkpLayer {
+                id: "layer-face".to_string(),
+                name: Some("Face".to_string()),
+                texture_ref: "textures/face.png".to_string(),
+                mesh: NkpLayerMesh {
+                    id: "mesh-face".to_string(),
+                    vertices: vec![[0.0, 0.0], [1.0, 0.0]],
+                    uvs: vec![],
+                    triangles: vec![],
+                },
+                blend_mode: None,
+                opacity: None,
+                z_order: None,
+                skin_weights: Some(neko_engine_types::puppet::NkpSkinWeights2D {
+                    mesh_id: "mesh-face".to_string(),
+                    joint_indices: vec![[0, 0, 0, 0], [1, 0, 0, 0]],
+                    joint_weights: vec![[1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+                }),
+            }],
+            skeleton: Some(NkpSkeleton2D {
+                bones: vec![
+                    neko_engine_types::puppet::NkpBone2D {
+                        id: "bone-root".to_string(),
+                        name: "root".to_string(),
+                        parent: None,
+                        position: [0.0, 0.0],
+                        rotation: Some(0.0),
+                        scale: None,
+                        length: Some(1.0),
+                    },
+                    neko_engine_types::puppet::NkpBone2D {
+                        id: "bone-head".to_string(),
+                        name: "head".to_string(),
+                        parent: Some("bone-root".to_string()),
+                        position: [0.0, 0.0],
+                        rotation: Some(0.0),
+                        scale: None,
+                        length: Some(1.0),
+                    },
+                ],
+                ik_constraints: vec![],
+                path_constraints: vec![],
+                spring_bones: vec![],
+            }),
+            blend_shapes: Some(NkpBlendShapeLibrary {
+                standard: None,
+                implemented: vec!["jawOpen".to_string()],
+                shapes: vec![NkpBlendShapeDef {
+                    id: Some("shape-jawOpen".to_string()),
+                    name: "jawOpen".to_string(),
+                    mesh_id: "mesh-face".to_string(),
+                    vertex_deltas: vec![[0.0, 0.0], [0.0, 1.0]],
+                    post_skin: None,
+                }],
+                custom: vec![],
+                aliases: BTreeMap::new(),
+            }),
+            control_drivers: vec![],
+            expressions: BTreeMap::new(),
+            animations: vec![],
+            auto_rig: None,
+            parameters: BTreeMap::new(),
+            face_parameters: BTreeMap::new(),
+            viewport: neko_engine_types::puppet::NkpViewportState { zoom: 1.0 },
+        }
     }
 }

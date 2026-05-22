@@ -622,6 +622,7 @@ impl ExportService {
                     width: output_width,
                     height: output_height,
                     diagnostics: None,
+                    meta: None,
                 },
             )))?;
             timing.encode_submit_ns = encode_start.elapsed().as_nanos() as u64;

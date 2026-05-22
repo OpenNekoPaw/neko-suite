@@ -660,6 +660,7 @@ impl SceneService {
                     .map(|snapshot| snapshot.active_leases as u32)
                     .unwrap_or_default(),
             }),
+            meta: None,
         })
     }
 
@@ -703,6 +704,7 @@ fn pack_scene_h264_frame(
         format: FrameFormat::H264,
         timestamp: pts_us as f64 / 1_000_000.0,
         diagnostics: None,
+        meta: None,
     }
 }
 

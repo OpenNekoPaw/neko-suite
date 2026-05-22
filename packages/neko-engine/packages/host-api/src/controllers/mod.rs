@@ -13,6 +13,8 @@
 //! - CanvasController: canvas:* actions (placeholder)
 //! - ScenesController: scenes:* actions (3D scene management)
 //! - PuppetsController: puppets:* actions (2D puppet management)
+//! - ViewportController: viewport:* protocol envelope routing
+//! - LiveCompositorController: live-compositor:* scene state and scene:live:* commands
 //! - ColorCorrectionController: color-correction:* actions (LUT management)
 
 mod audio;
@@ -24,7 +26,9 @@ mod effects;
 mod files;
 mod gamepad;
 mod image;
+mod live_compositor;
 mod midi;
+mod model_preview;
 mod models;
 mod node;
 mod plugins;
@@ -36,6 +40,7 @@ mod task;
 mod timeline;
 pub(crate) mod utils;
 mod video;
+mod viewport;
 
 pub use audio::AudioController;
 pub use camera::CameraController;
@@ -46,7 +51,9 @@ pub use effects::EffectsController;
 pub use files::FilesController;
 pub use gamepad::GamepadController;
 pub use image::ImageController;
+pub use live_compositor::LiveCompositorController;
 pub use midi::MidiController;
+pub use model_preview::{is_model_preview_action, ModelPreviewCommandResult, ModelPreviewController};
 pub use models::ModelsController;
 pub use node::NodeController;
 pub use plugins::PluginsController;
@@ -57,6 +64,7 @@ pub use stream::StreamController;
 pub use task::TaskController;
 pub use timeline::TimelineController;
 pub use video::VideoController;
+pub use viewport::ViewportController;
 
 use crate::error::ApiResult;
 use neko_engine_types::ActionResponse;

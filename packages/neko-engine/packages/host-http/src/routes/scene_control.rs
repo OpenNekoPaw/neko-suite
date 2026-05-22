@@ -10,12 +10,14 @@ use neko_engine_kernel::contracts::scene::{
     AnimationPlaybackAction, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
     SceneCommandEvent, SceneCommandPhase, SceneDelta, TopologyOperation,
 };
+use neko_engine_types::{ViewportCommand, ViewportDomain, ViewportEvent};
 use neko_host_api::EngineApi;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 
 const PROTOCOL: &str = "neko-scene-control-v1";
+const VIEWPORT_PROTOCOL_VERSION: u64 = 1;
 
 pub async fn handle_scene_control(
     State(engine): State<Arc<EngineApi>>,
@@ -160,6 +162,10 @@ async fn handle_client_message(
                 }
             }
         }
+        SceneControlClientMessage::ViewportCommand {
+            request_id,
+            command,
+        } => handle_viewport_command(socket, engine, request_id, command).await,
         SceneControlClientMessage::Resync { scene_id } => {
             send_snapshot(socket, engine, scene_id, "snapshot").await
         }
@@ -237,7 +243,15 @@ async fn handle_client_message(
                     .await
                 }
             };
-            service.set_editor_camera(camera);
+            service.set_editor_camera(camera.clone());
+            if let Err(error) = engine
+                .model_preview_controller()
+                .record_camera_override(&scene_id, &viewport_id, camera)
+            {
+                tracing::warn!(
+                    "Failed to record model preview camera override for {scene_id}/{viewport_id}: {error}"
+                );
+            }
             send_viewport_camera_ack(
                 socket,
                 request_id,
@@ -271,6 +285,46 @@ async fn handle_client_message(
             )
             .await
         }
+    }
+}
+
+async fn handle_viewport_command(
+    socket: &mut WebSocket,
+    engine: &EngineApi,
+    request_id: Option<String>,
+    command: ViewportProtocolCommand,
+) -> bool {
+    let command = match command.into_runtime() {
+        Ok(command) => command,
+        Err(error) => return send_error(socket, &error).await,
+    };
+
+    if neko_host_api::controllers::is_model_preview_action(&command.action) {
+        let result = match engine
+            .model_preview_controller()
+            .handle_viewport_command(command)
+        {
+            Ok(result) => result,
+            Err(error) => return send_error(socket, &error.to_string()).await,
+        };
+        let event = match serde_json::to_value(&result.event) {
+            Ok(event) => event,
+            Err(error) => return send_error(socket, &error.to_string()).await,
+        };
+        let state = match result.state {
+            Some(state) => match serde_json::to_value(state) {
+                Ok(state) => Some(state),
+                Err(error) => return send_error(socket, &error.to_string()).await,
+            },
+            None => None,
+        };
+        return send_viewport_event(socket, request_id, event, state).await;
+    }
+
+    let event = unsupported_viewport_command_event(&command, current_revision(engine));
+    match serde_json::to_value(event) {
+        Ok(event) => send_viewport_event(socket, request_id, event, None).await,
+        Err(error) => send_error(socket, &error.to_string()).await,
     }
 }
 
@@ -958,6 +1012,60 @@ fn payload_string_array(payload: Option<&Value>, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn unsupported_viewport_command_event(command: &ViewportCommand, revision: u64) -> ViewportEvent {
+    ViewportEvent {
+        protocol_version: neko_engine_types::VIEWPORT_PROTOCOL_VERSION,
+        domain: command.domain,
+        event: command.action.clone(),
+        scene_id: command.scene_id.clone(),
+        viewport_id: command.viewport_id.clone(),
+        ack_seq: command.seq,
+        revision,
+        timestamp: command.timestamp,
+        status: Some(neko_engine_types::ViewportEventStatus::Error),
+        applied_seq: None,
+        error: Some(neko_engine_types::ViewportProtocolError {
+            code: "unsupportedViewportCommand".to_string(),
+            message: "viewport command action is not supported by scene-control websocket"
+                .to_string(),
+            retryable: Some(true),
+        }),
+        payload: Value::Object(Default::default()),
+    }
+}
+
+async fn send_viewport_event(
+    socket: &mut WebSocket,
+    request_id: Option<String>,
+    event: Value,
+    preview_state: Option<Value>,
+) -> bool {
+    if !send_json(
+        socket,
+        json!({
+            "type": "viewportEvent",
+            "requestId": request_id,
+            "event": event
+        }),
+    )
+    .await
+    {
+        return false;
+    }
+    if let Some(state) = preview_state {
+        return send_json(
+            socket,
+            json!({
+                "type": "characterPreviewState",
+                "requestId": request_id,
+                "state": state
+            }),
+        )
+        .await;
+    }
+    true
+}
+
 async fn send_rejected_ack(
     socket: &mut WebSocket,
     seq: u64,
@@ -1469,6 +1577,11 @@ enum SceneControlClientMessage {
         #[serde(default)]
         payload: Option<Value>,
     },
+    ViewportCommand {
+        #[serde(default, rename = "requestId")]
+        request_id: Option<String>,
+        command: ViewportProtocolCommand,
+    },
     Resync {
         #[serde(default, rename = "sceneId")]
         scene_id: Option<String>,
@@ -1515,6 +1628,25 @@ struct ControlCommandEnvelope {
     command: ControlSceneCommand,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewportProtocolCommand {
+    protocol_version: u64,
+    domain: String,
+    action: String,
+    scene_id: String,
+    #[serde(default)]
+    viewport_id: Option<String>,
+    seq: u64,
+    correlation_id: String,
+    timestamp: f64,
+    source: String,
+    #[serde(default)]
+    base_revision: Option<u64>,
+    #[serde(default)]
+    payload: Value,
+}
+
 impl ControlCommandEnvelope {
     fn into_runtime(self) -> Result<SceneCommandEnvelope, String> {
         let event = self.command.into_event()?;
@@ -1525,6 +1657,33 @@ impl ControlCommandEnvelope {
             phase: self.phase.map(ControlCommandPhase::into_runtime),
             coalesce_key: self.coalesce_key,
             event,
+        })
+    }
+}
+
+impl ViewportProtocolCommand {
+    fn into_runtime(self) -> Result<ViewportCommand, String> {
+        let domain = match self.domain.as_str() {
+            "viewport" => ViewportDomain::Viewport,
+            "scene" => ViewportDomain::Scene,
+            other => return Err(format!("unsupported viewport command domain: {other}")),
+        };
+        let source = serde_json::from_value(json!(self.source))
+            .map_err(|error| format!("invalid viewport command source: {error}"))?;
+        let protocol_version = u16::try_from(self.protocol_version)
+            .map_err(|_| "viewport protocol version is out of range".to_string())?;
+        Ok(ViewportCommand {
+            protocol_version,
+            domain,
+            action: self.action,
+            scene_id: self.scene_id,
+            viewport_id: self.viewport_id,
+            seq: self.seq,
+            correlation_id: self.correlation_id,
+            timestamp: self.timestamp,
+            source,
+            base_revision: self.base_revision,
+            payload: self.payload,
         })
     }
 }
@@ -2226,6 +2385,83 @@ mod tests {
             }
             _ => panic!("expected viewport camera message"),
         }
+    }
+
+    #[test]
+    fn parses_character_preview_viewport_command() {
+        let message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"viewportCommand","requestId":"main:preview:12","command":{"protocolVersion":1,"domain":"scene","action":"scene:model:characterPreview:setMode","sceneId":"scene-a","viewportId":"main","seq":12,"correlationId":"main:preview:12","timestamp":100,"source":"user","baseRevision":3,"payload":{"characterId":"character-a","modeId":"voice-pack","viewportId":"main"}}}"#,
+        )
+        .unwrap();
+
+        match message {
+            SceneControlClientMessage::ViewportCommand {
+                request_id,
+                command,
+            } => {
+                assert_eq!(request_id.as_deref(), Some("main:preview:12"));
+                assert_eq!(command.action, "scene:model:characterPreview:setMode");
+                let command = command.into_runtime().unwrap();
+                assert_eq!(command.domain, ViewportDomain::Scene);
+                assert_eq!(command.payload["characterId"], "character-a");
+                assert_eq!(command.payload["modeId"], "voice-pack");
+                assert_eq!(command.payload["viewportId"], "main");
+            }
+            _ => panic!("expected viewport command message"),
+        }
+    }
+
+    #[test]
+    fn routes_character_preview_viewport_command_shape_to_runtime_controller() {
+        let command = ViewportProtocolCommand {
+            protocol_version: VIEWPORT_PROTOCOL_VERSION,
+            domain: "scene".to_string(),
+            action: "scene:model:characterPreview:setMode".to_string(),
+            scene_id: "scene-a".to_string(),
+            viewport_id: Some("main".to_string()),
+            seq: 14,
+            correlation_id: "main:preview:14".to_string(),
+            timestamp: 120.0,
+            source: "user".to_string(),
+            base_revision: Some(3),
+            payload: json!({
+                "characterId": "character-a",
+                "modeId": "motion",
+                "viewportId": "main"
+            }),
+        };
+        let command = command.into_runtime().unwrap();
+        assert!(neko_host_api::controllers::is_model_preview_action(&command.action));
+        assert_eq!(command.base_revision, Some(3));
+        assert_eq!(command.payload["modeId"], "motion");
+    }
+
+    #[test]
+    fn unsupported_viewport_command_event_is_contract_camel_case() {
+        let command = ViewportProtocolCommand {
+            protocol_version: VIEWPORT_PROTOCOL_VERSION,
+            domain: "scene".to_string(),
+            action: "scene:model:unsupported".to_string(),
+            scene_id: "scene-a".to_string(),
+            viewport_id: Some("main".to_string()),
+            seq: 15,
+            correlation_id: "main:preview:15".to_string(),
+            timestamp: 130.0,
+            source: "user".to_string(),
+            base_revision: Some(99),
+            payload: json!({
+                "characterId": "character-a",
+                "modeId": "face",
+                "viewportId": "main"
+            }),
+        }
+        .into_runtime()
+        .unwrap();
+
+        let error = serde_json::to_value(unsupported_viewport_command_event(&command, 4)).unwrap();
+        assert_eq!(error["status"], "error");
+        assert_eq!(error["error"]["code"], "unsupportedViewportCommand");
+        assert_eq!(error["ackSeq"], 15);
     }
 
     #[test]

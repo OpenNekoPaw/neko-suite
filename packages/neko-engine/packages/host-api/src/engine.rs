@@ -1,5 +1,6 @@
 //! EngineApi - Main facade for all engine operations
 
+use crate::controllers::ModelPreviewController;
 use crate::error::{ApiError, ApiResult};
 use crate::file_access::FileAccessRegistry;
 use crate::preview::PreviewFileRegistry;
@@ -39,6 +40,8 @@ pub struct EngineApi {
     puppet_service: Option<Arc<dyn IPuppetService>>,
     /// Scene service — exposed for scene control WebSocket endpoint
     scene_service: Option<Arc<dyn ISceneService>>,
+    /// AI character preview scene state shared by scene-control and scene stream metadata.
+    model_preview_controller: Arc<ModelPreviewController>,
     /// Audio service — exposed for monitor endpoint
     audio_service: Arc<dyn IAudioService>,
     /// MIDI service — exposed for WS event stream endpoint
@@ -127,6 +130,9 @@ impl EngineApi {
                 .with_activation_handler(Box::new(plugin_activation_router)),
         );
 
+        let model_preview_controller =
+            Arc::new(ModelPreviewController::new(scene_service_ref.clone()));
+
         // Create router
         let router = ActionRouter::new(
             kernel_services,
@@ -134,6 +140,7 @@ impl EngineApi {
             stream_registry.clone(),
             plugin_manager,
             preview_registry.clone(),
+            model_preview_controller.clone(),
             #[cfg(feature = "onnx")]
             Some(Arc::new(MlService::new(
                 config.ml.max_loaded,
@@ -151,6 +158,7 @@ impl EngineApi {
             kernel_facade,
             puppet_service: puppet_service_ref,
             scene_service: scene_service_ref,
+            model_preview_controller,
             audio_service: audio_service_ref,
             midi_service: midi_service_ref,
             gamepad_service: gamepad_service_ref,
@@ -259,6 +267,11 @@ impl EngineApi {
     /// Get the scene service (shared with scene control WebSocket endpoint)
     pub fn scene_service(&self) -> Option<Arc<dyn ISceneService>> {
         self.scene_service.clone()
+    }
+
+    /// Get the model preview controller shared with scene control and scene streams.
+    pub fn model_preview_controller(&self) -> Arc<ModelPreviewController> {
+        self.model_preview_controller.clone()
     }
 
     /// Read the current scene snapshot as JSON for HTTP/WebSocket adapters.

@@ -7,6 +7,7 @@
 mod architecture_tests;
 
 mod atlas_cache;
+mod native_extract;
 mod shader;
 mod sprite_batch;
 
@@ -17,6 +18,10 @@ use neko_engine_gpu::{BlendMode, GpuContext, GpuLayer, GpuReadbackTarget, Transf
 use neko_engine_types::{GpuFrameLease, GpuOutputHandle, VideoGpuFrame, VideoOutput};
 
 pub use atlas_cache::{PuppetAtlasCache, PuppetTextureAtlas, PuppetTextureAtlasInput};
+pub use native_extract::{
+    deform_native_cpu, deform_native_gpu, select_native_deformation_path, NativeBlendShapeDelta,
+    NativeDeformationPath, NativeDeformationSelection, NativePuppetRenderExtract,
+};
 pub use shader::{create_shader_module, PUPPET_TEXTURED_MESH_WGSL};
 pub use sprite_batch::{PuppetVertex, SpriteBatch, SpriteDraw};
 
@@ -167,6 +172,7 @@ impl PuppetRenderOutput {
             width: self.width,
             height: self.height,
             diagnostics: None,
+            meta: None,
         })
     }
 }
@@ -516,6 +522,7 @@ mod tests {
             width: 640,
             height: 480,
             diagnostics: None,
+            meta: None,
         });
         let output = PipelineOutput::Video(frame);
 

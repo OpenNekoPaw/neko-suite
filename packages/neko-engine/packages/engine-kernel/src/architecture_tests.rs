@@ -548,8 +548,8 @@ fn export_module_does_not_depend_on_service_impls() {
 
 #[test]
 fn gpu_export_pipeline_receives_domain_render_ports() {
-    let pipeline_rs = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/export/gpu_export_pipeline.rs");
+    let pipeline_rs =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/export/gpu_export_pipeline.rs");
     let source = fs::read_to_string(&pipeline_rs)
         .unwrap_or_else(|err| panic!("failed to read {}: {}", pipeline_rs.display(), err));
 

@@ -144,6 +144,7 @@ impl PanoramicRenderOutput {
             width: self.width,
             height: self.height,
             diagnostics: None,
+            meta: None,
         })
     }
 }

@@ -11,6 +11,8 @@ pub mod components;
 pub mod hierarchy;
 pub mod loader;
 pub mod moc3;
+pub mod native;
+pub mod native_creation;
 pub mod systems;
 pub mod world;
 

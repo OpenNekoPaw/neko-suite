@@ -280,6 +280,7 @@ mod tests {
                 width: 2,
                 height: 2,
                 diagnostics: None,
+                meta: None,
             };
             self.frame_index += 1;
             Ok((frame, GpuPipelineTiming::default()))

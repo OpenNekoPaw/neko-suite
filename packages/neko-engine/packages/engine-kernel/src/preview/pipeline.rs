@@ -351,6 +351,7 @@ impl PreviewPipeline {
             width: gpu_result.width,
             height: gpu_result.height,
             diagnostics: None,
+            meta: None,
         };
 
         self.frame_count += 1;

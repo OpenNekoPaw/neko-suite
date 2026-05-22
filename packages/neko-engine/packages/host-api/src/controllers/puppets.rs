@@ -10,6 +10,7 @@ use neko_engine_kernel::contracts::services::{IPuppetService, PuppetExportConfig
 use neko_engine_types::registry;
 use neko_engine_types::{
     ActionResponse, FileSourceRef, PuppetCommand, PuppetCommandAck, PuppetCommandAckStatus,
+    PuppetCommandEnvelope,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -117,14 +118,71 @@ impl Controller for PuppetsController {
 
             "snapshot" => {
                 let service = self.service()?;
+                let revision = service
+                    .current_revision()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
                 let snapshot = service
                     .get_snapshot()
                     .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                let mut value = serde_json::to_value(snapshot)
+                    .map_err(|e| ApiError::SerializationError(e.to_string()))?;
+                if let Value::Object(object) = &mut value {
+                    object.insert("revision".to_string(), serde_json::json!(revision));
+                }
+
+                Ok(ActionResponse::ok("", value))
+            }
+
+            "capabilities" => {
+                let service = self.service()?;
+                let revision = service
+                    .current_revision()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                let snapshot = service
+                    .get_snapshot()
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+                let is_native = snapshot.format.as_deref() == Some("native");
+                let blend_shapes = snapshot
+                    .parameters
+                    .iter()
+                    .map(|param| param.name.clone())
+                    .collect::<Vec<_>>();
+                let bones = snapshot
+                    .nodes
+                    .iter()
+                    .filter(|node| node.id.starts_with("bone-"))
+                    .map(|node| node.id.clone())
+                    .collect::<Vec<_>>();
 
                 Ok(ActionResponse::ok(
                     "",
-                    serde_json::to_value(snapshot)
-                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                    serde_json::json!({
+                        "format": if is_native { "native" } else { "legacy" },
+                        "animationModel": if is_native { "bone-blendshape" } else { "moc3-parameter" },
+                        "revision": revision,
+                        "native": is_native,
+                        "availableNativeCommands": if is_native {
+                            vec![
+                                "setNativeExpression",
+                                "setNativeBlendShape",
+                                "setNativeBoneTransform",
+                                "upsertNativeControlDriver",
+                                "playNativeAnimation",
+                            ]
+                        } else {
+                            Vec::<&str>::new()
+                        },
+                        "diagnostics": if is_native {
+                            Vec::<serde_json::Value>::new()
+                        } else {
+                            vec![serde_json::json!({
+                                "code": "legacy-only-puppet",
+                                "message": "Native puppet commands require a .nkp v2 bone-blendshape project or Live2D conversion."
+                            })]
+                        },
+                        "blendShapes": blend_shapes,
+                        "bones": bones,
+                    }),
                 ))
             }
 
@@ -509,6 +567,21 @@ impl Controller for PuppetsController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
+            "native_command" => {
+                let envelope: PuppetCommandEnvelope = serde_json::from_value(options)
+                    .map_err(|e| ApiError::InvalidRequest(e.to_string()))?;
+                let service = self.service()?;
+                let ack = service
+                    .apply_puppet_command(envelope)
+                    .map_err(|e| ApiError::ServiceError(e.to_string()))?;
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::to_value(ack)
+                        .map_err(|e| ApiError::SerializationError(e.to_string()))?,
+                ))
+            }
+
             "set_texture" => {
                 #[derive(Debug, Deserialize)]
                 struct SetTextureOptions {
@@ -679,6 +752,7 @@ mod tests {
         let actions = controller.actions();
         assert!(actions.contains(&"load"));
         assert!(actions.contains(&"snapshot"));
+        assert!(actions.contains(&"capabilities"));
         assert!(actions.contains(&"param"));
         assert!(actions.contains(&"params"));
         assert!(actions.contains(&"tick"));
@@ -687,6 +761,7 @@ mod tests {
         assert!(actions.contains(&"anim_play"));
         assert!(actions.contains(&"anim_stop"));
         assert!(actions.contains(&"anim_seek"));
+        assert!(actions.contains(&"native_command"));
     }
 
     #[tokio::test]

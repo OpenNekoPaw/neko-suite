@@ -1,11 +1,12 @@
 //! ActionRouter - Routes ActionRequest to appropriate controllers
 
 use crate::controllers::{
-    AudioController, CameraController, CanvasController, ColorCorrectionController, Controller,
-    DocumentsController, EffectsController, FilesController, GamepadController, ImageController,
-    MidiController, ModelsController, NodeController, PluginsController, PreviewsController,
-    PuppetsController, ScenesController, StreamController, TaskController, TimelineController,
-    VideoController,
+    is_model_preview_action, AudioController, CameraController, CanvasController,
+    ColorCorrectionController, Controller, DocumentsController, EffectsController, FilesController,
+    GamepadController, ImageController, LiveCompositorController, MidiController,
+    ModelPreviewController, ModelsController, NodeController, PluginsController,
+    PreviewsController, PuppetsController, ScenesController, StreamController, TaskController,
+    TimelineController, VideoController, ViewportController,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::plugin::PluginManager;
@@ -41,6 +42,9 @@ pub struct ActionRouter {
     files_controller: FilesController,
     plugins_controller: PluginsController,
     previews_controller: PreviewsController,
+    viewport_controller: ViewportController,
+    live_compositor_controller: LiveCompositorController,
+    model_preview_controller: Arc<ModelPreviewController>,
 }
 
 impl ActionRouter {
@@ -51,6 +55,7 @@ impl ActionRouter {
         stream_registry: Arc<StreamRegistry>,
         plugin_manager: Arc<PluginManager>,
         preview_registry: Arc<PreviewFileRegistry>,
+        model_preview_controller: Arc<ModelPreviewController>,
         #[cfg(feature = "onnx")] ml_service: Option<Arc<dyn IMlService>>,
     ) -> Self {
         let file_access_registry = preview_registry.file_access().clone();
@@ -92,8 +97,9 @@ impl ActionRouter {
             models_controller: ModelsController::new(),
             canvas_controller: CanvasController::new(),
             scenes_controller: ScenesController::with_stream_registry(
-                kernel_services.scene_service,
-                stream_registry,
+                kernel_services.scene_service.clone(),
+                stream_registry.clone(),
+                model_preview_controller.clone(),
             )
             .with_file_access_registry(file_access_registry.clone()),
             puppets_controller: PuppetsController::new(kernel_services.puppet_service)
@@ -106,6 +112,11 @@ impl ActionRouter {
             files_controller: FilesController::new(file_access_registry),
             plugins_controller: PluginsController::new(plugin_manager),
             previews_controller: PreviewsController::new(preview_registry),
+            viewport_controller: ViewportController::new(kernel_services.scene_service),
+            live_compositor_controller: LiveCompositorController::with_stream_registry(
+                stream_registry,
+            ),
+            model_preview_controller,
         }
     }
 
@@ -220,6 +231,44 @@ impl ActionRouter {
                     .handle(&request.action, resource_id, request.options, request.body)
                     .await
             }
+            groups::VIEWPORT => {
+                if request.action == "command"
+                    && LiveCompositorController::is_live_viewport_command_body(
+                        request.body.as_ref(),
+                    )
+                {
+                    return self
+                        .live_compositor_controller
+                        .handle(&request.action, resource_id, request.options, request.body)
+                        .await;
+                }
+                if request.action == "command"
+                    && request
+                        .body
+                        .as_ref()
+                        .and_then(|value| value.get("action"))
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(is_model_preview_action)
+                {
+                    return self
+                        .model_preview_controller
+                        .handle(&request.action, resource_id, request.options, request.body)
+                        .await;
+                }
+                self.viewport_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
+            groups::LIVE_COMPOSITOR => {
+                self.live_compositor_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
+            groups::MODEL_PREVIEW => {
+                self.model_preview_controller
+                    .handle(&request.action, resource_id, request.options, request.body)
+                    .await
+            }
             _ => Err(ApiError::UnknownAction {
                 group: request.group.clone(),
                 action: request.action.clone(),
@@ -255,6 +304,9 @@ impl ActionRouter {
             groups::FILES => Some(self.files_controller.actions()),
             groups::PLUGINS => Some(self.plugins_controller.actions()),
             groups::PREVIEWS => Some(self.previews_controller.actions()),
+            groups::VIEWPORT => Some(self.viewport_controller.actions()),
+            groups::LIVE_COMPOSITOR => Some(self.live_compositor_controller.actions()),
+            groups::MODEL_PREVIEW => Some(self.model_preview_controller.actions()),
             _ => None,
         }
     }
@@ -272,6 +324,8 @@ mod tests {
 
         let plugin_manager = Arc::new(PluginManager::new(vec![], "0.1.0"));
         let preview_registry = Arc::new(PreviewFileRegistry::new());
+        let model_preview_controller =
+            Arc::new(ModelPreviewController::new(kernel_services.scene_service.clone()));
 
         ActionRouter::new(
             kernel_services,
@@ -279,7 +333,15 @@ mod tests {
             stream_registry,
             plugin_manager,
             preview_registry,
+            model_preview_controller,
         )
+    }
+
+    fn live_scene_fixture() -> serde_json::Value {
+        let fixture =
+            include_str!("../../../../neko-types/src/types/__fixtures__/live-compositor-scene-v1.json");
+        let value: serde_json::Value = serde_json::from_str(fixture).unwrap();
+        value["scene"].clone()
     }
 
     #[tokio::test]
@@ -341,8 +403,79 @@ mod tests {
         assert!(groups.contains(&"puppets"));
         assert!(groups.contains(&"streams"));
         assert!(groups.contains(&"effects"));
+        assert!(groups.contains(&"viewport"));
+        assert!(groups.contains(&"live-compositor"));
         // "exports" group has been removed; export is now a timelines action
         assert!(!groups.contains(&"exports"));
+    }
+
+    #[tokio::test]
+    async fn test_route_viewport_controller_registered() {
+        let router = create_test_router();
+
+        let request = ActionRequest::new("viewport", "command").with_body(serde_json::json!({
+            "protocolVersion": 1,
+            "domain": "viewport",
+            "action": "viewport:select",
+            "sceneId": "scene-a",
+            "viewportId": "main",
+            "seq": 1,
+            "correlationId": "cmd-1",
+            "timestamp": 100.0,
+            "source": "user",
+            "payload": { "x": 0.5, "y": 0.5 }
+        }));
+
+        let response = router.route(request).await.unwrap();
+        assert!(response.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_route_live_compositor_controller_registered() {
+        let router = create_test_router();
+
+        let create = ActionRequest::new("live-compositor", "create")
+            .with_body(live_scene_fixture());
+        let create_response = router.route(create).await.unwrap();
+        assert!(create_response.is_ok());
+
+        let get = ActionRequest::new("live-compositor", "get").with_id("live-scene-main");
+        let get_response = router.route(get).await.unwrap();
+        assert!(get_response.is_ok());
+        assert_eq!(
+            get_response.data.as_ref().unwrap()["scene"]["sceneId"],
+            "live-scene-main"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_route_live_scene_command_through_viewport_entrypoint() {
+        let router = create_test_router();
+
+        let create = ActionRequest::new("live-compositor", "create")
+            .with_body(live_scene_fixture());
+        router.route(create).await.unwrap();
+
+        let command = ActionRequest::new("viewport", "command").with_body(serde_json::json!({
+            "protocolVersion": 1,
+            "domain": "scene",
+            "action": "scene:live:set-preset",
+            "sceneId": "live-scene-main",
+            "viewportId": "viewport-live-main",
+            "seq": 70,
+            "correlationId": "live-cmd-70",
+            "timestamp": 1810814400100.0,
+            "source": "user",
+            "baseRevision": 12,
+            "payload": { "presetId": "preset-closeup" }
+        }));
+        let response = router.route(command).await.unwrap();
+        let event = response.data.unwrap();
+
+        assert_eq!(event["status"], "ack");
+        assert_eq!(event["ackSeq"], 70);
+        assert_eq!(event["revision"], 13);
+        assert_eq!(event["payload"]["activePresetId"], "preset-closeup");
     }
 
     #[tokio::test]
@@ -421,6 +554,15 @@ mod tests {
         assert!(scenes_actions.contains(&"graph"));
         assert!(scenes_actions.contains(&"transform"));
         assert!(scenes_actions.contains(&"composite"));
+
+        let viewport_actions = router.actions("viewport").unwrap();
+        assert_eq!(viewport_actions, &["command"]);
+
+        let live_compositor_actions = router.actions("live-compositor").unwrap();
+        assert_eq!(
+            live_compositor_actions,
+            &["create", "update", "get", "reset", "list", "command", "stream", "stop"]
+        );
     }
 
     #[test]

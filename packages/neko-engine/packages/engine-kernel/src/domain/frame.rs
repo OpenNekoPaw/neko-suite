@@ -2,6 +2,7 @@
 
 use neko_engine_types::FrameFormat;
 use neko_engine_types::RenderFrameDiagnostics;
+use neko_engine_types::RenderFrameMeta;
 
 /// Decoded frame data — output of capture/extract/composite operations
 #[derive(Debug, Clone)]
@@ -18,6 +19,8 @@ pub struct FrameData {
     pub timestamp: f64,
     /// Optional producer-side render diagnostics for realtime streams.
     pub diagnostics: Option<RenderFrameDiagnostics>,
+    /// Optional producer-side frame metadata for authoritative render streams.
+    pub meta: Option<RenderFrameMeta>,
 }
 
 impl FrameData {
@@ -30,6 +33,7 @@ impl FrameData {
             format,
             timestamp: 0.0,
             diagnostics: None,
+            meta: None,
         }
     }
 

@@ -2507,6 +2507,7 @@ dependencies = [
  "neko-engine-gpu",
  "neko-engine-types",
  "neko-runtime-puppet",
+ "pollster",
  "wgpu",
 ]
 

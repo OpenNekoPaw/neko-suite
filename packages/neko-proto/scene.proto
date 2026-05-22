@@ -860,4 +860,8 @@ message RenderFrameMeta {
   uint64 scene_revision = 7;
   uint64 applied_seq = 8;
   optional RenderFrameDiagnostics diagnostics = 9;
+  optional string scene_id = 10;
+  double frame_timestamp = 11;
+  repeated double view_transform = 12; // 2D affine [a,b,c,d,tx,ty]
+  optional string projection_json = 13;
 }

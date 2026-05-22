@@ -1,7 +1,8 @@
 //! ECS components for 2D puppet models (format-agnostic)
 //!
 //! Defines the data layout for puppet nodes in the ECS world.
-//! Components are shared across all supported formats (.inp, .moc3).
+//! Components are shared across Live2D .moc3 and native .nkp projects;
+//! legacy .inp remains metadata-only for migrated assets.
 
 use bevy_ecs::prelude::*;
 use glam::{Mat3, Vec2};
@@ -60,9 +61,12 @@ pub struct ParameterBinding {
 
 /// Puppet format identifier
 #[derive(Component, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub enum PuppetFormat {
+    #[deprecated(note = "INP import was removed on 2026-05-20; keep only for legacy metadata")]
     Inp,
     Moc3,
+    Native,
 }
 
 /// Part visibility control (MOC3 Part → visibility group)
@@ -130,7 +134,7 @@ pub struct RotationDeformer {
 #[derive(Component, Debug, Clone)]
 pub struct ParentDeformerRef(pub Entity);
 
-/// Static mesh data (vertices, UVs, indices) — loaded once from INP or MOC3
+/// Static mesh data (vertices, UVs, indices) — loaded once from source puppet data
 #[derive(Component, Debug, Clone)]
 pub struct MeshData {
     pub vertices: Vec<Vec2>,

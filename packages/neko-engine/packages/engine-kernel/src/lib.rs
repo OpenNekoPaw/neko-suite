@@ -20,6 +20,7 @@ pub(crate) mod encoder;
 pub mod error;
 pub(crate) mod export;
 pub mod facade;
+pub mod live_compositor;
 pub(crate) mod monitor;
 pub(crate) mod preview;
 pub(crate) mod services;

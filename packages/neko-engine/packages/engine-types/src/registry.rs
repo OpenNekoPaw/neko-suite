@@ -28,6 +28,9 @@ pub mod groups {
     pub const FILES: &str = "files";
     pub const PLUGINS: &str = "plugins";
     pub const PREVIEWS: &str = "previews";
+    pub const VIEWPORT: &str = "viewport";
+    pub const LIVE_COMPOSITOR: &str = "live-compositor";
+    pub const MODEL_PREVIEW: &str = "model-preview";
 
     pub const ALL: &[&str] = &[
         NODES,
@@ -50,6 +53,9 @@ pub mod groups {
         FILES,
         PLUGINS,
         PREVIEWS,
+        VIEWPORT,
+        LIVE_COMPOSITOR,
+        MODEL_PREVIEW,
     ];
 }
 
@@ -197,6 +203,7 @@ pub mod actions {
         "load",
         "load_source",
         "snapshot",
+        "capabilities",
         "param",
         "params",
         "tick",
@@ -218,6 +225,7 @@ pub mod actions {
         "expressions",
         "set_expression",
         "clear_expression",
+        "native_command",
         "load_auxiliary",
         "export_motion3",
         "export_expression3",
@@ -258,4 +266,12 @@ pub mod actions {
         "unregister-token",
         "generate",
     ];
+
+    pub const VIEWPORT: &[&str] = &["command"];
+
+    pub const LIVE_COMPOSITOR: &[&str] = &[
+        "create", "update", "get", "reset", "list", "command", "stream", "stop",
+    ];
+
+    pub const MODEL_PREVIEW: &[&str] = &["command", "state", "reset"];
 }

@@ -15,14 +15,20 @@ use crate::components::*;
 use crate::hierarchy;
 use crate::loader::{self, LoadError};
 use crate::moc3;
+use crate::native;
 use crate::systems;
 use bevy_ecs::prelude::*;
 use neko_engine_types::easing::EasingType;
+use neko_engine_types::puppet::{
+    NkpControlDriver, NkpProjectData, NkpTransform2DEdit, NkpTransformEditMode,
+};
 use serde::{Deserialize, Serialize};
 
 /// Full snapshot of a loaded puppet for serialization to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PuppetSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
     pub nodes: Vec<PuppetNodeSnapshot>,
     pub parameters: Vec<ParameterInfo>,
     pub meshes: Vec<MeshSnapshot>,
@@ -89,6 +95,65 @@ pub struct DeformedMesh {
 pub trait PuppetWorld: Send + Sync {
     /// Load a puppet from binary data (auto-detects INP or MOC3 format)
     fn load_puppet(&mut self, data: &[u8]) -> Result<PuppetSnapshot, LoadError>;
+
+    /// Load a native .nkp v2 project from shared DTO data.
+    fn load_native_project(
+        &mut self,
+        project: &NkpProjectData,
+    ) -> Result<PuppetSnapshot, LoadError>;
+
+    /// Set a native BlendShape weight.
+    fn set_native_blendshape_weight(&mut self, name: &str, weight: f32) -> Result<(), String>;
+
+    /// Edit a native BlendShape vertex delta.
+    fn set_native_blendshape_delta(
+        &mut self,
+        name: &str,
+        mesh_id: &str,
+        vertex_index: usize,
+        delta: [f32; 2],
+    ) -> Result<(), String>;
+
+    /// Set or offset a native Bone2D transform.
+    fn set_native_bone_transform(
+        &mut self,
+        bone: &str,
+        transform: NkpTransform2DEdit,
+        mode: NkpTransformEditMode,
+    ) -> Result<(), String>;
+
+    /// Edit one native skin-weight row.
+    fn set_native_skin_weight(
+        &mut self,
+        mesh_id: &str,
+        vertex_index: usize,
+        joint_indices: [u16; 4],
+        joint_weights: [f32; 4],
+    ) -> Result<(), String>;
+
+    /// Insert or replace a native ControlDriver.
+    fn upsert_native_control_driver(&mut self, driver: NkpControlDriver) -> Result<(), String>;
+
+    /// Remove a native ControlDriver by id.
+    fn remove_native_control_driver(&mut self, id: &str) -> Result<(), String>;
+
+    /// Set a native tracking/control input value.
+    fn set_native_tracking_input(&mut self, name: &str, value: f32) -> Result<(), String>;
+
+    /// Activate a native expression preset.
+    fn set_native_expression(&mut self, name: &str) -> Result<(), String>;
+
+    /// Clear native expression preset weights.
+    fn clear_native_expression(&mut self) -> Result<(), String>;
+
+    /// Play a native Bone2D + BlendShape animation clip.
+    fn play_native_animation(&mut self, name: &str, loop_anim: bool) -> Result<(), String>;
+
+    /// Stop native animation playback.
+    fn stop_native_animation(&mut self) -> Result<(), String>;
+
+    /// Seek native animation playback.
+    fn seek_native_animation(&mut self, time_ms: f32) -> Result<(), String>;
 
     /// Get the current full snapshot
     fn get_snapshot(&mut self) -> PuppetSnapshot;
@@ -214,6 +279,26 @@ impl BevyPuppetWorld {
         let mut q = self.world.query_filtered::<Entity, With<PuppetRoot>>();
         q.iter(&self.world).next()
     }
+
+    fn root_format(&mut self) -> Option<String> {
+        let root = self.find_root()?;
+        self.world.get::<PuppetFormat>(root).map(puppet_format_label)
+    }
+}
+
+#[allow(deprecated)]
+fn puppet_format_label(format: &PuppetFormat) -> String {
+    match format {
+        PuppetFormat::Inp => "inp",
+        PuppetFormat::Moc3 => "moc3",
+        PuppetFormat::Native => "native",
+    }
+    .to_string()
+}
+
+#[allow(deprecated)]
+fn legacy_inp_format() -> PuppetFormat {
+    PuppetFormat::Inp
 }
 
 impl Default for BevyPuppetWorld {
@@ -287,7 +372,12 @@ impl PuppetWorld for BevyPuppetWorld {
         let load_result = if moc3::parser::is_moc3(data) {
             moc3::loader::load_moc3(&mut self.world, data)?
         } else {
-            loader::load_inp(&mut self.world, data)?
+            #[allow(deprecated)]
+            let load_result = loader::load_inp(&mut self.world, data)?;
+            self.world
+                .entity_mut(load_result.root_entity)
+                .insert(legacy_inp_format());
+            load_result
         };
 
         // Attach animation components to the puppet root entity
@@ -306,6 +396,118 @@ impl PuppetWorld for BevyPuppetWorld {
         systems::transform_propagation_2d(&mut self.world);
 
         Ok(self.get_snapshot())
+    }
+
+    fn load_native_project(
+        &mut self,
+        project: &NkpProjectData,
+    ) -> Result<PuppetSnapshot, LoadError> {
+        self.world = World::new();
+        let load_result = native::load_native_project(&mut self.world, project)
+            .map_err(LoadError::InvalidData)?;
+
+        tracing::info!(
+            "Loaded native puppet: {} entities",
+            load_result.entity_count
+        );
+
+        systems::transform_propagation_2d(&mut self.world);
+        Ok(self.get_snapshot())
+    }
+
+    fn set_native_blendshape_weight(&mut self, name: &str, weight: f32) -> Result<(), String> {
+        if !native::set_blendshape_weight(&mut self.world, name, weight) {
+            return Err(format!("Native BlendShape '{}' not found", name));
+        }
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn set_native_blendshape_delta(
+        &mut self,
+        name: &str,
+        mesh_id: &str,
+        vertex_index: usize,
+        delta: [f32; 2],
+    ) -> Result<(), String> {
+        native::set_blendshape_delta(&mut self.world, name, mesh_id, vertex_index, delta)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn set_native_bone_transform(
+        &mut self,
+        bone: &str,
+        transform: NkpTransform2DEdit,
+        mode: NkpTransformEditMode,
+    ) -> Result<(), String> {
+        native::set_bone_transform(&mut self.world, bone, transform, mode)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn set_native_skin_weight(
+        &mut self,
+        mesh_id: &str,
+        vertex_index: usize,
+        joint_indices: [u16; 4],
+        joint_weights: [f32; 4],
+    ) -> Result<(), String> {
+        native::set_skin_weight(
+            &mut self.world,
+            mesh_id,
+            vertex_index,
+            joint_indices,
+            joint_weights,
+        )?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn upsert_native_control_driver(&mut self, driver: NkpControlDriver) -> Result<(), String> {
+        native::upsert_control_driver(&mut self.world, driver)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn remove_native_control_driver(&mut self, id: &str) -> Result<(), String> {
+        native::remove_control_driver(&mut self.world, id)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn set_native_tracking_input(&mut self, name: &str, value: f32) -> Result<(), String> {
+        native::set_tracking_input(&mut self.world, name, value)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn set_native_expression(&mut self, name: &str) -> Result<(), String> {
+        native::apply_expression_preset(&mut self.world, name)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn clear_native_expression(&mut self) -> Result<(), String> {
+        native::clear_expression_preset(&mut self.world)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn play_native_animation(&mut self, name: &str, loop_anim: bool) -> Result<(), String> {
+        native::play_animation(&mut self.world, name, loop_anim)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
+    }
+
+    fn stop_native_animation(&mut self) -> Result<(), String> {
+        native::stop_animation(&mut self.world)
+    }
+
+    fn seek_native_animation(&mut self, time_ms: f32) -> Result<(), String> {
+        native::seek_animation(&mut self.world, time_ms)?;
+        native::native_runtime_update(&mut self.world, 0.0);
+        Ok(())
     }
 
     fn get_snapshot(&mut self) -> PuppetSnapshot {
@@ -378,6 +580,7 @@ impl PuppetWorld for BevyPuppetWorld {
         let parameters = self.get_parameters();
 
         PuppetSnapshot {
+            format: self.root_format(),
             nodes,
             parameters,
             meshes,
@@ -430,6 +633,15 @@ impl PuppetWorld for BevyPuppetWorld {
     }
 
     fn tick(&mut self, delta_ms: f32) -> PuppetDelta {
+        if native::is_native_loaded(&mut self.world) {
+            native::native_runtime_update(&mut self.world, delta_ms);
+            return PuppetDelta {
+                deformed_meshes: self.get_deformed_meshes(),
+                animation_time_ms: None,
+                animation_playing: None,
+            };
+        }
+
         // Check if blend layers exist — use blend_tick instead of animation_tick
         let has_blend_layers = {
             let mut q = self
@@ -1088,6 +1300,12 @@ impl PuppetWorld for BevyPuppetWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_engine_types::puppet::{
+        NkpAnimationModel, NkpBlendShapeDef, NkpBlendShapeLibrary, NkpBone2D, NkpLayer,
+        NkpLayerMesh, NkpProjectData, NkpPuppetSource, NkpSkeleton2D, NkpViewportState,
+        PuppetFormat,
+    };
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_bevy_puppet_world_new() {
@@ -1133,5 +1351,76 @@ mod tests {
         let mut world = BevyPuppetWorld::new();
         let params = world.get_parameters();
         assert!(params.is_empty());
+    }
+
+    #[test]
+    fn native_snapshot_reports_explicit_format() {
+        let mut world = BevyPuppetWorld::new();
+        let snapshot = world.load_native_project(&minimal_native_project()).unwrap();
+
+        assert_eq!(snapshot.format.as_deref(), Some("native"));
+    }
+
+    fn minimal_native_project() -> NkpProjectData {
+        NkpProjectData {
+            version: "2.0".to_string(),
+            name: "Native Fixture".to_string(),
+            puppet: NkpPuppetSource {
+                src: None,
+                format: Some(PuppetFormat::Native),
+                animation_model: Some(NkpAnimationModel::BoneBlendshape),
+                import_source: None,
+                bundle: None,
+            },
+            layers: vec![NkpLayer {
+                id: "layer-face".to_string(),
+                name: Some("Face".to_string()),
+                texture_ref: "textures/face.png".to_string(),
+                mesh: NkpLayerMesh {
+                    id: "mesh-face".to_string(),
+                    vertices: vec![[0.0, 0.0]],
+                    uvs: vec![],
+                    triangles: vec![],
+                },
+                blend_mode: None,
+                opacity: None,
+                z_order: None,
+                skin_weights: None,
+            }],
+            skeleton: Some(NkpSkeleton2D {
+                bones: vec![NkpBone2D {
+                    id: "bone-root".to_string(),
+                    name: "root".to_string(),
+                    parent: None,
+                    position: [0.0, 0.0],
+                    rotation: Some(0.0),
+                    scale: None,
+                    length: Some(1.0),
+                }],
+                ik_constraints: vec![],
+                path_constraints: vec![],
+                spring_bones: vec![],
+            }),
+            blend_shapes: Some(NkpBlendShapeLibrary {
+                standard: None,
+                implemented: vec!["jawOpen".to_string()],
+                shapes: vec![NkpBlendShapeDef {
+                    id: Some("shape-jaw-open".to_string()),
+                    name: "jawOpen".to_string(),
+                    mesh_id: "mesh-face".to_string(),
+                    vertex_deltas: vec![[0.0, 1.0]],
+                    post_skin: None,
+                }],
+                custom: vec![],
+                aliases: BTreeMap::new(),
+            }),
+            control_drivers: vec![],
+            expressions: BTreeMap::new(),
+            animations: vec![],
+            auto_rig: None,
+            parameters: BTreeMap::new(),
+            face_parameters: BTreeMap::new(),
+            viewport: NkpViewportState { zoom: 1.0 },
+        }
     }
 }

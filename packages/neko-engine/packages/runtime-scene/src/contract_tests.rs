@@ -135,11 +135,17 @@ struct ViewportOverlayFixture {
 #[serde(rename_all = "camelCase")]
 struct RenderFrameMetaFixture {
     stream_id: String,
+    #[serde(default)]
+    scene_id: Option<String>,
     viewport_id: String,
     frame_id: u64,
     duration_us: u64,
     scene_revision: u64,
     applied_seq: u64,
+    frame_timestamp: f64,
+    view_transform: [f64; 6],
+    #[serde(default)]
+    projection_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -385,6 +391,14 @@ fn scene_contract_fixture_roundtrips_render_frame_meta() {
     assert_eq!(roundtripped.duration_us, 16666);
     assert_eq!(roundtripped.scene_revision, 41);
     assert_eq!(roundtripped.applied_seq, 7);
+    assert_eq!(roundtripped.scene_id.as_deref(), Some("scene-main"));
+    assert_eq!(roundtripped.frame_timestamp, 1770000000048.0);
+    assert_eq!(roundtripped.view_transform, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    assert!(roundtripped
+        .projection_json
+        .as_deref()
+        .unwrap_or_default()
+        .contains("perspective"));
 }
 
 #[test]

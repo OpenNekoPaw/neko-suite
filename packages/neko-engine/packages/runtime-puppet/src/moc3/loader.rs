@@ -377,7 +377,7 @@ fn build_rotation_key_forms(
 }
 
 /// Build key forms for an art mesh by resolving keyform position sources.
-fn build_art_mesh_key_forms(
+pub(super) fn build_art_mesh_key_forms(
     moc3: &Moc3Data,
     mesh_idx: usize,
     vertex_count: usize,

@@ -190,6 +190,12 @@ pub enum Command {
         action: SceneAction,
     },
 
+    /// Live compositor scene operations
+    LiveCompositor {
+        #[command(subcommand)]
+        action: LiveCompositorAction,
+    },
+
     /// File access: register, unregister, stat, resolve
     Files {
         #[command(subcommand)]
@@ -458,6 +464,25 @@ define_actions!(SceneAction {
     UpdateCamera => "update_camera",
 });
 
+define_actions!(LiveCompositorAction {
+    /// Create a live compositor scene
+    Create => "create",
+    /// Replace a live compositor scene
+    Update => "update",
+    /// Get a live compositor scene
+    Get => "get",
+    /// Reset a live compositor scene
+    Reset => "reset",
+    /// List live compositor scenes
+    List => "list",
+    /// Dispatch a scene:live:* viewport command envelope
+    Command => "command",
+    /// Start a live compositor monitor stream
+    Stream => "stream",
+    /// Stop a live compositor monitor stream
+    Stop => "stop",
+});
+
 define_actions!(FileAction {
     /// Register a local file and receive an engine token
     Register => "register",
@@ -700,6 +725,15 @@ mod tests {
             SceneAction::all_action_names(),
             registry::actions::SCENES,
             "SceneAction variants do not match registry::actions::SCENES"
+        );
+    }
+
+    #[test]
+    fn test_live_compositor_actions_align_with_registry() {
+        assert_eq!(
+            LiveCompositorAction::all_action_names(),
+            registry::actions::LIVE_COMPOSITOR,
+            "LiveCompositorAction variants do not match registry::actions::LIVE_COMPOSITOR"
         );
     }
 

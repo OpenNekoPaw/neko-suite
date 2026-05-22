@@ -8,6 +8,7 @@ pub mod expression;
 pub mod interpolation;
 pub mod loader;
 pub mod motion;
+pub mod native_conversion;
 pub mod parser;
 pub mod physics;
 pub mod rotation_deformer;

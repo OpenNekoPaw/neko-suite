@@ -170,7 +170,8 @@ impl StreamSink {
                     GpuRenderPath::PartialZeroCopy
                 };
             }
-            let output = pack_encoded_packet(&packet, width, height, fps, diagnostics);
+            let mut output = pack_encoded_packet(&packet, width, height, fps, diagnostics);
+            output.meta = frame.meta.clone();
             let _ = self.tx.send(output);
         }
 
@@ -306,6 +307,7 @@ fn pack_encoded_packet(
         format: FrameFormat::H264,
         timestamp: packet.pts as f64 / 1_000_000.0,
         diagnostics,
+        meta: None,
     }
 }
 
@@ -338,6 +340,7 @@ mod tests {
             width: 1920,
             height: 1080,
             diagnostics: None,
+            meta: None,
         }))
     }
 

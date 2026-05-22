@@ -97,6 +97,35 @@ pub struct RenderFrameDiagnostics {
     pub queue_depth: u32,
 }
 
+/// Sideband metadata for realtime render frames.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderFrameMeta {
+    pub stream_id: String,
+    pub viewport_id: String,
+    pub frame_id: u64,
+    pub pts_us: u64,
+    pub duration_us: u64,
+    pub is_keyframe: bool,
+    pub scene_revision: u64,
+    pub applied_seq: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<RenderFrameDiagnostics>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_id: Option<String>,
+    pub frame_timestamp: f64,
+    pub view_transform: [f64; 6],
+    /// JSON-encoded projection payload owned by the producing scene backend.
+    /// Kept stringly typed for v1 stream compatibility; replace with a typed
+    /// DTO in the next protocol revision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_preview_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_playback_clock_ms: Option<f64>,
+}
+
 /// Video output variants, from GPU-resident hot-path frames to terminal artifacts.
 #[derive(Clone, Debug)]
 pub enum VideoOutput {
@@ -331,6 +360,8 @@ pub struct VideoGpuFrame {
     pub height: u32,
     /// Optional producer-side diagnostics for realtime streams.
     pub diagnostics: Option<RenderFrameDiagnostics>,
+    /// Optional producer-side frame metadata for authoritative render streams.
+    pub meta: Option<RenderFrameMeta>,
 }
 
 /// Terminal preview artifact.

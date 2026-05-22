@@ -1,7 +1,7 @@
 //! ScenesController - handles scenes:* actions for 3D scene management
 
 use crate::controllers::utils::{base64_encode, resolve_file_source_ref};
-use crate::controllers::Controller;
+use crate::controllers::{Controller, ModelPreviewController};
 use crate::error::{ApiError, ApiResult};
 use crate::file_access::FileAccessRegistry;
 use crate::registry::StreamRegistry;
@@ -15,7 +15,10 @@ use neko_engine_kernel::contracts::gpu::{
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
 use neko_engine_kernel::contracts::services::{ISceneService, PipelineSink, StreamSink};
 use neko_engine_types::registry;
-use neko_engine_types::{ActionResponse, FileSourceRef, Resolution, StreamId};
+use neko_engine_types::{
+    ActionResponse, FileSourceRef, GpuRenderPath, RenderFrameDiagnostics, RenderFrameMeta,
+    Resolution, StreamId,
+};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -27,6 +30,7 @@ pub struct ScenesController {
     scene_service: Option<Arc<dyn ISceneService>>,
     stream_registry: Option<Arc<StreamRegistry>>,
     file_access_registry: Option<Arc<FileAccessRegistry>>,
+    model_preview_controller: Option<Arc<ModelPreviewController>>,
 }
 
 impl ScenesController {
@@ -35,17 +39,20 @@ impl ScenesController {
             scene_service,
             stream_registry: None,
             file_access_registry: None,
+            model_preview_controller: None,
         }
     }
 
     pub fn with_stream_registry(
         scene_service: Option<Arc<dyn ISceneService>>,
         stream_registry: Arc<StreamRegistry>,
+        model_preview_controller: Arc<ModelPreviewController>,
     ) -> Self {
         Self {
             scene_service,
             stream_registry: Some(stream_registry),
             file_access_registry: None,
+            model_preview_controller: Some(model_preview_controller),
         }
     }
 
@@ -167,6 +174,8 @@ struct SceneStreamProducerConfig {
     width: u32,
     height: u32,
     fps: f64,
+    initial_revision: u64,
+    initial_applied_seq: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -445,6 +454,7 @@ fn parse_post_process(value: Option<&Value>) -> ViewportPostProcess {
 fn spawn_scene_stream_producer(
     stream_registry: Arc<StreamRegistry>,
     scene_service: Arc<dyn ISceneService>,
+    model_preview_controller: Option<Arc<ModelPreviewController>>,
     stream_id: StreamId,
     config: SceneStreamProducerConfig,
     cancel_token: CancellationToken,
@@ -503,6 +513,22 @@ fn spawn_scene_stream_producer(
                     let duration_us = stream_duration_us;
                     let quality = settings.h264_quality;
                     let viewport = runtime_scheduler.viewport_descriptor_for_settings(settings);
+                    let preview_camera = model_preview_controller
+                        .as_ref()
+                        .and_then(|controller| {
+                            controller.camera_for_viewport(&viewport.scene_id, &viewport.viewport_id)
+                        });
+                    let render_camera = preview_camera.or(camera);
+                    let frame_meta = scene_stream_render_frame_meta(
+                        &stream_id,
+                        &config,
+                        &viewport,
+                        frame_id,
+                        pts_us,
+                        duration_us,
+                        load.dropped_frames,
+                        model_preview_controller.as_deref(),
+                    );
                     if let Some(sink) = stream_sink.as_ref() {
                         if let Ok(sink_config) = scene_stream_sink_config(settings) {
                             if last_sink_config.as_ref() != Some(&sink_config) {
@@ -533,10 +559,11 @@ fn spawn_scene_stream_producer(
                     let gpu_submitted = if let Some(sink) = stream_sink.as_ref() {
                         let gpu_output = tokio::task::spawn_blocking({
                             let service = Arc::clone(&service);
-                            let camera = camera.clone();
+                            let camera = render_camera.clone();
                             let viewport = viewport.clone();
+                            let meta = frame_meta.clone();
                             move || {
-                                service.render_scene_stream_gpu_output(
+                                let mut output = service.render_scene_stream_gpu_output(
                                     output_size,
                                     camera.as_ref(),
                                     None,
@@ -545,7 +572,14 @@ fn spawn_scene_stream_producer(
                                     frame_id,
                                     &viewport,
                                     load.dropped_frames,
-                                )
+                                )?;
+                                if let neko_engine_types::PipelineOutput::Video(
+                                    neko_engine_types::VideoOutput::GpuFrame(frame),
+                                ) = &mut output
+                                {
+                                    frame.meta = Some(meta);
+                                }
+                                Ok::<_, neko_engine_kernel::error::Error>(output)
                             }
                         })
                         .await;
@@ -584,16 +618,19 @@ fn spawn_scene_stream_producer(
                     };
 
                     if !gpu_submitted {
+                        let meta = frame_meta;
                         let frame = tokio::task::spawn_blocking(move || {
-                            service.capture_h264_keyframe(
+                            let mut frame = service.capture_h264_keyframe(
                                 output_size,
-                                camera.as_ref(),
+                                render_camera.as_ref(),
                                 None,
                                 quality,
                                 pts_us,
                                 duration_us,
                                 &viewport,
-                            )
+                            )?;
+                            frame.meta = Some(meta);
+                            Ok::<_, neko_engine_kernel::error::Error>(frame)
                         })
                         .await;
 
@@ -692,6 +729,49 @@ fn scene_stream_sink_config(
         bitrate: scene_stream_bitrate(settings),
         gop_size: scene_stream_gop_size(settings.fps),
     })
+}
+
+fn scene_stream_render_frame_meta(
+    stream_id: &StreamId,
+    config: &SceneStreamProducerConfig,
+    viewport: &ViewportDescriptor,
+    frame_id: u64,
+    pts_us: i64,
+    duration_us: i64,
+    dropped_frames_since_last: u32,
+    model_preview_controller: Option<&ModelPreviewController>,
+) -> RenderFrameMeta {
+    let active_preview_mode = model_preview_controller
+        .and_then(|controller| {
+            controller.active_preview_mode(&viewport.scene_id, &viewport.viewport_id)
+        })
+        .and_then(|mode| serde_json::to_value(mode).ok())
+        .and_then(|value| value.as_str().map(str::to_string));
+    let preview_playback_clock_ms = model_preview_controller.and_then(|controller| {
+        controller.playback_clock_ms(&viewport.scene_id, &viewport.viewport_id)
+    });
+
+    RenderFrameMeta {
+        stream_id: stream_id.as_str().to_string(),
+        viewport_id: viewport.viewport_id.clone(),
+        frame_id,
+        pts_us: pts_us.max(0) as u64,
+        duration_us: duration_us.max(0) as u64,
+        is_keyframe: true,
+        scene_revision: config.initial_revision,
+        applied_seq: config.initial_applied_seq,
+        diagnostics: Some(RenderFrameDiagnostics {
+            render_path: GpuRenderPath::LegacyCpu,
+            dropped_frames_since_last,
+            ..RenderFrameDiagnostics::default()
+        }),
+        scene_id: Some(viewport.scene_id.clone()),
+        frame_timestamp: pts_us.max(0) as f64 / 1_000_000.0,
+        view_transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        projection_json: None,
+        active_preview_mode,
+        preview_playback_clock_ms,
+    }
 }
 
 fn scene_stream_bitrate(settings: SceneStreamRuntimeSettings) -> u64 {
@@ -948,19 +1028,21 @@ impl Controller for ScenesController {
                 );
                 let fps = normalize_stream_fps(opts.fps);
                 let viewport_descriptor = stream_options_to_viewport_descriptor(&opts, fps);
+                let scene_revision = self.service()?.current_revision()?;
                 let producer_config = SceneStreamProducerConfig {
                     session_id: format!("scene-{}", opts.scene_id),
                     viewport: viewport_descriptor,
                     width,
                     height,
                     fps,
+                    initial_revision: scene_revision,
+                    initial_applied_seq: 0,
                 };
                 let initial_runtime = SceneStreamRuntimeScheduler::new(&producer_config).settings(
                     0,
                     FrameLoadSample::default(),
                     ControlAckHealthSample::default(),
                 );
-                let scene_revision = self.service()?.current_revision()?;
                 let stream_registry = self.stream_registry()?;
                 let session_id = producer_config.session_id.clone();
                 let resource_id = scene_stream_resource_id(&opts.scene_id, &opts.viewport_id);
@@ -995,6 +1077,7 @@ impl Controller for ScenesController {
                     spawn_scene_stream_producer(
                         stream_registry,
                         scene_service,
+                        self.model_preview_controller.clone(),
                         stream_id.clone(),
                         producer_config.clone(),
                         cancel_token,
@@ -1559,8 +1642,14 @@ mod tests {
     fn create_stream_test_controller() -> (ScenesController, Arc<StreamRegistry>) {
         let registry = Arc::new(StreamRegistry::new());
         let services = ServiceFactory::new().create_with_gpu(None);
+        let model_preview_controller =
+            Arc::new(ModelPreviewController::new(services.scene_service.clone()));
         (
-            ScenesController::with_stream_registry(services.scene_service, registry.clone()),
+            ScenesController::with_stream_registry(
+                services.scene_service,
+                registry.clone(),
+                model_preview_controller,
+            ),
             registry,
         )
     }
@@ -1841,6 +1930,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            initial_revision: 0,
+            initial_applied_seq: 0,
         };
         let runtime = SceneStreamRuntimeScheduler::new(&config);
         let settings = runtime.settings(
@@ -1895,6 +1986,8 @@ mod tests {
             width: 640,
             height: 480,
             fps: 30.0,
+            initial_revision: 0,
+            initial_applied_seq: 0,
         };
         let runtime = SceneStreamRuntimeScheduler::new(&config);
         let settings = runtime.settings(
@@ -1947,6 +2040,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            initial_revision: 0,
+            initial_applied_seq: 0,
         };
         let runtime = SceneStreamRuntimeScheduler::new(&config);
         let settings = runtime.settings(
@@ -1998,6 +2093,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            initial_revision: 0,
+            initial_applied_seq: 0,
         };
         let runtime = SceneStreamRuntimeScheduler::new(&config);
         let full = runtime.settings(
@@ -2030,6 +2127,74 @@ mod tests {
         assert_eq!(
             scene_stream_sink_config(degraded).unwrap(),
             scene_stream_sink_config(full).unwrap()
+        );
+    }
+
+    #[test]
+    fn scene_stream_frame_meta_includes_active_preview_alignment() {
+        let services = ServiceFactory::new().create_with_gpu(None);
+        let controller = ModelPreviewController::new(services.scene_service);
+        controller
+            .handle_viewport_command(neko_engine_types::ViewportCommand {
+                protocol_version: neko_engine_types::VIEWPORT_PROTOCOL_VERSION,
+                domain: neko_engine_types::ViewportDomain::Scene,
+                action: neko_engine_types::MODEL_CHARACTER_PREVIEW_SET_MODE.to_string(),
+                scene_id: "scene-a".to_string(),
+                viewport_id: Some("main".to_string()),
+                seq: 120,
+                correlation_id: "main:preview:120".to_string(),
+                timestamp: 100.0,
+                source: neko_engine_types::ViewportCommandSource::User,
+                base_revision: Some(0),
+                payload: serde_json::json!({
+                    "characterId": "character-a",
+                    "modeId": "voice-pack",
+                    "viewportId": "main"
+                }),
+            })
+            .unwrap();
+        let config = SceneStreamProducerConfig {
+            session_id: "scene-scene-a".to_string(),
+            viewport: ViewportDescriptor {
+                viewport_id: "main".to_string(),
+                scene_id: "scene-a".to_string(),
+                render_mode: ViewportRenderMode::Pbr,
+                debug_view: None,
+                fps: 30,
+                color_space: SceneColorSpace::Srgb,
+                tone_mapping: SceneToneMapping::Aces,
+                post_process: ViewportPostProcess::default(),
+                layer_mask: None,
+                work_mode: ViewportWorkMode::EditParametric,
+                helper_passes: true,
+            },
+            width: 1280,
+            height: 720,
+            fps: 30.0,
+            initial_revision: 0,
+            initial_applied_seq: 120,
+        };
+        let stream_id = StreamId::from_string("stream-main");
+        let meta = scene_stream_render_frame_meta(
+            &stream_id,
+            &config,
+            &config.viewport,
+            7,
+            33_333,
+            33_333,
+            2,
+            Some(&controller),
+        );
+
+        assert_eq!(meta.stream_id, "stream-main");
+        assert_eq!(meta.scene_id.as_deref(), Some("scene-a"));
+        assert_eq!(meta.viewport_id, "main");
+        assert_eq!(meta.scene_revision, 0);
+        assert_eq!(meta.applied_seq, 120);
+        assert_eq!(meta.active_preview_mode.as_deref(), Some("voice-pack"));
+        assert_eq!(
+            meta.diagnostics.unwrap().dropped_frames_since_last,
+            2
         );
     }
 
