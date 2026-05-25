@@ -143,6 +143,106 @@ describe('ViewportPredictionLayer', () => {
       'revision',
     );
   });
+
+  it('keeps ack-before-frame predictions active until compatible metadata arrives', () => {
+    const layer = new ViewportPredictionLayer();
+    layer.create({
+      kind: 'transform',
+      seq: 50,
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      baseRevision: 7,
+      nowMs: 1_000,
+    });
+
+    expect(
+      layer.reconcileFrameMeta(
+        frame({
+          revision: 7,
+          appliedSeq: 49,
+          diagnostics: {
+            metadataState: 'ack-before-frame',
+          },
+        }),
+        1_020,
+      ),
+    ).toEqual([]);
+    expect(layer.active().map((prediction) => prediction.seq)).toEqual([50]);
+
+    expect(
+      layer.reconcileFrameMeta(frame({ revision: 8, appliedSeq: 50 }), 1_040)[0]?.reason,
+    ).toBe('frame');
+    expect(layer.active()).toHaveLength(0);
+  });
+
+  it('does not commit predictions from delayed metadata until applied sequence is compatible', () => {
+    const layer = new ViewportPredictionLayer();
+    layer.create({
+      kind: 'blendshape',
+      seq: 60,
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      baseRevision: 8,
+      nowMs: 2_000,
+    });
+
+    expect(
+      layer.reconcileFrameMeta(
+        frame({
+          revision: 8,
+          appliedSeq: 59,
+          diagnostics: {
+            metadataState: 'delayed',
+            metadataDelayMs: 150,
+          },
+        }),
+        2_050,
+      ),
+    ).toEqual([]);
+    expect(layer.active()).toHaveLength(1);
+  });
+
+  it('covers timeout, error rollback, and revision invalidation states independently', () => {
+    const layer = new ViewportPredictionLayer();
+    layer.create({
+      kind: 'bone',
+      seq: 70,
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      baseRevision: 10,
+      nowMs: 3_000,
+      timeoutMs: 20,
+    });
+    expect(layer.timeout(3_030)[0]?.prediction.status).toBe('timed-out');
+
+    layer.create({
+      kind: 'bone',
+      seq: 71,
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      baseRevision: 10,
+    });
+    expect(
+      layer.reconcileEvent(
+        event({
+          ackSeq: 71,
+          status: 'error',
+          error: { code: 'staleRevision', message: 'stale revision' },
+        }),
+      )[0]?.prediction.status,
+    ).toBe('rolled-back');
+
+    layer.create({
+      kind: 'bone',
+      seq: 72,
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      baseRevision: 10,
+    });
+    expect(
+      layer.reconcileFrameMeta(frame({ revision: 11, appliedSeq: 0 }))[0]?.prediction.status,
+    ).toBe('invalidated');
+  });
 });
 
 function event(patch: Partial<ViewportEvent>): ViewportEvent {

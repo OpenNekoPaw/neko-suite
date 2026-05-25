@@ -55,3 +55,13 @@ export type {
   ViewportOverlayDiagnostic,
   ViewportOverlayDiagnosticCode,
 } from './overlay-diagnostics';
+
+export {
+  assertSemanticViewportWorkflow,
+  expectSemanticViewportWorkflow,
+} from './control-flow-test-utils';
+export type {
+  SemanticWorkflowAssertion,
+  SemanticWorkflowExpectation,
+  SemanticWorkflowSample,
+} from './control-flow-test-utils';

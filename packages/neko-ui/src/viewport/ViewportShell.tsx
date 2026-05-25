@@ -153,6 +153,14 @@ export function ViewportShell({
           createViewportPointerInput(sceneId, viewportId, 'up', event, readRootRect()),
         );
       }}
+      onPointerCancel={(event) => {
+        if (event.defaultPrevented) return;
+        if (isViewportChromeEventTarget(event.target, event.currentTarget)) return;
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        void controller.onPointerCancel?.(
+          createViewportPointerInput(sceneId, viewportId, 'cancel', event, readRootRect()),
+        );
+      }}
       onWheel={(event) => {
         if (event.defaultPrevented) return;
         if (isViewportChromeEventTarget(event.target, event.currentTarget)) return;
@@ -162,7 +170,14 @@ export function ViewportShell({
         void controller.onWheel(input);
       }}
       onKeyDown={(event) => {
+        if (event.defaultPrevented) return;
+        if (isViewportChromeEventTarget(event.target, event.currentTarget)) return;
         void controller.onKeyDown(createViewportKeyInput(sceneId, viewportId, 'down', event));
+      }}
+      onKeyUp={(event) => {
+        if (event.defaultPrevented) return;
+        if (isViewportChromeEventTarget(event.target, event.currentTarget)) return;
+        void controller.onKeyUp?.(createViewportKeyInput(sceneId, viewportId, 'up', event));
       }}
       onContextMenu={handleContextMenu}
     >

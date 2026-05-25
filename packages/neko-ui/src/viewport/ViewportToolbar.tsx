@@ -24,10 +24,13 @@ export function ViewportToolbar({
             key={item.id}
             type="button"
             className="neko-viewport-toolbar-button"
-            title={item.label}
+            title={item.disabledReason ?? item.label}
             aria-pressed={item.kind === 'toggle' ? item.toggled === true : undefined}
+            aria-disabled={item.disabled === true || item.degraded === true ? true : undefined}
             disabled={item.disabled}
             data-action={item.action}
+            data-degraded={item.degraded === true ? 'true' : undefined}
+            data-degraded-reason={item.degradedReason}
             onClick={() => onAction?.(item)}
           >
             <span aria-hidden="true">{item.icon ?? item.label ?? item.id}</span>
