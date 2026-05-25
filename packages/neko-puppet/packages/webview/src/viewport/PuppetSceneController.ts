@@ -47,11 +47,34 @@ interface PuppetViewportCommand {
   readonly payload: ViewportSerializableRecord;
 }
 
+interface PuppetViewportCommandOptions {
+  readonly seq?: number;
+  readonly correlationId?: string;
+  readonly baseRevision?: number;
+  readonly pendingAlreadyTracked?: boolean;
+}
+
+interface PuppetBoneDragState {
+  readonly boneId: string;
+  readonly pointerId: number;
+  readonly startScenePosition: readonly [number, number];
+  readonly latestScenePosition: readonly [number, number];
+  readonly baseRevision: number;
+  readonly seq: number;
+  readonly correlationId: string;
+}
+
+const BONE_DRAG_COMMIT_EPSILON = 0.5;
+
 export class PuppetSceneController implements ISceneController {
   readonly sceneType = '2d' as const;
 
   private readonly options: PuppetSceneControllerOptions;
   private readonly predictions = new ViewportPredictionLayer();
+  private latestFrameMeta: ViewportFrameMeta | null = null;
+  private activeBoneDrag: PuppetBoneDragState | null = null;
+  private onionSkinEnabled = false;
+  private lastControlError: string | null = null;
 
   constructor(options: PuppetSceneControllerOptions) {
     this.options = options;
@@ -63,19 +86,82 @@ export class PuppetSceneController implements ISceneController {
 
   onPointerDown(input: ViewportPointerInput): ViewportControllerResult | void {
     if (input.button !== 0) return undefined;
-    const nearestBone = nearestBoneAt(input.position);
+    const scenePosition = this.toScenePosition(input.position);
+    const nearestBone = nearestBoneAt(scenePosition);
     if (nearestBone) {
-      usePuppetStore.getState().setSelectedNativeBoneId(nearestBone);
-      return { diagnostics: [`selected puppet bone ${nearestBone}`] };
+      const store = usePuppetStore.getState();
+      if (this.latestFrameMeta && this.latestFrameMeta.revision > store.nativeRevision) {
+        return {
+          diagnostics: [
+            `puppet snapshot stale for bone selection: frame ${this.latestFrameMeta.revision}, native ${store.nativeRevision}`,
+          ],
+        };
+      }
+      const seq = store.nextNativeSeq();
+      const correlationId = `${this.options.viewportId}:${seq}`;
+      store.setSelectedNativeBoneId(nearestBone);
+      store.addPendingNativeCommand(correlationId);
+      this.activeBoneDrag = {
+        boneId: nearestBone,
+        pointerId: input.pointerId,
+        startScenePosition: scenePosition,
+        latestScenePosition: scenePosition,
+        baseRevision: store.nativeRevision,
+        seq,
+        correlationId,
+      };
+      this.upsertBoneDragPrediction(this.activeBoneDrag);
+      return { diagnostics: [`selected puppet bone ${nearestBone}`, 'puppet bone drag started'] };
     }
     return undefined;
   }
 
-  onPointerMove(_input: ViewportPointerInput): ViewportControllerResult | void {
+  onPointerMove(input: ViewportPointerInput): ViewportControllerResult | void {
+    if (!this.activeBoneDrag || this.activeBoneDrag.pointerId !== input.pointerId) {
+      return undefined;
+    }
+    this.activeBoneDrag = {
+      ...this.activeBoneDrag,
+      latestScenePosition: this.toScenePosition(input.position),
+    };
+    this.upsertBoneDragPrediction(this.activeBoneDrag);
     return undefined;
   }
 
-  onPointerUp(_input: ViewportPointerInput): ViewportControllerResult | void {
+  async onPointerUp(input: ViewportPointerInput): Promise<ViewportControllerResult | void> {
+    if (!this.activeBoneDrag || this.activeBoneDrag.pointerId !== input.pointerId) {
+      return undefined;
+    }
+    const drag = {
+      ...this.activeBoneDrag,
+      latestScenePosition: this.toScenePosition(input.position),
+    };
+    this.activeBoneDrag = null;
+    if (!hasMeaningfulBoneDrag(drag)) {
+      this.predictions.rollback(drag.seq, Date.now(), 'manual');
+      this.clearFinalizedPredictions();
+      return { diagnostics: ['puppet bone drag cancelled'] };
+    }
+
+    const command = this.createViewportCommand(
+      'scene:puppet:drag-bone',
+      {
+        bone: drag.boneId,
+        transform: serializeTransform({ position: drag.latestScenePosition }),
+        mode: 'set',
+      },
+      {
+        seq: drag.seq,
+        correlationId: drag.correlationId,
+        baseRevision: drag.baseRevision,
+        pendingAlreadyTracked: true,
+      },
+    );
+    try {
+      await this.dispatchPuppetCommand(command);
+    } catch (error) {
+      this.options.onError?.(error instanceof Error ? error.message : String(error));
+    }
     return undefined;
   }
 
@@ -91,7 +177,25 @@ export class PuppetSceneController implements ISceneController {
     return undefined;
   }
 
+  onKeyUp(_input: ViewportKeyInput): ViewportControllerResult | void {
+    return undefined;
+  }
+
+  onPointerCancel(input: ViewportPointerInput): ViewportControllerResult | void {
+    if (!this.activeBoneDrag || this.activeBoneDrag.pointerId !== input.pointerId) {
+      return undefined;
+    }
+    const drag = this.activeBoneDrag;
+    this.activeBoneDrag = null;
+    this.predictions.rollback(drag.seq, Date.now(), 'manual');
+    this.clearFinalizedPredictions();
+    return { diagnostics: ['puppet bone drag cancelled'] };
+  }
+
   getOverlays(frame?: ViewportFrameMeta): readonly ViewportOverlayDescriptor[] {
+    if (frame && frame.sceneId === this.options.sceneId && frame.viewportId === this.options.viewportId) {
+      this.latestFrameMeta = frame;
+    }
     const state = usePuppetStore.getState();
     const revision = frame?.revision ?? state.nativeRevision;
     const overlays: ViewportOverlayDescriptor[] = [];
@@ -138,6 +242,7 @@ export class PuppetSceneController implements ISceneController {
 
     if (frame) {
       this.predictions.reconcileFrameMeta(frame);
+      this.predictions.timeout(Date.now());
       this.clearFinalizedPredictions();
     }
 
@@ -154,6 +259,13 @@ export class PuppetSceneController implements ISceneController {
   }
 
   getToolbarExtensions(): readonly ViewportToolbarItem[] {
+    const hasPendingCommand = usePuppetStore.getState().pendingNativeCommandIds.size > 0;
+    const degraded = hasPendingCommand || this.lastControlError !== null;
+    const degradedReason = hasPendingCommand
+      ? 'control-reconnecting'
+      : this.lastControlError
+        ? 'command-rejected'
+        : undefined;
     return [
       {
         id: 'puppet-onion-skin',
@@ -163,6 +275,12 @@ export class PuppetSceneController implements ISceneController {
         action: 'scene:puppet:toggle-onion-skin',
         group: 'puppet',
         order: 100,
+        toggled: this.onionSkinEnabled,
+        disabled: hasPendingCommand,
+        disabledReason: hasPendingCommand ? 'Native puppet command pending' : undefined,
+        degraded,
+        degradedReason,
+        payload: { enabled: !this.onionSkinEnabled },
       },
     ];
   }
@@ -181,14 +299,17 @@ export class PuppetSceneController implements ISceneController {
 
   async handleViewportEvent(event: ViewportEvent): Promise<void> {
     if (event.status === 'error') {
-      this.options.onError?.(event.error?.message ?? 'puppet viewport command failed');
+      this.lastControlError = event.error?.message ?? 'puppet viewport command failed';
+      this.options.onError?.(this.lastControlError);
       this.predictions.reconcileEvent(event);
       this.clearFinalizedPredictions();
       return;
     }
+    this.lastControlError = null;
     if (event.ackSeq > 0) {
       usePuppetStore.getState().setNativeRevision(event.revision);
     }
+    this.applyAckBackedUiState(event);
     this.predictions.reconcileEvent(event);
     this.clearFinalizedPredictions();
   }
@@ -198,6 +319,14 @@ export class PuppetSceneController implements ISceneController {
     payload: ViewportSerializableRecord,
   ): Promise<ViewportEvent> {
     const command = this.createViewportCommand(action, payload);
+    return this.dispatchPuppetCommand(command);
+  }
+
+  async setOnionSkin(enabled: boolean): Promise<ViewportEvent> {
+    return this.dispatchPuppetAction('scene:puppet:toggle-onion-skin', { enabled });
+  }
+
+  private async dispatchPuppetCommand(command: PuppetViewportCommand): Promise<ViewportEvent> {
     this.createPrediction(command);
     const puppetCommand = puppetCommandFromViewportCommand(command);
     const ack = await this.applyPuppetCommand(command, puppetCommand);
@@ -225,11 +354,14 @@ export class PuppetSceneController implements ISceneController {
   private createViewportCommand(
     action: PuppetViewportAction,
     payload: ViewportSerializableRecord,
+    options: PuppetViewportCommandOptions = {},
   ): PuppetViewportCommand {
     const state = usePuppetStore.getState();
-    const seq = state.nextNativeSeq();
-    const correlationId = `${this.options.viewportId}:${seq}`;
-    state.addPendingNativeCommand(correlationId);
+    const seq = options.seq ?? state.nextNativeSeq();
+    const correlationId = options.correlationId ?? `${this.options.viewportId}:${seq}`;
+    if (!options.pendingAlreadyTracked) {
+      state.addPendingNativeCommand(correlationId);
+    }
     return {
       protocolVersion: VIEWPORT_PROTOCOL_VERSION,
       domain: 'scene',
@@ -240,7 +372,7 @@ export class PuppetSceneController implements ISceneController {
       correlationId,
       timestamp: Date.now(),
       source: 'user',
-      baseRevision: state.nativeRevision,
+      baseRevision: options.baseRevision ?? state.nativeRevision,
       payload,
     };
   }
@@ -266,6 +398,22 @@ export class PuppetSceneController implements ISceneController {
   private createPrediction(command: PuppetViewportCommand): void {
     const overlays = createPredictionOverlays(command);
     if (overlays.length === 0) return;
+    const existing = this.predictions
+      .all()
+      .find(
+        (prediction) =>
+          prediction.status === 'active' &&
+          prediction.seq === command.seq &&
+          prediction.sceneId === command.sceneId &&
+          prediction.viewportId === command.viewportId,
+      );
+    if (existing) {
+      this.predictions.update(existing.id, {
+        payload: command.payload,
+        overlays,
+      });
+      return;
+    }
     this.predictions.create({
       kind: predictionKindForAction(command.action),
       seq: command.seq,
@@ -278,6 +426,61 @@ export class PuppetSceneController implements ISceneController {
       overlays,
       timeoutMs: 2_000,
     });
+  }
+
+  private upsertBoneDragPrediction(drag: PuppetBoneDragState): void {
+    const command = this.createViewportCommand(
+      'scene:puppet:drag-bone',
+      {
+        bone: drag.boneId,
+        transform: serializeTransform({ position: drag.latestScenePosition }),
+        mode: 'set',
+      },
+      {
+        seq: drag.seq,
+        correlationId: drag.correlationId,
+        baseRevision: drag.baseRevision,
+        pendingAlreadyTracked: true,
+      },
+    );
+    this.createPrediction(command);
+  }
+
+  private applyAckBackedUiState(event: ViewportEvent): void {
+    if (event.status === 'error') return;
+    if (event.event.startsWith('scene:puppet:set-blendshape')) {
+      const name = readOptionalString(event.payload['name']);
+      const weight = readOptionalFiniteNumber(event.payload['weight']);
+      if (name !== undefined && weight !== undefined) {
+        usePuppetStore.getState().updateNativeBlendShapeWeight(name, weight);
+      }
+    }
+    if (event.event.startsWith('scene:puppet:edit-vertex')) {
+      const name = readOptionalString(event.payload['name']);
+      const weight = readOptionalFiniteNumber(event.payload['weight']);
+      if (name !== undefined && weight !== undefined) {
+        usePuppetStore.getState().updateNativeBlendShapeWeight(name, weight);
+      }
+    }
+    if (event.event.startsWith('scene:puppet:set-driver-weight')) {
+      const name = readOptionalString(event.payload['name']);
+      const value = readOptionalFiniteNumber(event.payload['value']);
+      if (name !== undefined && value !== undefined) {
+        usePuppetStore.getState().updateNativeTrackingInputValue(name, value);
+      }
+    }
+    if (event.event.startsWith('scene:puppet:toggle-onion-skin')) {
+      const enabled = readOptionalBoolean(event.payload['enabled']);
+      if (enabled !== undefined) {
+        this.onionSkinEnabled = enabled;
+      }
+    }
+  }
+
+  private toScenePosition(position: readonly [number, number]): readonly [number, number] {
+    const frame = this.latestFrameMeta;
+    if (!frame) return position;
+    return invertViewportTransform(frame.viewTransform, position);
   }
 
   private clearFinalizedPredictions(): void {
@@ -296,6 +499,16 @@ export class PuppetSceneController implements ISceneController {
 export function handlePuppetMenuAction(item: ViewportMenuItem): void {
   if (item.action === 'scene:puppet:select-none') {
     usePuppetStore.getState().setSelectedNativeBoneId(null);
+  }
+}
+
+export async function handlePuppetToolbarAction(
+  item: ViewportToolbarItem,
+  controller?: PuppetSceneController | null,
+): Promise<void> {
+  if (item.action === 'scene:puppet:toggle-onion-skin') {
+    const enabled = readOptionalBoolean(item.payload?.['enabled']) ?? item.toggled !== true;
+    await controller?.setOnionSkin(enabled);
   }
 }
 
@@ -361,6 +574,7 @@ function eventFromPuppetAck(command: PuppetViewportCommand, ack: PuppetCommandAc
       revision: ack.revision,
       puppetRevision: ack.revision,
       commandType: command.action,
+      ...command.payload,
     },
   };
 }
@@ -380,6 +594,24 @@ function nearestBoneAt(position: readonly [number, number]): string | null {
   return nearest && nearest.distanceSquared <= 64 ? nearest.id : null;
 }
 
+function hasMeaningfulBoneDrag(drag: PuppetBoneDragState): boolean {
+  const dx = drag.latestScenePosition[0] - drag.startScenePosition[0];
+  const dy = drag.latestScenePosition[1] - drag.startScenePosition[1];
+  return Math.hypot(dx, dy) >= BONE_DRAG_COMMIT_EPSILON;
+}
+
+function invertViewportTransform(
+  transform: readonly [number, number, number, number, number, number],
+  point: readonly [number, number],
+): readonly [number, number] {
+  const [a, b, c, d, tx, ty] = transform;
+  const det = a * d - b * c;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-9) return point;
+  const x = point[0] - tx;
+  const y = point[1] - ty;
+  return [(d * x - c * y) / det, (-b * x + a * y) / det];
+}
+
 function readString(payload: ViewportSerializableRecord, key: string): string {
   const value = payload[key];
   if (typeof value !== 'string' || value.length === 0) {
@@ -394,6 +626,18 @@ function readFiniteNumber(payload: ViewportSerializableRecord, key: string): num
     throw new Error(`puppet viewport payload requires finite ${key}`);
   }
   return value;
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readOptionalFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 function readNonNegativeInteger(payload: ViewportSerializableRecord, key: string): number {

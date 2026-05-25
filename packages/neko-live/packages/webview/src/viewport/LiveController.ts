@@ -8,6 +8,7 @@ import type {
   LiveCompositorSetOutputRoutePayload,
   LiveCompositorSetTrackingOverlayPayload,
   LiveOutputRoute,
+  ViewportControlConnectionState,
   ViewportCommand,
   ViewportContextMenuRequest,
   ViewportControllerResult,
@@ -29,21 +30,29 @@ export interface LiveControllerOptions {
   readonly enginePort: number;
   readonly scene: LiveCompositorScene;
   readonly viewportId: string;
+  readonly controlConnectionState?: ViewportControlConnectionState;
   readonly onSceneChange?: (scene: LiveCompositorScene) => void;
   readonly onError?: (message: string) => void;
 }
 
 type LiveViewportCommand = ViewportCommand<ViewportSerializableRecord>;
+type LiveControllerClient = Pick<
+  EngineClient,
+  'dispatchViewportCommand' | 'getLiveCompositorScene'
+>;
 
 export class LiveController implements ISceneController {
   readonly sceneType = 'live' as const;
 
-  private readonly client: Pick<EngineClient, 'dispatchViewportCommand'>;
+  private readonly client: LiveControllerClient;
   private readonly viewportId: string;
   private readonly onSceneChange: ((scene: LiveCompositorScene) => void) | undefined;
   private readonly onError: ((message: string) => void) | undefined;
   private sceneSnapshot: LiveCompositorScene;
+  private controlConnectionState: ViewportControlConnectionState;
+  private lastControlError: string | null = null;
   private nextSeq = 1;
+  private resyncInFlight: Promise<void> | null = null;
   private readonly pendingCommands = new Map<
     number,
     {
@@ -54,12 +63,13 @@ export class LiveController implements ISceneController {
 
   constructor(
     options: LiveControllerOptions,
-    client: Pick<EngineClient, 'dispatchViewportCommand'> = new EngineClient(options.enginePort),
+    client: LiveControllerClient = new EngineClient(options.enginePort),
   ) {
     this.sceneSnapshot = options.scene;
     this.viewportId = options.viewportId;
     this.onSceneChange = options.onSceneChange;
     this.onError = options.onError;
+    this.controlConnectionState = options.controlConnectionState ?? 'connected';
     this.client = client;
   }
 
@@ -70,6 +80,18 @@ export class LiveController implements ISceneController {
   updateScene(scene: LiveCompositorScene): void {
     this.sceneSnapshot = scene;
     this.nextSeq = Math.max(this.nextSeq, scene.revision + 1);
+    this.lastControlError = null;
+  }
+
+  updateControlConnectionState(state: ViewportControlConnectionState): void {
+    const previous = this.controlConnectionState;
+    this.controlConnectionState = state;
+    if (
+      state === 'connected' &&
+      (previous === 'disconnected' || previous === 'reconnecting' || previous === 'degraded')
+    ) {
+      void this.resyncScene();
+    }
   }
 
   onPointerDown(_input: ViewportPointerInput): ViewportControllerResult | void {
@@ -122,6 +144,20 @@ export class LiveController implements ISceneController {
   }
 
   getToolbarExtensions(): readonly ViewportToolbarItem[] {
+    const controlUnavailable = !this.isControlAvailable();
+    const pending = this.pendingCommands.size > 0;
+    const disabledReason = controlUnavailable
+      ? 'Live scene-control is unavailable'
+      : pending
+        ? 'Live scene command pending'
+        : undefined;
+    const degradedReason = controlUnavailable
+      ? this.controlConnectionState === 'reconnecting'
+        ? 'control-reconnecting'
+        : 'control-disconnected'
+      : this.lastControlError
+        ? 'command-rejected'
+        : undefined;
     const presetOptions = this.sceneSnapshot.presets.map((preset) => ({
       id: preset.id,
       label: preset.label,
@@ -146,6 +182,10 @@ export class LiveController implements ISceneController {
         order: 100,
         value: this.sceneSnapshot.activePresetId ?? this.sceneSnapshot.presets[0]?.id ?? '',
         options: presetOptions,
+        disabled: controlUnavailable || pending,
+        disabledReason,
+        degraded: controlUnavailable || this.lastControlError !== null,
+        degradedReason,
         payload: {
           presetId: this.sceneSnapshot.activePresetId ?? this.sceneSnapshot.presets[0]?.id ?? '',
         },
@@ -161,6 +201,10 @@ export class LiveController implements ISceneController {
         toggled:
           this.sceneSnapshot.trackingOverlay.enabled &&
           this.sceneSnapshot.trackingOverlay.visible,
+        disabled: controlUnavailable || pending,
+        disabledReason,
+        degraded: controlUnavailable || this.lastControlError !== null,
+        degradedReason,
         payload: {
           enabled: this.sceneSnapshot.trackingOverlay.enabled,
           visible: this.sceneSnapshot.trackingOverlay.visible,
@@ -176,6 +220,10 @@ export class LiveController implements ISceneController {
         order: 102,
         value: activeRouteId(this.sceneSnapshot.outputRoutes),
         options: routeOptions,
+        disabled: controlUnavailable || pending,
+        disabledReason,
+        degraded: controlUnavailable || this.lastControlError !== null,
+        degradedReason,
         payload: {
           routeId: activeRouteId(this.sceneSnapshot.outputRoutes),
         },
@@ -184,6 +232,7 @@ export class LiveController implements ISceneController {
   }
 
   getContextMenu(_request: ViewportContextMenuRequest): readonly ViewportMenuItem[] {
+    const controlUnavailable = !this.isControlAvailable();
     return this.sceneSnapshot.layers
       .slice()
       .sort((left, right) => left.zIndex - right.zIndex)
@@ -192,7 +241,7 @@ export class LiveController implements ISceneController {
         label: layer.label ?? layer.id,
         action: LIVE_COMPOSITOR_COMMAND_ACTIONS.updateLayer,
         checked: layer.visible,
-        disabled: layer.locked,
+        disabled: layer.locked || controlUnavailable || this.pendingCommands.size > 0,
         payload: {
           layerId: layer.id,
           visible: layer.visible,
@@ -203,12 +252,14 @@ export class LiveController implements ISceneController {
   async handleViewportEvent(event: ViewportEvent): Promise<void> {
     if (event.status === 'error') {
       this.pendingCommands.delete(event.ackSeq);
-      this.onError?.(event.error?.message ?? 'live compositor command failed');
+      this.lastControlError = event.error?.message ?? 'live compositor command failed';
+      this.onError?.(this.lastControlError);
       return;
     }
 
     const pending = this.pendingCommands.get(event.ackSeq);
     this.pendingCommands.delete(event.ackSeq);
+    this.lastControlError = null;
     const nextScene = applyAckToScene(this.sceneSnapshot, event, pending);
     this.sceneSnapshot = nextScene;
     this.onSceneChange?.(nextScene);
@@ -252,6 +303,10 @@ export class LiveController implements ISceneController {
   }
 
   async handleToolbarAction(item: ViewportToolbarItem): Promise<void> {
+    if (!this.isControlAvailable()) {
+      this.handleControlUnavailable();
+      return;
+    }
     if (item.action === LIVE_COMPOSITOR_COMMAND_ACTIONS.setPreset) {
       const presetId = readString(item.value) ?? readString(item.payload?.['presetId']);
       if (presetId) {
@@ -269,12 +324,20 @@ export class LiveController implements ISceneController {
       const routeId = readString(item.value) ?? readString(item.payload?.['routeId']);
       if (routeId) {
         const route = this.sceneSnapshot.outputRoutes.find((candidate) => candidate.id === routeId);
+        if (route && !canEnableOutputRoute(route)) {
+          this.handleUnsupportedOutputRoute(route);
+          return;
+        }
         await this.setOutputRoute({ routeId, enabled: true, route });
       }
     }
   }
 
   async handleMenuAction(item: ViewportMenuItem): Promise<void> {
+    if (!this.isControlAvailable()) {
+      this.handleControlUnavailable();
+      return;
+    }
     if (item.action !== LIVE_COMPOSITOR_COMMAND_ACTIONS.updateLayer) return;
     const layerId = readString(item.payload?.['layerId']);
     const visible = readBoolean(item.payload?.['visible']);
@@ -307,6 +370,17 @@ export class LiveController implements ISceneController {
     action: LiveCompositorCommandAction,
     payload: LiveCompositorCommandPayload,
   ): Promise<ViewportEvent> {
+    if (!this.isControlAvailable()) {
+      const command = this.createViewportCommand(action, payload);
+      const event = viewportErrorEvent(
+        command,
+        this.sceneSnapshot.revision,
+        'sceneControlDisconnected',
+        'live scene-control websocket is disconnected',
+      );
+      await this.handleViewportEvent(event);
+      return event;
+    }
     const command = this.createViewportCommand(action, payload);
     this.pendingCommands.set(command.seq, { action, payload });
     try {
@@ -315,8 +389,46 @@ export class LiveController implements ISceneController {
       return event;
     } catch (error) {
       this.pendingCommands.delete(command.seq);
+      this.lastControlError = error instanceof Error ? error.message : String(error);
       throw error;
     }
+  }
+
+  private isControlAvailable(): boolean {
+    return (
+      this.resyncInFlight === null &&
+      (this.controlConnectionState === 'connected' || this.controlConnectionState === 'degraded')
+    );
+  }
+
+  private async resyncScene(): Promise<void> {
+    if (this.resyncInFlight) return this.resyncInFlight;
+    this.resyncInFlight = this.client
+      .getLiveCompositorScene(this.sceneId)
+      .then((scene) => {
+        this.updateScene(scene);
+        this.onSceneChange?.(scene);
+      })
+      .catch((error: unknown) => {
+        this.lastControlError = error instanceof Error ? error.message : String(error);
+        this.controlConnectionState = 'degraded';
+        this.onError?.(this.lastControlError);
+      })
+      .finally(() => {
+        this.resyncInFlight = null;
+      });
+    return this.resyncInFlight;
+  }
+
+  private handleControlUnavailable(): void {
+    this.lastControlError = 'live scene-control websocket is disconnected';
+    this.onError?.(this.lastControlError);
+  }
+
+  private handleUnsupportedOutputRoute(route: LiveOutputRoute): void {
+    const message = route.diagnostics?.[0]?.message ?? `Live output route ${route.id} is unavailable`;
+    this.lastControlError = message;
+    this.onError?.(message);
   }
 }
 
@@ -414,6 +526,35 @@ function activeRouteId(routes: readonly LiveOutputRoute[]): string {
     routes[0]?.id ??
     ''
   );
+}
+
+function canEnableOutputRoute(route: LiveOutputRoute): boolean {
+  return route.status === 'available' || route.status === 'active';
+}
+
+function viewportErrorEvent(
+  command: LiveViewportCommand,
+  revision: number,
+  code: string,
+  message: string,
+): ViewportEvent {
+  return {
+    protocolVersion: VIEWPORT_PROTOCOL_VERSION,
+    domain: command.domain,
+    event: `${command.action}:error`,
+    sceneId: command.sceneId,
+    viewportId: command.viewportId,
+    ackSeq: command.seq,
+    revision,
+    timestamp: Date.now(),
+    status: 'error',
+    error: { code, message, retryable: true },
+    payload: {
+      sceneId: command.sceneId,
+      viewportId: command.viewportId ?? '',
+      revision,
+    },
+  };
 }
 
 function readString(value: unknown): string | undefined {

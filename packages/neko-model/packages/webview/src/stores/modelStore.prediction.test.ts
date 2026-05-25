@@ -116,6 +116,55 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(0);
   });
 
+  it('clears transform and local predictions when an authoritative snapshot arrives', () => {
+    useModelStore.getState().addTransformPrediction({
+      seq: 7,
+      nodeId: 'node_1',
+      position: { x: 5, y: 0, z: 0 },
+    });
+    useModelStore.getState().createLocalPrediction({
+      kind: 'transform',
+      seq: 7,
+      viewportId: 'main',
+      sceneRevision: 1,
+      nodeId: 'node_1',
+      payload: { position: [5, 0, 0] },
+      nowMs: 100,
+    });
+
+    useModelStore.getState().applySceneSnapshot({
+      sceneId: 'scene-a',
+      revision: 8,
+      nodes: [
+        {
+          ...node,
+          transform: {
+            ...node.transform,
+            position: { x: 2, y: 0, z: 0 },
+          },
+        },
+      ],
+      animations: [],
+    });
+
+    const state = useModelStore.getState();
+    expect(state.sceneRevision).toBe(8);
+    expect(state.sceneNodes[0]?.transform?.position?.x).toBe(2);
+    expect(state.pendingTransformPredictions).toHaveLength(0);
+    expect(state.localPredictions).toHaveLength(0);
+
+    state.createLocalPrediction({
+      kind: 'selection',
+      seq: 8,
+      viewportId: 'main',
+      sceneRevision: 8,
+      nodeId: 'node_1',
+      payload: { selected: true },
+      nowMs: 200,
+    });
+    expect(useModelStore.getState().localPredictions).toHaveLength(1);
+  });
+
   it('aligns transform command prediction through ack, SceneDelta, and RenderFrameMeta appliedSeq', () => {
     useModelStore.getState().addTransformPrediction({
       seq: 50,

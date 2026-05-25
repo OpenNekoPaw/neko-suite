@@ -68,6 +68,7 @@ export interface PuppetStore {
   setNativeBlendShapes: (blendShapes: NativeBlendShapeInfo[]) => void;
   setNativeControlDrivers: (drivers: readonly NkpControlDriver[]) => void;
   updateNativeBlendShapeWeight: (name: string, weight: number) => void;
+  updateNativeTrackingInputValue: (name: string, value: number) => void;
   setSelectedNativeBoneId: (boneId: string | null) => void;
   setNativeRevision: (revision: number) => void;
   nextNativeSeq: () => number;
@@ -137,6 +138,10 @@ export const usePuppetStore = create<PuppetStore>()((set, get) => ({
       nativeBlendShapes: state.nativeBlendShapes.map((shape) =>
         shape.name === name ? { ...shape, current: weight } : shape,
       ),
+    })),
+  updateNativeTrackingInputValue: (name, value) =>
+    set((state) => ({
+      puppetParameters: updateParameterCurrent(state.puppetParameters, name, value),
     })),
   setSelectedNativeBoneId: (boneId) => set({ selectedNativeBoneId: boneId }),
   setNativeRevision: (revision) => set({ nativeRevision: revision }),
@@ -226,3 +231,27 @@ export const usePuppetStore = create<PuppetStore>()((set, get) => ({
       };
     }),
 }));
+
+function updateParameterCurrent(
+  parameters: ParameterInfo[],
+  name: string,
+  value: number,
+): ParameterInfo[] {
+  let updated = false;
+  const next = parameters.map((parameter) => {
+    if (parameter.name !== name) return parameter;
+    updated = true;
+    return { ...parameter, current: value };
+  });
+  if (updated) return next;
+  return [
+    ...parameters,
+    {
+      name,
+      min: 0,
+      max: 1,
+      default: 0,
+      current: value,
+    },
+  ];
+}

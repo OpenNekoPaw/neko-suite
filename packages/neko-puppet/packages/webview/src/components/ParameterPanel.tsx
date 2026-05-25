@@ -10,22 +10,19 @@ import { useTranslation } from '../i18n/I18nContext';
 import { FaceParameterSection } from './FaceParameterSection';
 import { PUPPET_FACE_PARAMETERS } from '@neko/shared';
 import type { IPuppetController } from '../animation';
+import type { PuppetSceneController } from '../viewport/PuppetSceneController';
 
 interface ParameterPanelProps {
   controller: IPuppetController | null;
+  sceneController?: PuppetSceneController | null;
 }
 
-export function ParameterPanel({ controller }: ParameterPanelProps) {
+export function ParameterPanel({ controller, sceneController }: ParameterPanelProps) {
   const { t } = useTranslation();
   const puppetLoaded = usePuppetStore((s) => s.puppetLoaded);
   const parameters = usePuppetStore((s) => s.puppetParameters);
   const nativeBlendShapes = usePuppetStore((s) => s.nativeBlendShapes);
   const updateParameterValue = usePuppetStore((s) => s.updateParameterValue);
-  const updateNativeBlendShapeWeight = usePuppetStore((s) => s.updateNativeBlendShapeWeight);
-  const setNativeRevision = usePuppetStore((s) => s.setNativeRevision);
-  const nextNativeSeq = usePuppetStore((s) => s.nextNativeSeq);
-  const addPendingNativeCommand = usePuppetStore((s) => s.addPendingNativeCommand);
-  const removePendingNativeCommand = usePuppetStore((s) => s.removePendingNativeCommand);
 
   const handleChange = useCallback(
     (name: string, value: number) => {
@@ -39,39 +36,18 @@ export function ParameterPanel({ controller }: ParameterPanelProps) {
 
   const handleNativeBlendShapeChange = useCallback(
     (name: string, value: number) => {
-      updateNativeBlendShapeWeight(name, value);
-      const seq = nextNativeSeq();
-      const transactionId = `blendshape:${name}:${seq}`;
-      addPendingNativeCommand(transactionId);
-      const activeController = controller;
-      void controller
-        ?.applyNativeCommand(
-          seq,
-          usePuppetStore.getState().nativeRevision,
-          { type: 'setNativeBlendShape', name, weight: value },
-          transactionId,
-        )
-        .then(async (ack) => {
-          setNativeRevision(ack.revision);
-          const meshes = await activeController?.getMeshes();
-          if (!meshes) return;
+      void sceneController?.setBlendShape(name, value).then(async (event) => {
+        if (event.status === 'error') return;
+        const meshes = await controller?.getMeshes();
+        if (!meshes) return;
+        usePuppetStore.getState().setDeformedMeshes(meshes);
+      }).catch(() => {
+        void controller?.getMeshes().then((meshes) => {
           usePuppetStore.getState().setDeformedMeshes(meshes);
-        })
-        .catch(() => {
-          void activeController?.getMeshes().then((meshes) => {
-            usePuppetStore.getState().setDeformedMeshes(meshes);
-          });
-        })
-        .finally(() => removePendingNativeCommand(transactionId));
+        });
+      });
     },
-    [
-      addPendingNativeCommand,
-      controller,
-      nextNativeSeq,
-      removePendingNativeCommand,
-      setNativeRevision,
-      updateNativeBlendShapeWeight,
-    ],
+    [controller, sceneController],
   );
 
   // Check if any puppet parameters match the standard face parameter template

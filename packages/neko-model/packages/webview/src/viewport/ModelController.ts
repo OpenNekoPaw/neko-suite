@@ -76,6 +76,14 @@ interface ModelViewportHitTestResult {
   readonly nodeId?: unknown;
 }
 
+interface ModelViewportDragState {
+  readonly nodeId: string;
+  readonly startPosition: readonly [number, number];
+  readonly latestPosition: readonly [number, number];
+  readonly baseRevision: number;
+  readonly predictionSeq: number;
+}
+
 const PREDICTION_POINT_BY_KIND: Record<ModelPredictionKind, readonly [number, number]> = {
   transform: [24, 24],
   camera: [36, 24],
@@ -124,6 +132,7 @@ export class ModelController implements ISceneController {
 
   private readonly client: EngineClient;
   private readonly options: ModelControllerOptions;
+  private activeDrag: ModelViewportDragState | null = null;
 
   constructor(options: ModelControllerOptions, client = new EngineClient(options.enginePort)) {
     this.options = options;
@@ -138,6 +147,11 @@ export class ModelController implements ISceneController {
     if (input.button !== 0) return undefined;
     if (input.modifiers.alt || input.modifiers.shift || input.modifiers.ctrl || input.modifiers.meta) {
       return undefined;
+    }
+
+    const maybeDrag = this.tryBeginTransformDrag(input);
+    if (maybeDrag) {
+      return maybeDrag;
     }
 
     const rect = this.options.getViewportRect?.() ?? { width: 1, height: 1 };
@@ -168,11 +182,38 @@ export class ModelController implements ISceneController {
     return undefined;
   }
 
-  onPointerMove(_input: ViewportPointerInput): ViewportControllerResult | void {
+  onPointerMove(input: ViewportPointerInput): ViewportControllerResult | void {
+    if (!this.activeDrag) {
+      return undefined;
+    }
+    this.activeDrag = {
+      ...this.activeDrag,
+      latestPosition: input.position,
+    };
+    this.updateDragPrediction(this.activeDrag);
     return undefined;
   }
 
-  onPointerUp(_input: ViewportPointerInput): ViewportControllerResult | void {
+  async onPointerUp(input: ViewportPointerInput): Promise<ViewportControllerResult | void> {
+    if (!this.activeDrag) {
+      return undefined;
+    }
+    const drag = {
+      ...this.activeDrag,
+      latestPosition: input.position,
+    };
+    this.activeDrag = null;
+    const transform = this.transformForDrag(drag);
+    if (!transform) {
+      useModelStore.getState().rollbackTransformPrediction(drag.predictionSeq);
+      useModelStore.getState().rollbackLocalPrediction(drag.predictionSeq);
+      return undefined;
+    }
+    try {
+      await this.dispatchTransformCommand(drag.nodeId, transform, drag.predictionSeq, drag.baseRevision);
+    } catch {
+      // dispatchTransformCommand already rolls back and reports through the caller path.
+    }
     return undefined;
   }
 
@@ -308,6 +349,15 @@ export class ModelController implements ISceneController {
   }
 
   async transformNode(nodeId: string, transform: EditableNodeTransform): Promise<ViewportEvent> {
+    return this.dispatchTransformCommand(nodeId, transform);
+  }
+
+  private async dispatchTransformCommand(
+    nodeId: string,
+    transform: EditableNodeTransform,
+    existingSeq?: number,
+    baseRevision = this.options.sceneRevision,
+  ): Promise<ViewportEvent> {
     const command = this.createViewportCommand(
       'viewport:transform',
       {
@@ -316,27 +366,10 @@ export class ModelController implements ISceneController {
         rotation: quatToTuple(transform.rotation),
         scale: vec3ToTuple(transform.scale),
       },
-      this.options.sceneRevision,
+      baseRevision,
+      existingSeq,
     );
-    useModelStore.getState().addTransformPrediction({
-      seq: command.seq,
-      nodeId,
-      position: transform.position,
-      rotation: transform.rotation,
-      scale: transform.scale,
-    });
-    useModelStore.getState().createLocalPrediction({
-      kind: 'transform',
-      seq: command.seq,
-      viewportId: this.options.viewportId,
-      sceneRevision: this.options.sceneRevision,
-      nodeId,
-      payload: {
-        position: transform.position,
-        rotation: transform.rotation,
-        scale: transform.scale,
-      },
-    });
+    this.upsertTransformPrediction(command.seq, nodeId, transform, baseRevision);
 
     try {
       const event = await this.dispatchViewportCommand(command);
@@ -427,8 +460,9 @@ export class ModelController implements ISceneController {
     action: ModelViewportAction,
     payload: ViewportSerializableRecord,
     baseRevision = this.options.sceneRevision,
+    existingSeq?: number,
   ): ModelViewportCommand {
-    const seq = useModelStore.getState().allocateSceneCommandSeq();
+    const seq = existingSeq ?? useModelStore.getState().allocateSceneCommandSeq();
     return {
       protocolVersion: 1,
       domain: 'viewport',
@@ -511,6 +545,93 @@ export class ModelController implements ISceneController {
       default:
         return this.client.dispatchViewportCommand(command);
     }
+  }
+
+  private tryBeginTransformDrag(input: ViewportPointerInput): ViewportControllerResult | void {
+    const state = useModelStore.getState();
+    const nodeId = state.selectedNodeId;
+    const overlay = state.viewportOverlay;
+    const rect = this.options.getViewportRect?.() ?? { width: 1, height: 1 };
+    if (!nodeId || !overlay || !isPointerNearSelectedGizmo(input.position, overlay, nodeId, rect)) {
+      return undefined;
+    }
+
+    const seq = state.allocateSceneCommandSeq();
+    this.activeDrag = {
+      nodeId,
+      startPosition: input.position,
+      latestPosition: input.position,
+      baseRevision: this.options.sceneRevision,
+      predictionSeq: seq,
+    };
+    const transform = this.transformForDrag(this.activeDrag);
+    if (transform) {
+      this.upsertTransformPrediction(seq, nodeId, transform, this.options.sceneRevision);
+    }
+    return { diagnostics: ['model transform drag started'] };
+  }
+
+  private updateDragPrediction(drag: ModelViewportDragState): void {
+    const transform = this.transformForDrag(drag);
+    if (!transform) return;
+    this.upsertTransformPrediction(drag.predictionSeq, drag.nodeId, transform, drag.baseRevision);
+  }
+
+  private transformForDrag(drag: ModelViewportDragState): EditableNodeTransform | null {
+    const node = useModelStore.getState().sceneNodes.find((item) => item.nodeId === drag.nodeId);
+    const transform = node?.transform;
+    if (!transform?.position || !transform.rotation || !transform.scale) {
+      return null;
+    }
+    const dx = (drag.latestPosition[0] - drag.startPosition[0]) / 100;
+    const dy = (drag.latestPosition[1] - drag.startPosition[1]) / 100;
+    return {
+      position: {
+        x: transform.position.x + dx,
+        y: transform.position.y - dy,
+        z: transform.position.z,
+      },
+      rotation: transform.rotation,
+      scale: transform.scale,
+    };
+  }
+
+  private upsertTransformPrediction(
+    seq: number,
+    nodeId: string,
+    transform: EditableNodeTransform,
+    baseRevision: number,
+  ): void {
+    const store = useModelStore.getState();
+    store.addTransformPrediction({
+      seq,
+      nodeId,
+      position: transform.position,
+      rotation: transform.rotation,
+      scale: transform.scale,
+    });
+    const existing = store.localPredictions.find((prediction) => prediction.seq === seq);
+    if (existing) {
+      store.localPredictionLayer.update(existing.id, {
+        position: transform.position,
+        rotation: transform.rotation,
+        scale: transform.scale,
+      });
+      useModelStore.setState({ localPredictions: store.localPredictionLayer.active() });
+      return;
+    }
+    store.createLocalPrediction({
+      kind: 'transform',
+      seq,
+      viewportId: this.options.viewportId,
+      sceneRevision: baseRevision,
+      nodeId,
+      payload: {
+        position: transform.position,
+        rotation: transform.rotation,
+        scale: transform.scale,
+      },
+    });
   }
 
   private async dispatchSelectOverSocket(
@@ -670,6 +791,26 @@ function createModelPredictionOverlays(
     });
   }
   return overlays;
+}
+
+function isPointerNearSelectedGizmo(
+  position: readonly [number, number],
+  overlay: NonNullable<ModelState['viewportOverlay']>,
+  nodeId: string,
+  rect: Pick<DOMRect, 'width' | 'height'>,
+): boolean {
+  const anchors = overlay.gizmoAnchors ?? [];
+  for (const anchor of anchors) {
+    if (anchor.nodeId !== nodeId || !anchor.screenPosition) continue;
+    const anchorX = anchor.screenPosition.x * rect.width;
+    const anchorY = anchor.screenPosition.y * rect.height;
+    const dx = position[0] - anchorX;
+    const dy = position[1] - anchorY;
+    if (Math.hypot(dx, dy) <= 24) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function vec3ToTuple(

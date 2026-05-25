@@ -171,6 +171,7 @@ export interface ModelState {
   rollbackLocalPrediction: (idOrSeq: string | number) => void;
   timeoutLocalPredictions: (nowMs?: number) => void;
   invalidateLocalPredictions: (filter: Parameters<LocalPredictionLayer['invalidate']>[0]) => void;
+  setViewportOverlay: (overlay: ViewportOverlayPatch | null) => void;
   recordAckLatency: (ms: number) => void;
   recordPatchBytes: (bytes: number, atMs?: number) => void;
   recordGpuUpload: (ms: number) => void;
@@ -326,6 +327,9 @@ export const useModelStore = create<ModelState>((set, get) => ({
         viewportOverlay: null,
         topologyWarning: null,
         modelingSessions: {},
+        pendingTransformPredictions: [],
+        localPredictionLayer: new LocalPredictionLayer(),
+        localPredictions: [],
       };
     }),
 
@@ -520,6 +524,8 @@ export const useModelStore = create<ModelState>((set, get) => ({
       state.authoringMetrics.incrementDroppedPrediction();
       return { localPredictions: state.localPredictionLayer.active() };
     }),
+
+  setViewportOverlay: (overlay) => set({ viewportOverlay: overlay }),
 
   recordAckLatency: (ms) =>
     set((state) => {

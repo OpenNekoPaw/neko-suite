@@ -221,6 +221,139 @@ describe('ModelController', () => {
     expect(useModelStore.getState().localPredictions).toHaveLength(0);
   });
 
+  it('commits viewport gizmo drag through scene-control transform ack', async () => {
+    useModelStore.setState({
+      selectedNodeId: 'node-1',
+      sceneNodes: [
+        {
+          nodeId: 'node-1',
+          name: 'Node 1',
+          children: [],
+          visible: true,
+          transform: {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 1, y: 1, z: 1 },
+          },
+        },
+      ],
+      viewportOverlay: {
+        viewportId: 'main',
+        revision: 3,
+        selectedNodeIds: ['node-1'],
+        gizmoAnchors: [
+          {
+            nodeId: 'node-1',
+            screenPosition: { x: 0.5, y: 0.5 },
+          },
+        ],
+      },
+    });
+    const socket = {
+      sendCommand: vi.fn(async (envelope) => ({
+        seq: envelope.seq,
+        appliedSeq: envelope.seq,
+        baseRevision: envelope.baseRevision,
+        revision: 4,
+        status: 'applied',
+      })),
+    };
+    const controller = new ModelController(
+      {
+        enginePort: 1234,
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        sceneRevision: 3,
+        sceneControlSocket: socket as never,
+        getViewportRect: () => ({ width: 200, height: 100 }),
+      },
+      { dispatchViewportCommand: vi.fn() } as never,
+    );
+
+    await controller.onPointerDown(pointerInput([100, 50]));
+    controller.onPointerMove(pointerInput([130, 40]));
+    expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(1);
+    expect(useModelStore.getState().localPredictions).toHaveLength(1);
+    await controller.onPointerUp(pointerInput([130, 40]));
+
+    expect(socket.sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        seq: 10,
+        baseRevision: 3,
+        command: expect.objectContaining({
+          type: 'transform',
+          payloadJson: JSON.stringify({
+            nodeId: 'node-1',
+            position: [0.3, 0.1, 0],
+            rotation: [0, 0, 0, 1],
+            scale: [1, 1, 1],
+          }),
+        }),
+      }),
+    );
+    expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(0);
+    expect(useModelStore.getState().localPredictions).toHaveLength(0);
+  });
+
+  it('rolls back viewport gizmo drag predictions when transform ack is rejected', async () => {
+    useModelStore.setState({
+      selectedNodeId: 'node-1',
+      sceneNodes: [
+        {
+          nodeId: 'node-1',
+          name: 'Node 1',
+          children: [],
+          visible: true,
+          transform: {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 1, y: 1, z: 1 },
+          },
+        },
+      ],
+      viewportOverlay: {
+        viewportId: 'main',
+        revision: 3,
+        selectedNodeIds: ['node-1'],
+        gizmoAnchors: [
+          {
+            nodeId: 'node-1',
+            screenPosition: { x: 0.5, y: 0.5 },
+          },
+        ],
+      },
+    });
+    const socket = {
+      sendCommand: vi.fn(async (envelope) => ({
+        seq: envelope.seq,
+        appliedSeq: 0,
+        baseRevision: envelope.baseRevision,
+        revision: 3,
+        status: 'rejected',
+        error: 'stale revision',
+      })),
+    };
+    const controller = new ModelController(
+      {
+        enginePort: 1234,
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        sceneRevision: 3,
+        sceneControlSocket: socket as never,
+        getViewportRect: () => ({ width: 200, height: 100 }),
+      },
+      { dispatchViewportCommand: vi.fn() } as never,
+    );
+
+    await controller.onPointerDown(pointerInput([100, 50]));
+    controller.onPointerMove(pointerInput([120, 60]));
+    await controller.onPointerUp(pointerInput([120, 60]));
+
+    expect(socket.sendCommand).toHaveBeenCalledOnce();
+    expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(0);
+    expect(useModelStore.getState().localPredictions).toHaveLength(0);
+  });
+
   it('routes camera commands through scene-control websocket when a socket is provided', async () => {
     const socket = {
       updateViewportCamera: vi.fn(async () => ({
@@ -474,5 +607,21 @@ function event(patch: Partial<ViewportEvent>): ViewportEvent {
     status: 'ack',
     payload: {},
     ...patch,
+  };
+}
+
+function pointerInput(position: readonly [number, number]) {
+  return {
+    kind: 'pointer' as const,
+    sceneId: 'scene-a',
+    viewportId: 'main',
+    timestamp: 100,
+    modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+    phase: 'down' as const,
+    pointerId: 1,
+    pointerType: 'mouse' as const,
+    position,
+    buttons: 1,
+    button: 0,
   };
 }

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LiveCompositorScene, RenderFrameMeta, ViewportFrameMeta } from '@neko/shared';
+import type {
+  LiveCompositorScene,
+  RenderFrameMeta,
+  ViewportControlConnectionState,
+  ViewportFrameMeta,
+} from '@neko/shared';
 import { EngineClient, H264StreamClient } from '@neko/neko-client';
 import { ViewportShell, bridgeRenderFrameMetaToViewportFrameMeta } from '@neko/ui';
 import { EmptyState } from './components/EmptyState';
@@ -32,6 +37,8 @@ export function App() {
   const [liveScene, setLiveScene] = useState<LiveCompositorScene>(() => liveSceneRef.current);
   const [frameMeta, setFrameMeta] = useState<ViewportFrameMeta | null>(null);
   const [compositorStatus, setCompositorStatus] = useState<LiveCompositorStatus>('idle');
+  const [liveControlState, setLiveControlState] =
+    useState<ViewportControlConnectionState>('disconnected');
   const [sceneSyncVersion, setSceneSyncVersion] = useState(0);
   const {
     avatarUrl,
@@ -62,6 +69,7 @@ export function App() {
       enginePort,
       scene: liveSceneRef.current,
       viewportId: LIVE_COMPOSITOR_VIEWPORT_ID,
+      controlConnectionState: 'disconnected',
       onSceneChange: setLiveScene,
       onError: handleCompositorError,
     });
@@ -77,6 +85,9 @@ export function App() {
     liveSceneRef.current = liveScene;
     liveController?.updateScene(liveScene);
   }, [liveController, liveScene]);
+  useEffect(() => {
+    liveController?.updateControlConnectionState(liveControlState);
+  }, [liveControlState, liveController]);
 
   useEffect(() => {
     setLiveScene((previous) => {
@@ -124,12 +135,14 @@ export function App() {
     const client = new EngineClient(enginePort);
     liveEngineClientRef.current = client;
     setCompositorStatus('starting');
+    setLiveControlState('connecting');
 
     const start = async (): Promise<void> => {
       try {
         const scene = await client.createOrUpdateLiveCompositorScene(liveSceneRef.current);
         if (disposed) return;
         setLiveScene(scene);
+        setLiveControlState('connected');
 
         const handle = await client.startLiveCompositorStream({
           sceneId: scene.sceneId,
@@ -158,11 +171,13 @@ export function App() {
           onConnectionChange: (connected) => {
             if (!disposed) {
               setCompositorStatus(connected ? 'active' : 'unavailable');
+              setLiveControlState(connected ? 'connected' : 'degraded');
             }
           },
           onError: (error) => {
             if (!disposed) {
               setCompositorStatus('unavailable');
+              setLiveControlState('degraded');
               handleCompositorError(`${t('diagnostics.compositorUnavailable')}: ${error.message}`);
             }
           },
@@ -172,6 +187,7 @@ export function App() {
       } catch (error) {
         if (!disposed) {
           setCompositorStatus('unavailable');
+          setLiveControlState('disconnected');
           handleCompositorError(
             `${t('diagnostics.compositorUnavailable')}: ${
               error instanceof Error ? error.message : String(error)
@@ -193,6 +209,7 @@ export function App() {
       if (liveEngineClientRef.current === client) {
         liveEngineClientRef.current = null;
       }
+      setLiveControlState('closed');
     };
   }, [enginePort, handleCompositorError]);
 
