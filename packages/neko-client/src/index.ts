@@ -17,6 +17,7 @@
 // H.264 WebCodecs decoder
 export {
   H264StreamClient,
+  type H264FrameMetaExpectation,
   type H264StreamClientConfig,
   type H264StreamClientStats,
 } from './H264StreamClient';

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import viewportProtocolFixture from '../__fixtures__/viewport-protocol-v1.json';
 import {
   createViewportPayloadGuardRegistry,
+  isViewportControlFlowDiagnostic,
   isViewportCommand,
   isViewportEvent,
   isViewportFrameMeta,
+  isViewportMetadataEvent,
   isViewportOverlayDescriptor,
   isViewportSerializableValue,
   isViewportToolbarItem,
@@ -20,6 +22,8 @@ interface ViewportProtocolFixture {
   readonly ackEvent: unknown;
   readonly errorEvent: unknown;
   readonly frameMeta: unknown;
+  readonly metadataEvent: unknown;
+  readonly controlDiagnostics: readonly unknown[];
   readonly overlays: readonly unknown[];
   readonly toolbar: readonly unknown[];
 }
@@ -37,6 +41,12 @@ describe('viewport protocol L0 contracts', () => {
     expect(isViewportEvent(fixture.ackEvent)).toBe(true);
     expect(isViewportEvent(fixture.errorEvent)).toBe(true);
     expect(isViewportFrameMeta(fixture.frameMeta)).toBe(true);
+    expect(isViewportMetadataEvent(fixture.metadataEvent)).toBe(true);
+    expect(
+      fixture.controlDiagnostics.every((diagnostic) =>
+        isViewportControlFlowDiagnostic(diagnostic),
+      ),
+    ).toBe(true);
     expect(fixture.overlays.every((overlay) => isViewportOverlayDescriptor(overlay))).toBe(true);
     expect(fixture.toolbar.every((item) => isViewportToolbarItem(item))).toBe(true);
     expectJsonSerializable(fixture);
@@ -72,6 +82,76 @@ describe('viewport protocol L0 contracts', () => {
     expect((fixture.errorEvent as { readonly error?: { readonly code: string } }).error?.code).toBe(
       'revisionConflict',
     );
+  });
+
+  it('allows degraded toolbar descriptors for unavailable scene-control operations', () => {
+    const degradedItem = fixture.toolbar.find(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        (item as { readonly degraded?: unknown }).degraded === true,
+    );
+
+    expect(isViewportToolbarItem(degradedItem)).toBe(true);
+    expect(degradedItem).toMatchObject({
+      disabled: true,
+      degraded: true,
+      degradedReason: 'control-disconnected',
+    });
+    expect(
+      isViewportToolbarItem({
+        ...(degradedItem as Record<string, unknown>),
+        degradedReason: 'surprise',
+      }),
+    ).toBe(false);
+  });
+
+  it('validates control-flow diagnostics for connection and metadata states', () => {
+    expect(fixture.controlDiagnostics).toHaveLength(5);
+    expect(fixture.controlDiagnostics.every(isViewportControlFlowDiagnostic)).toBe(true);
+
+    const ackBeforeFrame = fixture.controlDiagnostics.find(
+      (diagnostic) =>
+        typeof diagnostic === 'object' &&
+        diagnostic !== null &&
+        (diagnostic as { readonly code?: unknown }).code === 'ack-before-frame',
+    );
+    expect(isViewportControlFlowDiagnostic(ackBeforeFrame)).toBe(true);
+    expect(
+      isViewportControlFlowDiagnostic({
+        ...(ackBeforeFrame as Record<string, unknown>),
+        metadataState: 'surprise',
+      }),
+    ).toBe(false);
+    expect(fixture.controlDiagnostics.map((diagnostic) => readDiagnosticCode(diagnostic))).toEqual(
+      expect.arrayContaining([
+        'render-frame-meta-delayed',
+        'render-frame-meta-stale',
+        'scene-command-rejected',
+      ]),
+    );
+  });
+
+  it('defines a scene-control metadata event contract for the P1 migration path', () => {
+    expect(isViewportMetadataEvent(fixture.metadataEvent)).toBe(true);
+    expect(fixture.metadataEvent).toMatchObject({
+      type: 'viewportMetadata',
+      transport: 'scene-control',
+      cadence: 'ack-correlated',
+      revision: 11,
+      appliedSeq: 42,
+      meta: {
+        revision: 11,
+        appliedSeq: 42,
+        viewTransform: [1, 0, 0, 1, 0, 0],
+      },
+    });
+    expect(
+      isViewportMetadataEvent({
+        ...(fixture.metadataEvent as Record<string, unknown>),
+        transport: 'websocket-sideband',
+      }),
+    ).toBe(false);
   });
 
   it('rejects non-serializable payload data before commands reach domain handlers', () => {
@@ -116,4 +196,10 @@ function isDragBonePayload(value: unknown): value is ViewportSerializableRecord 
     payload['delta'].length === 2 &&
     payload['delta'].every((item) => typeof item === 'number')
   );
+}
+
+function readDiagnosticCode(value: unknown): string | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as { readonly code?: string }).code
+    : undefined;
 }

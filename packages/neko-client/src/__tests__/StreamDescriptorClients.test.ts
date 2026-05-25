@@ -37,6 +37,8 @@ type CapturedVideoDecoderConfig = VideoDecoderConfig & {
 const supportDecoderConfigs: CapturedVideoDecoderConfig[] = [];
 const configuredDecoderConfigs: CapturedVideoDecoderConfig[] = [];
 const fakeWebSockets: FakeWebSocket[] = [];
+const pendingFakeDecoderOutputs: Array<() => void> = [];
+let fakeDecoderAutoOutput = true;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -77,12 +79,19 @@ class FakeVideoDecoder {
   }
 
   decode(chunk: EncodedVideoChunk): void {
-    this.init.output({
-      timestamp: chunk.timestamp,
-      displayWidth: renderDescriptor.width,
-      displayHeight: renderDescriptor.height,
-      close: vi.fn(),
-    } as unknown as VideoFrame);
+    const output = () => {
+      this.init.output({
+        timestamp: chunk.timestamp,
+        displayWidth: renderDescriptor.width,
+        displayHeight: renderDescriptor.height,
+        close: vi.fn(),
+      } as unknown as VideoFrame);
+    };
+    if (fakeDecoderAutoOutput) {
+      output();
+    } else {
+      pendingFakeDecoderOutputs.push(output);
+    }
   }
 
   flush(): Promise<void> {
@@ -164,6 +173,8 @@ describe('stream descriptor clients', () => {
     supportDecoderConfigs.length = 0;
     configuredDecoderConfigs.length = 0;
     fakeWebSockets.length = 0;
+    pendingFakeDecoderOutputs.length = 0;
+    fakeDecoderAutoOutput = true;
     vi.stubGlobal('VideoDecoder', FakeVideoDecoder);
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.stubGlobal('EncodedVideoChunk', FakeEncodedVideoChunk);
@@ -533,6 +544,101 @@ describe('stream descriptor clients', () => {
       frameTimestamp: 100,
       viewTransform: [1, 0, 0, 1, 0, 0],
     });
+
+    client.dispose();
+  });
+
+  it('reports delayed, ack-before-frame, and stale render metadata without stopping decode', async () => {
+    let now = 1_000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    fakeDecoderAutoOutput = false;
+    const diagnostics: string[] = [];
+    const frames: Array<{ readonly timestamp: number; readonly hasMeta: boolean }> = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/live-video',
+      descriptor: {
+        ...renderDescriptor,
+        streamId: 'live-video',
+      },
+      width: 1,
+      height: 1,
+      metadataDelayBudgetMs: 25,
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrame: (frame, meta) => {
+        frames.push({ timestamp: frame.timestamp, hasMeta: meta !== undefined });
+      },
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+
+    client.expectCompatibleFrameMeta({
+      sceneId: 'live-scene-main',
+      viewportId: 'viewport-live-main',
+      streamId: 'live-video',
+      revision: 14,
+      appliedSeq: 71,
+      seq: 71,
+      correlationId: 'cmd-71',
+    });
+
+    now = 1_010;
+    socket?.onmessage?.({ data: createH264Packet(120_000, 33_333, true) });
+    expect(frames).toEqual([]);
+
+    now = 1_050;
+    socket?.onmessage?.({
+      data: JSON.stringify({
+        type: 'renderFrameMeta',
+        meta: {
+          streamId: 'live-video',
+          sceneId: 'live-scene-main',
+          viewportId: 'viewport-live-main',
+          frameId: 44,
+          ptsUs: 120_000,
+          durationUs: 33_333,
+          isKeyframe: true,
+          sceneRevision: 13,
+          appliedSeq: 70,
+        },
+      }),
+    });
+    now = 1_060;
+    pendingFakeDecoderOutputs.shift()?.();
+
+    expect(frames).toEqual([{ timestamp: 120_000, hasMeta: true }]);
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        'render-frame-meta-ack-before-frame',
+        'render-frame-meta-delayed',
+        'render-frame-meta-stale',
+      ]),
+    );
+
+    client.dispose();
+  });
+
+  it('reports missing metadata while still delivering decoded video frames', async () => {
+    const diagnostics: string[] = [];
+    const frames: number[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/raw-video',
+      width: 1,
+      height: 1,
+      codecString: 'avc1.640028',
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrame: (frame, meta) => {
+        frames.push(frame.timestamp);
+        expect(meta).toBeUndefined();
+      },
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    socket?.onmessage?.({ data: createH264Packet(140_000, 33_333, true) });
+
+    expect(frames).toEqual([140_000]);
+    expect(diagnostics).toContain('render-frame-meta-missing');
 
     client.dispose();
   });

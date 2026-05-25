@@ -11,6 +11,40 @@ export type ViewportProtocolVersion = typeof VIEWPORT_PROTOCOL_VERSION;
 export type ViewportDomain = 'viewport' | 'scene';
 export type ViewportCommandSource = 'user' | 'agent' | 'script' | 'system' | 'replay';
 export type ViewportSceneType = '2d' | '3d' | 'live';
+export type ViewportControlConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'degraded'
+  | 'closed';
+export type ViewportCommandLifecycleState =
+  | 'queued'
+  | 'sent'
+  | 'ack'
+  | 'error'
+  | 'timeout'
+  | 'superseded'
+  | 'resyncing';
+export type ViewportMetadataFreshnessState =
+  | 'fresh'
+  | 'missing'
+  | 'delayed'
+  | 'stale'
+  | 'superseded'
+  | 'ack-before-frame';
+export type ViewportDegradedReason =
+  | 'control-disconnected'
+  | 'control-reconnecting'
+  | 'command-rejected'
+  | 'query-failed'
+  | 'snapshot-stale'
+  | 'metadata-delayed'
+  | 'metadata-missing'
+  | 'metadata-stale'
+  | 'ack-before-frame'
+  | 'video-backpressure'
+  | 'unknown';
 
 export type ViewportSerializableValue =
   | null
@@ -82,6 +116,41 @@ export interface ViewportFrameMeta {
   readonly viewTransform: ViewportAffine2D;
   readonly projection?: ViewportSerializableRecord;
   readonly diagnostics?: ViewportSerializableRecord;
+}
+
+export interface ViewportMetadataEvent<TMeta extends ViewportFrameMeta = ViewportFrameMeta> {
+  readonly protocolVersion: ViewportProtocolVersion;
+  readonly type: 'viewportMetadata';
+  readonly sceneId: string;
+  readonly viewportId: string;
+  readonly revision: number;
+  readonly appliedSeq: number;
+  readonly timestamp: number;
+  readonly transport: 'scene-control';
+  readonly cadence: 'ack-correlated' | 'periodic' | 'on-demand';
+  readonly meta: TMeta;
+}
+
+export interface ViewportControlFlowDiagnostic<
+  TDetails extends ViewportSerializableRecord = ViewportSerializableRecord,
+> {
+  readonly kind: 'connection' | 'command' | 'query' | 'snapshot' | 'metadata' | 'prediction';
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly code: string;
+  readonly message: string;
+  readonly sceneId?: string;
+  readonly viewportId?: string;
+  readonly streamId?: string;
+  readonly seq?: number;
+  readonly correlationId?: string;
+  readonly revision?: number;
+  readonly appliedSeq?: number;
+  readonly connectionState?: ViewportControlConnectionState;
+  readonly commandState?: ViewportCommandLifecycleState;
+  readonly metadataState?: ViewportMetadataFreshnessState;
+  readonly degradedReason?: ViewportDegradedReason;
+  readonly timestamp: number;
+  readonly details?: TDetails;
 }
 
 export type ViewportPointerType = 'mouse' | 'pen' | 'touch' | 'unknown';
@@ -185,6 +254,9 @@ export interface ViewportToolbarItem<TValue extends ViewportSerializableValue = 
   readonly group?: string;
   readonly order?: number;
   readonly disabled?: boolean;
+  readonly disabledReason?: string;
+  readonly degraded?: boolean;
+  readonly degradedReason?: ViewportDegradedReason;
   readonly toggled?: boolean;
   readonly value?: TValue;
   readonly options?: readonly ViewportToolbarOption[];
@@ -220,8 +292,10 @@ export interface ISceneController {
   onPointerDown(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
   onPointerMove(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
   onPointerUp(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onPointerCancel?(input: ViewportPointerInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
   onWheel(input: ViewportWheelInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
   onKeyDown(input: ViewportKeyInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
+  onKeyUp?(input: ViewportKeyInput): ViewportControllerMaybePromise<ViewportControllerResult | void>;
   getOverlays(frame?: ViewportFrameMeta): readonly ViewportOverlayDescriptor[];
   getToolbarExtensions(): readonly ViewportToolbarItem[];
   getContextMenu(request: ViewportContextMenuRequest): readonly ViewportMenuItem[];
@@ -310,6 +384,50 @@ export function isViewportFrameMeta(value: unknown): value is ViewportFrameMeta 
   );
 }
 
+export function isViewportMetadataEvent(value: unknown): value is ViewportMetadataEvent {
+  if (!isRecord(value)) return false;
+  return (
+    isViewportProtocolVersion(value['protocolVersion']) &&
+    value['type'] === 'viewportMetadata' &&
+    typeof value['sceneId'] === 'string' &&
+    typeof value['viewportId'] === 'string' &&
+    isNonNegativeInteger(value['revision']) &&
+    isNonNegativeInteger(value['appliedSeq']) &&
+    isFiniteNumber(value['timestamp']) &&
+    isViewportMetadataTransport(value['transport']) &&
+    isViewportMetadataCadence(value['cadence']) &&
+    isViewportFrameMeta(value['meta'])
+  );
+}
+
+export function isViewportControlFlowDiagnostic(
+  value: unknown,
+): value is ViewportControlFlowDiagnostic {
+  if (!isRecord(value)) return false;
+  return (
+    isViewportDiagnosticKind(value['kind']) &&
+    isViewportDiagnosticSeverity(value['severity']) &&
+    typeof value['code'] === 'string' &&
+    typeof value['message'] === 'string' &&
+    (value['sceneId'] === undefined || typeof value['sceneId'] === 'string') &&
+    (value['viewportId'] === undefined || typeof value['viewportId'] === 'string') &&
+    (value['streamId'] === undefined || typeof value['streamId'] === 'string') &&
+    (value['seq'] === undefined || isNonNegativeInteger(value['seq'])) &&
+    (value['correlationId'] === undefined || typeof value['correlationId'] === 'string') &&
+    (value['revision'] === undefined || isNonNegativeInteger(value['revision'])) &&
+    (value['appliedSeq'] === undefined || isNonNegativeInteger(value['appliedSeq'])) &&
+    (value['connectionState'] === undefined ||
+      isViewportControlConnectionState(value['connectionState'])) &&
+    (value['commandState'] === undefined ||
+      isViewportCommandLifecycleState(value['commandState'])) &&
+    (value['metadataState'] === undefined ||
+      isViewportMetadataFreshnessState(value['metadataState'])) &&
+    (value['degradedReason'] === undefined || isViewportDegradedReason(value['degradedReason'])) &&
+    isFiniteNumber(value['timestamp']) &&
+    (value['details'] === undefined || isViewportSerializableRecord(value['details']))
+  );
+}
+
 export function isViewportOverlayDescriptor(value: unknown): value is ViewportOverlayDescriptor {
   if (!isRecord(value)) return false;
   return (
@@ -339,6 +457,9 @@ export function isViewportToolbarItem(value: unknown): value is ViewportToolbarI
     (value['group'] === undefined || typeof value['group'] === 'string') &&
     (value['order'] === undefined || isFiniteNumber(value['order'])) &&
     (value['disabled'] === undefined || typeof value['disabled'] === 'boolean') &&
+    (value['disabledReason'] === undefined || typeof value['disabledReason'] === 'string') &&
+    (value['degraded'] === undefined || typeof value['degraded'] === 'boolean') &&
+    (value['degradedReason'] === undefined || isViewportDegradedReason(value['degradedReason'])) &&
     (value['toggled'] === undefined || typeof value['toggled'] === 'boolean') &&
     (value['value'] === undefined || isViewportSerializableValue(value['value'])) &&
     (value['options'] === undefined ||
@@ -404,6 +525,91 @@ function isActionInDomain(domain: ViewportDomain, action: string): boolean {
 
 function isViewportEventStatus(value: unknown): value is ViewportEventStatus {
   return value === 'ack' || value === 'error' || value === 'event' || value === 'resync';
+}
+
+function isViewportControlConnectionState(
+  value: unknown,
+): value is ViewportControlConnectionState {
+  return (
+    value === 'disconnected' ||
+    value === 'connecting' ||
+    value === 'connected' ||
+    value === 'reconnecting' ||
+    value === 'degraded' ||
+    value === 'closed'
+  );
+}
+
+function isViewportCommandLifecycleState(
+  value: unknown,
+): value is ViewportCommandLifecycleState {
+  return (
+    value === 'queued' ||
+    value === 'sent' ||
+    value === 'ack' ||
+    value === 'error' ||
+    value === 'timeout' ||
+    value === 'superseded' ||
+    value === 'resyncing'
+  );
+}
+
+function isViewportMetadataFreshnessState(
+  value: unknown,
+): value is ViewportMetadataFreshnessState {
+  return (
+    value === 'fresh' ||
+    value === 'missing' ||
+    value === 'delayed' ||
+    value === 'stale' ||
+    value === 'superseded' ||
+    value === 'ack-before-frame'
+  );
+}
+
+function isViewportMetadataTransport(
+  value: unknown,
+): value is ViewportMetadataEvent['transport'] {
+  return value === 'scene-control';
+}
+
+function isViewportMetadataCadence(value: unknown): value is ViewportMetadataEvent['cadence'] {
+  return value === 'ack-correlated' || value === 'periodic' || value === 'on-demand';
+}
+
+function isViewportDegradedReason(value: unknown): value is ViewportDegradedReason {
+  return (
+    value === 'control-disconnected' ||
+    value === 'control-reconnecting' ||
+    value === 'command-rejected' ||
+    value === 'query-failed' ||
+    value === 'snapshot-stale' ||
+    value === 'metadata-delayed' ||
+    value === 'metadata-missing' ||
+    value === 'metadata-stale' ||
+    value === 'ack-before-frame' ||
+    value === 'video-backpressure' ||
+    value === 'unknown'
+  );
+}
+
+function isViewportDiagnosticKind(
+  value: unknown,
+): value is ViewportControlFlowDiagnostic['kind'] {
+  return (
+    value === 'connection' ||
+    value === 'command' ||
+    value === 'query' ||
+    value === 'snapshot' ||
+    value === 'metadata' ||
+    value === 'prediction'
+  );
+}
+
+function isViewportDiagnosticSeverity(
+  value: unknown,
+): value is ViewportControlFlowDiagnostic['severity'] {
+  return value === 'info' || value === 'warning' || value === 'error';
 }
 
 function isViewportProtocolError(value: unknown): value is ViewportProtocolError {

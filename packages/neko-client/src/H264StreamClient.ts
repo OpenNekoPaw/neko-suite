@@ -19,6 +19,8 @@ import type {
   RenderFrameMeta,
   RenderStreamDescriptor,
   EngineRenderFrameDiagnostics,
+  ViewportControlFlowDiagnostic,
+  ViewportSerializableRecord,
 } from '@neko/shared';
 import { getLogger } from './utils/logger';
 import {
@@ -145,6 +147,10 @@ export interface H264StreamClientConfig {
   onFrame?: (frame: VideoFrame, meta?: RenderFrameMeta) => void;
   /** Callback when packet metadata is aligned to a decoded frame */
   onFrameMeta?: (meta: RenderFrameMeta) => void;
+  /** Callback for transport/metadata diagnostics that should not affect decode flow */
+  onControlFlowDiagnostic?: (diagnostic: ViewportControlFlowDiagnostic) => void;
+  /** Local budget for frame metadata delay diagnostics. Defaults to 100ms. */
+  metadataDelayBudgetMs?: number;
   /** Callback on connection state change */
   onConnectionChange?: (connected: boolean) => void;
   /** Callback on error */
@@ -167,12 +173,30 @@ export interface H264StreamClientStats {
   hardwareAcceleration: boolean;
 }
 
+export interface H264FrameMetaExpectation {
+  readonly sceneId?: string;
+  readonly viewportId?: string;
+  readonly streamId?: string;
+  readonly revision?: number;
+  readonly appliedSeq?: number;
+  readonly seq?: number;
+  readonly correlationId?: string;
+  readonly timestamp?: number;
+}
+
+interface PendingFrameMetaExpectation extends H264FrameMetaExpectation {
+  readonly id: string;
+  readonly createdAt: number;
+}
+
 type NormalizedH264StreamClientConfig = H264StreamClientConfig & {
   width: number;
   height: number;
   codecString: string;
   onFrame: (frame: VideoFrame, meta?: RenderFrameMeta) => void;
   onFrameMeta: (meta: RenderFrameMeta) => void;
+  onControlFlowDiagnostic: (diagnostic: ViewportControlFlowDiagnostic) => void;
+  metadataDelayBudgetMs: number;
   onConnectionChange: (connected: boolean) => void;
   onError: (error: Error) => void;
   onPacketReceived: (sizeBytes: number) => void;
@@ -224,7 +248,13 @@ export class H264StreamClient {
   private pendingFrames: Map<number, number> = new Map(); // pts -> receiveTime
   private pendingFrameMeta: Map<number, RenderFrameMeta> = new Map();
   private pendingSidebandFrameMeta: Map<number, RenderFrameMeta> = new Map();
+  private pendingSidebandFrameMetaReceivedAt: Map<number, number> = new Map();
   private pendingFrameDiagnostics: Map<number, EngineRenderFrameDiagnostics> = new Map();
+  private pendingPacketReceivedAt: Map<number, number> = new Map();
+  private decodedFrameTimestamps: Map<number, number> = new Map();
+  private latestFrameMeta: RenderFrameMeta | undefined;
+  private readonly pendingFrameMetaExpectations = new Map<string, PendingFrameMetaExpectation>();
+  private nextFrameMetaExpectationId = 1;
 
   // Reconnection
   private reconnectAttempts = 0;
@@ -255,6 +285,8 @@ export class H264StreamClient {
       codecString: config.codecString ?? config.descriptor?.codecString ?? 'avc1.42001f',
       onFrame: config.onFrame ?? (() => {}),
       onFrameMeta: config.onFrameMeta ?? (() => {}),
+      onControlFlowDiagnostic: config.onControlFlowDiagnostic ?? (() => {}),
+      metadataDelayBudgetMs: config.metadataDelayBudgetMs ?? 100,
       onConnectionChange: config.onConnectionChange ?? (() => {}),
       onError: config.onError ?? (() => {}),
       onPacketReceived: config.onPacketReceived ?? (() => {}),
@@ -307,7 +339,12 @@ export class H264StreamClient {
     this.decodeStartTimes.clear();
     this.pendingFrameMeta.clear();
     this.pendingSidebandFrameMeta.clear();
+    this.pendingSidebandFrameMetaReceivedAt.clear();
     this.pendingFrameDiagnostics.clear();
+    this.pendingPacketReceivedAt.clear();
+    this.decodedFrameTimestamps.clear();
+    this.latestFrameMeta = undefined;
+    this.pendingFrameMetaExpectations.clear();
     this.decodeTimeSamples = [];
     this.latencySamples = [];
     this.stats.isConnected = false;
@@ -316,6 +353,53 @@ export class H264StreamClient {
 
   getStats(): H264StreamClientStats {
     return { ...this.stats };
+  }
+
+  expectCompatibleFrameMeta(expectation: H264FrameMetaExpectation): string {
+    const id = expectation.correlationId ?? `frame-meta-${this.nextFrameMetaExpectationId++}`;
+    if (
+      expectation.revision === undefined &&
+      expectation.appliedSeq === undefined &&
+      expectation.viewportId === undefined &&
+      expectation.streamId === undefined
+    ) {
+      return id;
+    }
+
+    const now = performance.now();
+    const pending: PendingFrameMetaExpectation = {
+      ...expectation,
+      id,
+      createdAt: expectation.timestamp ?? now,
+    };
+    if (isRenderFrameMetaCompatibleWithExpectation(this.latestFrameMeta, pending)) {
+      return id;
+    }
+    this.pendingFrameMetaExpectations.set(id, pending);
+    this.reportControlFlowDiagnostic({
+      kind: 'metadata',
+      severity: 'info',
+      code: 'render-frame-meta-ack-before-frame',
+      message: 'Control acknowledgement arrived before compatible render frame metadata.',
+      sceneId: pending.sceneId ?? this.latestFrameMeta?.sceneId,
+      viewportId: pending.viewportId ?? this.latestFrameMeta?.viewportId,
+      streamId: pending.streamId ?? this.latestFrameMeta?.streamId,
+      seq: pending.seq,
+      correlationId: pending.correlationId,
+      revision: pending.revision,
+      appliedSeq: pending.appliedSeq,
+      metadataState: 'ack-before-frame',
+      degradedReason: 'ack-before-frame',
+      timestamp: now,
+      details: finiteDetails({
+        lastFrameRevision: this.latestFrameMeta?.sceneRevision,
+        lastFrameAppliedSeq: this.latestFrameMeta?.appliedSeq,
+        expectedRevision: pending.revision,
+        expectedAppliedSeq: pending.appliedSeq,
+        ageMs: now - pending.createdAt,
+      }),
+    });
+    return id;
   }
 
   // =========================================================================
@@ -462,6 +546,7 @@ export class H264StreamClient {
 
     const packet = parseH264Packet(data);
     if (!packet) return;
+    this.pendingPacketReceivedAt.set(packet.pts, receiveTime);
     const meta = this.createFrameMeta(packet);
     if (meta) {
       this.pendingFrameMeta.set(packet.pts, meta);
@@ -509,6 +594,9 @@ export class H264StreamClient {
     }
 
     this.stats.framesDecoded++;
+    const framePresentedAt = performance.now();
+    this.decodedFrameTimestamps.set(frame.timestamp, framePresentedAt);
+    trimOldestMapEntry(this.decodedFrameTimestamps, 100);
 
     // Calculate decode time (submit -> output)
     const decodeStart = this.decodeStartTimes.get(frame.timestamp);
@@ -552,14 +640,65 @@ export class H264StreamClient {
       this.pendingFrameMeta.delete(frame.timestamp);
       const diagnostics = this.pendingFrameDiagnostics.get(frame.timestamp);
       this.pendingFrameDiagnostics.delete(frame.timestamp);
+      const packetReceivedAt = this.pendingPacketReceivedAt.get(frame.timestamp);
+      this.pendingPacketReceivedAt.delete(frame.timestamp);
+      const sidebandReceivedAt = this.pendingSidebandFrameMetaReceivedAt.get(frame.timestamp);
+      this.pendingSidebandFrameMetaReceivedAt.delete(frame.timestamp);
+      const metadataDelayMs =
+        sidebandReceivedAt !== undefined && packetReceivedAt !== undefined
+          ? sidebandReceivedAt - packetReceivedAt
+          : undefined;
+      if (
+        metadataDelayMs !== undefined &&
+        metadataDelayMs > this.config.metadataDelayBudgetMs
+      ) {
+        this.reportControlFlowDiagnostic({
+          kind: 'metadata',
+          severity: 'warning',
+          code: 'render-frame-meta-delayed',
+          message: 'Render frame metadata arrived after the configured metadata delay budget.',
+          streamId: meta.streamId,
+          viewportId: meta.viewportId,
+          revision: meta.sceneRevision,
+          appliedSeq: meta.appliedSeq,
+          metadataState: 'delayed',
+          degradedReason: 'metadata-delayed',
+          timestamp: framePresentedAt,
+          details: finiteDetails({
+            ptsUs: meta.ptsUs,
+            frameId: meta.frameId,
+            delayMs: metadataDelayMs,
+            budgetMs: this.config.metadataDelayBudgetMs,
+          }),
+        });
+      }
       const enrichedMeta = mergeRenderFrameDiagnostics(meta, {
         ...(diagnostics ?? {}),
         decodeTimeMs: this.latestDecodeTimeMs(),
         queueDepth: this.stats.decodeQueueDepth,
       });
+      this.latestFrameMeta = enrichedMeta;
+      this.reconcileFrameMetaExpectations(enrichedMeta, framePresentedAt);
       this.config.onFrameMeta(enrichedMeta);
       this.config.onFrame(frame, enrichedMeta);
     } else {
+      const packetReceivedAt = this.pendingPacketReceivedAt.get(frame.timestamp);
+      this.pendingPacketReceivedAt.delete(frame.timestamp);
+      this.reportControlFlowDiagnostic({
+        kind: 'metadata',
+        severity: 'warning',
+        code: 'render-frame-meta-missing',
+        message: 'Decoded video frame has no compatible render frame metadata.',
+        streamId: this.descriptor?.streamId,
+        viewportId: this.descriptor?.viewportId,
+        metadataState: 'missing',
+        degradedReason: 'metadata-missing',
+        timestamp: framePresentedAt,
+        details: finiteDetails({
+          ptsUs: frame.timestamp,
+          ageMs: packetReceivedAt !== undefined ? framePresentedAt - packetReceivedAt : undefined,
+        }),
+      });
       // Pass frame to scheduler (caller is responsible for closing)
       this.config.onFrame(frame);
     }
@@ -571,6 +710,7 @@ export class H264StreamClient {
       const oldest = Math.min(...this.pendingFrameDiagnostics.keys());
       this.pendingFrameDiagnostics.delete(oldest);
     }
+    trimOldestMapEntry(this.pendingPacketReceivedAt, 100);
   }
 
   private decoderConfig(): H264VideoDecoderConfig {
@@ -615,8 +755,35 @@ export class H264StreamClient {
       if (!meta) {
         return;
       }
+      const receivedAt = performance.now();
+      const decodedAt = this.decodedFrameTimestamps.get(meta.ptsUs);
+      if (decodedAt !== undefined) {
+        this.reportControlFlowDiagnostic({
+          kind: 'metadata',
+          severity: 'warning',
+          code: 'render-frame-meta-after-frame',
+          message: 'Render frame metadata arrived after the matching video frame was decoded.',
+          streamId: meta.streamId,
+          viewportId: meta.viewportId,
+          revision: meta.sceneRevision,
+          appliedSeq: meta.appliedSeq,
+          metadataState: 'delayed',
+          degradedReason: 'video-backpressure',
+          timestamp: receivedAt,
+          details: finiteDetails({
+            ptsUs: meta.ptsUs,
+            frameId: meta.frameId,
+            ageMs: receivedAt - decodedAt,
+          }),
+        });
+      }
       this.pendingSidebandFrameMeta.set(meta.ptsUs, meta);
+      this.pendingSidebandFrameMetaReceivedAt.set(meta.ptsUs, receivedAt);
+      if (this.pendingFrameMeta.has(meta.ptsUs)) {
+        this.pendingFrameMeta.set(meta.ptsUs, meta);
+      }
       trimOldestMapEntry(this.pendingSidebandFrameMeta, 100);
+      trimOldestMapEntry(this.pendingSidebandFrameMetaReceivedAt, 100);
       return;
     }
 
@@ -641,6 +808,45 @@ export class H264StreamClient {
 
   private latestDecodeTimeMs(): number | undefined {
     return this.decodeTimeSamples[this.decodeTimeSamples.length - 1];
+  }
+
+  private reportControlFlowDiagnostic(diagnostic: ViewportControlFlowDiagnostic): void {
+    this.config.onControlFlowDiagnostic(diagnostic);
+  }
+
+  private reconcileFrameMetaExpectations(meta: RenderFrameMeta, timestamp: number): void {
+    for (const [id, expectation] of this.pendingFrameMetaExpectations) {
+      if (!isRenderFrameMetaRelevantToExpectation(meta, expectation)) {
+        continue;
+      }
+      if (isRenderFrameMetaCompatibleWithExpectation(meta, expectation)) {
+        this.pendingFrameMetaExpectations.delete(id);
+        continue;
+      }
+      this.reportControlFlowDiagnostic({
+        kind: 'metadata',
+        severity: 'warning',
+        code: 'render-frame-meta-stale',
+        message: 'Render frame metadata is older than the expected control acknowledgement state.',
+        sceneId: meta.sceneId ?? expectation.sceneId,
+        viewportId: meta.viewportId,
+        streamId: meta.streamId,
+        seq: expectation.seq,
+        correlationId: expectation.correlationId,
+        revision: meta.sceneRevision,
+        appliedSeq: meta.appliedSeq,
+        metadataState: 'stale',
+        degradedReason: 'metadata-stale',
+        timestamp,
+        details: finiteDetails({
+          frameId: meta.frameId,
+          ptsUs: meta.ptsUs,
+          expectedRevision: expectation.revision,
+          expectedAppliedSeq: expectation.appliedSeq,
+          ageMs: timestamp - expectation.createdAt,
+        }),
+      });
+    }
   }
 
   private tryReconnect(): void {
@@ -701,4 +907,41 @@ function mergeRenderFrameDiagnostics(
 
 function isRenderFrameDiagnostics(value: unknown): value is EngineRenderFrameDiagnostics {
   return isRecord(value);
+}
+
+function finiteDetails(
+  value: Record<string, number | undefined>,
+): ViewportSerializableRecord | undefined {
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, number] =>
+      typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+  );
+  return entries.length === 0 ? undefined : Object.fromEntries(entries);
+}
+
+function isRenderFrameMetaCompatibleWithExpectation(
+  meta: RenderFrameMeta | undefined,
+  expectation: H264FrameMetaExpectation,
+): boolean {
+  if (!meta || !isRenderFrameMetaRelevantToExpectation(meta, expectation)) {
+    return false;
+  }
+  if (expectation.revision !== undefined && meta.sceneRevision < expectation.revision) {
+    return false;
+  }
+  if (expectation.appliedSeq !== undefined && meta.appliedSeq < expectation.appliedSeq) {
+    return false;
+  }
+  return true;
+}
+
+function isRenderFrameMetaRelevantToExpectation(
+  meta: RenderFrameMeta,
+  expectation: H264FrameMetaExpectation,
+): boolean {
+  return (
+    (expectation.streamId === undefined || meta.streamId === expectation.streamId) &&
+    (expectation.viewportId === undefined || meta.viewportId === expectation.viewportId) &&
+    (expectation.sceneId === undefined || meta.sceneId === undefined || meta.sceneId === expectation.sceneId)
+  );
 }

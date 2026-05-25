@@ -23,6 +23,18 @@ describe('viewport architecture boundaries', () => {
     }
   });
 
+  it('keeps viewport protocol free of generated engine and editor package dependencies', () => {
+    const source = readFileSync(
+      join(repoRoot, 'packages/neko-types/src/types/viewport-protocol.ts'),
+      'utf8',
+    );
+
+    expect(source).not.toMatch(/from ['"]\.\.\/generated\//);
+    expect(source).not.toMatch(/from ['"]@neko\/neko-client['"]/);
+    expect(source).not.toMatch(/from ['"]@neko\/ui['"]/);
+    expect(source).not.toMatch(/from ['"]@neko-(?:model|puppet|live)\//);
+  });
+
   it('keeps editor webviews from importing VSCode extension host APIs directly', () => {
     const roots = [
       'packages/neko-model/packages/webview/src',

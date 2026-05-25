@@ -55,9 +55,11 @@ describe('SceneControlSocket', () => {
     });
 
     socket.connect();
+    expect(socket.getConnectionState()).toBe('connecting');
     const firstSocket = socketAt(sockets, 0);
     firstSocket.open();
 
+    expect(socket.getConnectionState()).toBe('connected');
     expect(parseSent(firstSocket, 0)).toEqual({ type: 'hello' });
     expect(parseSent(firstSocket, 1)).toEqual({ type: 'subscribe', sceneId: 'scene-a' });
   });
@@ -96,6 +98,84 @@ describe('SceneControlSocket', () => {
     expect(socket.getPendingAckCount()).toBe(0);
   });
 
+  it('rejects timed-out scene commands and requests authoritative resync', async () => {
+    vi.useFakeTimers();
+    const fake = new FakeWebSocket();
+    const diagnostics: string[] = [];
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      sceneId: 'scene-a',
+      reconnect: false,
+      requestTimeoutMs: 25,
+      webSocketFactory: () => fake,
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.sendCommand({
+      seq: 11,
+      baseRevision: 4,
+      command: {
+        type: 'transform',
+        payloadJson: '{}',
+      },
+    });
+    const assertion = expect(promise).rejects.toThrow('Scene command 11 timed out');
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    await assertion;
+    expect(socket.getPendingAckCount()).toBe(0);
+    expect(diagnostics).toEqual(
+      expect.arrayContaining(['scene-command-timeout', 'scene-control-resync-after-timeout']),
+    );
+    expect(parseSent(fake, 3)).toEqual({ type: 'resync', sceneId: 'scene-a' });
+    vi.useRealTimers();
+  });
+
+  it('rejects timed-out viewport commands without waiting forever', async () => {
+    vi.useFakeTimers();
+    const fake = new FakeWebSocket();
+    const diagnostics: string[] = [];
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      sceneId: 'scene-a',
+      reconnect: false,
+      requestTimeoutMs: 25,
+      webSocketFactory: () => fake,
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.sendViewportCommand({
+      protocolVersion: 1,
+      domain: 'viewport',
+      action: 'viewport:transform',
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      seq: 12,
+      correlationId: 'transform-12',
+      timestamp: 100,
+      source: 'user',
+      baseRevision: 4,
+      payload: {},
+    });
+    const assertion = expect(promise).rejects.toThrow(
+      'Viewport command transform-12 timed out',
+    );
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    await assertion;
+    expect(diagnostics).toEqual(
+      expect.arrayContaining(['viewport-command-timeout', 'scene-control-resync-after-timeout']),
+    );
+    expect(parseSent(fake, 3)).toEqual({ type: 'resync', sceneId: 'scene-a' });
+    vi.useRealTimers();
+  });
+
   it('resolves rejected command ack without applying a local delta', async () => {
     const fake = new FakeWebSocket();
     const onAck = vi.fn();
@@ -131,6 +211,44 @@ describe('SceneControlSocket', () => {
     await expect(promise).resolves.toEqual(ack);
     expect(onAck).toHaveBeenCalledWith(ack);
     expect(onDelta).not.toHaveBeenCalled();
+  });
+
+  it('reports superseded scene command acknowledgements distinctly from rejection', async () => {
+    const fake = new FakeWebSocket();
+    const diagnostics: string[] = [];
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      sceneId: 'scene-a',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onControlFlowDiagnostic: (diagnostic) => {
+        diagnostics.push(`${diagnostic.code}:${diagnostic.commandState ?? 'none'}`);
+      },
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.sendCommand({
+      seq: 9,
+      baseRevision: 4,
+      command: {
+        type: 'transform',
+        payloadJson: '{}',
+      },
+    });
+    const ack: Awaited<ReturnType<SceneControlSocket['sendCommand']>> = {
+      seq: 9,
+      appliedSeq: 8,
+      baseRevision: 4,
+      revision: 5,
+      status: 'superseded',
+      error: 'coalesced by newer transform',
+    };
+    fake.emit({ type: 'ack', ack });
+
+    await expect(promise).resolves.toEqual(ack);
+    expect(diagnostics).toContain('scene-command-superseded:superseded');
+    expect(diagnostics).not.toContain('scene-command-rejected:error');
   });
 
   it('resyncs after reconnect with last known revision', async () => {
@@ -583,5 +701,178 @@ describe('SceneControlSocket', () => {
         viewTransform: [1, 0, 0, 1, 0, 0],
       }),
     );
+  });
+
+  it('accepts scene-control viewport metadata events as the P1 metadata path', () => {
+    const fake = new FakeWebSocket();
+    const onViewportMetadata = vi.fn();
+    const onDiagnostic = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onViewportMetadata,
+      onControlFlowDiagnostic: onDiagnostic,
+    });
+    socket.connect();
+    fake.open();
+
+    const event = {
+      protocolVersion: 1,
+      type: 'viewportMetadata',
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      revision: 12,
+      appliedSeq: 21,
+      timestamp: 1770000000050,
+      transport: 'scene-control',
+      cadence: 'ack-correlated',
+      meta: {
+        protocolVersion: 1,
+        streamId: 'stream-main',
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        frameId: 21,
+        ptsUs: 66_666,
+        durationUs: 16_666,
+        frameTimestamp: 1770000000048,
+        revision: 12,
+        sceneRevision: 12,
+        appliedSeq: 21,
+        viewTransform: [1, 0, 0, 1, 0, 0],
+      },
+    };
+    fake.emit({ type: 'viewportMetadata', event });
+
+    expect(onViewportMetadata).toHaveBeenCalledWith(event);
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'scene-control-viewport-metadata',
+        metadataState: 'fresh',
+        revision: 12,
+        appliedSeq: 21,
+      }),
+    );
+  });
+
+  it('reports connection, ack-before-frame, stale metadata, and metadata delay diagnostics', async () => {
+    const fake = new FakeWebSocket();
+    const diagnostics: string[] = [];
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      sceneId: 'scene-a',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.sendCommand({
+      seq: 21,
+      baseRevision: 10,
+      command: {
+        type: 'transform',
+        payloadJson: '{}',
+      },
+    });
+    fake.emit({
+      type: 'ack',
+      ack: {
+        seq: 21,
+        appliedSeq: 21,
+        baseRevision: 10,
+        revision: 12,
+        status: 'applied',
+      },
+    });
+
+    await expect(promise).resolves.toMatchObject({ status: 'applied' });
+
+    fake.emit({
+      type: 'renderFrameMeta',
+      meta: {
+        streamId: 'stream-main',
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        frameId: 22,
+        ptsUs: 66_666,
+        durationUs: 16_666,
+        isKeyframe: true,
+        sceneRevision: 11,
+        appliedSeq: 20,
+        diagnostics: {
+          metadataState: 'delayed',
+          metadataDelayMs: 140,
+        },
+      },
+    });
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        'scene-control-connecting',
+        'scene-control-connected',
+        'scene-command-queued',
+        'scene-command-sent',
+        'scene-command-ack',
+        'scene-command-ack-before-frame',
+        'scene-control-render-frame-meta-delayed',
+        'scene-control-render-frame-meta-stale',
+      ]),
+    );
+  });
+
+  it('reports control failure while callers can keep video transport state separate', async () => {
+    const fake = new FakeWebSocket();
+    const diagnostics: string[] = [];
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      sceneId: 'scene-a',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.sendCommand({
+      seq: 31,
+      baseRevision: 2,
+      command: {
+        type: 'transform',
+        payloadJson: '{}',
+      },
+    });
+    fake.emit({
+      type: 'ack',
+      ack: {
+        seq: 31,
+        appliedSeq: 0,
+        baseRevision: 2,
+        revision: 3,
+        status: 'rejected',
+        error: 'unsupported transform',
+      },
+    });
+
+    await expect(promise).resolves.toMatchObject({ status: 'rejected' });
+
+    fake.emit({
+      type: 'renderFrameMeta',
+      meta: {
+        streamId: 'stream-main',
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        frameId: 32,
+        ptsUs: 83_333,
+        durationUs: 16_666,
+        isKeyframe: true,
+        sceneRevision: 3,
+        appliedSeq: 30,
+      },
+    });
+
+    expect(diagnostics).toContain('scene-command-rejected');
+    expect(diagnostics).not.toContain('scene-control-render-frame-meta-stale');
   });
 });

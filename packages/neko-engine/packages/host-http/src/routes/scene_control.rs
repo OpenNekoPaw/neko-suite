@@ -10,7 +10,10 @@ use neko_engine_kernel::contracts::scene::{
     AnimationPlaybackAction, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
     SceneCommandEvent, SceneCommandPhase, SceneDelta, TopologyOperation,
 };
-use neko_engine_types::{ViewportCommand, ViewportDomain, ViewportEvent};
+use neko_engine_types::{
+    ViewportCommand, ViewportDomain, ViewportEvent, ViewportFrameMeta,
+    ViewportMetadataCadence, ViewportMetadataEvent, ViewportMetadataTransport,
+};
 use neko_host_api::EngineApi;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -264,6 +267,20 @@ async fn handle_client_message(
             .await
         }
         SceneControlClientMessage::RequestKeyframe { viewport_id } => {
+            let scene_id = "default".to_string();
+            let viewport_id = viewport_id.unwrap_or_else(|| "main".to_string());
+            let revision = current_revision(engine);
+            if !send_json(
+                socket,
+                json!({
+                    "type": "viewportMetadata",
+                    "event": viewport_metadata_event(&scene_id, &viewport_id, revision, 0)
+                }),
+            )
+            .await
+            {
+                return false;
+            }
             send_json(
                 socket,
                 json!({
@@ -1032,6 +1049,49 @@ fn unsupported_viewport_command_event(command: &ViewportCommand, revision: u64) 
         }),
         payload: Value::Object(Default::default()),
     }
+}
+
+fn viewport_metadata_event(
+    scene_id: &str,
+    viewport_id: &str,
+    revision: u64,
+    applied_seq: u64,
+) -> ViewportMetadataEvent {
+    let timestamp = current_timestamp_ms();
+    ViewportMetadataEvent {
+        protocol_version: neko_engine_types::VIEWPORT_PROTOCOL_VERSION,
+        message_type: "viewportMetadata".to_string(),
+        scene_id: scene_id.to_string(),
+        viewport_id: viewport_id.to_string(),
+        revision,
+        applied_seq,
+        timestamp,
+        transport: ViewportMetadataTransport::SceneControl,
+        cadence: ViewportMetadataCadence::OnDemand,
+        meta: ViewportFrameMeta {
+            protocol_version: neko_engine_types::VIEWPORT_PROTOCOL_VERSION,
+            stream_id: format!("scene-control:{scene_id}:{viewport_id}"),
+            scene_id: scene_id.to_string(),
+            viewport_id: viewport_id.to_string(),
+            frame_id: 0,
+            pts_us: 0,
+            duration_us: 0,
+            frame_timestamp: timestamp,
+            revision,
+            scene_revision: Some(revision),
+            applied_seq,
+            view_transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            projection: None,
+            diagnostics: Default::default(),
+        },
+    }
+}
+
+fn current_timestamp_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs_f64() * 1000.0)
+        .unwrap_or_default()
 }
 
 async fn send_viewport_event(
@@ -2462,6 +2522,28 @@ mod tests {
         assert_eq!(error["status"], "error");
         assert_eq!(error["error"]["code"], "unsupportedViewportCommand");
         assert_eq!(error["ackSeq"], 15);
+    }
+
+    #[test]
+    fn viewport_metadata_event_serializes_scene_control_p1_contract() {
+        let event = viewport_metadata_event("scene-a", "main", 12, 21);
+        let value = serde_json::to_value(&event).unwrap();
+
+        assert_eq!(value["protocolVersion"], 1);
+        assert_eq!(value["type"], "viewportMetadata");
+        assert_eq!(value["transport"], "scene-control");
+        assert_eq!(value["cadence"], "on-demand");
+        assert_eq!(value["sceneId"], "scene-a");
+        assert_eq!(value["viewportId"], "main");
+        assert_eq!(value["revision"], 12);
+        assert_eq!(value["appliedSeq"], 21);
+        assert_eq!(value["meta"]["revision"], 12);
+        assert_eq!(value["meta"]["appliedSeq"], 21);
+
+        let round_tripped: ViewportMetadataEvent = serde_json::from_value(value).unwrap();
+        assert_eq!(round_tripped.transport, ViewportMetadataTransport::SceneControl);
+        assert_eq!(round_tripped.cadence, ViewportMetadataCadence::OnDemand);
+        assert_eq!(round_tripped.meta.view_transform, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
     }
 
     #[test]

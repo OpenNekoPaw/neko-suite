@@ -147,6 +147,46 @@ impl ViewportFrameMeta {
     }
 }
 
+/// Scene-control metadata event used by the P1 metadata migration path.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewportMetadataEvent {
+    pub protocol_version: u16,
+    #[serde(rename = "type")]
+    pub message_type: String,
+    pub scene_id: String,
+    pub viewport_id: String,
+    pub revision: u64,
+    pub applied_seq: u64,
+    pub timestamp: f64,
+    pub transport: ViewportMetadataTransport,
+    pub cadence: ViewportMetadataCadence,
+    pub meta: ViewportFrameMeta,
+}
+
+/// Metadata event transport. P0 keeps video sideband; P1 mirrors through scene-control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ViewportMetadataTransport {
+    SceneControl,
+}
+
+/// Emission cadence for scene-control metadata events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ViewportMetadataCadence {
+    AckCorrelated,
+    Periodic,
+    OnDemand,
+}
+
+impl ViewportMetadataEvent {
+    /// Returns true when the metadata event can be handled by this protocol version.
+    pub fn has_supported_protocol_version(&self) -> bool {
+        self.protocol_version == VIEWPORT_PROTOCOL_VERSION
+    }
+}
+
 fn default_payload() -> Value {
     Value::Object(Default::default())
 }
@@ -163,6 +203,7 @@ mod tests {
         ack_event: ViewportEvent,
         error_event: ViewportEvent,
         frame_meta: ViewportFrameMeta,
+        metadata_event: ViewportMetadataEvent,
     }
 
     fn fixture() -> ViewportProtocolFixture {
@@ -200,10 +241,21 @@ mod tests {
         assert_eq!(fixture.frame_meta.scene_revision, Some(11));
         assert_eq!(fixture.frame_meta.applied_seq, 42);
         assert_eq!(fixture.frame_meta.view_transform, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(fixture.metadata_event.message_type, "viewportMetadata");
+        assert_eq!(fixture.metadata_event.transport, ViewportMetadataTransport::SceneControl);
+        assert_eq!(fixture.metadata_event.cadence, ViewportMetadataCadence::AckCorrelated);
+        assert_eq!(fixture.metadata_event.revision, 11);
+        assert_eq!(fixture.metadata_event.applied_seq, 42);
+        assert_eq!(fixture.metadata_event.meta, fixture.frame_meta);
+        assert!(fixture.metadata_event.has_supported_protocol_version());
 
         let encoded = serde_json::to_string(&fixture.frame_meta).unwrap();
         let round_tripped: ViewportFrameMeta = serde_json::from_str(&encoded).unwrap();
         assert_eq!(round_tripped, fixture.frame_meta);
+
+        let encoded = serde_json::to_string(&fixture.metadata_event).unwrap();
+        let round_tripped: ViewportMetadataEvent = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(round_tripped, fixture.metadata_event);
     }
 
     #[test]
