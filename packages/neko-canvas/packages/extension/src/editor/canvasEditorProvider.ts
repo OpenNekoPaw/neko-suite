@@ -136,6 +136,21 @@ function readCanvasSubsystemSummary(
   return summary.activeSubsystems.length > 0 ? summary.activeSubsystems.join(', ') : undefined;
 }
 
+function readCanvasProjectionSummary(canvasData: Record<string, unknown>): string | undefined {
+  const projectionStatus = canvasData.projectionStatus;
+  if (!projectionStatus || typeof projectionStatus !== 'object' || Array.isArray(projectionStatus)) {
+    return undefined;
+  }
+  const status = projectionStatus as { state?: unknown; message?: unknown };
+  if (typeof status.state !== 'string' || status.state.length === 0) {
+    return undefined;
+  }
+
+  return typeof status.message === 'string' && status.message.length > 0
+    ? `Projected: ${status.state} - ${status.message}`
+    : `Projected: ${status.state}`;
+}
+
 function createProjectionSourceKey(source: ProjectedCanvasSource): string {
   return `${source.kind}:${source.uri}`;
 }
@@ -2820,6 +2835,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const selection = (canvasData._selection ?? {}) as Record<string, unknown>;
     const selectedNodeIds = (selection.nodeIds ?? []) as unknown[];
     const subsystemSummary = readCanvasSubsystemSummary(canvasData, nodes);
+    const projectionSummary = readCanvasProjectionSummary(canvasData);
 
     this.statusBar.update({
       nodeCount: nodes.length,
@@ -2827,6 +2843,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       zoom: Number(viewport.zoom ?? 1),
       selectedCount: selectedNodeIds.length,
       subsystemSummary,
+      projectionSummary,
     });
   }
 

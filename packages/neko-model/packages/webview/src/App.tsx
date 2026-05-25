@@ -28,12 +28,14 @@ import type {
 import type { SceneCommandEnvelope } from '@neko/shared';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
 import { postMessage } from '@neko/shared/vscode';
+import { ResizeHandle, usePersistedResize, useResizable } from '@neko/shared/components';
 import { EngineClient, type SceneControlSocket } from '@neko/neko-client';
 import { ModelController } from './viewport/ModelController';
 import type { EditableNodeTransform } from './scene/SceneEditingTypes';
 import type { LocalPredictionInput } from './scene/LocalPredictionLayer';
 import type { ShapeType } from './types/shapeParams';
 import { modelErrorMessage, toError, webviewErrorHandler } from './platform/errors';
+import { MODEL_RESIZE_PANELS } from './layout/modelResizeLayout';
 
 /**
  * Root application component for the 3D Model Editor webview.
@@ -53,6 +55,7 @@ export function App(): React.JSX.Element {
   const sceneNodes = useModelStore((s) => s.sceneNodes);
   const sceneRevision = useModelStore((s) => s.sceneRevision);
   const sceneControlStatus = useModelStore((s) => s.sceneControlStatus);
+  const sceneControlError = useModelStore((s) => s.sceneControlError);
   const hasPendingPrediction = useModelStore((s) => s.pendingTransformPredictions.length > 0);
   const localPredictions = useModelStore((s) => s.localPredictions);
   const viewportOverlay = useModelStore((s) => s.viewportOverlay);
@@ -400,6 +403,26 @@ export function App(): React.JSX.Element {
   }, [applyWebviewVisibility, sendEditorCameraToEngine]);
 
   const selectedNode = sceneNodes.find((n) => n.nodeId === selectedNodeId) ?? null;
+  const selectedNodeName = selectedNode?.name ?? null;
+  useEffect(() => {
+    postMessage({
+      type: 'modelStatus',
+      selectedNodeName,
+      objectCount: sceneNodes.length,
+      sceneControlStatus,
+      sceneControlError,
+      hasPendingPrediction,
+      enginePort,
+    } satisfies WebviewMessage);
+  }, [
+    enginePort,
+    hasPendingPrediction,
+    sceneControlError,
+    sceneControlStatus,
+    sceneNodes.length,
+    selectedNodeName,
+  ]);
+
   const selectedCharacterId = resolveSelectedCharacterId(selectedNodeId, sceneNodes);
   const selectedTopologyVersion = selectedCharacterId
     ? (characterTopologyVersions[selectedCharacterId] ?? 0)
@@ -888,7 +911,6 @@ export function App(): React.JSX.Element {
   const shouldRenderEngineViewport = enginePort !== null;
   const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
   const panelCommandDisabled = sceneControlStatus !== 'ready';
-  const selectedNodeName = selectedNode?.name ?? null;
 
   const propertiesPanel = isExpressionPresetOpen ? (
     <ExpressionPresetPanel
@@ -950,14 +972,6 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="model-workbench h-screen w-screen overflow-hidden">
-      <WorkbenchTopBar
-        enginePort={enginePort}
-        hasPendingPrediction={hasPendingPrediction}
-        routeAReady={routeAReady}
-        sceneControlStatus={sceneControlStatus}
-        sceneNodeCount={sceneNodes.length}
-        selectedNodeName={selectedNodeName}
-      />
       <div className="model-workbench-body">
         <main className="model-viewport-area">
           <div className="model-viewport-shell">
@@ -1015,7 +1029,7 @@ export function App(): React.JSX.Element {
           properties={propertiesPanel}
         />
       </div>
-      <TimelineDock expanded={isKeyframeEditorOpen}>
+      <TimelineDock key={isKeyframeEditorOpen ? 'expanded' : 'compact'} expanded={isKeyframeEditorOpen}>
         {isKeyframeEditorOpen ? (
           <ModelKeyframeTimeline
             disabled={!routeAReady}
@@ -1046,52 +1060,6 @@ export function App(): React.JSX.Element {
   );
 }
 
-type SceneControlStatusView = 'disconnected' | 'connecting' | 'ready' | 'error';
-
-interface WorkbenchTopBarProps {
-  enginePort: number | null;
-  hasPendingPrediction: boolean;
-  routeAReady: boolean;
-  sceneControlStatus: SceneControlStatusView;
-  sceneNodeCount: number;
-  selectedNodeName: string | null;
-}
-
-function WorkbenchTopBar({
-  enginePort,
-  hasPendingPrediction,
-  routeAReady,
-  sceneControlStatus,
-  sceneNodeCount,
-  selectedNodeName,
-}: WorkbenchTopBarProps): React.JSX.Element {
-  const { t } = useTranslation();
-  const transportLabel =
-    enginePort === null
-      ? t('workbench.engineOffline')
-      : t('workbench.enginePort', { port: enginePort });
-  const statusTone = routeAReady
-    ? 'model-status-ready'
-    : sceneControlStatus === 'error'
-      ? 'model-status-error'
-      : 'model-status-waiting';
-
-  return (
-    <header className="model-workbench-topbar">
-      <div className="model-menu-strip">
-        <span className="model-app-title">Neko Model</span>
-      </div>
-      <div className="model-topbar-status">
-        <span className="truncate">{selectedNodeName ?? t('workbench.noSelection')}</span>
-        <span>{t('workbench.objectCount', { count: sceneNodeCount })}</span>
-        <span className={statusTone}>
-          {hasPendingPrediction ? t('workbench.syncing') : transportLabel}
-        </span>
-      </div>
-    </header>
-  );
-}
-
 interface RightDockProps {
   outliner: React.ReactNode;
   properties: React.ReactNode;
@@ -1099,17 +1067,71 @@ interface RightDockProps {
 
 function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element {
   const { t } = useTranslation();
+  const dockSpec = MODEL_RESIZE_PANELS.rightDock;
+  const outlinerSpec = MODEL_RESIZE_PANELS.outlinerSplit;
+  const dockResize = usePersistedResize(dockSpec.panelId, dockSpec.defaultSize, {
+    minSize: dockSpec.minSize,
+    maxSize: dockSpec.maxSize,
+  });
+  const outlinerResize = usePersistedResize(outlinerSpec.panelId, outlinerSpec.defaultSize, {
+    minSize: outlinerSpec.minSize,
+    maxSize: outlinerSpec.maxSize,
+  });
+  const {
+    containerRef: dockResizeRef,
+    handleProps: dockHandleProps,
+    isResizing: isDockResizing,
+  } = useResizable<HTMLElement>({
+    edge: 'right',
+    mode: 'pixel',
+    size: dockResize.size,
+    minSize: dockSpec.minSize,
+    maxSize: dockSpec.maxSize,
+    onSizeChange: dockResize.setSize,
+  });
+  const {
+    containerRef: splitResizeRef,
+    handleProps: splitHandleProps,
+    isResizing: isSplitResizing,
+  } = useResizable<HTMLDivElement>({
+    edge: 'top',
+    mode: 'pixel',
+    size: outlinerResize.size,
+    minSize: outlinerSpec.minSize,
+    maxSize: outlinerSpec.maxSize,
+    onSizeChange: outlinerResize.setSize,
+    calculateSize: (event, containerRect) => event.clientY - containerRect.top,
+  });
 
   return (
-    <aside className="model-right-dock">
-      <section className="model-dock-pane model-outliner-pane">
-        <div className="model-dock-title">{t('workbench.outliner')}</div>
-        <div className="model-dock-content">{outliner}</div>
-      </section>
-      <section className="model-dock-pane model-properties-pane">
-        <div className="model-dock-title">{t('workbench.properties')}</div>
-        <div className="model-dock-content">{properties}</div>
-      </section>
+    <aside
+      ref={dockResizeRef}
+      className="model-right-dock"
+      style={{ width: dockResize.size }}
+      data-resizing={isDockResizing ? 'true' : 'false'}
+    >
+      <ResizeHandle
+        handleProps={dockHandleProps}
+        className="model-resize-handle model-right-dock-resize-handle"
+      />
+      <div ref={splitResizeRef} className="model-right-dock-stack">
+        <section
+          className="model-dock-pane model-outliner-pane"
+          style={{ height: outlinerResize.size }}
+          data-resizing={isSplitResizing ? 'true' : 'false'}
+        >
+          <div className="model-dock-title">{t('workbench.outliner')}</div>
+          <div className="model-dock-content">{outliner}</div>
+        </section>
+        <ResizeHandle
+          handleProps={splitHandleProps}
+          className="model-resize-handle model-outliner-resize-handle"
+        />
+        <section className="model-dock-pane model-properties-pane">
+          <div className="model-dock-title">{t('workbench.properties')}</div>
+          <div className="model-dock-content">{properties}</div>
+        </section>
+      </div>
     </aside>
   );
 }
@@ -1121,8 +1143,37 @@ function TimelineDock({
   expanded: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const timelineSpec = expanded
+    ? MODEL_RESIZE_PANELS.timelineExpanded
+    : MODEL_RESIZE_PANELS.timelineCompact;
+  const timelineResize = usePersistedResize(timelineSpec.panelId, timelineSpec.defaultSize, {
+    minSize: timelineSpec.minSize,
+    maxSize: timelineSpec.maxSize,
+  });
+  const {
+    containerRef,
+    handleProps,
+    isResizing,
+  } = useResizable<HTMLElement>({
+    edge: 'bottom',
+    mode: 'pixel',
+    size: timelineResize.size,
+    minSize: timelineSpec.minSize,
+    maxSize: timelineSpec.maxSize,
+    onSizeChange: timelineResize.setSize,
+  });
+
   return (
-    <footer className={expanded ? 'model-timeline-dock expanded' : 'model-timeline-dock'}>
+    <footer
+      ref={containerRef}
+      className={expanded ? 'model-timeline-dock expanded' : 'model-timeline-dock'}
+      style={{ height: timelineResize.size }}
+      data-resizing={isResizing ? 'true' : 'false'}
+    >
+      <ResizeHandle
+        handleProps={handleProps}
+        className="model-resize-handle model-timeline-resize-handle"
+      />
       {children}
     </footer>
   );

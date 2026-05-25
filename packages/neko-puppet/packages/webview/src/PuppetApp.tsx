@@ -24,15 +24,17 @@ import { i18nService, setLocale } from './i18n';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import type { NkpNativeProjectData, SupportedLocale } from '@neko/shared';
 import type { ViewportFrameMeta, ViewportMenuItem } from '@neko/shared';
+import { ResizeHandle, usePersistedResize, useResizable } from '@neko/shared/components';
 import { EngineClient } from '@neko/neko-client';
 import { OverlayRenderer, ViewportShell, ViewportToolbar } from '@neko/ui';
+import { PUPPET_RIGHT_PANEL_RESIZE } from './layout/puppetResizeLayout';
 
 // Acquire VSCode API once
 const vscode = (window as unknown as { acquireVsCodeApi: () => VsCodeApi }).acquireVsCodeApi();
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
-  getState(): unknown;
+  getState<T = unknown>(): T | undefined;
   setState(state: unknown): void;
 }
 
@@ -388,6 +390,29 @@ export function PuppetApp() {
   const handlePuppetContextMenuAction = useCallback((item: ViewportMenuItem) => {
     handlePuppetMenuAction(item);
   }, []);
+  const rightPanelResize = usePersistedResize(
+    PUPPET_RIGHT_PANEL_RESIZE.panelId,
+    PUPPET_RIGHT_PANEL_RESIZE.defaultSize,
+    {
+      minSize: PUPPET_RIGHT_PANEL_RESIZE.minSize,
+      maxSize: PUPPET_RIGHT_PANEL_RESIZE.maxSize,
+    },
+    {
+      api: vscode,
+    },
+  );
+  const {
+    containerRef: rightPanelResizeRef,
+    handleProps: rightPanelResizeHandleProps,
+    isResizing: isRightPanelResizing,
+  } = useResizable<HTMLDivElement>({
+    edge: 'right',
+    mode: 'pixel',
+    size: rightPanelResize.size,
+    minSize: PUPPET_RIGHT_PANEL_RESIZE.minSize,
+    maxSize: PUPPET_RIGHT_PANEL_RESIZE.maxSize,
+    onSizeChange: rightPanelResize.setSize,
+  });
 
   useEffect(() => {
     window.addEventListener('message', handleMessage);
@@ -464,7 +489,16 @@ export function PuppetApp() {
           )}
 
           {/* Right side panels */}
-          <div className="flex flex-col w-60 border-l border-[var(--sketch-border)] overflow-y-auto">
+          <div
+            ref={rightPanelResizeRef}
+            className="puppet-right-panel"
+            style={{ width: rightPanelResize.size }}
+            data-resizing={isRightPanelResizing ? 'true' : 'false'}
+          >
+            <ResizeHandle
+              handleProps={rightPanelResizeHandleProps}
+              className="puppet-resize-handle puppet-right-panel-resize-handle"
+            />
             {puppetLoaded && (
               <>
                 <PuppetNodeTree />

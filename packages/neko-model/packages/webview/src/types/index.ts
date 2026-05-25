@@ -10,6 +10,7 @@ import type { VRMExpressionPreset } from './vrmExpressions';
 export type { SceneDelta, SceneSnapshot };
 export type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
 export type AnimationClipInfo = SceneSnapshot['animations'][number];
+export type SceneControlStatusView = 'disconnected' | 'connecting' | 'ready' | 'error';
 
 /** Transform mode for gizmo */
 export type TransformMode = 'translate' | 'rotate' | 'scale';
@@ -39,6 +40,15 @@ export type ExtensionMessage =
 export type WebviewMessage =
   | { type: 'ready' }
   | { type: 'requestEnginePort' }
+  | {
+      type: 'modelStatus';
+      selectedNodeName: string | null;
+      objectCount: number;
+      sceneControlStatus: SceneControlStatusView;
+      sceneControlError?: string | null;
+      hasPendingPrediction: boolean;
+      enginePort: number | null;
+    }
   | {
       type: 'updateTransform';
       nodeId: string;

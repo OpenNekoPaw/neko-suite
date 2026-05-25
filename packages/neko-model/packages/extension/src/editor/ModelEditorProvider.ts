@@ -23,6 +23,8 @@ import {
   injectLocaleAttribute,
 } from '@neko/shared/vscode/extension';
 import { ModelDocument } from './ModelDocument';
+import type { ModelStatusProjection, ModelStatusSnapshot } from './modelStatusProjection';
+import { getDefaultModelStatusSnapshot } from './modelStatusProjection';
 import {
   createModelImportConflictPath,
   createModelProjectImportPlan,
@@ -58,7 +60,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private lastSceneSnapshot: EngineSceneSnapshot | undefined;
   private activeModelPath: string | undefined;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly statusProjection?: ModelStatusProjection,
+  ) {}
 
   openCustomDocument(
     uri: vscode.Uri,
@@ -121,6 +126,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       this.activeDocument = undefined;
       this.activeModelPath = undefined;
       this.lastSceneSnapshot = undefined;
+      this.resetStatusProjection();
       this.destroyActiveStream('dispose:destroyStream', generation);
     });
 
@@ -288,6 +294,14 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
           this.activeStream.generation === generation
         ) {
           this.activeStream = undefined;
+        }
+        break;
+      }
+
+      case 'modelStatus': {
+        const status = parseModelStatusSnapshot(message);
+        if (status) {
+          this.statusProjection?.update(status);
         }
         break;
       }
@@ -1075,6 +1089,10 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     return true;
   }
 
+  private resetStatusProjection(): void {
+    this.statusProjection?.update(getDefaultModelStatusSnapshot());
+  }
+
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
     const webviewDistUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
@@ -1183,6 +1201,35 @@ export function isEngineSceneSnapshot(value: unknown): value is EngineSceneSnaps
   return activeCamera === undefined || isEngineCameraState(activeCamera);
 }
 
+function parseModelStatusSnapshot(value: unknown): ModelStatusSnapshot | null {
+  if (!isRecord(value)) return null;
+  if (value['type'] !== 'modelStatus') return null;
+  if (!isOptionalStringOrNull(value['selectedNodeName'])) return null;
+  if (!isFiniteNumber(value['objectCount'])) return null;
+  if (!isModelSceneControlStatus(value['sceneControlStatus'])) return null;
+  if (!isOptionalStringOrNull(value['sceneControlError'])) return null;
+  if (typeof value['hasPendingPrediction'] !== 'boolean') return null;
+  if (!isOptionalFiniteNumberOrNull(value['enginePort'])) return null;
+
+  return {
+    selectedNodeName: value['selectedNodeName'] ?? null,
+    objectCount: value['objectCount'],
+    sceneControlStatus: value['sceneControlStatus'],
+    sceneControlError: value['sceneControlError'] ?? null,
+    hasPendingPrediction: value['hasPendingPrediction'],
+    enginePort: value['enginePort'] ?? null,
+  };
+}
+
+function isModelSceneControlStatus(value: unknown): value is ModelStatusSnapshot['sceneControlStatus'] {
+  return (
+    value === 'disconnected' ||
+    value === 'connecting' ||
+    value === 'ready' ||
+    value === 'error'
+  );
+}
+
 function isEngineSceneNodeSnapshot(value: unknown): value is EngineSceneNodeSnapshot {
   if (!isRecord(value)) return false;
   if (!isNonEmptyString(value['nodeId'])) return false;
@@ -1275,6 +1322,10 @@ function isOptionalString(value: unknown): boolean {
   return value === undefined || isString(value);
 }
 
+function isOptionalStringOrNull(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || isString(value);
+}
+
 function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
@@ -1285,6 +1336,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isOptionalFiniteNumber(value: unknown): boolean {
   return value === undefined || isFiniteNumber(value);
+}
+
+function isOptionalFiniteNumberOrNull(value: unknown): value is number | null | undefined {
+  return value === undefined || value === null || isFiniteNumber(value);
 }
 
 function isFiniteNumber(value: unknown): value is number {

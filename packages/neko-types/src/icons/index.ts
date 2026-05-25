@@ -9,6 +9,8 @@ export {
   VolumeIcon,
   VolumeOffIcon,
   VolumeLowIcon,
+  CameraIcon,
+  PictureInPictureIcon,
 } from './media';
 
 export {
@@ -32,6 +34,7 @@ export {
   TrashIcon,
   SearchIcon,
   CloseIcon,
+  MoreHorizontalIcon,
 } from './action';
 
 export { ErrorIcon, WarningIcon, SuccessIcon, LoadingIcon, InfoIcon } from './status';

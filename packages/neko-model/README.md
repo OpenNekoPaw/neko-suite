@@ -4,6 +4,8 @@
 
 neko-model 的实时 3D 视口是 Engine-only Route A：Webview 通过 `EngineClient.startSceneRenderStream()` 获取 `RenderStreamDescriptor`，再由 `VideoViewport` 使用 `H264StreamClient` 和 WebCodecs 解码 raw H.264 帧。可见 3D 内容只来自 Engine 帧，`OverlayCanvas` 和 `InteractionLayer` 负责选中框、gizmo、hit-test、projected bounds、本地预测和诊断信息。
 
+布局上，Model Webview 不再渲染 `WorkbenchTopBar`。选中节点、对象数量和 Engine 状态投射到 VSCode 原生 StatusBar，右侧 Dock、Outliner/Properties 分割线以及 Timeline 高度由 Webview 内 ResizeHandle 调整，并通过 Webview state 恢复上次尺寸。
+
 Webview 不再内置 R3F/Three.js 可见模型 fallback。`R3FDevelopmentFallback`、`Viewport3D`、`ModelLoader` 和 R3F `TransformGizmo` 已从 Route A webview 移除；`@react-three/*`、`three`、`@pixiv/three-vrm` 不能作为 `@neko-model/webview` 依赖重新引入。WebCodecs 或 Engine stream 不可用时，UI 必须进入明确的 Route A unavailable 状态；`scenes:capture` 只能作为非交互质量预览 overlay，不得替代实时 Engine stream。
 
 短生命周期预测或辅助 overlay 必须以 2D overlay / gizmo anchor / projected bounds 形式表达，携带 viewportId、sceneRevision、seq，以及必要的 sessionId/topologyVersion，并在 ack、SceneDelta、TopologyChangeEvent 或 RenderFrameMeta 对齐后清除。预测层不得解析源 glTF、不得运行第二套 PBR/材质/动画渲染器，也不得覆盖 Engine 视频流持续显示。

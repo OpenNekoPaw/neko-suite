@@ -16,6 +16,7 @@
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/platform`、`@neko/shared`、`@neko/neko-client`、`sharp`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
+- **布局**：PreviewControls 保留播放/时间码为主控件，Quality/Speed 收入 Settings，FPS/Screenshot/PiP 收入溢出菜单；右侧 PropertyPanel 宽度约束为 200-400px。
 
 ## Architecture
 

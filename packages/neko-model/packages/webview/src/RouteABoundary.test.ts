@@ -134,7 +134,6 @@ describe('Route A webview boundaries', () => {
       expect(css, token).toMatch(new RegExp(`${token}:`));
     }
     expect(css).toMatch(/background: var\(--model-workbench-bg\)/);
-    expect(css).toMatch(/background: var\(--model-topbar-bg\)/);
     expect(css).toMatch(/background: var\(--model-viewport-bg\)/);
     expect(css).toMatch(/background: var\(--model-dock-bg\)/);
     expect(css).toMatch(/background: var\(--model-timeline-bg\)/);
@@ -143,6 +142,20 @@ describe('Route A webview boundaries', () => {
     expect(guideOverlay).toMatch(/getComputedStyle/);
     expect(guideOverlay).toMatch(/MutationObserver/);
     expect(guideOverlay).toMatch(/--model-guide-widget-bg/);
+  });
+
+  it('removes the Webview WorkbenchTopBar after native status projection', () => {
+    const app = readSource('App.tsx');
+    const css = readSource('index.css');
+    const extension = readSource('../../extension/src/extension.ts');
+    const provider = readSource('../../extension/src/editor/ModelEditorProvider.ts');
+
+    expect(app).not.toMatch(/WorkbenchTopBar/);
+    expect(app).toMatch(/type: 'modelStatus'/);
+    expect(app).toMatch(/selectedNodeName/);
+    expect(css).not.toMatch(/\.model-workbench-topbar/);
+    expect(extension).toMatch(/new ModelStatusBar\(\)/);
+    expect(provider).toMatch(/case 'modelStatus'/);
   });
 
   it('sizes Route A stream from the actual webview viewport instead of a fixed canvas', () => {

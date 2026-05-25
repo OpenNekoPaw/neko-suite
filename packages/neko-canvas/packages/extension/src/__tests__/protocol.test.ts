@@ -262,4 +262,22 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('export class CanvasEditorProvider');
     });
   });
+
+  describe('Layout status migration', () => {
+    it('projects subsystem and projection status to the native status bar', () => {
+      const statusSource = readFileSync(join(__dirname, '../views/canvasStatusBar.ts'), 'utf-8');
+
+      expect(providerSource).toContain('readCanvasProjectionSummary(canvasData)');
+      expect(providerSource).toContain('projectionSummary,');
+      expect(canvasAppSource).toContain('projectionStatus,');
+      expect(statusSource).toContain('neko.canvas.context');
+      expect(statusSource).toContain('contextParts.join');
+    });
+
+    it('removes lower-left Canvas surface status overlays', () => {
+      expect(canvasAppSource).not.toContain('absolute left-3 bottom-3');
+      expect(canvasAppSource).not.toContain('absolute left-3 bottom-10');
+      expect(canvasAppSource).not.toContain('formatProjectionStatus(');
+    });
+  });
 });

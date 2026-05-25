@@ -13,6 +13,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
+      '@neko/neko-client': path.resolve(__dirname, '../../../neko-client/src'),
     },
   },
 });

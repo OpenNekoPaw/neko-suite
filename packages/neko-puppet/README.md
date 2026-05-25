@@ -16,6 +16,7 @@
 - **依赖**：`@neko/shared`、`@neko/neko-client`（通过 EngineClient 访问 runtime-puppet）
 - **激活依赖**：`neko-engine`（extensionDependency，runtime-puppet sidecar）
 - **文件格式**：`.nkp`（JSON 项目）、`.moc3`（Live2D MOC3 二进制）
+- **布局**：右侧 NodeTree / Parameters / ControlDrivers / Animation 面板栈使用可持久化 ResizeHandle，默认 280px，宽度约束为 200-400px。
 
 ## Architecture
 

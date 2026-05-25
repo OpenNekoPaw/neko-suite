@@ -886,6 +886,118 @@ body[data-vscode-theme-kind="vscode-light"] .nk-select {
 }
 
 /* =============================================================================
+   Preview Controls — narrow layout overflow
+   ============================================================================= */
+
+.cut-preview-controls {
+  min-width: 0;
+  min-height: 37px;
+  overflow: visible;
+  color: var(--vscode-foreground);
+}
+
+.cut-preview-primary-controls {
+  min-width: max-content;
+}
+
+.cut-preview-secondary-controls {
+  overflow: visible;
+}
+
+.cut-preview-volume {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .cut-preview-volume input[type='range'],
+  .cut-preview-volume span {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .cut-preview-volume {
+    display: none;
+  }
+}
+
+.cut-preview-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  z-index: 50;
+  min-width: 188px;
+  padding: 6px;
+  color: var(--vscode-menu-foreground, var(--vscode-foreground));
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+  border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  box-shadow: 0 6px 18px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+}
+
+.cut-preview-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 30px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cut-preview-menu-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 7px;
+  color: var(--vscode-menu-foreground, var(--vscode-foreground));
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.cut-preview-menu-button:hover:not(:disabled) {
+  background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+  color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
+}
+
+.cut-preview-menu-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cut-preview-menu-button[aria-pressed='true'] {
+  color: var(--vscode-button-background);
+}
+
+.cut-preview-fps-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cut-preview-spinner {
+  animation: cut-preview-spin 0.9s linear infinite;
+}
+
+@keyframes cut-preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =============================================================================
    Property Panel — inspector chrome
    ============================================================================= */
 

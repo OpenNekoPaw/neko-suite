@@ -407,26 +407,6 @@ export function CanvasApp() {
     [reportAction],
   );
 
-  const handleProjectionHealthCheck = useCallback(() => {
-    if (!canvasData?.projected) return;
-    void requestProjectionWriteBack([]).then(
-      () => {
-        useCanvasStore.getState().updateCanvasData({
-          projectionStatus: { state: 'clean', updatedAt: Date.now() },
-        } as Partial<CanvasData>);
-      },
-      (error) => {
-        useCanvasStore.getState().updateCanvasData({
-          projectionStatus: {
-            state: 'writeback-error',
-            message: error instanceof Error ? error.message : String(error),
-            updatedAt: Date.now(),
-          },
-        } as Partial<CanvasData>);
-      },
-    );
-  }, [canvasData?.projected, requestProjectionWriteBack]);
-
   // =========================================================================
   // Drag & Drop
   // =========================================================================
@@ -674,24 +654,6 @@ export function CanvasApp() {
   // Canvas container is only mounted once isReady=true, so deps=[isReady] ensures
   // the ResizeObserver is attached after the element appears in the DOM.
   // =========================================================================
-
-  useEffect(() => {
-    if (!vscode) return;
-    const handleMessage = (event: MessageEvent) => {
-      const message = event.data as { type?: unknown; _requestId?: unknown; error?: unknown };
-      if (message.type !== '_response' || typeof message._requestId !== 'number') return;
-      const pending = projectionResolversRef.current.get(message._requestId);
-      if (!pending) return;
-      projectionResolversRef.current.delete(message._requestId);
-      if (typeof message.error === 'string') {
-        pending.reject(new Error(message.error));
-      } else {
-        pending.resolve(event.data);
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
 
   useEffect(() => {
     const container = canvasContainerRef.current;
@@ -993,8 +955,28 @@ export function CanvasApp() {
 
   const lastSyncRef = useRef<string>('');
   useEffect(() => {
+    if (!vscode) return;
+    const handleMessage = (event: MessageEvent) => {
+      const message = event.data as { type?: unknown; _requestId?: unknown; error?: unknown };
+      if (message.type !== '_response' || typeof message._requestId !== 'number') return;
+      const pending = projectionResolversRef.current.get(message._requestId);
+      if (!pending) return;
+      projectionResolversRef.current.delete(message._requestId);
+      if (typeof message.error === 'string') {
+        pending.reject(new Error(message.error));
+      } else {
+        pending.resolve(event.data);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  useEffect(() => {
     if (!vscode || !canvasData) return;
-    const fingerprint = `${nodes.length}:${connections.length}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}:${activeSubsystemKey}`;
+    const projectionStatus = (canvasData as { projectionStatus?: ProjectedCanvasStatus })
+      .projectionStatus;
+    const fingerprint = `${nodes.length}:${connections.length}:${viewport.zoom.toFixed(2)}:${selectedNodeIds.join(',')}:${activeSubsystemKey}:${projectionStatus?.state ?? 'none'}:${projectionStatus?.message ?? ''}`;
     if (fingerprint === lastSyncRef.current) return;
     lastSyncRef.current = fingerprint;
     vscode.postMessage({
@@ -1008,6 +990,7 @@ export function CanvasApp() {
           activeSubsystems: activeSubsystemIds,
           nodeTypeSummary,
         },
+        projectionStatus,
       },
     });
   }, [
@@ -1020,6 +1003,30 @@ export function CanvasApp() {
     activeSubsystemKey,
     nodeTypeSummary,
   ]);
+
+  const projectionHealthKey = canvasData?.projected
+    ? JSON.stringify((canvasData as { projectionSource?: unknown }).projectionSource ?? null)
+    : '';
+
+  useEffect(() => {
+    if (!projectionHealthKey) return;
+    void requestProjectionWriteBack([]).then(
+      () => {
+        useCanvasStore.getState().updateCanvasData({
+          projectionStatus: { state: 'clean', updatedAt: Date.now() },
+        } as Partial<CanvasData>);
+      },
+      (error) => {
+        useCanvasStore.getState().updateCanvasData({
+          projectionStatus: {
+            state: 'writeback-error',
+            message: error instanceof Error ? error.message : String(error),
+            updatedAt: Date.now(),
+          },
+        } as Partial<CanvasData>);
+      },
+    );
+  }, [projectionHealthKey, requestProjectionWriteBack]);
 
   // =========================================================================
   // Notify extension of selection changes for ambient agent context
@@ -1305,36 +1312,6 @@ export function CanvasApp() {
 
           <FloatingPanelHost panels={floatingPanels} />
 
-          <div
-            className="absolute left-3 bottom-3 z-10 rounded px-2 py-1 text-xs pointer-events-none"
-            style={{
-              backgroundColor: 'var(--glass-bg-light)',
-              border: '1px solid var(--glass-border)',
-              color: 'var(--toolbar-fg-secondary)',
-            }}
-          >
-            {activeSubsystemIds.length > 0
-              ? `${t('status.subsystems')}: ${activeSubsystemIds.join(', ')}`
-              : t('status.noSubsystems')}
-          </div>
-
-          {canvasData?.projected && (
-            <button
-              type="button"
-              className="absolute left-3 bottom-10 z-10 rounded px-2 py-1 text-xs"
-              style={{
-                backgroundColor: 'var(--glass-bg-light)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--toolbar-fg)',
-              }}
-              onClick={handleProjectionHealthCheck}
-            >
-              {formatProjectionStatus(
-                (canvasData as { projectionStatus?: ProjectedCanvasStatus }).projectionStatus,
-              )}
-            </button>
-          )}
-
           {/* Generation Prompt Panel (E6: ControlNet / Video / image generation) */}
           <GenerationPromptPanel
             visible={generationPanelState.visible}
@@ -1388,11 +1365,4 @@ export function CanvasApp() {
       </div>
     </div>
   );
-}
-
-function formatProjectionStatus(status: ProjectedCanvasStatus | undefined): string {
-  if (!status) {
-    return `${t('status.projected')}: clean`;
-  }
-  return `${t('status.projected')}: ${status.state}${status.message ? ` · ${status.message}` : ''}`;
 }

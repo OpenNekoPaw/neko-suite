@@ -9,6 +9,7 @@ import {
 } from '@neko/shared/vscode/extension';
 import { setRootLogger, getRootLogger } from './logger';
 import { ModelEditorProvider } from './editor/ModelEditorProvider';
+import { ModelStatusBar } from './editor/ModelStatusBar';
 import { createNekoModelCapabilityProvider } from './agentCapabilityProvider';
 import {
   formatSupportedModelAssetExtensions,
@@ -55,7 +56,9 @@ export function activate(context: vscode.ExtensionContext): NekoModelAPI {
   const errorHandler = new VSCodeErrorHandler(logger.child('Errors'));
   getRootLogger().info('Activating extension...');
 
-  modelEditorProvider = new ModelEditorProvider(context);
+  const modelStatusBar = new ModelStatusBar();
+  context.subscriptions.push(modelStatusBar);
+  modelEditorProvider = new ModelEditorProvider(context, modelStatusBar);
   const api = modelEditorProvider.getModelApi();
   const liveModeService = new ModelLiveModeService({
     editorProvider: modelEditorProvider,

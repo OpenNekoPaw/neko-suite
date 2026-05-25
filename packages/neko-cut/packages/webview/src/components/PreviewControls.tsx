@@ -4,9 +4,19 @@
  */
 
 import { useState, useRef, useEffect, memo } from 'react';
+import {
+  CameraIcon,
+  LoadingIcon,
+  MoreHorizontalIcon,
+  PictureInPictureIcon,
+  SettingsIcon,
+  VolumeIcon,
+  VolumeOffIcon,
+} from '@neko/shared/icons';
 import { useTranslation } from '../i18n/I18nContext';
 import { useEditorStore } from '../stores/editor-store';
 import { formatTimeFull } from '../utils';
+import { PREVIEW_CONTROL_ACTION_PLACEMENTS } from './PreviewControls.presenter';
 
 export type ResolutionPreset =
   | '720p@60fps'
@@ -159,6 +169,10 @@ export const PreviewControls = memo(function PreviewControls({
   onTogglePropertyPanel,
 }: PreviewControlsProps) {
   const { t } = useTranslation();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isOverflowOpen, setIsOverflowOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const overflowRef = useRef<HTMLDivElement>(null);
 
   // FPS counter state from store
   const showFpsCounter = useEditorStore((state) => state.showFpsCounter);
@@ -182,11 +196,31 @@ export const PreviewControls = memo(function PreviewControls({
     { value: 1.5, label: '1.5x' },
     { value: 2, label: '2x' },
   ];
+  const placementSummary = PREVIEW_CONTROL_ACTION_PLACEMENTS;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (settingsRef.current && !settingsRef.current.contains(target)) {
+        setIsSettingsOpen(false);
+      }
+      if (overflowRef.current && !overflowRef.current.contains(target)) {
+        setIsOverflowOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
-    <div className="flex items-center px-4 py-2 bg-vscode-editor-bg border-b border-vscode-panel-border">
+    <div
+      className="cut-preview-controls flex items-center px-3 py-2 bg-vscode-editor-bg border-b border-vscode-panel-border"
+      data-action-placements={placementSummary
+        .map((action) => `${action.id}:${action.placement}`)
+        .join(',')}
+    >
       {/* Left: Playback Controls */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="cut-preview-primary-controls flex items-center gap-1 flex-shrink-0">
         <button
           onClick={() => seek(0)}
           className="p-1.5 hover:bg-vscode-toolbar-hover rounded"
@@ -250,39 +284,19 @@ export const PreviewControls = memo(function PreviewControls({
         </span>
       </div>
 
-      {/* Center: Quality Dropdown + Volume Controls + Screenshot + Fullscreen */}
-      <div className="flex items-center gap-2 min-w-0 overflow-hidden mx-2 flex-1 justify-end">
-        <span className="text-xs text-vscode-description whitespace-nowrap">
-          {t('preview.quality')}
-        </span>
-        <Dropdown value={previewQuality} options={qualityOptions} onChange={setPreviewQuality} />
-
-        <span className="text-xs text-vscode-description whitespace-nowrap">
-          {t('preview.playbackSpeed')}
-        </span>
-        <Dropdown
-          value={playbackSpeed}
-          options={playbackSpeedOptions}
-          onChange={setPlaybackSpeed}
-        />
-
+      <div className="cut-preview-secondary-controls flex items-center gap-2 min-w-0 mx-2 flex-1 justify-end">
         {/* Volume Controls */}
-        <div className="w-px h-4 bg-vscode-panel-border mx-1" />
-        <div className="flex items-center gap-2">
+        <div className="cut-preview-volume flex items-center gap-2">
           {/* Mute/Unmute Button */}
           <button
             onClick={togglePreviewMute}
             className="p-1.5 hover:bg-vscode-toolbar-hover rounded"
-            title={previewMuted ? t('preview.unmute') || 'Unmute' : t('preview.mute') || 'Mute'}
+            title={previewMuted ? t('preview.unmute') : t('preview.mute')}
           >
             {previewMuted ? (
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-              </svg>
+              <VolumeOffIcon className="w-4 h-4" />
             ) : (
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-              </svg>
+              <VolumeIcon className="w-4 h-4" />
             )}
           </button>
 
@@ -304,7 +318,7 @@ export const PreviewControls = memo(function PreviewControls({
             style={{
               background: `linear-gradient(to right, var(--vscode-button-background) 0%, var(--vscode-button-background) ${previewMuted ? 0 : previewVolume * 100}%, var(--vscode-input-background) ${previewMuted ? 0 : previewVolume * 100}%, var(--vscode-input-background) 100%)`,
             }}
-            title={`${t('preview.volume') || 'Volume'}: ${Math.round(previewVolume * 100)}%`}
+            title={`${t('preview.volume')}: ${Math.round(previewVolume * 100)}%`}
           />
 
           {/* Volume Percentage */}
@@ -313,80 +327,96 @@ export const PreviewControls = memo(function PreviewControls({
           </span>
         </div>
 
-        {/* FPS Counter Toggle */}
-        <div className="w-px h-4 bg-vscode-panel-border mx-1" />
-        <button
-          onClick={toggleFpsCounter}
-          className={`p-1.5 rounded transition-colors ${
-            showFpsCounter
-              ? 'bg-vscode-button text-vscode-button-fg'
-              : 'hover:bg-vscode-toolbar-hover'
-          }`}
-          title={t('preview.toggleFps') || 'Toggle FPS Counter'}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H5v-2h7v2zm5-4H5v-2h12v2zm0-4H5V7h12v2z" />
-          </svg>
-        </button>
+        <div ref={settingsRef} className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen((value) => !value)}
+            className="p-1.5 hover:bg-vscode-toolbar-hover rounded"
+            title={t('preview.settings')}
+            aria-label={t('preview.settings')}
+          >
+            <SettingsIcon className="w-4 h-4" />
+          </button>
+          {isSettingsOpen && (
+            <div className="cut-preview-menu right-0">
+              <div className="cut-preview-menu-row">
+                <span>{t('preview.quality')}</span>
+                <Dropdown
+                  value={previewQuality}
+                  options={qualityOptions}
+                  onChange={setPreviewQuality}
+                />
+              </div>
+              <div className="cut-preview-menu-row">
+                <span>{t('preview.playbackSpeed')}</span>
+                <Dropdown
+                  value={playbackSpeed}
+                  options={playbackSpeedOptions}
+                  onChange={setPlaybackSpeed}
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
-        {/* Screenshot Button */}
-        {onCaptureScreenshot && (
-          <>
-            <div className="w-px h-4 bg-vscode-panel-border mx-1" />
-            <button
-              onClick={onCaptureScreenshot}
-              disabled={isCapturingScreenshot}
-              className="p-1.5 hover:bg-vscode-toolbar-hover rounded disabled:opacity-50 disabled:cursor-not-allowed"
-              title={t('preview.captureScreenshot') || 'Capture Screenshot'}
-            >
-              {isCapturingScreenshot ? (
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+        <div ref={overflowRef} className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsOverflowOpen((value) => !value)}
+            className="p-1.5 hover:bg-vscode-toolbar-hover rounded"
+            title={t('preview.moreActions')}
+            aria-label={t('preview.moreActions')}
+          >
+            <MoreHorizontalIcon className="w-4 h-4" />
+          </button>
+          {isOverflowOpen && (
+            <div className="cut-preview-menu right-0">
+              <button
+                type="button"
+                onClick={toggleFpsCounter}
+                className="cut-preview-menu-button"
+                aria-pressed={showFpsCounter}
+              >
+                <FpsIcon />
+                <span>{t('preview.toggleFps')}</span>
+              </button>
+              {onCaptureScreenshot && (
+                <button
+                  type="button"
+                  onClick={onCaptureScreenshot}
+                  disabled={isCapturingScreenshot}
+                  className="cut-preview-menu-button"
+                >
+                  {isCapturingScreenshot ? (
+                    <LoadingIcon className="cut-preview-spinner" />
+                  ) : (
+                    <CameraIcon className="w-4 h-4" />
+                  )}
+                  <span>{t('preview.captureScreenshot')}</span>
+                </button>
               )}
-            </button>
-          </>
-        )}
-
-        {/* PiP Button */}
-        <div className="w-px h-4 bg-vscode-panel-border mx-1" />
-        <button
-          onClick={() =>
-            (
-              window as unknown as { __previewPanelTogglePiP?: () => void }
-            ).__previewPanelTogglePiP?.()
-          }
-          className={`p-1.5 rounded transition-colors ${
-            isPiPActive ? 'bg-vscode-button text-vscode-button-fg' : 'hover:bg-vscode-toolbar-hover'
-          }`}
-          title={isPiPActive ? t('preview.exitPictureInPicture') : t('preview.pictureInPicture')}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z" />
-          </svg>
-        </button>
+              <button
+                type="button"
+                onClick={() =>
+                  (
+                    window as unknown as { __previewPanelTogglePiP?: () => void }
+                  ).__previewPanelTogglePiP?.()
+                }
+                className="cut-preview-menu-button"
+                aria-pressed={isPiPActive}
+              >
+                <PictureInPictureIcon className="w-4 h-4" />
+                <span>
+                  {isPiPActive ? t('preview.exitPictureInPicture') : t('preview.pictureInPicture')}
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Fullscreen Button */}
         {onFullscreenToggle && (
           <>
-            <div className="w-px h-4 bg-vscode-panel-border mx-1" />
             <button
               onClick={onFullscreenToggle}
               className="p-1.5 hover:bg-vscode-toolbar-hover rounded"
@@ -404,7 +434,6 @@ export const PreviewControls = memo(function PreviewControls({
             </button>
           </>
         )}
-
       </div>
 
       {/* Property Panel Toggle — pinned right, never clipped */}
@@ -414,7 +443,7 @@ export const PreviewControls = memo(function PreviewControls({
           <button
             onClick={onTogglePropertyPanel}
             className={`p-1.5 hover:bg-vscode-toolbar-hover rounded ${propertyPanelVisible ? 'text-vscode-accent' : ''}`}
-            title={t('preview.togglePropertyPanel') || 'Toggle Properties'}
+            title={t('preview.togglePropertyPanel')}
           >
             <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
               <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM15 5v14h-2V5h2z" />
@@ -425,3 +454,7 @@ export const PreviewControls = memo(function PreviewControls({
     </div>
   );
 });
+
+function FpsIcon() {
+  return <span className="cut-preview-fps-icon">FPS</span>;
+}

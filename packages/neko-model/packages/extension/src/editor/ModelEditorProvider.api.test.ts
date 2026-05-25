@@ -116,6 +116,41 @@ describe('ModelEditorProvider model API mapping', () => {
     });
   });
 
+  it('projects webview model status updates to the model status bar', async () => {
+    const statusProjection = { update: vi.fn(), reset: vi.fn() };
+    const provider = new ModelEditorProvider(createExtensionContext(), statusProjection);
+    const internals = provider as unknown as ModelEditorProviderInternals;
+    const panel = createWebviewPanel();
+    const document = { uri: { fsPath: '/workspace/hero.nkm', scheme: 'file' } };
+    internals.activeWebviewPanel = panel;
+    internals.activeDocument = document;
+    internals.panelGeneration = 1;
+
+    await internals.handleWebviewMessage(
+      {
+        type: 'modelStatus',
+        selectedNodeName: 'Head',
+        objectCount: 4,
+        sceneControlStatus: 'ready',
+        sceneControlError: null,
+        hasPendingPrediction: false,
+        enginePort: 3001,
+      },
+      panel,
+      document,
+      1,
+    );
+
+    expect(statusProjection.update).toHaveBeenCalledWith({
+      selectedNodeName: 'Head',
+      objectCount: 4,
+      sceneControlStatus: 'ready',
+      sceneControlError: null,
+      hasPendingPrediction: false,
+      enginePort: 3001,
+    });
+  });
+
   it('reports viewport camera acknowledgement and rejection through model API results', async () => {
     const provider = new ModelEditorProvider(createExtensionContext());
     const internals = provider as unknown as ModelEditorProviderInternals;
@@ -174,6 +209,7 @@ describe('ModelEditorProvider model API mapping', () => {
 interface ModelEditorProviderInternals {
   activeWebviewPanel: unknown;
   activeDocument: unknown;
+  panelGeneration: number;
   lastSceneSnapshot: EngineSceneSnapshot | undefined;
   activeModelPath: string | undefined;
   engineClient: {
@@ -184,7 +220,13 @@ interface ModelEditorProviderInternals {
       viewportId?: string,
     ): Promise<void>;
     getSceneSnapshot?: () => Promise<unknown>;
-  };
+  } | undefined;
+  handleWebviewMessage(
+    message: Record<string, unknown>,
+    panel: unknown,
+    document: unknown,
+    generation: number,
+  ): Promise<void>;
 }
 
 function createSceneSnapshot(): EngineSceneSnapshot {
@@ -224,4 +266,13 @@ function createExtensionContext(): ConstructorParameters<typeof ModelEditorProvi
     extensionUri: { fsPath: '/ext', scheme: 'file' },
     extensionMode: 3,
   } as unknown as ConstructorParameters<typeof ModelEditorProvider>[0];
+}
+
+function createWebviewPanel() {
+  return {
+    webview: {
+      postMessage: vi.fn(async () => true),
+    },
+    visible: true,
+  };
 }

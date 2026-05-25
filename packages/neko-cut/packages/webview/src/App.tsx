@@ -7,6 +7,7 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { PreviewControls } from './components/PreviewControls';
 import { Timeline } from './components/Timeline';
 import { PropertyPanelInline } from './components/PropertyPanel/PropertyPanelInline';
+import { CUT_PROPERTY_PANEL_WIDTH_BOUNDS } from './components/PreviewControls.presenter';
 import { useEditorStore } from './stores/editor-store';
 import { getLogger } from './utils/logger';
 const logger = getLogger('App');
@@ -137,6 +138,8 @@ function App() {
     edge: 'right',
     mode: 'pixel',
     size: propertyPanelWidth,
+    minSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.minSize,
+    maxSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.maxSize,
     onSizeChange: setPropertyPanelWidth,
   });
 
@@ -279,16 +282,16 @@ function App() {
             handleProps={propertyPanelResizeHandleProps}
             className={`w-1 flex-shrink-0 cursor-ew-resize transition-colors ${
               isHResizing
-                ? 'bg-[var(--neko-accent)]'
-                : 'bg-[var(--neko-border)] hover:bg-[var(--neko-accent)]'
+                ? 'bg-[var(--vscode-button-background)]'
+                : 'bg-[var(--vscode-panel-border)] hover:bg-[var(--vscode-button-background)]'
             }`}
           />
           {/* PropertyPanel */}
           <div
-            className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
+            className="flex-shrink-0 overflow-hidden border-l border-[var(--vscode-panel-border)]"
             style={{
               width: propertyPanelWidth,
-              background: 'var(--neko-surface)',
+              background: 'var(--vscode-sideBar-background)',
             }}
           >
             <PropertyPanelInline />

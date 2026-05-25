@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
+import type { VSCodeAPI } from '../vscode/types';
+import { getVSCodeAPI } from '../vscode/api';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +63,33 @@ export interface UseResizableReturn<TElement extends HTMLElement = HTMLElement> 
   containerRef: React.MutableRefObject<TElement | null>;
   handleProps: ResizeHandleBindings;
 }
+
+export interface ResizeBounds {
+  minSize?: number;
+  maxSize?: number;
+}
+
+export interface ResizeState {
+  size: number;
+  collapsed: boolean;
+}
+
+export interface PersistedResizeOptions extends ResizeBounds {
+  api?: Pick<VSCodeAPI, 'getState' | 'setState'> | null;
+}
+
+export interface PersistedResizeReturn {
+  state: ResizeState;
+  size: number;
+  collapsed: boolean;
+  setSize: (size: number) => void;
+  setCollapsed: (collapsed: boolean) => void;
+  updateState: (state: Partial<ResizeState>) => void;
+}
+
+type WebviewPersistedState = Record<string, unknown>;
+
+const RESIZE_STATE_KEY = 'neko.resizeState';
 
 // ── Pure Helpers ─────────────────────────────────────────────────────────────
 
@@ -140,6 +169,50 @@ export function endResizeSession(
   return {
     activePointerId: null,
     isResizing: false,
+  };
+}
+
+export function normalizeResizeState(
+  value: unknown,
+  defaultSize: number,
+  bounds: ResizeBounds = {},
+): ResizeState {
+  const record = isRecord(value) ? value : {};
+  const rawSize = typeof record.size === 'number' && Number.isFinite(record.size)
+    ? record.size
+    : defaultSize;
+
+  return {
+    size: clampResizeSize(rawSize, bounds.minSize, bounds.maxSize),
+    collapsed: typeof record.collapsed === 'boolean' ? record.collapsed : false,
+  };
+}
+
+export function readPersistedResizeState(
+  rootState: unknown,
+  panelId: string,
+  defaultSize: number,
+  bounds: ResizeBounds = {},
+): ResizeState {
+  const record = isRecord(rootState) ? rootState : {};
+  const resizeRecord = isRecord(record[RESIZE_STATE_KEY]) ? record[RESIZE_STATE_KEY] : {};
+  return normalizeResizeState(resizeRecord[panelId], defaultSize, bounds);
+}
+
+export function writePersistedResizeState(
+  rootState: unknown,
+  panelId: string,
+  state: ResizeState,
+): WebviewPersistedState {
+  const base = isRecord(rootState) ? { ...rootState } : {};
+  const resizeRecord = isRecord(base[RESIZE_STATE_KEY]) ? { ...base[RESIZE_STATE_KEY] } : {};
+
+  return {
+    ...base,
+    [RESIZE_STATE_KEY]: {
+      ...resizeRecord,
+      [panelId]: state,
+    },
   };
 }
 
@@ -256,6 +329,77 @@ export function useResizable<TElement extends HTMLElement = HTMLElement>(
   };
 }
 
+export function usePersistedResize(
+  panelId: string,
+  defaultSize: number,
+  bounds: ResizeBounds = {},
+  options: PersistedResizeOptions = {},
+): PersistedResizeReturn {
+  const api = options.api === undefined ? getVSCodeAPI() : options.api;
+  const effectiveBounds = {
+    minSize: options.minSize ?? bounds.minSize,
+    maxSize: options.maxSize ?? bounds.maxSize,
+  };
+  const defaultSizeRef = useRef(defaultSize);
+  const boundsRef = useRef(effectiveBounds);
+  boundsRef.current = effectiveBounds;
+
+  const [state, setState] = useState<ResizeState>(() =>
+    api
+      ? readPersistedResizeState(api.getState(), panelId, defaultSizeRef.current, boundsRef.current)
+      : normalizeResizeState(undefined, defaultSizeRef.current, boundsRef.current),
+  );
+
+  const persist = useCallback(
+    (nextState: ResizeState) => {
+      if (!api) return;
+      api.setState(writePersistedResizeState(api.getState(), panelId, nextState));
+    },
+    [api, panelId],
+  );
+
+  const updateState = useCallback(
+    (patch: Partial<ResizeState>) => {
+      setState((current) => {
+        const next = normalizeResizeState(
+          {
+            size: patch.size ?? current.size,
+            collapsed: patch.collapsed ?? current.collapsed,
+          },
+          defaultSizeRef.current,
+          boundsRef.current,
+        );
+        persist(next);
+        return next;
+      });
+    },
+    [persist],
+  );
+
+  const setSize = useCallback(
+    (size: number) => {
+      updateState({ size });
+    },
+    [updateState],
+  );
+
+  const setCollapsed = useCallback(
+    (collapsed: boolean) => {
+      updateState({ collapsed });
+    },
+    [updateState],
+  );
+
+  return {
+    state,
+    size: state.size,
+    collapsed: state.collapsed,
+    setSize,
+    setCollapsed,
+    updateState,
+  };
+}
+
 function setPointerCaptureSafely(target: HTMLElement, pointerId: number): void {
   try {
     if (!target.hasPointerCapture(pointerId)) {
@@ -264,6 +408,10 @@ function setPointerCaptureSafely(target: HTMLElement, pointerId: number): void {
   } catch {
     // Pointer capture can fail in incomplete DOM hosts; resize still degrades gracefully.
   }
+}
+
+function isRecord(value: unknown): value is WebviewPersistedState {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function releasePointerCaptureSafely(target: HTMLElement, pointerId: number): void {

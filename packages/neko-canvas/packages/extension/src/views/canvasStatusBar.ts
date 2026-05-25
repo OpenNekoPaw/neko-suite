@@ -17,6 +17,7 @@ export interface CanvasStatusInfo {
   zoom: number;
   selectedCount: number;
   subsystemSummary?: string;
+  projectionSummary?: string;
 }
 
 // =============================================================================
@@ -24,12 +25,13 @@ export interface CanvasStatusInfo {
 // =============================================================================
 
 const ID = {
-  nodeCount: 'neko.canvas.nodeCount',
-  connectionCount: 'neko.canvas.connectionCount',
+  structure: 'neko.canvas.structure',
   zoom: 'neko.canvas.zoom',
-  selection: 'neko.canvas.selection',
-  subsystems: 'neko.canvas.subsystems',
+  context: 'neko.canvas.context',
 } as const;
+
+const CONTEXT_TEXT_PREFIX = '$(symbol-namespace) ';
+const CONTEXT_TEXT_MAX_LENGTH = 72;
 
 // =============================================================================
 // Manager
@@ -41,18 +43,11 @@ export class CanvasStatusBar implements vscode.Disposable {
   constructor() {
     this.group = new StatusBarGroup([
       {
-        id: ID.nodeCount,
+        id: ID.structure,
         alignment: vscode.StatusBarAlignment.Left,
         priority: 100,
-        name: 'Canvas Nodes',
-        tooltip: 'Number of nodes on canvas',
-      },
-      {
-        id: ID.connectionCount,
-        alignment: vscode.StatusBarAlignment.Left,
-        priority: 99,
-        name: 'Canvas Connections',
-        tooltip: 'Number of connections',
+        name: 'Canvas Structure',
+        tooltip: 'Number of nodes and connections on canvas',
       },
       {
         id: ID.zoom,
@@ -63,19 +58,11 @@ export class CanvasStatusBar implements vscode.Disposable {
         command: 'neko.canvas.resetZoom',
       },
       {
-        id: ID.selection,
+        id: ID.context,
         alignment: vscode.StatusBarAlignment.Left,
         priority: 98,
-        name: 'Canvas Selection',
-        tooltip: 'Selected items',
-        visible: 'conditional',
-      },
-      {
-        id: ID.subsystems,
-        alignment: vscode.StatusBarAlignment.Left,
-        priority: 97,
-        name: 'Canvas Subsystems',
-        tooltip: 'Active Canvas subsystems',
+        name: 'Canvas Context',
+        tooltip: 'Selected items, active subsystems, and projection status',
         visible: 'conditional',
       },
     ]);
@@ -83,22 +70,31 @@ export class CanvasStatusBar implements vscode.Disposable {
 
   /** Update all status bar items with current canvas info */
   update(info: CanvasStatusInfo): void {
-    this.group.update(ID.nodeCount, `$(symbol-class) ${info.nodeCount} nodes`);
-    this.group.update(ID.connectionCount, `$(git-merge) ${info.connectionCount}`);
+    this.group.update(
+      ID.structure,
+      `$(symbol-class) ${info.nodeCount} nodes · $(git-merge) ${info.connectionCount}`,
+    );
     this.group.update(ID.zoom, `$(zoom-in) ${Math.round(info.zoom * 100)}%`);
 
+    const contextParts: string[] = [];
     if (info.selectedCount > 0) {
-      this.group.update(ID.selection, `$(check) ${info.selectedCount} selected`);
-      this.group.setVisible(ID.selection, true);
-    } else {
-      this.group.setVisible(ID.selection, false);
+      contextParts.push(`${info.selectedCount} selected`);
+    }
+    if (info.subsystemSummary) {
+      contextParts.push(info.subsystemSummary);
+    }
+    if (info.projectionSummary) {
+      contextParts.push(info.projectionSummary);
     }
 
-    if (info.subsystemSummary) {
-      this.group.update(ID.subsystems, `$(symbol-namespace) ${info.subsystemSummary}`);
-      this.group.setVisible(ID.subsystems, true);
-    } else {
-      this.group.setVisible(ID.subsystems, false);
+    this.group.setVisible(ID.context, contextParts.length > 0);
+    if (contextParts.length > 0) {
+      const contextText = contextParts.join(' · ');
+      this.group.update(
+        ID.context,
+        `${CONTEXT_TEXT_PREFIX}${truncateStatusText(contextText)}`,
+        contextText,
+      );
     }
   }
 
@@ -115,4 +111,24 @@ export class CanvasStatusBar implements vscode.Disposable {
   dispose(): void {
     this.group.dispose();
   }
+}
+
+function truncateStatusText(text: string): string {
+  if (text.length <= CONTEXT_TEXT_MAX_LENGTH) {
+    return text;
+  }
+
+  const maxContentLength = CONTEXT_TEXT_MAX_LENGTH - 3;
+  const truncated = text.slice(0, maxContentLength).trimEnd();
+  const separatorIndex = truncated.lastIndexOf(' · ');
+  const wordIndex = truncated.lastIndexOf(' ');
+  const minimumReadableLength = Math.floor(maxContentLength * 0.6);
+  const cutIndex =
+    separatorIndex >= minimumReadableLength
+      ? separatorIndex
+      : wordIndex >= minimumReadableLength
+        ? wordIndex
+        : maxContentLength;
+
+  return `${truncated.slice(0, cutIndex).trimEnd()}...`;
 }

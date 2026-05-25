@@ -103,5 +103,17 @@ export {
 } from './templates';
 
 // StatusBar group lifecycle manager
-export { StatusBarGroup } from './StatusBarGroup';
-export type { StatusBarItemConfig } from './StatusBarGroup';
+export {
+  StatusBarGroup,
+  StatusBarProjectionManager,
+  getActiveCustomEditorId,
+  getStatusBarActiveSurface,
+  isStatusBarItemSpecVisible,
+  sortStatusBarItemSpecs,
+} from './StatusBarGroup';
+export type {
+  StatusBarActiveSurface,
+  StatusBarItemConfig,
+  StatusBarItemSpec,
+  StatusBarProjectionManagerOptions,
+} from './StatusBarGroup';

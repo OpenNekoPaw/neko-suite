@@ -72,6 +72,10 @@ describe('uiStateSlice', () => {
     it('should start with dragTargetTrackId = null', () => {
       expect(store.getState().dragTargetTrackId).toBeNull();
     });
+
+    it('should start with propertyPanelWidth = 280', () => {
+      expect(store.getState().propertyPanelWidth).toBe(280);
+    });
   });
 
   describe('setZoomLevel', () => {
@@ -285,6 +289,23 @@ describe('uiStateSlice', () => {
       store.getState().setDragTargetTrackId('track-1');
       store.getState().setDragTargetTrackId(null);
       expect(store.getState().dragTargetTrackId).toBeNull();
+    });
+  });
+
+  describe('setPropertyPanelWidth', () => {
+    it('should set a width within bounds', () => {
+      store.getState().setPropertyPanelWidth(320);
+      expect(store.getState().propertyPanelWidth).toBe(320);
+    });
+
+    it('should clamp the property panel width to the minimum', () => {
+      store.getState().setPropertyPanelWidth(120);
+      expect(store.getState().propertyPanelWidth).toBe(200);
+    });
+
+    it('should clamp the property panel width to the maximum', () => {
+      store.getState().setPropertyPanelWidth(480);
+      expect(store.getState().propertyPanelWidth).toBe(400);
     });
   });
 });

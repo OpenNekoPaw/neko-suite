@@ -5,6 +5,7 @@
 
 import { StateCreator } from 'zustand';
 import { type PreviewQuality } from '../../constants';
+import { clampCutPropertyPanelWidth } from '../../components/PreviewControls.presenter';
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 10;
@@ -244,6 +245,5 @@ export const createUIStateSlice: StateCreator<UIStateSlice, [], [], UIStateSlice
   propertyPanelVisible: true,
   propertyPanelWidth: 280,
   togglePropertyPanel: () => set((s) => ({ propertyPanelVisible: !s.propertyPanelVisible })),
-  setPropertyPanelWidth: (width) =>
-    set({ propertyPanelWidth: Math.max(200, Math.min(400, width)) }),
+  setPropertyPanelWidth: (width) => set({ propertyPanelWidth: clampCutPropertyPanelWidth(width) }),
 });

@@ -144,6 +144,37 @@ html, body, #root {
   background: var(--sketch-hover);
 }
 
+.puppet-right-panel {
+  position: relative;
+  display: flex;
+  width: 280px;
+  min-width: 200px;
+  max-width: 400px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  overflow-y: auto;
+  border-left: 1px solid var(--vscode-panel-border, var(--sketch-border));
+}
+
+.puppet-resize-handle {
+  z-index: 50;
+  background: transparent;
+  transition: background-color 0.12s ease;
+}
+
+.puppet-right-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -2px;
+  width: 4px;
+}
+
+.puppet-resize-handle:hover,
+.puppet-right-panel[data-resizing='true'] > .puppet-resize-handle {
+  background: color-mix(in srgb, var(--vscode-focusBorder, var(--sketch-active)) 38%, transparent);
+}
+
 .puppet-fallback-badge {
   pointer-events: none;
   position: absolute;

@@ -73,14 +73,24 @@ export type {
 export { useDrag } from './useDrag';
 export type { DragCallbacks, DragOptions, DragBindings } from './useDrag';
 
-export { useResizable } from './useResizable';
+export {
+  normalizeResizeState,
+  readPersistedResizeState,
+  usePersistedResize,
+  useResizable,
+  writePersistedResizeState,
+} from './useResizable';
 export type {
+  PersistedResizeOptions,
+  PersistedResizeReturn,
+  ResizeBounds,
   ResizeEdge,
   ResizeHandleBindings,
   ResizeMode,
   ResizeOrientation,
   ResizePointerPosition,
   ResizeRect,
+  ResizeState,
   UseResizableControlledOptions,
   UseResizableOptions,
   UseResizableReturn,
