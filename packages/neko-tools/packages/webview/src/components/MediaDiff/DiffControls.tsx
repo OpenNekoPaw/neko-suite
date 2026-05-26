@@ -4,7 +4,10 @@
  */
 
 import { memo, useState, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import type { DiffViewMode } from '@neko/shared';
+import { Badge, Button, Slider } from '@neko/ui/primitives';
+import { LayersIcon, SettingsIcon, toCodiconClassName } from '@neko/ui/icons';
 import { useTranslation } from '../../i18n/I18nContext';
 import type { DiffControlsProps } from './types';
 
@@ -16,7 +19,7 @@ interface ViewModeButtonProps {
   mode: DiffViewMode;
   currentMode: DiffViewMode;
   label: string;
-  icon: string;
+  icon: ReactNode;
   onClick: (mode: DiffViewMode) => void;
   disabled?: boolean;
 }
@@ -32,16 +35,16 @@ const ViewModeButton = memo(function ViewModeButton({
   const isActive = mode === currentMode;
 
   return (
-    <button
-      type="button"
+    <Button
       className={`${isActive ? 'tools-button' : 'tools-button-secondary'} px-3 py-1.5 text-xs font-medium ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
       onClick={() => !disabled && onClick(mode)}
       disabled={disabled}
       title={label}
+      variant={isActive ? 'default' : 'secondary'}
     >
       <span>{icon}</span>
       <span>{label}</span>
-    </button>
+    </Button>
   );
 });
 
@@ -58,9 +61,9 @@ const SimilarityBadge = memo(function SimilarityBadge({ similarity }: Similarity
   // Files are identical
   if (similarity >= 1.0) {
     return (
-      <div className="tools-pill px-3 py-1.5">
+      <Badge className="tools-pill h-auto px-3 py-1.5" tone="success">
         <span className="text-sm font-bold text-green-400">{t('mediaDiff.identical')}</span>
-      </div>
+      </Badge>
     );
   }
 
@@ -72,10 +75,10 @@ const SimilarityBadge = memo(function SimilarityBadge({ similarity }: Similarity
   else if (percentage >= 50) colorClass = 'text-orange-400';
 
   return (
-    <div className="tools-pill px-3 py-1.5">
+    <Badge className="tools-pill h-auto gap-1 px-3 py-1.5" tone="neutral">
       <span className="text-xs text-[var(--tools-fg-secondary)]">{t('mediaDiff.similarity')}</span>
       <span className={`text-sm font-bold ${colorClass}`}>{percentage}%</span>
-    </div>
+    </Badge>
   );
 });
 
@@ -105,14 +108,15 @@ const SliderControl = memo(function SliderControl({
   return (
     <div className="flex items-center gap-2">
       <span className="min-w-[60px] text-xs text-[var(--tools-fg-secondary)]">{label}:</span>
-      <input
-        type="range"
+      <Slider
+        className="w-24"
+        label={label}
         min={min}
         max={max}
         step={step}
         value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="tools-range h-1 w-24 cursor-pointer appearance-none rounded-lg bg-[var(--tools-elevated)]"
+        onCommit={onChange}
+        onPreviewChange={onChange}
       />
       <span className="min-w-[40px] text-right text-xs text-[var(--tools-fg)]">
         {formatValue ? formatValue(value) : value.toFixed(0)}
@@ -202,25 +206,27 @@ const TimeRangeControl = memo(function TimeRangeControl({
         className="tools-input w-14 px-1 py-0.5 text-center text-xs"
         title={t('mediaDiff.endTimeHint')}
       />
-      <button
-        type="button"
+      <Button
         onClick={handleApply}
         disabled={isLoading}
-        className={`${isLoading ? 'tools-button-secondary opacity-50' : 'tools-button'} px-2 py-0.5 text-xs font-medium`}
+        className={`${isLoading ? 'opacity-50' : ''} px-2 py-0.5 text-xs font-medium`}
+        size="xs"
         title={t('mediaDiff.applyRange')}
+        variant={isLoading ? 'secondary' : 'default'}
       >
         {t('mediaDiff.apply')}
-      </button>
+      </Button>
       {isActive && (
-        <button
-          type="button"
+        <Button
           onClick={handleReset}
           disabled={isLoading}
           className="px-1.5 py-0.5 text-xs text-[var(--tools-fg-secondary)] transition-colors hover:text-[var(--tools-fg)]"
+          size="xs"
           title={t('mediaDiff.resetRange')}
+          variant="ghost"
         >
           {t('mediaDiff.reset')}
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -244,14 +250,30 @@ export const DiffControls = memo(function DiffControls({
   onSetTimeRange,
 }: DiffControlsProps) {
   const { t } = useTranslation();
-  const viewModes: { mode: DiffViewMode; label: string; icon: string }[] = [
-    { mode: 'side-by-side', label: t('mediaDiff.viewMode.sideBySide'), icon: '⬜⬜' },
-    { mode: 'slider', label: t('mediaDiff.viewMode.slider'), icon: '↔️' },
-    { mode: 'overlay', label: t('mediaDiff.viewMode.overlay'), icon: '🔲' },
+  const viewModes: { mode: DiffViewMode; label: string; icon: ReactNode }[] = [
+    {
+      mode: 'side-by-side',
+      label: t('mediaDiff.viewMode.sideBySide'),
+      icon: <span className={toCodiconClassName('symbol-structure')} aria-hidden="true" />,
+    },
+    {
+      mode: 'slider',
+      label: t('mediaDiff.viewMode.slider'),
+      icon: <SettingsIcon size={14} />,
+    },
+    {
+      mode: 'overlay',
+      label: t('mediaDiff.viewMode.overlay'),
+      icon: <span className={toCodiconClassName('symbol-color')} aria-hidden="true" />,
+    },
   ];
 
   if (mediaType === 'image') {
-    viewModes.push({ mode: 'onion-skin', label: t('mediaDiff.viewMode.onionSkin'), icon: '🧅' });
+    viewModes.push({
+      mode: 'onion-skin',
+      label: t('mediaDiff.viewMode.onionSkin'),
+      icon: <LayersIcon size={14} />,
+    });
   }
 
   return (

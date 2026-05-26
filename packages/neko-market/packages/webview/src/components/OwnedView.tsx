@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { useMarketplaceStore, type OwnedItem } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
@@ -27,7 +28,7 @@ export const OwnedView: React.FC = () => {
   if (entitlements.items.length === 0) {
     return (
       <div className="empty-state">
-        <span className="codicon codicon-account empty-state__icon" />
+        <span className={`${toCodiconClassName('account')} empty-state__icon`} />
         <p className="empty-state__text">{t('marketplace.owned.empty')}</p>
         <button className="asset-action-btn asset-action-btn--secondary" onClick={refresh}>
           {t('marketplace.action.refresh')}

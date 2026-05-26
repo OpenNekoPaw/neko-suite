@@ -1,3 +1,4 @@
+import { Badge, Button } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardProjectType, WorkflowAvailability, WorkflowId } from '../types';
 
@@ -97,24 +98,24 @@ function WorkflowCard({ id, available, actions, onCreateProject, onCommand }: Wo
       <p className="workflow-card-desc">{t(`dashboard.workflow.${id}.desc`)}</p>
       <div className="workflow-card-tags">
         {tags.map((tag) => (
-          <span key={tag} className="badge">
+          <Badge key={tag} className="h-auto rounded-full px-2 py-0.5">
             {tag}
-          </span>
+          </Badge>
         ))}
       </div>
       {available ? (
         <div className="workflow-card-actions">
           {actions.map((action) => (
-            <button
+            <Button
               key={action.labelKey}
-              type="button"
+              size="sm"
               onClick={() => {
                 if (action.projectType) onCreateProject(action.projectType);
                 else if (action.command) onCommand(action.command);
               }}
             >
               {t(action.labelKey)}
-            </button>
+            </Button>
           ))}
         </div>
       ) : (

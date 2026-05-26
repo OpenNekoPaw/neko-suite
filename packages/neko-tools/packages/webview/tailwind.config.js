@@ -7,6 +7,7 @@ export default {
     "./assetDiff.html",
     "./mediaDiff.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    "../../../neko-ui/src/**/*.{tsx,ts}",
   ],
   plugins: [],
 }

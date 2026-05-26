@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { useDrag } from '@neko/shared/components';
+import { useDrag } from '@neko/ui/hooks';
 import { useEditorStore } from '../../stores/editor-store';
 
 interface PlayheadProps {

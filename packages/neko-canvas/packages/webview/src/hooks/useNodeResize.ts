@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useDrag } from '@neko/shared/components';
+import { useDrag } from '@neko/ui/hooks';
 import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================

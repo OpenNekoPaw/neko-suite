@@ -9,6 +9,10 @@
  */
 
 import { useCallback } from 'react';
+import type { PropertyValue } from '@neko/ui/creative';
+import { PropertyPanel as SharedPropertyPanel } from '@neko/ui/creative';
+import { Button, Collapsible } from '@neko/ui/primitives';
+import { toCodiconClassName } from '@neko/ui/icons';
 import type {
   CanvasBlock,
   CanvasConnection,
@@ -20,12 +24,15 @@ import type {
   JsonPointerPath,
 } from '@neko/shared';
 import { getContainerChildIds, readFieldBinding, writeFieldBinding } from '@neko/shared';
-import { CollapsibleSection } from '@neko/shared/components';
 import { t } from '../../i18n';
 import { PortEditor } from './PortEditor';
 import { getNodeLabel } from '../nodes/nodeTypeDescriptor';
 import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 import { getContainerActionDescriptors } from '../content/node-card';
+import {
+  mapCanvasNodePropertyCommit,
+  mapCanvasNodeTransformToProperties,
+} from '../adapters/sharedCanvasUiAdapter';
 
 // =============================================================================
 // Types
@@ -140,6 +147,13 @@ export function PropertyPanel({
 
   const isMulti = selectedNodes.length > 1;
   const node = selectedNodes[0]!;
+  const transformAdapter = mapCanvasNodeTransformToProperties(node, t);
+  const handleTransformChange = (propertyId: string, value: PropertyValue): void => {
+    const updates = mapCanvasNodePropertyCommit(node, propertyId, value);
+    if (Object.keys(updates).length > 0) {
+      onUpdateNode(node.id, updates);
+    }
+  };
 
   // Creator nodes (shot/scene/gallery) collapse technical fields by default
   const isCreatorNode = node.type === 'shot' || node.type === 'scene' || node.type === 'gallery';
@@ -177,102 +191,46 @@ export function PropertyPanel({
           {/* Technical sections — hidden for creator nodes */}
           {!isCreatorNode && (
             <>
-              <CollapsibleSection title={t('panel.transform')}>
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberField
-                    label="X"
-                    value={node.position.x}
-                    onChange={(v) =>
-                      onUpdateNode(node.id, { position: { ...node.position, x: v } })
-                    }
-                  />
-                  <NumberField
-                    label="Y"
-                    value={node.position.y}
-                    onChange={(v) =>
-                      onUpdateNode(node.id, { position: { ...node.position, y: v } })
-                    }
-                  />
-                  <NumberField
-                    label="W"
-                    value={node.size.width}
-                    onChange={(v) =>
-                      onUpdateNode(node.id, { size: { ...node.size, width: Math.max(50, v) } })
-                    }
-                  />
-                  <NumberField
-                    label="H"
-                    value={node.size.height}
-                    onChange={(v) =>
-                      onUpdateNode(node.id, { size: { ...node.size, height: Math.max(30, v) } })
-                    }
-                  />
-                  <NumberField
-                    label="R"
-                    value={node.rotation ?? 0}
-                    onChange={(v) => onUpdateNode(node.id, { rotation: ((v % 360) + 360) % 360 })}
-                  />
-                </div>
-              </CollapsibleSection>
+              <CanvasSection title={t('panel.transform')}>
+                <SharedPropertyPanel
+                  properties={transformAdapter.properties}
+                  onCommit={handleTransformChange}
+                  onPreviewChange={handleTransformChange}
+                />
+              </CanvasSection>
 
-              <CollapsibleSection title={t('panel.layer')}>
+              <CanvasSection title={t('panel.layer')}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs" style={{ color: 'var(--neko-fg-secondary)' }}>
                     Z-Index: {node.zIndex}
                   </span>
-                  <button
-                    style={{
-                      fontSize: 11,
-                      padding: '3px 8px',
-                      borderRadius: 5,
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'background 0.15s',
-                      color: '#ffffff',
-                      backgroundColor: node.locked ? '#f59e0b' : '#6b7280',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = node.locked ? '#d97706' : '#4b5563';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = node.locked ? '#f59e0b' : '#6b7280';
-                    }}
+                  <Button
+                    leadingIcon={<Codicon name={node.locked ? 'lock' : 'unlock'} />}
+                    size="xs"
+                    variant={node.locked ? 'secondary' : 'ghost'}
                     onClick={() => onToggleLock(node.id)}
                   >
-                    {node.locked ? '🔒 ' + t('menu.unlock') : '🔓 ' + t('menu.lock')}
-                  </button>
+                    {node.locked ? t('menu.unlock') : t('menu.lock')}
+                  </Button>
                 </div>
-              </CollapsibleSection>
+              </CanvasSection>
 
               {onUpdatePorts && <PortEditor node={node} onUpdatePorts={onUpdatePorts} />}
             </>
           )}
 
           {/* Actions */}
-          <CollapsibleSection title={t('panel.actions')}>
-            <button
-              style={{
-                width: '100%',
-                fontSize: 12,
-                padding: '5px 0',
-                borderRadius: 6,
-                border: 'none',
-                backgroundColor: '#ef4444',
-                color: '#ffffff',
-                cursor: 'pointer',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#dc2626';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#ef4444';
-              }}
+          <CanvasSection title={t('panel.actions')}>
+            <Button
+              className="w-full"
+              leadingIcon={<Codicon name="trash" />}
+              size="sm"
+              variant="danger"
               onClick={() => onDeleteNode(node.id)}
             >
-              🗑 {t('menu.delete')}
-            </button>
-          </CollapsibleSection>
+              {t('menu.delete')}
+            </Button>
+          </CanvasSection>
         </>
       )}
     </div>
@@ -287,64 +245,53 @@ function PanelHeader({ title }: { title: string }) {
   return <div className="neko-panel-header">{title}</div>;
 }
 
-function NumberField({
-  label,
-  value,
-  onChange,
+function CanvasSection({
+  children,
+  defaultExpanded = true,
+  title,
 }: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
+  readonly children: React.ReactNode;
+  readonly defaultExpanded?: boolean;
+  readonly title: string;
 }) {
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = parseFloat(e.target.value);
-      if (!isNaN(v)) onChange(v);
-    },
-    [onChange],
-  );
-
   return (
-    <div className="flex items-center gap-1.5">
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          width: 14,
-          textAlign: 'center',
-          color: 'var(--neko-fg-secondary)',
-          userSelect: 'none',
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </span>
-      <input
-        type="number"
-        value={Math.round(value)}
-        onChange={handleChange}
-        className="flex-1 min-w-0 outline-none"
-        style={{
-          fontSize: 12,
-          padding: '3px 6px',
-          borderRadius: 5,
-          border: '1px solid var(--control-border)',
-          backgroundColor: 'var(--control-bg)',
-          color: 'var(--control-fg)',
-          fontVariantNumeric: 'tabular-nums',
-          transition: 'border-color 0.15s, box-shadow 0.15s',
-        }}
-        onFocus={(e) => {
-          e.currentTarget.style.borderColor = 'var(--accent-blue)';
-          e.currentTarget.style.boxShadow = '0 0 0 2.5px var(--control-focus-ring)';
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.borderColor = 'var(--control-border)';
-          e.currentTarget.style.boxShadow = 'none';
-        }}
-      />
-    </div>
+    <Collapsible
+      defaultOpen={defaultExpanded}
+      className="border-b border-[var(--panel-divider)] px-3 py-2"
+      contentClassName="pt-2"
+      trigger={
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-left text-xs font-semibold uppercase text-[var(--neko-fg-secondary)]"
+        >
+          <span>{title}</span>
+          <Codicon name="chevron-down" />
+        </button>
+      }
+    >
+      {children}
+    </Collapsible>
   );
+}
+
+function CollapsibleSection({
+  children,
+  defaultExpanded = true,
+  title,
+}: {
+  readonly children: React.ReactNode;
+  readonly defaultExpanded?: boolean;
+  readonly title: string;
+}) {
+  return (
+    <CanvasSection defaultExpanded={defaultExpanded} title={title}>
+      {children}
+    </CanvasSection>
+  );
+}
+
+function Codicon({ name }: { readonly name: Parameters<typeof toCodiconClassName>[0] }) {
+  return <span aria-hidden="true" className={toCodiconClassName(name)} />;
 }
 
 function MultiSelectionInfo({ nodes }: { nodes: CanvasNode[] }) {

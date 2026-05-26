@@ -12,8 +12,8 @@
  */
 
 import { useCallback } from 'react';
-import { useFileDrop } from '@neko/shared/components';
-import type { FileDropResult } from '@neko/shared/components';
+import { useFileDrop } from '@neko/ui/hooks';
+import type { FileDropResult } from '@neko/ui/hooks';
 import { postMessage } from '../shared/useVscodeMessage';
 
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']);

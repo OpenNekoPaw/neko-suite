@@ -107,8 +107,9 @@ function PanoramaVideoApp(): JSX.Element {
     clientRef.current = client;
     void client.connect();
 
+    let audioClient: AudioStreamClient | null = null;
     if (stream.audioStreamUrl) {
-      const audioClient = new AudioStreamClient({
+      audioClient = new AudioStreamClient({
         websocketUrl: stream.audioStreamUrl,
         onError: (nextError) => setError(nextError.message),
       });

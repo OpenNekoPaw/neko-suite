@@ -5,6 +5,8 @@
  */
 
 import React, { useCallback } from 'react';
+import { Badge, Button, Progress } from '@neko/ui/primitives';
+import { toCodiconClassName, type CodiconName } from '@neko/ui/icons';
 import { useMarketplaceStore, type MarketItem } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
@@ -13,11 +15,11 @@ interface AssetCardProps {
   item: MarketItem;
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  skill: 'codicon-symbol-misc',
-  shader: 'codicon-symbol-color',
-  model: 'codicon-symbol-namespace',
-  preset: 'codicon-settings-gear',
+const TYPE_ICONS: Record<string, CodiconName> = {
+  skill: 'symbol-misc',
+  shader: 'symbol-color',
+  model: 'symbol-namespace',
+  preset: 'gear',
 };
 
 export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
@@ -46,9 +48,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
         ? t('marketplace.action.update')
         : t('marketplace.action.uninstall');
 
-  const actionVariant = item.installState === 'installed' ? 'secondary' : 'primary';
+  const actionVariant = item.installState === 'installed' ? 'secondary' : 'default';
 
-  const iconClass = TYPE_ICONS[item.type] ?? 'codicon-package';
+  const iconName = TYPE_ICONS[item.type] ?? 'package';
 
   return (
     <div className="asset-card">
@@ -57,19 +59,21 @@ export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
         {item.thumbnail ? (
           <img src={item.thumbnail} alt={item.name} className="asset-card__thumbnail" />
         ) : (
-          <span className={`codicon ${iconClass} asset-card__type-icon`} />
+          <span className={`${toCodiconClassName(iconName)} asset-card__type-icon`} />
         )}
       </div>
 
       {/* Content */}
       <div className="asset-card__content">
         <div className="asset-card__header">
-          <button
+          <Button
             className="asset-card__name asset-card__name-btn"
+            size="xs"
+            variant="ghost"
             onClick={() => setSelectedPackage(item)}
           >
             {item.name}
-          </button>
+          </Button>
           <span className="asset-card__version">v{item.version}</span>
         </div>
 
@@ -80,9 +84,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
         {item.tags && item.tags.length > 0 && (
           <div className="asset-card__tags">
             {item.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="tag-chip">
+              <Badge key={tag} className="tag-chip h-auto px-1.5 py-0.5">
                 {tag}
-              </span>
+              </Badge>
             ))}
           </div>
         )}
@@ -90,7 +94,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
         <div className="asset-card__footer">
           {item.downloadCount !== undefined && (
             <span className="asset-card__meta">
-              <span className="codicon codicon-cloud-download" />
+              <span className={toCodiconClassName('cloud-download')} />
               {item.downloadCount.toLocaleString()}
             </span>
           )}
@@ -98,18 +102,24 @@ export const AssetCard: React.FC<AssetCardProps> = ({ item }) => {
           {/* Progress bar during install */}
           {isInstalling && (
             <div className="install-progress">
-              <div className="install-progress__bar" style={{ width: `${progress.percent}%` }} />
+              <Progress
+                className="install-progress__bar"
+                label={progress.phase}
+                value={progress.percent}
+              />
               <span className="install-progress__phase">{progress.phase}</span>
             </div>
           )}
 
-          <button
-            className={`asset-action-btn asset-action-btn--${actionVariant}`}
+          <Button
+            className="asset-action-btn"
+            size="xs"
+            variant={actionVariant}
             onClick={handleAction}
             disabled={isInstalling}
           >
             {actionLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

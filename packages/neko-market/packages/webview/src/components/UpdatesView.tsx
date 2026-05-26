@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { useMarketplaceStore } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
@@ -14,7 +15,7 @@ export const UpdatesView: React.FC = () => {
   if (updates.length === 0) {
     return (
       <div className="empty-state">
-        <span className="codicon codicon-check empty-state__icon" />
+        <span className={`${toCodiconClassName('check')} empty-state__icon`} />
         <p className="empty-state__text">{t('marketplace.updates.empty')}</p>
       </div>
     );

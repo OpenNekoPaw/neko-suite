@@ -3,6 +3,8 @@
  */
 
 import React from 'react';
+import { Button, IconButton } from '@neko/ui/primitives';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { useMarketplaceStore, type MarketItem } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
@@ -41,9 +43,12 @@ export const PackageDetailView: React.FC = () => {
             {selectedPackage.kind ? ` · ${selectedPackage.kind}` : ''}
           </span>
         </div>
-        <button className="search-clear" onClick={() => setSelectedPackage(null)}>
-          <span className="codicon codicon-close" />
-        </button>
+        <IconButton
+          className="search-clear"
+          label={t('marketplace.action.dismiss')}
+          icon={<span className={toCodiconClassName('close')} />}
+          onClick={() => setSelectedPackage(null)}
+        />
       </div>
 
       {selectedPackage.description && (
@@ -51,16 +56,20 @@ export const PackageDetailView: React.FC = () => {
       )}
 
       <div className="detail-panel__actions">
-        <button
-          className={`asset-action-btn asset-action-btn--${action.variant}`}
+        <Button
+          className="asset-action-btn"
+          size="xs"
+          variant={action.variant === 'primary' ? 'default' : 'secondary'}
           disabled={action.disabled}
           onClick={() => action.run(selectedPackage)}
         >
           {t(action.labelKey)}
-        </button>
+        </Button>
         {hasLargeAsset && (
-          <button
-            className="asset-action-btn asset-action-btn--secondary"
+          <Button
+            className="asset-action-btn"
+            size="xs"
+            variant="secondary"
             onClick={() =>
               openLargeAssetPicker({
                 packageId: selectedPackage.id,
@@ -78,7 +87,7 @@ export const PackageDetailView: React.FC = () => {
             }
           >
             {t('marketplace.largeAsset.choose')}
-          </button>
+          </Button>
         )}
       </div>
     </div>

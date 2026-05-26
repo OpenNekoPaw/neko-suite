@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { DashboardTask } from '@neko/shared';
+import { Badge, Button, Progress } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 
 export interface TaskTableProps {
@@ -90,28 +91,27 @@ function TaskLane({ label, tasks, onCancel, onRetry, onRevealOutput }: TaskLaneP
           <div key={task.taskId} className="task-card">
             <div className="task-card-title">{task.title}</div>
             <div className="task-card-meta">
-              <span className="badge">{task.kind}</span> {task.sourceDisplayName ?? task.source}
+              <Badge className="mr-1 h-auto rounded-full px-2 py-0.5">{task.kind}</Badge>
+              {task.sourceDisplayName ?? task.source}
             </div>
             {task.progress !== undefined ? (
-              <progress max={100} value={task.progress}>
-                {task.progress}%
-              </progress>
+              <Progress label={task.title} value={task.progress} />
             ) : null}
             <div className="task-card-actions">
               {task.actions.includes('cancel') ? (
-                <button type="button" onClick={() => onCancel(task.taskId)}>
+                <Button size="xs" variant="secondary" onClick={() => onCancel(task.taskId)}>
                   {t('common.cancel')}
-                </button>
+                </Button>
               ) : null}
               {task.actions.includes('retry') ? (
-                <button type="button" onClick={() => onRetry(task.taskId)}>
+                <Button size="xs" onClick={() => onRetry(task.taskId)}>
                   {t('common.retry')}
-                </button>
+                </Button>
               ) : null}
               {task.actions.includes('reveal-output') ? (
-                <button type="button" onClick={() => onRevealOutput(task.taskId)}>
+                <Button size="xs" variant="ghost" onClick={() => onRevealOutput(task.taskId)}>
                   {t('common.reveal')}
-                </button>
+                </Button>
               ) : null}
             </div>
           </div>

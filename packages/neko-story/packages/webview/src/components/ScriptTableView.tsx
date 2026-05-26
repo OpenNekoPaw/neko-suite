@@ -18,6 +18,8 @@ import type {
   StoryMissingInput,
   StorySceneVideoReadiness,
 } from '@neko/shared';
+import { Badge, Button, IconButton } from '@neko/ui/primitives';
+import { SendIcon, MoreHorizontalIcon } from '@neko/ui/icons';
 import type { StorySceneAction, StorySceneState } from '../types';
 import { formatDurationShort } from '../utils/sceneBreakdown';
 import { useTranslation } from '../i18n/I18nContext';
@@ -178,8 +180,9 @@ function StatusBadge({
 }) {
   const palette = STATUS_PALETTE[status];
   return (
-    <span
+    <Badge
       title={title}
+      tone={status === 'done' ? 'success' : status === 'attention' ? 'warning' : 'neutral'}
       style={{
         display: 'inline-block',
         padding: '1px 8px',
@@ -194,7 +197,7 @@ function StatusBadge({
       }}
     >
       {label}
-    </span>
+    </Badge>
   );
 }
 
@@ -290,38 +293,23 @@ function CharacterBadge({
         </span>
       )}
       {onSendToAgent && (
-        <span
-          role="button"
+        <IconButton
+          label={t('table.character.sendToAgent')}
           title={t('table.character.sendToAgent')}
+          icon={<SendIcon size={10} />}
+          size="xs"
+          variant="ghost"
+          className="h-4 w-4 flex-shrink-0 opacity-60"
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 14,
-            height: 14,
             borderRadius: 2,
             fontSize: 9,
-            cursor: 'pointer',
-            opacity: 0.6,
-            flexShrink: 0,
             marginLeft: 1,
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLSpanElement).style.opacity = '1';
-            (e.currentTarget as HTMLSpanElement).style.backgroundColor =
-              'var(--vscode-list-hoverBackground)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLSpanElement).style.opacity = '0.6';
-            (e.currentTarget as HTMLSpanElement).style.backgroundColor = 'transparent';
           }}
           onClick={(e) => {
             e.stopPropagation();
             onSendToAgent(name, sceneId, character?.characterId);
           }}
-        >
-          ↗
-        </span>
+        />
       )}
       {/* Hover preview */}
       {hoverVisible && resolvedThumbnailUri && (
@@ -414,71 +402,32 @@ function translateVisualStatus(
 
 function PrimaryActionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
-      style={{
-        display: 'inline-block',
-        padding: '2px 10px',
-        borderRadius: 3,
-        border: 'none',
-        color: 'var(--vscode-button-foreground)',
-        backgroundColor: 'var(--vscode-button-background)',
-        fontSize: 10,
-        lineHeight: '16px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-          'var(--vscode-button-hoverBackground)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-          'var(--vscode-button-background)';
-      }}
+    <Button
+      className="h-5 px-2 text-[10px] leading-4"
+      size="xs"
       onClick={(event) => {
         event.stopPropagation();
         onClick();
       }}
-      type="button"
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
 function SecondaryActionButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
-      style={{
-        display: 'inline-block',
-        padding: '2px 6px',
-        borderRadius: 3,
-        border: '1px solid var(--vscode-panel-border)',
-        color: 'var(--vscode-descriptionForeground)',
-        backgroundColor: 'transparent',
-        fontSize: 10,
-        lineHeight: '14px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-      }}
-      onMouseEnter={(e) => {
-        const el = e.currentTarget as HTMLButtonElement;
-        el.style.backgroundColor = 'var(--vscode-list-hoverBackground)';
-        el.style.color = 'var(--vscode-foreground)';
-      }}
-      onMouseLeave={(e) => {
-        const el = e.currentTarget as HTMLButtonElement;
-        el.style.backgroundColor = 'transparent';
-        el.style.color = 'var(--vscode-descriptionForeground)';
-      }}
+    <Button
+      className="h-5 px-2 text-[10px] leading-4"
+      size="xs"
+      variant="secondary"
       onClick={(event) => {
         event.stopPropagation();
         onClick();
       }}
-      type="button"
     >
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -547,9 +496,11 @@ function DropdownMenu({
       }}
     >
       {items.map((item, i) => (
-        <button
+        <Button
           key={i}
           role="menuitem"
+          size="xs"
+          variant="ghost"
           style={{
             display: 'block',
             width: '100%',
@@ -578,10 +529,9 @@ function DropdownMenu({
             item.onClick();
             onClose();
           }}
-          type="button"
         >
           {item.label}
-        </button>
+        </Button>
       ))}
     </div>,
     document.body,
@@ -884,42 +834,26 @@ const SceneRow = memo(function SceneRow({
           )}
 
           {/* More menu trigger */}
-          <button
+          <IconButton
             ref={moreButtonRef}
+            label={t('table.action.more')}
+            icon={<MoreHorizontalIcon size={14} />}
+            size="xs"
+            variant="secondary"
+            className="h-[18px] w-5 flex-shrink-0"
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 20,
-              height: 18,
               borderRadius: 3,
               border: '1px solid var(--vscode-panel-border)',
               color: 'var(--vscode-descriptionForeground)',
-              backgroundColor: 'transparent',
               fontSize: 11,
-              cursor: 'pointer',
               lineHeight: 1,
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.backgroundColor =
-                'var(--vscode-list-hoverBackground)';
-              (e.currentTarget as HTMLButtonElement).style.color = 'var(--vscode-foreground)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
-              (e.currentTarget as HTMLButtonElement).style.color =
-                'var(--vscode-descriptionForeground)';
             }}
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen((v) => !v);
             }}
             title={t('table.action.more')}
-            type="button"
-          >
-            ···
-          </button>
+          />
           {menuOpen && (
             <DropdownMenu items={menuItems} anchorRef={moreButtonRef} onClose={handleCloseMenu} />
           )}

@@ -102,6 +102,7 @@ export const marketplace = {
   'marketplace.action.detail': '详情',
   'marketplace.action.reveal': '显示',
   'marketplace.action.refresh': '刷新',
+  'marketplace.action.dismiss': '关闭',
   'marketplace.action.renew': '续费',
   'marketplace.action.installing': '安装中...',
   'marketplace.action.uninstalling': '卸载中...',

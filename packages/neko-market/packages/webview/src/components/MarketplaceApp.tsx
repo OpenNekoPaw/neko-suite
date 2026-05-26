@@ -5,6 +5,8 @@
  */
 
 import React, { useEffect, useCallback } from 'react';
+import { Badge, IconButton, Tabs } from '@neko/ui/primitives';
+import { toCodiconClassName, type CodiconName } from '@neko/ui/icons';
 import {
   useMarketplaceStore,
   type MarketItem,
@@ -47,11 +49,11 @@ export const MarketplaceApp: React.FC = () => {
   const store = useMarketplaceStore();
   const { t } = useTranslation();
 
-  const TABS: { key: TabType; labelKey: string; icon: string }[] = [
-    { key: 'browse', labelKey: 'marketplace.tab.browse', icon: 'codicon-search' },
-    { key: 'installed', labelKey: 'marketplace.tab.installed', icon: 'codicon-package' },
-    { key: 'owned', labelKey: 'marketplace.tab.owned', icon: 'codicon-account' },
-    { key: 'updates', labelKey: 'marketplace.tab.updates', icon: 'codicon-cloud-download' },
+  const TABS: { key: TabType; labelKey: string; icon: CodiconName }[] = [
+    { key: 'browse', labelKey: 'marketplace.tab.browse', icon: 'search' },
+    { key: 'installed', labelKey: 'marketplace.tab.installed', icon: 'package' },
+    { key: 'owned', labelKey: 'marketplace.tab.owned', icon: 'account' },
+    { key: 'updates', labelKey: 'marketplace.tab.updates', icon: 'cloud-download' },
   ];
 
   // ---------------------------------------------------------------------------
@@ -216,40 +218,36 @@ export const MarketplaceApp: React.FC = () => {
           role="alert"
         >
           <span>{t(error.i18nKey, error.message ? { message: error.message } : undefined)}</span>
-          <button
+          <IconButton
             onClick={() => store.setError(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'inherit',
-              opacity: 0.7,
-            }}
-            aria-label="Dismiss"
-          >
-            <span className="codicon codicon-close" />
-          </button>
+            className="text-inherit opacity-70"
+            label={t('marketplace.action.dismiss')}
+            icon={<span className={toCodiconClassName('close')} />}
+          />
         </div>
       )}
 
       {/* Tab bar */}
-      <div className="tab-bar" role="tablist">
-        {TABS.map(({ key, labelKey, icon }) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={activeTab === key}
-            className={`tab-btn ${activeTab === key ? 'tab-btn--active' : ''}`}
-            onClick={() => store.setActiveTab(key)}
-          >
-            <span className={`codicon ${icon}`} />
-            <span className="tab-btn__label">{t(labelKey)}</span>
-            {key === 'updates' && updates.length > 0 && (
-              <span className="badge">{updates.length}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="tab-bar"
+        listClassName="bg-transparent p-0"
+        value={activeTab}
+        onValueChange={(value) => store.setActiveTab(value as TabType)}
+        items={TABS.map(({ key, labelKey, icon }) => ({
+          value: key,
+          label: (
+            <span className="tab-btn">
+              <span className={toCodiconClassName(icon)} />
+              <span className="tab-btn__label">{t(labelKey)}</span>
+              {key === 'updates' && updates.length > 0 ? (
+                <Badge className="h-auto min-w-4 rounded-full px-1.5 py-0" tone="accent">
+                  {updates.length}
+                </Badge>
+              ) : null}
+            </span>
+          ),
+        }))}
+      />
 
       {/* Content */}
       <div className="marketplace-content">

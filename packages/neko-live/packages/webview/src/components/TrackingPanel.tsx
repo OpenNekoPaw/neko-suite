@@ -1,3 +1,4 @@
+import { Badge, Button, Select } from '@neko/ui/primitives';
 import { useLiveStore } from '../stores/liveStore';
 import type { TrackingMode } from '../types/tracking';
 import { vscode } from '../vscode-api';
@@ -91,7 +92,10 @@ export function TrackingPanel() {
         )}
 
         {isRecording && (
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Badge
+            tone="danger"
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}
+          >
             <span
               style={{
                 width: 6,
@@ -104,69 +108,43 @@ export function TrackingPanel() {
             <span style={{ color: '#ef4444', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
               {formatTime(recordingElapsedMs)}
             </span>
-          </span>
+          </Badge>
         )}
       </div>
 
       {/* Controls row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-        <select
+        <Select
+          label={t('mode.vmc')}
           value={trackingMode}
-          onChange={(e) => handleModeChange(e.target.value as TrackingMode)}
-          style={{
-            padding: '2px 4px',
-            fontSize: 11,
-            borderRadius: 3,
-            background: 'var(--vscode-dropdown-background)',
-            color: 'var(--vscode-dropdown-foreground)',
-            border: '1px solid var(--vscode-dropdown-border)',
-          }}
-        >
-          <option value="vmc">{t('mode.vmc')}</option>
-          <option value="mediapipe" disabled>
-            {t('mode.mediapipe')}
-          </option>
-          <option value="hybrid" disabled>
-            {t('mode.hybrid')}
-          </option>
-        </select>
+          options={[
+            { value: 'vmc', label: t('mode.vmc') },
+            { value: 'mediapipe', label: t('mode.mediapipe'), disabled: true },
+            { value: 'hybrid', label: t('mode.hybrid'), disabled: true },
+          ]}
+          className="h-6 min-w-24 text-[11px]"
+          onValueChange={(value) => handleModeChange(value as TrackingMode)}
+        />
 
-        <button
+        <Button
+          size="xs"
+          variant={isTracking ? 'danger' : 'default'}
           onClick={handleToggleTracking}
-          style={{
-            ...btnStyle,
-            background: isTracking
-              ? 'var(--vscode-statusBarItem-errorBackground, #c53030)'
-              : 'var(--vscode-button-background)',
-            color: isTracking
-              ? 'var(--vscode-statusBarItem-errorForeground, #fff)'
-              : 'var(--vscode-button-foreground)',
-          }}
         >
           {isTracking ? t('controls.stop') : t('controls.start')}
-        </button>
+        </Button>
 
-        <button
-          onClick={handleSelectAvatar}
-          style={{
-            ...btnStyle,
-            background: 'var(--vscode-button-secondaryBackground)',
-            color: 'var(--vscode-button-secondaryForeground)',
-          }}
-        >
+        <Button size="xs" variant="secondary" onClick={handleSelectAvatar}>
           {t('controls.avatar')}
-        </button>
+        </Button>
 
-        <button
+        <Button
+          size="xs"
+          variant={isRecording ? 'danger' : 'secondary'}
           onClick={handleToggleRecording}
-          style={{
-            ...btnStyle,
-            background: isRecording ? '#dc2626' : 'var(--vscode-button-secondaryBackground)',
-            color: isRecording ? '#fff' : 'var(--vscode-button-secondaryForeground)',
-          }}
         >
           {isRecording ? t('controls.stopRec') : t('controls.rec')}
-        </button>
+        </Button>
       </div>
 
       {/* Last recording path */}
@@ -203,11 +181,3 @@ export function TrackingPanel() {
     </div>
   );
 }
-
-const btnStyle: React.CSSProperties = {
-  padding: '2px 8px',
-  fontSize: 11,
-  borderRadius: 3,
-  border: 'none',
-  cursor: 'pointer',
-};

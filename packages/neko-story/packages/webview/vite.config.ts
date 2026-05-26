@@ -4,6 +4,12 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@neko/shared': resolve(__dirname, '../../../neko-types/src'),
+      '@neko/ui': resolve(__dirname, '../../../neko-ui/src'),
+    },
+  },
   build: {
     outDir: '../../dist/webview',
     emptyOutDir: true,

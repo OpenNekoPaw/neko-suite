@@ -28,7 +28,8 @@ import type {
 import type { SceneCommandEnvelope } from '@neko/shared';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
 import { postMessage } from '@neko/shared/vscode';
-import { ResizeHandle, usePersistedResize, useResizable } from '@neko/shared/components';
+import { usePersistedResize, useResizable } from '@neko/ui/hooks';
+import { ResizeHandle } from '@neko/ui/primitives';
 import { EngineClient, type SceneControlSocket } from '@neko/neko-client';
 import { ModelController } from './viewport/ModelController';
 import type { EditableNodeTransform } from './scene/SceneEditingTypes';
@@ -116,36 +117,33 @@ export function App(): React.JSX.Element {
     [],
   );
 
-  const sendEditorCameraToEngine = useCallback(
-    () => {
-      const store = useModelStore.getState();
-      const position = store.getCameraPosition();
-      const target = store.cameraTarget;
-      const socket = sceneControlRef.current;
-      const handleCameraError = (error: unknown) => {
-        void webviewErrorHandler.handleError(toError(error), {
-          showToUser: false,
-          severity: 'error',
-        });
-        setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
-      };
+  const sendEditorCameraToEngine = useCallback(() => {
+    const store = useModelStore.getState();
+    const position = store.getCameraPosition();
+    const target = store.cameraTarget;
+    const socket = sceneControlRef.current;
+    const handleCameraError = (error: unknown) => {
+      void webviewErrorHandler.handleError(toError(error), {
+        showToUser: false,
+        severity: 'error',
+      });
+      setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
+    };
 
-      if (!socket) {
-        return;
-      }
+    if (!socket) {
+      return;
+    }
 
-      void socket
-        .updateViewportCamera({
-          sceneId: store.sceneId,
-          sceneRevision: store.sceneRevision,
-          viewportId: 'main',
-          position,
-          target,
-        })
-        .catch(handleCameraError);
-    },
-    [setSceneControlStatus],
-  );
+    void socket
+      .updateViewportCamera({
+        sceneId: store.sceneId,
+        sceneRevision: store.sceneRevision,
+        viewportId: 'main',
+        position,
+        target,
+      })
+      .catch(handleCameraError);
+  }, [setSceneControlStatus]);
 
   const handleViewportCameraMutated = useCallback(() => {
     setQualityPreview(null);
@@ -806,7 +804,8 @@ export function App(): React.JSX.Element {
   const handleCharacterPreviewPlaybackControl = useCallback(
     (action: 'play' | 'pause' | 'stop') => {
       const modeId = characterPreview.appliedMode;
-      if (!selectedCharacterId || !modeId || !sceneControlRef.current || enginePort === null) return;
+      if (!selectedCharacterId || !modeId || !sceneControlRef.current || enginePort === null)
+        return;
       const controller = new ModelController({
         enginePort,
         sceneId,
@@ -824,13 +823,7 @@ export function App(): React.JSX.Element {
           });
         });
     },
-    [
-      characterPreview.appliedMode,
-      enginePort,
-      sceneId,
-      selectedCharacterId,
-      setSceneControlStatus,
-    ],
+    [characterPreview.appliedMode, enginePort, sceneId, selectedCharacterId, setSceneControlStatus],
   );
 
   const handleCrossfadeAnimation = useCallback(
@@ -1029,7 +1022,10 @@ export function App(): React.JSX.Element {
           properties={propertiesPanel}
         />
       </div>
-      <TimelineDock key={isKeyframeEditorOpen ? 'expanded' : 'compact'} expanded={isKeyframeEditorOpen}>
+      <TimelineDock
+        key={isKeyframeEditorOpen ? 'expanded' : 'compact'}
+        expanded={isKeyframeEditorOpen}
+      >
         {isKeyframeEditorOpen ? (
           <ModelKeyframeTimeline
             disabled={!routeAReady}
@@ -1150,11 +1146,7 @@ function TimelineDock({
     minSize: timelineSpec.minSize,
     maxSize: timelineSpec.maxSize,
   });
-  const {
-    containerRef,
-    handleProps,
-    isResizing,
-  } = useResizable<HTMLElement>({
+  const { containerRef, handleProps, isResizing } = useResizable<HTMLElement>({
     edge: 'bottom',
     mode: 'pixel',
     size: timelineResize.size,

@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, type FC, type ReactNode } from 'react';
+import { Button, ContextMenu } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 
 export interface ContextMenuAction {
@@ -52,11 +53,7 @@ export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      e.preventDefault();
       onContextMenuTarget?.(e.target as HTMLElement);
-      const x = Math.min(e.clientX, window.innerWidth - 180);
-      const y = Math.min(e.clientY, window.innerHeight - 120);
-      setMenu({ x, y });
     },
     [onContextMenuTarget],
   );
@@ -83,16 +80,33 @@ export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
 
   const visibleActions = actions?.filter((a) => a.when !== false) ?? [];
 
-  return (
+  const trigger = (
     <div onContextMenu={handleContextMenu} className="contents">
       {children}
+    </div>
+  );
+
+  return (
+    <>
+      {visibleActions.length > 0 ? (
+        <ContextMenu
+          trigger={trigger}
+          items={visibleActions.map((action, index) => ({
+            id: `document-action-${index}`,
+            label: action.label,
+            onSelect: action.onClick,
+          }))}
+        />
+      ) : (
+        trigger
+      )}
 
       {menu && visibleActions.length > 0 && (
         <div
           className="fixed z-50 rounded py-1 text-xs shadow-lg"
           style={{
-            left: menu.x,
-            top: menu.y,
+            left: Math.min(menu.x, window.innerWidth - 180),
+            top: Math.min(menu.y, window.innerHeight - 120),
             minWidth: '160px',
             background: 'var(--vscode-menu-background, var(--vscode-sideBar-background))',
             border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
@@ -101,9 +115,11 @@ export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
           onClick={(e) => e.stopPropagation()}
         >
           {visibleActions.map((action, i) => (
-            <button
+            <Button
               key={i}
-              className="block w-full px-3 py-1.5 text-left hover:opacity-80"
+              className="block h-auto w-full justify-start px-3 py-1.5 text-left hover:opacity-80"
+              size="xs"
+              variant="ghost"
               style={{ background: 'transparent', color: 'inherit' }}
               onClick={() => {
                 action.onClick();
@@ -111,11 +127,11 @@ export const DocumentContextMenu: FC<DocumentContextMenuProps> = ({
               }}
             >
               {action.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 };
 

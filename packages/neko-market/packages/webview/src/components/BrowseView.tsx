@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { useMarketplaceStore } from '../stores/marketplaceStore';
 import { useTranslation } from '../i18n/I18nContext';
 import { AssetCard } from './AssetCard';
@@ -22,7 +23,7 @@ export const BrowseView: React.FC = () => {
       {/* Loading spinner */}
       {isSearching && (
         <div className="loading-state">
-          <span className="codicon codicon-loading codicon-modifier-spin" />
+          <span className={`${toCodiconClassName('loading')} codicon-modifier-spin`} />
         </div>
       )}
 
@@ -40,7 +41,7 @@ export const BrowseView: React.FC = () => {
             </>
           ) : (
             <div className="empty-state">
-              <span className="codicon codicon-package empty-state__icon" />
+              <span className={`${toCodiconClassName('package')} empty-state__icon`} />
               <p className="empty-state__text">{t('marketplace.browse.empty')}</p>
             </div>
           )}
@@ -64,7 +65,7 @@ export const BrowseView: React.FC = () => {
             </div>
           ) : (
             <div className="empty-state">
-              <span className="codicon codicon-search empty-state__icon" />
+              <span className={`${toCodiconClassName('search')} empty-state__icon`} />
               <p className="empty-state__text">
                 {t('marketplace.browse.noResults', { query: searchText })}
               </p>

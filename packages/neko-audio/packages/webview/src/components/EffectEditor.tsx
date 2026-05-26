@@ -5,13 +5,14 @@
  */
 
 import { useCallback } from 'react';
+import { ChevronDownIcon, ChevronUpIcon, CloseIcon, toCodiconClassName } from '@neko/ui/icons';
 import type {
   AudioEffectInstance,
   AudioEffectParameterDefinition,
   AudioEffectParams,
 } from '../types/audioEffects';
 import { getAudioEffectDefinition } from '../types/audioEffects';
-import { MacIconButton } from '@neko/shared/components';
+import { AudioIconButton, AudioSelect, AudioSlider } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 interface EffectEditorProps {
@@ -44,32 +45,47 @@ export function EffectEditor({
     >
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-1.5">
-        <button
-          className="w-5 h-5 flex items-center justify-center rounded-full text-[10px] bg-transparent text-[var(--editor-fg)] border-none cursor-pointer hover:bg-[var(--audio-hover)] transition-colors"
+        <AudioIconButton
+          active={effect.enabled}
+          className="h-5 w-5 text-[10px]"
+          label={t('audio.effects.bypass')}
           onClick={() => onToggle(effect.id)}
           title={t('audio.effects.bypass')}
         >
-          {effect.enabled ? '●' : '○'}
-        </button>
+          <span
+            aria-hidden="true"
+            className={toCodiconClassName(
+              effect.enabled ? 'circle-large-filled' : 'circle-large-outline',
+            )}
+          />
+        </AudioIconButton>
         <span className="flex-1 text-xs font-medium">{t(definition.nameKey) || effect.type}</span>
         {onMoveUp && (
-          <MacIconButton size="sm" onClick={onMoveUp} className="w-5 h-5 text-[10px]">
-            ▲
-          </MacIconButton>
+          <AudioIconButton
+            className="h-5 w-5 text-[10px]"
+            label={t('audio.effects.moveUp')}
+            onClick={onMoveUp}
+          >
+            <ChevronUpIcon className="h-3 w-3" />
+          </AudioIconButton>
         )}
         {onMoveDown && (
-          <MacIconButton size="sm" onClick={onMoveDown} className="w-5 h-5 text-[10px]">
-            ▼
-          </MacIconButton>
+          <AudioIconButton
+            className="h-5 w-5 text-[10px]"
+            label={t('audio.effects.moveDown')}
+            onClick={onMoveDown}
+          >
+            <ChevronDownIcon className="h-3 w-3" />
+          </AudioIconButton>
         )}
-        <MacIconButton
-          size="sm"
+        <AudioIconButton
+          className="h-5 w-5 text-[10px] text-[var(--status-error)]"
+          label={t('audio.effects.remove')}
           onClick={() => onRemove(effect.id)}
           title={t('audio.effects.remove')}
-          className="w-5 h-5 text-[10px] text-[var(--status-error)]"
         >
-          ✕
-        </MacIconButton>
+          <CloseIcon className="h-3 w-3" />
+        </AudioIconButton>
       </div>
 
       {/* Parameters */}
@@ -100,19 +116,9 @@ interface ParameterControlProps {
 }
 
 function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) {
-  const handleSliderChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      onChange(parseFloat(e.target.value));
-    },
-    [onChange],
-  );
+  const handleSliderChange = useCallback((nextValue: number) => onChange(nextValue), [onChange]);
 
-  const handleSelectChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      onChange(e.target.value);
-    },
-    [onChange],
-  );
+  const handleSelectChange = useCallback((nextValue: string) => onChange(nextValue), [onChange]);
 
   const handleBooleanChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,12 +136,12 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
           <label className="text-[10px] min-w-[60px] max-w-[80px] shrink-0 opacity-70 truncate">
             {label}
           </label>
-          <input
-            type="range"
-            className="neko-slider flex-1 min-w-0"
-            min={paramDef.min}
-            max={paramDef.max}
-            step={paramDef.step}
+          <AudioSlider
+            className="min-w-0 flex-1"
+            label={label}
+            min={paramDef.min ?? 0}
+            max={paramDef.max ?? 1}
+            step={paramDef.step ?? 0.01}
             value={typeof value === 'number' ? value : (paramDef.min ?? 0)}
             onChange={handleSliderChange}
           />
@@ -151,17 +157,16 @@ function ParameterControl({ paramDef, value, onChange }: ParameterControlProps) 
           <label className="text-[10px] min-w-[60px] max-w-[80px] shrink-0 opacity-70 truncate">
             {label}
           </label>
-          <select
+          <AudioSelect
+            className="flex-1"
+            label={label}
             value={typeof value === 'string' ? value : ''}
             onChange={handleSelectChange}
-            className="flex-1 text-[11px] px-1 py-0.5 bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded"
-          >
-            {paramDef.options?.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {t(opt.labelKey) || opt.value}
-              </option>
-            ))}
-          </select>
+            options={(paramDef.options ?? []).map((opt) => ({
+              value: opt.value,
+              label: t(opt.labelKey) || opt.value,
+            }))}
+          />
         </div>
       );
 

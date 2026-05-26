@@ -1,0 +1,55 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcRoot = join(__dirname, '..');
+const sourceExtensions = new Set(['.ts', '.tsx']);
+const forbiddenImportPatterns = [
+  /from\s+['"]vscode['"]/,
+  /from\s+['"]node:/,
+  /from\s+['"]fs['"]/,
+  /from\s+['"]path['"]/,
+  /from\s+['"]url['"]/,
+  /from\s+['"]@neko\/(?:cut|model|puppet|sketch|canvas|agent|market|dashboard|tools|preview|audio|live|story)(?:\/|['"])/,
+];
+
+describe('@neko/ui dependency boundary', () => {
+  it('does not import vscode, node-only modules, or feature packages from source files', () => {
+    const violations = collectSourceFiles(srcRoot).flatMap((filePath) => {
+      const text = readFileSync(filePath, 'utf-8');
+      const relativePath = relative(srcRoot, filePath);
+      const patternViolations = forbiddenImportPatterns
+        .filter((pattern) => pattern.test(text))
+        .map((pattern) => `${relativePath}: ${pattern}`);
+      const acquireViolation = text.includes('acquireVsCodeApi')
+        ? [`${relativePath}: acquireVsCodeApi`]
+        : [];
+
+      return [...patternViolations, ...acquireViolation];
+    });
+
+    expect(violations).toEqual([]);
+  });
+});
+
+function collectSourceFiles(directory: string): string[] {
+  return readdirSync(directory).flatMap((entry) => {
+    const path = join(directory, entry);
+    const stat = statSync(path);
+
+    if (stat.isDirectory()) {
+      if (entry === '__tests__') {
+        return [];
+      }
+      return collectSourceFiles(path);
+    }
+
+    if (!Array.from(sourceExtensions).some((extension) => path.endsWith(extension))) {
+      return [];
+    }
+
+    return [path];
+  });
+}

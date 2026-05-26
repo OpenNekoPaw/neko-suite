@@ -14,7 +14,14 @@ import { ProgressBar } from '../shared/ProgressBar';
 import { MacIconButton } from '../shared/MacIconButton';
 import { MacButton } from '../shared/MacButton';
 import { MacSlider } from '../shared/MacSlider';
-import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/shared/icons';
+import {
+  PauseIcon,
+  PlayIcon,
+  SkipBackIcon,
+  SkipForwardIcon,
+  VolumeIcon,
+  VolumeOffIcon,
+} from '@neko/ui/icons';
 
 export type ViewMode = 'cover' | 'lyrics' | 'waveform' | 'spectrum';
 
@@ -153,19 +160,7 @@ export function AudioControls({
           onClick={() => onSeek(Math.max(0, currentTime - 10))}
           title={t('preview.audio.skipBack')}
         >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-            <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
-            <text
-              x="12"
-              y="15.5"
-              textAnchor="middle"
-              fontSize="7"
-              fill="currentColor"
-              fontWeight="700"
-            >
-              10
-            </text>
-          </svg>
+          <SkipBackIcon className="w-5 h-5" />
         </MacIconButton>
 
         <MacIconButton
@@ -182,19 +177,7 @@ export function AudioControls({
           onClick={() => onSeek(Math.min(duration, currentTime + 10))}
           title={t('preview.audio.skipForward')}
         >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-            <path d="M12.01 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
-            <text
-              x="12"
-              y="15.5"
-              textAnchor="middle"
-              fontSize="7"
-              fill="currentColor"
-              fontWeight="700"
-            >
-              10
-            </text>
-          </svg>
+          <SkipForwardIcon className="w-5 h-5" />
         </MacIconButton>
       </div>
     </div>

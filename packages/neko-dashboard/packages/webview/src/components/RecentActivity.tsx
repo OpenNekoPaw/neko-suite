@@ -1,3 +1,4 @@
+import { Badge, Button } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardRecentActivity } from '../types';
 
@@ -24,16 +25,17 @@ export function RecentActivity({ items, onOpen }: RecentActivityProps) {
           {items.map((item) => (
             <tr key={`${item.file.workspaceFolder}:${item.file.relativePath}`}>
               <td>
-                <button
+                <Button
                   className="link-button"
-                  type="button"
+                  size="xs"
+                  variant="ghost"
                   onClick={() => onOpen(item.file.relativePath)}
                 >
                   {item.file.name}
-                </button>
+                </Button>
               </td>
               <td>
-                <span className="badge">{item.action}</span>
+                <Badge className="h-auto rounded-full px-2 py-0.5">{item.action}</Badge>
               </td>
               <td>{new Date(item.time).toLocaleString()}</td>
             </tr>

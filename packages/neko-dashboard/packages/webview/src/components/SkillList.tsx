@@ -1,3 +1,4 @@
+import { Badge, Button } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardSkill } from '../types';
 
@@ -47,16 +48,16 @@ function SkillCard({ skill, onCommand }: SkillCardProps) {
       {skill.tags && skill.tags.length > 0 ? (
         <div className="skill-card-tags">
           {skill.tags.map((tag) => (
-            <span key={tag} className="badge">
+            <Badge key={tag} className="h-auto rounded-full px-2 py-0.5">
               {tag}
-            </span>
+            </Badge>
           ))}
         </div>
       ) : null}
       {skill.command ? (
-        <button type="button" className="skill-card-run" onClick={() => onCommand(skill)}>
+        <Button className="skill-card-run" size="sm" onClick={() => onCommand(skill)}>
           {t('dashboard.skills.run')}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

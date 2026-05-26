@@ -3,6 +3,8 @@
  */
 
 import React, { useCallback, useRef } from 'react';
+import { IconButton } from '@neko/ui/primitives';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { useMarketplaceStore } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
@@ -30,7 +32,7 @@ export const SearchBar: React.FC = () => {
   return (
     <div className="search-bar">
       <div className="search-input-wrapper">
-        <span className="search-icon codicon codicon-search" />
+        <span className={`search-icon ${toCodiconClassName('search')}`} />
         <input
           className="search-input"
           type="text"
@@ -39,16 +41,16 @@ export const SearchBar: React.FC = () => {
           onChange={handleInput}
         />
         {searchText && (
-          <button
+          <IconButton
             className="search-clear"
+            label={t('marketplace.search.clear')}
+            icon={<span className={toCodiconClassName('close')} />}
             onClick={() => {
               setSearchText('');
               setSearching(true);
               MarketMessages.search(buildBrowseQuery());
             }}
-          >
-            <span className="codicon codicon-close" />
-          </button>
+          />
         )}
       </div>
     </div>

@@ -1,10 +1,14 @@
 /**
- * @neko/shared/components — Shared UI component library
+ * @neko/shared/components — legacy shared UI compatibility surface
  *
  * Components use CSS classes injected by the Tailwind preset plugin.
  * All packages using nekoTailwindPreset get these classes automatically.
  *
- * Import:
+ * New Webview UI code should import React UI from @neko/ui. This subpath stays
+ * available during the Webview UI design system migration for untouched legacy
+ * packages and compatibility re-exports.
+ *
+ * Legacy import:
  *   import { VerticalToolbar, ToolbarButton, ContextMenu, MacButton, ... } from '@neko/shared/components';
  */
 

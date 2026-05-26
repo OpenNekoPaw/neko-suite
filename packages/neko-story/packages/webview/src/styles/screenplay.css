@@ -3,6 +3,10 @@
  * Based on industry standard format (Courier 12pt, specific margins)
  */
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --page-width: 8.5in;
   --page-padding: 1in;

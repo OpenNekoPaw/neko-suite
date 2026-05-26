@@ -17,7 +17,7 @@ import { AUDIO_EFFECT_DEFINITIONS } from '../types/audioEffects';
 import type { EffectsChain } from '../hooks/useEffectsChain';
 import { EffectEditor } from './EffectEditor';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton } from '@neko/shared/components';
+import { AudioButton } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 interface EffectsPanelProps {
@@ -114,14 +114,13 @@ export function EffectsPanel({ chain }: EffectsPanelProps) {
       <div className="flex items-center">
         <span className="flex-1" />
         <div className="relative">
-          <MacButton
+          <AudioButton
             variant="ghost"
-            size="sm"
             onClick={() => setShowAddMenu(!showAddMenu)}
             className="text-[11px] px-2 py-0.5"
           >
             + {t('audio.effects.add')}
-          </MacButton>
+          </AudioButton>
 
           {/* Add dropdown */}
           {showAddMenu && (
@@ -158,22 +157,12 @@ export function EffectsPanel({ chain }: EffectsPanelProps) {
       {/* Apply / Clear buttons */}
       {chain.effects.length > 0 && (
         <div className="flex gap-1.5">
-          <MacButton
-            variant="primary"
-            size="sm"
-            onClick={handleApply}
-            className="flex-1 text-[11px]"
-          >
+          <AudioButton variant="primary" onClick={handleApply} className="flex-1 text-[11px]">
             {t('audio.effects.apply')}
-          </MacButton>
-          <MacButton
-            variant="ghost"
-            size="sm"
-            onClick={chain.clearAll}
-            className="text-[11px] opacity-70"
-          >
+          </AudioButton>
+          <AudioButton variant="ghost" onClick={chain.clearAll} className="text-[11px] opacity-70">
             {t('audio.effects.clear')}
-          </MacButton>
+          </AudioButton>
         </div>
       )}
     </div>

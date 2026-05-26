@@ -1,431 +1,602 @@
-# ADR: Webview UI 设计体系 — 共享组件层 + shadcn/Radix 引入策略
+# ADR: Webview UI 设计体系 — 共享组件层 + 分批迁移策略
 
 ## 状态
 
-Proposed (2026-05-19)
+Accepted / Implemented (Proposed 2026-05-19, implementation status updated 2026-05-25)
+
+## 实施状态
+
+Updated: 2026-05-25
+
+本 ADR 是 [adr-webview-layout-unification.md](./adr-webview-layout-unification.md) 的后续组件层设计。布局统一 ADR 已完成一轮布局/StatusBar/resize/viewport 迁移；本 ADR 已通过 OpenSpec change `unify-webview-ui-design-system` 落地共享 UI 入口、primitive/creative contract、包内 adapter、legacy cutoff 和 Agent 隔离守卫。
+
+| 层级 | 状态 | 当前事实 |
+|------|------|----------|
+| Layout / native chrome | Done / Scoped | Model/Canvas/Puppet/Cut 已完成本轮布局或状态迁移；Agent Header/Input 已回退并延期 |
+| Viewport UI | Done | `@neko/ui/viewport` 导出 `ViewportShell`、`OverlayRenderer`、`ViewportToolbar`、prediction/diagnostics 和 control-flow test utilities |
+| Shared component primitives | Done | `@neko/ui/primitives` 已提供 `Button`、`IconButton`、`Select`、`Slider`、`Popover`、`Tooltip`、`Dialog`、`Tabs`、`ContextMenu`、`Collapsible`、`ScrollArea`、`ToggleGroup`、`Progress`、`Badge`、`EmptyState` |
+| Creative components | Done / P2 scoped | `PropertyPanel`、`PropertyRow`、`NumberInput`、`NumberSlider`、`ColorPicker`、`ColorSwatch`、`TreeView`、`KeyframeButton` 已落地；`AssetBrowser` 和 `MediaTransportControls` 保持 P2 placeholder |
+| Package migration | Done / Exemptions remain | Cut/Puppet/Model/Sketch/Canvas 与 Audio/Live/Preview/Tools/Dashboard/Market/Story 已完成本轮触达面迁移；legacy timeline/menu/toolbar/resize 入口保留豁免 |
+| Agent guardrail | Done / Separate | Agent Header/Input、selectors、slash/mention/media controls 未迁移；`agent-ui-isolation.test.ts` 防止本 change 误引入 `@neko/ui` |
+
+---
 
 ## 关联 ADR
 
 | 关联文档 | 关系 |
 |---|---|
-| [adr-capability-protocol.md](./adr-capability-protocol.md) | Webview 安全边界参考 — `@neko/ui` 同样遵循零 vscode 依赖，但属于 React/DOM UI 层 |
-| [adr-asset-federation.md](./adr-asset-federation.md) | AssetBrowser 统一组件的需求来源 — assets / preview / market 三包共享 |
-| [vscode-constraints.md](./vscode-constraints.md) | Webview 安全沙盒约束 — CSP / 无动态加载 / 资源路径限制 |
-| [adr-device-management.md](./adr-device-management.md) | 原生 VSCode UI（TreeView/QuickPick）与 Webview UI 的边界划分 |
+| [adr-webview-layout-unification.md](./adr-webview-layout-unification.md) | 布局结构、StatusBar、resize、Agent rollback 的前置决策 |
+| [adr-unified-viewport-protocol.md](./adr-unified-viewport-protocol.md) | `@neko/ui/viewport` 的协议来源 |
+| [adr-viewport-stream-control-boundary.md](./adr-viewport-stream-control-boundary.md) | Viewport 语义控制与渲染流边界，避免 UI 组件迁移误碰 engine authority |
+| [adr-capability-protocol.md](./adr-capability-protocol.md) | Webview 安全边界参考 |
+| [adr-asset-federation.md](./adr-asset-federation.md) | AssetBrowser / market / preview 统一组件需求来源 |
+| [vscode-constraints.md](./vscode-constraints.md) | Webview CSP、无 Node.js、无直接 VSCode API 的硬约束 |
+| [adr-device-management.md](./adr-device-management.md) | 原生 VSCode UI 与 Webview UI 的边界划分 |
 
 ---
 
-## 背景
+## 1. 背景
 
 ### 1.1 当前技术栈一致性
 
-Neko Suite 13 个 webview 子包已在底层框架上高度统一：
+Neko Suite 13 个 webview 子包已在底层框架上基本统一：
 
 | 维度 | 选型 | 一致性 |
 |------|------|--------|
-| UI 框架 | React 18.2.0 | 100% |
-| 构建工具 | Vite 6.4.2 | 100% |
-| 样式方案 | Tailwind 3.3.6 + `nekoTailwindPreset` | 100% |
-| 主题 | `@neko/shared/theme` → VSCode CSS 变量自动同步 | 100% |
-| 状态管理 | Zustand 4.4.x（7 包）/ React built-in（6 包） | 统一 |
-| i18n | `@neko/shared/i18n` + 各包自管翻译文件 | 100% |
-| 滚动条 | 7px macOS 风格 webkit-scrollbar | 100% |
-| 布局 | Flexbox-first (75-96%), gap 优于 margin | 统一 |
+| UI 框架 | React 18 | 100% |
+| 构建工具 | Vite | 100% |
+| 样式方案 | Tailwind + package CSS | 高 |
+| 主题 | VSCode CSS 变量 + `--neko-*` tokens | 高，但命名空间碎片化 |
+| 状态管理 | Zustand / React built-in | 可共存 |
+| i18n | `@neko/shared/i18n` + 各包领域翻译 | 高 |
+| Webview 安全 | postMessage / 无直接 VSCode API | 必须保持 |
 
-### 1.2 当前设计基建
+### 1.2 当前共享基础
 
-**Design Tokens（质量高）**:
+`@neko/shared/components` 目前仍承担大量 UI 复用：
+
+| 类别 | 现有能力 |
+|------|----------|
+| Layout | `VerticalToolbar`、`ToolbarButton`、`Panel`、`CollapsibleSection`、`ResizeHandle` |
+| Overlay | `ContextMenu`、`buildAIMenuSection` |
+| Media | `TimelineRuler`、`ProgressBar` |
+| Keyframe | `KeyframeDiamond`、`KeyframeTimeline` |
+| Primitives | `MacButton`、`MacIconButton`、`MacSlider`、`MacTabs` |
+| Hooks | `useDrag`、`useResizable`、`usePersistedResize`、`useFileDrop` |
+
+迁移前，`@neko/ui` 已经存在，但实际公共 API 仍以 viewport 为主：
 
 ```
---neko-surface / --neko-elevated / --neko-glass-bg    颜色
---neko-accent / --neko-danger / --neko-hover           交互
---neko-border / --neko-divider                         分隔
---neko-shadow-sm/md/lg/xl                              阴影四级
---neko-radius-sm(6px)/md(8px)/lg(12px)/xl(16px)       圆角
---neko-glass-blur / --neko-glass-border                毛玻璃
+@neko/ui
+└── viewport/
+    ├── ViewportShell
+    ├── OverlayRenderer
+    ├── ViewportToolbar
+    ├── ViewportPredictionLayer
+    ├── frame metadata bridge
+    └── overlay diagnostics / control-flow test utils
 ```
 
-三主题支持：Dark（默认）/ Light / High Contrast，自动跟随 VSCode。
+本次实现后，`@neko/ui` 的公共入口已经扩展到 `viewport`、`primitives`、`creative`、`icons`、`hooks` 和 `test-utils`，并由 public-entrypoint 与 dependency-boundary 测试固定。
 
-**共享组件库（@neko/shared/components）**:
+### 1.3 13 个 Webview 子包进度
 
-| 类别 | 组件 |
-|------|------|
-| Layout | VerticalToolbar, ToolbarButton, ToolbarSeparator, ToolbarSpacer, Panel, PanelSection, CollapsibleSection, ResizeHandle |
-| Overlay | ContextMenu, buildAIMenuSection |
-| Media | TimelineRuler, ProgressBar |
-| Keyframe | KeyframeDiamond, KeyframeTimeline |
-| Primitives | MacButton, MacIconButton, MacSlider, MacTabs |
-| Hooks | useDrag, useResizable, useFileDrop |
-| Icons | 28+ SVG 组件 (Play, Pause, Chevron, Copy, Search...) |
-
-### 1.3 各子包 UI 复用 vs 自建现状
-
-| 能力 | cut | canvas | sketch | agent | model | puppet | market | preview |
-|------|:---:|:------:|:------:|:-----:|:-----:|:------:|:------:|:-------:|
-| 属性面板 | 自建 | 自建(registry) | 多面板 | — | 多面板 | 自建 | — | — |
-| 右键菜单 | 包装共享 | 包装共享 | 包装共享 | — | — | — | — | 自建 |
-| 颜色选择 | HTML5 | — | — | — | — | — | — | — |
-| 滑块 | — | — | — | — | 自建 | — | — | MacSlider |
-| 工具栏 | 自建 | 共享 | 共享 | — | 共享 | — | — | — |
-| 拖放 | 自建 | hook | 自建 | hook | — | — | — | — |
-| 时间轴 | 自建(4500LOC) | 自建(节点) | 自建(帧) | — | 包装共享 | 包装共享 | — | — |
-| 图层/树 | — | 节点树 | 图层树 | — | 场景树 | 骨骼树 | — | — |
+| 子包 | 原型 | 本轮状态 | 已迁移触达面 | 保留差异 / 豁免 |
+|------|------|----------|--------------|-----------------|
+| `neko-cut` | Workbench / NLE | Done / partial exemption | Core PropertyPanel rows 经 Cut adapter 使用 shared creative controls；keyframe、preview/commit、token/icon mapping 已验证 | Timeline、AI menu、复杂效果/遮罩/transition 面板继续包内所有 |
+| `neko-puppet` | Workbench / 2D skeletal | Done / partial exemption | ParameterPanel、Face parameters、reset controls、PuppetNodeTree 使用 `PropertyPanel` / `NumberSlider` / `TreeView` | KeyframeTimeline、layout resize 兼容入口保留 |
+| `neko-model` | Workbench / 3D | Done / partial exemption | TransformPanel、FaceParameterSlider、SceneTree 使用 shared creative controls；500 visible item 测试覆盖 | Toolbar、KeyframeTimeline、layout resize 兼容入口保留 |
+| `neko-sketch` | Studio / raster paint | Done / partial exemption | BrushPanel、LayerPanel、Layer actions/context popover 使用 shared creative/primitives | 主 Toolbar、SketchCanvas context menu、Collapsible shell 保留 |
+| `neko-canvas` | Studio / node canvas | Done / partial exemption | PropertyPanel technical fields、NodeLibrary rows 使用 shared creative/primitives | Node gesture hooks、Canvas toolbar、media inline players、AI context menu 保留 |
+| `neko-audio` | Workbench / DAW | Done / partial exemption | Transport、effects、export、recording、preset browser、side panel、drag/drop 使用 shared primitives/hooks/icons | Timeline/menu/toolbar/EditableWaveform 保留，等待 timeline/menu contract |
+| `neko-live` | Viewport + bottom controls | Done | Tracking mode select、tracking/avatar/recording buttons、recording badges 使用 shared primitives | Compositor viewport、fallback canvas、engine stream authority 保持包内 |
+| `neko-preview` | Preview viewers | Done / wrapper compatibility | `Mac*` wrappers 适配到 `@neko/ui/primitives`；audio/video controls、tabs、document context menu、progress/icons 已迁移 | 保留 wrapper 命名以兼容 viewer 代码；播放/stream authority 包内所有 |
+| `neko-tools` | Diff tools | Done | MediaDiff mode buttons、similarity badge、zoom/opacity/seek sliders、playback icons 使用 shared primitives/icons | TimelineDiff expand glyph 和 waveform SVG 属于未触达可视化 UI |
+| `neko-agent` | Conversation | Guarded / separate | 仅保留既有 `useFileDrop` 兼容入口；critical Header/Input path 不 import `@neko/ui` | Header/Input、selectors、account、slash/mention、media model controls 另开 redesign proposal |
+| `neko-dashboard` | Dashboard | Done | Quick actions、workflow cards、task/project/creative controls、skills、recent activity 使用 shared primitives | Dashboard shell 和 table structure 保持包内 |
+| `neko-market` | Dashboard / marketplace | Done | Search、Tabs、FilterDropdown、AssetCard、install progress、detail actions、LargeAssetPicker controls 使用 shared primitives | Installed/Owned/Updates 管理列表留给后续 focused pass |
+| `neko-story` | Document / table | Done | Main tabs、creator status badges、scene/character actions、row menu trigger/items 使用 shared primitives/icons | Script table layout 和 hover preview 定位保持文档领域实现 |
 
 ---
 
-## 问题分析
+## 2. 五层分析
 
-### 2.1 组件层缺口
+| 层 | 职责 | 依赖边界 | 接口 | 扩展点 | 测试重点 |
+|----|------|----------|------|--------|----------|
+| L0: Contracts | UI 可消费的 DTO、viewport protocol、通用类型 | 无 React/DOM，不依赖 Webview | `ViewportFrameMeta`、`ViewportMenuItem`、property/tree DTO | 新领域协议字段 | 类型契约、序列化 fixture |
+| L1: Host integration | VSCode StatusBar、QuickPick、commands、Webview lifecycle | Extension Host only，不引入 React | Status projection、postMessage handlers | per-package manager | active editor visibility、command dispatch |
+| L2: UI primitives | Button、Input、Select、Slider、Tooltip、Dialog、Tabs、Menu | React/DOM only；不可直接访问 VSCode API | `@neko/ui/primitives` | variant、size、density、a11y behavior | keyboard/a11y、theme、CSP |
+| L2: Creative UI | PropertyPanel、TreeView、ColorPicker、NumberInput、Keyframe controls | 只依赖 primitives + L0 类型 | `@neko/ui/creative` | domain adapter renderers | controlled state、edge values、virtualization |
+| Package adapters | 把领域状态投射到共享 UI | 只在 owning package 内连接 store/controller | Cut/Model/Puppet/Sketch adapters | package-specific render overrides | behavior parity、visual regression、rollback |
+
+核心原则：
+
+1. `@neko/ui` 是 Webview React UI 层，不是业务领域层。
+2. `@neko/ui` 可以消费 `@neko/shared` 的 L0 类型和 protocol，但不能依赖任何功能子包。
+3. Extension 侧 UI 和 Webview 侧 UI 保持边界清晰；Webview 组件不可 import `vscode`。
+4. Engine/viewport 语义控制不因 UI 组件迁移改变权威来源。
+
+---
+
+## 3. 问题分析
+
+### 3.1 迁移前组件层缺口
 
 | 问题 | 严重度 | 受影响包 | 说明 |
 |------|:------:|---------|------|
-| 无 PropertyPanel 抽象 | P0 | cut, canvas, sketch, model, puppet, puppet | 6 包各自实现属性检查器，模式相似但代码不复用 |
-| 无颜色选择器 | P0 | cut(HTML5 原生), sketch, canvas, model | 创作软件核心控件缺失 |
-| 无数值输入(NumberInput) | P0 | cut, sketch, model, puppet | 缺少带拖拽调节的数值输入（Blender/Figma 标配） |
-| 图标碎片化 | P1 | 全部 | agent 有组件封装，其他包直接 inline SVG，无统一管理 |
-| 树组件重复 | P1 | canvas, sketch, model, puppet | 图层树/场景树/骨骼树/节点树各自实现 |
-| 无 Dialog/Popover | P1 | 全部 | 弹窗、浮层无统一组件，各包 ad-hoc 实现 |
-| 无 Tooltip | P1 | 全部 | 仅靠 HTML title 属性 |
-| 交互状态不齐 | P2 | model, market, sketch | cut 有完整 hover/focus/active/disabled，其他包不齐 |
-| 硬编码颜色 | P2 | canvas(81), agent(96), sketch(89) | 应使用 `--neko-*` tokens |
-| a11y 薄弱 | P2 | 全部 | 仅全局 focus-visible，无系统性 ARIA / 键盘导航 |
+| 无统一 `PropertyPanel` contract | P0 | cut, canvas, sketch, model, puppet | 属性检查器模式相似但各自实现，状态提交/预览/undo 语义分散 |
+| 无统一 `NumberInput` / `Slider` | P0 | cut, sketch, model, puppet, audio, tools | 原生 input/range 大量重复，提交时机和边界处理不一致 |
+| 无统一 `ColorPicker` | P0 | cut, sketch, canvas, model | 创作软件核心控件缺失，当前多为 HTML5 color 或本地实现 |
+| 无统一 `TreeView` | P1 | sketch, model, puppet, canvas | 图层树/场景树/骨骼树/节点树各自实现键盘、选择、展开逻辑 |
+| Dialog/Popover/Select/Menu 分散 | P1 | agent, cut, market, tools, preview, dashboard | 下拉、弹窗、浮层和右键菜单存在多套 ad-hoc 实现 |
+| 图标方案碎片化 | P1 | 全部 | shared icons、inline SVG、Unicode、codicon 混用 |
+| package-specific tokens 过多 | P2 | cut, model, sketch, agent, tools, preview | 已映射部分 `--neko-*`，但命名空间仍阻碍统一主题 |
+| a11y / keyboard 不一致 | P2 | 全部 | 多数控件依赖 `title` 或手写焦点逻辑 |
 
-### 2.2 创作场景的共性需求
+### 3.2 需要保留的差异
 
-```
-视频剪辑 (cut)     ─┐
-2D 绘画 (sketch)   ─┤── 属性面板 / 颜色选择器 / 数值输入 / 工具栏
-2D 骨骼 (puppet)   ─┤── 图层/树视图 / 拖拽排序 / 右键菜单
-3D 建模 (model)    ─┤── 缩放平移画布 / 对齐辅助线
-画布编排 (canvas)   ─┤── 素材浏览器 / 弹窗+浮层 / Tooltip
-剧本 (story)       ─┘── i18n / a11y / 键盘快捷键
-```
+统一 UI 不等于统一所有布局。以下差异是领域合理差异，不应被抽象抹平：
 
-### 2.3 约束条件
-
-| 约束 | 影响 |
-|------|------|
-| **VSCode CSP** | 禁止 eval / 无动态 import / 无外部 CDN → 排除运行时重量级 UI 框架 |
-| **独立打包** | 每个 webview 独立 bundle → 组件必须 tree-shakable |
-| **主题跟随** | 必须消费 VSCode CSS 变量 → 排除自带样式系统的 UI 库 |
-| **Webview UI 层** | UI 组件包不可依赖 `vscode` API → 纯 React + CSS；因依赖 React/DOM，不归入 L0 |
-| **渐进迁移** | 13 个 webview 不可能一次性重写 → 必须支持新旧组件共存 |
+| 场景 | 应保留差异 |
+|------|------------|
+| Cut | NLE 的 preview/timeline/property 三栏关系、播放主控优先级 |
+| Canvas | 无限画布、浮动面板、节点交互和连接行为 |
+| Sketch | 左侧窄工具栏、画布优先、绘画参数密集面板 |
+| Model/Puppet/Live | viewport 协议、overlay、engine authority 和 local fallback 语义 |
+| Agent | Conversation 侧栏场景，Header/Input redesign 单独处理 |
+| Story | 文档阅读/剧本表格排版可保持更轻量 |
 
 ---
 
-## 第三方 UI 库评估
+## 4. 第三方 UI 库决策
 
-### 3.1 候选方案
+### 4.1 决策：shadcn/ui 源码模式 + Radix Primitives
 
-| 方案 | 包大小 | VSCode CSP 兼容 | 主题适配 | 创作控件覆盖 | 风险 |
-|------|--------|:--------------:|---------|:-----------:|------|
-| **Radix UI Primitives** | ~50KB (按需) | ✅ 无样式原语 | ✅ 完全自定义 | 低 | 低 |
-| **shadcn/ui** | 0KB (源码复制) | ✅ Tailwind 原生 | ✅ CSS 变量驱动 | 中 | 极低 |
-| **Ark UI** | ~40KB (按需) | ✅ headless | ✅ 完全自定义 | 低 | 低 |
-| **Mantine** | ~200KB | ⚠️ 自带样式系统 | ⚠️ 需大量覆盖 | 高 | 中 |
-| **Ant Design** | ~1MB | ❌ 体积大、样式侵入 | ❌ 主题系统冲突 | 高 | 高 |
-| **完全自建** | 0 | ✅ | ✅ | 按需 | 维护成本高 |
+采用 shadcn/ui 的源码复制模式，并按需引入 Radix Primitives。原因：
 
-### 3.2 排除理由
+1. shadcn/ui 不是运行时组件库，源码可进入 `@neko/ui` 后完全受控。
+2. Radix 提供 ARIA、焦点管理和键盘导航，避免从零维护复杂 a11y 行为。
+3. Tailwind + CSS variables 与现有 VSCode theme / `--neko-*` tokens 匹配。
+4. 可以按组件逐步引入，不要求 13 个 webview 同步改造。
+
+Bundle 预算作为引入前提：每个迁移 PR 必须记录受影响 webview 的 gzip bundle delta；单个 Radix primitive 默认增量上限为 20KB gzipped，超过阈值时必须在 PR 中说明原因，并优先评估 lazy import、拆分 adapter 或继续保留本地实现。
+
+### 4.2 引入顺序
+
+| 组件 | Radix 原语 | 用途 | 优先级 |
+|------|------------|------|:------:|
+| Tooltip | `@radix-ui/react-tooltip` | 替代 HTML `title`，统一图标按钮说明 | P0 |
+| Popover | `@radix-ui/react-popover` | Cut settings、Agent/Market/Tools 菜单后续替换 | P0 |
+| Select | `@radix-ui/react-select` | 替代各包原生 select / 自建 dropdown | P0 |
+| Slider | `@radix-ui/react-slider` | 统一参数滑条、音量、时间范围、blendshape | P0 |
+| Dialog | `@radix-ui/react-dialog` | Market detail、large asset picker、确认弹窗 | P1 |
+| ContextMenu | `@radix-ui/react-context-menu` | 增强现有 shared ContextMenu | P1 |
+| Tabs | `@radix-ui/react-tabs` | Market/Dashboard/Story/Agent 后续统一 | P1 |
+| Collapsible | `@radix-ui/react-collapsible` | 替代 CollapsibleSection 内部实现 | P1 |
+| ScrollArea | `@radix-ui/react-scroll-area` | 长列表、TreeView、Inspector | P2 |
+| ToggleGroup | `@radix-ui/react-toggle-group` | 工具栏模式选择 | P2 |
+
+### 4.3 排除方案
 
 | 排除 | 原因 |
 |------|------|
-| Ant Design / Arco Design | 体积 >1MB，自带样式系统与 Tailwind + VSCode CSS 变量冲突，CSP 风险 |
-| Mantine | 200KB+，虽然质量高但自有 CSS-in-JS 主题系统需要大量覆盖层，增加维护负担 |
-| Material UI | Google 风格与 macOS 设计语言冲突，Emotion 依赖 |
-| 完全自建 | a11y（ARIA / 焦点管理 / 键盘导航）从零实现成本极高且容易遗漏 |
-
-### 3.3 决策：shadcn/ui 模式 + Radix Primitives
-
-**选型理由**：
-
-1. **shadcn/ui 不是 npm 依赖，是源码模式** — 组件源码复制到 `@neko/ui`，完全可控，不存在版本升级风险
-2. **Radix Primitives 补齐 a11y** — ARIA 属性、焦点管理、键盘导航均由 Radix 处理，经过 WAI-ARIA 规范验证
-3. **Tailwind 原生** — shadcn/ui 所有样式通过 Tailwind class + CSS 变量，与现有 `nekoTailwindPreset` 无缝集成
-4. **按需引入** — 只复制需要的组件，不引入整个库，tree-shaking 天然满足
-5. **渐进迁移** — 新旧组件可共存，不需要一次性重写
-
-**从 shadcn/ui 可直接获取的组件**：
-
-| shadcn 组件 | 解决的问题 | Radix 原语 | 估计大小 |
-|------------|-----------|-----------|---------|
-| Dialog | 无统一弹窗 | `@radix-ui/react-dialog` | ~8KB |
-| Popover | 无浮层 | `@radix-ui/react-popover` | ~12KB |
-| Select | 各包自建下拉 | `@radix-ui/react-select` | ~15KB |
-| Context Menu | 增强现有实现 | `@radix-ui/react-context-menu` | ~12KB |
-| Slider | 补齐数值拖拽 | `@radix-ui/react-slider` | ~6KB |
-| Tooltip | 无统一 Tooltip | `@radix-ui/react-tooltip` | ~6KB |
-| Collapsible | 增强 CollapsibleSection | `@radix-ui/react-collapsible` | ~3KB |
-| ScrollArea | 统一滚动容器 | `@radix-ui/react-scroll-area` | ~5KB |
-| Toggle / ToggleGroup | 工具栏单选/多选 | `@radix-ui/react-toggle` | ~3KB |
-| Tabs | 增强 MacTabs | `@radix-ui/react-tabs` | ~4KB |
-
-**需要自建的创作领域组件**（shadcn 不覆盖）：
-
-| 组件 | 说明 | 参考 |
-|------|------|------|
-| ColorPicker | HSL/HEX/Alpha + 吸色器接口 | Figma / Photoshop 颜色面板 |
-| NumberInput | 拖拽调节 + 步进 + 表达式输入 | Blender / After Effects 数值控件 |
-| PropertyPanel | 可折叠属性检查器框架 + 属性行布局 | VSCode Properties Panel / Unity Inspector |
-| TreeView | 拖拽排序树 + 多选 + 重命名 | 图层/场景/骨骼树统一 |
-| AssetBrowser | 网格/列表/瀑布流 + 搜索过滤 | Finder / Adobe Bridge |
-| Canvas2DContainer | 缩放平移画布壳 + 辅助线 | Figma 无限画布 |
+| Ant Design / Arco | 体积和样式系统过重，与 VSCode 主题和 Tailwind 冲突 |
+| Material UI | 视觉语言不匹配，Emotion/CSS-in-JS 增加 CSP 和 bundle 风险 |
+| Mantine | 质量高但自带主题系统，覆盖成本高 |
+| 全量自建基础控件 | a11y 和焦点管理成本过高 |
 
 ---
 
-## 方案设计
+## 5. 方案设计
 
-### 4.1 `@neko/ui` 包结构
+### 5.1 `@neko/ui` 目标包结构
 
 ```
-packages/neko-ui/                          ← 新建 L2 Webview UI 包
-├── package.json                           ← @neko/ui, peerDep: react 18
-├── tsconfig.json
-├── tailwind.config.ts                     ← extends nekoTailwindPreset
-├── vitest.config.ts
-│
+packages/neko-ui/
 ├── src/
-│   ├── primitives/                        ← shadcn/ui 源码复制 + neko 主题定制
-│   │   ├── dialog.tsx                     ← Radix Dialog + neko glass 样式
+│   ├── index.ts
+│   ├── viewport/                         # 已存在
+│   │   ├── ViewportShell.tsx
+│   │   ├── OverlayRenderer.tsx
+│   │   ├── ViewportToolbar.tsx
+│   │   └── ...
+│   ├── primitives/
+│   │   ├── button.tsx
+│   │   ├── icon-button.tsx
+│   │   ├── tooltip.tsx
 │   │   ├── popover.tsx
 │   │   ├── select.tsx
-│   │   ├── context-menu.tsx               ← 替换 @neko/shared ContextMenu
-│   │   ├── slider.tsx                     ← Radix Slider + neko accent
-│   │   ├── tooltip.tsx
-│   │   ├── toggle-group.tsx               ← 工具栏选择
-│   │   ├── scroll-area.tsx
-│   │   ├── collapsible.tsx
+│   │   ├── slider.tsx
+│   │   ├── dialog.tsx
+│   │   ├── context-menu.tsx
 │   │   ├── tabs.tsx
-│   │   └── index.ts
-│   │
-│   ├── creative/                          ← 创作领域自建
-│   │   ├── color-picker/
-│   │   │   ├── color-picker.tsx           ← HSL wheel + HEX input + Alpha
-│   │   │   ├── color-swatch.tsx           ← 色板
-│   │   │   └── index.ts
-│   │   ├── number-input/
-│   │   │   ├── number-input.tsx           ← 拖拽调节 + 步进 + 键盘
-│   │   │   └── index.ts
+│   │   ├── collapsible.tsx
+│   │   ├── scroll-area.tsx
+│   │   └── toggle-group.tsx
+│   ├── creative/
 │   │   ├── property-panel/
-│   │   │   ├── property-panel.tsx         ← 面板框架
-│   │   │   ├── property-row.tsx           ← label:control 行布局
-│   │   │   ├── property-group.tsx         ← 可折叠属性组
-│   │   │   └── index.ts
+│   │   ├── number-input/
+│   │   ├── color-picker/
 │   │   ├── tree-view/
-│   │   │   ├── tree-view.tsx              ← 虚拟滚动树
-│   │   │   ├── tree-item.tsx              ← 拖拽排序节点
-│   │   │   └── index.ts
-│   │   ├── asset-browser/
-│   │   │   ├── asset-browser.tsx          ← 视图切换容器
-│   │   │   ├── asset-grid.tsx             ← 网格/瀑布流
-│   │   │   ├── asset-list.tsx             ← 列表
-│   │   │   └── index.ts
-│   │   └── canvas-container/
-│   │       ├── canvas-container.tsx        ← 缩放平移壳
-│   │       ├── use-pan-zoom.ts            ← 手势 hook
-│   │       └── index.ts
-│   │
-│   ├── hooks/                             ← 从 @neko/shared 迁移 + 新增
-│   │   ├── use-drag.ts                    ← 迁移自 @neko/shared
-│   │   ├── use-resizable.ts               ← 迁移自 @neko/shared
-│   │   ├── use-file-drop.ts               ← 迁移自 @neko/shared
-│   │   ├── use-hotkeys.ts                 ← 新增：键盘快捷键
-│   │   └── index.ts
-│   │
-│   ├── icons/                             ← 从 @neko/shared/icons 迁移
-│   │   ├── media.tsx                      ← Play, Pause, Stop, Volume...
-│   │   ├── navigation.tsx                 ← Chevron, Arrow...
-│   │   ├── action.tsx                     ← Copy, Download, Edit, Send...
-│   │   ├── status.tsx                     ← Error, Warning, Success, Loading...
-│   │   ├── editor.tsx                     ← Code, File, Zoom, Undo, Redo...
-│   │   └── index.ts
-│   │
-│   ├── utils/
-│   │   └── cn.ts                          ← clsx + tailwind-merge
-│   │
-│   └── index.ts                           ← 公共 API
-│
-├── src/i18n/
-│   └── locales/
-│       ├── en/common.ts                   ← "Cancel" / "Confirm" / "Delete" / "Undo"
-│       └── zh-cn/common.ts               ← "取消" / "确认" / "删除" / "撤销"
-│
-└── __tests__/
+│   │   ├── keyframe-controls/
+│   │   ├── media-controls/
+│   │   └── asset-browser/
+│   ├── hooks/
+│   │   ├── use-drag.ts
+│   │   ├── use-resizable.ts
+│   │   ├── use-persisted-resize.ts
+│   │   ├── use-file-drop.ts
+│   │   └── use-hotkeys.ts
+│   ├── icons/
+│   │   ├── media.tsx
+│   │   ├── navigation.tsx
+│   │   ├── action.tsx
+│   │   ├── status.tsx
+│   │   └── editor.tsx
+│   └── utils/
+│       └── cn.ts
 ```
 
-### 4.2 Layer 约束
+### 5.2 Public API 分层
+
+| Export | 内容 | 消费者 |
+|--------|------|--------|
+| `@neko/ui` | 稳定公共 API，允许导出 primitives/creative/viewport 的常用项 | Webview 子包 |
+| `@neko/ui/viewport` | ViewportShell、OverlayRenderer、ViewportToolbar、prediction helpers | Model/Puppet/Live |
+| `@neko/ui/primitives` | 基础控件 | 所有 Webview |
+| `@neko/ui/creative` | 创作领域组件 | Cut/Canvas/Sketch/Model/Puppet/Audio/Tools |
+| `@neko/ui/icons` | 图标组件 | 所有 Webview |
+| `@neko/ui/test-utils` | UI 行为断言、a11y helpers、viewport workflow assertions | 测试 |
+
+### 5.3 Layer 约束
 
 ```
-Layer 2:  @neko/ui (无 vscode 依赖，纯 React + Tailwind)
-              │
-              ├── peerDependencies: react, react-dom
-              ├── dependencies: @radix-ui/react-* (按需)
-              └── devDependencies: @neko/shared/theme (Tailwind preset)
+L0: @neko/shared
+  - DTO / protocol / i18n / theme / non-React utilities
 
-消费方:   各 webview 子包 → import { ... } from '@neko/ui'
+L2: @neko/ui
+  - React + DOM + Tailwind UI
+  - 可依赖 @neko/shared 的 L0 类型和 protocol
+  - 不依赖任何 feature package
+  - 不直接访问 VSCode API
+
+Feature webview packages
+  - 通过 adapters 把领域 store/controller 映射到 @neko/ui props
 ```
 
-**不变量**：
-- `@neko/ui` 不可 import `vscode`
-- `@neko/ui` 不可 import 任何 `@neko/*` 运行时包（`@neko/shared/theme` 仅用于 Tailwind 编译时）
-- `@neko/ui` 依赖 React/DOM，属于 L2 Webview UI 层；纯 DTO、协议和跨层类型仍放在 `@neko/shared` L0
-- 所有组件通过 CSS 变量消费主题，不硬编码颜色
+不变量：
 
-### 4.3 shadcn 组件定制规范
+- `@neko/ui` 不 import `vscode`，不调用 `acquireVsCodeApi()`。
+- `@neko/ui` 不 import `neko-cut`、`neko-model`、`neko-puppet` 等功能包。
+- `@neko/ui` 组件是受控优先，业务状态归属调用方。
+- `@neko/ui` 不执行 engine/viewport 核心计算，只渲染传入的 DTO 和回调。
+- 新增组件必须消费 `--neko-*` / VSCode 主题变量，不新增 package-specific token 前缀。
+- 新增图标必须从 `@neko/ui/icons` 或既有 codicon 映射进入；业务包不得继续新增 inline SVG 或 Unicode glyph 作为控件图标。
 
-从 shadcn/ui 复制的每个组件需做以下适配：
-
-```typescript
-// 1. 样式替换：shadcn 默认色 → neko design tokens
-// Before (shadcn default):
-"bg-background text-foreground border-border"
-// After (neko adapted):
-"bg-[var(--neko-surface)] text-[var(--neko-fg)] border-[var(--neko-border)]"
-
-// 2. 毛玻璃：浮层组件统一使用 glass 效果
-// Dialog / Popover / ContextMenu / Select overlay:
-"backdrop-blur-[var(--neko-glass-blur)] bg-[var(--neko-glass-bg)] border-[var(--neko-glass-border)]"
-
-// 3. 阴影：使用 neko 四级阴影
-// Tooltip: shadow-[var(--neko-shadow-sm)]
-// Popover: shadow-[var(--neko-shadow-md)]
-// Dialog:  shadow-[var(--neko-shadow-xl)]
-
-// 4. 圆角：使用 neko 统一尺度
-// 小控件: rounded-[var(--neko-radius-sm)]   (6px)
-// 面板:   rounded-[var(--neko-radius-md)]   (8px)
-// 弹窗:   rounded-[var(--neko-radius-lg)]   (12px)
-// 卡片:   rounded-[var(--neko-radius-xl)]   (16px)
-
-// 5. 动画：保持 CSS transition 风格
-"transition-colors duration-150"  // 颜色变化
-"transition-opacity duration-200" // 显隐
-```
-
-### 4.4 与现有 @neko/shared/components 的关系
+### 5.4 `@neko/shared/components` 关系
 
 ```
-Phase 1: 共存期
-  @neko/shared/components  ← 现有组件继续使用
-  @neko/ui                 ← 新组件 + shadcn 基础组件
-  各子包同时消费两者
+现在:
+  @neko/shared/components  # 既有共享 UI + hooks
+  @neko/ui/viewport        # viewport 专用 UI
 
-Phase 2: 迁移期
-  @neko/shared/components  ← 逐步标记 @deprecated
-  @neko/ui                 ← 吸收共享组件
-  各子包逐包迁移
+迁移期:
+  @neko/ui                 # 新 canonical UI API
+  @neko/shared/components  # 兼容 re-export 或 deprecated legacy
 
-Phase 3: 完成
-  @neko/shared/components  ← 仅保留非 UI 导出（types, hooks 等非 React 部分）
-  @neko/ui                 ← 统一 UI 组件层
+完成后:
+  @neko/ui                 # React UI 组件权威入口
+  @neko/shared             # L0 类型/协议/主题/非 React 工具
 ```
 
-**迁移映射**：
+迁移映射：
 
-| @neko/shared/components | → @neko/ui | 变化 |
-|------------------------|-----------|------|
-| ContextMenu | primitives/context-menu | Radix 重写，增强键盘导航 + a11y |
-| CollapsibleSection | primitives/collapsible | Radix 重写，动画增强 |
-| MacTabs | primitives/tabs | Radix 重写，保持视觉风格 |
-| MacSlider | primitives/slider | Radix 重写，增强 a11y |
-| MacButton, MacIconButton | 保留于 @neko/shared | 足够简单，无需 Radix |
-| Panel, PanelSection | creative/property-panel | 升级为通用属性面板 |
-| VerticalToolbar, ToolbarButton | 迁移至 @neko/ui + ToggleGroup | Radix ToggleGroup 增强 |
-| TimelineRuler, KeyframeTimeline | 迁移至 @neko/ui/creative | 保持现有实现 |
-| ProgressBar, KeyframeDiamond | 迁移至 @neko/ui/creative | 保持现有实现 |
-| useDrag, useResizable, useFileDrop | hooks/ | 直接迁移 |
-| Icons (28+) | icons/ | 按类别分文件组织 |
+| 当前来源 | 目标 | 说明 |
+|----------|------|------|
+| `MacButton` / `MacIconButton` | `Button` / `IconButton` | 视觉保持，API 收敛到 variant/size/density |
+| `MacSlider` | `Slider` / `NumberSlider` | 增加键盘与 aria 支持 |
+| `MacTabs` | `Tabs` | Radix Tabs 内核，保持紧凑 VSCode 风格 |
+| `ContextMenu` | `ContextMenu` | Radix 内核，保留 AI menu builder adapter |
+| `CollapsibleSection` | `Collapsible` / `PropertyGroup` | 基础折叠和属性组语义分离 |
+| `VerticalToolbar` / `ToolbarButton` | `Toolbar` / `ToolbarButton` / `ToggleGroup` | 工具栏按钮统一图标、tooltip、pressed 状态 |
+| `ResizeHandle` / `useResizable` / `usePersistedResize` | `@neko/ui/hooks` | 保持兼容 re-export，后续入口转移 |
+| `TimelineRuler` / `KeyframeTimeline` | `@neko/ui/creative` | 先搬迁入口，行为不重写 |
+| shared icons | `@neko/ui/icons` | 分类导出，禁止新增 inline SVG 到业务包 |
 
-### 4.5 视觉一致性修复
+### 5.5 Creative Inspector Contract
 
-| 问题 | 修复方案 | 涉及包 |
-|------|---------|--------|
-| 硬编码颜色 (266 处) | 批量替换为 `--neko-*` tokens | canvas, agent, sketch |
-| 交互状态不齐 | `@neko/ui` 组件统一内置 hover/focus/active/disabled | 所有包 |
-| 图标 inline SVG | 迁移到 `@neko/ui/icons` 统一组件 | 除 agent 外 |
-| focus 环不一致 | 全局 `focus-visible` + Radix 焦点管理 | 所有包 |
+第一批领域组件以 Inspector 为核心，因为 Cut/Puppet/Model/Sketch/Canvas 重复度最高。
+
+```ts
+export type PropertyValue = string | number | boolean;
+
+export interface PropertyOption {
+  readonly value: string;
+  readonly label: string;
+  readonly disabled?: boolean;
+}
+
+interface PropertyBase {
+  readonly id: string;
+  readonly label: string;
+  readonly disabled?: boolean;
+  readonly animatable?: boolean;
+  readonly hasKeyframes?: boolean;
+  readonly isAtKeyframe?: boolean;
+}
+
+export type PropertyDefinition =
+  | NumberPropertyDefinition
+  | SliderPropertyDefinition
+  | TextPropertyDefinition
+  | ColorPropertyDefinition
+  | BooleanPropertyDefinition
+  | SelectPropertyDefinition;
+
+export type NumberPropertyDefinition = PropertyBase & {
+  readonly kind: 'number';
+  readonly value: number;
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  readonly unit?: string;
+};
+
+export type SliderPropertyDefinition = PropertyBase & {
+  readonly kind: 'slider';
+  readonly value: number;
+  readonly min: number;
+  readonly max: number;
+  readonly step?: number;
+  readonly unit?: string;
+};
+
+export type TextPropertyDefinition = PropertyBase & {
+  readonly kind: 'text';
+  readonly value: string;
+};
+
+export type ColorPropertyDefinition = PropertyBase & {
+  readonly kind: 'color';
+  readonly value: string;
+  readonly alpha?: number;
+};
+
+export type BooleanPropertyDefinition = PropertyBase & {
+  readonly kind: 'boolean';
+  readonly value: boolean;
+};
+
+export type SelectPropertyDefinition = PropertyBase & {
+  readonly kind: 'select';
+  readonly value: string;
+  readonly options: readonly PropertyOption[];
+};
+```
+
+`PropertyDefinition` 使用逐 kind 的 discriminated union，而不是单一 interface + 大量可选字段。这样 adapter 在 `switch (definition.kind)` 中可以获得 exhaustive check，避免新增控件类型时遗漏 value/options/min/max 等字段约束。
+
+```ts
+function assertNever(value: never): never {
+  throw new Error(`Unhandled property definition: ${JSON.stringify(value)}`);
+}
+
+function mapProperty(definition: PropertyDefinition): PropertyViewModel {
+  switch (definition.kind) {
+    case 'number':
+      return mapNumber(definition);
+    case 'slider':
+      return mapSlider(definition);
+    case 'text':
+      return mapText(definition);
+    case 'color':
+      return mapColor(definition);
+    case 'boolean':
+      return mapBoolean(definition);
+    case 'select':
+      return mapSelect(definition);
+    default:
+      return assertNever(definition);
+  }
+}
+```
+
+事件语义：
+
+| 事件 | 用途 |
+|------|------|
+| `onPreviewChange(id, value)` | 滑动/拖拽中的实时预览，不写 undo history |
+| `onCommit(id, value)` | blur / pointerup / Enter 后提交，进入 undo history |
+| `onReset(id)` | 回默认值 |
+| `onToggleKeyframe(id)` | 交给调用方连接 keyframe store |
+
+### 5.6 TreeView Contract
+
+```ts
+export interface TreeViewItem {
+  readonly id: string;
+  readonly label: string;
+  readonly icon?: React.ReactNode;
+  readonly children?: readonly TreeViewItem[];
+  readonly disabled?: boolean;
+  readonly selected?: boolean;
+  readonly expanded?: boolean;
+  readonly visible?: boolean;
+  readonly locked?: boolean;
+  readonly metadata?: unknown;
+}
+```
+
+TreeView 只负责可访问性、展开/收起、选择、多选、重命名、拖拽排序 UI。节点含义由调用方 adapter 解释，例如 Model 的 scene node、Puppet 的 node snapshot、Sketch 的 layer。
+
+TreeView 必须为大数据量场景预留渲染策略：
+
+| 场景 | 约束 |
+|------|------|
+| 少量节点（< 200 visible items） | 可使用直接 DOM 渲染，保留完整 keyboard/focus 行为 |
+| 大量节点（>= 200 visible items） | 必须启用 virtualization 或窗口化渲染策略，例如 `react-window` 同类实现 |
+| 展开/过滤/搜索 | adapter 负责提供稳定 `id`、展开状态和过滤结果，TreeView 不解释领域节点含义 |
+| 测试 | Model SceneTree / Sketch LayerPanel 迁移时必须包含 500 节点级别的渲染、键盘导航和选中状态断言 |
 
 ---
 
-## 实施计划
+## 6. 子包迁移设计
 
-### Phase 0: 基础设施（~2d）
+### 6.1 第一批：Inspector / Form
 
-| PR | 内容 |
-|----|------|
-| PR0-1 | 创建 `@neko/ui` 包骨架：package.json, tsconfig, tailwind.config, vitest.config, cn.ts |
-| PR0-2 | 从 @neko/shared 迁移 hooks (useDrag, useResizable, useFileDrop) + icons 到 @neko/ui，@neko/shared 侧 re-export 保持兼容 |
+| 子包 | 迁移内容 | 原因 |
+|------|----------|------|
+| Cut | `PropertyPanel`、`PropertyRow`、`NumberInput`、`ColorInput`、`SelectInput` | 已有声明式 `PropertyDefinition`，最适合做首个 adapter |
+| Puppet | `ParameterPanel`、`FaceParameterSection` slider、reset button | 参数滑条与 Model/Cut 可复用 |
+| Model | `TransformPanel`、`FaceParameterSlider` | 数值输入和 slider 密集 |
+| Sketch | 工具参数面板、颜色/尺寸输入 | 表单控件数量高 |
 
-### Phase 1: Primitives — shadcn/Radix 引入（~3d）
+### 6.2 第二批：Tree / List
 
-| PR | 内容 | 优先级 |
-|----|------|:------:|
-| PR1-1 | Tooltip + Popover (最常需、最简单) | P0 |
-| PR1-2 | Dialog (替换各包 ad-hoc 弹窗) | P0 |
-| PR1-3 | Select + Combobox | P0 |
-| PR1-4 | ContextMenu (Radix 重写，保持 glass 风格 + AI menu builder) | P1 |
-| PR1-5 | Slider + Tabs + Collapsible + ScrollArea + ToggleGroup | P1 |
+| 子包 | 迁移内容 | 原因 |
+|------|----------|------|
+| Puppet | `PuppetNodeTree` | 当前使用 Unicode icon 和本地 tree state |
+| Model | `SceneTree` | 可与 Puppet/Sketch 共用 visibility/selection 语义 |
+| Sketch | `LayerPanel` | 图层树需要统一右键、可见性、锁定状态 |
+| Canvas | node/library list | 后续可复用 TreeView/ListView primitives |
 
-### Phase 2: Creative 组件 — 自建（~5d）
+### 6.3 后续批次：Media / Dashboard / Marketplace / Document
 
-| PR | 内容 | 优先级 |
-|----|------|:------:|
-| PR2-1 | ColorPicker (HSL/HEX/Alpha) | P0 |
-| PR2-2 | NumberInput (拖拽调节 + 步进 + 键盘输入) | P0 |
-| PR2-3 | PropertyPanel + PropertyRow + PropertyGroup | P1 |
-| PR2-4 | TreeView (虚拟滚动 + 拖拽排序 + 多选) | P1 |
-| PR2-5 | AssetBrowser (网格/列表/瀑布流) | P2 |
-| PR2-6 | Canvas2DContainer + usePanZoom | P2 |
+| 子包 | 本轮迁移内容 | 仍保留原因 |
+|------|--------------|------------|
+| Audio | Transport、effects、export、recording、preset browser、side panel、drag/drop primitives/hooks/icons | Timeline、menu、toolbar 需要独立 timeline/menu contract |
+| Live | TrackingPanel form controls、recording badge、Tailwind scan config | Compositor/viewport authority 不属于 UI primitive 迁移 |
+| Preview | Viewer tabs、sliders、video/audio controls、document context menu、preview wrapper adapters | Wrapper 名称保留给既有 viewer 代码，后续可做命名清理 |
+| Tools | DiffControls、range/select/button、progress/badge、audio/video seek controls | 波形/TimelineDiff 可视化控件未触达 |
+| Dashboard | QuickActions、WorkflowCards、TaskTable、ProjectTable、CreativeEntities、SkillList、RecentActivity | Dashboard shell 和表结构保持包内 |
+| Market | Search、Tabs、FilterDropdown、AssetCard、PackageDetail、LargeAssetPicker controls | 管理列表留给独立 marketplace controls pass |
+| Story | Main tabs、table actions、row menu、touched icons/styles | 剧本表格布局和 hover preview 保持领域实现 |
 
-### Phase 3: 子包迁移（~4d）
+### 6.4 Agent 单独处理
 
-| PR | 内容 |
-|----|------|
-| PR3-1 | neko-cut: 属性面板 → PropertyPanel, ColorInput → ColorPicker, ContextMenu 迁移 |
-| PR3-2 | neko-canvas: PropertyPanel + ContextMenu + TreeView 迁移 |
-| PR3-3 | neko-sketch: 面板组件 + LayerPanel → TreeView |
-| PR3-4 | neko-model: 面板组件 + SceneTree → TreeView + FaceSlider → NumberInput |
-| PR3-5 | neko-puppet: ParameterPanel + BoneTree → TreeView |
-| PR3-6 | neko-market + neko-preview: Dialog + Select + AssetBrowser |
+Agent Header/Input 在布局统一变更中已经回退。Agent 的组件迁移不应混入本 ADR 的通用 UI 迁移批次，因为它同时涉及：
 
-### Phase 4: 清理 + a11y（~2d）
+- conversation tabs
+- model/session/execution selectors
+- account / SSO / onboarding
+- media model selection
+- slash command / mention / file reference menus
+- generation params
+- side-panel 空间约束
 
-| PR | 内容 |
-|----|------|
-| PR4-1 | 硬编码颜色批量替换 (canvas/agent/sketch) |
-| PR4-2 | @neko/shared/components deprecated 标记 + 文档更新 |
-| PR4-3 | a11y 审计 + ARIA 补全 |
-
-**总工期估算**：~16 eng-days，可并行（Phase 1 + Phase 2 部分可同时推进）
+Agent 后续应单独提出 `redesign-agent-conversation-ui`，本 ADR 只允许复用低风险 primitives，例如 Tooltip、Button、Popover 的外观层替换，不改变交互信息架构。本次实现没有把 `@neko/ui` 引入 Agent Header/Input、conversation tabs、selectors、account flows、slash commands、mentions 或 media model controls；`packages/neko-ui/src/__tests__/agent-ui-isolation.test.ts` 会扫描这些 critical files 并阻止 accidental migration。
 
 ---
 
-## 风险与缓解
+## 7. 实施计划
+
+### Phase 0: Baseline / Guardrails
+
+| 任务 | 状态 |
+|------|------|
+| 确认 `@neko/ui/viewport` 作为现有已落地边界 | Done |
+| 保留 `@neko/shared/components` 兼容入口 | Done / exempted |
+| 为 `@neko/ui` 增加 dependency boundary test：不可 import feature packages / vscode | Done |
+| 为新增组件建立 theme/a11y 测试基线 | Done |
+
+### Phase 1: Primitives
+
+| 任务 | 优先级 | 状态 |
+|------|:------:|------|
+| `Button` / `IconButton` / `Tooltip` | P0 | Done |
+| `Select` / `Slider` / `Popover` | P0 | Done |
+| `Dialog` / `Tabs` / `ContextMenu` | P1 | Done |
+| `Collapsible` / `ScrollArea` / `ToggleGroup` | P1 | Done |
+| `Progress` / `Badge` / `EmptyState` | P2 | Done |
+
+Phase 1 起每个新增 primitive 必须同时完成 token 映射：组件内部只消费 `--neko-*` / VSCode theme variables，不新增 package-specific token；迁移调用方时删除或降级对应本地 token 别名。
+
+### Phase 2: Creative Components
+
+| 任务 | 优先级 | 状态 |
+|------|:------:|------|
+| `NumberInput` + `NumberSlider` | P0 | Done |
+| `ColorPicker` + `ColorSwatch` | P0 | Done |
+| `PropertyPanel` + `PropertyGroup` + `PropertyRow` | P0 | Done |
+| `KeyframeToggle` / `KeyframeButton` | P1 | Done |
+| `TreeView` | P1 | Done, includes 200+ virtualization path |
+| `AssetBrowser` | P2 | Placeholder |
+| `MediaTransportControls` | P2 | Placeholder |
+
+Phase 2 不等待 Phase 4 才做 token 收敛。每个 creative component 的首个 package adapter 必须同时提交 token mapping diff，证明旧的 `--nk-*` / `--sketch-*` / `--model-*` / `--tools-*` 等语义可以映射到共享 `--neko-*` 或局部 adapter token。
+
+`TreeView` 首版必须包含 virtualization 开关或可替换 renderer contract。即使 Cut adapter 不使用 TreeView，Model/Sketch/Puppet 迁移前也不得把 TreeView 固化为全量 DOM 渲染模型。
+
+### Phase 3: Package Adapters
+
+| 批次 | 子包 | 范围 |
+|------|------|------|
+| 3.1 | Cut | Done: Inspector/Form 首迁，验证 `PropertyDefinition` adapter |
+| 3.2 | Puppet + Model | Done: Parameter/Transform/Tree 迁移 |
+| 3.3 | Sketch + Canvas | Done: 面板、Layer/Node list、touched toolbar/list controls |
+| 3.4 | Audio + Preview + Tools | Done: media controls、range/select/dialog/context controls |
+| 3.5 | Dashboard + Market + Story | Done: dashboard primitives、cards/table/tabs/dialog/actions |
+
+Phase 3.1 contract review gate 已通过：Cut core Basic/Transform/Text/Subtitle/Audio rows 可通过 discriminated `PropertyDefinition` 表达，preview/commit 和 undo boundary 由 Cut-owned bridge 持有，复杂 effects/mask/transition/transport-like 控件没有强行塞入通用 contract。
+
+`@neko/shared/components` 的 React UI 入口硬截止已在 Phase 3.3 完成后生效：新代码不得再从 `@neko/shared/components` 导入 React UI 组件，只允许保留兼容 re-export 和 migration notes 中记录的 legacy exemptions。Phase 3.4 起新增或修改的 Webview UI 必须从 `@neko/ui` 导入，`legacy-shared-components-imports.test.ts` 会检查 allowlist。
+
+### Phase 4: Cleanup
+
+| 任务 | 说明 |
+|------|------|
+| Remove legacy imports | Done for non-exempt touched surfaces；剩余引用记录在 migration notes exemption table |
+| Token convergence audit | Done for touched adapters/primitives；未触达 shell token 留到 Phase 4 package cleanup |
+| Icon convergence | Done for touched controls；未触达 visualization/toolbar icons 保持包内债务 |
+| A11y audit | Done through primitive/creative tests for keyboard、aria、focus、disabled、theme assertions |
+
+---
+
+## 8. 验收标准
+
+每个组件和子包迁移必须满足：
+
+1. Webview 侧不 import `vscode`，Extension 侧不 import React。
+2. `@neko/ui` 不依赖任何 feature package。
+3. 新增 UI 不引入新的 package-specific token 前缀。
+4. 控件支持 disabled、focus-visible、keyboard 操作和 aria label。
+5. 表单控件区分 preview change 和 commit change。
+6. 迁移子包保留原行为测试或补充 adapter tests。
+7. 复杂视觉组件至少有 DOM/source assertion；viewport 场景保留 semantic workflow tests。
+8. Agent redesign 不与首批 creative UI migration 混合提交。
+9. `PropertyDefinition` adapter 使用 exhaustive switch；新增 `kind` 时测试必须失败直到所有 adapter 覆盖。
+10. Phase 3.3 后修改 Webview UI 时不得新增 `@neko/shared/components` React UI import，除非在迁移清单中标注 legacy 豁免。
+11. 每批 Radix/shadcn primitive 迁移必须记录 gzip bundle delta；单 primitive 超过 20KB gzipped 时需要设计说明和替代方案评估。
+12. `TreeView` 迁移到 Model/Sketch/Puppet 前必须通过 500 visible items 级别的 virtualization/keyboard/selection 测试。
+13. 新增或迁移控件图标不得新增业务包 inline SVG / Unicode glyph；缺失图标先补 `@neko/ui/icons` 或 codicon mapping。
+
+---
+
+## 9. 风险与缓解
 
 | 风险 | 影响 | 缓解 |
 |------|------|------|
-| Radix 运行时与 VSCode CSP 冲突 | 组件无法渲染 | Phase 0 末做 PoC：在真实 webview 中验证 Dialog + Popover + ContextMenu |
-| bundle 体积增长 | webview 加载变慢 | 按需引入 Radix 原语，每个 webview 只打包使用的组件；Phase 1 后测量 |
-| 迁移期两套组件共存 | 维护成本暂时增加 | @neko/shared 侧 re-export @neko/ui 保持 import 路径不变，逐包迁移 |
-| 创作组件自建质量 | ColorPicker 等复杂控件 bug | 参考成熟实现（react-colorful 等），重点测试边界值 |
+| `@neko/ui` 变成业务聚合层 | 破坏依赖方向 | boundary tests 禁止依赖 feature packages；creative components 只接受 DTO/props |
+| Radix 增加 bundle 体积 | Webview 首屏变慢 | 按组件引入；每批迁移后记录 bundle delta；单 primitive 默认不超过 20KB gzipped |
+| 两套组件长期共存 | 维护成本上升 | Phase 3.3 作为硬截止；Phase 3.4 起新增/修改 UI 必须走 `@neko/ui` |
+| PropertyPanel 抽象过度 | 不适配 Cut/Model/Puppet 差异 | 先以 Cut adapter 验证 contract；Phase 3.1 后设置 contract review gate，再迁 Model/Puppet |
+| TreeView 全量 DOM 渲染失控 | 大场景卡顿、键盘导航不稳定 | TreeView contract 预留 virtualization；Model/Sketch/Puppet 迁移前做 500 visible items 测试 |
+| 图标收敛后置导致清理面扩大 | inline SVG / Unicode glyph 继续扩散 | 新增控件图标从 Phase 1 起进入 `@neko/ui/icons` 或 codicon mapping |
+| Token 收敛后置导致返工 | 后续回头改成本高 | Phase 1/2 开始随组件和 adapter 同步映射 token；Phase 4 只做 audit |
+| Agent 被误纳入通用迁移 | 重复之前失败设计 | 明确单独 redesign，当前仅允许低风险外观 primitive 替换 |
 
 ---
 
-## Kill Switches
+## 10. 决策总结
 
-| 开关 | 作用 | 默认 |
-|------|------|------|
-| 回退到 @neko/shared | @neko/shared re-export 层可随时切回旧实现 | 否 |
-| Radix 单组件禁用 | 每个 Radix 组件独立引入，可单独移除 | 否 |
-
----
-
-## 决策总结
-
-1. **不换底层框架** — React + Tailwind + Vite + Design Tokens 体系保持不变
-2. **新建 `@neko/ui` L2 Webview UI 包** — 统一组件层，不修改现有 `@neko/shared` 非 UI 部分
-3. **shadcn/ui 源码模式 + Radix Primitives** — 基础控件（Dialog/Popover/Select/Tooltip/ContextMenu/Slider 等）
-4. **创作领域自建** — ColorPicker / NumberInput / PropertyPanel / TreeView / AssetBrowser / Canvas2DContainer
-5. **渐进迁移** — Phase 0-4 分阶段，@neko/shared re-export 保持向后兼容
-6. **i18n 不变** — 共享组件自带通用文案，各子包继续自管领域翻译
+1. `@neko/ui` 是 Webview React UI 的 canonical 入口，`@neko/shared` 回归 L0 类型/协议/主题/非 React 工具。
+2. `@neko/ui/viewport`、`@neko/ui/primitives`、`@neko/ui/creative`、`@neko/ui/icons`、`@neko/ui/hooks`、`@neko/ui/test-utils` 已作为公共入口落地。
+3. 基础控件采用 shadcn 源码模式 + Radix primitives；创作领域控件自建并保持受控优先。
+4. Cut/Puppet/Model/Sketch/Canvas 的 Inspector/Form/Tree 已完成首批 adapter 迁移，Audio/Live/Preview/Tools/Dashboard/Market/Story 已完成后续低风险 primitive wave。
+5. Agent Header/Input redesign 单独提案，不混入通用 UI 迁移。
+6. 每次迁移以 adapter 方式连接业务 store，避免共享 UI 反向依赖功能包。
+7. `PropertyDefinition` 使用 discriminated union，保证 adapter 具备类型层面的 exhaustive check。
+8. `@neko/shared/components` React UI 入口已进入 Phase 3.3 后硬截止期，Phase 3.4 起新增/修改 UI 必须使用 `@neko/ui`，除非在 exemption table 和 allowlist test 中记录。
+9. Radix/shadcn 引入受 bundle budget 约束，单 primitive 默认不超过 20KB gzipped；Popover、Select、ContextMenu 的 isolated baseline 超阈值，但 package deltas 通过 shared chunk reuse 记录和评估。
+10. TreeView 已实现 200+ virtualization/windowing path，Model/Sketch/Puppet 大列表迁移包含 500 visible items 测试。
+11. 图标收敛从 Phase 1 开始，新增控件图标只能进入 `@neko/ui/icons` 或 codicon mapping；未触达包内 visualization/toolbar icon 债务保留到后续 cleanup。

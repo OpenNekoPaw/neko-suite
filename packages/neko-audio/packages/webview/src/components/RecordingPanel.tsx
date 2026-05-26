@@ -8,7 +8,7 @@
 import { useCallback } from 'react';
 import { useRecording } from '../hooks/useRecording';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton } from '@neko/shared/components';
+import { AudioButton, AudioSelect } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 export function RecordingPanel() {
@@ -51,19 +51,19 @@ export function RecordingPanel() {
       {devices.length > 0 && (
         <div className="flex items-center gap-1.5">
           <label className="text-[10px] opacity-70 shrink-0">{t('audio.recording.device')}</label>
-          <select
+          <AudioSelect
+            className="flex-1"
+            label={t('audio.recording.device')}
             value={selectedDeviceId ?? ''}
-            onChange={(e) => selectDevice(e.target.value)}
+            onChange={selectDevice}
             disabled={state !== 'idle'}
-            className="flex-1 text-[11px] px-1 py-0.5 bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded"
-          >
-            {devices.map((device) => (
-              <option key={device.deviceId} value={device.deviceId}>
-                {device.label ||
-                  t('audio.recording.micFallback', { id: device.deviceId.slice(0, 8) })}
-              </option>
-            ))}
-          </select>
+            options={devices.map((device) => ({
+              value: device.deviceId,
+              label:
+                device.label ||
+                t('audio.recording.micFallback', { id: device.deviceId.slice(0, 8) }),
+            }))}
+          />
         </div>
       )}
 
@@ -94,28 +94,27 @@ export function RecordingPanel() {
       {/* Controls */}
       <div className="flex gap-1.5 justify-center">
         {state === 'idle' ? (
-          <MacButton variant="primary" size="sm" onClick={startRecording}>
+          <AudioButton variant="primary" onClick={startRecording}>
             {t('audio.recording.start')}
-          </MacButton>
+          </AudioButton>
         ) : (
           <>
             {state === 'recording' ? (
-              <MacButton variant="secondary" size="sm" onClick={pauseRecording}>
+              <AudioButton variant="secondary" onClick={pauseRecording}>
                 {t('audio.controls.pause')}
-              </MacButton>
+              </AudioButton>
             ) : (
-              <MacButton variant="secondary" size="sm" onClick={resumeRecording}>
+              <AudioButton variant="secondary" onClick={resumeRecording}>
                 {t('audio.controls.play')}
-              </MacButton>
+              </AudioButton>
             )}
-            <MacButton
+            <AudioButton
               variant="ghost"
-              size="sm"
               onClick={handleStopAndSave}
               className="text-[var(--status-error)]"
             >
               {t('audio.recording.stop')}
-            </MacButton>
+            </AudioButton>
           </>
         )}
       </div>

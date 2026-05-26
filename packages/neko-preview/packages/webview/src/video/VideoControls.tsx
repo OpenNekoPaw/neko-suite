@@ -12,7 +12,15 @@ import { useTranslation } from '../i18n/I18nContext';
 import { ProgressBar } from '../shared/ProgressBar';
 import { MacIconButton } from '../shared/MacIconButton';
 import { MacSlider } from '../shared/MacSlider';
-import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/shared/icons';
+import {
+  InfoIcon,
+  PauseIcon,
+  PictureInPictureIcon,
+  PlayIcon,
+  VolumeIcon,
+  VolumeOffIcon,
+} from '@neko/ui/icons';
+import { MacButton } from '../shared/MacButton';
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
@@ -161,13 +169,15 @@ export function VideoControls({
 
         <div className="flex items-center gap-2 ml-auto">
           {/* Speed */}
-          <button
-            className="text-[11px] font-semibold px-2 py-1 rounded-neko-sm bg-white/10 text-white/85 hover:bg-white/20 hover:text-white cursor-pointer transition-all duration-150 min-w-[40px] text-center border-none"
+          <MacButton
+            variant="ghost"
+            size="sm"
+            className="min-w-[40px] bg-white/10 px-2 py-1 text-center text-[11px] font-semibold text-white/85 hover:bg-white/20 hover:text-white"
             onClick={handleSpeedClick}
             title={t('preview.video.speedLabel')}
           >
             {speed}x
-          </button>
+          </MacButton>
 
           {/* Stats toggle */}
           {onToggleStats && (
@@ -178,9 +188,7 @@ export function VideoControls({
               className={`${showStats ? 'bg-white/25 text-white' : 'text-white/85 hover:text-white hover:bg-white/15'}`}
               title={showStats ? t('preview.video.hideStats') : t('preview.video.showStats')}
             >
-              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H5v-2h7v2zm5-4H5v-2h12v2zm0-4H5V7h12v2z" />
-              </svg>
+              <InfoIcon className="w-4 h-4" />
             </MacIconButton>
           )}
 
@@ -193,9 +201,7 @@ export function VideoControls({
               className={`${isPiPActive ? 'bg-white/25 text-white' : 'text-white/85 hover:text-white hover:bg-white/15'}`}
               title={isPiPActive ? t('preview.video.exitPip') : t('preview.video.pipButton')}
             >
-              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                <path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z" />
-              </svg>
+              <PictureInPictureIcon className="w-4 h-4" />
             </MacIconButton>
           )}
 

@@ -32,6 +32,7 @@ const mediaDiff: MessageBundle = {
   'mediaDiff.webglNotAvailable': 'WebGL 不可用 — 使用回退视图',
   // Video diff
   'mediaDiff.video.fetchingPrevious': '正在获取上一版本…',
+  'mediaDiff.video.seek': '定位',
   'mediaDiff.video.analyzing': '正在分析视频...',
   'mediaDiff.video.playTitle': '播放视频差异',
   'mediaDiff.video.streamError': '流错误：{error}',
@@ -48,6 +49,7 @@ const mediaDiff: MessageBundle = {
   'mediaDiff.audio.playBoth': '双轨',
   'mediaDiff.audio.playCurrent': '当前版',
   'mediaDiff.audio.fetchingPrevious': '正在获取上一版本…',
+  'mediaDiff.audio.seek': '定位',
   'mediaDiff.audio.loading': '正在加载音频文件...',
   'mediaDiff.audio.zoom': '缩放：{level}x',
   'mediaDiff.audio.wheelHint': 'Ctrl+滚轮: 缩放 · 滚轮: 滚动',

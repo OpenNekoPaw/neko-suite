@@ -3,6 +3,8 @@
  */
 
 import React, { useCallback, useRef, useState } from 'react';
+import { Button } from '@neko/ui/primitives';
+import { toCodiconClassName } from '@neko/ui/icons';
 import {
   buildBrowseQueryFromState,
   useMarketplaceStore,
@@ -178,34 +180,38 @@ function FilterDropdown(props: {
 
   return (
     <div className="filter-dropdown" ref={containerRef} onBlur={handleBlur}>
-      <button
+      <Button
         className={`filter-dropdown__trigger${!isDefault ? ' filter-dropdown__trigger--active' : ''}`}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-label={props.label}
+        size="xs"
+        variant="secondary"
       >
         <span className="filter-dropdown__label">{props.label}</span>
         <span className="filter-dropdown__value">{selectedLabel}</span>
-        <span className="filter-dropdown__chevron codicon codicon-chevron-down" />
-      </button>
+        <span className={`filter-dropdown__chevron ${toCodiconClassName('chevron-down')}`} />
+      </Button>
       {open && (
         <div className="filter-dropdown__menu" role="listbox" aria-label={props.label}>
           {props.options.map(({ key, label }) => (
-            <button
+            <Button
               key={key}
               className={`filter-dropdown__item${key === props.value ? ' filter-dropdown__item--active' : ''}`}
               role="option"
               aria-selected={key === props.value}
+              size="xs"
+              variant="ghost"
               onClick={() => {
                 props.onChange(key);
                 setOpen(false);
               }}
             >
               {key === props.value && (
-                <span className="codicon codicon-check filter-dropdown__check" />
+                <span className={`${toCodiconClassName('check')} filter-dropdown__check`} />
               )}
               {label}
-            </button>
+            </Button>
           ))}
         </div>
       )}

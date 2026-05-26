@@ -11,6 +11,7 @@
   "dependencies": {
     "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
+    "@neko/ui": "workspace:*",
     "@zip.js/zip.js": "^2.7.52",
     "docx-preview": "^0.3.3",
     "epubjs": "^0.3.93",

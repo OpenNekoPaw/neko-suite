@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Tabs } from '@neko/ui/primitives';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { ScriptRenderer } from './components/ScriptRenderer';
 import { ScriptTableView } from './components/ScriptTableView';
@@ -32,35 +33,16 @@ function TabBar({
 }) {
   const { t } = useTranslation();
   return (
-    <div
-      className="flex items-center gap-0 flex-shrink-0"
-      style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}
-    >
-      {TAB_IDS.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onChange(tab.id)}
-          style={{
-            padding: '6px 14px',
-            fontSize: 12,
-            background: 'none',
-            border: 'none',
-            borderBottom:
-              active === tab.id ? '2px solid var(--vscode-focusBorder)' : '2px solid transparent',
-            color:
-              active === tab.id
-                ? 'var(--vscode-foreground)'
-                : 'var(--vscode-descriptionForeground)',
-            cursor: 'pointer',
-            transition: 'color 0.1s',
-            fontWeight: active === tab.id ? 600 : 400,
-            marginBottom: -1,
-          }}
-        >
-          {t(tab.labelKey)}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      className="flex-shrink-0 gap-0"
+      listClassName="w-full justify-start rounded-none border-b border-[var(--vscode-panel-border)] bg-transparent p-0"
+      value={active}
+      onValueChange={(value) => onChange(value as StoryViewMode)}
+      items={TAB_IDS.map((tab) => ({
+        value: tab.id,
+        label: t(tab.labelKey),
+      }))}
+    />
   );
 }
 

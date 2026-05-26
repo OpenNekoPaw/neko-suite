@@ -9,7 +9,7 @@ import { useState, useCallback } from 'react';
 import type { AudioExportFormat } from '@neko/shared';
 import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton } from '@neko/shared/components';
+import { AudioButton, AudioSelect } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 // =============================================================================
@@ -32,9 +32,6 @@ const FORMATS: FormatOption[] = [
 
 const SAMPLE_RATES = [8000, 16000, 22050, 44100, 48000, 96000];
 const BITRATES = [96, 128, 192, 256, 320];
-
-const selectClass =
-  'w-full text-[11px] px-2 py-1 bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded';
 
 // =============================================================================
 // ExportPanel
@@ -67,70 +64,63 @@ export function ExportPanel() {
       {/* Format */}
       <div className="flex flex-col gap-1">
         <label className="text-[10px] opacity-70">{t('audio.export.format')}</label>
-        <select
-          className={selectClass}
+        <AudioSelect
+          className="w-full"
+          label={t('audio.export.format')}
           value={format}
-          onChange={(e) => setFormat(e.target.value as AudioExportFormat)}
-        >
-          {FORMATS.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+          onChange={setFormat}
+          options={FORMATS.map((f) => ({ value: f.value, label: f.label }))}
+        />
       </div>
 
       {/* Sample Rate */}
       <div className="flex flex-col gap-1">
         <label className="text-[10px] opacity-70">{t('audio.export.sampleRate')}</label>
-        <select
-          className={selectClass}
+        <AudioSelect
+          className="w-full"
+          label={t('audio.export.sampleRate')}
           value={sampleRate}
-          onChange={(e) => setSampleRate(Number(e.target.value))}
-        >
-          {SAMPLE_RATES.map((r) => (
-            <option key={r} value={r}>
-              {r >= 1000 ? `${r / 1000}kHz` : `${r}Hz`}
-            </option>
-          ))}
-        </select>
+          onChange={setSampleRate}
+          options={SAMPLE_RATES.map((r) => ({
+            value: r,
+            label: r >= 1000 ? `${r / 1000}kHz` : `${r}Hz`,
+          }))}
+        />
       </div>
 
       {/* Bitrate (lossy only) */}
       {isLossy && (
         <div className="flex flex-col gap-1">
           <label className="text-[10px] opacity-70">{t('audio.export.bitrate')}</label>
-          <select
-            className={selectClass}
+          <AudioSelect
+            className="w-full"
+            label={t('audio.export.bitrate')}
             value={bitrate}
-            onChange={(e) => setBitrate(Number(e.target.value))}
-          >
-            {BITRATES.map((b) => (
-              <option key={b} value={b}>
-                {b} kbps
-              </option>
-            ))}
-          </select>
+            onChange={setBitrate}
+            options={BITRATES.map((b) => ({ value: b, label: `${b} kbps` }))}
+          />
         </div>
       )}
 
       {/* Channels */}
       <div className="flex flex-col gap-1">
         <label className="text-[10px] opacity-70">{t('audio.export.channels')}</label>
-        <select
-          className={selectClass}
+        <AudioSelect
+          className="w-full"
+          label={t('audio.export.channels')}
           value={channels}
-          onChange={(e) => setChannels(Number(e.target.value))}
-        >
-          <option value={1}>{t('audio.export.mono')}</option>
-          <option value={2}>{t('audio.export.stereo')}</option>
-        </select>
+          onChange={setChannels}
+          options={[
+            { value: 1, label: t('audio.export.mono') },
+            { value: 2, label: t('audio.export.stereo') },
+          ]}
+        />
       </div>
 
       {/* Export button */}
-      <MacButton variant="primary" size="sm" onClick={handleExport} className="mt-1">
+      <AudioButton variant="primary" onClick={handleExport} className="mt-1">
         {t('audio.export.export')}
-      </MacButton>
+      </AudioButton>
     </div>
   );
 }

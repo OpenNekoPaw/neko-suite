@@ -11,6 +11,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
       '@neko/neko-client': path.resolve(__dirname, '../../../neko-client/src'),
+      '@neko/ui': path.resolve(__dirname, '../../../neko-ui/src'),
     },
   },
   server: {
@@ -39,6 +40,6 @@ export default defineConfig({
     modulePreload: false,
   },
   optimizeDeps: {
-    include: ['@neko/shared'],
+    include: ['@neko/shared', '@neko/ui'],
   },
 });

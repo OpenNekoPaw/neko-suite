@@ -5,7 +5,8 @@
  * Toolbar | Canvas | Side panels (Brush/Color/Layers)
  */
 import { useEffect, useCallback, useState } from 'react';
-import { ResizeHandle, useResizable } from '@neko/shared/components';
+import { useResizable } from '@neko/ui/hooks';
+import { ResizeHandle } from '@neko/ui/primitives';
 import type { ExtensionToWebviewMessage } from './types';
 import { useSketchStore } from './stores';
 import {

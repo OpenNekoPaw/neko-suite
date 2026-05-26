@@ -6,6 +6,7 @@ import type {
   ViewportFrameMeta,
 } from '@neko/shared';
 import { EngineClient, H264StreamClient } from '@neko/neko-client';
+import { Badge } from '@neko/ui/primitives';
 import { ViewportShell, bridgeRenderFrameMetaToViewportFrameMeta } from '@neko/ui';
 import { EmptyState } from './components/EmptyState';
 import { TrackingPanel } from './components/TrackingPanel';
@@ -15,7 +16,10 @@ import { vscode } from './vscode-api';
 import { CanvasRecorder } from './recording/CanvasRecorder';
 import { t } from './i18n';
 import { NEKO_LIVE_RENDERER_FALLBACK_ENABLED } from './rendererMigration';
-import { LiveCompositorCanvas, type LiveCompositorCanvasHandle } from './viewport/LiveCompositorCanvas';
+import {
+  LiveCompositorCanvas,
+  type LiveCompositorCanvasHandle,
+} from './viewport/LiveCompositorCanvas';
 import { LiveController } from './viewport/LiveController';
 import {
   LIVE_COMPOSITOR_SCENE_ID,
@@ -405,7 +409,8 @@ export function App() {
 
         {/* REC badge overlay */}
         {isRecording && (
-          <div
+          <Badge
+            tone="danger"
             style={{
               position: 'absolute',
               top: 8,
@@ -425,7 +430,7 @@ export function App() {
           >
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
             {t('recording.rec')}
-          </div>
+          </Badge>
         )}
       </div>
 

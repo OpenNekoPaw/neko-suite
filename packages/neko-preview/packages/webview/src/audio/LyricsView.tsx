@@ -7,6 +7,7 @@
  */
 
 import { useRef, useEffect, useMemo } from 'react';
+import { VolumeIcon } from '@neko/ui/icons';
 import { useTranslation } from '../i18n/I18nContext';
 import { findCurrentLineIndex, type LrcLine } from './lrc-parser';
 
@@ -43,9 +44,7 @@ export function LyricsView({ lyrics, currentTime }: LyricsViewProps) {
     return (
       <div className="w-full h-full flex items-center justify-center text-neko-preview-text-secondary text-sm">
         <div className="text-center opacity-60">
-          <svg viewBox="0 0 24 24" className="w-10 h-10 fill-current opacity-40 mx-auto mb-2">
-            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.79 13 6 14.79 6 17s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-          </svg>
+          <VolumeIcon className="mx-auto mb-2 opacity-40" size={40} />
           <div>{t('preview.audio.noLyrics')}</div>
         </div>
       </div>

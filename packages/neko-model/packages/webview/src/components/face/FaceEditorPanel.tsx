@@ -69,6 +69,9 @@ export function FaceEditorPanel({
   const categories: FaceCategory[] = ['face', 'eyes', 'nose', 'mouth', 'eyebrows'];
   const handleParamChange = (name: string, value: number) => {
     setFaceParam(name, value);
+  };
+  const handleParamCommit = (name: string, value: number) => {
+    setFaceParam(name, value);
     onSetMorph(name, value);
   };
   const controlsDisabled = disabled || !characterId;
@@ -111,6 +114,8 @@ export function FaceEditorPanel({
             parameters={getParametersByCategory(category)}
             values={faceParams}
             onChange={handleParamChange}
+            onCommit={handleParamCommit}
+            onPreviewChange={handleParamChange}
             disabled={controlsDisabled}
           />
         ))}

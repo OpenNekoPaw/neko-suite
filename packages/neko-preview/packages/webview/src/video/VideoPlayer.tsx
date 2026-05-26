@@ -15,6 +15,7 @@ import type {
 import { useExtensionMessage, useVscodeReady } from '../shared/useVscodeMessage';
 import { useTranslation } from '../i18n/I18nContext';
 import { VideoControls } from './VideoControls';
+import { PictureInPictureIcon, PlayIcon } from '@neko/ui/icons';
 import type { MediaInfo, PreviewInitMessage } from '../shared/types';
 import { getLogger } from '../utils/logger';
 import {
@@ -702,9 +703,7 @@ export function VideoPlayer() {
         {isPiPActive && isPlaying && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 cursor-default">
             <div className="w-12 h-12 opacity-70">
-              <svg viewBox="0 0 24 24" className="w-12 h-12 fill-white/70">
-                <path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z" />
-              </svg>
+              <PictureInPictureIcon className="w-12 h-12 text-white/70" />
             </div>
             <span className="text-sm text-white/70">{t('preview.video.pipActive')}</span>
           </div>
@@ -717,9 +716,7 @@ export function VideoPlayer() {
             onClick={handleTogglePlay}
           >
             <div className="w-16 h-16 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center transition-all duration-150 hover:scale-110 hover:bg-white/25">
-              <svg viewBox="0 0 24 24" className="w-7 h-7 fill-white ml-1">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <PlayIcon className="ml-1 text-white" size={28} />
             </div>
           </div>
         )}

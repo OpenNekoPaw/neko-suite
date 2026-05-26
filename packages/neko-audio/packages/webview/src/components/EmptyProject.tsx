@@ -8,7 +8,7 @@
 import { useRef } from 'react';
 import { postMessage } from '../shared/useVscodeMessage';
 import { useDragDrop } from '../hooks/useDragDrop';
-import { MacButton } from '@neko/shared/components';
+import { AudioButton } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 export function EmptyProject() {
@@ -32,9 +32,9 @@ export function EmptyProject() {
       <div className="text-sm text-[var(--editor-fg)] opacity-60">
         {isDragOver ? t('audio.import.drop') : t('audio.import.empty')}
       </div>
-      <MacButton variant="secondary" size="sm" onClick={handleImport}>
+      <AudioButton variant="secondary" onClick={handleImport}>
         {t('audio.import.button')}
-      </MacButton>
+      </AudioButton>
     </div>
   );
 }

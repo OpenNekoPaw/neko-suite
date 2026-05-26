@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { FaceParameterSlider } from './FaceParameterSlider';
 import type { FaceCategory, FaceParameter } from '../../types/faceParameters';
 import { FACE_CATEGORIES } from '../../types/faceParameters';
@@ -8,6 +9,8 @@ interface FaceParameterCategoryProps {
   parameters: FaceParameter[];
   values: Record<string, number>;
   onChange: (name: string, value: number) => void;
+  onCommit?: (name: string, value: number) => void;
+  onPreviewChange?: (name: string, value: number) => void;
   disabled?: boolean;
 }
 
@@ -20,6 +23,8 @@ export function FaceParameterCategory({
   parameters,
   values,
   onChange,
+  onCommit,
+  onPreviewChange,
   disabled = false,
 }: FaceParameterCategoryProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -33,14 +38,10 @@ export function FaceParameterCategory({
         className="model-section-toggle flex w-full items-center justify-between px-3 py-2 text-sm font-medium"
       >
         <span>{FACE_CATEGORIES[category]}</span>
-        <svg
-          className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
+        <span
+          aria-hidden="true"
+          className={`${toCodiconClassName('chevron-right')} transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+        />
       </button>
 
       {isExpanded && (
@@ -51,6 +52,8 @@ export function FaceParameterCategory({
               parameter={param}
               value={values[param.name] ?? param.default}
               onChange={(value) => onChange(param.name, value)}
+              onCommit={(value) => (onCommit ?? onChange)(param.name, value)}
+              onPreviewChange={(value) => (onPreviewChange ?? onChange)(param.name, value)}
               disabled={disabled}
             />
           ))}

@@ -1,7 +1,7 @@
 // TODO: Duplicated hook — neko-audio has a similar useDragDrop (69 lines) with
 // incompatible API (audio-specific: postMessage only, no position tracking).
-// Both use @neko/shared useFileDrop internally but wrap it differently.
-// Consider extracting a shared base hook to @neko/shared/hooks/useDragDrop that
+// Both use @neko/ui/hooks useFileDrop internally but wrap it differently.
+// Consider extracting a shared base hook to @neko/ui/hooks/useDragDrop that
 // provides common DnD lifecycle (isDragOver, dropProps) with a pluggable onDrop strategy.
 
 /**
@@ -13,13 +13,10 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { CanvasNodeType } from '@neko/shared';
-import { useFileDrop } from '@neko/shared/components';
-import type { FileDropResult } from '@neko/shared/components';
+import { useFileDrop } from '@neko/ui/hooks';
+import type { FileDropResult } from '@neko/ui/hooks';
 import { detectMediaType } from '../utils/mediaType';
-import {
-  hasNodeLibraryDragPayload,
-  readNodeLibraryDragPayload,
-} from '../utils/nodeLibraryDrag';
+import { hasNodeLibraryDragPayload, readNodeLibraryDragPayload } from '../utils/nodeLibraryDrag';
 import type { VSCodeAPI } from './useVSCodeMessages';
 
 // =============================================================================
@@ -220,11 +217,7 @@ export function isNodeLibraryDragLeavingCanvas(
   canvasElement: HTMLDivElement | null,
 ): boolean {
   const nextTarget = event.relatedTarget;
-  return (
-    nextTarget === null ||
-    !isDomNode(nextTarget) ||
-    !canvasElement?.contains(nextTarget)
-  );
+  return nextTarget === null || !isDomNode(nextTarget) || !canvasElement?.contains(nextTarget);
 }
 
 export function isDomNode(value: EventTarget | null): value is Node {

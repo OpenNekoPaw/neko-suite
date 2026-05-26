@@ -1,0 +1,30 @@
+import { describe, expect, it } from 'vitest';
+import * as creative from '../creative';
+import * as hooks from '../hooks';
+import * as icons from '../icons';
+import * as primitives from '../primitives';
+import * as testUtils from '../test-utils';
+import * as ui from '../index';
+import * as viewport from '../viewport';
+
+describe('@neko/ui public entrypoints', () => {
+  it('keeps existing viewport exports available through the canonical entry', () => {
+    expect(viewport.ViewportShell).toBe(ui.ViewportShell);
+    expect(viewport.OverlayRenderer).toBe(ui.OverlayRenderer);
+    expect(viewport.ViewportToolbar).toBe(ui.ViewportToolbar);
+    expect(viewport.ViewportPredictionLayer).toBe(ui.ViewportPredictionLayer);
+    expect(viewport.bridgeRenderFrameMetaToViewportFrameMeta).toBe(
+      ui.bridgeRenderFrameMetaToViewportFrameMeta,
+    );
+  });
+
+  it('exposes new UI system subpath surfaces', () => {
+    expect(primitives).toBeDefined();
+    expect(creative.DEFAULT_TREE_VIEW_VIRTUALIZATION.threshold).toBe(200);
+    expect(creative.assertNever).toBeTypeOf('function');
+    expect(icons.toCodiconClassName('play')).toBe('codicon codicon-play');
+    expect(hooks.useResizable).toBeTypeOf('function');
+    expect(ui.ResizeHandle).toBeTypeOf('function');
+    expect(testUtils.hasAccessibleName).toBeTypeOf('function');
+  });
+});

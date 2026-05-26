@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
+import { CloseIcon } from '@neko/ui/icons';
 import { useAudioStore } from '../stores/audioStore';
 import type { SidePanelType } from '../stores/audioStore';
 import { EffectsPanel } from './EffectsPanel';
@@ -13,7 +14,7 @@ import { RecordingPanel } from './RecordingPanel';
 import { ExportPanel } from './ExportPanel';
 import { PresetBrowser } from './PresetBrowser';
 import { useEffectsChain } from '../hooks/useEffectsChain';
-import { MacIconButton } from '@neko/shared/components';
+import { AudioIconButton } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 const PANEL_TITLES: Record<SidePanelType, string> = {
@@ -72,9 +73,13 @@ export function SidePanel() {
         {/* Header */}
         <div className="flex items-center gap-2 px-3 py-2 min-h-9 text-xs font-medium border-b border-[var(--editor-border)]">
           <span className="flex-1">{t(PANEL_TITLES[activeSidePanel])}</span>
-          <MacIconButton size="sm" onClick={closeSidePanel} title={t('audio.common.close')}>
-            ✕
-          </MacIconButton>
+          <AudioIconButton
+            label={t('audio.common.close')}
+            onClick={closeSidePanel}
+            title={t('audio.common.close')}
+          >
+            <CloseIcon className="h-3 w-3" />
+          </AudioIconButton>
         </div>
 
         {/* Content */}

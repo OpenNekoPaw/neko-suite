@@ -1,16 +1,20 @@
 /**
- * LayerPanel - layer list with visibility/lock toggles
+ * LayerPanel - layer list with visibility/lock toggles.
  *
- * macOS source-list style: rows use .sketch-item-row for hover/selected states,
- * action buttons use .sketch-icon-button with danger variant for remove.
+ * Domain layer operations stay in Sketch; row rendering and interaction chrome
+ * use @neko/ui TreeView and primitives.
  */
-import { useState, useCallback } from 'react';
+import type React from 'react';
+import { useMemo, useState } from 'react';
+import { TreeView } from '@neko/ui/creative';
+import type { ContextMenuItem } from '@neko/ui/primitives';
+import { Button, ContextMenu, IconButton, Popover } from '@neko/ui/primitives';
+import { toCodiconClassName, type CodiconName } from '@neko/ui/icons';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
-import { ContextMenu } from '@neko/shared/components';
-import type { MenuItem } from '@neko/shared/components';
 import type { LayerData } from '../types';
 import { canMergeLayerPixels } from '../tools/layer-merge-tool';
+import { getLayerIndex, mapSketchLayersToTreeViewItems } from './adapters/sharedSketchUiAdapter';
 
 /** Adjustment layer types that map to FilterRegistry IDs */
 const ADJUSTMENT_TYPES = [
@@ -35,414 +39,220 @@ export function LayerPanel() {
   const addAdjustmentLayer = useSketchStore((s) => s.addAdjustmentLayer);
   const requestMergeLayerDown = useSketchStore((s) => s.requestMergeLayerDown);
   const show = useSketchStore((s) => s.showLayerPanel);
-
-  const [layerMenu, setLayerMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(
-    null,
+  const [showAdjustmentMenu, setShowAdjustmentMenu] = useState(false);
+  const [focusedLayerId, setFocusedLayerId] = useState<string | undefined>(
+    activeLayerId ?? undefined,
   );
-  const [showAdjDropdown, setShowAdjDropdown] = useState(false);
 
-  const handleLayerContextMenu = useCallback(
-    (e: React.MouseEvent, layer: LayerData) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const arrayIndex = layers.findIndex((l) => l.id === layer.id);
-      const belowLayer = arrayIndex > 0 ? layers[arrayIndex - 1] : undefined;
-      const items: MenuItem[] = [
-        {
-          label: t('sketch.layer.duplicate'),
-          onClick: () => duplicateLayerById(layer.id),
-        },
-        { separator: true },
-        {
-          label: t('sketch.layer.moveUp'),
-          disabled: arrayIndex >= layers.length - 1,
-          onClick: () => moveLayerTo(layer.id, arrayIndex + 1),
-        },
-        {
-          label: t('sketch.layer.moveDown'),
-          disabled: arrayIndex <= 0,
-          onClick: () => moveLayerTo(layer.id, arrayIndex - 1),
-        },
-        { separator: true },
-        {
-          label: t('sketch.layer.mergeDown'),
-          disabled: !canMergeLayerPixels(layer, belowLayer),
-          onClick: () => requestMergeLayerDown(layer.id),
-        },
-        { separator: true },
-        {
-          label: layer.clippingMask ? 'Release Clipping Mask' : 'Create Clipping Mask',
-          onClick: () => updateLayerProps(layer.id, { clippingMask: !layer.clippingMask }),
-        },
-        {
-          label: layer.alphaLock ? 'Unlock Alpha' : 'Lock Alpha',
-          onClick: () => updateLayerProps(layer.id, { alphaLock: !layer.alphaLock }),
-        },
-        { separator: true },
-        {
-          label: t('sketch.layer.delete'),
-          danger: true,
-          onClick: () => removeLayerById(layer.id),
-        },
-      ];
-      setLayerMenu({ x: e.clientX, y: e.clientY, items });
-    },
-    [
-      layers,
-      t,
-      duplicateLayerById,
-      moveLayerTo,
-      removeLayerById,
-      requestMergeLayerDown,
-      updateLayerProps,
-    ],
+  const treeItems = useMemo(
+    () => mapSketchLayersToTreeViewItems(layers, activeLayerId),
+    [activeLayerId, layers],
   );
 
   if (!show) return null;
 
   return (
     <div className="sketch-panel" role="region" aria-label={t('sketch.panel.layers')}>
-      {/* Header */}
       <div className="sketch-panel-header">
         <h3 className="sketch-panel-title">{t('sketch.panel.layers')}</h3>
-        <div className="flex gap-0.5 relative">
-          <button
-            aria-label={t('sketch.layer.add')}
-            className="sketch-icon-button"
+        <div className="relative flex gap-0.5">
+          <IconButton
+            icon={<Codicon name="add" />}
+            label={t('sketch.layer.add')}
             onClick={() => addNewLayer()}
-            title={t('sketch.layer.add')}
-          >
-            <PlusIcon />
-          </button>
-          <button
-            aria-label={t('sketch.layer.addVector')}
-            className="sketch-icon-button"
+            size="xs"
+            variant="ghost"
+          />
+          <IconButton
+            icon={<Codicon name="symbol-structure" />}
+            label={t('sketch.layer.addVector')}
             onClick={() => addVectorLayer()}
-            title={t('sketch.layer.addVector')}
-          >
-            <VectorLayerIcon />
-          </button>
-          <button
-            aria-label={t('sketch.layer.addBackground')}
-            className="sketch-icon-button"
+            size="xs"
+            variant="ghost"
+          />
+          <IconButton
+            icon={<Codicon name="symbol-color" />}
+            label={t('sketch.layer.addBackground')}
             onClick={() => addBackgroundLayer()}
-            title={t('sketch.layer.addBackground')}
+            size="xs"
+            variant="ghost"
+          />
+          <Popover
+            align="end"
+            open={showAdjustmentMenu}
+            onOpenChange={setShowAdjustmentMenu}
+            trigger={
+              <IconButton
+                icon={<Codicon name="settings" />}
+                label="Add adjustment layer"
+                size="xs"
+                variant="ghost"
+              />
+            }
           >
-            <FillLayerIcon />
-          </button>
-          <button
-            aria-label="Add adjustment layer"
-            className="sketch-icon-button"
-            onClick={() => setShowAdjDropdown((v) => !v)}
-            title="Add adjustment layer"
-          >
-            <AdjustIcon />
-          </button>
-          {showAdjDropdown && (
-            <div
-              className="absolute right-0 top-full mt-0.5 z-10 py-0.5 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-editor-background)] shadow-md"
-              onMouseLeave={() => setShowAdjDropdown(false)}
-            >
-              {ADJUSTMENT_TYPES.map((adj) => (
-                <button
-                  key={adj.id}
-                  className="block w-full text-left text-[10px] px-2 py-0.5 hover:bg-[var(--vscode-list-hoverBackground)] whitespace-nowrap"
+            <div className="grid gap-1">
+              {ADJUSTMENT_TYPES.map((adjustment) => (
+                <Button
+                  key={adjustment.id}
+                  className="justify-start"
+                  size="xs"
+                  variant="ghost"
                   onClick={() => {
-                    addAdjustmentLayer(adj.id, {});
-                    setShowAdjDropdown(false);
+                    addAdjustmentLayer(adjustment.id, {});
+                    setShowAdjustmentMenu(false);
                   }}
                 >
-                  {adj.label}
-                </button>
+                  {adjustment.label}
+                </Button>
               ))}
             </div>
-          )}
+          </Popover>
         </div>
       </div>
 
-      {/* Layer list */}
-      <div className="flex flex-col gap-0.5">
-        {[...layers].reverse().map((layer) => (
-          <LayerItem
-            key={layer.id}
-            layer={layer}
-            isActive={layer.id === activeLayerId}
-            onSelect={() => setActiveLayer(layer.id)}
-            onToggleVisible={() => updateLayerProps(layer.id, { visible: !layer.visible })}
-            onToggleLock={() => updateLayerProps(layer.id, { locked: !layer.locked })}
-            onRemove={() => removeLayerById(layer.id)}
-            onContextMenu={(e) => handleLayerContextMenu(e, layer)}
+      <ContextMenu
+        items={createLayerContextMenuItems({
+          activeLayerId,
+          duplicateLayerById,
+          layers,
+          moveLayerTo,
+          removeLayerById,
+          requestMergeLayerDown,
+          t,
+          updateLayerProps,
+        })}
+        trigger={
+          <TreeView
+            className="border-0 bg-transparent"
+            height={260}
+            items={treeItems}
+            label={t('sketch.panel.layers')}
+            lockLabels={{ lock: t('sketch.layer.lock'), unlock: t('sketch.layer.unlock') }}
+            focusedId={focusedLayerId}
+            selectedIds={activeLayerId ? [activeLayerId] : []}
+            visibilityLabels={{ hide: t('sketch.layer.hide'), show: t('sketch.layer.show') }}
+            onAction={(layerId, actionId) => {
+              if (actionId === 'remove') {
+                removeLayerById(layerId);
+              }
+            }}
+            onContextMenu={(layerId, event) => {
+              event.preventDefault();
+              setActiveLayer(layerId);
+              setFocusedLayerId(layerId);
+            }}
+            onFocusItem={setFocusedLayerId}
+            onSelect={(layerId) => {
+              setActiveLayer(layerId);
+              setFocusedLayerId(layerId);
+            }}
+            onToggleLock={(layerId, locked) => updateLayerProps(layerId, { locked })}
+            onToggleVisibility={(layerId, visible) => updateLayerProps(layerId, { visible })}
           />
-        ))}
-      </div>
-
-      {layerMenu && (
-        <ContextMenu
-          x={layerMenu.x}
-          y={layerMenu.y}
-          items={layerMenu.items}
-          onClose={() => setLayerMenu(null)}
-        />
-      )}
+        }
+      />
     </div>
   );
 }
 
-function LayerItem(props: {
-  layer: LayerData;
-  isActive: boolean;
-  onSelect: () => void;
-  onToggleVisible: () => void;
-  onToggleLock: () => void;
-  onRemove: () => void;
-  onContextMenu: (e: React.MouseEvent) => void;
-}) {
-  const { t } = useTranslation();
-  const { layer, isActive, onSelect, onToggleVisible, onToggleLock, onRemove, onContextMenu } =
-    props;
+function createLayerContextMenuItems({
+  activeLayerId,
+  duplicateLayerById,
+  layers,
+  moveLayerTo,
+  removeLayerById,
+  requestMergeLayerDown,
+  t,
+  updateLayerProps,
+}: {
+  readonly activeLayerId: string | null;
+  readonly duplicateLayerById: (id: string) => void;
+  readonly layers: readonly LayerData[];
+  readonly moveLayerTo: (id: string, index: number) => void;
+  readonly removeLayerById: (id: string) => void;
+  readonly requestMergeLayerDown: (id: string) => void;
+  readonly t: (key: string) => string;
+  readonly updateLayerProps: (id: string, updates: Partial<LayerData>) => void;
+}): readonly ContextMenuItem[] {
+  const layer = activeLayerId ? findLayerById(layers, activeLayerId) : null;
+  const arrayIndex = activeLayerId ? getLayerIndex(layers, activeLayerId) : -1;
+  const belowLayer = arrayIndex > 0 ? layers[arrayIndex - 1] : undefined;
+  const disabled = !layer || arrayIndex < 0;
 
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-selected={isActive}
-      className={`sketch-item-row${isActive ? ' active' : ''}`}
-      onClick={onSelect}
-      onContextMenu={onContextMenu}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onSelect();
-      }}
-    >
-      {/* Visibility */}
-      <button
-        aria-label={layer.visible ? t('sketch.layer.hide') : t('sketch.layer.show')}
-        className="sketch-icon-button"
-        style={{ opacity: layer.visible ? 1 : 0.35 }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleVisible();
-        }}
-        title={layer.visible ? t('sketch.layer.hide') : t('sketch.layer.show')}
-      >
-        {layer.visible ? <EyeOnIcon /> : <EyeOffIcon />}
-      </button>
-
-      {/* Lock */}
-      <button
-        aria-label={layer.locked ? t('sketch.layer.unlock') : t('sketch.layer.lock')}
-        className="sketch-icon-button"
-        style={{ opacity: layer.locked ? 1 : 0.35 }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleLock();
-        }}
-        title={layer.locked ? t('sketch.layer.unlock') : t('sketch.layer.lock')}
-      >
-        {layer.locked ? <LockClosedIcon /> : <LockOpenIcon />}
-      </button>
-
-      {/* Name + badges */}
-      <span
-        className="flex-1 truncate text-xs"
-        style={{
-          color: isActive ? 'var(--sketch-text-primary)' : 'var(--sketch-text-secondary)',
-          fontWeight: isActive ? 500 : 400,
-        }}
-      >
-        {layer.name}
-      </span>
-      {layer.type === 'adjustment' && (
-        <span className="text-[8px] px-1 py-0 rounded bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)]">
-          ADJ
-        </span>
-      )}
-      {layer.clippingMask && (
-        <span className="text-[8px] opacity-50" title="Clipping mask">
-          &#8627;
-        </span>
-      )}
-      {layer.alphaLock && (
-        <span className="text-[8px] opacity-50" title="Alpha lock">
-          &#945;
-        </span>
-      )}
-
-      {/* Remove */}
-      <button
-        aria-label={t('sketch.layer.remove')}
-        className="sketch-icon-button danger"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        title={t('sketch.layer.remove')}
-      >
-        <CloseIcon />
-      </button>
-    </div>
-  );
+  return [
+    {
+      id: 'duplicate',
+      label: t('sketch.layer.duplicate'),
+      disabled,
+      onSelect: () => {
+        if (activeLayerId) duplicateLayerById(activeLayerId);
+      },
+    },
+    { id: 'separator-move', type: 'separator' },
+    {
+      id: 'move-up',
+      label: t('sketch.layer.moveUp'),
+      disabled: disabled || arrayIndex >= layers.length - 1,
+      onSelect: () => {
+        if (activeLayerId) moveLayerTo(activeLayerId, arrayIndex + 1);
+      },
+    },
+    {
+      id: 'move-down',
+      label: t('sketch.layer.moveDown'),
+      disabled: disabled || arrayIndex <= 0,
+      onSelect: () => {
+        if (activeLayerId) moveLayerTo(activeLayerId, arrayIndex - 1);
+      },
+    },
+    { id: 'separator-merge', type: 'separator' },
+    {
+      id: 'merge-down',
+      label: t('sketch.layer.mergeDown'),
+      disabled: disabled || !canMergeLayerPixels(layer, belowLayer),
+      onSelect: () => {
+        if (activeLayerId) requestMergeLayerDown(activeLayerId);
+      },
+    },
+    { id: 'separator-mask', type: 'separator' },
+    {
+      id: 'clipping-mask',
+      label: layer?.clippingMask ? 'Release Clipping Mask' : 'Create Clipping Mask',
+      disabled,
+      onSelect: () => {
+        if (layer) updateLayerProps(layer.id, { clippingMask: !layer.clippingMask });
+      },
+    },
+    {
+      id: 'alpha-lock',
+      label: layer?.alphaLock ? 'Unlock Alpha' : 'Lock Alpha',
+      disabled,
+      onSelect: () => {
+        if (layer) updateLayerProps(layer.id, { alphaLock: !layer.alphaLock });
+      },
+    },
+    { id: 'separator-delete', type: 'separator' },
+    {
+      id: 'delete',
+      label: t('sketch.layer.delete'),
+      danger: true,
+      disabled,
+      onSelect: () => {
+        if (activeLayerId) removeLayerById(activeLayerId);
+      },
+    },
+  ];
 }
 
-/* ── Icons ─────────────────────────────────────────────────────────── */
-
-function PlusIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-    >
-      <path d="M6 2v8M2 6h8" />
-    </svg>
-  );
+function Codicon({ name }: { readonly name: CodiconName }): React.ReactElement {
+  return <span aria-hidden="true" className={toCodiconClassName(name)} />;
 }
 
-function VectorLayerIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2 9c2-6 6-6 8-3" />
-      <circle cx="2" cy="9" r="1" />
-      <circle cx="6" cy="4" r="1" />
-      <circle cx="10" cy="6" r="1" />
-    </svg>
-  );
-}
-
-function FillLayerIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="2" y="2" width="8" height="8" fill="currentColor" opacity="0.25" />
-      <rect x="2" y="2" width="8" height="8" />
-    </svg>
-  );
-}
-
-function EyeOnIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 13 13"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M1 6.5C2.5 3.5 5 2 6.5 2s4 1.5 5.5 4.5C10.5 9.5 8 11 6.5 11S2.5 9.5 1 6.5z" />
-      <circle cx="6.5" cy="6.5" r="1.5" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 13 13"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2 2l9 9" />
-      <path d="M5 3.5C5.6 3.2 6 3 6.5 3c1.5 0 3.5 1.5 5 3.5-.5.8-1.1 1.5-1.8 2" />
-      <path d="M9.5 9.8C8.5 10.5 7.5 11 6.5 11c-1.5 0-3.5-1.5-5-4 .5-.9 1.2-1.7 2-2.3" />
-    </svg>
-  );
-}
-
-function LockClosedIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="2" y="5" width="8" height="6" rx="1" />
-      <path d="M4 5V4a2 2 0 014 0v1" />
-    </svg>
-  );
-}
-
-function LockOpenIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="2" y="5" width="8" height="6" rx="1" />
-      <path d="M4 5V4a2 2 0 014 0" />
-    </svg>
-  );
-}
-
-function AdjustIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-    >
-      <circle cx="3" cy="6" r="1.5" />
-      <path d="M3 2v2.5M3 7.5V10" />
-      <circle cx="9" cy="4" r="1.5" />
-      <path d="M9 2v0.5M9 5.5V10" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 10 10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-    >
-      <path d="M2 2l6 6M8 2L2 8" />
-    </svg>
-  );
+function findLayerById(layers: readonly LayerData[], layerId: string): LayerData | null {
+  for (const layer of layers) {
+    if (layer.id === layerId) return layer;
+    const child = findLayerById(layer.children, layerId);
+    if (child) return child;
+  }
+  return null;
 }

@@ -20,6 +20,7 @@ import {
   shouldRenderCreativeEntityDetail,
   shouldRenderCreativeEntityRow,
 } from '../creativeEntityRenderGuards';
+import { Badge, Button, Select } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardCreativeEntityState } from '../types';
 
@@ -66,9 +67,9 @@ export function CreativeEntitiesSection({
           <h2>{t('creativeEntities.title')}</h2>
           <div className="section-subtitle">{formatSourceStatus(state, t)}</div>
         </div>
-        <button type="button" onClick={onRefresh}>
+        <Button size="sm" variant="secondary" onClick={onRefresh}>
           {t('common.refresh')}
-        </button>
+        </Button>
       </div>
       <div className="table-toolbar creative-entity-toolbar">
         <input
@@ -77,59 +78,62 @@ export function CreativeEntitiesSection({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <select
-          aria-label={t('creativeEntities.allKinds')}
+        <Select
+          label={t('creativeEntities.allKinds')}
           value={kindFilter}
-          onChange={(event) => setKindFilter(event.target.value as CreativeEntityKindFilter)}
-        >
-          <option value="all">{t('creativeEntities.allKinds')}</option>
-          {DASHBOARD_CREATIVE_ENTITY_KINDS.map((kind) => (
-            <option key={kind} value={kind}>
-              {t(`creativeEntities.kind.${kind}`)}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={t('creativeEntities.allStatuses')}
+          options={[
+            { value: 'all', label: t('creativeEntities.allKinds') },
+            ...DASHBOARD_CREATIVE_ENTITY_KINDS.map((kind) => ({
+              value: kind,
+              label: t(`creativeEntities.kind.${kind}`),
+            })),
+          ]}
+          onValueChange={(value) => setKindFilter(value as CreativeEntityKindFilter)}
+        />
+        <Select
+          label={t('creativeEntities.allStatuses')}
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as CreativeEntityStatusFilter)}
-        >
-          <option value="all">{t('creativeEntities.allStatuses')}</option>
-          {DASHBOARD_CREATIVE_ENTITY_LIFECYCLE_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {t(`creativeEntities.status.${status}`)}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={t('creativeEntities.allMaterialStates')}
+          options={[
+            { value: 'all', label: t('creativeEntities.allStatuses') },
+            ...DASHBOARD_CREATIVE_ENTITY_LIFECYCLE_STATUSES.map((status) => ({
+              value: status,
+              label: t(`creativeEntities.status.${status}`),
+            })),
+          ]}
+          onValueChange={(value) => setStatusFilter(value as CreativeEntityStatusFilter)}
+        />
+        <Select
+          label={t('creativeEntities.allMaterialStates')}
           value={missingFilter}
-          onChange={(event) => setMissingFilter(event.target.value as CreativeEntityMissingFilter)}
-        >
-          <option value="all">{t('creativeEntities.allMaterialStates')}</option>
-          <option value="missing">{t('creativeEntities.missingMaterials')}</option>
-          <option value="complete">{t('creativeEntities.noMissingMaterials')}</option>
-        </select>
-        <select
-          aria-label={t('creativeEntities.allBindingStates')}
+          options={[
+            { value: 'all', label: t('creativeEntities.allMaterialStates') },
+            { value: 'missing', label: t('creativeEntities.missingMaterials') },
+            { value: 'complete', label: t('creativeEntities.noMissingMaterials') },
+          ]}
+          onValueChange={(value) => setMissingFilter(value as CreativeEntityMissingFilter)}
+        />
+        <Select
+          label={t('creativeEntities.allBindingStates')}
           value={bindingFilter}
-          onChange={(event) => setBindingFilter(event.target.value as CreativeEntityBindingFilter)}
-        >
-          <option value="all">{t('creativeEntities.allBindingStates')}</option>
-          <option value="bound">{t('creativeEntities.hasDefaultBinding')}</option>
-          <option value="unbound">{t('creativeEntities.noDefaultBinding')}</option>
-        </select>
-        <select
-          aria-label={t('creativeEntities.sort.status')}
+          options={[
+            { value: 'all', label: t('creativeEntities.allBindingStates') },
+            { value: 'bound', label: t('creativeEntities.hasDefaultBinding') },
+            { value: 'unbound', label: t('creativeEntities.noDefaultBinding') },
+          ]}
+          onValueChange={(value) => setBindingFilter(value as CreativeEntityBindingFilter)}
+        />
+        <Select
+          label={t('creativeEntities.sort.status')}
           value={sortKey}
-          onChange={(event) => setSortKey(event.target.value as CreativeEntitySortKey)}
-        >
-          <option value="status">{t('creativeEntities.sort.status')}</option>
-          <option value="kind">{t('creativeEntities.sort.kind')}</option>
-          <option value="label">{t('creativeEntities.sort.label')}</option>
-          <option value="missing">{t('creativeEntities.sort.missing')}</option>
-          <option value="bindings">{t('creativeEntities.sort.bindings')}</option>
-        </select>
+          options={[
+            { value: 'status', label: t('creativeEntities.sort.status') },
+            { value: 'kind', label: t('creativeEntities.sort.kind') },
+            { value: 'label', label: t('creativeEntities.sort.label') },
+            { value: 'missing', label: t('creativeEntities.sort.missing') },
+            { value: 'bindings', label: t('creativeEntities.sort.bindings') },
+          ]}
+          onValueChange={(value) => setSortKey(value as CreativeEntitySortKey)}
+        />
       </div>
       <div className="creative-entity-layout">
         <CreativeEntityTable rows={rows} selected={state.selectedRef} onSelect={onSelect} />
@@ -168,19 +172,22 @@ function CreativeEntityTable({ rows, selected, onSelect }: CreativeEntityTablePr
             return (
               <tr key={`${row.ref.source}:${row.ref.sourceEntityId}`}>
                 <td>
-                  <button
+                  <Button
                     className={selectedRow ? 'link-button selected-link' : 'link-button'}
-                    type="button"
+                    size="xs"
+                    variant="ghost"
                     onClick={() => onSelect(row.ref)}
                   >
                     {row.label}
-                  </button>
+                  </Button>
                   {row.aliases?.length ? (
                     <div className="muted-line">{row.aliases.join(', ')}</div>
                   ) : null}
                 </td>
                 <td>
-                  <span className="badge">{t(`creativeEntities.kind.${row.kind}`)}</span>
+                  <Badge className="h-auto rounded-full px-2 py-0.5">
+                    {t(`creativeEntities.kind.${row.kind}`)}
+                  </Badge>
                 </td>
                 <td>{t(`creativeEntities.status.${row.status}`)}</td>
                 <td>{formatList(row.missingRepresentationKinds, t)}</td>
@@ -293,8 +300,8 @@ function SyncSuggestions({
               <div className="muted-line">{suggestion.reason}</div>
             </div>
             <div className="button-row">
-              <button
-                type="button"
+              <Button
+                size="xs"
                 disabled={suggestion.status === 'unavailable'}
                 onClick={() =>
                   onAction({
@@ -306,9 +313,10 @@ function SyncSuggestions({
                 }
               >
                 {t('creativeEntities.action.apply')}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                size="xs"
+                variant="secondary"
                 onClick={() =>
                   onAction({
                     source: detail.ref.source,
@@ -319,7 +327,7 @@ function SyncSuggestions({
                 }
               >
                 {t('creativeEntities.action.ignore')}
-              </button>
+              </Button>
             </div>
           </div>
         ))}
@@ -346,14 +354,15 @@ function ActionButton({
   const translatedLabel = t(labelKey);
   const label = translatedLabel === labelKey ? descriptor.label : translatedLabel;
   return (
-    <button
-      type="button"
+    <Button
+      size="xs"
+      variant="secondary"
       disabled={descriptor.disabled}
       title={descriptor.reason}
       onClick={() => onAction({ source: detail.ref.source, ref: detail.ref, action })}
     >
       {label}
-    </button>
+    </Button>
   );
 }
 

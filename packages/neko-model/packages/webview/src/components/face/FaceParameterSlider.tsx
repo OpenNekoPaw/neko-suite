@@ -1,10 +1,12 @@
-import React from 'react';
+import { NumberSlider } from '@neko/ui/creative';
 import type { FaceParameter } from '../../types/faceParameters';
 
 interface FaceParameterSliderProps {
   parameter: FaceParameter;
   value: number;
   onChange: (value: number) => void;
+  onCommit?: (value: number) => void;
+  onPreviewChange?: (value: number) => void;
   disabled?: boolean;
 }
 
@@ -16,34 +18,26 @@ export function FaceParameterSlider({
   parameter,
   value,
   onChange,
+  onCommit,
+  onPreviewChange,
   disabled = false,
 }: FaceParameterSliderProps): React.JSX.Element {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(parseFloat(e.target.value));
-  };
+  const handlePreviewChange = onPreviewChange ?? onChange;
+  const handleCommit = onCommit ?? onChange;
 
   return (
     <div className="flex items-center gap-2 py-1">
-      <label
-        htmlFor={`param-${parameter.name}`}
-        className="w-20 shrink-0 text-xs text-[var(--model-fg)]"
-      >
-        {parameter.label}
-      </label>
-      <input
-        id={`param-${parameter.name}`}
-        type="range"
+      <NumberSlider
+        disabled={disabled}
+        id={parameter.name}
+        label={parameter.label}
         min={parameter.min}
         max={parameter.max}
         step={parameter.step}
+        onCommit={(_, nextValue) => handleCommit(nextValue)}
+        onPreviewChange={(_, nextValue) => handlePreviewChange(nextValue)}
         value={value}
-        onChange={handleChange}
-        disabled={disabled}
-        className="model-range flex-1"
       />
-      <span className="w-10 text-right text-xs text-[var(--model-fg-secondary)]">
-        {value.toFixed(2)}
-      </span>
     </div>
   );
 }

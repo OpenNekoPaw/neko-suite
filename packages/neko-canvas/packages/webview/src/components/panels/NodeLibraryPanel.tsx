@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNodeType, CanvasSubsystemManifest } from '@neko/shared';
-import { ChevronDownIcon, ChevronRightIcon } from '@neko/shared/icons';
+import { TreeView } from '@neko/ui/creative';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { t } from '../../i18n';
 import { writeNodeLibraryDragPayload } from '../../utils/nodeLibraryDrag';
 import {
@@ -10,6 +11,7 @@ import {
   type NodeLibraryPickerMessageType,
 } from '../../utils/nodeLibraryPolicy';
 import type { NodeTypeDescriptorRegistry } from '../nodes/nodeTypeDescriptor';
+import { mapCanvasNodeLibraryGroupToTreeItems } from '../adapters/sharedCanvasUiAdapter';
 
 export interface NodeLibraryPanelProps {
   coreDescriptors: NodeTypeDescriptorRegistry;
@@ -17,11 +19,14 @@ export interface NodeLibraryPanelProps {
   nodeTypeDescriptors?: NodeTypeDescriptorRegistry;
   activeSubsystemIds?: readonly string[];
   onCreateNode: (type: CanvasNodeType) => void;
-  onPickNodeSource?: (type: CanvasNodeType, pickerMessageType: NodeLibraryPickerMessageType) => void;
+  onPickNodeSource?: (
+    type: CanvasNodeType,
+    pickerMessageType: NodeLibraryPickerMessageType,
+  ) => void;
   onLoadSubsystem?: (subsystemId: CanvasSubsystemManifest['id']) => void;
 }
 
-interface NodeLibraryGroup {
+export interface NodeLibraryGroup {
   id: string;
   label: string;
   nodeTypes: readonly CanvasNodeType[];
@@ -87,11 +92,14 @@ export function NodeLibraryPanel({
       <div className="flex-1 overflow-y-auto p-2">
         {groups.map((group) => {
           const isExpanded = expandedGroupIds.has(group.id);
-          const isActive = group.subsystemId
-            ? activeSubsystemIds.includes(group.subsystemId)
-            : true;
+          const treeItems = mapCanvasNodeLibraryGroupToTreeItems({
+            activeSubsystemIds,
+            descriptors,
+            group,
+          });
+          const nodeItems = treeItems[0]?.children ?? [];
           return (
-            <section key={group.id} className="mb-2">
+            <section key={group.id} className="mb-2" data-node-library-group-id={group.id}>
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs"
@@ -114,99 +122,64 @@ export function NodeLibraryPanel({
                   });
                 }}
               >
-                {isExpanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+                <span
+                  aria-hidden="true"
+                  className={toCodiconClassName(isExpanded ? 'chevron-down' : 'chevron-right')}
+                />
                 <span className="min-w-0 flex-1 truncate">{group.label}</span>
                 {group.subsystemId && (
                   <span
                     className="rounded px-1.5 py-0.5 text-[10px]"
                     style={{
-                      backgroundColor: isActive
+                      backgroundColor: activeSubsystemIds.includes(group.subsystemId)
                         ? 'var(--selection-bg)'
                         : 'var(--badge-neutral-bg)',
-                      color: isActive ? 'var(--badge-fg)' : 'var(--toolbar-fg-secondary)',
+                      color: activeSubsystemIds.includes(group.subsystemId)
+                        ? 'var(--badge-fg)'
+                        : 'var(--toolbar-fg-secondary)',
                     }}
                   >
-                    {isActive ? t('library.active') : t('library.available')}
+                    {activeSubsystemIds.includes(group.subsystemId)
+                      ? t('library.active')
+                      : t('library.available')}
                   </span>
                 )}
               </button>
 
               {isExpanded && (
-                <div className="mt-1 grid gap-1">
-                  {group.nodeTypes.map((nodeType) => {
-                    const descriptor = descriptors[nodeType];
+                <TreeView
+                  className="mt-1 border-0 bg-transparent"
+                  height={Math.min(320, 32 + group.nodeTypes.length * 28)}
+                  items={nodeItems}
+                  label={group.label}
+                  virtualization={{ itemHeight: 28, threshold: 200 }}
+                  onDragStart={(id, event) => {
+                    const nodeType = id as CanvasNodeType;
                     const creationPolicy = getNodeLibraryCreationPolicy(nodeType);
-                    const canCreateDirectly = creationPolicy.kind === 'create';
-                    const canPickSource = Boolean(creationPolicy.pickerMessageType);
-                    const isActionable = canCreateDirectly || canPickSource;
-                    const badge = creationPolicy.badgeKey ? t(creationPolicy.badgeKey) : undefined;
-                    const title = t(creationPolicy.titleKey, {
-                      node: resolveNodeLibraryLabel(nodeType, descriptor),
-                    });
-                    return (
-                      <button
-                        key={nodeType}
-                        type="button"
-                        draggable={creationPolicy.canDragToCreate}
-                        aria-disabled={!isActionable ? true : undefined}
-                        title={title}
-                        className="flex min-h-[34px] w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs"
-                        style={{
-                          backgroundColor: 'var(--control-bg)',
-                          border: '1px solid var(--control-border)',
-                          color: canCreateDirectly ? 'var(--control-fg)' : 'var(--toolbar-fg)',
-                          opacity: isActionable ? 1 : 0.72,
-                        }}
-                        onClick={() => {
-                          if (group.subsystemId) {
-                            requestSubsystemLoad(group.subsystemId);
-                          }
-                          if (canCreateDirectly) {
-                            onCreateNode(nodeType);
-                            return;
-                          }
-                          if (creationPolicy.pickerMessageType) {
-                            onPickNodeSource?.(nodeType, creationPolicy.pickerMessageType);
-                          }
-                        }}
-                        onDragStart={(event) => {
-                          if (group.subsystemId) {
-                            requestSubsystemLoad(group.subsystemId);
-                          }
-                          if (!creationPolicy.canDragToCreate) {
-                            event.preventDefault();
-                            return;
-                          }
-                          writeNodeLibraryDragPayload(event.dataTransfer, nodeType);
-                        }}
-                      >
-                        <span
-                          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-sm"
-                          style={{
-                            backgroundColor: `${descriptor?.tagColor ?? '#6b7280'}20`,
-                            color: descriptor?.tagColor ?? 'var(--toolbar-fg-secondary)',
-                          }}
-                        >
-                          {descriptor?.icon ?? nodeType.charAt(0).toUpperCase()}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate">
-                          {resolveNodeLibraryLabel(nodeType, descriptor)}
-                        </span>
-                        {badge && (
-                          <span
-                            className="rounded px-1.5 py-0.5 text-[10px]"
-                            style={{
-                              backgroundColor: 'var(--badge-neutral-bg)',
-                              color: 'var(--toolbar-fg-secondary)',
-                            }}
-                          >
-                            {badge}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                    if (group.subsystemId) {
+                      requestSubsystemLoad(group.subsystemId);
+                    }
+                    if (!creationPolicy.canDragToCreate || !event.dataTransfer) {
+                      event.preventDefault();
+                      return;
+                    }
+                    writeNodeLibraryDragPayload(event.dataTransfer, nodeType);
+                  }}
+                  onSelect={(id) => {
+                    const nodeType = id as CanvasNodeType;
+                    const creationPolicy = getNodeLibraryCreationPolicy(nodeType);
+                    if (group.subsystemId) {
+                      requestSubsystemLoad(group.subsystemId);
+                    }
+                    if (creationPolicy.kind === 'create') {
+                      onCreateNode(nodeType);
+                      return;
+                    }
+                    if (creationPolicy.pickerMessageType) {
+                      onPickNodeSource?.(nodeType, creationPolicy.pickerMessageType);
+                    }
+                  }}
+                />
               )}
             </section>
           );

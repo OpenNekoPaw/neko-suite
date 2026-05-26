@@ -14,6 +14,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
       '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
+      '@neko/ui': path.resolve(__dirname, '../../../neko-ui/src'),
     },
   },
 });

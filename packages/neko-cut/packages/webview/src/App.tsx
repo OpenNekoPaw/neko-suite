@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { ResizeHandle, useResizable } from '@neko/shared/components';
+import { useResizable } from '@neko/ui/hooks';
+import { ResizeHandle } from '@neko/ui/primitives';
 import { useShallowStore } from './hooks/useShallowStore';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';

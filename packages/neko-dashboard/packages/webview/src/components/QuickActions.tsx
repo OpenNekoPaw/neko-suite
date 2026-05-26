@@ -1,3 +1,4 @@
+import { Button } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardProjectType } from '../types';
 
@@ -22,9 +23,9 @@ export function QuickActions({ onCreateProject }: QuickActionsProps) {
       <h2>{t('dashboard.quickStart')}</h2>
       <div className="button-row">
         {ACTION_TYPES.map((type) => (
-          <button key={type} type="button" onClick={() => onCreateProject(type)}>
+          <Button key={type} size="sm" onClick={() => onCreateProject(type)}>
             {t(`dashboard.quickStart.${type}`)}
-          </button>
+          </Button>
         ))}
       </div>
     </section>

@@ -103,6 +103,7 @@ export const marketplace = {
   'marketplace.action.detail': 'Detail',
   'marketplace.action.reveal': 'Reveal',
   'marketplace.action.refresh': 'Refresh',
+  'marketplace.action.dismiss': 'Dismiss',
   'marketplace.action.renew': 'Renew',
   'marketplace.action.installing': 'Installing...',
   'marketplace.action.uninstalling': 'Uninstalling...',

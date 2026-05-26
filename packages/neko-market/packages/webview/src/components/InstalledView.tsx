@@ -3,6 +3,7 @@
  */
 
 import React, { useCallback } from 'react';
+import { toCodiconClassName } from '@neko/ui/icons';
 import {
   useMarketplaceStore,
   type GovernanceWarning,
@@ -117,7 +118,7 @@ export const InstalledView: React.FC = () => {
 
       {installed.length === 0 ? (
         <div className="empty-state">
-          <span className="codicon codicon-inbox empty-state__icon" />
+          <span className={`${toCodiconClassName('inbox')} empty-state__icon`} />
           <p className="empty-state__text">{t('marketplace.installed.empty')}</p>
           <p className="empty-state__hint">{t('marketplace.installed.hint')}</p>
         </div>
@@ -177,9 +178,7 @@ export const InstalledView: React.FC = () => {
                           : t('marketplace.action.enable')
                       }
                     >
-                      <span
-                        className={`codicon ${item.enabled ? 'codicon-eye' : 'codicon-eye-closed'}`}
-                      />
+                      <span className={toCodiconClassName(item.enabled ? 'eye' : 'eye-closed')} />
                     </button>
                     {!isLocalItem(item) && (
                       <button

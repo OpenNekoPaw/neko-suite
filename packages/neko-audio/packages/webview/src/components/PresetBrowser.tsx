@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDownIcon, ChevronRightIcon } from '@neko/ui/icons';
 import type { PresetEntry } from '../shared/types';
 import { postMessage } from '../shared/useVscodeMessage';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
-import { MacButton } from '@neko/shared/components';
+import { AudioButton } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 const CATEGORY_ORDER = ['voice-over', 'music', 'sound-design'] as const;
@@ -74,7 +75,13 @@ export function PresetBrowser() {
                 onClick={() => toggleCategory(category)}
                 className="w-full flex items-center gap-1 px-1.5 py-1 text-[11px] font-medium bg-transparent border-none text-[var(--vscode-foreground)] cursor-pointer rounded hover:bg-[var(--vscode-list-hoverBackground)]"
               >
-                <span className="text-[9px] opacity-60">{isExpanded ? '▼' : '▶'}</span>
+                <span className="opacity-60" aria-hidden="true">
+                  {isExpanded ? (
+                    <ChevronDownIcon className="h-3 w-3" />
+                  ) : (
+                    <ChevronRightIcon className="h-3 w-3" />
+                  )}
+                </span>
                 <span>{t(CATEGORY_LABEL_KEYS[category] ?? '') || category}</span>
                 <span className="ml-auto text-[10px] opacity-40">{items.length}</span>
               </button>
@@ -132,14 +139,13 @@ function PresetCard({ preset, projectMode, tracks, onApply }: PresetCardProps) {
       <div className="text-[9px] opacity-40 mt-1 truncate font-mono">{effectSummary}</div>
 
       <div className="flex gap-1 mt-1.5 relative">
-        <MacButton
+        <AudioButton
           variant="primary"
-          size="sm"
           onClick={handleApplyClick}
           className="text-[10px] px-2 py-0.5 flex-1"
         >
           {t('audio.presets.apply')}
-        </MacButton>
+        </AudioButton>
 
         {showTrackMenu && tracks && (
           <>

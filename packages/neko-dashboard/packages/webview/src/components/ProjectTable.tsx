@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { DASHBOARD_PROJECT_TYPES } from '@neko/shared/types/dashboard-project';
+import { Badge, Button, Select } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 import type { DashboardProject, DashboardProjectType } from '../types';
 import { filterAndSortProjects, type ProjectSortKey } from '../projectTableState';
@@ -29,18 +30,15 @@ export function ProjectTable({ projects, onOpen, onReveal }: ProjectTableProps) 
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <select
-          aria-label={t('projects.filterByType')}
+        <Select
+          label={t('projects.filterByType')}
           value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value as DashboardProjectType | 'all')}
-        >
-          <option value="all">{t('common.allTypes')}</option>
-          {DASHBOARD_PROJECT_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: 'all', label: t('common.allTypes') },
+            ...DASHBOARD_PROJECT_TYPES.map((type) => ({ value: type, label: type })),
+          ]}
+          onValueChange={(value) => setTypeFilter(value as DashboardProjectType | 'all')}
+        />
       </div>
       <table>
         <thead>
@@ -78,18 +76,22 @@ export function ProjectTable({ projects, onOpen, onReveal }: ProjectTableProps) 
             <tr key={`${project.workspaceFolder}:${project.relativePath}`}>
               <td>{project.name}</td>
               <td>
-                <span className="badge">{project.type}</span>
+                <Badge className="h-auto rounded-full px-2 py-0.5">{project.type}</Badge>
               </td>
               <td>{formatDate(project.lastModified)}</td>
               <td>{formatBytes(project.size)}</td>
               <td className="path-cell">{project.relativePath}</td>
               <td className="actions-cell">
-                <button type="button" onClick={() => onOpen(project.relativePath)}>
+                <Button size="xs" onClick={() => onOpen(project.relativePath)}>
                   {t('common.open')}
-                </button>
-                <button type="button" onClick={() => onReveal(project.relativePath)}>
+                </Button>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => onReveal(project.relativePath)}
+                >
                   {t('common.reveal')}
-                </button>
+                </Button>
               </td>
             </tr>
           ))}
@@ -116,10 +118,15 @@ interface ColumnHeaderProps {
 function ColumnHeader({ label, sortKey, active, onSort }: ColumnHeaderProps) {
   return (
     <th>
-      <button className="column-button" type="button" onClick={() => onSort(sortKey)}>
+      <Button
+        className="column-button h-auto px-0"
+        size="xs"
+        variant="ghost"
+        onClick={() => onSort(sortKey)}
+      >
         {label}
         {active === sortKey ? ' ↓' : ''}
-      </button>
+      </Button>
     </th>
   );
 }

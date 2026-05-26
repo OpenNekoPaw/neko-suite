@@ -3,6 +3,8 @@
  */
 
 import React, { useEffect } from 'react';
+import { Badge, Button, IconButton, Progress } from '@neko/ui/primitives';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { useMarketplaceStore, type LargeAssetPickerState } from '../stores/marketplaceStore';
 import { MarketMessages } from '../messages';
 import { useTranslation } from '../i18n/I18nContext';
@@ -85,22 +87,25 @@ export const LargeAssetPicker: React.FC = () => {
           <h2 className="detail-panel__title">{t('marketplace.largeAsset.choose')}</h2>
           <span className="detail-panel__meta">{largeAssetPicker.packageId}</span>
         </div>
-        <button className="search-clear" onClick={closeLargeAssetPicker}>
-          <span className="codicon codicon-close" />
-        </button>
+        <IconButton
+          className="search-clear"
+          label={t('marketplace.action.dismiss')}
+          icon={<span className={toCodiconClassName('close')} />}
+          onClick={closeLargeAssetPicker}
+        />
       </div>
 
       <div className="large-asset-panel__body">
-        <span className="status-badge">{largeAssetPicker.mode}</span>
+        <Badge className="status-badge h-auto px-1.5 py-0.5">{largeAssetPicker.mode}</Badge>
         {totalSize !== undefined && (
           <span className="owned-item__meta">
             {formatBytes(selectedSize ?? totalSize)} / {formatBytes(totalSize)}
           </span>
         )}
         {!largeAssetPicker.isSupported && (
-          <span className="status-badge status-badge--blocked">
+          <Badge className="status-badge status-badge--blocked h-auto px-1.5 py-0.5" tone="danger">
             {t('marketplace.largeAsset.unsupported')}
-          </span>
+          </Badge>
         )}
       </div>
 
@@ -133,7 +138,9 @@ export const LargeAssetPicker: React.FC = () => {
                 {variant.minVram ? `${variant.minVram} MB` : '-'}
               </span>
               {variant.recommended ? (
-                <span className="status-badge">{t('marketplace.largeAsset.recommended')}</span>
+                <Badge className="status-badge h-auto px-1.5 py-0.5">
+                  {t('marketplace.largeAsset.recommended')}
+                </Badge>
               ) : (
                 <span />
               )}
@@ -145,15 +152,30 @@ export const LargeAssetPicker: React.FC = () => {
       {largeAssetPicker.mode === 'sparse' && largeAssetPicker.sparseItems && (
         <div className="large-asset-options">
           <div className="large-asset-toolbar">
-            <button className="type-chip" onClick={() => setSparseSelection('all')}>
+            <Button
+              className="type-chip"
+              size="xs"
+              variant="secondary"
+              onClick={() => setSparseSelection('all')}
+            >
               {t('marketplace.largeAsset.selectAll')}
-            </button>
-            <button className="type-chip" onClick={() => setSparseSelection('recommended')}>
+            </Button>
+            <Button
+              className="type-chip"
+              size="xs"
+              variant="secondary"
+              onClick={() => setSparseSelection('recommended')}
+            >
               {t('marketplace.largeAsset.selectRecommended')}
-            </button>
-            <button className="type-chip" onClick={() => setSparseSelection('clear')}>
+            </Button>
+            <Button
+              className="type-chip"
+              size="xs"
+              variant="ghost"
+              onClick={() => setSparseSelection('clear')}
+            >
               {t('marketplace.largeAsset.clear')}
-            </button>
+            </Button>
           </div>
           {largeAssetPicker.sparseItems.map((item) => {
             const selected = largeAssetPicker.selectedItems.includes(item.itemId);
@@ -168,7 +190,9 @@ export const LargeAssetPicker: React.FC = () => {
                 <span>{item.name}</span>
                 <span className="owned-item__meta">{formatBytes(item.size)}</span>
                 {item.defaultSelected && (
-                  <span className="status-badge">{t('marketplace.largeAsset.default')}</span>
+                  <Badge className="status-badge h-auto px-1.5 py-0.5">
+                    {t('marketplace.largeAsset.default')}
+                  </Badge>
                 )}
               </button>
             );
@@ -185,24 +209,25 @@ export const LargeAssetPicker: React.FC = () => {
         <div className="large-asset-options">
           {progress && (
             <div className="large-asset-progress">
-              <div className="large-asset-progress__bar">
-                <div
-                  className="large-asset-progress__fill"
-                  style={{ width: `${Math.max(0, Math.min(progress.percent, 100))}%` }}
-                />
-              </div>
+              <Progress
+                className="large-asset-progress__bar"
+                label={progress.phase}
+                value={progress.percent}
+              />
               <span className="owned-item__meta">
                 {progress.phase} · {progress.percent}%
               </span>
-              <button
+              <Button
                 className="type-chip"
+                size="xs"
+                variant="secondary"
                 onClick={() => {
                   MarketMessages.cancelInstall(largeAssetPicker.packageId);
                   clearInstallProgress(largeAssetPicker.packageId);
                 }}
               >
                 {t('marketplace.largeAsset.cancel')}
-              </button>
+              </Button>
             </div>
           )}
           {largeAssetPicker.proxyVariants.map((variant) => (
@@ -213,7 +238,9 @@ export const LargeAssetPicker: React.FC = () => {
               <span>{variant.qualityTag}</span>
               <span className="owned-item__meta">{formatBytes(variant.size)}</span>
               {variant.default && (
-                <span className="status-badge">{t('marketplace.largeAsset.default')}</span>
+                <Badge className="status-badge h-auto px-1.5 py-0.5">
+                  {t('marketplace.largeAsset.default')}
+                </Badge>
               )}
             </div>
           ))}

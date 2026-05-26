@@ -15,16 +15,14 @@ import { PuppetNodeTree } from './components/PuppetNodeTree';
 import { PuppetKeyframeTimeline } from './components/PuppetKeyframeTimeline';
 import { PuppetCanvas } from './components/PuppetCanvas';
 import { PuppetController } from './animation';
-import {
-  PuppetSceneController,
-  handlePuppetMenuAction,
-} from './viewport/PuppetSceneController';
+import { PuppetSceneController, handlePuppetMenuAction } from './viewport/PuppetSceneController';
 import { usePuppetPlayback } from './hooks/usePuppetPlayback';
 import { i18nService, setLocale } from './i18n';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import type { NkpNativeProjectData, SupportedLocale } from '@neko/shared';
 import type { ViewportFrameMeta, ViewportMenuItem } from '@neko/shared';
-import { ResizeHandle, usePersistedResize, useResizable } from '@neko/shared/components';
+import { usePersistedResize, useResizable } from '@neko/ui/hooks';
+import { ResizeHandle } from '@neko/ui/primitives';
 import { EngineClient } from '@neko/neko-client';
 import { OverlayRenderer, ViewportShell, ViewportToolbar } from '@neko/ui';
 import { PUPPET_RIGHT_PANEL_RESIZE } from './layout/puppetResizeLayout';
@@ -89,10 +87,7 @@ function PuppetLoadErrorPlaceholder({ message }: { message: string }) {
 
 function PuppetFallbackLabel() {
   return (
-    <div
-      className="puppet-fallback-badge"
-      data-non-authoritative-preview="local-canvas-fallback"
-    >
+    <div className="puppet-fallback-badge" data-non-authoritative-preview="local-canvas-fallback">
       Local fallback preview
     </div>
   );

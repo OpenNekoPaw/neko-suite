@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { readPersistedResizeState } from '@neko/shared/components';
+import { readPersistedResizeState } from '@neko/ui/hooks';
 import { MODEL_RESIZE_PANELS } from './modelResizeLayout';
 
 const srcRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));

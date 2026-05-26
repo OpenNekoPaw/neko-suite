@@ -5,7 +5,9 @@
 
 import { memo, useCallback, useMemo } from 'react';
 import { CollapsibleSection } from '@neko/shared/components';
-import { PropertyRow, type PropertyDefinition } from './PropertyRow';
+import { PropertyPanel as SharedPropertyPanel } from '@neko/ui/creative';
+import type { PropertyValue as SharedPropertyValue } from '@neko/ui/creative';
+import type { PropertyDefinition } from './PropertyRow';
 import { NormalizeLoudnessButton } from './NormalizeLoudnessButton';
 import { AIActionsButton } from './AIActionsButton';
 import { SpeedControl } from '../SpeedControl';
@@ -25,12 +27,16 @@ import type {
   ProjectDefaults,
   MaskInstance,
 } from '../../types';
-import { getKeyframeAtTime, hasKeyframes } from '../../utils/animation';
+import { getKeyframeAtTime } from '../../utils/animation';
 import { createAnimatableProperty, createDefaultElementTransform } from '../../types/animation';
 import { hasMediaSource } from '../../types/capabilities';
 import { mergeColorCorrectionEffect } from '../../utils/composite-helpers';
 import { BLEND_MODE_DEFINITIONS, BLEND_MODE_CATEGORY_I18N_KEYS } from '../../types/blendModes';
 import type { BlendModeCategory } from '../../types/blendModes';
+import {
+  createCutElementPatch,
+  mapCutPropertySourcesToShared,
+} from './adapters/sharedPropertyAdapter';
 
 // =============================================================================
 // Property Definitions
@@ -291,9 +297,26 @@ const BASIC_PROPERTIES: PropertyDefinition[] = [
   },
 ];
 
+const PROPERTY_DEFINITION_BY_PATH = new Map<string, PropertyDefinition>([
+  ...BASIC_PROPERTIES.map((definition) => [definition.key, definition] as const),
+  ...TRANSFORM_PROPERTIES.map(
+    (definition) => [`animTransform.${definition.key}`, definition] as const,
+  ),
+  ...TEXT_PROPERTIES.flatMap((definition) => [
+    [definition.key, definition] as const,
+    [`text.${definition.key}`, definition] as const,
+  ]),
+  ...SUBTITLE_PROPERTIES.map((definition) => [definition.key, definition] as const),
+  ...AUDIO_PROPERTIES.map((definition) => [`audio.${definition.key}`, definition] as const),
+]);
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+function findPropertyDefinition(propertyPath: string): PropertyDefinition | undefined {
+  return PROPERTY_DEFINITION_BY_PATH.get(propertyPath);
+}
 
 // =============================================================================
 // Property Group Component
@@ -357,13 +380,15 @@ function getLegacyCompatibleTransition(
   if (key === 'transitionIn') {
     return (
       element.transitionIn ??
-      ((element as TimelineElement & { inTransition?: Transition }).inTransition ?? null)
+      (element as TimelineElement & { inTransition?: Transition }).inTransition ??
+      null
     );
   }
 
   return (
     element.transitionOut ??
-    ((element as TimelineElement & { outTransition?: Transition }).outTransition ?? null)
+    (element as TimelineElement & { outTransition?: Transition }).outTransition ??
+    null
   );
 }
 
@@ -451,31 +476,6 @@ export const PropertyPanel = memo(function PropertyPanel({
       return current as number | string | boolean;
     },
     [dataSource, element],
-  );
-
-  // Check if a property has keyframes
-  const propertyHasKeyframes = useCallback(
-    (propertyPath: string): boolean => {
-      if (!element) return false;
-
-      const parts = propertyPath.split('.');
-      let current: unknown = element;
-
-      for (const part of parts) {
-        if (current && typeof current === 'object' && part in current) {
-          current = (current as Record<string, unknown>)[part];
-        } else {
-          return false;
-        }
-      }
-
-      if (current && typeof current === 'object' && 'keyframes' in current) {
-        return hasKeyframes(current as AnimatableProperty);
-      }
-
-      return false;
-    },
-    [element],
   );
 
   // Check if at a keyframe
@@ -582,59 +582,6 @@ export const PropertyPanel = memo(function PropertyPanel({
       }
     },
     [dataSource, isEditingDefaults, element, projectDefaults, onDefaultsChange, onElementChange],
-  );
-
-  // Handle property commit (finalized value → undo history)
-  // Mirrors handlePropertyChange logic but routes to onElementCommit
-  const handlePropertyCommit = useCallback(
-    (propertyPath: string, value: number | string | boolean, definition: PropertyDefinition) => {
-      if (!element || isEditingDefaults || !onElementCommit) return;
-
-      // Special handling for duration
-      if (propertyPath === 'duration' && typeof value === 'number') {
-        const newEffectiveDuration = Math.max(0.1, value);
-        const newDuration = newEffectiveDuration + element.trimStart + element.trimEnd;
-        onElementCommit(element.id, { duration: newDuration } as Partial<TimelineElement>);
-        return;
-      }
-
-      const parts = propertyPath.split('.');
-
-      if (parts.length === 1) {
-        onElementCommit(element.id, { [propertyPath]: value } as Partial<TimelineElement>);
-      } else {
-        const rootKey = parts[0] as keyof TimelineElement;
-        const subKey = parts[1];
-        let existingValue = element[rootKey];
-
-        if (rootKey === 'animTransform' && !existingValue) {
-          existingValue = createDefaultElementTransform();
-        }
-
-        if (definition.animatable && typeof value === 'number') {
-          const existingObj = existingValue as Record<string, unknown> | undefined;
-          const animProp = existingObj?.[subKey] as AnimatableProperty | undefined;
-          const newAnimProp: AnimatableProperty = animProp
-            ? { ...animProp, baseValue: value }
-            : createAnimatableProperty(value);
-
-          onElementCommit(element.id, {
-            [rootKey]: {
-              ...(existingValue as object),
-              [subKey]: newAnimProp,
-            },
-          } as Partial<TimelineElement>);
-        } else {
-          onElementCommit(element.id, {
-            [rootKey]: {
-              ...(existingValue as object),
-              [subKey]: value,
-            },
-          } as Partial<TimelineElement>);
-        }
-      }
-    },
-    [element, isEditingDefaults, onElementCommit],
   );
 
   // Handle add keyframe
@@ -750,45 +697,144 @@ export const PropertyPanel = memo(function PropertyPanel({
     [element, handlePropertyChange],
   );
 
-  // Render property rows for a group
-  const renderPropertyRows = useCallback(
-    (properties: PropertyDefinition[], pathPrefix: string = '') => {
-      return properties.map((def) => {
-        const fullPath = pathPrefix ? `${pathPrefix}.${def.key}` : def.key;
-        const value = getPropertyValue(fullPath, def);
-
-        return (
-          <PropertyRow
-            key={fullPath}
-            definition={def}
-            value={value}
-            hasKeyframes={propertyHasKeyframes(fullPath)}
-            isAtKeyframe={isAtKeyframe(fullPath)}
-            onChange={(val) => handlePropertyChange(fullPath, val, def)}
-            onCommit={(val) => handlePropertyCommit(fullPath, val, def)}
-            onAddKeyframe={() => handleAddKeyframe(fullPath, def)}
-            onRemoveKeyframe={() => handleRemoveKeyframe(fullPath)}
-            disabled={!element}
-          />
-        );
-      });
-    },
-    [
-      element,
-      dataSource,
-      getPropertyValue,
-      propertyHasKeyframes,
-      isAtKeyframe,
-      handlePropertyChange,
-      handlePropertyCommit,
-      handleAddKeyframe,
-      handleRemoveKeyframe,
-      isEditingDefaults,
-    ],
-  );
-
   // Determine if property editing is disabled
   const isDisabled = !element;
+
+  const sharedBasicProperties = useMemo(
+    () =>
+      mapCutPropertySourcesToShared(
+        [
+          {
+            groupId: 'basic',
+            groupLabelKey: 'propertyPanel.group.basic',
+            definitions: BASIC_PROPERTIES,
+          },
+        ],
+        { currentTime, element, projectDefaults, translate: t },
+      ).properties,
+    [currentTime, element, projectDefaults, t],
+  );
+
+  const sharedTransformProperties = useMemo(
+    () =>
+      mapCutPropertySourcesToShared(
+        [
+          {
+            groupId: 'transform',
+            groupLabelKey: 'propertyPanel.group.transform',
+            pathPrefix: 'animTransform',
+            definitions: TRANSFORM_PROPERTIES,
+          },
+        ],
+        { currentTime, element, projectDefaults, translate: t },
+      ).properties,
+    [currentTime, element, projectDefaults, t],
+  );
+
+  const sharedTextProperties = useMemo(
+    () =>
+      mapCutPropertySourcesToShared(
+        [
+          {
+            groupId: 'text',
+            groupLabelKey: 'propertyPanel.group.text',
+            pathPrefix: isEditingDefaults ? 'text' : undefined,
+            definitions: TEXT_PROPERTIES,
+          },
+        ],
+        { currentTime, element, projectDefaults, translate: t },
+      ).properties,
+    [currentTime, element, isEditingDefaults, projectDefaults, t],
+  );
+
+  const sharedSubtitleProperties = useMemo(
+    () =>
+      mapCutPropertySourcesToShared(
+        [
+          {
+            groupId: 'subtitle',
+            groupLabelKey: 'propertyPanel.group.subtitle',
+            definitions: SUBTITLE_PROPERTIES,
+          },
+        ],
+        { currentTime, element, projectDefaults, translate: t },
+      ).properties,
+    [currentTime, element, projectDefaults, t],
+  );
+
+  const sharedAudioProperties = useMemo(
+    () =>
+      mapCutPropertySourcesToShared(
+        [
+          {
+            groupId: 'audio',
+            groupLabelKey: 'propertyPanel.group.audio',
+            pathPrefix: 'audio',
+            definitions: AUDIO_PROPERTIES,
+          },
+        ],
+        { currentTime, element, projectDefaults, translate: t },
+      ).properties,
+    [currentTime, element, projectDefaults, t],
+  );
+
+  const previewSharedProperty = useCallback(
+    (propertyPath: string, value: SharedPropertyValue) => {
+      const definition = findPropertyDefinition(propertyPath);
+      if (!definition) return;
+
+      if (isEditingDefaults) {
+        handlePropertyChange(propertyPath, value, definition);
+        return;
+      }
+
+      if (!element) return;
+      onElementChange(element.id, createCutElementPatch(element, propertyPath, value, definition));
+    },
+    [element, handlePropertyChange, isEditingDefaults, onElementChange],
+  );
+
+  const commitSharedProperty = useCallback(
+    (propertyPath: string, value: SharedPropertyValue) => {
+      const definition = findPropertyDefinition(propertyPath);
+      if (!definition) return;
+
+      if (isEditingDefaults) {
+        handlePropertyChange(propertyPath, value, definition);
+        return;
+      }
+
+      if (!element || !onElementCommit) return;
+      onElementCommit(element.id, createCutElementPatch(element, propertyPath, value, definition));
+    },
+    [element, handlePropertyChange, isEditingDefaults, onElementCommit],
+  );
+
+  const toggleSharedKeyframe = useCallback(
+    (propertyPath: string) => {
+      const definition = findPropertyDefinition(propertyPath);
+      if (!definition) return;
+
+      if (isAtKeyframe(propertyPath)) {
+        handleRemoveKeyframe(propertyPath);
+      } else {
+        handleAddKeyframe(propertyPath, definition);
+      }
+    },
+    [handleAddKeyframe, handleRemoveKeyframe, isAtKeyframe],
+  );
+
+  const renderSharedPropertyRows = useCallback(
+    (properties: typeof sharedBasicProperties) => (
+      <SharedPropertyPanel
+        properties={properties}
+        onPreviewChange={previewSharedProperty}
+        onCommit={commitSharedProperty}
+        onToggleKeyframe={toggleSharedKeyframe}
+      />
+    ),
+    [commitSharedProperty, previewSharedProperty, toggleSharedKeyframe],
+  );
 
   return (
     <div className="nk-prop-panel">
@@ -805,7 +851,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
         defaultExpanded={!isDisabled}
       >
-        {renderPropertyRows(BASIC_PROPERTIES)}
+        {renderSharedPropertyRows(sharedBasicProperties)}
       </PropertyGroup>
 
       {/* Transform Properties - always show */}
@@ -814,7 +860,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
         defaultExpanded={!isDisabled}
       >
-        {renderPropertyRows(TRANSFORM_PROPERTIES, 'animTransform')}
+        {renderSharedPropertyRows(sharedTransformProperties)}
         {/* Blend Mode selector */}
         <div className="nk-prop-row">
           <label className="nk-prop-label">{t('blendMode.title')}</label>
@@ -853,7 +899,7 @@ export const PropertyPanel = memo(function PropertyPanel({
           disabled={isDisabled}
           defaultExpanded={!isDisabled}
         >
-          {renderPropertyRows(TEXT_PROPERTIES, isEditingDefaults ? 'text' : '')}
+          {renderSharedPropertyRows(sharedTextProperties)}
         </PropertyGroup>
       )}
 
@@ -864,7 +910,7 @@ export const PropertyPanel = memo(function PropertyPanel({
           disabled={isDisabled}
           defaultExpanded={!isDisabled}
         >
-          {renderPropertyRows(SUBTITLE_PROPERTIES)}
+          {renderSharedPropertyRows(sharedSubtitleProperties)}
         </PropertyGroup>
       )}
 
@@ -874,7 +920,7 @@ export const PropertyPanel = memo(function PropertyPanel({
         disabled={isDisabled}
         defaultExpanded={!isDisabled}
       >
-        {renderPropertyRows(AUDIO_PROPERTIES, 'audio')}
+        {renderSharedPropertyRows(sharedAudioProperties)}
         {element && hasMediaSource(element) && (
           <NormalizeLoudnessButton
             source={element.src}

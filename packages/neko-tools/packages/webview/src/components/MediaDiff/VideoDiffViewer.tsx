@@ -8,6 +8,8 @@
 
 import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
+import { PlayIcon, PauseIcon } from '@neko/ui/icons';
+import { Button, Slider } from '@neko/ui/primitives';
 import { useTranslation } from '../../i18n/I18nContext';
 import { useMediaDiffRuntime } from '../../runtime/MediaDiffRuntimeContext';
 
@@ -92,21 +94,18 @@ const SeekControls = memo(function SeekControls({
   return (
     <div className="flex items-center gap-4 border-t border-[var(--tools-divider)] bg-[var(--tools-bg)] p-3">
       {/* Play/Pause button — disabled while previous version is being fetched */}
-      <button
-        type="button"
-        className={`h-8 w-8 rounded-full p-0 text-base ${
-          isFetchingPrevious
-            ? 'tools-button-secondary cursor-not-allowed opacity-40'
-            : 'tools-button-secondary'
-        }`}
+      <Button
+        variant="secondary"
+        size="md"
+        className={`h-8 w-8 rounded-full p-0 ${isFetchingPrevious ? 'opacity-40' : ''}`}
         onClick={isFetchingPrevious ? undefined : onPlayPause}
         disabled={isFetchingPrevious}
         title={
           isFetchingPrevious ? t('mediaDiff.video.fetchingPrevious') : isPlaying ? 'Pause' : 'Play'
         }
       >
-        {isPlaying ? '\u23F8' : '\u25B6'}
-      </button>
+        {isPlaying ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
+      </Button>
       <span className="min-w-[100px] font-mono text-xs text-[var(--tools-fg)]">
         {formatTime(currentTime)} / {formatTime(duration)}
       </span>
@@ -127,14 +126,15 @@ const SeekControls = memo(function SeekControls({
             })}
           </div>
         )}
-        <input
-          type="range"
+        <Slider
+          className="relative z-10"
+          label={t('mediaDiff.video.seek')}
           min={0}
           max={duration || 1}
           step={0.01}
           value={currentTime}
-          onChange={(e) => onSeek(parseFloat(e.target.value))}
-          className="tools-range relative z-10 h-1 w-full cursor-pointer appearance-none rounded-lg bg-[var(--tools-elevated)]"
+          onPreviewChange={onSeek}
+          onCommit={onSeek}
         />
       </div>
     </div>
@@ -427,14 +427,15 @@ export const VideoDiffViewer = memo(function VideoDiffViewer({
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              className="tools-button h-16 w-16 rounded-full p-0 text-2xl"
+            <Button
+              variant="default"
+              size="md"
+              className="h-16 w-16 rounded-full p-0"
               onClick={handlePlayPause}
               title={t('mediaDiff.video.playTitle')}
             >
-              {'\u25B6'}
-            </button>
+              <PlayIcon size={28} />
+            </Button>
           )}
         </div>
         <SeekControls

@@ -7,10 +7,19 @@
 
 import { useCallback } from 'react';
 import { getTotalDuration } from '@neko/shared';
+import {
+  PauseIcon,
+  PlayIcon,
+  StopIcon,
+  VolumeIcon,
+  VolumeLowIcon,
+  VolumeOffIcon,
+  toCodiconClassName,
+} from '@neko/ui/icons';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { postMessage } from '../shared/useVscodeMessage';
-import { MacButton, MacIconButton } from '@neko/shared/components';
+import { AudioButton, AudioIconButton, AudioSelect, AudioSlider } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 import { formatSecondsAsBarBeat, getProjectBpm, getProjectTempoMap } from '../utils/beatGrid';
 
@@ -97,7 +106,6 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
     [initialSignature.denominator, initialSignature.numerator, setTimeSignature],
   );
 
-
   // Keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -146,8 +154,7 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
   );
 
   const handleSpeedChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const newSpeed = parseFloat(e.target.value);
+    (newSpeed: number) => {
       setSpeed(newSpeed);
       postMessage({
         type: 'audio:playback',
@@ -202,66 +209,44 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
       <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
 
       {/* Playback controls */}
-      <MacIconButton
-        size="sm"
+      <AudioIconButton
         active={isPlaying}
+        label={isPlaying ? t('audio.controls.pause') : t('audio.controls.play')}
         onClick={onTogglePlay}
         title={isPlaying ? t('audio.controls.pause') : t('audio.controls.play')}
       >
-        {isPlaying ? (
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <rect x="4" y="3" width="4" height="14" rx="1.5" />
-            <rect x="12" y="3" width="4" height="14" rx="1.5" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path d="M5 3.5l12 6.5-12 6.5V3.5z" />
-          </svg>
-        )}
-      </MacIconButton>
+        {isPlaying ? <PauseIcon className="h-3.5 w-3.5" /> : <PlayIcon className="h-3.5 w-3.5" />}
+      </AudioIconButton>
 
-      <MacIconButton size="sm" onClick={onStop} title={t('audio.controls.stop')}>
-        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-          <rect x="3" y="3" width="14" height="14" rx="2" />
-        </svg>
-      </MacIconButton>
+      <AudioIconButton
+        label={t('audio.controls.stop')}
+        onClick={onStop}
+        title={t('audio.controls.stop')}
+      >
+        <StopIcon className="h-3 w-3" />
+      </AudioIconButton>
 
       {onRecord && (
-        <MacIconButton size="sm" onClick={onRecord} title={t('audio.controls.record')}>
-          <svg viewBox="0 0 20 20" className="w-3.5 h-3.5">
-            <circle cx="10" cy="10" r="6" fill="#ff453a" />
-          </svg>
-        </MacIconButton>
+        <AudioIconButton
+          label={t('audio.controls.record')}
+          onClick={onRecord}
+          title={t('audio.controls.record')}
+        >
+          <span className="h-3.5 w-3.5 rounded-full bg-[var(--status-error)]" />
+        </AudioIconButton>
       )}
 
-      <MacIconButton
-        size="sm"
+      <AudioIconButton
         active={isLooping}
+        label={t('audio.controls.loop')}
         onClick={handleToggleLoop}
         title={t('audio.controls.loop')}
       >
-        <svg
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          className="w-3.5 h-3.5"
-          opacity={isLooping ? 1 : 0.5}
-        >
-          <path
-            d="M14 4l2 2-2 2M6 16l-2-2 2-2"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <path
-            d="M16 6H8a4 4 0 000 8h0M4 14h8a4 4 0 000-8h0"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-        </svg>
-      </MacIconButton>
+        <span
+          aria-hidden="true"
+          className={`${toCodiconClassName('sync')} h-3.5 w-3.5 ${isLooping ? 'opacity-100' : 'opacity-50'}`}
+        />
+      </AudioIconButton>
 
       <span className="text-[12px] font-mono text-[var(--activity-fg)] opacity-75 whitespace-nowrap tabular-nums">
         {formatTime(currentTime)} / {formatTime(duration)}
@@ -318,68 +303,41 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
               end: formatTime(selection.end),
             })}
           </span>
-          <MacButton
+          <AudioButton
             variant="ghost"
-            size="sm"
             onClick={handleTrim}
             title={t('audio.edit.trim')}
             className="text-[11px] px-2 py-0.5"
           >
             {t('audio.edit.trim')}
-          </MacButton>
+          </AudioButton>
         </>
       )}
 
       <span className="flex-1" />
 
       {/* Volume */}
-      <MacIconButton
-        size="sm"
+      <AudioIconButton
+        label={isMuted ? t('audio.controls.volume') : t('audio.controls.mute')}
         onClick={toggleMute}
         title={isMuted ? t('audio.controls.volume') : t('audio.controls.mute')}
       >
         {isMuted || volume === 0 ? (
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" opacity="0.5">
-            <path
-              d="M9 4L5 7.5H2v5h3l4 3.5V4zM14 8l-4 4M14 12l-4-4"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              fill="none"
-            />
-          </svg>
+          <VolumeOffIcon className="h-3.5 w-3.5 opacity-50" />
         ) : volume < 0.5 ? (
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path d="M9 4L5 7.5H2v5h3l4 3.5V4z" />
-            <path
-              d="M13 8a4 4 0 010 4"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              fill="none"
-            />
-          </svg>
+          <VolumeLowIcon className="h-3.5 w-3.5" />
         ) : (
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path d="M9 4L5 7.5H2v5h3l4 3.5V4z" />
-            <path
-              d="M13 7a5 5 0 010 6M15.5 5a8 8 0 010 10"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              fill="none"
-            />
-          </svg>
+          <VolumeIcon className="h-3.5 w-3.5" />
         )}
-      </MacIconButton>
-      <input
-        type="range"
-        className="neko-slider w-16"
-        min="0"
-        max="1"
-        step="0.05"
+      </AudioIconButton>
+      <AudioSlider
+        className="w-16"
+        label={t('audio.controls.volume')}
+        min={0}
+        max={1}
+        step={0.05}
         value={isMuted ? 0 : volume}
-        onChange={(e) => setVolume(parseFloat(e.target.value))}
+        onChange={setVolume}
       />
 
       <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
@@ -388,17 +346,15 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
       <label className="text-[11px] text-[var(--activity-inactive)]">
         {t('audio.controls.speed')}
       </label>
-      <select
+      <AudioSelect
+        label={t('audio.controls.speed')}
         value={speed}
         onChange={handleSpeedChange}
-        className="text-[11px] px-1.5 py-0.5 bg-[var(--btn-bg)] text-[var(--activity-fg)] border border-[var(--btn-border)] rounded-md appearance-none cursor-pointer hover:bg-[var(--btn-bg-hover)] transition-colors"
-      >
-        {SPEED_OPTIONS.map((s) => (
-          <option key={s} value={s}>
-            {s}x
-          </option>
-        ))}
-      </select>
+        options={SPEED_OPTIONS.map((nextSpeed) => ({
+          value: nextSpeed,
+          label: `${nextSpeed}x`,
+        }))}
+      />
 
       <span className="w-px h-4 bg-[var(--editor-border)] shrink-0 opacity-60" />
 
@@ -406,15 +362,14 @@ export function TransportBar({ onTogglePlay, onSeek, onStop, onRecord }: Transpo
       <label className="text-[11px] text-[var(--activity-inactive)]">
         {t('audio.controls.zoom')}
       </label>
-      <input
-        type="range"
-        className="neko-slider w-16"
-        min="0.1"
-        max="10"
-        step="0.1"
+      <AudioSlider
+        className="w-16"
+        label={t('audio.controls.zoom')}
+        min={0.1}
+        max={10}
+        step={0.1}
         value={zoom}
-        onChange={(e) => setZoom(parseFloat(e.target.value))}
-        title={`${Math.round(zoom * 100)}%`}
+        onChange={setZoom}
       />
       <span className="text-[10px] text-[var(--activity-inactive)] w-8 text-right tabular-nums">
         {zoom.toFixed(1)}x

@@ -32,6 +32,7 @@ const mediaDiff: MessageBundle = {
   'mediaDiff.webglNotAvailable': 'WebGL not available — using fallback view',
   // Video diff
   'mediaDiff.video.fetchingPrevious': 'Fetching previous version…',
+  'mediaDiff.video.seek': 'Seek',
   'mediaDiff.video.analyzing': 'Analyzing video...',
   'mediaDiff.video.playTitle': 'Play video diff',
   'mediaDiff.video.streamError': 'Stream error: {error}',
@@ -48,6 +49,7 @@ const mediaDiff: MessageBundle = {
   'mediaDiff.audio.playBoth': 'Both',
   'mediaDiff.audio.playCurrent': 'Current',
   'mediaDiff.audio.fetchingPrevious': 'Fetching previous version…',
+  'mediaDiff.audio.seek': 'Seek',
   'mediaDiff.audio.loading': 'Loading audio files...',
   'mediaDiff.audio.zoom': 'Zoom: {level}x',
   'mediaDiff.audio.wheelHint': 'Ctrl+Wheel: zoom · Wheel: scroll',
