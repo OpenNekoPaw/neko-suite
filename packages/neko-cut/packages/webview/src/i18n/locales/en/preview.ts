@@ -39,6 +39,8 @@ export const preview = {
   'preview.exitPictureInPicture': 'Exit Picture-in-Picture',
   'preview.captureScreenshot': 'Capture Screenshot',
   'preview.togglePropertyPanel': 'Toggle Properties',
+  'preview.showPropertyPanel': 'Show properties',
+  'preview.hidePropertyPanel': 'Hide properties',
   'preview.aiQuickActions': 'AI Quick Actions',
   'preview.aiOperations': 'AI Operations',
   'preview.moreActions': 'More Actions...',

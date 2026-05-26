@@ -73,10 +73,6 @@
       var(--model-fg) 26%
     );
     --model-viewport-control-shadow: var(--neko-shadow-md, 0 10px 26px rgba(0, 0, 0, 0.28));
-    --model-viewport-pad-bg: color-mix(in srgb, var(--model-surface) 46%, transparent);
-    --model-viewport-pad-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
-    --model-viewport-pad-hover: color-mix(in srgb, var(--model-fg) 9%, transparent);
-    --model-viewport-pad-center: color-mix(in srgb, var(--model-fg) 50%, transparent);
     --model-dock-bg: var(--model-surface);
     --model-dock-title-bg: color-mix(in srgb, var(--model-elevated) 82%, var(--model-surface) 18%);
     --model-dock-title-fg: var(--model-fg);
@@ -84,14 +80,6 @@
     --model-timeline-fg: color-mix(in srgb, var(--model-fg) 72%, var(--model-fg-secondary) 28%);
     --model-ruler-fg: var(--model-fg-secondary);
     --model-ruler-tick: color-mix(in srgb, var(--model-fg) 12%, transparent);
-    --model-engine-pill-bg: color-mix(in srgb, var(--model-surface) 86%, transparent);
-    --model-engine-pill-hover-bg: color-mix(in srgb, var(--model-elevated) 92%, transparent);
-    --model-engine-pill-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
-    --model-engine-pill-fg: var(--model-fg);
-    --model-engine-popover-bg: color-mix(in srgb, var(--model-surface) 96%, transparent);
-    --model-engine-popover-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
-    --model-engine-popover-fg: var(--model-fg-secondary);
-    --model-engine-shadow: var(--neko-shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.34));
     --model-guide-widget-bg: color-mix(in srgb, var(--model-surface) 58%, transparent);
     --model-guide-widget-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
     --model-guide-ruler: color-mix(in srgb, var(--model-fg) 72%, transparent);
@@ -157,15 +145,9 @@
     --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
     --model-viewport-control-hover-border: color-mix(in srgb, var(--model-fg) 24%, transparent);
     --model-viewport-control-active: var(--model-accent);
-    --model-viewport-pad-bg: color-mix(in srgb, var(--model-elevated) 62%, transparent);
-    --model-viewport-pad-border: color-mix(in srgb, var(--model-fg) 10%, transparent);
-    --model-viewport-pad-hover: color-mix(in srgb, var(--model-fg) 7%, transparent);
     --model-dock-bg: var(--model-surface);
     --model-dock-title-bg: color-mix(in srgb, var(--model-elevated) 86%, var(--model-surface) 14%);
     --model-timeline-bg: color-mix(in srgb, var(--model-surface) 94%, var(--model-bg) 6%);
-    --model-engine-pill-bg: color-mix(in srgb, var(--model-elevated) 86%, transparent);
-    --model-engine-pill-hover-bg: color-mix(in srgb, var(--model-elevated) 96%, var(--model-fg) 4%);
-    --model-engine-popover-bg: color-mix(in srgb, var(--model-elevated) 98%, transparent);
     --model-guide-widget-bg: color-mix(in srgb, var(--model-elevated) 70%, transparent);
     --model-axis-x: rgba(208, 61, 51, 0.86);
     --model-axis-y: rgba(31, 142, 58, 0.88);
@@ -207,18 +189,9 @@
     --model-viewport-control-border: var(--model-border);
     --model-viewport-control-hover-border: var(--model-border);
     --model-viewport-control-shadow: none;
-    --model-viewport-pad-bg: var(--vscode-editor-background);
-    --model-viewport-pad-border: var(--model-border);
-    --model-viewport-pad-hover: var(--model-hover);
     --model-dock-bg: var(--vscode-sideBar-background);
     --model-dock-title-bg: var(--vscode-sideBar-background);
     --model-timeline-bg: var(--vscode-panel-background);
-    --model-engine-pill-bg: var(--vscode-editor-background);
-    --model-engine-pill-hover-bg: var(--model-hover);
-    --model-engine-pill-border: var(--model-border);
-    --model-engine-popover-bg: var(--vscode-editor-background);
-    --model-engine-popover-border: var(--model-border);
-    --model-engine-shadow: none;
     --model-guide-widget-bg: var(--vscode-editor-background);
     --model-guide-widget-border: var(--model-border);
   }
@@ -540,7 +513,7 @@
     min-width: 0;
     min-height: 0;
     flex: 1;
-    flex-direction: column;
+    flex-direction: row;
     background: var(--model-viewport-area-bg);
   }
 
@@ -632,41 +605,37 @@
     background: color-mix(in srgb, var(--model-accent) 18%, transparent);
   }
 
-  .model-viewport-tools {
-    pointer-events: auto;
-    position: absolute;
-    left: 8px;
-    top: 8px;
-    bottom: 8px;
-    z-index: 30;
-  }
-
   .model-viewport-toolbar.neko-vtoolbar {
     height: 100%;
-    border: 1px solid var(--model-viewport-toolbar-border);
-    border-radius: 5px;
+    border-right: 1px solid var(--model-viewport-toolbar-border);
     background: var(--model-viewport-toolbar-bg);
-    box-shadow: var(--model-viewport-toolbar-shadow);
-    backdrop-filter: blur(10px);
   }
 
   .model-viewport-toolbar .neko-toolbar-btn {
-    height: 34px;
+    height: 38px;
     border-radius: 3px;
+    color: var(--model-fg-secondary);
+  }
+
+  .model-viewport-toolbar .neko-toolbar-btn:hover:not(:disabled),
+  .model-viewport-toolbar .neko-toolbar-btn.active {
+    color: var(--model-fg);
+    background: var(--model-hover);
   }
 
   .model-viewport-toolbar .neko-toolbar-btn.active::before {
-    left: -1px;
+    left: 0;
+    background: var(--model-accent);
   }
 
   .model-character-preview-modes {
     pointer-events: auto;
     position: absolute;
     top: 10px;
-    left: 56px;
+    left: 10px;
     z-index: 31;
     display: flex;
-    max-width: min(520px, calc(100% - 132px));
+    max-width: min(520px, calc(100% - 84px));
     flex-direction: column;
     gap: 5px;
     border: 1px solid var(--model-viewport-toolbar-border);
@@ -746,103 +715,6 @@
     line-height: 1.25;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .model-viewport-nav-controls {
-    pointer-events: auto;
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    z-index: 35;
-    display: flex;
-    transform: translateY(-50%);
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .model-viewport-nav-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .model-viewport-nav-btn {
-    display: flex;
-    width: 34px;
-    height: 34px;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--model-viewport-control-border);
-    border-radius: 999px;
-    background: var(--model-viewport-control-bg);
-    color: var(--model-fg);
-    line-height: 1;
-    box-shadow: var(--model-viewport-control-shadow);
-    backdrop-filter: blur(10px);
-  }
-
-  .model-viewport-nav-btn:hover {
-    border-color: var(--model-viewport-control-hover-border);
-    background: var(--model-viewport-control-hover-bg);
-  }
-
-  .model-viewport-nav-btn.active {
-    border-color: color-mix(in srgb, var(--model-viewport-control-active) 72%, transparent);
-    color: var(--model-viewport-control-active);
-  }
-
-  .model-viewport-nav-pad {
-    display: grid;
-    grid-template-areas:
-      '. up .'
-      'left center right'
-      '. down .';
-    grid-template-columns: 28px 28px 28px;
-    grid-template-rows: 28px 28px 28px;
-    place-items: center;
-    border: 1px solid var(--model-viewport-pad-border);
-    border-radius: 999px;
-    background: var(--model-viewport-pad-bg);
-    box-shadow: var(--model-viewport-control-shadow);
-    backdrop-filter: blur(10px);
-  }
-
-  .model-viewport-nav-pad .model-viewport-nav-btn {
-    width: 28px;
-    height: 28px;
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-  }
-
-  .model-viewport-nav-pad .model-viewport-nav-btn:hover {
-    background: var(--model-viewport-pad-hover);
-  }
-
-  .model-viewport-nav-pad-up {
-    grid-area: up;
-  }
-
-  .model-viewport-nav-pad-left {
-    grid-area: left;
-  }
-
-  .model-viewport-nav-pad-right {
-    grid-area: right;
-  }
-
-  .model-viewport-nav-pad-down {
-    grid-area: down;
-  }
-
-  .model-viewport-nav-pad-center {
-    grid-area: center;
-    width: 5px;
-    height: 5px;
-    border-radius: 999px;
-    background: var(--model-viewport-pad-center);
   }
 
   .model-right-dock {
@@ -995,59 +867,6 @@
     align-items: center;
     min-width: 0;
     padding: 8px 12px;
-  }
-
-  .model-engine-diagnostics {
-    position: absolute;
-    right: 10px;
-    bottom: 10px;
-    z-index: 40;
-    font-size: 11px;
-  }
-
-  .model-engine-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    height: 25px;
-    border: 1px solid var(--model-engine-pill-border);
-    border-radius: 5px;
-    background: var(--model-engine-pill-bg);
-    padding: 0 9px;
-    color: var(--model-engine-pill-fg);
-    box-shadow: var(--model-engine-shadow);
-    backdrop-filter: blur(10px);
-  }
-
-  .model-engine-pill:hover {
-    background: var(--model-engine-pill-hover-bg);
-  }
-
-  .model-engine-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: var(--model-status-waiting);
-  }
-
-  .model-engine-dot.ready {
-    background: var(--model-status-ready);
-  }
-
-  .model-engine-popover {
-    position: absolute;
-    right: 0;
-    bottom: 31px;
-    width: 270px;
-    max-height: min(430px, calc(100vh - 96px));
-    overflow: auto;
-    border: 1px solid var(--model-engine-popover-border);
-    border-radius: 6px;
-    background: var(--model-engine-popover-bg);
-    padding: 8px 10px;
-    color: var(--model-engine-popover-fg);
-    box-shadow: var(--model-engine-shadow);
-    backdrop-filter: blur(10px);
   }
 
   @media (max-width: 920px) {

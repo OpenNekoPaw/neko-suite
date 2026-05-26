@@ -39,6 +39,8 @@ export const preview = {
   'preview.exitPictureInPicture': '退出画中画',
   'preview.captureScreenshot': '截图',
   'preview.togglePropertyPanel': '切换属性面板',
+  'preview.showPropertyPanel': '显示属性面板',
+  'preview.hidePropertyPanel': '折叠属性面板',
   'preview.aiQuickActions': 'AI 快捷操作',
   'preview.aiOperations': 'AI 操作',
   'preview.moreActions': '更多操作...',

@@ -1,6 +1,5 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import type {
-  CanvasAutoArrangeStrategyId,
   CanvasData,
   CanvasDroppedAsset,
   CanvasNodeType,
@@ -18,11 +17,7 @@ import {
   type GenerationParams,
 } from './components/panels/GenerationPromptPanel';
 import { ContentOverlay } from './components/panels/ContentOverlay';
-import {
-  CanvasTopToolbar,
-  type AutoArrangeChoice,
-  type CanvasInteractionTool,
-} from './components/toolbar/CanvasTopToolbar';
+import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { NodeLibraryPanel } from './components/panels/NodeLibraryPanel';
 import { FloatingPanelHost } from './components/panels/FloatingPanelHost';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
@@ -93,8 +88,8 @@ export function CanvasApp() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
   // Interaction tool: select/marquee by default, hand tool pans on drag.
-  const [interactionTool, setInteractionTool] = useState<CanvasInteractionTool>('select');
-  const [isNodeLibraryVisible, setIsNodeLibraryVisible] = useState(true);
+  const [interactionTool, setInteractionTool] = useState<'select' | 'pan'>('select');
+  const [isRightNodeTreeVisible, setIsRightNodeTreeVisible] = useState(true);
   // Minimap width tracks ZoomControls width for alignment
   const zoomControlsRef = useRef<HTMLDivElement>(null);
   const [miniMapWidth, setMiniMapWidth] = useState(200);
@@ -163,20 +158,6 @@ export function CanvasApp() {
     () => WEBVIEW_SUBSYSTEM_REGISTRY.getNodeTypeSummary({ nodes }),
     [nodes],
   );
-  const autoArrangeChoices = useMemo<readonly AutoArrangeChoice[]>(
-    () =>
-      WEBVIEW_SUBSYSTEM_REGISTRY.manifests
-        .filter((manifest) => manifest.autoArrangeStrategy)
-        .map((manifest) => ({
-          id: manifest.autoArrangeStrategy!,
-          label: t('toolbar.autoArrangeChoice', {
-            subsystem: t(`library.group.${manifest.id}`),
-            strategy: t(`autoArrange.strategy.${manifest.autoArrangeStrategy}`),
-          }),
-          subsystemId: manifest.id,
-        })),
-    [],
-  );
   const coreNodeTypeDescriptors = useMemo(
     () => WEBVIEW_SUBSYSTEM_REGISTRY.getCoreNodeTypeDescriptors(),
     [],
@@ -193,9 +174,14 @@ export function CanvasApp() {
       .then((registrations) => {
         if (cancelled) return;
         setSubsystemNodeTypeDescriptors(
-          Object.assign({}, ...registrations.map((registration) => registration.nodeTypeDescriptors)),
+          Object.assign(
+            {},
+            ...registrations.map((registration) => registration.nodeTypeDescriptors),
+          ),
         );
-        setFloatingPanels(registrations.flatMap((registration) => registration.floatingPanels ?? []));
+        setFloatingPanels(
+          registrations.flatMap((registration) => registration.floatingPanels ?? []),
+        );
         setPlaybackControllers(
           registrations.flatMap((registration) =>
             registration.playbackController ? [registration.playbackController] : [],
@@ -399,13 +385,6 @@ export function CanvasApp() {
         logger.warn(`Failed to load Canvas subsystem "${subsystemId}"`, error);
       });
   }, []);
-
-  const handleAutoArrange = useCallback(
-    (strategyId: CanvasAutoArrangeStrategyId) => {
-      reportAction('canvas.autoArrange', strategyId);
-    },
-    [reportAction],
-  );
 
   // =========================================================================
   // Drag & Drop
@@ -1185,32 +1164,22 @@ export function CanvasApp() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <CanvasTopToolbar
-        interactionTool={interactionTool}
-        onInteractionToolChange={setInteractionTool}
-        onUndo={undo}
-        onRedo={redo}
-        isNodeLibraryVisible={isNodeLibraryVisible}
-        onToggleNodeLibrary={() => setIsNodeLibraryVisible((visible) => !visible)}
-        onImportFile={handleImportFile}
-        autoArrangeChoices={autoArrangeChoices}
-        onAutoArrange={handleAutoArrange}
-        playbackControllers={playbackControllers}
-        activeSubsystemIds={activeSubsystemIds}
-      />
       {/* Main content area */}
       <div ref={rootRef} className="flex-1 flex overflow-hidden">
-        {isNodeLibraryVisible && (
-          <NodeLibraryPanel
-            coreDescriptors={coreNodeTypeDescriptors}
-            subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
-            nodeTypeDescriptors={subsystemNodeTypeDescriptors}
-            activeSubsystemIds={activeSubsystemIds}
-            onCreateNode={handleCreateLibraryNode}
-            onPickNodeSource={handlePickLibraryNodeSource}
-            onLoadSubsystem={handleLoadSubsystem}
-          />
-        )}
+        <CanvasToolbar
+          onAddText={() => handleCreateLibraryNode('annotation')}
+          onUndo={undo}
+          onRedo={redo}
+          onAddShot={() => handleCreateLibraryNode('shot')}
+          onAddSceneGroup={() => handleCreateLibraryNode('scene')}
+          onAddGallery={() => handleCreateLibraryNode('gallery')}
+          onAddTable={() => handleCreateLibraryNode('table')}
+          onImportFile={handleImportFile}
+          isNodeLibraryVisible={isRightNodeTreeVisible}
+          onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
+          isPanMode={isPanMode}
+          onTogglePanMode={() => setInteractionTool((tool) => (tool === 'pan' ? 'select' : 'pan'))}
+        />
 
         <div
           ref={canvasContainerRef}
@@ -1278,8 +1247,8 @@ export function CanvasApp() {
             </div>
           )}
 
-          {/* Bottom-right cluster: MiniMap + ZoomControls (always visible, widths aligned) */}
-          <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
+          {/* Bottom-left MiniMap and zoom controls */}
+          <div className="absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2">
             <MiniMap
               nodes={nodes}
               viewport={viewport}
@@ -1289,6 +1258,7 @@ export function CanvasApp() {
               width={miniMapWidth}
               height={Math.round(miniMapWidth * 0.7)}
             />
+
             <div ref={zoomControlsRef}>
               <ZoomControls
                 zoom={viewport.zoom}
@@ -1311,6 +1281,10 @@ export function CanvasApp() {
           )}
 
           <FloatingPanelHost panels={floatingPanels} />
+          <PlaybackControllerHost
+            activeSubsystemIds={activeSubsystemIds}
+            controllers={playbackControllers}
+          />
 
           {/* Generation Prompt Panel (E6: ControlNet / Video / image generation) */}
           <GenerationPromptPanel
@@ -1362,7 +1336,44 @@ export function CanvasApp() {
             </div>
           )}
         </div>
+
+        {isRightNodeTreeVisible && (
+          <NodeLibraryPanel
+            coreDescriptors={coreNodeTypeDescriptors}
+            subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
+            nodeTypeDescriptors={subsystemNodeTypeDescriptors}
+            activeSubsystemIds={activeSubsystemIds}
+            onCreateNode={handleCreateLibraryNode}
+            onPickNodeSource={handlePickLibraryNodeSource}
+            onLoadSubsystem={handleLoadSubsystem}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function PlaybackControllerHost({
+  activeSubsystemIds,
+  controllers,
+}: {
+  readonly activeSubsystemIds: readonly CanvasSubsystemId[];
+  readonly controllers: readonly PlaybackControllerDefinition[];
+}) {
+  if (controllers.length === 0) {
+    return null;
+  }
+
+  const PlaybackComponent = controllers[0]?.component;
+  if (!PlaybackComponent) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-auto absolute right-4 top-4 z-20 rounded border border-[var(--control-border)] bg-[var(--toolbar-bg)] p-1 shadow-[var(--glass-shadow-sm)]">
+      <Suspense fallback={<div className="h-7 w-24 rounded bg-[var(--control-bg)]" />}>
+        <PlaybackComponent activeSubsystemIds={activeSubsystemIds} />
+      </Suspense>
     </div>
   );
 }

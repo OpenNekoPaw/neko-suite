@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PuppetCommandAck } from '@neko/shared';
 import {
   PuppetSceneController,
+  createIdlePuppetSceneController,
   handlePuppetToolbarAction,
   handlePuppetMenuAction,
   puppetCommandFromViewportCommand,
@@ -52,6 +53,15 @@ describe('PuppetSceneController', () => {
       nativeBlendShapes: [{ name: 'Smile', meshId: 'mesh-face', current: 0 }],
       puppetParameters: [],
     });
+  });
+
+  it('provides an idle viewport controller for empty puppet documents', () => {
+    const controller = createIdlePuppetSceneController();
+
+    expect(controller.sceneId).toBe('puppet-main');
+    expect(controller.sceneType).toBe('2d');
+    expect(controller.getToolbarExtensions()).toEqual([]);
+    expect(controller.getOverlays()).toEqual([]);
   });
 
   it('maps drag bone and BlendShape actions to native puppet commands', async () => {
@@ -160,14 +170,16 @@ describe('PuppetSceneController', () => {
 
   it('rolls back native BlendShape prediction when the engine rejects the command', async () => {
     const engine = createControllerHarness({
-      applyNativeCommand: vi.fn(async (seq: number, baseRevision: number): Promise<PuppetCommandAck> => ({
-        seq,
-        appliedSeq: 0,
-        baseRevision,
-        revision: baseRevision,
-        status: 'rejected',
-        error: { code: 'revisionConflict', message: 'stale native revision' },
-      })),
+      applyNativeCommand: vi.fn(
+        async (seq: number, baseRevision: number): Promise<PuppetCommandAck> => ({
+          seq,
+          appliedSeq: 0,
+          baseRevision,
+          revision: baseRevision,
+          status: 'rejected',
+          error: { code: 'revisionConflict', message: 'stale native revision' },
+        }),
+      ),
     });
     const onError = vi.fn();
     const controller = new PuppetSceneController({
@@ -182,9 +194,9 @@ describe('PuppetSceneController', () => {
     expect(onError).toHaveBeenCalledWith('stale native revision');
     expect(usePuppetStore.getState().nativeRevision).toBe(5);
     expect(usePuppetStore.getState().pendingNativeCommandIds.size).toBe(0);
-    expect(controller.getOverlays().some((overlay) => overlay.id.startsWith('puppet-prediction'))).toBe(
-      false,
-    );
+    expect(
+      controller.getOverlays().some((overlay) => overlay.id.startsWith('puppet-prediction')),
+    ).toBe(false);
   });
 
   it('invalidates stale native edit predictions when frame metadata supersedes their base revision', () => {
@@ -334,14 +346,16 @@ describe('PuppetSceneController', () => {
   it('rolls back pointer drag predictions while preview stream can remain connected', async () => {
     usePuppetStore.getState().setStreamConnected(true);
     const engine = createControllerHarness({
-      applyNativeCommand: vi.fn(async (seq: number, baseRevision: number): Promise<PuppetCommandAck> => ({
-        seq,
-        appliedSeq: 0,
-        baseRevision,
-        revision: baseRevision,
-        status: 'rejected',
-        error: { code: 'revisionConflict', message: 'stale native revision' },
-      })),
+      applyNativeCommand: vi.fn(
+        async (seq: number, baseRevision: number): Promise<PuppetCommandAck> => ({
+          seq,
+          appliedSeq: 0,
+          baseRevision,
+          revision: baseRevision,
+          status: 'rejected',
+          error: { code: 'revisionConflict', message: 'stale native revision' },
+        }),
+      ),
     });
     const onError = vi.fn();
     const controller = new PuppetSceneController({
@@ -358,9 +372,9 @@ describe('PuppetSceneController', () => {
     expect(onError).toHaveBeenCalledWith('stale native revision');
     expect(usePuppetStore.getState().streamConnected).toBe(true);
     expect(usePuppetStore.getState().pendingNativeCommandIds.size).toBe(0);
-    expect(controller.getOverlays().some((overlay) => overlay.id.startsWith('puppet-prediction'))).toBe(
-      false,
-    );
+    expect(
+      controller.getOverlays().some((overlay) => overlay.id.startsWith('puppet-prediction')),
+    ).toBe(false);
   });
 
   it('keeps BlendShape UI state pending until native command ack applies', async () => {
@@ -597,15 +611,17 @@ function pointerInput(
 }
 
 function createControllerHarness(overrides: Partial<IPuppetController> = {}): IPuppetController {
-  const applyNativeCommand = overrides.applyNativeCommand ?? vi.fn(
-    async (seq: number, baseRevision: number): Promise<PuppetCommandAck> => ({
-      seq,
-      appliedSeq: seq,
-      baseRevision,
-      revision: baseRevision + 1,
-      status: 'applied',
-    }),
-  );
+  const applyNativeCommand =
+    overrides.applyNativeCommand ??
+    vi.fn(
+      async (seq: number, baseRevision: number): Promise<PuppetCommandAck> => ({
+        seq,
+        appliedSeq: seq,
+        baseRevision,
+        revision: baseRevision + 1,
+        status: 'applied',
+      }),
+    );
   const controller: IPuppetController = {
     load: vi.fn(),
     loadSource: vi.fn(),

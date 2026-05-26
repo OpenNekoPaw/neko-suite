@@ -4,6 +4,7 @@ import { ResizeHandle } from '@neko/ui/primitives';
 import { useShallowStore } from './hooks/useShallowStore';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { CutSideToolbar } from './components/CutSideToolbar';
 import { PreviewPanel } from './components/PreviewPanel';
 import { PreviewControls } from './components/PreviewControls';
 import { Timeline } from './components/Timeline';
@@ -222,6 +223,11 @@ function App() {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      <CutSideToolbar
+        propertyPanelVisible={propertyPanelVisible}
+        onTogglePropertyPanel={togglePropertyPanel}
+      />
+
       {/* Left: Preview + Timeline (vertical split) */}
       <div ref={containerRef} className="flex flex-col flex-1 min-w-0">
         {/* Preview Panel with Controls */}
@@ -289,6 +295,7 @@ function App() {
           />
           {/* PropertyPanel */}
           <div
+            id="cut-property-panel"
             className="flex-shrink-0 overflow-hidden border-l border-[var(--vscode-panel-border)]"
             style={{
               width: propertyPanelWidth,

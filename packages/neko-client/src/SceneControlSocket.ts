@@ -229,9 +229,7 @@ export class SceneControlSocket {
           : 'Scene control socket closed.',
         sceneId: this.config.sceneId,
         connectionState: this.config.reconnect ? 'reconnecting' : 'disconnected',
-        degradedReason: this.config.reconnect
-          ? 'control-reconnecting'
-          : 'control-disconnected',
+        degradedReason: this.config.reconnect ? 'control-reconnecting' : 'control-disconnected',
         timestamp: Date.now(),
       });
       this.rejectPending(new Error('Scene control WebSocket closed'));
@@ -515,6 +513,10 @@ export class SceneControlSocket {
     return this.connectionState;
   }
 
+  isOpen(): boolean {
+    return this.socket?.readyState === WS_OPEN;
+  }
+
   private createSocket(url: string): SceneControlWebSocketLike {
     if (this.config.webSocketFactory) {
       return this.config.webSocketFactory(url);
@@ -622,8 +624,8 @@ export class SceneControlSocket {
         ack.status === 'applied'
           ? 'Scene command acknowledged.'
           : ack.status === 'superseded'
-            ? ack.error ?? 'Scene command was superseded by a newer command.'
-            : ack.error ?? 'Scene command was not applied.',
+            ? (ack.error ?? 'Scene command was superseded by a newer command.')
+            : (ack.error ?? 'Scene command was not applied.'),
       sceneId: this.config.sceneId,
       seq: ack.seq,
       commandState: ackState,
@@ -932,8 +934,7 @@ export class SceneControlSocket {
   private reportStaleRenderFrameMeta(meta: RenderFrameMeta): void {
     const expectedRevision = this.latestControlRevision;
     const expectedAppliedSeq = this.latestControlAppliedSeq;
-    const staleRevision =
-      expectedRevision !== undefined && meta.sceneRevision < expectedRevision;
+    const staleRevision = expectedRevision !== undefined && meta.sceneRevision < expectedRevision;
     const staleAppliedSeq =
       expectedAppliedSeq !== undefined && meta.appliedSeq < expectedAppliedSeq;
     if (!staleRevision && !staleAppliedSeq) return;
@@ -1094,8 +1095,7 @@ function serializableDetails(
 ): ViewportSerializableRecord | undefined {
   const entries = Object.entries(value).filter(
     (entry): entry is [string, string | number | boolean] =>
-      entry[1] !== undefined &&
-      (typeof entry[1] !== 'number' || Number.isFinite(entry[1])),
+      entry[1] !== undefined && (typeof entry[1] !== 'number' || Number.isFinite(entry[1])),
   );
   return entries.length === 0 ? undefined : Object.fromEntries(entries);
 }

@@ -24,6 +24,8 @@ export const zhCN = {
   'toolbar.importFile': '导入文件',
   'toolbar.addMedia': '添加媒体',
   'toolbar.toggleNodeLibrary': '切换节点库',
+  'toolbar.showRightNodeTree': '显示右侧节点树',
+  'toolbar.hideRightNodeTree': '折叠右侧节点树',
   'toolbar.layers': '图层',
   'toolbar.toggleProperties': '切换属性面板',
   'toolbar.undo': '撤销',

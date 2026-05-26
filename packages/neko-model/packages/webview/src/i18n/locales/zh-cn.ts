@@ -12,6 +12,8 @@ export const zhCN = {
   'toolbar.sculpt': '雕刻笔刷',
   'toolbar.exportGlb': '导出 GLB',
   'toolbar.saveProject': '保存项目',
+  'toolbar.showRightDock': '显示右侧面板',
+  'toolbar.hideRightDock': '折叠右侧面板',
 
   // Toolbar (continued)
   'toolbar.keyframes': '关键帧',
@@ -19,14 +21,6 @@ export const zhCN = {
 
   // Viewport controls
   'viewport.controls': '视口控制',
-  'viewport.zoomIn': '拉近',
-  'viewport.zoomOut': '拉远',
-  'viewport.pan': '平移',
-  'viewport.panUp': '向上平移',
-  'viewport.panDown': '向下平移',
-  'viewport.panLeft': '向左平移',
-  'viewport.panRight': '向右平移',
-  'viewport.orbit': '旋转视图',
   'viewport.grid': '显示引擎 3D 网格',
   'viewport.resetCamera': '重置相机',
 
@@ -165,30 +159,6 @@ export const zhCN = {
   'latency.moderate': '⚠️ 延迟中等，考虑 JPEG 单帧模式',
   'latency.high': '❌ 延迟较高，建议 R3F 双渲染',
   'latency.footer': '测量 Webview ↔ Rust 引擎往返时间',
-
-  // Diagnostics panel
-  'diagnostics.title': '引擎',
-  'diagnostics.scene': '场景',
-  'diagnostics.topology': '拓扑',
-  'diagnostics.appliedSeq': '已应用序列',
-  'diagnostics.predictions': '预测',
-  'diagnostics.session': '会话',
-  'diagnostics.quality': '质量',
-  'diagnostics.path': '路径',
-  'diagnostics.ackP95': '确认 p95',
-  'diagnostics.patchBw': '补丁带宽',
-  'diagnostics.gpuUpload': 'GPU 上传',
-  'diagnostics.render': '渲染',
-  'diagnostics.convert': '转换',
-  'diagnostics.encode': '编码',
-  'diagnostics.decode': '解码',
-  'diagnostics.draw': '绘制',
-  'diagnostics.gpuWait': 'GPU 等待',
-  'diagnostics.frameP95': '帧 p95',
-  'diagnostics.iosurfaceCreations': 'IOSurface',
-  'diagnostics.textureAllocations': '纹理分配',
-  'diagnostics.queueDepth': '队列深度',
-  'diagnostics.dropped': '丢弃',
 
   // Error boundary
   'error.title': '出现错误',

@@ -14,17 +14,9 @@ import { useModelStore } from '../stores/modelStore';
 import type { ModelState } from '../stores/modelStore';
 import { useTranslation } from '../i18n/I18nContext';
 import { postMessage } from '@neko/shared/vscode';
+import { RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
 
-type ToggleToolKey =
-  | 'face'
-  | 'latency'
-  | 'vrm'
-  | 'bone'
-  | 'shape'
-  | 'text'
-  | 'csg'
-  | 'sculpt'
-  | 'keyframe';
+type ToggleToolKey = 'face' | 'bone' | 'shape' | 'text' | 'csg' | 'sculpt' | 'keyframe';
 
 type ToolItem =
   | {
@@ -32,7 +24,6 @@ type ToolItem =
       key: ToggleToolKey;
       icon: React.ReactNode;
       titleKey: string;
-      needsVRM?: boolean;
     }
   | { kind: 'action'; key: string; icon: React.ReactNode; titleKey: string; action: () => void }
   | 'separator'
@@ -48,14 +39,6 @@ const TOGGLE_TOOLS: Record<
   face: {
     isActive: (state) => state.isFaceEditorOpen,
     toggle: (state) => state.toggleFaceEditor,
-  },
-  latency: {
-    isActive: (state) => state.isLatencyTesterOpen,
-    toggle: (state) => state.toggleLatencyTester,
-  },
-  vrm: {
-    isActive: (state) => state.isExpressionPresetOpen,
-    toggle: (state) => state.toggleExpressionPreset,
   },
   bone: {
     isActive: (state) => state.isBoneExpressionOpen,
@@ -89,19 +72,6 @@ const TOOLS: ToolItem[] = [
     key: 'face',
     icon: <FaceIcon />,
     titleKey: 'toolbar.faceEditor',
-  },
-  {
-    kind: 'toggle',
-    key: 'latency',
-    icon: <LatencyIcon />,
-    titleKey: 'toolbar.latencyTest',
-  },
-  {
-    kind: 'toggle',
-    key: 'vrm',
-    icon: <VrmIcon />,
-    titleKey: 'toolbar.vrmExpression',
-    needsVRM: true,
   },
   'separator',
   {
@@ -144,14 +114,6 @@ const TOOLS: ToolItem[] = [
   'separator',
   {
     kind: 'action',
-    key: 'qualityPreview',
-    icon: <QualityPreviewIcon />,
-    titleKey: 'toolbar.qualityPreview',
-    action: () =>
-      postMessage({ type: 'scene:capturePreview', width: 1280, height: 720, quality: 90 }),
-  },
-  {
-    kind: 'action',
     key: 'export',
     icon: <ExportIcon />,
     titleKey: 'toolbar.exportGlb',
@@ -172,19 +134,39 @@ const TOOLS: ToolItem[] = [
 interface ToolbarProps {
   className?: string;
   width?: number;
+  isRightDockVisible?: boolean;
+  onToggleRightDock?: () => void;
+  onCameraChange?: () => void;
+  onCameraMutated?: () => void;
 }
 
-export function Toolbar({ className, width }: ToolbarProps = {}) {
+export function Toolbar({
+  className,
+  width,
+  isRightDockVisible = true,
+  onToggleRightDock,
+  onCameraChange,
+  onCameraMutated,
+}: ToolbarProps = {}) {
   const store = useModelStore();
   const { t } = useTranslation();
   let sepIdx = 0;
   let spacerIdx = 0;
+  const showViewportGrid = store.showViewportGrid;
+
+  const runCameraAction = (action: () => void) => {
+    action();
+    onCameraMutated?.();
+    onCameraChange?.();
+  };
 
   return (
     <VerticalToolbar className={className} width={width}>
       {TOOLS.map((item) => {
         if (item === 'separator') return <ToolbarSeparator key={`sep-${sepIdx++}`} />;
-        if (item === 'spacer') return <ToolbarSpacer key={`spc-${spacerIdx++}`} />;
+        if (item === 'spacer') {
+          return <ToolbarSpacer key={`spc-${spacerIdx++}`} />;
+        }
 
         if (item.kind === 'action') {
           return (
@@ -200,19 +182,44 @@ export function Toolbar({ className, width }: ToolbarProps = {}) {
         const tool = TOGGLE_TOOLS[item.key];
         const isActive = tool.isActive(store);
         const toggleFn = tool.toggle(store);
-        const disabled = item.needsVRM === true && !store.isVRMLoaded;
-
         return (
           <ToolbarButton
             key={item.key}
             icon={item.icon}
             title={t(item.titleKey)}
             active={isActive}
-            disabled={disabled}
             onClick={toggleFn}
           />
         );
       })}
+      <ToolbarButton
+        icon={<GridIcon />}
+        title={t('viewport.grid')}
+        active={showViewportGrid}
+        onClick={() => useModelStore.getState().toggleViewportGrid()}
+      />
+      <ToolbarButton
+        icon={<ResetCameraIcon />}
+        title={t('viewport.resetCamera')}
+        onClick={() => runCameraAction(() => useModelStore.getState().resetCamera())}
+      />
+      {onToggleRightDock ? (
+        <>
+          <ToolbarSpacer />
+          <ToolbarSeparator />
+          <ToolbarButton
+            aria-controls="model-right-dock"
+            aria-expanded={isRightDockVisible}
+            data-model-toolbar-action="toggle-right-dock"
+            icon={
+              isRightDockVisible ? <RightPanelIcon size={16} /> : <RightPanelOffIcon size={16} />
+            }
+            title={isRightDockVisible ? t('toolbar.hideRightDock') : t('toolbar.showRightDock')}
+            active={isRightDockVisible}
+            onClick={onToggleRightDock}
+          />
+        </>
+      ) : null}
     </VerticalToolbar>
   );
 }
@@ -235,63 +242,6 @@ function FaceIcon() {
       <circle cx="6" cy="7" r="0.8" fill="currentColor" stroke="none" />
       <circle cx="10" cy="7" r="0.8" fill="currentColor" stroke="none" />
       <path d="M5.5 10.5c1 1 4 1 5 0" />
-    </svg>
-  );
-}
-
-function LatencyIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 4v4l3 2" />
-    </svg>
-  );
-}
-
-function QualityPreviewIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="2.5" y="3" width="11" height="8" rx="1" />
-      <path d="M5 13h6" />
-      <path d="M8 11v2" />
-      <path d="M5.5 6.5h5" />
-      <path d="M5.5 8.5h3" />
-    </svg>
-  );
-}
-
-function VrmIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M8 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z" />
-      <path d="M4 9c-1 1-1 3 0 4h8c1-1 1-3 0-4" />
     </svg>
   );
 }
@@ -434,6 +384,42 @@ function SaveIcon() {
     >
       <path d="M3 3h8l2 2v8H3z" />
       <path d="M5 3v3h4V3M5 10h6" />
+    </svg>
+  );
+}
+
+function GridIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="10" height="10" rx="1.5" />
+      <path d="M6.3 3v10M9.7 3v10M3 6.3h10M3 9.7h10" />
+    </svg>
+  );
+}
+
+function ResetCameraIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12.5 6.5A4.6 4.6 0 1 0 13 9" />
+      <path d="M12.5 3.5v3h-3" />
     </svg>
   );
 }

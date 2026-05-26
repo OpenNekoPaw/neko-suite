@@ -66,6 +66,33 @@ interface PuppetBoneDragState {
 
 const BONE_DRAG_COMMIT_EPSILON = 0.5;
 
+class IdlePuppetSceneController implements ISceneController {
+  readonly sceneId = 'puppet-main';
+  readonly sceneType = '2d' as const;
+
+  onPointerDown(_input: ViewportPointerInput): void {}
+  onPointerMove(_input: ViewportPointerInput): void {}
+  onPointerUp(_input: ViewportPointerInput): void {}
+  onPointerCancel(_input: ViewportPointerInput): void {}
+  onWheel(_input: ViewportWheelInput): void {}
+  onKeyDown(_input: ViewportKeyInput): void {}
+  onKeyUp(_input: ViewportKeyInput): void {}
+  getOverlays(_frame?: ViewportFrameMeta): readonly ViewportOverlayDescriptor[] {
+    return [];
+  }
+  getToolbarExtensions(): readonly ViewportToolbarItem[] {
+    return [];
+  }
+  getContextMenu(_request: ViewportContextMenuRequest): readonly ViewportMenuItem[] {
+    return [];
+  }
+  handleViewportEvent(_event: ViewportEvent): void {}
+}
+
+export function createIdlePuppetSceneController(): ISceneController {
+  return new IdlePuppetSceneController();
+}
+
 export class PuppetSceneController implements ISceneController {
   readonly sceneType = '2d' as const;
 
@@ -193,7 +220,11 @@ export class PuppetSceneController implements ISceneController {
   }
 
   getOverlays(frame?: ViewportFrameMeta): readonly ViewportOverlayDescriptor[] {
-    if (frame && frame.sceneId === this.options.sceneId && frame.viewportId === this.options.viewportId) {
+    if (
+      frame &&
+      frame.sceneId === this.options.sceneId &&
+      frame.viewportId === this.options.viewportId
+    ) {
       this.latestFrameMeta = frame;
     }
     const state = usePuppetStore.getState();
@@ -236,7 +267,10 @@ export class PuppetSceneController implements ISceneController {
               ? 'rgba(255, 214, 102, 0.95)'
               : 'rgba(75, 190, 255, 0.95)',
         },
-        payload: { points: [bone.position], radius: bone.id === state.selectedNativeBoneId ? 4 : 3 },
+        payload: {
+          points: [bone.position],
+          radius: bone.id === state.selectedNativeBoneId ? 4 : 3,
+        },
       });
     }
 
@@ -659,10 +693,9 @@ function readVec2(value: unknown): readonly [number, number] {
   throw new Error('puppet viewport payload requires vec2');
 }
 
-function readTransform(value: unknown): Extract<
-  PuppetCommand,
-  { type: 'setNativeBoneTransform' }
->['transform'] {
+function readTransform(
+  value: unknown,
+): Extract<PuppetCommand, { type: 'setNativeBoneTransform' }>['transform'] {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error('puppet viewport payload requires transform');
   }

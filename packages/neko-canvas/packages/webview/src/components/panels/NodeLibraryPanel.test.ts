@@ -55,6 +55,22 @@ describe('NodeLibraryPanel', () => {
     expect(markup).toContain('Text');
   });
 
+  it('renders as the right node tree panel surface', () => {
+    setLocale('en');
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeLibraryPanel, {
+        coreDescriptors: createCoreNodeTypeDescriptors(),
+        subsystemManifests: [],
+        onCreateNode: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('id="canvas-right-node-tree-panel"');
+    expect(markup).toContain('data-canvas-right-node-tree="true"');
+    expect(markup).toContain('aria-label="Node Library"');
+  });
+
   it('keeps file-bound node entries behind a collapsed file references group', () => {
     setLocale('zh-cn');
 

@@ -56,10 +56,12 @@ describe('SceneControlSocket', () => {
 
     socket.connect();
     expect(socket.getConnectionState()).toBe('connecting');
+    expect(socket.isOpen()).toBe(false);
     const firstSocket = socketAt(sockets, 0);
     firstSocket.open();
 
     expect(socket.getConnectionState()).toBe('connected');
+    expect(socket.isOpen()).toBe(true);
     expect(parseSent(firstSocket, 0)).toEqual({ type: 'hello' });
     expect(parseSent(firstSocket, 1)).toEqual({ type: 'subscribe', sceneId: 'scene-a' });
   });
@@ -162,9 +164,7 @@ describe('SceneControlSocket', () => {
       baseRevision: 4,
       payload: {},
     });
-    const assertion = expect(promise).rejects.toThrow(
-      'Viewport command transform-12 timed out',
-    );
+    const assertion = expect(promise).rejects.toThrow('Viewport command transform-12 timed out');
 
     await vi.advanceTimersByTimeAsync(25);
 

@@ -579,6 +579,7 @@ export function App() {
                 }`}
               />
               <div
+                id="sketch-right-sidebar"
                 className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
                 style={{ width: sidebarWidth, background: 'var(--neko-surface)' }}
               >

@@ -17,7 +17,9 @@
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -88,33 +90,42 @@ html, body, #root {
   height: 100%;
 }
 
-.puppet-viewport-toolbar {
-  pointer-events: auto;
-  position: absolute;
-  left: 8px;
-  top: 8px;
-  z-index: 30;
-  display: flex;
-  gap: 4px;
-  border: 1px solid var(--sketch-border);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--sketch-panel-bg) 92%, transparent);
-  padding: 4px;
+.puppet-left-toolbar.neko-vtoolbar {
+  width: 48px !important;
+  height: 100%;
+  flex: 0 0 48px;
+  align-self: stretch;
+  border-right: 1px solid var(--sketch-border);
+  background: var(--sketch-panel-bg);
 }
 
-.puppet-viewport-toolbar .neko-viewport-toolbar-button {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 3px;
+.puppet-left-toolbar .neko-toolbar-btn {
+  height: 40px;
+  border-radius: 4px;
+  color: var(--vscode-descriptionForeground, var(--sketch-fg));
+}
+
+.puppet-left-toolbar .neko-toolbar-sep {
+  background: var(--sketch-border);
+}
+
+.puppet-left-toolbar .neko-toolbar-btn:hover:not(:disabled),
+.puppet-left-toolbar .neko-toolbar-btn.active {
   color: var(--sketch-fg);
-  font-size: 11px;
+  background: var(--sketch-hover);
 }
 
-.puppet-viewport-toolbar .neko-viewport-toolbar-button:hover,
-.puppet-viewport-toolbar .neko-viewport-toolbar-button[aria-pressed='true'] {
-  background: var(--sketch-hover);
+.puppet-left-toolbar .neko-toolbar-btn.active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sketch-active) 42%, transparent);
+}
+
+.puppet-left-toolbar .neko-toolbar-btn.active::before {
+  background: var(--sketch-active);
+}
+
+.puppet-left-toolbar .neko-toolbar-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .puppet-viewport-shell .neko-viewport-context-menu {
@@ -144,6 +155,22 @@ html, body, #root {
   background: var(--sketch-hover);
 }
 
+.puppet-empty-state {
+  pointer-events: auto;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: transparent;
+  transition:
+    background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.puppet-empty-state[data-drag-over='true'] {
+  background: color-mix(in srgb, var(--sketch-active) 8%, transparent);
+  box-shadow: inset 0 0 0 2px var(--vscode-focusBorder, var(--sketch-active));
+}
+
 .puppet-right-panel {
   position: relative;
   display: flex;
@@ -152,8 +179,23 @@ html, body, #root {
   max-width: 400px;
   flex: 0 0 auto;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
+  background: var(--sketch-panel-bg);
   border-left: 1px solid var(--vscode-panel-border, var(--sketch-border));
+}
+
+.puppet-right-panel-stack {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.puppet-right-panel .sketch-panel {
+  border: 0;
+  border-bottom: 1px solid var(--sketch-border);
+  background: transparent;
 }
 
 .puppet-resize-handle {

@@ -15,7 +15,6 @@ import { TextEditorPanel } from './components/text-editor';
 import { ShapeCreatorPanel } from './components/shape-creator';
 import { SculptBrushPanel } from './components/sculpt/SculptBrushPanel';
 import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
-import { EngineDiagnosticsPanel } from './components/EngineDiagnosticsPanel';
 import { CharacterPreviewModeSelector } from './components/CharacterPreviewModeSelector';
 import { useModelStore } from './stores/modelStore';
 import type {
@@ -51,6 +50,7 @@ export function App(): React.JSX.Element {
   const [enginePort, setEnginePort] = useState<number | null>(null);
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
   const [webviewVisible, setWebviewVisible] = useState(initialWebviewVisible);
+  const [isRightDockVisible, setIsRightDockVisible] = useState(true);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
   const sceneNodes = useModelStore((s) => s.sceneNodes);
@@ -130,7 +130,7 @@ export function App(): React.JSX.Element {
       setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
     };
 
-    if (!socket) {
+    if (!socket?.isOpen()) {
       return;
     }
 
@@ -141,6 +141,9 @@ export function App(): React.JSX.Element {
         viewportId: 'main',
         position,
         target,
+      })
+      .then(() => {
+        socket.requestKeyframe('main');
       })
       .catch(handleCameraError);
   }, [setSceneControlStatus]);
@@ -411,12 +414,14 @@ export function App(): React.JSX.Element {
       sceneControlError,
       hasPendingPrediction,
       enginePort,
+      sceneRevision,
     } satisfies WebviewMessage);
   }, [
     enginePort,
     hasPendingPrediction,
     sceneControlError,
     sceneControlStatus,
+    sceneRevision,
     sceneNodes.length,
     selectedNodeName,
   ]);
@@ -967,6 +972,14 @@ export function App(): React.JSX.Element {
     <div className="model-workbench h-screen w-screen overflow-hidden">
       <div className="model-workbench-body">
         <main className="model-viewport-area">
+          <Toolbar
+            className="model-viewport-toolbar"
+            width={48}
+            isRightDockVisible={isRightDockVisible}
+            onToggleRightDock={() => setIsRightDockVisible((visible) => !visible)}
+            onCameraChange={sendEditorCameraToEngine}
+            onCameraMutated={handleViewportCameraMutated}
+          />
           <div className="model-viewport-shell">
             {enginePort !== null ? (
               <VideoViewport
@@ -995,9 +1008,6 @@ export function App(): React.JSX.Element {
                 />
               </div>
             ) : null}
-            <div className="model-viewport-tools" aria-label="Viewport tools">
-              <Toolbar className="model-viewport-toolbar" width={38} />
-            </div>
             <CharacterPreviewModeSelector
               state={characterPreview}
               disabled={!routeAReady || !selectedCharacterId}
@@ -1005,22 +1015,23 @@ export function App(): React.JSX.Element {
               onResetCamera={handleCharacterPreviewCameraReset}
               onPlaybackControl={handleCharacterPreviewPlaybackControl}
             />
-            <EngineDiagnosticsPanel />
           </div>
         </main>
-        <RightDock
-          outliner={
-            <SceneTree
-              nodes={sceneNodes}
-              selectedNodeId={selectedNodeId}
-              onSelectNode={selectNode}
-              onSetNodeVisible={handleSetNodeVisible}
-              visibilityDisabled={panelCommandDisabled}
-              showHeader={false}
-            />
-          }
-          properties={propertiesPanel}
-        />
+        {isRightDockVisible ? (
+          <RightDock
+            outliner={
+              <SceneTree
+                nodes={sceneNodes}
+                selectedNodeId={selectedNodeId}
+                onSelectNode={selectNode}
+                onSetNodeVisible={handleSetNodeVisible}
+                visibilityDisabled={panelCommandDisabled}
+                showHeader={false}
+              />
+            }
+            properties={propertiesPanel}
+          />
+        ) : null}
       </div>
       <TimelineDock
         key={isKeyframeEditorOpen ? 'expanded' : 'compact'}
@@ -1101,6 +1112,7 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
 
   return (
     <aside
+      id="model-right-dock"
       ref={dockResizeRef}
       className="model-right-dock"
       style={{ width: dockResize.size }}

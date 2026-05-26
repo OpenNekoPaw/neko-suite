@@ -48,6 +48,7 @@ export type WebviewMessage =
       sceneControlError?: string | null;
       hasPendingPrediction: boolean;
       enginePort: number | null;
+      sceneRevision: number;
     }
   | {
       type: 'updateTransform';

@@ -48,5 +48,7 @@ export {
   RedoIcon,
   ScissorsIcon,
   LayersIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
   SettingsIcon,
 } from './editor';

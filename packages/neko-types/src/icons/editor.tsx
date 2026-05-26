@@ -135,6 +135,49 @@ export function LayersIcon({ size = 16, className, strokeWidth = 2 }: IconProps)
   );
 }
 
+export function RightPanelIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      className={className}
+      {...base(strokeWidth)}
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M15 4v16" />
+      <path d="M7 8h4" />
+      <path d="M7 12h4" />
+      <path d="M7 16h4" />
+      <path d="M17.5 8h1.5" />
+      <path d="M17.5 12h1.5" />
+      <path d="M17.5 16h1.5" />
+    </svg>
+  );
+}
+
+export function RightPanelOffIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      className={className}
+      {...base(strokeWidth)}
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M15 4v16" />
+      <path d="M7 8h4" />
+      <path d="M7 12h4" />
+      <path d="M7 16h4" />
+      <path d="M17.5 8h1.5" />
+      <path d="M17.5 12h1.5" />
+      <path d="M17.5 16h1.5" />
+      <path d="M5 21 21 5" strokeWidth={strokeWidth + 0.25} />
+    </svg>
+  );
+}
+
 export function SettingsIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
   return (
     <svg

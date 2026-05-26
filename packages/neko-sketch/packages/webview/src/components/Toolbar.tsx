@@ -10,6 +10,7 @@ import {
   ToolbarSeparator,
   ToolbarSpacer,
 } from '@neko/ui/primitives';
+import { RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import type { ToolType } from '../types';
@@ -55,7 +56,10 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       <ToolbarButton
-        icon={<SidebarIcon />}
+        aria-controls="sketch-right-sidebar"
+        aria-expanded={showSidebar}
+        data-sketch-toolbar-action="toggle-right-sidebar"
+        icon={showSidebar ? <RightPanelIcon size={16} /> : <RightPanelOffIcon size={16} />}
         title={t('sketch.sidebar.toggle')}
         active={showSidebar}
         onClick={toggleSidebar}
@@ -343,24 +347,6 @@ function CloneIcon() {
     >
       <circle cx="7" cy="7" r="4" />
       <circle cx="10" cy="10" r="4" strokeDasharray="2 2" />
-    </svg>
-  );
-}
-
-function SidebarIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 15 15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="1" y="1" width="13" height="13" rx="2" />
-      <path d="M10 1v13" />
     </svg>
   );
 }

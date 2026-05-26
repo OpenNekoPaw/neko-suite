@@ -12,6 +12,8 @@ export const en = {
   'toolbar.sculpt': 'Sculpt Brush',
   'toolbar.exportGlb': 'Export GLB',
   'toolbar.saveProject': 'Save Project',
+  'toolbar.showRightDock': 'Show right panels',
+  'toolbar.hideRightDock': 'Hide right panels',
 
   // Toolbar (continued)
   'toolbar.keyframes': 'Keyframes',
@@ -19,14 +21,6 @@ export const en = {
 
   // Viewport controls
   'viewport.controls': 'Viewport controls',
-  'viewport.zoomIn': 'Zoom in',
-  'viewport.zoomOut': 'Zoom out',
-  'viewport.pan': 'Pan',
-  'viewport.panUp': 'Pan up',
-  'viewport.panDown': 'Pan down',
-  'viewport.panLeft': 'Pan left',
-  'viewport.panRight': 'Pan right',
-  'viewport.orbit': 'Orbit view',
   'viewport.grid': 'Show Engine 3D grid',
   'viewport.resetCamera': 'Reset camera',
 
@@ -165,30 +159,6 @@ export const en = {
   'latency.moderate': 'Moderate latency, consider JPEG frame mode',
   'latency.high': 'High latency, recommend R3F dual rendering',
   'latency.footer': 'Measure Webview ↔ Rust engine round-trip time',
-
-  // Diagnostics panel
-  'diagnostics.title': 'Engine',
-  'diagnostics.scene': 'scene',
-  'diagnostics.topology': 'topology',
-  'diagnostics.appliedSeq': 'appliedSeq',
-  'diagnostics.predictions': 'predictions',
-  'diagnostics.session': 'session',
-  'diagnostics.quality': 'quality',
-  'diagnostics.path': 'path',
-  'diagnostics.ackP95': 'ack p95',
-  'diagnostics.patchBw': 'patch bw',
-  'diagnostics.gpuUpload': 'gpu upload',
-  'diagnostics.render': 'render',
-  'diagnostics.convert': 'convert',
-  'diagnostics.encode': 'encode',
-  'diagnostics.decode': 'decode',
-  'diagnostics.draw': 'draw',
-  'diagnostics.gpuWait': 'gpu wait',
-  'diagnostics.frameP95': 'frame p95',
-  'diagnostics.iosurfaceCreations': 'IOSurface',
-  'diagnostics.textureAllocations': 'texture allocs',
-  'diagnostics.queueDepth': 'queue depth',
-  'diagnostics.dropped': 'dropped',
 
   // Error boundary
   'error.title': 'Something went wrong',

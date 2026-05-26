@@ -13,17 +13,129 @@ export interface PuppetCanvasProps {
   readonly toolbarLayer?: React.ReactNode;
   readonly contextMenuLayer?: React.ReactNode;
   readonly fallbackLabel?: React.ReactNode;
+  readonly fitViewRequest?: number;
+  readonly emptyViewport?: boolean;
 }
 
 // ── Blend mode mapping ──────────────────────────────────────────────────────
 
 const BLEND_MODE_MAP: Record<string, GlobalCompositeOperation> = {
   Normal: 'source-over',
+  normal: 'source-over',
   Multiply: 'multiply',
+  multiply: 'multiply',
   Screen: 'screen',
+  screen: 'screen',
   Overlay: 'overlay',
+  overlay: 'overlay',
   Add: 'lighter',
+  add: 'lighter',
 };
+
+interface PuppetBounds {
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+}
+
+interface CanvasSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+const INITIAL_FIT_PADDING = 0.78;
+const INITIAL_FIT_MIN_ZOOM = 0.05;
+const INITIAL_FIT_MAX_ZOOM = 8;
+
+const EMPTY_PUPPET_MESHES: readonly DeformedMesh[] = [
+  createEmptyMesh('empty-head', 0, [
+    [-28, -126],
+    [28, -126],
+    [30, -70],
+    [-30, -70],
+  ]),
+  createEmptyMesh('empty-torso', 1, [
+    [-42, -58],
+    [42, -58],
+    [52, 42],
+    [-52, 42],
+  ]),
+  createEmptyMesh('empty-left-arm', 2, [
+    [-46, -44],
+    [-112, 34],
+    [-96, 48],
+    [-32, -34],
+  ]),
+  createEmptyMesh('empty-right-arm', 3, [
+    [46, -44],
+    [112, 34],
+    [96, 48],
+    [32, -34],
+  ]),
+  createEmptyMesh('empty-left-leg', 4, [
+    [-24, 42],
+    [-60, 132],
+    [-42, 138],
+    [8, 44],
+  ]),
+  createEmptyMesh('empty-right-leg', 5, [
+    [24, 42],
+    [60, 132],
+    [42, 138],
+    [-8, 44],
+  ]),
+];
+
+const EMPTY_PUPPET_MESH_IDS = new Set(EMPTY_PUPPET_MESHES.map((mesh) => mesh.node_id));
+
+const EMPTY_PUPPET_NODES: readonly PuppetNodeSnapshot[] = [
+  createEmptyBone('empty-neck', 'Neck', [0, -70], null),
+  createEmptyBone('empty-spine', 'Spine', [0, -28], 'empty-neck'),
+  createEmptyBone('empty-hips', 'Hips', [0, 42], 'empty-spine'),
+  createEmptyBone('empty-left-shoulder', 'Left Shoulder', [-46, -44], 'empty-spine'),
+  createEmptyBone('empty-left-hand', 'Left Hand', [-104, 42], 'empty-left-shoulder'),
+  createEmptyBone('empty-right-shoulder', 'Right Shoulder', [46, -44], 'empty-spine'),
+  createEmptyBone('empty-right-hand', 'Right Hand', [104, 42], 'empty-right-shoulder'),
+  createEmptyBone('empty-left-foot', 'Left Foot', [-50, 136], 'empty-hips'),
+  createEmptyBone('empty-right-foot', 'Right Foot', [50, 136], 'empty-hips'),
+];
+
+const EMPTY_PUPPET_VIEWPORT_BOUNDS = calculatePuppetBounds(EMPTY_PUPPET_MESHES);
+
+function createEmptyMesh(
+  nodeId: string,
+  zOrder: number,
+  vertices: [number, number][],
+): DeformedMesh {
+  return {
+    node_id: nodeId,
+    vertices,
+    blend_mode: 'normal',
+    opacity: 1,
+    z_order: zOrder,
+  };
+}
+
+function createEmptyBone(
+  id: string,
+  name: string,
+  position: [number, number],
+  parentId: string | null,
+): PuppetNodeSnapshot {
+  return {
+    id,
+    name,
+    node_type: 'group',
+    position,
+    rotation: 0,
+    scale: [1, 1],
+    z_order: 10,
+    opacity: 1,
+    parent_id: parentId,
+    has_mesh: false,
+  };
+}
 
 // ── Textured triangle drawing ───────────────────────────────────────────────
 
@@ -127,6 +239,70 @@ function buildSolidColorCache(textures: ImageBitmap[]): ReadonlyMap<number, stri
   });
 
   return colors;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+export function calculatePuppetBounds(
+  deformedMeshes: readonly DeformedMesh[],
+): PuppetBounds | null {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const mesh of deformedMeshes) {
+    for (const vertex of mesh.vertices) {
+      const [x, y] = vertex;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+  return { minX, minY, maxX, maxY };
+}
+
+export function calculateInitialPuppetViewport(
+  bounds: PuppetBounds,
+  canvasSize: CanvasSize,
+): { zoom: number; panX: number; panY: number } | null {
+  if (canvasSize.width <= 0 || canvasSize.height <= 0) return null;
+
+  const contentWidth = Math.max(bounds.maxX - bounds.minX, 1);
+  const contentHeight = Math.max(bounds.maxY - bounds.minY, 1);
+  const fitZoom = Math.min(canvasSize.width / contentWidth, canvasSize.height / contentHeight);
+  const zoom = clamp(fitZoom * INITIAL_FIT_PADDING, INITIAL_FIT_MIN_ZOOM, INITIAL_FIT_MAX_ZOOM);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+
+  return {
+    zoom,
+    panX: -centerX * zoom,
+    panY: -centerY * zoom,
+  };
+}
+
+export function createMeshSnapshotFallbacks(
+  meshSnapshots: readonly MeshSnapshot[],
+  deformedMeshes: readonly DeformedMesh[],
+): DeformedMesh[] {
+  if (deformedMeshes.length > 0 || meshSnapshots.length === 0) {
+    return [...deformedMeshes];
+  }
+
+  return meshSnapshots.map((snapshot, index) => ({
+    node_id: snapshot.node_id,
+    vertices: snapshot.vertices,
+    blend_mode: 'normal',
+    opacity: 1,
+    z_order: index,
+  }));
 }
 
 // ── Main render function ────────────────────────────────────────────────────
@@ -246,6 +422,73 @@ function renderPreviewFrame(
   ctx.drawImage(frame, x, y, width, height);
 }
 
+function renderEmptyViewport(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  viewport: { zoom: number; panX: number; panY: number },
+): void {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.width / dpr;
+  const cssH = canvas.height / dpr;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  drawViewportGrid(ctx, cssW, cssH);
+
+  ctx.save();
+  ctx.translate(cssW / 2 + viewport.panX, cssH / 2 + viewport.panY);
+  ctx.scale(viewport.zoom, viewport.zoom);
+
+  for (const mesh of EMPTY_PUPPET_MESHES) {
+    drawEmptyMesh(ctx, mesh);
+  }
+  renderNativeBoneOverlay(ctx, EMPTY_PUPPET_NODES, null);
+  ctx.restore();
+}
+
+function drawViewportGrid(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  const major = 64;
+  const minor = 16;
+
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= width; x += minor) {
+    ctx.strokeStyle = x % major === 0 ? 'rgba(128, 128, 128, 0.22)' : 'rgba(128, 128, 128, 0.10)';
+    ctx.beginPath();
+    ctx.moveTo(x + 0.5, 0);
+    ctx.lineTo(x + 0.5, height);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= height; y += minor) {
+    ctx.strokeStyle = y % major === 0 ? 'rgba(128, 128, 128, 0.22)' : 'rgba(128, 128, 128, 0.10)';
+    ctx.beginPath();
+    ctx.moveTo(0, y + 0.5);
+    ctx.lineTo(width, y + 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawEmptyMesh(ctx: CanvasRenderingContext2D, mesh: DeformedMesh): void {
+  if (mesh.vertices.length < 3) return;
+  ctx.save();
+  ctx.fillStyle = EMPTY_PUPPET_MESH_IDS.has(mesh.node_id)
+    ? 'rgba(136, 136, 136, 0.26)'
+    : 'rgba(217, 190, 163, 1)';
+  ctx.strokeStyle = 'rgba(100, 100, 100, 0.58)';
+  ctx.lineWidth = 1 / Math.max(ctx.getTransform().a, 1);
+  ctx.beginPath();
+  const [firstX, firstY] = mesh.vertices[0]!;
+  ctx.moveTo(firstX, firstY);
+  for (const [x, y] of mesh.vertices.slice(1)) {
+    ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function renderNativeBoneOverlay(
   ctx: CanvasRenderingContext2D,
   nodes: readonly PuppetNodeSnapshot[],
@@ -291,26 +534,68 @@ export function PuppetCanvas({
   toolbarLayer = null,
   contextMenuLayer = null,
   fallbackLabel = null,
+  fitViewRequest = 0,
+  emptyViewport = false,
 }: PuppetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const needsRenderRef = useRef(true);
+  const hasAppliedInitialFitRef = useRef(false);
+  const canvasSizeRef = useRef<CanvasSize>({ width: 0, height: 0 });
 
   const meshSnapshots = usePuppetStore((s) => s.puppetSnapshot?.meshes ?? []);
   const nodes = usePuppetStore((s) => s.puppetSnapshot?.nodes ?? []);
   const deformedMeshes = usePuppetStore((s) => s.deformedMeshes);
+  const renderMeshes = useMemo(
+    () =>
+      emptyViewport
+        ? [...EMPTY_PUPPET_MESHES]
+        : createMeshSnapshotFallbacks(meshSnapshots, deformedMeshes),
+    [deformedMeshes, emptyViewport, meshSnapshots],
+  );
+  const renderNodes = emptyViewport ? EMPTY_PUPPET_NODES : nodes;
   const textures = usePuppetStore((s) => s.textures);
   const viewport = usePuppetStore((s) => s.viewport);
   const previewFrame = usePuppetStore((s) => s.previewFrame);
   const selectedBoneId = usePuppetStore((s) => s.selectedNativeBoneId);
   const setViewport = usePuppetStore((s) => s.setViewport);
   const solidColors = useMemo(() => buildSolidColorCache(textures), [textures]);
+  const puppetBounds = useMemo(
+    () => (emptyViewport ? EMPTY_PUPPET_VIEWPORT_BOUNDS : calculatePuppetBounds(renderMeshes)),
+    [emptyViewport, renderMeshes],
+  );
 
   // Mark dirty when mesh data changes
   useEffect(() => {
     needsRenderRef.current = true;
-  }, [deformedMeshes, textures, viewport, previewFrame]);
+  }, [emptyViewport, previewFrame, renderMeshes, textures, viewport]);
+
+  useEffect(() => {
+    hasAppliedInitialFitRef.current = false;
+  }, [emptyViewport, meshSnapshots]);
+
+  const fitPuppetToView = useCallback(() => {
+    if (!puppetBounds) return;
+    const nextViewport = calculateInitialPuppetViewport(puppetBounds, canvasSizeRef.current);
+    if (!nextViewport) return;
+    setViewport(nextViewport);
+    hasAppliedInitialFitRef.current = true;
+    needsRenderRef.current = true;
+  }, [puppetBounds, setViewport]);
+
+  useEffect(() => {
+    if (hasAppliedInitialFitRef.current) return;
+    if (!puppetBounds || canvasSizeRef.current.width <= 0 || canvasSizeRef.current.height <= 0) {
+      return;
+    }
+    fitPuppetToView();
+  }, [fitPuppetToView, puppetBounds]);
+
+  useEffect(() => {
+    if (fitViewRequest <= 0) return;
+    fitPuppetToView();
+  }, [fitPuppetToView, fitViewRequest]);
 
   // Render loop
   useEffect(() => {
@@ -324,10 +609,12 @@ export function PuppetCanvas({
       if (!running) return;
       if (needsRenderRef.current) {
         needsRenderRef.current = false;
-        if (previewFrame) {
+        if (emptyViewport) {
+          renderEmptyViewport(ctx, canvas, viewport);
+        } else if (previewFrame) {
           renderPreviewFrame(ctx, canvas, previewFrame);
         } else {
-          renderPuppet(ctx, canvas, meshSnapshots, deformedMeshes, textures, solidColors, viewport);
+          renderPuppet(ctx, canvas, meshSnapshots, renderMeshes, textures, solidColors, viewport);
           const dpr = window.devicePixelRatio || 1;
           const cssW = canvas.width / dpr;
           const cssH = canvas.height / dpr;
@@ -335,7 +622,7 @@ export function PuppetCanvas({
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.translate(cssW / 2 + viewport.panX, cssH / 2 + viewport.panY);
           ctx.scale(viewport.zoom, viewport.zoom);
-          renderNativeBoneOverlay(ctx, nodes, selectedBoneId);
+          renderNativeBoneOverlay(ctx, renderNodes, selectedBoneId);
           ctx.restore();
         }
       }
@@ -348,8 +635,9 @@ export function PuppetCanvas({
     };
   }, [
     meshSnapshots,
-    nodes,
-    deformedMeshes,
+    emptyViewport,
+    renderNodes,
+    renderMeshes,
     textures,
     solidColors,
     viewport,
@@ -367,16 +655,24 @@ export function PuppetCanvas({
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
+        canvasSizeRef.current = { width, height };
         canvas.width = Math.round(width * dpr);
         canvas.height = Math.round(height * dpr);
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
         needsRenderRef.current = true;
+        if (!hasAppliedInitialFitRef.current && puppetBounds) {
+          const nextViewport = calculateInitialPuppetViewport(puppetBounds, { width, height });
+          if (nextViewport) {
+            setViewport(nextViewport);
+            hasAppliedInitialFitRef.current = true;
+          }
+        }
       }
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [puppetBounds, setViewport]);
 
   // Mouse wheel zoom
   const handleWheel = useCallback(
@@ -421,6 +717,7 @@ export function PuppetCanvas({
       className="flex-1 relative overflow-hidden bg-[var(--vscode-editor-background)]"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
+      onDoubleClick={fitPuppetToView}
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
       {overlayLayer}

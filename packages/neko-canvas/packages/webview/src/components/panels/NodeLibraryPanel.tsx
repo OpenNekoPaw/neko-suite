@@ -76,10 +76,13 @@ export function NodeLibraryPanel({
 
   return (
     <aside
+      id="canvas-right-node-tree-panel"
+      aria-label={t('library.title')}
       className="flex h-full w-[220px] flex-shrink-0 flex-col overflow-hidden"
+      data-canvas-right-node-tree="true"
       style={{
         backgroundColor: 'var(--toolbar-bg)',
-        borderRight: '1px solid var(--toolbar-border)',
+        borderLeft: '1px solid var(--toolbar-border)',
         color: 'var(--toolbar-fg)',
       }}
     >

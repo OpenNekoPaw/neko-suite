@@ -24,6 +24,8 @@ export const en = {
   'toolbar.importFile': 'Import File',
   'toolbar.addMedia': 'Add Media',
   'toolbar.toggleNodeLibrary': 'Toggle Node Library',
+  'toolbar.showRightNodeTree': 'Show right node tree',
+  'toolbar.hideRightNodeTree': 'Hide right node tree',
   'toolbar.layers': 'Layers',
   'toolbar.toggleProperties': 'Toggle Properties',
   'toolbar.undo': 'Undo',

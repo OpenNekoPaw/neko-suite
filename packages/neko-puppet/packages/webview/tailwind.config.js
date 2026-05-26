@@ -6,6 +6,8 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    "../../../neko-types/src/components/**/*.{tsx,ts}",
+    "../../../neko-ui/src/**/*.{tsx,ts}",
   ],
   plugins: [],
 };

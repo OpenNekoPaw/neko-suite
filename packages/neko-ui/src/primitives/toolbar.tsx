@@ -1,4 +1,5 @@
 import type React from 'react';
+import { forwardRef } from 'react';
 import { cn } from '../utils';
 
 export interface VerticalToolbarProps {
@@ -7,25 +8,23 @@ export interface VerticalToolbarProps {
   readonly className?: string;
 }
 
-export function VerticalToolbar({
-  children,
-  className,
-  width = 48,
-}: VerticalToolbarProps): React.ReactElement {
-  return (
-    <div className={cn('neko-vtoolbar', className)} style={{ width }}>
-      {children}
-    </div>
-  );
-}
+export const VerticalToolbar = forwardRef<HTMLDivElement, VerticalToolbarProps>(
+  function VerticalToolbar({ children, className, width = 48 }, ref): React.ReactElement {
+    return (
+      <div ref={ref} className={cn('neko-vtoolbar', className)} style={{ width }}>
+        {children}
+      </div>
+    );
+  },
+);
 
-export interface ToolbarButtonProps {
+export interface ToolbarButtonProps extends Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'children' | 'title'
+> {
   readonly icon: React.ReactNode;
   readonly title: string;
   readonly active?: boolean;
-  readonly disabled?: boolean;
-  readonly onClick?: () => void;
-  readonly className?: string;
 }
 
 export function ToolbarButton({
@@ -35,9 +34,11 @@ export function ToolbarButton({
   icon,
   onClick,
   title,
+  ...buttonProps
 }: ToolbarButtonProps): React.ReactElement {
   return (
     <button
+      {...buttonProps}
       aria-label={title}
       aria-pressed={active}
       className={cn('neko-toolbar-btn', active ? 'active' : null, className)}

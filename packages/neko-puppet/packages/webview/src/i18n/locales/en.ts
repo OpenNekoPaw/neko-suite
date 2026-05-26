@@ -43,6 +43,13 @@ export const en: MessageBundle = {
   'puppet.empty.templateBlank': 'Blank Skeleton',
   'puppet.empty.templateHumanoid': 'Simple Humanoid',
 
+  // Toolbar
+  'puppet.toolbar.import': 'Import MOC3',
+  'puppet.toolbar.fitView': 'Fit view',
+  'puppet.toolbar.showRightPanel': 'Show right panel',
+  'puppet.toolbar.hideRightPanel': 'Hide right panel',
+  'puppet.toolbar.onionSkin': 'Onion skin',
+
   // Status
   'puppet.status.ready': 'Ready',
   'puppet.status.loading': 'Loading puppet...',

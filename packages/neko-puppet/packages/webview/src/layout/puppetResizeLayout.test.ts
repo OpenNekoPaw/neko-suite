@@ -1,11 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readPersistedResizeState } from '@neko/ui/hooks';
 import { PUPPET_RIGHT_PANEL_RESIZE } from './puppetResizeLayout';
 
-const srcRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const srcRoot = resolve(process.cwd(), 'src');
 
 function readSource(relativePath: string): string {
   return readFileSync(resolve(srcRoot, relativePath), 'utf8');
@@ -58,5 +57,40 @@ describe('Puppet right panel resize layout', () => {
       expect(app).toMatch(new RegExp(`<${component}\\b`));
     }
     expect(app).toMatch(/handlePuppetContextMenuAction/);
+  });
+
+  it('keeps empty puppet documents inside the shared viewport shell', () => {
+    const app = readSource('PuppetApp.tsx');
+    const css = readSource('index.css');
+
+    expect(app).toMatch(/createIdlePuppetSceneController/);
+    expect(app).toMatch(/noPuppetSource \|\| \(puppetLoaded && puppetSceneController\)/);
+    expect(app).toMatch(/<PuppetCanvas/);
+    expect(app).toMatch(/emptyViewport=\{noPuppetSource\}/);
+    expect(app).toMatch(/<PuppetEmptyState\s+onDropMoc3=\{handleDropMoc3\}/);
+    expect(app).toMatch(/<PuppetToolbar\b/);
+    expect(app).toMatch(/renderToolbar=\{\(\) => null\}/);
+    expect(app).not.toMatch(/onToolbarAction=/);
+    expect(app).not.toMatch(/DefaultPuppetViewportPreview/);
+    expect(app).not.toMatch(/puppet-empty-inspector/);
+    expect(css).toMatch(/\.puppet-left-toolbar\.neko-vtoolbar\s*\{[^}]*width: 48px !important/s);
+    expect(css).toMatch(/\.puppet-left-toolbar \.neko-toolbar-btn\s*\{[^}]*height: 40px/s);
+    expect(css).not.toMatch(/\.puppet-empty-actions/);
+    expect(css).not.toMatch(/\.puppet-default-viewport-preview/);
+  });
+
+  it('uses a dedicated left toolbar and right dock instead of overlay protocol toolbar', () => {
+    const app = readSource('PuppetApp.tsx');
+    const toolbar = readSource('components/PuppetToolbar.tsx');
+    const css = readSource('index.css');
+
+    expect(app).not.toMatch(/ViewportToolbar/);
+    expect(app).not.toMatch(/handlePuppetToolbarAction/);
+    expect(toolbar).toMatch(/ToolbarSpacer/);
+    expect(toolbar).toMatch(/aria-controls="puppet-right-panel"/);
+    expect(app).toMatch(/fitViewRequest=\{fitViewRequest\}/);
+    expect(app).toMatch(/isRightPanelVisible && \(/);
+    expect(css).not.toMatch(/\.puppet-viewport-toolbar/);
+    expect(css).toMatch(/\.puppet-right-panel-stack/);
   });
 });

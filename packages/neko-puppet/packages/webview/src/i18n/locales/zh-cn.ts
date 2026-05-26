@@ -43,6 +43,13 @@ export const zhCN: MessageBundle = {
   'puppet.empty.templateBlank': '空白骨架',
   'puppet.empty.templateHumanoid': '简单人形',
 
+  // Toolbar
+  'puppet.toolbar.import': '导入 MOC3',
+  'puppet.toolbar.fitView': '适配视图',
+  'puppet.toolbar.showRightPanel': '显示右侧面板',
+  'puppet.toolbar.hideRightPanel': '隐藏右侧面板',
+  'puppet.toolbar.onionSkin': '洋葱皮',
+
   // Status
   'puppet.status.ready': '就绪',
   'puppet.status.loading': '正在加载 Puppet...',

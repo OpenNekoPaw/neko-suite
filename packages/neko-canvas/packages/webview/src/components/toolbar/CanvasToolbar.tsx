@@ -3,7 +3,7 @@
  *
  * Provides quick access to:
  * - Add node (expandable panel)
- * - Layer panel toggle
+ * - Right node tree/library panel toggle
  * - Undo / Redo
  * - Canvas settings
  *
@@ -11,10 +11,22 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { ToolbarButton, ToolbarSeparator } from '@neko/ui/primitives';
+import {
+  ToolbarButton,
+  ToolbarSeparator,
+  ToolbarSpacer,
+  VerticalToolbar,
+} from '@neko/ui/primitives';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
-import { PlusIcon, UploadIcon, UndoIcon, RedoIcon } from '@neko/ui/icons';
+import {
+  PlusIcon,
+  UploadIcon,
+  UndoIcon,
+  RedoIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
+} from '@neko/ui/icons';
 
 // =============================================================================
 // Types
@@ -31,6 +43,9 @@ export interface CanvasToolbarProps {
   onAddTable?: () => void;
   /** Unified file import — opens file picker, auto-detects type */
   onImportFile?: () => void;
+  /** Node tree/library panel visibility */
+  isNodeLibraryVisible?: boolean;
+  onToggleNodeLibrary?: () => void;
   /** Hand tool (drag-to-pan) mode */
   isPanMode?: boolean;
   onTogglePanMode?: () => void;
@@ -51,6 +66,8 @@ export function CanvasToolbar({
   onAddGallery,
   onAddTable,
   onImportFile,
+  isNodeLibraryVisible = true,
+  onToggleNodeLibrary,
   isPanMode = false,
   onTogglePanMode,
 }: CanvasToolbarProps) {
@@ -85,9 +102,12 @@ export function CanvasToolbar({
     action();
     setExpandedPanel(null);
   }, []);
+  const nodeLibraryTitle = isNodeLibraryVisible
+    ? t('toolbar.hideRightNodeTree')
+    : t('toolbar.showRightNodeTree');
 
   return (
-    <div ref={toolbarRef} className="neko-vtoolbar relative z-20" style={{ width: 48 }}>
+    <VerticalToolbar ref={toolbarRef} className="relative z-20" width={48}>
       {/* Hand Tool (drag-to-pan) */}
       <ToolbarButton
         icon={
@@ -135,6 +155,25 @@ export function CanvasToolbar({
         onClick={onRedo}
         disabled={!canRedo}
       />
+
+      <ToolbarSpacer />
+
+      {onToggleNodeLibrary && (
+        <>
+          <ToolbarSeparator />
+          <ToolbarButton
+            aria-controls="canvas-right-node-tree-panel"
+            aria-expanded={isNodeLibraryVisible}
+            data-canvas-toolbar-action="toggle-right-node-tree"
+            icon={
+              isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
+            }
+            title={nodeLibraryTitle}
+            active={isNodeLibraryVisible}
+            onClick={onToggleNodeLibrary}
+          />
+        </>
+      )}
 
       {/* ============================================================= */}
       {/* Add Node Panel                                                */}
@@ -222,7 +261,7 @@ export function CanvasToolbar({
           />
         </div>
       )}
-    </div>
+    </VerticalToolbar>
   );
 }
 
