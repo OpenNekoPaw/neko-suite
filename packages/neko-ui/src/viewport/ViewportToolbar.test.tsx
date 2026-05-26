@@ -39,6 +39,7 @@ describe('ViewportToolbar', () => {
       root.render(<ViewportToolbar items={[item]} onAction={onAction} />);
     });
 
+    expect(host.querySelector('.neko-vtoolbar')).not.toBeNull();
     const button = host.querySelector<HTMLButtonElement>('[data-action="scene:live:outputRoute"]');
     expect(button).not.toBeNull();
     expect(button?.disabled).toBe(true);

@@ -13,6 +13,11 @@ function hasSource(relativePath: string): boolean {
   return existsSync(resolve(srcRoot, relativePath));
 }
 
+function readCssRule(source: string, selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return source.match(new RegExp(`${escapedSelector}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+}
+
 describe('Route A webview boundaries', () => {
   it('keeps App Route A main viewport free of persistent R3F model mounts', () => {
     const app = readSource('App.tsx');
@@ -80,7 +85,8 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/<canvas/);
     expect(videoViewport).toMatch(/model-viewport-frame/);
     expect(videoViewport).toMatch(/<ViewportGuideOverlay\b/);
-    expect(videoViewport).toMatch(/<ViewportNavigationControls\b/);
+    expect(videoViewport).not.toMatch(/<ViewportNavigationControls\b/);
+    expect(hasSource('components/ViewportNavigationControls.tsx')).toBe(false);
     expect(videoViewport).toMatch(/<InteractionLayer\b/);
     expect(videoViewport).toMatch(/<OverlayCanvas\b/);
     expect(videoViewport).not.toMatch(/children/);
@@ -110,6 +116,31 @@ describe('Route A webview boundaries', () => {
     expect(modelController).toMatch(/getContextMenu\(request: ViewportContextMenuRequest\)/);
     expect(modelController).toMatch(/handleModelMenuAction/);
     expect(css).toMatch(/neko-viewport-context-menu/);
+  });
+
+  it('keeps the model tool strip as a left layout rail instead of a viewport overlay', () => {
+    const app = readSource('App.tsx');
+    const css = readSource('index.css');
+
+    expect(app).toMatch(/<main className="model-viewport-area">\s*<Toolbar/);
+    expect(app).toMatch(/className="model-viewport-toolbar"/);
+    expect(app).toMatch(/width=\{48\}/);
+    expect(app).toMatch(/isRightDockVisible=\{isRightDockVisible\}/);
+    expect(app).toMatch(
+      /onToggleRightDock=\{\(\) => setIsRightDockVisible\(\(visible\) => !visible\)\}/,
+    );
+    expect(app).toMatch(/\{isRightDockVisible \? \(\s*<RightDock/);
+    expect(app).not.toMatch(/model-viewport-tools/);
+    expect(css).toMatch(/\.model-viewport-area\s*\{[\s\S]*flex-direction: row;/);
+    expect(css).not.toMatch(/\.model-viewport-tools\s*\{/);
+
+    const toolbarRule = readCssRule(css, '.model-viewport-toolbar.neko-vtoolbar');
+    expect(toolbarRule).toMatch(/border-right:/);
+    expect(toolbarRule).not.toMatch(/position: absolute/);
+
+    const previewModesRule = readCssRule(css, '.model-character-preview-modes');
+    expect(previewModesRule).toMatch(/left: 10px;/);
+    expect(previewModesRule).not.toMatch(/left: 56px;/);
   });
 
   it('drives Blender-style workbench chrome from VSCode light and dark theme tokens', () => {
@@ -151,11 +182,16 @@ describe('Route A webview boundaries', () => {
     const provider = readSource('../../extension/src/editor/ModelEditorProvider.ts');
 
     expect(app).not.toMatch(/WorkbenchTopBar/);
+    expect(app).not.toMatch(/EngineDiagnosticsPanel/);
     expect(app).toMatch(/type: 'modelStatus'/);
     expect(app).toMatch(/selectedNodeName/);
+    expect(app).toMatch(/sceneRevision/);
     expect(css).not.toMatch(/\.model-workbench-topbar/);
+    expect(css).not.toMatch(/\.model-engine-diagnostics/);
+    expect(css).not.toMatch(/--model-engine-pill/);
     expect(extension).toMatch(/new ModelStatusBar\(\)/);
     expect(provider).toMatch(/case 'modelStatus'/);
+    expect(provider).toMatch(/sceneRevision/);
   });
 
   it('sizes Route A stream from the actual webview viewport instead of a fixed canvas', () => {
@@ -194,12 +230,14 @@ describe('Route A webview boundaries', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
     const app = readSource('App.tsx');
     const orbitControls = readSource('components/ViewportOrbitControls.tsx');
-    const navigationControls = readSource('components/ViewportNavigationControls.tsx');
+    const toolbar = readSource('components/Toolbar.tsx');
     const modelController = readSource('viewport/ModelController.ts');
 
+    expect(videoViewport).toMatch(/!sceneControlSocket\?\.isOpen\(\)/);
     expect(videoViewport).toMatch(/sceneControlSocket\.updateViewportCamera/);
     expect(videoViewport).toMatch(/sceneControlSocket\.requestKeyframe\(MAIN_VIEWPORT_ID\)/);
     expect(videoViewport).not.toMatch(/sendHttpFallback|updateEditorCamera/);
+    expect(app).toMatch(/!socket\?\.isOpen\(\)/);
     expect(app).toMatch(/socket\s*\n\s*\.updateViewportCamera/);
     expect(app).not.toMatch(/updateEditorCamera/);
     expect(videoViewport).not.toMatch(/modelController\s*\n\s*\.updateCamera\(\)/);
@@ -208,9 +246,14 @@ describe('Route A webview boundaries', () => {
     expect(modelController).toMatch(/target: vec3ToTuple\(store\.cameraTarget\)/);
     expect(modelController).toMatch(/kind: 'camera'/);
     expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 16/);
-    expect(navigationControls).toMatch(/CAMERA_SEND_INTERVAL_MS = 16/);
+    expect(toolbar).toMatch(/onCameraChange\?\.\(\)/);
+    expect(toolbar).toMatch(/onCameraMutated\?\.\(\)/);
+    expect(orbitControls).toMatch(/zoomCamera\(-zoomStep\)/);
+    expect(toolbar).not.toMatch(/zoomCamera\(|viewport\.zoomIn|viewport\.zoomOut/);
+    expect(toolbar).toMatch(/toggleViewportGrid\(\)/);
+    expect(toolbar).toMatch(/resetCamera\(\)/);
     expect(orbitControls).not.toMatch(/new EngineClient|updateEditorCamera/);
-    expect(navigationControls).not.toMatch(/new EngineClient|updateEditorCamera/);
+    expect(toolbar).not.toMatch(/new EngineClient|updateEditorCamera/);
   });
 
   it('sends hit-test queries with the same viewport contract as the engine stream', () => {
@@ -285,8 +328,9 @@ describe('Route A webview boundaries', () => {
 
     expect(app).toMatch(/sendSceneCommand\('visibility-set', \{ nodeId, visible \}\)/);
     expect(app).toMatch(/onSetNodeVisible=\{handleSetNodeVisible\}/);
-    expect(sceneTree).toMatch(/model-tree-visibility-toggle/);
-    expect(sceneTree).toMatch(/onSetNodeVisible\?\.\(node\.nodeId, !isVisible\)/);
+    expect(sceneTree).toMatch(/<TreeView/);
+    expect(sceneTree).toMatch(/onToggleVisibility=\{onSetNodeVisible\}/);
+    expect(sceneTree).toMatch(/visibilityDisabled=\{visibilityDisabled \|\| !onSetNodeVisible\}/);
     expect(sceneDocument).toMatch(/createEnvelope\(this\.context, 'visibility-set'/);
     expect(sceneTree).not.toMatch(/postMessage\(/);
   });

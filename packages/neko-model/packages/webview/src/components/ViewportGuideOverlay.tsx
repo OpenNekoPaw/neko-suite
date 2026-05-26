@@ -28,6 +28,11 @@ interface GuideTheme {
 
 const WORLD_UP: Vec3 = [0, 1, 0];
 const EDITOR_CAMERA_FOV_DEG = 45;
+const HUD_LEFT = 18;
+const HUD_BOTTOM = 22;
+const HUD_GIZMO_RADIUS = 38;
+const HUD_GIZMO_GAP = 20;
+const HUD_RULER_HEIGHT = 28;
 const DEFAULT_GUIDE_THEME: GuideTheme = {
   widgetBackground: 'rgba(24, 27, 31, 0.42)',
   widgetBorder: 'rgba(255, 255, 255, 0.08)',
@@ -127,7 +132,7 @@ function drawGuides(
 
   const frame = createCameraFrame(cameraPosition, cameraTarget, rect.width, rect.height);
   const minorStep = niceStep(cameraRadius / 8);
-  drawNavigationGizmo(ctx, frame, rect.width, theme);
+  drawNavigationGizmo(ctx, frame, rect.height, theme);
   drawScaleRuler(ctx, rect.width, rect.height, minorStep, theme);
 
   ctx.restore();
@@ -136,11 +141,14 @@ function drawGuides(
 function drawNavigationGizmo(
   ctx: CanvasRenderingContext2D,
   frame: CameraFrame,
-  width: number,
+  height: number,
   theme: GuideTheme,
 ): void {
-  const origin: Vec2 = [Math.max(64, width - 68), 62];
-  const axisLength = 33;
+  const origin: Vec2 = [
+    HUD_LEFT + HUD_GIZMO_RADIUS,
+    Math.max(HUD_GIZMO_RADIUS + HUD_RULER_HEIGHT + HUD_BOTTOM, height - 78),
+  ];
+  const axisLength = 24;
   const axes = (
     [
       { axis: [0, 0, 1], color: theme.axisZ, label: 'Z' },
@@ -154,11 +162,11 @@ function drawNavigationGizmo(
   ctx.strokeStyle = theme.widgetBorder;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(origin[0], origin[1], 46, 0, Math.PI * 2);
+  ctx.arc(origin[0], origin[1], HUD_GIZMO_RADIUS, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  ctx.lineWidth = 2.25;
+  ctx.lineWidth = 2;
   ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -189,8 +197,8 @@ function drawScaleRuler(
   theme: GuideTheme,
 ): void {
   const rulerWidth = Math.min(180, Math.max(96, width * 0.16));
-  const left = 18;
-  const top = Math.max(18, height - 34);
+  const left = HUD_LEFT + HUD_GIZMO_RADIUS * 2 + HUD_GIZMO_GAP;
+  const top = Math.max(18, height - HUD_BOTTOM);
   const majorStep = minorStep * 5;
   const label = formatGridStep(majorStep);
 

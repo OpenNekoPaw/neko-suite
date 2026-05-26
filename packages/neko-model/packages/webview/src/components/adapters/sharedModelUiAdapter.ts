@@ -95,30 +95,35 @@ export function mapModelSceneNodesToTreeViewItems(
   nodes: readonly SceneNodeSnapshot[],
   selectedNodeId: string | null,
 ): readonly TreeViewItem[] {
-  const nodeMap = new Map<string, TreeViewItem & { children: TreeViewItem[] }>();
-  const roots: (TreeViewItem & { children: TreeViewItem[] })[] = [];
+  const nodeMap = new Map<string, MutableTreeViewItem>();
+  const parentByChildId = new Map<string, string>();
+  const roots: MutableTreeViewItem[] = [];
 
   for (const node of nodes) {
-    nodeMap.set(node.nodeId, {
-      id: node.nodeId,
-      label: node.name,
-      children: [],
-      expanded: node.parentId === null,
-      selected: node.nodeId === selectedNodeId,
-      visible: node.visible !== false,
-      locked: false,
-      metadata: {
-        kind: node.kind,
-        hasMesh: Boolean(node.mesh),
-      },
-    });
+    nodeMap.set(node.nodeId, createModelTreeItem(node, selectedNodeId));
+  }
+
+  for (const node of nodes) {
+    if (node.parentId && nodeMap.has(node.parentId)) {
+      parentByChildId.set(node.nodeId, node.parentId);
+    }
+  }
+
+  for (const node of nodes) {
+    for (const childId of node.children ?? []) {
+      if (childId === node.nodeId || !nodeMap.has(childId) || parentByChildId.has(childId)) {
+        continue;
+      }
+      parentByChildId.set(childId, node.nodeId);
+    }
   }
 
   for (const node of nodes) {
     const item = nodeMap.get(node.nodeId);
     if (!item) continue;
 
-    const parent = node.parentId ? nodeMap.get(node.parentId) : undefined;
+    item.expanded = !parentByChildId.has(node.nodeId);
+    const parent = nodeMap.get(parentByChildId.get(node.nodeId) ?? '');
     if (parent) {
       parent.children.push(item);
     } else {
@@ -128,3 +133,26 @@ export function mapModelSceneNodesToTreeViewItems(
 
   return roots;
 }
+
+function createModelTreeItem(
+  node: SceneNodeSnapshot,
+  selectedNodeId: string | null,
+): MutableTreeViewItem {
+  return {
+    id: node.nodeId,
+    label: node.name,
+    children: [],
+    selected: node.nodeId === selectedNodeId,
+    visible: node.visible !== false,
+    locked: false,
+    metadata: {
+      kind: node.kind,
+      hasMesh: Boolean(node.mesh),
+    },
+  };
+}
+
+type MutableTreeViewItem = Omit<TreeViewItem, 'children' | 'expanded'> & {
+  children: TreeViewItem[];
+  expanded?: boolean;
+};

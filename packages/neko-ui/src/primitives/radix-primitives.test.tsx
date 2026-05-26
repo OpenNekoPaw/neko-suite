@@ -76,6 +76,45 @@ describe('@neko/ui Radix-backed primitives', () => {
     expect(host.textContent).toContain('Edit');
   });
 
+  it('maps empty Select option values through a Radix-safe internal value', () => {
+    const onValueChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <Select
+          label="Target"
+          onValueChange={onValueChange}
+          options={[
+            { value: '', label: 'None' },
+            { value: 'active', label: 'Active' },
+          ]}
+          value=""
+        />,
+      );
+    });
+
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Target');
+    expect(host.textContent).toContain('None');
+  });
+
+  it('preserves Select placeholder behavior when no empty option exists', () => {
+    const onValueChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <Select
+          label="Target"
+          onValueChange={onValueChange}
+          options={[{ value: 'active', label: 'Active' }]}
+          placeholder="Choose target"
+          value=""
+        />,
+      );
+    });
+
+    expect(host.textContent).toContain('Choose target');
+  });
+
   it('emits Slider preview and commit values', () => {
     act(() => {
       root.render(<Slider label="Opacity" max={100} min={0} value={40} />);

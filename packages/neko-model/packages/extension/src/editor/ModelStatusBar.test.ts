@@ -68,13 +68,14 @@ describe('ModelStatusBar', () => {
       sceneControlError: null,
       hasPendingPrediction: false,
       enginePort: 4999,
+      sceneRevision: 12,
     };
 
     expect(formatModelSelectedNodeStatus(snapshot)).toBe('$(symbol-method) Head');
     expect(formatModelObjectCountStatus(snapshot)).toBe('$(symbol-array) 4 objects');
-    expect(formatModelEngineStatus(snapshot)).toBe('$(check) Engine :4999');
+    expect(formatModelEngineStatus(snapshot)).toBe('$(check) Engine :4999 rev 12');
     expect(formatModelEngineStatus({ ...snapshot, hasPendingPrediction: true })).toBe(
-      '$(sync~spin) Syncing',
+      '$(sync~spin) Syncing rev 12',
     );
     expect(formatModelEngineStatus({ ...snapshot, sceneControlStatus: 'error' })).toBe(
       '$(error) Engine error',
@@ -91,15 +92,16 @@ describe('ModelStatusBar', () => {
       sceneControlError: null,
       hasPendingPrediction: false,
       enginePort: 3001,
+      sceneRevision: 9,
     });
 
     expect(mocks.statusItems.get('neko.model.selectedNode')?.text).toBe(
       '$(symbol-method) Armature',
     );
-    expect(mocks.statusItems.get('neko.model.objectCount')?.text).toBe(
-      '$(symbol-array) 8 objects',
+    expect(mocks.statusItems.get('neko.model.objectCount')?.text).toBe('$(symbol-array) 8 objects');
+    expect(mocks.statusItems.get('neko.model.engineStatus')?.text).toBe(
+      '$(check) Engine :3001 rev 9',
     );
-    expect(mocks.statusItems.get('neko.model.engineStatus')?.text).toBe('$(check) Engine :3001');
 
     statusBar.dispose();
   });

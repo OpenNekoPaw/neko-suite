@@ -1210,6 +1210,7 @@ function parseModelStatusSnapshot(value: unknown): ModelStatusSnapshot | null {
   if (!isOptionalStringOrNull(value['sceneControlError'])) return null;
   if (typeof value['hasPendingPrediction'] !== 'boolean') return null;
   if (!isOptionalFiniteNumberOrNull(value['enginePort'])) return null;
+  if (!isFiniteNumber(value['sceneRevision'])) return null;
 
   return {
     selectedNodeName: value['selectedNodeName'] ?? null,
@@ -1218,15 +1219,15 @@ function parseModelStatusSnapshot(value: unknown): ModelStatusSnapshot | null {
     sceneControlError: value['sceneControlError'] ?? null,
     hasPendingPrediction: value['hasPendingPrediction'],
     enginePort: value['enginePort'] ?? null,
+    sceneRevision: value['sceneRevision'],
   };
 }
 
-function isModelSceneControlStatus(value: unknown): value is ModelStatusSnapshot['sceneControlStatus'] {
+function isModelSceneControlStatus(
+  value: unknown,
+): value is ModelStatusSnapshot['sceneControlStatus'] {
   return (
-    value === 'disconnected' ||
-    value === 'connecting' ||
-    value === 'ready' ||
-    value === 'error'
+    value === 'disconnected' || value === 'connecting' || value === 'ready' || value === 'error'
   );
 }
 

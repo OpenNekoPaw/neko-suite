@@ -135,6 +135,7 @@ describe('ModelEditorProvider model API mapping', () => {
         sceneControlError: null,
         hasPendingPrediction: false,
         enginePort: 3001,
+        sceneRevision: 17,
       },
       panel,
       document,
@@ -148,6 +149,7 @@ describe('ModelEditorProvider model API mapping', () => {
       sceneControlError: null,
       hasPendingPrediction: false,
       enginePort: 3001,
+      sceneRevision: 17,
     });
   });
 
@@ -212,15 +214,17 @@ interface ModelEditorProviderInternals {
   panelGeneration: number;
   lastSceneSnapshot: EngineSceneSnapshot | undefined;
   activeModelPath: string | undefined;
-  engineClient: {
-    updateEditorCamera(
-      position: [number, number, number],
-      target: [number, number, number],
-      fovY?: number,
-      viewportId?: string,
-    ): Promise<void>;
-    getSceneSnapshot?: () => Promise<unknown>;
-  } | undefined;
+  engineClient:
+    | {
+        updateEditorCamera(
+          position: [number, number, number],
+          target: [number, number, number],
+          fovY?: number,
+          viewportId?: string,
+        ): Promise<void>;
+        getSceneSnapshot?: () => Promise<unknown>;
+      }
+    | undefined;
   handleWebviewMessage(
     message: Record<string, unknown>,
     panel: unknown,

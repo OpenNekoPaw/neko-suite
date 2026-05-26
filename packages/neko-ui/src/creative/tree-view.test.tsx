@@ -65,6 +65,31 @@ describe('@neko/ui TreeView', () => {
       host.querySelector<HTMLButtonElement>('button[aria-label="Collapse item"]')?.click();
     });
     expect(onToggleExpand).toHaveBeenCalledWith('root', false);
+    expect(host.querySelectorAll('[role="treeitem"]')).toHaveLength(1);
+  });
+
+  it('hydrates uncontrolled default expansion when tree items arrive after mount', () => {
+    act(() => {
+      root.render(<TreeView items={[]} />);
+    });
+
+    act(() => {
+      root.render(
+        <TreeView
+          items={[
+            {
+              id: 'root',
+              label: 'Root',
+              expanded: true,
+              children: [{ id: 'child', label: 'Child' }],
+            },
+          ]}
+        />,
+      );
+    });
+
+    expect(host.querySelector('[data-tree-item-id="root"]')).not.toBeNull();
+    expect(host.querySelector('[data-tree-item-id="child"]')).not.toBeNull();
   });
 
   it('supports keyboard focus, selection, and expansion callbacks', () => {

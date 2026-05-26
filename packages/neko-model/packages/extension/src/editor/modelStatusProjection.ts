@@ -9,6 +9,7 @@ export interface ModelStatusSnapshot {
   readonly sceneControlError?: string | null;
   readonly hasPendingPrediction: boolean;
   readonly enginePort: number | null;
+  readonly sceneRevision: number;
 }
 
 export interface ModelStatusProjection {
@@ -24,6 +25,7 @@ export function getDefaultModelStatusSnapshot(): ModelStatusSnapshot {
     sceneControlError: null,
     hasPendingPrediction: false,
     enginePort: null,
+    sceneRevision: 0,
   };
 }
 
@@ -39,14 +41,14 @@ export function formatModelObjectCountStatus(status: ModelStatusSnapshot): strin
 
 export function formatModelEngineStatus(status: ModelStatusSnapshot): string {
   if (status.hasPendingPrediction) {
-    return '$(sync~spin) Syncing';
+    return `$(sync~spin) Syncing rev ${status.sceneRevision}`;
   }
 
   switch (status.sceneControlStatus) {
     case 'ready':
       return status.enginePort === null
-        ? '$(check) Engine ready'
-        : `$(check) Engine :${status.enginePort}`;
+        ? `$(check) Engine rev ${status.sceneRevision}`
+        : `$(check) Engine :${status.enginePort} rev ${status.sceneRevision}`;
     case 'connecting':
       return '$(sync~spin) Engine connecting';
     case 'error':

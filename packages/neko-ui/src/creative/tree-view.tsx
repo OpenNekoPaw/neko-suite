@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import { toCodiconClassName } from '../icons/codicon';
 import { cn } from '../utils';
@@ -77,11 +77,16 @@ export function TreeView({
   visibilityDisabled,
   visibilityLabels = DEFAULT_TREE_VIEW_VISIBILITY_LABELS,
 }: TreeViewProps): React.ReactElement {
-  const [internalExpandedIds, setInternalExpandedIds] = useState<ReadonlySet<string>>(() =>
-    collectDefaultExpandedIds(items),
+  const defaultExpandedIds = useMemo(() => collectDefaultExpandedIds(items), [items]);
+  const itemIds = useMemo(() => collectTreeItemIds(items), [items]);
+  const knownItemIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const [internalExpandedIds, setInternalExpandedIds] = useState<ReadonlySet<string>>(
+    () => defaultExpandedIds,
   );
   const controlledExpanded = expandedIds !== undefined;
-  const expandedSet = controlledExpanded ? toReadonlySet(expandedIds) : internalExpandedIds;
+  const expandedSet = controlledExpanded
+    ? toReadonlySet(expandedIds)
+    : mergeNewDefaultExpandedIds(internalExpandedIds, defaultExpandedIds, knownItemIdsRef.current);
   const selectedSet = toReadonlySet(selectedIds);
   const options = { ...DEFAULT_TREE_VIEW_VIRTUALIZATION, ...virtualization };
   const flatItems = flattenTreeItems(items, {
@@ -113,6 +118,36 @@ export function TreeView({
     }
     onToggleExpand?.(id, expanded);
   };
+
+  useEffect(() => {
+    if (controlledExpanded) {
+      knownItemIdsRef.current = itemIds;
+      return;
+    }
+
+    setInternalExpandedIds((current) => {
+      const next = new Set(current);
+      const knownItemIds = knownItemIdsRef.current;
+      let changed = false;
+
+      for (const id of defaultExpandedIds) {
+        if (!knownItemIds.has(id) && !next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+
+      for (const id of next) {
+        if (!itemIds.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+    knownItemIdsRef.current = itemIds;
+  }, [controlledExpanded, defaultExpandedIds, itemIds]);
 
   return (
     <div
@@ -413,9 +448,7 @@ function flattenTreeItems(
   depth = 0,
 ): FlatTreeItem[] {
   return items.flatMap((item) => {
-    const expanded = state.controlledExpanded
-      ? state.expandedSet.has(item.id)
-      : (item.expanded ?? false);
+    const expanded = state.expandedSet.has(item.id);
     const selected = state.controlledSelected
       ? state.selectedSet.has(item.id)
       : (item.selected ?? false);
@@ -538,4 +571,31 @@ function collectDefaultExpandedIds(items: readonly TreeViewItem[]): ReadonlySet<
     }
   }
   return ids;
+}
+
+function collectTreeItemIds(items: readonly TreeViewItem[]): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const item of items) {
+    ids.add(item.id);
+    for (const childId of collectTreeItemIds(item.children ?? [])) {
+      ids.add(childId);
+    }
+  }
+  return ids;
+}
+
+function mergeNewDefaultExpandedIds(
+  expandedIds: ReadonlySet<string>,
+  defaultExpandedIds: ReadonlySet<string>,
+  knownItemIds: ReadonlySet<string>,
+): ReadonlySet<string> {
+  let next: Set<string> | undefined;
+  for (const id of defaultExpandedIds) {
+    if (knownItemIds.has(id) || expandedIds.has(id)) {
+      continue;
+    }
+    next ??= new Set(expandedIds);
+    next.add(id);
+  }
+  return next ?? expandedIds;
 }

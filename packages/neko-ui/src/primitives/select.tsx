@@ -19,6 +19,8 @@ export interface SelectProps {
   readonly onValueChange: (value: string) => void;
 }
 
+const EMPTY_OPTION_VALUE_PREFIX = '__neko_select_empty_value__';
+
 export function Select({
   className,
   disabled,
@@ -28,8 +30,17 @@ export function Select({
   placeholder,
   value,
 }: SelectProps): React.ReactElement {
+  const emptyOptionValue = getEmptyOptionValue(options);
+  const selectedValue = toRadixSelectValue(value, emptyOptionValue);
+
   return (
-    <SelectPrimitive.Root disabled={disabled} onValueChange={onValueChange} value={value}>
+    <SelectPrimitive.Root
+      disabled={disabled}
+      onValueChange={(nextValue) => {
+        onValueChange(fromRadixSelectValue(nextValue, emptyOptionValue));
+      }}
+      value={selectedValue}
+    >
       <SelectPrimitive.Trigger
         aria-label={label}
         className={cn(
@@ -56,15 +67,15 @@ export function Select({
           sideOffset={4}
         >
           <SelectPrimitive.Viewport className="p-1">
-            {options.map((option) => (
+            {options.map((option, index) => (
               <SelectPrimitive.Item
-                key={option.value}
+                key={`${option.value}:${index}`}
                 className={cn(
                   'relative flex h-7 cursor-default select-none items-center rounded-[var(--neko-radius-sm,6px)] px-2 outline-none',
                   'focus:bg-[var(--neko-hover)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
                 )}
                 disabled={option.disabled}
-                value={option.value}
+                value={toRadixSelectItemValue(option.value, emptyOptionValue)}
               >
                 <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
               </SelectPrimitive.Item>
@@ -74,4 +85,37 @@ export function Select({
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
   );
+}
+
+function getEmptyOptionValue(options: readonly SelectOption[]): string | undefined {
+  const optionValues = new Set(options.map((option) => option.value));
+  if (!optionValues.has('')) {
+    return undefined;
+  }
+
+  let emptyOptionValue = EMPTY_OPTION_VALUE_PREFIX;
+  let suffix = 0;
+
+  while (optionValues.has(emptyOptionValue)) {
+    suffix += 1;
+    emptyOptionValue = `${EMPTY_OPTION_VALUE_PREFIX}${suffix}`;
+  }
+
+  return emptyOptionValue;
+}
+
+function toRadixSelectValue(value: string, emptyOptionValue: string | undefined): string {
+  return value === '' ? (emptyOptionValue ?? '') : value;
+}
+
+function toRadixSelectItemValue(value: string, emptyOptionValue: string | undefined): string {
+  if (value !== '') {
+    return value;
+  }
+
+  return emptyOptionValue ?? EMPTY_OPTION_VALUE_PREFIX;
+}
+
+function fromRadixSelectValue(value: string, emptyOptionValue: string | undefined): string {
+  return value === emptyOptionValue ? '' : value;
 }

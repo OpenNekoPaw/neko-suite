@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ViewportToolbarItem } from '@neko/shared';
+import { ToolbarButton, ToolbarSeparator, VerticalToolbar } from '../primitives/toolbar';
 
 export interface ViewportToolbarProps {
   readonly items: readonly ViewportToolbarItem[];
@@ -15,28 +16,26 @@ export function ViewportToolbar({
   const sorted = [...items].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
 
   return (
-    <div className={className ?? 'neko-viewport-toolbar'} role="toolbar">
+    <VerticalToolbar className={className ?? 'neko-viewport-toolbar'} width={48}>
       {sorted.map((item) =>
         item.kind === 'separator' ? (
-          <span key={item.id} className="neko-viewport-toolbar-separator" role="separator" />
+          <ToolbarSeparator key={item.id} />
         ) : (
-          <button
+          <ToolbarButton
             key={item.id}
-            type="button"
-            className="neko-viewport-toolbar-button"
-            title={item.disabledReason ?? item.label}
-            aria-pressed={item.kind === 'toggle' ? item.toggled === true : undefined}
-            aria-disabled={item.disabled === true || item.degraded === true ? true : undefined}
+            icon={<span aria-hidden="true">{item.icon ?? item.label ?? item.id}</span>}
+            title={item.disabledReason ?? item.label ?? item.id}
+            active={item.kind === 'toggle' ? item.toggled === true : undefined}
             disabled={item.disabled}
+            className="neko-viewport-toolbar-button"
+            aria-disabled={item.disabled === true || item.degraded === true ? true : undefined}
             data-action={item.action}
             data-degraded={item.degraded === true ? 'true' : undefined}
             data-degraded-reason={item.degradedReason}
             onClick={() => onAction?.(item)}
-          >
-            <span aria-hidden="true">{item.icon ?? item.label ?? item.id}</span>
-          </button>
+          />
         ),
       )}
-    </div>
+    </VerticalToolbar>
   );
 }

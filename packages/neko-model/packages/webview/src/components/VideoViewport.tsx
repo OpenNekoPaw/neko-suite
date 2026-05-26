@@ -1,10 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RenderFrameMeta, SceneDelta, ViewportDescriptor } from '@neko/shared';
-import type {
-  ViewportMenuItem,
-  ViewportFrameMeta,
-  ViewportSerializableRecord,
-} from '@neko/shared';
+import type { ViewportMenuItem, ViewportFrameMeta, ViewportSerializableRecord } from '@neko/shared';
 import { OverlayRenderer, ViewportShell } from '@neko/ui';
 import {
   EngineClient,
@@ -17,14 +13,10 @@ import { InteractionLayer } from './InteractionLayer';
 import { OverlayCanvas } from './OverlayCanvas';
 import { ViewportOrbitControls } from './ViewportOrbitControls';
 import { ViewportGuideOverlay } from './ViewportGuideOverlay';
-import { ViewportNavigationControls } from './ViewportNavigationControls';
 import { bridgeRenderFrameMetaToViewportFrameMeta } from '@neko/ui';
 import { postMessage } from '@neko/shared/vscode';
 import { useModelStore } from '../stores/modelStore';
-import {
-  handleModelMenuAction,
-  ModelController,
-} from '../viewport/ModelController';
+import { handleModelMenuAction, ModelController } from '../viewport/ModelController';
 import { modelErrorMessage, toError, webviewErrorHandler } from '../platform/errors';
 
 export interface VideoViewportProps {
@@ -247,7 +239,7 @@ export function VideoViewport({
     const target = store.cameraTarget;
 
     const sendSceneControlCamera = async () => {
-      if (!sceneControlSocket) {
+      if (!sceneControlSocket?.isOpen()) {
         return;
       }
       await sceneControlSocket.updateViewportCamera({
@@ -261,21 +253,14 @@ export function VideoViewport({
       sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
     };
 
-    void sendSceneControlCamera()
-      .catch((error: unknown) => {
-        void webviewErrorHandler.handleError(toError(error), {
-          showToUser: false,
-          severity: 'error',
-        });
-        onSceneControlError(modelErrorMessage('error.cameraUpdateFailed'));
+    void sendSceneControlCamera().catch((error: unknown) => {
+      void webviewErrorHandler.handleError(toError(error), {
+        showToUser: false,
+        severity: 'error',
       });
-  }, [
-    sceneControlSocket,
-    sceneId,
-    sceneRevision,
-    viewportSize,
-    onSceneControlError,
-  ]);
+      onSceneControlError(modelErrorMessage('error.cameraUpdateFailed'));
+    });
+  }, [sceneControlSocket, sceneId, sceneRevision, viewportSize, onSceneControlError]);
 
   useEffect(() => {
     let disposed = false;
@@ -486,9 +471,7 @@ export function VideoViewport({
   }, [hasEngineFrame, sceneRevision]);
   const viewportFrameMeta = useMemo<ViewportFrameMeta | null>(
     () =>
-      overlayFrameMeta
-        ? bridgeRenderFrameMetaToViewportFrameMeta(overlayFrameMeta, sceneId)
-        : null,
+      overlayFrameMeta ? bridgeRenderFrameMetaToViewportFrameMeta(overlayFrameMeta, sceneId) : null,
     [overlayFrameMeta, sceneId],
   );
   const handleViewportContextMenuAction = React.useCallback(
@@ -549,11 +532,6 @@ export function VideoViewport({
           </button>
         </div>
         <ViewportGuideOverlay visible />
-        <ViewportNavigationControls
-          viewportId={MAIN_VIEWPORT_ID}
-          onCameraChange={sendViewportCamera}
-          onCameraMutated={onCameraMutated}
-        />
         <div className="pointer-events-none absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-amber-400" />
       </div>
     );
@@ -598,11 +576,6 @@ export function VideoViewport({
             <ViewportOrbitControls
               viewportId={MAIN_VIEWPORT_ID}
               onClickSelect={handleClickSelect}
-              onCameraChange={sendViewportCamera}
-              onCameraMutated={onCameraMutated}
-            />
-            <ViewportNavigationControls
-              viewportId={MAIN_VIEWPORT_ID}
               onCameraChange={sendViewportCamera}
               onCameraMutated={onCameraMutated}
             />
