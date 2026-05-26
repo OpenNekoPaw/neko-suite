@@ -2,14 +2,14 @@
  * Toolbar - vertical tool selector
  *
  * macOS-style icon toolbar. Uses shared VerticalToolbar + ToolbarButton
- * from @neko/shared/components with the unified .neko-toolbar-btn CSS class.
+ * from @neko/ui/primitives with the unified .neko-toolbar-btn CSS class.
  */
 import {
   VerticalToolbar,
   ToolbarButton,
   ToolbarSeparator,
   ToolbarSpacer,
-} from '@neko/shared/components';
+} from '@neko/ui/primitives';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import type { ToolType } from '../types';

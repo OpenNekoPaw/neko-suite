@@ -1,6 +1,6 @@
 import type React from 'react';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CloseIcon } from '@neko/shared/icons';
+import { CloseIcon } from '@neko/ui/icons';
 import type { FloatingPanelDefinition } from '../../subsystems';
 import { t } from '../../i18n';
 
@@ -74,9 +74,7 @@ export function FloatingPanelHost({ panels }: FloatingPanelHostProps) {
             key={panel.id}
             panel={panel}
             position={positions[panel.id] ?? { x: 260 + index * 24, y: 68 + index * 24 }}
-            onMove={(position) =>
-              setPositions((current) => ({ ...current, [panel.id]: position }))
-            }
+            onMove={(position) => setPositions((current) => ({ ...current, [panel.id]: position }))}
             onClose={() =>
               setVisiblePanelIds((current) => {
                 const next = new Set(current);

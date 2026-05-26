@@ -9,8 +9,7 @@ import type { WaveformData } from '../../shared/types';
 import { useAudioProjectStore } from '../../stores/audioProjectStore';
 import { useAudioStore } from '../../stores/audioStore';
 import { useClipInteraction } from '../../hooks/useClipInteraction';
-import { ContextMenu } from '@neko/shared/components';
-import type { MenuItem } from '@neko/shared/components';
+import { PositionedContextMenu as ContextMenu, type MenuItem } from '@neko/ui/primitives';
 import { t } from '../../i18n';
 
 interface AudioClipProps {

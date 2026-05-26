@@ -7,7 +7,7 @@ import {
   SettingsIcon,
   UndoIcon,
   UploadIcon,
-} from '@neko/shared/icons';
+} from '@neko/ui/icons';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
 import type { PlaybackControllerDefinition } from '../../subsystems';
@@ -247,9 +247,7 @@ function resolvePlaybackControllerTitle(controller: PlaybackControllerDefinition
 }
 
 function PlaybackFallback() {
-  return (
-    <div className="h-8 w-24 rounded" style={{ backgroundColor: 'var(--control-bg)' }} />
-  );
+  return <div className="h-8 w-24 rounded" style={{ backgroundColor: 'var(--control-bg)' }} />;
 }
 
 function CursorIcon() {

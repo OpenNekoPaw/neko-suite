@@ -10,7 +10,7 @@
 
 import { memo } from 'react';
 import type { RefObject } from 'react';
-import { TimelineRuler as SharedRuler } from '@neko/shared/components';
+import { TimelineRuler as SharedRuler } from '@neko/ui/creative';
 import { PIXELS_PER_SECOND, RULER_HEIGHT, TRACK_LABEL_WIDTH } from '../../constants';
 
 export interface TimelineRulerProps {

@@ -8,9 +8,9 @@
 
 import { memo } from 'react';
 import {
-  ContextMenu as SharedContextMenu,
+  PositionedContextMenu as SharedContextMenu,
   type MenuItem as SharedMenuItem,
-} from '@neko/shared/components';
+} from '@neko/ui/primitives';
 
 // ── neko-cut public MenuItem type (unchanged for callers) ────────────────────
 

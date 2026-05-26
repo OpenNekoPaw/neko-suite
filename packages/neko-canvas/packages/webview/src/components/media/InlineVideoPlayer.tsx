@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { H264StreamClient, AudioStreamClient, FrameScheduler, formatTime } from '@neko/neko-client';
-import { ProgressBar } from '@neko/shared/components';
-import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/shared/icons';
+import { ProgressBar } from '@neko/ui/creative';
+import { PlayIcon, PauseIcon, VolumeIcon, VolumeOffIcon } from '@neko/ui/icons';
 import { getLogger } from '../../utils/logger';
 import {
   createInlineVideoSeekGate,

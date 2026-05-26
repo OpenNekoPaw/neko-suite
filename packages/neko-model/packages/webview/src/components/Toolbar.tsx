@@ -1,7 +1,7 @@
 /**
  * Model Editor Toolbar — left-side vertical tool selector.
  *
- * Uses shared VerticalToolbar + ToolbarButton from @neko/shared/components.
+ * Uses shared VerticalToolbar + ToolbarButton from @neko/ui/primitives.
  * Data-driven: each tool is defined as a descriptor, rendered via map.
  */
 import {
@@ -9,7 +9,7 @@ import {
   ToolbarButton,
   ToolbarSeparator,
   ToolbarSpacer,
-} from '@neko/shared/components';
+} from '@neko/ui/primitives';
 import { useModelStore } from '../stores/modelStore';
 import type { ModelState } from '../stores/modelStore';
 import { useTranslation } from '../i18n/I18nContext';

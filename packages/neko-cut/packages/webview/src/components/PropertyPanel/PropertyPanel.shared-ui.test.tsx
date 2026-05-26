@@ -133,6 +133,66 @@ describe('Cut PropertyPanel shared UI migration', () => {
     expect(onAddKeyframe).toHaveBeenCalledWith('element-1', 'animTransform.opacity', 0.75);
     expect(onRemoveKeyframe).not.toHaveBeenCalled();
   });
+
+  it('keeps migrated collapsible shell expanded by default and toggles content', () => {
+    act(() => {
+      root.render(
+        <PropertyPanel
+          currentTime={0}
+          element={createElement()}
+          projectDefaults={createDefaults()}
+          onAddKeyframe={vi.fn()}
+          onDefaultsChange={vi.fn()}
+          onElementChange={vi.fn()}
+          onElementCommit={vi.fn()}
+          onRemoveKeyframe={vi.fn()}
+        />,
+      );
+    });
+
+    const basicHeader = getGroupHeader('propertyPanel.group.basic');
+    expect(basicHeader).not.toBeNull();
+    expect(basicHeader?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('[data-property-id="name"]')).not.toBeNull();
+
+    act(() => {
+      basicHeader?.click();
+    });
+
+    expect(basicHeader?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('[data-property-id="name"]')).toBeNull();
+  });
+
+  it('keeps disabled migrated collapsible shell closed without rendering rows', () => {
+    act(() => {
+      root.render(
+        <PropertyPanel
+          currentTime={0}
+          element={null}
+          projectDefaults={null}
+          onAddKeyframe={vi.fn()}
+          onDefaultsChange={vi.fn()}
+          onElementChange={vi.fn()}
+          onElementCommit={vi.fn()}
+          onRemoveKeyframe={vi.fn()}
+        />,
+      );
+    });
+
+    const basicHeader = getGroupHeader('propertyPanel.group.basic');
+    expect(basicHeader).not.toBeNull();
+    expect(basicHeader?.disabled).toBe(true);
+    expect(basicHeader?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('[data-property-id="name"]')).toBeNull();
+  });
+
+  function getGroupHeader(label: string): HTMLButtonElement | null {
+    return (
+      Array.from(host.querySelectorAll<HTMLButtonElement>('.neko-collapsible-header')).find(
+        (button) => button.textContent?.includes(label),
+      ) ?? null
+    );
+  }
 });
 
 function createElement(): TimelineElement {

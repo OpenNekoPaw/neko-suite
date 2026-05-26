@@ -54,3 +54,12 @@ export type {
   AssetBrowserPlaceholderProps,
   MediaTransportControlsPlaceholderProps,
 } from './p2-placeholders';
+
+export { TimelineRuler } from './timeline-ruler';
+export type { TimelineRulerProps } from './timeline-ruler';
+export { KeyframeDiamond } from './keyframe-diamond';
+export type { KeyframeDiamondProps } from './keyframe-diamond';
+export { KeyframeTimeline } from './keyframe-timeline';
+export type { KeyframeTimelineProps } from './keyframe-timeline';
+export { ProgressBar, SeekBar } from './seek-bar';
+export type { ProgressBarProps, SeekBarProps } from './seek-bar';

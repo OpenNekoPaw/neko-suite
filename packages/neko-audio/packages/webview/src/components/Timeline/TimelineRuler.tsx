@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useState, type RefObject } from 'react';
-import { TimelineRuler as SharedRuler } from '@neko/shared/components';
+import { TimelineRuler as SharedRuler } from '@neko/ui/creative';
 import { RULER_HEIGHT } from '../../constants';
 import type { TempoMap } from '@neko/shared';
 import { getVisibleBarBeatLabels } from '../../utils/beatGrid';
@@ -37,10 +37,7 @@ export function TimelineRuler({
     }
 
     const visibleStart = scrollLeft / pixelsPerSecond;
-    const visibleEnd = Math.min(
-      totalDuration,
-      (scrollLeft + viewportWidth) / pixelsPerSecond,
-    );
+    const visibleEnd = Math.min(totalDuration, (scrollLeft + viewportWidth) / pixelsPerSecond);
     return getVisibleBarBeatLabels({
       tempoMap,
       visibleStart,

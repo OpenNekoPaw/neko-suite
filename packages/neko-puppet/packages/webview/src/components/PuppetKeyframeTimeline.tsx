@@ -6,7 +6,7 @@
  * to the IPuppetController for engine dispatch.
  */
 import { useCallback, useEffect, useRef } from 'react';
-import { KeyframeTimeline } from '@neko/shared/components';
+import { KeyframeTimeline } from '@neko/ui/creative';
 import type { EasingType } from '@neko/shared';
 import type { IPuppetController } from '../animation';
 import { usePuppetStore } from '../stores/puppet-store';

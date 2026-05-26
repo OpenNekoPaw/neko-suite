@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SkipBackIcon, SkipForwardIcon, PlayIcon } from '@neko/shared/icons';
+import { SkipBackIcon, SkipForwardIcon, PlayIcon } from '@neko/ui/icons';
 import { traverseNarrativeFlow } from '@neko/shared';
 import { t } from '../../i18n';
 import { useCanvasStore } from '../../stores/canvasStore';

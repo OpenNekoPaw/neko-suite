@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { IconProps } from '@neko/shared/icons';
+import type { IconProps } from '@neko/ui/icons';
 
 const base = (strokeWidth: number) => ({
   fill: 'none',

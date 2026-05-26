@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import { KeyframeTimeline } from '@neko/shared/components';
+import { KeyframeTimeline } from '@neko/ui/creative';
 import type { EasingType } from '@neko/shared';
 import { useTranslation } from '../i18n/I18nContext';
 import { useModelStore } from '../stores/modelStore';

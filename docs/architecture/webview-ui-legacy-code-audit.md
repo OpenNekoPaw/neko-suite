@@ -19,7 +19,7 @@ Updated: 2026-05-26
 1. `@neko/ui` 是新的 canonical Webview React UI 入口。
 2. `@neko/shared/components` 仍作为 legacy compatibility surface 存在。
 3. 低风险 hooks / resize 入口已从业务包迁到 `@neko/ui/hooks` 和 `@neko/ui/primitives`。
-4. 剩余旧代码主要集中在 API 不等价的 timeline、context menu、toolbar、keyframe timeline、collapsible shell 和 media progress 组件。
+4. 非 Agent 业务包已经没有 `@neko/shared/components` 直连残留；剩余旧入口只在 Agent 隔离面和 `@neko/ui` bridge 内。
 5. Agent Webview 保持隔离；`DropZone` 的 file-drop hook 仍是显式豁免，避免给 Agent package 引入 `@neko/ui` 依赖。
 
 ## 已清理项
@@ -34,6 +34,13 @@ Updated: 2026-05-26
 | 业务包 raw `codicon codicon-*` 控制图标 | Cleared for touched surfaces | 触达面改用 `@neko/ui/icons` 的 `toCodiconClassName()`；`codicon-modifier-spin` 仍作为 VSCode codicon 修饰类使用 |
 | `useDrag` / `useFileDrop` / `useResizable` / `usePersistedResize` / `readPersistedResizeState` / `ResizeHandle` 直接从业务包导入 `@neko/shared/components` | Cleared except Agent `DropZone` | 业务包已切到 `@neko/ui/hooks` / `@neko/ui/primitives`；Agent 保持隔离豁免 |
 | Canvas gesture / drop hooks legacy imports | Cleared | `useDragDrop.ts` 使用 `@neko/ui/hooks` 的 `useFileDrop`；`useNodeDrag.ts`、`useNodeResize.ts`、`useNodeRotate.ts` 使用 `@neko/ui/hooks` 的 `useDrag` |
+| Cut / Sketch collapsible shell legacy imports | Cleared | Cut `PropertyPanel.tsx` 和 Sketch `CollapsiblePanel.tsx` 已用 `@neko/ui/primitives` 的 `Collapsible` 包装，并保留 legacy shell CSS 类名 |
+| Canvas / Cut / Model `@neko/shared/icons` imports | Cleared | 非 Agent 图标入口已收敛到 `@neko/ui/icons`；Agent 仍保持隔离豁免 |
+| Audio / Canvas / Model / Sketch toolbar legacy imports | Cleared | `VerticalToolbar`、`ToolbarButton`、`ToolbarSeparator`、`ToolbarSpacer` 已迁到 `@neko/ui/primitives`，保留 `.neko-vtoolbar` / `.neko-toolbar-btn` / `.neko-toolbar-sep` 类名 |
+| Cut / Audio timeline ruler legacy imports | Cleared | `TimelineRuler` 已迁到 `@neko/ui/creative`，业务包 adapter 继续保留各自布局、tempo label 和 seek 语义 |
+| Model / Puppet keyframe timeline legacy imports | Cleared | `KeyframeTimeline` 与 `KeyframeDiamond` 已迁到 `@neko/ui/creative`，业务包只保留 controller/store adapter |
+| Canvas inline media progress legacy imports | Cleared | Canvas `InlineAudioPlayer` / `InlineVideoPlayer` 改用 `@neko/ui/creative` 的 `ProgressBar` / `SeekBar`，保留 preview/commit seek 分离 |
+| Audio / Canvas / Cut / Sketch menu legacy imports | Cleared | `PositionedContextMenu` 和 `buildAIMenuSection` 已迁到 `@neko/ui/primitives`，保留 manual x/y 定位、submenu、danger、shortcut 与 AI section 行为 |
 
 ## 当前残留总览
 
@@ -44,26 +51,11 @@ Updated: 2026-05-26
 | 包 | 残留文件 | Legacy 能力 | 保留原因 | 建议清理阶段 |
 |----|----------|-------------|----------|--------------|
 | Agent | `components/ChatView/DropZone.tsx` | `useFileDrop`, `FileDropResult` | Agent Header/Input 与信息架构在本 ADR 中明确隔离；Agent package 当前不引入 `@neko/ui` | 单独 Agent-safe primitive pass |
-| Audio | `Toolbar.tsx` | `VerticalToolbar`, `ToolbarButton`, `ToolbarSeparator` | DAW toolbar 行为与布局未纳入低风险 primitive slice | Toolbar contract pass |
-| Audio | `Timeline/AudioClip.tsx`, `Timeline/TrackLane.tsx`, `EditableWaveform.tsx` | `ContextMenu`, `MenuItem` | Timeline / waveform 菜单有包内交互语义，需要先收敛 menu contract | Timeline/menu pass |
-| Audio | `Timeline/TimelineRuler.tsx` | `TimelineRuler` | 时间标尺是 timeline 专用组件，不等价于 primitive | Timeline component pass |
-| Canvas | `components/common/ContextMenu.tsx` | `ContextMenu`, `MenuItem`, `buildAIMenuSection` | Canvas node/edge/AI 菜单语义复杂，需保持 package-owned 行为 | Canvas menu pass |
-| Canvas | `components/media/InlineAudioPlayer.tsx`, `InlineVideoPlayer.tsx` | `ProgressBar` | Inline media playback 需要 seek / progress 行为契约，不能直接换成 generic `Progress` | Media transport pass |
-| Canvas | `components/toolbar/CanvasToolbar.tsx` | `ToolbarButton`, `ToolbarSeparator` | Canvas toolbar 涉及 mode、upload、undo/redo 与后续 top toolbar 收敛 | Canvas toolbar pass |
-| Cut | `components/ContextMenu.tsx` | `ContextMenu`, `MenuItem` | NLE context menu 行为未纳入 PropertyPanel migration | Cut menu pass |
-| Cut | `hooks/useTimelineContextMenu.ts` | `MenuItem`, `buildAIMenuSection` | AI menu section 与 timeline action 需要专用 contract | Timeline/menu pass |
-| Cut | `components/Timeline/TimelineRuler.tsx` | `TimelineRuler` | Timeline ruler 需要 timeline contract | Timeline component pass |
-| Cut | `components/PropertyPanel/PropertyPanel.tsx` | `CollapsibleSection` | Core rows 已迁移，外层 legacy collapsible shell 尚未替换 | PropertyPanel shell cleanup |
-| Model | `components/ModelKeyframeTimeline.tsx` | `KeyframeTimeline` | Keyframe timeline 尚无 `@neko/ui` creative contract | Keyframe timeline pass |
-| Model | `components/Toolbar.tsx` | `VerticalToolbar`, `ToolbarButton`, `ToolbarSeparator`, `ToolbarSpacer` | 3D toolbar 工具语义与图标收敛未纳入 Transform / SceneTree slice | Toolbar contract pass |
-| Puppet | `components/PuppetKeyframeTimeline.tsx` | `KeyframeTimeline` | Puppet keyframe UI 需要与 Model/Cut 一起统一 | Keyframe timeline pass |
-| Sketch | `components/CollapsiblePanel.tsx` | `CollapsibleSection` | Sketch panel shell 保留包内样式；BrushPanel/LayerPanel 控件已迁移 | Panel shell pass |
-| Sketch | `components/Toolbar.tsx` | `VerticalToolbar`, `ToolbarButton`, `ToolbarSeparator`, `ToolbarSpacer` | 主绘画工具栏含 tool-specific 行为和图标，未纳入 Brush/Layer slice | Sketch toolbar pass |
-| Sketch | `components/SketchCanvas.tsx` | `ContextMenu`, `MenuItem` | Canvas context menu 与绘图交互耦合，需要专门迁移 | Sketch canvas menu pass |
+| `@neko/ui` | `hooks/index.ts`, `primitives/resize-handle.ts`, `hooks/hooks-compat.test.ts` | hooks / resize compatibility re-export | Bridge required while deleting or redirecting legacy shared React exports is deferred | Final bridge removal / redirect pass |
 
 ### `@neko/shared/icons`
 
-`@neko/shared/icons` 仍在部分未触达或 Agent 隔离面中使用。当前扫描命中 24 行、21 个文件。触达面应继续优先使用 `@neko/ui/icons` 或 `toCodiconClassName()`。
+`@neko/shared/icons` 只剩 Agent 隔离面使用。当前扫描命中 14 行、11 个文件。触达面应继续优先使用 `@neko/ui/icons` 或 `toCodiconClassName()`。
 
 | 包 | 文件 | 残留能力 / 区域 | 保留原因 | 建议清理阶段 |
 |----|------|-----------------|----------|--------------|
@@ -78,28 +70,18 @@ Updated: 2026-05-26
 | Agent | `components/ChatView/ToolCallDisplay/ToolCallDisplay.tsx` | `CopyIcon` | Agent tool-call UI 未触达 | Agent dedicated redesign / primitive pass |
 | Agent | `components/ChatView/ToolCallDisplay/icons.tsx` | `FileIcon`, `WarningIcon`, `ChevronDownIcon`, `CheckIcon` re-export | Agent tool-call UI 未触达 | Agent dedicated redesign / primitive pass |
 | Agent | `components/ChatView/TaskCard/TaskSteps.tsx` | `ChevronRightIcon` import / re-export | Agent task UI 未触达 | Agent dedicated redesign / primitive pass |
-| Canvas | `subsystems/narrative/NarrativePlaybackController.tsx` | `SkipBackIcon`, `SkipForwardIcon`, `PlayIcon` | Narrative playback controls 未触达 | Canvas icon convergence pass |
-| Canvas | `subsystems/storyboard/icons.tsx` | `IconProps` type | Storyboard local icon adapter 未触达 | Canvas icon convergence pass |
-| Canvas | `components/media/InlineVideoPlayer.tsx` | `PlayIcon`, `PauseIcon`, `VolumeIcon`, `VolumeOffIcon` | Inline media transport 未触达 | Canvas media transport pass |
-| Canvas | `components/media/InlineAudioPlayer.tsx` | `PlayIcon`, `PauseIcon`, `VolumeIcon`, `VolumeOffIcon` | Inline media transport 未触达 | Canvas media transport pass |
-| Canvas | `components/toolbar/CanvasToolbar.tsx` | `PlusIcon`, `UploadIcon`, `UndoIcon`, `RedoIcon` | Canvas toolbar 未触达 | Canvas toolbar pass |
-| Canvas | `components/toolbar/CanvasTopToolbar.tsx` | Toolbar icons | Top toolbar 未触达 | Canvas toolbar pass |
-| Canvas | `components/panels/FloatingPanelHost.tsx` | `CloseIcon` | Floating panel shell 未触达 | Canvas shell/icon convergence pass |
-| Cut | `components/Toolbar.tsx` | Toolbar icons | NLE toolbar 未做 shared toolbar contract | Cut toolbar pass |
-| Cut | `components/PreviewControls.tsx` | Preview transport icons | Preview transport 尚未做 shared transport/control contract | Cut transport pass |
-| Model | `components/ViewportNavigationControls.tsx` | Viewport navigation icons | Viewport navigation controls 未纳入 Transform / SceneTree slice | Model viewport controls pass |
 
 ## 包级迁移状态
 
 | 包 | 本轮触达面 | 旧代码清理状态 | 下一步 |
 |----|------------|----------------|--------|
-| Cut | Core PropertyPanel rows、preview/commit、adapter、resize hook import cleanup | Partial legacy remains | 先迁 `CollapsibleSection` shell，再做 timeline/menu/ruler |
-| Sketch | BrushPanel、LayerPanel、TreeView、icons、resize hook import cleanup | Partial legacy remains | 先迁 `CollapsiblePanel`，再迁 Toolbar 和 SketchCanvas ContextMenu |
-| Puppet | ParameterPanel、PuppetNodeTree、resize hook import cleanup | Partial legacy remains | 与 Model 合并设计 KeyframeTimeline contract |
-| Model | TransformPanel、Face sliders、SceneTree、resize hook import cleanup | Partial legacy remains | Toolbar、ViewportNavigationControls、KeyframeTimeline 分批迁 |
+| Cut | Core PropertyPanel rows、preview/commit、adapter、resize hook import cleanup、collapsible shell cleanup、icon import convergence、TimelineRuler import cleanup、ContextMenu import cleanup | No current non-Agent shared-components/icon residue found in scan | 后续只做 token / visual audit |
+| Sketch | BrushPanel、LayerPanel、TreeView、icons、resize hook import cleanup、CollapsiblePanel shell cleanup、Toolbar import cleanup、SketchCanvas ContextMenu import cleanup | No current non-Agent shared-components/icon residue found in scan | 后续只做 token / visual audit |
+| Puppet | ParameterPanel、PuppetNodeTree、resize hook import cleanup、KeyframeTimeline import cleanup | No current non-Agent shared-components/icon residue found in scan | 后续只做 token / visual audit |
+| Model | TransformPanel、Face sliders、SceneTree、resize hook import cleanup、ViewportNavigationControls icon import convergence、Toolbar import cleanup、KeyframeTimeline import cleanup | No current shared-components/icon residue found in scan | 后续只做 token / visual audit |
 | Live | TrackingPanel controls、recording badge；`index.css` 新增 Tailwind base/components/utilities 以支持首次引入 `@neko/ui` primitives | No current shared-components/icon residue found in scan; Tailwind infra change is migration plumbing, not legacy residue | 后续只做 token / visual audit |
-| Audio | Transport/effects/export/recording/preset/side controls | Partial legacy remains | Timeline/menu/toolbar pass |
-| Canvas | PropertyPanel technical fields、NodeLibrary rows、node gesture hooks import cleanup | Partial legacy remains | Menu/media/toolbar/icon convergence |
+| Audio | Transport/effects/export/recording/preset/side controls、Toolbar import cleanup、TimelineRuler import cleanup、ContextMenu import cleanup | No current non-Agent shared-components/icon residue found in scan | 后续只做 token / visual audit |
+| Canvas | PropertyPanel technical fields、NodeLibrary rows、node gesture hooks import cleanup、non-Agent icon import convergence、Toolbar import cleanup、media ProgressBar import cleanup、ContextMenu import cleanup | No current non-Agent shared-components/icon residue found in scan | 后续只做 token / visual audit |
 | Preview | Viewer controls and local `Mac*` wrappers adapted to `@neko/ui` | Compatibility wrapper names remain | 可后续重命名 wrapper 或逐步内联 `@neko/ui` imports |
 | Tools | Diff controls and media seek controls | No current shared-components residue found in scan | TimelineDiff / waveform SVG can be separate visual cleanup |
 | Dashboard | Cards, filters, tables, actions | No current shared-components residue found in scan | Shell/table structure stays package-owned |
@@ -113,8 +95,8 @@ Updated: 2026-05-26
 |----|----------|------|----------|
 | L0 Contracts | DTO、hooks 类型和 shared compatibility exports 仍在 `@neko/shared/components` / `@neko/ui/hooks` 之间桥接 | 过早删除 shared exports 会破坏未迁移包 | 保持 bridge，先迁业务 imports，再删除 shared React exports |
 | L1 Host integration | 无直接变化 | 误把 Agent / Extension 侧流程引入 `@neko/ui` 会破坏边界 | Agent 单独 proposal；Extension 侧不引 React |
-| L2 Primitives | `@neko/ui/primitives` 已覆盖低风险 UI primitives | 旧 `ContextMenu` / `Toolbar` API 与新 primitive 不等价 | 先定义 compatibility adapters，再替换调用点 |
-| L2 Creative | PropertyPanel、TreeView、NumberSlider 等已覆盖主要 creative controls | KeyframeTimeline、TimelineRuler、MediaTransportControls 仍缺 canonical contract | 新增 creative/timeline contracts 后迁移 |
+| L2 Primitives | `@neko/ui/primitives` 已覆盖低风险 UI primitives、toolbar compatibility API、manual-position menu 与 AI menu section | `@neko/shared/components` bridge 仍存在 | 等 Agent 单独方案或 final bridge pass 后删除/重定向 legacy exports |
+| L2 Creative | PropertyPanel、TreeView、NumberSlider、TimelineRuler、KeyframeTimeline、SeekBar 等已覆盖主要 creative controls | 后续风险主要是视觉/token audit，不是 import 残留 | 保持业务 adapter owner-owned |
 | Package adapters | Cut/Puppet/Model/Sketch/Canvas 等已建立 adapter 模式 | 包内旧 shell、timeline、menu 与 adapter 交错 | 每个包按 owner-owned adapter 小步替换 |
 
 ## 建议清理顺序
@@ -126,30 +108,31 @@ Updated: 2026-05-26
 
 2. **P1: Shell / hook 类低风险收口**
    - 已完成 hooks / resize import cleanup。
-   - 下一步可替换 Cut `PropertyPanel` 和 Sketch `CollapsiblePanel` 中的 `CollapsibleSection`，前提是视觉和 collapse 默认行为有测试。
+   - 已完成 Cut `PropertyPanel` 和 Sketch `CollapsiblePanel` 中的 `CollapsibleSection` 迁移，视觉类名和 collapse 默认行为有测试覆盖。
 
 3. **P1: Toolbar contract**
-   - 覆盖 Audio、Canvas、Model、Sketch toolbar。
-   - 不建议直接把 `ToolbarButton` 替换成 `Button`，应先定义 toolbar-specific props、orientation、active state、tooltip、separator 和 icon policy。
+   - 已完成 Audio、Canvas、Model、Sketch toolbar import cleanup。
+   - `@neko/ui/primitives` 提供 toolbar-specific props、active state、separator 和 spacer 兼容组件，后续可再扩展 orientation、tooltip 和 icon policy。
 
 4. **P1: Menu contract**
-   - 覆盖 Cut、Canvas、Sketch、Audio menus。
-   - 需要处理 manual-position menu 与 Radix trigger menu 的差异，以及 AI menu section 的 DTO。
+   - 已完成 Cut、Canvas、Sketch、Audio menu import cleanup。
+   - `@neko/ui/primitives` 现在提供 `PositionedContextMenu` 与 `buildAIMenuSection`，保留 manual-position menu 与 Radix trigger menu 两条路径。
 
 5. **P1: Timeline / Keyframe contract**
-   - 覆盖 `TimelineRuler` 和 `KeyframeTimeline`。
-   - 这是 Cut、Audio、Model、Puppet 的共性残留，应先设计 `@neko/ui/creative` timeline DTO，再迁对应包。
+   - 已完成 `TimelineRuler` 和 `KeyframeTimeline` import cleanup。
+   - `@neko/ui/creative` 现在提供 `TimelineRuler`、`KeyframeDiamond`、`KeyframeTimeline`，Cut / Audio / Model / Puppet 保留各自 owning adapter。
 
 6. **P2: Media transport contract**
-   - 覆盖 Canvas inline media players、Audio transport 与后续 `MediaTransportControls`。
-   - 该方向涉及 seek / progress / playback authority 差异，优先级低于 TimelineRuler / KeyframeTimeline contract。
+   - Canvas inline media players 已迁到 `@neko/ui/creative` `SeekBar` / `ProgressBar`，保留 drag preview 与 commit seek 分离。
+   - Audio transport 与后续 `MediaTransportControls` 仍需单独 contract，因为 playback authority 差异较大。
 
 7. **P2: Icon convergence**
-   - Canvas / Cut / Model 非触达面继续从 `@neko/shared/icons` 迁到 `@neko/ui/icons`。
+   - Canvas / Cut / Model 非 Agent 图标入口已从 `@neko/shared/icons` 迁到 `@neko/ui/icons`。
    - Agent icon migration 必须等 Agent-specific proposal。
 
 8. **Final: 删除 `@neko/shared/components` React exports**
-   - 只有当 allowlist 降到 `@neko/ui` bridge 自身，且所有业务包无 legacy import 后，才能删除或重定向 legacy React exports。
+   - 非 Agent 业务包已经无 legacy import；allowlist 现在只剩 Agent `DropZone` 和 `@neko/ui` bridge。
+   - 删除或重定向 legacy React exports 前，需要先决定 Agent-safe file-drop/icon 迁移策略。
 
 ## 验证命令
 

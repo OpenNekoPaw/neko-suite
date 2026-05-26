@@ -3,10 +3,10 @@
  * 属性面板组件 - 显示和编辑选中元素的属性
  */
 
-import { memo, useCallback, useMemo } from 'react';
-import { CollapsibleSection } from '@neko/shared/components';
+import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { PropertyPanel as SharedPropertyPanel } from '@neko/ui/creative';
 import type { PropertyValue as SharedPropertyValue } from '@neko/ui/creative';
+import { Collapsible } from '@neko/ui/primitives';
 import type { PropertyDefinition } from './PropertyRow';
 import { NormalizeLoudnessButton } from './NormalizeLoudnessButton';
 import { AIActionsButton } from './AIActionsButton';
@@ -324,7 +324,7 @@ function findPropertyDefinition(propertyPath: string): PropertyDefinition | unde
 
 interface PropertyGroupProps {
   titleKey: string;
-  children: React.ReactNode;
+  children: ReactNode;
   defaultExpanded?: boolean;
   disabled?: boolean;
 }
@@ -336,15 +336,48 @@ const PropertyGroup = memo(function PropertyGroup({
   disabled = false,
 }: PropertyGroupProps) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(defaultExpanded && !disabled);
+  const isExpanded = expanded && !disabled;
+
   return (
-    <CollapsibleSection title={t(titleKey)} defaultExpanded={defaultExpanded} disabled={disabled}>
-      {/* Preserve horizontal padding matching the original .nk-prop-group-body */}
-      <div style={{ padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {children}
-      </div>
-    </CollapsibleSection>
+    <Collapsible
+      className="neko-collapsible"
+      contentClassName="neko-collapsible-body"
+      disabled={disabled}
+      onOpenChange={setExpanded}
+      open={isExpanded}
+      trigger={
+        <button
+          aria-expanded={isExpanded}
+          className="neko-collapsible-header"
+          disabled={disabled}
+          style={disabled ? { pointerEvents: 'none', opacity: 0.4 } : undefined}
+          type="button"
+        >
+          <span className={`neko-collapsible-chevron${isExpanded ? ' expanded' : ''}`}>
+            <ChevronIcon />
+          </span>
+          {t(titleKey)}
+        </button>
+      }
+    >
+      {isExpanded ? (
+        // Preserve horizontal padding matching the original .nk-prop-group-body.
+        <div style={{ padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {children}
+        </div>
+      ) : null}
+    </Collapsible>
   );
 });
+
+function ChevronIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true">
+      <path d="M6.22 4.22a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06-1.06L9.19 8 6.22 5.03a.75.75 0 0 1 0-1.06z" />
+    </svg>
+  );
+}
 
 // =============================================================================
 // Main PropertyPanel Component

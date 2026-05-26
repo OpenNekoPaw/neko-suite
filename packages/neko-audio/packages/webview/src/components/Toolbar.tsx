@@ -2,11 +2,11 @@
  * Toolbar - Left-side vertical toolbar for the audio editor.
  *
  * Provides quick access to panel toggles and action commands.
- * Uses shared VerticalToolbar + ToolbarButton from @neko/shared/components.
+ * Uses shared VerticalToolbar + ToolbarButton from @neko/ui/primitives.
  */
 
 import { useCallback } from 'react';
-import { VerticalToolbar, ToolbarButton, ToolbarSeparator } from '@neko/shared/components';
+import { VerticalToolbar, ToolbarButton, ToolbarSeparator } from '@neko/ui/primitives';
 import { useAudioStore } from '../stores/audioStore';
 import type { SidePanelType } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';

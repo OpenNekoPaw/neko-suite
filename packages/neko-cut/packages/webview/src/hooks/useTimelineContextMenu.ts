@@ -8,7 +8,7 @@ import { useEditorStore } from '../stores/editor-store';
 import { useTranslation } from '../i18n/I18nContext';
 import type { MenuItem } from '../components/ContextMenu';
 import type { TimelineTrack } from '../types';
-import { buildAIMenuSection, type MenuItem as SharedMenuItem } from '@neko/shared/components';
+import { buildAIMenuSection, type MenuItem as SharedMenuItem } from '@neko/ui/primitives';
 
 export interface ContextMenuState {
   x: number;
@@ -29,7 +29,7 @@ export interface TimelineContextMenuOptions {
 }
 
 /** Convert shared MenuItem[] (discriminated union) to neko-cut MenuItem[] (optional bool separator) */
-function fromSharedItems(items: SharedMenuItem[]): MenuItem[] {
+function fromSharedItems(items: readonly SharedMenuItem[]): MenuItem[] {
   return items.map((item): MenuItem => {
     if ('separator' in item && item.separator === true) {
       return { label: '', onClick: () => {}, separator: true };

@@ -11,7 +11,7 @@ import {
   RedoIcon,
   ZoomInIcon,
   ZoomOutIcon,
-} from '@neko/shared/icons';
+} from '@neko/ui/icons';
 
 export function Toolbar() {
   const {

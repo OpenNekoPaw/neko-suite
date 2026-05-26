@@ -11,10 +11,10 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { ToolbarButton, ToolbarSeparator } from '@neko/shared/components';
+import { ToolbarButton, ToolbarSeparator } from '@neko/ui/primitives';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
-import { PlusIcon, UploadIcon, UndoIcon, RedoIcon } from '@neko/shared/icons';
+import { PlusIcon, UploadIcon, UndoIcon, RedoIcon } from '@neko/ui/icons';
 
 // =============================================================================
 // Types

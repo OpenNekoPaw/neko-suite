@@ -12,7 +12,7 @@ import {
   SettingsIcon,
   VolumeIcon,
   VolumeOffIcon,
-} from '@neko/shared/icons';
+} from '@neko/ui/icons';
 import { useTranslation } from '../i18n/I18nContext';
 import { useEditorStore } from '../stores/editor-store';
 import { formatTimeFull } from '../utils';

@@ -6,14 +6,18 @@
  */
 
 export {
-  ContextMenu,
-  type ContextMenuProps,
+  PositionedContextMenu as ContextMenu,
+  buildAIMenuSection,
   type MenuItem,
   type MenuAction,
   type MenuSeparator,
-} from '@neko/shared/components';
-import type { MenuItem } from '@neko/shared/components';
-import { buildAIMenuSection } from '@neko/shared/components';
+} from '@neko/ui/primitives';
+export type {
+  PositionedContextMenuProps,
+  PositionedContextMenuProps as ContextMenuProps,
+} from '@neko/ui/primitives';
+import type { MenuItem } from '@neko/ui/primitives';
+import { buildAIMenuSection } from '@neko/ui/primitives';
 import { t } from '../../i18n';
 
 export type MenuEntry = MenuItem;

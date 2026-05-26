@@ -18,6 +18,15 @@ export type {
   ContextMenuProps,
   ContextMenuSeparatorItem,
 } from './context-menu';
+export { PositionedContextMenu } from './positioned-context-menu';
+export type {
+  MenuAction,
+  MenuItem,
+  MenuSeparator,
+  PositionedContextMenuProps,
+} from './positioned-context-menu';
+export { buildAIMenuSection } from './context-menu-ai';
+export type { AICapability, AIMenuConfig } from './context-menu-ai';
 export { Dialog } from './dialog';
 export type { DialogProps } from './dialog';
 export { EmptyState } from './empty-state';
@@ -42,3 +51,5 @@ export { Tooltip, TooltipProvider } from './tooltip';
 export type { TooltipProps, TooltipProviderProps } from './tooltip';
 export { ToggleGroup } from './toggle-group';
 export type { ToggleGroupOption, ToggleGroupProps } from './toggle-group';
+export { ToolbarButton, ToolbarSeparator, ToolbarSpacer, VerticalToolbar } from './toolbar';
+export type { ToolbarButtonProps, VerticalToolbarProps } from './toolbar';

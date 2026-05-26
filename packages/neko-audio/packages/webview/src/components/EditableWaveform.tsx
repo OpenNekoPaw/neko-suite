@@ -10,8 +10,7 @@
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useAudioStore } from '../stores/audioStore';
-import { ContextMenu } from '@neko/shared/components';
-import type { MenuItem } from '@neko/shared/components';
+import { PositionedContextMenu as ContextMenu, type MenuItem } from '@neko/ui/primitives';
 import { postMessage } from '../shared/useVscodeMessage';
 import { t } from '../i18n';
 

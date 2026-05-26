@@ -22,6 +22,11 @@ describe('@neko/ui public entrypoints', () => {
     expect(primitives).toBeDefined();
     expect(creative.DEFAULT_TREE_VIEW_VIRTUALIZATION.threshold).toBe(200);
     expect(creative.assertNever).toBeTypeOf('function');
+    expect(creative.TimelineRuler).toBe(ui.TimelineRuler);
+    expect(creative.KeyframeTimeline).toBe(ui.KeyframeTimeline);
+    expect(creative.SeekBar).toBe(ui.SeekBar);
+    expect(primitives.PositionedContextMenu).toBe(ui.PositionedContextMenu);
+    expect(primitives.buildAIMenuSection).toBe(ui.buildAIMenuSection);
     expect(icons.toCodiconClassName('play')).toBe('codicon codicon-play');
     expect(hooks.useResizable).toBeTypeOf('function');
     expect(ui.ResizeHandle).toBeTypeOf('function');
