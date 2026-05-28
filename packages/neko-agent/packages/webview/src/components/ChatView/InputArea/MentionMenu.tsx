@@ -8,7 +8,7 @@
  * Replaces the old FileReferenceMenu for the @ trigger in InputArea.
  */
 
-import { useRef } from 'react';
+import { useRef, type CSSProperties } from 'react';
 import type { MentionItem } from './types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useTranslation } from '@/i18n/I18nContext';
@@ -24,14 +24,54 @@ const KIND_ICONS: Record<string, string> = {
   entity: '◇',
 };
 
-const KIND_SECTION_LABELS: Record<string, string> = {
-  file: 'Files',
-  asset: 'Assets',
-  media: 'Media Library',
-  entity: 'Entities',
-  'canvas-node': 'Canvas nodes',
-  character: 'Characters',
-  scene: 'Scenes',
+const KIND_SECTION_LABELS: Record<MentionItem['kind'], MentionLocalizedLabel> = {
+  file: { key: 'chat.input.mentionSections.file', fallback: 'Files' },
+  asset: { key: 'chat.input.mentionSections.asset', fallback: 'Assets' },
+  media: { key: 'chat.input.mentionSections.media', fallback: 'Media Library' },
+  entity: { key: 'chat.input.mentionSections.entity', fallback: 'Entities' },
+  'canvas-node': { key: 'chat.input.mentionSections.canvasNode', fallback: 'Canvas nodes' },
+  character: { key: 'chat.input.mentionSections.character', fallback: 'Characters' },
+  scene: { key: 'chat.input.mentionSections.scene', fallback: 'Scenes' },
+};
+
+const MEDIA_TYPE_TAG_LABELS: Record<
+  NonNullable<MentionItem['mediaType']>,
+  MentionLocalizedLabel
+> = {
+  video: { key: 'chat.input.mentionTags.media.video', fallback: 'Video' },
+  audio: { key: 'chat.input.mentionTags.media.audio', fallback: 'Audio' },
+  image: { key: 'chat.input.mentionTags.media.image', fallback: 'Image' },
+  sequence: { key: 'chat.input.mentionTags.media.sequence', fallback: 'Sequence' },
+  text: { key: 'chat.input.mentionTags.media.text', fallback: 'Text' },
+  document: { key: 'chat.input.mentionTags.media.document', fallback: 'Document' },
+};
+
+const SOURCE_TAG_LABELS: Record<NonNullable<MentionItem['source']>, MentionLocalizedLabel> = {
+  workspace: { key: 'chat.input.mentionTags.source.workspace', fallback: 'Workspace' },
+  'asset-library': { key: 'chat.input.mentionTags.source.assetLibrary', fallback: 'Assets' },
+  'media-library': { key: 'chat.input.mentionTags.source.mediaLibrary', fallback: 'Media' },
+  'entity-graph': { key: 'chat.input.mentionTags.source.entityGraph', fallback: 'Entity' },
+  story: { key: 'chat.input.mentionTags.source.story', fallback: 'Story' },
+  canvas: { key: 'chat.input.mentionTags.source.canvas', fallback: 'Canvas' },
+};
+
+const KIND_TAG_LABELS: Record<MentionItem['kind'], MentionLocalizedLabel> = {
+  file: { key: 'chat.input.mentionTags.kind.file', fallback: 'File' },
+  asset: { key: 'chat.input.mentionTags.kind.asset', fallback: 'Asset' },
+  media: { key: 'chat.input.mentionTags.kind.media', fallback: 'Media' },
+  entity: { key: 'chat.input.mentionTags.kind.entity', fallback: 'Entity' },
+  'canvas-node': { key: 'chat.input.mentionTags.kind.canvasNode', fallback: 'Canvas' },
+  character: { key: 'chat.input.mentionTags.kind.character', fallback: 'Character' },
+  scene: { key: 'chat.input.mentionTags.kind.scene', fallback: 'Scene' },
+};
+
+const ENTITY_TYPE_TAG_LABELS: Record<string, MentionLocalizedLabel> = {
+  asset: { key: 'chat.input.mentionTags.entity.asset', fallback: 'Asset' },
+  character: { key: 'chat.input.mentionTags.entity.character', fallback: 'Character' },
+  scene: { key: 'chat.input.mentionTags.entity.scene', fallback: 'Scene' },
+  shot: { key: 'chat.input.mentionTags.entity.shot', fallback: 'Shot' },
+  canvas: { key: 'chat.input.mentionTags.entity.canvas', fallback: 'Canvas' },
+  'canvas-node': { key: 'chat.input.mentionTags.entity.canvasNode', fallback: 'Canvas node' },
 };
 
 const MENTION_KIND_ORDER: MentionItem['kind'][] = [
@@ -43,6 +83,28 @@ const MENTION_KIND_ORDER: MentionItem['kind'][] = [
   'character',
   'scene',
 ];
+
+interface MentionSection {
+  kind: MentionItem['kind'];
+  label: MentionLocalizedLabel;
+  items: MentionItem[];
+  startIndex: number;
+}
+
+interface MentionLocalizedLabel {
+  key?: string;
+  fallback: string;
+}
+
+interface MentionBadgeProjection {
+  label: MentionLocalizedLabel;
+  style: CSSProperties;
+}
+
+interface MentionGlyphProjection {
+  label: string;
+  style: CSSProperties;
+}
 
 interface MentionMenuProps {
   isOpen: boolean;
@@ -73,11 +135,7 @@ export function MentionMenu({
   if (!isOpen) return null;
 
   const filtered = getFilteredMentionItems(items, filter);
-
-  const sections = MENTION_KIND_ORDER.map((kind) => ({
-    kind,
-    items: filtered.filter((i) => i.kind === kind),
-  })).filter((s) => s.items.length > 0);
+  const sections = buildMentionSections(filtered);
 
   // Build a flat list for keyboard navigation index alignment
   const flat = sections.flatMap((s) => s.items);
@@ -93,66 +151,84 @@ export function MentionMenu({
   return (
     <div
       ref={menuRef}
-      className="absolute bottom-full left-0 mb-1 w-full bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg max-h-[280px] overflow-y-auto py-1 z-50"
+      className="absolute bottom-full left-0 right-0 mb-1 z-50 max-h-[min(286px,44vh)] overflow-hidden rounded-lg border border-[var(--agent-input-border)] bg-[var(--agent-menu-bg)] shadow-[0_8px_24px_var(--vscode-widget-shadow,rgba(0,0,0,0.28))]"
     >
       {/* Search hint */}
-      <div className="px-3 py-1 text-[10px] text-[var(--vscode-descriptionForeground)] border-b border-[var(--vscode-dropdown-border)]">
+      <div className="border-b border-[var(--agent-divider)] px-3 py-1.5 text-[10px] text-[var(--agent-fg-secondary)]">
         {filter ? t('chat.input.mentionSearching', { filter }) : t('chat.input.mentionHint')}
       </div>
 
       {flat.length === 0 ? (
-        <div className="px-3 py-2 text-[10px] text-[var(--vscode-descriptionForeground)]">
+        <div className="px-3 py-3 text-[11px] text-[var(--agent-fg-secondary)]">
           {t('chat.input.noMatchingFiles')}
         </div>
       ) : (
-        sections.map((section) => (
-          <div key={section.kind}>
-            {/* Section header */}
-            <div className="px-3 pt-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--vscode-descriptionForeground)] opacity-70">
-              {KIND_SECTION_LABELS[section.kind] ?? section.kind}
+        <div className="max-h-[calc(min(286px,44vh)-29px)] overflow-y-auto py-0.5">
+          {sections.map((section) => (
+            <div key={section.kind}>
+              {/* Section header */}
+              <div className="sticky top-0 z-10 flex items-center justify-between bg-[var(--agent-menu-bg)] px-3 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase text-[var(--agent-fg-secondary)]">
+                <span>{resolveMentionLabel(section.label, t)}</span>
+                <span className="font-normal opacity-70">{section.items.length}</span>
+              </div>
+
+              {section.items.map((item, itemIndex) => {
+                const flatIdx = section.startIndex + itemIndex;
+                const isSelected = flatIdx === selectedIndex;
+                const glyph = getMentionGlyph(item, isSelected);
+                const subtitle = getMentionSubtitle(item);
+                const badge = getMentionBadge(item, isSelected);
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelect(item)}
+                    className={`grid h-9 w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 px-3 text-left transition-colors ${
+                      isSelected
+                        ? 'bg-[var(--vscode-list-activeSelectionBackground,var(--agent-accent-soft))] text-[var(--vscode-list-activeSelectionForeground,var(--agent-fg))]'
+                        : 'text-[var(--agent-fg)] hover:bg-[var(--agent-hover)]'
+                    }`}
+                  >
+                    {item.thumbnailUri ? (
+                      <img
+                        src={item.thumbnailUri}
+                        alt=""
+                        className="h-6 w-6 rounded object-cover"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className="flex h-6 w-6 items-center justify-center rounded-md border text-[8.5px] font-semibold leading-none"
+                        style={glyph.style}
+                      >
+                        {glyph.label}
+                      </span>
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate text-[11px] font-medium leading-4">
+                        {item.label}
+                      </span>
+                      {subtitle && (
+                        <span className="block truncate text-[9.5px] leading-3 text-[var(--agent-fg-secondary)]">
+                          {subtitle}
+                        </span>
+                      )}
+                    </span>
+                    {badge && (
+                      <span
+                        className="max-w-[86px] truncate rounded-full border px-1.5 py-0.5 text-[8.5px] font-medium leading-none"
+                        style={badge.style}
+                      >
+                        {resolveMentionLabel(badge.label, t)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-
-            {section.items.map((item) => {
-              const flatIdx = flat.indexOf(item);
-              const isSelected = flatIdx === selectedIndex;
-              const icon = getMentionIcon(item);
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleSelect(item)}
-                  className={`w-full px-3 py-1 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors flex items-center gap-2 ${
-                    isSelected ? 'bg-[var(--vscode-list-hoverBackground)]' : ''
-                  }`}
-                >
-                  {item.thumbnailUri ? (
-                    <img
-                      src={item.thumbnailUri}
-                      alt=""
-                      className="flex-shrink-0 rounded-sm object-cover"
-                      style={{ width: 14, height: 14 }}
-                    />
-                  ) : (
-                    <span aria-hidden="true" className="flex-shrink-0 text-[12px]">
-                      {icon}
-                    </span>
-                  )}
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {item.description && item.description !== item.label && (
-                    <span className="flex-shrink-0 text-[9px] text-[var(--vscode-descriptionForeground)] truncate max-w-[100px]">
-                      {item.description}
-                    </span>
-                  )}
-                  {item.kind !== 'file' && (
-                    <span className="flex-shrink-0 text-[9px] px-1 rounded bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)]">
-                      chip
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </div>
   );
@@ -175,14 +251,22 @@ export function getFilteredMentionItems(items: MentionItem[], filter: string): M
         (item.searchText ?? '').toLowerCase().includes(lc) ||
         Object.values(item.navigationData ?? {}).some((value) => value.toLowerCase().includes(lc)),
     )
-    .sort((a, b) => MENTION_KIND_ORDER.indexOf(a.kind) - MENTION_KIND_ORDER.indexOf(b.kind))
+    .sort((a, b) => {
+      const kindOrder = MENTION_KIND_ORDER.indexOf(a.kind) - MENTION_KIND_ORDER.indexOf(b.kind);
+      if (kindOrder !== 0) return kindOrder;
+      const rankOrder = scoreMentionItem(a, lc) - scoreMentionItem(b, lc);
+      if (rankOrder !== 0) return rankOrder;
+      return a.label.localeCompare(b.label);
+    })
     .slice(0, 20);
 }
 
 export function getMentionIcon(item: MentionItem): string {
+  if (item.filePath && (!item.icon || isGenericMentionIcon(item.icon))) {
+    return getFilePathIcon(item.filePath);
+  }
   if (item.icon) return item.icon;
   if (item.mediaType) return getMediaTypeIcon(item.mediaType);
-  if (item.filePath) return getFilePathIcon(item.filePath);
   return KIND_ICONS[item.kind] ?? '◈';
 }
 
@@ -196,8 +280,7 @@ function getMediaTypeIcon(mediaType: NonNullable<MentionItem['mediaType']>): str
 }
 
 function getFilePathIcon(filePath: string): string {
-  const fileName = filePath.split(/[/\\]/).pop() ?? filePath;
-  const ext = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : undefined;
+  const ext = getFileExtension(filePath);
   if (!ext) return KIND_ICONS.file;
   if (['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs'].includes(ext)) return 'TS';
   if (['rs', 'toml'].includes(ext)) return 'RS';
@@ -205,9 +288,184 @@ function getFilePathIcon(filePath: string): string {
   if (['md', 'mdx'].includes(ext)) return 'MD';
   if (['css', 'scss', 'less'].includes(ext)) return '#';
   if (['html', 'xml', 'svg'].includes(ext)) return '<>';
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff'].includes(ext)) return '🖼';
-  if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].includes(ext)) return '🎬';
-  if (['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'].includes(ext)) return '♪';
-  if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'epub'].includes(ext)) return '📄';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff'].includes(ext)) {
+    return ext === 'jpeg' ? 'JPG' : ext.toUpperCase();
+  }
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].includes(ext)) return 'VID';
+  if (['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'].includes(ext)) return 'AUD';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'ZIP';
+  if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'epub'].includes(ext)) {
+    return ext.toUpperCase().slice(0, 4);
+  }
   return KIND_ICONS.file;
+}
+
+function buildMentionSections(items: MentionItem[]): MentionSection[] {
+  const sections: MentionSection[] = [];
+  let startIndex = 0;
+  for (const kind of MENTION_KIND_ORDER) {
+    const sectionItems = items.filter((item) => item.kind === kind);
+    if (sectionItems.length === 0) continue;
+    sections.push({
+      kind,
+      label: KIND_SECTION_LABELS[kind] ?? { fallback: kind },
+      items: sectionItems,
+      startIndex,
+    });
+    startIndex += sectionItems.length;
+  }
+  return sections;
+}
+
+function getMentionSubtitle(item: MentionItem): string | undefined {
+  if (item.filePath) return item.filePath;
+  if (item.description && item.description !== item.label) return item.description;
+  if (item.contextPayload?.summary && item.contextPayload.summary !== item.label) {
+    return item.contextPayload.summary;
+  }
+  return undefined;
+}
+
+function getMentionBadge(
+  item: MentionItem,
+  isSelected: boolean,
+): MentionBadgeProjection | undefined {
+  const label = getMentionBadgeLabel(item);
+  if (!label) return undefined;
+  return {
+    label,
+    style: getToneStyle(getMentionBadgeToneKey(item), isSelected, 'badge'),
+  };
+}
+
+function getMentionBadgeLabel(item: MentionItem): MentionLocalizedLabel | undefined {
+  if (item.mediaType) return MEDIA_TYPE_TAG_LABELS[item.mediaType];
+  if (item.source) return SOURCE_TAG_LABELS[item.source];
+  if (item.entityType) return getMentionEntityTypeLabel(item.entityType);
+  if (item.kind !== 'file') return KIND_TAG_LABELS[item.kind];
+  return undefined;
+}
+
+function getMentionEntityTypeLabel(entityType: string): MentionLocalizedLabel {
+  const normalized = entityType.toLowerCase();
+  return ENTITY_TYPE_TAG_LABELS[normalized] ?? { fallback: entityType };
+}
+
+function resolveMentionLabel(
+  label: MentionLocalizedLabel,
+  translate: (key: string) => string,
+): string {
+  if (!label.key) return label.fallback;
+  const translated = translate(label.key);
+  return translated === label.key ? label.fallback : translated;
+}
+
+function getMentionGlyph(item: MentionItem, isSelected: boolean): MentionGlyphProjection {
+  return {
+    label: getMentionIcon(item),
+    style: getToneStyle(getMentionToneKey(item), isSelected, 'glyph'),
+  };
+}
+
+function getMentionToneKey(item: MentionItem): string {
+  const extension = item.filePath ? getFileExtension(item.filePath) : undefined;
+  if (extension) {
+    if (
+      [
+        'ts',
+        'tsx',
+        'js',
+        'jsx',
+        'mjs',
+        'cjs',
+        'html',
+        'xml',
+        'svg',
+        'css',
+        'scss',
+        'less',
+      ].includes(extension)
+    ) {
+      return 'code';
+    }
+    if (['json', 'jsonc', 'toml'].includes(extension)) return 'data';
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff'].includes(extension))
+      return 'image';
+    if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'].includes(extension)) return 'video';
+    if (['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'].includes(extension)) return 'audio';
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) return 'archive';
+    if (
+      ['md', 'mdx', 'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'epub'].includes(extension)
+    ) {
+      return 'document';
+    }
+  }
+  return item.mediaType ?? item.source ?? item.kind;
+}
+
+function getMentionBadgeToneKey(item: MentionItem): string {
+  return item.mediaType ?? item.source ?? item.entityType ?? item.kind;
+}
+
+function getToneStyle(key: string, isSelected: boolean, surface: 'badge' | 'glyph'): CSSProperties {
+  if (isSelected) {
+    return {
+      color: 'var(--vscode-list-activeSelectionForeground,var(--agent-fg))',
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      borderColor: 'rgba(255,255,255,0.36)',
+    };
+  }
+
+  const color = getToneColor(key);
+  const strength = surface === 'glyph' ? 16 : 10;
+  const borderStrength = surface === 'glyph' ? 42 : 34;
+  return {
+    color,
+    backgroundColor: `color-mix(in srgb, ${color} ${strength}%, transparent)`,
+    borderColor: `color-mix(in srgb, ${color} ${borderStrength}%, transparent)`,
+  };
+}
+
+function getToneColor(key: string): string {
+  if (key === 'code') return 'var(--vscode-charts-purple,#b180d7)';
+  if (key === 'data') return 'var(--vscode-charts-blue,#3794ff)';
+  if (key === 'image') return 'var(--vscode-charts-green,#89d185)';
+  if (key === 'video' || key === 'sequence') return 'var(--vscode-charts-orange,#d18616)';
+  if (key === 'audio') return 'var(--vscode-charts-yellow,#cca700)';
+  if (key === 'archive') return 'var(--vscode-terminal-ansiMagenta,#bc3fbc)';
+  if (key === 'document' || key === 'text') return 'var(--vscode-textLink-foreground,#3794ff)';
+  if (key === 'workspace') return 'var(--vscode-descriptionForeground,#8a8a8a)';
+  if (key === 'asset-library' || key === 'asset') return 'var(--vscode-charts-green,#89d185)';
+  if (key === 'media-library' || key === 'media') return 'var(--vscode-charts-orange,#d18616)';
+  if (key === 'entity-graph' || key === 'entity') return 'var(--vscode-charts-purple,#b180d7)';
+  if (key === 'story' || key === 'scene' || key === 'character')
+    return 'var(--vscode-charts-yellow,#cca700)';
+  if (key === 'canvas' || key === 'canvas-node') return 'var(--vscode-charts-blue,#3794ff)';
+  return 'var(--agent-fg-secondary)';
+}
+
+function isGenericMentionIcon(icon: string): boolean {
+  return icon === KIND_ICONS.file || icon === '📄' || icon === 'file';
+}
+
+function scoreMentionItem(item: MentionItem, filter: string): number {
+  if (!filter) return 0;
+  const label = item.label.toLowerCase();
+  const path = item.filePath?.toLowerCase() ?? '';
+  if (label === filter || path === filter) return 0;
+  if (label.startsWith(filter)) return 1;
+  if (getFileName(path).startsWith(filter)) return 2;
+  if (path.includes(`/${filter}`)) return 3;
+  if (label.includes(filter)) return 4;
+  if (path.includes(filter)) return 5;
+  return 6;
+}
+
+function getFileName(path: string): string {
+  return path.split(/[/\\]/).pop() ?? path;
+}
+
+function getFileExtension(path: string): string | undefined {
+  const fileName = getFileName(path);
+  return fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : undefined;
 }
