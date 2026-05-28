@@ -20,10 +20,11 @@ import {
   readString,
   resolvePlacementTitle,
 } from './utils';
+import { t } from '../../../i18n';
 
 const REMOVE_ACTION: CardActionDescriptor = {
   id: 'remove',
-  label: 'Remove',
+  label: 'action.remove',
   icon: 'x',
   position: 'top-right',
   visibleWhen: 'hover',
@@ -88,7 +89,7 @@ export const mediaCardPolicy: NodeCardPolicy = {
     REMOVE_ACTION,
     {
       id: 'open-media-preview',
-      label: 'Open preview',
+      label: 'action.openPreview',
       icon: 'play',
       position: 'overlay-center',
       visibleWhen: 'hover',
@@ -135,7 +136,7 @@ export const shotCardPolicy: NodeCardPolicy = {
     REMOVE_ACTION,
     {
       id: 'generate',
-      label: 'Generate',
+      label: 'action.generate',
       icon: 'sparkles',
       position: 'bottom',
       visibleWhen: 'hover',
@@ -143,7 +144,7 @@ export const shotCardPolicy: NodeCardPolicy = {
     },
     {
       id: 'open-content-overlay',
-      label: 'Open',
+      label: 'action.open',
       icon: 'maximize',
       position: 'overlay-center',
       visibleWhen: 'hover',
@@ -161,7 +162,7 @@ export const annotationCardPolicy: NodeCardPolicy = {
   resolveTitle: (node, parent) =>
     resolvePlacementTitle(node, parent) ??
     createTextExcerpt(readRecord(node.data)['content'], 30) ??
-    'Annotation',
+    t('node.note'),
   resolveSubtitle: () => undefined,
   resolveActions: () => DEFAULT_ACTIONS,
 };
@@ -175,7 +176,7 @@ export const textCardPolicy: NodeCardPolicy = {
   resolveTitle: (node, parent) =>
     resolvePlacementTitle(node, parent) ??
     createTextExcerpt(readRecord(node.data)['content'], 30) ??
-    'Text',
+    t('node.newText'),
   resolveSubtitle: () => undefined,
   resolveActions: () => DEFAULT_ACTIONS,
 };
@@ -248,9 +249,9 @@ function resolveMediaTitle(node: CanvasNode): string {
   }
 
   const mediaType = readString(node.data, 'mediaType');
-  if (mediaType === 'video') return 'Empty video';
-  if (mediaType === 'audio') return 'Empty audio';
-  return 'Empty image';
+  if (mediaType === 'video') return t('media.emptyVideo');
+  if (mediaType === 'audio') return t('media.emptyAudio');
+  return t('media.emptyImage');
 }
 
 function resolveShotTitle(node: CanvasNode): string {
@@ -259,21 +260,23 @@ function resolveShotTitle(node: CanvasNode): string {
   }
 
   const shotNumber = readNumber(node.data, 'shotNumber');
-  return typeof shotNumber === 'number' ? `Shot ${shotNumber}` : 'Shot';
+  return typeof shotNumber === 'number'
+    ? t('scene.shotBadgeTitle', { number: shotNumber })
+    : t('node.shot');
 }
 
 function resolveContainerTitle(node: CanvasNode): string {
   switch (node.type) {
     case 'scene':
-      return readString(node.data, 'sceneTitle') ?? 'Scene';
+      return readString(node.data, 'sceneTitle') ?? t('node.sceneGroup');
     case 'gallery':
-      return readString(node.data, 'characterName') ?? 'Gallery';
+      return readString(node.data, 'characterName') ?? t('node.gallery');
     case 'table':
-      return readString(node.data, 'label') ?? 'Table';
+      return readString(node.data, 'label') ?? t('node.table');
     case 'group':
-      return readString(node.data, 'label') ?? 'Group';
+      return readString(node.data, 'label') ?? t('node.group');
     case 'artboard':
-      return readString(node.data, 'title') ?? 'Artboard';
+      return readString(node.data, 'title') ?? t('node.artboard');
     default:
       return capitalize(node.type);
   }

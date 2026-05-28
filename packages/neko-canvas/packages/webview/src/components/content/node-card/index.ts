@@ -20,6 +20,7 @@ export type {
   NodeCardActionContext,
   NodeCardActionDispatcher,
   NodeCardActionHandler,
+  NodeCardVariant,
   NodeCardPolicy,
   NodeCardPolicyRegistry,
   NonePreviewSource,

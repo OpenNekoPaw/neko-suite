@@ -96,6 +96,14 @@ export interface NodeCardPolicy {
 
 export type NodeCardPolicyRegistry = Partial<Record<CanvasNodeType, NodeCardPolicy>>;
 
+export type NodeCardVariant =
+  | 'thumbnail'
+  | 'compact'
+  | 'row'
+  | 'summary'
+  | 'summary-large'
+  | 'gallery';
+
 export interface ActionConditionContext {
   readonly node: CanvasNode;
   readonly parentNode?: CanvasNode;

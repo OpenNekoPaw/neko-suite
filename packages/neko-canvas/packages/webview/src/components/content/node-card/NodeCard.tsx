@@ -14,6 +14,7 @@ import type {
   CardPreviewAspectRatio,
   CardPreviewSource,
   NodeCardActionId,
+  NodeCardVariant,
   NodeCardPolicyRegistry,
 } from './types';
 import {
@@ -21,6 +22,7 @@ import {
   getStableSafeVariantUrl,
   hasPreviewDescriptorContent,
 } from './utils';
+import { t } from '../../../i18n';
 
 const BUILT_IN_POLICY_REGISTRY = createBuiltInNodeCardPolicyRegistry();
 
@@ -29,6 +31,7 @@ export interface NodeCardProps {
   parentNode?: CanvasNode;
   policyRegistry?: NodeCardPolicyRegistry;
   selection?: { nodeIds: readonly string[] };
+  variant?: NodeCardVariant;
   onSelect?: (id: string, multi: boolean) => void;
   onAction?: (nodeId: string, actionId: NodeCardActionId) => void;
 }
@@ -38,6 +41,7 @@ export function NodeCard({
   parentNode,
   policyRegistry = BUILT_IN_POLICY_REGISTRY,
   selection = { nodeIds: [] },
+  variant = 'thumbnail',
   onSelect,
   onAction,
 }: NodeCardProps): React.ReactNode {
@@ -65,15 +69,21 @@ export function NodeCard({
   );
 
   return (
-    <div className="group relative" data-node-card-id={node.id}>
+    <div
+      className="group relative min-w-0"
+      data-node-card-id={node.id}
+      data-node-card-variant={variant}
+    >
       <button
         type="button"
-        className="flex w-full flex-col overflow-hidden rounded border border-[var(--node-border)] bg-black/10 text-left hover:border-[var(--node-selected)]"
+        className={getCardButtonClassName(variant)}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => onSelect?.(node.id, event.shiftKey || event.metaKey)}
       >
-        <CardPreviewSlot source={previewSource} title={title} />
-        <CardMetadataSlot title={title} subtitle={subtitle} badges={badges} />
+        {variant !== 'summary' && (
+          <CardPreviewSlot source={previewSource} title={title} variant={variant} />
+        )}
+        <CardMetadataSlot title={title} subtitle={subtitle} badges={badges} variant={variant} />
       </button>
       <CardActionSlot
         actions={actions}
@@ -90,9 +100,11 @@ export function NodeCard({
 export function CardPreviewSlot({
   source,
   title,
+  variant = 'thumbnail',
 }: {
   source: CardPreviewSource;
   title: string;
+  variant?: NodeCardVariant;
 }): React.ReactNode {
   const previewDescriptor =
     source.renderForm === 'asset-thumbnail' || source.renderForm === 'media-poster'
@@ -112,36 +124,41 @@ export function CardPreviewSlot({
   switch (source.renderForm) {
     case 'asset-thumbnail':
       return displayUrl ? (
-        <PreviewImage url={displayUrl} title={title} aspectRatio={source.aspectRatio} />
+        <PreviewImage
+          url={displayUrl}
+          title={title}
+          aspectRatio={source.aspectRatio}
+          variant={variant}
+        />
       ) : (
-        <IconPlaceholder icon="IMG" aspectRatio={source.aspectRatio} />
+        <IconPlaceholder icon="IMG" aspectRatio={source.aspectRatio} variant={variant} />
       );
     case 'media-poster':
       return (
         <div
-          className="relative w-full overflow-hidden bg-black/30"
-          style={aspectRatioStyle(source.aspectRatio)}
+          className={getPreviewFrameClassName(variant)}
+          style={previewFrameStyle(source.aspectRatio, variant)}
         >
           {displayUrl ? (
             <img src={displayUrl} alt={title} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-[var(--node-fg-secondary)]">
-              VID
+              {t('preview.videoPlaceholder')}
             </div>
           )}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-[11px] text-white">
-              Play
+              {t('action.playShort')}
             </div>
           </div>
         </div>
       );
     case 'waveform':
-      return <AudioWaveformPreview />;
+      return <AudioWaveformPreview variant={variant} />;
     case 'text':
-      return <TextExcerptPreview text={source.textExcerpt} />;
+      return <TextExcerptPreview text={source.textExcerpt} variant={variant} />;
     case 'icon':
-      return <IconPlaceholder icon={source.icon} aspectRatio="3/2" />;
+      return <IconPlaceholder icon={source.icon} aspectRatio="3/2" variant={variant} />;
     case 'none':
       return null;
   }
@@ -151,16 +168,27 @@ function CardMetadataSlot({
   title,
   subtitle,
   badges,
+  variant,
 }: {
   title: string;
   subtitle?: string;
   badges: readonly CardBadge[];
+  variant: NodeCardVariant;
 }): React.ReactNode {
+  const showSubtitle = variant !== 'summary' && subtitle;
   return (
-    <div className="flex min-w-0 items-center justify-between gap-1 px-1.5 py-1">
+    <div className={getMetadataClassName(variant)}>
       <div className="min-w-0">
-        <div className="truncate text-[10px] text-[var(--node-fg)]">{title}</div>
-        {subtitle ? (
+        <div
+          className={
+            variant === 'row'
+              ? 'truncate text-[11px] text-[var(--node-fg)]'
+              : 'truncate text-[10px] text-[var(--node-fg)]'
+          }
+        >
+          {title}
+        </div>
+        {showSubtitle ? (
           <div className="truncate text-[9px] text-[var(--node-fg-secondary)]">{subtitle}</div>
         ) : null}
       </div>
@@ -239,7 +267,7 @@ function ActionButton({
     <button
       type="button"
       className={`${className ?? ''} ${getActionClassName(action)}`}
-      title={action.label}
+      title={resolveActionTitle(action)}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();
@@ -255,27 +283,57 @@ function PreviewImage({
   url,
   title,
   aspectRatio,
+  variant,
 }: {
   url: string;
   title: string;
   aspectRatio: CardPreviewAspectRatio;
+  variant: NodeCardVariant;
 }): React.ReactNode {
   return (
     <div
-      className="flex w-full items-center justify-center overflow-hidden bg-black/20"
-      style={aspectRatioStyle(aspectRatio)}
+      className={getPreviewFrameClassName(variant)}
+      style={previewFrameStyle(aspectRatio, variant)}
     >
       <img src={url} alt={title} className="h-full w-full object-cover" />
     </div>
   );
 }
 
-function AudioWaveformPreview(): React.ReactNode {
+function AudioWaveformPreview({ variant }: { variant: NodeCardVariant }): React.ReactNode {
+  if (variant === 'summary-large' || variant === 'gallery') {
+    return (
+      <div className="flex h-full min-h-[72px] w-full flex-col justify-center gap-2 bg-gray-100 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white text-[10px] text-gray-700 shadow-sm">
+            {t('action.playShort')}
+          </div>
+          <div className="h-1 flex-1 rounded bg-gray-200" />
+        </div>
+        <div className="flex h-8 items-end gap-px">
+          {Array.from({ length: 18 }, (_, index) => (
+            <div
+              key={index}
+              className="flex-1 rounded-sm bg-gray-300"
+              style={{ height: `${20 + Math.sin(index * 0.8) * 40 + Math.cos(index * 1.3) * 30}%` }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex w-full flex-col gap-1.5 bg-gradient-to-b from-black/30 to-black/10 px-2 py-2">
+    <div
+      className={
+        variant === 'row'
+          ? 'flex h-10 w-14 flex-shrink-0 flex-col justify-center gap-1 bg-black/20 px-1.5 py-1'
+          : 'flex w-full flex-col gap-1.5 bg-gradient-to-b from-black/30 to-black/10 px-2 py-2'
+      }
+    >
       <div className="flex items-center gap-1.5">
         <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-[9px]">
-          Play
+          {t('action.playShort')}
         </div>
         <div className="h-0.5 flex-1 rounded bg-white/20" />
       </div>
@@ -292,13 +350,39 @@ function AudioWaveformPreview(): React.ReactNode {
   );
 }
 
-function TextExcerptPreview({ text }: { text: string }): React.ReactNode {
+function TextExcerptPreview({
+  text,
+  variant,
+}: {
+  text: string;
+  variant: NodeCardVariant;
+}): React.ReactNode {
+  if (variant === 'summary-large' || variant === 'gallery') {
+    return (
+      <div className="flex h-full min-h-[72px] w-full items-start overflow-hidden rounded bg-gray-100 px-2 py-2 text-[11px] leading-snug text-gray-600">
+        <span className="line-clamp-4 break-words">{text || t('preset.inlineField.text')}</span>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="flex w-full items-start overflow-hidden bg-black/20 px-2 py-1.5 text-[10px] leading-snug text-[var(--node-fg-secondary)]"
-      style={aspectRatioStyle('3/2')}
+      className={
+        variant === 'row'
+          ? 'flex h-10 w-14 flex-shrink-0 items-start overflow-hidden bg-black/20 px-1.5 py-1 text-[9px] leading-tight text-[var(--node-fg-secondary)]'
+          : 'flex w-full items-start overflow-hidden bg-black/20 px-2 py-1.5 text-[10px] leading-snug text-[var(--node-fg-secondary)]'
+      }
+      style={variant === 'row' ? undefined : previewFrameStyle('3/2', variant)}
     >
-      <span className="line-clamp-3 break-words">{text || 'Text'}</span>
+      <span
+        className={
+          variant === 'compact' || variant === 'row'
+            ? 'line-clamp-2 break-words'
+            : 'line-clamp-3 break-words'
+        }
+      >
+        {text || t('preset.inlineField.text')}
+      </span>
     </div>
   );
 }
@@ -306,14 +390,16 @@ function TextExcerptPreview({ text }: { text: string }): React.ReactNode {
 function IconPlaceholder({
   icon,
   aspectRatio,
+  variant,
 }: {
   icon: string;
   aspectRatio: CardPreviewAspectRatio;
+  variant: NodeCardVariant;
 }): React.ReactNode {
   return (
     <div
-      className="flex w-full items-center justify-center bg-black/20 text-base text-[var(--node-fg-secondary)]"
-      style={aspectRatioStyle(aspectRatio)}
+      className={getPreviewFrameClassName(variant)}
+      style={previewFrameStyle(aspectRatio, variant)}
     >
       {icon}
     </div>
@@ -352,6 +438,51 @@ function aspectRatioStyle(aspectRatio: CardPreviewAspectRatio): React.CSSPropert
   return { aspectRatio: aspectRatio.replace('/', ' / ') };
 }
 
+function previewFrameStyle(
+  aspectRatio: CardPreviewAspectRatio,
+  variant: NodeCardVariant,
+): React.CSSProperties | undefined {
+  if (variant === 'row' || variant === 'summary-large' || variant === 'gallery') {
+    return undefined;
+  }
+
+  return aspectRatioStyle(aspectRatio);
+}
+
+function getCardButtonClassName(variant: NodeCardVariant): string {
+  const base =
+    variant === 'thumbnail'
+      ? 'w-full overflow-hidden rounded border border-[var(--node-border)] bg-black/10 text-left hover:border-[var(--node-selected)]'
+      : 'w-full overflow-hidden bg-transparent text-left';
+  if (variant === 'row' || variant === 'summary') {
+    return `${base} flex min-h-[42px] min-w-0 flex-row items-stretch`;
+  }
+
+  return `${base} flex min-w-0 flex-col`;
+}
+
+function getPreviewFrameClassName(variant: NodeCardVariant): string {
+  if (variant === 'row') {
+    return 'relative flex h-10 w-14 flex-shrink-0 items-center justify-center overflow-hidden bg-black/20 text-xs text-[var(--node-fg-secondary)]';
+  }
+  if (variant === 'summary-large') {
+    return 'relative flex h-full min-h-[72px] w-full items-center justify-center overflow-hidden rounded bg-gray-100 text-sm text-gray-500';
+  }
+  if (variant === 'gallery') {
+    return 'relative flex h-full min-h-[104px] w-full items-center justify-center overflow-hidden bg-gray-100 text-base text-gray-500';
+  }
+
+  return 'relative flex w-full items-center justify-center overflow-hidden bg-black/20 text-base text-[var(--node-fg-secondary)]';
+}
+
+function getMetadataClassName(variant: NodeCardVariant): string {
+  if (variant === 'row' || variant === 'summary') {
+    return 'flex min-w-0 flex-1 items-center justify-between gap-1 px-2 py-1';
+  }
+
+  return 'flex min-w-0 items-center justify-between gap-1 px-1.5 py-1';
+}
+
 function getBadgeClassName(tone: CardBadge['tone']): string {
   switch (tone) {
     case 'success':
@@ -376,17 +507,25 @@ function getActionClassName(action: CardActionDescriptor): string {
 function resolveActionLabel(action: CardActionDescriptor): string {
   switch (action.id) {
     case 'remove':
-      return 'x';
+      return t('action.removeShort');
     case 'open-media-preview':
     case 'open-content-overlay':
-      return 'Open';
+      return t('action.openShort');
     case 'generate':
-      return 'Gen';
+      return t('action.generateShort');
     case 'duplicate':
-      return 'Dup';
+      return t('action.duplicateShort');
     case 'edit':
-      return 'Edit';
+      return t('action.editShort');
     case 'open-in-editor':
-      return 'File';
+      return t('action.fileShort');
   }
+}
+
+function resolveActionTitle(action: CardActionDescriptor): string {
+  return isI18nKey(action.label) ? t(action.label) : action.label;
+}
+
+function isI18nKey(label: string): boolean {
+  return label.startsWith('action.') || label.startsWith('preset.');
 }

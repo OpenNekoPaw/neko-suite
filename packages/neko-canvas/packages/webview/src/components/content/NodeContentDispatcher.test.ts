@@ -2,8 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { AnnotationCanvasNode, CanvasNode, CanvasViewport } from '@neko/shared';
-import { NodeContentDispatcher } from './NodeContentDispatcher';
-import { createNodeCollapseUpdate } from './NodeShell';
+import { createNodeCollapseUpdate, NodeContentDispatcher } from './NodeContentDispatcher';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import { buildCanvasNode } from '../../utils/nodeFactory';
 
@@ -109,9 +108,10 @@ describe('NodeContentDispatcher', () => {
       }),
     );
 
-    expect(markup).toMatchInlineSnapshot(
-      `"<div data-node-id="annotation-1" class="absolute select-none cursor-grab" style="left:0;top:0;width:220px;height:120px;z-index:1;transform-origin:center center"><div class="w-full h-full rounded-lg border-2 shadow-lg overflow-hidden bg-[var(--node-bg)] transition-colors duration-150 border-[var(--node-border)]"><div class="flex min-h-0 flex-col"><div class="flex items-center gap-2 px-3 py-2" style="background-color:var(--node-header-bg);border-bottom:1px solid var(--node-divider)"><button type="button" class="flex-shrink-0 text-[10px]" style="color:var(--node-fg-secondary)">▼</button><span class="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium" style="background-color:#eab30820;color:#eab308">NOTE</span><span class="min-w-0 flex-1 truncate text-sm font-medium" style="color:var(--node-fg)">Note</span><button type="button" class="flex-shrink-0 rounded px-1 py-0.5 text-xs" style="color:var(--node-fg-secondary)">⛶</button></div><div class="flex min-h-0 min-w-0 flex-col gap-2 p-2"><div data-content-block-id="annotation-content" class="min-w-0"><label class="flex min-h-0 flex-1 flex-col gap-1 text-xs text-[var(--node-fg-secondary)]"><span>Note</span><textarea class="min-h-[64px] resize-none rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]">Legacy note</textarea></label></div></div></div></div><div class="absolute z-30 derive-btn" style="right:-16px;top:50%;transform:translateY(-50%)"><button class="flex items-center justify-center rounded-full" style="width:28px;height:28px;background-color:var(--node-selected, #3b82f6);color:#fff;border:2px solid var(--node-bg, #1e1e1e);font-size:16px;font-weight:bold;line-height:1;cursor:pointer" title="添加后继节点">+</button></div></div>"`,
-    );
+    expect(markup).toContain('data-node-density="compact"');
+    expect(markup).toContain('data-node-overflow="summary"');
+    expect(markup).toContain('flex-1 resize-none');
+    expect(markup).toContain('<textarea');
   });
 
   it('renders migrated shot generation preview from selected candidate data', () => {
@@ -215,6 +215,32 @@ describe('NodeContentDispatcher', () => {
     expect(createNodeCollapseUpdate(leafNode, true)).toBeUndefined();
   });
 
+  it('renders collapsed composable containers at header height only', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Collapsed Scene', sceneNumber: 1 },
+      }),
+      id: 'scene-collapsed',
+      container: { policy: 'scene', childIds: [], collapsed: true },
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('height:42px');
+    expect(markup).toContain('Collapsed Scene');
+    expect(markup).not.toContain('data-content-block-id="scene-title"');
+    expect(markup).not.toContain('data-child-slot-id="scene-children"');
+  });
+
   it('renders project nodes through the default composable preset when unselected', () => {
     const node = {
       id: 'project-1',
@@ -242,7 +268,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('UNSUPPORTED');
   });
 
-  it('renders migrated scene child slot summaries and action buttons', () => {
+  it('renders scene shot children as a single horizontal progress rail', () => {
     const scene = {
       ...buildCanvasNode({
         type: 'scene',
@@ -282,6 +308,113 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('Shot 1');
     expect(markup).toContain('Assign selected');
     expect(markup).toContain('Auto layout');
+    expect(markup).toContain('data-child-slot-id="scene-children"');
+    expect(markup).toContain('data-child-slot-variant="summary-large"');
+    expect(markup).toContain('data-child-slot-kind="scene-shot-rail"');
+    expect(markup).toContain('data-child-slot-card-height="210"');
+    expect(markup).toContain('data-child-slot-card-max-height="210"');
+    expect(markup).toContain('data-scene-shot-rail="true"');
+    expect(markup).toContain('data-scene-shot-card-id="shot-1"');
+    expect(markup).toContain('data-scene-shot-card-layout="rail"');
+    expect(markup).toContain('data-scene-shot-card-height="210px"');
+    expect(markup).toContain('Shot progress');
+    expect(markup).toContain('Train door');
+    expect(markup).toContain('Detail');
+    expect(markup).not.toContain('data-child-card-layout="detail"');
+    expect(markup).not.toContain('data-child-detail-id="shot-1"');
+    expect(markup).not.toContain('Visual');
+    expect(markup).not.toContain('data-node-card-id="shot-1"');
+    expect(markup).not.toContain('Legacy path');
+  });
+
+  it('renders parent-linked scene children even when container childIds are stale', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Parent Linked', sceneNumber: 3 },
+      }),
+      id: 'scene-parent-linked',
+      container: { policy: 'scene', childIds: [] },
+    } as CanvasNode;
+    const shot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: { shotNumber: 7, visualDescription: 'Visible through parentId' },
+      }),
+      id: 'shot-parent-linked',
+      parentId: 'scene-parent-linked',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(scene, [scene, shot]),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('data-child-slot-id="scene-children"');
+    expect(markup).toContain('data-child-slot-kind="scene-shot-rail"');
+    expect(markup).toContain('data-scene-shot-card-id="shot-parent-linked"');
+    expect(markup).toContain('Shot 7');
+    expect(markup).toContain('Visible through parentId');
+    expect(markup).not.toContain('No shots');
+    expect(markup).not.toContain('Legacy path');
+  });
+
+  it('keeps scene shot rail horizontal when a scene container is narrow', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Narrow', sceneNumber: 2 },
+      }),
+      id: 'scene-narrow',
+      size: { width: 340, height: 240 },
+      container: { policy: 'scene', childIds: ['shot-1', 'shot-2'] },
+    } as CanvasNode;
+    const children = ['shot-1', 'shot-2'].map(
+      (id, index) =>
+        ({
+          ...buildCanvasNode({
+            type: 'shot',
+            position: { x: 20 + index * 20, y: 20 },
+            zIndex: index + 1,
+            preset: 'shot.basic',
+            data: { shotNumber: index + 1, visualDescription: `Beat ${index + 1}` },
+          }),
+          id,
+          parentId: 'scene-narrow',
+        }) as CanvasNode,
+    );
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(scene, [scene, ...children]),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('data-node-density="compact"');
+    expect(markup).toContain('data-child-slot-variant="summary-large"');
+    expect(markup).toContain('data-child-slot-kind="scene-shot-rail"');
+    expect(markup).toContain('data-child-slot-card-height="150"');
+    expect(markup).toContain('data-child-slot-card-max-height="210"');
+    expect(markup).toContain('data-scene-shot-rail="true"');
+    expect(markup).toContain('overflow-x-auto');
+    expect(markup).toContain('flex-nowrap');
+    expect(markup).toContain('data-scene-shot-card-id="shot-1"');
+    expect(markup).toContain('data-scene-shot-card-id="shot-2"');
+    expect(markup).toContain('Beat 1');
+    expect(markup).toContain('Beat 2');
+    expect(markup).not.toContain('data-child-card-layout="detail"');
     expect(markup).not.toContain('Legacy path');
   });
 
@@ -318,8 +451,161 @@ describe('NodeContentDispatcher', () => {
 
     expect(markup).toContain('Mika');
     expect(markup).toContain('No views (drag media here)');
-    expect(markup).toContain('grid-template-columns:repeat(3, 1fr)');
+    expect(markup).toContain('data-child-slot-id="gallery-children"');
+    expect(markup).toContain('data-child-slot-variant="gallery"');
+    expect(markup).toContain('data-child-slot-kind="gallery-grid"');
+    expect(markup).toContain('data-child-slot-card-height="170"');
     expect(markup).not.toContain('Legacy path');
+  });
+
+  it('renders gallery children as image-first grid cards instead of a horizontal rail', () => {
+    const gallery = {
+      ...buildCanvasNode({
+        type: 'gallery',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'gallery.basic',
+        data: {
+          characterName: 'Mika',
+          preset: 'character-3view',
+          rows: 1,
+          cols: 3,
+        },
+      }),
+      id: 'gallery-with-children',
+      size: { width: 560, height: 420 },
+      container: {
+        policy: 'gallery',
+        childIds: ['media-front', 'media-side'],
+        layout: { mode: 'gallery' },
+        acceptedChildren: { nodeTypes: ['media'] },
+        deleteBehavior: 'delete-subtree',
+        childPlacements: {
+          'media-front': {
+            childId: 'media-front',
+            metadata: {
+              label: 'Front',
+              prompt: 'Front view, neutral pose, clean reference lighting.',
+              generationStatus: 'done',
+            },
+          },
+          'media-side': {
+            childId: 'media-side',
+            metadata: {
+              label: 'Side',
+              prompt: 'Side view with matching outfit details.',
+              generationStatus: 'idle',
+            },
+          },
+        },
+      },
+    } as CanvasNode;
+    const mediaFront = {
+      ...buildCanvasNode({
+        type: 'media',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'media.basic',
+        data: {
+          assetPath: 'data:image/png;base64,front',
+          mediaType: 'image',
+        },
+      }),
+      id: 'media-front',
+      parentId: 'gallery-with-children',
+    } as CanvasNode;
+    const mediaSide = {
+      ...buildCanvasNode({
+        type: 'media',
+        position: { x: 40, y: 20 },
+        zIndex: 2,
+        preset: 'media.basic',
+        data: {
+          assetPath: 'data:image/png;base64,side',
+          mediaType: 'image',
+        },
+      }),
+      id: 'media-side',
+      parentId: 'gallery-with-children',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(gallery, [gallery, mediaFront, mediaSide]),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('data-child-slot-id="gallery-children"');
+    expect(markup).toContain('data-child-slot-kind="gallery-grid"');
+    expect(markup).toContain('data-child-slot-variant="gallery"');
+    expect(markup).toContain('data-child-slot-card-height="240"');
+    expect(markup).toContain('data-gallery-child-card-id="media-front"');
+    expect(markup).toContain('data-gallery-child-card-layout="visual-grid"');
+    expect(markup).toContain('Front view, neutral pose, clean reference lighting.');
+    expect(markup).toContain('done');
+    expect(markup).toContain('data:image/png;base64,front');
+    expect(markup).toContain('overflow-x-hidden');
+    expect(markup).not.toContain('data-scene-shot-rail="true"');
+    expect(markup).not.toContain('flex-nowrap');
+    expect(markup).not.toContain('Legacy path');
+  });
+
+  it('renders group children as informative summary cards with remove actions', () => {
+    const group = {
+      ...buildCanvasNode({
+        type: 'group',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        data: { label: 'Review Group', childIds: ['note-1', 'media-1'] },
+      }),
+      id: 'group-1',
+    } as CanvasNode;
+    const note = {
+      ...buildCanvasNode({
+        type: 'annotation',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        data: { content: 'Check the second beat before exporting.' },
+      }),
+      id: 'note-1',
+      parentId: 'group-1',
+    } as CanvasNode;
+    const media = {
+      ...buildCanvasNode({
+        type: 'media',
+        position: { x: 40, y: 40 },
+        zIndex: 2,
+        preset: 'media.basic',
+        data: { assetPath: 'assets/ref.png', mediaType: 'image' },
+      }),
+      id: 'media-1',
+      parentId: 'group-1',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(group, [group, note, media]),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('Review Group');
+    expect(markup).toContain('data-child-slot-id="group-children"');
+    expect(markup).toContain('data-child-slot-kind="group-summary"');
+    expect(markup).toContain('data-child-slot-variant="row"');
+    expect(markup).toContain('data-child-slot-card-height="148"');
+    expect(markup).toContain('data-group-child-card-id="note-1"');
+    expect(markup).toContain('data-group-child-card-id="media-1"');
+    expect(markup).toContain('data-group-child-card-height="148px"');
+    expect(markup).toContain('Check the second beat before exporting.');
+    expect(markup).toContain('ref.png');
+    expect(markup).toContain('overflow-y-auto');
+    expect(markup).toContain('overflow-x-hidden');
+    expect(markup).toContain('Remove from group');
+    expect(markup).toContain('Detail');
+    expect(markup).not.toContain('Legacy path');
+    expect(markup).not.toContain('group-node');
   });
 
   it('covers migrated core preset render parity surfaces', () => {
@@ -390,6 +676,15 @@ describe('NodeContentDispatcher', () => {
       },
       {
         ...buildCanvasNode({
+          type: 'group',
+          position: { x: 640, y: 0 },
+          zIndex: 0,
+          data: { label: 'Review', childIds: [] },
+        }),
+        id: 'group-parity',
+      },
+      {
+        ...buildCanvasNode({
           type: 'project',
           position: { x: 640, y: 260 },
           zIndex: 0,
@@ -428,6 +723,9 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('No views (drag media here)');
     expect(markup).toContain('data-node-id="media-parity"');
     expect(markup).toContain('data-content-block-id="media-asset-preview"');
+    expect(markup).toContain('data-node-id="group-parity"');
+    expect(markup).toContain('data-child-slot-id="group-children"');
+    expect(markup).toContain('No children');
     expect(markup).toContain('data-node-id="project-parity"');
     expect(markup).toContain('data-content-block-id="project-asset-preview"');
     expect(markup).toContain('Puppet');

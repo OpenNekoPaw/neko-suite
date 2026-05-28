@@ -44,6 +44,55 @@ describe('NodeCard rendering', () => {
     expect(markup).toContain('data-node-card-id="storyboard-1"');
     expect(markup).toContain('Storyboard');
   });
+
+  it('supports compact row variants for constrained container slots', () => {
+    const node = createNode('text-1', 'text', { content: 'Pinned note for a narrow scene' });
+
+    const markup = renderToStaticMarkup(React.createElement(NodeCard, { node, variant: 'row' }));
+
+    expect(markup).toContain('data-node-card-variant="row"');
+    expect(markup).toContain('min-h-[42px]');
+    expect(markup).toContain('h-10 w-14');
+    expect(markup).toContain('Pinned note');
+  });
+
+  it('supports large summary and gallery preview variants for container child cards', () => {
+    const node = createNode('media-1', 'media', {
+      assetPath: 'data:image/png;base64,preview',
+      mediaType: 'image',
+    });
+
+    const summaryMarkup = renderToStaticMarkup(
+      React.createElement(CardPreviewSlot, {
+        source: {
+          renderForm: 'asset-thumbnail',
+          aspectRatio: '3/2',
+          source: {
+            id: 'summary-preview',
+            role: 'image',
+            variants: [
+              {
+                id: 'summary-preview',
+                role: 'image',
+                sourcePath: 'data:image/png;base64,preview',
+              },
+            ],
+          },
+        } satisfies CardPreviewSource,
+        title: 'Summary',
+        variant: 'summary-large',
+      }),
+    );
+    const galleryMarkup = renderToStaticMarkup(
+      React.createElement(NodeCard, { node, variant: 'gallery' }),
+    );
+
+    expect(summaryMarkup).toContain('min-h-[72px]');
+    expect(summaryMarkup).toContain('bg-gray-100');
+    expect(galleryMarkup).toContain('data-node-card-variant="gallery"');
+    expect(galleryMarkup).toContain('min-h-[104px]');
+    expect(galleryMarkup).toContain('data:image/png;base64,preview');
+  });
 });
 
 describe('CardPreviewSlot rendering', () => {
