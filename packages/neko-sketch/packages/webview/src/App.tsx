@@ -7,6 +7,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { useResizable } from '@neko/ui/hooks';
 import { ResizeHandle } from '@neko/ui/primitives';
+import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import type { ExtensionToWebviewMessage } from './types';
 import { useSketchStore } from './stores';
 import {
@@ -108,6 +109,8 @@ export function App() {
   const brushSize = store((s) => s.brushSettings).size;
   const sidebarWidth = store((s) => s.sidebarWidth);
   const setSidebarWidth = store((s) => s.setSidebarWidth);
+  const showSidebar = store((s) => s.showSidebar);
+  const showFrameTimeline = store((s) => s.showFrameTimeline);
   const [aiRuns, setAIRuns] = useState<readonly SketchAIRun[]>(() => aiSessionStore.list());
   const [featureFlags, setFeatureFlags] =
     useState<SketchRuntimeFeatureFlags>(DEFAULT_FEATURE_FLAGS);
@@ -564,79 +567,88 @@ export function App() {
           onDiscard={handleDiscardAIResult}
           onDismiss={handleDismissAIRun}
         />
-        <div ref={rootRef} className="flex flex-1 overflow-hidden">
-          <Toolbar />
-          <div className="sketch-canvas-container">
-            <SketchCanvas />
-          </div>
-          {store((s) => s.showSidebar) && (
-            <>
-              {/* Horizontal Resize Handle */}
-              <ResizeHandle
-                handleProps={sidebarResizeHandleProps}
-                className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
-                  isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
-                }`}
-              />
-              <div
-                id="sketch-right-sidebar"
-                className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
-                style={{ width: sidebarWidth, background: 'var(--neko-surface)' }}
-              >
-                <div className="flex flex-col h-full overflow-y-auto">
-                  <CollapsiblePanel
-                    titleKey={activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'}
-                  >
-                    <BrushPanel />
-                  </CollapsiblePanel>
-                  {activeTool === 'shape' && (
-                    <CollapsiblePanel titleKey="sketch.panel.vector">
-                      <VectorToolbar />
+        <CreativeWorkbenchShell
+          className="sketch-workbench-shell"
+          bodyClassName="sketch-workbench-body"
+          mainClassName="sketch-main-panel"
+          mainKind="drawing-canvas"
+          leftRail={<Toolbar />}
+          main={
+            <div ref={rootRef} className="sketch-canvas-container">
+              <SketchCanvas />
+            </div>
+          }
+          rightPanel={
+            showSidebar ? (
+              <>
+                <ResizeHandle
+                  handleProps={sidebarResizeHandleProps}
+                  className={`w-1 flex-shrink-0 cursor-ew-resize border-l border-vscode-panel-border transition-colors ${
+                    isHResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
+                  }`}
+                />
+                <div
+                  id="sketch-right-sidebar"
+                  className="flex-shrink-0 overflow-hidden border-l border-[var(--neko-border)]"
+                  style={{ width: sidebarWidth, background: 'var(--neko-surface)' }}
+                >
+                  <div className="flex flex-col h-full overflow-y-auto">
+                    <CollapsiblePanel
+                      titleKey={
+                        activeTool === 'eraser' ? 'sketch.tool.eraser' : 'sketch.panel.brush'
+                      }
+                    >
+                      <BrushPanel />
                     </CollapsiblePanel>
-                  )}
-                  {activeTool === 'fill' && (
-                    <CollapsiblePanel titleKey="sketch.panel.fill">
-                      <FillPanel />
+                    {activeTool === 'shape' && (
+                      <CollapsiblePanel titleKey="sketch.panel.vector">
+                        <VectorToolbar />
+                      </CollapsiblePanel>
+                    )}
+                    {activeTool === 'fill' && (
+                      <CollapsiblePanel titleKey="sketch.panel.fill">
+                        <FillPanel />
+                      </CollapsiblePanel>
+                    )}
+                    <CollapsiblePanel titleKey="sketch.panel.palette">
+                      <PalettePanel />
                     </CollapsiblePanel>
-                  )}
-                  <CollapsiblePanel titleKey="sketch.panel.palette">
-                    <PalettePanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
-                    <PerspectiveGridPanel />
-                  </CollapsiblePanel>
-                  {hasAvailableSketchAIOperations(featureFlags) && (
-                    <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
-                      <AIPanel
-                        operationAvailability={featureFlags.aiOps.operations}
-                        onOpenAgent={handleOpenAgentForAI}
-                      />
+                    <CollapsiblePanel titleKey="sketch.panel.perspective" defaultExpanded={false}>
+                      <PerspectiveGridPanel />
                     </CollapsiblePanel>
-                  )}
-                  <CollapsiblePanel titleKey="sketch.panel.layers">
-                    <LayerPanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
-                    <FilterPanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.frames" defaultExpanded={false}>
-                    <FrameControls />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
-                    <SpriteSheetPlayer />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
-                    <ParticlePanel />
-                  </CollapsiblePanel>
-                  <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
-                    <ScenePanel />
-                  </CollapsiblePanel>
+                    {hasAvailableSketchAIOperations(featureFlags) && (
+                      <CollapsiblePanel titleKey="sketch.panel.ai" defaultExpanded={false}>
+                        <AIPanel
+                          operationAvailability={featureFlags.aiOps.operations}
+                          onOpenAgent={handleOpenAgentForAI}
+                        />
+                      </CollapsiblePanel>
+                    )}
+                    <CollapsiblePanel titleKey="sketch.panel.layers">
+                      <LayerPanel />
+                    </CollapsiblePanel>
+                    <CollapsiblePanel titleKey="sketch.panel.filters" defaultExpanded={false}>
+                      <FilterPanel />
+                    </CollapsiblePanel>
+                    <CollapsiblePanel titleKey="sketch.panel.frames" defaultExpanded={false}>
+                      <FrameControls />
+                    </CollapsiblePanel>
+                    <CollapsiblePanel titleKey="sketch.panel.spritesheet" defaultExpanded={false}>
+                      <SpriteSheetPlayer />
+                    </CollapsiblePanel>
+                    <CollapsiblePanel titleKey="sketch.panel.particles" defaultExpanded={false}>
+                      <ParticlePanel />
+                    </CollapsiblePanel>
+                    <CollapsiblePanel titleKey="sketch.panel.scene" defaultExpanded={false}>
+                      <ScenePanel />
+                    </CollapsiblePanel>
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
-        </div>
-        <FrameTimeline />
+              </>
+            ) : undefined
+          }
+          bottomPanel={showFrameTimeline ? <FrameTimeline /> : undefined}
+        />
       </div>
     </I18nProvider>
   );

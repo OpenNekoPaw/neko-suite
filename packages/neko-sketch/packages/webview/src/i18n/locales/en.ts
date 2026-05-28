@@ -250,6 +250,8 @@ export const en: MessageBundle = {
   'sketch.timeline.onionSkin': 'Toggle onion skin (O)',
   'sketch.timeline.onionSkinLabel': 'Toggle onion skin',
   'sketch.timeline.frames': 'Animation frames',
+  'sketch.timeline.showFrameTimeline': 'Show frame timeline',
+  'sketch.timeline.hideFrameTimeline': 'Hide frame timeline',
   'sketch.timeline.frame': 'Frame {index}',
   'sketch.timeline.frameKey': 'Frame {index} (key)',
 

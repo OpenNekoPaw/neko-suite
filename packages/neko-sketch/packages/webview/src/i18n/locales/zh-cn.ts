@@ -250,6 +250,8 @@ export const zhCN: MessageBundle = {
   'sketch.timeline.onionSkin': '切换洋葱皮 (O)',
   'sketch.timeline.onionSkinLabel': '切换洋葱皮',
   'sketch.timeline.frames': '动画帧',
+  'sketch.timeline.showFrameTimeline': '显示帧时间线',
+  'sketch.timeline.hideFrameTimeline': '隐藏帧时间线',
   'sketch.timeline.frame': '第 {index} 帧',
   'sketch.timeline.frameKey': '第 {index} 帧 (关键帧)',
 

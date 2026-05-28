@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import type {
   CanvasData,
   CanvasDroppedAsset,
@@ -90,6 +91,7 @@ export function CanvasApp() {
   // Interaction tool: select/marquee by default, hand tool pans on drag.
   const [interactionTool, setInteractionTool] = useState<'select' | 'pan'>('select');
   const [isRightNodeTreeVisible, setIsRightNodeTreeVisible] = useState(true);
+  const [isHudVisible, setIsHudVisible] = useState(true);
   // Minimap width tracks ZoomControls width for alignment
   const zoomControlsRef = useRef<HTMLDivElement>(null);
   const [miniMapWidth, setMiniMapWidth] = useState(200);
@@ -648,13 +650,14 @@ export function CanvasApp() {
 
   // Track ZoomControls width so MiniMap stays aligned
   useEffect(() => {
+    if (!isHudVisible) return;
     const el = zoomControlsRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => setMiniMapWidth(el.offsetWidth));
     ro.observe(el);
     setMiniMapWidth(el.offsetWidth);
     return () => ro.disconnect();
-  }, [isReady]);
+  }, [isReady, isHudVisible]);
 
   // =========================================================================
   // AI generation / agent handlers
@@ -1163,192 +1166,204 @@ export function CanvasApp() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col">
-      {/* Main content area */}
-      <div ref={rootRef} className="flex-1 flex overflow-hidden">
-        <CanvasToolbar
-          onAddText={() => handleCreateLibraryNode('annotation')}
-          onUndo={undo}
-          onRedo={redo}
-          onAddShot={() => handleCreateLibraryNode('shot')}
-          onAddSceneGroup={() => handleCreateLibraryNode('scene')}
-          onAddGallery={() => handleCreateLibraryNode('gallery')}
-          onAddTable={() => handleCreateLibraryNode('table')}
-          onImportFile={handleImportFile}
-          isNodeLibraryVisible={isRightNodeTreeVisible}
-          onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
-          isPanMode={isPanMode}
-          onTogglePanMode={() => setInteractionTool((tool) => (tool === 'pan' ? 'select' : 'pan'))}
-        />
-
-        <div
-          ref={canvasContainerRef}
-          className="flex-1 relative overflow-hidden"
-          style={{ backgroundColor: 'var(--canvas-bg)' }}
-          onContextMenu={handleContextMenu}
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <InfiniteCanvas
-            nodes={nodes}
-            connections={connections}
-            viewport={viewport}
-            selectedNodeIds={selectedNodeIds}
-            selectedConnectionIds={selectedConnectionIds}
-            onViewportChange={handleViewportChange}
-            onNodeSelect={handleNodeSelect}
-            onNodeDrag={handleNodeDrag}
-            onNodeMove={handleNodeMove}
-            onNodeResize={handleNodeResize}
-            onNodeResizeEnd={handleNodeResizeEnd}
-            onNodeRotate={handleNodeRotate}
-            onNodeRotateEnd={handleNodeRotateEnd}
-            onNodeUpdateData={handleNodeUpdateData}
-            onConnectionSelect={handleConnectionSelect}
-            onConnectionStart={handleConnectionStart}
-            onConnectionComplete={handleConnectionComplete}
-            onConnectionCancel={handleConnectionCancel}
-            onCanvasClick={handleCanvasClick}
-            onMarqueeSelect={handleMarqueeSelect}
-            onScriptLoadScenes={handleScriptLoadScenes}
-            onScriptOpen={handleScriptOpen}
-            onScriptNavigateToScene={handleScriptNavigateToScene}
-            onDocumentOpen={handleDocumentOpen}
-            onCanvasEmbedOpen={handleCanvasEmbedOpen}
-            onModelCheckInstalled={handleModelCheckInstalled}
-            onRemoveContainerChild={handleRemoveContainerChild}
-            onConnectionUpdate={updateConnection}
-            expandedNodeId={expandedNodeId}
+    <div ref={rootRef} className="canvas-workbench-root">
+      <CreativeWorkbenchShell
+        className="canvas-workbench-shell"
+        bodyClassName="canvas-workbench-body"
+        mainClassName="canvas-main-panel"
+        mainKind="canvas"
+        leftRail={
+          <CanvasToolbar
+            onAddText={() => handleCreateLibraryNode('annotation')}
+            onUndo={undo}
+            onRedo={redo}
+            onAddShot={() => handleCreateLibraryNode('shot')}
+            onAddSceneGroup={() => handleCreateLibraryNode('scene')}
+            onAddGallery={() => handleCreateLibraryNode('gallery')}
+            onAddTable={() => handleCreateLibraryNode('table')}
+            onImportFile={handleImportFile}
+            isNodeLibraryVisible={isRightNodeTreeVisible}
+            onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
+            isHudVisible={isHudVisible}
+            onToggleHud={() => setIsHudVisible((visible) => !visible)}
             isPanMode={isPanMode}
+            onTogglePanMode={() =>
+              setInteractionTool((tool) => (tool === 'pan' ? 'select' : 'pan'))
+            }
           />
-
-          {/* Empty state hint */}
-          {nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  className="mx-auto mb-3 opacity-40"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M12 8v8" />
-                  <path d="M8 12h8" />
-                </svg>
-                <p className="text-sm opacity-60">{t('empty.hint')}</p>
-                <p className="text-xs opacity-40 mt-1">{t('empty.zoom')}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Bottom-left MiniMap and zoom controls */}
-          <div className="absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2">
-            <MiniMap
+        }
+        main={
+          <div
+            ref={canvasContainerRef}
+            className="canvas-main-surface"
+            style={{ backgroundColor: 'var(--canvas-bg)' }}
+            onContextMenu={handleContextMenu}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <InfiniteCanvas
               nodes={nodes}
+              connections={connections}
               viewport={viewport}
-              containerWidth={containerSize.width}
-              containerHeight={containerSize.height}
+              selectedNodeIds={selectedNodeIds}
+              selectedConnectionIds={selectedConnectionIds}
               onViewportChange={handleViewportChange}
-              width={miniMapWidth}
-              height={Math.round(miniMapWidth * 0.7)}
+              onNodeSelect={handleNodeSelect}
+              onNodeDrag={handleNodeDrag}
+              onNodeMove={handleNodeMove}
+              onNodeResize={handleNodeResize}
+              onNodeResizeEnd={handleNodeResizeEnd}
+              onNodeRotate={handleNodeRotate}
+              onNodeRotateEnd={handleNodeRotateEnd}
+              onNodeUpdateData={handleNodeUpdateData}
+              onConnectionSelect={handleConnectionSelect}
+              onConnectionStart={handleConnectionStart}
+              onConnectionComplete={handleConnectionComplete}
+              onConnectionCancel={handleConnectionCancel}
+              onCanvasClick={handleCanvasClick}
+              onMarqueeSelect={handleMarqueeSelect}
+              onScriptLoadScenes={handleScriptLoadScenes}
+              onScriptOpen={handleScriptOpen}
+              onScriptNavigateToScene={handleScriptNavigateToScene}
+              onDocumentOpen={handleDocumentOpen}
+              onCanvasEmbedOpen={handleCanvasEmbedOpen}
+              onModelCheckInstalled={handleModelCheckInstalled}
+              onRemoveContainerChild={handleRemoveContainerChild}
+              onConnectionUpdate={updateConnection}
+              expandedNodeId={expandedNodeId}
+              isPanMode={isPanMode}
             />
 
-            <div ref={zoomControlsRef}>
-              <ZoomControls
-                zoom={viewport.zoom}
-                onZoomIn={handleZoomIn}
-                onZoomOut={handleZoomOut}
-                onZoomTo={handleZoomTo}
-                onFitContent={handleFitContent}
-                onResetViewport={handleResetViewport}
-              />
-            </div>
-          </div>
+            {nodes.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="text-center" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+                  <svg
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1"
+                    className="mx-auto mb-3 opacity-40"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M12 8v8" />
+                    <path d="M8 12h8" />
+                  </svg>
+                  <p className="text-sm opacity-60">{t('empty.hint')}</p>
+                  <p className="text-xs opacity-40 mt-1">{t('empty.zoom')}</p>
+                </div>
+              </div>
+            )}
 
-          {contextMenu && (
-            <ContextMenu
-              x={contextMenu.x}
-              y={contextMenu.y}
-              items={contextMenu.items}
-              onClose={closeContextMenu}
-            />
-          )}
-
-          <FloatingPanelHost panels={floatingPanels} />
-          <PlaybackControllerHost
-            activeSubsystemIds={activeSubsystemIds}
-            controllers={playbackControllers}
-          />
-
-          {/* Generation Prompt Panel (E6: ControlNet / Video / image generation) */}
-          <GenerationPromptPanel
-            visible={generationPanelState.visible}
-            target={generationPanelTarget}
-            onGenerate={handlePanelGenerate}
-            onClose={closeGenerationPanel}
-            onRequestAutoPrompt={handlePanelAutoPrompt}
-          />
-
-          {contentOverlayState.visible && contentOverlayState.nodeId && (
-            <ContentOverlay nodeId={contentOverlayState.nodeId} onClose={closeContentOverlay} />
-          )}
-
-          {isDragOver && (
-            <div
-              className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
-              style={{
-                backgroundColor: 'rgba(0, 120, 212, 0.08)',
-                border: '2px dashed var(--node-selected)',
-                borderRadius: 4,
-              }}
-            >
+            {isHudVisible && (
               <div
-                className="px-4 py-2 rounded-lg text-sm"
+                id="canvas-hud-controls"
+                className="absolute bottom-4 left-4 z-10 flex flex-col items-start gap-2"
+              >
+                <MiniMap
+                  nodes={nodes}
+                  viewport={viewport}
+                  containerWidth={containerSize.width}
+                  containerHeight={containerSize.height}
+                  onViewportChange={handleViewportChange}
+                  width={miniMapWidth}
+                  height={Math.round(miniMapWidth * 0.7)}
+                />
+
+                <div ref={zoomControlsRef}>
+                  <ZoomControls
+                    zoom={viewport.zoom}
+                    onZoomIn={handleZoomIn}
+                    onZoomOut={handleZoomOut}
+                    onZoomTo={handleZoomTo}
+                    onFitContent={handleFitContent}
+                    onResetViewport={handleResetViewport}
+                  />
+                </div>
+              </div>
+            )}
+
+            {contextMenu && (
+              <ContextMenu
+                x={contextMenu.x}
+                y={contextMenu.y}
+                items={contextMenu.items}
+                onClose={closeContextMenu}
+              />
+            )}
+
+            <FloatingPanelHost panels={floatingPanels} />
+            <PlaybackControllerHost
+              activeSubsystemIds={activeSubsystemIds}
+              controllers={playbackControllers}
+            />
+
+            <GenerationPromptPanel
+              visible={generationPanelState.visible}
+              target={generationPanelTarget}
+              onGenerate={handlePanelGenerate}
+              onClose={closeGenerationPanel}
+              onRequestAutoPrompt={handlePanelAutoPrompt}
+            />
+
+            {contentOverlayState.visible && contentOverlayState.nodeId && (
+              <ContentOverlay nodeId={contentOverlayState.nodeId} onClose={closeContentOverlay} />
+            )}
+
+            {isDragOver && (
+              <div
+                className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
+                style={{
+                  backgroundColor: 'rgba(0, 120, 212, 0.08)',
+                  border: '2px dashed var(--node-selected)',
+                  borderRadius: 4,
+                }}
+              >
+                <div
+                  className="px-4 py-2 rounded-lg text-sm"
+                  style={{
+                    backgroundColor: 'var(--toolbar-bg)',
+                    color: 'var(--toolbar-fg)',
+                    border: '1px solid var(--toolbar-border)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  }}
+                >
+                  {t('canvas.dropHint')}
+                </div>
+              </div>
+            )}
+
+            {isConnecting && (
+              <div
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded text-xs pointer-events-none animate-pulse"
                 style={{
                   backgroundColor: 'var(--toolbar-bg)',
                   color: 'var(--toolbar-fg)',
                   border: '1px solid var(--toolbar-border)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                 }}
               >
-                {t('canvas.dropHint')}
+                {t('status.connecting')}
               </div>
-            </div>
-          )}
-
-          {/* Connection hint overlay */}
-          {isConnecting && (
-            <div
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded text-xs pointer-events-none animate-pulse"
-              style={{
-                backgroundColor: 'var(--toolbar-bg)',
-                color: 'var(--toolbar-fg)',
-                border: '1px solid var(--toolbar-border)',
-              }}
-            >
-              {t('status.connecting')}
-            </div>
-          )}
-        </div>
-
-        {isRightNodeTreeVisible && (
-          <NodeLibraryPanel
-            coreDescriptors={coreNodeTypeDescriptors}
-            subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
-            nodeTypeDescriptors={subsystemNodeTypeDescriptors}
-            activeSubsystemIds={activeSubsystemIds}
-            onCreateNode={handleCreateLibraryNode}
-            onPickNodeSource={handlePickLibraryNodeSource}
-            onLoadSubsystem={handleLoadSubsystem}
-          />
-        )}
-      </div>
+            )}
+          </div>
+        }
+        rightPanel={
+          isRightNodeTreeVisible ? (
+            <NodeLibraryPanel
+              coreDescriptors={coreNodeTypeDescriptors}
+              subsystemManifests={WEBVIEW_SUBSYSTEM_REGISTRY.manifests}
+              nodeTypeDescriptors={subsystemNodeTypeDescriptors}
+              activeSubsystemIds={activeSubsystemIds}
+              onCreateNode={handleCreateLibraryNode}
+              onPickNodeSource={handlePickLibraryNodeSource}
+              onLoadSubsystem={handleLoadSubsystem}
+            />
+          ) : undefined
+        }
+      />
     </div>
   );
 }

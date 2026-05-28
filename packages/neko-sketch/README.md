@@ -16,6 +16,7 @@
 - **依赖**：`@neko/shared`
 - **国际化**：I18nProvider + useTranslation hook，130 翻译 key，中英双语 13 组件全覆盖
 - **状态**：S.1 ✅ 绘画基础 | S.3 ✅ 高级 2D + i18n
+- **布局**：Webview 使用 Creative Workbench Shell：左侧工具栏保留 Brush/Eraser/Select 等绘画主工具选择，底部显隐组承接逐帧时间线与右侧面板显隐；画布保持长显，逐帧时间线作为主面板底部控件可折叠；Brush、Layer、Palette、AI、Filter 等属性与局部操作保留在右侧面板；zoom/tool/layer 等被动状态通过 `status:update` 投射到 VSCode 原生 StatusBar。
 
 ## Architecture
 

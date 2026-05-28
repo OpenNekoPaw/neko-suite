@@ -10,7 +10,7 @@ import {
   ToolbarSeparator,
   ToolbarSpacer,
 } from '@neko/ui/primitives';
-import { RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
+import { LayersIcon, RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import type { ToolType } from '../types';
@@ -39,12 +39,16 @@ export function Toolbar() {
   const setActiveTool = useSketchStore((s) => s.setActiveTool);
   const showSidebar = useSketchStore((s) => s.showSidebar);
   const toggleSidebar = useSketchStore((s) => s.toggleSidebar);
+  const showFrameTimeline = useSketchStore((s) => s.showFrameTimeline);
+  const toggleFrameTimeline = useSketchStore((s) => s.toggleFrameTimeline);
 
   return (
-    <VerticalToolbar>
+    <VerticalToolbar className="sketch-left-toolbar" aria-label={t('sketch.toolbar.ariaLabel')}>
       {TOOLS.map((tool) => (
         <ToolbarButton
           key={tool.type}
+          data-creative-left-rail-action={`select-${tool.type}`}
+          data-creative-left-rail-kind="common-action"
           icon={tool.icon}
           title={t(tool.key)}
           active={activeTool === tool.type}
@@ -56,9 +60,27 @@ export function Toolbar() {
       <ToolbarSeparator />
 
       <ToolbarButton
+        aria-controls="sketch-frame-timeline"
+        aria-expanded={showFrameTimeline}
+        data-creative-left-rail-action="toggle-frame-timeline"
+        data-creative-left-rail-kind="visibility-toggle"
+        data-creative-left-rail-target="main-panel"
+        icon={<LayersIcon size={16} />}
+        title={
+          showFrameTimeline
+            ? t('sketch.timeline.hideFrameTimeline')
+            : t('sketch.timeline.showFrameTimeline')
+        }
+        active={showFrameTimeline}
+        onClick={toggleFrameTimeline}
+      />
+
+      <ToolbarButton
         aria-controls="sketch-right-sidebar"
         aria-expanded={showSidebar}
-        data-sketch-toolbar-action="toggle-right-sidebar"
+        data-creative-left-rail-action="toggle-right-sidebar"
+        data-creative-left-rail-kind="visibility-toggle"
+        data-creative-left-rail-target="right-panel"
         icon={showSidebar ? <RightPanelIcon size={16} /> : <RightPanelOffIcon size={16} />}
         title={t('sketch.sidebar.toggle')}
         active={showSidebar}

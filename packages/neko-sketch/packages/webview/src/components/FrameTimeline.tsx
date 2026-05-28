@@ -78,7 +78,10 @@ export function FrameTimeline() {
   if (frameLayers.length === 0) return null;
 
   return (
-    <div className="flex flex-col border-t border-[var(--sketch-border)] bg-[var(--vscode-editor-background)]">
+    <div
+      id="sketch-frame-timeline"
+      className="flex flex-col border-t border-[var(--sketch-border)] bg-[var(--vscode-editor-background)]"
+    >
       {/* Controls bar */}
       <div className="flex items-center gap-1 px-2 py-1 text-xs">
         <button

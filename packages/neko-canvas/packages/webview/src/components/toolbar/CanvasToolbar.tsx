@@ -24,6 +24,7 @@ import {
   UploadIcon,
   UndoIcon,
   RedoIcon,
+  LayersIcon,
   RightPanelIcon,
   RightPanelOffIcon,
 } from '@neko/ui/icons';
@@ -46,6 +47,9 @@ export interface CanvasToolbarProps {
   /** Node tree/library panel visibility */
   isNodeLibraryVisible?: boolean;
   onToggleNodeLibrary?: () => void;
+  /** Canvas HUD visibility (minimap, zoom controls) */
+  isHudVisible?: boolean;
+  onToggleHud?: () => void;
   /** Hand tool (drag-to-pan) mode */
   isPanMode?: boolean;
   onTogglePanMode?: () => void;
@@ -68,6 +72,8 @@ export function CanvasToolbar({
   onImportFile,
   isNodeLibraryVisible = true,
   onToggleNodeLibrary,
+  isHudVisible = true,
+  onToggleHud,
   isPanMode = false,
   onTogglePanMode,
 }: CanvasToolbarProps) {
@@ -105,11 +111,20 @@ export function CanvasToolbar({
   const nodeLibraryTitle = isNodeLibraryVisible
     ? t('toolbar.hideRightNodeTree')
     : t('toolbar.showRightNodeTree');
+  const hudTitle = isHudVisible ? t('toolbar.hideHudControls') : t('toolbar.showHudControls');
+  const hasVisibilityToggles = onToggleHud !== undefined || onToggleNodeLibrary !== undefined;
 
   return (
-    <VerticalToolbar ref={toolbarRef} className="relative z-20" width={48}>
+    <VerticalToolbar
+      ref={toolbarRef}
+      className="canvas-left-toolbar relative z-20"
+      width={48}
+      aria-label={t('toolbar.leftRail')}
+    >
       {/* Hand Tool (drag-to-pan) */}
       <ToolbarButton
+        data-creative-left-rail-action="toggle-pan-mode"
+        data-creative-left-rail-kind="common-action"
         icon={
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M10 15V6a1.5 1.5 0 0 1 3 0v5a1.5 1.5 0 0 1 3 0v1a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.243-1.757l-3.5-3.5a1.5 1.5 0 0 1 2.121-2.121L8 17V6" />
@@ -122,6 +137,8 @@ export function CanvasToolbar({
 
       {/* Add Node Button */}
       <ToolbarButton
+        data-creative-left-rail-action="open-add-node-popover"
+        data-creative-left-rail-kind="common-action"
         icon={<PlusIcon size={18} />}
         title={t('toolbar.addNode')}
         active={expandedPanel === 'add'}
@@ -130,6 +147,8 @@ export function CanvasToolbar({
 
       {/* Import File Button */}
       <ToolbarButton
+        data-creative-left-rail-action="import-file"
+        data-creative-left-rail-kind="common-action"
         icon={<UploadIcon size={18} />}
         title={t('toolbar.importFile')}
         onClick={() => {
@@ -142,6 +161,8 @@ export function CanvasToolbar({
 
       {/* Undo */}
       <ToolbarButton
+        data-creative-left-rail-action="undo"
+        data-creative-left-rail-kind="common-action"
         icon={<UndoIcon size={18} />}
         title={`${t('toolbar.undo')} (⌘Z)`}
         onClick={onUndo}
@@ -150,29 +171,49 @@ export function CanvasToolbar({
 
       {/* Redo */}
       <ToolbarButton
+        data-creative-left-rail-action="redo"
+        data-creative-left-rail-kind="common-action"
         icon={<RedoIcon size={18} />}
         title={`${t('toolbar.redo')} (⇧⌘Z)`}
         onClick={onRedo}
         disabled={!canRedo}
       />
 
-      <ToolbarSpacer />
+      {hasVisibilityToggles && (
+        <>
+          <ToolbarSpacer />
+          <ToolbarSeparator />
+        </>
+      )}
+
+      {onToggleHud && (
+        <ToolbarButton
+          aria-controls="canvas-hud-controls"
+          aria-expanded={isHudVisible}
+          data-creative-left-rail-action="toggle-hud-controls"
+          data-creative-left-rail-kind="visibility-toggle"
+          data-creative-left-rail-target="hud"
+          icon={<LayersIcon size={18} />}
+          title={hudTitle}
+          active={isHudVisible}
+          onClick={onToggleHud}
+        />
+      )}
 
       {onToggleNodeLibrary && (
-        <>
-          <ToolbarSeparator />
-          <ToolbarButton
-            aria-controls="canvas-right-node-tree-panel"
-            aria-expanded={isNodeLibraryVisible}
-            data-canvas-toolbar-action="toggle-right-node-tree"
-            icon={
-              isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
-            }
-            title={nodeLibraryTitle}
-            active={isNodeLibraryVisible}
-            onClick={onToggleNodeLibrary}
-          />
-        </>
+        <ToolbarButton
+          aria-controls="canvas-right-node-tree-panel"
+          aria-expanded={isNodeLibraryVisible}
+          data-creative-left-rail-action="toggle-right-node-tree"
+          data-creative-left-rail-kind="visibility-toggle"
+          data-creative-left-rail-target="right-panel"
+          icon={
+            isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
+          }
+          title={nodeLibraryTitle}
+          active={isNodeLibraryVisible}
+          onClick={onToggleNodeLibrary}
+        />
       )}
 
       {/* ============================================================= */}

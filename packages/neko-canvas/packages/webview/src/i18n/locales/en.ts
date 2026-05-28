@@ -3,6 +3,7 @@ import type { MessageBundle } from '@neko/shared';
 export const en = {
   // Toolbar
   'toolbar.text': 'Text',
+  'toolbar.leftRail': 'Canvas tools',
   'toolbar.scene': 'Scene',
   'toolbar.addText': 'Add text annotation',
   'toolbar.addScene': 'Add storyboard scene',
@@ -26,6 +27,8 @@ export const en = {
   'toolbar.toggleNodeLibrary': 'Toggle Node Library',
   'toolbar.showRightNodeTree': 'Show right node tree',
   'toolbar.hideRightNodeTree': 'Hide right node tree',
+  'toolbar.showHudControls': 'Show canvas HUD',
+  'toolbar.hideHudControls': 'Hide canvas HUD',
   'toolbar.layers': 'Layers',
   'toolbar.toggleProperties': 'Toggle Properties',
   'toolbar.undo': 'Undo',

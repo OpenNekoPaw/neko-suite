@@ -3,6 +3,7 @@ import type { MessageBundle } from '@neko/shared';
 export const zhCN = {
   // Toolbar
   'toolbar.text': '文本',
+  'toolbar.leftRail': '画布工具',
   'toolbar.scene': '场景',
   'toolbar.addText': '添加文本注释',
   'toolbar.addScene': '添加故事板场景',
@@ -26,6 +27,8 @@ export const zhCN = {
   'toolbar.toggleNodeLibrary': '切换节点库',
   'toolbar.showRightNodeTree': '显示右侧节点树',
   'toolbar.hideRightNodeTree': '折叠右侧节点树',
+  'toolbar.showHudControls': '显示画布 HUD',
+  'toolbar.hideHudControls': '隐藏画布 HUD',
   'toolbar.layers': '图层',
   'toolbar.toggleProperties': '切换属性面板',
   'toolbar.undo': '撤销',

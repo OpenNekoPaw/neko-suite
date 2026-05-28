@@ -218,11 +218,56 @@ html, body, #root {
    CANVAS AREA
    ============================================================ */
 
+.sketch-workbench-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sketch-workbench-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sketch-main-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .sketch-canvas-container {
   position: relative;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   /* cursor is now set dynamically per active tool in SketchCanvas */
+}
+
+.sketch-left-toolbar.neko-vtoolbar {
+  height: 100%;
+  border-right: 1px solid var(--sketch-border);
+  background: var(--sketch-surface);
+}
+
+.sketch-left-toolbar .neko-toolbar-btn {
+  height: 34px;
+  border-radius: var(--sketch-radius-sm);
+  color: var(--sketch-text-secondary);
+}
+
+.sketch-left-toolbar .neko-toolbar-btn:hover:not(:disabled),
+.sketch-left-toolbar .neko-toolbar-btn.active {
+  color: var(--sketch-text-primary);
+  background: var(--sketch-hover);
 }
 
 .sketch-canvas-container canvas {
@@ -670,34 +715,6 @@ input[type='range']:focus-visible {
 
 .sketch-card:last-child {
   margin-bottom: 0;
-}
-
-/* ============================================================
-   STATUS BAR
-   ============================================================ */
-
-.sketch-statusbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 10px;
-  height: 24px;
-  background: var(--sketch-surface);
-  border-top: 1px solid var(--sketch-divider);
-  font-size: 10px;
-  color: var(--sketch-text-secondary);
-  flex-shrink: 0;
-}
-
-.sketch-statusbar-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: default;
-}
-
-.sketch-statusbar-item:hover {
-  color: var(--sketch-text-primary);
 }
 
 /* ============================================================
