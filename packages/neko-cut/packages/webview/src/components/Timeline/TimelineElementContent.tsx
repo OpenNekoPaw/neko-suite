@@ -13,6 +13,11 @@ import { generateWaveform } from '../../utils/waveform';
 import { ShapeElementContent } from '../ShapeElementContent';
 import { getThumbnailService, type ThumbnailData } from '../../services';
 import { getLogger } from '../../utils/logger';
+import {
+  buildClipThumbnailRequests,
+  getClipThumbnailTimelineRange,
+  getClipTimelineDuration,
+} from '../../utils/clipThumbnails';
 
 const logger = getLogger('TimelineElementContent');
 
@@ -30,6 +35,14 @@ interface TimelineElementContentProps {
   pixelsPerSecond?: number; // Pixels per second for viewport calculation
   zoomLevel?: number; // Current zoom level
   visibleRange?: VisibleRange; // Visible time range for viewport-aware loading
+}
+
+interface DisplayThumbnail {
+  key: string;
+  displayTime: number;
+  displayDuration: number;
+  sourceTime: number;
+  dataUrl: string;
 }
 
 // Helper function to resample waveform peaks to target count
@@ -55,45 +68,6 @@ function resampleWaveformPeaks(peaks: number[], targetCount: number): number[] {
   return result;
 }
 
-// Helper: compute buffered generation range for thumbnails
-function computeGenRange(
-  visibleRange: VisibleRange | undefined,
-  elementStartTime: number,
-  elementEndTime: number,
-  minTime: number,
-  maxTime: number,
-  elementDuration: number,
-  interval: number,
-): { start: number; end: number } {
-  const visDuration = visibleRange
-    ? visibleRange.endTime - visibleRange.startTime
-    : elementDuration;
-  const buffer = visDuration * 0.5;
-
-  let start: number;
-  let end: number;
-
-  if (visibleRange) {
-    const visStart = Math.max(visibleRange.startTime, elementStartTime);
-    const visEnd = Math.min(visibleRange.endTime, elementEndTime);
-    start = visStart - elementStartTime + minTime - buffer;
-    end = visEnd - elementStartTime + minTime + buffer;
-  } else {
-    start = minTime;
-    end = maxTime;
-  }
-
-  // Align to interval grid and clamp
-  start = Math.max(minTime, Math.floor(start / interval) * interval);
-  end = Math.min(maxTime, Math.ceil(end / interval) * interval);
-
-  // Round to avoid floating point jitter
-  return {
-    start: Math.round(start * 100) / 100,
-    end: Math.round(end * 100) / 100,
-  };
-}
-
 // MediaElementContent - memoized for performance
 // Virtual scrolling: generates thumbnails for visible range + buffer.
 // Incremental: on scroll only requests thumbnails for newly exposed edges.
@@ -111,9 +85,9 @@ const MediaElementContent = memo(function MediaElementContent({
   zoomLevel?: number;
   visibleRange?: VisibleRange;
 }) {
-  // Accumulated thumbnails keyed by time — never cleared on scroll
-  const thumbnailMapRef = useRef<Map<number, ThumbnailData>>(new Map());
-  const [thumbnails, setThumbnails] = useState<ThumbnailData[]>([]);
+  // Accumulated thumbnails keyed by display/source pair — never cleared on scroll
+  const thumbnailMapRef = useRef<Map<string, DisplayThumbnail>>(new Map());
+  const [thumbnails, setThumbnails] = useState<DisplayThumbnail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generatedRangeRef = useRef<{ start: number; end: number } | null>(null);
@@ -122,12 +96,9 @@ const MediaElementContent = memo(function MediaElementContent({
   const thumbHeight = Math.max(1, height - 8);
   const effectivePPS = (pixelsPerSecond ?? 50) * (zoomLevel ?? 1);
 
-  // Element's valid time range (in source-local time) — guard against NaN
-  const minTime = element.trimStart || 0;
-  const maxTime = (element.duration || 0) - (element.trimEnd || 0);
-  const elementDuration = Math.max(0, maxTime - minTime);
+  // Element display duration on the timeline. Source frame times are mapped separately.
+  const elementDuration = getClipTimelineDuration(element);
   const elementStartTime = element.startTime || 0;
-  const elementEndTime = elementStartTime + elementDuration;
 
   // Dynamically compute thumbnail interval so each thumbnail is ~80px wide on screen.
   // Clamp to [0.5, 60] seconds to avoid too many or too few frames.
@@ -135,16 +106,14 @@ const MediaElementContent = memo(function MediaElementContent({
   const rawInterval = effectivePPS > 0 ? TARGET_THUMB_WIDTH_PX / effectivePPS : 30;
   const interval = Math.max(0.5, Math.min(60, Math.round(rawInterval * 2) / 2)); // snap to 0.5s steps
 
-  // structureKey: changes when src, trim, zoom, or height changes → full reset
-  const structureKey = `${element.src}-${minTime}-${maxTime}-${interval}-${thumbHeight}`;
+  // structureKey: changes when source, trim/speed mapping, zoom, or height changes → full reset
+  const speedKey = JSON.stringify(element.speed ?? null);
+  const structureKey = `${element.src}-${element.duration}-${element.trimStart}-${element.trimEnd}-${speedKey}-${interval}-${thumbHeight}`;
 
   // Compute generation range
-  const { start: genStart, end: genEnd } = computeGenRange(
+  const { startTime: genStart, endTime: genEnd } = getClipThumbnailTimelineRange(
     visibleRange,
     elementStartTime,
-    elementEndTime,
-    minTime,
-    maxTime,
     elementDuration,
     interval,
   );
@@ -159,6 +128,7 @@ const MediaElementContent = memo(function MediaElementContent({
       structureKeyRef.current = structureKey;
       thumbnailMapRef.current.clear();
       generatedRangeRef.current = null;
+      setThumbnails([]);
     }
 
     // Determine which sub-ranges are missing
@@ -186,40 +156,67 @@ const MediaElementContent = memo(function MediaElementContent({
 
     const delay = !existing ? 0 : 100;
 
+    let cancelled = false;
+    const requestStructureKey = structureKey;
+
     debounceTimerRef.current = setTimeout(() => {
       if (!generatedRangeRef.current) setIsLoading(true);
 
       const service = getThumbnailService();
       const promises = ranges.map((r) =>
-        service.getThumbnailsForViewport(element.src, {
-          startTime: r.start,
-          endTime: r.end,
-          pixelsPerSecond: effectivePPS,
-          height: thumbHeight,
-        }),
+        service.getThumbnailsAtTimes(
+          element.src,
+          buildClipThumbnailRequests(element, { startTime: r.start, endTime: r.end }, interval).map(
+            (request) => request.sourceTime,
+          ),
+          thumbHeight,
+        ),
+      );
+      const requestedThumbnails = ranges.flatMap((r) =>
+        buildClipThumbnailRequests(element, { startTime: r.start, endTime: r.end }, interval),
       );
 
       Promise.all(promises)
         .then((results) => {
+          if (cancelled || structureKeyRef.current !== requestStructureKey) {
+            return;
+          }
+
+          const framesBySourceTime = new Map<number, ThumbnailData>();
+          for (const frame of results.flat()) {
+            framesBySourceTime.set(frame.time, frame);
+          }
+
           const map = thumbnailMapRef.current;
-          for (const batch of results) {
-            for (const t of batch) map.set(t.time, t);
+          for (const thumbnail of requestedThumbnails) {
+            const frame = framesBySourceTime.get(thumbnail.sourceTime);
+            if (!frame) {
+              continue;
+            }
+            map.set(thumbnail.key, {
+              ...thumbnail,
+              dataUrl: frame.dataUrl,
+            });
           }
           const prev = generatedRangeRef.current;
           generatedRangeRef.current = prev
             ? { start: Math.min(prev.start, genStart), end: Math.max(prev.end, genEnd) }
             : { start: genStart, end: genEnd };
 
-          setThumbnails(Array.from(map.values()).sort((a, b) => a.time - b.time));
+          setThumbnails(Array.from(map.values()).sort((a, b) => a.displayTime - b.displayTime));
           setIsLoading(false);
         })
         .catch((error) => {
+          if (cancelled || structureKeyRef.current !== requestStructureKey) {
+            return;
+          }
           logger.warn('Failed to generate thumbnails:', error);
           setIsLoading(false);
         });
     }, delay);
 
     return () => {
+      cancelled = true;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
@@ -242,28 +239,17 @@ const MediaElementContent = memo(function MediaElementContent({
     );
   }
 
-  // Derive actual interval from thumbnail data
-  let actualInterval = interval;
-  if (thumbnails.length >= 2) {
-    const intervals: number[] = [];
-    for (let i = 1; i < Math.min(thumbnails.length, 10); i++) {
-      intervals.push(thumbnails[i].time - thumbnails[i - 1].time);
-    }
-    intervals.sort((a, b) => a - b);
-    actualInterval = intervals[Math.floor(intervals.length / 2)];
-  }
-
-  const thumbWidthPercent = elementDuration > 0 ? (actualInterval / elementDuration) * 100 : 100;
-
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       {thumbnails.map((thumb) => {
-        const localTime = thumb.time - minTime;
-        const positionPercent = elementDuration > 0 ? (localTime / elementDuration) * 100 : 0;
+        const positionPercent =
+          elementDuration > 0 ? (thumb.displayTime / elementDuration) * 100 : 0;
+        const thumbWidthPercent =
+          elementDuration > 0 ? (thumb.displayDuration / elementDuration) * 100 : 100;
 
         return (
           <div
-            key={thumb.time}
+            key={thumb.key}
             className="absolute h-full"
             style={{
               left: `${Math.max(0, positionPercent)}%`,

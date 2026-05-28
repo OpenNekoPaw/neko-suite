@@ -60,6 +60,14 @@ export interface IThumbnailService {
     options?: ThumbnailRequestOptions,
   ): Promise<ThumbnailData[]>;
 
+  /** Generate thumbnails at explicit source times */
+  getThumbnailsAtTimes(
+    filePath: string,
+    times: readonly number[],
+    height: number,
+    options?: ThumbnailRequestOptions,
+  ): Promise<ThumbnailData[]>;
+
   /** Clear thumbnail cache */
   clearCache(): void;
 
@@ -370,6 +378,34 @@ class ThumbnailService implements IThumbnailService {
     }
   }
 
+  async getThumbnailsAtTimes(
+    filePath: string,
+    times: readonly number[],
+    height: number,
+    options: ThumbnailRequestOptions = {},
+  ): Promise<ThumbnailData[]> {
+    const { signal, priority = 0 } = options;
+
+    if (signal?.aborted) {
+      throw new Error('Request aborted');
+    }
+
+    const uniqueTimes = [
+      ...new Set(times.map((time) => Math.max(0, Math.round(time * 1000) / 1000))),
+    ].sort((a, b) => a - b);
+
+    if (uniqueTimes.length === 0) {
+      return [];
+    }
+
+    const ext = this._getExtension(filePath);
+    if (IMAGE_EXTENSIONS.has(ext)) {
+      return this._generateImageThumbnailsAtTimes(filePath, uniqueTimes, height);
+    }
+
+    return this._generateVideoThumbnailsAtTimes(filePath, uniqueTimes, height, signal, priority);
+  }
+
   clearCache(): void {
     this._cache.clear();
   }
@@ -419,6 +455,18 @@ class ThumbnailService implements IThumbnailService {
     count: number,
     height: number,
   ): Promise<ThumbnailData[]> {
+    const times = Array.from({ length: count }, () => 0);
+    return this._generateImageThumbnailsAtTimes(filePath, times, height);
+  }
+
+  /**
+   * Generate thumbnails for image files at explicit display/source times.
+   */
+  private async _generateImageThumbnailsAtTimes(
+    filePath: string,
+    times: readonly number[],
+    height: number,
+  ): Promise<ThumbnailData[]> {
     const uri = await this._urlResolver(filePath);
 
     return new Promise((resolve) => {
@@ -436,12 +484,7 @@ class ThumbnailService implements IThumbnailService {
           ctx.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL('image/jpeg', THUMBNAIL_QUALITY);
 
-          // Repeat thumbnail for timeline display
-          const thumbnails: ThumbnailData[] = [];
-          for (let i = 0; i < count; i++) {
-            thumbnails.push({ time: 0, dataUrl });
-          }
-          resolve(thumbnails);
+          resolve(times.map((time) => ({ time, dataUrl })));
         } else {
           resolve([]);
         }
@@ -453,6 +496,74 @@ class ThumbnailService implements IThumbnailService {
 
       img.src = uri;
     });
+  }
+
+  private async _generateVideoThumbnailsAtTimes(
+    filePath: string,
+    times: readonly number[],
+    height: number,
+    signal?: AbortSignal,
+    priority = 0,
+  ): Promise<ThumbnailData[]> {
+    if (signal?.aborted) {
+      throw new Error('Request aborted');
+    }
+
+    const mediaRequestPriority = THUMBNAIL_MEDIA_REQUEST_PRIORITY_BASE + priority;
+    const mediaInfo = await getMediaProxy().probeMediaInfo(filePath, {
+      signal,
+      priority: mediaRequestPriority,
+    });
+    const aspectRatio = mediaInfo.width / mediaInfo.height || DEFAULT_ASPECT_RATIO;
+    const width = Math.round(height * aspectRatio);
+    const scale = mediaInfo.height > 0 ? height / mediaInfo.height : 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('Failed to create canvas context');
+    }
+
+    const thumbnails: ThumbnailData[] = [];
+    for (const requestedTime of times) {
+      if (signal?.aborted) {
+        throw new Error('Request aborted');
+      }
+
+      const targetTime = Math.min(requestedTime, Math.max(0, mediaInfo.duration - 0.1));
+
+      try {
+        const imageBitmap = await getMediaProxy().getVideoFrame(filePath, targetTime, {
+          signal,
+          priority: mediaRequestPriority,
+          scale,
+          quality: THUMBNAIL_JPEG_QUALITY,
+          useThumbnailMode: true,
+        });
+
+        if (imageBitmap) {
+          ctx.clearRect(0, 0, width, height);
+          ctx.drawImage(imageBitmap, 0, 0, width, height);
+          thumbnails.push({
+            time: requestedTime,
+            dataUrl: canvas.toDataURL('image/jpeg', THUMBNAIL_QUALITY),
+          });
+          imageBitmap.close();
+        } else {
+          thumbnails.push(this._createPlaceholderThumbnail(requestedTime, width, height));
+        }
+      } catch (error) {
+        if (signal?.aborted) {
+          throw new Error('Request aborted');
+        }
+        logger.warn(`Failed to get frame at ${targetTime.toFixed(3)}s`, error);
+        thumbnails.push(this._createPlaceholderThumbnail(requestedTime, width, height));
+      }
+    }
+
+    return thumbnails;
   }
 
   /**

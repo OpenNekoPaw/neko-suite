@@ -16,7 +16,12 @@ import type {
 } from '@neko/shared';
 import { generateId } from '../../utils';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
+import { getThumbnailService } from '../../services';
 import { hasMediaSource, isTimeInElement } from '../../types/capabilities';
+import {
+  getClipSourceTimeAtDisplayTime,
+  getClipTimelineDuration,
+} from '../../utils/clipThumbnails';
 import { getVSCodeAPI } from '../../utils/vscodeApi';
 
 /**
@@ -78,8 +83,7 @@ function findTopmostMediaElementAtTime(
       if (el.type !== 'media') continue;
       if (!isTimeInElement(el, time)) continue;
 
-      const trimStart = el.trimStart ?? 0;
-      const sourceTime = Math.max(0, trimStart + (time - el.startTime));
+      const sourceTime = getClipSourceTimeAtDisplayTime(el, time - el.startTime);
       return { element: el as MediaElement, sourceTime };
     }
   }
@@ -325,24 +329,32 @@ const getThumbnail: ToolHandler = async (params): Promise<ToolHandlerResult> => 
   const outputFormat = format ?? 'jpeg';
 
   let renderTime: number;
+  let targetElement: MediaElement | null = null;
 
   if (elementId) {
-    // Find element and use its start time
-    let foundElement = null;
     for (const track of project.tracks) {
       const element = track.elements.find((e) => e.id === elementId);
       if (element) {
-        foundElement = element;
+        if (hasMediaSource(element) && element.type === 'media') {
+          targetElement = element as MediaElement;
+        }
         break;
       }
     }
 
-    if (!foundElement) {
+    if (!targetElement) {
       return { success: false, error: `Element not found: ${elementId}` };
     }
 
-    // Use element's start time plus a small offset to get a representative frame
-    renderTime = foundElement.startTime + 0.1;
+    const timelineDuration = getClipTimelineDuration(targetElement);
+    const requestedTime =
+      typeof time === 'number' && Number.isFinite(time)
+        ? time
+        : targetElement.startTime + timelineDuration / 2;
+    renderTime = Math.max(
+      targetElement.startTime,
+      Math.min(targetElement.startTime + timelineDuration, requestedTime),
+    );
   } else if (time !== undefined) {
     renderTime = time;
   } else {
@@ -357,15 +369,14 @@ const getThumbnail: ToolHandler = async (params): Promise<ToolHandlerResult> => 
   try {
     // 尝试优先使用 elementId 对应素材；否则按时间点找顶层素材
     let target: { src: string; sourceTime: number } | null = null;
-    if (elementId) {
-      for (const track of project.tracks) {
-        const found = track.elements.find((e) => e.id === elementId);
-        if (found && hasMediaSource(found) && found.type === 'media') {
-          const trimStart = found.trimStart ?? 0;
-          target = { src: found.src, sourceTime: Math.max(0, trimStart + 0.1) };
-          break;
-        }
-      }
+    if (targetElement) {
+      target = {
+        src: targetElement.src,
+        sourceTime: getClipSourceTimeAtDisplayTime(
+          targetElement,
+          Math.max(0, renderTime - targetElement.startTime),
+        ),
+      };
     } else {
       const found = findTopmostMediaElementAtTime(project, renderTime);
       if (found) {
@@ -377,30 +388,35 @@ const getThumbnail: ToolHandler = async (params): Promise<ToolHandlerResult> => 
       return { success: false, error: 'No media element found for thumbnail' };
     }
 
-    const bitmap = await getMediaProxy().getVideoFrame(target.src, target.sourceTime, {
-      timeoutMs: 30_000,
-      priority: -10,
-    });
+    const [thumbnail] = await getThumbnailService().getThumbnailsAtTimes(
+      target.src,
+      [target.sourceTime],
+      thumbHeight,
+      {
+        priority: -10,
+      },
+    );
+
+    if (!thumbnail) {
+      return { success: false, error: 'Failed to capture thumbnail frame' };
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = thumbWidth;
     canvas.height = thumbHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      try {
-        bitmap.close();
-      } catch {
-        /* ignore */
-      }
       return { success: false, error: 'Failed to create canvas context' };
     }
 
-    ctx.drawImage(bitmap, 0, 0, thumbWidth, thumbHeight);
-    try {
-      bitmap.close();
-    } catch {
-      /* ignore */
-    }
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Failed to load thumbnail frame'));
+      image.src = thumbnail.dataUrl;
+    });
+
+    ctx.drawImage(image, 0, 0, thumbWidth, thumbHeight);
     const dataUrl = canvas.toDataURL(
       mimeFromFormat(outputFormat),
       outputFormat === 'png' ? undefined : 0.8,
