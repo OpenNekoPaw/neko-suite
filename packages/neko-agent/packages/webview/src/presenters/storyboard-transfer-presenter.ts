@@ -86,16 +86,10 @@ export function projectStoryboardScenesCutTimelinePayload(
 
 export function projectAssistantMarkdownCanvasTransferPayload(
   input: MarkdownCanvasTransferInput,
-): PluginTransferPayload {
+): PluginTransferPayload | null {
   const storyboard = projectMarkdownStoryboardTransferPayload(input.content);
   if (storyboard) return storyboard;
-  return {
-    kind: 'canvasText',
-    text: input.content,
-    format: 'markdown',
-    ...(input.target ? { target: input.target } : {}),
-    ...(input.provenance ? { provenance: input.provenance } : {}),
-  };
+  return null;
 }
 
 export function projectMarkdownStoryboardTransferPayload(

@@ -145,21 +145,26 @@ function renderBlockContent(
         <ThinkingBlock content={projection.thinking} isComplete={projection.isThinkingComplete} />
       );
 
-    case 'markdown':
+    case 'markdown': {
+      const canvasPayload =
+        !projection.renderStreaming && callbacks.pluginsAvailable?.canvas
+          ? projectAssistantMarkdownCanvasTransferPayload({
+              content: projection.content,
+              target: projectCanvasContentTransferTarget({
+                ambientNodes: callbacks.ambientNodes,
+                contextChips: callbacks.contextChips,
+              }),
+              provenance: { source: 'webview', label: 'assistant-storyboard-block' },
+            })
+          : null;
+
       return (
         <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)] rounded-tl-sm">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
-          {!projection.renderStreaming && callbacks.pluginsAvailable?.canvas && (
+          {canvasPayload && callbacks.pluginsAvailable && (
             <div className="mt-1.5 border-t border-[var(--agent-divider)] pt-1">
               <SendToMenu
-                payload={projectAssistantMarkdownCanvasTransferPayload({
-                  content: projection.content,
-                  target: projectCanvasContentTransferTarget({
-                    ambientNodes: callbacks.ambientNodes,
-                    contextChips: callbacks.contextChips,
-                  }),
-                  provenance: { source: 'webview', label: 'assistant-text-block' },
-                })}
+                payload={canvasPayload}
                 mediaType="image"
                 plugins={callbacks.pluginsAvailable}
                 allowedTargets={['canvas']}
@@ -168,6 +173,7 @@ function renderBlockContent(
           )}
         </div>
       );
+    }
 
     case 'tool':
       return (

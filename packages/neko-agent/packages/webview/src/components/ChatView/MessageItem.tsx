@@ -150,18 +150,23 @@ function ContentBlockRenderer({
         </div>
       );
 
-    case 'markdown':
+    case 'markdown': {
+      const canvasPayload =
+        !projection.renderStreaming && pluginsAvailable?.canvas
+          ? projectAssistantMarkdownCanvasTransferPayload({
+              content: projection.content,
+              target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
+              provenance: { source: 'webview', label: 'assistant-storyboard-block' },
+            })
+          : null;
+
       return (
         <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]/60 rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
-          {!projection.renderStreaming && pluginsAvailable?.canvas && (
+          {canvasPayload && pluginsAvailable && (
             <div className="mt-1.5 border-t border-[var(--agent-divider)] pt-1">
               <SendToMenu
-                payload={projectAssistantMarkdownCanvasTransferPayload({
-                  content: projection.content,
-                  target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
-                  provenance: { source: 'webview', label: 'assistant-text-block' },
-                })}
+                payload={canvasPayload}
                 mediaType="image"
                 plugins={pluginsAvailable}
                 allowedTargets={['canvas']}
@@ -170,6 +175,7 @@ function ContentBlockRenderer({
           )}
         </div>
       );
+    }
 
     case 'tool':
       return (

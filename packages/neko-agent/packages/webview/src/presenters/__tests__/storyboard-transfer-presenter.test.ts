@@ -236,7 +236,7 @@ describe('storyboard transfer presenter', () => {
     });
   });
 
-  it('prefers markdown storyboard payloads and falls back to canvas text for prose', () => {
+  it('projects only storyboard-ready assistant markdown for Canvas transfer', () => {
     expect(
       projectAssistantMarkdownCanvasTransferPayload({
         content: `
@@ -255,12 +255,6 @@ describe('storyboard transfer presenter', () => {
         target: { plugin: 'canvas', mode: 'insert' },
         provenance: { source: 'webview', label: 'assistant-text-block' },
       }),
-    ).toEqual({
-      kind: 'canvasText',
-      text: '建议采用 60 秒标准序章版：既能保留传说说明，也能完整呈现悬念。',
-      format: 'markdown',
-      target: { plugin: 'canvas', mode: 'insert' },
-      provenance: { source: 'webview', label: 'assistant-text-block' },
-    });
+    ).toBeNull();
   });
 });
