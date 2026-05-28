@@ -19,6 +19,12 @@ import { PREVIEW_QUALITY } from '../../constants';
 import { postMessage } from '../../utils/vscodeApi';
 import { getMediaProxy } from '../../services/mediaProxyFactory';
 import {
+  addFrameServerMessageListener,
+  getLatestFrameServerConfig,
+  getLatestFrameServerStream,
+  type FrameServerMessage,
+} from '../../services/frameServerMessages';
+import {
   H264StreamClient,
   AudioStreamClient,
   FrameScheduler,
@@ -304,8 +310,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   // ==========================================================================
 
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      const message = event.data;
+    const handleFrameServerMessage = (message: FrameServerMessage) => {
       if (message.type === 'frameServer:config' && typeof message.port === 'number') {
         logger.info(`Received frame server config, port: ${message.port}`);
         setFrameServerPort(message.port);
@@ -324,8 +329,17 @@ export const PreviewPanel = memo(function PreviewPanel({
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    const cachedConfig = getLatestFrameServerConfig();
+    if (cachedConfig) {
+      handleFrameServerMessage(cachedConfig);
+    }
+
+    const cachedStream = getLatestFrameServerStream();
+    if (cachedStream) {
+      handleFrameServerMessage(cachedStream);
+    }
+
+    return addFrameServerMessageListener(handleFrameServerMessage);
   }, []);
 
   // ==========================================================================

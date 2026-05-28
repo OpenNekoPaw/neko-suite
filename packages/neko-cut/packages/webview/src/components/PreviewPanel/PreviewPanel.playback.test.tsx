@@ -5,6 +5,7 @@ import type { ProjectData } from '@neko/shared';
 import { PreviewPanel } from './PreviewPanel';
 import { useEditorStore } from '../../stores/editor-store';
 import { postMessage } from '../../utils/vscodeApi';
+import { publishFrameServerMessage } from '../../services/frameServerMessages';
 
 type MockStoreState = {
   project: ProjectData | null;
@@ -86,8 +87,10 @@ vi.mock('../../services/mediaProxyFactory', () => ({
 }));
 
 vi.mock('@neko/neko-client', () => {
+  const h264Connect = vi.fn();
+
   class H264StreamClient {
-    connect = vi.fn();
+    connect = h264Connect;
     dispose = vi.fn();
     resetDecoder = vi.fn();
     getStats = vi.fn(() => ({
@@ -142,6 +145,7 @@ vi.mock('@neko/neko-client', () => {
     AudioStreamClient,
     FrameScheduler,
     PlaybackPerformanceMonitor,
+    __h264Connect: h264Connect,
   };
 });
 
@@ -219,11 +223,7 @@ describe('PreviewPanel playback controls', () => {
     const { root } = await renderPreview();
 
     await act(async () => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'frameServer:config', port: 39001 },
-        }),
-      );
+      publishFrameServerMessage({ type: 'frameServer:config', port: 39001 });
       await Promise.resolve();
     });
 
@@ -247,6 +247,33 @@ describe('PreviewPanel playback controls', () => {
     expect(messageTypes).toContain('media:frameServer:projectPlayback:speed');
     expect(messageTypes).not.toContain('media:frameServer:projectPlayback:pause');
     expect(messageTypes).not.toContain('media:frameServer:projectPlayback:resume');
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+  });
+
+  it('connects to cached frame server stream when streamCreated arrives before mount', async () => {
+    publishFrameServerMessage({
+      type: 'frameServer:config',
+      port: 39001,
+    });
+    publishFrameServerMessage({
+      type: 'frameServer:streamCreated',
+      streamId: 'strm_editor-v_cached',
+      wsUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-v_cached',
+      audioStreamId: null,
+      audioWsUrl: null,
+    });
+
+    const { root } = await renderPreview();
+    const clientModule = await import('@neko/neko-client');
+    const h264Connect = (
+      clientModule as typeof clientModule & { __h264Connect: ReturnType<typeof vi.fn> }
+    ).__h264Connect;
+
+    expect(h264Connect).toHaveBeenCalled();
 
     await act(async () => {
       root.unmount();

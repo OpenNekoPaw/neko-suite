@@ -25,6 +25,7 @@ import {
   normalizeCutStoryboardImportPayload,
 } from '../utils/storyboardImport';
 import type { CutStoryboardImportPayload } from '../utils/storyboardImport';
+import { isFrameServerMessage, publishFrameServerMessage } from '../services/frameServerMessages';
 
 const logger = getLogger('useVSCodeMessaging');
 
@@ -117,6 +118,14 @@ export function useVSCodeMessaging() {
       const message = event.data;
 
       switch (message.type) {
+        case 'frameServer:config':
+        case 'frameServer:streamCreated':
+        case 'frameServer:streamStopped':
+          if (isFrameServerMessage(message)) {
+            publishFrameServerMessage(message);
+          }
+          break;
+
         case 'update':
           // Store the incoming content as "last saved" to avoid immediate re-save
           lastSavedRef.current = JSON.stringify(message.content);
