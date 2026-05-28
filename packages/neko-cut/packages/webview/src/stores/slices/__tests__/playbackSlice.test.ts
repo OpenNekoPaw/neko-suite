@@ -33,6 +33,10 @@ describe('playbackSlice', () => {
       expect(store.getState().currentTime).toBe(0);
     });
 
+    it('should start with seekRevision = 0', () => {
+      expect(store.getState().seekRevision).toBe(0);
+    });
+
     it('should start with playbackSpeed = 1', () => {
       expect(store.getState().playbackSpeed).toBe(1);
     });
@@ -124,6 +128,11 @@ describe('playbackSlice', () => {
       expect(store.getState().currentTime).toBe(5.0);
     });
 
+    it('should increment seekRevision', () => {
+      store.getState().seek(5.0);
+      expect(store.getState().seekRevision).toBe(1);
+    });
+
     it('should clamp negative values to 0', () => {
       store.getState().seek(-3.0);
       expect(store.getState().currentTime).toBe(0);
@@ -172,6 +181,11 @@ describe('playbackSlice', () => {
       expect(store.getState().currentTime).toBeCloseTo(expected, 10);
     });
 
+    it('should increment seekRevision', () => {
+      store.getState().seekToFrame(1.234, 30);
+      expect(store.getState().seekRevision).toBe(1);
+    });
+
     it('should clamp negative values to 0 before aligning', () => {
       store.getState().seekToFrame(-1.0, 30);
       expect(store.getState().currentTime).toBe(0);
@@ -202,6 +216,19 @@ describe('playbackSlice', () => {
       store.getState().toggleFrameAlign();
       store.getState().toggleFrameAlign();
       expect(store.getState().frameAlignEnabled).toBe(false);
+    });
+  });
+
+  describe('updatePlaybackTime', () => {
+    it('should update currentTime without incrementing seekRevision', () => {
+      store.getState().updatePlaybackTime(2.5);
+      expect(store.getState().currentTime).toBe(2.5);
+      expect(store.getState().seekRevision).toBe(0);
+    });
+
+    it('should clamp negative values to 0', () => {
+      store.getState().updatePlaybackTime(-1);
+      expect(store.getState().currentTime).toBe(0);
     });
   });
 

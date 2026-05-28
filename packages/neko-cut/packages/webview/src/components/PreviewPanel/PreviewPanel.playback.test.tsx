@@ -10,6 +10,7 @@ import { publishFrameServerMessage } from '../../services/frameServerMessages';
 type MockStoreState = {
   project: ProjectData | null;
   currentTime: number;
+  seekRevision: number;
   isPlaying: boolean;
   playbackSpeed: number;
   previewQuality: 'low' | 'medium' | 'high';
@@ -194,6 +195,7 @@ describe('PreviewPanel playback controls', () => {
     storeMock.replaceState({
       project: baseProject,
       currentTime: 0,
+      seekRevision: 0,
       isPlaying: false,
       playbackSpeed: 1,
       previewQuality: 'medium',
@@ -214,6 +216,7 @@ describe('PreviewPanel playback controls', () => {
     useEditorStore.setState({
       project: null,
       currentTime: 0,
+      seekRevision: 0,
       isPlaying: false,
       playbackSpeed: 1,
     });
@@ -247,6 +250,75 @@ describe('PreviewPanel playback controls', () => {
     expect(messageTypes).toContain('media:frameServer:projectPlayback:speed');
     expect(messageTypes).not.toContain('media:frameServer:projectPlayback:pause');
     expect(messageTypes).not.toContain('media:frameServer:projectPlayback:resume');
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+  });
+
+  it('does not restart playback when the playhead advances without an explicit seek', async () => {
+    const { root } = await renderPreview();
+
+    await act(async () => {
+      publishFrameServerMessage({ type: 'frameServer:config', port: 39001 });
+      await Promise.resolve();
+    });
+
+    const mockedPostMessage = vi.mocked(postMessage);
+    await act(async () => {
+      useEditorStore.setState({ isPlaying: true, currentTime: 0, seekRevision: 0 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await Promise.resolve();
+    });
+    mockedPostMessage.mockClear();
+
+    await act(async () => {
+      useEditorStore.setState({ currentTime: 60 });
+      await Promise.resolve();
+    });
+
+    const messageTypes = mockedPostMessage.mock.calls.map((call) => {
+      const message = call[0] as { type?: unknown };
+      return message.type;
+    });
+    expect(messageTypes).not.toContain('media:frameServer:projectPlayback:resume');
+    expect(messageTypes).not.toContain('media:frameServer:projectPlayback:seek');
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+  });
+
+  it('restarts playback from the target time when seekRevision changes during playback', async () => {
+    const { root } = await renderPreview();
+
+    await act(async () => {
+      publishFrameServerMessage({ type: 'frameServer:config', port: 39001 });
+      await Promise.resolve();
+    });
+
+    const mockedPostMessage = vi.mocked(postMessage);
+    await act(async () => {
+      useEditorStore.setState({ isPlaying: true, currentTime: 0, seekRevision: 0 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await Promise.resolve();
+    });
+    mockedPostMessage.mockClear();
+
+    await act(async () => {
+      useEditorStore.setState({ currentTime: 60, seekRevision: 1 });
+      await Promise.resolve();
+    });
+
+    expect(mockedPostMessage).toHaveBeenCalledWith({
+      type: 'media:frameServer:projectPlayback:resume',
+      payload: {
+        startTime: 60,
+        speed: 1,
+      },
+    });
 
     await act(async () => {
       root.unmount();

@@ -24,8 +24,10 @@ function App() {
     project,
     isPlaying,
     currentTime,
+    seekRevision,
     playbackSpeed,
     seek,
+    updatePlaybackTime,
     pause,
     getTotalDuration,
     togglePlayback,
@@ -40,8 +42,10 @@ function App() {
     project: state.project,
     isPlaying: state.isPlaying,
     currentTime: state.currentTime,
+    seekRevision: state.seekRevision,
     playbackSpeed: state.playbackSpeed,
     seek: state.seek,
+    updatePlaybackTime: state.updatePlaybackTime,
     pause: state.pause,
     getTotalDuration: state.getTotalDuration,
     togglePlayback: state.togglePlayback,
@@ -75,12 +79,10 @@ function App() {
     [sendMessage],
   );
 
-  // Sync lastSeekTimeRef when manually seeking while paused
+  // Sync lastSeekTimeRef when manually seeking.
   useEffect(() => {
-    if (!isPlaying) {
-      lastSeekTimeRef.current = currentTime;
-    }
-  }, [currentTime, isPlaying]);
+    lastSeekTimeRef.current = currentTime;
+  }, [seekRevision]);
 
   // Enable keyboard shortcuts
   useKeyboardShortcuts();
@@ -145,12 +147,12 @@ function App() {
     onSizeChange: setPropertyPanelWidth,
   });
 
-  // Playback loop with optimized timing (avoid excessive seek calls)
+  // Playback loop with optimized timing (avoid excessive store updates)
   // Use refs to avoid restarting the loop when currentTime changes
-  const seekRef = useRef(seek);
+  const updatePlaybackTimeRef = useRef(updatePlaybackTime);
   const pauseRef = useRef(pause);
   const getTotalDurationRef = useRef(getTotalDuration);
-  seekRef.current = seek;
+  updatePlaybackTimeRef.current = updatePlaybackTime;
   pauseRef.current = pause;
   getTotalDurationRef.current = getTotalDuration;
 
@@ -176,14 +178,15 @@ function App() {
 
       if (newTime >= totalDuration) {
         // Stop at the end
-        seekRef.current(totalDuration);
+        updatePlaybackTimeRef.current(totalDuration);
         pauseRef.current();
         lastSeekTimeRef.current = totalDuration;
       } else {
-        // Only call seek when time changed by at least 1 frame (~33ms for 30fps)
-        // This reduces seek calls from 60/sec to ~30/sec, reducing race conditions
+        // Only update the playhead when time changed by at least 1 frame (~33ms
+        // for 30fps). This is intentionally not a seek: the engine is already
+        // streaming from its own clock during playback.
         if (Math.abs(newTime - lastUpdateTime) >= 0.033) {
-          seekRef.current(newTime);
+          updatePlaybackTimeRef.current(newTime);
           lastUpdateTime = newTime;
           lastSeekTimeRef.current = newTime;
         }
@@ -198,7 +201,7 @@ function App() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, playbackSpeed]); // Restart when play state or preview speed changes
+  }, [isPlaying, playbackSpeed, seekRevision]); // Restart when play state, speed, or explicit seek changes
 
   useEffect(() => {
     // Notify VSCode that webview is ready

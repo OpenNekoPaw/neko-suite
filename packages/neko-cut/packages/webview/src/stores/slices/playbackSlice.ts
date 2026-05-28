@@ -9,6 +9,7 @@ export interface PlaybackSlice {
   // State
   isPlaying: boolean;
   currentTime: number;
+  seekRevision: number;
   playbackSpeed: number;
   frameAlignEnabled: boolean;
 
@@ -21,6 +22,7 @@ export interface PlaybackSlice {
   pause: () => void;
   togglePlayback: () => void;
   setPlaybackSpeed: (speed: number) => void;
+  updatePlaybackTime: (time: number) => void;
   seek: (time: number, fps?: number) => void;
   seekToFrame: (time: number, fps?: number) => void;
   toggleFrameAlign: () => void;
@@ -37,6 +39,7 @@ export const createPlaybackSlice: StateCreator<PlaybackSlice, [], [], PlaybackSl
   // Initial state
   isPlaying: false,
   currentTime: 0,
+  seekRevision: 0,
   playbackSpeed: 1,
   frameAlignEnabled: false,
 
@@ -56,18 +59,22 @@ export const createPlaybackSlice: StateCreator<PlaybackSlice, [], [], PlaybackSl
     set({ playbackSpeed: normalizedSpeed });
   },
 
+  updatePlaybackTime: (time) => {
+    set({ currentTime: Math.max(0, time) });
+  },
+
   seek: (time, fps = 30) => {
     const { frameAlignEnabled } = get();
     let alignedTime = Math.max(0, time);
     if (frameAlignEnabled) {
       alignedTime = Math.round(alignedTime * fps) / fps;
     }
-    set({ currentTime: alignedTime });
+    set((state) => ({ currentTime: alignedTime, seekRevision: state.seekRevision + 1 }));
   },
 
   seekToFrame: (time, fps = 30) => {
     const alignedTime = Math.round(Math.max(0, time) * fps) / fps;
-    set({ currentTime: alignedTime });
+    set((state) => ({ currentTime: alignedTime, seekRevision: state.seekRevision + 1 }));
   },
 
   toggleFrameAlign: () => set((state) => ({ frameAlignEnabled: !state.frameAlignEnabled })),
