@@ -6,9 +6,9 @@ Proposed (2026-05-22)
 
 ## 实施状态
 
-Updated: 2026-05-23
+Updated: 2026-05-26
 
-OpenSpec change: `implement-webview-layout-unification`
+OpenSpec changes: `implement-webview-layout-unification`, `standardize-creative-workbench-shell`
 
 | 阶段 | 状态 | 已落地内容 |
 |------|------|------------|
@@ -17,9 +17,11 @@ OpenSpec change: `implement-webview-layout-unification`
 | Phase 2: Agent Header | Deferred / Rolled back | Agent Webview Header 设计存在问题，已回退到原 Webview 内 New Chat / History / AccountBar / TabBar 方案；后续另立 Agent redesign |
 | Phase 3: Agent Input 分层 | Deferred / Rolled back | Agent session/chat model/native QuickPick 同步与齿轮 Popover 方案已回退；InputArea 保持原 Webview 选择器与生成参数布局 |
 | Phase 4: Resize 补全 | Done | Model Right Dock、Outliner/Properties split、Timeline 高度使用持久化 resize；Puppet 右面板支持 280px 默认、200-400px 约束；Cut PreviewControls 增加设置/溢出菜单，PropertyPanel 宽度约束为 200-400px |
+| Creative Workbench Shell | Done | `neko-cut`、`neko-canvas`、`neko-audio`、`neko-puppet`、`neko-model`、`neko-sketch` 已统一为左侧工具栏 + 主面板 + 右侧面板 + VSCode 原生 StatusBar 的布局契约 |
+| Tool responsibility split | Done | 六个创意子包已按“左侧工具栏=通用/常用动作与显隐，主面板=创作表面与 Cut 时间线控制组件，右侧面板=属性/检查器/局部分区，StatusBar=被动状态”拆分；Cut 保留 timeline 控制条，其他子包不再引入横向命令工具栏 |
 | Token/Icon guardrails | Done | 本次触及布局代码未新增 package-specific CSS token 前缀；新增低频预览菜单图标使用 `@neko/shared/icons`，广义 token/icon 迁移仍归属 UI Design System ADR |
 
-验证证据采用目标测试和布局断言而非全量视觉截图：StatusBar 可见性、Canvas 状态迁移、Model/Puppet resize、Cut 窄布局结构均已有对应测试或 DOM/source assertion。Agent Header/Input 回退后不再作为本变更验收范围；完整验收状态以 `openspec/changes/implement-webview-layout-unification/tasks.md` 为准。
+验证证据采用目标测试和布局断言而非全量视觉截图：StatusBar 可见性、Canvas 状态迁移、Model/Puppet resize、Cut 窄布局结构，以及六个创意子包的 Workbench shell 职责均已有对应测试或 DOM/source assertion。Agent Header/Input 回退后不再作为本变更验收范围；完整验收状态以 `openspec/changes/implement-webview-layout-unification/tasks.md` 和 `openspec/changes/standardize-creative-workbench-shell/tasks.md` 为准。
 
 ## 关联 ADR
 
@@ -51,7 +53,7 @@ Neko Suite 10+ 个 webview 子包各自实现布局 Shell，导致以下问题�
 |------|---------|----------|---------|---------|---------------|--------------|
 | neko-cut | 三栏(预览+时间线+属性) | `--neko-*` | shared icons | 高 | 无 | 无 |
 | neko-agent | 单列聊天 | `--agent-*` | shared icons | 低 | TabBar+Actions (44px) | 无 |
-| neko-canvas | 画布+顶栏+左侧库 | `--canvas-*`, `--neko-*` | shared icons | 中 | CanvasTopToolbar | 左下状态徽章 |
+| neko-canvas | 左侧工具栏+画布+右侧创建面板 | `--canvas-*`, `--neko-*` | shared icons | 高 | 无 | StatusBar |
 | neko-sketch | 工具栏+画布+右面板+帧 | `--sketch-*` | 内联 SVG (~16) | 高 | 无 | AIRunMonitor |
 | neko-model | 顶栏+视口+右Dock+时间线 | `--model-*` | 内联 SVG (~10) | 高 | WorkbenchTopBar (36px) | 引擎状态在 TopBar |
 | neko-puppet | 视口+右面板栈+关键帧 | `--sketch-*` (复用) | Unicode 符号 | 高 | 无 | 无 |
@@ -258,6 +260,30 @@ Neko Suite 10+ 个 webview 子包各自实现布局 Shell，导致以下问题�
 
 ## 3. 设计决策
 
+### D0: Creative Workbench Shell — 六个创意子包统一布局契约
+
+第一轮覆盖范围固定为 `neko-cut`、`neko-canvas`、`neko-audio`、`neko-puppet`、`neko-model`、`neko-sketch`。这些 Webview 均采用同一结构语义：
+
+```
+┌─ VSCode Editor Tab / View Title（原生） ──────────────┐
+├─ Left Rail ┬──────── Main Panel ────────┬ Right Panel ┤
+│ 通用动作   │ 预览/viewport/画布/波形      │ 属性/检查器  │
+│ 显隐开关   │ 时间线/transport/overlay控件 │ 面板局部控件  │
+└───────────┴─────────────────────────────┴────────────┘
+└─ VSCode StatusBar（原生，被动状态）──────────────────┘
+```
+
+共享层只提供 `@neko/ui/workbench` 的 slot contract：`CreativeWorkbenchShell`、`CreativeLeftRail`、`MainPanelControlLayer`。它不导入 VSCode API、Node-only 模块或任何功能子包；命令回调、store 选择、i18n key、engine 消息仍由各子包 adapter 负责。
+
+| 区域 | 职责 | 允许内容 | 不允许内容 |
+|------|------|----------|------------|
+| 左侧工具栏 | 常用/通用动作；既有主工具入口；显示/隐藏主面板控件、右侧面板、overlay 或 panel stack | 保存、导入入口、文档级导出、Canvas/Sketch 主工具选择、Model/Puppet viewport 常用命令、Audio 分析/频谱命令、显隐开关 | 属性修改控件、局部 inspector tab、Cut timeline 控制组件、transport 组件 |
+| 主面板 | 创作表面与嵌入该表面的控件 | preview controls、Cut timeline controls、timeline/transport surface、waveform/canvas/viewport surface、canvas zoom/minimap、播放组件自带控件 | 非 Cut 子包独立横向命令工具栏 |
+| 右侧面板 | 属性、检查器、树/层级、库、效果链、局部分区 | property groups、outliner、layer stack、node library、effect/export/recording settings | 复制到左栏的局部属性按钮 |
+| VSCode StatusBar | 被动状态和编辑器级摘要 | zoom/tool/layer、engine、selection/object count、duration/sample rate、subsystem/projection、export/proxy state | 高交互控件、预览图、scrubber、需要 rich UI 的进度面板 |
+
+左栏中的 `visibility-toggle` 必须带 `aria-controls` 与 `aria-expanded`，并通过 `visibilityTarget` / `data-creative-left-rail-target` 标注为 `main-panel`、`right-panel` 或 `hud`。底部显隐组只控制主面板控件（如 timeline/header/keyframe strip）、右侧面板、HUD/overlay（如 minimap/zoom/viewport overlay）的显示状态；预览、viewport、画布、波形等主展示表面保持长显。显隐按钮数量按子包能力声明，不做固定三件套：Cut 只暴露 timeline 主面板控件与右侧属性面板两个开关；Model 暴露 viewport HUD、下侧动画/timeline controls、右侧 Dock 三个开关。按钮迁移必须先按功能职责归类：Cut 的 timeline 横向控制条是时间线控制组件，保留在主面板；其他子包不保留独立横向工具栏，Model/Puppet viewport 常用命令和 Audio 分析/频谱命令进入左侧工具栏；参数、画笔细项、节点属性、效果/导出/录制设置等局部控制仍归主面板组件或右侧面板。
+
 ### D1: VSCode 原生 UI 整合 — Webview 内不重建 VSCode 已提供的 UI 层
 
 **原则**: Webview 内只放**需要空间交互的编辑器 UI**（工具栏、画布、时间线、属性面板）。纯信息展示和全局导航交给 VSCode 原生层。
@@ -268,7 +294,7 @@ Neko Suite 10+ 个 webview 子包各自实现布局 Shell，导致以下问题�
 |------|-----------|------|---------|
 | neko-cut | 无独立 Header | **保留** | — |
 | neko-agent | TabBar + NewChat + History + AccountBar (44px) | **保留 / Deferred** | 本变更回退 Agent Header 迁移，维持既有 Webview Header；后续另立 Agent redesign |
-| neko-canvas | CanvasTopToolbar (工具+undo/redo+导入+排列+播放) | **瘦身** | Undo/Redo → VSCode 原生命令；Import → `editor/title` 按钮；保留工具切换和排列 |
+| neko-canvas | 旧 CanvasTopToolbar | **移除 shell 级横向工具栏** | 全局画布工具与显隐开关进入左侧工具栏；MiniMap/Zoom/Playback/FloatingPanel 作为主面板 overlay；NodeLibrary 进入右侧面板职责 |
 | neko-model | WorkbenchTopBar ("Neko Model"+选中节点+对象数+引擎状态, 36px) | **移除** | 标题与 Editor Tab 重复→删除；选中节点/对象数/引擎状态 → StatusBar |
 | neko-sketch | 无 | **正确** | — |
 | neko-puppet | 无 | **正确** | — |
@@ -703,11 +729,11 @@ interface ResizeState {
 
 | 组件 | cut | canvas | sketch | model | puppet | 一致性 |
 |------|-----|--------|--------|-------|--------|:------:|
-| **工具栏** | 内嵌预览区 | 顶部水平 | 左侧垂直 | 左侧(视口内) | 内嵌视口 | ❌ 低 |
-| **属性/检查器** | 右侧 | 浮动面板 | 右侧 | 右侧 | 右侧 | ⚠️ 中 |
-| **树/层级面板** | 无 | 左侧 | 右侧(sidebar) | 右侧 | 右侧 | ❌ 低 |
+| **工具栏** | 左侧 2 个显隐 + 主面板 Cut timeline 控制组件 | 左侧全局工具 | 左侧主工具 | 左侧常用命令 + viewport HUD/timeline/右侧 Dock 显隐 | 左侧常用命令 + 右侧面板显隐 | ✅ 高 |
+| **属性/检查器** | 右侧 | 右侧/右上浮动 | 右侧 | 右侧 | 右侧 | ✅ 高 |
+| **树/层级面板** | 无 | 右侧创建面板；未来 Outliner 右侧 | 右侧(sidebar) | 右侧 | 右侧 | ✅ 高 |
 | **时间轴/关键帧** | 底部 | 无 | 底部 | 底部 | 底部 | ✅ 高 |
-| **状态信息** | 底部控件区 | 左下浮动 | sidebar 内 | 顶部 TopBar | 右面板内 | ❌ 低 |
+| **状态信息** | StatusBar | StatusBar | StatusBar + 交互式 AIRunMonitor | StatusBar | 无独立投影 | ✅ 高 |
 | **MiniMap/缩放** | 预览区内嵌 | 右下浮动 | 无 | 无 | 无 | — |
 
 ### 9.2 不一致分类：合理差异 vs 不合理差异
@@ -716,7 +742,7 @@ interface ResizeState {
 
 | 差异 | 原因 |
 |------|------|
-| sketch 工具栏左侧垂直 vs canvas 工具栏顶部水平 | sketch 绘画工具 10+ 种（画笔/橡皮/选区/形状/文字/取色），需要纵向空间；canvas 只有 Select+Pan 两种交互工具，节点编辑器行业 5/5 用顶部水平 |
+| Cut 主面板 timeline 控制条 vs 其他子包左侧命令 rail | Cut 的横向控制条是时间线控制组件的一部分；Audio/Model/Puppet 的分析、viewport 等原横向命令行不应成为独立 toolbar，常用命令进入左侧工具栏，局部设置进入右侧面板 |
 | canvas 有 MiniMap，其他包没有 | 只有无限画布需要全局鸟瞰导航，时间轴编辑器/绘画画布不需要 |
 | canvas 无底部时间轴 | canvas 是空间编排，不是时间线性编辑 |
 | cut 工具栏嵌入 PreviewControls | 视频编辑器工具即播放控制，嵌入预览区是行业标准（Premiere/DaVinci） |
@@ -726,13 +752,26 @@ interface ResizeState {
 | 差异 | 影响 | 统一方案 |
 |------|------|---------|
 | **状态信息散落 5 个位置** | 顶部(model) vs 左下(canvas) vs 右侧(sketch/puppet) vs 底部(cut)，用户无法形成"状态在哪看"的一致预期 | **全部统一到 VSCode StatusBar**（§3.1 D1 已决定） |
-| **canvas 树面板在左侧，其他 3 包在右侧** | 用户从 canvas 切到 sketch/model/puppet 时层级面板左右跳，破坏肌肉记忆 | canvas NodeLibrary 本质是**创建面板**（从中拖出新节点），不是**层级树**（浏览/编辑已有层级）。**明确 NodeLibrary 为"创建面板"语义**，左侧放置合理；未来若增加节点层级浏览（如 Outliner），应放右侧浮动面板 |
+| **canvas 创建面板曾在左侧，其他包检查器在右侧** | 左侧同时承载工具和大面板会压缩主画布，也混淆工具栏职责 | canvas NodeLibrary 本质是**创建面板**，迁入右侧面板职责；左侧只保留显示/隐藏 toggle 与全局工具 |
 | **canvas 属性面板浮动，其他 4 包固定右侧** | 用户在 canvas 中编辑节点属性时找不到固定位置 | canvas FloatingPanelHost 保持浮动能力但**默认初始位置锚定右上**（当前已是 `right-3 top-3`），视觉上与其他包右侧面板对齐 |
 | **model/puppet 右面板不可 Resize** | cut 右面板可 resize，model/puppet 不行，交互体验不一致 | model Right Dock + puppet 右面板补全 ResizeHandle（§4.2/§4.3 已决定） |
 
 ### 9.3 工具栏是否需要动态长度
 
 **结论：所有子包工具栏保持固定长度，不引入动态伸缩。**
+
+### 9.4 工具按钮职责归属
+
+Workbench 类编辑器统一按区域职责归位按钮：
+
+| 区域 | 职责 | 放置按钮 |
+|------|------|----------|
+| 左侧工具栏 | 常用/通用动作、既有主工具入口、区域显隐、面板显隐、高层工作区入口 | 保存/导入/文档级导出、显示/隐藏主面板控件、显示/隐藏 HUD、显示/隐藏右侧属性面板、Canvas/Sketch 主工具选择、Model/Puppet viewport 常用命令、Audio 分析/频谱命令 |
+| 主面板工具 | 当前主工作区内嵌控件 | Cut timeline 控制组件、预览播放、transport、时间线表面、viewport/波形/画布展示表面、画布 zoom/minimap/playback |
+| 右侧属性面板 | 选中对象、当前工具或属性面板内部状态 | 属性分组切换、局部 inspector tab、面板内应用/重置、效果/导出/录制设置 |
+| VSCode StatusBar | 被动状态和编辑器级摘要 | 选中/对象数、engine、zoom/tool/layer、duration/sample rate、subsystem/projection、导出状态 |
+
+本规则已落地到 `neko-cut`、`neko-canvas`、`neko-audio`、`neko-puppet`、`neko-model`、`neko-sketch`。后续新增按钮时先判断其作用域：如果按钮是编辑器级通用动作、常用命令或该编辑器既有主工具入口，放左侧工具栏；如果它是 Cut timeline 控制组件、transport、preview playback、canvas zoom/minimap/playback 等主面板内嵌组件，放主面板；如果它是属性/检查器局部操作，放右侧面板；如果按钮只切换某个面板或控件是否可见，优先放左侧工具栏底部显隐组，并标注 `main-panel` / `right-panel` / `hud`，但按钮数量必须由子包真实区域决定，例如 Cut=2、Model=3；如果只是文字/数字/图标状态摘要，优先投射到 VSCode StatusBar。除 Cut 的 timeline 控制组件外，其他子包不得重新引入横向命令工具栏。
 
 | 理由 | 说明 |
 |------|------|
@@ -746,33 +785,20 @@ interface ResizeState {
 - 上下文操作放右侧属性面板或 Popover，不扩展工具栏
 - 工具栏是**锚点**，用户靠肌肉记忆定位，位置和尺寸不应变化
 
-### 9.4 neko-canvas 布局专项分析
+### 9.5 neko-canvas 布局专项分析
 
-#### 9.4.1 当前布局结构
+#### 9.5.1 当前布局结构
 
 ```
-┌─ CanvasTopToolbar (h-11, 44px) ──────────────────────────────────────────────┐
-│ [Select|Pan] │ [Library] │ [Undo|Redo] │ [AutoArrange▼] [Import]  ···  [▶Playback] [⚙] │
-├──────────┬───────────────────────────────────────────────────────────────────┤
-│NodeLibrary│                    InfiniteCanvas (flex-1)                       │
-│ w-220px  │                                                                  │
-│ 固定宽度  │  ┌─FloatingPanelHost─────────────────┐ (z-20, right-3, top-3)   │
-│          │  │ [TabBtn1] [TabBtn2]                │                          │
-│ · core   │  │  ┌──320px draggable panel──┐       │                          │
-│ · story  │  │  └─────────────────────────┘       │                          │
-│ · narr.  │  └────────────────────────────────────┘                          │
-│ · behav. │                                                                  │
-│ · entity │                                                                  │
-│ · memory │  ┌─Status──────┐                           ┌─MiniMap+Zoom────┐   │
-│ · files  │  │subsystems:..│ (z-10, left-3, bottom-3)  │  MiniMap (SVG)  │   │
-│          │  └─────────────┘                           │  ZoomControls   │   │
-│          │  [Projection] (left-3, bottom-10)           └─(right-4,bot-4)┘   │
-├──────────┴──────────────────────────────────────────────────────────────────┤
-│ (无底栏)                                                                     │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌─ Left Rail ┬──────────────────── InfiniteCanvas ────────────────────┬ Right Panel ┐
+│ Pan/Add    │ FloatingPanelHost / PlaybackControllerHost (overlay)    │ NodeLibrary │
+│ Import     │ GenerationPromptPanel / ContentOverlay (overlay)        │ 创建面板     │
+│ Undo/Redo  │ MiniMap + ZoomControls（主面板控件）                    │             │
+│ Library ⟷  │ subsystem/projection 状态 → VSCode StatusBar            │             │
+└────────────┴─────────────────────────────────────────────────────────┴─────────────┘
 ```
 
-#### 9.4.2 Canvas 不需要 Header
+#### 9.5.2 Canvas 不需要 Header
 
 Canvas 当前没有独立 Header（标题栏/文件名/状态栏），这是正确的：
 
@@ -782,36 +808,31 @@ Canvas 当前没有独立 Header（标题栏/文件名/状态栏），这是正�
 | 文档导航 | 无限画布本身就是导航（平移+缩放+MiniMap） |
 | 状态信息 | 应迁入 VSCode StatusBar（§3.1 已裁定） |
 
-canvas 的 CanvasTopToolbar 是纯**工具栏**（Select/Pan/Undo/Redo/Arrange/Playback），不是 Header。这个区分是正确的。
+旧 `CanvasTopToolbar` 已迁移为左侧 `CanvasToolbar` 与主面板 overlay 控件，不再作为 shell 级横向工具栏存在。
 
-#### 9.4.3 工具栏保持顶部
+#### 9.5.3 Canvas 去掉 shell 级横向工具栏
 
-Canvas 工具栏应保持顶部水平，不移到左侧：
+Canvas 的全局工具现在进入左侧工具栏；Playback、MiniMap、Zoom、FloatingPanel、GenerationPrompt 等保持在主面板 overlay 或主面板控件层。这样 Canvas 与 Audio/Model/Puppet/Sketch 一样不再有 shell 级横向工具栏，同时仍保留画布优先的交互模式；Cut 的 timeline 横向控制条是时间线控制组件，不属于被移除的 shell 级横向工具栏。
 
-- canvas 只有 Select + Pan 两种交互工具，不需要左侧垂直工具栏的纵向空间
-- 左侧已有 NodeLibraryPanel (220px)，再加垂直工具栏会过度挤压画布水平空间
-- 节点编排器行业共识：ComfyUI、Node-RED、Draw.io、Unreal Blueprint、n8n — 5/5 用顶部水平
-- 工具栏右侧区域放子系统 Playback 控件（条件渲染），水平布局自然支持左右分区
+#### 9.5.4 NodeLibrary 作为右侧创建面板
 
-#### 9.4.4 NodeLibrary 保持左侧
+NodeLibrary 是**创建面板**（拖拽新建节点），不是**层级树**（浏览编辑已有节点）。在 Creative Workbench Shell 中它归入右侧面板职责，左侧工具栏只保留显示/隐藏该面板的 toggle。
 
-NodeLibrary 是**创建面板**（拖拽新建节点），不是**层级树**（浏览编辑已有节点）。左侧放置符合 Draw.io/n8n 的节点创建面板位置。
+如果未来 canvas 需要增加节点 Outliner（浏览已有节点层级），应作为右侧 FloatingPanel 提供，不应与 NodeLibrary 创建面板合并。
 
-如果未来 canvas 需要增加节点 Outliner（浏览已有节点层级），应作为右侧 FloatingPanel 提供，不应与左侧 NodeLibrary 合并。
-
-#### 9.4.5 MiniMap+ZoomControls 保持右下
+#### 9.5.5 MiniMap+ZoomControls 保持主面板控件
 
 - 右下角是行业通用位置（Figma、Blender、Draw.io 均放右下）
-- 左下角已有状态徽章（迁入 StatusBar 后空出），但右下与 FloatingPanelHost（右上）形成右侧视觉走廊
+- subsystem/projection 状态迁入 StatusBar 后不再占据画布角落
 - MiniMap 宽度与 ZoomControls 宽度对齐（通过 ResizeObserver 同步），聚合为整体控件簇
 
-#### 9.4.6 工具栏小问题
+#### 9.5.6 工具栏小问题
 
 | 问题 | 位置 | 建议 |
 |------|------|------|
-| CursorIcon / HandIcon 使用 inline SVG | `CanvasTopToolbar.tsx:255-268` | 迁移到 `@neko/shared/icons` 或 `@neko/ui/icons`，与其他按钮图标来源统一 |
-| AutoArrange 使用原生 `<select>` (min-w-150px) | `CanvasTopToolbar.tsx:120-149` | 视觉上与 32×32px ToolButton 不统一；未来 `@neko/ui` Select 组件可替换 |
-| 左下状态徽章+Projection 按钮 hardcode 偏移 | `CanvasApp.tsx:1309-1336` | 迁入 StatusBar 后自然解决（§4.4）；若保留 Webview 内状态，应聚合为 StatusCluster |
+| Hand tool 使用 inline SVG | `CanvasToolbar.tsx` | 后续迁移到 `@neko/ui/icons`，与其他按钮图标来源统一 |
+| Add Node popover 使用局部 menu 样式 | `CanvasToolbar.tsx` | 未来可替换为 `@neko/ui` menu/select primitive |
+| Canvas status overlay 回潮风险 | `CanvasApp.tsx` | subsystem/projection 只通过 `canvasStatus` 同步到 `CanvasStatusBar`，不得恢复 Webview 左下状态徽章 |
 
 ---
 
@@ -826,6 +847,6 @@ NodeLibrary 是**创建面板**（拖拽新建节点），不是**层级树**（
 7. **CSS Token/图标收敛由 UI Design System ADR 拥有** — 本 ADR 仅声明布局组件必须消费 `--neko-*` token，不主动发起全包替换
 8. **跨子包组件位置：区分合理差异与不合理差异** — 工具栏位置差异因交互模式不同属合理差异，不强行统一；状态信息散落 5 个位置属不合理差异，统一到 VSCode StatusBar
 9. **工具栏固定长度** — 所有子包工具栏保持固定尺寸，不引入动态伸缩
-10. **neko-canvas 布局保持不变** — 顶部工具栏、左侧 NodeLibrary（创建面板语义）、右下 MiniMap+Zoom 符合行业共识。未来节点 Outliner 应放右侧浮动面板
-11. **接口契约先行** — `StatusBarItemSpec`、`WorkbenchLayoutSlots`、`ResizeState` 在 Phase 0 定义，后续 PR 对齐契约实施；Agent-specific 契约随独立 redesign 再定义
+10. **neko-canvas 迁入 Creative Workbench Shell** — 顶部横向工具栏移除；左侧工具栏承接全局工具与右侧 NodeLibrary 显隐；MiniMap/Zoom/Playback/FloatingPanel 保持主面板控件；subsystem/projection 状态只进 StatusBar
+11. **接口契约先行** — `StatusBarItemSpec`、`CreativeWorkbenchShell`、`WorkbenchLayoutSlots`、`ResizeState` 在共享层定义，后续 PR 对齐契约实施；Agent-specific 契约随独立 redesign 再定义
 12. **实施顺序：契约 → 先建后拆 → Agent 回退并延期 → Resize → CSS(由 UI Design System ADR 执行)** — 避免跨包连锁改动
