@@ -4,7 +4,7 @@ export const CUT_PROPERTY_PANEL_WIDTH_BOUNDS = {
 } as const;
 
 export interface PreviewControlActionPlacement {
-  readonly id: 'quality' | 'speed' | 'fps' | 'screenshot' | 'pip' | 'fullscreen' | 'propertyPanel';
+  readonly id: 'quality' | 'speed' | 'fps' | 'screenshot' | 'pip' | 'fullscreen';
   readonly placement: 'primary' | 'settings' | 'overflow';
 }
 
@@ -15,7 +15,6 @@ export const PREVIEW_CONTROL_ACTION_PLACEMENTS = [
   { id: 'screenshot', placement: 'overflow' },
   { id: 'pip', placement: 'overflow' },
   { id: 'fullscreen', placement: 'primary' },
-  { id: 'propertyPanel', placement: 'primary' },
 ] as const satisfies readonly PreviewControlActionPlacement[];
 
 export function clampCutPropertyPanelWidth(width: number): number {

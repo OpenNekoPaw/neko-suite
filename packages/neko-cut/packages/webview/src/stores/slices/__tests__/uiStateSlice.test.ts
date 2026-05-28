@@ -57,6 +57,10 @@ describe('uiStateSlice', () => {
       expect(store.getState().showMinimap).toBe(true);
     });
 
+    it('should start with mainPanelToolsVisible = true', () => {
+      expect(store.getState().mainPanelToolsVisible).toBe(true);
+    });
+
     it('should start with frameAlignEnabled = false', () => {
       expect(store.getState().frameAlignEnabled).toBe(false);
     });
@@ -237,6 +241,19 @@ describe('uiStateSlice', () => {
       store.getState().toggleMinimap();
       store.getState().toggleMinimap();
       expect(store.getState().showMinimap).toBe(true);
+    });
+  });
+
+  describe('toggleMainPanelTools', () => {
+    it('should toggle from true to false', () => {
+      store.getState().toggleMainPanelTools();
+      expect(store.getState().mainPanelToolsVisible).toBe(false);
+    });
+
+    it('should toggle back to true', () => {
+      store.getState().toggleMainPanelTools();
+      store.getState().toggleMainPanelTools();
+      expect(store.getState().mainPanelToolsVisible).toBe(true);
     });
   });
 

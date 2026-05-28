@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useResizable } from '@neko/ui/hooks';
 import { ResizeHandle } from '@neko/ui/primitives';
+import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import { useShallowStore } from './hooks/useShallowStore';
 import { useVSCodeMessaging } from './hooks/useVSCodeMessaging';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -60,6 +61,8 @@ function App() {
   const propertyPanelVisible = useEditorStore((state) => state.propertyPanelVisible);
   const propertyPanelWidth = useEditorStore((state) => state.propertyPanelWidth);
   const setPropertyPanelWidth = useEditorStore((state) => state.setPropertyPanelWidth);
+  const mainPanelToolsVisible = useEditorStore((state) => state.mainPanelToolsVisible);
+  const toggleMainPanelTools = useEditorStore((state) => state.toggleMainPanelTools);
   const togglePropertyPanel = useEditorStore((state) => state.togglePropertyPanel);
   const { sendMessage } = useVSCodeMessaging();
   const animationFrameRef = useRef<number>(0);
@@ -226,89 +229,95 @@ function App() {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <CutSideToolbar
-        propertyPanelVisible={propertyPanelVisible}
-        onTogglePropertyPanel={togglePropertyPanel}
-      />
-
-      {/* Left: Preview + Timeline (vertical split) */}
-      <div ref={containerRef} className="flex flex-col flex-1 min-w-0">
-        {/* Preview Panel with Controls */}
-        <div
-          className="flex flex-col overflow-hidden min-h-0"
-          style={{ flex: isFullscreen ? 1 : previewRatio }}
-        >
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <PreviewPanel onCaptureScreenshot={handleCaptureScreenshot} />
-          </div>
-          <PreviewControls
-            currentTime={currentTime}
-            totalDuration={getTotalDuration()}
-            isPlaying={isPlaying}
-            playbackSpeed={playbackSpeed}
-            seek={seek}
-            togglePlayback={togglePlayback}
-            setPlaybackSpeed={setPlaybackSpeed}
-            previewQuality={previewQuality}
-            setPreviewQuality={setPreviewQuality}
-            previewVolume={previewVolume}
-            previewMuted={previewMuted}
-            setPreviewVolume={setPreviewVolume}
-            togglePreviewMute={togglePreviewMute}
-            resolution={project.resolution}
-            fps={project.fps}
-            isFullscreen={isFullscreen}
-            onFullscreenToggle={toggleFullscreen}
-            onCaptureScreenshot={handleCaptureScreenshot}
-            isCapturingScreenshot={isCapturingScreenshot}
+      <CreativeWorkbenchShell
+        className="cut-workbench-shell"
+        bodyClassName="cut-workbench-body"
+        mainClassName="cut-main-panel"
+        mainKind="preview-timeline"
+        leftRail={
+          <CutSideToolbar
+            mainPanelToolsVisible={mainPanelToolsVisible}
             propertyPanelVisible={propertyPanelVisible}
+            onToggleMainPanelTools={toggleMainPanelTools}
             onTogglePropertyPanel={togglePropertyPanel}
           />
-        </div>
+        }
+        main={
+          <div ref={containerRef} className="cut-preview-timeline-panel">
+            <div
+              className="flex flex-col overflow-hidden min-h-0"
+              style={{ flex: isFullscreen ? 1 : previewRatio }}
+            >
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <PreviewPanel onCaptureScreenshot={handleCaptureScreenshot} />
+              </div>
+              <PreviewControls
+                currentTime={currentTime}
+                totalDuration={getTotalDuration()}
+                isPlaying={isPlaying}
+                playbackSpeed={playbackSpeed}
+                seek={seek}
+                togglePlayback={togglePlayback}
+                setPlaybackSpeed={setPlaybackSpeed}
+                previewQuality={previewQuality}
+                setPreviewQuality={setPreviewQuality}
+                previewVolume={previewVolume}
+                previewMuted={previewMuted}
+                setPreviewVolume={setPreviewVolume}
+                togglePreviewMute={togglePreviewMute}
+                resolution={project.resolution}
+                fps={project.fps}
+                isFullscreen={isFullscreen}
+                onFullscreenToggle={toggleFullscreen}
+                onCaptureScreenshot={handleCaptureScreenshot}
+                isCapturingScreenshot={isCapturingScreenshot}
+              />
+            </div>
 
-        {/* Vertical Resize Handle - hidden in fullscreen */}
-        {!isFullscreen && (
-          <ResizeHandle
-            handleProps={previewResizeHandleProps}
-            className={`h-1 flex-shrink-0 cursor-ns-resize border-t border-vscode-panel-border transition-colors ${
-              isResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
-            }`}
-          />
-        )}
+            {!isFullscreen && (
+              <ResizeHandle
+                handleProps={previewResizeHandleProps}
+                className={`h-1 flex-shrink-0 cursor-ns-resize border-t border-vscode-panel-border transition-colors ${
+                  isResizing ? 'bg-vscode-accent' : 'hover:bg-vscode-accent/50'
+                }`}
+              />
+            )}
 
-        {/* Timeline with Controls - hidden in fullscreen */}
-        {!isFullscreen && (
-          <div className="overflow-hidden flex flex-col min-h-0" style={{ flex: 1 - previewRatio }}>
-            <Timeline />
+            {!isFullscreen && (
+              <div
+                className="overflow-hidden flex flex-col min-h-0"
+                style={{ flex: 1 - previewRatio }}
+              >
+                <Timeline />
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      {/* Right: Inline PropertyPanel (collapsible) */}
-      {propertyPanelVisible && (
-        <>
-          {/* Horizontal Resize Handle */}
-          <ResizeHandle
-            handleProps={propertyPanelResizeHandleProps}
-            className={`w-1 flex-shrink-0 cursor-ew-resize transition-colors ${
-              isHResizing
-                ? 'bg-[var(--vscode-button-background)]'
-                : 'bg-[var(--vscode-panel-border)] hover:bg-[var(--vscode-button-background)]'
-            }`}
-          />
-          {/* PropertyPanel */}
-          <div
-            id="cut-property-panel"
-            className="flex-shrink-0 overflow-hidden border-l border-[var(--vscode-panel-border)]"
-            style={{
-              width: propertyPanelWidth,
-              background: 'var(--vscode-sideBar-background)',
-            }}
-          >
-            <PropertyPanelInline />
-          </div>
-        </>
-      )}
+        }
+        rightPanel={
+          propertyPanelVisible ? (
+            <>
+              <ResizeHandle
+                handleProps={propertyPanelResizeHandleProps}
+                className={`w-1 flex-shrink-0 cursor-ew-resize transition-colors ${
+                  isHResizing
+                    ? 'bg-[var(--vscode-button-background)]'
+                    : 'bg-[var(--vscode-panel-border)] hover:bg-[var(--vscode-button-background)]'
+                }`}
+              />
+              <div
+                id="cut-property-panel"
+                className="flex-shrink-0 overflow-hidden border-l border-[var(--vscode-panel-border)]"
+                style={{
+                  width: propertyPanelWidth,
+                  background: 'var(--vscode-sideBar-background)',
+                }}
+              >
+                <PropertyPanelInline />
+              </div>
+            </>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

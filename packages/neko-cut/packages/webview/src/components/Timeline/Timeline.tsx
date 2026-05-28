@@ -3,7 +3,7 @@
  * 时间线主组件 - 组合所有提取的 Hooks 和 UI 组件
  */
 
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { useEditorStore } from '../../stores/editor-store';
 import { ExportPanel } from './export';
 import { ContextMenu } from '../ContextMenu';
@@ -57,13 +57,12 @@ export function Timeline() {
     clipboard,
     showMinimap,
     toggleMinimap,
+    mainPanelToolsVisible,
   } = useEditorStore();
 
   // Refs
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksRef = useRef<HTMLDivElement>(null);
-
-  // UI state
   const [showExportPanel, setShowExportPanel] = useState(false);
 
   // Calculate derived values
@@ -168,7 +167,6 @@ export function Timeline() {
     onError: (message) => showToast(message, 'error'),
   });
 
-  // Listen for showExportPanel event from status bar click
   useEffect(() => {
     const handleShowExportPanel = () => {
       setShowExportPanel(true);
@@ -201,8 +199,8 @@ export function Timeline() {
 
   return (
     <div ref={timelineRef} className="h-full flex flex-col bg-vscode-editor-bg">
-      {/* Controls Panel */}
       <TimelineControls
+        visible={mainPanelToolsVisible}
         zoomLevel={zoomLevel}
         setZoomLevel={setZoomLevel}
         snappingEnabled={snappingEnabled}
@@ -226,16 +224,18 @@ export function Timeline() {
       />
 
       {/* Minimap (if enabled) */}
-      {showMinimap && project && (
-        <TimelineMinimap
-          totalDuration={totalDuration}
-          currentTime={currentTime}
-          visibleStart={visibleRange.startTime}
-          visibleEnd={visibleRange.endTime}
-          zoomLevel={zoomLevel}
-          project={project}
-          onScrollToTime={scrollToTime}
-        />
+      {mainPanelToolsVisible && showMinimap && project && (
+        <div id="cut-timeline-minimap">
+          <TimelineMinimap
+            totalDuration={totalDuration}
+            currentTime={currentTime}
+            visibleStart={visibleRange.startTime}
+            visibleEnd={visibleRange.endTime}
+            zoomLevel={zoomLevel}
+            project={project}
+            onScrollToTime={scrollToTime}
+          />
+        </div>
       )}
 
       {/* Ruler — canvas redraws based on tracksRef scroll, no separate scroll container needed */}
@@ -289,7 +289,6 @@ export function Timeline() {
         onExecuteAIAction={handleExecuteAIAction}
       />
 
-      {/* Export Panel Modal */}
       <ExportPanel isOpen={showExportPanel} onClose={() => setShowExportPanel(false)} />
 
       {/* Context Menu */}

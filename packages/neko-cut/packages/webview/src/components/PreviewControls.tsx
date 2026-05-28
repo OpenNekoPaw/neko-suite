@@ -60,10 +60,6 @@ export interface PreviewControlsProps {
   // Screenshot
   onCaptureScreenshot?: () => void;
   isCapturingScreenshot?: boolean;
-
-  // Property panel toggle
-  propertyPanelVisible?: boolean;
-  onTogglePropertyPanel?: () => void;
 }
 
 // Dropdown component for selections
@@ -165,8 +161,6 @@ export const PreviewControls = memo(function PreviewControls({
   onFullscreenToggle,
   onCaptureScreenshot,
   isCapturingScreenshot = false,
-  propertyPanelVisible = true,
-  onTogglePropertyPanel,
 }: PreviewControlsProps) {
   const { t } = useTranslation();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -435,22 +429,6 @@ export const PreviewControls = memo(function PreviewControls({
           </>
         )}
       </div>
-
-      {/* Property Panel Toggle — pinned right, never clipped */}
-      {onTogglePropertyPanel && (
-        <div className="flex items-center flex-shrink-0 ml-1">
-          <div className="w-px h-4 bg-vscode-panel-border mx-1" />
-          <button
-            onClick={onTogglePropertyPanel}
-            className={`p-1.5 hover:bg-vscode-toolbar-hover rounded ${propertyPanelVisible ? 'text-vscode-accent' : ''}`}
-            title={t('preview.togglePropertyPanel')}
-          >
-            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-              <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM15 5v14h-2V5h2z" />
-            </svg>
-          </button>
-        </div>
-      )}
     </div>
   );
 });

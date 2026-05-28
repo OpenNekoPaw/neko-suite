@@ -25,4 +25,9 @@ describe('PreviewControls narrow-layout structure', () => {
     expect(overflowSource).toContain('onCaptureScreenshot');
     expect(overflowSource).toContain('__previewPanelTogglePiP');
   });
+
+  it('does not own property panel visibility controls', () => {
+    expect(componentSource).not.toContain('onTogglePropertyPanel');
+    expect(componentSource).not.toContain('propertyPanelVisible');
+  });
 });

@@ -17,7 +17,9 @@ describe('PreviewControls presenter', () => {
     expect(placements.get('quality')).toBe('settings');
     expect(placements.get('speed')).toBe('settings');
     expect(placements.get('fullscreen')).toBe('primary');
-    expect(placements.get('propertyPanel')).toBe('primary');
+    expect(PREVIEW_CONTROL_ACTION_PLACEMENTS.map((action) => action.id)).not.toContain(
+      'propertyPanel',
+    );
   });
 
   it('clamps property panel width to the Cut bounds', () => {

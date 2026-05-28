@@ -16,7 +16,7 @@
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/platform`、`@neko/shared`、`@neko/neko-client`、`sharp`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
-- **布局**：PreviewControls 保留播放/时间码为主控件，Quality/Speed 收入 Settings，FPS/Screenshot/PiP 收入溢出菜单；右侧 PropertyPanel 宽度约束为 200-400px。
+- **布局**：Webview 使用 Creative Workbench Shell；左侧 CutSideToolbar 只负责主面板时间线控件与右侧属性面板的显示/隐藏；主面板保留 PreviewControls、预览表面、时间线表面、时间线工具按钮与 minimap，minimap 随主面板时间线控件一起显隐；右侧 PropertyPanel 承接属性编辑按钮；Quality/Speed 收入 Settings，FPS/Screenshot/PiP 收入溢出菜单；右侧 PropertyPanel 宽度约束为 200-400px。播放状态、时间、轨道/元素数量和导出进度由 Extension 侧 StatusBar 投射到 VSCode 原生 StatusBar。
 
 ## Architecture
 

@@ -132,6 +132,10 @@ export interface UIStateSlice {
   showMinimap: boolean;
   toggleMinimap: () => void;
 
+  // Main panel controls
+  mainPanelToolsVisible: boolean;
+  toggleMainPanelTools: () => void;
+
   // Frame alignment
   frameAlignEnabled: boolean;
   toggleFrameAlign: () => void;
@@ -202,6 +206,7 @@ export const createUIStateSlice: StateCreator<UIStateSlice, [], [], UIStateSlice
   rippleEditingEnabled: false,
   showClipThumbnails: true,
   showMinimap: true,
+  mainPanelToolsVisible: true,
   frameAlignEnabled: false,
   isPiPActive: false,
   snapIndicatorTime: null,
@@ -232,6 +237,9 @@ export const createUIStateSlice: StateCreator<UIStateSlice, [], [], UIStateSlice
   toggleClipThumbnails: () => set((state) => ({ showClipThumbnails: !state.showClipThumbnails })),
 
   toggleMinimap: () => set((state) => ({ showMinimap: !state.showMinimap })),
+
+  toggleMainPanelTools: () =>
+    set((state) => ({ mainPanelToolsVisible: !state.mainPanelToolsVisible })),
 
   toggleFrameAlign: () => set((state) => ({ frameAlignEnabled: !state.frameAlignEnabled })),
 
