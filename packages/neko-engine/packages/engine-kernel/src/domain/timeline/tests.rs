@@ -85,6 +85,46 @@ fn test_element_source_time() {
 }
 
 #[test]
+fn test_element_source_time_with_speed_uses_timeline_duration() {
+    let element = Element {
+        id: "test".to_string(),
+        name: String::new(),
+        element_type: ElementType::Media(MediaElementData {
+            src: "/path/to/video.mp4".to_string(),
+            resource_id: None,
+            audio: None,
+            media_type: None,
+            linked_audio_id: None,
+            volume: 1.0,
+        }),
+        start_time: 20.0,
+        duration: 5.0,
+        trim_start: 1.0,
+        trim_end: 1.0,
+        transform: Transform::default(),
+        opacity: 1.0,
+        blend_mode: BlendMode::Normal,
+        effects: Vec::new(),
+        muted: false,
+        hidden: false,
+        locked: false,
+        speed: Some(SpeedProperties {
+            speed: 2.0,
+            reverse: false,
+            preserve_pitch: true,
+            time_remap: None,
+        }),
+        transition_in: None,
+        transition_out: None,
+        masks: Vec::new(),
+        transition: None,
+    };
+
+    assert_eq!(element.get_source_time(20.0), 1.0);
+    assert_eq!(element.get_source_time(22.5), 6.0);
+}
+
+#[test]
 fn track_reorder_rejects_mismatched_track_id() {
     let mut timeline = Timeline::new(Resolution::full_hd(), 30.0);
     timeline.tracks = vec![

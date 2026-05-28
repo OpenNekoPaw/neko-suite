@@ -151,6 +151,7 @@ pub struct HwAccelDecoder {
     input_ctx: Option<ffmpeg::format::context::Input>,
     decoder: Option<ffmpeg::decoder::Video>,
     stream_index: usize,
+    stream_start_pts: i64,
     media_info: Option<MediaInfo>,
     current_position: f64,
     time_base: f64,
@@ -167,6 +168,7 @@ impl HwAccelDecoder {
             input_ctx: None,
             decoder: None,
             stream_index: 0,
+            stream_start_pts: 0,
             media_info: None,
             current_position: 0.0,
             time_base: 1.0,
@@ -203,6 +205,14 @@ impl HwAccelDecoder {
     /// Only valid after `open()` has been called.
     pub fn time_base(&self) -> f64 {
         self.time_base
+    }
+
+    fn seconds_to_stream_pts(&self, time_seconds: f64) -> i64 {
+        self.stream_start_pts + (time_seconds / self.time_base).round() as i64
+    }
+
+    fn stream_pts_to_seconds(&self, pts: i64) -> f64 {
+        ((pts - self.stream_start_pts) as f64 * self.time_base).max(0.0)
     }
 
     /// Decode next frame as NV12 GPU texture
@@ -303,7 +313,7 @@ impl HwAccelDecoder {
         }
 
         // Decode frames until we reach or pass the target time
-        let target_pts = (time_seconds / self.time_base) as i64;
+        let target_pts = self.seconds_to_stream_pts(time_seconds);
         let mut last_frame: Option<Nv12GpuTexture> = None;
 
         loop {
@@ -326,14 +336,17 @@ impl HwAccelDecoder {
         let format = hw_frame.format();
         let width = hw_frame.width();
         let height = hw_frame.height();
-        let pts = hw_frame.pts().unwrap_or(0);
+        let pts = hw_frame
+            .timestamp()
+            .or_else(|| hw_frame.pts())
+            .unwrap_or(self.stream_start_pts);
         let is_keyframe = hw_frame.is_key();
 
         // Extract color space from frame
         let color_space = unsafe { (*hw_frame.as_ptr()).colorspace as i32 };
 
         // Update position
-        self.current_position = pts as f64 * self.time_base;
+        self.current_position = self.stream_pts_to_seconds(pts);
 
         // Extract platform-specific GPU handle
         let handle = self.extract_platform_handle(hw_frame, format)?;
@@ -651,6 +664,10 @@ impl Decoder for HwAccelDecoder {
         let codec_params = stream.parameters();
         let time_base = stream.time_base();
         self.time_base = time_base.numerator() as f64 / time_base.denominator() as f64;
+        let stream_start_pts = match stream.start_time() {
+            ffmpeg::ffi::AV_NOPTS_VALUE => 0,
+            value => value,
+        };
 
         let context = ffmpeg::codec::context::Context::from_parameters(codec_params)?;
         let mut decoder = context.decoder().video()?;
@@ -698,6 +715,7 @@ impl Decoder for HwAccelDecoder {
         self.input_ctx = Some(input_ctx);
         self.decoder = Some(decoder);
         self.stream_index = stream_index;
+        self.stream_start_pts = stream_start_pts;
         self.media_info = Some(media_info.clone());
         self.current_position = 0.0;
 
@@ -705,19 +723,30 @@ impl Decoder for HwAccelDecoder {
     }
 
     fn seek(&mut self, time_seconds: f64) -> Result<()> {
+        if time_seconds < 0.0 {
+            return Err(Error::InvalidSeek(time_seconds));
+        }
+
+        let timestamp = self.seconds_to_stream_pts(time_seconds);
         let input_ctx = self
             .input_ctx
             .as_mut()
             .ok_or(Error::DecoderNotInitialized)?;
         let decoder = self.decoder.as_mut().ok_or(Error::DecoderNotInitialized)?;
 
-        if time_seconds < 0.0 {
-            return Err(Error::InvalidSeek(time_seconds));
+        unsafe {
+            let result = ffmpeg::ffi::avformat_seek_file(
+                input_ctx.as_mut_ptr(),
+                self.stream_index as i32,
+                i64::MIN,
+                timestamp,
+                timestamp,
+                ffmpeg::ffi::AVSEEK_FLAG_BACKWARD,
+            );
+            if result < 0 {
+                return Err(ffmpeg::Error::from(result).into());
+            }
         }
-
-        // avformat_seek_file uses AV_TIME_BASE (microseconds) by default
-        let timestamp = (time_seconds * ffmpeg::ffi::AV_TIME_BASE as f64) as i64;
-        input_ctx.seek(timestamp, ..timestamp)?;
         decoder.flush();
         self.current_position = time_seconds;
 
@@ -753,6 +782,7 @@ impl Decoder for HwAccelDecoder {
         self.decoder = None;
         self.input_ctx = None;
         self.media_info = None;
+        self.stream_start_pts = 0;
         self.current_position = 0.0;
         self.active_hw_type = None;
         self.hw_device_ctx = None;
@@ -787,5 +817,25 @@ mod tests {
     fn test_with_hw_accel() {
         let decoder = HwAccelDecoder::with_hw_accel(HwAccelType::VideoToolbox);
         assert_eq!(decoder.config.hw_accel, HwAccelType::VideoToolbox);
+    }
+
+    #[test]
+    fn test_stream_pts_conversion_accounts_for_stream_start() {
+        let mut decoder = HwAccelDecoder::new();
+        decoder.time_base = 1.0 / 1000.0;
+        decoder.stream_start_pts = 2400;
+
+        assert_eq!(decoder.seconds_to_stream_pts(0.0), 2400);
+        assert_eq!(decoder.seconds_to_stream_pts(1.25), 3650);
+        assert_eq!(decoder.stream_pts_to_seconds(3650), 1.25);
+    }
+
+    #[test]
+    fn test_stream_pts_to_seconds_clamps_before_stream_start() {
+        let mut decoder = HwAccelDecoder::new();
+        decoder.time_base = 1.0 / 1000.0;
+        decoder.stream_start_pts = 2400;
+
+        assert_eq!(decoder.stream_pts_to_seconds(1200), 0.0);
     }
 }
