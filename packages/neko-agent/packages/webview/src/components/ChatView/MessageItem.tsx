@@ -9,6 +9,7 @@ import { MessageActions } from '@/components/ChatView/MessageActions';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { ImagePreview, AudioCard, VideoCard } from '@/components/ChatView/MediaPreview';
+import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import {
@@ -47,32 +48,6 @@ function formatTime(timestamp: number): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// User avatar component - compact size (20px)
-function UserAvatar() {
-  return (
-    <div className="w-5 h-5 rounded-full bg-[var(--vscode-button-background)] flex items-center justify-center flex-shrink-0">
-      <svg
-        className="w-3 h-3 text-[var(--vscode-button-foreground)]"
-        fill="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-      </svg>
-    </div>
-  );
-}
-
-// Assistant avatar component - compact size (20px)
-function AssistantAvatar() {
-  return (
-    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[var(--vscode-charts-purple)] to-[var(--vscode-charts-blue)] flex items-center justify-center flex-shrink-0">
-      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-      </svg>
-    </div>
-  );
-}
-
 // Attachment preview component
 function AttachmentDisplay({ projection }: { projection: MessageAttachmentProjection }) {
   if (projection.previewKind === 'image' && projection.previewSrc) {
@@ -100,7 +75,7 @@ function AttachmentDisplay({ projection }: { projection: MessageAttachmentProjec
   }
 
   return (
-    <div className="mt-1 inline-flex items-center gap-1 px-2 py-1 bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded text-[11px]">
+    <div className="agent-bubble agent-bubble-assistant mt-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]">
       <span>{projection.icon}</span>
       <span className="truncate max-w-[150px]">{projection.name}</span>
       {projection.showSize && projection.sizeLabel && (
@@ -161,7 +136,7 @@ function ContentBlockRenderer({
           : null;
 
       return (
-        <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]/60 rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
+        <div className="agent-bubble agent-bubble-assistant block w-fit max-w-full min-w-0 rounded-2xl rounded-tl-md px-2.5 py-1.5 text-[13px] leading-relaxed">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
           {canvasPayload && pluginsAvailable && (
             <div className="mt-1.5 border-t border-[var(--agent-divider)] pt-1">
@@ -371,7 +346,7 @@ export const MessageItem = memo(function MessageItem({
   if (isSystem) {
     return (
       <div className="flex justify-center py-1 px-2">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] text-[var(--vscode-descriptionForeground)] bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)]">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--agent-bubble-assistant-border)] bg-[var(--agent-bubble-assistant-bg)] px-2.5 py-1 text-[11px] text-[var(--agent-fg-secondary)]">
           {message.isQueued && (
             <svg className="w-3 h-3 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
@@ -386,16 +361,12 @@ export const MessageItem = memo(function MessageItem({
   // User messages: right-aligned with avatar on right
   // Assistant messages: left-aligned with avatar on left
   return (
-    <div className="group hover:bg-[var(--vscode-list-hoverBackground)] transition-colors">
+    <div className="agent-message-row group">
       <div className={`flex gap-2 px-2 py-1 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
         {/* Avatar - compact 20px */}
         <div className="flex-shrink-0 w-5 pt-0.5">
           {showAvatar && !isGrouped ? (
-            isUser ? (
-              <UserAvatar />
-            ) : (
-              <AssistantAvatar />
-            )
+            <MessageAvatar role={isUser ? 'user' : 'assistant'} title={isUser ? 'You' : 'AI'} />
           ) : (
             <div className="w-5" />
           )}
@@ -424,9 +395,7 @@ export const MessageItem = memo(function MessageItem({
 
           {/* User message content - compact bubble */}
           {isUser ? (
-            <div
-              className={`block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] via-[var(--vscode-button-background)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] rounded-tr-sm shadow-[0_2px_8px_rgba(0,0,0,0.2)]`}
-            >
+            <div className="agent-bubble agent-bubble-user block w-fit max-w-full min-w-0 rounded-2xl rounded-tr-md px-2.5 py-1.5 text-[13px] leading-relaxed">
               {/* Context references for user messages */}
               {message.contextReferences && message.contextReferences.length > 0 && (
                 <div className="mb-1.5 flex flex-wrap gap-1">

@@ -487,7 +487,7 @@ export function InputArea({
         </div>
       )}
 
-      <div className="border-t border-[var(--vscode-panel-border)]">
+      <div className="border-t border-[var(--agent-composer-rail-border)] bg-[var(--agent-composer-rail-bg)]">
         {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
         <div className="flex items-center px-2 py-1 gap-0.5">
           {/* Left: session mode */}
@@ -518,7 +518,7 @@ export function InputArea({
           {/* Separator */}
           <div
             className="w-px h-3.5 mx-1 opacity-30"
-            style={{ background: 'var(--vscode-panel-border)' }}
+            style={{ background: 'var(--agent-composer-rail-border)' }}
           />
 
           {/* Right: generation params (media model integrated in agent mode) */}
@@ -526,7 +526,7 @@ export function InputArea({
         </div>
 
         {/* ── Input container ── */}
-        <div className="relative bg-[var(--vscode-input-background)] border border-[var(--vscode-input-border)] rounded-xl mx-2 mb-2 focus-within:border-[var(--vscode-focusBorder)] transition-colors">
+        <div className="agent-composer-shell relative mx-2 mb-2">
           {/* Slash command menu */}
           <SlashCommandMenu
             isOpen={showSlashMenu}
@@ -601,7 +601,7 @@ export function InputArea({
           </div>
 
           {/* ── Bottom bar: utilities + execution mode + send ── */}
-          <div className="border-t border-[var(--vscode-panel-border)] border-opacity-30 flex items-center px-2 py-1 gap-0.5">
+          <div className="agent-composer-toolbar flex items-center gap-0.5 px-2 py-1">
             {/* Attachment button */}
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -673,8 +673,8 @@ export function InputArea({
                 disabled={!inputAreaProjection.canSend}
                 className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition-all ${
                   inputAreaProjection.canSend
-                    ? 'bg-gradient-to-br from-[var(--vscode-charts-blue,#0e63c8)] to-[var(--vscode-charts-purple,#6b3fa0)] text-[var(--vscode-button-foreground)] hover:opacity-90 shadow-[0_2px_8px_rgba(0,0,0,0.25)]'
-                    : 'bg-[var(--vscode-input-background)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
+                    ? 'agent-composer-send hover:opacity-95'
+                    : 'bg-[var(--agent-control-muted-bg)] text-[var(--vscode-descriptionForeground)] opacity-50 cursor-not-allowed'
                 }`}
                 title={t('chat.input.send')}
               >

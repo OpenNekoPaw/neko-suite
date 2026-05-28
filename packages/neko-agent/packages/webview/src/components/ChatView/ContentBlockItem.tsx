@@ -12,6 +12,7 @@ import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
+import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
@@ -38,17 +39,6 @@ interface ContentBlockItemProps {
   workItemIds?: string[];
   /** Sibling blocks from the owner message, used for composite media resolution */
   siblingBlocks?: ContentBlock[];
-}
-
-// Assistant avatar component - compact size (20px)
-function AssistantAvatar() {
-  return (
-    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[var(--vscode-charts-purple)] to-[var(--vscode-charts-blue)] flex items-center justify-center flex-shrink-0">
-      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-      </svg>
-    </div>
-  );
 }
 
 const blockHeaderIconByKind: Record<ContentBlockHeaderIconKind, string> = {
@@ -84,11 +74,11 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   });
 
   return (
-    <div className="group hover:bg-[var(--vscode-list-hoverBackground)] transition-colors">
+    <div className="agent-message-row group">
       <div className="flex gap-2 px-2 py-1">
         {/* Avatar - only show on first block */}
         <div className="flex-shrink-0 w-5 pt-0.5">
-          {isFirst ? <AssistantAvatar /> : <div className="w-5" />}
+          {isFirst ? <MessageAvatar role="assistant" title="AI" /> : <div className="w-5" />}
         </div>
 
         {/* Content */}
@@ -159,7 +149,7 @@ function renderBlockContent(
           : null;
 
       return (
-        <div className="block w-fit max-w-full min-w-0 px-2.5 py-1.5 rounded-xl text-[13px] leading-relaxed bg-[var(--vscode-input-background)] border border-[var(--vscode-panel-border)] rounded-tl-sm">
+        <div className="agent-bubble agent-bubble-assistant block w-fit max-w-full min-w-0 rounded-2xl rounded-tl-md px-2.5 py-1.5 text-[13px] leading-relaxed">
           <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
           {canvasPayload && callbacks.pluginsAvailable && (
             <div className="mt-1.5 border-t border-[var(--agent-divider)] pt-1">

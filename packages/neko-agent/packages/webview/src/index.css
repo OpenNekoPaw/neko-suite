@@ -99,6 +99,31 @@
   --agent-accent-fg: var(--vscode-button-foreground, var(--fallback-button-fg));
   --agent-input-bg: color-mix(in srgb, var(--agent-elevated) 84%, var(--agent-bg) 16%);
   --agent-input-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
+  --agent-chat-row-hover: color-mix(in srgb, var(--agent-fg) 3%, transparent);
+  --agent-bubble-assistant-bg: color-mix(in srgb, var(--agent-elevated) 58%, var(--agent-bg) 42%);
+  --agent-bubble-assistant-border: color-mix(in srgb, var(--agent-fg) 10%, transparent);
+  --agent-bubble-user-bg: color-mix(in srgb, var(--agent-accent) 12%, var(--agent-elevated) 88%);
+  --agent-bubble-user-border: color-mix(in srgb, var(--agent-accent) 28%, var(--agent-fg) 6%);
+  --agent-bubble-user-fg: var(--agent-fg);
+  --agent-bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
+  --agent-bubble-user-shadow: 0 1px 4px color-mix(in srgb, var(--agent-accent) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 5%, transparent);
+  --agent-composer-rail-bg: color-mix(in srgb, var(--agent-bg) 92%, var(--agent-elevated) 8%);
+  --agent-composer-rail-border: color-mix(in srgb, var(--agent-fg) 8%, transparent);
+  --agent-composer-bg: color-mix(in srgb, var(--agent-elevated) 64%, var(--agent-bg) 36%);
+  --agent-composer-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
+  --agent-composer-focus-border: color-mix(in srgb, var(--agent-accent) 64%, var(--agent-fg) 8%);
+  --agent-composer-divider: color-mix(in srgb, var(--agent-fg) 7%, transparent);
+  --agent-composer-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 4%, transparent);
+  --agent-composer-focus-shadow: 0 0 0 1px color-mix(in srgb, var(--agent-accent) 24%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--agent-accent) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--agent-fg) 5%, transparent);
+  --agent-control-muted-bg: color-mix(in srgb, var(--agent-fg) 7%, transparent);
+  --agent-composer-send-bg: color-mix(in srgb, var(--agent-accent) 88%, var(--agent-fg) 12%);
+  --agent-composer-send-border: color-mix(in srgb, var(--agent-accent) 72%, transparent);
+  --agent-composer-send-fg: var(--agent-accent-fg);
   --agent-tab-active-bg: color-mix(in srgb, var(--agent-accent) 18%, transparent);
   --agent-menu-bg: color-mix(
     in srgb,
@@ -126,6 +151,24 @@ body[data-vscode-theme-kind='vscode-high-contrast'] {
   --agent-accent-soft: var(--vscode-list-activeSelectionBackground, rgba(255, 255, 255, 0.18));
   --agent-input-bg: var(--agent-elevated);
   --agent-input-border: var(--agent-border);
+  --agent-chat-row-hover: var(--vscode-list-hoverBackground, transparent);
+  --agent-bubble-assistant-bg: var(--agent-elevated);
+  --agent-bubble-assistant-border: var(--agent-border);
+  --agent-bubble-user-bg: var(--vscode-list-activeSelectionBackground, var(--agent-elevated));
+  --agent-bubble-user-border: var(--agent-border);
+  --agent-bubble-shadow: none;
+  --agent-bubble-user-shadow: none;
+  --agent-composer-rail-bg: var(--agent-bg);
+  --agent-composer-rail-border: var(--agent-border);
+  --agent-composer-bg: var(--agent-elevated);
+  --agent-composer-border: var(--agent-border);
+  --agent-composer-focus-border: var(--vscode-focusBorder, var(--agent-border));
+  --agent-composer-divider: var(--agent-border);
+  --agent-composer-shadow: none;
+  --agent-composer-focus-shadow: none;
+  --agent-control-muted-bg: var(--agent-elevated);
+  --agent-composer-send-bg: var(--vscode-button-background, var(--agent-accent));
+  --agent-composer-send-border: var(--agent-border);
 }
 
 * {
@@ -465,6 +508,61 @@ body {
 }
 
 /* Agent UI helpers */
+.agent-message-row {
+  transition: background-color 0.12s ease;
+}
+
+.agent-message-row:hover {
+  background: var(--agent-chat-row-hover);
+}
+
+.agent-bubble {
+  border: 1px solid var(--agent-bubble-assistant-border);
+  box-shadow: var(--agent-bubble-shadow);
+}
+
+.agent-bubble-assistant {
+  background: var(--agent-bubble-assistant-bg);
+  border-color: var(--agent-bubble-assistant-border);
+  color: var(--agent-fg);
+}
+
+.agent-bubble-user {
+  background: var(--agent-bubble-user-bg);
+  border-color: var(--agent-bubble-user-border);
+  color: var(--agent-bubble-user-fg);
+  box-shadow: var(--agent-bubble-user-shadow);
+}
+
+.agent-composer-shell {
+  background: var(--agent-composer-bg);
+  border: 1px solid var(--agent-composer-border);
+  border-radius: 14px;
+  box-shadow: var(--agent-composer-shadow);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.agent-composer-shell:focus-within {
+  border-color: var(--agent-composer-focus-border);
+  box-shadow: var(--agent-composer-focus-shadow);
+}
+
+.agent-composer-toolbar {
+  border-top: 1px solid var(--agent-composer-divider);
+  background: color-mix(in srgb, var(--agent-composer-bg) 82%, transparent);
+}
+
+.agent-composer-send {
+  background: var(--agent-composer-send-bg);
+  border: 1px solid var(--agent-composer-send-border);
+  color: var(--agent-composer-send-fg);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--agent-accent) 18%, transparent);
+}
+
+.agent-composer-send:hover {
+  background: color-mix(in srgb, var(--agent-composer-send-bg) 88%, #ffffff 12%);
+}
+
 .agent-header {
   background: color-mix(in srgb, var(--agent-elevated) 94%, transparent);
   border-bottom: 1px solid var(--agent-divider);
