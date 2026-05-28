@@ -6,6 +6,7 @@ import * as primitives from '../primitives';
 import * as testUtils from '../test-utils';
 import * as ui from '../index';
 import * as viewport from '../viewport';
+import * as workbench from '../workbench';
 
 describe('@neko/ui public entrypoints', () => {
   it('keeps existing viewport exports available through the canonical entry', () => {
@@ -29,6 +30,9 @@ describe('@neko/ui public entrypoints', () => {
     expect(primitives.buildAIMenuSection).toBe(ui.buildAIMenuSection);
     expect(icons.toCodiconClassName('play')).toBe('codicon codicon-play');
     expect(hooks.useResizable).toBeTypeOf('function');
+    expect(workbench.CreativeWorkbenchShell).toBe(ui.CreativeWorkbenchShell);
+    expect(workbench.CreativeLeftRail).toBe(ui.CreativeLeftRail);
+    expect(workbench.MainPanelControlLayer).toBe(ui.MainPanelControlLayer);
     expect(ui.ResizeHandle).toBeTypeOf('function');
     expect(testUtils.hasAccessibleName).toBeTypeOf('function');
   });

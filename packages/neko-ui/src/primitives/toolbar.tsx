@@ -2,16 +2,27 @@ import type React from 'react';
 import { forwardRef } from 'react';
 import { cn } from '../utils';
 
-export interface VerticalToolbarProps {
+export interface VerticalToolbarProps extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  'children'
+> {
   readonly width?: number;
   readonly children: React.ReactNode;
   readonly className?: string;
 }
 
 export const VerticalToolbar = forwardRef<HTMLDivElement, VerticalToolbarProps>(
-  function VerticalToolbar({ children, className, width = 48 }, ref): React.ReactElement {
+  function VerticalToolbar(
+    { children, className, style, width = 48, ...toolbarProps },
+    ref,
+  ): React.ReactElement {
     return (
-      <div ref={ref} className={cn('neko-vtoolbar', className)} style={{ width }}>
+      <div
+        {...toolbarProps}
+        ref={ref}
+        className={cn('neko-vtoolbar', className)}
+        style={{ ...style, width }}
+      >
         {children}
       </div>
     );
