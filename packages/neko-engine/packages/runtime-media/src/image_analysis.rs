@@ -461,7 +461,10 @@ mod tests {
             PreviewProjectionConfidence::Heuristic
         );
         assert_eq!(projection.requires_confirmation, Some(true));
-        assert_eq!(projection.coverage_angle, Some(PanoramaCoverageAngle::full()));
+        assert_eq!(
+            projection.coverage_angle,
+            Some(PanoramaCoverageAngle::full())
+        );
     }
 
     #[test]
@@ -484,7 +487,10 @@ mod tests {
             },
         );
 
-        assert_eq!(projection.projection_type, PreviewProjectionType::Cylindrical);
+        assert_eq!(
+            projection.projection_type,
+            PreviewProjectionType::Cylindrical
+        );
         assert_eq!(projection.confidence, PreviewProjectionConfidence::Manual);
         assert_eq!(
             projection.coverage_angle,

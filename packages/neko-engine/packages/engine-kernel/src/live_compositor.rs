@@ -310,7 +310,8 @@ fn unsupported_adaptation(
 ) -> SourceAdaptation {
     SourceAdaptation {
         status: fallback_status(layer.fallback_policy),
-        diagnostic_overlay: layer.fallback_policy == LiveCompositorFallbackPolicy::DiagnosticOverlay,
+        diagnostic_overlay: layer.fallback_policy
+            == LiveCompositorFallbackPolicy::DiagnosticOverlay,
         diagnostics: vec![LiveCompositorDiagnostic {
             id: format!("diag-adapter-{}-{}", layer.id, source.source_id),
             code,
@@ -336,8 +337,9 @@ fn fallback_status(fallback_policy: LiveCompositorFallbackPolicy) -> LiveComposi
         | LiveCompositorFallbackPolicy::Substitute => {
             LiveCompositorAdapterStatus::DiagnosticOverlay
         }
-        LiveCompositorFallbackPolicy::Exclude
-        | LiveCompositorFallbackPolicy::HoldLastFrame => LiveCompositorAdapterStatus::Unsupported,
+        LiveCompositorFallbackPolicy::Exclude | LiveCompositorFallbackPolicy::HoldLastFrame => {
+            LiveCompositorAdapterStatus::Unsupported
+        }
     }
 }
 
@@ -492,7 +494,10 @@ mod tests {
             .find(|layer| layer.layer_id == "layer-tracking-overlay")
             .unwrap();
         assert!(overlay.diagnostic_overlay);
-        assert_eq!(overlay.tracking_source_ids, scene.tracking_overlay.source_ids);
+        assert_eq!(
+            overlay.tracking_source_ids,
+            scene.tracking_overlay.source_ids
+        );
     }
 
     #[test]
