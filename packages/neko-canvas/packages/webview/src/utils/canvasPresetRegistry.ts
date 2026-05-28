@@ -332,6 +332,47 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     createPorts: () => GALLERY_NODE_PORTS,
   },
   {
+    name: 'group.container',
+    nodeType: 'group',
+    createContent: () => ({
+      id: 'group-root',
+      layout: 'stack',
+      sections: [
+        {
+          id: 'group-header',
+          layout: 'row',
+          blocks: [fieldBlock('group-label', 'input', '/label', 'preset.group.label')],
+        },
+      ],
+      childSlots: [
+        {
+          id: 'group-children',
+          layout: 'grid',
+          summaryRole: 'node-summary',
+          emptyLabel: 'group.empty',
+        },
+      ],
+    }),
+    createContainer: () => ({
+      policy: 'group',
+      childIds: [],
+      layout: { mode: 'manual' },
+      acceptedChildren: {
+        nodeTypes: ['shot', 'media', 'annotation', 'text', 'gallery', 'scene', 'group'],
+      },
+      deleteBehavior: 'release-children',
+    }),
+    createPreview: (node) => {
+      const data = node.type === 'group' ? node.data : undefined;
+      const childCount = getDraftContainerChildIds(node).length;
+      return {
+        title: data?.label ?? 'Group',
+        role: 'node-summary',
+        badges: [{ label: `${childCount}`, tone: 'info' as const }],
+      };
+    },
+  },
+  {
     name: 'media.basic',
     nodeType: 'media',
     createContent: (node) => {
@@ -366,12 +407,12 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                   {
                     kind: 'delegate',
                     actions: [
-                    {
-                      id: 'open-media',
-                      label: 'preview.open',
-                      target: 'preview',
-                      assetBinding: {
-                        path: assetBindingPath,
+                      {
+                        id: 'open-media',
+                        label: 'preview.open',
+                        target: 'preview',
+                        assetBinding: {
+                          path: assetBindingPath,
                           valueType: 'asset',
                         },
                       },

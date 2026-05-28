@@ -83,6 +83,30 @@ describe('canvasAgentOperations', () => {
     });
   });
 
+  it('derives children into a source container for inline review', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 1,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Arrival', sceneNumber: 1 },
+      }),
+      id: 'scene-1',
+    } as CanvasNode;
+
+    const result = deriveCanvasNode(
+      { nodes: [scene], connections: [], generateId: ids() },
+      { sourceNodeId: 'scene-1', targetPreset: 'shot.basic' },
+    );
+
+    const nextScene = result.nodes.find((item) => item.id === 'scene-1');
+    const shot = result.nodes.find((item) => item.id === result.result.nodeId);
+
+    expect(nextScene?.container?.childIds).toEqual([result.result.nodeId]);
+    expect(shot?.parentId).toBe('scene-1');
+  });
+
   it('rejects unknown derive presets without mutating inputs', () => {
     const source = node('shot-1', 'shot', 0, 0);
 

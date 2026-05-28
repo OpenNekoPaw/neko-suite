@@ -218,7 +218,14 @@ export function deriveCanvasNode(
     id: nodeId,
     zIndex: (context.nodes.length + 1) * 10,
   } as CanvasNode);
-  const nextNodes = [...context.nodes, nextNode];
+  let nextNodes = [...context.nodes, nextNode];
+  const targetContainerId = getDeriveContainerTargetId(sourceNode);
+  if (targetContainerId) {
+    const added = addContainerChild(nextNodes, targetContainerId, nodeId);
+    if (added.changed) {
+      nextNodes = added.nodes;
+    }
+  }
 
   let nextConnections = context.connections;
   let connectionId: string | undefined;
@@ -244,6 +251,14 @@ export function deriveCanvasNode(
     nodes: nextNodes,
     connections: nextConnections,
   };
+}
+
+function getDeriveContainerTargetId(sourceNode: CanvasNode): string | undefined {
+  if (getContainerPolicyName(sourceNode)) {
+    return sourceNode.id;
+  }
+
+  return getNodeParentId(sourceNode);
 }
 
 export function summarizeCanvasAgentNode(
@@ -613,8 +628,7 @@ export function createCanvasComposite(
     }
 
     const childId = child.id ?? context.generateId();
-    const childPosition =
-      child.position ?? defaultChildPosition(containerNode, index, childType);
+    const childPosition = child.position ?? defaultChildPosition(containerNode, index, childType);
     return hydrateCanvasNodePreview({
       ...createNodeSpec({
         ...child,

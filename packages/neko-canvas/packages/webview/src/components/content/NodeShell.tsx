@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { ContainerSection, DocumentArchiveResourceRef } from '@neko/shared';
 import { NodeHeader } from './NodeHeader';
 import type { NodeHeaderBadge } from './NodeHeader';
@@ -13,12 +13,13 @@ import { ContainerActionBar, readDocumentResourceRef } from './node-card';
 export interface NodeShellProps {
   section: ContainerSection;
   context: NodeContentRenderContext;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
-export function NodeShell({ section, context }: NodeShellProps) {
+export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: NodeShellProps) {
   const descriptors = useMemo(() => createBuiltInNodeTypeDescriptors(), []);
   const openContentOverlay = useCanvasStore((s) => s.openContentOverlay);
-  const updateNode = useCanvasStore((s) => s.updateNode);
 
   const { node } = context;
   const descriptor = context.nodeTypeDescriptors?.[node.type] ?? descriptors[node.type];
@@ -30,22 +31,6 @@ export function NodeShell({ section, context }: NodeShellProps) {
   const badges = (preview?.badges ?? []) as NodeHeaderBadge[];
 
   const assetInfo = useMemo(() => getNodeAssetInfo(node), [node]);
-  const [isCollapsed, setIsCollapsed] = useState(() => node.container?.collapsed ?? false);
-
-  useEffect(() => {
-    setIsCollapsed(node.container?.collapsed ?? false);
-  }, [node.id, node.container?.collapsed]);
-
-  const handleToggleInlineEditor = useCallback(() => {
-    setIsCollapsed((current) => {
-      const next = !current;
-      const updates = createNodeCollapseUpdate(node, next);
-      if (updates) {
-        updateNode(node.id, updates);
-      }
-      return next;
-    });
-  }, [node.container, node.id, updateNode]);
 
   const handleOpenPreview = useCallback(() => {
     if (!assetInfo) return;
@@ -68,8 +53,17 @@ export function NodeShell({ section, context }: NodeShellProps) {
     };
   }, [section.sections]);
 
+  const bodyClassName =
+    context.layout.overflow === 'scroll'
+      ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-auto'
+      : 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden';
+
   return (
-    <div className="flex min-h-0 flex-col">
+    <div
+      className="flex h-full min-h-0 min-w-0 flex-col"
+      data-node-density={context.layout.density}
+      data-node-overflow={context.layout.overflow}
+    >
       <NodeHeader
         tagLabel={tagLabel}
         tagColor={tagColor}
@@ -77,12 +71,12 @@ export function NodeShell({ section, context }: NodeShellProps) {
         badges={badges}
         collapsible={true}
         isCollapsed={isCollapsed}
-        onToggleCollapse={handleToggleInlineEditor}
+        onToggleCollapse={onToggleCollapse}
         onOpenPreview={assetInfo ? handleOpenPreview : undefined}
         onExpand={() => openContentOverlay(node.id)}
       />
       {!isCollapsed && (
-        <>
+        <div className={bodyClassName}>
           <ContainerActionBar
             node={node}
             allNodes={context.allNodes}
@@ -107,7 +101,7 @@ export function NodeShell({ section, context }: NodeShellProps) {
             }}
             context={context}
           />
-        </>
+        </div>
       )}
     </div>
   );
@@ -115,21 +109,6 @@ export function NodeShell({ section, context }: NodeShellProps) {
 
 function isControlSection(section: ContainerSection): boolean {
   return section.visibleWhen === 'selected' && section.layout === 'row';
-}
-
-export function createNodeCollapseUpdate(
-  node: NodeShellProps['context']['node'],
-  collapsed: boolean,
-): Pick<NodeShellProps['context']['node'], 'container'> | undefined {
-  if (!node.container) {
-    return undefined;
-  }
-  return {
-    container: {
-      ...node.container,
-      collapsed,
-    },
-  };
 }
 
 interface NodeAssetInfo {

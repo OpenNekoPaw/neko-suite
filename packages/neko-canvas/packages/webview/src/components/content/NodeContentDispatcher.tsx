@@ -1,15 +1,21 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CanvasNode, ContainerSection, FieldBinding } from '@neko/shared';
 import { getDefaultCanvasNodePresetName, writeFieldBinding } from '@neko/shared';
 import { BaseNode } from '../nodes/BaseNode';
 import { NodeShell } from './NodeShell';
-import type { FieldBindingUpdate, NodeContentRenderContext } from './types';
+import type {
+  FieldBindingUpdate,
+  NodeContentDensity,
+  NodeContentLayoutContext,
+  NodeContentRenderContext,
+} from './types';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import {
   createBuiltInCanvasNodePresetRegistry,
   getCanvasNodePreset,
 } from '../../utils/canvasPresetRegistry';
 import type { CanvasNodeDraft } from '../../utils/canvasPresetRegistry';
+import { useCanvasStore } from '../../stores/canvasStore';
 
 export type LegacyNodeRenderer = (context: NodeRendererContext) => React.ReactNode;
 
@@ -19,6 +25,7 @@ export interface NodeContentDispatcherProps {
 }
 
 const PRESET_REGISTRY = createBuiltInCanvasNodePresetRegistry();
+const COLLAPSED_NODE_RENDER_HEIGHT = 42;
 
 export function NodeContentDispatcher({ context, renderLegacy }: NodeContentDispatcherProps) {
   const { node } = context;
@@ -53,6 +60,13 @@ function ComposableNodeContent({
   node: CanvasNode;
   content: NonNullable<CanvasNode['content']>;
 }) {
+  const updateNode = useCanvasStore((s) => s.updateNode);
+  const [isCollapsed, setIsCollapsed] = useState(() => node.container?.collapsed ?? false);
+
+  useEffect(() => {
+    setIsCollapsed(node.container?.collapsed ?? false);
+  }, [node.id, node.container?.collapsed]);
+
   const handleUpdateBinding = useCallback(
     (update: FieldBindingUpdate) => {
       const binding: FieldBinding = { path: update.path as FieldBinding['path'] };
@@ -64,6 +78,17 @@ function ComposableNodeContent({
     [context, node],
   );
 
+  const handleToggleCollapse = useCallback(() => {
+    setIsCollapsed((current) => {
+      const next = !current;
+      const updates = createNodeCollapseUpdate(node, next);
+      if (updates) {
+        updateNode(node.id, updates);
+      }
+      return next;
+    });
+  }, [node, updateNode]);
+
   const renderContext: NodeContentRenderContext = {
     node,
     allNodes: context.allNodes,
@@ -71,9 +96,11 @@ function ComposableNodeContent({
     nodeTypeDescriptors: context.nodeTypeDescriptors,
     isSelected: context.isSelected,
     isExpanded: context.isExpanded,
+    layout: createNodeLayoutContext(node),
     depth: 0,
     previewSurfaceKind: 'inline',
     onUpdateBinding: handleUpdateBinding,
+    onUpdateNodeData: context.onUpdateData,
     onSelectNode: context.onSelect,
     onRemoveChild: context.onRemoveContainerChild,
   };
@@ -92,10 +119,58 @@ function ComposableNodeContent({
       onRotate={context.onRotate}
       onRotateEnd={context.onRotateEnd}
       onConnectionStart={context.onConnectionStart}
+      autoSizeContent={false}
+      renderHeight={isCollapsed ? COLLAPSED_NODE_RENDER_HEIGHT : undefined}
     >
-      <NodeShell section={content} context={renderContext} />
+      <NodeShell
+        section={content}
+        context={renderContext}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={handleToggleCollapse}
+      />
     </BaseNode>
   );
+}
+
+export function createNodeCollapseUpdate(
+  node: CanvasNode,
+  collapsed: boolean,
+): Pick<CanvasNode, 'container'> | undefined {
+  if (!node.container) {
+    return undefined;
+  }
+  return {
+    container: {
+      ...node.container,
+      collapsed,
+    },
+  };
+}
+
+function createNodeLayoutContext(node: CanvasNode): NodeContentLayoutContext {
+  const width = Math.max(0, node.size.width);
+  const height = Math.max(0, node.size.height);
+  const density = resolveNodeDensity(width, height);
+
+  return {
+    width,
+    height,
+    density,
+    surface: 'canvas',
+    overflow: density === 'expanded' ? 'scroll' : 'summary',
+  };
+}
+
+function resolveNodeDensity(width: number, height: number): NodeContentDensity {
+  if (width < 360 || height < 220) {
+    return 'compact';
+  }
+
+  if (width >= 720 && height >= 420) {
+    return 'expanded';
+  }
+
+  return 'comfortable';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

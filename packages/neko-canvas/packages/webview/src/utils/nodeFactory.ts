@@ -145,7 +145,8 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
     throw new Error(`Unsupported preset "${options.preset}"`);
   }
   const presetName =
-    options.preset ?? (type === 'project' ? getDefaultCanvasNodePresetName(type) : undefined);
+    options.preset ??
+    (type === 'project' || type === 'group' ? getDefaultCanvasNodePresetName(type) : undefined);
   const preset = getCanvasNodePreset(NODE_PRESETS, presetName);
 
   switch (type) {
@@ -457,15 +458,31 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
         preset,
       );
     case 'group':
+      const groupChildIds = asStringArray(data.childIds);
+      const groupNode = applyCanvasNodePreset(
+        {
+          type,
+          position,
+          size: getNodeDefaultSize(type),
+          zIndex,
+          data: {
+            childIds: groupChildIds,
+            label: asString(data.label) || undefined,
+            color: asString(data.color) || undefined,
+          },
+        },
+        preset,
+      );
+      if (groupNode.type !== 'group') {
+        throw new Error('Group preset produced a non-group node');
+      }
       return {
-        type,
-        position,
-        size: getNodeDefaultSize(type),
-        zIndex,
-        data: {
-          childIds: asStringArray(data.childIds),
-          label: asString(data.label) || undefined,
-          color: asString(data.color) || undefined,
+        ...groupNode,
+        container: {
+          ...groupNode.container,
+          policy: 'group',
+          childIds: groupChildIds,
+          deleteBehavior: 'release-children',
         },
       };
     default:

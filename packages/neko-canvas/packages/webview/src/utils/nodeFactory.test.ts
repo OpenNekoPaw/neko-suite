@@ -87,6 +87,7 @@ describe('nodeFactory composable presets', () => {
     expect(CANVAS_AGENT_CHILD_PRESETS).toContain('gallery.basic');
     expect(CANVAS_AGENT_CONTAINER_PRESETS).toContain('scene.basic');
     expect(getDefaultCanvasNodePresetName('project')).toBe('project.basic');
+    expect(getDefaultCanvasNodePresetName('group')).toBe('group.container');
   });
 
   it('adds composable content for the low-risk annotation preset', () => {
@@ -214,6 +215,34 @@ describe('nodeFactory composable presets', () => {
     expect(node.preview).toMatchObject({
       title: 'Mika',
       role: 'collection',
+    });
+  });
+
+  it('applies the group container preset by default with child slot content', () => {
+    const node = buildCanvasNode({
+      type: 'group',
+      position: { x: 0, y: 0 },
+      zIndex: 0,
+      data: {
+        label: 'Review',
+        childIds: ['note-1'],
+      },
+    });
+
+    expect(node.type).toBe('group');
+    expect(node.preset).toBe('group.container');
+    expect(node.container).toMatchObject({
+      policy: 'group',
+      childIds: ['note-1'],
+      deleteBehavior: 'release-children',
+    });
+    expect(node.content?.childSlots?.[0]).toMatchObject({
+      id: 'group-children',
+      summaryRole: 'node-summary',
+    });
+    expect(node.preview).toMatchObject({
+      title: 'Review',
+      role: 'node-summary',
     });
   });
 

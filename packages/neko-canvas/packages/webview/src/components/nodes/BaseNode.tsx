@@ -66,6 +66,9 @@ export interface BaseNodeProps {
   onConnectionStart?: (nodeId: string, anchor: string, e: React.MouseEvent) => void;
   children: ReactNode;
   className?: string;
+  autoSizeContent?: boolean;
+  /** Optional visual-only height override. Does not change persisted node.size. */
+  renderHeight?: number;
 }
 
 type AnchorPosition = 'top' | 'right' | 'bottom' | 'left';
@@ -234,6 +237,8 @@ export function BaseNode({
   onConnectionStart,
   children,
   className,
+  autoSizeContent = true,
+  renderHeight,
 }: BaseNodeProps) {
   // Node dragging
   const {
@@ -265,13 +270,23 @@ export function BaseNode({
     disabled: node.locked,
   });
 
+  // Use resize position/size when resizing, otherwise drag position + node size.
+  // renderHeight is a visual-only override used by collapsed composable nodes.
+  const currentPosition = isResizing ? resizePosition : dragPosition;
+  const currentSize = isResizing ? size : node.size;
+  const displaySize = {
+    width: currentSize.width,
+    height:
+      !isResizing && renderHeight !== undefined ? Math.max(0, renderHeight) : currentSize.height,
+  };
+
   // Node rotation
   const nodeCenter = useMemo(
     () => ({
-      x: node.position.x + node.size.width / 2,
-      y: node.position.y + node.size.height / 2,
+      x: currentPosition.x + displaySize.width / 2,
+      y: currentPosition.y + displaySize.height / 2,
     }),
-    [node.position.x, node.position.y, node.size.width, node.size.height],
+    [currentPosition.x, currentPosition.y, displaySize.width, displaySize.height],
   );
 
   const {
@@ -288,10 +303,6 @@ export function BaseNode({
     onRotateEnd,
     disabled: node.locked,
   });
-
-  // Use resize position/size when resizing, otherwise drag position + node size
-  const currentPosition = isResizing ? resizePosition : dragPosition;
-  const currentSize = isResizing ? size : node.size;
 
   // Resolve ports: explicit node.ports > default ports for type > empty
   const ports = node.ports ?? getDefaultPorts(node.type as CanvasNodeType);
@@ -390,7 +401,7 @@ export function BaseNode({
   const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = contentRef.current;
-    if (!el || isResizing) return;
+    if (!autoSizeContent || !el || isResizing) return;
     const raf = requestAnimationFrame(() => {
       const scrollH = el.scrollHeight;
       const targetH = scrollH + 4;
@@ -415,8 +426,8 @@ export function BaseNode({
       style={{
         left: currentPosition.x,
         top: currentPosition.y,
-        width: currentSize.width,
-        height: currentSize.height,
+        width: displaySize.width,
+        height: displaySize.height,
         zIndex: isDragging || isResizing || isRotating ? 1000 : node.zIndex,
         transform: currentRotation ? `rotate(${currentRotation}deg)` : undefined,
         transformOrigin: 'center center',

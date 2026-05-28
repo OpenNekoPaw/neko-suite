@@ -6,6 +6,12 @@ import { PreviewSurface, isSafeWebviewUrl, type PreviewSourceDescriptor } from '
 import { NodeCard } from './node-card';
 import { t } from '../../i18n';
 
+const FORM_CONTROL_CLASS =
+  'min-w-0 rounded border border-[var(--node-border)] bg-white px-2 py-1 text-gray-900 outline-none focus:border-[var(--node-selected)] disabled:bg-gray-100 disabled:text-gray-500';
+
+const TEXTAREA_CONTROL_CLASS =
+  'min-h-[64px] flex-1 resize-none rounded border border-[var(--node-border)] bg-white px-2 py-1 text-gray-900 outline-none focus:border-[var(--node-selected)] disabled:bg-gray-100 disabled:text-gray-500';
+
 export function createBuiltInBlockRendererRegistry(): BlockRendererRegistry {
   return {
     text: renderTextBlock,
@@ -54,7 +60,7 @@ function renderInputBlock(context: BlockRendererContext): React.ReactNode {
     <label className="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
       {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <input
-        className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
+        className={FORM_CONTROL_CLASS}
         value={toInputValue(value)}
         disabled={!isWritable(context.block.binding)}
         onMouseDown={(event) => event.stopPropagation()}
@@ -67,10 +73,10 @@ function renderInputBlock(context: BlockRendererContext): React.ReactNode {
 function renderTextareaBlock(context: BlockRendererContext): React.ReactNode {
   const value = getBlockValue(context);
   return (
-    <label className="flex min-h-0 flex-1 flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
+    <label className="flex min-h-0 flex-1 basis-0 flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
       {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <textarea
-        className="min-h-[64px] resize-none rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
+        className={TEXTAREA_CONTROL_CLASS}
         value={toInputValue(value)}
         disabled={!isWritable(context.block.binding)}
         onMouseDown={(event) => event.stopPropagation()}
@@ -87,7 +93,7 @@ function renderNumberBlock(context: BlockRendererContext): React.ReactNode {
       {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <input
         type="number"
-        className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
+        className={FORM_CONTROL_CLASS}
         value={typeof value === 'number' ? value : Number(value) || 0}
         disabled={!isWritable(context.block.binding)}
         onMouseDown={(event) => event.stopPropagation()}
@@ -104,7 +110,7 @@ function renderSelectBlock(context: BlockRendererContext): React.ReactNode {
     <label className="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
       {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
       <select
-        className="min-w-0 rounded border border-[var(--node-border)] bg-black/20 px-2 py-1 text-[var(--node-fg)] outline-none focus:border-[var(--node-selected)]"
+        className={FORM_CONTROL_CLASS}
         value={toInputValue(value)}
         disabled={!isWritable(context.block.binding)}
         onMouseDown={(event) => event.stopPropagation()}

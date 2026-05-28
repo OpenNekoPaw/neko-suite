@@ -30,6 +30,8 @@ export interface ContentOverlayProps {
 export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
   const nodes = useCanvasStore((s) => s.canvasData?.nodes ?? []);
   const selectedNodeIds = useCanvasStore((s) => s.selection.nodeIds);
+  const selectNode = useCanvasStore((s) => s.selectNode);
+  const removeChildFromContainer = useCanvasStore((s) => s.removeChildFromContainer);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const node = useMemo(() => nodes.find((n) => n.id === nodeId), [nodes, nodeId]);
 
@@ -71,6 +73,8 @@ export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
           allNodes={nodes}
           selectedNodeIds={selectedNodeIds}
           onUpdateData={updateNodeData}
+          onSelectNode={selectNode}
+          onRemoveChild={removeChildFromContainer}
         />
       </div>
     </>
@@ -121,12 +125,16 @@ function OverlayBody({
   allNodes,
   selectedNodeIds,
   onUpdateData,
+  onSelectNode,
+  onRemoveChild,
 }: {
   node: CanvasNode;
   content: ContainerSection;
   allNodes: CanvasNode[];
   selectedNodeIds: readonly string[];
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
+  onSelectNode?: (nodeId: string, multi?: boolean) => void;
+  onRemoveChild?: (containerId: string, childId: string) => void;
 }) {
   const handleUpdateBinding = useCallback(
     (update: FieldBindingUpdate) => {
@@ -144,13 +152,24 @@ function OverlayBody({
     allNodes,
     selectedNodeIds: [...selectedNodeIds],
     isSelected: true,
+    isExpanded: true,
+    layout: {
+      width: Math.max(720, node.size.width),
+      height: Math.max(420, node.size.height),
+      density: 'expanded',
+      surface: 'overlay',
+      overflow: 'scroll',
+    },
     depth: 0,
     previewSurfaceKind: 'overlay',
     onUpdateBinding: handleUpdateBinding,
+    onUpdateNodeData: onUpdateData,
+    onSelectNode,
+    onRemoveChild,
   };
 
   return (
-    <div className="flex-1 overflow-auto p-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
       <ContainerActionBar
         node={node}
         allNodes={allNodes}

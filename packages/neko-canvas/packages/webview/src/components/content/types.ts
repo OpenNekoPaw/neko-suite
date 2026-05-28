@@ -1,6 +1,20 @@
 import type { CanvasBlock, CanvasNode, ContainerSection } from '@neko/shared';
 import type { NodeTypeDescriptorRegistry } from '../nodes/nodeTypeDescriptor';
 
+export type NodeContentDensity = 'compact' | 'comfortable' | 'expanded';
+
+export type NodeContentSurface = 'canvas' | 'container-card' | 'overlay';
+
+export type NodeContentOverflow = 'clip' | 'scroll' | 'summary';
+
+export interface NodeContentLayoutContext {
+  width: number;
+  height: number;
+  density: NodeContentDensity;
+  surface: NodeContentSurface;
+  overflow: NodeContentOverflow;
+}
+
 export interface FieldBindingUpdate {
   path: string;
   value: unknown;
@@ -13,9 +27,11 @@ export interface NodeContentRenderContext {
   nodeTypeDescriptors?: NodeTypeDescriptorRegistry;
   isSelected: boolean;
   isExpanded?: boolean;
+  layout: NodeContentLayoutContext;
   depth: number;
   previewSurfaceKind?: 'inline' | 'overlay';
   onUpdateBinding?: (update: FieldBindingUpdate) => void;
+  onUpdateNodeData?: (nodeId: string, data: Record<string, unknown>) => void;
   onSelectNode?: (nodeId: string, multi: boolean) => void;
   onRemoveChild?: (containerId: string, childId: string) => void;
 }
