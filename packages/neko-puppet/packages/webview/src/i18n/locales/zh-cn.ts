@@ -46,6 +46,8 @@ export const zhCN: MessageBundle = {
   // Toolbar
   'puppet.toolbar.import': '导入 MOC3',
   'puppet.toolbar.fitView': '适配视图',
+  'puppet.toolbar.leftRail': 'Puppet 工作台工具栏',
+  'puppet.toolbar.viewportControls': '视口控件',
   'puppet.toolbar.showRightPanel': '显示右侧面板',
   'puppet.toolbar.hideRightPanel': '隐藏右侧面板',
   'puppet.toolbar.onionSkin': '洋葱皮',

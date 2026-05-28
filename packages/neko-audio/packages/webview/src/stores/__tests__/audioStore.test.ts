@@ -144,6 +144,15 @@ describe('audioStore', () => {
       },
     );
 
+    it('openSidePanel activates a panel without closing the current one', () => {
+      getState().toggleSidePanel('effects');
+      expect(getState().activeSidePanel).toBe('effects');
+      getState().openSidePanel('effects');
+      expect(getState().activeSidePanel).toBe('effects');
+      getState().openSidePanel('presets');
+      expect(getState().activeSidePanel).toBe('presets');
+    });
+
     it('toggleSidePanel switches between panels and closeSidePanel resets', () => {
       getState().toggleSidePanel('effects');
       expect(getState().activeSidePanel).toBe('effects');

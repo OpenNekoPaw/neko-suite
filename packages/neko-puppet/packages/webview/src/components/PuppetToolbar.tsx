@@ -1,55 +1,64 @@
 /**
- * PuppetToolbar - left-side editor toolbar.
+ * Puppet toolbar surfaces.
  *
- * Mirrors the Sketch/Model vertical toolbar structure: primary viewport actions
- * at the top, panel visibility at the bottom after a flexible spacer.
+ * The left rail owns editor-wide commands, viewport commands, and region visibility.
  */
 import type React from 'react';
-import {
-  ToolbarButton,
-  ToolbarSeparator,
-  ToolbarSpacer,
-  VerticalToolbar,
-} from '@neko/ui/primitives';
+import { ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/ui/primitives';
+import { CreativeLeftRail } from '@neko/ui/workbench';
 import { RightPanelIcon, RightPanelOffIcon, UploadIcon } from '@neko/ui/icons';
 import { useTranslation } from '../i18n/I18nContext';
 
 export interface PuppetToolbarProps {
-  readonly puppetLoaded: boolean;
   readonly isRightPanelVisible: boolean;
+  readonly puppetLoaded: boolean;
   readonly onionSkinEnabled: boolean;
   readonly onImport: () => void;
   readonly onFitView: () => void;
-  readonly onToggleRightPanel: () => void;
   readonly onToggleOnionSkin: () => void;
+  readonly onToggleRightPanel: () => void;
 }
 
 export function PuppetToolbar({
-  puppetLoaded,
   isRightPanelVisible,
+  puppetLoaded,
   onionSkinEnabled,
   onImport,
   onFitView,
-  onToggleRightPanel,
   onToggleOnionSkin,
+  onToggleRightPanel,
 }: PuppetToolbarProps): React.ReactElement {
   const { t } = useTranslation();
 
   return (
-    <VerticalToolbar className="puppet-left-toolbar" width={48}>
+    <CreativeLeftRail
+      className="puppet-left-toolbar"
+      width={48}
+      label={t('puppet.toolbar.leftRail')}
+    >
       <ToolbarButton
+        data-creative-left-rail-action="import"
+        data-creative-left-rail-kind="common-action"
         icon={<UploadIcon size={18} />}
         title={t('puppet.toolbar.import')}
         onClick={onImport}
       />
+
+      <ToolbarSeparator />
+
       <ToolbarButton
+        data-creative-left-rail-action="fit-view"
+        data-creative-left-rail-kind="common-action"
+        data-puppet-toolbar-action="fit-view"
         icon={<FitViewIcon />}
         title={t('puppet.toolbar.fitView')}
         disabled={!puppetLoaded}
         onClick={onFitView}
       />
-      <ToolbarSeparator />
       <ToolbarButton
+        data-creative-left-rail-action="toggle-onion-skin"
+        data-creative-left-rail-kind="common-action"
+        data-puppet-toolbar-action="toggle-onion-skin"
         icon={<OnionSkinIcon />}
         title={t('puppet.toolbar.onionSkin')}
         active={onionSkinEnabled}
@@ -63,6 +72,9 @@ export function PuppetToolbar({
       <ToolbarButton
         aria-controls="puppet-right-panel"
         aria-expanded={isRightPanelVisible}
+        data-creative-left-rail-action="toggle-right-panel"
+        data-creative-left-rail-kind="visibility-toggle"
+        data-creative-left-rail-target="right-panel"
         data-puppet-toolbar-action="toggle-right-panel"
         icon={isRightPanelVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />}
         title={
@@ -73,7 +85,7 @@ export function PuppetToolbar({
         active={isRightPanelVisible}
         onClick={onToggleRightPanel}
       />
-    </VerticalToolbar>
+    </CreativeLeftRail>
   );
 }
 

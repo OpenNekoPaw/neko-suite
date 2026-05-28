@@ -30,6 +30,7 @@ export interface VideoViewportProps {
   overlay?: NonNullable<SceneDelta['overlay']> | null;
   predictions?: LocalPredictionSnapshot[];
   topologyWarning?: string | null;
+  hudVisible?: boolean;
   onSelectNode: (nodeId: string | null) => void;
   onSceneControlError: (message: string) => void;
   onCameraMutated?: () => void;
@@ -159,6 +160,7 @@ export function VideoViewport({
   overlay = null,
   predictions = [],
   topologyWarning = null,
+  hudVisible = true,
   onSelectNode,
   onSceneControlError,
   onCameraMutated,
@@ -531,7 +533,7 @@ export function VideoViewport({
             {modelErrorMessage('error.retry')}
           </button>
         </div>
-        <ViewportGuideOverlay visible />
+        <ViewportGuideOverlay visible={hudVisible} />
         <div className="pointer-events-none absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-amber-400" />
       </div>
     );
@@ -553,7 +555,7 @@ export function VideoViewport({
         renderOverlayLayer={({ frameMeta, overlays }) => (
           <>
             <OverlayRenderer frameMeta={frameMeta} overlays={overlays} />
-            <ViewportGuideOverlay visible />
+            <ViewportGuideOverlay visible={hudVisible} />
             <InteractionLayer
               viewportId={MAIN_VIEWPORT_ID}
               sceneId={sceneId}

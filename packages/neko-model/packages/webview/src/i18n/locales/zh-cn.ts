@@ -12,6 +12,13 @@ export const zhCN = {
   'toolbar.sculpt': '雕刻笔刷',
   'toolbar.exportGlb': '导出 GLB',
   'toolbar.saveProject': '保存项目',
+  'toolbar.modelLeftRail': '模型工作台工具栏',
+  'toolbar.viewportControls': '视口控件',
+  'toolbar.showViewportHud': '显示视口 HUD',
+  'toolbar.hideViewportHud': '隐藏视口 HUD',
+  'toolbar.showTimelineControls': '显示时间线控件',
+  'toolbar.hideTimelineControls': '隐藏时间线控件',
+  'toolbar.timelineControlsHidden': '时间线控件已隐藏',
   'toolbar.showRightDock': '显示右侧面板',
   'toolbar.hideRightDock': '折叠右侧面板',
 
@@ -20,7 +27,6 @@ export const zhCN = {
   'toolbar.qualityPreview': '引擎质量预览',
 
   // Viewport controls
-  'viewport.controls': '视口控制',
   'viewport.grid': '显示引擎 3D 网格',
   'viewport.resetCamera': '重置相机',
 

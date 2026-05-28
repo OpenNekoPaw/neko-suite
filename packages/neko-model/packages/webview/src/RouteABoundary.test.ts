@@ -118,23 +118,43 @@ describe('Route A webview boundaries', () => {
     expect(css).toMatch(/neko-viewport-context-menu/);
   });
 
-  it('keeps the model tool strip as a left layout rail instead of a viewport overlay', () => {
+  it('keeps model side rails full-height and moves viewport command buttons into the left toolbar', () => {
     const app = readSource('App.tsx');
+    const toolbar = readSource('components/Toolbar.tsx');
     const css = readSource('index.css');
 
-    expect(app).toMatch(/<main className="model-viewport-area">\s*<Toolbar/);
-    expect(app).toMatch(/className="model-viewport-toolbar"/);
+    expect(app).toMatch(/<CreativeWorkbenchShell/);
+    expect(app).toMatch(/mainKind="viewport-timeline"/);
+    expect(app).toMatch(/bodyClassName="model-workbench-body"/);
+    expect(app).toMatch(/leftRail=\{\s*<ModelSideToolbar/);
+    expect(app).toMatch(/className="model-left-toolbar"/);
     expect(app).toMatch(/width=\{48\}/);
+    expect(app).toMatch(/isViewportHudVisible=\{isViewportHudVisible\}/);
+    expect(app).toMatch(/onToggleViewportHud=\{\(\) => setIsViewportHudVisible/);
+    expect(app).toMatch(/areTimelineControlsVisible=\{areTimelineControlsVisible\}/);
+    expect(app).toMatch(/onToggleTimelineControls=\{\(\) =>\s*setAreTimelineControlsVisible/);
     expect(app).toMatch(/isRightDockVisible=\{isRightDockVisible\}/);
     expect(app).toMatch(
       /onToggleRightDock=\{\(\) => setIsRightDockVisible\(\(visible\) => !visible\)\}/,
     );
-    expect(app).toMatch(/\{isRightDockVisible \? \(\s*<RightDock/);
-    expect(app).not.toMatch(/model-viewport-tools/);
-    expect(css).toMatch(/\.model-viewport-area\s*\{[\s\S]*flex-direction: row;/);
-    expect(css).not.toMatch(/\.model-viewport-tools\s*\{/);
+    expect(app).toMatch(/mainClassName="model-center-panel"/);
+    expect(app).toMatch(/<section className="model-viewport-area">/);
+    expect(app).not.toMatch(/<ModelViewportControls/);
+    expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-grid"/);
+    expect(toolbar).toMatch(/data-model-toolbar-action="reset-camera"/);
+    expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-hud"/);
+    expect(toolbar).toMatch(/data-creative-left-rail-target="hud"/);
+    expect(toolbar).toMatch(/data-model-toolbar-action=\{`toggle-\$\{item.key\}`\}/);
+    expect(app).toMatch(/<div id="model-viewport-hud">/);
+    expect(app).toMatch(/hudVisible=\{isViewportHudVisible\}/);
+    expect(app).toMatch(/<TimelineDock[\s\S]*controlsVisible=\{areTimelineControlsVisible\}/);
+    expect(app).toMatch(/id="model-timeline-controls"/);
+    expect(app).toMatch(/rightPanel=\{\s*isRightDockVisible \? \(/);
+    expect(css).toMatch(/\.model-center-panel\s*\{[\s\S]*flex-direction: column;/);
+    expect(css).toMatch(/\.model-viewport-area\s*\{[\s\S]*flex-direction: column;/);
+    expect(css).not.toMatch(/\.model-viewport-controls\s*\{/);
 
-    const toolbarRule = readCssRule(css, '.model-viewport-toolbar.neko-vtoolbar');
+    const toolbarRule = readCssRule(css, '.model-left-toolbar.neko-vtoolbar');
     expect(toolbarRule).toMatch(/border-right:/);
     expect(toolbarRule).not.toMatch(/position: absolute/);
 
@@ -254,6 +274,23 @@ describe('Route A webview boundaries', () => {
     expect(toolbar).toMatch(/resetCamera\(\)/);
     expect(orbitControls).not.toMatch(/new EngineClient|updateEditorCamera/);
     expect(toolbar).not.toMatch(/new EngineClient|updateEditorCamera/);
+  });
+
+  it('enables character preview controls for a selected or single previewable scene node', () => {
+    const app = readSource('App.tsx');
+    const selector = readSource('components/CharacterPreviewModeSelector.tsx');
+
+    expect(app).toMatch(/const characterPreviewTarget = resolveCharacterPreviewTarget/);
+    expect(app).toMatch(/const selectedCharacterId = characterPreviewTarget\.characterId/);
+    expect(app).toMatch(
+      /const isCharacterPreviewDisabled = !routeAReady \|\| !selectedCharacterId/,
+    );
+    expect(app).toMatch(/sceneNodes\.filter\(isPreviewableSceneNode\)/);
+    expect(app).toMatch(/node\.kind === 'mesh' \|\| node\.mesh !== undefined/);
+    expect(app).toMatch(/statusLabel=\{characterPreviewStatusLabel\}/);
+    expect(app).toMatch(/return 'Ready'/);
+    expect(selector).toMatch(/statusLabel\?: string/);
+    expect(selector).toMatch(/const displayStatus =/);
   });
 
   it('sends hit-test queries with the same viewport contract as the engine stream', () => {

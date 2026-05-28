@@ -1,8 +1,8 @@
 /**
  * AudioEditor - Main audio editor component
  *
- * 3-column layout: Toolbar | Center (waveform + spectrum + loudness) | SidePanel
- * Unified TransportBar at top with playback controls.
+ * Creative workbench layout: left rail | main audio surface | side panel.
+ * Transport remains part of the main audio surface.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
@@ -25,6 +25,7 @@ import { Toast } from '../components/Toast';
 import type { ExtensionMessage } from '../shared/types';
 import { handleAudioResponseMessage } from '../shared/audioProtocolHandler';
 import { t } from '../i18n';
+import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import '../styles/editor.css';
 
 export function AudioEditor() {
@@ -36,6 +37,9 @@ export function AudioEditor() {
     audioInfo,
     projectMode,
     showSpectrum,
+    activeSidePanel,
+    openSidePanel,
+    closeSidePanel,
     setFileInfo,
     setWaveform,
     setStreamInfo,
@@ -45,8 +49,16 @@ export function AudioEditor() {
     setLoudness,
     showToast,
   } = useAudioStore();
-
   const { togglePlay, seek, stop, audioClientRef } = useAudioPlayback();
+  const isSidePanelVisible = activeSidePanel !== null;
+
+  const handleToggleSidePanel = useCallback(() => {
+    if (activeSidePanel) {
+      closeSidePanel();
+      return;
+    }
+    openSidePanel('effects');
+  }, [activeSidePanel, closeSidePanel, openSidePanel]);
 
   // Drag-drop support for importing audio into project
   const editorRef = useRef<HTMLDivElement>(null);
@@ -243,34 +255,41 @@ export function AudioEditor() {
       onDragLeave={projectMode ? handleDragLeave : undefined}
       onDrop={projectMode ? handleDrop : undefined}
     >
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: vertical toolbar */}
-        <Toolbar />
+      <CreativeWorkbenchShell
+        className="audio-workbench-shell"
+        bodyClassName="audio-workbench-body"
+        mainClassName="audio-main-panel"
+        mainKind="waveform-timeline"
+        leftRail={
+          <Toolbar
+            sidePanelVisible={isSidePanelVisible}
+            onToggleSidePanel={handleToggleSidePanel}
+          />
+        }
+        main={
+          <>
+            <TransportBar onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
 
-        {/* Center + Right: transport bar + timeline + side panel */}
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <TransportBar onTogglePlay={togglePlay} onSeek={seek} onStop={stop} />
-
-          <div className="flex flex-1 overflow-hidden">
-            <div className="flex flex-col flex-1 overflow-hidden">
-              {isV2 ? (
-                <div className="neko-project-workstation">
-                  <AudioTimeline />
-                  <MixerPanel />
-                </div>
-              ) : (
-                <>
-                  <EditableWaveform onSeek={seek} />
-                  <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
-                  <LoudnessPanel />
-                </>
-              )}
+            <div className="audio-main-surface">
+              <div className="audio-main-content">
+                {isV2 ? (
+                  <div className="neko-project-workstation">
+                    <AudioTimeline />
+                    <MixerPanel />
+                  </div>
+                ) : (
+                  <>
+                    <EditableWaveform onSeek={seek} />
+                    <SpectrumAnalyzer audioClientRef={audioClientRef} enabled={showSpectrum} />
+                    <LoudnessPanel />
+                  </>
+                )}
+              </div>
             </div>
-
-            <SidePanel />
-          </div>
-        </div>
-      </div>
+          </>
+        }
+        rightPanel={activeSidePanel ? <SidePanel /> : undefined}
+      />
 
       {isDragOver && projectMode && (
         <div className="absolute inset-0 z-50 flex items-center justify-center neko-drop-overlay-bg">

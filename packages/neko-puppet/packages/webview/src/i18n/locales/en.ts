@@ -46,6 +46,8 @@ export const en: MessageBundle = {
   // Toolbar
   'puppet.toolbar.import': 'Import MOC3',
   'puppet.toolbar.fitView': 'Fit view',
+  'puppet.toolbar.leftRail': 'Puppet workbench toolbar',
+  'puppet.toolbar.viewportControls': 'Viewport controls',
   'puppet.toolbar.showRightPanel': 'Show right panel',
   'puppet.toolbar.hideRightPanel': 'Hide right panel',
   'puppet.toolbar.onionSkin': 'Onion skin',

@@ -16,6 +16,7 @@
 - **激活依赖**：neko-engine、neko-tools
 - **状态**：Alpha
 - **测试**：vitest v4
+- **布局**：Webview 使用 Creative Workbench Shell：左侧工具栏承接响度分析、静音检测、降噪、标准化、频谱开关等常用音频命令，并通过底部显隐组控制右侧 SidePanel；Transport、波形、时间线、频谱画面和 LoudnessPanel 保持在主面板展示区；Effects、Recording、Export、Presets 等局部设置保留在右侧 SidePanel；duration/sample rate/channels/codec 由 Extension 侧 `AudioStatusBar` 投射到 VSCode 原生 StatusBar。
 
 ## Architecture
 

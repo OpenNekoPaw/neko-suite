@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from './i18n/I18nContext';
 import type { CharacterPreviewModeId } from '@neko/shared';
-import { Toolbar } from './components/Toolbar';
+import { ModelSideToolbar } from './components/Toolbar';
 import { VideoViewport } from './components/VideoViewport';
 import { AnimationPlayer } from './components/AnimationPlayer';
 import { SceneTree } from './components/SceneTree';
@@ -27,6 +27,7 @@ import type {
 import type { SceneCommandEnvelope } from '@neko/shared';
 import type { VRMExpressionPreset } from './types/vrmExpressions';
 import { postMessage } from '@neko/shared/vscode';
+import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import { usePersistedResize, useResizable } from '@neko/ui/hooks';
 import { ResizeHandle } from '@neko/ui/primitives';
 import { EngineClient, type SceneControlSocket } from '@neko/neko-client';
@@ -42,6 +43,7 @@ import { MODEL_RESIZE_PANELS } from './layout/modelResizeLayout';
  * Uses Zustand store for all state management.
  */
 export function App(): React.JSX.Element {
+  const { t } = useTranslation();
   const sceneControlRef = useRef<SceneControlSocket | null>(null);
   const latestRevisionRef = useRef(0);
   const enginePortRef = useRef<number | null>(null);
@@ -50,6 +52,8 @@ export function App(): React.JSX.Element {
   const [enginePort, setEnginePort] = useState<number | null>(null);
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
   const [webviewVisible, setWebviewVisible] = useState(initialWebviewVisible);
+  const [isViewportHudVisible, setIsViewportHudVisible] = useState(true);
+  const [areTimelineControlsVisible, setAreTimelineControlsVisible] = useState(true);
   const [isRightDockVisible, setIsRightDockVisible] = useState(true);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
@@ -426,7 +430,8 @@ export function App(): React.JSX.Element {
     selectedNodeName,
   ]);
 
-  const selectedCharacterId = resolveSelectedCharacterId(selectedNodeId, sceneNodes);
+  const characterPreviewTarget = resolveCharacterPreviewTarget(selectedNodeId, sceneNodes);
+  const selectedCharacterId = characterPreviewTarget.characterId;
   const selectedTopologyVersion = selectedCharacterId
     ? (characterTopologyVersions[selectedCharacterId] ?? 0)
     : 0;
@@ -909,6 +914,12 @@ export function App(): React.JSX.Element {
   const shouldRenderEngineViewport = enginePort !== null;
   const routeAReady = enginePort !== null && sceneControlStatus === 'ready';
   const panelCommandDisabled = sceneControlStatus !== 'ready';
+  const isCharacterPreviewDisabled = !routeAReady || !selectedCharacterId;
+  const characterPreviewStatusLabel = characterPreviewStatusText({
+    routeAReady,
+    status: characterPreview.status,
+    target: characterPreviewTarget,
+  });
 
   const propertiesPanel = isExpressionPresetOpen ? (
     <ExpressionPresetPanel
@@ -969,55 +980,116 @@ export function App(): React.JSX.Element {
   );
 
   return (
-    <div className="model-workbench h-screen w-screen overflow-hidden">
-      <div className="model-workbench-body">
-        <main className="model-viewport-area">
-          <Toolbar
-            className="model-viewport-toolbar"
-            width={48}
-            isRightDockVisible={isRightDockVisible}
-            onToggleRightDock={() => setIsRightDockVisible((visible) => !visible)}
-            onCameraChange={sendEditorCameraToEngine}
-            onCameraMutated={handleViewportCameraMutated}
-          />
-          <div className="model-viewport-shell">
-            {enginePort !== null ? (
-              <VideoViewport
-                enginePort={enginePort}
-                sceneId={sceneId}
-                sceneRevision={sceneRevision}
-                selectedNodeId={selectedNodeId}
-                hasPendingPrediction={hasPendingPrediction}
-                sceneControlSocket={sceneControlSocket}
-                visible={webviewVisible}
-                overlay={viewportOverlay}
-                predictions={localPredictions}
-                topologyWarning={topologyWarning}
-                onSelectNode={selectNode}
-                onSceneControlError={(message) => setSceneControlStatus('error', message)}
-                onCameraMutated={handleViewportCameraMutated}
-              />
-            ) : null}
-            {qualityPreviewDataUrl && shouldRenderEngineViewport ? (
-              <div className="model-quality-preview-overlay pointer-events-none absolute inset-0">
-                <img
-                  src={qualityPreviewDataUrl}
-                  alt=""
-                  className="h-full w-full object-contain opacity-95"
-                  draggable={false}
+    <CreativeWorkbenchShell
+      className="model-workbench h-screen w-screen overflow-hidden"
+      bodyClassName="model-workbench-body"
+      mainClassName="model-center-panel"
+      mainKind="viewport-timeline"
+      leftRail={
+        <ModelSideToolbar
+          className="model-left-toolbar"
+          width={48}
+          isViewportHudVisible={isViewportHudVisible}
+          onToggleViewportHud={() => setIsViewportHudVisible((visible) => !visible)}
+          areTimelineControlsVisible={areTimelineControlsVisible}
+          onToggleTimelineControls={() => setAreTimelineControlsVisible((visible) => !visible)}
+          isRightDockVisible={isRightDockVisible}
+          onToggleRightDock={() => setIsRightDockVisible((visible) => !visible)}
+          onCameraChange={sendEditorCameraToEngine}
+          onCameraMutated={handleViewportCameraMutated}
+        />
+      }
+      main={
+        <>
+          <section className="model-viewport-area">
+            <div className="model-viewport-shell">
+              {enginePort !== null ? (
+                <VideoViewport
+                  enginePort={enginePort}
+                  sceneId={sceneId}
+                  sceneRevision={sceneRevision}
+                  selectedNodeId={selectedNodeId}
+                  hasPendingPrediction={hasPendingPrediction}
+                  sceneControlSocket={sceneControlSocket}
+                  visible={webviewVisible}
+                  overlay={viewportOverlay}
+                  predictions={localPredictions}
+                  topologyWarning={topologyWarning}
+                  hudVisible={isViewportHudVisible}
+                  onSelectNode={selectNode}
+                  onSceneControlError={(message) => setSceneControlStatus('error', message)}
+                  onCameraMutated={handleViewportCameraMutated}
                 />
+              ) : null}
+              {qualityPreviewDataUrl && shouldRenderEngineViewport ? (
+                <div className="model-quality-preview-overlay pointer-events-none absolute inset-0">
+                  <img
+                    src={qualityPreviewDataUrl}
+                    alt=""
+                    className="h-full w-full object-contain opacity-95"
+                    draggable={false}
+                  />
+                </div>
+              ) : null}
+              {isViewportHudVisible ? (
+                <div id="model-viewport-hud">
+                  <CharacterPreviewModeSelector
+                    state={characterPreview}
+                    disabled={isCharacterPreviewDisabled}
+                    statusLabel={characterPreviewStatusLabel}
+                    onModeChange={handleCharacterPreviewModeChange}
+                    onResetCamera={handleCharacterPreviewCameraReset}
+                    onPlaybackControl={handleCharacterPreviewPlaybackControl}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </section>
+          <TimelineDock
+            key={isKeyframeEditorOpen ? 'expanded' : 'compact'}
+            expanded={isKeyframeEditorOpen}
+            controlsVisible={areTimelineControlsVisible}
+          >
+            {areTimelineControlsVisible ? (
+              <div id="model-timeline-controls" className="model-timeline-controls">
+                {isKeyframeEditorOpen ? (
+                  <ModelKeyframeTimeline
+                    disabled={!routeAReady}
+                    onSeek={handleSeekAnimation}
+                    onKeyframeMutation={handleKeyframeMutation}
+                  />
+                ) : (
+                  <AnimationTimelineStrip clipCount={animationClips.length}>
+                    <AnimationPlayer
+                      clips={animationClips}
+                      nodes={sceneNodes}
+                      activeClip={activeAnimation}
+                      playbackState={playbackState}
+                      rootMotionEnabled={rootMotionEnabled}
+                      rootMotionNodeId={rootMotionNodeId}
+                      onRootMotionChange={handleRootMotionChange}
+                      onSelectClip={handleSelectAnimation}
+                      onCrossfade={handleCrossfadeAnimation}
+                      onPlay={handlePlayAnimation}
+                      onPause={handlePauseAnimation}
+                      onStop={handleStopAnimation}
+                      disabled={!routeAReady}
+                    />
+                  </AnimationTimelineStrip>
+                )}
               </div>
-            ) : null}
-            <CharacterPreviewModeSelector
-              state={characterPreview}
-              disabled={!routeAReady || !selectedCharacterId}
-              onModeChange={handleCharacterPreviewModeChange}
-              onResetCamera={handleCharacterPreviewCameraReset}
-              onPlaybackControl={handleCharacterPreviewPlaybackControl}
-            />
-          </div>
-        </main>
-        {isRightDockVisible ? (
+            ) : (
+              <div className="model-animation-controls">
+                <span className="text-[var(--model-fg-muted)]">
+                  {t('toolbar.timelineControlsHidden')}
+                </span>
+              </div>
+            )}
+          </TimelineDock>
+        </>
+      }
+      rightPanel={
+        isRightDockVisible ? (
           <RightDock
             outliner={
               <SceneTree
@@ -1031,39 +1103,9 @@ export function App(): React.JSX.Element {
             }
             properties={propertiesPanel}
           />
-        ) : null}
-      </div>
-      <TimelineDock
-        key={isKeyframeEditorOpen ? 'expanded' : 'compact'}
-        expanded={isKeyframeEditorOpen}
-      >
-        {isKeyframeEditorOpen ? (
-          <ModelKeyframeTimeline
-            disabled={!routeAReady}
-            onSeek={handleSeekAnimation}
-            onKeyframeMutation={handleKeyframeMutation}
-          />
-        ) : (
-          <AnimationTimelineStrip clipCount={animationClips.length}>
-            <AnimationPlayer
-              clips={animationClips}
-              nodes={sceneNodes}
-              activeClip={activeAnimation}
-              playbackState={playbackState}
-              rootMotionEnabled={rootMotionEnabled}
-              rootMotionNodeId={rootMotionNodeId}
-              onRootMotionChange={handleRootMotionChange}
-              onSelectClip={handleSelectAnimation}
-              onCrossfade={handleCrossfadeAnimation}
-              onPlay={handlePlayAnimation}
-              onPause={handlePauseAnimation}
-              onStop={handleStopAnimation}
-              disabled={!routeAReady}
-            />
-          </AnimationTimelineStrip>
-        )}
-      </TimelineDock>
-    </div>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -1146,9 +1188,11 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
 
 function TimelineDock({
   expanded,
+  controlsVisible,
   children,
 }: {
   expanded: boolean;
+  controlsVisible: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const timelineSpec = expanded
@@ -1169,6 +1213,9 @@ function TimelineDock({
 
   return (
     <footer
+      id="model-timeline-dock"
+      aria-controls="model-timeline-controls"
+      aria-expanded={controlsVisible}
       ref={containerRef}
       className={expanded ? 'model-timeline-dock expanded' : 'model-timeline-dock'}
       style={{ height: timelineResize.size }}
@@ -1236,16 +1283,67 @@ function previewRenderPreset(modeId: CharacterPreviewModeId) {
   }
 }
 
-function resolveSelectedCharacterId(
+interface CharacterPreviewTarget {
+  readonly characterId: string | null;
+  readonly reason:
+    | 'selected-character'
+    | 'single-character'
+    | 'single-preview-node'
+    | 'selected-node'
+    | 'no-scene-node';
+}
+
+function resolveCharacterPreviewTarget(
   selectedNodeId: string | null,
   sceneNodes: readonly SceneNodeSnapshot[],
-): string | null {
-  if (!selectedNodeId) return null;
-  const selected = sceneNodes.find((node) => node.nodeId === selectedNodeId);
-  if (!selected) return selectedNodeId;
-  return selected.kind === 'character' || selected.kind === 'character-instance'
-    ? selected.nodeId
-    : selectedNodeId;
+): CharacterPreviewTarget {
+  if (selectedNodeId) {
+    const selected = sceneNodes.find((node) => node.nodeId === selectedNodeId);
+    if (selected && isCharacterSceneNode(selected)) {
+      return { characterId: selected.nodeId, reason: 'selected-character' };
+    }
+    if (!selected) {
+      return { characterId: selectedNodeId, reason: 'selected-node' };
+    }
+  }
+
+  const characterNodes = sceneNodes.filter(isCharacterSceneNode);
+  if (characterNodes.length === 1) {
+    return { characterId: characterNodes[0]?.nodeId ?? null, reason: 'single-character' };
+  }
+
+  const previewNodes = sceneNodes.filter(isPreviewableSceneNode);
+  if (previewNodes.length === 1) {
+    return { characterId: previewNodes[0]?.nodeId ?? null, reason: 'single-preview-node' };
+  }
+
+  return {
+    characterId: selectedNodeId && sceneNodes.length > 0 ? selectedNodeId : null,
+    reason: selectedNodeId ? 'selected-node' : 'no-scene-node',
+  };
+}
+
+function isCharacterSceneNode(node: SceneNodeSnapshot): boolean {
+  return node.kind === 'character' || node.kind === 'character-instance';
+}
+
+function isPreviewableSceneNode(node: SceneNodeSnapshot): boolean {
+  return isCharacterSceneNode(node) || node.kind === 'mesh' || node.mesh !== undefined;
+}
+
+function characterPreviewStatusText({
+  routeAReady,
+  status,
+  target,
+}: {
+  readonly routeAReady: boolean;
+  readonly status: string;
+  readonly target: CharacterPreviewTarget;
+}): string | undefined {
+  if (!routeAReady) return 'Waiting for engine';
+  if (!target.characterId) return 'Select a character';
+  if (status === 'unavailable' && target.reason !== 'selected-character') return 'Ready';
+  return undefined;
 }
 
 function sceneCommandPredictionKind(

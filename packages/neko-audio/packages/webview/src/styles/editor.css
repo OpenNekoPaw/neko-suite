@@ -341,6 +341,93 @@
     background: var(--accent);
   }
 
+  .audio-workbench-shell {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .audio-workbench-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .audio-main-panel {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .audio-main-surface {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .audio-main-content {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .audio-left-toolbar.neko-vtoolbar {
+    height: 100%;
+    border-right: 1px solid var(--editor-border);
+    background: var(--toolbar-bg);
+  }
+
+  .audio-left-toolbar .neko-toolbar-btn {
+    height: 38px;
+    border-radius: 3px;
+    color: var(--activity-inactive);
+  }
+
+  .audio-left-toolbar .neko-toolbar-btn:hover:not(:disabled),
+  .audio-left-toolbar .neko-toolbar-btn.active {
+    color: var(--activity-fg);
+    background: var(--audio-hover);
+  }
+
+  .audio-side-panel-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 3px;
+    border-bottom: 1px solid var(--editor-border);
+    padding: 5px 8px;
+  }
+
+  .audio-side-panel-tabs button {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--activity-inactive);
+    cursor: pointer;
+  }
+
+  .audio-side-panel-tabs button:hover,
+  .audio-side-panel-tabs button.active {
+    color: var(--activity-fg);
+    background: var(--audio-hover);
+  }
+
   /* Resize handle */
   .neko-resize-handle {
     width: 3px;

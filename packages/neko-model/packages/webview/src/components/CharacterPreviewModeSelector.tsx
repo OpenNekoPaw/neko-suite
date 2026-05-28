@@ -6,6 +6,7 @@ import type { CharacterPreviewUiState } from '../stores/modelStore';
 export interface CharacterPreviewModeSelectorProps {
   state: CharacterPreviewUiState;
   disabled: boolean;
+  statusLabel?: string;
   onModeChange: (modeId: CharacterPreviewModeId) => void;
   onResetCamera: () => void;
   onPlaybackControl?: (action: 'play' | 'pause' | 'stop') => void;
@@ -14,6 +15,7 @@ export interface CharacterPreviewModeSelectorProps {
 export function CharacterPreviewModeSelector({
   state,
   disabled,
+  statusLabel,
   onModeChange,
   onResetCamera,
   onPlaybackControl,
@@ -21,6 +23,8 @@ export function CharacterPreviewModeSelector({
   const activeMode = state.requestedMode ?? state.appliedMode ?? 'face';
   const diagnostic = state.diagnostics[0]?.message ?? null;
   const playbackState = state.state?.playback.state;
+  const displayStatus =
+    statusLabel ?? (state.status === 'pending' ? 'Pending' : (playbackState ?? state.status));
   const canControlPlayback =
     !disabled &&
     (state.appliedMode === 'motion' || state.appliedMode === 'voice-pack') &&
@@ -51,7 +55,7 @@ export function CharacterPreviewModeSelector({
         ))}
       </div>
       <div className="model-character-preview-status">
-        <span>{state.status === 'pending' ? 'Pending' : playbackState ?? state.status}</span>
+        <span>{displayStatus}</span>
         {canControlPlayback ? (
           <div className="model-character-preview-playback" aria-label="Preview playback controls">
             <button

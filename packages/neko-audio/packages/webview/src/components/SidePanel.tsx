@@ -13,6 +13,7 @@ import { EffectsPanel } from './EffectsPanel';
 import { RecordingPanel } from './RecordingPanel';
 import { ExportPanel } from './ExportPanel';
 import { PresetBrowser } from './PresetBrowser';
+import { audioSidePanelItems } from './audioSidePanelItems';
 import { useEffectsChain } from '../hooks/useEffectsChain';
 import { AudioIconButton } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
@@ -29,7 +30,7 @@ const MAX_WIDTH = 400;
 const DEFAULT_WIDTH = 260;
 
 export function SidePanel() {
-  const { activeSidePanel, closeSidePanel } = useAudioStore();
+  const { activeSidePanel, closeSidePanel, openSidePanel } = useAudioStore();
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const rootRef = useRef<HTMLDivElement>(null);
   const effectsChain = useEffectsChain();
@@ -66,6 +67,7 @@ export function SidePanel() {
 
       {/* Panel */}
       <div
+        id="audio-side-panel"
         ref={rootRef}
         className="flex flex-col shrink-0 bg-[var(--toolbar-bg)] border-l border-[var(--editor-border)] overflow-hidden"
         style={{ width }}
@@ -80,6 +82,26 @@ export function SidePanel() {
           >
             <CloseIcon className="h-3 w-3" />
           </AudioIconButton>
+        </div>
+
+        <div
+          className="audio-side-panel-tabs"
+          role="tablist"
+          aria-label={t('audio.sidePanel.tabs')}
+        >
+          {audioSidePanelItems.map((item) => (
+            <button
+              key={item.panel}
+              type="button"
+              role="tab"
+              aria-selected={activeSidePanel === item.panel}
+              className={activeSidePanel === item.panel ? 'active' : undefined}
+              title={t(item.titleKey)}
+              onClick={() => openSidePanel(item.panel)}
+            >
+              {item.icon}
+            </button>
+          ))}
         </div>
 
         {/* Content */}

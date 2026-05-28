@@ -46,24 +46,54 @@ describe('PuppetToolbar', () => {
     });
 
     expect(host.querySelector('.neko-vtoolbar')).not.toBeNull();
+    expect(host.querySelector('.neko-creative-left-rail')).not.toBeNull();
     expect(host.querySelector('.puppet-left-toolbar')).not.toBeNull();
+    expect(host.querySelector('.puppet-left-toolbar')?.getAttribute('aria-label')).toBe(
+      'puppet.toolbar.leftRail',
+    );
     expect(host.querySelectorAll('.neko-toolbar-btn')).toHaveLength(4);
     expect(host.querySelector('[style*="flex"]')).not.toBeNull();
   });
 
-  it('keeps puppet-only viewport commands disabled until a puppet is loaded', () => {
+  it('keeps viewport commands in the left rail', () => {
     act(() => {
-      root.render(<PuppetToolbar {...defaultProps({ puppetLoaded: false })} />);
+      root.render(<PuppetToolbar {...defaultProps({ puppetLoaded: true })} />);
     });
 
-    expect(buttonByLabel('puppet.toolbar.fitView')?.disabled).toBe(true);
-    expect(buttonByLabel('puppet.toolbar.onionSkin')?.disabled).toBe(true);
-    expect(buttonByLabel('puppet.toolbar.import')?.disabled).toBe(false);
-    expect(buttonByLabel('puppet.toolbar.hideRightPanel')?.disabled).toBe(false);
+    expect(buttonByLabel('puppet.toolbar.import')).not.toBeNull();
+    expect(
+      buttonByLabel('puppet.toolbar.import')?.getAttribute('data-creative-left-rail-kind'),
+    ).toBe('common-action');
+    expect(buttonByLabel('puppet.toolbar.fitView')).not.toBeNull();
+    expect(buttonByLabel('puppet.toolbar.onionSkin')).not.toBeNull();
+    expect(
+      buttonByLabel('puppet.toolbar.fitView')?.getAttribute('data-puppet-toolbar-action'),
+    ).toBe('fit-view');
+    expect(
+      buttonByLabel('puppet.toolbar.onionSkin')?.getAttribute('data-creative-left-rail-kind'),
+    ).toBe('common-action');
   });
 
-  it('routes commands and exposes the right panel toggle state', () => {
-    const props = defaultProps({ puppetLoaded: true, onionSkinEnabled: true });
+  it('routes left rail import and viewport commands', () => {
+    const props = defaultProps({ puppetLoaded: true });
+
+    act(() => {
+      root.render(<PuppetToolbar {...props} />);
+    });
+
+    act(() => {
+      buttonByLabel('puppet.toolbar.import')?.click();
+      buttonByLabel('puppet.toolbar.fitView')?.click();
+      buttonByLabel('puppet.toolbar.onionSkin')?.click();
+    });
+
+    expect(props.onImport).toHaveBeenCalledTimes(1);
+    expect(props.onFitView).toHaveBeenCalledTimes(1);
+    expect(props.onToggleOnionSkin).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes visibility toggles through the left rail', () => {
+    const props = defaultProps({ isRightPanelVisible: true });
 
     act(() => {
       root.render(<PuppetToolbar {...props} />);
@@ -73,19 +103,14 @@ describe('PuppetToolbar', () => {
     expect(rightPanelButton?.getAttribute('aria-controls')).toBe('puppet-right-panel');
     expect(rightPanelButton?.getAttribute('aria-expanded')).toBe('true');
     expect(rightPanelButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(rightPanelButton?.getAttribute('data-creative-left-rail-target')).toBe('right-panel');
     expect(rightPanelButton?.getAttribute('data-puppet-toolbar-action')).toBe('toggle-right-panel');
-    expect(buttonByLabel('puppet.toolbar.onionSkin')?.getAttribute('aria-pressed')).toBe('true');
+    expect(buttonByLabel('puppet.toolbar.import')).not.toBeNull();
 
     act(() => {
-      buttonByLabel('puppet.toolbar.import')?.click();
-      buttonByLabel('puppet.toolbar.fitView')?.click();
-      buttonByLabel('puppet.toolbar.onionSkin')?.click();
       rightPanelButton?.click();
     });
 
-    expect(props.onImport).toHaveBeenCalledTimes(1);
-    expect(props.onFitView).toHaveBeenCalledTimes(1);
-    expect(props.onToggleOnionSkin).toHaveBeenCalledTimes(1);
     expect(props.onToggleRightPanel).toHaveBeenCalledTimes(1);
   });
 
@@ -107,13 +132,13 @@ describe('PuppetToolbar', () => {
 
 function defaultProps(overrides: Partial<React.ComponentProps<typeof PuppetToolbar>> = {}) {
   return {
-    puppetLoaded: true,
     isRightPanelVisible: true,
+    puppetLoaded: false,
     onionSkinEnabled: false,
     onImport: vi.fn(),
     onFitView: vi.fn(),
-    onToggleRightPanel: vi.fn(),
     onToggleOnionSkin: vi.fn(),
+    onToggleRightPanel: vi.fn(),
     ...overrides,
   };
 }

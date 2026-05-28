@@ -7,7 +7,11 @@
 
 import { create } from 'zustand';
 import type { AudioInfo, WaveformData } from '../shared/types';
-import { DEFAULT_BEAT_GRID_STATE, type BeatGridSnapMode, type BeatGridState } from '../utils/beatGrid';
+import {
+  DEFAULT_BEAT_GRID_STATE,
+  type BeatGridSnapMode,
+  type BeatGridState,
+} from '../utils/beatGrid';
 
 // =============================================================================
 // State Types
@@ -110,6 +114,7 @@ export interface AudioStoreActions {
 
   // UI
   toggleSpectrum(): void;
+  openSidePanel(panel: SidePanelType): void;
   toggleSidePanel(panel: SidePanelType): void;
   closeSidePanel(): void;
   setLoading(loading: boolean): void;
@@ -197,14 +202,14 @@ export const useAudioStore = create<AudioStoreState & AudioStoreActions>()((set)
 
   // UI
   toggleSpectrum: () => set((s) => ({ showSpectrum: !s.showSpectrum })),
+  openSidePanel: (panel) => set({ activeSidePanel: panel }),
   toggleSidePanel: (panel) =>
     set((s) => ({ activeSidePanel: s.activeSidePanel === panel ? null : panel })),
   closeSidePanel: () => set({ activeSidePanel: null }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error, isLoading: false }),
   setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(10, zoom)) }),
-  setBeatGrid: (updates) =>
-    set((s) => ({ beatGrid: { ...s.beatGrid, ...updates } })),
+  setBeatGrid: (updates) => set((s) => ({ beatGrid: { ...s.beatGrid, ...updates } })),
   setBeatGridSnapMode: (mode) =>
     set((s) => ({ beatGrid: { ...s.beatGrid, enabled: mode !== 'off', mode } })),
   toggleLoop: () => set((s) => ({ isLooping: !s.isLooping })),

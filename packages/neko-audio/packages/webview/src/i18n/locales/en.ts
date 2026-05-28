@@ -42,6 +42,12 @@ const audio: MessageBundle = {
   'audio.spectrum.title': 'Spectrum Analyzer',
   'audio.spectrum.toggle': 'Toggle Spectrum',
 
+  // Layout
+  'audio.toolbar.leftRail': 'Audio editor toolbar',
+  'audio.sidePanel.show': 'Show side panel',
+  'audio.sidePanel.hide': 'Hide side panel',
+  'audio.sidePanel.tabs': 'Side panel sections',
+
   // Effects
   'audio.effects.title': 'Effects',
   'audio.effects.add': 'Add Effect',

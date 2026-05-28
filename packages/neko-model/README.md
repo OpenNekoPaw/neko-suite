@@ -4,7 +4,7 @@
 
 neko-model 的实时 3D 视口是 Engine-only Route A：Webview 通过 `EngineClient.startSceneRenderStream()` 获取 `RenderStreamDescriptor`，再由 `VideoViewport` 使用 `H264StreamClient` 和 WebCodecs 解码 raw H.264 帧。可见 3D 内容只来自 Engine 帧，`OverlayCanvas` 和 `InteractionLayer` 负责选中框、gizmo、hit-test、projected bounds、本地预测和诊断信息。
 
-布局上，Model Webview 不再渲染 `WorkbenchTopBar`。选中节点、对象数量和 Engine 状态投射到 VSCode 原生 StatusBar，右侧 Dock、Outliner/Properties 分割线以及 Timeline 高度由 Webview 内 ResizeHandle 调整，并通过 Webview state 恢复上次尺寸。
+布局上，Model Webview 使用 Creative Workbench Shell，不再渲染 `WorkbenchTopBar` 或 viewport 横向工具条。左侧工具栏承接保存、导出、建模面板入口、网格开关、重置相机等常用命令，并通过底部显隐组控制三类区域：主面板 viewport HUD、主面板下侧动画/timeline controls、右侧 Dock；viewport 与 timeline 展示表面保持长显。右侧 Dock 承接 Outliner/Properties 和选中对象属性编辑。选中节点、对象数量和 Engine 状态投射到 VSCode 原生 StatusBar，右侧 Dock、Outliner/Properties 分割线以及 Timeline 高度由 Webview 内 ResizeHandle 调整，并通过 Webview state 恢复上次尺寸。
 
 Webview 不再内置 R3F/Three.js 可见模型 fallback。`R3FDevelopmentFallback`、`Viewport3D`、`ModelLoader` 和 R3F `TransformGizmo` 已从 Route A webview 移除；`@react-three/*`、`three`、`@pixiv/three-vrm` 不能作为 `@neko-model/webview` 依赖重新引入。WebCodecs 或 Engine stream 不可用时，UI 必须进入明确的 Route A unavailable 状态；`scenes:capture` 只能作为非交互质量预览 overlay，不得替代实时 Engine stream。
 

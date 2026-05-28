@@ -12,6 +12,13 @@ export const en = {
   'toolbar.sculpt': 'Sculpt Brush',
   'toolbar.exportGlb': 'Export GLB',
   'toolbar.saveProject': 'Save Project',
+  'toolbar.modelLeftRail': 'Model workbench toolbar',
+  'toolbar.viewportControls': 'Viewport controls',
+  'toolbar.showViewportHud': 'Show viewport HUD',
+  'toolbar.hideViewportHud': 'Hide viewport HUD',
+  'toolbar.showTimelineControls': 'Show timeline controls',
+  'toolbar.hideTimelineControls': 'Hide timeline controls',
+  'toolbar.timelineControlsHidden': 'Timeline controls hidden',
   'toolbar.showRightDock': 'Show right panels',
   'toolbar.hideRightDock': 'Hide right panels',
 
@@ -20,7 +27,6 @@ export const en = {
   'toolbar.qualityPreview': 'Engine Quality Preview',
 
   // Viewport controls
-  'viewport.controls': 'Viewport controls',
   'viewport.grid': 'Show Engine 3D grid',
   'viewport.resetCamera': 'Reset camera',
 

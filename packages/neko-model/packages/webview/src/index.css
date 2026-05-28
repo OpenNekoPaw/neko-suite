@@ -60,9 +60,9 @@
     --model-status-error: var(--vscode-errorForeground, var(--model-danger));
     --model-viewport-area-bg: color-mix(in srgb, var(--model-bg) 88%, #17181b 12%);
     --model-viewport-bg: color-mix(in srgb, var(--model-bg) 90%, #000000 10%);
-    --model-viewport-toolbar-bg: color-mix(in srgb, var(--model-surface) 92%, transparent);
-    --model-viewport-toolbar-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
-    --model-viewport-toolbar-shadow: var(--neko-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.24));
+    --model-left-toolbar-bg: color-mix(in srgb, var(--model-surface) 92%, transparent);
+    --model-left-toolbar-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
+    --model-left-toolbar-shadow: var(--neko-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.24));
     --model-viewport-control-bg: color-mix(in srgb, var(--model-surface) 70%, transparent);
     --model-viewport-control-hover-bg: color-mix(in srgb, var(--model-elevated) 84%, transparent);
     --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
@@ -134,8 +134,8 @@
     --model-segment-active-fg: var(--model-fg);
     --model-viewport-area-bg: color-mix(in srgb, var(--model-bg) 94%, var(--model-fg) 6%);
     --model-viewport-bg: color-mix(in srgb, var(--model-bg) 92%, var(--model-fg) 8%);
-    --model-viewport-toolbar-bg: color-mix(in srgb, var(--model-elevated) 94%, transparent);
-    --model-viewport-toolbar-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
+    --model-left-toolbar-bg: color-mix(in srgb, var(--model-elevated) 94%, transparent);
+    --model-left-toolbar-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
     --model-viewport-control-bg: color-mix(in srgb, var(--model-elevated) 78%, transparent);
     --model-viewport-control-hover-bg: color-mix(
       in srgb,
@@ -181,9 +181,9 @@
     --model-segment-active-border: var(--model-border);
     --model-viewport-area-bg: var(--vscode-editor-background);
     --model-viewport-bg: var(--vscode-editor-background);
-    --model-viewport-toolbar-bg: var(--vscode-editor-background);
-    --model-viewport-toolbar-border: var(--model-border);
-    --model-viewport-toolbar-shadow: none;
+    --model-left-toolbar-bg: var(--vscode-editor-background);
+    --model-left-toolbar-border: var(--model-border);
+    --model-left-toolbar-shadow: none;
     --model-viewport-control-bg: var(--vscode-editor-background);
     --model-viewport-control-hover-bg: var(--model-hover);
     --model-viewport-control-border: var(--model-border);
@@ -508,12 +508,21 @@
     flex: 1;
   }
 
+  .model-center-panel {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    background: var(--model-viewport-area-bg);
+  }
+
   .model-viewport-area {
     display: flex;
     min-width: 0;
     min-height: 0;
     flex: 1;
-    flex-direction: row;
+    flex-direction: column;
     background: var(--model-viewport-area-bg);
   }
 
@@ -554,10 +563,10 @@
     z-index: 32;
     display: flex;
     gap: 4px;
-    border: 1px solid var(--model-viewport-toolbar-border);
+    border: 1px solid var(--model-left-toolbar-border);
     border-radius: 5px;
-    background: var(--model-viewport-toolbar-bg);
-    box-shadow: var(--model-viewport-toolbar-shadow);
+    background: var(--model-left-toolbar-bg);
+    box-shadow: var(--model-left-toolbar-shadow);
     backdrop-filter: blur(10px);
     padding: 4px;
   }
@@ -585,7 +594,7 @@
     border: 1px solid var(--model-border);
     border-radius: 5px;
     background: var(--model-elevated);
-    box-shadow: var(--model-viewport-toolbar-shadow);
+    box-shadow: var(--model-left-toolbar-shadow);
     padding: 4px;
   }
 
@@ -605,25 +614,25 @@
     background: color-mix(in srgb, var(--model-accent) 18%, transparent);
   }
 
-  .model-viewport-toolbar.neko-vtoolbar {
+  .model-left-toolbar.neko-vtoolbar {
     height: 100%;
-    border-right: 1px solid var(--model-viewport-toolbar-border);
-    background: var(--model-viewport-toolbar-bg);
+    border-right: 1px solid var(--model-left-toolbar-border);
+    background: var(--model-left-toolbar-bg);
   }
 
-  .model-viewport-toolbar .neko-toolbar-btn {
+  .model-left-toolbar .neko-toolbar-btn {
     height: 38px;
     border-radius: 3px;
     color: var(--model-fg-secondary);
   }
 
-  .model-viewport-toolbar .neko-toolbar-btn:hover:not(:disabled),
-  .model-viewport-toolbar .neko-toolbar-btn.active {
+  .model-left-toolbar .neko-toolbar-btn:hover:not(:disabled),
+  .model-left-toolbar .neko-toolbar-btn.active {
     color: var(--model-fg);
     background: var(--model-hover);
   }
 
-  .model-viewport-toolbar .neko-toolbar-btn.active::before {
+  .model-left-toolbar .neko-toolbar-btn.active::before {
     left: 0;
     background: var(--model-accent);
   }
@@ -631,17 +640,17 @@
   .model-character-preview-modes {
     pointer-events: auto;
     position: absolute;
-    top: 10px;
+    top: 52px;
     left: 10px;
     z-index: 31;
     display: flex;
     max-width: min(520px, calc(100% - 84px));
     flex-direction: column;
     gap: 5px;
-    border: 1px solid var(--model-viewport-toolbar-border);
+    border: 1px solid var(--model-left-toolbar-border);
     border-radius: 6px;
-    background: var(--model-viewport-toolbar-bg);
-    box-shadow: var(--model-viewport-toolbar-shadow);
+    background: var(--model-left-toolbar-bg);
+    box-shadow: var(--model-left-toolbar-shadow);
     padding: 6px;
     backdrop-filter: blur(10px);
   }

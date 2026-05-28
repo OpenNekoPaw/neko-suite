@@ -2,8 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Toolbar } from './Toolbar';
-import { useModelStore } from '../stores/modelStore';
+import { ModelSideToolbar } from './Toolbar';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -16,6 +15,25 @@ vi.mock('../i18n/I18nContext', () => ({
 vi.mock('@neko/shared/vscode', () => ({
   postMessage: vi.fn(),
 }));
+
+vi.mock('@neko/ui/icons', async () => {
+  const actual = await vi.importActual<typeof import('@neko/ui/icons')>('@neko/ui/icons');
+  return {
+    ...actual,
+    DownloadIcon: ({ size = 16 }: { readonly size?: number }) => (
+      <span data-icon="download">{size}</span>
+    ),
+    RightPanelIcon: ({ size = 16 }: { readonly size?: number }) => (
+      <span data-icon="right-panel">{size}</span>
+    ),
+    RightPanelOffIcon: ({ size = 16 }: { readonly size?: number }) => (
+      <span data-icon="right-panel-off">{size}</span>
+    ),
+    LayersIcon: ({ size = 16 }: { readonly size?: number }) => (
+      <span data-icon="layers">{size}</span>
+    ),
+  };
+});
 
 describe('Model Toolbar', () => {
   let host: HTMLDivElement;
@@ -32,10 +50,6 @@ describe('Model Toolbar', () => {
       root.unmount();
     });
     host.remove();
-    useModelStore.setState({
-      cameraRadius: 2.2,
-      showViewportGrid: true,
-    });
   });
 
   it('renders a right dock visibility toggle at the bottom of the left toolbar', () => {
@@ -43,7 +57,15 @@ describe('Model Toolbar', () => {
 
     act(() => {
       root.render(
-        <Toolbar isRightDockVisible={true} onToggleRightDock={onToggleRightDock} width={48} />,
+        <ModelSideToolbar
+          isViewportHudVisible={true}
+          onToggleViewportHud={vi.fn()}
+          areTimelineControlsVisible={true}
+          onToggleTimelineControls={vi.fn()}
+          isRightDockVisible={true}
+          onToggleRightDock={onToggleRightDock}
+          width={48}
+        />,
       );
     });
 
@@ -56,6 +78,7 @@ describe('Model Toolbar', () => {
     expect(toggle?.getAttribute('aria-controls')).toBe('model-right-dock');
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(toggle?.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle?.getAttribute('data-creative-left-rail-target')).toBe('right-panel');
 
     act(() => {
       toggle?.click();
@@ -66,7 +89,17 @@ describe('Model Toolbar', () => {
 
   it('uses the show label when the right dock is collapsed', () => {
     act(() => {
-      root.render(<Toolbar isRightDockVisible={false} onToggleRightDock={vi.fn()} width={48} />);
+      root.render(
+        <ModelSideToolbar
+          isViewportHudVisible={true}
+          onToggleViewportHud={vi.fn()}
+          areTimelineControlsVisible={true}
+          onToggleTimelineControls={vi.fn()}
+          isRightDockVisible={false}
+          onToggleRightDock={vi.fn()}
+          width={48}
+        />,
+      );
     });
 
     const toggle = host.querySelector<HTMLButtonElement>(
@@ -77,42 +110,70 @@ describe('Model Toolbar', () => {
     expect(toggle?.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('keeps high-value viewport commands in the left toolbar', () => {
+  it('keeps viewport commands in the left toolbar and exposes three model visibility toggles', () => {
+    const onToggleViewportHud = vi.fn();
+    const onToggleTimelineControls = vi.fn();
     const onCameraChange = vi.fn();
     const onCameraMutated = vi.fn();
-    useModelStore.setState({ cameraRadius: 2, showViewportGrid: true });
 
     act(() => {
       root.render(
-        <Toolbar
+        <ModelSideToolbar
+          isViewportHudVisible={false}
+          onToggleViewportHud={onToggleViewportHud}
+          areTimelineControlsVisible={false}
+          onToggleTimelineControls={onToggleTimelineControls}
           isRightDockVisible={true}
+          onToggleRightDock={vi.fn()}
           onCameraChange={onCameraChange}
           onCameraMutated={onCameraMutated}
-          onToggleRightDock={vi.fn()}
           width={48}
         />,
       );
     });
 
-    const grid = buttonByLabel(host, 'viewport.grid');
-    const reset = buttonByLabel(host, 'viewport.resetCamera');
+    const timelineToggle = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="toolbar.showTimelineControls"]',
+    );
+    const hudToggle = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="toolbar.showViewportHud"]',
+    );
 
-    expect(buttonByLabel(host, 'viewport.zoomIn')).toBeNull();
-    expect(buttonByLabel(host, 'viewport.zoomOut')).toBeNull();
-    expect(grid).not.toBeNull();
-    expect(grid?.getAttribute('aria-pressed')).toBe('true');
-    expect(reset).not.toBeNull();
+    expect(host.querySelector('.neko-creative-left-rail')).not.toBeNull();
+    expect(buttonByLabel(host, 'toolbar.exportGlb')).not.toBeNull();
+    expect(buttonByLabel(host, 'toolbar.saveProject')).not.toBeNull();
+    expect(buttonByLabel(host, 'toolbar.faceEditor')).not.toBeNull();
+    expect(buttonByLabel(host, 'toolbar.boneExpression')).not.toBeNull();
+    expect(buttonByLabel(host, 'viewport.grid')).not.toBeNull();
+    expect(buttonByLabel(host, 'viewport.resetCamera')).not.toBeNull();
+    expect(
+      buttonByLabel(host, 'toolbar.faceEditor')?.getAttribute('data-model-toolbar-action'),
+    ).toBe('toggle-face');
+    expect(buttonByLabel(host, 'viewport.grid')?.getAttribute('data-creative-left-rail-kind')).toBe(
+      'common-action',
+    );
+    expect(hudToggle).not.toBeNull();
+    expect(hudToggle?.getAttribute('aria-controls')).toBe('model-viewport-hud');
+    expect(hudToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(hudToggle?.getAttribute('aria-pressed')).toBe('false');
+    expect(hudToggle?.getAttribute('data-creative-left-rail-target')).toBe('hud');
+    expect(hudToggle?.getAttribute('data-model-toolbar-action')).toBe('toggle-viewport-hud');
+    expect(timelineToggle).not.toBeNull();
+    expect(timelineToggle?.getAttribute('aria-controls')).toBe('model-timeline-controls');
+    expect(timelineToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(timelineToggle?.getAttribute('aria-pressed')).toBe('false');
+    expect(timelineToggle?.getAttribute('data-creative-left-rail-target')).toBe('main-panel');
 
     act(() => {
-      grid?.click();
+      buttonByLabel(host, 'viewport.resetCamera')?.click();
+      hudToggle?.click();
+      timelineToggle?.click();
     });
-    expect(useModelStore.getState().showViewportGrid).toBe(false);
 
-    act(() => {
-      reset?.click();
-    });
     expect(onCameraMutated).toHaveBeenCalledTimes(1);
     expect(onCameraChange).toHaveBeenCalledTimes(1);
+    expect(onToggleViewportHud).toHaveBeenCalledTimes(1);
+    expect(onToggleTimelineControls).toHaveBeenCalledTimes(1);
   });
 });
 

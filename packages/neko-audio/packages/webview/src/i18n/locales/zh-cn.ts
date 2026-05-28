@@ -42,6 +42,12 @@ const audio: MessageBundle = {
   'audio.spectrum.title': '频谱分析仪',
   'audio.spectrum.toggle': '切换频谱',
 
+  // Layout
+  'audio.toolbar.leftRail': '音频编辑器工具栏',
+  'audio.sidePanel.show': '显示右侧面板',
+  'audio.sidePanel.hide': '隐藏右侧面板',
+  'audio.sidePanel.tabs': '右侧面板分区',
+
   // Effects
   'audio.effects.title': '效果器',
   'audio.effects.add': '添加效果',

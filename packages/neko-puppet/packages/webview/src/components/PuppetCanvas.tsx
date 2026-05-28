@@ -10,7 +10,6 @@ import type { DeformedMesh, MeshSnapshot, PuppetNodeSnapshot } from '../animatio
 
 export interface PuppetCanvasProps {
   readonly overlayLayer?: React.ReactNode;
-  readonly toolbarLayer?: React.ReactNode;
   readonly contextMenuLayer?: React.ReactNode;
   readonly fallbackLabel?: React.ReactNode;
   readonly fitViewRequest?: number;
@@ -531,7 +530,6 @@ function renderNativeBoneOverlay(
 
 export function PuppetCanvas({
   overlayLayer = null,
-  toolbarLayer = null,
   contextMenuLayer = null,
   fallbackLabel = null,
   fitViewRequest = 0,
@@ -721,7 +719,6 @@ export function PuppetCanvas({
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
       {overlayLayer}
-      {toolbarLayer}
       {contextMenuLayer}
       {fallbackLabel}
     </div>

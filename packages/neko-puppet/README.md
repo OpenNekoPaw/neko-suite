@@ -16,7 +16,7 @@
 - **依赖**：`@neko/shared`、`@neko/neko-client`（通过 EngineClient 访问 runtime-puppet）
 - **激活依赖**：`neko-engine`（extensionDependency，runtime-puppet sidecar）
 - **文件格式**：`.nkp`（JSON 项目）、`.moc3`（Live2D MOC3 二进制）
-- **布局**：右侧 NodeTree / Parameters / ControlDrivers / Animation 面板栈使用可持久化 ResizeHandle，默认 280px，宽度约束为 200-400px。
+- **布局**：Webview 使用 Creative Workbench Shell：左侧工具栏承接导入、适配视图、洋葱皮开关等常用命令，并通过底部显隐组控制右侧面板；viewport 展示表面保持长显，不再单独渲染横向 viewport 工具条；右侧 NodeTree / Parameters / ControlDrivers / Animation 面板栈使用可持久化 ResizeHandle，默认 280px，宽度约束为 200-400px。当前没有独立被动状态投影，也不在 Webview 重建状态栏或顶栏。
 
 ## Architecture
 

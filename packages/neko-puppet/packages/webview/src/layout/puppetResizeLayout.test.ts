@@ -69,6 +69,10 @@ describe('Puppet right panel resize layout', () => {
     expect(app).toMatch(/emptyViewport=\{noPuppetSource\}/);
     expect(app).toMatch(/<PuppetEmptyState\s+onDropMoc3=\{handleDropMoc3\}/);
     expect(app).toMatch(/<PuppetToolbar\b/);
+    expect(app).not.toMatch(/<PuppetViewportControls\b/);
+    expect(app).toMatch(/<CreativeWorkbenchShell/);
+    expect(app).toMatch(/mainKind="viewport-timeline"/);
+    expect(app).not.toMatch(/toolbarLayer=/);
     expect(app).toMatch(/renderToolbar=\{\(\) => null\}/);
     expect(app).not.toMatch(/onToolbarAction=/);
     expect(app).not.toMatch(/DefaultPuppetViewportPreview/);
@@ -79,18 +83,26 @@ describe('Puppet right panel resize layout', () => {
     expect(css).not.toMatch(/\.puppet-default-viewport-preview/);
   });
 
-  it('uses a dedicated left toolbar and right dock instead of overlay protocol toolbar', () => {
+  it('uses a dedicated left command rail and right dock without a horizontal viewport toolbar', () => {
     const app = readSource('PuppetApp.tsx');
     const toolbar = readSource('components/PuppetToolbar.tsx');
     const css = readSource('index.css');
 
     expect(app).not.toMatch(/ViewportToolbar/);
     expect(app).not.toMatch(/handlePuppetToolbarAction/);
+    expect(toolbar).toMatch(/CreativeLeftRail/);
     expect(toolbar).toMatch(/ToolbarSpacer/);
+    expect(toolbar).toMatch(/data-creative-left-rail-kind="common-action"/);
+    expect(toolbar).toMatch(/data-creative-left-rail-action="fit-view"/);
+    expect(toolbar).toMatch(/data-creative-left-rail-action="toggle-onion-skin"/);
+    expect(app).not.toMatch(/<PuppetViewportControls\b/);
     expect(toolbar).toMatch(/aria-controls="puppet-right-panel"/);
+    expect(app).not.toMatch(/toolbarLayer=/);
     expect(app).toMatch(/fitViewRequest=\{fitViewRequest\}/);
-    expect(app).toMatch(/isRightPanelVisible && \(/);
+    expect(app).toMatch(/rightPanel=\{\s*isRightPanelVisible \? \(/);
     expect(css).not.toMatch(/\.puppet-viewport-toolbar/);
+    expect(css).toMatch(/\.puppet-main-panel\s*\{/);
+    expect(css).not.toMatch(/\.puppet-viewport-controls\s*\{/);
     expect(css).toMatch(/\.puppet-right-panel-stack/);
   });
 });
