@@ -33,7 +33,10 @@ use neko_engine_types::{
     VideoGpuFrame, VideoOutput, WaveformData,
 };
 use neko_runtime_media::PanoramaViewState;
-use neko_runtime_media::{encode_rgba_to_jpeg, extract_subtitles, global_probe_cache};
+use neko_runtime_media::{
+    capture_video_frame, encode_rgba_to_jpeg, extract_subtitles, global_probe_cache,
+    VideoFrameCaptureOptions,
+};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -90,51 +93,6 @@ fn panoramic_stream_video_output(
     frame_index: u64,
 ) -> Result<VideoOutput> {
     Ok(output.into_video_output(ctx, pts, duration, frame_index))
-}
-
-/// Bilinear downscale for RGBA pixel data.
-///
-/// Produces a smaller image by averaging source pixels that map to each
-/// destination pixel. This is intentionally simple — thumbnail quality
-/// does not need a Lanczos kernel.
-fn bilinear_downscale_rgba(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<u8> {
-    let mut dst = vec![0u8; (dst_w * dst_h * 4) as usize];
-    let x_ratio = src_w as f64 / dst_w as f64;
-    let y_ratio = src_h as f64 / dst_h as f64;
-    let src_stride = (src_w * 4) as usize;
-
-    for dy in 0..dst_h {
-        let sy_f = dy as f64 * y_ratio;
-        let sy0 = sy_f as u32;
-        let sy1 = (sy0 + 1).min(src_h - 1);
-        let fy = sy_f - sy0 as f64;
-
-        for dx in 0..dst_w {
-            let sx_f = dx as f64 * x_ratio;
-            let sx0 = sx_f as u32;
-            let sx1 = (sx0 + 1).min(src_w - 1);
-            let fx = sx_f - sx0 as f64;
-
-            let idx00 = sy0 as usize * src_stride + sx0 as usize * 4;
-            let idx10 = sy0 as usize * src_stride + sx1 as usize * 4;
-            let idx01 = sy1 as usize * src_stride + sx0 as usize * 4;
-            let idx11 = sy1 as usize * src_stride + sx1 as usize * 4;
-
-            let dst_idx = (dy * dst_w + dx) as usize * 4;
-            for c in 0..4 {
-                let v00 = src[idx00 + c] as f64;
-                let v10 = src[idx10 + c] as f64;
-                let v01 = src[idx01 + c] as f64;
-                let v11 = src[idx11 + c] as f64;
-                let v = v00 * (1.0 - fx) * (1.0 - fy)
-                    + v10 * fx * (1.0 - fy)
-                    + v01 * (1.0 - fx) * fy
-                    + v11 * fx * fy;
-                dst[dst_idx + c] = v.round() as u8;
-            }
-        }
-    }
-    dst
 }
 
 /// VideoService implementation
@@ -210,84 +168,26 @@ impl IVideoService for VideoService {
         time_seconds: f64,
         options: CaptureOptions,
     ) -> Result<FrameData> {
-        let path = source.to_string_lossy().to_string();
-        let gpu_ctx = self.gpu_ctx.clone();
-        let quality = options.quality;
-        let format = options.format;
-        let target_width = options.width;
-        let target_height = options.height;
+        let source = source.to_path_buf();
+        let capture_options = VideoFrameCaptureOptions {
+            quality: options.quality,
+            format: options.format,
+            width: options.width,
+            height: options.height,
+        };
 
-        // Run capture in blocking task since decoder is not async
+        // Still-frame capture favors deterministic thumbnails over GPU zero-copy throughput.
         let result = tokio::task::spawn_blocking(move || -> Result<FrameData> {
-            // Create hardware decoder
-            let mut decoder = HwAccelDecoder::with_hw_accel(HwAccelType::Auto);
-
-            // Open video file
-            let media_info = decoder.open(&path)?;
-            let src_width = media_info.width;
-            let src_height = media_info.height;
-
-            // Decode frame at specified time
-            let gpu_texture = decoder
-                .decode_gpu_at(time_seconds)?
-                .ok_or_else(|| Error::Other(format!("No frame at time {}", time_seconds)))?;
-
-            // If we have GPU context, use GPU pipeline for NV12 -> RGBA conversion
-            if let Some(ctx) = gpu_ctx {
-                // Import NV12 texture to wgpu
-                let importer = Nv12TextureImporter::new(Arc::clone(&ctx));
-                let nv12_texture = importer.import(&gpu_texture)?;
-
-                // Convert NV12 to RGBA using GPU
-                let renderer = Nv12Renderer::new(Arc::clone(&ctx))?;
-                let output_texture = renderer.create_output_texture(src_width, src_height);
-                let output_view =
-                    output_texture.create_view(&wgpu::TextureViewDescriptor::default());
-                renderer.render(&nv12_texture, &output_view, ColorSpace::Bt709);
-
-                // Read RGBA data from GPU
-                let rgba_data = ctx.read_texture_sync(&output_texture, src_width, src_height)?;
-
-                // Downscale if target dimensions are specified and smaller than source
-                let (final_rgba, out_w, out_h) = match (target_width, target_height) {
-                    (Some(tw), Some(th))
-                        if tw > 0 && th > 0 && (tw < src_width || th < src_height) =>
-                    {
-                        let scaled =
-                            bilinear_downscale_rgba(&rgba_data, src_width, src_height, tw, th);
-                        (scaled, tw, th)
-                    }
-                    _ => (rgba_data, src_width, src_height),
-                };
-
-                // Encode based on format
-                let (data, output_format) = match format {
-                    FrameFormat::Jpeg => {
-                        let jpeg_data = encode_rgba_to_jpeg(&final_rgba, out_w, out_h, quality)?;
-                        (jpeg_data, FrameFormat::Jpeg)
-                    }
-                    FrameFormat::Rgba => (final_rgba, FrameFormat::Rgba),
-                    _ => {
-                        // Default to JPEG for other formats
-                        let jpeg_data = encode_rgba_to_jpeg(&final_rgba, out_w, out_h, quality)?;
-                        (jpeg_data, FrameFormat::Jpeg)
-                    }
-                };
-
-                Ok(FrameData {
-                    data,
-                    width: out_w,
-                    height: out_h,
-                    format: output_format,
-                    timestamp: time_seconds,
-                    diagnostics: None,
-                    meta: None,
-                })
-            } else {
-                // CPU fallback - decode to CPU frame
-                // For now, return error as CPU path is not implemented
-                Err(Error::Other("GPU context required for capture".to_string()))
-            }
+            let frame = capture_video_frame(&source, time_seconds, capture_options)?;
+            Ok(FrameData {
+                data: frame.data,
+                width: frame.width,
+                height: frame.height,
+                format: frame.format,
+                timestamp: frame.timestamp,
+                diagnostics: None,
+                meta: None,
+            })
         })
         .await
         .map_err(|e| Error::Other(format!("Capture task failed: {}", e)))??;

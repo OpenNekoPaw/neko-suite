@@ -80,6 +80,39 @@ pub fn encode_rgba_to_jpeg(
     Ok(jpeg_data)
 }
 
+/// Encode RGB buffer to JPEG
+pub fn encode_rgb_to_jpeg(
+    rgb_data: &[u8],
+    width: u32,
+    height: u32,
+    quality: u32,
+) -> Result<Vec<u8>> {
+    let expected_rgb8 = (width as usize) * (height as usize) * 3;
+    if rgb_data.len() != expected_rgb8 {
+        return Err(Error::Other(format!(
+            "RGB data size mismatch: expected {} bytes, got {} bytes",
+            expected_rgb8,
+            rgb_data.len()
+        )));
+    }
+
+    let mut jpeg_buffer = Cursor::new(Vec::new());
+    let quality = quality.clamp(1, 100) as u8;
+
+    let encoder = JpegEncoder::new_with_quality(&mut jpeg_buffer, quality);
+    encoder
+        .write_image(rgb_data, width, height, ColorType::Rgb8.into())
+        .map_err(|e| Error::Image(format!("JPEG encoding failed: {}", e)))?;
+
+    let jpeg_data = jpeg_buffer.into_inner();
+
+    if jpeg_data.is_empty() {
+        return Err(Error::Image("JPEG encoding produced no output".to_string()));
+    }
+
+    Ok(jpeg_data)
+}
+
 /// Convert RGBA8 to RGB by dropping alpha channel
 #[inline]
 fn rgba8_to_rgb(rgba: &[u8]) -> Vec<u8> {

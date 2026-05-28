@@ -13,6 +13,7 @@ pub mod audio_diff;
 pub mod diff;
 pub mod error;
 pub mod ffmpeg_parser;
+pub mod frame_capture;
 pub mod image_analysis;
 pub mod image_diff;
 pub mod image_variant;
@@ -34,6 +35,7 @@ pub use audio_diff::{
 };
 pub use diff::{diff_media, ContentDiff, DiffCategory, DiffResult, FieldDiff};
 pub use error::{MediaError, Result};
+pub use frame_capture::{capture_video_frame, CapturedVideoFrame, VideoFrameCaptureOptions};
 pub use image_analysis::{
     contains_gpano_metadata, default_panorama_view_state, infer_projection,
     manual_projection_metadata, parse_gpano_coverage, probe_dimensions, PanoramaCoverageAngle,
@@ -46,7 +48,7 @@ pub use image_variant::{
     is_hdr_path, ImageVariantArtifact, ImageVariantFormat, ImageVariantRequest, ImageVariantRole,
     PreviewDynamicRange,
 };
-pub use jpeg_encoder::encode_rgba_to_jpeg;
+pub use jpeg_encoder::{encode_rgb_to_jpeg, encode_rgba_to_jpeg};
 pub use jvi::{
     load_project, load_project_from_json, AudioDefaults, JviAudioElement, JviAudioProperties,
     JviElement, JviMediaElement, JviProjectLoader, JviShapeElement, JviSubtitleElement,
