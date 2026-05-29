@@ -60,6 +60,34 @@ The system SHALL route Extension-originated user keyboard actions to one focused
 - **WHEN** two Webviews of the same view type are visible and one panel is active
 - **THEN** Extension Host sends the user keyboard action only to the active visible panel
 
+#### Scenario: Webview reports real keyboard focus
+
+- **WHEN** two retained Webviews of the same view type are visible and one Webview reports `webviewKeyboardFocus` with `focused: true`
+- **THEN** Extension Host treats that Webview as the unique focused panel and sends the previous focused Webview `keyboardFocus` with `focused: false`
+
+#### Scenario: Webview reports editable keyboard focus
+
+- **WHEN** the focused Webview reports `webviewKeyboardEditable` with `editable: true`
+- **THEN** Extension Host does not forward editor-level keyboard actions such as Delete, Select All, Undo, Redo, Copy, Cut, or Paste to that Webview
+
+#### Scenario: WebviewView editable focus blocks active custom-editor keybindings
+
+- **WHEN** an Agent `WebviewView` input reports `webviewKeyboardFocus` and `webviewKeyboardEditable` with `editable: true`
+- **AND** VSCode still reports `activeCustomEditorId == 'neko.canvasEditor'`
+- **THEN** Canvas and Model contributed keybindings SHALL be disabled through the `neko.webview.keyboardEditable` when-context maintained by the global Webview keyboard owner registry
+
+#### Scenario: Runtime command guard checks global editable ownership
+
+- **WHEN** an editor-level keyboard command reaches Canvas or Model despite keybinding when-context filtering
+- **AND** `neko.webviewKeyboard.hasEditableOwner` returns true
+- **THEN** Extension Host SHALL NOT forward that keyboard action into the Canvas or Model Webview
+
+#### Scenario: Multiple Webview editable owners overlap
+
+- **WHEN** two Webviews report `webviewKeyboardEditable` with different owner ids
+- **AND** one owner later reports `editable: false`
+- **THEN** the global `neko.webview.keyboardEditable` when-context SHALL remain true until every owner has released editable ownership
+
 #### Scenario: Command specifies document URI
 
 - **WHEN** a command includes a target document URI

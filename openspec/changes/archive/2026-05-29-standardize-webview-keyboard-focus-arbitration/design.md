@@ -90,9 +90,27 @@ Alternatives considered:
 ### Decision 5: Add lightweight focused panel feedback
 
 Focused panels receive `keyboardFocus` messages and set `data-neko-keyboard-focused="true"` on
-their shell root. This gives side-by-side editors a consistent source for shortcut hints and
-lightweight focus styling, while still relying on VSCode tab/editor group affordances as the
-primary focus signal.
+their shell root. Webviews also report real keyboard ownership back to the Extension Host with
+`webviewKeyboardFocus` on `focusin`, `pointerdown`, window focus/blur, page hide, and visibility
+changes. This gives side-by-side editors a consistent source for shortcut hints and lightweight
+focus styling while treating VSCode tab/editor group state as a useful signal, not the sole source
+of truth.
+
+For editors that still use VSCode contributed keybindings, Webviews additionally report
+`webviewKeyboardEditable` whenever focus enters or leaves an editable target. Extension Host uses
+that signal as a second guard before forwarding editor-level commands, because VSCode's
+`activeCustomEditorId` only identifies the custom editor type and does not by itself prove that
+Delete/Cmd+A/Cmd+Z should target the canvas/model rather than an input inside the webview.
+
+The same editable signal is required for `WebviewView` surfaces such as Agent. When Agent's input
+owns keyboard focus, VSCode can still keep a Canvas custom editor as the active editor, so Canvas
+and Model contributed keybindings must check the shared `neko.webview.keyboardEditable` context
+before firing. Webviews update that context through a stable owner id via
+`neko.webviewKeyboard.updateEditableOwner`; the owning service aggregates active owners so one
+panel releasing focus cannot clear another panel's editable ownership. Canvas and Model also query
+`neko.webviewKeyboard.hasEditableOwner` before forwarding editor-level keyboard actions, because the
+VSCode `when` clause is only a pre-filter and can be bypassed by command entrypoints or context
+update timing.
 
 Alternatives considered:
 

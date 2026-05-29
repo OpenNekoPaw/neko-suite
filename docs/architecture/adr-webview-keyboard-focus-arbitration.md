@@ -93,13 +93,55 @@ VSCode keybinding / DOM keydown
 
 每个提供 custom editor 或 webview view 的子包必须维护 focused webview registry。
 
+VSCode 的 `WebviewPanel.active` / `visible` 是 Extension Host 能拿到的原生面板状态，
+但 side-by-side、retained webview 和 tab 切换时，它不足以表达“当前唯一键盘所有者”。
+因此 registry 还必须接受 webview 侧通过 postMessage 上报的
+`{ type: 'webviewKeyboardFocus', focused: boolean }` 信号。Webview 在真实
+`focusin`、`pointerdown`、window `focus` 时申明 focus，在 `blur`、`pagehide`、
+`visibilitychange(hidden)` 时撤销 focus；Extension Host 收到后在同一 `viewType`
+内强制唯一化，并向新旧面板广播 `keyboardFocus` 反馈。
+
+仍通过 VSCode `contributes.keybindings` 接管 Delete、Escape、Select All、Undo/Redo
+的编辑器还必须处理 VSCode 原生命令在 webview 输入框中仍可能触发的情况：
+keybinding 的 `when` 至少包含 `!inputFocus`，同时 webview 侧上报
+`{ type: 'webviewKeyboardEditable', editable: boolean }`，Extension Host 在当前
+focused panel 处于 editable 状态时直接拒绝 editor-level keyboard action。这样即使
+VSCode 某些平台/版本没有正确设置 `inputFocus`，输入框仍不会被 Delete、Cmd+A、Cmd+Z
+等编辑器级命令抢走。
+
+截至 2026-05-29，Canvas 和 Model 已完成 Webview-Owned Keyboard Dispatch 迁移，
+不再为编辑器内部动作贡献 VSCode `contributes.keybindings`。它们仍保留 VSCode
+commands，用于命令面板、菜单、Outline、StatusBar 或外部插件调用；这些显式入口仍
+经过 focused webview registry 与 editable owner 运行时 guard，作为兼容保护层。
+
+跨 `WebviewView` 与 `CustomEditor` 的冲突不能只依赖 `activeCustomEditorId`。例如
+Agent 是 panel 中的 `WebviewView`，用户在 Agent 输入框内输入时，VSCode 仍可能保持
+`activeCustomEditorId == 'neko.canvasEditor'`。因此 WebviewView 必须同样上报
+`webviewKeyboardFocus` 与 `webviewKeyboardEditable`。各插件不得各自维护互不相干的
+when-context；所有 editable owner 都通过 `neko.webviewKeyboard.updateEditableOwner`
+注册到 `neko-tools` 提供的全局聚合器，由聚合器维护
+`neko.webview.keyboardEditable`。仍贡献 editor-internal keybinding 的子包必须在
+`when` 中加入 `!neko.webview.keyboardEditable`，避免 Agent、Market、Dashboard、
+Tools 等 Webview 输入框中的 Delete、Cmd/Ctrl+A、Cmd/Ctrl+Z、Cmd/Ctrl+G 被当前
+active custom editor 命令抢走。Canvas/Model 已退出这条 keybinding 主路径，但仍可
+查询全局 editable owner 来保护显式 Extension 命令。owner 更新必须带稳定 `ownerId`，
+释放某个 owner 不能清掉其他仍处于 editable 的 webview。
+
+`when` clause 只是 VSCode 原生 keybinding 的预过滤，仍可能受 context 同步时序或
+非 keybinding 命令入口影响。因此聚合器还提供只读命令
+`neko.webviewKeyboard.hasEditableOwner`。Canvas/Model 的 Extension Host 命令入口在
+转发 editor-level keyboard action 前必须再次查询该命令；只要任意 webview editable
+owner 存在，就拒绝向当前 custom editor webview 转发 Delete、Escape、Select All、
+Undo/Redo、Generate 等编辑器级动作。
+
 用户命令路由顺序：
 
 1. 精确 `documentUri` 或命令参数指定目标。
-2. `panel.active && panel.visible`。
-3. 最近一次 `onDidChangeViewState` 激活的 visible panel。
-4. 单面板 fallback。
-5. 无目标则返回 false，由命令入口显示用户提示。
+2. webview 侧最近申明且仍 visible 的键盘 focused panel。
+3. `panel.active && panel.visible`。
+4. 最近一次 `onDidChangeViewState` 激活的 visible panel。
+5. 单面板 fallback。
+6. 无目标则返回 false，由命令入口显示用户提示。
 
 不得用 `postToActivePanels()` 分发用户快捷键、播放、编辑、删除、导出面板切换等命令。
 `postToActivePanels()` 仅保留给状态同步、配置刷新、locale、任务进度和非破坏性通知。
@@ -294,7 +336,12 @@ interface ResolveFocusedWebviewRequest {
 interface IFocusedWebviewRegistry {
   register(entry: Omit<FocusedWebviewEntry, 'lastActiveAt'>): vscode.Disposable;
   markActive(id: string): void;
+  markInactive(id: string): void;
   markVisible(id: string, visible: boolean): void;
+  markKeyboardFocused(id: string, focused: boolean): void;
+  markKeyboardEditable(id: string, editable: boolean): void;
+  hasKeyboardEditable(request: ResolveFocusedWebviewRequest): boolean;
+  syncFocus(id: string): void;
   unregister(id: string): void;
   resolve(request: ResolveFocusedWebviewRequest): FocusedWebviewEntry | undefined;
   postKeyboardAction(request: ResolveFocusedWebviewRequest, action: KeyboardActionEnvelope): boolean;
@@ -302,8 +349,10 @@ interface IFocusedWebviewRegistry {
 ```
 
 Provider 负责在 `resolveCustomEditor()` 中 register，在 `onDidChangeViewState` 中
-同步 active/visible，在 dispose 时 unregister。命令入口不得直接持有最近创建的
-panel 作为目标。
+同步 active/visible，在 webview `ready` 后 replay 当前 `keyboardFocus`，在收到
+`webviewKeyboardFocus` 后调用 `markKeyboardFocused()`，在收到
+`webviewKeyboardEditable` 后调用 `markKeyboardEditable()`，并在 dispose 时 unregister。
+命令入口不得直接持有最近创建的 panel 作为目标。
 
 ### 2.6 跨面板焦点体验
 
@@ -314,7 +363,117 @@ VSCode tab active 高亮是第一层视觉反馈，但 side-by-side editor group
 - focused panel 的 root 设置 `data-neko-keyboard-focused="true"`。
 - unfocused 但 visible 的 panel 不显示 active shortcut hints，且忽略 VSCode 转发的用户命令。
 - 状态栏/outline 只跟随 focused panel；visible fallback 只在单面板或无 active panel 时使用。
+- Canvas 这类拥有 VSCode 全局 Outline/StatusBar 的编辑器必须缓存每个 `documentUri`
+  的最新 webview 状态，并仅用当前 active document 的快照刷新全局 UI。Outline item
+  的选择、删除、detach 等命令必须携带 `documentUri`，再通过 focused webview registry
+  精确投递；不得依赖“最近创建”或“最近上报状态”的 panel。
 - 视觉反馈必须轻量，优先使用现有 VSCode focus border/token，不引入新的品牌色或大面积装饰。
+
+### 2.7 过渡方案退出与最终子包自治方案
+
+历史过渡方案采用“过渡止血”策略：Canvas/Model 通过 VSCode
+`contributes.keybindings` 注册 Delete、Backspace、Escape、Cmd/Ctrl+A、
+Cmd/Ctrl+Z、Cmd/Ctrl+Shift+Z、Cmd/Ctrl+G 等编辑器级快捷键，并用
+`activeCustomEditorId`、`!inputFocus`、`!neko.webview.keyboardEditable` 作为
+Workbench 预过滤；Agent/Canvas/Model 等 webview 上报 `webviewKeyboardFocus` 与
+`webviewKeyboardEditable`，由 `neko-tools` 维护全局 editable owner 集合；Canvas/Model
+在 Extension Host 转发 editor-level keyboard action 前，再查询
+`neko.webviewKeyboard.hasEditableOwner` 作为运行时兜底。
+
+该方案的目的只是阻止已存在的全局 keybinding 在跨插件、跨 tab 和 context 同步时序下
+误触发。它不是最终架构，因为 Delete、Select All、Undo/Redo、Space 等动作本质上
+属于 webview 内部编辑语义，不应长期先由 VSCode Workbench 全局 keybinding 捕获，
+再绕回 Extension Host 转发到 webview。
+
+截至 2026-05-29，Canvas 与 Model 已退出过渡 keybinding 主路径：
+
+| 子包 | 当前状态 |
+|---|---|
+| `neko-canvas` | 编辑型快捷键由 `useCanvasKeyboardController` root dispatcher 处理；viewport、node/container、inline editor、text-input、modal/popover/menu、toolbar、property/prompt surface 均声明 KeyboardBoundary；`package.json` 不再贡献编辑型 `contributes.keybindings` |
+| `neko-model` | 编辑型/viewport fallback 由 `useModelKeyboardController` root dispatcher 与 viewport 局部 controls 处理；editor、viewport、property-panel、timeline、tree 与共享控件声明 KeyboardBoundary；`package.json` 不再贡献编辑型 `contributes.keybindings` |
+
+Model 迁移只保留有当前领域语义的 Webview-owned 快捷键：`Escape` 用于清除选择，
+`Digit0` 用于重置 viewport。已从 VSCode manifest 移除的 Delete、Select All、
+Undo/Redo 等条目在现有 3D viewport 中没有已实现的编辑器级领域动作；它们不应为了
+对齐旧 manifest 而重新进入 dispatcher。属性面板与文本输入仍通过 `text-input` /
+`property-panel` boundary 拥有 Delete、Backspace、Cmd/Ctrl+A、Space、Enter 与
+IME composition 的文本编辑行为，避免外层 viewport/editor fallback 抢占。
+
+当前最终架构是 **Webview-Owned Keyboard Dispatch**：
+
+```text
+VSCode Workbench keybinding
+  -> workbench-level command only
+
+Explicit command/menu/outline/status bar
+  -> Extension Host routes by documentUri / focused webview
+
+Webview internal editing shortcut
+  -> owning webview root dispatcher
+  -> innermost KeyboardBoundary wins
+  -> domain action handler
+```
+
+Canvas/Model 不再为编辑器内部动作贡献 VSCode 全局 keybinding。这些命令仍保留为
+VSCode command，用于命令面板、菜单、Outline、StatusBar 或其他显式入口；但
+Delete、Cmd/Ctrl+A、Cmd/Ctrl+Z、Space、Enter、Escape 等普通编辑快捷键由当前
+webview DOM focus 所在的子包自行处理。
+
+单个 webview tab 内必须把 **Selection** 与 **Keyboard Owner** 分开建模：
+
+| 层级 | Keyboard owner | 示例行为 |
+|---|---|---|
+| 1 | `text-input` | 节点内 prompt、名称、参数输入框；Delete 删除字符，Cmd/Ctrl+A 选中文本 |
+| 2 | `modal` / `popover` / `menu` | Dialog、ContextMenu、Select dropdown；Escape/Enter/Arrow 先归浮层 |
+| 3 | `inline-editor` | 节点标题编辑、clip label、数值 inline edit |
+| 4 | `node` / `container` | 节点、容器、连线 selection；Delete 删除选中对象 |
+| 5 | `viewport` / `timeline` | Canvas/3D viewport、Cut/Audio timeline；Space 平移或播放控制 |
+| 6 | `editor` | 编辑器级 fallback |
+
+节点或容器处于 selected 状态时，不代表它拥有键盘。若其内部 input 获得 DOM focus，
+keyboard owner 必须切换到 `text-input`，外层 node/container/viewport 快捷键不得
+消费同一个事件。IME composition 期间也不得降级触发外层编辑器命令。
+
+对比：
+
+| 维度 | 历史过渡方案 | 当前子包自治方案 |
+|---|---|---|
+| 跨插件冲突 | 依赖全局 `neko.webview.keyboardEditable` 和 query guard 拦截 | 编辑型快捷键不进入 VSCode 全局系统，冲突面自然收缩 |
+| 多 tab / side-by-side | FocusedWebviewRegistry 负责唯一目标和 `documentUri` 路由 | DOM focus 决定内部快捷键，Host 只处理显式路由 |
+| 单 tab 内层级 | 多个 guard 与局部监听并存，仍需逐步收敛 | 单 root dispatcher + KeyboardBoundary owner tree |
+| 耦合 | Canvas/Model 依赖 `neko-tools` 全局 owner 状态 | 子包内部自治，跨包只共享 L2 keyboard contract |
+| 可测试性 | 偏 contract/集成测试，验证 when/context/guard | shortcut table、scope resolution、owner tree 可纯单测 |
+| 架构性质 | 兼容与止血 | 目标架构 |
+
+迁移原则是：仍在过渡期的子包保留全局 owner 作为保护层；已完成迁移的子包把编辑型
+快捷键迁回 webview 内部 root dispatcher，并移除对应的 `contributes.keybindings`
+编辑器级条目。Canvas/Model 属于已完成迁移的子包。
+
+过渡层必须有退出条件，避免 `neko-tools` 全局聚合器长期成为所有子包的隐式依赖。
+仍贡献编辑型 VSCode keybinding 的子包完成以下条件后，必须移除对应
+`contributes.keybindings` 条目：
+
+1. 子包内部只有一个 root keyboard dispatcher 负责编辑型快捷键。
+2. 所有文本输入、inline editor、modal/menu/popover、viewport/timeline 等交互层都
+   通过 `KeyboardBoundary` 或等价 owner contract 声明键盘所有权。
+3. 该子包的 Delete、Backspace、Escape、Cmd/Ctrl+A、Cmd/Ctrl+Z、Space、Enter、
+   IME composition 回归测试通过。
+4. Extension Host 中仅保留显式命令路由，例如菜单、命令面板、Outline、StatusBar、
+   外部插件调用，并且这些入口必须能通过 `documentUri` 或 focused webview 精确定位。
+
+`neko.webview.keyboardEditable` 与 `neko.webviewKeyboard.hasEditableOwner` 在最终方案中
+只作为兼容保护层存在，不应成为 webview 内部编辑快捷键的主路径。若所有子包都不再
+通过 VSCode 全局 keybinding 捕获编辑型快捷键，可移除该全局聚合器或将其降级为
+workbench-level command 的保护性 context。
+
+WebviewView 与 CustomEditor 的生命周期不同。Agent 这类 `WebviewView` 可能被隐藏、
+折叠、移动到侧栏/面板，且没有 custom editor 的 document URI 生命周期。因此任何
+WebviewView owner 更新都必须满足：
+
+- owner id 稳定且与 view instance 相关，不能只用包名覆盖所有实例。
+- view hidden / disposed / webview remounted 时必须释放 editable owner。
+- 一个 owner 释放时不得清除其他 owner。
+- 快速 focus/blur、hide/show 或 remount 时必须用 sequence 或等价机制避免旧消息覆盖新状态。
 
 ---
 
@@ -336,7 +495,7 @@ VSCode tab active 高亮是第一层视觉反馈，但 side-by-side editor group
 | 包 | 动作 |
 |---|---|
 | `@neko/ui` | 增加 keyboard focus helpers 和 `KeyboardBoundary` |
-| `neko-canvas` | `keyboardAction` message 与 DOM fallback 统一经过 guard；Space/H/Delete/Cmd+A 等监听补齐 editable/IME 判断 |
+| `neko-canvas` | 作为最复杂子包先做 KeyboardBoundary 原型验证；`keyboardAction` message 与 DOM fallback 统一经过 guard；Space/H/Delete/Cmd+A 等监听补齐 editable/IME 判断 |
 | `neko-audio` | 将 command forwarding 从 `postToActivePanels()` 改为 focused panel only |
 | `neko-model` | provider 维护 focused panel registry，不再只依赖最后 resolve 的 `activeWebviewPanel` |
 | `neko-sketch` | 将现有 `isEditableTarget()` 行为提升为 shared helper，包内改为复用 |
@@ -355,6 +514,14 @@ VSCode tab active 高亮是第一层视觉反馈，但 side-by-side editor group
 
 为 custom editors 上报 `neko.webviewTextInputFocus` / `neko.webviewModalOpen`，
 在 `package.json` keybindings 中补充 when 条件，减少 VSCode 层误触发。
+
+### P3: 移除编辑型 VSCode keybinding
+
+| 包 | 动作 |
+|---|---|
+| `neko-canvas` | 已完成：root dispatcher 与 owner tree 生效，Delete/Backspace/Escape/Cmd+A/Cmd+Z/Cmd+G 的 `contributes.keybindings` 已移除 |
+| `neko-model` | 已完成：viewport/property/timeline owner tree 生效，编辑型 `contributes.keybindings` 已移除 |
+| `neko-tools` | 保留为过渡/兼容保护层；若所有相关子包已完成迁移，评估移除或降级全局 editable owner 聚合器 |
 
 ---
 
@@ -385,6 +552,12 @@ VSCode tab active 高亮是第一层视觉反馈，但 side-by-side editor group
 - documentUri 指定目标时不受最近 active panel 影响。
 - side-by-side 打开两个 Canvas 时，focused panel 收到 `keyboardFocus: true`，另一个收到 `false`。
 - focused panel 切换后，状态栏、outline 和 keyboard action 路由同步切换。
+- 快速连续切换两个同类面板时，registry 最终只有一个 keyboard focused panel，且旧面板
+  不再接收 editor-level keyboard action。
+- WebviewView 快速 focus/blur/hide/show/remount 时，全局 editable owner 最终状态与
+  最新可见焦点状态一致，旧异步消息不能覆盖新状态。
+- 两个 webview editable owner 重叠时，一个 owner 释放后
+  `neko.webview.keyboardEditable` 仍保持 true，直到所有 owner 释放。
 
 ---
 
