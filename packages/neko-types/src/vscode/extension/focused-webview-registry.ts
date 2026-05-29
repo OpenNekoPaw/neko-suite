@@ -40,7 +40,12 @@ export interface IFocusedWebviewRegistry {
   register(entry: FocusedWebviewRegistration): FocusedWebviewDisposable;
   unregister(id: string): void;
   markActive(id: string): void;
+  markInactive(id: string): void;
   markVisible(id: string, visible: boolean): void;
+  markKeyboardFocused(id: string, focused: boolean): void;
+  markKeyboardEditable(id: string, editable: boolean): void;
+  hasKeyboardEditable(request: FocusedWebviewResolveRequest): boolean;
+  syncFocus(id: string): void;
   resolve(request: FocusedWebviewResolveRequest): FocusedWebviewResolution | undefined;
   postKeyboardAction(action: string, request: FocusedWebviewResolveRequest): Promise<boolean>;
 }
@@ -55,6 +60,7 @@ interface RegisteredFocusedWebview {
   visible: boolean;
   lastFocusedAt: number;
   keyboardFocused: boolean;
+  keyboardEditable: boolean;
 }
 
 export class FocusedWebviewRegistry implements IFocusedWebviewRegistry {
@@ -75,11 +81,12 @@ export class FocusedWebviewRegistry implements IFocusedWebviewRegistry {
       visible,
       lastFocusedAt: active ? this.tick() : 0,
       keyboardFocused: false,
+      keyboardEditable: false,
     };
 
     this.entries.set(id, registered);
     if (active && visible) {
-      this.setFocusedEntry(registered);
+      this.setKeyboardFocusedEntry(registered);
     }
 
     return {
@@ -105,15 +112,51 @@ export class FocusedWebviewRegistry implements IFocusedWebviewRegistry {
       return;
     }
 
-    for (const candidate of this.entries.values()) {
-      if (candidate.viewType === entry.viewType) {
-        candidate.active = candidate.id === id;
-      }
+    this.setActiveEntry(entry);
+    this.setKeyboardFocusedEntry(entry);
+  }
+
+  markKeyboardFocused(id: string, focused: boolean): void {
+    const entry = this.entries.get(id);
+    if (!entry) {
+      return;
     }
 
-    entry.visible = entry.panel.visible ?? true;
-    entry.lastFocusedAt = this.tick();
-    this.setFocusedEntry(entry);
+    if (focused) {
+      this.setActiveEntry(entry);
+      this.setKeyboardFocusedEntry(entry);
+      return;
+    }
+
+    this.markKeyboardBlurred(entry);
+  }
+
+  markKeyboardEditable(id: string, editable: boolean): void {
+    const entry = this.entries.get(id);
+    if (!entry) {
+      return;
+    }
+
+    entry.keyboardEditable = editable;
+  }
+
+  hasKeyboardEditable(request: FocusedWebviewResolveRequest): boolean {
+    const resolution = this.resolve(request);
+    return resolution ? this.entries.get(resolution.id)?.keyboardEditable === true : false;
+  }
+
+  markInactive(id: string): void {
+    const entry = this.entries.get(id);
+    if (!entry) {
+      return;
+    }
+
+    entry.active = false;
+    entry.keyboardEditable = false;
+    if (entry.keyboardFocused) {
+      entry.keyboardFocused = false;
+      void postKeyboardFocus(entry, false);
+    }
   }
 
   markVisible(id: string, visible: boolean): void {
@@ -125,11 +168,21 @@ export class FocusedWebviewRegistry implements IFocusedWebviewRegistry {
     entry.visible = visible;
     if (!visible) {
       entry.active = false;
+      entry.keyboardEditable = false;
       if (entry.keyboardFocused) {
         entry.keyboardFocused = false;
         void postKeyboardFocus(entry, false);
       }
     }
+  }
+
+  syncFocus(id: string): void {
+    const entry = this.entries.get(id);
+    if (!entry) {
+      return;
+    }
+
+    void postKeyboardFocus(entry, entry.keyboardFocused);
   }
 
   resolve(request: FocusedWebviewResolveRequest): FocusedWebviewResolution | undefined {
@@ -192,11 +245,30 @@ export class FocusedWebviewRegistry implements IFocusedWebviewRegistry {
     );
   }
 
+  private setActiveEntry(entry: RegisteredFocusedWebview): void {
+    for (const candidate of this.entries.values()) {
+      if (candidate.viewType === entry.viewType) {
+        candidate.active = candidate.id === entry.id;
+      }
+    }
+
+    entry.visible = entry.panel.visible ?? true;
+    entry.lastFocusedAt = this.tick();
+  }
+
+  private markKeyboardBlurred(entry: RegisteredFocusedWebview): void {
+    entry.keyboardEditable = false;
+    if (entry.keyboardFocused) {
+      entry.keyboardFocused = false;
+      void postKeyboardFocus(entry, false);
+    }
+  }
+
   private getEntriesForViewType(viewType: string): RegisteredFocusedWebview[] {
     return Array.from(this.entries.values()).filter((entry) => entry.viewType === viewType);
   }
 
-  private setFocusedEntry(entry: RegisteredFocusedWebview): void {
+  private setKeyboardFocusedEntry(entry: RegisteredFocusedWebview): void {
     for (const candidate of this.entries.values()) {
       if (candidate.viewType !== entry.viewType) {
         continue;

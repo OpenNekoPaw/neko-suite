@@ -7,6 +7,7 @@ import {
   __keyboardDispatcherTestUtils,
   dispatchKeyboardShortcut,
   DuplicateShortcutBindingError,
+  useKeyboardDispatcher,
   validateShortcutBindings,
 } from './dispatcher';
 import type { ShortcutBinding } from './types';
@@ -194,7 +195,48 @@ describe('keyboard dispatcher', () => {
     expect(modalAction).not.toHaveBeenCalled();
     expect(__keyboardDispatcherTestUtils.getScopePriority('property-panel')).toBe(70);
     expect(__keyboardDispatcherTestUtils.getScopePriority('popover')).toBe(90);
+    expect(__keyboardDispatcherTestUtils.getScopePriority('inline-editor')).toBe(80);
+    expect(__keyboardDispatcherTestUtils.getScopePriority('container')).toBe(60);
     expect(__keyboardDispatcherTestUtils.getScopePriority('canvas')).toBe(40);
+  });
+
+  it('treats inline editor as the owner between text input and node scopes', () => {
+    document.body.innerHTML = `
+      <div data-neko-keyboard-scope="editor">
+        <div data-neko-keyboard-scope="node" data-neko-keyboard-owner="node-1">
+          <div data-neko-keyboard-scope="inline-editor" data-neko-keyboard-owner="title-1">
+            <button id="target"></button>
+          </div>
+        </div>
+      </div>
+    `;
+    const nodeAction = vi.fn();
+    const inlineEditorAction = vi.fn();
+    const event = createKeyboardEvent('Enter', document.getElementById('target'));
+
+    const result = dispatchKeyboardShortcut(
+      event,
+      [
+        createBinding({
+          id: 'node-enter',
+          scope: 'node',
+          key: { key: 'Enter' },
+          run: nodeAction,
+        }),
+        createBinding({
+          id: 'inline-enter',
+          scope: 'inline-editor',
+          key: { key: 'Enter' },
+          run: inlineEditorAction,
+        }),
+      ],
+      {},
+    );
+
+    expect(result.outcome).toBe('handled');
+    expect(result.binding?.id).toBe('inline-enter');
+    expect(inlineEditorAction).toHaveBeenCalledTimes(1);
+    expect(nodeAction).not.toHaveBeenCalled();
   });
 
   it('stops dispatch on editable targets instead of falling through to outer editor shortcuts', () => {
@@ -242,6 +284,22 @@ describe('keyboard dispatcher', () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it('stops editor-level actions while the root dispatcher is disabled', () => {
+    const run = vi.fn();
+    const event = createKeyboardEvent('Delete', document.body);
+
+    const result = dispatchKeyboardShortcut(
+      event,
+      [createBinding({ id: 'delete', scope: 'editor', key: { key: 'Delete' }, run })],
+      {},
+      { enabled: false },
+    );
+
+    expect(result.outcome).toBe('stopped-unfocused');
+    expect(run).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it('stops outer editor fallbacks when an inner boundary owns the key', () => {
     document.body.innerHTML = `
       <div data-neko-keyboard-scope="editor">
@@ -268,6 +326,56 @@ describe('keyboard dispatcher', () => {
 
     expect(result.outcome).toBe('stopped-owned-boundary');
     expect(closeEditorPanel).not.toHaveBeenCalled();
+  });
+
+  it('uses one root listener while reading the latest bindings and state', () => {
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
+    const firstRun = vi.fn();
+    const secondRun = vi.fn();
+
+    function Harness({
+      label,
+      run,
+    }: {
+      readonly label: string;
+      readonly run: (label: string) => void;
+    }) {
+      useKeyboardDispatcher(
+        [
+          createBinding({
+            id: 'delete',
+            scope: 'editor',
+            key: { key: 'Delete' },
+            run: (context) => run(String(context.state['label'])),
+          }),
+        ],
+        { label },
+      );
+      return null;
+    }
+
+    act(() => {
+      root.render(<Harness label="first" run={firstRun} />);
+    });
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, code: 'Delete' }));
+    expect(firstRun).toHaveBeenCalledWith('first');
+
+    act(() => {
+      root.render(<Harness label="second" run={secondRun} />);
+    });
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, code: 'Delete' }));
+    expect(secondRun).toHaveBeenCalledWith('second');
+
+    const keydownAdds = addSpy.mock.calls.filter(([eventType]) => eventType === 'keydown');
+    const keydownRemoves = removeSpy.mock.calls.filter(([eventType]) => eventType === 'keydown');
+    expect(keydownAdds).toHaveLength(1);
+    expect(keydownRemoves).toHaveLength(0);
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 });
 

@@ -3,6 +3,8 @@ export type KeyboardScope =
   | 'viewport'
   | 'canvas'
   | 'node'
+  | 'container'
+  | 'inline-editor'
   | 'timeline'
   | 'property-panel'
   | 'text-input'
@@ -90,6 +92,7 @@ export type KeyboardDispatchOutcome =
   | 'stopped-editable'
   | 'stopped-composing'
   | 'stopped-owned-boundary'
+  | 'stopped-unfocused'
   | 'duplicate-shortcut';
 
 export interface KeyboardDispatchResult<
@@ -107,6 +110,7 @@ export interface KeyboardDispatcherOptions {
   readonly eventType?: 'keydown' | 'keyup';
   readonly validateDuplicates?: boolean;
   readonly isMac?: boolean;
+  readonly enabled?: boolean;
   readonly stopOnEditableTarget?: boolean;
   readonly stopOnComposition?: boolean;
 }

@@ -50,6 +50,12 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+export function hasEditableActiveElement(
+  root: Document | ShadowRoot | null = typeof document === 'undefined' ? null : document,
+): boolean {
+  return isEditableTarget(root?.activeElement ?? null);
+}
+
 export function isComposingKeyboardEvent(event: KeyboardEvent): boolean {
   const legacyKeyCode = 'keyCode' in event ? event.keyCode : undefined;
   return event.isComposing || legacyKeyCode === 229;

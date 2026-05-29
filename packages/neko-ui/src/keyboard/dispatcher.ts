@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { collectKeyboardBoundaryPath } from './boundary';
 import { isComposingKeyboardEvent, isEditableTarget } from './editable-target';
 import {
@@ -19,9 +19,11 @@ const SCOPE_PRIORITY: Readonly<Record<string, number>> = {
   modal: 90,
   menu: 90,
   popover: 90,
+  'inline-editor': 80,
   'property-panel': 70,
   tree: 70,
   node: 60,
+  container: 60,
   timeline: 50,
   canvas: 40,
   viewport: 40,
@@ -42,6 +44,7 @@ export function useKeyboardDispatcher<S extends Record<string, unknown> = Record
 ): void {
   const {
     capture = true,
+    enabled = true,
     eventType = 'keydown',
     isMac,
     stopOnComposition,
@@ -58,6 +61,25 @@ export function useKeyboardDispatcher<S extends Record<string, unknown> = Record
     throw new DuplicateShortcutBindingError(diagnostics);
   }
 
+  const latestRef = useRef({
+    bindings,
+    enabled,
+    isMac,
+    state,
+    stopOnComposition,
+    stopOnEditableTarget,
+    validateDuplicates,
+  });
+  latestRef.current = {
+    bindings,
+    enabled,
+    isMac,
+    state,
+    stopOnComposition,
+    stopOnEditableTarget,
+    validateDuplicates,
+  };
+
   useEffect(() => {
     const listenerTarget = target ?? (typeof window === 'undefined' ? null : window);
     if (!listenerTarget) {
@@ -66,11 +88,13 @@ export function useKeyboardDispatcher<S extends Record<string, unknown> = Record
 
     const handleKeyEvent = (event: Event): void => {
       if (event instanceof KeyboardEvent) {
-        dispatchKeyboardShortcut(event, bindings, state, {
-          isMac,
-          stopOnComposition,
-          stopOnEditableTarget,
-          validateDuplicates,
+        const latest = latestRef.current;
+        dispatchKeyboardShortcut(event, latest.bindings, latest.state, {
+          enabled: latest.enabled,
+          isMac: latest.isMac,
+          stopOnComposition: latest.stopOnComposition,
+          stopOnEditableTarget: latest.stopOnEditableTarget,
+          validateDuplicates: latest.validateDuplicates,
         });
       }
     };
@@ -84,17 +108,7 @@ export function useKeyboardDispatcher<S extends Record<string, unknown> = Record
         capture,
       });
     };
-  }, [
-    bindings,
-    capture,
-    eventType,
-    isMac,
-    state,
-    stopOnComposition,
-    stopOnEditableTarget,
-    target,
-    validateDuplicates,
-  ]);
+  }, [capture, eventType, target]);
 }
 
 export function dispatchKeyboardShortcut<
@@ -110,6 +124,10 @@ export function dispatchKeyboardShortcut<
 
   if (diagnostics.length > 0) {
     return { outcome: 'duplicate-shortcut', diagnostics };
+  }
+
+  if (options.enabled === false) {
+    return { outcome: 'stopped-unfocused', diagnostics };
   }
 
   if ((options.stopOnComposition ?? true) && isComposingKeyboardEvent(event)) {

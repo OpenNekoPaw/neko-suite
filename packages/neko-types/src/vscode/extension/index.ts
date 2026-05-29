@@ -129,3 +129,14 @@ export type {
   FocusedWebviewResolveRequest,
   IFocusedWebviewRegistry,
 } from './focused-webview-registry';
+
+// Cross-extension Webview keyboard ownership context
+export {
+  NEKO_WEBVIEW_KEYBOARD_EDITABLE_CONTEXT,
+  NEKO_WEBVIEW_KEYBOARD_EDITABLE_QUERY_COMMAND,
+  NEKO_WEBVIEW_KEYBOARD_EDITABLE_UPDATE_COMMAND,
+  hasWebviewKeyboardEditableOwner,
+  isWebviewKeyboardEditableOwnerUpdate,
+  updateWebviewKeyboardEditableOwner,
+} from './webview-keyboard-context';
+export type { WebviewKeyboardEditableOwnerUpdate } from './webview-keyboard-context';

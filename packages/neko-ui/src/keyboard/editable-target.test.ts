@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isComposingKeyboardEvent, isEditableTarget } from './editable-target';
+import {
+  hasEditableActiveElement,
+  isComposingKeyboardEvent,
+  isEditableTarget,
+} from './editable-target';
 
 describe('keyboard editable and IME guards', () => {
   it('treats text inputs, textareas, selects, textbox roles, contenteditable, and text-input scopes as editable', () => {
@@ -30,6 +34,19 @@ describe('keyboard editable and IME guards', () => {
     expect(isEditableTarget(document.getElementById('range'))).toBe(false);
     expect(isEditableTarget(document.getElementById('checkbox'))).toBe(false);
     expect(isEditableTarget(document.getElementById('button'))).toBe(false);
+  });
+
+  it('detects when the current active element is editable', () => {
+    document.body.innerHTML = `
+      <input id="text" />
+      <button id="button"></button>
+    `;
+
+    document.getElementById('text')?.focus();
+    expect(hasEditableActiveElement()).toBe(true);
+
+    document.getElementById('button')?.focus();
+    expect(hasEditableActiveElement()).toBe(false);
   });
 
   it('detects active IME composition events', () => {

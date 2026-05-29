@@ -113,6 +113,155 @@ describe('FocusedWebviewRegistry', () => {
     );
   });
 
+  it('lets the Webview-side focus handshake establish the unique focused panel', async () => {
+    const registry = new FocusedWebviewRegistry();
+    const first = createPanel({ active: true, visible: true });
+    const second = createPanel({ active: true, visible: true });
+
+    registry.register({
+      id: 'left',
+      viewType: 'neko.canvasEditor',
+      documentUri: 'file:///left.nkc',
+      panel: first,
+      visible: true,
+      active: true,
+    });
+    registry.register({
+      id: 'right',
+      viewType: 'neko.canvasEditor',
+      documentUri: 'file:///right.nkc',
+      panel: second,
+      visible: true,
+      active: true,
+    });
+
+    registry.markKeyboardFocused('left', true);
+    registry.markKeyboardFocused('right', true);
+
+    const posted = await registry.postKeyboardAction('deleteSelected', {
+      viewType: 'neko.canvasEditor',
+      allowRecentVisibleFallback: false,
+    });
+
+    expect(posted).toBe(true);
+    expect(registry.resolve({ viewType: 'neko.canvasEditor' })?.id).toBe('right');
+    expect(first.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'keyboardFocus', focused: false }),
+    );
+    expect(second.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'keyboardAction', action: 'deleteSelected' }),
+    );
+  });
+
+  it('lets the Webview-side blur handshake clear keyboard focus without dropping active panel routing', () => {
+    const registry = new FocusedWebviewRegistry();
+    const panel = createPanel({ visible: true });
+    registry.register({
+      id: 'canvas',
+      viewType: 'neko.canvasEditor',
+      panel,
+      visible: true,
+    });
+
+    registry.markKeyboardFocused('canvas', true);
+    registry.markKeyboardEditable('canvas', true);
+    registry.markKeyboardFocused('canvas', false);
+
+    expect(
+      registry.resolve({ viewType: 'neko.canvasEditor', allowRecentVisibleFallback: false })?.id,
+    ).toBe('canvas');
+    expect(
+      registry.hasKeyboardEditable({
+        viewType: 'neko.canvasEditor',
+        allowRecentVisibleFallback: false,
+      }),
+    ).toBe(false);
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'keyboardFocus', focused: false }),
+    );
+  });
+
+  it('keeps Workbench active ownership when Webview DOM focus blurs', async () => {
+    const registry = new FocusedWebviewRegistry();
+    const panel = createPanel({ visible: true });
+    registry.register({
+      id: 'canvas',
+      viewType: 'neko.canvasEditor',
+      panel,
+      visible: true,
+    });
+
+    registry.markActive('canvas');
+    registry.markKeyboardFocused('canvas', false);
+
+    expect(registry.resolve({ viewType: 'neko.canvasEditor' })?.id).toBe('canvas');
+    await expect(
+      registry.postKeyboardAction('explicitCommand', {
+        viewType: 'neko.canvasEditor',
+        allowRecentVisibleFallback: false,
+      }),
+    ).resolves.toBe(true);
+    expect(panel.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'keyboardAction', action: 'explicitCommand' }),
+    );
+  });
+
+  it('tracks editable keyboard focus on the resolved panel only', () => {
+    const registry = new FocusedWebviewRegistry();
+    registry.register({
+      id: 'left',
+      viewType: 'neko.canvasEditor',
+      panel: createPanel(),
+      visible: true,
+    });
+    registry.register({
+      id: 'right',
+      viewType: 'neko.canvasEditor',
+      panel: createPanel(),
+      visible: true,
+    });
+
+    registry.markKeyboardFocused('right', true);
+    registry.markKeyboardEditable('left', true);
+
+    expect(
+      registry.hasKeyboardEditable({
+        viewType: 'neko.canvasEditor',
+        allowRecentVisibleFallback: false,
+      }),
+    ).toBe(false);
+
+    registry.markKeyboardEditable('right', true);
+
+    expect(
+      registry.hasKeyboardEditable({
+        viewType: 'neko.canvasEditor',
+        allowRecentVisibleFallback: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('clears editable keyboard focus when a panel loses ownership', () => {
+    const registry = new FocusedWebviewRegistry();
+    registry.register({
+      id: 'canvas',
+      viewType: 'neko.canvasEditor',
+      panel: createPanel(),
+      visible: true,
+    });
+
+    registry.markKeyboardFocused('canvas', true);
+    registry.markKeyboardEditable('canvas', true);
+    registry.markKeyboardFocused('canvas', false);
+
+    expect(
+      registry.hasKeyboardEditable({
+        viewType: 'neko.canvasEditor',
+        allowRecentVisibleFallback: false,
+      }),
+    ).toBe(false);
+  });
+
   it('does not guess between side-by-side visible panels when recent fallback is disabled', async () => {
     const registry = new FocusedWebviewRegistry();
     const first = createPanel();
@@ -206,6 +355,68 @@ describe('FocusedWebviewRegistry', () => {
     expect(second.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'keyboardFocus', focused: true }),
     );
+  });
+
+  it('replays the current keyboard focus state for a ready webview', () => {
+    const registry = new FocusedWebviewRegistry();
+    const first = createPanel();
+    const second = createPanel();
+
+    registry.register({
+      id: 'first',
+      viewType: 'neko.canvasEditor',
+      panel: first,
+      visible: true,
+      active: true,
+    });
+    registry.register({
+      id: 'second',
+      viewType: 'neko.canvasEditor',
+      panel: second,
+      visible: true,
+    });
+
+    registry.syncFocus('second');
+
+    expect(second.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'keyboardFocus', focused: false }),
+    );
+  });
+
+  it('marks an inactive visible panel unfocused without hiding it', () => {
+    const registry = new FocusedWebviewRegistry();
+    const first = createPanel();
+    const second = createPanel();
+
+    registry.register({
+      id: 'first',
+      viewType: 'neko.canvasEditor',
+      panel: first,
+      visible: true,
+    });
+    registry.register({
+      id: 'second',
+      viewType: 'neko.canvasEditor',
+      panel: second,
+      visible: true,
+    });
+
+    registry.markActive('second');
+    registry.markInactive('second');
+
+    expect(second.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'keyboardFocus', focused: false }),
+    );
+    expect(
+      registry.resolve({ viewType: 'neko.canvasEditor', allowRecentVisibleFallback: false }),
+    ).toBeUndefined();
+    expect(
+      registry.resolve({
+        viewType: 'neko.canvasEditor',
+        allowRecentVisibleFallback: false,
+        allowSingleVisibleFallback: true,
+      }),
+    ).toBeUndefined();
   });
 });
 
