@@ -40,6 +40,8 @@ export type ExtensionMessage =
 /** Messages from Webview to Extension Host */
 export type WebviewMessage =
   | { type: 'ready' }
+  | { type: 'webviewKeyboardFocus'; focused: boolean }
+  | { type: 'webviewKeyboardEditable'; editable: boolean }
   | { type: 'requestEnginePort' }
   | {
       type: 'modelStatus';

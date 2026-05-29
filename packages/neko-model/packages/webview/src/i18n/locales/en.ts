@@ -16,9 +16,8 @@ export const en = {
   'toolbar.viewportControls': 'Viewport controls',
   'toolbar.showViewportHud': 'Show viewport HUD',
   'toolbar.hideViewportHud': 'Hide viewport HUD',
-  'toolbar.showTimelineControls': 'Show timeline controls',
-  'toolbar.hideTimelineControls': 'Hide timeline controls',
-  'toolbar.timelineControlsHidden': 'Timeline controls hidden',
+  'toolbar.showBottomPanel': 'Show bottom panel',
+  'toolbar.hideBottomPanel': 'Hide bottom panel',
   'toolbar.showRightDock': 'Show right panels',
   'toolbar.hideRightDock': 'Hide right panels',
 

@@ -21,7 +21,9 @@ import {
   createFocusedWebviewRegistry,
   generateDefaultCubeGlb,
   generateHumanoidGlb,
+  hasWebviewKeyboardEditableOwner,
   injectLocaleAttribute,
+  updateWebviewKeyboardEditableOwner,
   type FocusedWebviewDisposable,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
@@ -37,6 +39,15 @@ import type { VrmExpressionValues } from '../live/vmcMapping';
 import { getLogger } from '../logger';
 
 const logger = getLogger('ModelEditorProvider');
+const MODEL_KEYBOARD_OWNER_PREFIX = 'neko.modelEditor:';
+const MODEL_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
+  'deleteSelected',
+  'escape',
+  'selectAll',
+  'undo',
+  'redo',
+  'resetView',
+]);
 
 interface ActiveSceneStream {
   readonly streamId: string;
@@ -126,10 +137,16 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         if (!this.isPanelCurrent(event.webviewPanel, generation)) return;
         const panelId = document.uri.toString();
         this.focusedWebviews.markVisible(panelId, event.webviewPanel.visible);
+        if (!event.webviewPanel.visible) {
+          void this.setGlobalKeyboardEditable(panelId, false);
+        }
         if (event.webviewPanel.active) {
           this.focusedWebviews.markActive(panelId);
           this.activeWebviewPanel = event.webviewPanel;
           this.activeDocument = document;
+        } else {
+          this.focusedWebviews.markInactive(panelId);
+          void this.setGlobalKeyboardEditable(panelId, false);
         }
         void this.postToPanel(event.webviewPanel, generation, {
           type: 'webviewVisibility',
@@ -145,6 +162,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
     webviewPanel.onDidDispose(() => {
       focusedRegistration.dispose();
+      void this.setGlobalKeyboardEditable(documentUri, false);
       if (!this.isPanelCurrent(webviewPanel, generation)) return;
       this.panelGeneration++;
       this.activeWebviewPanel = undefined;
@@ -163,9 +181,14 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
    * Forward keyboard action to active webview
    */
   async postKeyboardAction(action: string, documentUri?: vscode.Uri): Promise<boolean> {
+    if (isModelEditorLevelKeyboardAction(action) && (await this.hasGlobalKeyboardEditableOwner())) {
+      return false;
+    }
+
     return this.focusedWebviews.postKeyboardAction(action, {
       viewType: ModelEditorProvider.viewType,
       documentUri: documentUri?.toString(),
+      allowRecentVisibleFallback: false,
       allowSingleVisibleFallback: true,
     });
   }
@@ -259,6 +282,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
 
     switch (message.type) {
       case 'ready': {
+        this.focusedWebviews.syncFocus(document.uri.toString());
         const filePath = document.uri.fsPath;
         const isProject = filePath.endsWith('.nkm');
 
@@ -289,6 +313,28 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             await this.importModelFile(queued.uri.fsPath, document, webviewPanel, generation);
           }
         }
+        break;
+      }
+
+      case 'webviewKeyboardFocus': {
+        if (typeof message.focused !== 'boolean') {
+          break;
+        }
+        this.focusedWebviews.markKeyboardFocused(document.uri.toString(), message.focused);
+        if (message.focused && webviewPanel.visible) {
+          this.activeWebviewPanel = webviewPanel;
+          this.activeDocument = document;
+        }
+        break;
+      }
+
+      case 'webviewKeyboardEditable': {
+        if (typeof message.editable !== 'boolean') {
+          break;
+        }
+        const editable = message.editable && webviewPanel.visible;
+        this.focusedWebviews.markKeyboardEditable(document.uri.toString(), editable);
+        void this.setGlobalKeyboardEditable(document.uri.toString(), editable);
         break;
       }
 
@@ -1117,6 +1163,26 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     this.statusProjection?.update(getDefaultModelStatusSnapshot());
   }
 
+  private async setGlobalKeyboardEditable(documentUri: string, editable: boolean): Promise<void> {
+    try {
+      await updateWebviewKeyboardEditableOwner(
+        `${MODEL_KEYBOARD_OWNER_PREFIX}${documentUri}`,
+        editable,
+      );
+    } catch (error) {
+      logger.warn('Failed to update Model keyboard editable owner', error);
+    }
+  }
+
+  private async hasGlobalKeyboardEditableOwner(): Promise<boolean> {
+    try {
+      return await hasWebviewKeyboardEditableOwner();
+    } catch (error) {
+      logger.warn('Failed to query global Webview keyboard editable owner', error);
+      return false;
+    }
+  }
+
   private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
     const webviewDistUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
@@ -1373,6 +1439,10 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isModelEditorLevelKeyboardAction(action: string): boolean {
+  return MODEL_EDITOR_LEVEL_KEYBOARD_ACTIONS.has(action);
 }
 
 function vec3ToTuple(value: EngineVec3): [number, number, number] {

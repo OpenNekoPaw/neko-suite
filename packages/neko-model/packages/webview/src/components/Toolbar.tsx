@@ -3,21 +3,23 @@
  *
  * The rail owns global actions, viewport commands, and visibility toggles.
  */
+import { memo } from 'react';
 import type React from 'react';
 import { DownloadIcon, LayersIcon, RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/ui/primitives';
 import { CreativeLeftRail } from '@neko/ui/workbench';
 import { useTranslation } from '../i18n/I18nContext';
 import { postMessage } from '@neko/shared/vscode';
-import { useModelStore } from '../stores/modelStore';
+import { useModelStore, type ModelState } from '../stores/modelStore';
 
 interface ModelSideToolbarProps {
   readonly className?: string;
   readonly width?: number;
   readonly isViewportHudVisible?: boolean;
   readonly onToggleViewportHud?: () => void;
-  readonly areTimelineControlsVisible?: boolean;
-  readonly onToggleTimelineControls?: () => void;
+  readonly isBottomPanelVisible?: boolean;
+  readonly onToggleBottomPanel?: () => void;
   readonly isRightDockVisible?: boolean;
   readonly onToggleRightDock?: () => void;
   readonly onCameraChange?: () => void;
@@ -25,6 +27,26 @@ interface ModelSideToolbarProps {
 }
 
 type ToggleToolKey = 'face' | 'bone' | 'shape' | 'text' | 'csg' | 'sculpt' | 'keyframe';
+
+interface ViewportToolbarStoreState {
+  readonly showViewportGrid: boolean;
+  readonly isFaceEditorOpen: boolean;
+  readonly isBoneExpressionOpen: boolean;
+  readonly isShapeCreatorOpen: boolean;
+  readonly isTextEditorOpen: boolean;
+  readonly isCsgPanelOpen: boolean;
+  readonly isSculptBrushOpen: boolean;
+  readonly isKeyframeEditorOpen: boolean;
+  readonly toggleViewportGrid: () => void;
+  readonly resetCamera: () => void;
+  readonly toggleFaceEditor: () => void;
+  readonly toggleBoneExpression: () => void;
+  readonly toggleShapeCreator: () => void;
+  readonly toggleTextEditor: () => void;
+  readonly toggleCsgPanel: () => void;
+  readonly toggleSculptBrush: () => void;
+  readonly toggleKeyframeEditor: () => void;
+}
 
 type ViewportCommandItem =
   | {
@@ -81,23 +103,23 @@ const VIEWPORT_COMMANDS: readonly ViewportCommandItem[] = [
   },
 ];
 
-export function ModelSideToolbar({
+export const ModelSideToolbar = memo(function ModelSideToolbar({
   className,
   width,
   isViewportHudVisible = true,
   onToggleViewportHud,
-  areTimelineControlsVisible = true,
-  onToggleTimelineControls,
+  isBottomPanelVisible = true,
+  onToggleBottomPanel,
   isRightDockVisible = true,
   onToggleRightDock,
   onCameraChange,
   onCameraMutated,
 }: ModelSideToolbarProps = {}): React.ReactElement {
   const { t } = useTranslation();
-  const store = useModelStore();
+  const toolbarState = useModelStore(selectViewportToolbarStoreState, areToolbarStatesEqual);
   const hasVisibilityToggles =
     onToggleViewportHud !== undefined ||
-    onToggleTimelineControls !== undefined ||
+    onToggleBottomPanel !== undefined ||
     onToggleRightDock !== undefined;
   let sepIdx = 0;
 
@@ -108,127 +130,184 @@ export function ModelSideToolbar({
   };
 
   return (
-    <CreativeLeftRail className={className} width={width} label={t('toolbar.modelLeftRail')}>
-      <ToolbarButton
-        data-creative-left-rail-action="export"
-        data-creative-left-rail-kind="common-action"
-        icon={<DownloadIcon size={16} />}
-        title={t('toolbar.exportGlb')}
-        onClick={() => postMessage({ type: 'exportGlb' })}
-      />
-      <ToolbarButton
-        data-creative-left-rail-action="save"
-        data-creative-left-rail-kind="common-action"
-        icon={<SaveIcon />}
-        title={t('toolbar.saveProject')}
-        onClick={() => {
-          const editorState = useModelStore.getState().getEditorState();
-          postMessage({ type: 'saveProject', editorState });
-        }}
-      />
-
-      <ToolbarSeparator />
-
-      {VIEWPORT_COMMANDS.map((item) => {
-        if (item === 'separator') return <ToolbarSeparator key={`sep-${sepIdx++}`} />;
-
-        const tool = viewportToggleTool(item.key, store);
-        return (
-          <ToolbarButton
-            key={item.key}
-            data-creative-left-rail-action={`toggle-${item.key}`}
-            data-creative-left-rail-kind="common-action"
-            data-model-toolbar-action={`toggle-${item.key}`}
-            icon={item.icon}
-            title={t(item.titleKey)}
-            active={tool.active}
-            onClick={tool.toggle}
-          />
-        );
+    <div
+      {...getKeyboardBoundaryMetadata({
+        scope: 'popover',
+        ownerId: 'model-left-toolbar',
+        ownedKeys: ['Enter', 'Escape', 'Space', 'Tab', 'ArrowUp', 'ArrowDown'],
       })}
-
-      <ToolbarSeparator />
-
-      <ToolbarButton
-        data-creative-left-rail-action="toggle-viewport-grid"
-        data-creative-left-rail-kind="common-action"
-        data-model-toolbar-action="toggle-viewport-grid"
-        icon={<GridIcon />}
-        title={t('viewport.grid')}
-        active={store.showViewportGrid}
-        onClick={() => useModelStore.getState().toggleViewportGrid()}
-      />
-      <ToolbarButton
-        data-creative-left-rail-action="reset-camera"
-        data-creative-left-rail-kind="common-action"
-        data-model-toolbar-action="reset-camera"
-        icon={<ResetCameraIcon />}
-        title={t('viewport.resetCamera')}
-        onClick={() => runCameraAction(() => useModelStore.getState().resetCamera())}
-      />
-
-      {hasVisibilityToggles ? (
-        <>
-          <ToolbarSpacer />
-          <ToolbarSeparator />
-        </>
-      ) : null}
-
-      {onToggleViewportHud ? (
+    >
+      <CreativeLeftRail className={className} width={width} label={t('toolbar.modelLeftRail')}>
         <ToolbarButton
-          aria-controls="model-viewport-hud"
-          aria-expanded={isViewportHudVisible}
-          data-creative-left-rail-action="toggle-viewport-hud"
-          data-creative-left-rail-kind="visibility-toggle"
-          data-creative-left-rail-target="hud"
-          data-model-toolbar-action="toggle-viewport-hud"
-          icon={<LayersIcon size={16} />}
-          title={isViewportHudVisible ? t('toolbar.hideViewportHud') : t('toolbar.showViewportHud')}
-          active={isViewportHudVisible}
-          onClick={onToggleViewportHud}
+          data-creative-left-rail-action="export"
+          data-creative-left-rail-kind="common-action"
+          icon={<DownloadIcon size={16} />}
+          title={t('toolbar.exportGlb')}
+          onClick={() => postMessage({ type: 'exportGlb' })}
         />
-      ) : null}
-
-      {onToggleTimelineControls ? (
         <ToolbarButton
-          aria-controls="model-timeline-controls"
-          aria-expanded={areTimelineControlsVisible}
-          data-creative-left-rail-action="toggle-timeline-controls"
-          data-creative-left-rail-kind="visibility-toggle"
-          data-creative-left-rail-target="main-panel"
-          data-model-toolbar-action="toggle-timeline-controls"
-          icon={<TimelineIcon />}
-          title={
-            areTimelineControlsVisible
-              ? t('toolbar.hideTimelineControls')
-              : t('toolbar.showTimelineControls')
-          }
-          active={areTimelineControlsVisible}
-          onClick={onToggleTimelineControls}
+          data-creative-left-rail-action="save"
+          data-creative-left-rail-kind="common-action"
+          icon={<SaveIcon />}
+          title={t('toolbar.saveProject')}
+          onClick={() => {
+            const editorState = useModelStore.getState().getEditorState();
+            postMessage({ type: 'saveProject', editorState });
+          }}
         />
-      ) : null}
 
-      {onToggleRightDock ? (
+        <ToolbarSeparator />
+
+        {VIEWPORT_COMMANDS.map((item) => {
+          if (item === 'separator') return <ToolbarSeparator key={`sep-${sepIdx++}`} />;
+
+          const tool = viewportToggleTool(item.key, toolbarState);
+          return (
+            <ToolbarButton
+              key={item.key}
+              data-creative-left-rail-action={`toggle-${item.key}`}
+              data-creative-left-rail-kind="common-action"
+              data-model-toolbar-action={`toggle-${item.key}`}
+              icon={item.icon}
+              title={t(item.titleKey)}
+              active={tool.active}
+              onClick={tool.toggle}
+            />
+          );
+        })}
+
+        <ToolbarSeparator />
+
         <ToolbarButton
-          aria-controls="model-right-dock"
-          aria-expanded={isRightDockVisible}
-          data-creative-left-rail-action="toggle-right-dock"
-          data-creative-left-rail-kind="visibility-toggle"
-          data-creative-left-rail-target="right-panel"
-          data-model-toolbar-action="toggle-right-dock"
-          icon={isRightDockVisible ? <RightPanelIcon size={16} /> : <RightPanelOffIcon size={16} />}
-          title={isRightDockVisible ? t('toolbar.hideRightDock') : t('toolbar.showRightDock')}
-          active={isRightDockVisible}
-          onClick={onToggleRightDock}
+          data-creative-left-rail-action="toggle-viewport-grid"
+          data-creative-left-rail-kind="common-action"
+          data-model-toolbar-action="toggle-viewport-grid"
+          icon={<GridIcon />}
+          title={t('viewport.grid')}
+          active={toolbarState.showViewportGrid}
+          onClick={toolbarState.toggleViewportGrid}
         />
-      ) : null}
-    </CreativeLeftRail>
+        <ToolbarButton
+          data-creative-left-rail-action="reset-camera"
+          data-creative-left-rail-kind="common-action"
+          data-model-toolbar-action="reset-camera"
+          icon={<ResetCameraIcon />}
+          title={t('viewport.resetCamera')}
+          onClick={() => runCameraAction(toolbarState.resetCamera)}
+        />
+
+        {hasVisibilityToggles ? (
+          <>
+            <ToolbarSpacer />
+            <ToolbarSeparator />
+          </>
+        ) : null}
+
+        {onToggleViewportHud ? (
+          <ToolbarButton
+            aria-controls="model-viewport-hud"
+            aria-expanded={isViewportHudVisible}
+            data-creative-left-rail-action="toggle-viewport-hud"
+            data-creative-left-rail-kind="visibility-toggle"
+            data-creative-left-rail-target="hud"
+            data-model-toolbar-action="toggle-viewport-hud"
+            icon={<LayersIcon size={16} />}
+            title={
+              isViewportHudVisible ? t('toolbar.hideViewportHud') : t('toolbar.showViewportHud')
+            }
+            active={isViewportHudVisible}
+            onClick={onToggleViewportHud}
+          />
+        ) : null}
+
+        {onToggleBottomPanel ? (
+          <ToolbarButton
+            aria-controls="model-timeline-dock"
+            aria-expanded={isBottomPanelVisible}
+            data-creative-left-rail-action="toggle-bottom-panel"
+            data-creative-left-rail-kind="visibility-toggle"
+            data-creative-left-rail-target="main-panel"
+            data-model-toolbar-action="toggle-bottom-panel"
+            icon={<BottomPanelIcon />}
+            title={
+              isBottomPanelVisible ? t('toolbar.hideBottomPanel') : t('toolbar.showBottomPanel')
+            }
+            active={isBottomPanelVisible}
+            onClick={onToggleBottomPanel}
+          />
+        ) : null}
+
+        {onToggleRightDock ? (
+          <ToolbarButton
+            aria-controls="model-right-dock"
+            aria-expanded={isRightDockVisible}
+            data-creative-left-rail-action="toggle-right-dock"
+            data-creative-left-rail-kind="visibility-toggle"
+            data-creative-left-rail-target="right-panel"
+            data-model-toolbar-action="toggle-right-dock"
+            icon={
+              isRightDockVisible ? <RightPanelIcon size={16} /> : <RightPanelOffIcon size={16} />
+            }
+            title={isRightDockVisible ? t('toolbar.hideRightDock') : t('toolbar.showRightDock')}
+            active={isRightDockVisible}
+            onClick={onToggleRightDock}
+          />
+        ) : null}
+      </CreativeLeftRail>
+    </div>
+  );
+});
+
+function selectViewportToolbarStoreState(state: ModelState): ViewportToolbarStoreState {
+  return {
+    showViewportGrid: state.showViewportGrid,
+    isFaceEditorOpen: state.isFaceEditorOpen,
+    isBoneExpressionOpen: state.isBoneExpressionOpen,
+    isShapeCreatorOpen: state.isShapeCreatorOpen,
+    isTextEditorOpen: state.isTextEditorOpen,
+    isCsgPanelOpen: state.isCsgPanelOpen,
+    isSculptBrushOpen: state.isSculptBrushOpen,
+    isKeyframeEditorOpen: state.isKeyframeEditorOpen,
+    toggleViewportGrid: state.toggleViewportGrid,
+    resetCamera: state.resetCamera,
+    toggleFaceEditor: state.toggleFaceEditor,
+    toggleBoneExpression: state.toggleBoneExpression,
+    toggleShapeCreator: state.toggleShapeCreator,
+    toggleTextEditor: state.toggleTextEditor,
+    toggleCsgPanel: state.toggleCsgPanel,
+    toggleSculptBrush: state.toggleSculptBrush,
+    toggleKeyframeEditor: state.toggleKeyframeEditor,
+  };
+}
+
+function areToolbarStatesEqual(
+  left: ViewportToolbarStoreState,
+  right: ViewportToolbarStoreState,
+): boolean {
+  return (
+    left.showViewportGrid === right.showViewportGrid &&
+    left.isFaceEditorOpen === right.isFaceEditorOpen &&
+    left.isBoneExpressionOpen === right.isBoneExpressionOpen &&
+    left.isShapeCreatorOpen === right.isShapeCreatorOpen &&
+    left.isTextEditorOpen === right.isTextEditorOpen &&
+    left.isCsgPanelOpen === right.isCsgPanelOpen &&
+    left.isSculptBrushOpen === right.isSculptBrushOpen &&
+    left.isKeyframeEditorOpen === right.isKeyframeEditorOpen &&
+    left.toggleViewportGrid === right.toggleViewportGrid &&
+    left.resetCamera === right.resetCamera &&
+    left.toggleFaceEditor === right.toggleFaceEditor &&
+    left.toggleBoneExpression === right.toggleBoneExpression &&
+    left.toggleShapeCreator === right.toggleShapeCreator &&
+    left.toggleTextEditor === right.toggleTextEditor &&
+    left.toggleCsgPanel === right.toggleCsgPanel &&
+    left.toggleSculptBrush === right.toggleSculptBrush &&
+    left.toggleKeyframeEditor === right.toggleKeyframeEditor
   );
 }
 
 function viewportToggleTool(
   key: ToggleToolKey,
-  state: ReturnType<typeof useModelStore.getState>,
+  state: ViewportToolbarStoreState,
 ): {
   readonly active: boolean;
   readonly toggle: () => void;
@@ -270,7 +349,7 @@ function SaveIcon(): React.ReactElement {
   );
 }
 
-function TimelineIcon(): React.ReactElement {
+function BottomPanelIcon(): React.ReactElement {
   return (
     <svg
       width="16"
@@ -283,8 +362,8 @@ function TimelineIcon(): React.ReactElement {
       strokeLinejoin="round"
     >
       <rect x="2.5" y="4" width="11" height="8" rx="1.5" />
-      <path d="M5 4v8M8 4v8M11 4v8" />
       <path d="M2.5 8h11" />
+      <path d="M5 10h2M9 10h2" />
     </svg>
   );
 }

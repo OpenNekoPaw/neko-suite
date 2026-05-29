@@ -16,9 +16,8 @@ export const zhCN = {
   'toolbar.viewportControls': '视口控件',
   'toolbar.showViewportHud': '显示视口 HUD',
   'toolbar.hideViewportHud': '隐藏视口 HUD',
-  'toolbar.showTimelineControls': '显示时间线控件',
-  'toolbar.hideTimelineControls': '隐藏时间线控件',
-  'toolbar.timelineControlsHidden': '时间线控件已隐藏',
+  'toolbar.showBottomPanel': '显示底部区域',
+  'toolbar.hideBottomPanel': '隐藏底部区域',
   'toolbar.showRightDock': '显示右侧面板',
   'toolbar.hideRightDock': '折叠右侧面板',
 

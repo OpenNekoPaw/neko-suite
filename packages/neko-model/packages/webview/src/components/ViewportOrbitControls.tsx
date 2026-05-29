@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { useModelStore } from '../stores/modelStore';
 
 export interface ViewportOrbitControlsProps {
@@ -191,6 +192,11 @@ export function ViewportOrbitControls({
       className="absolute inset-0"
       style={{ touchAction: 'none', cursor: 'default' }}
       tabIndex={0}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'viewport',
+        ownerId: 'model-viewport-controls',
+        ownedKeys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Minus', 'Equal'],
+      })}
       onPointerDown={handlePointerDown}
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}

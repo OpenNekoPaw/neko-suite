@@ -145,42 +145,7 @@
           "group": "1@7"
         }
       ]
-    },
-    "keybindings": [
-      {
-        "command": "neko.model.deleteSelected",
-        "key": "delete",
-        "when": "activeCustomEditorId == 'neko.modelEditor'"
-      },
-      {
-        "command": "neko.model.deleteSelected",
-        "key": "backspace",
-        "when": "activeCustomEditorId == 'neko.modelEditor'"
-      },
-      {
-        "command": "neko.model.escape",
-        "key": "escape",
-        "when": "activeCustomEditorId == 'neko.modelEditor'"
-      },
-      {
-        "command": "neko.model.selectAll",
-        "key": "ctrl+a",
-        "mac": "cmd+a",
-        "when": "activeCustomEditorId == 'neko.modelEditor'"
-      },
-      {
-        "command": "neko.model.undo",
-        "key": "ctrl+z",
-        "mac": "cmd+z",
-        "when": "activeCustomEditorId == 'neko.modelEditor'"
-      },
-      {
-        "command": "neko.model.redo",
-        "key": "ctrl+shift+z",
-        "mac": "cmd+shift+z",
-        "when": "activeCustomEditorId == 'neko.modelEditor'"
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",

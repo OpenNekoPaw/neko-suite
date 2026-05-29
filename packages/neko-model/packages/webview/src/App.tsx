@@ -1,5 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { isKeyboardFocusMessage, useFocusedWebviewRoot } from '@neko/ui/keyboard';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  getKeyboardBoundaryMetadata,
+  isKeyboardFocusMessage,
+  useFocusedWebviewRoot,
+  useReportWebviewKeyboardEditable,
+  useReportWebviewKeyboardFocus,
+} from '@neko/ui/keyboard';
 import { useTranslation } from './i18n/I18nContext';
 import type { CharacterPreviewModeId } from '@neko/shared';
 import { ModelSideToolbar } from './components/Toolbar';
@@ -38,17 +44,24 @@ import type { LocalPredictionInput } from './scene/LocalPredictionLayer';
 import type { ShapeType } from './types/shapeParams';
 import { modelErrorMessage, toError, webviewErrorHandler } from './platform/errors';
 import { MODEL_RESIZE_PANELS } from './layout/modelResizeLayout';
+import {
+  useModelKeyboardController,
+  type ModelKeyboardState,
+} from './hooks/useModelKeyboardController';
 
 /**
  * Root application component for the 3D Model Editor webview.
  * Uses Zustand store for all state management.
  */
 export function App(): React.JSX.Element {
-  const { t } = useTranslation();
   const sceneControlRef = useRef<SceneControlSocket | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } =
-    useFocusedWebviewRoot(rootRef);
+  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
+    rootRef,
+    false,
+  );
+  useReportWebviewKeyboardFocus(rootRef, { postMessage });
+  useReportWebviewKeyboardEditable({ postMessage });
   const latestRevisionRef = useRef(0);
   const enginePortRef = useRef<number | null>(null);
   const initialWebviewVisible = document.visibilityState !== 'hidden';
@@ -57,8 +70,8 @@ export function App(): React.JSX.Element {
   const [sceneControlSocket, setSceneControlSocket] = useState<SceneControlSocket | null>(null);
   const [webviewVisible, setWebviewVisible] = useState(initialWebviewVisible);
   const [isViewportHudVisible, setIsViewportHudVisible] = useState(true);
-  const [areTimelineControlsVisible, setAreTimelineControlsVisible] = useState(true);
-  const [isRightDockVisible, setIsRightDockVisible] = useState(true);
+  const [isBottomPanelVisible, setIsBottomPanelVisible] = useState(true);
+  const [isRightDockVisible, setIsRightDockVisible] = useState(false);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
   const sceneNodes = useModelStore((s) => s.sceneNodes);
@@ -160,6 +173,18 @@ export function App(): React.JSX.Element {
     setQualityPreview(null);
   }, [setQualityPreview]);
 
+  const toggleViewportHud = useCallback(() => {
+    setIsViewportHudVisible((visible) => !visible);
+  }, []);
+
+  const toggleBottomPanel = useCallback(() => {
+    setIsBottomPanelVisible((visible) => !visible);
+  }, []);
+
+  const toggleRightDock = useCallback(() => {
+    setIsRightDockVisible((visible) => !visible);
+  }, []);
+
   const closeSceneControlSocket = useCallback(
     (reason: string) => {
       sceneControlRef.current?.close(1000, reason);
@@ -194,6 +219,30 @@ export function App(): React.JSX.Element {
       }
     },
     [sendEditorCameraToEngine],
+  );
+
+  const resetViewportCamera = useCallback(() => {
+    useModelStore.getState().resetCamera();
+    sendEditorCameraToEngine();
+  }, [sendEditorCameraToEngine]);
+
+  const handleKeyboardAction = useCallback(
+    (action: string) => {
+      if (!isKeyboardFocusedRef.current) {
+        return;
+      }
+      switch (action) {
+        case 'escape':
+          selectNode(null);
+          break;
+        case 'resetView':
+          resetViewportCamera();
+          break;
+        default:
+          break;
+      }
+    },
+    [isKeyboardFocusedRef, resetViewportCamera, selectNode],
   );
 
   // Listen for messages from extension host
@@ -306,19 +355,7 @@ export function App(): React.JSX.Element {
           setQualityPreview(message.preview.dataUrl);
           break;
         case 'keyboardAction':
-          if (!isKeyboardFocusedRef.current) {
-            break;
-          }
-          switch (message.action) {
-            case 'escape':
-              selectNode(null);
-              break;
-            case 'resetView': {
-              useModelStore.getState().resetCamera();
-              sendEditorCameraToEngine();
-              break;
-            }
-          }
+          handleKeyboardAction(message.action);
           break;
         case 'latency:response':
           // Echo back latency response (handled by LatencyTester component)
@@ -389,7 +426,7 @@ export function App(): React.JSX.Element {
     applyEngineSceneSnapshot,
     applySceneDelta,
     applyWebviewVisibility,
-    selectNode,
+    handleKeyboardAction,
     sendEditorCameraToEngine,
     setAnimationClips,
     setQualityPreview,
@@ -933,6 +970,19 @@ export function App(): React.JSX.Element {
     status: characterPreview.status,
     target: characterPreviewTarget,
   });
+  const modelKeyboardState = useMemo<ModelKeyboardState>(
+    () => ({
+      hasSelection: selectedNodeId !== null,
+      isKeyboardFocused,
+    }),
+    [isKeyboardFocused, selectedNodeId],
+  );
+
+  useModelKeyboardController({
+    state: modelKeyboardState,
+    onClearSelection: () => handleKeyboardAction('escape'),
+    onResetView: () => handleKeyboardAction('resetView'),
+  });
 
   const propertiesPanel = isExpressionPresetOpen ? (
     <ExpressionPresetPanel
@@ -997,6 +1047,10 @@ export function App(): React.JSX.Element {
       ref={rootRef}
       className="model-keyboard-root h-screen w-screen overflow-hidden"
       data-neko-keyboard-focused={isKeyboardFocused ? 'true' : 'false'}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'editor',
+        ownerId: 'model-editor',
+      })}
     >
       <CreativeWorkbenchShell
         className="model-workbench h-screen w-screen overflow-hidden"
@@ -1008,11 +1062,11 @@ export function App(): React.JSX.Element {
             className="model-left-toolbar"
             width={48}
             isViewportHudVisible={isViewportHudVisible}
-            onToggleViewportHud={() => setIsViewportHudVisible((visible) => !visible)}
-            areTimelineControlsVisible={areTimelineControlsVisible}
-            onToggleTimelineControls={() => setAreTimelineControlsVisible((visible) => !visible)}
+            onToggleViewportHud={toggleViewportHud}
+            isBottomPanelVisible={isBottomPanelVisible}
+            onToggleBottomPanel={toggleBottomPanel}
             isRightDockVisible={isRightDockVisible}
-            onToggleRightDock={() => setIsRightDockVisible((visible) => !visible)}
+            onToggleRightDock={toggleRightDock}
             onCameraChange={sendEditorCameraToEngine}
             onCameraMutated={handleViewportCameraMutated}
           />
@@ -1020,7 +1074,13 @@ export function App(): React.JSX.Element {
         main={
           <>
             <section className="model-viewport-area">
-              <div className="model-viewport-shell">
+              <div
+                className="model-viewport-shell"
+                {...getKeyboardBoundaryMetadata({
+                  scope: 'viewport',
+                  ownerId: 'model-viewport',
+                })}
+              >
                 {enginePort !== null ? (
                   <VideoViewport
                     enginePort={enginePort}
@@ -1063,12 +1123,11 @@ export function App(): React.JSX.Element {
                 ) : null}
               </div>
             </section>
-            <TimelineDock
-              key={isKeyframeEditorOpen ? 'expanded' : 'compact'}
-              expanded={isKeyframeEditorOpen}
-              controlsVisible={areTimelineControlsVisible}
-            >
-              {areTimelineControlsVisible ? (
+            {isBottomPanelVisible ? (
+              <TimelineDock
+                key={isKeyframeEditorOpen ? 'expanded' : 'compact'}
+                expanded={isKeyframeEditorOpen}
+              >
                 <div id="model-timeline-controls" className="model-timeline-controls">
                   {isKeyframeEditorOpen ? (
                     <ModelKeyframeTimeline
@@ -1096,14 +1155,8 @@ export function App(): React.JSX.Element {
                     </AnimationTimelineStrip>
                   )}
                 </div>
-              ) : (
-                <div className="model-animation-controls">
-                  <span className="text-[var(--model-fg-muted)]">
-                    {t('toolbar.timelineControlsHidden')}
-                  </span>
-                </div>
-              )}
-            </TimelineDock>
+              </TimelineDock>
+            ) : null}
           </>
         }
         rightPanel={
@@ -1176,6 +1229,20 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
       id="model-right-dock"
       ref={dockResizeRef}
       className="model-right-dock"
+      {...getKeyboardBoundaryMetadata({
+        scope: 'property-panel',
+        ownerId: 'model-right-dock',
+        ownedKeys: [
+          'Enter',
+          'Escape',
+          'Space',
+          'Tab',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+        ],
+      })}
       style={{ width: dockResize.size }}
       data-resizing={isDockResizing ? 'true' : 'false'}
     >
@@ -1207,11 +1274,9 @@ function RightDock({ outliner, properties }: RightDockProps): React.JSX.Element 
 
 function TimelineDock({
   expanded,
-  controlsVisible,
   children,
 }: {
   expanded: boolean;
-  controlsVisible: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const timelineSpec = expanded
@@ -1234,9 +1299,23 @@ function TimelineDock({
     <footer
       id="model-timeline-dock"
       aria-controls="model-timeline-controls"
-      aria-expanded={controlsVisible}
+      aria-expanded={true}
       ref={containerRef}
       className={expanded ? 'model-timeline-dock expanded' : 'model-timeline-dock'}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'timeline',
+        ownerId: 'model-timeline',
+        ownedKeys: [
+          'Delete',
+          'Backspace',
+          'Enter',
+          'Escape',
+          'Space',
+          'Tab',
+          'ArrowLeft',
+          'ArrowRight',
+        ],
+      })}
       style={{ height: timelineResize.size }}
       data-resizing={isResizing ? 'true' : 'false'}
     >

@@ -130,25 +130,30 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/className="model-left-toolbar"/);
     expect(app).toMatch(/width=\{48\}/);
     expect(app).toMatch(/isViewportHudVisible=\{isViewportHudVisible\}/);
-    expect(app).toMatch(/onToggleViewportHud=\{\(\) => setIsViewportHudVisible/);
-    expect(app).toMatch(/areTimelineControlsVisible=\{areTimelineControlsVisible\}/);
-    expect(app).toMatch(/onToggleTimelineControls=\{\(\) =>\s*setAreTimelineControlsVisible/);
+    expect(app).toMatch(/const toggleViewportHud = useCallback/);
+    expect(app).toMatch(/onToggleViewportHud=\{toggleViewportHud\}/);
+    expect(app).toMatch(/isBottomPanelVisible=\{isBottomPanelVisible\}/);
+    expect(app).toMatch(/const toggleBottomPanel = useCallback/);
+    expect(app).toMatch(/onToggleBottomPanel=\{toggleBottomPanel\}/);
     expect(app).toMatch(/isRightDockVisible=\{isRightDockVisible\}/);
-    expect(app).toMatch(
-      /onToggleRightDock=\{\(\) => setIsRightDockVisible\(\(visible\) => !visible\)\}/,
-    );
+    expect(app).toMatch(/const toggleRightDock = useCallback/);
+    expect(app).toMatch(/onToggleRightDock=\{toggleRightDock\}/);
     expect(app).toMatch(/mainClassName="model-center-panel"/);
     expect(app).toMatch(/<section className="model-viewport-area">/);
     expect(app).not.toMatch(/<ModelViewportControls/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-grid"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="reset-camera"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-hud"/);
+    expect(toolbar).toMatch(/data-model-toolbar-action="toggle-bottom-panel"/);
     expect(toolbar).toMatch(/data-creative-left-rail-target="hud"/);
+    expect(toolbar).toMatch(/data-creative-left-rail-action="toggle-bottom-panel"/);
     expect(toolbar).toMatch(/data-model-toolbar-action=\{`toggle-\$\{item.key\}`\}/);
     expect(app).toMatch(/<div id="model-viewport-hud">/);
     expect(app).toMatch(/hudVisible=\{isViewportHudVisible\}/);
-    expect(app).toMatch(/<TimelineDock[\s\S]*controlsVisible=\{areTimelineControlsVisible\}/);
+    expect(app).toMatch(/\{isBottomPanelVisible \? \(\s*<TimelineDock/);
     expect(app).toMatch(/id="model-timeline-controls"/);
+    expect(app).toMatch(/id="model-timeline-dock"/);
+    expect(app).not.toMatch(/timelineControlsHidden/);
     expect(app).toMatch(/rightPanel=\{\s*isRightDockVisible \? \(/);
     expect(css).toMatch(/\.model-center-panel\s*\{[\s\S]*flex-direction: column;/);
     expect(css).toMatch(/\.model-viewport-area\s*\{[\s\S]*flex-direction: column;/);
@@ -161,6 +166,15 @@ describe('Route A webview boundaries', () => {
     const previewModesRule = readCssRule(css, '.model-character-preview-modes');
     expect(previewModesRule).toMatch(/left: 10px;/);
     expect(previewModesRule).not.toMatch(/left: 56px;/);
+  });
+
+  it('defaults the right dock to hidden while keeping the toolbar toggle wired', () => {
+    const app = readSource('App.tsx');
+
+    expect(app).toMatch(/const \[isRightDockVisible, setIsRightDockVisible\] = useState\(false\)/);
+    expect(app).toMatch(/isRightDockVisible=\{isRightDockVisible\}/);
+    expect(app).toMatch(/onToggleRightDock=\{toggleRightDock\}/);
+    expect(app).toMatch(/rightPanel=\{\s*isRightDockVisible \? \(/);
   });
 
   it('drives Blender-style workbench chrome from VSCode light and dark theme tokens', () => {
@@ -270,8 +284,11 @@ describe('Route A webview boundaries', () => {
     expect(toolbar).toMatch(/onCameraMutated\?\.\(\)/);
     expect(orbitControls).toMatch(/zoomCamera\(-zoomStep\)/);
     expect(toolbar).not.toMatch(/zoomCamera\(|viewport\.zoomIn|viewport\.zoomOut/);
-    expect(toolbar).toMatch(/toggleViewportGrid\(\)/);
-    expect(toolbar).toMatch(/resetCamera\(\)/);
+    expect(toolbar).toMatch(/onClick=\{toolbarState\.toggleViewportGrid\}/);
+    expect(toolbar).toMatch(/runCameraAction\(toolbarState\.resetCamera\)/);
+    expect(toolbar).toMatch(/export const ModelSideToolbar = memo/);
+    expect(toolbar).toMatch(/selectViewportToolbarStoreState/);
+    expect(toolbar).toMatch(/areToolbarStatesEqual/);
     expect(orbitControls).not.toMatch(/new EngineClient|updateEditorCamera/);
     expect(toolbar).not.toMatch(/new EngineClient|updateEditorCamera/);
   });
