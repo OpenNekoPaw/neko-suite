@@ -327,7 +327,7 @@ function releaseEditableFocusFromPointerTarget(
     return;
   }
 
-  if (hasNativePointerFocusTarget(targetElement)) {
+  if (hasBrowserManagedPointerFocusTarget(targetElement)) {
     return;
   }
 
@@ -371,7 +371,7 @@ function getPointerTargetElement(target: EventTarget | null): Element | null {
   return null;
 }
 
-function hasNativePointerFocusTarget(targetElement: Element): boolean {
+function hasBrowserManagedPointerFocusTarget(targetElement: Element): boolean {
   return Boolean(
     targetElement.closest(
       [
@@ -386,7 +386,6 @@ function hasNativePointerFocusTarget(targetElement: Element): boolean {
         'object',
         'embed',
         'label',
-        '[tabindex]:not([tabindex="-1"])',
         '[contenteditable]:not([contenteditable="false"])',
       ].join(','),
     ),

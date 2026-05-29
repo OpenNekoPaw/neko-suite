@@ -88,6 +88,27 @@ describe('useFocusedWebviewRoot', () => {
     expect(document.activeElement).toBe(viewport);
   });
 
+  it('focuses a custom keyboard boundary when the user clicks its non-focusable child', () => {
+    act(() => {
+      root.render(<FocusedRootWithEditableHarness />);
+    });
+
+    const input = host.querySelector<HTMLInputElement>('input[data-testid="editable-input"]');
+    const container = host.querySelector<HTMLElement>('[data-testid="container-boundary"]');
+    const containerTitle = host.querySelector<HTMLElement>('[data-testid="container-title"]');
+
+    act(() => {
+      input?.focus();
+    });
+    expect(document.activeElement).toBe(input);
+
+    act(() => {
+      containerTitle?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+
+    expect(document.activeElement).toBe(container);
+  });
+
   it('keeps focus inside the same text input when the user clicks it again', () => {
     act(() => {
       root.render(<FocusedRootWithEditableHarness />);
@@ -406,6 +427,9 @@ function FocusedRootWithEditableHarness(): React.ReactElement {
       <input data-testid="editable-input" type="text" />
       <div data-testid="viewport-boundary" data-neko-keyboard-scope="viewport" tabIndex={-1}>
         Canvas surface
+      </div>
+      <div data-testid="container-boundary" data-neko-keyboard-scope="container" tabIndex={0}>
+        <span data-testid="container-title">Container title</span>
       </div>
       <input data-testid="next-input" type="text" />
       <button data-testid="native-button" type="button">
