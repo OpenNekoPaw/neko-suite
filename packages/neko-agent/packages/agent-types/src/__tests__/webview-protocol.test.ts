@@ -966,6 +966,22 @@ describe('webview protocol projectors', () => {
     expect(parseWebviewToExtensionMessage({ type: 'setPromptMode', mode: 'plan' })).toBeNull();
   });
 
+  it('parses webview keyboard ownership messages', () => {
+    expect(parseWebviewToExtensionMessage({ type: 'webviewKeyboardFocus', focused: true })).toEqual(
+      {
+        type: 'webviewKeyboardFocus',
+        focused: true,
+      },
+    );
+    expect(
+      parseWebviewToExtensionMessage({ type: 'webviewKeyboardEditable', editable: true }),
+    ).toEqual({
+      type: 'webviewKeyboardEditable',
+      editable: true,
+    });
+    expect(parseWebviewToExtensionMessage({ type: 'webviewKeyboardEditable' })).toBeNull();
+  });
+
   it('builds task, media task, and subagent messages with conversation scope', () => {
     const task = {
       id: 'task-1',

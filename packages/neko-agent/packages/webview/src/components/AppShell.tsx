@@ -9,13 +9,19 @@
  * Extracted from the former 589-line AIAssistant component (ADR P0.1).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useReportWebviewKeyboardEditable, useReportWebviewKeyboardFocus } from '@neko/ui/keyboard';
 import { Header } from '@/components/Header';
 import { OnboardingFlow } from '@/components/OnboardingFlow';
 import { useConfigState, useResourceState } from '@/hooks';
+import { vscode } from '@/messages';
 import { ConversationController } from './ConversationController';
 
 export function AppShell() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useReportWebviewKeyboardFocus(rootRef, vscode);
+  useReportWebviewKeyboardEditable(vscode);
+
   const config = useConfigState();
   const resource = useResourceState();
 
@@ -58,7 +64,10 @@ export function AppShell() {
   }, [isAiConfigured, showOnboarding]);
 
   return (
-    <div className="flex flex-col h-screen bg-[var(--vscode-sideBar-background,var(--vscode-editor-background))] text-[var(--vscode-foreground)]">
+    <div
+      ref={rootRef}
+      className="flex flex-col h-screen bg-[var(--vscode-sideBar-background,var(--vscode-editor-background))] text-[var(--vscode-foreground)]"
+    >
       <ConversationController
         settings={settings}
         setSettings={setSettings}

@@ -137,6 +137,21 @@ describe('parseWebviewToExtensionMessage', () => {
     ).toBeNull();
   });
 
+  it('accepts webview keyboard ownership messages without conversation scope', () => {
+    expect(parseWebviewToExtensionMessage({ type: 'webviewKeyboardFocus', focused: true })).toEqual(
+      {
+        type: 'webviewKeyboardFocus',
+        focused: true,
+      },
+    );
+    expect(
+      parseWebviewToExtensionMessage({ type: 'webviewKeyboardEditable', editable: true }),
+    ).toEqual({
+      type: 'webviewKeyboardEditable',
+      editable: true,
+    });
+  });
+
   it('accepts tab state updates with explicit tab-to-conversation mapping', () => {
     expect(
       parseWebviewToExtensionMessage({

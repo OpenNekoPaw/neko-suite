@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
 import * as vscode from 'vscode';
+import {
+  NEKO_WEBVIEW_KEYBOARD_EDITABLE_UPDATE_COMMAND,
+  type WebviewKeyboardEditableOwnerUpdate,
+} from '@neko/shared/vscode/extension';
 import { ChatViewProvider, createChatLocalResourceAccess } from '../chatProvider';
 
 describe('chatProvider', () => {
@@ -221,6 +225,148 @@ describe('chatProvider', () => {
         model: false,
       },
     });
+
+    provider.dispose();
+  });
+
+  it('sets the agent editable keyboard context while the assistant input owns focus', async () => {
+    const webview = vscode.createMockWebview();
+    const view = {
+      webview,
+      visible: true,
+      onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+    };
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(view as never, {} as never, {} as never);
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    expect(receiveMessage).toBeDefined();
+
+    await receiveMessage?.({ type: 'webviewKeyboardEditable', editable: true });
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'setContext',
+      'neko.agent.keyboardEditable',
+      true,
+    );
+
+    await receiveMessage?.({ type: 'webviewKeyboardFocus', focused: true });
+    await receiveMessage?.({ type: 'webviewKeyboardEditable', editable: true });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      NEKO_WEBVIEW_KEYBOARD_EDITABLE_UPDATE_COMMAND,
+      {
+        ownerId: 'neko.agent:assistant',
+        editable: true,
+      } satisfies WebviewKeyboardEditableOwnerUpdate,
+    );
+    await Promise.resolve();
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'setContext',
+      'neko.agent.keyboardEditable',
+      true,
+    );
+
+    await receiveMessage?.({ type: 'webviewKeyboardFocus', focused: false });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      NEKO_WEBVIEW_KEYBOARD_EDITABLE_UPDATE_COMMAND,
+      {
+        ownerId: 'neko.agent:assistant',
+        editable: false,
+      } satisfies WebviewKeyboardEditableOwnerUpdate,
+    );
+    await Promise.resolve();
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'setContext',
+      'neko.agent.keyboardEditable',
+      false,
+    );
+
+    provider.dispose();
+  });
+
+  it('does not treat keyboard ownership reports as chat readiness messages', async () => {
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    await provider.sendMessageToAssistant('queued message', false);
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    vi.mocked(webview.postMessage).mockClear();
+
+    await receiveMessage?.({ type: 'webviewKeyboardFocus', focused: true });
+    expect(webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'prefillInput' }),
+    );
+
+    await receiveMessage?.({ type: 'getConfig' });
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'prefillInput', message: 'queued message' }),
+    );
+
+    provider.dispose();
+  });
+
+  it('clears the agent editable keyboard context when the assistant view is hidden', async () => {
+    const webview = vscode.createMockWebview();
+    let visibilityListener: (() => void) | undefined;
+    const view = {
+      webview,
+      visible: true,
+      onDidChangeVisibility: vi.fn((listener: () => void) => {
+        visibilityListener = listener;
+        return { dispose: vi.fn() };
+      }),
+    };
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(view as never, {} as never, {} as never);
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      | ((message: unknown) => void | Promise<void>)
+      | undefined;
+    await receiveMessage?.({ type: 'webviewKeyboardFocus', focused: true });
+    await receiveMessage?.({ type: 'webviewKeyboardEditable', editable: true });
+    vi.mocked(vscode.commands.executeCommand).mockClear();
+
+    view.visible = false;
+    visibilityListener?.();
+    await Promise.resolve();
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      NEKO_WEBVIEW_KEYBOARD_EDITABLE_UPDATE_COMMAND,
+      {
+        ownerId: 'neko.agent:assistant',
+        editable: false,
+      } satisfies WebviewKeyboardEditableOwnerUpdate,
+    );
+    await Promise.resolve();
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'setContext',
+      'neko.agent.keyboardEditable',
+      false,
+    );
 
     provider.dispose();
   });

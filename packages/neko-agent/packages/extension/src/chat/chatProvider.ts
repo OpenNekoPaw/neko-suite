@@ -9,8 +9,6 @@
 
 import * as vscode from 'vscode';
 import { getService, getLogger } from '../base';
-
-const logger = getLogger('ChatProvider');
 import type { Platform } from '@neko/platform';
 import type { IAgentManager } from '../ai/agentManager';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
@@ -79,6 +77,11 @@ import {
   type OpenTab,
   type TabState,
 } from '@neko-agent/types';
+import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
+
+const logger = getLogger('ChatProvider');
+const AGENT_KEYBOARD_EDITABLE_CONTEXT = 'neko.agent.keyboardEditable';
+const AGENT_KEYBOARD_EDITABLE_OWNER_ID = 'neko.agent:assistant';
 
 function getCurrentWorkspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -149,6 +152,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   // Agent + Skill stack; no separate plan handler is needed.
   private readonly _dndBroker = new DragDropBroker();
   private _webviewReady = false;
+  private _keyboardFocused = false;
+  private _keyboardEditable = false;
+  private _keyboardEditableUpdateSequence = 0;
   private _pendingContextPayload: import('@neko/shared').AgentContextPayload | null = null;
   private _pendingExternalMessage: { message: string; autoSend: boolean } | null = null;
 
@@ -405,6 +411,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         if (webviewView.visible) {
           this._restoreState();
           this._replayUndeliveredTasks();
+        } else {
+          void this._setKeyboardFocused(false);
         }
       }),
     );
@@ -521,12 +529,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
     this._webviewDisposables.push(
       webview.onDidReceiveMessage(async (raw: unknown) => {
-        if (!this._webviewReady) {
-          this._webviewReady = true;
-          this._flushPendingMessages();
-          this._replayUndeliveredTasks();
-        }
-
         const message = parseWebviewToExtensionMessage(raw);
         if (!message) {
           logger.warn('Rejected invalid webview message payload');
@@ -536,6 +538,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
         if (message.type === 'getConfig') {
           postPluginsAvailable(webview);
+        }
+
+        if (message.type === 'webviewKeyboardFocus') {
+          void this._setKeyboardFocused(message.focused);
+          return;
+        }
+
+        if (message.type === 'webviewKeyboardEditable') {
+          void this._setKeyboardEditable(message.editable);
+          return;
+        }
+
+        if (!this._webviewReady) {
+          this._webviewReady = true;
+          this._flushPendingMessages();
+          this._replayUndeliveredTasks();
         }
 
         // 1. Delegate config messages to ConfigBridge
@@ -811,12 +829,57 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   private _disposeWebviewBindings(): void {
     this._webviewReady = false;
+    void this._setKeyboardFocused(false);
     for (const disposable of this._webviewDisposables.splice(0)) {
       try {
         disposable.dispose();
       } catch (error) {
         logger.warn('Failed to dispose webview binding', error);
       }
+    }
+  }
+
+  private async _setKeyboardFocused(focused: boolean): Promise<void> {
+    if (this._keyboardFocused === focused) {
+      if (!focused) {
+        await this._setKeyboardEditable(false);
+      }
+      return;
+    }
+
+    this._keyboardFocused = focused;
+    if (!focused) {
+      await this._setKeyboardEditable(false);
+    }
+  }
+
+  private async _setKeyboardEditable(editable: boolean): Promise<void> {
+    const nextEditable = editable && this._keyboardFocused;
+    if (this._keyboardEditable === nextEditable) {
+      return;
+    }
+
+    this._keyboardEditable = nextEditable;
+    const updateSequence = ++this._keyboardEditableUpdateSequence;
+
+    try {
+      await updateWebviewKeyboardEditableOwner(AGENT_KEYBOARD_EDITABLE_OWNER_ID, nextEditable);
+    } catch (error) {
+      logger.warn('Failed to update global Webview keyboard editable owner', error);
+    }
+
+    if (this._keyboardEditableUpdateSequence !== updateSequence) {
+      return;
+    }
+
+    try {
+      await vscode.commands.executeCommand(
+        'setContext',
+        AGENT_KEYBOARD_EDITABLE_CONTEXT,
+        nextEditable,
+      );
+    } catch (error) {
+      logger.warn('Failed to update agent keyboard editable context', error);
     }
   }
 }

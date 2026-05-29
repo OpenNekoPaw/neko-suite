@@ -256,6 +256,16 @@ export interface RevealContextSourceWebviewMessage {
   navigationData?: Record<string, string>;
 }
 
+export interface WebviewKeyboardFocusWebviewMessage {
+  type: 'webviewKeyboardFocus';
+  focused: boolean;
+}
+
+export interface WebviewKeyboardEditableWebviewMessage {
+  type: 'webviewKeyboardEditable';
+  editable: boolean;
+}
+
 export type WebviewToExtensionMessage =
   | SendMessageWebviewMessage
   | SearchProjectFilesWebviewMessage
@@ -280,7 +290,9 @@ export type WebviewToExtensionMessage =
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
   | SsoLoginWebviewMessage
-  | RevealContextSourceWebviewMessage;
+  | RevealContextSourceWebviewMessage
+  | WebviewKeyboardFocusWebviewMessage
+  | WebviewKeyboardEditableWebviewMessage;
 
 export interface ProjectFileMentionInfo {
   path: string;
@@ -820,6 +832,8 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'invokePluginSlashCommand',
   'ssoLogin',
   'revealContextSource',
+  'webviewKeyboardFocus',
+  'webviewKeyboardEditable',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 const PROMPT_MODES: readonly SetPromptModeWebviewMessage['mode'][] = ['default', 'plan'];
@@ -1127,6 +1141,10 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseSsoLoginMessage(raw);
     case 'revealContextSource':
       return parseRevealContextSourceMessage(raw);
+    case 'webviewKeyboardFocus':
+      return typeof raw.focused === 'boolean' ? { type, focused: raw.focused } : null;
+    case 'webviewKeyboardEditable':
+      return typeof raw.editable === 'boolean' ? { type, editable: raw.editable } : null;
     default:
       return null;
   }

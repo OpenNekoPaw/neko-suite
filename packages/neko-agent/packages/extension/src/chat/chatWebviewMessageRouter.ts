@@ -56,6 +56,8 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'invokeSlashCommand',
   'getContextTokenCount',
   'compressContext',
+  'webviewKeyboardFocus',
+  'webviewKeyboardEditable',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 type RoutedWebviewMessageType =

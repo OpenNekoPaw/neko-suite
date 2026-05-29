@@ -21,6 +21,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@neko-agent/types': path.resolve(__dirname, '../agent-types/src'),
+      '@neko/ui': path.resolve(__dirname, '../../../neko-ui/src'),
       '@neko/shared': path.resolve(__dirname, '../../../neko-types/src'),
       'd3': d3Dist,
     },
@@ -56,6 +57,6 @@ export default defineConfig({
     modulePreload: false,
   },
   optimizeDeps: {
-    include: ['@neko/shared', 'mermaid'],
+    include: ['@neko/shared', '@neko/ui', 'mermaid'],
   },
 });

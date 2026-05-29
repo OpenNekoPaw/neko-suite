@@ -11,6 +11,7 @@ import { bootstrapAssetDiff } from './bootstrapAssetDiff';
 import { bootstrapMediaDiff } from './bootstrapMediaDiff';
 import { bootstrapMediaLsp } from './bootstrapMediaLsp';
 import { registerNekoToolsCommands } from './registerCommands';
+import { WebviewKeyboardContextService } from '../services/WebviewKeyboardContextService';
 
 export interface INekoToolsExtensionActivation extends vscode.Disposable {
   services: ServiceCollection;
@@ -48,11 +49,14 @@ export function bootstrapNekoToolsExtension(
     assetEntityReader: coreServices.assetEntityReader,
     errorHandler: coreServices.errorHandler,
   });
+  const webviewKeyboardContextService = new WebviewKeyboardContextService(
+    coreServices.logger.child('WebviewKeyboardContext'),
+  );
   const devicePermissionService = new DevicePermissionService(
     new VSCodeDevicePermissionStore(context),
     new VSCodeDevicePermissionPrompt(),
   );
-  context.subscriptions.push(devicePermissionService);
+  context.subscriptions.push(webviewKeyboardContextService, devicePermissionService);
   registerDeviceCommands(context, {
     permissionService: devicePermissionService,
     getFrameServerPort: async () => {
@@ -69,6 +73,7 @@ export function bootstrapNekoToolsExtension(
     services: coreServices.services,
     async disposeAsync() {
       await Promise.all([mediaDiffProvider.disposeAsync(), assetDiffProvider.disposeAsync()]);
+      webviewKeyboardContextService.dispose();
       coreServices.dispose();
     },
     dispose() {
