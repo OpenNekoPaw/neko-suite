@@ -41,6 +41,15 @@ import { getLogger } from '../base';
 
 const logger = getLogger('MediaService');
 
+interface EditorStreamProjectData {
+  tracks: unknown[];
+  resolution: {
+    width: number;
+    height: number;
+  };
+  fps: number;
+}
+
 // =============================================================================
 // MediaService
 // =============================================================================
@@ -469,12 +478,7 @@ export class MediaService implements vscode.Disposable {
    * Create editor-level stream (paused state).
    * Called by VideoEditorProvider when editor opens.
    */
-  async createEditorStream(projectData: {
-    tracks: unknown[];
-    resolution: { width: number; height: number };
-    fps: number;
-    duration: number;
-  }): Promise<void> {
+  async createEditorStream(projectData: EditorStreamProjectData): Promise<void> {
     if (this._activeVideoStreamId) {
       logger.warn('Stream already exists, skipping create');
       return;

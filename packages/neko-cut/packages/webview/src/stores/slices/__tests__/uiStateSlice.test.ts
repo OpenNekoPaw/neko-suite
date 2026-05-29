@@ -80,6 +80,10 @@ describe('uiStateSlice', () => {
     it('should start with propertyPanelWidth = 280', () => {
       expect(store.getState().propertyPanelWidth).toBe(280);
     });
+
+    it('should start with propertyPanelVisible = false', () => {
+      expect(store.getState().propertyPanelVisible).toBe(false);
+    });
   });
 
   describe('setZoomLevel', () => {

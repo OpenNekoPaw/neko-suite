@@ -301,6 +301,7 @@ export type ExtensionToWebviewMessage =
 
 export type WebviewToExtensionMessage =
   | { type: 'ready' }
+  | { type: 'webviewKeyboardFocus'; focused: boolean }
   | { type: 'document:save'; data: unknown }
   | { type: 'file:import' }
   | { type: 'stamp:import' }

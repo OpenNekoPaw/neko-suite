@@ -110,7 +110,7 @@ export function PuppetApp() {
   const toggleKeyframeEditor = usePuppetStore((s) => s.toggleKeyframeEditor);
   const nativeRevision = usePuppetStore((s) => s.nativeRevision);
   const [controllerVersion, setControllerVersion] = useState(0);
-  const [isRightPanelVisible, setIsRightPanelVisible] = useState(true);
+  const [isRightPanelVisible, setIsRightPanelVisible] = useState(false);
   const [fitViewRequest, setFitViewRequest] = useState(0);
   const [isOnionSkinEnabled, setIsOnionSkinEnabled] = useState(false);
 

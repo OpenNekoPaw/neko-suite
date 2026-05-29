@@ -15,6 +15,7 @@
  *   - A separate 2D canvas overlay shows the shape outline while dragging.
  */
 import { useRef, useEffect, useCallback, useState } from 'react';
+import type React from 'react';
 import { useSketchStore } from '../stores';
 import { SketchRenderer } from '../engine';
 import type { LightingConfig } from '../engine';
@@ -888,7 +889,11 @@ function LightOverlay() {
   );
 }
 
-export function SketchCanvas() {
+export interface SketchCanvasProps {
+  isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
+}
+
+export function SketchCanvas({ isKeyboardFocusedRef }: SketchCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onionCanvasRef = useRef<HTMLCanvasElement>(null);
   const vectorPreviewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -3111,6 +3116,9 @@ export function SketchCanvas() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isKeyboardFocusedRef?.current === false) {
+        return;
+      }
       if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
         return;
       }
@@ -3123,6 +3131,9 @@ export function SketchCanvas() {
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (isKeyboardFocusedRef?.current === false) {
+        return;
+      }
       if (e.code === 'Space') {
         spaceHeldRef.current = false;
         el.style.cursor = '';
@@ -3147,7 +3158,7 @@ export function SketchCanvas() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [panBy]);
+  }, [panBy, isKeyboardFocusedRef]);
 
   // ── Tool cursor mapping ──
   const TOOL_CURSORS: Record<string, string> = {

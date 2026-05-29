@@ -119,6 +119,11 @@ export interface ReadyMessage {
   type: 'ready';
 }
 
+export interface WebviewKeyboardFocusMessage {
+  type: 'webviewKeyboardFocus';
+  focused: boolean;
+}
+
 // =============================================================================
 // Project Messages (for .nka files)
 // =============================================================================
@@ -165,6 +170,7 @@ export interface OperationAppliedMessage {
 export type WebviewMessage =
   | AudioRequestMessage
   | ReadyMessage
+  | WebviewKeyboardFocusMessage
   | ProjectImportAudioMessage
   | ProjectDropImportAudioMessage
   | PresetListRequestMessage

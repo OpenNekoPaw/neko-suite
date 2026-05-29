@@ -99,6 +99,9 @@ describe('Puppet right panel resize layout', () => {
     expect(toolbar).toMatch(/aria-controls="puppet-right-panel"/);
     expect(app).not.toMatch(/toolbarLayer=/);
     expect(app).toMatch(/fitViewRequest=\{fitViewRequest\}/);
+    expect(app).toMatch(
+      /const \[isRightPanelVisible, setIsRightPanelVisible\] = useState\(false\)/,
+    );
     expect(app).toMatch(/rightPanel=\{\s*isRightPanelVisible \? \(/);
     expect(css).not.toMatch(/\.puppet-viewport-toolbar/);
     expect(css).toMatch(/\.puppet-main-panel\s*\{/);

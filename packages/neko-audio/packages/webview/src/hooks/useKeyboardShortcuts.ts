@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type React from 'react';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
 import { postMessage } from '../shared/useVscodeMessage';
@@ -6,11 +7,19 @@ import { postMessage } from '../shared/useVscodeMessage';
 interface ShortcutCallbacks {
   onTogglePlay: () => void;
   onStop: () => void;
+  isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
 }
 
-export function useKeyboardShortcuts({ onTogglePlay, onStop }: ShortcutCallbacks) {
+export function useKeyboardShortcuts({
+  onTogglePlay,
+  onStop,
+  isKeyboardFocusedRef,
+}: ShortcutCallbacks) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (isKeyboardFocusedRef?.current === false) {
+        return;
+      }
       const target = e.target as HTMLElement | null;
       if (
         target &&
@@ -94,5 +103,5 @@ export function useKeyboardShortcuts({ onTogglePlay, onStop }: ShortcutCallbacks
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [onTogglePlay, onStop]);
+  }, [onTogglePlay, onStop, isKeyboardFocusedRef]);
 }

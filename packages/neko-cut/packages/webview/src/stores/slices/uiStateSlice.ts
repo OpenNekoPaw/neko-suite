@@ -250,7 +250,7 @@ export const createUIStateSlice: StateCreator<UIStateSlice, [], [], UIStateSlice
   setDragTargetTrackId: (trackId) => set({ dragTargetTrackId: trackId }),
 
   // Property panel (inline)
-  propertyPanelVisible: true,
+  propertyPanelVisible: false,
   propertyPanelWidth: 280,
   togglePropertyPanel: () => set((s) => ({ propertyPanelVisible: !s.propertyPanelVisible })),
   setPropertyPanelWidth: (width) => set({ propertyPanelWidth: clampCutPropertyPanelWidth(width) }),

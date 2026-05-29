@@ -6,7 +6,11 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { isKeyboardFocusMessage, useFocusedWebviewRoot } from '@neko/ui/keyboard';
+import {
+  isKeyboardFocusMessage,
+  useFocusedWebviewRoot,
+  useReportWebviewKeyboardFocus,
+} from '@neko/ui/keyboard';
 import { useExtensionMessage, useVscodeReady, postMessage } from '../shared/useVscodeMessage';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
@@ -69,11 +73,14 @@ export function AudioEditor() {
 
   // Drag-drop support for importing audio into project
   const editorRef = useRef<HTMLDivElement>(null);
-  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } =
-    useFocusedWebviewRoot(editorRef);
+  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
+    editorRef,
+    false,
+  );
+  useReportWebviewKeyboardFocus(editorRef, { postMessage });
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(editorRef);
 
-  useKeyboardShortcuts({ onTogglePlay: togglePlay, onStop: stop });
+  useKeyboardShortcuts({ onTogglePlay: togglePlay, onStop: stop, isKeyboardFocusedRef });
 
   // v2 multi-track project state (must be before any early returns)
   const isV2 = useAudioProjectStore((s) => s.audioProjectData !== null);
@@ -232,7 +239,7 @@ export function AudioEditor() {
               <div className="audio-main-content">
                 {isV2 ? (
                   <div className="neko-project-workstation">
-                    <AudioTimeline />
+                    <AudioTimeline isKeyboardFocusedRef={isKeyboardFocusedRef} />
                     <MixerPanel />
                   </div>
                 ) : (

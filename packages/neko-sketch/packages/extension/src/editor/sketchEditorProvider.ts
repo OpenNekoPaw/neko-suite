@@ -207,6 +207,8 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
           this.focusedWebviews.markActive(panelId);
           this.activeWebviewPanel = event.webviewPanel;
           this.activeDocument = document;
+        } else {
+          this.focusedWebviews.markInactive(panelId);
         }
       },
       undefined,
@@ -281,6 +283,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     return this.focusedWebviews.postKeyboardAction(action, {
       viewType: SketchEditorProvider.viewType,
       documentUri: documentUri?.toString(),
+      allowRecentVisibleFallback: false,
       allowSingleVisibleFallback: true,
     });
   }
@@ -707,6 +710,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<void> {
     switch (message.type) {
       case 'ready': {
+        this.focusedWebviews.syncFocus(document.uri.toString());
         await this.postFeatureFlags(webviewPanel);
         try {
           const fileData = await vscode.workspace.fs.readFile(document.uri);
@@ -738,6 +742,18 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
             webviewPanel,
             pending.name ? { name: pending.name } : undefined,
           );
+        }
+        break;
+      }
+      case 'webviewKeyboardFocus': {
+        if (typeof message.focused !== 'boolean') {
+          break;
+        }
+        this.focusedWebviews.markKeyboardFocused(document.uri.toString(), message.focused);
+        if (message.focused && webviewPanel.visible) {
+          this.activeWebviewPanel = webviewPanel;
+          this.activeDocument = document;
+          this.statusBar?.show();
         }
         break;
       }

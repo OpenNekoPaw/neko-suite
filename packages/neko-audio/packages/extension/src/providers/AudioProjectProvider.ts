@@ -218,6 +218,7 @@ export class AudioProjectProvider
   async postCommandToFocusedPanel(command: string): Promise<boolean> {
     return this._focusedWebviews.postKeyboardAction(command, {
       viewType: AudioProjectProvider.viewType,
+      allowRecentVisibleFallback: false,
       allowSingleVisibleFallback: true,
     });
   }
@@ -798,7 +799,15 @@ export class AudioProjectProvider
 
         switch (type) {
           case 'ready':
+            this._focusedWebviews.syncFocus(docKey);
             await this.initializeWebview(webviewPanel, document.uri);
+            break;
+
+          case 'webviewKeyboardFocus':
+            if (typeof msg.focused !== 'boolean') {
+              break;
+            }
+            this._focusedWebviews.markKeyboardFocused(docKey, msg.focused);
             break;
 
           case 'operationApplied': {
@@ -889,6 +898,8 @@ export class AudioProjectProvider
       this._focusedWebviews.markVisible(docKey, event.webviewPanel.visible);
       if (event.webviewPanel.active) {
         this._focusedWebviews.markActive(docKey);
+      } else {
+        this._focusedWebviews.markInactive(docKey);
       }
     });
 

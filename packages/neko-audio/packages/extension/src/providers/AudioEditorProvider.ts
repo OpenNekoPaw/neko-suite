@@ -84,6 +84,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
   async postCommandToFocusedPanel(command: string): Promise<boolean> {
     return this._focusedWebviews.postKeyboardAction(command, {
       viewType: AudioEditorProvider.viewType,
+      allowRecentVisibleFallback: false,
       allowSingleVisibleFallback: true,
     });
   }
@@ -499,6 +500,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
 
         switch (type) {
           case 'ready': {
+            this._focusedWebviews.syncFocus(documentUri);
             const audioInfo = await audioInfoPromise;
             if (!audioInfo) return;
             await webviewPanel.webview.postMessage({
@@ -560,6 +562,14 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
             break;
           }
 
+          case 'webviewKeyboardFocus': {
+            if (typeof msg.focused !== 'boolean') {
+              break;
+            }
+            this._focusedWebviews.markKeyboardFocused(documentUri, msg.focused);
+            break;
+          }
+
           case 'audio:playback': {
             const request = await parseAudioRequest(msg, isAudioPlaybackRequestMessage);
             if (request) await handleAudioPlayback(request);
@@ -606,6 +616,8 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
       this._focusedWebviews.markVisible(documentUri, event.webviewPanel.visible);
       if (event.webviewPanel.active) {
         this._focusedWebviews.markActive(documentUri);
+      } else {
+        this._focusedWebviews.markInactive(documentUri);
       }
     });
 

@@ -317,14 +317,10 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       const mediaService = new MediaService(webviewPanel, client, document.uri);
       this.mediaServices.set(docUri, mediaService);
 
-      // Create editor-level stream (paused state) immediately
-      try {
-        const projectData = JSON.parse(document.getText());
-        await mediaService.createEditorStream(projectData);
-      } catch (err) {
-        logger.error('Failed to create editor stream:', err);
-        // Non-fatal: Webview will show "初始化 GPU..." until stream becomes available
-      }
+      // The editor stream is created after the Webview sends `ready`.
+      // Creating it earlier can start the Rust stream before WebSocket
+      // subscribers exist, causing the engine to wait until its subscriber
+      // timeout and leaving the editor with a fragile first-load race.
     }
 
     // Create or reuse ExportService — reuse if there's an active background export
@@ -461,13 +457,41 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       this.localResourceAccess,
     );
 
-    // Set up the webview HTML content
-    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
-
     // Initialize preset service (lazy, shared across documents)
     if (!this.presetService) {
       this.presetService = new ExportPresetService(this.context.workspaceState);
     }
+
+    // Send initial/current document content to webview. This is intentionally
+    // reusable so the `ready` handshake can replay project data if an early
+    // postMessage was dropped while the Webview was still loading.
+    const projectRoot = path.dirname(document.uri.fsPath);
+    const updateWebview = () => {
+      const content = model!.getProjectData();
+      webviewPanel.webview.postMessage({
+        type: 'update',
+        content,
+        projectRoot, // Project root directory for resolving relative media paths
+      });
+      // Update outline when document changes
+      if (webviewPanel.visible) {
+        outlineProvider?.updateProject(content);
+      }
+    };
+
+    const ensureEditorStream = async () => {
+      const mediaService = this.mediaServices.get(docUri);
+      if (!mediaService) {
+        return;
+      }
+
+      try {
+        await mediaService.createEditorStream(model!.getProjectData());
+      } catch (err) {
+        logger.error('Failed to create editor stream:', err);
+        // Non-fatal: Webview can still edit the project and request a retry on reload.
+      }
+    };
 
     // Handle messages from the webview
     webviewPanel.webview.onDidReceiveMessage(
@@ -645,14 +669,16 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
         // Handle webview ready message - send frame server config
         if (message.type === 'ready') {
-          logger.info('Webview ready, sending frame server config');
+          logger.info('Webview ready, replaying project data and frame server config');
+          updateWebview();
           if (frameServerPort) {
             webviewPanel.webview.postMessage({
               type: 'frameServer:config',
               port: frameServerPort,
             });
           }
-          // Re-notify stream info (stream was created before webview loaded)
+          await ensureEditorStream();
+          // Re-notify stream info in case a stream already existed for this editor.
           const ms = this.mediaServices.get(docUri);
           if (ms) {
             ms.notifyStreamCreated();
@@ -787,6 +813,11 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
       this.context.subscriptions,
     );
 
+    // Set up the webview HTML content after registering the message listener,
+    // so a fast-loading Webview cannot send `ready` before the Extension is
+    // listening.
+    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
+
     // Show status bar only when THIS editor is the currently visible one.
     // When multiple editors exist, only the most recently focused panel
     // should drive the status bar and outline (fixes NKC-008 race).
@@ -819,21 +850,6 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
 
     // Initial visibility check
     updateStatusBarVisibility();
-
-    // Send initial document content to webview
-    const projectRoot = path.dirname(document.uri.fsPath);
-    const updateWebview = () => {
-      const content = model!.getProjectData();
-      webviewPanel.webview.postMessage({
-        type: 'update',
-        content,
-        projectRoot, // Project root directory for resolving relative media paths
-      });
-      // Update outline when document changes
-      if (webviewPanel.visible) {
-        outlineProvider?.updateProject(content);
-      }
-    };
 
     // Listen for model changes (来自 VideoEditorModel 的事件)
     const modelChangeSubscription = model.onDidChange(() => {

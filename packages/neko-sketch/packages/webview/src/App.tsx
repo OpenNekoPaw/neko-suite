@@ -5,7 +5,12 @@
  * Toolbar | Canvas | Side panels (Brush/Color/Layers)
  */
 import { useEffect, useCallback, useState } from 'react';
-import { isEditableTarget, isKeyboardFocusMessage, useFocusedWebviewRoot } from '@neko/ui/keyboard';
+import {
+  isEditableTarget,
+  isKeyboardFocusMessage,
+  useFocusedWebviewRoot,
+  useReportWebviewKeyboardFocus,
+} from '@neko/ui/keyboard';
 import { useResizable } from '@neko/ui/hooks';
 import { ResizeHandle } from '@neko/ui/primitives';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
@@ -128,8 +133,11 @@ export function App() {
     size: sidebarWidth,
     onSizeChange: setSidebarWidth,
   });
-  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } =
-    useFocusedWebviewRoot(rootRef);
+  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
+    rootRef,
+    false,
+  );
+  useReportWebviewKeyboardFocus(rootRef, vscode);
 
   useEffect(() => {
     vscode.postMessage({
@@ -160,6 +168,9 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
+      if (isKeyboardFocusedRef.current === false) {
+        return;
+      }
       const action = getSketchKeyboardAction(event);
       if (!action) {
         return;
@@ -170,7 +181,7 @@ export function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store]);
+  }, [store, isKeyboardFocusedRef]);
 
   useEffect(() => aiSessionStore.subscribe(setAIRuns), []);
 
@@ -589,7 +600,7 @@ export function App() {
           leftRail={<Toolbar />}
           main={
             <div ref={rootRef} className="sketch-canvas-container">
-              <SketchCanvas />
+              <SketchCanvas isKeyboardFocusedRef={isKeyboardFocusedRef} />
             </div>
           }
           rightPanel={
@@ -661,7 +672,11 @@ export function App() {
               </>
             ) : undefined
           }
-          bottomPanel={showFrameTimeline ? <FrameTimeline /> : undefined}
+          bottomPanel={
+            showFrameTimeline ? (
+              <FrameTimeline isKeyboardFocusedRef={isKeyboardFocusedRef} />
+            ) : undefined
+          }
         />
       </div>
     </I18nProvider>

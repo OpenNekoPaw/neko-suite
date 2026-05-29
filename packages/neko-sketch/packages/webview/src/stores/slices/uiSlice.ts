@@ -17,7 +17,7 @@ export interface UISlice {
 }
 
 export const createUISlice: StateCreator<UISlice> = (set) => ({
-  showSidebar: true,
+  showSidebar: false,
   showBrushPanel: true,
   showLayerPanel: true,
   showFrameTimeline: true,

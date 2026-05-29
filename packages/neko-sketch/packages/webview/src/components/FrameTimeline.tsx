@@ -5,12 +5,17 @@
  * Click to select, keyboard shortcuts for navigation.
  */
 import { useCallback, useRef, useEffect } from 'react';
+import type React from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import { useFramePlayback } from '../hooks/useFramePlayback';
 import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
 
-export function FrameTimeline() {
+export interface FrameTimelineProps {
+  isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
+}
+
+export function FrameTimeline({ isKeyboardFocusedRef }: FrameTimelineProps) {
   const { t } = useTranslation();
   const frameLayers = useSketchStore((s) => s.frameLayers);
   const selectedLayerId = useSketchStore((s) => s.selectedFrameLayerId);
@@ -39,6 +44,7 @@ export function FrameTimeline() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (isKeyboardFocusedRef?.current === false) return;
       if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) return;
 
       switch (e.key) {
@@ -66,7 +72,7 @@ export function FrameTimeline() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [toggle, toggleOnionSkin]);
+  }, [toggle, toggleOnionSkin, isKeyboardFocusedRef]);
 
   const handleFpsChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

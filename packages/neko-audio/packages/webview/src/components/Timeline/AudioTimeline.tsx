@@ -5,7 +5,15 @@
  * Left column: track headers. Right column: scrollable element lanes.
  */
 
-import { useRef, useCallback, useMemo, useEffect, useState, type CSSProperties } from 'react';
+import {
+  useRef,
+  useCallback,
+  useMemo,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type MutableRefObject,
+} from 'react';
 import { useAudioProjectStore } from '../../stores/audioProjectStore';
 import { useAudioStore } from '../../stores/audioStore';
 import { TimelineRuler } from './TimelineRuler';
@@ -17,7 +25,11 @@ import { calculateTimelineLayout } from './timelineLayout';
 
 const EMPTY_TRACK_ROW_COUNT = 6;
 
-export function AudioTimeline() {
+export interface AudioTimelineProps {
+  isKeyboardFocusedRef?: MutableRefObject<boolean>;
+}
+
+export function AudioTimeline({ isKeyboardFocusedRef }: AudioTimelineProps) {
   const tracks = useAudioProjectStore((s) => s.audioProjectData?.tracks ?? []);
   const tempoMap = useAudioProjectStore((s) => getProjectTempoMap(s.audioProjectData));
   const waveforms = useAudioProjectStore((s) => s.waveforms);
@@ -120,6 +132,7 @@ export function AudioTimeline() {
   // Keyboard zoom: Cmd+= / Cmd+-
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isKeyboardFocusedRef?.current === false) return;
       if (!(e.ctrlKey || e.metaKey)) return;
       if (e.key === '=' || e.key === '+') {
         e.preventDefault();
@@ -133,7 +146,7 @@ export function AudioTimeline() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [setZoom]);
+  }, [setZoom, isKeyboardFocusedRef]);
 
   return (
     <div

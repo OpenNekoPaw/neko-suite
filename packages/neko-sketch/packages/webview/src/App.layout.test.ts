@@ -17,10 +17,14 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(appSource).toMatch(/leftRail=\{<Toolbar \/>}/);
     expect(appSource).toMatch(/mainClassName="sketch-main-panel"/);
     expect(appSource).toMatch(/className="sketch-canvas-container"/);
-    expect(appSource).toMatch(/bottomPanel=\{showFrameTimeline \? <FrameTimeline \/> : undefined}/);
+    expect(appSource).toMatch(/bottomPanel=\{\s*showFrameTimeline \? \(/);
+    expect(appSource).toMatch(/<FrameTimeline isKeyboardFocusedRef=\{isKeyboardFocusedRef\} \/>/);
   });
 
   it('keeps drawing tools on the left rail while sidebar controls stay in the right panel', () => {
+    const uiSliceSource = readFileSync(resolve(__dirname, 'stores/slices/uiSlice.ts'), 'utf8');
+
+    expect(uiSliceSource).toMatch(/showSidebar: false/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-kind="common-action"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-kind="visibility-toggle"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-target="main-panel"/);
