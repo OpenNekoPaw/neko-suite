@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import type React from 'react';
 import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
@@ -162,20 +163,12 @@ export function useConnectionDrag({
       cancelConnection();
     };
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        cancelConnection();
-      }
-    };
-
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isConnecting, updateConnection, completeConnection, cancelConnection]);
 

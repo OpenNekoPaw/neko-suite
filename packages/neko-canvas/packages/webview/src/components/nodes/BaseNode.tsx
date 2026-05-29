@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasViewport, CanvasNodeType, PortDefinition } from '@neko/shared';
 import {
   getDefaultPorts,
@@ -427,6 +428,11 @@ export function BaseNode({
   return (
     <div
       data-node-id={node.id}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'node',
+        ownerId: node.id,
+        priority: isSelected ? 10 : 0,
+      })}
       className={clsx(
         'absolute select-none',
         (isResizing || isRotating) && 'pointer-events-auto',

@@ -36,6 +36,7 @@ interface CanvasConnectionInfo {
 }
 
 export interface CanvasOutlineData {
+  documentUri: string;
   name: string;
   nodes: CanvasNodeInfo[];
   connections: CanvasConnectionInfo[];
@@ -69,10 +70,10 @@ const CATEGORY_META: Record<OutlineCategory, { label: string; icon: string }> = 
 // =============================================================================
 
 type OutlineElement =
-  | { kind: 'category'; category: OutlineCategory; count: number }
-  | { kind: 'node'; node: CanvasNodeInfo }
-  | { kind: 'scene-child'; node: CanvasNodeInfo; parentSceneId: string }
-  | { kind: 'connection'; connection: CanvasConnectionInfo };
+  | { kind: 'category'; category: OutlineCategory; count: number; documentUri: string }
+  | { kind: 'node'; node: CanvasNodeInfo; documentUri: string }
+  | { kind: 'scene-child'; node: CanvasNodeInfo; parentSceneId: string; documentUri: string }
+  | { kind: 'connection'; connection: CanvasConnectionInfo; documentUri: string };
 
 // =============================================================================
 // Icons
@@ -154,7 +155,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
         item.command = {
           command: 'neko.canvas.selectNodeFromOutline',
           title: 'Select Node',
-          arguments: element.kind === 'scene-child' ? [node.id, element.parentSceneId] : [node.id],
+          arguments: [node.id, element.documentUri],
         };
         return item;
       }
@@ -170,7 +171,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
         item.command = {
           command: 'neko.canvas.selectConnectionFromOutline',
           title: 'Select Connection',
-          arguments: [connection.id],
+          arguments: [connection.id, element.documentUri],
         };
         return item;
       }
@@ -182,6 +183,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
 
     // Root: show categories (only those with items)
     if (!element) {
+      const { documentUri } = this.data;
       const nodes = this.data.nodes;
       const scenes = nodes.filter((n) => n.type === 'scene');
       const standaloneShots = nodes.filter(
@@ -197,54 +199,78 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
 
       const cats: OutlineElement[] = [];
       if (scenes.length > 0)
-        cats.push({ kind: 'category', category: 'scenes', count: scenes.length });
+        cats.push({ kind: 'category', category: 'scenes', count: scenes.length, documentUri });
       if (standaloneShots.length > 0)
-        cats.push({ kind: 'category', category: 'shots', count: standaloneShots.length });
+        cats.push({
+          kind: 'category',
+          category: 'shots',
+          count: standaloneShots.length,
+          documentUri,
+        });
       if (galleries.length > 0)
-        cats.push({ kind: 'category', category: 'galleries', count: galleries.length });
-      if (media.length > 0) cats.push({ kind: 'category', category: 'media', count: media.length });
+        cats.push({
+          kind: 'category',
+          category: 'galleries',
+          count: galleries.length,
+          documentUri,
+        });
+      if (media.length > 0)
+        cats.push({ kind: 'category', category: 'media', count: media.length, documentUri });
       if (annotations.length > 0)
-        cats.push({ kind: 'category', category: 'annotations', count: annotations.length });
-      if (other.length > 0) cats.push({ kind: 'category', category: 'other', count: other.length });
+        cats.push({
+          kind: 'category',
+          category: 'annotations',
+          count: annotations.length,
+          documentUri,
+        });
+      if (other.length > 0)
+        cats.push({ kind: 'category', category: 'other', count: other.length, documentUri });
       if (conns.length > 0)
-        cats.push({ kind: 'category', category: 'connections', count: conns.length });
+        cats.push({
+          kind: 'category',
+          category: 'connections',
+          count: conns.length,
+          documentUri,
+        });
       return cats;
     }
 
     // Category → children
     if (element.kind === 'category') {
+      const { documentUri } = element;
       const nodes = this.data.nodes;
       switch (element.category) {
         case 'scenes':
           return nodes
             .filter((n) => n.type === 'scene')
-            .map((node) => ({ kind: 'node' as const, node }));
+            .map((node) => ({ kind: 'node' as const, node, documentUri }));
         case 'shots':
           return nodes
             .filter((n) => n.type === 'shot' && !this.containedSceneChildIds.has(n.id))
-            .map((node) => ({ kind: 'node' as const, node }));
+            .map((node) => ({ kind: 'node' as const, node, documentUri }));
         case 'galleries':
           return nodes
             .filter((n) => n.type === 'gallery')
-            .map((node) => ({ kind: 'node' as const, node }));
+            .map((node) => ({ kind: 'node' as const, node, documentUri }));
         case 'media':
           return nodes
             .filter((n) => n.type === 'media')
-            .map((node) => ({ kind: 'node' as const, node }));
+            .map((node) => ({ kind: 'node' as const, node, documentUri }));
         case 'annotations':
           return nodes
             .filter((n) => n.type === 'annotation' || n.type === 'text')
-            .map((node) => ({ kind: 'node' as const, node }));
+            .map((node) => ({ kind: 'node' as const, node, documentUri }));
         case 'other':
           return nodes
             .filter(
               (n) => !['scene', 'shot', 'gallery', 'media', 'annotation', 'text'].includes(n.type),
             )
-            .map((node) => ({ kind: 'node' as const, node }));
+            .map((node) => ({ kind: 'node' as const, node, documentUri }));
         case 'connections':
           return this.data.connections.map((connection) => ({
             kind: 'connection' as const,
             connection,
+            documentUri,
           }));
       }
     }
@@ -262,6 +288,7 @@ export class CanvasOutlineProvider extends BaseOutlineProvider<OutlineElement, C
           kind: 'scene-child' as const,
           node,
           parentSceneId: element.node.id,
+          documentUri: element.documentUri,
         }));
     }
 

@@ -1,8 +1,9 @@
 import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
-  isComposingKeyboardEvent,
-  isEditableTarget,
+  getKeyboardBoundaryMetadata,
   useFocusedWebviewRoot,
+  useReportWebviewKeyboardEditable,
+  useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import type {
@@ -31,6 +32,10 @@ import { useNodeExpand } from './hooks/useNodeExpand';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
 import { useNodeHelpers } from './hooks/useNodeHelpers';
 import { useClipboard } from './hooks/useClipboard';
+import {
+  useCanvasKeyboardController,
+  type CanvasKeyboardState,
+} from './hooks/useCanvasKeyboardController';
 import { useKeyboardActions } from './hooks/useKeyboardActions';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useContextMenu } from './hooks/useContextMenu';
@@ -95,7 +100,8 @@ export function CanvasApp() {
 
   // Interaction tool: select/marquee by default, hand tool pans on drag.
   const [interactionTool, setInteractionTool] = useState<'select' | 'pan'>('select');
-  const [isRightNodeTreeVisible, setIsRightNodeTreeVisible] = useState(true);
+  const [isSpacePanActive, setIsSpacePanActive] = useState(false);
+  const [isRightNodeTreeVisible, setIsRightNodeTreeVisible] = useState(false);
   const [isHudVisible, setIsHudVisible] = useState(true);
   // Minimap width tracks ZoomControls width for alignment
   const zoomControlsRef = useRef<HTMLDivElement>(null);
@@ -108,8 +114,12 @@ export function CanvasApp() {
   >([]);
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } =
-    useFocusedWebviewRoot(rootRef);
+  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
+    rootRef,
+    vscode ? false : true,
+  );
+  useReportWebviewKeyboardFocus(rootRef, vscode);
+  useReportWebviewKeyboardEditable(vscode);
 
   const {
     setCanvasData,
@@ -163,6 +173,10 @@ export function CanvasApp() {
   );
   const activeSubsystemKey = activeSubsystemIds.join('|');
   const isPanMode = interactionTool === 'pan';
+  const togglePanMode = useCallback(
+    () => setInteractionTool((tool) => (tool === 'pan' ? 'select' : 'pan')),
+    [],
+  );
   const nodeTypeSummary = useMemo(
     () => WEBVIEW_SUBSYSTEM_REGISTRY.getNodeTypeSummary({ nodes }),
     [nodes],
@@ -248,6 +262,7 @@ export function CanvasApp() {
   // =========================================================================
 
   const buildPromptResolverRef = useRef<((prompt: string) => void) | null>(null);
+  const isComposingRef = useRef(false);
   const projectionRequestIdRef = useRef(0);
   const projectionResolversRef = useRef(
     new Map<
@@ -594,6 +609,7 @@ export function CanvasApp() {
     },
     onKeyboardFocusChange: setKeyboardFocused,
     isKeyboardFocusedRef,
+    isComposingRef,
     getNodes: (type) => {
       const allNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
       return type ? allNodes.filter((n) => n.type === type) : allNodes;
@@ -869,6 +885,23 @@ export function CanvasApp() {
     onEditWithControlNet: handleEditWithControlNet,
   });
 
+  const closeTransientKeyboardSurface = useCallback(() => {
+    if (generationPanelState.visible) {
+      closeGenerationPanel();
+      return true;
+    }
+    if (contentOverlayState.visible) {
+      closeContentOverlay();
+      return true;
+    }
+    return false;
+  }, [
+    closeContentOverlay,
+    closeGenerationPanel,
+    contentOverlayState.visible,
+    generationPanelState.visible,
+  ]);
+
   // =========================================================================
   // Keyboard actions
   // =========================================================================
@@ -895,27 +928,42 @@ export function CanvasApp() {
     handlePasteInPlace,
     handleDuplicate,
     onGenerateSelected: handleGenerateSelected,
+    closeTransientSurface: closeTransientKeyboardSurface,
     reportAction,
     isKeyboardFocusedRef,
+    isComposingRef,
+  });
+
+  const keyboardState = useMemo<CanvasKeyboardState>(
+    () => ({
+      canDeleteSelection: selectedNodeIds.length > 0 || selectedConnectionIds.length > 0,
+      canGenerateSelection: selectedNodeIds.length > 0,
+      hasNodes: nodes.length > 0,
+      isKeyboardFocused,
+    }),
+    [isKeyboardFocused, nodes.length, selectedConnectionIds.length, selectedNodeIds.length],
+  );
+
+  useCanvasKeyboardController({
+    state: keyboardState,
+    onDeleteSelected: () => handleKeyboardAction('deleteSelected'),
+    onEscape: () => handleKeyboardAction('escape'),
+    onSelectAll: () => handleKeyboardAction('selectAll'),
+    onUndo: () => handleKeyboardAction('undo'),
+    onRedo: () => handleKeyboardAction('redo'),
+    onCopy: () => handleKeyboardAction('copy'),
+    onCut: () => handleKeyboardAction('cut'),
+    onPaste: () => handleKeyboardAction('paste'),
+    onPasteInPlace: () => handleKeyboardAction('pasteInPlace'),
+    onDuplicate: () => handleKeyboardAction('duplicate'),
+    onGenerateSelected: () => handleKeyboardAction('generateSelected'),
+    onSpacePanStart: () => setIsSpacePanActive(true),
+    onSpacePanEnd: () => setIsSpacePanActive(false),
+    onTogglePanMode: togglePanMode,
   });
 
   // Keep ref in sync with latest handler (for VSCode message dispatch)
   keyboardActionRef.current = handleKeyboardAction;
-
-  // H key toggles hand tool (drag-to-pan)
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
-        return;
-      }
-
-      if (e.code === 'KeyH' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        setInteractionTool((prev) => (prev === 'pan' ? 'select' : 'pan'));
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
 
   // =========================================================================
   // Debounced save
@@ -1198,9 +1246,7 @@ export function CanvasApp() {
             isHudVisible={isHudVisible}
             onToggleHud={() => setIsHudVisible((visible) => !visible)}
             isPanMode={isPanMode}
-            onTogglePanMode={() =>
-              setInteractionTool((tool) => (tool === 'pan' ? 'select' : 'pan'))
-            }
+            onTogglePanMode={togglePanMode}
           />
         }
         main={
@@ -1208,6 +1254,12 @@ export function CanvasApp() {
             ref={canvasContainerRef}
             className="canvas-main-surface"
             style={{ backgroundColor: 'var(--canvas-bg)' }}
+            {...getKeyboardBoundaryMetadata({
+              scope: 'editor',
+              ownerId: 'canvas-editor',
+              priority: 0,
+            })}
+            tabIndex={-1}
             onContextMenu={handleContextMenu}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
@@ -1245,6 +1297,7 @@ export function CanvasApp() {
               onConnectionUpdate={updateConnection}
               expandedNodeId={expandedNodeId}
               isPanMode={isPanMode}
+              isSpacePanActive={isSpacePanActive}
             />
 
             {nodes.length === 0 && (

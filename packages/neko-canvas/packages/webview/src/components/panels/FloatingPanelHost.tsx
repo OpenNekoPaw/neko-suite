@@ -1,5 +1,6 @@
 import type React from 'react';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { CloseIcon } from '@neko/ui/icons';
 import type { FloatingPanelDefinition } from '../../subsystems';
 import { t } from '../../i18n';
@@ -138,6 +139,21 @@ function FloatingPanelFrame({
   return (
     <div
       className="pointer-events-auto absolute w-[320px] overflow-hidden rounded-lg"
+      {...getKeyboardBoundaryMetadata({
+        scope: 'property-panel',
+        ownerId: `floating-panel:${panel.id}`,
+        priority: 20,
+        ownedKeys: [
+          'Enter',
+          'Escape',
+          'Space',
+          'Tab',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+        ],
+      })}
       style={{
         left: position.x,
         top: position.y,

@@ -138,47 +138,6 @@
         "category": "NekoCanvas"
       }
     ],
-    "keybindings": [
-      {
-        "command": "neko.canvas.deleteSelected",
-        "key": "delete",
-        "when": "activeCustomEditorId == 'neko.canvasEditor'"
-      },
-      {
-        "command": "neko.canvas.deleteSelected",
-        "key": "backspace",
-        "when": "activeCustomEditorId == 'neko.canvasEditor'"
-      },
-      {
-        "command": "neko.canvas.escape",
-        "key": "escape",
-        "when": "activeCustomEditorId == 'neko.canvasEditor'"
-      },
-      {
-        "command": "neko.canvas.selectAll",
-        "key": "ctrl+a",
-        "mac": "cmd+a",
-        "when": "activeCustomEditorId == 'neko.canvasEditor'"
-      },
-      {
-        "command": "neko.canvas.undo",
-        "key": "ctrl+z",
-        "mac": "cmd+z",
-        "when": "activeCustomEditorId == 'neko.canvasEditor'"
-      },
-      {
-        "command": "neko.canvas.redo",
-        "key": "ctrl+shift+z",
-        "mac": "cmd+shift+z",
-        "when": "activeCustomEditorId == 'neko.canvasEditor'"
-      },
-      {
-        "command": "neko.canvas.generateSelected",
-        "key": "ctrl+g",
-        "mac": "cmd+g",
-        "when": "activeCustomEditorId == 'neko.canvasEditor'"
-      }
-    ],
     "menus": {
       "explorer/context": [],
       "neko.explorer.newProject": [

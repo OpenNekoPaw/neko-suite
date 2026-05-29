@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 
 // =============================================================================
 // Types
@@ -146,6 +147,22 @@ export function EditableText({
       onKeyPress: handleKeyPress,
       onMouseDown: handleMouseDown,
       onInput: handleInput,
+      ...getKeyboardBoundaryMetadata({
+        scope: 'text-input',
+        ownerId: 'editable-text',
+        ownedKeys: [
+          'Backspace',
+          'Delete',
+          'Enter',
+          'Escape',
+          'Space',
+          'Tab',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+        ],
+      }),
       className: `w-full bg-transparent outline-none border border-[var(--node-selected)] rounded px-1 ${className}`,
       style: { ...style, resize: 'none' as const },
       autoFocus: true,

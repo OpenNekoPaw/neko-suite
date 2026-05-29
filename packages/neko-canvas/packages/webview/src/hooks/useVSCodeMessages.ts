@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { isKeyboardFocusMessage } from '@neko/ui/keyboard';
+import { hasEditableActiveElement, isKeyboardFocusMessage } from '@neko/ui/keyboard';
 import type {
   CanvasData,
   CanvasDroppedAsset,
@@ -34,6 +34,7 @@ import {
 } from '../utils/importedGeneratedAsset';
 import { migrateGalleryV1ToContainer } from '../utils/galleryMigration';
 import { normalizeScriptScenes } from '../utils/scriptScenes';
+import { isEditorLevelKeyboardAction } from './keyboardActionPolicy';
 
 // =============================================================================
 // Types
@@ -95,6 +96,7 @@ export interface UseVSCodeMessagesOptions {
   onUpdateNodeImage?: (nodeId: string, imageData: string, childNodeId?: string) => void;
   onKeyboardFocusChange?: (focused: boolean) => void;
   isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
+  isComposingRef?: React.MutableRefObject<boolean>;
 }
 
 function withOperationSource<T>(source: OperationSource, run: () => T): T {
@@ -186,6 +188,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     onUpdateNodeImage,
     onKeyboardFocusChange,
     isKeyboardFocusedRef,
+    isComposingRef,
   } = options;
 
   const [isReady, setIsReady] = useState(false);
@@ -238,9 +241,16 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onKeyboardFocusChangeRef.current = onKeyboardFocusChange;
   const isKeyboardFocusedRefRef = useRef(isKeyboardFocusedRef);
   isKeyboardFocusedRefRef.current = isKeyboardFocusedRef;
+  const isComposingRefRef = useRef(isComposingRef);
+  isComposingRefRef.current = isComposingRef;
 
   useEffect(() => {
     if (vscode) {
+      const setComposing = (composing: boolean): void => {
+        if (isComposingRefRef.current) {
+          isComposingRefRef.current.current = composing;
+        }
+      };
       const handleMessage = (event: MessageEvent) => {
         const message = event.data;
         if (isKeyboardFocusMessage(message)) {
@@ -266,6 +276,12 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           }
           case 'keyboardAction':
             if (isKeyboardFocusedRefRef.current?.current === false) {
+              break;
+            }
+            if (
+              isEditorLevelKeyboardAction(message.action) &&
+              (isComposingRefRef.current?.current || hasEditableActiveElement())
+            ) {
               break;
             }
             keyboardActionRef.current(message.action as string);
@@ -588,11 +604,17 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
         }
       };
 
+      const handleCompositionStart = (): void => setComposing(true);
+      const handleCompositionEnd = (): void => setComposing(false);
+      window.addEventListener('compositionstart', handleCompositionStart);
+      window.addEventListener('compositionend', handleCompositionEnd);
       window.addEventListener('message', handleMessage);
       vscode.postMessage({ type: 'ready' });
 
       return () => {
         window.removeEventListener('message', handleMessage);
+        window.removeEventListener('compositionstart', handleCompositionStart);
+        window.removeEventListener('compositionend', handleCompositionEnd);
       };
     } else {
       setCanvasData(defaultCanvasData);

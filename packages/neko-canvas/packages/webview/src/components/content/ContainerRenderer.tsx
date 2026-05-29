@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasBlock, CanvasNode, ChildNodeSlot } from '@neko/shared';
 import { getContainerChildIds, getNodeParentId } from '@neko/shared';
 import { createBuiltInBlockRendererRegistry, renderCanvasBlock } from './blockRendererRegistry';
@@ -32,6 +33,18 @@ const INLINE_FORM_CONTROL_CLASS =
   'min-w-0 rounded border border-[var(--node-border)] bg-white px-2 py-1 text-gray-900 outline-none focus:border-[var(--node-selected)]';
 const INLINE_TEXTAREA_CONTROL_CLASS =
   'min-h-[76px] resize-none rounded border border-[var(--node-border)] bg-white px-2 py-1 text-gray-900 outline-none focus:border-[var(--node-selected)]';
+const INLINE_TEXT_OWNED_KEYS = [
+  'Backspace',
+  'Delete',
+  'Enter',
+  'Escape',
+  'Space',
+  'Tab',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+] as const;
 
 export function ContainerRenderer({ section, context }: ContainerRendererProps) {
   const blockRendererRegistry = useMemo(() => createBuiltInBlockRendererRegistry(), []);
@@ -287,6 +300,11 @@ function GroupChildSummaryCard({
       role="button"
       tabIndex={0}
       className={getGroupSummaryCardClassName(variant, isSelected)}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'container',
+        ownerId: `container-child:${childNode.id}`,
+        ownedKeys: ['Enter', 'Space'],
+      })}
       style={style}
       data-group-child-card-id={childNode.id}
       data-group-child-card-layout="summary"
@@ -433,6 +451,11 @@ function GalleryChildCard({
       role="button"
       tabIndex={0}
       className={getGalleryChildCardClassName(isSelected)}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'container',
+        ownerId: `gallery-child:${childNode.id}`,
+        ownedKeys: ['Enter', 'Space'],
+      })}
       style={style}
       data-gallery-child-card-id={childNode.id}
       data-gallery-child-card-layout="visual-grid"
@@ -619,6 +642,11 @@ function SceneShotRailCard({
       role="button"
       tabIndex={0}
       className={getSceneShotRailCardClassName(isSelected)}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'container',
+        ownerId: `scene-shot:${childNode.id}`,
+        ownedKeys: ['Enter', 'Space'],
+      })}
       style={style}
       data-scene-shot-card-id={childNode.id}
       data-scene-shot-card-layout="rail"
@@ -877,6 +905,11 @@ function InlineChildFields({
               <textarea
                 className={INLINE_TEXTAREA_CONTROL_CLASS}
                 value={value}
+                {...getKeyboardBoundaryMetadata({
+                  scope: 'inline-editor',
+                  ownerId: `container-field:${childNode.id}:${field.key}`,
+                  ownedKeys: INLINE_TEXT_OWNED_KEYS,
+                })}
                 onMouseDown={(event) => event.stopPropagation()}
                 onChange={(event) => handleChange(event.target.value)}
               />
@@ -885,6 +918,11 @@ function InlineChildFields({
                 type={field.kind === 'number' ? 'number' : 'text'}
                 className={INLINE_FORM_CONTROL_CLASS}
                 value={value}
+                {...getKeyboardBoundaryMetadata({
+                  scope: 'inline-editor',
+                  ownerId: `container-field:${childNode.id}:${field.key}`,
+                  ownedKeys: INLINE_TEXT_OWNED_KEYS,
+                })}
                 onMouseDown={(event) => event.stopPropagation()}
                 onChange={(event) => handleChange(event.target.value)}
               />

@@ -1,15 +1,17 @@
 /**
  * useKeyboardActions - Keyboard shortcut dispatch handler
  *
- * Maps keyboard action strings (from VSCode keybindings or dev-mode
- * key events) to the corresponding canvas operations.
+ * Maps explicit keyboard action strings from Extension Host command routing to
+ * the corresponding canvas operations. Local DOM keyboard shortcuts are owned
+ * by useCanvasKeyboardController.
  */
 
-import { useCallback, useEffect } from 'react';
-import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
+import { useCallback } from 'react';
+import { hasEditableActiveElement } from '@neko/ui/keyboard';
 import type { CanvasNode } from '@neko/shared';
 import { useCanvasStore } from '../stores/canvasStore';
 import type { VSCodeAPI } from './useVSCodeMessages';
+import { isEditorLevelKeyboardAction } from './keyboardActionPolicy';
 
 // =============================================================================
 // Types
@@ -37,8 +39,10 @@ export interface UseKeyboardActionsOptions {
   handlePasteInPlace: () => void;
   handleDuplicate: () => void;
   onGenerateSelected?: () => void;
+  closeTransientSurface?: () => boolean;
   reportAction: (action: string, label: string, detail?: string) => void;
   isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
+  isComposingRef?: React.MutableRefObject<boolean>;
 }
 
 export interface UseKeyboardActionsReturn {
@@ -51,7 +55,6 @@ export interface UseKeyboardActionsReturn {
 
 export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeyboardActionsReturn {
   const {
-    vscode,
     selectedNodeIds,
     selectedConnectionIds,
     nodes,
@@ -72,13 +75,21 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
     handlePasteInPlace,
     handleDuplicate,
     onGenerateSelected,
+    closeTransientSurface,
     reportAction,
     isKeyboardFocusedRef,
+    isComposingRef,
   } = options;
 
   const handleKeyboardAction = useCallback(
     (action: string) => {
       if (isKeyboardFocusedRef?.current === false) {
+        return;
+      }
+      if (
+        isEditorLevelKeyboardAction(action) &&
+        (isComposingRef?.current || hasEditableActiveElement())
+      ) {
         return;
       }
 
@@ -122,6 +133,8 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
         case 'escape':
           if (contextMenu) {
             setContextMenu(null);
+          } else if (closeTransientSurface?.()) {
+            return;
           } else if (isConnecting) {
             cancelConnection();
           } else {
@@ -171,6 +184,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
     },
     [
       isKeyboardFocusedRef,
+      isComposingRef,
       selectedNodeIds,
       selectedConnectionIds,
       deleteSelected,
@@ -187,6 +201,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
       handlePasteInPlace,
       handleDuplicate,
       onGenerateSelected,
+      closeTransientSurface,
       selectNode,
       selectConnection,
       resetViewport,
@@ -194,59 +209,6 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
       setContextMenu,
     ],
   );
-
-  // Dev-mode keyboard shortcuts fallback (when not in VSCode webview)
-  useEffect(() => {
-    if (vscode) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
-        return;
-      }
-
-      if (e.key === 'Escape') {
-        handleKeyboardAction('escape');
-        return;
-      }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        handleKeyboardAction('deleteSelected');
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-        e.preventDefault();
-        handleKeyboardAction('selectAll');
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          handleKeyboardAction('redo');
-        } else {
-          handleKeyboardAction('undo');
-        }
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
-        e.preventDefault();
-        handleKeyboardAction('copy');
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'x') {
-        e.preventDefault();
-        handleKeyboardAction('cut');
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
-        e.preventDefault();
-        handleKeyboardAction(e.shiftKey ? 'pasteInPlace' : 'paste');
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
-        e.preventDefault();
-        handleKeyboardAction('duplicate');
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
-        e.preventDefault();
-        handleKeyboardAction('generateSelected');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [vscode, handleKeyboardAction]);
 
   return { handleKeyboardAction };
 }

@@ -11,6 +11,8 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import type React from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import {
   ToolbarButton,
   ToolbarSeparator,
@@ -89,14 +91,9 @@ export function CanvasToolbar({
         setExpandedPanel(null);
       }
     };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setExpandedPanel(null);
-    };
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
     };
   }, [expandedPanel]);
 
@@ -120,6 +117,18 @@ export function CanvasToolbar({
       className="canvas-left-toolbar relative z-20"
       width={48}
       aria-label={t('toolbar.leftRail')}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && expandedPanel) {
+          event.stopPropagation();
+          setExpandedPanel(null);
+        }
+      }}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'popover',
+        ownerId: 'canvas-toolbar',
+        priority: 20,
+        ownedKeys: ['Enter', 'Escape', 'Space', 'Tab', 'ArrowUp', 'ArrowDown'],
+      })}
     >
       {/* Hand Tool (drag-to-pan) */}
       <ToolbarButton
@@ -223,6 +232,12 @@ export function CanvasToolbar({
       {expandedPanel === 'add' && (
         <div
           className="absolute left-full top-0 ml-1.5"
+          {...getKeyboardBoundaryMetadata({
+            scope: 'popover',
+            ownerId: 'canvas-toolbar-add-panel',
+            priority: 40,
+            ownedKeys: ['Enter', 'Escape', 'Space', 'Tab', 'ArrowUp', 'ArrowDown'],
+          })}
           style={{
             minWidth: 180,
             padding: '5px',

@@ -1,0 +1,141 @@
+// @vitest-environment jsdom
+import React from 'react';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CanvasData } from '@neko/shared';
+import {
+  useVSCodeMessages,
+  type UseVSCodeMessagesOptions,
+  type VSCodeAPI,
+} from './useVSCodeMessages';
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+const DEFAULT_CANVAS_DATA: CanvasData = {
+  version: '1.0',
+  name: 'Test Canvas',
+  nodes: [],
+  connections: [],
+};
+
+describe('useVSCodeMessages keyboard action guards', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  let action: ReturnType<typeof vi.fn<(value: string) => void>>;
+  let isComposingRef: React.MutableRefObject<boolean>;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    action = vi.fn();
+    isComposingRef = { current: false };
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    document.body.innerHTML = '';
+  });
+
+  it('keeps editor-level keyboard actions inside the active text input', () => {
+    act(() => {
+      root.render(<VSCodeMessageHarness action={action} isComposingRef={isComposingRef} />);
+    });
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+
+    act(() => {
+      postHostMessage({ type: 'keyboardAction', action: 'deleteSelected' });
+      postHostMessage({ type: 'keyboardAction', action: 'selectNode:node-2' });
+    });
+
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(action).toHaveBeenCalledWith('selectNode:node-2');
+  });
+
+  it('keeps editor-level keyboard actions out while IME composition is active', () => {
+    act(() => {
+      root.render(<VSCodeMessageHarness action={action} isComposingRef={isComposingRef} />);
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event('compositionstart'));
+      postHostMessage({ type: 'keyboardAction', action: 'deleteSelected' });
+      postHostMessage({ type: 'keyboardAction', action: 'selectNode:node-2' });
+    });
+
+    expect(isComposingRef.current).toBe(true);
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(action).toHaveBeenCalledWith('selectNode:node-2');
+  });
+
+  it('ignores host keyboard actions after the webview loses keyboard ownership', () => {
+    const isKeyboardFocusedRef: React.MutableRefObject<boolean> = { current: true };
+
+    act(() => {
+      root.render(
+        <VSCodeMessageHarness
+          action={action}
+          isComposingRef={isComposingRef}
+          isKeyboardFocusedRef={isKeyboardFocusedRef}
+        />,
+      );
+    });
+
+    act(() => {
+      postHostMessage({ type: 'keyboardFocus', focused: false });
+      postHostMessage({ type: 'keyboardAction', action: 'deleteSelected' });
+    });
+
+    expect(isKeyboardFocusedRef.current).toBe(false);
+    expect(action).not.toHaveBeenCalled();
+  });
+});
+
+function VSCodeMessageHarness({
+  action,
+  isComposingRef,
+  isKeyboardFocusedRef,
+}: {
+  readonly action: (value: string) => void;
+  readonly isComposingRef: React.MutableRefObject<boolean>;
+  readonly isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
+}): React.ReactElement | null {
+  const { keyboardActionRef } = useVSCodeMessages(
+    createOptions(isComposingRef, isKeyboardFocusedRef),
+  );
+  keyboardActionRef.current = action;
+  return null;
+}
+
+function createOptions(
+  isComposingRef: React.MutableRefObject<boolean>,
+  isKeyboardFocusedRef?: React.MutableRefObject<boolean>,
+): UseVSCodeMessagesOptions {
+  return {
+    vscode: createVSCodeApi(),
+    defaultCanvasData: DEFAULT_CANVAS_DATA,
+    setCanvasData: vi.fn(),
+    onAddMediaFromExtension: vi.fn(),
+    onDropAssets: vi.fn(),
+    isComposingRef,
+    isKeyboardFocusedRef,
+  };
+}
+
+function createVSCodeApi(): NonNullable<VSCodeAPI> {
+  return {
+    postMessage: vi.fn(),
+    getState: vi.fn(),
+    setState: vi.fn(),
+  };
+}
+
+function postHostMessage(data: Record<string, unknown>): void {
+  window.dispatchEvent(new MessageEvent('message', { data }));
+}

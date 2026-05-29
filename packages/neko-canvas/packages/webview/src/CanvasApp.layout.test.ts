@@ -41,6 +41,9 @@ describe('Canvas creative workbench layout boundary', () => {
   });
 
   it('keeps the right node library in the right-panel responsibility', () => {
+    expect(appSource).toMatch(
+      /const \[isRightNodeTreeVisible, setIsRightNodeTreeVisible\] = useState\(false\)/,
+    );
     expect(appSource).toMatch(/rightPanel=\{\s*isRightNodeTreeVisible \? \(/);
     expect(appSource).toMatch(/<NodeLibraryPanel/);
     expect(nodeLibrarySource).toMatch(/id="canvas-right-node-tree-panel"/);

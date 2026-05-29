@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasNodeType, CanvasSubsystemManifest } from '@neko/shared';
 import { TreeView } from '@neko/ui/creative';
 import { toCodiconClassName } from '@neko/ui/icons';
@@ -80,6 +81,21 @@ export function NodeLibraryPanel({
       aria-label={t('library.title')}
       className="flex h-full w-[220px] flex-shrink-0 flex-col overflow-hidden"
       data-canvas-right-node-tree="true"
+      {...getKeyboardBoundaryMetadata({
+        scope: 'property-panel',
+        ownerId: 'canvas-node-library',
+        priority: 10,
+        ownedKeys: [
+          'Enter',
+          'Escape',
+          'Space',
+          'Tab',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+        ],
+      })}
       style={{
         backgroundColor: 'var(--toolbar-bg)',
         borderLeft: '1px solid var(--toolbar-border)',

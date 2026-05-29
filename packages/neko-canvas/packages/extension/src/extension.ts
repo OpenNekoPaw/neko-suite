@@ -43,6 +43,10 @@ let canvasStatusBar: CanvasStatusBar;
 /** Cached assets API reference (resolved once, reused across calls). */
 let assetsAPI: NekoAssetsAPI | undefined;
 
+function parseCanvasDocumentUri(documentUri: string | undefined): vscode.Uri | undefined {
+  return documentUri ? vscode.Uri.parse(documentUri) : undefined;
+}
+
 async function getAssetsAPI(): Promise<NekoAssetsAPI | undefined> {
   if (assetsAPI) return assetsAPI;
   const ext = vscode.extensions.getExtension<NekoAssetsAPI>(NEKO_EXTENSION_IDS.NEKO_ASSETS);
@@ -557,15 +561,24 @@ function registerCommands(
 
   // Outline commands - select node/connection from tree view
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.canvas.selectNodeFromOutline', (nodeId: string) => {
-      canvasEditorProvider.postKeyboardAction('selectNode:' + nodeId);
-    }),
+    vscode.commands.registerCommand(
+      'neko.canvas.selectNodeFromOutline',
+      (nodeId: string, documentUri?: string) => {
+        canvasEditorProvider.postKeyboardAction(
+          'selectNode:' + nodeId,
+          parseCanvasDocumentUri(documentUri),
+        );
+      },
+    ),
   );
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.canvas.selectConnectionFromOutline',
-      (connectionId: string) => {
-        canvasEditorProvider.postKeyboardAction('selectConnection:' + connectionId);
+      (connectionId: string, documentUri?: string) => {
+        canvasEditorProvider.postKeyboardAction(
+          'selectConnection:' + connectionId,
+          parseCanvasDocumentUri(documentUri),
+        );
       },
     ),
   );
@@ -574,10 +587,16 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.canvas.detachShotFromScene',
-      (element?: { kind?: string; node?: { id: string }; parentSceneId?: string }) => {
+      (element?: {
+        kind?: string;
+        node?: { id: string };
+        parentSceneId?: string;
+        documentUri?: string;
+      }) => {
         if (element?.kind === 'shot-child' && element.node?.id && element.parentSceneId) {
           canvasEditorProvider.postKeyboardAction(
             `detachShot:${element.node.id}:${element.parentSceneId}`,
+            parseCanvasDocumentUri(element.documentUri),
           );
         }
       },
@@ -588,9 +607,12 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.canvas.deleteNodeFromOutline',
-      (element?: { kind?: string; node?: { id: string } }) => {
+      (element?: { kind?: string; node?: { id: string }; documentUri?: string }) => {
         if (element?.node?.id) {
-          canvasEditorProvider.postKeyboardAction(`deleteNode:${element.node.id}`);
+          canvasEditorProvider.postKeyboardAction(
+            `deleteNode:${element.node.id}`,
+            parseCanvasDocumentUri(element.documentUri),
+          );
         }
       },
     ),

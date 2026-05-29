@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
+import type React from 'react';
 import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
@@ -36,6 +36,8 @@ export interface UseViewportTransformOptions {
   maxZoom?: number;
   /** When true, left-button drag pans the canvas (hand tool mode) */
   isPanMode?: boolean;
+  /** When true, left-button drag temporarily pans the canvas while Space is held. */
+  isSpacePanActive?: boolean;
 }
 
 export interface UseViewportTransformReturn {
@@ -69,6 +71,7 @@ export function useViewportTransform(
     minZoom = MIN_ZOOM,
     maxZoom = MAX_ZOOM,
     isPanMode = false,
+    isSpacePanActive = false,
   } = options;
 
   // State
@@ -78,41 +81,11 @@ export function useViewportTransform(
     startViewport: { pan: { x: 0, y: 0 }, zoom: 1 },
   });
 
-  // Track space key for pan mode
-  const isSpacePressed = useRef(false);
-
-  // Handle space key for pan mode
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
-        return;
-      }
-
-      if (e.code === 'Space' && !e.repeat) {
-        isSpacePressed.current = true;
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        isSpacePressed.current = false;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
   // Mouse down - start panning
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // Pan with: middle mouse button, space + left click, or hand tool mode
-      const shouldPan = e.button === 1 || (e.button === 0 && (isSpacePressed.current || isPanMode));
+      const shouldPan = e.button === 1 || (e.button === 0 && (isSpacePanActive || isPanMode));
 
       if (!shouldPan) return;
 
@@ -124,7 +97,7 @@ export function useViewportTransform(
         startViewport: { ...viewport },
       });
     },
-    [viewport, isPanMode],
+    [viewport, isPanMode, isSpacePanActive],
   );
 
   // Mouse move - update pan

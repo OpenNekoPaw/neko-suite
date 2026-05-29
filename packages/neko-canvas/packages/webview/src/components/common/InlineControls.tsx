@@ -8,9 +8,24 @@
  * and stop mousedown propagation to prevent BaseNode drag triggering.
  */
 
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
+
 // =============================================================================
 // Event helpers (VS Code webview keyboard isolation)
 // =============================================================================
+
+const INLINE_TEXT_OWNED_KEYS = [
+  'Backspace',
+  'Delete',
+  'Enter',
+  'Escape',
+  'Space',
+  'Tab',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+] as const;
 
 function stopVSCodeEvents(e: React.KeyboardEvent) {
   e.stopPropagation();
@@ -94,6 +109,11 @@ export function InlineSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'inline-editor',
+        ownerId: 'inline-select',
+        ownedKeys: INLINE_TEXT_OWNED_KEYS,
+      })}
       onKeyDown={stopVSCodeEvents}
       onKeyUp={stopVSCodeEvents}
       onMouseDown={stopDrag}
@@ -142,6 +162,11 @@ export function InlineInput({
       min={min}
       step={step}
       onChange={(e) => onChange(e.target.value)}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'inline-editor',
+        ownerId: 'inline-input',
+        ownedKeys: INLINE_TEXT_OWNED_KEYS,
+      })}
       onKeyDown={stopVSCodeEvents}
       onKeyUp={stopVSCodeEvents}
       onMouseDown={stopDrag}
@@ -177,6 +202,11 @@ export function InlineTextarea({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'inline-editor',
+        ownerId: 'inline-textarea',
+        ownedKeys: INLINE_TEXT_OWNED_KEYS,
+      })}
       onKeyDown={stopVSCodeEvents}
       onKeyUp={stopVSCodeEvents}
       onMouseDown={stopDrag}

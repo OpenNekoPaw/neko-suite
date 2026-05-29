@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasNode, ContainerSection, FieldBinding } from '@neko/shared';
 import { getDefaultCanvasNodePresetName, writeFieldBinding } from '@neko/shared';
 import { useCanvasStore } from '../../stores/canvasStore';
@@ -35,17 +36,6 @@ export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const node = useMemo(() => nodes.find((n) => n.id === nodeId), [nodes, nodeId]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
   if (!node) return null;
 
   const content = resolveOverlayContent(node);
@@ -60,6 +50,12 @@ export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
       />
       <div
         className="fixed inset-4 flex flex-col overflow-hidden rounded-xl"
+        {...getKeyboardBoundaryMetadata({
+          scope: 'modal',
+          ownerId: `content-overlay:${node.id}`,
+          priority: 40,
+          ownedKeys: ['Enter', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+        })}
         style={{
           zIndex: 9999,
           backgroundColor: 'var(--node-bg)',

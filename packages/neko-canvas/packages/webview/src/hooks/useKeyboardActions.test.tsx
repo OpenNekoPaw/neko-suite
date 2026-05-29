@@ -7,7 +7,7 @@ import { useKeyboardActions, type UseKeyboardActionsOptions } from './useKeyboar
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-describe('useKeyboardActions editable and IME guards', () => {
+describe('useKeyboardActions explicit action mapping', () => {
   let host: HTMLDivElement;
   let root: Root;
   let options: UseKeyboardActionsOptions;
@@ -26,9 +26,45 @@ describe('useKeyboardActions editable and IME guards', () => {
     host.remove();
   });
 
-  it('keeps Delete, Space, and primary+A inside node text inputs', () => {
+  it('dispatches explicit editor actions when Canvas owns keyboard focus', () => {
+    let handleKeyboardAction: ((action: string) => void) | undefined;
     act(() => {
-      root.render(<KeyboardHarness options={options} />);
+      root.render(
+        <KeyboardHarness
+          options={options}
+          onReady={(handler) => {
+            handleKeyboardAction = handler;
+          }}
+        />,
+      );
+    });
+
+    act(() => {
+      handleKeyboardAction?.('deleteSelected');
+    });
+
+    expect(options.deleteSelected).toHaveBeenCalledTimes(1);
+    expect(options.reportAction).toHaveBeenCalledWith('deleteNode', 'Deleted 1 node(s)');
+  });
+
+  it('guards VSCode keyboard actions while text editing but still allows targeted outline actions', () => {
+    const isComposingRef = { current: false };
+    options = {
+      ...options,
+      vscode: createVSCodeApi(),
+      isComposingRef,
+    };
+
+    let handleKeyboardAction: ((action: string) => void) | undefined;
+    act(() => {
+      root.render(
+        <KeyboardHarness
+          options={options}
+          onReady={(handler) => {
+            handleKeyboardAction = handler;
+          }}
+        />,
+      );
     });
 
     const input = document.createElement('input');
@@ -36,54 +72,55 @@ describe('useKeyboardActions editable and IME guards', () => {
     input.focus();
 
     act(() => {
-      input.dispatchEvent(createKeyEvent('Delete', 'Delete'));
-      input.dispatchEvent(createKeyEvent(' ', 'Space'));
-      input.dispatchEvent(createKeyEvent('a', 'KeyA', { ctrlKey: true }));
+      handleKeyboardAction?.('deleteSelected');
+      handleKeyboardAction?.('selectNode:node-2');
     });
 
     expect(options.deleteSelected).not.toHaveBeenCalled();
-    expect(options.clearSelection).not.toHaveBeenCalled();
-    expect(options.resetViewport).not.toHaveBeenCalled();
+    expect(options.selectNode).toHaveBeenCalledWith('node-2');
 
     input.remove();
   });
 
-  it('does not trigger editor-level actions during IME composition', () => {
+  it('guards VSCode keyboard actions while IME composition is active', () => {
+    const isComposingRef = { current: true };
+    options = {
+      ...options,
+      vscode: createVSCodeApi(),
+      isComposingRef,
+    };
+
+    let handleKeyboardAction: ((action: string) => void) | undefined;
     act(() => {
-      root.render(<KeyboardHarness options={options} />);
+      root.render(
+        <KeyboardHarness
+          options={options}
+          onReady={(handler) => {
+            handleKeyboardAction = handler;
+          }}
+        />,
+      );
     });
 
     act(() => {
-      window.dispatchEvent(createKeyEvent('Delete', 'Delete', { isComposing: true }));
-      window.dispatchEvent(createKeyEvent('Escape', 'Escape', { isComposing: true }));
-      window.dispatchEvent(createKeyEvent('a', 'KeyA', { ctrlKey: true, isComposing: true }));
+      handleKeyboardAction?.('deleteSelected');
+      handleKeyboardAction?.('selectNode:node-2');
     });
 
     expect(options.deleteSelected).not.toHaveBeenCalled();
-    expect(options.clearSelection).not.toHaveBeenCalled();
-  });
-
-  it('still dispatches editor actions when the editor owns the key event', () => {
-    act(() => {
-      root.render(<KeyboardHarness options={options} />);
-    });
-
-    act(() => {
-      window.dispatchEvent(createKeyEvent('Delete', 'Delete'));
-      window.dispatchEvent(createKeyEvent('a', 'KeyA', { ctrlKey: true }));
-    });
-
-    expect(options.deleteSelected).toHaveBeenCalledTimes(1);
-    expect(options.reportAction).toHaveBeenCalledWith('deleteNode', 'Deleted 1 node(s)');
+    expect(options.selectNode).toHaveBeenCalledWith('node-2');
   });
 });
 
 function KeyboardHarness({
+  onReady,
   options,
 }: {
+  readonly onReady?: (handleKeyboardAction: (action: string) => void) => void;
   readonly options: UseKeyboardActionsOptions;
 }): React.ReactElement | null {
-  useKeyboardActions(options);
+  const { handleKeyboardAction } = useKeyboardActions(options);
+  onReady?.(handleKeyboardAction);
   return null;
 }
 
@@ -113,12 +150,10 @@ function createOptions(): UseKeyboardActionsOptions {
   };
 }
 
-function createKeyEvent(key: string, code: string, options: KeyboardEventInit = {}): KeyboardEvent {
-  return new KeyboardEvent('keydown', {
-    bubbles: true,
-    cancelable: true,
-    code,
-    key,
-    ...options,
-  });
+function createVSCodeApi(): NonNullable<UseKeyboardActionsOptions['vscode']> {
+  return {
+    postMessage: vi.fn(),
+    getState: vi.fn(),
+    setState: vi.fn(),
+  };
 }

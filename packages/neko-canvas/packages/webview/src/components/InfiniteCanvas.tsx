@@ -4,6 +4,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasNode, CanvasConnection, CanvasViewport as ViewportType } from '@neko/shared';
 import { CanvasGrid } from './CanvasGrid';
 import { CanvasViewport } from './CanvasViewport';
@@ -68,6 +69,8 @@ export interface InfiniteCanvasProps {
   enableCulling?: boolean;
   /** Hand tool: left-drag pans canvas instead of marquee-selecting */
   isPanMode?: boolean;
+  /** Spacebar-hold pan mode, owned by the Canvas root keyboard dispatcher. */
+  isSpacePanActive?: boolean;
 
   // ── ScriptNode callbacks ───────────────────────────────────────────────────
   /** Called to load scene TOC from neko-story */
@@ -119,6 +122,7 @@ export function InfiniteCanvas({
   onMarqueeSelect,
   enableCulling = true,
   isPanMode = false,
+  isSpacePanActive = false,
   onScriptLoadScenes,
   onScriptOpen,
   onScriptNavigateToScene,
@@ -136,7 +140,9 @@ export function InfiniteCanvas({
     useState<NodeTypeDescriptorRegistry>(() =>
       webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors(),
     );
-  const activeSubsystemKey = webviewSubsystemRegistryRef.current.getActiveSubsystems({ nodes }).join('|');
+  const activeSubsystemKey = webviewSubsystemRegistryRef.current
+    .getActiveSubsystems({ nodes })
+    .join('|');
 
   // Viewport transform hook
   const { state: viewportState, handlers: viewportHandlers } = useViewportTransform({
@@ -144,6 +150,7 @@ export function InfiniteCanvas({
     onViewportChange,
     containerRef,
     isPanMode,
+    isSpacePanActive,
   });
 
   // Connection drag hook - enables drag-to-connect with mouse-follow preview
@@ -218,13 +225,18 @@ export function InfiniteCanvas({
         setNodeRendererRegistry(nextRegistry);
         setNodeTypeDescriptorRegistry({
           ...webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors(),
-          ...Object.assign({}, ...registrations.map((registration) => registration.nodeTypeDescriptors)),
+          ...Object.assign(
+            {},
+            ...registrations.map((registration) => registration.nodeTypeDescriptors),
+          ),
         });
       })
       .catch(() => {
         if (!cancelled) {
           setNodeRendererRegistry({});
-          setNodeTypeDescriptorRegistry(webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors());
+          setNodeTypeDescriptorRegistry(
+            webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors(),
+          );
         }
       });
 
@@ -239,8 +251,10 @@ export function InfiniteCanvas({
       // Only handle clicks on the canvas itself, not on nodes
       if (
         e.target === e.currentTarget ||
+        (e.target as HTMLElement).hasAttribute('data-canvas-viewport-layer') ||
         (e.target as HTMLElement).closest('[data-canvas-background]')
       ) {
+        containerRef.current?.focus();
         onCanvasClick?.();
       }
     },
@@ -252,7 +266,7 @@ export function InfiniteCanvas({
     if (viewportState.isPanning) return 'grabbing';
     if (isDraggingConnection) return 'crosshair';
     if (isMarqueeSelecting) return 'crosshair';
-    if (isPanMode) return 'grab';
+    if (isPanMode || isSpacePanActive) return 'grab';
     return 'default';
   };
 
@@ -261,7 +275,20 @@ export function InfiniteCanvas({
       ref={containerRef}
       className="relative w-full h-full overflow-hidden select-none"
       style={{ cursor: getCursor() }}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'viewport',
+        ownerId: 'canvas-viewport',
+        priority: 0,
+      })}
+      tabIndex={-1}
       onMouseDown={(e) => {
+        if (
+          e.target === e.currentTarget ||
+          (e.target as HTMLElement).hasAttribute('data-canvas-viewport-layer') ||
+          (e.target as HTMLElement).closest('[data-canvas-background]')
+        ) {
+          e.currentTarget.focus();
+        }
         viewportHandlers.onMouseDown(e);
         marqueeHandlers.onMouseDown(e);
         handleCanvasClick(e);
@@ -293,11 +320,14 @@ export function InfiniteCanvas({
         <InlineConnectionEditor
           connection={
             selectedConnectionIds.length === 1
-              ? connections.find((connection) => connection.id === selectedConnectionIds[0]) ?? null
+              ? (connections.find((connection) => connection.id === selectedConnectionIds[0]) ??
+                null)
               : null
           }
           nodes={nodes}
-          onUpdateConnection={(connectionId, updates) => onConnectionUpdate?.(connectionId, updates)}
+          onUpdateConnection={(connectionId, updates) =>
+            onConnectionUpdate?.(connectionId, updates)
+          }
         />
 
         {/* Node layer - 使用裁剪后的可见节点; container-managed children are summarized by containers */}

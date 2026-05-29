@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { ShotScale, CameraMovement, CameraAngle } from '@neko/shared';
 import { t } from '../../i18n';
 import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
@@ -127,6 +128,19 @@ function SelectPill<T extends string>({
       <select
         value={value ?? ''}
         onChange={(e) => onChange((e.target.value as T) || undefined)}
+        {...getKeyboardBoundaryMetadata({
+          scope: 'text-input',
+          ownerId: `generation-select:${label}`,
+          ownedKeys: [
+            'Enter',
+            'Escape',
+            'Space',
+            'ArrowUp',
+            'ArrowDown',
+            'ArrowLeft',
+            'ArrowRight',
+          ],
+        })}
         style={{
           fontSize: 11,
           padding: '1px 4px',
@@ -242,6 +256,12 @@ export function GenerationPromptPanel({
       {/* Panel */}
       <div
         className="fixed"
+        {...getKeyboardBoundaryMetadata({
+          scope: 'modal',
+          ownerId: 'generation-prompt-panel',
+          priority: 40,
+          ownedKeys: ['Enter', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+        })}
         style={{
           zIndex: 9999,
           top: '50%',
@@ -316,6 +336,22 @@ export function GenerationPromptPanel({
               ref={promptRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              {...getKeyboardBoundaryMetadata({
+                scope: 'text-input',
+                ownerId: 'generation-prompt',
+                ownedKeys: [
+                  'Backspace',
+                  'Delete',
+                  'Enter',
+                  'Escape',
+                  'Space',
+                  'Tab',
+                  'ArrowUp',
+                  'ArrowDown',
+                  'ArrowLeft',
+                  'ArrowRight',
+                ],
+              })}
               placeholder="描述画面内容，例如: A young woman standing in a modern office, looking at a screen..."
               rows={3}
               style={{
@@ -339,6 +375,19 @@ export function GenerationPromptPanel({
               <select
                 value={style ?? ''}
                 onChange={(e) => setStyle(e.target.value || undefined)}
+                {...getKeyboardBoundaryMetadata({
+                  scope: 'text-input',
+                  ownerId: 'generation-style',
+                  ownedKeys: [
+                    'Enter',
+                    'Escape',
+                    'Space',
+                    'ArrowUp',
+                    'ArrowDown',
+                    'ArrowLeft',
+                    'ArrowRight',
+                  ],
+                })}
                 style={{
                   fontSize: 11,
                   padding: '1px 4px',
@@ -461,6 +510,22 @@ export function GenerationPromptPanel({
                   type="text"
                   value={editInstruction}
                   onChange={(e) => setEditInstruction(e.target.value)}
+                  {...getKeyboardBoundaryMetadata({
+                    scope: 'text-input',
+                    ownerId: 'generation-edit-instruction',
+                    ownedKeys: [
+                      'Backspace',
+                      'Delete',
+                      'Enter',
+                      'Escape',
+                      'Space',
+                      'Tab',
+                      'ArrowUp',
+                      'ArrowDown',
+                      'ArrowLeft',
+                      'ArrowRight',
+                    ],
+                  })}
                   placeholder={t('gen.editInstruction')}
                   style={{
                     fontSize: 11,
@@ -498,6 +563,19 @@ export function GenerationPromptPanel({
                       <select
                         value={videoDuration}
                         onChange={(e) => setVideoDuration(Number(e.target.value))}
+                        {...getKeyboardBoundaryMetadata({
+                          scope: 'text-input',
+                          ownerId: 'generation-video-duration',
+                          ownedKeys: [
+                            'Enter',
+                            'Escape',
+                            'Space',
+                            'ArrowUp',
+                            'ArrowDown',
+                            'ArrowLeft',
+                            'ArrowRight',
+                          ],
+                        })}
                         style={{
                           fontSize: 11,
                           padding: '1px 4px',

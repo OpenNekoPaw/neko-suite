@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import type { CanvasViewport, TextCanvasNode, TextNodeStyle } from '@neko/shared';
 import { DEFAULT_TEXT_STYLE } from '@neko/shared';
 import { BaseNode } from './BaseNode';
@@ -147,6 +148,22 @@ export function TextNode({
               onChange={handleChange}
               onBlur={handleBlur}
               onKeyDown={handleKeyDown}
+              {...getKeyboardBoundaryMetadata({
+                scope: 'text-input',
+                ownerId: `text-node:${node.id}`,
+                ownedKeys: [
+                  'Backspace',
+                  'Delete',
+                  'Enter',
+                  'Escape',
+                  'Space',
+                  'Tab',
+                  'ArrowUp',
+                  'ArrowDown',
+                  'ArrowLeft',
+                  'ArrowRight',
+                ],
+              })}
               className={clsx(
                 'w-full h-full resize-none bg-transparent border-none outline-none',
                 'text-[var(--text-primary)]',
