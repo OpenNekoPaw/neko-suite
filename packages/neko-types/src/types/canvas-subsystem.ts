@@ -57,6 +57,7 @@ export const BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS = [
       'shot',
       'scene',
       'gallery',
+      'table',
       'script',
       'document',
       'model',
@@ -123,9 +124,7 @@ export const BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS = [
   },
 ] as const satisfies readonly CanvasSubsystemManifest[];
 
-export type CanvasSubsystemMetadataKey = NonNullable<
-  CanvasSubsystemManifest['metadata']
->['key'];
+export type CanvasSubsystemMetadataKey = NonNullable<CanvasSubsystemManifest['metadata']>['key'];
 
 export function createBuiltInCanvasSubsystemManifestRegistry(): ReadonlyMap<
   CanvasSubsystemId,
@@ -151,7 +150,9 @@ export function summarizeCanvasSubsystems(
   }
 
   const activeSubsystems = manifests
-    .filter((manifest) => manifest.triggerNodeTypes.some((type) => (nodeTypeSummary[type] ?? 0) > 0))
+    .filter((manifest) =>
+      manifest.triggerNodeTypes.some((type) => (nodeTypeSummary[type] ?? 0) > 0),
+    )
     .map((manifest) => manifest.id);
 
   return {

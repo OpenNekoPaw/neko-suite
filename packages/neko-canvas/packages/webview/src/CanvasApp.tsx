@@ -1233,14 +1233,8 @@ export function CanvasApp() {
         mainKind="canvas"
         leftRail={
           <CanvasToolbar
-            onAddText={() => handleCreateLibraryNode('annotation')}
             onUndo={undo}
             onRedo={redo}
-            onAddShot={() => handleCreateLibraryNode('shot')}
-            onAddSceneGroup={() => handleCreateLibraryNode('scene')}
-            onAddGallery={() => handleCreateLibraryNode('gallery')}
-            onAddTable={() => handleCreateLibraryNode('table')}
-            onImportFile={handleImportFile}
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
             isHudVisible={isHudVisible}

@@ -46,7 +46,7 @@ export function NodeLibraryPanel({
   onLoadSubsystem,
 }: NodeLibraryPanelProps) {
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(
-    () => new Set(['core', 'storyboard']),
+    () => new Set(['core', 'storyboard', FILE_REFERENCE_GROUP_ID]),
   );
   const requestedSubsystemIdsRef = useRef<Set<CanvasSubsystemManifest['id']>>(new Set());
 

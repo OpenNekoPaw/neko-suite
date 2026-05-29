@@ -1,5 +1,9 @@
+// @vitest-environment jsdom
+
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS } from '@neko/shared';
 import { setLocale } from '../../i18n';
@@ -17,6 +21,22 @@ import { NodeLibraryPanel } from './NodeLibraryPanel';
 (globalThis as { React?: typeof React }).React = React;
 
 describe('NodeLibraryPanel', () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
   it('localizes subsystem group labels and placeholder node descriptors', () => {
     setLocale('zh-cn');
 
@@ -71,7 +91,7 @@ describe('NodeLibraryPanel', () => {
     expect(markup).toContain('aria-label="Node Library"');
   });
 
-  it('keeps file-bound node entries behind a collapsed file references group', () => {
+  it('keeps file-bound node entries visible in the file references group', () => {
     setLocale('zh-cn');
 
     const markup = renderToStaticMarkup(
@@ -87,8 +107,43 @@ describe('NodeLibraryPanel', () => {
     );
 
     expect(markup).toContain('文件引用');
-    expect(markup).not.toContain('选择文件添加媒体');
+    expect(markup).toContain('媒体');
+    expect(markup).toContain('文件');
     expect(markup).not.toContain('draggable="false"');
+  });
+
+  it('opens pickers for visible file reference entries', () => {
+    setLocale('en');
+    const onCreateNode = vi.fn();
+    const onPickNodeSource = vi.fn();
+
+    act(() => {
+      root.render(
+        React.createElement(NodeLibraryPanel, {
+          coreDescriptors: {
+            ...createCoreNodeTypeDescriptors(),
+            ...createStoryboardNodeTypeDescriptors(),
+          },
+          subsystemManifests: [],
+          onCreateNode,
+          onPickNodeSource,
+        }),
+      );
+    });
+
+    act(() => {
+      host.querySelector<HTMLElement>('[data-tree-item-id="media"]')?.click();
+      host.querySelector<HTMLElement>('[data-tree-item-id="script"]')?.click();
+      host.querySelector<HTMLElement>('[data-tree-item-id="document"]')?.click();
+      host.querySelector<HTMLElement>('[data-tree-item-id="model"]')?.click();
+    });
+
+    expect(onCreateNode).not.toHaveBeenCalled();
+    expect(onPickNodeSource).toHaveBeenCalledTimes(4);
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(1, 'media', 'pickMediaFile');
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(2, 'script', 'pickScriptDocument');
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(3, 'document', 'pickReferenceDocument');
+    expect(onPickNodeSource).toHaveBeenNthCalledWith(4, 'model', 'pickModelReference');
   });
 
   it('moves file-bound nodes out of default groups and hides projection-only entity nodes', () => {
@@ -107,6 +162,7 @@ describe('NodeLibraryPanel', () => {
       'shot',
       'scene',
       'gallery',
+      'table',
     ]);
     expect(groups.find((group) => group.id === 'entity')).toBeUndefined();
     expect(groups.find((group) => group.id === 'file-references')?.nodeTypes).toEqual([

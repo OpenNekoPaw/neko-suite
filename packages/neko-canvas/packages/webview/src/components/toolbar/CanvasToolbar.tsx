@@ -2,7 +2,6 @@
  * CanvasToolbar - Left vertical toolbar
  *
  * Provides quick access to:
- * - Add node (expandable panel)
  * - Right node tree/library panel toggle
  * - Undo / Redo
  * - Canvas settings
@@ -10,8 +9,6 @@
  * Uses shared ToolbarButton for consistent active state and hover styling.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import type React from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import {
   ToolbarButton,
@@ -21,31 +18,15 @@ import {
 } from '@neko/ui/primitives';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
-import {
-  PlusIcon,
-  UploadIcon,
-  UndoIcon,
-  RedoIcon,
-  LayersIcon,
-  RightPanelIcon,
-  RightPanelOffIcon,
-} from '@neko/ui/icons';
+import { UndoIcon, RedoIcon, LayersIcon, RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface CanvasToolbarProps {
-  onAddText: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  /** Storyboard node creation callbacks */
-  onAddShot?: () => void;
-  onAddSceneGroup?: () => void;
-  onAddGallery?: () => void;
-  onAddTable?: () => void;
-  /** Unified file import — opens file picker, auto-detects type */
-  onImportFile?: () => void;
   /** Node tree/library panel visibility */
   isNodeLibraryVisible?: boolean;
   onToggleNodeLibrary?: () => void;
@@ -57,21 +38,13 @@ export interface CanvasToolbarProps {
   onTogglePanMode?: () => void;
 }
 
-type ExpandedPanel = 'add' | null;
-
 // =============================================================================
 // Component
 // =============================================================================
 
 export function CanvasToolbar({
-  onAddText,
   onUndo,
   onRedo,
-  onAddShot,
-  onAddSceneGroup,
-  onAddGallery,
-  onAddTable,
-  onImportFile,
   isNodeLibraryVisible = true,
   onToggleNodeLibrary,
   isHudVisible = true,
@@ -79,32 +52,8 @@ export function CanvasToolbar({
   isPanMode = false,
   onTogglePanMode,
 }: CanvasToolbarProps) {
-  const [expandedPanel, setExpandedPanel] = useState<ExpandedPanel>(null);
   const canUndo = useHistoryStore((s) => s.canUndo());
   const canRedo = useHistoryStore((s) => s.canRedo());
-  const toolbarRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!expandedPanel) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
-        setExpandedPanel(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [expandedPanel]);
-
-  const togglePanel = useCallback((panel: ExpandedPanel) => {
-    setExpandedPanel((prev) => (prev === panel ? null : panel));
-  }, []);
-
-  const handleAddAndClose = useCallback((action: () => void) => {
-    action();
-    setExpandedPanel(null);
-  }, []);
   const nodeLibraryTitle = isNodeLibraryVisible
     ? t('toolbar.hideRightNodeTree')
     : t('toolbar.showRightNodeTree');
@@ -113,16 +62,9 @@ export function CanvasToolbar({
 
   return (
     <VerticalToolbar
-      ref={toolbarRef}
       className="canvas-left-toolbar relative z-20"
       width={48}
       aria-label={t('toolbar.leftRail')}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && expandedPanel) {
-          event.stopPropagation();
-          setExpandedPanel(null);
-        }
-      }}
       {...getKeyboardBoundaryMetadata({
         scope: 'popover',
         ownerId: 'canvas-toolbar',
@@ -144,27 +86,21 @@ export function CanvasToolbar({
         onClick={onTogglePanMode}
       />
 
-      {/* Add Node Button */}
-      <ToolbarButton
-        data-creative-left-rail-action="open-add-node-popover"
-        data-creative-left-rail-kind="common-action"
-        icon={<PlusIcon size={18} />}
-        title={t('toolbar.addNode')}
-        active={expandedPanel === 'add'}
-        onClick={() => togglePanel('add')}
-      />
-
-      {/* Import File Button */}
-      <ToolbarButton
-        data-creative-left-rail-action="import-file"
-        data-creative-left-rail-kind="common-action"
-        icon={<UploadIcon size={18} />}
-        title={t('toolbar.importFile')}
-        onClick={() => {
-          setExpandedPanel(null);
-          onImportFile?.();
-        }}
-      />
+      {onToggleNodeLibrary && (
+        <ToolbarButton
+          aria-controls="canvas-right-node-tree-panel"
+          aria-expanded={isNodeLibraryVisible}
+          data-creative-left-rail-action="toggle-right-node-tree"
+          data-creative-left-rail-kind="visibility-toggle"
+          data-creative-left-rail-target="right-panel"
+          icon={
+            isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
+          }
+          title={nodeLibraryTitle}
+          active={isNodeLibraryVisible}
+          onClick={onToggleNodeLibrary}
+        />
+      )}
 
       <ToolbarSeparator />
 
@@ -208,140 +144,6 @@ export function CanvasToolbar({
           onClick={onToggleHud}
         />
       )}
-
-      {onToggleNodeLibrary && (
-        <ToolbarButton
-          aria-controls="canvas-right-node-tree-panel"
-          aria-expanded={isNodeLibraryVisible}
-          data-creative-left-rail-action="toggle-right-node-tree"
-          data-creative-left-rail-kind="visibility-toggle"
-          data-creative-left-rail-target="right-panel"
-          icon={
-            isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
-          }
-          title={nodeLibraryTitle}
-          active={isNodeLibraryVisible}
-          onClick={onToggleNodeLibrary}
-        />
-      )}
-
-      {/* ============================================================= */}
-      {/* Add Node Panel                                                */}
-      {/* ============================================================= */}
-
-      {expandedPanel === 'add' && (
-        <div
-          className="absolute left-full top-0 ml-1.5"
-          {...getKeyboardBoundaryMetadata({
-            scope: 'popover',
-            ownerId: 'canvas-toolbar-add-panel',
-            priority: 40,
-            ownedKeys: ['Enter', 'Escape', 'Space', 'Tab', 'ArrowUp', 'ArrowDown'],
-          })}
-          style={{
-            minWidth: 180,
-            padding: '5px',
-            background: 'var(--neko-glass-bg)',
-            backdropFilter: 'var(--neko-glass-blur)',
-            WebkitBackdropFilter: 'var(--neko-glass-blur)',
-            border: '1px solid var(--neko-glass-border)',
-            borderRadius: 'var(--neko-radius-lg)',
-            boxShadow: 'var(--neko-glass-shadow)',
-            color: 'var(--neko-fg)',
-          }}
-        >
-          {onAddShot && (
-            <AddPanelItem
-              icon={<span className="text-[13px]">🎬</span>}
-              label={t('toolbar.shot')}
-              onClick={() => handleAddAndClose(onAddShot)}
-            />
-          )}
-          {onAddSceneGroup && (
-            <AddPanelItem
-              icon={<span className="text-[13px]">🎞</span>}
-              label={t('toolbar.sceneGroup')}
-              onClick={() => handleAddAndClose(onAddSceneGroup)}
-            />
-          )}
-          {onAddGallery && (
-            <AddPanelItem
-              icon={<span className="text-[13px]">🖼</span>}
-              label={t('toolbar.gallery')}
-              onClick={() => handleAddAndClose(onAddGallery)}
-            />
-          )}
-
-          {onAddTable && (
-            <AddPanelItem
-              icon={
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M3 9h18" />
-                  <path d="M3 15h18" />
-                  <path d="M9 3v18" />
-                  <path d="M15 3v18" />
-                </svg>
-              }
-              label={t('toolbar.table')}
-              onClick={() => handleAddAndClose(onAddTable)}
-            />
-          )}
-
-          <div className="neko-menu-sep" />
-
-          <AddPanelItem
-            icon={
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M4 7V4h16v3" />
-                <path d="M9 20h6" />
-                <path d="M12 4v16" />
-              </svg>
-            }
-            label={t('toolbar.annotation')}
-            onClick={() => handleAddAndClose(onAddText)}
-          />
-        </div>
-      )}
     </VerticalToolbar>
-  );
-}
-
-// =============================================================================
-// Sub-components
-// =============================================================================
-
-interface AddPanelItemProps {
-  icon: React.ReactNode;
-  label: string;
-  shortcut?: string;
-  onClick: () => void;
-}
-
-function AddPanelItem({ icon, label, shortcut, onClick }: AddPanelItemProps) {
-  return (
-    <button className="neko-menu-item" onClick={onClick}>
-      <span className="neko-menu-item-icon">{icon}</span>
-      <span className="neko-menu-item-label">{label}</span>
-      {shortcut !== undefined && (
-        <span className="neko-menu-item-shortcut neko-shortcut-hint" data-neko-shortcut-hint="true">
-          {shortcut}
-        </span>
-      )}
-    </button>
   );
 }

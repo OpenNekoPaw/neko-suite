@@ -49,7 +49,7 @@ export const en = {
   'toolbar.audio': 'Audio',
 
   // Empty state
-  'empty.hint': 'Click + to add elements, or right-click for more options',
+  'empty.hint': 'Open the node library, drop files here, or right-click to add elements',
   'empty.zoom': 'Scroll to zoom · Middle-click to pan',
 
   // Status bar

@@ -8,14 +8,12 @@ import { setLocale } from '../../i18n';
 
 vi.mock('@neko/ui/icons', () => ({
   LayersIcon: ({ size = 16 }: { size?: number }) => <span data-icon="layers">{size}</span>,
-  PlusIcon: ({ size = 16 }: { size?: number }) => <span data-icon="plus">{size}</span>,
   RedoIcon: ({ size = 16 }: { size?: number }) => <span data-icon="redo">{size}</span>,
   RightPanelIcon: ({ size = 16 }: { size?: number }) => <span data-icon="right-panel">{size}</span>,
   RightPanelOffIcon: ({ size = 16 }: { size?: number }) => (
     <span data-icon="right-panel-off">{size}</span>
   ),
   UndoIcon: ({ size = 16 }: { size?: number }) => <span data-icon="undo">{size}</span>,
-  UploadIcon: ({ size = 16 }: { size?: number }) => <span data-icon="upload">{size}</span>,
 }));
 
 describe('CanvasToolbar', () => {
@@ -38,13 +36,7 @@ describe('CanvasToolbar', () => {
 
   it('renders as the shared left vertical toolbar surface', () => {
     act(() => {
-      root.render(
-        <CanvasToolbar
-          onAddText={() => undefined}
-          onUndo={() => undefined}
-          onRedo={() => undefined}
-        />,
-      );
+      root.render(<CanvasToolbar onUndo={() => undefined} onRedo={() => undefined} />);
     });
 
     expect(host.querySelector('.neko-vtoolbar')).not.toBeNull();
@@ -52,40 +44,11 @@ describe('CanvasToolbar', () => {
       'Canvas tools',
     );
     expect(host.querySelectorAll('.neko-toolbar-btn').length).toBeGreaterThan(0);
+    expect(host.querySelector('[data-creative-left-rail-action="toggle-pan-mode"]')).not.toBeNull();
     expect(
       host.querySelector('[data-creative-left-rail-action="open-add-node-popover"]'),
-    ).not.toBeNull();
-  });
-
-  it('keeps add-node choices in the toolbar popover', () => {
-    const onAddShot = vi.fn();
-
-    act(() => {
-      root.render(
-        <CanvasToolbar
-          onAddText={() => undefined}
-          onUndo={() => undefined}
-          onRedo={() => undefined}
-          onAddShot={onAddShot}
-        />,
-      );
-    });
-
-    const addButton = host
-      .querySelector('[data-icon="plus"]')
-      ?.closest<HTMLButtonElement>('.neko-toolbar-btn');
-
-    act(() => {
-      addButton?.click();
-    });
-
-    const menuItem = host.querySelector<HTMLButtonElement>('.neko-menu-item');
-
-    act(() => {
-      menuItem?.click();
-    });
-
-    expect(onAddShot).toHaveBeenCalledTimes(1);
+    ).toBeNull();
+    expect(host.querySelector('[data-creative-left-rail-action="import-file"]')).toBeNull();
   });
 
   it('controls the right node tree panel from the left toolbar', () => {
@@ -94,7 +57,6 @@ describe('CanvasToolbar', () => {
     act(() => {
       root.render(
         <CanvasToolbar
-          onAddText={() => undefined}
           onUndo={() => undefined}
           onRedo={() => undefined}
           isNodeLibraryVisible={true}
@@ -123,7 +85,6 @@ describe('CanvasToolbar', () => {
     act(() => {
       root.render(
         <CanvasToolbar
-          onAddText={() => undefined}
           onUndo={() => undefined}
           onRedo={() => undefined}
           isNodeLibraryVisible={false}
@@ -148,7 +109,6 @@ describe('CanvasToolbar', () => {
     act(() => {
       root.render(
         <CanvasToolbar
-          onAddText={() => undefined}
           onUndo={() => undefined}
           onRedo={() => undefined}
           isHudVisible={false}

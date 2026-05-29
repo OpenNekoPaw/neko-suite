@@ -41,6 +41,9 @@ describe('canvas subsystem contracts', () => {
         defaultValue: { variables: [] },
       },
     });
+    expect(
+      createBuiltInCanvasSubsystemManifestRegistry().get('storyboard')?.triggerNodeTypes,
+    ).toContain('table');
   });
 
   it('summarizes active subsystems from actual node types', () => {

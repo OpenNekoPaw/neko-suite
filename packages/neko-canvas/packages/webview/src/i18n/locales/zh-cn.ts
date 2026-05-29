@@ -49,7 +49,7 @@ export const zhCN = {
   'toolbar.audio': '音频',
 
   // Empty state
-  'empty.hint': '点击 + 添加元素，或右键查看更多选项',
+  'empty.hint': '打开节点库、拖入文件，或右键添加元素',
   'empty.zoom': '滚轮缩放 · 中键平移',
 
   // Status bar
