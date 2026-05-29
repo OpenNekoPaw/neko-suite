@@ -6,3 +6,4 @@ export * from './hooks';
 export * from './workbench';
 export * from './test-utils';
 export * from './utils';
+export * from './keyboard';

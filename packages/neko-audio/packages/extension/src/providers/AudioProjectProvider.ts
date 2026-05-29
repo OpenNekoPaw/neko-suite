@@ -39,7 +39,11 @@ import type {
   MixConfigWarning,
   TimelineElement,
 } from '@neko/shared';
-import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
+import {
+  createDefaultLocalResourceAccessService,
+  createFocusedWebviewRegistry,
+  type IFocusedWebviewRegistry,
+} from '@neko/shared/vscode/extension';
 import type { MixStreamConfig } from '@neko/shared';
 import type { AudioService } from '../services/AudioService';
 import type {
@@ -132,13 +136,19 @@ export class AudioProjectProvider
   private readonly _projectDataCache = new Map<string, AudioProjectData>();
   private readonly _projectCompatibilityCache = new Map<string, NkaCompatibilityMetadata>();
   private readonly _documents = new Map<string, vscode.CustomDocument>();
+  private readonly _focusedWebviews: IFocusedWebviewRegistry;
 
   private readonly _onDidChangeCustomDocument = new vscode.EventEmitter<
     vscode.CustomDocumentEditEvent<vscode.CustomDocument>
   >();
   public readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
+  ) {
+    this._focusedWebviews = focusedWebviews;
+  }
 
   /** Inject a shared AudioService instance */
   setAudioService(service: AudioService): void {
@@ -203,6 +213,13 @@ export class AudioProjectProvider
       panel.webview.postMessage(message);
     }
     return true;
+  }
+
+  async postCommandToFocusedPanel(command: string): Promise<boolean> {
+    return this._focusedWebviews.postKeyboardAction(command, {
+      viewType: AudioProjectProvider.viewType,
+      allowSingleVisibleFallback: true,
+    });
   }
 
   // =========================================================================
@@ -304,6 +321,14 @@ export class AudioProjectProvider
   ): Promise<void> {
     const docKey = document.uri.toString();
     this._activePanels.set(docKey, webviewPanel);
+    const focusedRegistration = this._focusedWebviews.register({
+      id: docKey,
+      viewType: AudioProjectProvider.viewType,
+      documentUri: docKey,
+      panel: webviewPanel,
+      visible: webviewPanel.visible,
+      active: webviewPanel.active,
+    });
 
     // Configure webview
     await createDefaultLocalResourceAccessService({
@@ -860,8 +885,16 @@ export class AudioProjectProvider
       },
     );
 
+    webviewPanel.onDidChangeViewState((event) => {
+      this._focusedWebviews.markVisible(docKey, event.webviewPanel.visible);
+      if (event.webviewPanel.active) {
+        this._focusedWebviews.markActive(docKey);
+      }
+    });
+
     // Cleanup
     webviewPanel.onDidDispose(async () => {
+      focusedRegistration.dispose();
       messageDisposable.dispose();
       this._activePanels.delete(docKey);
       this._documents.delete(docKey);

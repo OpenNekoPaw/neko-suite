@@ -28,7 +28,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
   const tagLabel = descriptor?.tagLabel ?? node.type.toUpperCase();
   const tagColor = descriptor?.tagColor ?? '#6b7280';
   const title = resolveNodeTitle(node, preview?.title);
-  const badges = (preview?.badges ?? []) as NodeHeaderBadge[];
+  const badges = resolveNodeHeaderBadges(node, (preview?.badges ?? []) as NodeHeaderBadge[]);
 
   const assetInfo = useMemo(() => getNodeAssetInfo(node), [node]);
 
@@ -53,10 +53,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
     };
   }, [section.sections]);
 
-  const bodyClassName =
-    context.layout.overflow === 'scroll'
-      ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-auto'
-      : 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden';
+  const bodyClassName = 'flex min-h-0 min-w-0 flex-1 flex-col overflow-auto';
 
   return (
     <div
@@ -109,6 +106,30 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
 
 function isControlSection(section: ContainerSection): boolean {
   return section.visibleWhen === 'selected' && section.layout === 'row';
+}
+
+function resolveNodeHeaderBadges(
+  node: NodeShellProps['context']['node'],
+  previewBadges: NodeHeaderBadge[],
+): NodeHeaderBadge[] {
+  switch (node.type) {
+    case 'scene':
+      return [
+        {
+          label: t('scene.shotCountCompact', { count: node.container?.childIds.length ?? 0 }),
+          tone: 'info',
+        },
+      ];
+    case 'gallery':
+      return [
+        {
+          label: t('gallery.viewCountCompact', { count: node.container?.childIds.length ?? 0 }),
+          tone: 'info',
+        },
+      ];
+    default:
+      return previewBadges;
+  }
 }
 
 interface NodeAssetInfo {

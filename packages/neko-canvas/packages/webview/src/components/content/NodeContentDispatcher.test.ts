@@ -1,10 +1,11 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { AnnotationCanvasNode, CanvasNode, CanvasViewport } from '@neko/shared';
 import { createNodeCollapseUpdate, NodeContentDispatcher } from './NodeContentDispatcher';
 import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import { buildCanvasNode } from '../../utils/nodeFactory';
+import { setLocale } from '../../i18n';
 
 const viewport: CanvasViewport = { pan: { x: 0, y: 0 }, zoom: 1 };
 
@@ -29,6 +30,10 @@ function createAnnotationNode(): AnnotationCanvasNode {
     data: { content: 'Legacy note' },
   };
 }
+
+afterEach(() => {
+  setLocale('en');
+});
 
 describe('NodeContentDispatcher', () => {
   it('uses the legacy renderer when node has no content and no preset', () => {
@@ -109,9 +114,38 @@ describe('NodeContentDispatcher', () => {
     );
 
     expect(markup).toContain('data-node-density="compact"');
-    expect(markup).toContain('data-node-overflow="summary"');
+    expect(markup).toContain('data-node-overflow="scroll"');
     expect(markup).toContain('flex-1 resize-none');
     expect(markup).toContain('<textarea');
+  });
+
+  it('clamps tiny composable nodes to their minimum render size and scrolls overflow', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Tiny Scene', sceneNumber: 4 },
+      }),
+      id: 'scene-tiny',
+      size: { width: 90, height: 60 },
+      container: { policy: 'scene', childIds: [] },
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('width:320px');
+    expect(markup).toContain('height:220px');
+    expect(markup).toContain('data-node-density="compact"');
+    expect(markup).toContain('data-node-overflow="scroll"');
+    expect(markup).toContain('flex min-h-0 min-w-0 flex-1 flex-col overflow-auto');
+    expect(markup).not.toContain('Legacy path');
   });
 
   it('renders migrated shot generation preview from selected candidate data', () => {
@@ -180,6 +214,44 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-content-block-id="shot-character-action"');
     expect(markup).toContain('Detail');
     expect(markup).not.toContain('Legacy path');
+  });
+
+  it('localizes composable shot control values', () => {
+    setLocale('zh-cn');
+
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 2,
+          duration: 3,
+          visualDescription: 'Wide establishing frame',
+          shotScale: 'MS',
+          cameraMovement: 'static',
+          cameraAngle: 'eye-level',
+          generationStatus: 'idle',
+        },
+      }),
+      id: 'shot-localized',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('空闲');
+    expect(markup).toContain('MS — 中景');
+    expect(markup).toContain('静止');
+    expect(markup).toContain('平视');
+    expect(markup).not.toContain('&gt;idle&lt;');
+    expect(markup).not.toContain('&gt;static&lt;');
+    expect(markup).not.toContain('&gt;eye-level&lt;');
   });
 
   it('builds persistent container collapse updates without changing non-container nodes', () => {
@@ -451,11 +523,45 @@ describe('NodeContentDispatcher', () => {
 
     expect(markup).toContain('Mika');
     expect(markup).toContain('No views (drag media here)');
+    expect(markup).toContain('3-View Character');
+    expect(markup).toContain('0 views');
+    expect(markup).not.toContain('0 cells');
     expect(markup).toContain('data-child-slot-id="gallery-children"');
     expect(markup).toContain('data-child-slot-variant="gallery"');
     expect(markup).toContain('data-child-slot-kind="gallery-grid"');
     expect(markup).toContain('data-child-slot-card-height="170"');
+    expect(markup).not.toContain('data-content-block-id="gallery-global-prompt"');
+    expect(markup).not.toContain('Character Profile');
     expect(markup).not.toContain('Legacy path');
+  });
+
+  it('shows gallery advanced fields only in expanded content context', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'gallery',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'gallery.basic',
+        data: {
+          characterName: 'Mika',
+          preset: 'character-3view',
+          globalPromptPrefix: 'clean reference lighting',
+          characterProfile: { description: 'A tall elf' },
+        },
+      }),
+      id: 'gallery-expanded',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: { ...createContext(node), isExpanded: true },
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('Advanced');
+    expect(markup).toContain('Character Profile');
+    expect(markup).not.toContain('data-content-block-id="gallery-global-prompt"');
   });
 
   it('renders gallery children as image-first grid cards instead of a horizontal rail', () => {
@@ -543,7 +649,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-gallery-child-card-id="media-front"');
     expect(markup).toContain('data-gallery-child-card-layout="visual-grid"');
     expect(markup).toContain('Front view, neutral pose, clean reference lighting.');
-    expect(markup).toContain('done');
+    expect(markup).toContain('Done');
     expect(markup).toContain('data:image/png;base64,front');
     expect(markup).toContain('overflow-x-hidden');
     expect(markup).not.toContain('data-scene-shot-rail="true"');
@@ -718,9 +824,9 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('No children');
     expect(markup).toContain('data-content-block-id="scene-title"');
     expect(markup).toContain('data-node-id="gallery-parity"');
-    expect(markup).toContain('data-content-block-id="gallery-global-prompt"');
-    expect(markup).toContain('Character Profile');
     expect(markup).toContain('No views (drag media here)');
+    expect(markup).not.toContain('data-content-block-id="gallery-global-prompt"');
+    expect(markup).not.toContain('Character Profile');
     expect(markup).toContain('data-node-id="media-parity"');
     expect(markup).toContain('data-content-block-id="media-asset-preview"');
     expect(markup).toContain('data-node-id="group-parity"');

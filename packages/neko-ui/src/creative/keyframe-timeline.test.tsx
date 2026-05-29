@@ -73,6 +73,9 @@ describe('@neko/ui KeyframeTimeline', () => {
 
     expect(host.textContent).toContain('Position X');
     expect(host.querySelector('.neko-keyframe-timeline')).not.toBeNull();
+    expect(
+      host.querySelector('.neko-keyframe-timeline')?.getAttribute('data-neko-keyboard-scope'),
+    ).toBe('timeline');
     expect(host.querySelector('.neko-keyframe-diamond')?.getAttribute('title')).toContain(
       'Position X',
     );
@@ -140,6 +143,9 @@ describe('@neko/ui KeyframeTimeline', () => {
       );
     });
     expect(document.querySelector('.neko-menu')?.textContent).toContain('Delete Keyframe');
+    expect(document.querySelector('.neko-menu')?.getAttribute('data-neko-keyboard-scope')).toBe(
+      'menu',
+    );
 
     act(() => {
       document.querySelector<HTMLButtonElement>('.neko-menu-item')?.click();

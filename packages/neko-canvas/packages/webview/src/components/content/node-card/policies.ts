@@ -21,6 +21,7 @@ import {
   resolvePlacementTitle,
 } from './utils';
 import { t } from '../../../i18n';
+import { resolveCanvasStatusLabel } from '../../../i18n/canvasValueLabels';
 
 const REMOVE_ACTION: CardActionDescriptor = {
   id: 'remove',
@@ -130,7 +131,9 @@ export const shotCardPolicy: NodeCardPolicy = {
   resolveSubtitle: (node) => createSubtitle(readRecord(node.data)['visualDescription']),
   resolveBadges: (node) => {
     const status = readString(node.data, 'generationStatus');
-    return status ? [{ label: status, tone: badgeToneForGenerationStatus(status) }] : [];
+    return status
+      ? [{ label: resolveCanvasStatusLabel(status), tone: badgeToneForGenerationStatus(status) }]
+      : [];
   },
   resolveActions: () => [
     REMOVE_ACTION,

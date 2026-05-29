@@ -5,7 +5,11 @@
  * in the WebGL-based drawing canvas.
  */
 import * as vscode from 'vscode';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import {
+  createFocusedWebviewRegistry,
+  injectLocaleAttribute,
+  type IFocusedWebviewRegistry,
+} from '@neko/shared/vscode/extension';
 import type { LayerOutlineProvider } from '../views/layerOutlineProvider';
 import type { SketchStatusBar } from '../views/sketchStatusBar';
 import type { NksDocument, LayerOutlineData, SketchStatusInfo } from '../types';
@@ -127,8 +131,13 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly cancellableAIRuns = new Map<string, () => Promise<void>>();
 
   private readonly psdImportOutput = vscode.window.createOutputChannel(PSD_IMPORT_OUTPUT_CHANNEL);
+  private readonly focusedWebviews: IFocusedWebviewRegistry;
 
-  constructor(private readonly context: vscode.ExtensionContext) {
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
+  ) {
+    this.focusedWebviews = focusedWebviews;
     this.context.subscriptions.push(this.psdImportOutput);
     this.context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration((event) => {
@@ -163,6 +172,16 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<void> {
     this.activeWebviewPanel = webviewPanel;
     this.activeDocument = document;
+    const documentUri = document.uri.toString();
+    const focusedRegistration = this.focusedWebviews.register({
+      id: documentUri,
+      viewType: SketchEditorProvider.viewType,
+      documentUri,
+      panel: webviewPanel,
+      visible: webviewPanel.visible,
+      active: webviewPanel.active,
+    });
+    this.context.subscriptions.push(focusedRegistration);
 
     webviewPanel.webview.options = {
       enableScripts: true,
@@ -180,7 +199,22 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       this.context.subscriptions,
     );
 
+    webviewPanel.onDidChangeViewState(
+      (event) => {
+        const panelId = document.uri.toString();
+        this.focusedWebviews.markVisible(panelId, event.webviewPanel.visible);
+        if (event.webviewPanel.active) {
+          this.focusedWebviews.markActive(panelId);
+          this.activeWebviewPanel = event.webviewPanel;
+          this.activeDocument = document;
+        }
+      },
+      undefined,
+      this.context.subscriptions,
+    );
+
     webviewPanel.onDidDispose(() => {
+      focusedRegistration.dispose();
       if (this.activeWebviewPanel === webviewPanel) {
         this.activeWebviewPanel = undefined;
         this.activeDocument = undefined;
@@ -243,10 +277,11 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   /** Forward keyboard actions to webview */
-  postKeyboardAction(action: string): void {
-    this.activeWebviewPanel?.webview.postMessage({
-      type: 'keyboardAction',
-      action,
+  async postKeyboardAction(action: string, documentUri?: vscode.Uri): Promise<boolean> {
+    return this.focusedWebviews.postKeyboardAction(action, {
+      viewType: SketchEditorProvider.viewType,
+      documentUri: documentUri?.toString(),
+      allowSingleVisibleFallback: true,
     });
   }
 

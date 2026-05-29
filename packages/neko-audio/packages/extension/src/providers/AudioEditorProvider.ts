@@ -18,7 +18,11 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
+import {
+  createDefaultLocalResourceAccessService,
+  createFocusedWebviewRegistry,
+  type IFocusedWebviewRegistry,
+} from '@neko/shared/vscode/extension';
 import type {
   AudioAnalyzeRequestMessage,
   AudioEffectsRequestMessage,
@@ -59,8 +63,14 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
   private _statusBar: AudioStatusBar | null = null;
   private readonly _activePanels = new Set<vscode.WebviewPanel>();
   private readonly _stopPanelStreams = new WeakMap<vscode.WebviewPanel, () => Promise<void>>();
+  private readonly _focusedWebviews: IFocusedWebviewRegistry;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
+  ) {
+    this._focusedWebviews = focusedWebviews;
+  }
 
   /** Forward a command message to all active webview panels */
   postToActivePanels(message: Record<string, unknown>): boolean {
@@ -69,6 +79,13 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
       panel.webview.postMessage(message);
     }
     return true;
+  }
+
+  async postCommandToFocusedPanel(command: string): Promise<boolean> {
+    return this._focusedWebviews.postKeyboardAction(command, {
+      viewType: AudioEditorProvider.viewType,
+      allowSingleVisibleFallback: true,
+    });
   }
 
   /** Inject a shared AudioService instance */
@@ -105,6 +122,15 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
   ): Promise<void> {
     // Track active panels for command forwarding
     this._activePanels.add(webviewPanel);
+    const documentUri = document.uri.toString();
+    const focusedRegistration = this._focusedWebviews.register({
+      id: documentUri,
+      viewType: AudioEditorProvider.viewType,
+      documentUri,
+      panel: webviewPanel,
+      visible: webviewPanel.visible,
+      active: webviewPanel.active,
+    });
 
     // Configure webview
     await createDefaultLocalResourceAccessService({
@@ -576,8 +602,16 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
       },
     );
 
+    webviewPanel.onDidChangeViewState((event) => {
+      this._focusedWebviews.markVisible(documentUri, event.webviewPanel.visible);
+      if (event.webviewPanel.active) {
+        this._focusedWebviews.markActive(documentUri);
+      }
+    });
+
     // Cleanup on dispose
     webviewPanel.onDidDispose(async () => {
+      focusedRegistration.dispose();
       messageDisposable.dispose();
       this._activePanels.delete(webviewPanel);
       this._stopPanelStreams.delete(webviewPanel);

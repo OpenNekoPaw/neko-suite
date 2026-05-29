@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 
 export interface NumberInputProps {
@@ -57,6 +58,11 @@ export function NumberInput({
             'outline-none focus-visible:border-[var(--vscode-focusBorder)] disabled:cursor-not-allowed disabled:opacity-50',
           )}
           disabled={disabled}
+          {...getKeyboardBoundaryMetadata({
+            scope: 'text-input',
+            ownerId: `number-input:${id}`,
+            ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown'],
+          })}
           inputMode="decimal"
           max={max}
           min={min}

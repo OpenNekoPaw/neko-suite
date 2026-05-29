@@ -19,10 +19,10 @@ export type ContainerPolicyRegistry = ReadonlyMap<ContainerPolicyName, Container
 const BUILT_IN_CONTAINER_POLICIES: ContainerPolicy[] = [
   {
     name: 'scene',
-    acceptedNodeTypes: ['shot', 'media', 'annotation', 'text', 'gallery', 'group'],
+    acceptedNodeTypes: ['shot'],
     deleteBehavior: 'release-children',
     layoutMode: 'sequence',
-    allowNestedContainers: true,
+    allowNestedContainers: false,
   },
   {
     name: 'group',

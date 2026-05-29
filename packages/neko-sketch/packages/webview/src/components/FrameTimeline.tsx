@@ -8,7 +8,7 @@ import { useCallback, useRef, useEffect } from 'react';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import { useFramePlayback } from '../hooks/useFramePlayback';
-import { isEditableTarget } from '../utils/editable-target';
+import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
 
 export function FrameTimeline() {
   const { t } = useTranslation();
@@ -39,7 +39,7 @@ export function FrameTimeline() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) return;
+      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) return;
 
       switch (e.key) {
         case ',':

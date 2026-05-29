@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
 import type { CanvasViewport } from '@neko/shared';
 
 // =============================================================================
@@ -83,6 +84,10 @@ export function useViewportTransform(
   // Handle space key for pan mode
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
+        return;
+      }
+
       if (e.code === 'Space' && !e.repeat) {
         isSpacePressed.current = true;
       }

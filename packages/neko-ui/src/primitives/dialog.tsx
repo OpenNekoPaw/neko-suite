@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import type React from 'react';
 import type { ReactNode } from 'react';
 import { toCodiconClassName } from '../icons/codicon';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 
 export interface DialogProps {
@@ -44,6 +45,12 @@ export function Dialog({
             'shadow-[var(--neko-shadow-lg,0_16px_48px_rgba(0,0,0,0.36))] outline-none',
             className,
           )}
+          {...getKeyboardBoundaryMetadata({
+            scope: 'modal',
+            ownerId: 'dialog',
+            priority: 50,
+            ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          })}
         >
           <div className="grid gap-1 pr-8">
             <DialogPrimitive.Title className="text-sm font-semibold text-[var(--vscode-foreground)]">

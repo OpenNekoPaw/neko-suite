@@ -79,7 +79,7 @@ import { PerspectiveGridOverlay } from './PerspectiveGridOverlay';
 import { PositionedContextMenu as ContextMenu, type MenuItem } from '@neko/ui/primitives';
 import { useTranslation } from '../i18n/I18nContext';
 import { extractRegionSnapshot, findChangedPixelBounds } from '../utils/region-snapshot';
-import { isEditableTarget } from '../utils/editable-target';
+import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
 import {
   applyCanvasViewportTransform,
   documentToScreenPoint,
@@ -3111,7 +3111,7 @@ export function SketchCanvas() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) {
+      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
         return;
       }
       if (e.code === 'Space' && !e.repeat) {

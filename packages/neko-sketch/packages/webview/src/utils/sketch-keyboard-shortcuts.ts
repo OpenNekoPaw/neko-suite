@@ -1,4 +1,4 @@
-import { isEditableTarget } from './editable-target';
+import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
 
 export type SketchKeyboardAction =
   | 'deleteSelected'
@@ -17,7 +17,7 @@ export type SketchKeyboardAction =
   | 'selectTransform';
 
 export function getSketchKeyboardAction(event: KeyboardEvent): SketchKeyboardAction | null {
-  if (event.isComposing || isEditableTarget(event.target)) {
+  if (isComposingKeyboardEvent(event) || isEditableTarget(event.target)) {
     return null;
   }
 

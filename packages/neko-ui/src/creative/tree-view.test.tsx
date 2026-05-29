@@ -49,6 +49,12 @@ describe('@neko/ui TreeView', () => {
     });
 
     expect(host.querySelector('[role="tree"]')?.getAttribute('aria-label')).toBe('Tree');
+    expect(host.querySelector('[role="tree"]')?.getAttribute('data-neko-keyboard-scope')).toBe(
+      'tree',
+    );
+    expect(
+      host.querySelector('[role="tree"]')?.getAttribute('data-neko-keyboard-owned-keys'),
+    ).toContain('ArrowDown');
     expect(host.querySelectorAll('[role="treeitem"]')).toHaveLength(3);
     expect(host.querySelector('[aria-selected="true"]')?.getAttribute('data-tree-item-id')).toBe(
       'child-a',

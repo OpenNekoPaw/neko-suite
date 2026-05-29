@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ShotScale, CameraMovement, CameraAngle } from '@neko/shared';
 import { t } from '../../i18n';
+import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
 
 // =============================================================================
 // Types
@@ -111,11 +112,13 @@ function SelectPill<T extends string>({
   label,
   value,
   options,
+  optionPath,
   onChange,
 }: {
   label: string;
   value: T | undefined;
   options: T[];
+  optionPath?: string;
   onChange: (v: T | undefined) => void;
 }) {
   return (
@@ -137,7 +140,7 @@ function SelectPill<T extends string>({
         <option value="">--</option>
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {optionPath ? resolveCanvasOptionLabel(optionPath, o) : o}
           </option>
         ))}
       </select>
@@ -382,21 +385,24 @@ export function GenerationPromptPanel({
           {/* Camera controls */}
           <div className="flex items-center gap-3 flex-wrap">
             <SelectPill
-              label="景别"
+              label={t('panel.shotScale')}
               value={shotScale}
               options={SHOT_SCALES}
+              optionPath="/shotScale"
               onChange={setShotScale}
             />
             <SelectPill
-              label="运镜"
+              label={t('panel.cameraMovement')}
               value={cameraMovement}
               options={CAMERA_MOVEMENTS}
+              optionPath="/cameraMovement"
               onChange={setCameraMovement}
             />
             <SelectPill
-              label="角度"
+              label={t('panel.cameraAngle')}
               value={cameraAngle}
               options={CAMERA_ANGLES}
+              optionPath="/cameraAngle"
               onChange={setCameraAngle}
             />
           </div>

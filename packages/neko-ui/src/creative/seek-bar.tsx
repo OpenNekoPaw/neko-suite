@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type React from 'react';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 
 export interface SeekBarProps {
   readonly currentTime: number;
@@ -83,7 +84,14 @@ export function SeekBar({
   const thumbBg = isVideo ? 'bg-white' : 'bg-neko-preview-text-primary';
 
   return (
-    <div className="relative w-full">
+    <div
+      className="relative w-full"
+      {...getKeyboardBoundaryMetadata({
+        scope: 'timeline',
+        ownerId: 'seek-bar',
+        ownedKeys: ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Space'],
+      })}
+    >
       <div
         ref={trackRef}
         className={`relative h-1 rounded-full ${trackBg} cursor-pointer transition-all duration-150 hover:h-1.5 group`}

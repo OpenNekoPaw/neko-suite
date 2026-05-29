@@ -5,6 +5,7 @@ import type { BlockRendererContext, BlockRendererRegistry } from './types';
 import { PreviewSurface, isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../preview';
 import { NodeCard } from './node-card';
 import { t } from '../../i18n';
+import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
 
 const FORM_CONTROL_CLASS =
   'min-w-0 rounded border border-[var(--node-border)] bg-white px-2 py-1 text-gray-900 outline-none focus:border-[var(--node-selected)] disabled:bg-gray-100 disabled:text-gray-500';
@@ -106,6 +107,7 @@ function renderNumberBlock(context: BlockRendererContext): React.ReactNode {
 function renderSelectBlock(context: BlockRendererContext): React.ReactNode {
   const value = getBlockValue(context);
   const options = getStringArrayMetadata(context.block, 'options');
+  const path = context.block.binding?.path;
   return (
     <label className="flex flex-col gap-1 text-xs text-[var(--node-fg-secondary)]">
       {context.block.label && <span>{resolveLabel(context.block.label)}</span>}
@@ -118,7 +120,7 @@ function renderSelectBlock(context: BlockRendererContext): React.ReactNode {
       >
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {resolveCanvasOptionLabel(path, option)}
           </option>
         ))}
       </select>
@@ -127,7 +129,11 @@ function renderSelectBlock(context: BlockRendererContext): React.ReactNode {
 }
 
 function renderStatusBlock(context: BlockRendererContext): React.ReactNode {
-  const value = stringifyValue(getBlockValue(context), resolveLabel(context.block.label));
+  const value = stringifyFieldValue(
+    getBlockValue(context),
+    context.block.binding?.path,
+    resolveLabel(context.block.label),
+  );
   return (
     <span className="inline-flex max-w-full items-center self-start rounded border border-[var(--node-border)] px-2 py-0.5 text-xs text-[var(--node-fg-secondary)]">
       <span className="truncate">{value}</span>
@@ -405,6 +411,15 @@ function stringifyValue(value: unknown, fallback: string | undefined): string {
   }
 
   return JSON.stringify(value);
+}
+
+function stringifyFieldValue(
+  value: unknown,
+  path: string | undefined,
+  fallback: string | undefined,
+): string {
+  const rawValue = stringifyValue(value, fallback);
+  return path ? resolveCanvasOptionLabel(path, rawValue) : rawValue;
 }
 
 function getStringArrayMetadata(block: CanvasBlock, key: string): string[] {

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 
 export type MenuSeparator = { readonly separator: true };
 
@@ -94,6 +95,12 @@ export function PositionedContextMenu({
       role="menu"
       style={{ left: position.x, top: position.y }}
       tabIndex={-1}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'menu',
+        ownerId: groupId,
+        priority: 40,
+        ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+      })}
       {...{ [MENU_GROUP_ATTR]: groupId }}
     >
       {items.map((item, index) =>
@@ -171,7 +178,12 @@ function PositionedContextMenuItem({
         {item.icon !== undefined ? <span className="neko-menu-item-icon">{item.icon}</span> : null}
         <span className="neko-menu-item-label">{item.label}</span>
         {item.shortcut !== undefined ? (
-          <span className="neko-menu-item-shortcut">{item.shortcut}</span>
+          <span
+            className="neko-menu-item-shortcut neko-shortcut-hint"
+            data-neko-shortcut-hint="true"
+          >
+            {item.shortcut}
+          </span>
         ) : null}
         {hasSubmenu ? <span className="neko-menu-item-arrow">›</span> : null}
       </button>

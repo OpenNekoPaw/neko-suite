@@ -206,6 +206,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           id: 'scene-children',
           layout: 'grid',
           summaryRole: 'node-summary',
+          filter: { nodeTypes: ['shot'] },
           emptyLabel: 'preset.scene.noChildren',
         },
       ],
@@ -215,7 +216,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
       childIds: [],
       layout: { mode: 'sequence' },
       acceptedChildren: {
-        nodeTypes: ['shot', 'media', 'annotation', 'text', 'gallery', 'group'],
+        nodeTypes: ['shot'],
       },
       deleteBehavior: 'release-children',
     }),
@@ -260,7 +261,10 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
         {
           id: 'gallery-prompt',
           layout: 'stack',
-          visibleWhen: 'selected',
+          visibleWhen: 'expanded',
+          collapsible: true,
+          defaultCollapsed: true,
+          title: 'preset.gallery.advanced',
           blocks: [
             fieldBlock(
               'gallery-global-prompt',
@@ -273,7 +277,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
         {
           id: 'gallery-profile',
           layout: 'stack',
-          visibleWhen: 'selected',
+          visibleWhen: 'expanded',
           collapsible: true,
           defaultCollapsed: true,
           title: 'preset.gallery.characterProfile',

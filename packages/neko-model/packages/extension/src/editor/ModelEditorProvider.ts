@@ -18,9 +18,12 @@ import type {
   NekoModelAPI,
 } from '@neko/shared';
 import {
+  createFocusedWebviewRegistry,
   generateDefaultCubeGlb,
   generateHumanoidGlb,
   injectLocaleAttribute,
+  type FocusedWebviewDisposable,
+  type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import { ModelDocument } from './ModelDocument';
 import type { ModelStatusProjection, ModelStatusSnapshot } from './modelStatusProjection';
@@ -59,11 +62,15 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   private panelGeneration = 0;
   private lastSceneSnapshot: EngineSceneSnapshot | undefined;
   private activeModelPath: string | undefined;
+  private readonly focusedWebviews: IFocusedWebviewRegistry;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly statusProjection?: ModelStatusProjection,
-  ) {}
+    focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
+  ) {
+    this.focusedWebviews = focusedWebviews;
+  }
 
   openCustomDocument(
     uri: vscode.Uri,
@@ -82,6 +89,16 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     const generation = ++this.panelGeneration;
     this.activeWebviewPanel = webviewPanel;
     this.activeDocument = document;
+    const documentUri = document.uri.toString();
+    const focusedRegistration: FocusedWebviewDisposable = this.focusedWebviews.register({
+      id: documentUri,
+      viewType: ModelEditorProvider.viewType,
+      documentUri,
+      panel: webviewPanel,
+      visible: webviewPanel.visible,
+      active: webviewPanel.active,
+    });
+    this.context.subscriptions.push(focusedRegistration);
 
     const workspaceFolders = this.getWorkspaceFolderUris();
     const documentResourceRoots =
@@ -107,6 +124,13 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     webviewPanel.onDidChangeViewState(
       (event) => {
         if (!this.isPanelCurrent(event.webviewPanel, generation)) return;
+        const panelId = document.uri.toString();
+        this.focusedWebviews.markVisible(panelId, event.webviewPanel.visible);
+        if (event.webviewPanel.active) {
+          this.focusedWebviews.markActive(panelId);
+          this.activeWebviewPanel = event.webviewPanel;
+          this.activeDocument = document;
+        }
         void this.postToPanel(event.webviewPanel, generation, {
           type: 'webviewVisibility',
           visible: event.webviewPanel.visible,
@@ -120,6 +144,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     );
 
     webviewPanel.onDidDispose(() => {
+      focusedRegistration.dispose();
       if (!this.isPanelCurrent(webviewPanel, generation)) return;
       this.panelGeneration++;
       this.activeWebviewPanel = undefined;
@@ -137,12 +162,11 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   /**
    * Forward keyboard action to active webview
    */
-  postKeyboardAction(action: string): void {
-    const panel = this.activeWebviewPanel;
-    if (!panel) return;
-    void this.postToPanel(panel, this.panelGeneration, {
-      type: 'keyboardAction',
-      action,
+  async postKeyboardAction(action: string, documentUri?: vscode.Uri): Promise<boolean> {
+    return this.focusedWebviews.postKeyboardAction(action, {
+      viewType: ModelEditorProvider.viewType,
+      documentUri: documentUri?.toString(),
+      allowSingleVisibleFallback: true,
     });
   }
 

@@ -138,46 +138,47 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
   }
 
   // Helper: forward command to active audio webview
-  const forwardCommand = (command: string): boolean => {
-    const msg = { type: 'command', command };
-    const sent = audioProvider?.postToActivePanels(msg) || projectProvider?.postToActivePanels(msg);
-    return !!sent;
+  const forwardCommand = async (command: string): Promise<boolean> => {
+    if (await audioProvider?.postCommandToFocusedPanel(command)) {
+      return true;
+    }
+    return Boolean(await projectProvider?.postCommandToFocusedPanel(command));
   };
 
   // Register commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.audio.record', () => {
-      if (!forwardCommand('toggleRecording')) {
+    vscode.commands.registerCommand('neko.audio.record', async () => {
+      if (!(await forwardCommand('toggleRecording'))) {
         vscode.window.showInformationMessage('Audio recording — open an audio file to start');
       }
     }),
-    vscode.commands.registerCommand('neko.audio.denoise', () => {
-      if (!forwardCommand('denoise')) {
+    vscode.commands.registerCommand('neko.audio.denoise', async () => {
+      if (!(await forwardCommand('denoise'))) {
         vscode.window.showInformationMessage('Denoise — open an audio file first');
       }
     }),
-    vscode.commands.registerCommand('neko.audio.normalize', () => {
-      if (!forwardCommand('normalize')) {
+    vscode.commands.registerCommand('neko.audio.normalize', async () => {
+      if (!(await forwardCommand('normalize'))) {
         vscode.window.showInformationMessage('Normalize — open an audio file first');
       }
     }),
-    vscode.commands.registerCommand('neko.audio.showSpectrum', () => {
-      if (!forwardCommand('toggleSpectrum')) {
+    vscode.commands.registerCommand('neko.audio.showSpectrum', async () => {
+      if (!(await forwardCommand('toggleSpectrum'))) {
         vscode.window.showInformationMessage('Spectrum — open an audio file first');
       }
     }),
-    vscode.commands.registerCommand('neko.audio.trim', () => {
-      if (!forwardCommand('trim')) {
+    vscode.commands.registerCommand('neko.audio.trim', async () => {
+      if (!(await forwardCommand('trim'))) {
         vscode.window.showInformationMessage('Trim — select a region in the waveform first');
       }
     }),
-    vscode.commands.registerCommand('neko.audio.fadeIn', () => {
-      if (!forwardCommand('fadeIn')) {
+    vscode.commands.registerCommand('neko.audio.fadeIn', async () => {
+      if (!(await forwardCommand('fadeIn'))) {
         vscode.window.showInformationMessage('Fade In — select a region first');
       }
     }),
-    vscode.commands.registerCommand('neko.audio.fadeOut', () => {
-      if (!forwardCommand('fadeOut')) {
+    vscode.commands.registerCommand('neko.audio.fadeOut', async () => {
+      if (!(await forwardCommand('fadeOut'))) {
         vscode.window.showInformationMessage('Fade Out — select a region first');
       }
     }),
@@ -200,8 +201,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
       }
     }),
 
-    vscode.commands.registerCommand('neko.audio.exportAs', () => {
-      if (!forwardCommand('toggleExport')) {
+    vscode.commands.registerCommand('neko.audio.exportAs', async () => {
+      if (!(await forwardCommand('toggleExport'))) {
         vscode.window.showInformationMessage('Export As — open an audio file first');
       }
     }),

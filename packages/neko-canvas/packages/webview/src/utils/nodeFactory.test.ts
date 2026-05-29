@@ -179,10 +179,12 @@ describe('nodeFactory composable presets', () => {
       policy: 'scene',
       childIds: [],
       layout: { mode: 'sequence' },
+      acceptedChildren: { nodeTypes: ['shot'] },
     });
     expect(node.content?.childSlots?.[0]).toMatchObject({
       id: 'scene-children',
       summaryRole: 'node-summary',
+      filter: { nodeTypes: ['shot'] },
     });
     expect(node.preview).toMatchObject({
       title: 'Arrival',

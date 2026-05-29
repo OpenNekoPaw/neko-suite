@@ -1,5 +1,6 @@
 import * as SliderPrimitive from '@radix-ui/react-slider';
 import type React from 'react';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 
 export interface SliderProps {
@@ -46,6 +47,20 @@ export function Slider({
       }}
       step={step}
       value={[value]}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'timeline',
+        ownerId: label ? `slider:${label}` : 'slider',
+        ownedKeys: [
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+          'Home',
+          'End',
+          'PageUp',
+          'PageDown',
+        ],
+      })}
     >
       <SliderPrimitive.Track className="relative h-1.5 grow overflow-hidden rounded-full bg-[var(--neko-surface)]">
         <SliderPrimitive.Range className="absolute h-full bg-[var(--neko-accent)]" />

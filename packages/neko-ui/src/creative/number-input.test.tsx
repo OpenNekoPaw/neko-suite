@@ -59,6 +59,8 @@ describe('@neko/ui creative number controls', () => {
       input?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
     });
     expect(onCommit).toHaveBeenCalledWith('opacity', 100);
+    expect(input?.getAttribute('data-neko-keyboard-scope')).toBe('text-input');
+    expect(input?.getAttribute('data-neko-keyboard-owner')).toBe('number-input:opacity');
   });
 
   it('composes the shared Slider primitive for range editing', () => {

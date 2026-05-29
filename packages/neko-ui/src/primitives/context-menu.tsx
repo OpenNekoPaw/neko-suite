@@ -1,6 +1,7 @@
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 import type React from 'react';
 import type { ReactNode } from 'react';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 
 export interface ContextMenuActionItem {
@@ -48,6 +49,12 @@ export function ContextMenu({
             'shadow-[var(--neko-shadow-md,0_8px_24px_rgba(0,0,0,0.28))]',
             className,
           )}
+          {...getKeyboardBoundaryMetadata({
+            scope: 'menu',
+            ownerId: 'context-menu',
+            priority: 40,
+            ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          })}
         >
           {items.map((item) =>
             item.type === 'separator' ? (
@@ -71,7 +78,10 @@ export function ContextMenu({
               >
                 <span>{item.label}</span>
                 {item.shortcut ? (
-                  <span className="text-[var(--vscode-descriptionForeground)]">
+                  <span
+                    className="neko-shortcut-hint text-[var(--vscode-descriptionForeground)]"
+                    data-neko-shortcut-hint="true"
+                  >
                     {item.shortcut}
                   </span>
                 ) : null}

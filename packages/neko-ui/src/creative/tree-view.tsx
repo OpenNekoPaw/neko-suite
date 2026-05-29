@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import { toCodiconClassName } from '../icons/codicon';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 import {
   DEFAULT_TREE_VIEW_VIRTUALIZATION,
@@ -160,6 +161,20 @@ export function TreeView({
       role="tree"
       style={useVirtualization ? { height } : undefined}
       tabIndex={0}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'tree',
+        ownerId: label,
+        ownedKeys: [
+          'Enter',
+          'Space',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+          'Home',
+          'End',
+        ],
+      })}
       onKeyDown={(event) => {
         handleTreeKeyDown({
           event,

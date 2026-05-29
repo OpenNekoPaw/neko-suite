@@ -368,6 +368,48 @@ describe('canvasStore scene container actions', () => {
 
     expect(useCanvasStore.getState().canvasData?.behavior).toEqual({ blackboard: [] });
   });
+
+  it('normalizes undersized nodes at store boundaries', () => {
+    useCanvasStore.getState().setCanvasData(
+      createCanvasData([
+        {
+          ...createSceneNode(),
+          id: 'tiny-scene',
+          size: { width: 90, height: 60 },
+        },
+      ]),
+    );
+
+    let tinyScene = useCanvasStore
+      .getState()
+      .canvasData?.nodes.find((node) => node.id === 'tiny-scene');
+    expect(tinyScene?.size).toEqual({ width: 320, height: 220 });
+
+    useCanvasStore
+      .getState()
+      .resizeNode('tiny-scene', { width: 200, height: 120 }, { x: 120, y: 140 });
+
+    tinyScene = useCanvasStore
+      .getState()
+      .canvasData?.nodes.find((node) => node.id === 'tiny-scene');
+    expect(tinyScene?.size).toEqual({ width: 320, height: 220 });
+
+    useCanvasStore
+      .getState()
+      .resizeNodeEnd('tiny-scene', { width: 500, height: 260 }, { x: 120, y: 140 });
+
+    tinyScene = useCanvasStore
+      .getState()
+      .canvasData?.nodes.find((node) => node.id === 'tiny-scene');
+    expect(tinyScene?.size).toEqual({ width: 500, height: 260 });
+
+    useCanvasStore.getState().updateNode('tiny-scene', { size: { width: 100, height: 100 } });
+
+    tinyScene = useCanvasStore
+      .getState()
+      .canvasData?.nodes.find((node) => node.id === 'tiny-scene');
+    expect(tinyScene?.size).toEqual({ width: 320, height: 220 });
+  });
 });
 
 describe('playbackStore runtime handoff', () => {

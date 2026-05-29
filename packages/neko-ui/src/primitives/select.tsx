@@ -1,6 +1,7 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import type React from 'react';
 import { toCodiconClassName } from '../icons/codicon';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 
 export interface SelectOption {
@@ -50,6 +51,11 @@ export function Select({
           'disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
+        {...getKeyboardBoundaryMetadata({
+          scope: 'menu',
+          ownerId: label ? `select:${label}` : 'select',
+          ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+        })}
       >
         <SelectPrimitive.Value placeholder={placeholder} />
         <SelectPrimitive.Icon aria-hidden="true">
@@ -65,6 +71,12 @@ export function Select({
           )}
           position="popper"
           sideOffset={4}
+          {...getKeyboardBoundaryMetadata({
+            scope: 'menu',
+            ownerId: label ? `select:${label}:content` : 'select:content',
+            priority: 20,
+            ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          })}
         >
           <SelectPrimitive.Viewport className="p-1">
             {options.map((option, index) => (

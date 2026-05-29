@@ -1,6 +1,7 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import type React from 'react';
 import type { ReactNode } from 'react';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 
 export interface PopoverProps {
@@ -35,6 +36,12 @@ export function Popover({
           )}
           side={side}
           sideOffset={6}
+          {...getKeyboardBoundaryMetadata({
+            scope: 'popover',
+            ownerId: 'popover',
+            priority: 30,
+            ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          })}
         >
           {children}
           <PopoverPrimitive.Arrow className="fill-[var(--neko-border)]" />

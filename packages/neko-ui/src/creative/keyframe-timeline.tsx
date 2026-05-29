@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EasingType, EditorKeyframeTrack } from '@neko/shared';
 import { createPortal } from 'react-dom';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { KeyframeDiamond } from './keyframe-diamond';
 import { TimelineRuler } from './timeline-ruler';
 
@@ -132,6 +133,20 @@ export function KeyframeTimeline({
   return (
     <div
       className={className ? `neko-keyframe-timeline ${className}` : 'neko-keyframe-timeline'}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'timeline',
+        ownerId: 'keyframe-timeline',
+        ownedKeys: [
+          'Delete',
+          'Backspace',
+          'Enter',
+          'Escape',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight',
+        ],
+      })}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -335,6 +350,12 @@ function KeyframeContextMenu({
       role="menu"
       style={{ left: state.x, top: state.y }}
       tabIndex={-1}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'menu',
+        ownerId: 'keyframe-context-menu',
+        priority: 40,
+        ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+      })}
     >
       {items.map((item) =>
         'separator' in item ? (

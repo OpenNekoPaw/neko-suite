@@ -9,8 +9,10 @@ import * as fs from 'node:fs';
 import * as path from 'path';
 import {
   createDefaultLocalResourceAccessService,
+  createFocusedWebviewRegistry,
   injectLocaleAttribute,
   normalizeLocalFilePath,
+  type IFocusedWebviewRegistry,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
 import {
@@ -138,7 +140,11 @@ function readCanvasSubsystemSummary(
 
 function readCanvasProjectionSummary(canvasData: Record<string, unknown>): string | undefined {
   const projectionStatus = canvasData.projectionStatus;
-  if (!projectionStatus || typeof projectionStatus !== 'object' || Array.isArray(projectionStatus)) {
+  if (
+    !projectionStatus ||
+    typeof projectionStatus !== 'object' ||
+    Array.isArray(projectionStatus)
+  ) {
     return undefined;
   }
   const status = projectionStatus as { state?: unknown; message?: unknown };
@@ -373,10 +379,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private _activeStreams = new Map<vscode.WebviewPanel, Map<string, PlaybackHandle>>();
   private readonly localResourceAccess: LocalResourceAccessService;
   private readonly documentResourceCacheRoots: readonly vscode.Uri[];
-  private readonly projectionAdapters: ProjectionAdapterRegistry = createProjectionAdapterRegistry();
+  private readonly projectionAdapters: ProjectionAdapterRegistry =
+    createProjectionAdapterRegistry();
   private readonly projectionSubscriptions = new Map<string, ProjectionDisposable>();
+  private readonly focusedWebviews: IFocusedWebviewRegistry;
 
-  constructor(private readonly context: vscode.ExtensionContext) {
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
+  ) {
+    this.focusedWebviews = focusedWebviews;
     this.localResourceAccess = createDefaultLocalResourceAccessService({
       extensionUri: context.extensionUri,
       context,
@@ -443,6 +455,16 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   ): Promise<void> {
     this.activeWebviewPanel = webviewPanel;
     this.activeDocument = document;
+    const documentUri = document.uri.toString();
+    const focusedRegistration = this.focusedWebviews.register({
+      id: documentUri,
+      viewType: CanvasEditorProvider.viewType,
+      documentUri,
+      panel: webviewPanel,
+      visible: webviewPanel.visible,
+      active: webviewPanel.active,
+    });
+    this.context.subscriptions.push(focusedRegistration);
 
     const extraRoots =
       document.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(document.uri.fsPath))] : [];
@@ -459,7 +481,22 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       this.context.subscriptions,
     );
 
+    webviewPanel.onDidChangeViewState(
+      (event) => {
+        const panelId = document.uri.toString();
+        this.focusedWebviews.markVisible(panelId, event.webviewPanel.visible);
+        if (event.webviewPanel.active) {
+          this.focusedWebviews.markActive(panelId);
+          this.activeWebviewPanel = event.webviewPanel;
+          this.activeDocument = document;
+        }
+      },
+      undefined,
+      this.context.subscriptions,
+    );
+
     webviewPanel.onDidDispose(async () => {
+      focusedRegistration.dispose();
       const panelStreams = this._activeStreams.get(webviewPanel);
       if (panelStreams && panelStreams.size > 0) {
         const playback = await this.getMediaPlayback();
@@ -518,10 +555,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   // Keyboard action forwarding
-  postKeyboardAction(action: string): void {
-    this.activeWebviewPanel?.webview.postMessage({
-      type: 'keyboardAction',
-      action,
+  async postKeyboardAction(action: string, documentUri?: vscode.Uri): Promise<boolean> {
+    return this.focusedWebviews.postKeyboardAction(action, {
+      viewType: CanvasEditorProvider.viewType,
+      documentUri: documentUri?.toString(),
+      allowSingleVisibleFallback: true,
     });
   }
 
@@ -1122,7 +1160,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             : document.uri;
           const content = JSON.stringify(data, null, 2);
           if (targetUri.toString() !== document.uri.toString()) {
-            await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(targetUri.fsPath)));
+            await vscode.workspace.fs.createDirectory(
+              vscode.Uri.file(path.dirname(targetUri.fsPath)),
+            );
           }
           await vscode.workspace.fs.writeFile(targetUri, Buffer.from(content, 'utf-8'));
           // Sync outline & status bar on every save

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as creative from '../creative';
 import * as hooks from '../hooks';
 import * as icons from '../icons';
+import * as keyboard from '../keyboard';
 import * as primitives from '../primitives';
 import * as testUtils from '../test-utils';
 import * as ui from '../index';
@@ -35,5 +36,8 @@ describe('@neko/ui public entrypoints', () => {
     expect(workbench.MainPanelControlLayer).toBe(ui.MainPanelControlLayer);
     expect(ui.ResizeHandle).toBeTypeOf('function');
     expect(testUtils.hasAccessibleName).toBeTypeOf('function');
+    expect(keyboard.KeyboardBoundary).toBe(ui.KeyboardBoundary);
+    expect(keyboard.isEditableTarget).toBe(ui.isEditableTarget);
+    expect(keyboard.useKeyboardDispatcher).toBe(ui.useKeyboardDispatcher);
   });
 });

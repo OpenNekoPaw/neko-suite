@@ -125,6 +125,26 @@ describe('containerActions', () => {
     expect(nextShot?.parentId).toBe('scene-1');
   });
 
+  it('rejects non-shot children for Scene containers', () => {
+    const scene = {
+      id: 'scene-1',
+      type: 'scene',
+      position: { x: 0, y: 0 },
+      size: { width: 400, height: 240 },
+      zIndex: 1,
+      container: { policy: 'scene' as const, childIds: [] },
+      data: { sceneTitle: 'Scene', sceneNumber: 1 },
+    } as CanvasNode;
+    const note = createNode('note-1', 'annotation', 20, 60);
+
+    const result = addContainerChild([scene, note], 'scene-1', 'note-1');
+
+    expect(result.changed).toBe(false);
+    expect(result.error).toContain('child rejected by container policy');
+    expect(result.nodes.find((node) => node.id === 'scene-1')?.container?.childIds).toEqual([]);
+    expect(result.nodes.find((node) => node.id === 'note-1')?.parentId).toBeUndefined();
+  });
+
   it('rejects duplicate IDs within composite input', () => {
     const container = createNode('group-1', 'group');
     const note = createNode('group-1', 'annotation');

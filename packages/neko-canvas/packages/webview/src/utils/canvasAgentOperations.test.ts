@@ -122,7 +122,7 @@ describe('canvasAgentOperations', () => {
     const result = createCanvasComposite(
       { nodes: [], connections: [], generateId: ids() },
       {
-        containerPreset: 'scene.basic',
+        containerPreset: 'group.container',
         position: { x: 100, y: 100 },
         children: [
           { preset: 'shot.basic', data: { visualDescription: 'First beat' } },
@@ -148,16 +148,12 @@ describe('canvasAgentOperations', () => {
       {
         containerType: 'scene',
         position: { x: 100, y: 100 },
-        children: [
-          { type: 'shot', data: { visualDescription: 'First beat' } },
-          { type: 'media', data: { assetPath: 'assets/ref.png', mediaType: 'image' } },
-        ],
+        children: [{ type: 'shot', data: { visualDescription: 'First beat' } }],
       },
     );
 
     const scene = result.nodes.find((item) => item.id === result.result.containerId);
     const shot = result.nodes.find((item) => item.type === 'shot');
-    const media = result.nodes.find((item) => item.type === 'media');
 
     expect(scene?.preset).toBe('scene.basic');
     expect(scene?.content?.childSlots?.[0]?.id).toBe('scene-children');
@@ -165,8 +161,19 @@ describe('canvasAgentOperations', () => {
     expect(getContainerChildIds(scene as CanvasNode)).toEqual(result.result.childIds);
     expect(shot?.preset).toBe('shot.basic');
     expect(shot?.parentId).toBe(scene?.id);
-    expect(media?.preset).toBe('media.basic');
-    expect(media?.parentId).toBe(scene?.id);
+  });
+
+  it('rejects non-shot children when creating Scene composites', () => {
+    expect(() =>
+      createCanvasComposite(
+        { nodes: [], connections: [], generateId: ids() },
+        {
+          containerType: 'scene',
+          position: { x: 100, y: 100 },
+          children: [{ type: 'media', data: { assetPath: 'assets/ref.png', mediaType: 'image' } }],
+        },
+      ),
+    ).toThrow(/child rejected by container policy/);
   });
 
   it('rejects invalid child presets before returning partial nodes', () => {
@@ -333,7 +340,7 @@ describe('canvasAgentOperations', () => {
       policy: 'scene',
       childIds: ['shot-1'],
     });
-    expect(result.focusedContainer?.acceptedChildTypes).toContain('text');
+    expect(result.focusedContainer?.acceptedChildTypes).toEqual(['shot']);
     expect(result.insertionPoint).toEqual({ x: 320, y: 240 });
   });
 
@@ -428,20 +435,20 @@ describe('canvasAgentOperations', () => {
   });
 
   it('inserts Agent text into a container through generic membership actions', () => {
-    const scene = {
-      ...node('scene-1', 'scene', 100, 100),
-      container: { policy: 'scene', childIds: [] },
-      data: { sceneTitle: 'Arrival', sceneNumber: 1 },
+    const group = {
+      ...node('group-1', 'group', 100, 100),
+      container: { policy: 'group', childIds: [] },
+      data: { label: 'Arrival', childIds: [] },
     } as unknown as CanvasNode;
 
     const result = applyCanvasAgentContent(
-      { nodes: [scene], connections: [], generateId: ids() },
+      { nodes: [group], connections: [], generateId: ids() },
       {
         kind: 'text',
         text: 'Beat note',
         format: 'markdown',
         target: {
-          containerId: 'scene-1',
+          containerId: 'group-1',
           mode: 'create-child',
           insertionPoint: { x: 160, y: 220 },
         },
@@ -449,12 +456,36 @@ describe('canvasAgentOperations', () => {
     );
 
     const created = result.nodes.find((item) => item.id === 'generated-1') as CanvasNode;
-    const nextScene = result.nodes.find((item) => item.id === 'scene-1') as CanvasNode;
+    const nextGroup = result.nodes.find((item) => item.id === 'group-1') as CanvasNode;
     expect(result.result.createdNodeIds).toEqual(['generated-1']);
     expect(created.type).toBe('text');
-    expect(created.parentId).toBe('scene-1');
+    expect(created.parentId).toBe('group-1');
     expect(created.data).toMatchObject({ content: 'Beat note', format: 'markdown' });
-    expect(getContainerChildIds(nextScene)).toEqual(['generated-1']);
+    expect(getContainerChildIds(nextGroup)).toEqual(['generated-1']);
+  });
+
+  it('rejects Agent text insertion into Scene containers', () => {
+    const scene = {
+      ...node('scene-1', 'scene', 100, 100),
+      container: { policy: 'scene', childIds: [] },
+      data: { sceneTitle: 'Arrival', sceneNumber: 1 },
+    } as unknown as CanvasNode;
+
+    expect(() =>
+      applyCanvasAgentContent(
+        { nodes: [scene], connections: [], generateId: ids() },
+        {
+          kind: 'text',
+          text: 'Beat note',
+          format: 'markdown',
+          target: {
+            containerId: 'scene-1',
+            mode: 'create-child',
+            insertionPoint: { x: 160, y: 220 },
+          },
+        },
+      ),
+    ).toThrow(/does not accept text nodes/);
   });
 
   it('rejects invalid Agent content targets atomically', () => {

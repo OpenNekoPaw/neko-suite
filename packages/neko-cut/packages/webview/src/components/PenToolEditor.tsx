@@ -9,6 +9,7 @@
  */
 
 import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
 import type { BezierShape, ShapeInstance } from '../types/shape';
 import type { Point2D, BezierPoint } from '../types/mask';
 
@@ -572,6 +573,7 @@ export const PenToolEditor = memo(function PenToolEditor({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (readonly) return;
+      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) return;
 
       switch (e.key) {
         case 'Delete':

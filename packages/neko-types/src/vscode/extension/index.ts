@@ -117,3 +117,15 @@ export type {
   StatusBarItemSpec,
   StatusBarProjectionManagerOptions,
 } from './StatusBarGroup';
+
+// Focused Webview keyboard routing
+export { FocusedWebviewRegistry, createFocusedWebviewRegistry } from './focused-webview-registry';
+export type {
+  FocusedWebviewDisposable,
+  FocusedWebviewPanelLike,
+  FocusedWebviewPostTarget,
+  FocusedWebviewRegistration,
+  FocusedWebviewResolution,
+  FocusedWebviewResolveRequest,
+  IFocusedWebviewRegistry,
+} from './focused-webview-registry';

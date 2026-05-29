@@ -18,6 +18,8 @@ import { useNodeDrag } from '../../hooks/useNodeDrag';
 import { useNodeResize, type ResizeHandle } from '../../hooks/useNodeResize';
 import { useNodeRotate } from '../../hooks/useNodeRotate';
 import { useCanvasStore } from '../../stores/canvasStore';
+import { clampNodeRenderSize, clampNodeSize, resolveNodeMinSize } from '../../utils/nodeSizing';
+import type { NodeSize } from '../../utils/nodeSizing';
 import clsx from 'clsx';
 
 // =============================================================================
@@ -34,6 +36,7 @@ interface BaseNodeInput {
   rotation?: number;
   locked?: boolean;
   ports?: PortDefinition[];
+  container?: unknown;
 }
 
 export interface BaseNodeProps {
@@ -67,6 +70,7 @@ export interface BaseNodeProps {
   children: ReactNode;
   className?: string;
   autoSizeContent?: boolean;
+  minSize?: NodeSize;
   /** Optional visual-only height override. Does not change persisted node.size. */
   renderHeight?: number;
 }
@@ -238,8 +242,15 @@ export function BaseNode({
   children,
   className,
   autoSizeContent = true,
+  minSize,
   renderHeight,
 }: BaseNodeProps) {
+  const nodeMinSize = minSize ?? resolveNodeMinSize(node);
+  const initialResizeSize = useMemo(
+    () => clampNodeSize(node.size, nodeMinSize),
+    [node.size.width, node.size.height, nodeMinSize.width, nodeMinSize.height],
+  );
+
   // Node dragging
   const {
     position: dragPosition,
@@ -262,9 +273,11 @@ export function BaseNode({
     startResize,
   } = useNodeResize({
     nodeId: node.id,
-    initialSize: node.size,
+    initialSize: initialResizeSize,
     initialPosition: node.position,
     viewport,
+    minWidth: nodeMinSize.width,
+    minHeight: nodeMinSize.height,
     onResize,
     onResizeEnd,
     disabled: node.locked,
@@ -273,12 +286,11 @@ export function BaseNode({
   // Use resize position/size when resizing, otherwise drag position + node size.
   // renderHeight is a visual-only override used by collapsed composable nodes.
   const currentPosition = isResizing ? resizePosition : dragPosition;
-  const currentSize = isResizing ? size : node.size;
-  const displaySize = {
-    width: currentSize.width,
-    height:
-      !isResizing && renderHeight !== undefined ? Math.max(0, renderHeight) : currentSize.height,
-  };
+  const currentSize = isResizing ? size : clampNodeSize(node.size, nodeMinSize);
+  const displaySize =
+    !isResizing && renderHeight !== undefined
+      ? clampNodeRenderSize({ ...node, size: currentSize }, { renderHeight, minSize: nodeMinSize })
+      : currentSize;
 
   // Node rotation
   const nodeCenter = useMemo(
@@ -404,7 +416,7 @@ export function BaseNode({
     if (!autoSizeContent || !el || isResizing) return;
     const raf = requestAnimationFrame(() => {
       const scrollH = el.scrollHeight;
-      const targetH = scrollH + 4;
+      const targetH = Math.max(nodeMinSize.height, scrollH + 4);
       if (Math.abs(targetH - currentSize.height) > 4) {
         onResizeEnd?.(node.id, { width: currentSize.width, height: targetH }, currentPosition);
       }

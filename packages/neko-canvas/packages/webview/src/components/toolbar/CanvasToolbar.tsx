@@ -322,7 +322,11 @@ function AddPanelItem({ icon, label, shortcut, onClick }: AddPanelItemProps) {
     <button className="neko-menu-item" onClick={onClick}>
       <span className="neko-menu-item-icon">{icon}</span>
       <span className="neko-menu-item-label">{label}</span>
-      {shortcut !== undefined && <span className="neko-menu-item-shortcut">{shortcut}</span>}
+      {shortcut !== undefined && (
+        <span className="neko-menu-item-shortcut neko-shortcut-hint" data-neko-shortcut-hint="true">
+          {shortcut}
+        </span>
+      )}
     </button>
   );
 }

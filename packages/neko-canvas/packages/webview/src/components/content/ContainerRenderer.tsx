@@ -24,6 +24,7 @@ import { getGlobalVSCodeApi } from '../../utils/vscode';
 import type { CardActionDescriptor, CardBadge, CardPreviewSource } from './node-card';
 import type { NodeCardVariant } from './node-card';
 import { t } from '../../i18n';
+import { resolveCanvasStatusLabel } from '../../i18n/canvasValueLabels';
 
 const MAX_CONTENT_DEPTH = 8;
 const NODE_CARD_POLICY_REGISTRY = createBuiltInNodeCardPolicyRegistry();
@@ -953,7 +954,7 @@ function getChildSlotFrameClassName(presentation: ChildSlotPresentation): string
     return 'flex min-h-0 min-w-0 flex-shrink-0 flex-col gap-1.5';
   }
   if (presentation === 'group-summary' || presentation === 'gallery-grid') {
-    return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-hidden';
+    return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-auto';
   }
   return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5';
 }
@@ -1082,7 +1083,7 @@ function resolveGalleryChildBadges(
   if (!status) {
     return badges;
   }
-  return [{ label: status, tone: badgeToneForStatus(status) }, ...badges];
+  return [{ label: resolveCanvasStatusLabel(status), tone: badgeToneForStatus(status) }, ...badges];
 }
 
 function resolveGalleryCellOrdinal(
@@ -1442,12 +1443,12 @@ function getSectionClassName(layout: string | undefined, fill: boolean): string 
   const fillClass = fill ? ' flex-1 basis-0' : '';
   switch (layout) {
     case 'row':
-      return 'flex min-w-0 flex-row gap-2 p-2';
+      return 'flex min-w-0 flex-row gap-2 overflow-x-auto overflow-y-hidden p-2';
     case 'grid':
     case 'gallery':
-      return `grid min-w-0 grid-cols-2 gap-2 p-2${fillClass}`;
+      return `grid min-h-0 min-w-0 grid-cols-2 gap-2 overflow-auto p-2${fillClass}`;
     case 'table':
-      return `grid min-w-0 gap-1 p-2${fillClass}`;
+      return `grid min-h-0 min-w-0 gap-1 overflow-auto p-2${fillClass}`;
     default:
       return `flex min-h-0 min-w-0 flex-col gap-2 p-2${fillClass}`;
   }

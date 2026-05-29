@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { isKeyboardFocusMessage } from '@neko/ui/keyboard';
 import type {
   CanvasData,
   CanvasDroppedAsset,
@@ -92,6 +93,8 @@ export interface UseVSCodeMessagesOptions {
   onProjectionSourceChanged?: (event: ProjectionSourceChangeEvent) => void;
   /** Called when the Sketch round-trip sends an edited image back to a canvas node */
   onUpdateNodeImage?: (nodeId: string, imageData: string, childNodeId?: string) => void;
+  onKeyboardFocusChange?: (focused: boolean) => void;
+  isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
 }
 
 function withOperationSource<T>(source: OperationSource, run: () => T): T {
@@ -181,6 +184,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     onProjectionStatus,
     onProjectionSourceChanged,
     onUpdateNodeImage,
+    onKeyboardFocusChange,
+    isKeyboardFocusedRef,
   } = options;
 
   const [isReady, setIsReady] = useState(false);
@@ -229,11 +234,22 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onProjectionSourceChangedRef.current = onProjectionSourceChanged;
   const onUpdateNodeImageRef = useRef(onUpdateNodeImage);
   onUpdateNodeImageRef.current = onUpdateNodeImage;
+  const onKeyboardFocusChangeRef = useRef(onKeyboardFocusChange);
+  onKeyboardFocusChangeRef.current = onKeyboardFocusChange;
+  const isKeyboardFocusedRefRef = useRef(isKeyboardFocusedRef);
+  isKeyboardFocusedRefRef.current = isKeyboardFocusedRef;
 
   useEffect(() => {
     if (vscode) {
       const handleMessage = (event: MessageEvent) => {
         const message = event.data;
+        if (isKeyboardFocusMessage(message)) {
+          if (isKeyboardFocusedRefRef.current) {
+            isKeyboardFocusedRefRef.current.current = message.focused;
+          }
+          onKeyboardFocusChangeRef.current?.(message.focused);
+          return;
+        }
         switch (message.type) {
           case 'update': {
             let canvasData = message.data ? (message.data as CanvasData) : defaultCanvasData;
@@ -249,6 +265,9 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             break;
           }
           case 'keyboardAction':
+            if (isKeyboardFocusedRefRef.current?.current === false) {
+              break;
+            }
             keyboardActionRef.current(message.action as string);
             break;
           case 'setLocale':

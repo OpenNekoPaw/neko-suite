@@ -33,6 +33,7 @@ import {
   mapCanvasNodePropertyCommit,
   mapCanvasNodeTransformToProperties,
 } from '../adapters/sharedCanvasUiAdapter';
+import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
 
 // =============================================================================
 // Types
@@ -668,7 +669,10 @@ function ComposableFieldEditor({
       <SelectField
         label={item.label}
         value={toEditableString(item.value)}
-        options={(item.options ?? []).map((option) => ({ value: option, label: option }))}
+        options={(item.options ?? []).map((option) => ({
+          value: option,
+          label: resolveCanvasOptionLabel(item.binding.path, option),
+        }))}
         onChange={(value) => onChange(value || undefined)}
       />
     );
@@ -720,7 +724,7 @@ function ComposableFieldEditor({
             color: 'var(--neko-fg-secondary)',
           }}
         >
-          {toEditableString(item.value)}
+          {resolveCanvasOptionLabel(item.binding.path, toEditableString(item.value))}
         </div>
       </div>
     );

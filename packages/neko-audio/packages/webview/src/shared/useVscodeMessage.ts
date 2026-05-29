@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useCallback, useRef } from 'react';
+import { isKeyboardFocusMessage } from '@neko/ui/keyboard';
 import type { WebviewMessage, ExtensionMessage } from './types';
 import { getLogger } from '../utils/logger';
 
@@ -51,6 +52,10 @@ export function useExtensionMessage(handler: (message: ExtensionMessage) => void
   useEffect(() => {
     const listener = (event: MessageEvent) => {
       const message = event.data as ExtensionMessage;
+      if (isKeyboardFocusMessage(message)) {
+        handlerRef.current(message);
+        return;
+      }
       if (message && typeof message.type === 'string') {
         handlerRef.current(message);
       }

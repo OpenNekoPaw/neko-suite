@@ -40,18 +40,45 @@ export interface ProjectImportAudioResultMessage {
   };
 }
 
+export type AudioUserCommand =
+  | 'toggleRecording'
+  | 'denoise'
+  | 'normalize'
+  | 'toggleSpectrum'
+  | 'trim'
+  | 'fadeIn'
+  | 'fadeOut'
+  | 'toggleExport';
+
 /** Command forwarded from VSCode command palette to webview */
 export interface CommandMessage {
   type: 'command';
-  command:
-    | 'toggleRecording'
-    | 'denoise'
-    | 'normalize'
-    | 'toggleSpectrum'
-    | 'trim'
-    | 'fadeIn'
-    | 'fadeOut'
-    | 'toggleExport';
+  command: AudioUserCommand;
+}
+
+/** Focus-routed keyboard action forwarded by the Extension Host registry. */
+export interface KeyboardActionMessage {
+  type: 'keyboardAction';
+  action: AudioUserCommand;
+}
+
+export type AudioCommandMessage = CommandMessage | KeyboardActionMessage;
+
+export function isAudioUserCommand(value: unknown): value is AudioUserCommand {
+  return (
+    value === 'toggleRecording' ||
+    value === 'denoise' ||
+    value === 'normalize' ||
+    value === 'toggleSpectrum' ||
+    value === 'trim' ||
+    value === 'fadeIn' ||
+    value === 'fadeOut' ||
+    value === 'toggleExport'
+  );
+}
+
+export function readAudioCommandMessage(message: AudioCommandMessage): AudioUserCommand {
+  return message.type === 'keyboardAction' ? message.action : message.command;
 }
 
 /** Preset list response */
@@ -81,7 +108,8 @@ export type ExtensionMessage =
   | ProjectSaveAsRequestMessage
   | ProjectRevertMessage
   | PresetListMessage
-  | CommandMessage;
+  | { type: 'keyboardFocus'; focused: boolean }
+  | AudioCommandMessage;
 
 // =============================================================================
 // Webview → Extension Messages

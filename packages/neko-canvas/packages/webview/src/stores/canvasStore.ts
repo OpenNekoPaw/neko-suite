@@ -55,6 +55,12 @@ import {
   applyCanvasAgentContent,
   updateCanvasBlock,
 } from '../utils/canvasAgentOperations';
+import {
+  clampNodeSize,
+  clampNodeStoredSize,
+  clampNodeStoredSizes,
+  resolveNodeMinSize,
+} from '../utils/nodeSizing';
 
 // =============================================================================
 // Types
@@ -389,7 +395,21 @@ function recordChangedNodesForAudit(previousNodes: CanvasNode[], nextNodes: Canv
 }
 
 function withSubsystemMetadataDefaults(canvasData: CanvasData): CanvasData {
-  return applyCanvasSubsystemMetadataDefaults(canvasData);
+  return applyCanvasSubsystemMetadataDefaults({
+    ...canvasData,
+    nodes: clampNodeStoredSizes(canvasData.nodes),
+  });
+}
+
+function clampNodeUpdateSize(node: CanvasNode, updates: Partial<CanvasNode>): Partial<CanvasNode> {
+  if (!updates.size) {
+    return updates;
+  }
+
+  return {
+    ...updates,
+    size: clampNodeSize(updates.size, resolveNodeMinSize(node)),
+  };
 }
 
 // =============================================================================
@@ -434,7 +454,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   updateCanvasData: (updates) => {
     const { canvasData } = get();
     if (!canvasData) return;
-    set({ canvasData: { ...canvasData, ...updates } });
+    set({
+      canvasData: withSubsystemMetadataDefaults({
+        ...canvasData,
+        ...updates,
+      }),
+    });
   },
 
   // ==================== Node Actions ====================
@@ -445,7 +470,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     recordHistory(canvasData);
 
     const id = generateId();
-    const newNode = hydrateCanvasNodePreview({ ...node, id } as CanvasNode);
+    const newNode = hydrateCanvasNodePreview(clampNodeStoredSize({ ...node, id } as CanvasNode));
 
     set({
       canvasData: withSubsystemMetadataDefaults({
@@ -468,7 +493,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const newNodes = nodes.map((node) => {
       const id = generateId();
       ids.push(id);
-      return hydrateCanvasNodePreview({ ...node, id } as CanvasNode);
+      return hydrateCanvasNodePreview(clampNodeStoredSize({ ...node, id } as CanvasNode));
     });
 
     set({
@@ -498,17 +523,18 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         (before as any)[key] = (oldNode as any)[key];
       }
     }
+    const normalizedUpdates = oldNode ? clampNodeUpdateSize(oldNode, updates) : updates;
 
     set({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? ({ ...node, ...updates } as CanvasNode) : node,
+          node.id === id ? ({ ...node, ...normalizedUpdates } as CanvasNode) : node,
         ),
       },
     });
 
-    useCanvasOperationStore.getState().recordNodeUpdate(id, updates, before);
+    useCanvasOperationStore.getState().recordNodeUpdate(id, normalizedUpdates, before);
   },
 
   updateNodeData: (id, data) => {
@@ -638,12 +664,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const { canvasData } = get();
     if (!canvasData) return;
 
+    const target = canvasData.nodes.find((node) => node.id === id);
+    if (!target) return;
+    const clampedSize = clampNodeSize(size, resolveNodeMinSize(target));
+
     // No history recording – called on every mousemove during resize
     set({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, size, position } : node,
+          node.id === id ? { ...node, size: clampedSize, position } : node,
         ),
       },
     });
@@ -654,26 +684,26 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!canvasData) return;
 
     const oldNode = canvasData.nodes.find((n) => n.id === id);
+    if (!oldNode) return;
+    const clampedSize = clampNodeSize(size, resolveNodeMinSize(oldNode));
     recordHistory(canvasData);
 
     set({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, size, position } : node,
+          node.id === id ? { ...node, size: clampedSize, position } : node,
         ),
       },
     });
 
-    if (oldNode) {
-      useCanvasOperationStore
-        .getState()
-        .recordNodeUpdate(
-          id,
-          { size, position } as any,
-          { size: oldNode.size, position: oldNode.position } as any,
-        );
-    }
+    useCanvasOperationStore
+      .getState()
+      .recordNodeUpdate(
+        id,
+        { size: clampedSize, position } as any,
+        { size: oldNode.size, position: oldNode.position } as any,
+      );
   },
 
   rotateNode: (id, rotation) => {

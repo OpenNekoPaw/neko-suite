@@ -7,6 +7,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDrag } from '@neko/ui/hooks';
 import type { CanvasViewport } from '@neko/shared';
+import { DEFAULT_NODE_MIN_SIZE } from '../utils/nodeSizing';
 
 // =============================================================================
 // Types
@@ -65,8 +66,8 @@ export function useNodeResize({
   initialSize,
   initialPosition,
   viewport,
-  minWidth = 80,
-  minHeight = 60,
+  minWidth = DEFAULT_NODE_MIN_SIZE.width,
+  minHeight = DEFAULT_NODE_MIN_SIZE.height,
   onResize,
   onResizeEnd,
   disabled = false,

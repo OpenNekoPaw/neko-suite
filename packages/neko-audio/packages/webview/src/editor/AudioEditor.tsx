@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
+import { isKeyboardFocusMessage, useFocusedWebviewRoot } from '@neko/ui/keyboard';
 import { useExtensionMessage, useVscodeReady, postMessage } from '../shared/useVscodeMessage';
 import { useAudioStore } from '../stores/audioStore';
 import { useAudioProjectStore } from '../stores/audioProjectStore';
@@ -22,10 +23,16 @@ import { EmptyProject } from '../components/EmptyProject';
 import { AudioTimeline } from '../components/Timeline/AudioTimeline';
 import { MixerPanel } from '../components/MixerPanel';
 import { Toast } from '../components/Toast';
-import type { ExtensionMessage } from '../shared/types';
+import {
+  isAudioUserCommand,
+  readAudioCommandMessage,
+  type AudioCommandMessage,
+  type ExtensionMessage,
+} from '../shared/types';
 import { handleAudioResponseMessage } from '../shared/audioProtocolHandler';
 import { t } from '../i18n';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
+import '@neko/ui/keyboard/focus.css';
 import '../styles/editor.css';
 
 export function AudioEditor() {
@@ -62,6 +69,8 @@ export function AudioEditor() {
 
   // Drag-drop support for importing audio into project
   const editorRef = useRef<HTMLDivElement>(null);
+  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } =
+    useFocusedWebviewRoot(editorRef);
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useDragDrop(editorRef);
 
   useKeyboardShortcuts({ onTogglePlay: togglePlay, onStop: stop });
@@ -79,6 +88,11 @@ export function AudioEditor() {
   // Handle messages from Extension Host
   const handleMessage = useCallback(
     (message: ExtensionMessage) => {
+      if (isKeyboardFocusMessage(message)) {
+        setKeyboardFocused(message.focused);
+        return;
+      }
+
       if (message.type.startsWith('audio:')) {
         const handled = handleAudioResponseMessage(
           message as Extract<ExtensionMessage, { type: `audio:${string}` }>,
@@ -128,83 +142,24 @@ export function AudioEditor() {
           break;
 
         case 'command': {
-          const cmd = (message as { command: string }).command;
-          const store = useAudioStore.getState();
-          switch (cmd) {
-            case 'toggleRecording':
-              store.toggleSidePanel('recording');
-              break;
-            case 'toggleSpectrum':
-              store.toggleSpectrum();
-              break;
-            case 'toggleExport':
-              store.toggleSidePanel('export');
-              break;
-            case 'denoise':
-              postMessage({
-                type: 'audio:effects',
-                effects: [
-                  {
-                    id: crypto.randomUUID(),
-                    effectType: 'noise-gate',
-                    enabled: true,
-                    params: { threshold: -40, attack: 1, hold: 50, release: 100 },
-                  },
-                ],
-              });
-              break;
-            case 'normalize':
-              postMessage({
-                type: 'audio:effects',
-                effects: [
-                  {
-                    id: crypto.randomUUID(),
-                    effectType: 'gain',
-                    enabled: true,
-                    params: { gainDb: 0 },
-                  },
-                ],
-              });
-              break;
-            case 'trim': {
-              const sel = store.selection;
-              if (sel) {
-                postMessage({
-                  type: 'audio:trim',
-                  startTime: sel.start,
-                  endTime: sel.end,
-                  mode: store.projectMode ? 'project' : 'single-file',
-                });
-              }
-              break;
-            }
-            case 'fadeIn':
-              postMessage({
-                type: 'audio:effects',
-                effects: [
-                  {
-                    id: crypto.randomUUID(),
-                    effectType: 'gain',
-                    enabled: true,
-                    params: { gainDb: 0, automation: 'fadeIn', duration: 1.0 },
-                  },
-                ],
-              });
-              break;
-            case 'fadeOut':
-              postMessage({
-                type: 'audio:effects',
-                effects: [
-                  {
-                    id: crypto.randomUUID(),
-                    effectType: 'gain',
-                    enabled: true,
-                    params: { gainDb: 0, automation: 'fadeOut', duration: 1.0 },
-                  },
-                ],
-              });
-              break;
+          if (!isKeyboardFocusedRef.current) {
+            break;
           }
+          if (!isAudioUserCommand(message.command)) {
+            break;
+          }
+          handleUserCommand(message);
+          break;
+        }
+
+        case 'keyboardAction': {
+          if (!isKeyboardFocusedRef.current) {
+            break;
+          }
+          if (!isAudioUserCommand(message.action)) {
+            break;
+          }
+          handleUserCommand(message);
           break;
         }
       }
@@ -217,6 +172,8 @@ export function AudioEditor() {
       setProjectMode,
       setMarkers,
       setLoudness,
+      setKeyboardFocused,
+      isKeyboardFocusedRef,
       showToast,
     ],
   );
@@ -251,6 +208,7 @@ export function AudioEditor() {
     <div
       ref={editorRef}
       className="flex flex-col w-full h-full bg-[var(--editor-bg)] text-[var(--editor-fg)] overflow-hidden relative"
+      data-neko-keyboard-focused={isKeyboardFocused ? 'true' : 'false'}
       onDragOver={projectMode ? handleDragOver : undefined}
       onDragLeave={projectMode ? handleDragLeave : undefined}
       onDrop={projectMode ? handleDrop : undefined}
@@ -302,4 +260,85 @@ export function AudioEditor() {
       <Toast />
     </div>
   );
+}
+
+function handleUserCommand(message: AudioCommandMessage): void {
+  const cmd = readAudioCommandMessage(message);
+  const store = useAudioStore.getState();
+
+  switch (cmd) {
+    case 'toggleRecording':
+      store.toggleSidePanel('recording');
+      break;
+    case 'toggleSpectrum':
+      store.toggleSpectrum();
+      break;
+    case 'toggleExport':
+      store.toggleSidePanel('export');
+      break;
+    case 'denoise':
+      postMessage({
+        type: 'audio:effects',
+        effects: [
+          {
+            id: crypto.randomUUID(),
+            effectType: 'noise-gate',
+            enabled: true,
+            params: { threshold: -40, attack: 1, hold: 50, release: 100 },
+          },
+        ],
+      });
+      break;
+    case 'normalize':
+      postMessage({
+        type: 'audio:effects',
+        effects: [
+          {
+            id: crypto.randomUUID(),
+            effectType: 'gain',
+            enabled: true,
+            params: { gainDb: 0 },
+          },
+        ],
+      });
+      break;
+    case 'trim': {
+      const sel = store.selection;
+      if (sel) {
+        postMessage({
+          type: 'audio:trim',
+          startTime: sel.start,
+          endTime: sel.end,
+          mode: store.projectMode ? 'project' : 'single-file',
+        });
+      }
+      break;
+    }
+    case 'fadeIn':
+      postMessage({
+        type: 'audio:effects',
+        effects: [
+          {
+            id: crypto.randomUUID(),
+            effectType: 'gain',
+            enabled: true,
+            params: { gainDb: 0, automation: 'fadeIn', duration: 1.0 },
+          },
+        ],
+      });
+      break;
+    case 'fadeOut':
+      postMessage({
+        type: 'audio:effects',
+        effects: [
+          {
+            id: crypto.randomUUID(),
+            effectType: 'gain',
+            enabled: true,
+            params: { gainDb: 0, automation: 'fadeOut', duration: 1.0 },
+          },
+        ],
+      });
+      break;
+  }
 }

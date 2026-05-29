@@ -5,6 +5,7 @@
  * Toolbar | Canvas | Side panels (Brush/Color/Layers)
  */
 import { useEffect, useCallback, useState } from 'react';
+import { isEditableTarget, isKeyboardFocusMessage, useFocusedWebviewRoot } from '@neko/ui/keyboard';
 import { useResizable } from '@neko/ui/hooks';
 import { ResizeHandle } from '@neko/ui/primitives';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
@@ -30,7 +31,6 @@ import {
 } from './components';
 import { deserializeDocument, serializeDocument } from './utils/document-serializer';
 import { dispatchKeyboardAction } from './utils/keyboard-dispatcher';
-import { isEditableTarget } from './utils/editable-target';
 import { getSketchKeyboardAction } from './utils/sketch-keyboard-shortcuts';
 import { importImageAsLayer, importImageFromBlob, isImageMimeType } from './utils/image-import';
 import { createTextureStampAssetFromBase64 } from './brush';
@@ -128,6 +128,8 @@ export function App() {
     size: sidebarWidth,
     onSizeChange: setSidebarWidth,
   });
+  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } =
+    useFocusedWebviewRoot(rootRef);
 
   useEffect(() => {
     vscode.postMessage({
@@ -209,6 +211,12 @@ export function App() {
   const handleMessage = useCallback(
     async (event: MessageEvent<ExtensionToWebviewMessage>) => {
       const msg = event.data;
+      const focusMessage = isKeyboardFocusMessage(msg) ? msg : null;
+      if (focusMessage) {
+        setKeyboardFocused(focusMessage.focused);
+        return;
+      }
+
       switch (msg.type) {
         case 'document:load': {
           const parsed = deserializeDocument(msg.data);
@@ -267,6 +275,9 @@ export function App() {
         }
 
         case 'keyboardAction': {
+          if (!isKeyboardFocusedRef.current) {
+            break;
+          }
           if (isEditableTarget(document.activeElement)) {
             break;
           }
@@ -550,7 +561,10 @@ export function App() {
 
   return (
     <I18nProvider service={i18nService}>
-      <div className="flex flex-col h-screen w-screen overflow-hidden relative">
+      <div
+        className="flex flex-col h-screen w-screen overflow-hidden relative"
+        data-neko-keyboard-focused={isKeyboardFocused ? 'true' : 'false'}
+      >
         {/* Drag-over visual feedback */}
         {isDragOver && (
           <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none bg-black/30 border-2 border-dashed border-[var(--vscode-focusBorder,#007acc)]">

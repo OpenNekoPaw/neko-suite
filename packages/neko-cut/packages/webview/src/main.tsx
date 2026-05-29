@@ -5,6 +5,7 @@ import { I18nProvider } from '@/i18n/I18nContext';
 import { ToastProvider } from '@/components/Toast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { i18nService } from '@/i18n';
+import '@neko/ui/keyboard/focus.css';
 import '@/index.css';
 import { getLogger } from '@/utils/logger';
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useFocusedWebviewRoot } from '@neko/ui/keyboard';
 import { useResizable } from '@neko/ui/hooks';
 import { ResizeHandle } from '@neko/ui/primitives';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
@@ -149,6 +150,7 @@ function App() {
     maxSize: CUT_PROPERTY_PANEL_WIDTH_BOUNDS.maxSize,
     onSizeChange: setPropertyPanelWidth,
   });
+  const { isKeyboardFocused, setKeyboardFocused } = useFocusedWebviewRoot(rootRef);
 
   // Playback loop with optimized timing (avoid excessive store updates)
   // Use refs to avoid restarting the loop when currentTime changes
@@ -211,6 +213,23 @@ function App() {
     sendMessage({ type: 'ready' });
   }, [sendMessage]);
 
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const message = event.data;
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: unknown }).type === 'keyboardFocus' &&
+        typeof (message as { focused?: unknown }).focused === 'boolean'
+      ) {
+        setKeyboardFocused((message as { focused: boolean }).focused);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [setKeyboardFocused]);
+
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full bg-vscode-bg">
@@ -226,6 +245,7 @@ function App() {
     <div
       ref={rootRef}
       className="flex h-full bg-vscode-bg"
+      data-neko-keyboard-focused={isKeyboardFocused ? 'true' : 'false'}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >

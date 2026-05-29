@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect } from 'react';
+import { isComposingKeyboardEvent, isEditableTarget } from '@neko/ui/keyboard';
 import type { CanvasNode } from '@neko/shared';
 import { useCanvasStore } from '../stores/canvasStore';
 import type { VSCodeAPI } from './useVSCodeMessages';
@@ -37,6 +38,7 @@ export interface UseKeyboardActionsOptions {
   handleDuplicate: () => void;
   onGenerateSelected?: () => void;
   reportAction: (action: string, label: string, detail?: string) => void;
+  isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
 }
 
 export interface UseKeyboardActionsReturn {
@@ -71,10 +73,15 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
     handleDuplicate,
     onGenerateSelected,
     reportAction,
+    isKeyboardFocusedRef,
   } = options;
 
   const handleKeyboardAction = useCallback(
     (action: string) => {
+      if (isKeyboardFocusedRef?.current === false) {
+        return;
+      }
+
       // Handle outline selection commands (selectNode:id, selectConnection:id)
       if (action.startsWith('selectNode:')) {
         const nodeId = action.slice('selectNode:'.length);
@@ -163,6 +170,7 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
       }
     },
     [
+      isKeyboardFocusedRef,
       selectedNodeIds,
       selectedConnectionIds,
       deleteSelected,
@@ -192,13 +200,15 @@ export function useKeyboardActions(options: UseKeyboardActionsOptions): UseKeybo
     if (vscode) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
+        return;
+      }
+
       if (e.key === 'Escape') {
         handleKeyboardAction('escape');
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const target = e.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
         handleKeyboardAction('deleteSelected');
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') {

@@ -289,6 +289,7 @@ export type ExtensionToWebviewMessage =
   | SketchAIResultApplyMessage
   | SketchAIErrorMessage
   | SketchAICancelMessage
+  | { type: 'keyboardFocus'; focused: boolean }
   | { type: 'keyboardAction'; action: string }
   | { type: 'setLocale'; locale: string }
   // Phase 2: export request from extension

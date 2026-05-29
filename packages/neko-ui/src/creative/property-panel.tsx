@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { Button, Select, TooltipProvider } from '../primitives';
 import { cn } from '../utils';
 import { ColorPicker } from './color-picker';
@@ -196,6 +197,11 @@ function renderPropertyControl(
             'outline-none focus-visible:border-[var(--vscode-focusBorder)] disabled:cursor-not-allowed disabled:opacity-50',
           )}
           disabled={property.disabled}
+          {...getKeyboardBoundaryMetadata({
+            scope: 'text-input',
+            ownerId: `property-text:${property.id}`,
+            ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          })}
           onBlur={(event) => onCommit?.(property.id, event.currentTarget.value)}
           onChange={(event) => onPreviewChange?.(property.id, event.currentTarget.value)}
           onKeyDown={(event) => {

@@ -1,4 +1,9 @@
 import { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import {
+  isComposingKeyboardEvent,
+  isEditableTarget,
+  useFocusedWebviewRoot,
+} from '@neko/ui/keyboard';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import type {
   CanvasData,
@@ -103,6 +108,8 @@ export function CanvasApp() {
   >([]);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } =
+    useFocusedWebviewRoot(rootRef);
 
   const {
     setCanvasData,
@@ -585,6 +592,8 @@ export function CanvasApp() {
         if (cells) updateNodeData(nodeId, { cells });
       }
     },
+    onKeyboardFocusChange: setKeyboardFocused,
+    isKeyboardFocusedRef,
     getNodes: (type) => {
       const allNodes = useCanvasStore.getState().canvasData?.nodes ?? [];
       return type ? allNodes.filter((n) => n.type === type) : allNodes;
@@ -887,6 +896,7 @@ export function CanvasApp() {
     handleDuplicate,
     onGenerateSelected: handleGenerateSelected,
     reportAction,
+    isKeyboardFocusedRef,
   });
 
   // Keep ref in sync with latest handler (for VSCode message dispatch)
@@ -895,14 +905,11 @@ export function CanvasApp() {
   // H key toggles hand tool (drag-to-pan)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isComposingKeyboardEvent(e) || isEditableTarget(e.target)) {
+        return;
+      }
+
       if (e.code === 'KeyH' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const active = document.activeElement;
-        if (
-          active instanceof HTMLInputElement ||
-          active instanceof HTMLTextAreaElement ||
-          (active as HTMLElement)?.isContentEditable
-        )
-          return;
         setInteractionTool((prev) => (prev === 'pan' ? 'select' : 'pan'));
       }
     };
@@ -1166,7 +1173,11 @@ export function CanvasApp() {
   }
 
   return (
-    <div ref={rootRef} className="canvas-workbench-root">
+    <div
+      ref={rootRef}
+      className="canvas-workbench-root"
+      data-neko-keyboard-focused={isKeyboardFocused ? 'true' : 'false'}
+    >
       <CreativeWorkbenchShell
         className="canvas-workbench-shell"
         bodyClassName="canvas-workbench-body"

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type React from 'react';
+import { getKeyboardBoundaryMetadata } from '../keyboard';
 import { cn } from '../utils';
 
 export interface ColorSwatchProps {
@@ -66,6 +67,11 @@ export function ColorPicker({
           aria-label={label ?? id}
           className="h-7 w-10 cursor-pointer rounded-[var(--neko-radius-sm,6px)] border border-[var(--neko-border)] bg-[var(--vscode-input-background)] p-0 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabled}
+          {...getKeyboardBoundaryMetadata({
+            scope: 'text-input',
+            ownerId: `color-input:${id}`,
+            ownedKeys: ['Enter', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+          })}
           onBlur={() => {
             onCommit?.(id, draftValueRef.current);
           }}

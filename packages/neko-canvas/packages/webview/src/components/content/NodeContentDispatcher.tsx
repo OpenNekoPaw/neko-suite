@@ -16,6 +16,7 @@ import {
 } from '../../utils/canvasPresetRegistry';
 import type { CanvasNodeDraft } from '../../utils/canvasPresetRegistry';
 import { useCanvasStore } from '../../stores/canvasStore';
+import { clampNodeSize, resolveNodeMinSize } from '../../utils/nodeSizing';
 
 export type LegacyNodeRenderer = (context: NodeRendererContext) => React.ReactNode;
 
@@ -148,8 +149,7 @@ export function createNodeCollapseUpdate(
 }
 
 function createNodeLayoutContext(node: CanvasNode): NodeContentLayoutContext {
-  const width = Math.max(0, node.size.width);
-  const height = Math.max(0, node.size.height);
+  const { width, height } = clampNodeSize(node.size, resolveNodeMinSize(node));
   const density = resolveNodeDensity(width, height);
 
   return {
@@ -157,7 +157,7 @@ function createNodeLayoutContext(node: CanvasNode): NodeContentLayoutContext {
     height,
     density,
     surface: 'canvas',
-    overflow: density === 'expanded' ? 'scroll' : 'summary',
+    overflow: 'scroll',
   };
 }
 

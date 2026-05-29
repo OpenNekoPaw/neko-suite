@@ -4,6 +4,7 @@ import { CanvasApp } from './CanvasApp';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { I18nProvider } from './i18n/I18nContext';
 import { i18nService } from './i18n';
+import '@neko/ui/keyboard/focus.css';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

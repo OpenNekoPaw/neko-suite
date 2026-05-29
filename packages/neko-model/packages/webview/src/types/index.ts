@@ -22,6 +22,7 @@ export type PlaybackState = 'playing' | 'paused' | 'stopped';
 export type ExtensionMessage =
   | { type: 'enginePort'; port: number }
   | { type: 'webviewVisibility'; visible: boolean }
+  | { type: 'keyboardFocus'; focused: boolean }
   | { type: 'keyboardAction'; action: string }
   | { type: 'sceneSnapshot'; snapshot: SceneSnapshot }
   | { type: 'sceneDelta'; delta: SceneDelta }

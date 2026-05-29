@@ -11,6 +11,8 @@
     "./creative": "./src/creative/index.ts",
     "./icons": "./src/icons/index.ts",
     "./hooks": "./src/hooks/index.ts",
+    "./keyboard": "./src/keyboard/index.ts",
+    "./keyboard/focus.css": "./src/keyboard/focus.css",
     "./workbench": "./src/workbench/index.ts",
     "./test-utils": "./src/test-utils/index.ts",
     "./utils": "./src/utils/index.ts"

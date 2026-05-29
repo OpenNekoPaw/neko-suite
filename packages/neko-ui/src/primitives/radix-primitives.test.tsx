@@ -74,6 +74,7 @@ describe('@neko/ui Radix-backed primitives', () => {
 
     expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Mode');
     expect(host.textContent).toContain('Edit');
+    expect(host.querySelector('button')?.getAttribute('data-neko-keyboard-scope')).toBe('menu');
   });
 
   it('maps empty Select option values through a Radix-safe internal value', () => {
@@ -123,5 +124,6 @@ describe('@neko/ui Radix-backed primitives', () => {
     const slider = host.querySelector('[role="slider"]');
     expect(slider?.getAttribute('aria-label')).toBe('Opacity');
     expect(slider?.getAttribute('aria-valuenow')).toBe('40');
+    expect(host.querySelector('[data-neko-keyboard-scope="timeline"]')).not.toBeNull();
   });
 });
