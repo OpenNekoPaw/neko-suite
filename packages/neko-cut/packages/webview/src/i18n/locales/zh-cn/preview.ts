@@ -40,6 +40,8 @@ export const preview = {
   'preview.captureScreenshot': '截图',
   'preview.togglePropertyPanel': '切换属性面板',
   'preview.leftRail': '视频编辑器工具栏',
+  'preview.exportVideo': '导出视频',
+  'preview.packageProject': '打包工程',
   'preview.showMainPanelTools': '显示时间线控件',
   'preview.hideMainPanelTools': '隐藏时间线控件',
   'preview.showPropertyPanel': '显示属性面板',

@@ -25,6 +25,8 @@ describe('AudioEditor workbench layout boundary', () => {
 
   it('keeps the left rail responsible for audio commands and right panel visibility', () => {
     expect(toolbarSource).toMatch(/CreativeLeftRail/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="analyze-loudness"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-spectrum"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-target="right-panel"/);

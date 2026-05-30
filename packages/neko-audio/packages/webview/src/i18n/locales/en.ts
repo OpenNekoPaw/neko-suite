@@ -237,6 +237,7 @@ const audio: MessageBundle = {
   'audio.export.stereo': 'Stereo',
   'audio.export.export': 'Export',
   'audio.export.toggle': 'Export As...',
+  'audio.package.project': 'Package project',
 
   // Mixer
   'audio.mixer.volumeShort': 'Vol',

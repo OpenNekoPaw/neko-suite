@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {
   createDefaultLocalResourceAccessService,
+  createProjectSnapshotPackage,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
 import { IEditorRegistry } from '../common/editorRegistry';
@@ -552,6 +553,20 @@ export class VideoEditorProvider implements vscode.CustomTextEditorProvider {
               error: e instanceof Error ? e.message : String(e),
             });
           }
+          return;
+        }
+
+        if (message.type === 'project:package') {
+          await createProjectSnapshotPackage({
+            packageId: 'neko-cut',
+            title: 'Package Cut Project',
+            sourceUri: document.uri,
+            sourceBytes: Buffer.from(JSON.stringify(model!.getProjectData(), null, 2), 'utf-8'),
+            metadata: {
+              kind: 'video',
+              viewType: VideoEditorProvider.viewType,
+            },
+          });
           return;
         }
 

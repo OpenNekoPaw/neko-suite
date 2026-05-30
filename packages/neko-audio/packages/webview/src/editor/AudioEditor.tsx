@@ -70,6 +70,12 @@ export function AudioEditor() {
     }
     openSidePanel('effects');
   }, [activeSidePanel, closeSidePanel, openSidePanel]);
+  const handleOpenExport = useCallback(() => {
+    openSidePanel('export');
+  }, [openSidePanel]);
+  const handleOpenPackage = useCallback(() => {
+    postMessage({ type: 'project:package' });
+  }, []);
 
   // Drag-drop support for importing audio into project
   const editorRef = useRef<HTMLDivElement>(null);
@@ -228,6 +234,8 @@ export function AudioEditor() {
         leftRail={
           <Toolbar
             sidePanelVisible={isSidePanelVisible}
+            onOpenExport={handleOpenExport}
+            onOpenPackage={handleOpenPackage}
             onToggleSidePanel={handleToggleSidePanel}
           />
         }

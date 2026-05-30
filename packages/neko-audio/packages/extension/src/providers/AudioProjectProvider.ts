@@ -42,6 +42,7 @@ import type {
 import {
   createDefaultLocalResourceAccessService,
   createFocusedWebviewRegistry,
+  createProjectSnapshotPackage,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import type { MixStreamConfig } from '@neko/shared';
@@ -867,6 +868,27 @@ export class AudioProjectProvider
           case 'audio:export': {
             const request = await parseAudioRequest(msg, isAudioExportRequestMessage);
             if (request) await handleAudioExport(request);
+            break;
+          }
+
+          case 'project:package': {
+            const cached = this._projectDataCache.get(docKey);
+            const sourceBytes = cached
+              ? Buffer.from(
+                  saveNka(await this.normalizePathsForSave(cached, document.uri.fsPath)),
+                  'utf-8',
+                )
+              : undefined;
+            await createProjectSnapshotPackage({
+              packageId: 'neko-audio',
+              title: 'Package Audio Project',
+              sourceUri: document.uri,
+              sourceBytes,
+              metadata: {
+                kind: 'audio-project',
+                viewType: AudioProjectProvider.viewType,
+              },
+            });
             break;
           }
 

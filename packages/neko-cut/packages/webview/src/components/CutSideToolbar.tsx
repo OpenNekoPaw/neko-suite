@@ -1,10 +1,18 @@
-import { RightPanelIcon, RightPanelOffIcon, SettingsIcon } from '@neko/ui/icons';
+import {
+  DownloadIcon,
+  PackageIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
+  SettingsIcon,
+} from '@neko/ui/icons';
 import { CreativeLeftRail } from '@neko/ui/workbench';
 import { useTranslation } from '../i18n/I18nContext';
 
 export interface CutSideToolbarProps {
   readonly mainPanelToolsVisible: boolean;
   readonly propertyPanelVisible: boolean;
+  readonly onOpenExport: () => void;
+  readonly onOpenPackage: () => void;
   readonly onToggleMainPanelTools: () => void;
   readonly onTogglePropertyPanel: () => void;
 }
@@ -12,6 +20,8 @@ export interface CutSideToolbarProps {
 export function CutSideToolbar({
   mainPanelToolsVisible,
   propertyPanelVisible,
+  onOpenExport,
+  onOpenPackage,
   onToggleMainPanelTools,
   onTogglePropertyPanel,
 }: CutSideToolbarProps) {
@@ -22,6 +32,22 @@ export function CutSideToolbar({
       className="cut-left-toolbar"
       width={48}
       label={t('preview.leftRail')}
+      actions={[
+        {
+          id: 'open-export',
+          kind: 'common-action',
+          label: t('preview.exportVideo'),
+          icon: <DownloadIcon size={18} />,
+          onClick: onOpenExport,
+        },
+        {
+          id: 'open-package',
+          kind: 'common-action',
+          label: t('preview.packageProject'),
+          icon: <PackageIcon size={18} />,
+          onClick: onOpenPackage,
+        },
+      ]}
       bottomActions={[
         {
           id: 'toggle-main-panel-tools',

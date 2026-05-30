@@ -40,6 +40,8 @@ export const preview = {
   'preview.captureScreenshot': 'Capture Screenshot',
   'preview.togglePropertyPanel': 'Toggle Properties',
   'preview.leftRail': 'Video editor toolbar',
+  'preview.exportVideo': 'Export video',
+  'preview.packageProject': 'Package project',
   'preview.showMainPanelTools': 'Show timeline controls',
   'preview.hideMainPanelTools': 'Hide timeline controls',
   'preview.showPropertyPanel': 'Show properties',

@@ -21,6 +21,7 @@ import * as path from 'path';
 import {
   createDefaultLocalResourceAccessService,
   createFocusedWebviewRegistry,
+  createProjectSnapshotPackage,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import type {
@@ -597,6 +598,19 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
           case 'audio:export': {
             const request = await parseAudioRequest(msg, isAudioExportRequestMessage);
             if (request) await handleAudioExport(request);
+            break;
+          }
+
+          case 'project:package': {
+            await createProjectSnapshotPackage({
+              packageId: 'neko-audio',
+              title: 'Package Audio Source',
+              sourceUri: document.uri,
+              metadata: {
+                kind: 'audio',
+                viewType: AudioEditorProvider.viewType,
+              },
+            });
             break;
           }
 

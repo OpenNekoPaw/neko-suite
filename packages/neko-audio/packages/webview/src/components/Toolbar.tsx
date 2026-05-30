@@ -4,7 +4,7 @@
  * The left rail owns audio commands and region visibility.
  */
 
-import { RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
+import { DownloadIcon, PackageIcon, RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
 import { ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/ui/primitives';
 import { CreativeLeftRail } from '@neko/ui/workbench';
 import { useAudioStore } from '../stores/audioStore';
@@ -14,10 +14,18 @@ import { t } from '../i18n';
 interface ToolbarProps {
   readonly className?: string;
   readonly sidePanelVisible: boolean;
+  readonly onOpenExport: () => void;
+  readonly onOpenPackage: () => void;
   readonly onToggleSidePanel: () => void;
 }
 
-export function Toolbar({ className, sidePanelVisible, onToggleSidePanel }: ToolbarProps) {
+export function Toolbar({
+  className,
+  sidePanelVisible,
+  onOpenExport,
+  onOpenPackage,
+  onToggleSidePanel,
+}: ToolbarProps) {
   const showSpectrum = useAudioStore((s) => s.showSpectrum);
   const toggleSpectrum = useAudioStore((s) => s.toggleSpectrum);
 
@@ -41,6 +49,24 @@ export function Toolbar({ className, sidePanelVisible, onToggleSidePanel }: Tool
       width={48}
       label={t('audio.toolbar.leftRail')}
     >
+      <ToolbarButton
+        data-creative-left-rail-action="open-export"
+        data-creative-left-rail-kind="common-action"
+        data-audio-toolbar-action="open-export"
+        icon={<DownloadIcon size={16} />}
+        title={t('audio.export.toggle')}
+        onClick={onOpenExport}
+      />
+      <ToolbarButton
+        data-creative-left-rail-action="open-package"
+        data-creative-left-rail-kind="common-action"
+        data-audio-toolbar-action="open-package"
+        icon={<PackageIcon size={16} />}
+        title={t('audio.package.project')}
+        onClick={onOpenPackage}
+      />
+      <ToolbarSeparator />
+
       <ToolbarButton
         data-creative-left-rail-action="analyze-loudness"
         data-creative-left-rail-kind="common-action"

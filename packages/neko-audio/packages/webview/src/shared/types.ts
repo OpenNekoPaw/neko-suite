@@ -150,6 +150,10 @@ export interface ProjectDropImportAudioMessage {
   uris: string[];
 }
 
+export interface ProjectPackageMessage {
+  type: 'project:package';
+}
+
 /** Request preset list from extension */
 export interface PresetListRequestMessage {
   type: 'presets:listRequest';
@@ -173,6 +177,7 @@ export type WebviewMessage =
   | WebviewKeyboardFocusMessage
   | ProjectImportAudioMessage
   | ProjectDropImportAudioMessage
+  | ProjectPackageMessage
   | PresetListRequestMessage
   | PresetApplyMessage
   | OperationAppliedMessage;

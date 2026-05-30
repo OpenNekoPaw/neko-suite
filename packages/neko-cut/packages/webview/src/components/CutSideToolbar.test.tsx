@@ -10,6 +10,12 @@ import { CutSideToolbar } from './CutSideToolbar';
 const componentSource = readFileSync(resolve(__dirname, 'CutSideToolbar.tsx'), 'utf8');
 
 vi.mock('@neko/ui/icons', () => ({
+  DownloadIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="download">{size}</span>
+  ),
+  PackageIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="package">{size}</span>
+  ),
   RightPanelIcon: ({ size = 16 }: { readonly size?: number }) => (
     <span data-icon="right-panel">{size}</span>
   ),
@@ -52,6 +58,8 @@ describe('CutSideToolbar', () => {
         <CutSideToolbar
           mainPanelToolsVisible={true}
           propertyPanelVisible={true}
+          onOpenExport={() => undefined}
+          onOpenPackage={() => undefined}
           onToggleMainPanelTools={() => undefined}
           onTogglePropertyPanel={onTogglePropertyPanel}
         />,
@@ -86,6 +94,8 @@ describe('CutSideToolbar', () => {
         <CutSideToolbar
           mainPanelToolsVisible={true}
           propertyPanelVisible={false}
+          onOpenExport={() => undefined}
+          onOpenPackage={() => undefined}
           onToggleMainPanelTools={() => undefined}
           onTogglePropertyPanel={() => undefined}
         />,
@@ -107,6 +117,8 @@ describe('CutSideToolbar', () => {
         <CutSideToolbar
           mainPanelToolsVisible={true}
           propertyPanelVisible={false}
+          onOpenExport={() => undefined}
+          onOpenPackage={() => undefined}
           onToggleMainPanelTools={() => undefined}
           onTogglePropertyPanel={() => undefined}
         />,
@@ -124,7 +136,6 @@ describe('CutSideToolbar', () => {
       'toggle-clip-thumbnails',
       'zoom-out',
       'zoom-in',
-      'open-export',
     ];
     for (const actionId of actionIds) {
       expect(
@@ -137,6 +148,36 @@ describe('CutSideToolbar', () => {
     ).not.toBeNull();
   });
 
+  it('routes export and package actions separately', () => {
+    const onOpenExport = vi.fn();
+    const onOpenPackage = vi.fn();
+
+    act(() => {
+      root.render(
+        <CutSideToolbar
+          mainPanelToolsVisible={true}
+          propertyPanelVisible={false}
+          onOpenExport={onOpenExport}
+          onOpenPackage={onOpenPackage}
+          onToggleMainPanelTools={() => undefined}
+          onTogglePropertyPanel={() => undefined}
+        />,
+      );
+    });
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('[data-creative-left-rail-action="open-export"]')
+        ?.click();
+      host
+        .querySelector<HTMLButtonElement>('[data-creative-left-rail-action="open-package"]')
+        ?.click();
+    });
+
+    expect(onOpenExport).toHaveBeenCalledTimes(1);
+    expect(onOpenPackage).toHaveBeenCalledTimes(1);
+  });
+
   it('exposes the main panel control visibility toggle', () => {
     const onToggleMainPanelTools = vi.fn();
 
@@ -145,6 +186,8 @@ describe('CutSideToolbar', () => {
         <CutSideToolbar
           mainPanelToolsVisible={false}
           propertyPanelVisible={false}
+          onOpenExport={() => undefined}
+          onOpenPackage={() => undefined}
           onToggleMainPanelTools={onToggleMainPanelTools}
           onTogglePropertyPanel={() => undefined}
         />,
@@ -174,6 +217,8 @@ describe('CutSideToolbar', () => {
         <CutSideToolbar
           mainPanelToolsVisible={true}
           propertyPanelVisible={true}
+          onOpenExport={() => undefined}
+          onOpenPackage={() => undefined}
           onToggleMainPanelTools={() => undefined}
           onTogglePropertyPanel={() => undefined}
         />,
@@ -190,7 +235,8 @@ describe('CutSideToolbar', () => {
     expect(componentSource).toContain('cut-main-panel-tools');
     expect(componentSource).toContain('preview.showMainPanelTools');
     expect(componentSource).toContain('preview.hideMainPanelTools');
-    expect(componentSource).not.toContain('data-creative-left-rail-kind="common-action"');
+    expect(componentSource).toContain("id: 'open-export'");
+    expect(componentSource).toContain("id: 'open-package'");
     expect(componentSource).toContain("visibilityTarget: 'main-panel'");
     expect(componentSource).toContain("visibilityTarget: 'right-panel'");
     expect(componentSource).not.toContain("visibilityTarget: 'hud'");

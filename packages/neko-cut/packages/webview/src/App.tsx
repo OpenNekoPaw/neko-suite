@@ -121,6 +121,14 @@ function App() {
     }
   }, [project, isCapturingScreenshot]);
 
+  const handleOpenExport = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('showExportPanel', { detail: {} }));
+  }, []);
+
+  const handleOpenPackage = useCallback(() => {
+    sendMessage({ type: 'project:package' });
+  }, [sendMessage]);
+
   const {
     size: previewRatio,
     isResizing,
@@ -258,6 +266,8 @@ function App() {
           <CutSideToolbar
             mainPanelToolsVisible={mainPanelToolsVisible}
             propertyPanelVisible={propertyPanelVisible}
+            onOpenExport={handleOpenExport}
+            onOpenPackage={handleOpenPackage}
             onToggleMainPanelTools={toggleMainPanelTools}
             onTogglePropertyPanel={togglePropertyPanel}
           />

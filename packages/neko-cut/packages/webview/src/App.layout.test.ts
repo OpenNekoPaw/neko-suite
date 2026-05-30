@@ -35,13 +35,14 @@ describe('Cut creative workbench layout boundary', () => {
     expect(timelineControlsSource).toMatch(/placement="timeline-header"/);
   });
 
-  it('keeps the left rail focused on visibility toggles, not timeline commands', () => {
+  it('keeps timeline edit commands out of the left rail while exposing export/package actions', () => {
     expect(toolbarSource).toMatch(/CreativeLeftRail/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="add-media-track"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="split-selection"/);
     expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="toggle-snapping"/);
-    expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="open-export"/);
-    expect(toolbarSource).not.toMatch(/data-creative-left-rail-kind="common-action"/);
+    expect(toolbarSource).toMatch(/id: 'open-export'/);
+    expect(toolbarSource).toMatch(/id: 'open-package'/);
+    expect(toolbarSource).toMatch(/kind: 'common-action'/);
     expect(toolbarSource).toMatch(/kind: 'visibility-toggle'/);
     expect(toolbarSource).toMatch(/controls: 'cut-main-panel-tools'/);
     expect(toolbarSource).toMatch(/controls: 'cut-property-panel'/);

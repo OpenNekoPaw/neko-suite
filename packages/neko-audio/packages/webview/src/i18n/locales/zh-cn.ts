@@ -237,6 +237,7 @@ const audio: MessageBundle = {
   'audio.export.stereo': '立体声',
   'audio.export.export': '导出',
   'audio.export.toggle': '导出为…',
+  'audio.package.project': '打包工程',
 
   // Mixer
   'audio.mixer.volumeShort': '音量',

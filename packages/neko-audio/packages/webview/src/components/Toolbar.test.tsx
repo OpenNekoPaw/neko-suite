@@ -12,6 +12,12 @@ vi.mock('../i18n', () => ({
 }));
 
 vi.mock('@neko/ui/icons', () => ({
+  DownloadIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="download">{size}</span>
+  ),
+  PackageIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="package">{size}</span>
+  ),
   RightPanelIcon: ({ size = 16 }: { readonly size?: number }) => (
     <span data-icon="right-panel">{size}</span>
   ),
@@ -39,9 +45,18 @@ describe('Audio toolbar surfaces', () => {
 
   it('places audio command buttons and right panel visibility in the left rail', () => {
     const onToggleSidePanel = vi.fn();
+    const onOpenExport = vi.fn();
+    const onOpenPackage = vi.fn();
 
     act(() => {
-      root.render(<Toolbar sidePanelVisible={false} onToggleSidePanel={onToggleSidePanel} />);
+      root.render(
+        <Toolbar
+          sidePanelVisible={false}
+          onOpenExport={onOpenExport}
+          onOpenPackage={onOpenPackage}
+          onToggleSidePanel={onToggleSidePanel}
+        />,
+      );
     });
 
     const sidePanelButton = buttonByLabel('audio.sidePanel.show');
@@ -52,6 +67,14 @@ describe('Audio toolbar surfaces', () => {
       'audio.toolbar.leftRail',
     );
     expect(buttonByLabel('audio.spectrum.toggle')).not.toBeNull();
+    expect(buttonByLabel('audio.export.toggle')).not.toBeNull();
+    expect(buttonByLabel('audio.package.project')).not.toBeNull();
+    expect(
+      buttonByLabel('audio.export.toggle')?.getAttribute('data-creative-left-rail-action'),
+    ).toBe('open-export');
+    expect(
+      buttonByLabel('audio.package.project')?.getAttribute('data-creative-left-rail-action'),
+    ).toBe('open-package');
     expect(buttonByLabel('audio.analysis.loudness')).not.toBeNull();
     expect(buttonByLabel('audio.analysis.silence')).not.toBeNull();
     expect(buttonByLabel('audio.analysis.denoise')).not.toBeNull();
@@ -67,9 +90,13 @@ describe('Audio toolbar surfaces', () => {
     expect(sidePanelButton?.getAttribute('data-creative-left-rail-kind')).toBe('visibility-toggle');
     expect(sidePanelButton?.getAttribute('data-creative-left-rail-target')).toBe('right-panel');
     act(() => {
+      buttonByLabel('audio.export.toggle')?.click();
+      buttonByLabel('audio.package.project')?.click();
       sidePanelButton?.click();
     });
 
+    expect(onOpenExport).toHaveBeenCalledTimes(1);
+    expect(onOpenPackage).toHaveBeenCalledTimes(1);
     expect(onToggleSidePanel).toHaveBeenCalledTimes(1);
   });
 
