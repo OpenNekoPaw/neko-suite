@@ -57,13 +57,13 @@ export function SlashCommandMenu({
   return (
     <div
       ref={menuRef}
-      className="absolute bottom-full left-1/2 z-50 mb-2 max-h-[min(260px,38vh)] w-[min(480px,calc(100%_-_40px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
+      className="absolute bottom-full left-1/2 z-50 mb-2 max-h-[min(228px,34vh)] w-[min(480px,calc(100%_-_40px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
     >
-      <div className="max-h-[min(260px,38vh)] overflow-y-auto px-2 py-2">
+      <div className="max-h-[min(228px,34vh)] overflow-y-auto px-1.5 py-1.5">
         {sections.map((section) => (
           <div key={section.group}>
             {section.title && (
-              <div className="px-3 pb-1.5 pt-2 text-[12px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
+              <div className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-medium leading-3 text-[var(--agent-fg-secondary)]">
                 {section.title}
               </div>
             )}
@@ -78,21 +78,21 @@ export function SlashCommandMenu({
                   key={cmd.id}
                   type="button"
                   onClick={() => onSelect(cmd)}
-                  className={`grid h-10 w-full grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-2 rounded-[13px] px-3 text-left transition-colors ${
+                  className={`grid h-8 w-full grid-cols-[82px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-[11px] px-2.5 text-left transition-colors ${
                     isSelected
                       ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
                       : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
                   }`}
                 >
                   <span
-                    className={`truncate text-[13px] font-semibold leading-5 ${
+                    className={`truncate text-[11.5px] font-semibold leading-4 ${
                       isSelected ? '' : 'text-[var(--vscode-textLink-foreground)]'
                     }`}
                   >
                     {cmd.name}
                   </span>
                   <span
-                    className={`min-w-0 truncate text-[12px] leading-5 ${
+                    className={`min-w-0 truncate text-[10.5px] leading-4 ${
                       isSelected
                         ? 'text-[var(--agent-fg)] opacity-80'
                         : 'text-[var(--agent-fg-secondary)]'
@@ -102,7 +102,7 @@ export function SlashCommandMenu({
                   </span>
                   {sourceLabel && (
                     <span
-                      className={`max-w-[88px] truncate rounded-full px-2 py-0.5 text-[10.5px] font-medium leading-none ${
+                      className={`max-w-[72px] truncate rounded-full px-1.5 py-0.5 text-[9.5px] font-medium leading-none ${
                         isSelected
                           ? 'bg-[color-mix(in_srgb,var(--agent-bg)_58%,transparent)] text-[var(--agent-fg)]'
                           : 'text-[var(--agent-fg-secondary)]'

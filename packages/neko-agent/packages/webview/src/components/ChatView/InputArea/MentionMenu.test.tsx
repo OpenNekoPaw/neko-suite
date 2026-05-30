@@ -158,12 +158,12 @@ describe('MentionMenu icon projection', () => {
     expect(screen.getByText('assets/hero.png')).toBeTruthy();
     expect(screen.getByText('Image')).toBeTruthy();
     expect(screen.getByText('Character')).toBeTruthy();
-    expect(panel.className).toContain('max-h-[min(260px,38vh)]');
+    expect(panel.className).toContain('max-h-[min(228px,34vh)]');
     expect(panel.className).toContain('w-[min(480px,calc(100%_-_40px))]');
 
     const fileButton = screen.getByRole('button', { name: /library\.json/i });
-    expect(fileButton.className).toContain('h-10');
-    expect(fileButton.className).toContain('rounded-[13px]');
+    expect(fileButton.className).toContain('h-8');
+    expect(fileButton.className).toContain('rounded-[11px]');
   });
 
   it('falls back to host-provided tags when no localized entity tag exists', () => {

@@ -79,13 +79,13 @@ describe('SlashCommandMenu', () => {
     expect(screen.getByText('Show help message')).toBeTruthy();
     expect(screen.getByText('Plugin')).toBeTruthy();
     expect(screen.getByText('Personal')).toBeTruthy();
-    expect(panel.className).toContain('max-h-[min(260px,38vh)]');
+    expect(panel.className).toContain('max-h-[min(228px,34vh)]');
     expect(panel.className).toContain('w-[min(480px,calc(100%_-_40px))]');
 
     const selectedButton = screen.getByRole('button', { name: /\/commit/i });
-    expect(selectedButton.className).toContain('h-10');
-    expect(selectedButton.className).toContain('rounded-[13px]');
-    expect(selectedButton.className).toContain('grid-cols-[96px_minmax(0,1fr)_auto]');
+    expect(selectedButton.className).toContain('h-8');
+    expect(selectedButton.className).toContain('rounded-[11px]');
+    expect(selectedButton.className).toContain('grid-cols-[82px_minmax(0,1fr)_auto]');
   });
 
   it('keeps display ordering aligned with keyboard selection groups', () => {

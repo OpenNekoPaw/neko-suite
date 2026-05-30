@@ -151,15 +151,15 @@ export function MentionMenu({
   return (
     <div
       ref={menuRef}
-      className="absolute bottom-full left-1/2 z-50 mb-2 max-h-[min(260px,38vh)] w-[min(480px,calc(100%_-_40px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
+      className="absolute bottom-full left-1/2 z-50 mb-2 max-h-[min(228px,34vh)] w-[min(480px,calc(100%_-_40px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
     >
-      <div className="max-h-[min(260px,38vh)] overflow-y-auto px-2 py-2">
-        <div className="px-3 pb-2 pt-1 text-[12px] leading-5 text-[var(--agent-fg-secondary)]">
+      <div className="max-h-[min(228px,34vh)] overflow-y-auto px-1.5 py-1.5">
+        <div className="px-2.5 pb-1.5 pt-1 text-[10.5px] leading-4 text-[var(--agent-fg-secondary)]">
           {filter ? t('chat.input.mentionSearching', { filter }) : t('chat.input.mentionHint')}
         </div>
 
         {flat.length === 0 ? (
-          <div className="px-3 py-3 text-[12px] leading-5 text-[var(--agent-fg-secondary)]">
+          <div className="px-2.5 py-2 text-[10.5px] leading-4 text-[var(--agent-fg-secondary)]">
             {t('chat.input.noMatchingFiles')}
           </div>
         ) : (
@@ -167,7 +167,7 @@ export function MentionMenu({
             {sections.map((section) => (
               <div key={section.kind}>
                 {/* Section header */}
-                <div className="sticky top-0 z-10 flex items-center justify-between bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] px-3 pb-1.5 pt-2 text-[12px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
+                <div className="sticky top-0 z-10 flex items-center justify-between bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] px-2.5 pb-1 pt-1.5 text-[10.5px] font-medium leading-3 text-[var(--agent-fg-secondary)]">
                   <span>{resolveMentionLabel(section.label, t)}</span>
                   <span className="font-normal opacity-70">{section.items.length}</span>
                 </div>
@@ -184,7 +184,7 @@ export function MentionMenu({
                       key={item.id}
                       type="button"
                       onClick={() => handleSelect(item)}
-                      className={`grid h-10 w-full grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-[13px] px-3 text-left transition-colors ${
+                      className={`grid h-8 w-full grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-[11px] px-2.5 text-left transition-colors ${
                         isSelected
                           ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
                           : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
@@ -194,24 +194,24 @@ export function MentionMenu({
                         <img
                           src={item.thumbnailUri}
                           alt=""
-                          className="h-7 w-7 rounded-[10px] object-cover"
+                          className="h-6 w-6 rounded-[8px] object-cover"
                         />
                       ) : (
                         <span
                           aria-hidden="true"
-                          className="flex h-7 w-7 items-center justify-center rounded-[10px] border text-[9.5px] font-semibold leading-none"
+                          className="flex h-6 w-6 items-center justify-center rounded-[8px] border text-[8.5px] font-semibold leading-none"
                           style={glyph.style}
                         >
                           {glyph.label}
                         </span>
                       )}
                       <span className="min-w-0">
-                        <span className="block truncate text-[12px] font-medium leading-4">
+                        <span className="block truncate text-[11.5px] font-medium leading-4">
                           {item.label}
                         </span>
                         {subtitle && (
                           <span
-                            className={`block truncate text-[10.5px] leading-4 ${
+                            className={`block truncate text-[9.5px] leading-3 ${
                               isSelected
                                 ? 'text-[var(--agent-fg)] opacity-70'
                                 : 'text-[var(--agent-fg-secondary)]'
@@ -223,7 +223,7 @@ export function MentionMenu({
                       </span>
                       {badge && (
                         <span
-                          className="max-w-[88px] truncate rounded-full border px-2 py-0.5 text-[10.5px] font-medium leading-none"
+                          className="max-w-[72px] truncate rounded-full border px-1.5 py-0.5 text-[9.5px] font-medium leading-none"
                           style={badge.style}
                         >
                           {resolveMentionLabel(badge.label, t)}
