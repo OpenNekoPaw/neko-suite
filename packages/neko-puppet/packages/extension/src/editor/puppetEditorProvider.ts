@@ -9,7 +9,7 @@
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { injectLocaleAttribute } from '@neko/shared/vscode/extension';
+import { createProjectSnapshotPackage, injectLocaleAttribute } from '@neko/shared/vscode/extension';
 import { Live2dBundleLoader } from '../live2d';
 import { getLogger } from '../utils/logger';
 
@@ -356,6 +356,49 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
         webviewPanel.webview.postMessage({
           type: 'puppetImported',
           name: path.basename(fileName).replace(/\.moc3$/, ''),
+        });
+        break;
+      }
+
+      case 'puppet:export': {
+        const choice = await vscode.window.showQuickPick(
+          [
+            {
+              label: '$(package) Model package',
+              description: 'Export puppet model package',
+              command: 'neko.puppet.exportModel',
+            },
+            {
+              label: '$(run-all) Motion package',
+              description: 'Export puppet motion package',
+              command: 'neko.puppet.exportMotions',
+            },
+            {
+              label: '$(settings-gear) Config package',
+              description: 'Export puppet config package',
+              command: 'neko.puppet.exportConfig',
+            },
+          ],
+          { placeHolder: 'Select puppet export target' },
+        );
+        if (choice) {
+          await vscode.commands.executeCommand(choice.command, document.uri);
+        }
+        break;
+      }
+
+      case 'project:package': {
+        await createProjectSnapshotPackage({
+          packageId: 'neko-puppet',
+          title: 'Package Puppet Project',
+          sourceUri: document.uri,
+          sourceBytes: document.projectData
+            ? Buffer.from(JSON.stringify(document.projectData, null, 2), 'utf-8')
+            : undefined,
+          metadata: {
+            kind: 'puppet',
+            viewType: PuppetEditorProvider.viewType,
+          },
         });
         break;
       }

@@ -5,7 +5,13 @@
  */
 import { memo } from 'react';
 import type React from 'react';
-import { DownloadIcon, LayersIcon, RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
+import {
+  DownloadIcon,
+  LayersIcon,
+  PackageIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
+} from '@neko/ui/icons';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/ui/primitives';
 import { CreativeLeftRail } from '@neko/ui/workbench';
@@ -139,11 +145,18 @@ export const ModelSideToolbar = memo(function ModelSideToolbar({
     >
       <CreativeLeftRail className={className} width={width} label={t('toolbar.modelLeftRail')}>
         <ToolbarButton
-          data-creative-left-rail-action="export"
+          data-creative-left-rail-action="open-export"
           data-creative-left-rail-kind="common-action"
           icon={<DownloadIcon size={16} />}
-          title={t('toolbar.exportGlb')}
-          onClick={() => postMessage({ type: 'exportGlb' })}
+          title={t('toolbar.export')}
+          onClick={() => postMessage({ type: 'model:export' })}
+        />
+        <ToolbarButton
+          data-creative-left-rail-action="open-package"
+          data-creative-left-rail-kind="common-action"
+          icon={<PackageIcon size={16} />}
+          title={t('toolbar.package')}
+          onClick={() => postMessage({ type: 'project:package' })}
         />
         <ToolbarButton
           data-creative-left-rail-action="save"

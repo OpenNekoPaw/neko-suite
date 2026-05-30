@@ -82,6 +82,8 @@ export type WebviewMessage =
       rotation: [number, number, number, number];
     }
   | { type: 'exportGlb' }
+  | { type: 'model:export' }
+  | { type: 'project:package' }
   | { type: 'saveProject'; editorState: unknown }
   | {
       type: 'addKeyframe';

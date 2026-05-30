@@ -12,6 +12,8 @@ export const zhCN: MessageBundle = {
   'sketch.toolbar.eyedropper': '吸管',
   'sketch.toolbar.fill': '填充',
   'sketch.toolbar.zoom': '缩放',
+  'sketch.toolbar.export': '导出图像',
+  'sketch.toolbar.package': '打包工程',
   'sketch.toolbar.ariaLabel': '绘图工具',
   'sketch.sidebar.toggle': '切换侧栏',
 

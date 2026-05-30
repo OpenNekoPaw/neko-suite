@@ -10,7 +10,13 @@ import {
   ToolbarSeparator,
   ToolbarSpacer,
 } from '@neko/ui/primitives';
-import { LayersIcon, RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
+import {
+  DownloadIcon,
+  LayersIcon,
+  PackageIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
+} from '@neko/ui/icons';
 import { useSketchStore } from '../stores';
 import { useTranslation } from '../i18n/I18nContext';
 import type { ToolType } from '../types';
@@ -33,7 +39,12 @@ const TOOLS: { type: ToolType; icon: React.ReactNode; key: string }[] = [
   { type: 'zoom', icon: <ZoomIcon />, key: 'sketch.toolbar.zoom' },
 ];
 
-export function Toolbar() {
+export interface ToolbarProps {
+  readonly onOpenExport?: () => void;
+  readonly onOpenPackage?: () => void;
+}
+
+export function Toolbar({ onOpenExport, onOpenPackage }: ToolbarProps = {}) {
   const { t } = useTranslation();
   const activeTool = useSketchStore((s) => s.activeTool);
   const setActiveTool = useSketchStore((s) => s.setActiveTool);
@@ -44,6 +55,26 @@ export function Toolbar() {
 
   return (
     <VerticalToolbar className="sketch-left-toolbar" aria-label={t('sketch.toolbar.ariaLabel')}>
+      {onOpenExport && (
+        <ToolbarButton
+          data-creative-left-rail-action="open-export"
+          data-creative-left-rail-kind="common-action"
+          icon={<DownloadIcon size={16} />}
+          title={t('sketch.toolbar.export')}
+          onClick={onOpenExport}
+        />
+      )}
+      {onOpenPackage && (
+        <ToolbarButton
+          data-creative-left-rail-action="open-package"
+          data-creative-left-rail-kind="common-action"
+          icon={<PackageIcon size={16} />}
+          title={t('sketch.toolbar.package')}
+          onClick={onOpenPackage}
+        />
+      )}
+      {(onOpenExport || onOpenPackage) && <ToolbarSeparator />}
+
       {TOOLS.map((tool) => (
         <ToolbarButton
           key={tool.type}

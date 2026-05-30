@@ -24,6 +24,9 @@ vi.mock('@neko/ui/icons', async () => {
     DownloadIcon: ({ size = 16 }: { readonly size?: number }) => (
       <span data-icon="download">{size}</span>
     ),
+    PackageIcon: ({ size = 16 }: { readonly size?: number }) => (
+      <span data-icon="package">{size}</span>
+    ),
     RightPanelIcon: ({ size = 16 }: { readonly size?: number }) => (
       <span data-icon="right-panel">{size}</span>
     ),
@@ -141,7 +144,14 @@ describe('Model Toolbar', () => {
     );
 
     expect(host.querySelector('.neko-creative-left-rail')).not.toBeNull();
-    expect(buttonByLabel(host, 'toolbar.exportGlb')).not.toBeNull();
+    expect(buttonByLabel(host, 'toolbar.export')).not.toBeNull();
+    expect(buttonByLabel(host, 'toolbar.package')).not.toBeNull();
+    expect(
+      buttonByLabel(host, 'toolbar.export')?.getAttribute('data-creative-left-rail-action'),
+    ).toBe('open-export');
+    expect(
+      buttonByLabel(host, 'toolbar.package')?.getAttribute('data-creative-left-rail-action'),
+    ).toBe('open-package');
     expect(buttonByLabel(host, 'toolbar.saveProject')).not.toBeNull();
     expect(buttonByLabel(host, 'toolbar.faceEditor')).not.toBeNull();
     expect(buttonByLabel(host, 'toolbar.boneExpression')).not.toBeNull();

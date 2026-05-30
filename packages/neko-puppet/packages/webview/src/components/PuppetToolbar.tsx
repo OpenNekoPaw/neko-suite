@@ -6,7 +6,13 @@
 import type React from 'react';
 import { ToolbarButton, ToolbarSeparator, ToolbarSpacer } from '@neko/ui/primitives';
 import { CreativeLeftRail } from '@neko/ui/workbench';
-import { RightPanelIcon, RightPanelOffIcon, UploadIcon } from '@neko/ui/icons';
+import {
+  DownloadIcon,
+  PackageIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
+  UploadIcon,
+} from '@neko/ui/icons';
 import { useTranslation } from '../i18n/I18nContext';
 
 export interface PuppetToolbarProps {
@@ -14,6 +20,8 @@ export interface PuppetToolbarProps {
   readonly puppetLoaded: boolean;
   readonly onionSkinEnabled: boolean;
   readonly onImport: () => void;
+  readonly onOpenExport: () => void;
+  readonly onOpenPackage: () => void;
   readonly onFitView: () => void;
   readonly onToggleOnionSkin: () => void;
   readonly onToggleRightPanel: () => void;
@@ -24,6 +32,8 @@ export function PuppetToolbar({
   puppetLoaded,
   onionSkinEnabled,
   onImport,
+  onOpenExport,
+  onOpenPackage,
   onFitView,
   onToggleOnionSkin,
   onToggleRightPanel,
@@ -42,6 +52,21 @@ export function PuppetToolbar({
         icon={<UploadIcon size={18} />}
         title={t('puppet.toolbar.import')}
         onClick={onImport}
+      />
+      <ToolbarButton
+        data-creative-left-rail-action="open-export"
+        data-creative-left-rail-kind="common-action"
+        icon={<DownloadIcon size={18} />}
+        title={t('puppet.toolbar.export')}
+        disabled={!puppetLoaded}
+        onClick={onOpenExport}
+      />
+      <ToolbarButton
+        data-creative-left-rail-action="open-package"
+        data-creative-left-rail-kind="common-action"
+        icon={<PackageIcon size={18} />}
+        title={t('puppet.toolbar.package')}
+        onClick={onOpenPackage}
       />
 
       <ToolbarSeparator />

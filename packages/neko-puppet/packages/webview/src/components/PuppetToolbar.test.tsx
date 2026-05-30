@@ -14,6 +14,12 @@ vi.mock('../i18n/I18nContext', () => ({
 }));
 
 vi.mock('@neko/ui/icons', () => ({
+  DownloadIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="download">{size}</span>
+  ),
+  PackageIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="package">{size}</span>
+  ),
   RightPanelIcon: ({ size = 16 }: { readonly size?: number }) => (
     <span data-icon="right-panel">{size}</span>
   ),
@@ -51,7 +57,7 @@ describe('PuppetToolbar', () => {
     expect(host.querySelector('.puppet-left-toolbar')?.getAttribute('aria-label')).toBe(
       'puppet.toolbar.leftRail',
     );
-    expect(host.querySelectorAll('.neko-toolbar-btn')).toHaveLength(4);
+    expect(host.querySelectorAll('.neko-toolbar-btn')).toHaveLength(6);
     expect(host.querySelector('[style*="flex"]')).not.toBeNull();
   });
 
@@ -64,6 +70,8 @@ describe('PuppetToolbar', () => {
     expect(
       buttonByLabel('puppet.toolbar.import')?.getAttribute('data-creative-left-rail-kind'),
     ).toBe('common-action');
+    expect(buttonByLabel('puppet.toolbar.export')).not.toBeNull();
+    expect(buttonByLabel('puppet.toolbar.package')).not.toBeNull();
     expect(buttonByLabel('puppet.toolbar.fitView')).not.toBeNull();
     expect(buttonByLabel('puppet.toolbar.onionSkin')).not.toBeNull();
     expect(
@@ -83,11 +91,15 @@ describe('PuppetToolbar', () => {
 
     act(() => {
       buttonByLabel('puppet.toolbar.import')?.click();
+      buttonByLabel('puppet.toolbar.export')?.click();
+      buttonByLabel('puppet.toolbar.package')?.click();
       buttonByLabel('puppet.toolbar.fitView')?.click();
       buttonByLabel('puppet.toolbar.onionSkin')?.click();
     });
 
     expect(props.onImport).toHaveBeenCalledTimes(1);
+    expect(props.onOpenExport).toHaveBeenCalledTimes(1);
+    expect(props.onOpenPackage).toHaveBeenCalledTimes(1);
     expect(props.onFitView).toHaveBeenCalledTimes(1);
     expect(props.onToggleOnionSkin).toHaveBeenCalledTimes(1);
   });
@@ -136,6 +148,8 @@ function defaultProps(overrides: Partial<React.ComponentProps<typeof PuppetToolb
     puppetLoaded: false,
     onionSkinEnabled: false,
     onImport: vi.fn(),
+    onOpenExport: vi.fn(),
+    onOpenPackage: vi.fn(),
     onFitView: vi.fn(),
     onToggleOnionSkin: vi.fn(),
     onToggleRightPanel: vi.fn(),

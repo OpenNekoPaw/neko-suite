@@ -80,7 +80,9 @@ describe('SlashCommandMenu', () => {
     expect(screen.getByText('Plugin')).toBeTruthy();
     expect(screen.getByText('Personal')).toBeTruthy();
     expect(panel.className).toContain('max-h-[min(228px,34vh)]');
-    expect(panel.className).toContain('w-[min(480px,calc(100%_-_40px))]');
+    expect(panel.className).toContain('left-0');
+    expect(panel.className).toContain('right-0');
+    expect(panel.className).not.toContain('w-[min');
 
     const selectedButton = screen.getByRole('button', { name: /\/commit/i });
     expect(selectedButton.className).toContain('h-8');

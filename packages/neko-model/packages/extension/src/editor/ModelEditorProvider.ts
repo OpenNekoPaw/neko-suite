@@ -18,6 +18,7 @@ import type {
   NekoModelAPI,
 } from '@neko/shared';
 import {
+  createProjectSnapshotPackage,
   createFocusedWebviewRegistry,
   generateDefaultCubeGlb,
   generateHumanoidGlb,
@@ -564,6 +565,57 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
             error: err instanceof Error ? err.message : String(err),
           });
         }
+        break;
+      }
+
+      case 'model:export': {
+        const choice = await vscode.window.showQuickPick(
+          [
+            {
+              label: '$(symbol-file) GLB',
+              description: 'Export rendered scene as GLB',
+              action: 'glb',
+            },
+            {
+              label: '$(run-all) Motion artifact',
+              description: 'Export model motion artifact (.nkma)',
+              action: 'motions',
+            },
+            {
+              label: '$(settings-gear) Config artifact',
+              description: 'Export model config artifact (.nkmc)',
+              action: 'config',
+            },
+          ] as const,
+          { placeHolder: 'Select model export target' },
+        );
+        if (!choice) break;
+        if (choice.action === 'glb') {
+          await this.handleWebviewMessage(
+            { type: 'exportGlb' },
+            webviewPanel,
+            document,
+            generation,
+          );
+        } else {
+          await vscode.commands.executeCommand(
+            choice.action === 'motions' ? 'neko.model.exportMotions' : 'neko.model.exportConfig',
+            document.uri,
+          );
+        }
+        break;
+      }
+
+      case 'project:package': {
+        await createProjectSnapshotPackage({
+          packageId: 'neko-model',
+          title: 'Package Model Project',
+          sourceUri: document.uri,
+          metadata: {
+            kind: 'model',
+            viewType: ModelEditorProvider.viewType,
+          },
+        });
         break;
       }
 

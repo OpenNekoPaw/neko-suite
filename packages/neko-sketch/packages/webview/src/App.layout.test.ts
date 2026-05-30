@@ -14,7 +14,9 @@ describe('Sketch creative workbench layout boundary', () => {
     expect(appSource).toMatch(/import \{ CreativeWorkbenchShell \} from '@neko\/ui\/workbench'/);
     expect(appSource).toMatch(/<CreativeWorkbenchShell/);
     expect(appSource).toMatch(/mainKind="drawing-canvas"/);
-    expect(appSource).toMatch(/leftRail=\{<Toolbar \/>}/);
+    expect(appSource).toMatch(
+      /leftRail=\{<Toolbar onOpenExport=\{handleOpenExport\} onOpenPackage=\{handleOpenPackage\} \/>}/,
+    );
     expect(appSource).toMatch(/mainClassName="sketch-main-panel"/);
     expect(appSource).toMatch(/className="sketch-canvas-container"/);
     expect(appSource).toMatch(/bottomPanel=\{\s*showFrameTimeline \? \(/);
@@ -25,6 +27,8 @@ describe('Sketch creative workbench layout boundary', () => {
     const uiSliceSource = readFileSync(resolve(__dirname, 'stores/slices/uiSlice.ts'), 'utf8');
 
     expect(uiSliceSource).toMatch(/showSidebar: false/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-kind="common-action"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-kind="visibility-toggle"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-target="main-panel"/);

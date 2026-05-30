@@ -45,6 +45,8 @@ export const en: MessageBundle = {
 
   // Toolbar
   'puppet.toolbar.import': 'Import MOC3',
+  'puppet.toolbar.export': 'Export puppet assets',
+  'puppet.toolbar.package': 'Package project',
   'puppet.toolbar.fitView': 'Fit view',
   'puppet.toolbar.leftRail': 'Puppet workbench toolbar',
   'puppet.toolbar.viewportControls': 'Viewport controls',

@@ -12,6 +12,8 @@ export const en: MessageBundle = {
   'sketch.toolbar.eyedropper': 'Eyedropper',
   'sketch.toolbar.fill': 'Fill',
   'sketch.toolbar.zoom': 'Zoom',
+  'sketch.toolbar.export': 'Export image',
+  'sketch.toolbar.package': 'Package project',
   'sketch.toolbar.ariaLabel': 'Drawing tools',
   'sketch.sidebar.toggle': 'Toggle Sidebar',
 

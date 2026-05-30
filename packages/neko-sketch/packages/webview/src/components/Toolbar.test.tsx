@@ -7,7 +7,13 @@ import { Toolbar } from './Toolbar';
 import { useSketchStore } from '../stores';
 
 vi.mock('@neko/ui/icons', () => ({
+  DownloadIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="download">{size}</span>
+  ),
   LayersIcon: ({ size = 16 }: { readonly size?: number }) => <span data-icon="layers">{size}</span>,
+  PackageIcon: ({ size = 16 }: { readonly size?: number }) => (
+    <span data-icon="package">{size}</span>
+  ),
   RightPanelIcon: ({ size = 16 }: { readonly size?: number }) => (
     <span data-icon="right-panel">{size}</span>
   ),
@@ -108,5 +114,32 @@ describe('Sketch Toolbar', () => {
     });
 
     expect(useSketchStore.getState().activeTool).toBe('eraser');
+  });
+
+  it('renders optional export and package actions when callbacks are provided', () => {
+    const onOpenExport = vi.fn();
+    const onOpenPackage = vi.fn();
+
+    act(() => {
+      root.render(<Toolbar onOpenExport={onOpenExport} onOpenPackage={onOpenPackage} />);
+    });
+
+    const exportButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="open-export"]',
+    );
+    const packageButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="open-package"]',
+    );
+
+    expect(exportButton?.getAttribute('aria-label')).toBe('sketch.toolbar.export');
+    expect(packageButton?.getAttribute('aria-label')).toBe('sketch.toolbar.package');
+
+    act(() => {
+      exportButton?.click();
+      packageButton?.click();
+    });
+
+    expect(onOpenExport).toHaveBeenCalledTimes(1);
+    expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });
 });

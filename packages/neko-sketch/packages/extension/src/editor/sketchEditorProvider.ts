@@ -6,6 +6,7 @@
  */
 import * as vscode from 'vscode';
 import {
+  createProjectSnapshotPackage,
   createFocusedWebviewRegistry,
   injectLocaleAttribute,
   type IFocusedWebviewRegistry,
@@ -905,6 +906,18 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
             });
           }
         }
+        break;
+      }
+      case 'project:package': {
+        await createProjectSnapshotPackage({
+          packageId: 'neko-sketch',
+          title: 'Package Sketch Project',
+          sourceUri: document.uri,
+          metadata: {
+            kind: 'sketch',
+            viewType: SketchEditorProvider.viewType,
+          },
+        });
         break;
       }
 

@@ -57,7 +57,7 @@ export function SlashCommandMenu({
   return (
     <div
       ref={menuRef}
-      className="absolute bottom-full left-1/2 z-50 mb-2 max-h-[min(228px,34vh)] w-[min(480px,calc(100%_-_40px))] -translate-x-1/2 overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
+      className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(228px,34vh)] overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
     >
       <div className="max-h-[min(228px,34vh)] overflow-y-auto px-1.5 py-1.5">
         {sections.map((section) => (

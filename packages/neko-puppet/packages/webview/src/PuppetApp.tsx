@@ -340,6 +340,12 @@ export function PuppetApp() {
   const handleImportPuppet = useCallback(() => {
     vscode.postMessage({ type: 'puppet:import' });
   }, []);
+  const handleOpenExport = useCallback(() => {
+    vscode.postMessage({ type: 'puppet:export' });
+  }, []);
+  const handleOpenPackage = useCallback(() => {
+    vscode.postMessage({ type: 'project:package' });
+  }, []);
   const handleDropMoc3 = useCallback((file: { readonly name: string; readonly data: string }) => {
     vscode.postMessage({ type: 'puppet:dropFile', name: file.name, data: file.data });
   }, []);
@@ -409,6 +415,8 @@ export function PuppetApp() {
             puppetLoaded={puppetLoaded}
             onionSkinEnabled={isOnionSkinEnabled}
             onImport={handleImportPuppet}
+            onOpenExport={handleOpenExport}
+            onOpenPackage={handleOpenPackage}
             onFitView={handleFitPuppetView}
             onToggleOnionSkin={handleToggleOnionSkin}
             onToggleRightPanel={() => setIsRightPanelVisible((visible) => !visible)}

@@ -185,6 +185,14 @@ export function App() {
 
   useEffect(() => aiSessionStore.subscribe(setAIRuns), []);
 
+  const handleOpenExport = useCallback(() => {
+    dispatchKeyboardAction('export', store.getState(), vscode);
+  }, [store]);
+
+  const handleOpenPackage = useCallback(() => {
+    vscode.postMessage({ type: 'project:package' });
+  }, []);
+
   const handleCancelAIRun = useCallback((runId: string) => {
     aiSessionStore.cancel(runId, 'Cancelling');
     vscode.postMessage({ type: 'ai:cancel', runId });
@@ -597,7 +605,7 @@ export function App() {
           bodyClassName="sketch-workbench-body"
           mainClassName="sketch-main-panel"
           mainKind="drawing-canvas"
-          leftRail={<Toolbar />}
+          leftRail={<Toolbar onOpenExport={handleOpenExport} onOpenPackage={handleOpenPackage} />}
           main={
             <div ref={rootRef} className="sketch-canvas-container">
               <SketchCanvas isKeyboardFocusedRef={isKeyboardFocusedRef} />
