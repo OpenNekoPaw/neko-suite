@@ -251,10 +251,13 @@ export function CanvasApp() {
   // Report action to extension
   // =========================================================================
 
-  const reportAction = useCallback((action: string, label: string, detail?: string) => {
-    if (!vscode) return;
-    vscode.postMessage({ type: 'canvasAction', action, label, detail });
-  }, []);
+  const reportAction = useCallback(
+    (action: string, label: string, detail?: string, data?: unknown) => {
+      if (!vscode) return;
+      vscode.postMessage({ type: 'canvasAction', action, label, detail, data });
+    },
+    [],
+  );
 
   // =========================================================================
   // AutoPrompt resolver — bridges postMessage round-trip into a Promise
@@ -1237,6 +1240,12 @@ export function CanvasApp() {
             onRedo={redo}
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
+            onOpenExport={() => {
+              reportAction('openExport', t('toolbar.export'));
+            }}
+            onOpenPackage={() => {
+              reportAction('openPackage', t('toolbar.package'), undefined, canvasData);
+            }}
             isHudVisible={isHudVisible}
             onToggleHud={() => setIsHudVisible((visible) => !visible)}
             isPanMode={isPanMode}

@@ -18,7 +18,15 @@ import {
 } from '@neko/ui/primitives';
 import { useHistoryStore } from '../../stores/historyStore';
 import { t } from '../../i18n';
-import { UndoIcon, RedoIcon, LayersIcon, RightPanelIcon, RightPanelOffIcon } from '@neko/ui/icons';
+import {
+  DownloadIcon,
+  UndoIcon,
+  RedoIcon,
+  LayersIcon,
+  PackageIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
+} from '@neko/ui/icons';
 
 // =============================================================================
 // Types
@@ -30,6 +38,10 @@ export interface CanvasToolbarProps {
   /** Node tree/library panel visibility */
   isNodeLibraryVisible?: boolean;
   onToggleNodeLibrary?: () => void;
+  /** Opens the Extension Host-owned rendered export picker */
+  onOpenExport?: () => void;
+  /** Opens the Extension Host-owned no-engine project package flow */
+  onOpenPackage?: () => void;
   /** Canvas HUD visibility (minimap, zoom controls) */
   isHudVisible?: boolean;
   onToggleHud?: () => void;
@@ -47,6 +59,8 @@ export function CanvasToolbar({
   onRedo,
   isNodeLibraryVisible = true,
   onToggleNodeLibrary,
+  onOpenExport,
+  onOpenPackage,
   isHudVisible = true,
   onToggleHud,
   isPanMode = false,
@@ -99,6 +113,26 @@ export function CanvasToolbar({
           title={nodeLibraryTitle}
           active={isNodeLibraryVisible}
           onClick={onToggleNodeLibrary}
+        />
+      )}
+
+      {onOpenExport && (
+        <ToolbarButton
+          data-creative-left-rail-action="open-export"
+          data-creative-left-rail-kind="common-action"
+          icon={<DownloadIcon size={18} />}
+          title={t('toolbar.export')}
+          onClick={onOpenExport}
+        />
+      )}
+
+      {onOpenPackage && (
+        <ToolbarButton
+          data-creative-left-rail-action="open-package"
+          data-creative-left-rail-kind="common-action"
+          icon={<PackageIcon size={18} />}
+          title={t('toolbar.package')}
+          onClick={onOpenPackage}
         />
       )}
 

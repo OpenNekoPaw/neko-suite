@@ -17,6 +17,7 @@
  *   NKV-008: toolbar pickers cover file-bound reference nodes
  *   NKV-009: composable Agent node operations use payload wrappers
  *   NKV-010: projected Canvas write-back routes through projection adapters
+ *   NKV-012: canvas toolbar export intent routes through a whitelisted command
  */
 
 import { describe, it, expect } from 'vitest';
@@ -29,7 +30,10 @@ const webviewSource = readFileSync(
   join(__dirname, '../../../webview/src/hooks/useVSCodeMessages.ts'),
   'utf-8',
 );
-const canvasAppSource = readFileSync(join(__dirname, '../../../webview/src/CanvasApp.tsx'), 'utf-8');
+const canvasAppSource = readFileSync(
+  join(__dirname, '../../../webview/src/CanvasApp.tsx'),
+  'utf-8',
+);
 const operationStoreSource = readFileSync(
   join(__dirname, '../../../webview/src/stores/canvasOperationStore.ts'),
   'utf-8',
@@ -250,6 +254,29 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain(
         "filter((item): item is string => typeof item === 'string')",
       );
+    });
+  });
+
+  describe('NKV-012: canvas toolbar export and package intents', () => {
+    it('routes toolbar export and package actions through separate whitelisted paths', () => {
+      expect(providerSource).toContain("case 'canvasAction'");
+      expect(providerSource).toContain("message.action === 'openExport'");
+      expect(providerSource).toContain(
+        "vscode.commands.executeCommand('neko.neko-canvas.slashCommand.export')",
+      );
+      expect(providerSource).toContain("message.action === 'openPackage'");
+      expect(providerSource).toContain('createProjectSnapshotPackage({');
+      expect(providerSource).toContain("packageId: 'neko-canvas'");
+    });
+
+    it('sends lightweight canvasAction intents from the webview toolbar', () => {
+      expect(canvasAppSource).toContain("type: 'canvasAction'");
+      expect(canvasAppSource).toContain("reportAction('openExport', t('toolbar.export'))");
+      expect(canvasAppSource).toContain(
+        "reportAction('openPackage', t('toolbar.package'), undefined, canvasData)",
+      );
+      expect(canvasAppSource).not.toContain("type: 'exportStoryboard'");
+      expect(canvasAppSource).not.toContain("type: 'packageCanvas'");
     });
   });
 

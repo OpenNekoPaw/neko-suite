@@ -7,7 +7,9 @@ import { CanvasToolbar } from './CanvasToolbar';
 import { setLocale } from '../../i18n';
 
 vi.mock('@neko/ui/icons', () => ({
+  DownloadIcon: ({ size = 16 }: { size?: number }) => <span data-icon="download">{size}</span>,
   LayersIcon: ({ size = 16 }: { size?: number }) => <span data-icon="layers">{size}</span>,
+  PackageIcon: ({ size = 16 }: { size?: number }) => <span data-icon="package">{size}</span>,
   RedoIcon: ({ size = 16 }: { size?: number }) => <span data-icon="redo">{size}</span>,
   RightPanelIcon: ({ size = 16 }: { size?: number }) => <span data-icon="right-panel">{size}</span>,
   RightPanelOffIcon: ({ size = 16 }: { size?: number }) => (
@@ -101,6 +103,42 @@ describe('CanvasToolbar', () => {
     expect(collapsedButton?.getAttribute('aria-label')).toBe('Show right node tree');
     expect(collapsedButton?.getAttribute('aria-expanded')).toBe('false');
     expect(collapsedButton?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('opens separate Extension Host-owned export and package flows', () => {
+    const onOpenExport = vi.fn();
+    const onOpenPackage = vi.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          onUndo={() => undefined}
+          onRedo={() => undefined}
+          onOpenExport={onOpenExport}
+          onOpenPackage={onOpenPackage}
+        />,
+      );
+    });
+
+    const exportButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="open-export"]',
+    );
+    const packageButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="open-package"]',
+    );
+    expect(exportButton?.getAttribute('aria-label')).toBe('Export');
+    expect(exportButton?.getAttribute('data-creative-left-rail-kind')).toBe('common-action');
+    expect(exportButton?.querySelector('[data-icon="download"]')).not.toBeNull();
+    expect(packageButton?.getAttribute('aria-label')).toBe('Package');
+    expect(packageButton?.getAttribute('data-creative-left-rail-kind')).toBe('common-action');
+    expect(packageButton?.querySelector('[data-icon="package"]')).not.toBeNull();
+
+    act(() => {
+      exportButton?.click();
+      packageButton?.click();
+    });
+    expect(onOpenExport).toHaveBeenCalledTimes(1);
+    expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });
 
   it('controls canvas HUD visibility from the bottom visibility cluster', () => {

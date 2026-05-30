@@ -27,6 +27,8 @@ export const en = {
   'toolbar.toggleNodeLibrary': 'Toggle Node Library',
   'toolbar.showRightNodeTree': 'Show right node tree',
   'toolbar.hideRightNodeTree': 'Hide right node tree',
+  'toolbar.export': 'Export',
+  'toolbar.package': 'Package',
   'toolbar.showHudControls': 'Show canvas HUD',
   'toolbar.hideHudControls': 'Hide canvas HUD',
   'toolbar.layers': 'Layers',

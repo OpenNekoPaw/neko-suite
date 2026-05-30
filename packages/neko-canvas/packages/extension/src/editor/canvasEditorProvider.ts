@@ -10,6 +10,7 @@ import * as path from 'path';
 import {
   createDefaultLocalResourceAccessService,
   createFocusedWebviewRegistry,
+  createProjectSnapshotPackage,
   hasWebviewKeyboardEditableOwner,
   injectLocaleAttribute,
   normalizeLocalFilePath,
@@ -1290,6 +1291,31 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         const editable = message.editable && webviewPanel.visible;
         this.focusedWebviews.markKeyboardEditable(document.uri.toString(), editable);
         void this.setGlobalKeyboardEditable(document.uri.toString(), editable);
+        break;
+      }
+      case 'canvasAction': {
+        if (message.action === 'openExport') {
+          await vscode.commands.executeCommand('neko.neko-canvas.slashCommand.export');
+        } else if (message.action === 'openPackage') {
+          const data =
+            message.data && typeof message.data === 'object'
+              ? (message.data as Record<string, unknown>)
+              : undefined;
+          if (data) {
+            await this.normalizeCanvasPathsForSave(data, document.uri);
+            this.rememberCanvasSnapshot(document, data);
+          }
+          await createProjectSnapshotPackage({
+            packageId: 'neko-canvas',
+            title: 'Package Canvas Project',
+            sourceUri: document.uri,
+            sourceBytes: data ? Buffer.from(JSON.stringify(data, null, 2), 'utf-8') : undefined,
+            metadata: {
+              kind: 'canvas',
+              viewType: CanvasEditorProvider.viewType,
+            },
+          });
+        }
         break;
       }
       case 'save': {
