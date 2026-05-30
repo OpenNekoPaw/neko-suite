@@ -130,6 +130,23 @@ export function UploadIcon({ size = 16, className, strokeWidth = 2 }: IconProps)
   );
 }
 
+export function PackageIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      className={className}
+      {...base(strokeWidth)}
+    >
+      <path d="M21 8l-9-5-9 5 9 5 9-5z" />
+      <path d="M3 8v8l9 5 9-5V8" />
+      <path d="M12 13v8" />
+      <path d="M7.5 5.5l9 5" opacity="0.55" />
+    </svg>
+  );
+}
+
 export function TrashIcon({ size = 16, className, strokeWidth = 2 }: IconProps) {
   return (
     <svg

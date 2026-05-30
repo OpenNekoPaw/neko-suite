@@ -93,6 +93,10 @@ export type { CreateNewFileOptions, TemplateChoice } from './create-new-file';
 // Command payload parsing helpers
 export { isRecord, readNonEmptyString } from './command-args';
 
+// Project snapshot package helper (Extension Host only, no Engine dependency)
+export { createProjectSnapshotPackage } from './project-package';
+export type { ProjectPackageRequest, ProjectPackageResult } from './project-package';
+
 // Binary template generators for new-file templates
 export {
   generateMinimalInp,
