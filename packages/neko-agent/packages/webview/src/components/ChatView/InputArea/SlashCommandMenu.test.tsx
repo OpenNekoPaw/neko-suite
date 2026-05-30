@@ -80,9 +80,9 @@ describe('SlashCommandMenu', () => {
     expect(screen.getByText('Personal')).toBeTruthy();
 
     const selectedButton = screen.getByRole('button', { name: /\/commit/i });
-    expect(selectedButton.className).toContain('h-10');
+    expect(selectedButton.className).toContain('h-11');
     expect(selectedButton.className).toContain('rounded-[14px]');
-    expect(selectedButton.className).toContain('grid-cols-[96px_minmax(0,1fr)_auto]');
+    expect(selectedButton.className).toContain('grid-cols-[104px_minmax(0,1fr)_auto]');
   });
 
   it('keeps display ordering aligned with keyboard selection groups', () => {

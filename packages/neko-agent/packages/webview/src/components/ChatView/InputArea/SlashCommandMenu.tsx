@@ -63,7 +63,7 @@ export function SlashCommandMenu({
         {sections.map((section) => (
           <div key={section.group}>
             {section.title && (
-              <div className="px-3 pb-1 pt-2 text-[11px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
+              <div className="px-3 pb-1.5 pt-2 text-[12px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
                 {section.title}
               </div>
             )}
@@ -78,14 +78,14 @@ export function SlashCommandMenu({
                   key={cmd.id}
                   type="button"
                   onClick={() => onSelect(cmd)}
-                  className={`grid h-10 w-full grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-2 rounded-[14px] px-3 text-left transition-colors ${
+                  className={`grid h-11 w-full grid-cols-[104px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[14px] px-3 text-left transition-colors ${
                     isSelected
                       ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
                       : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
                   }`}
                 >
                   <span
-                    className={`truncate text-[13px] font-semibold leading-5 ${
+                    className={`truncate text-[14px] font-semibold leading-5 ${
                       isSelected ? '' : 'text-[var(--vscode-textLink-foreground)]'
                     }`}
                   >
@@ -102,7 +102,7 @@ export function SlashCommandMenu({
                   </span>
                   {sourceLabel && (
                     <span
-                      className={`max-w-[84px] truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${
+                      className={`max-w-[88px] truncate rounded-full px-2 py-0.5 text-[10.5px] font-medium leading-none ${
                         isSelected
                           ? 'bg-[color-mix(in_srgb,var(--agent-bg)_58%,transparent)] text-[var(--agent-fg)]'
                           : 'text-[var(--agent-fg-secondary)]'

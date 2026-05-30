@@ -154,7 +154,7 @@ export function MentionMenu({
       className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(360px,52vh)] overflow-hidden rounded-[20px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
     >
       <div className="max-h-[min(360px,52vh)] overflow-y-auto px-2 py-2">
-        <div className="px-3 pb-2 pt-1 text-[12px] leading-4 text-[var(--agent-fg-secondary)]">
+        <div className="px-3 pb-2 pt-1 text-[12px] leading-5 text-[var(--agent-fg-secondary)]">
           {filter ? t('chat.input.mentionSearching', { filter }) : t('chat.input.mentionHint')}
         </div>
 
@@ -167,7 +167,7 @@ export function MentionMenu({
             {sections.map((section) => (
               <div key={section.kind}>
                 {/* Section header */}
-                <div className="sticky top-0 z-10 flex items-center justify-between bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] px-3 pb-1 pt-2 text-[11px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
+                <div className="sticky top-0 z-10 flex items-center justify-between bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] px-3 pb-1.5 pt-2 text-[12px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
                   <span>{resolveMentionLabel(section.label, t)}</span>
                   <span className="font-normal opacity-70">{section.items.length}</span>
                 </div>
@@ -184,7 +184,7 @@ export function MentionMenu({
                       key={item.id}
                       type="button"
                       onClick={() => handleSelect(item)}
-                      className={`grid h-10 w-full grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-[14px] px-3 text-left transition-colors ${
+                      className={`grid h-11 w-full grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-[14px] px-3 text-left transition-colors ${
                         isSelected
                           ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
                           : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
@@ -199,19 +199,19 @@ export function MentionMenu({
                       ) : (
                         <span
                           aria-hidden="true"
-                          className="flex h-7 w-7 items-center justify-center rounded-[10px] border text-[9px] font-semibold leading-none"
+                          className="flex h-7 w-7 items-center justify-center rounded-[10px] border text-[9.5px] font-semibold leading-none"
                           style={glyph.style}
                         >
                           {glyph.label}
                         </span>
                       )}
                       <span className="min-w-0">
-                        <span className="block truncate text-[12px] font-medium leading-4">
+                        <span className="block truncate text-[13px] font-medium leading-4">
                           {item.label}
                         </span>
                         {subtitle && (
                           <span
-                            className={`block truncate text-[10px] leading-3 ${
+                            className={`block truncate text-[11px] leading-4 ${
                               isSelected
                                 ? 'text-[var(--agent-fg)] opacity-70'
                                 : 'text-[var(--agent-fg-secondary)]'
@@ -223,7 +223,7 @@ export function MentionMenu({
                       </span>
                       {badge && (
                         <span
-                          className="max-w-[86px] truncate rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none"
+                          className="max-w-[88px] truncate rounded-full border px-2 py-0.5 text-[10.5px] font-medium leading-none"
                           style={badge.style}
                         >
                           {resolveMentionLabel(badge.label, t)}

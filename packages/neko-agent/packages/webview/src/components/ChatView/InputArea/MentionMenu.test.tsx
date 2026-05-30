@@ -159,7 +159,7 @@ describe('MentionMenu icon projection', () => {
     expect(screen.getByText('Character')).toBeTruthy();
 
     const fileButton = screen.getByRole('button', { name: /library\.json/i });
-    expect(fileButton.className).toContain('h-10');
+    expect(fileButton.className).toContain('h-11');
     expect(fileButton.className).toContain('rounded-[14px]');
   });
 
