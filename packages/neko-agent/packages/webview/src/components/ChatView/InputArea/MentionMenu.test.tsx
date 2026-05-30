@@ -103,7 +103,7 @@ describe('MentionMenu icon projection', () => {
   });
 
   it('renders compact rows with localized section labels and tags', () => {
-    render(
+    const { container } = render(
       <MentionMenu
         isOpen
         filter=""
@@ -149,6 +149,7 @@ describe('MentionMenu icon projection', () => {
         onClose={vi.fn()}
       />,
     );
+    const panel = container.firstElementChild as HTMLElement;
 
     expect(screen.getByText('Files')).toBeTruthy();
     expect(screen.getByText('Assets')).toBeTruthy();
@@ -157,10 +158,12 @@ describe('MentionMenu icon projection', () => {
     expect(screen.getByText('assets/hero.png')).toBeTruthy();
     expect(screen.getByText('Image')).toBeTruthy();
     expect(screen.getByText('Character')).toBeTruthy();
+    expect(panel.className).toContain('max-h-[min(260px,38vh)]');
+    expect(panel.className).toContain('w-[min(480px,calc(100%_-_40px))]');
 
     const fileButton = screen.getByRole('button', { name: /library\.json/i });
-    expect(fileButton.className).toContain('h-11');
-    expect(fileButton.className).toContain('rounded-[14px]');
+    expect(fileButton.className).toContain('h-10');
+    expect(fileButton.className).toContain('rounded-[13px]');
   });
 
   it('falls back to host-provided tags when no localized entity tag exists', () => {

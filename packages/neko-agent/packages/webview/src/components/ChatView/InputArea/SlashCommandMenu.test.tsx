@@ -37,7 +37,7 @@ function command(overrides: Partial<SlashCommandCatalogItem>): SlashCommandCatal
 
 describe('SlashCommandMenu', () => {
   it('renders codex-style command rows without command icons', () => {
-    render(
+    const { container } = render(
       <SlashCommandMenu
         isOpen
         commands={[
@@ -66,6 +66,7 @@ describe('SlashCommandMenu', () => {
         onClose={vi.fn()}
       />,
     );
+    const panel = container.firstElementChild as HTMLElement;
 
     expect(screen.queryByText('ICON_SHOULD_NOT_RENDER')).toBeNull();
     expect(screen.queryByText('PLUGIN_ICON_SHOULD_NOT_RENDER')).toBeNull();
@@ -78,11 +79,13 @@ describe('SlashCommandMenu', () => {
     expect(screen.getByText('Show help message')).toBeTruthy();
     expect(screen.getByText('Plugin')).toBeTruthy();
     expect(screen.getByText('Personal')).toBeTruthy();
+    expect(panel.className).toContain('max-h-[min(260px,38vh)]');
+    expect(panel.className).toContain('w-[min(480px,calc(100%_-_40px))]');
 
     const selectedButton = screen.getByRole('button', { name: /\/commit/i });
-    expect(selectedButton.className).toContain('h-11');
-    expect(selectedButton.className).toContain('rounded-[14px]');
-    expect(selectedButton.className).toContain('grid-cols-[104px_minmax(0,1fr)_auto]');
+    expect(selectedButton.className).toContain('h-10');
+    expect(selectedButton.className).toContain('rounded-[13px]');
+    expect(selectedButton.className).toContain('grid-cols-[96px_minmax(0,1fr)_auto]');
   });
 
   it('keeps display ordering aligned with keyboard selection groups', () => {
