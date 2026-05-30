@@ -151,85 +151,92 @@ export function MentionMenu({
   return (
     <div
       ref={menuRef}
-      className="absolute bottom-full left-0 right-0 mb-1 z-50 max-h-[min(286px,44vh)] overflow-hidden rounded-lg border border-[var(--agent-input-border)] bg-[var(--agent-menu-bg)] shadow-[0_8px_24px_var(--vscode-widget-shadow,rgba(0,0,0,0.28))]"
+      className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(360px,52vh)] overflow-hidden rounded-[20px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
     >
-      {/* Search hint */}
-      <div className="border-b border-[var(--agent-divider)] px-3 py-1.5 text-[10px] text-[var(--agent-fg-secondary)]">
-        {filter ? t('chat.input.mentionSearching', { filter }) : t('chat.input.mentionHint')}
-      </div>
-
-      {flat.length === 0 ? (
-        <div className="px-3 py-3 text-[11px] text-[var(--agent-fg-secondary)]">
-          {t('chat.input.noMatchingFiles')}
+      <div className="max-h-[min(360px,52vh)] overflow-y-auto px-2 py-2">
+        <div className="px-3 pb-2 pt-1 text-[12px] leading-4 text-[var(--agent-fg-secondary)]">
+          {filter ? t('chat.input.mentionSearching', { filter }) : t('chat.input.mentionHint')}
         </div>
-      ) : (
-        <div className="max-h-[calc(min(286px,44vh)-29px)] overflow-y-auto py-0.5">
-          {sections.map((section) => (
-            <div key={section.kind}>
-              {/* Section header */}
-              <div className="sticky top-0 z-10 flex items-center justify-between bg-[var(--agent-menu-bg)] px-3 pb-0.5 pt-1.5 text-[9px] font-semibold uppercase text-[var(--agent-fg-secondary)]">
-                <span>{resolveMentionLabel(section.label, t)}</span>
-                <span className="font-normal opacity-70">{section.items.length}</span>
-              </div>
 
-              {section.items.map((item, itemIndex) => {
-                const flatIdx = section.startIndex + itemIndex;
-                const isSelected = flatIdx === selectedIndex;
-                const glyph = getMentionGlyph(item, isSelected);
-                const subtitle = getMentionSubtitle(item);
-                const badge = getMentionBadge(item, isSelected);
+        {flat.length === 0 ? (
+          <div className="px-3 py-3 text-[12px] leading-5 text-[var(--agent-fg-secondary)]">
+            {t('chat.input.noMatchingFiles')}
+          </div>
+        ) : (
+          <>
+            {sections.map((section) => (
+              <div key={section.kind}>
+                {/* Section header */}
+                <div className="sticky top-0 z-10 flex items-center justify-between bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] px-3 pb-1 pt-2 text-[11px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
+                  <span>{resolveMentionLabel(section.label, t)}</span>
+                  <span className="font-normal opacity-70">{section.items.length}</span>
+                </div>
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSelect(item)}
-                    className={`grid h-9 w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 px-3 text-left transition-colors ${
-                      isSelected
-                        ? 'bg-[var(--vscode-list-activeSelectionBackground,var(--agent-accent-soft))] text-[var(--vscode-list-activeSelectionForeground,var(--agent-fg))]'
-                        : 'text-[var(--agent-fg)] hover:bg-[var(--agent-hover)]'
-                    }`}
-                  >
-                    {item.thumbnailUri ? (
-                      <img
-                        src={item.thumbnailUri}
-                        alt=""
-                        className="h-6 w-6 rounded object-cover"
-                      />
-                    ) : (
-                      <span
-                        aria-hidden="true"
-                        className="flex h-6 w-6 items-center justify-center rounded-md border text-[8.5px] font-semibold leading-none"
-                        style={glyph.style}
-                      >
-                        {glyph.label}
-                      </span>
-                    )}
-                    <span className="min-w-0">
-                      <span className="block truncate text-[11px] font-medium leading-4">
-                        {item.label}
-                      </span>
-                      {subtitle && (
-                        <span className="block truncate text-[9.5px] leading-3 text-[var(--agent-fg-secondary)]">
-                          {subtitle}
+                {section.items.map((item, itemIndex) => {
+                  const flatIdx = section.startIndex + itemIndex;
+                  const isSelected = flatIdx === selectedIndex;
+                  const glyph = getMentionGlyph(item, isSelected);
+                  const subtitle = getMentionSubtitle(item);
+                  const badge = getMentionBadge(item, isSelected);
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSelect(item)}
+                      className={`grid h-10 w-full grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-[14px] px-3 text-left transition-colors ${
+                        isSelected
+                          ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
+                          : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
+                      }`}
+                    >
+                      {item.thumbnailUri ? (
+                        <img
+                          src={item.thumbnailUri}
+                          alt=""
+                          className="h-7 w-7 rounded-[10px] object-cover"
+                        />
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          className="flex h-7 w-7 items-center justify-center rounded-[10px] border text-[9px] font-semibold leading-none"
+                          style={glyph.style}
+                        >
+                          {glyph.label}
                         </span>
                       )}
-                    </span>
-                    {badge && (
-                      <span
-                        className="max-w-[86px] truncate rounded-full border px-1.5 py-0.5 text-[8.5px] font-medium leading-none"
-                        style={badge.style}
-                      >
-                        {resolveMentionLabel(badge.label, t)}
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12px] font-medium leading-4">
+                          {item.label}
+                        </span>
+                        {subtitle && (
+                          <span
+                            className={`block truncate text-[10px] leading-3 ${
+                              isSelected
+                                ? 'text-[var(--agent-fg)] opacity-70'
+                                : 'text-[var(--agent-fg-secondary)]'
+                            }`}
+                          >
+                            {subtitle}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      )}
+                      {badge && (
+                        <span
+                          className="max-w-[86px] truncate rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none"
+                          style={badge.style}
+                        >
+                          {resolveMentionLabel(badge.label, t)}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -410,9 +417,12 @@ function getMentionBadgeToneKey(item: MentionItem): string {
 function getToneStyle(key: string, isSelected: boolean, surface: 'badge' | 'glyph'): CSSProperties {
   if (isSelected) {
     return {
-      color: 'var(--vscode-list-activeSelectionForeground,var(--agent-fg))',
-      backgroundColor: 'rgba(255,255,255,0.18)',
-      borderColor: 'rgba(255,255,255,0.36)',
+      color: 'var(--agent-fg)',
+      backgroundColor:
+        surface === 'glyph'
+          ? 'color-mix(in srgb, var(--agent-bg) 62%, transparent)'
+          : 'color-mix(in srgb, var(--agent-bg) 58%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--agent-fg) 18%, transparent)',
     };
   }
 
