@@ -21,6 +21,23 @@ interface SlashCommandMenuProps {
   onClose: () => void;
 }
 
+type SlashCommandDisplayGroup = 'agent' | 'creation' | 'skill';
+
+interface SlashCommandSection {
+  group: SlashCommandDisplayGroup;
+  title: string | null;
+  commands: SlashCommandCatalogItem[];
+  startIndex: number;
+}
+
+const slashCommandDisplayGroupOrder: readonly SlashCommandDisplayGroup[] = [
+  'agent',
+  'creation',
+  'skill',
+];
+
+const creationBuiltinCommands = new Set(['skills', 'tools', 'tasks']);
+
 export function SlashCommandMenu({
   isOpen,
   commands,
@@ -35,34 +52,138 @@ export function SlashCommandMenu({
 
   if (!isOpen || commands.length === 0) return null;
 
+  const sections = buildSlashCommandSections(commands, t);
+
   return (
     <div
       ref={menuRef}
-      className="absolute bottom-full left-0 mb-1 w-full bg-[var(--vscode-dropdown-background)] border border-[var(--vscode-dropdown-border)] rounded-md shadow-lg max-h-[200px] overflow-y-auto py-1 z-50"
+      className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(360px,52vh)] overflow-hidden rounded-[20px] border border-[color-mix(in_srgb,var(--agent-fg)_8%,transparent)] bg-[color-mix(in_srgb,var(--agent-elevated)_96%,var(--agent-bg)_4%)] shadow-[0_18px_48px_var(--vscode-widget-shadow,rgba(0,0,0,0.26))]"
     >
-      {commands.map((cmd, index) => {
-        const description = resolveSlashCommandDescription(cmd, t);
-        const sourceLabel = resolveSlashCommandSourceLabel(cmd);
-
-        return (
-          <button
-            key={cmd.id}
-            onClick={() => onSelect(cmd)}
-            className={`w-full px-3 py-1.5 text-left text-[11px] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors flex items-center gap-2 ${
-              index === selectedIndex ? 'bg-[var(--vscode-list-hoverBackground)]' : ''
-            }`}
-          >
-            <span>{cmd.icon}</span>
-            <span className="font-medium text-[var(--vscode-textLink-foreground)]">{cmd.name}</span>
-            <span className="text-[var(--vscode-descriptionForeground)]">{description}</span>
-            {sourceLabel && (
-              <span className="ml-auto text-[9px] px-1 py-0.5 rounded bg-[var(--vscode-badge-background)] text-[var(--vscode-badge-foreground)]">
-                {sourceLabel}
-              </span>
+      <div className="max-h-[min(360px,52vh)] overflow-y-auto px-2 py-2">
+        {sections.map((section) => (
+          <div key={section.group}>
+            {section.title && (
+              <div className="px-3 pb-1 pt-2 text-[11px] font-medium leading-4 text-[var(--agent-fg-secondary)]">
+                {section.title}
+              </div>
             )}
-          </button>
-        );
-      })}
+            {section.commands.map((cmd, itemIndex) => {
+              const flatIndex = section.startIndex + itemIndex;
+              const description = resolveSlashCommandDescription(cmd, t);
+              const sourceLabel = resolveSlashCommandSourceLabel(cmd);
+              const isSelected = flatIndex === selectedIndex;
+
+              return (
+                <button
+                  key={cmd.id}
+                  type="button"
+                  onClick={() => onSelect(cmd)}
+                  className={`grid h-10 w-full grid-cols-[96px_minmax(0,1fr)_auto] items-center gap-2 rounded-[14px] px-3 text-left transition-colors ${
+                    isSelected
+                      ? 'bg-[color-mix(in_srgb,var(--agent-fg)_10%,transparent)] text-[var(--agent-fg)]'
+                      : 'text-[var(--agent-fg)] hover:bg-[color-mix(in_srgb,var(--agent-fg)_5%,transparent)]'
+                  }`}
+                >
+                  <span
+                    className={`truncate text-[13px] font-semibold leading-5 ${
+                      isSelected ? '' : 'text-[var(--vscode-textLink-foreground)]'
+                    }`}
+                  >
+                    {cmd.name}
+                  </span>
+                  <span
+                    className={`min-w-0 truncate text-[12px] leading-5 ${
+                      isSelected
+                        ? 'text-[var(--agent-fg)] opacity-80'
+                        : 'text-[var(--agent-fg-secondary)]'
+                    }`}
+                  >
+                    {description}
+                  </span>
+                  {sourceLabel && (
+                    <span
+                      className={`max-w-[84px] truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${
+                        isSelected
+                          ? 'bg-[color-mix(in_srgb,var(--agent-bg)_58%,transparent)] text-[var(--agent-fg)]'
+                          : 'text-[var(--agent-fg-secondary)]'
+                      }`}
+                    >
+                      {resolveSlashCommandSourceLabelText(sourceLabel, t)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
+}
+
+function buildSlashCommandSections(
+  commands: SlashCommandCatalogItem[],
+  translate: (key: string, params?: Record<string, string | number>) => string,
+): SlashCommandSection[] {
+  const sections: SlashCommandSection[] = [];
+  let startIndex = 0;
+  const sortedCommands = sortSlashCommandsForDisplay(commands);
+
+  for (const group of slashCommandDisplayGroupOrder) {
+    const sectionCommands = sortedCommands.filter(
+      (command) => projectSlashCommandGroup(command) === group,
+    );
+    if (sectionCommands.length === 0) continue;
+    sections.push({
+      group,
+      title: resolveSlashCommandSectionTitle(group, translate),
+      commands: sectionCommands,
+      startIndex,
+    });
+    startIndex += sectionCommands.length;
+  }
+
+  return sections;
+}
+
+export function sortSlashCommandsForDisplay(
+  commands: readonly SlashCommandCatalogItem[],
+): SlashCommandCatalogItem[] {
+  return [...commands].sort((a, b) => {
+    const groupOrder =
+      slashCommandDisplayGroupOrder.indexOf(projectSlashCommandGroup(a)) -
+      slashCommandDisplayGroupOrder.indexOf(projectSlashCommandGroup(b));
+    if (groupOrder !== 0) return groupOrder;
+    return commands.indexOf(a) - commands.indexOf(b);
+  });
+}
+
+export function projectSlashCommandGroup(
+  command: SlashCommandCatalogItem,
+): SlashCommandDisplayGroup {
+  if (command.source === 'skill') return 'skill';
+  if (command.source === 'plugin') return 'creation';
+  if (creationBuiltinCommands.has(command.commandId ?? command.id)) return 'creation';
+  return 'agent';
+}
+
+function resolveSlashCommandSectionTitle(
+  group: SlashCommandDisplayGroup,
+  translate: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const key = `chat.commands.sections.${group}`;
+  const translated = translate(key);
+  if (translated !== key) return translated;
+  if (group === 'creation') return 'Creation';
+  if (group === 'skill') return 'Skills';
+  return 'Agent';
+}
+
+function resolveSlashCommandSourceLabelText(
+  sourceLabel: string,
+  translate: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const key = `chat.commands.source.${sourceLabel}`;
+  const translated = translate(key);
+  return translated === key ? sourceLabel : translated;
 }

@@ -181,6 +181,11 @@ export const chat = {
   'chat.commands.tasks': 'List and manage background tasks',
   'chat.commands.plan': 'Enter plan mode',
   'chat.commands.mcp': 'Manage MCP server connections',
+  'chat.commands.sections.agent': 'Agent',
+  'chat.commands.sections.creation': 'Creation',
+  'chat.commands.sections.skill': 'Skills',
+  'chat.commands.source.skill': 'Personal',
+  'chat.commands.source.plugin': 'Plugin',
 
   'chat.helpMessage':
     '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/resume` - Resume a previous conversation\n- `/help` - Show this help message\n- `/compact` - Compress conversation to save context\n- `/status` - Show status information\n- `/model` - Select AI model\n- `/plan` - Enter plan mode\n- `/mcp` - Manage MCP servers\n- `/tasks` - Manage background tasks\n- `/settings` - Open settings\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',

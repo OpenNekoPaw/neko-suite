@@ -10,7 +10,7 @@ import { ModeSelector } from './ModeSelector';
 import { SessionModeSelector } from './SessionModeSelector';
 import { GenerationParamsBar } from './GenerationParamsBar';
 import { AttachmentPreview } from './FileAttachment';
-import { SlashCommandMenu } from './SlashCommandMenu';
+import { SlashCommandMenu, sortSlashCommandsForDisplay } from './SlashCommandMenu';
 import { parseFileReference } from './FileReferenceMenu';
 import { MentionMenu, getFilteredMentionItems } from './MentionMenu';
 import { MessageAttachment, ProjectFile, SlashCommand, MentionItem } from './types';
@@ -132,7 +132,9 @@ export function InputArea({
 
   // Filtered data
   const slashCommands = createSlashCommandCatalog(skills, pluginCommands);
-  const filteredCommands = filterSlashCommands(slashCommands, slashFilter, t);
+  const filteredCommands = sortSlashCommandsForDisplay(
+    filterSlashCommands(slashCommands, slashFilter, t),
+  );
   const filteredMentionItems = getFilteredMentionItems(mentionItems, atFilter);
 
   // Handle input change
