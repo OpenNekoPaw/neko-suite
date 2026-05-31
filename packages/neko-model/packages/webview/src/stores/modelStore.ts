@@ -76,6 +76,7 @@ const MIN_NODE_EXTENT = 0.01;
 const CAMERA_FIT_PADDING = 1.25;
 const EPSILON = 0.000001;
 const LOOKDEV_MODE_UNAVAILABLE_DIAGNOSTIC = 'lookdev.modeUnavailable';
+const RENDER_FRAME_METRICS_SAMPLE_INTERVAL_US = 200_000;
 
 interface CameraStatePatch {
   cameraTheta: number;
@@ -215,6 +216,7 @@ export interface ModelState {
   recordPatchBytes: (bytes: number, atMs?: number) => void;
   recordGpuUpload: (ms: number) => void;
   recordRenderFrameMeta: (meta: RenderFrameMeta) => void;
+  updateRenderFrameMeta: (meta: RenderFrameMeta) => void;
   updateLastRenderFrameMeta: (meta: RenderFrameMeta) => void;
   incrementDroppedPrediction: () => void;
   requestCharacterPreviewMode: (modeId: CharacterPreviewModeId) => void;
@@ -628,16 +630,32 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   recordRenderFrameMeta: (meta) =>
     set((state) => {
-      const latencyMs = meta.durationUs > 0 ? meta.durationUs / 1000 : 0;
-      state.authoringMetrics.recordFrameLatency(latencyMs);
-      if (typeof meta.diagnostics?.gpuUploadTimeMs === 'number') {
-        state.authoringMetrics.recordGpuUpload(meta.diagnostics.gpuUploadTimeMs);
-      }
+      recordFrameMetricsSample(state, meta);
       return {
         lastRenderFrameMeta: meta,
         characterPreview: reconcilePreviewFrameMeta(state.characterPreview, meta),
         lookDev: reconcileLookDevFrameMeta(state.lookDev, meta),
         authoringMetricsSnapshot: state.authoringMetrics.snapshot(),
+      };
+    }),
+
+  updateRenderFrameMeta: (meta) =>
+    set((state) => {
+      const previous = state.lastRenderFrameMeta;
+      const shouldSampleMetrics =
+        previous === null ||
+        meta.ptsUs < previous.ptsUs ||
+        meta.ptsUs - previous.ptsUs >= RENDER_FRAME_METRICS_SAMPLE_INTERVAL_US;
+      if (shouldSampleMetrics) {
+        recordFrameMetricsSample(state, meta);
+      }
+      return {
+        lastRenderFrameMeta: meta,
+        characterPreview: reconcilePreviewFrameMeta(state.characterPreview, meta),
+        lookDev: reconcileLookDevFrameMeta(state.lookDev, meta),
+        authoringMetricsSnapshot: shouldSampleMetrics
+          ? state.authoringMetrics.snapshot()
+          : state.authoringMetricsSnapshot,
       };
     }),
 
@@ -1436,6 +1454,14 @@ function readViewportRenderMode(value: unknown): ViewportRenderMode | null {
       return value;
     default:
       return null;
+  }
+}
+
+function recordFrameMetricsSample(state: ModelState, meta: RenderFrameMeta): void {
+  const latencyMs = meta.durationUs > 0 ? meta.durationUs / 1000 : 0;
+  state.authoringMetrics.recordFrameLatency(latencyMs);
+  if (typeof meta.diagnostics?.gpuUploadTimeMs === 'number') {
+    state.authoringMetrics.recordGpuUpload(meta.diagnostics.gpuUploadTimeMs);
   }
 }
 

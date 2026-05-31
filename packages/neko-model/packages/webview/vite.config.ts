@@ -58,14 +58,9 @@ export default defineConfig({
         index: path.resolve(__dirname, 'index.html'),
       },
       output: {
-        entryFileNames: 'assets/index.js',
+        entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.names?.[0] === 'style.css') {
-            return 'assets/index.css';
-          }
-          return 'assets/[name].[ext]';
-        },
+        assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
     modulePreload: false,

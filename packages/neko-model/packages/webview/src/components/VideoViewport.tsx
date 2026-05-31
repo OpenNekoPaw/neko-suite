@@ -44,8 +44,9 @@ export interface VideoViewportProps {
 }
 
 const MAIN_VIEWPORT_ID = 'main';
-const DEFAULT_VIEWPORT_STREAM_SIZE = { width: 1920, height: 1080, pixelRatio: 1 };
-const MAX_VIEWPORT_STREAM_PIXELS = 1920 * 1080;
+const TARGET_VIEWPORT_STREAM_HEIGHT = 1080;
+const MAX_VIEWPORT_STREAM_WIDTH = 1920;
+const MAX_VIEWPORT_STREAM_HEIGHT = 1080;
 const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT_DIMENSION_BUCKET = 16;
 const MIN_VISIBLE_VIEWPORT_DIMENSION = 64;
@@ -55,11 +56,13 @@ const VIEWPORT_CAMERA_SEND_INTERVAL_MS = 33;
 const VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS = 250;
 const LOOKDEV_PENDING_DELAY_MS = 250;
 const LOOKDEV_RETRY_DELAY_MS = 1500;
+const RENDER_FRAME_META_STORE_INTERVAL_MS = 250;
+const RAF_LIMITED_FPS_THRESHOLD = 50;
+const RAF_LIMITED_STREAM_FPS_THRESHOLD = 55;
 const REALTIME_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
-  maxDecodeQueueDepth: 2,
-  dropDeltaFramesWhenBacklogged: true,
+  maxDecodeQueueDepth: 4,
+  dropDeltaFramesWhenBacklogged: false,
   preserveKeyframes: true,
-  keyframeRequestDropThreshold: 30,
 };
 
 type ViewportStreamSize = SceneViewportResolution;
@@ -67,9 +70,11 @@ type ViewportStreamSize = SceneViewportResolution;
 interface PendingPresentationFrame {
   frame: VideoFrame;
   meta?: RenderFrameMeta;
+  decodedAt: number;
+  droppedBeforePresent: number;
 }
 
-function bucketStreamDimension(value: number): number {
+function bucketStreamDimension(value: number, maxValue?: number): number {
   if (!Number.isFinite(value) || value <= 0) {
     return VIEWPORT_DIMENSION_BUCKET;
   }
@@ -77,7 +82,8 @@ function bucketStreamDimension(value: number): number {
     VIEWPORT_DIMENSION_BUCKET,
     Math.round(value / VIEWPORT_DIMENSION_BUCKET) * VIEWPORT_DIMENSION_BUCKET,
   );
-  return bucketed % 2 === 0 ? bucketed : bucketed + 1;
+  const clamped = maxValue === undefined ? bucketed : Math.min(bucketed, maxValue);
+  return clamped % 2 === 0 ? clamped : clamped + 1;
 }
 
 function createViewportStreamSize(rect: DOMRectReadOnly): ViewportStreamSize {
@@ -87,28 +93,43 @@ function createViewportStreamSize(rect: DOMRectReadOnly): ViewportStreamSize {
     return {
       width: 0,
       height: 0,
-      pixelRatio: DEFAULT_VIEWPORT_STREAM_SIZE.pixelRatio,
+      pixelRatio: 1,
     };
   }
   const pixelRatio = Math.min(
-    Math.max(window.devicePixelRatio || DEFAULT_VIEWPORT_STREAM_SIZE.pixelRatio, 1),
+    Math.max(window.devicePixelRatio || 1, 1),
     MAX_VIEWPORT_DEVICE_PIXEL_RATIO,
   );
 
-  let width = cssWidth * pixelRatio;
-  let height = cssHeight * pixelRatio;
-  const pixels = width * height;
-  if (pixels > MAX_VIEWPORT_STREAM_PIXELS) {
-    const scale = Math.sqrt(MAX_VIEWPORT_STREAM_PIXELS / pixels);
-    width *= scale;
-    height *= scale;
+  const aspectRatio = cssWidth / cssHeight;
+  let height = Math.min(TARGET_VIEWPORT_STREAM_HEIGHT, MAX_VIEWPORT_STREAM_HEIGHT);
+  let width = height * aspectRatio;
+  if (width > MAX_VIEWPORT_STREAM_WIDTH) {
+    width = MAX_VIEWPORT_STREAM_WIDTH;
+    height = width / aspectRatio;
   }
 
   return {
-    width: bucketStreamDimension(width),
-    height: bucketStreamDimension(height),
+    width: bucketStreamDimension(width, MAX_VIEWPORT_STREAM_WIDTH),
+    height: bucketStreamDimension(height, MAX_VIEWPORT_STREAM_HEIGHT),
     pixelRatio,
   };
+}
+
+function isPresentationHostLimited(
+  presentFps: number | undefined,
+  streamDurationUs: number,
+): boolean {
+  if (
+    typeof presentFps !== 'number' ||
+    !Number.isFinite(presentFps) ||
+    !Number.isFinite(streamDurationUs) ||
+    streamDurationUs <= 0
+  ) {
+    return false;
+  }
+  const streamFps = 1_000_000 / streamDurationUs;
+  return streamFps >= RAF_LIMITED_STREAM_FPS_THRESHOLD && presentFps < RAF_LIMITED_FPS_THRESHOLD;
 }
 
 function areViewportStreamSizesEqual(
@@ -148,6 +169,8 @@ function createViewportDescriptor(
       pixelRatio: streamSize.pixelRatio,
     },
     fps: VIEWPORT_STREAM_FPS,
+    allowFpsDegrade: false,
+    allowQualityDegrade: false,
     colorSpace: 'srgb',
     toneMapping: 'aces',
     postProcess: {
@@ -196,6 +219,9 @@ export function VideoViewport({
   const frameMetaRef = useRef<RenderFrameMeta | null>(null);
   const pendingPresentationRef = useRef<PendingPresentationFrame | null>(null);
   const presentationFrameRef = useRef<number | null>(null);
+  const lastPresentedAtRef = useRef<number | null>(null);
+  const lastFrameMetaStoreAtRef = useRef(0);
+  const decodedDroppedBeforePresentRef = useRef(0);
   const pendingResizeCommitRef = useRef<number | null>(null);
   const latestResizeSizeRef = useRef<ViewportStreamSize | null>(null);
   const cameraUpdateInFlightRef = useRef(false);
@@ -402,6 +428,9 @@ export function VideoViewport({
     setRouteAUnavailable(false);
     setRouteAUnavailableReason(null);
     frameMetaRef.current = null;
+    lastPresentedAtRef.current = null;
+    lastFrameMetaStoreAtRef.current = 0;
+    decodedDroppedBeforePresentRef.current = 0;
 
     const clearLookDevTimers = () => {
       if (pendingTimer !== null) {
@@ -530,6 +559,18 @@ export function VideoViewport({
 
           const ctx = canvas.getContext('2d');
           if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            const presentedAt = performance.now();
+            const previousPresentedAt = lastPresentedAtRef.current;
+            lastPresentedAtRef.current = presentedAt;
+            const presentIntervalMs =
+              previousPresentedAt !== null ? presentedAt - previousPresentedAt : undefined;
+            const presentFps =
+              presentIntervalMs !== undefined && presentIntervalMs > 0
+                ? 1000 / presentIntervalMs
+                : undefined;
+            const outputToPresentedMs = presentedAt - pending.decodedAt;
             const drawStarted = performance.now();
             ctx.drawImage(frame, 0, 0, width, height);
             const drawTimeMs = performance.now() - drawStarted;
@@ -538,12 +579,28 @@ export function VideoViewport({
                 ...meta,
                 diagnostics: {
                   ...meta.diagnostics,
+                  decodedDroppedBeforePresent: pending.droppedBeforePresent,
+                  decodeOutputToPresentedMs: outputToPresentedMs,
+                  packetToPresentedMs:
+                    meta.diagnostics?.packetToDecodeOutputMs !== undefined
+                      ? meta.diagnostics.packetToDecodeOutputMs + outputToPresentedMs
+                      : undefined,
+                  presentIntervalMs,
+                  presentFps,
+                  presentationHostLimited: isPresentationHostLimited(presentFps, meta.durationUs),
                   drawTimeMs,
                 },
               };
               frameMetaRef.current = drawnMeta;
               const store = useModelStore.getState();
-              store.recordRenderFrameMeta(drawnMeta);
+              const shouldUpdateFrameMeta =
+                drawnMeta.appliedSeq > 0 ||
+                presentedAt - lastFrameMetaStoreAtRef.current >=
+                  RENDER_FRAME_META_STORE_INTERVAL_MS;
+              if (shouldUpdateFrameMeta) {
+                lastFrameMetaStoreAtRef.current = presentedAt;
+                store.updateRenderFrameMeta(drawnMeta);
+              }
               const frameMode = renderModeFromFrameMeta(drawnMeta);
               if (frameMode === selectedRenderMode) {
                 clearLookDevTimers();
@@ -563,8 +620,13 @@ export function VideoViewport({
           const previous = pendingPresentationRef.current;
           if (previous) {
             previous.frame.close();
+            decodedDroppedBeforePresentRef.current += previous.droppedBeforePresent + 1;
           }
-          pendingPresentationRef.current = meta ? { frame, meta } : { frame };
+          const droppedBeforePresent = decodedDroppedBeforePresentRef.current;
+          decodedDroppedBeforePresentRef.current = 0;
+          pendingPresentationRef.current = meta
+            ? { frame, meta, decodedAt: performance.now(), droppedBeforePresent }
+            : { frame, decodedAt: performance.now(), droppedBeforePresent };
           if (presentationFrameRef.current === null) {
             presentationFrameRef.current = window.requestAnimationFrame(presentLatestFrame);
           }

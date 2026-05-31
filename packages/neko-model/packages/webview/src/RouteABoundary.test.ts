@@ -61,6 +61,46 @@ describe('Route A webview boundaries', () => {
     );
   });
 
+  it('activates the VSCode custom editor entry for model documents', () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve(srcRoot, '../../../package.json'), 'utf8'),
+    ) as {
+      activationEvents?: string[];
+      contributes?: {
+        customEditors?: Array<{
+          viewType?: string;
+          selector?: Array<{ filenamePattern?: string }>;
+          priority?: string;
+        }>;
+      };
+    };
+
+    expect(manifest.activationEvents).toContain('onCustomEditor:neko.modelEditor');
+    const modelEditor = manifest.contributes?.customEditors?.find(
+      (editor) => editor.viewType === 'neko.modelEditor',
+    );
+    expect(modelEditor?.priority).toBe('default');
+    expect(modelEditor?.selector?.map((selector) => selector.filenamePattern)).toEqual([
+      '*.gltf',
+      '*.glb',
+      '*.vrm',
+      '*.nkm',
+    ]);
+  });
+
+  it('loads webview bundles through hashed Vite assets to avoid stale VSCode webview cache', () => {
+    const viteConfig = readFileSync(resolve(srcRoot, '../vite.config.ts'), 'utf8');
+    const provider = readSource('../../extension/src/editor/ModelEditorProvider.ts');
+
+    expect(viteConfig).toMatch(/entryFileNames:\s*'assets\/\[name\]-\[hash\]\.js'/);
+    expect(viteConfig).toMatch(/assetFileNames:\s*'assets\/\[name\]-\[hash\]\[extname\]'/);
+    expect(provider).toMatch(/parseViteWebviewAssets/);
+    expect(provider).toMatch(/dist', 'webview', 'index\.html'/);
+    expect(provider).toMatch(/asWebviewUri/);
+    expect(provider).not.toMatch(/assets\/index\.js/);
+    expect(provider).not.toMatch(/assets\/index\.css/);
+  });
+
   it('does not ship a visible R3F/Three.js model fallback or dependency path', () => {
     const componentsIndex = readSource('components/index.ts');
     const packageJson = readFileSync(resolve(srcRoot, '../package.json'), 'utf8');
@@ -204,7 +244,11 @@ describe('Route A webview boundaries', () => {
     expect(overlay).toMatch(/lastRenderFrameMeta/);
     expect(overlay).toMatch(/diagnostics\?\.gpuFrameTimeMs/);
     expect(overlay).toMatch(/diagnostics\?\.decodeSubmitToOutputMs/);
+    expect(overlay).toMatch(/diagnostics\?\.packetToDecodeOutputMs/);
+    expect(overlay).toMatch(/diagnostics\?\.decodeOutputToPresentedMs/);
+    expect(overlay).toMatch(/diagnostics\?\.presentFps/);
     expect(overlay).toMatch(/diagnostics\?\.droppedBeforeDecode/);
+    expect(overlay).toMatch(/diagnostics\?\.decodedDroppedBeforePresent/);
     expect(overlay).not.toMatch(/new EngineClient|postMessage\(|SceneControlSocket|WebSocket/);
     expect(overlay).not.toMatch(
       /@react-three\/fiber|@react-three\/drei|@pixiv\/three-vrm|"three"|"@types\/three"|GLTFLoader|VRMLoader|gltf-parser|parseGltf|parseVRM/,
@@ -278,13 +322,17 @@ describe('Route A webview boundaries', () => {
 
     expect(videoViewport).toMatch(/new ResizeObserver/);
     expect(videoViewport).toMatch(/createViewportStreamSize/);
-    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_PIXELS/);
-    expect(videoViewport).toMatch(/1920 \* 1080/);
+    expect(videoViewport).toMatch(/TARGET_VIEWPORT_STREAM_HEIGHT = 1080/);
+    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_WIDTH = 1920/);
+    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_HEIGHT = 1080/);
     expect(videoViewport).toMatch(/MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2/);
     expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
+    expect(videoViewport).toMatch(/allowFpsDegrade: false/);
+    expect(videoViewport).toMatch(/allowQualityDegrade: false/);
     expect(videoViewport).toMatch(/VIEWPORT_RESIZE_COMMIT_DELAY_MS/);
     expect(videoViewport).toMatch(/window\.setTimeout/);
-    expect(videoViewport).toMatch(/bucketed % 2 === 0/);
+    expect(videoViewport).toMatch(/clamped % 2 === 0/);
+    expect(videoViewport).toMatch(/ctx\.imageSmoothingQuality = 'high'/);
     expect(videoViewport).toMatch(/resolution:\s*\{\s*width: streamSize\.width/);
     expect(videoViewport).not.toMatch(
       /width:\s*1280,\s*\n\s*height:\s*720,\s*\n\s*pixelRatio:\s*window\.devicePixelRatio/,
@@ -302,7 +350,12 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/requestAnimationFrame\(presentLatestFrame\)/);
     expect(videoViewport).toMatch(/cancelAnimationFrame/);
     expect(videoViewport).toMatch(/previous\.frame\.close\(\)/);
-    expect(videoViewport).toMatch(/recordRenderFrameMeta\(drawnMeta\)/);
+    expect(videoViewport).toMatch(/updateRenderFrameMeta\(drawnMeta\)/);
+    expect(videoViewport).toMatch(/RENDER_FRAME_META_STORE_INTERVAL_MS = 250/);
+    expect(videoViewport).toMatch(/maxDecodeQueueDepth: 4/);
+    expect(videoViewport).toMatch(/dropDeltaFramesWhenBacklogged: false/);
+    expect(h264Client).toMatch(/latencyMode: this\.descriptor\?\.latencyMode/);
+    expect(h264Client).toMatch(/codedWidth: this\.descriptor\?\.codedWidth/);
     expect(videoViewport).not.toMatch(/onFrame:\s*\(frame, meta\) => \{[\s\S]*ctx\.drawImage/);
     expect(h264Client).not.toMatch(/shouldDropQueuedRouteAFrame/);
   });

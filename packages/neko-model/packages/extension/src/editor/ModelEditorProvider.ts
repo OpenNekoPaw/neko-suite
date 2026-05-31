@@ -57,6 +57,11 @@ interface ActiveSceneStream {
   readonly generation: number;
 }
 
+export interface WebviewAssetManifest {
+  readonly scripts: readonly string[];
+  readonly styles: readonly string[];
+}
+
 /**
  * Custom editor provider for 3D model files (.gltf, .glb, .vrm)
  *
@@ -127,7 +132,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
       ],
     };
 
-    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
+    webviewPanel.webview.html = await this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
     webviewPanel.webview.onDidReceiveMessage(
       (msg) => this.handleWebviewMessage(msg, webviewPanel, document, generation),
@@ -1327,11 +1332,49 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     }
   }
 
-  private getHtmlForWebview(webview: vscode.Webview, documentUri: vscode.Uri): string {
-    const webviewDistUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
-    );
+  private async getHtmlForWebview(
+    webview: vscode.Webview,
+    documentUri: vscode.Uri,
+  ): Promise<string> {
     const nonce = this.getNonce();
+
+    try {
+      return this.renderWebviewHtml(webview, documentUri, nonce, await this.readWebviewAssets());
+    } catch (error) {
+      logger.error(
+        'Failed to load Model webview assets',
+        error instanceof Error ? error.message : String(error),
+      );
+      return this.renderWebviewAssetErrorHtml(webview, nonce, error);
+    }
+  }
+
+  private async readWebviewAssets(): Promise<WebviewAssetManifest> {
+    const indexUri = vscode.Uri.joinPath(
+      this.context.extensionUri,
+      'dist',
+      'webview',
+      'index.html',
+    );
+    const indexBytes = await vscode.workspace.fs.readFile(indexUri);
+    return parseViteWebviewAssets(new TextDecoder().decode(indexBytes));
+  }
+
+  private renderWebviewHtml(
+    webview: vscode.Webview,
+    documentUri: vscode.Uri,
+    nonce: string,
+    assets: WebviewAssetManifest,
+  ): string {
+    const styleTags = assets.styles
+      .map((asset) => `<link rel="stylesheet" href="${this.toWebviewAssetUri(webview, asset)}">`)
+      .join('\n  ');
+    const scriptTags = assets.scripts
+      .map(
+        (asset) =>
+          `<script nonce="${nonce}" type="module" src="${this.toWebviewAssetUri(webview, asset)}"></script>`,
+      )
+      .join('\n  ');
 
     return `<!DOCTYPE html>
 <html ${injectLocaleAttribute()}>
@@ -1345,15 +1388,52 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
              img-src ${webview.cspSource} data: blob: https: http://127.0.0.1:*;
              font-src ${webview.cspSource};
              connect-src ${webview.cspSource} ws://127.0.0.1:* http://127.0.0.1:*;">
-  <link rel="stylesheet" href="${webviewDistUri}/assets/index.css">
+  ${styleTags}
   <title>3D Model Editor</title>
 </head>
 <body>
   <div id="root"></div>
-  <script nonce="${nonce}">window.documentUri = "${documentUri.toString()}";</script>
-  <script nonce="${nonce}" type="module" src="${webviewDistUri}/assets/index.js"></script>
+  <script nonce="${nonce}">window.documentUri = ${JSON.stringify(documentUri.toString())};</script>
+  ${scriptTags}
 </body>
 </html>`;
+  }
+
+  private renderWebviewAssetErrorHtml(
+    webview: vscode.Webview,
+    nonce: string,
+    error: unknown,
+  ): string {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return `<!DOCTYPE html>
+<html ${injectLocaleAttribute()}>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none';
+             style-src ${webview.cspSource} 'unsafe-inline';
+             script-src 'nonce-${nonce}';
+             img-src ${webview.cspSource} data:;
+             font-src ${webview.cspSource};">
+  <title>3D Model Editor</title>
+</head>
+<body>
+  <main style="font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 24px;">
+    <h1 style="font-size: 16px; margin: 0 0 8px;">${vscode.l10n.t('Unable to load Neko Model webview assets.')}</h1>
+    <p style="margin: 0; color: var(--vscode-descriptionForeground);">${escapeHtml(message)}</p>
+  </main>
+</body>
+</html>`;
+  }
+
+  private toWebviewAssetUri(webview: vscode.Webview, assetPath: string): string {
+    return webview
+      .asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', ...assetPath.split('/')),
+      )
+      .toString();
   }
 
   private getNonce(): string {
@@ -1364,6 +1444,29 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     }
     return text;
   }
+}
+
+export function parseViteWebviewAssets(indexHtml: string): WebviewAssetManifest {
+  const scripts = Array.from(indexHtml.matchAll(/<script\b[^>]*>/gi))
+    .map((match) => readHtmlAttribute(match[0], 'src'))
+    .map((asset) => normalizeViteAssetPath(asset))
+    .filter(isDefined);
+  const styles = Array.from(indexHtml.matchAll(/<link\b[^>]*>/gi))
+    .filter((match) => readHtmlAttribute(match[0], 'rel')?.toLowerCase() === 'stylesheet')
+    .map((match) => normalizeViteAssetPath(readHtmlAttribute(match[0], 'href')))
+    .filter(isDefined);
+
+  if (scripts.length === 0) {
+    throw new Error('Vite webview index.html does not reference a script asset.');
+  }
+  if (styles.length === 0) {
+    throw new Error('Vite webview index.html does not reference a stylesheet asset.');
+  }
+
+  return {
+    scripts: unique(scripts),
+    styles: unique(styles),
+  };
 }
 
 /** @internal Exported for focused model API unit tests. */
@@ -1606,6 +1709,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isModelEditorLevelKeyboardAction(action: string): boolean {
   return MODEL_EDITOR_LEVEL_KEYBOARD_ACTIONS.has(action);
+}
+
+function normalizeViteAssetPath(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.startsWith('/') || value.includes('..')) return undefined;
+  const [pathWithoutQuery] = value.split(/[?#]/, 1);
+  const normalized = pathWithoutQuery?.replace(/^\.?\//, '');
+  if (!normalized || normalized.startsWith('http:') || normalized.startsWith('https:')) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function readHtmlAttribute(tag: string, attribute: string): string | undefined {
+  const escapedAttribute = attribute.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = tag.match(new RegExp(`\\b${escapedAttribute}\\s*=\\s*["']([^"']+)["']`, 'i'));
+  return match?.[1];
+}
+
+function unique<T>(values: readonly T[]): readonly T[] {
+  return Array.from(new Set(values));
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function vec3ToTuple(value: EngineVec3): [number, number, number] {

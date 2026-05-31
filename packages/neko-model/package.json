@@ -32,6 +32,7 @@
     "neko.neko-preview"
   ],
   "activationEvents": [
+    "onCustomEditor:neko.modelEditor",
     "onInstallKind:media.model-3d",
     "onInstallKind:media.model-motion",
     "onInstallKind:media.model-config"

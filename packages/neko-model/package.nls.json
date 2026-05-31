@@ -3,6 +3,8 @@
   "neko.model.importAsset.title": "Import 3D Model Asset",
   "neko.model.exportMotions.title": "Export Model Motion Artifact",
   "neko.model.exportConfig.title": "Export Model Config Artifact",
+  "neko.model.liveMode.start.title": "Start Model Live Mode",
+  "neko.model.liveMode.stop.title": "Stop Model Live Mode",
   "neko.model.deleteSelected.title": "Delete Selected",
   "neko.model.escape.title": "Cancel / Deselect",
   "neko.model.selectAll.title": "Select All",

@@ -4,24 +4,48 @@ import {
   isEngineSceneSnapshot,
   mapEngineSceneSnapshotToModelGraph,
   ModelEditorProvider,
+  parseViteWebviewAssets,
 } from './ModelEditorProvider';
 
 vi.mock('vscode', () => ({
   commands: {
     executeCommand: vi.fn(),
   },
+  env: {
+    language: 'en',
+  },
   Uri: {
-    file: (fsPath: string) => ({ fsPath, scheme: 'file' }),
+    file: (fsPath: string) => ({
+      fsPath,
+      scheme: 'file',
+      toString() {
+        return fsPath;
+      },
+    }),
     joinPath: (base: { fsPath?: string }, ...parts: string[]) => ({
       fsPath: [base.fsPath, ...parts].filter(Boolean).join('/'),
       scheme: 'file',
+      toString() {
+        return this.fsPath;
+      },
     }),
   },
   workspace: {
     workspaceFolders: [],
     fs: {
       stat: vi.fn(),
-      readFile: vi.fn(),
+      readFile: vi.fn(async () =>
+        new TextEncoder().encode(`
+          <html>
+            <head>
+              <link rel="stylesheet" href="./assets/index-BJH_iLiU.css">
+            </head>
+            <body>
+              <script type="module" crossorigin src="./assets/index-D0DlV1oZ.js"></script>
+            </body>
+          </html>
+        `),
+      ),
       writeFile: vi.fn(),
       createDirectory: vi.fn(),
       copy: vi.fn(),
@@ -48,6 +72,40 @@ vi.mock('@neko/neko-client', () => ({
 }));
 
 describe('ModelEditorProvider model API mapping', () => {
+  it('parses hashed Vite webview assets from index.html', () => {
+    expect(
+      parseViteWebviewAssets(`
+        <html>
+          <head>
+            <link href="./assets/index-BJH_iLiU.css?v=1" crossorigin rel="stylesheet">
+          </head>
+          <body>
+            <script type="module" crossorigin src="./assets/index-D0DlV1oZ.js"></script>
+            <script type="module" crossorigin src="./assets/index-D0DlV1oZ.js"></script>
+            <script type="module" crossorigin src="https://example.com/ignored.js"></script>
+          </body>
+        </html>
+      `),
+    ).toEqual({
+      scripts: ['assets/index-D0DlV1oZ.js'],
+      styles: ['assets/index-BJH_iLiU.css'],
+    });
+  });
+
+  it('injects hashed Vite assets into the custom editor webview html', async () => {
+    const provider = new ModelEditorProvider(createExtensionContext());
+    const internals = provider as unknown as ModelEditorProviderInternals;
+    const webview = createWebview();
+
+    const html = await internals.getHtmlForWebview(webview, createUri('/workspace/hero.glb'));
+
+    expect(html).toContain('vscode-webview-resource:/ext/dist/webview/assets/index-BJH_iLiU.css');
+    expect(html).toContain('vscode-webview-resource:/ext/dist/webview/assets/index-D0DlV1oZ.js');
+    expect(html).toContain('window.documentUri = "/workspace/hero.glb"');
+    expect(html).not.toContain('assets/index.css');
+    expect(html).not.toContain('assets/index.js');
+  });
+
   it('projects engine scene nodes with bounds and materials into compact model graph data', () => {
     const graph = mapEngineSceneSnapshotToModelGraph(createSceneSnapshot(), './hero.glb');
 
@@ -272,6 +330,7 @@ interface ModelEditorProviderInternals {
     document: unknown,
     generation: number,
   ): Promise<void>;
+  getHtmlForWebview(webview: unknown, documentUri: unknown): Promise<string>;
 }
 
 function createSceneSnapshot(): EngineSceneSnapshot {
@@ -308,16 +367,34 @@ function createSceneSnapshot(): EngineSceneSnapshot {
 function createExtensionContext(): ConstructorParameters<typeof ModelEditorProvider>[0] {
   return {
     subscriptions: [],
-    extensionUri: { fsPath: '/ext', scheme: 'file' },
+    extensionUri: createUri('/ext'),
     extensionMode: 3,
   } as unknown as ConstructorParameters<typeof ModelEditorProvider>[0];
 }
 
+function createUri(fsPath: string) {
+  return {
+    fsPath,
+    scheme: 'file',
+    toString() {
+      return fsPath;
+    },
+  };
+}
+
+function createWebview() {
+  return {
+    cspSource: 'vscode-webview:',
+    asWebviewUri: (uri: { fsPath: string }) => ({
+      toString: () => `vscode-webview-resource:${uri.fsPath}`,
+    }),
+    postMessage: vi.fn(async () => true),
+  };
+}
+
 function createWebviewPanel() {
   return {
-    webview: {
-      postMessage: vi.fn(async () => true),
-    },
+    webview: createWebview(),
     visible: true,
   };
 }

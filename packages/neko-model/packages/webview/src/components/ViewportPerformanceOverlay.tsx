@@ -4,6 +4,9 @@ import { useTranslation } from '../i18n/I18nContext';
 import { useModelStore } from '../stores/modelStore';
 import type { AuthoringMetricsSnapshot } from '../scene/AuthoringPerformanceMetrics';
 
+const HOST_LIMITED_PRESENT_FPS_THRESHOLD = 50;
+const HOST_LIMITED_STREAM_FPS_THRESHOLD = 55;
+
 interface PerformanceMetricRow {
   readonly id: string;
   readonly label: string;
@@ -54,12 +57,24 @@ function buildPerformanceRows(
 ): PerformanceMetricRow[] {
   const diagnostics = frameMeta?.diagnostics;
   const droppedFrames = diagnostics?.droppedFramesSinceLast ?? 0;
+  const presentFps = diagnostics?.presentFps;
+  const presentationHostLimited =
+    diagnostics?.presentationHostLimited === true ||
+    isPresentationHostLimited(frameMeta, presentFps);
 
   return [
     {
       id: 'stream-fps',
       label: t('performance.metric.streamFps'),
       value: formatFps(frameMeta),
+    },
+    {
+      id: 'present-fps',
+      label: t('performance.metric.presentFps'),
+      value: presentationHostLimited
+        ? t('performance.value.hostLimited', { fps: formatFpsNumber(presentFps) })
+        : formatFpsValue(presentFps),
+      tone: toneForPresentFps(presentFps),
     },
     {
       id: 'frame-p95',
@@ -74,16 +89,46 @@ function buildPerformanceRows(
       tone: toneForFrameBudget(diagnostics?.gpuFrameTimeMs ?? diagnostics?.renderTimeMs),
     },
     {
+      id: 'producer-frame',
+      label: t('performance.metric.producerFrame'),
+      value: formatMs(diagnostics?.producerFrameTimeMs),
+      tone: toneForFrameBudget(diagnostics?.producerFrameTimeMs),
+    },
+    {
       id: 'encode',
       label: t('performance.metric.encode'),
       value: formatMs(diagnostics?.encodeTimeMs),
       tone: toneForFrameBudget(diagnostics?.encodeTimeMs),
     },
     {
+      id: 'stream-submit',
+      label: t('performance.metric.streamSubmit'),
+      value: formatMs(diagnostics?.streamSubmitTimeMs),
+      tone: toneForFrameBudget(diagnostics?.streamSubmitTimeMs),
+    },
+    {
+      id: 'schedule-lag',
+      label: t('performance.metric.scheduleLag'),
+      value: formatMs(diagnostics?.scheduleLagMs),
+      tone: toneForFrameBudget(diagnostics?.scheduleLagMs),
+    },
+    {
       id: 'decode',
       label: t('performance.metric.decode'),
       value: formatMs(diagnostics?.decodeSubmitToOutputMs ?? diagnostics?.decodeTimeMs),
       tone: toneForFrameBudget(diagnostics?.decodeSubmitToOutputMs ?? diagnostics?.decodeTimeMs),
+    },
+    {
+      id: 'packet-output',
+      label: t('performance.metric.packetOutput'),
+      value: formatMs(diagnostics?.packetToDecodeOutputMs),
+      tone: toneForFrameBudget(diagnostics?.packetToDecodeOutputMs),
+    },
+    {
+      id: 'output-present',
+      label: t('performance.metric.outputPresent'),
+      value: formatMs(diagnostics?.decodeOutputToPresentedMs),
+      tone: toneForFrameBudget(diagnostics?.decodeOutputToPresentedMs),
     },
     {
       id: 'draw',
@@ -103,6 +148,24 @@ function buildPerformanceRows(
       value: formatCount(diagnostics?.droppedBeforeDecode),
       tone:
         diagnostics?.droppedBeforeDecode && diagnostics.droppedBeforeDecode > 0
+          ? 'warning'
+          : undefined,
+    },
+    {
+      id: 'pre-present-drops',
+      label: t('performance.metric.prePresentDrops'),
+      value: formatCount(diagnostics?.decodedDroppedBeforePresent),
+      tone:
+        diagnostics?.decodedDroppedBeforePresent && diagnostics.decodedDroppedBeforePresent > 0
+          ? 'warning'
+          : undefined,
+    },
+    {
+      id: 'decode-lag',
+      label: t('performance.metric.decodeLag'),
+      value: formatCount(diagnostics?.decodeOutputLagFrames),
+      tone:
+        diagnostics?.decodeOutputLagFrames && diagnostics.decodeOutputLagFrames > 2
           ? 'warning'
           : undefined,
     },
@@ -128,6 +191,13 @@ function buildPerformanceRows(
       label: t('performance.metric.frameDrops'),
       value: formatCount(droppedFrames),
       tone: droppedFrames > 0 ? 'warning' : undefined,
+    },
+    {
+      id: 'skipped-intervals',
+      label: t('performance.metric.skippedIntervals'),
+      value: formatCount(diagnostics?.skippedIntervals),
+      tone:
+        diagnostics?.skippedIntervals && diagnostics.skippedIntervals > 0 ? 'warning' : undefined,
     },
     {
       id: 'prediction-drops',
@@ -162,6 +232,20 @@ function formatFps(frameMeta: RenderFrameMeta | null): string {
     return '-';
   }
   return `${(1_000_000 / durationUs).toFixed(1)} fps`;
+}
+
+function formatFpsValue(value: number | undefined): string {
+  if (!isFinitePositiveOrZeroNumber(value)) {
+    return '-';
+  }
+  return `${formatFpsNumber(value)} fps`;
+}
+
+function formatFpsNumber(value: number | undefined): string {
+  if (!isFinitePositiveOrZeroNumber(value)) {
+    return '-';
+  }
+  return value.toFixed(1);
 }
 
 function formatMs(value: number | undefined): string {
@@ -202,6 +286,34 @@ function toneForFrameBudget(value: number | undefined): PerformanceMetricRow['to
     return 'warning';
   }
   return undefined;
+}
+
+function toneForPresentFps(value: number | undefined): PerformanceMetricRow['tone'] {
+  if (!isFinitePositiveOrZeroNumber(value)) {
+    return undefined;
+  }
+  if (value < 50) {
+    return 'danger';
+  }
+  if (value < 58) {
+    return 'warning';
+  }
+  return undefined;
+}
+
+function isPresentationHostLimited(
+  frameMeta: RenderFrameMeta | null,
+  presentFps: number | undefined,
+): boolean {
+  const durationUs = frameMeta?.durationUs;
+  if (!isFinitePositiveNumber(durationUs) || !isFinitePositiveOrZeroNumber(presentFps)) {
+    return false;
+  }
+  const streamFps = 1_000_000 / durationUs;
+  return (
+    streamFps >= HOST_LIMITED_STREAM_FPS_THRESHOLD &&
+    presentFps < HOST_LIMITED_PRESENT_FPS_THRESHOLD
+  );
 }
 
 function isFinitePositiveNumber(value: number | undefined): value is number {

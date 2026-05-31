@@ -11,6 +11,9 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 vi.mock('../i18n/I18nContext', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string | number>) => {
+      if (key === 'performance.value.hostLimited') {
+        return `${params?.fps ?? '-'} fps host-limited`;
+      }
       if (!params) return key;
       return Object.entries(params).reduce(
         (message, [name, value]) => message.replace(`{${name}}`, String(value)),
@@ -53,13 +56,23 @@ describe('ViewportPerformanceOverlay', () => {
         diagnostics: {
           qualityTier: 'main-fps-reduced',
           gpuFrameTimeMs: 12.25,
+          producerFrameTimeMs: 15.75,
           encodeTimeMs: 4.5,
+          streamSubmitTimeMs: 5.25,
+          scheduleLagMs: 1.25,
           decodeTimeMs: 99,
           decodeSubmitToOutputMs: 21.2,
+          packetToDecodeOutputMs: 24.4,
+          decodeOutputToPresentedMs: 8.6,
+          decodedDroppedBeforePresent: 1,
+          decodeOutputLagFrames: 1.5,
+          presentFps: 59.8,
+          presentationHostLimited: false,
           drawTimeMs: 2.1,
           queueDepth: 3,
           droppedBeforeDecode: 4,
           droppedFramesSinceLast: 2,
+          skippedIntervals: 1,
           renderPath: 'gpu-zero-copy',
         },
       },
@@ -87,12 +100,42 @@ describe('ViewportPerformanceOverlay', () => {
     expect(host.textContent).toContain('60.0 fps');
     expect(host.textContent).toContain('17.4 ms');
     expect(host.textContent).toContain('12.3 ms');
+    expect(host.textContent).toContain('15.8 ms');
+    expect(host.textContent).toContain('5.3 ms');
+    expect(host.textContent).toContain('1.3 ms');
     expect(host.textContent).toContain('21.2 ms');
+    expect(host.textContent).toContain('24.4 ms');
+    expect(host.textContent).toContain('8.6 ms');
+    expect(host.textContent).toContain('59.8 fps');
     expect(host.textContent).toContain('4');
     expect(host.textContent).not.toContain('99.0 ms');
     expect(host.textContent).toContain('2.0 KB/s');
     expect(host.textContent).toContain('gpu-zero-copy');
     expect(host.textContent).toContain('performance.metric.preDecodeDrops');
+    expect(host.textContent).toContain('performance.metric.prePresentDrops');
+    expect(host.textContent).toContain('performance.metric.decodeLag');
+    expect(host.textContent).toContain('performance.metric.skippedIntervals');
     expect(host.textContent).toContain('performance.value.frameRevision');
+  });
+
+  it('labels present FPS when the VSCode webview host limits presentation cadence', () => {
+    useModelStore.setState((state) => ({
+      lastRenderFrameMeta: state.lastRenderFrameMeta
+        ? {
+            ...state.lastRenderFrameMeta,
+            diagnostics: {
+              ...state.lastRenderFrameMeta.diagnostics,
+              presentFps: 30.1,
+              presentationHostLimited: true,
+            },
+          }
+        : null,
+    }));
+
+    act(() => {
+      root.render(<ViewportPerformanceOverlay />);
+    });
+
+    expect(host.textContent).toContain('30.1 fps host-limited');
   });
 });
