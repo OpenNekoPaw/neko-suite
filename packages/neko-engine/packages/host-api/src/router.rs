@@ -324,8 +324,9 @@ mod tests {
 
         let plugin_manager = Arc::new(PluginManager::new(vec![], "0.1.0"));
         let preview_registry = Arc::new(PreviewFileRegistry::new());
-        let model_preview_controller =
-            Arc::new(ModelPreviewController::new(kernel_services.scene_service.clone()));
+        let model_preview_controller = Arc::new(ModelPreviewController::new(
+            kernel_services.scene_service.clone(),
+        ));
 
         ActionRouter::new(
             kernel_services,
@@ -338,8 +339,9 @@ mod tests {
     }
 
     fn live_scene_fixture() -> serde_json::Value {
-        let fixture =
-            include_str!("../../../../neko-types/src/types/__fixtures__/live-compositor-scene-v1.json");
+        let fixture = include_str!(
+            "../../../../neko-types/src/types/__fixtures__/live-compositor-scene-v1.json"
+        );
         let value: serde_json::Value = serde_json::from_str(fixture).unwrap();
         value["scene"].clone()
     }
@@ -434,8 +436,8 @@ mod tests {
     async fn test_route_live_compositor_controller_registered() {
         let router = create_test_router();
 
-        let create = ActionRequest::new("live-compositor", "create")
-            .with_body(live_scene_fixture());
+        let create =
+            ActionRequest::new("live-compositor", "create").with_body(live_scene_fixture());
         let create_response = router.route(create).await.unwrap();
         assert!(create_response.is_ok());
 
@@ -452,8 +454,8 @@ mod tests {
     async fn test_route_live_scene_command_through_viewport_entrypoint() {
         let router = create_test_router();
 
-        let create = ActionRequest::new("live-compositor", "create")
-            .with_body(live_scene_fixture());
+        let create =
+            ActionRequest::new("live-compositor", "create").with_body(live_scene_fixture());
         router.route(create).await.unwrap();
 
         let command = ActionRequest::new("viewport", "command").with_body(serde_json::json!({

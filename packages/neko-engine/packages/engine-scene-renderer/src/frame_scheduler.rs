@@ -132,6 +132,14 @@ impl DegradationHysteresis {
 pub struct FrameScheduler;
 
 impl FrameScheduler {
+    const MAIN_POST_PROCESS_OVERLOAD_RATIO: f32 = 1.25;
+    const MAIN_FPS_OVERLOAD_RATIO: f32 = 1.80;
+    const MAIN_RESOLUTION_OVERLOAD_RATIO: f32 = 2.40;
+    const MAIN_FPS_DROPPED_FRAMES: u32 = 6;
+    const MAIN_RESOLUTION_DROPPED_FRAMES: u32 = 12;
+    const MAIN_FPS_RENDER_BACKLOG_FRAMES: u32 = 8;
+    const MAIN_RESOLUTION_RENDER_BACKLOG_FRAMES: u32 = 16;
+
     pub fn schedule_viewport(&self, descriptor: &ViewportDescriptor) -> FrameScheduleDecision {
         let target_fps = descriptor.fps.clamp(1, 240);
         let frame_interval_ms = 1000.0 / target_fps as f32;
@@ -178,14 +186,21 @@ impl FrameScheduler {
         {
             steps.push(DegradationStep::AuxiliaryViewportFpsResolution);
         }
-        if overload_ratio > 1.25 || load.dropped_frames > 2 || control_unhealthy {
+        if overload_ratio > Self::MAIN_POST_PROCESS_OVERLOAD_RATIO
+            || load.dropped_frames > 2
+            || control_unhealthy
+        {
             steps.push(DegradationStep::MainViewportPostProcessQuality);
         }
-        if overload_ratio > 1.50 || load.dropped_frames > 4 || control_ack.render_backlog_frames > 4
+        if overload_ratio > Self::MAIN_FPS_OVERLOAD_RATIO
+            || load.dropped_frames > Self::MAIN_FPS_DROPPED_FRAMES
+            || control_ack.render_backlog_frames > Self::MAIN_FPS_RENDER_BACKLOG_FRAMES
         {
             steps.push(DegradationStep::MainViewportFps);
         }
-        if overload_ratio > 1.80 || load.dropped_frames > 8 || control_ack.render_backlog_frames > 8
+        if overload_ratio > Self::MAIN_RESOLUTION_OVERLOAD_RATIO
+            || load.dropped_frames > Self::MAIN_RESOLUTION_DROPPED_FRAMES
+            || control_ack.render_backlog_frames > Self::MAIN_RESOLUTION_RENDER_BACKLOG_FRAMES
         {
             steps.push(DegradationStep::MainViewportResolution);
         }
@@ -337,9 +352,9 @@ mod tests {
             &main,
             0,
             FrameLoadSample {
-                gpu_frame_ms: 34.0,
+                gpu_frame_ms: 46.0,
                 encode_ms: 4.0,
-                dropped_frames: 9,
+                dropped_frames: 13,
             },
             ControlAckHealthSample::default(),
         );
@@ -353,6 +368,28 @@ mod tests {
             ]
         );
         assert!(decision.preserve_control_ack);
+    }
+
+    #[test]
+    fn main_viewport_keeps_fps_for_single_frame_over_budget_spikes() {
+        let scheduler = FrameScheduler;
+        let main = scheduler.schedule_viewport(&descriptor(ViewportWorkMode::EditParametric, 60));
+        let decision = scheduler.degradation_plan(
+            &main,
+            0,
+            FrameLoadSample {
+                gpu_frame_ms: 22.0,
+                encode_ms: 2.0,
+                dropped_frames: 1,
+            },
+            ControlAckHealthSample::default(),
+        );
+
+        assert_eq!(
+            decision.steps,
+            vec![DegradationStep::MainViewportPostProcessQuality]
+        );
+        assert!(!decision.steps.contains(&DegradationStep::MainViewportFps));
     }
 
     #[test]
@@ -489,7 +526,7 @@ mod tests {
             ControlAckHealthSample {
                 ack_p95_ms: 2.0,
                 pending_command_acks: 0,
-                render_backlog_frames: 9,
+                render_backlog_frames: 17,
             },
         );
 

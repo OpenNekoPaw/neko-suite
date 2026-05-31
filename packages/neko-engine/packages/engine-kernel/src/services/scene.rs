@@ -133,11 +133,8 @@ pub trait ISceneService: Send + Sync {
     fn current_revision(&self) -> crate::error::Result<u64>;
 
     /// Resolve a validated Engine file token for environment loading.
-    fn register_environment_file_token(
-        &self,
-        token: &str,
-        path: &Path,
-    ) -> crate::error::Result<()>;
+    fn register_environment_file_token(&self, token: &str, path: &Path)
+        -> crate::error::Result<()>;
 
     /// Drain environment loading diagnostics emitted outside command apply.
     fn take_environment_load_diagnostics(&self) -> Vec<EnvironmentLoadDiagnostic>;

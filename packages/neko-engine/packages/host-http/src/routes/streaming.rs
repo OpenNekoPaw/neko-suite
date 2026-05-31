@@ -196,6 +196,7 @@ mod tests {
             gpu_wait_time_ms: 4.0,
             dropped_frames_since_last: 0,
             queue_depth: 1,
+            ..RenderFrameDiagnostics::default()
         }
     }
 

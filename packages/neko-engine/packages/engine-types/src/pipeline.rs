@@ -95,6 +95,10 @@ pub struct RenderFrameDiagnostics {
     pub gpu_wait_time_ms: f32,
     pub dropped_frames_since_last: u32,
     pub queue_depth: u32,
+    pub producer_frame_time_ms: f32,
+    pub stream_submit_time_ms: f32,
+    pub schedule_lag_ms: f32,
+    pub skipped_intervals: u32,
 }
 
 /// Sideband metadata for realtime render frames.

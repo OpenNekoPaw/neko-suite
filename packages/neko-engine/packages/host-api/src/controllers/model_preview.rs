@@ -9,11 +9,10 @@ use neko_engine_types::{
     ActionResponse, CharacterPreviewCameraOverrideState, CharacterPreviewDiagnostic,
     CharacterPreviewDiagnosticCode, CharacterPreviewModeId, CharacterPreviewModeRequestPayload,
     CharacterPreviewModeStatePayload, CharacterPreviewPlaybackCommandPayload,
-    CharacterPreviewPlaybackDescriptor, CharacterPreviewPlaybackState,
-    CharacterPreviewStateStatus, ViewportCommand, ViewportDomain, ViewportEvent,
-    ViewportEventStatus, ViewportProtocolError, MODEL_CHARACTER_PREVIEW_PLAYBACK,
-    MODEL_CHARACTER_PREVIEW_RESET_MODE_CAMERA, MODEL_CHARACTER_PREVIEW_SET_MODE,
-    VIEWPORT_PROTOCOL_VERSION,
+    CharacterPreviewPlaybackDescriptor, CharacterPreviewPlaybackState, CharacterPreviewStateStatus,
+    ViewportCommand, ViewportDomain, ViewportEvent, ViewportEventStatus, ViewportProtocolError,
+    MODEL_CHARACTER_PREVIEW_PLAYBACK, MODEL_CHARACTER_PREVIEW_RESET_MODE_CAMERA,
+    MODEL_CHARACTER_PREVIEW_SET_MODE, VIEWPORT_PROTOCOL_VERSION,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -107,34 +106,26 @@ impl ModelPreviewController {
         scene_id: &str,
         viewport_id: &str,
     ) -> Option<CharacterPreviewModeId> {
-        self.read_store()
-            .ok()
-            .and_then(|store| {
-                store
-                    .sessions
-                    .iter()
-                    .find(|(key, _)| key.scene_id == scene_id && key.viewport_id == viewport_id)
-                    .map(|(_, session)| session.active_state.mode_id.clone())
-            })
+        self.read_store().ok().and_then(|store| {
+            store
+                .sessions
+                .iter()
+                .find(|(key, _)| key.scene_id == scene_id && key.viewport_id == viewport_id)
+                .map(|(_, session)| session.active_state.mode_id.clone())
+        })
     }
 
     pub fn playback_clock_ms(&self, scene_id: &str, viewport_id: &str) -> Option<f64> {
-        self.read_store()
-            .ok()
-            .and_then(|store| {
-                store
-                    .sessions
-                    .iter()
-                    .find(|(key, _)| key.scene_id == scene_id && key.viewport_id == viewport_id)
-                    .and_then(|(_, session)| session.active_state.playback.clock_ms)
-            })
+        self.read_store().ok().and_then(|store| {
+            store
+                .sessions
+                .iter()
+                .find(|(key, _)| key.scene_id == scene_id && key.viewport_id == viewport_id)
+                .and_then(|(_, session)| session.active_state.playback.clock_ms)
+        })
     }
 
-    pub fn camera_for_viewport(
-        &self,
-        scene_id: &str,
-        viewport_id: &str,
-    ) -> Option<CameraParams> {
+    pub fn camera_for_viewport(&self, scene_id: &str, viewport_id: &str) -> Option<CameraParams> {
         let store = self.read_store().ok()?;
         let session = store
             .sessions
@@ -185,7 +176,11 @@ impl ModelPreviewController {
     fn handle_set_mode(&self, command: ViewportCommand) -> ApiResult<ModelPreviewCommandResult> {
         let revision = self.current_revision();
         if let Some(error) = validate_required_base_revision(&command, revision) {
-            let state = rejected_state(&command, "stale-revision", "preview mode command targets a stale scene revision")?;
+            let state = rejected_state(
+                &command,
+                "stale-revision",
+                "preview mode command targets a stale scene revision",
+            )?;
             return Ok(ModelPreviewCommandResult::new(error, Some(state)));
         }
 
@@ -205,7 +200,11 @@ impl ModelPreviewController {
     ) -> ApiResult<ModelPreviewCommandResult> {
         let revision = self.current_revision();
         if let Some(error) = validate_required_base_revision(&command, revision) {
-            let state = rejected_state(&command, "stale-revision", "preview camera reset targets a stale scene revision")?;
+            let state = rejected_state(
+                &command,
+                "stale-revision",
+                "preview camera reset targets a stale scene revision",
+            )?;
             return Ok(ModelPreviewCommandResult::new(error, Some(state)));
         }
 
@@ -222,7 +221,11 @@ impl ModelPreviewController {
     fn handle_playback(&self, command: ViewportCommand) -> ApiResult<ModelPreviewCommandResult> {
         let revision = self.current_revision();
         if let Some(error) = validate_required_base_revision(&command, revision) {
-            let state = rejected_state(&command, "stale-revision", "preview playback targets a stale scene revision")?;
+            let state = rejected_state(
+                &command,
+                "stale-revision",
+                "preview playback targets a stale scene revision",
+            )?;
             return Ok(ModelPreviewCommandResult::new(error, Some(state)));
         }
 
@@ -258,10 +261,14 @@ impl ModelPreviewController {
         reset_camera: bool,
     ) -> ApiResult<CharacterPreviewModeStatePayload> {
         if payload.character_id.trim().is_empty() {
-            return Err(ApiError::InvalidRequest("characterId is required".to_string()));
+            return Err(ApiError::InvalidRequest(
+                "characterId is required".to_string(),
+            ));
         }
         if payload.viewport_id.trim().is_empty() {
-            return Err(ApiError::InvalidRequest("viewportId is required".to_string()));
+            return Err(ApiError::InvalidRequest(
+                "viewportId is required".to_string(),
+            ));
         }
 
         let camera = preset_camera(payload.mode_id.clone());
@@ -271,7 +278,8 @@ impl ModelPreviewController {
             }
         }
 
-        let mut diagnostics = preview_mode_diagnostics(&payload.mode_id, self.scene_service.as_ref());
+        let mut diagnostics =
+            preview_mode_diagnostics(&payload.mode_id, self.scene_service.as_ref());
         if reset_camera {
             diagnostics.push(CharacterPreviewDiagnostic {
                 code: CharacterPreviewDiagnosticCode::CameraOverrideReset,
@@ -285,7 +293,11 @@ impl ModelPreviewController {
         let mode_id = payload.mode_id;
         let camera_preset = camera_preset_id(&mode_id).to_string();
         let render_preset = render_preset_id(&mode_id).to_string();
-        let playback = playback_descriptor(&mode_id, self.scene_service.as_ref(), payload.playback.as_ref());
+        let playback = playback_descriptor(
+            &mode_id,
+            self.scene_service.as_ref(),
+            payload.playback.as_ref(),
+        );
         let state = CharacterPreviewModeStatePayload {
             character_id: payload.character_id,
             mode_id,
@@ -338,11 +350,14 @@ impl ModelPreviewController {
         self.read_store()
             .ok()
             .and_then(|store| {
-                store.sessions.get(&PreviewSessionKey {
-                    scene_id: command.scene_id.clone(),
-                    viewport_id: payload.viewport_id.clone(),
-                    character_id: payload.character_id.clone(),
-                }).and_then(|session| session.camera_overrides.get(&payload.mode_id))
+                store
+                    .sessions
+                    .get(&PreviewSessionKey {
+                        scene_id: command.scene_id.clone(),
+                        viewport_id: payload.viewport_id.clone(),
+                        character_id: payload.character_id.clone(),
+                    })
+                    .and_then(|session| session.camera_overrides.get(&payload.mode_id))
                     .map(|state| state.scene_revision == revision)
             })
             .unwrap_or(false)
@@ -378,7 +393,8 @@ impl Controller for ModelPreviewController {
     ) -> ApiResult<ActionResponse> {
         match action {
             ACTION_COMMAND => {
-                let body = body.ok_or_else(|| ApiError::InvalidRequest("body required".to_string()))?;
+                let body =
+                    body.ok_or_else(|| ApiError::InvalidRequest("body required".to_string()))?;
                 let command: ViewportCommand = serde_json::from_value(body)
                     .map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
                 let result = self.handle_viewport_command(command)?;
@@ -702,7 +718,10 @@ fn camera_from_override(state: &CharacterPreviewCameraOverrideState) -> CameraPa
     CameraParams {
         position: glam::Vec3::from_array(state.position),
         target: glam::Vec3::from_array(state.target),
-        up: state.up.map(glam::Vec3::from_array).unwrap_or(glam::Vec3::Y),
+        up: state
+            .up
+            .map(glam::Vec3::from_array)
+            .unwrap_or(glam::Vec3::Y),
         fov_y: state.fov_y.unwrap_or_else(|| 45.0_f32.to_radians()),
         ..CameraParams::default()
     }
@@ -750,7 +769,10 @@ mod tests {
         assert_eq!(state.mode_id, CharacterPreviewModeId::Face);
         assert_eq!(state.camera_preset, "face-closeup");
         assert_eq!(state.render_preset, "face-detail");
-        assert_eq!(controller.active_preview_mode("scene-a", "main"), Some(CharacterPreviewModeId::Face));
+        assert_eq!(
+            controller.active_preview_mode("scene-a", "main"),
+            Some(CharacterPreviewModeId::Face)
+        );
 
         let event = controller
             .handle_viewport_command(command(MODEL_CHARACTER_PREVIEW_SET_MODE, "full-body", 8, 0))
@@ -768,16 +790,33 @@ mod tests {
             .unwrap()
             .state
             .unwrap();
-        assert_eq!(motion.playback.state, CharacterPreviewPlaybackState::Unavailable);
-        assert_eq!(motion.diagnostics[0].code, CharacterPreviewDiagnosticCode::MissingDemoClip);
+        assert_eq!(
+            motion.playback.state,
+            CharacterPreviewPlaybackState::Unavailable
+        );
+        assert_eq!(
+            motion.diagnostics[0].code,
+            CharacterPreviewDiagnosticCode::MissingDemoClip
+        );
 
         let voice = controller
-            .handle_viewport_command(command(MODEL_CHARACTER_PREVIEW_SET_MODE, "voice-pack", 10, 0))
+            .handle_viewport_command(command(
+                MODEL_CHARACTER_PREVIEW_SET_MODE,
+                "voice-pack",
+                10,
+                0,
+            ))
             .unwrap()
             .state
             .unwrap();
-        assert_eq!(voice.playback.state, CharacterPreviewPlaybackState::Unavailable);
-        assert_eq!(voice.diagnostics[0].code, CharacterPreviewDiagnosticCode::MissingVoicePack);
+        assert_eq!(
+            voice.playback.state,
+            CharacterPreviewPlaybackState::Unavailable
+        );
+        assert_eq!(
+            voice.diagnostics[0].code,
+            CharacterPreviewDiagnosticCode::MissingVoicePack
+        );
     }
 
     #[test]
@@ -793,7 +832,10 @@ mod tests {
             .state
             .unwrap();
 
-        assert_eq!(motion.playback.state, CharacterPreviewPlaybackState::Playing);
+        assert_eq!(
+            motion.playback.state,
+            CharacterPreviewPlaybackState::Playing
+        );
         assert_eq!(motion.playback.clip_id.as_deref(), Some("IdleCheck"));
         assert_eq!(motion.playback.duration_ms, Some(1250.0));
         assert!(motion.diagnostics.is_empty());
@@ -803,7 +845,12 @@ mod tests {
     fn reset_camera_clears_override_and_reports_diagnostic() {
         let controller = controller();
         let result = controller
-            .handle_viewport_command(command(MODEL_CHARACTER_PREVIEW_RESET_MODE_CAMERA, "face", 11, 0))
+            .handle_viewport_command(command(
+                MODEL_CHARACTER_PREVIEW_RESET_MODE_CAMERA,
+                "face",
+                11,
+                0,
+            ))
             .unwrap();
         let state = result.state.unwrap();
         assert_eq!(state.mode_id, CharacterPreviewModeId::Face);
@@ -834,7 +881,12 @@ mod tests {
         assert_eq!(stored.position, camera.position);
 
         let reset = controller
-            .handle_viewport_command(command(MODEL_CHARACTER_PREVIEW_RESET_MODE_CAMERA, "face", 15, 0))
+            .handle_viewport_command(command(
+                MODEL_CHARACTER_PREVIEW_RESET_MODE_CAMERA,
+                "face",
+                15,
+                0,
+            ))
             .unwrap()
             .state
             .unwrap();
@@ -851,6 +903,9 @@ mod tests {
             .unwrap();
         assert_eq!(result.event.status, Some(ViewportEventStatus::Error));
         assert_eq!(result.event.error.unwrap().code, "stale-revision");
-        assert_eq!(result.state.unwrap().status, CharacterPreviewStateStatus::Rejected);
+        assert_eq!(
+            result.state.unwrap().status,
+            CharacterPreviewStateStatus::Rejected
+        );
     }
 }

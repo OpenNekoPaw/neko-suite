@@ -13,9 +13,9 @@
 //! No CPU-based format conversion is performed (zero-copy design).
 
 use super::codec_ext::HwEncoderTypeExt;
-#[cfg(test)]
-use super::traits::VideoCodec;
-use super::traits::{EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType};
+use super::traits::{
+    EncodedPacket, Encoder, EncoderConfig, EncoderPreset, HwEncoderType, VideoCodec,
+};
 use crate::error::{Error, Result};
 
 use ffmpeg_next as ffmpeg;
@@ -386,52 +386,7 @@ impl HwAccelEncoder {
             encoder.set_max_b_frames(max_b as usize);
         }
 
-        // Build encoder options based on hardware type
-        let mut opts = Dictionary::new();
-
-        match hw_type {
-            HwEncoderType::VideoToolbox => {
-                // VideoToolbox specific options
-                opts.set("allow_sw", "0"); // Disable software fallback within VT
-                                           // realtime mode: Ultrafast/Fast → prioritize speed (preview),
-                                           // Medium/Slow/Veryslow → prioritize quality (export)
-                match config.preset {
-                    EncoderPreset::Ultrafast | EncoderPreset::Fast => {
-                        opts.set("realtime", "1");
-                    }
-                    _ => {
-                        opts.set("realtime", "0");
-                    }
-                }
-                // Use "main" profile for better compatibility (avoid "baseline")
-                if config.profile.is_none() {
-                    opts.set("profile", "main");
-                }
-            }
-            HwEncoderType::Nvenc => {
-                // NVENC specific options
-                opts.set("preset", "p4"); // Balanced preset (p1=fastest, p7=slowest)
-                opts.set("tune", "hq"); // High quality tuning
-                opts.set("rc", "vbr"); // Variable bitrate
-            }
-            HwEncoderType::Vaapi => {
-                // VAAPI specific options
-                opts.set("low_power", "0"); // Use full quality mode
-            }
-            HwEncoderType::Qsv => {
-                // QSV specific options
-                opts.set("preset", "medium");
-            }
-            HwEncoderType::Amf => {
-                // AMF specific options (AMD)
-                opts.set("quality", "balanced");
-            }
-            _ => {}
-        }
-
-        if let Some(ref profile) = config.profile {
-            opts.set("profile", profile);
-        }
+        let opts = build_hw_encoder_options(config, hw_type);
 
         // Set GLOBAL_HEADER flag if requested (needed for MP4/fMP4 muxing)
         if config.global_header {
@@ -505,6 +460,54 @@ impl HwAccelEncoder {
             }
         }
     }
+}
+
+fn build_hw_encoder_options(config: &EncoderConfig, hw_type: HwEncoderType) -> Dictionary<'static> {
+    let mut opts = Dictionary::new();
+
+    match hw_type {
+        HwEncoderType::VideoToolbox => {
+            opts.set("allow_sw", "0");
+            match config.preset {
+                EncoderPreset::Ultrafast | EncoderPreset::Fast => {
+                    opts.set("realtime", "1");
+                    opts.set("prio_speed", "1");
+                    opts.set("power_efficient", "0");
+                    if config.codec == VideoCodec::H264 {
+                        opts.set("coder", "vlc");
+                        opts.set("max_ref_frames", "1");
+                    }
+                }
+                _ => {
+                    opts.set("realtime", "0");
+                }
+            }
+            if config.profile.is_none() {
+                opts.set("profile", "constrained_baseline");
+            }
+        }
+        HwEncoderType::Nvenc => {
+            opts.set("preset", "p4");
+            opts.set("tune", "hq");
+            opts.set("rc", "vbr");
+        }
+        HwEncoderType::Vaapi => {
+            opts.set("low_power", "0");
+        }
+        HwEncoderType::Qsv => {
+            opts.set("preset", "medium");
+        }
+        HwEncoderType::Amf => {
+            opts.set("quality", "balanced");
+        }
+        _ => {}
+    }
+
+    if let Some(ref profile) = config.profile {
+        opts.set("profile", profile);
+    }
+
+    opts
 }
 
 impl Default for HwAccelEncoder {
@@ -1006,5 +1009,34 @@ mod tests {
         let config = EncoderConfig::new(1920, 1080, 30.0, VideoCodec::H264);
 
         assert_eq!(config.hw_encoder, HwEncoderType::None);
+    }
+
+    #[test]
+    fn videotoolbox_realtime_preview_options_prioritize_low_latency() {
+        let config = EncoderConfig::new(1920, 1080, 60.0, VideoCodec::H264)
+            .with_preset(EncoderPreset::Ultrafast)
+            .with_max_b_frames(0);
+        let opts = build_hw_encoder_options(&config, HwEncoderType::VideoToolbox);
+
+        assert_eq!(opts.get("allow_sw"), Some("0"));
+        assert_eq!(opts.get("realtime"), Some("1"));
+        assert_eq!(opts.get("prio_speed"), Some("1"));
+        assert_eq!(opts.get("power_efficient"), Some("0"));
+        assert_eq!(opts.get("coder"), Some("vlc"));
+        assert_eq!(opts.get("max_ref_frames"), Some("1"));
+        assert_eq!(opts.get("profile"), Some("constrained_baseline"));
+    }
+
+    #[test]
+    fn videotoolbox_quality_options_do_not_force_realtime() {
+        let config = EncoderConfig::new(1920, 1080, 60.0, VideoCodec::H264)
+            .with_preset(EncoderPreset::Medium)
+            .with_profile("high");
+        let opts = build_hw_encoder_options(&config, HwEncoderType::VideoToolbox);
+
+        assert_eq!(opts.get("realtime"), Some("0"));
+        assert_eq!(opts.get("prio_speed"), None);
+        assert_eq!(opts.get("max_ref_frames"), None);
+        assert_eq!(opts.get("profile"), Some("high"));
     }
 }

@@ -53,7 +53,9 @@ pub use gamepad::GamepadController;
 pub use image::ImageController;
 pub use live_compositor::LiveCompositorController;
 pub use midi::MidiController;
-pub use model_preview::{is_model_preview_action, ModelPreviewCommandResult, ModelPreviewController};
+pub use model_preview::{
+    is_model_preview_action, ModelPreviewCommandResult, ModelPreviewController,
+};
 pub use models::ModelsController;
 pub use node::NodeController;
 pub use plugins::PluginsController;

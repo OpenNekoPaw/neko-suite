@@ -89,7 +89,13 @@ impl ViewportController {
 
         let snapshot = self.snapshot_value()?;
         let viewport_id = viewport_id(&command);
-        let hit = hit_test_result(&snapshot, &command.payload, &command.scene_id, &viewport_id, revision);
+        let hit = hit_test_result(
+            &snapshot,
+            &command.payload,
+            &command.scene_id,
+            &viewport_id,
+            revision,
+        );
         Ok(ack_event(&command, revision, hit))
     }
 
@@ -117,7 +123,8 @@ impl ViewportController {
             return Ok(error);
         }
 
-        let transform = parse_transform_payload(&command.payload).map_err(ApiError::InvalidRequest)?;
+        let transform =
+            parse_transform_payload(&command.payload).map_err(ApiError::InvalidRequest)?;
         self.scene_service()?
             .update_transform(
                 &transform.node_id,
@@ -197,8 +204,12 @@ impl ViewportController {
     }
 
     fn snapshot_value(&self) -> ApiResult<Value> {
-        let snapshot = self.scene_service()?.get_snapshot().map_err(ApiError::from)?;
-        serde_json::to_value(snapshot).map_err(|error| ApiError::SerializationError(error.to_string()))
+        let snapshot = self
+            .scene_service()?
+            .get_snapshot()
+            .map_err(ApiError::from)?;
+        serde_json::to_value(snapshot)
+            .map_err(|error| ApiError::SerializationError(error.to_string()))
     }
 }
 
@@ -353,7 +364,9 @@ fn projected_nodes(snapshot: &Value, payload: &Value) -> Vec<HitTestNode> {
     scene_nodes(snapshot)
         .into_iter()
         .filter(|node| node.get("visible").and_then(Value::as_bool).unwrap_or(true))
-        .filter(|node| requested.is_empty() || node_id(node).is_some_and(|id| requested.contains(&id)))
+        .filter(|node| {
+            requested.is_empty() || node_id(node).is_some_and(|id| requested.contains(&id))
+        })
         .filter_map(project_node)
         .collect()
 }
@@ -396,11 +409,23 @@ fn node_position(node: &Value) -> [f32; 3] {
             position.get(2).and_then(Value::as_f64).unwrap_or_default() as f32,
         ];
     }
-    if let Some(position) = node.get("transform").and_then(|transform| transform.get("position")) {
+    if let Some(position) = node
+        .get("transform")
+        .and_then(|transform| transform.get("position"))
+    {
         return [
-            position.get("x").and_then(Value::as_f64).unwrap_or_default() as f32,
-            position.get("y").and_then(Value::as_f64).unwrap_or_default() as f32,
-            position.get("z").and_then(Value::as_f64).unwrap_or_default() as f32,
+            position
+                .get("x")
+                .and_then(Value::as_f64)
+                .unwrap_or_default() as f32,
+            position
+                .get("y")
+                .and_then(Value::as_f64)
+                .unwrap_or_default() as f32,
+            position
+                .get("z")
+                .and_then(Value::as_f64)
+                .unwrap_or_default() as f32,
         ];
     }
     [0.0, 0.0, 0.0]
@@ -607,7 +632,12 @@ mod tests {
         command.protocol_version = 2;
 
         let response = controller
-            .handle("command", None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                "command",
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -627,7 +657,12 @@ mod tests {
         command.payload = json!({ "x": 0.5, "y": 0.5 });
 
         let response = controller
-            .handle("command", None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                "command",
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -649,7 +684,12 @@ mod tests {
         });
 
         let response = controller
-            .handle("command", None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                "command",
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -682,7 +722,12 @@ mod tests {
         });
 
         let response = controller
-            .handle("command", None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                "command",
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -702,14 +747,21 @@ mod tests {
         marquee.payload = json!({ "rect": [0.0, 0.0, 1.0, 1.0] });
 
         let marquee_response = controller
-            .handle("command", None, Value::Null, Some(serde_json::to_value(marquee).unwrap()))
+            .handle(
+                "command",
+                None,
+                Value::Null,
+                Some(serde_json::to_value(marquee).unwrap()),
+            )
             .await
             .unwrap();
         let marquee_event: ViewportEvent =
             serde_json::from_value(marquee_response.data.unwrap()).unwrap();
         assert_eq!(marquee_event.viewport_id.as_deref(), Some("side"));
         assert_eq!(marquee_event.payload["viewportId"], "side");
-        assert!(marquee_event.payload["selectedNodeIds"].as_array().is_some());
+        assert!(marquee_event.payload["selectedNodeIds"]
+            .as_array()
+            .is_some());
 
         let mut camera = command("viewport:camera", 5, Some(controller.current_revision()));
         camera.viewport_id = Some("main".to_string());
@@ -721,7 +773,12 @@ mod tests {
         });
 
         let camera_response = controller
-            .handle("command", None, Value::Null, Some(serde_json::to_value(camera).unwrap()))
+            .handle(
+                "command",
+                None,
+                Value::Null,
+                Some(serde_json::to_value(camera).unwrap()),
+            )
             .await
             .unwrap();
         let camera_event: ViewportEvent =

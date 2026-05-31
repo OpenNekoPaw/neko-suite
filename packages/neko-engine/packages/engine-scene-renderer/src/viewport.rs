@@ -152,9 +152,8 @@ pub fn build_viewport_render_graph(
     let post_process = matches!(
         variant,
         ViewportRenderGraphVariant::StandardPbr | ViewportRenderGraphVariant::Clay
-    )
-        && (descriptor.tone_mapping != SceneToneMapping::None
-            || descriptor.post_process.any_enabled());
+    ) && (descriptor.tone_mapping != SceneToneMapping::None
+        || descriptor.post_process.any_enabled());
     // Realtime stream frames now hand the final RenderGraph color target
     // directly to the RGBA->NV12 IOSurface bridge. Keeping the old RGBA8
     // conversion/copy passes here adds latency and extra texture churn.
@@ -365,8 +364,7 @@ mod tests {
         });
 
         let plan =
-            build_viewport_render_graph(&clay, ViewportRenderGraphOutput::RealtimeStream)
-                .unwrap();
+            build_viewport_render_graph(&clay, ViewportRenderGraphOutput::RealtimeStream).unwrap();
 
         assert_eq!(plan.variant, ViewportRenderGraphVariant::Clay);
         assert!(plan.post_process);

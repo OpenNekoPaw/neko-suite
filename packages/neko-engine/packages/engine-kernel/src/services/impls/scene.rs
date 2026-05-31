@@ -362,9 +362,10 @@ impl SceneService {
     }
 
     pub fn register_environment_file_token(&self, token: &str, path: &Path) -> Result<()> {
-        let mut guard = self.environment_file_tokens.write().map_err(|e| {
-            Error::Other(format!("Environment file token lock poisoned: {}", e))
-        })?;
+        let mut guard = self
+            .environment_file_tokens
+            .write()
+            .map_err(|e| Error::Other(format!("Environment file token lock poisoned: {}", e)))?;
         guard.insert(token.to_string(), path.to_path_buf());
         Ok(())
     }
@@ -441,8 +442,7 @@ impl SceneService {
         *self
             .blocked_environment_source_key
             .lock()
-            .map_err(|e| Error::Other(format!("Environment retry lock poisoned: {}", e)))? =
-            None;
+            .map_err(|e| Error::Other(format!("Environment retry lock poisoned: {}", e)))? = None;
         let cancelled = self
             .pending_environment_background
             .lock()
@@ -462,10 +462,7 @@ impl SceneService {
             .is_none();
         if should_clear_background {
             *self.environment_background.lock().map_err(|e| {
-                Error::Other(format!(
-                    "Environment background cache lock poisoned: {}",
-                    e
-                ))
+                Error::Other(format!("Environment background cache lock poisoned: {}", e))
             })? = None;
         }
         Ok(())
@@ -605,10 +602,7 @@ impl SceneService {
         let environment = self.current_environment_patch();
         self.prepare_environment_background_if_needed(scene_renderer, environment.as_ref())?;
         let environment_background = self.environment_background.lock().map_err(|e| {
-            Error::Other(format!(
-                "Environment background cache lock poisoned: {}",
-                e
-            ))
+            Error::Other(format!("Environment background cache lock poisoned: {}", e))
         })?;
         let active_environment_background = environment
             .as_ref()
@@ -688,10 +682,7 @@ impl SceneService {
         }
         {
             let guard = self.environment_background.lock().map_err(|e| {
-                Error::Other(format!(
-                    "Environment background cache lock poisoned: {}",
-                    e
-                ))
+                Error::Other(format!("Environment background cache lock poisoned: {}", e))
             })?;
             if guard
                 .as_ref()
@@ -796,9 +787,7 @@ impl SceneService {
                     completed = Some(EnvironmentLoadResult {
                         source_key: pending.source_key.clone(),
                         generation: pending.generation,
-                        loaded: Err(Error::Other(
-                            "Environment loader disconnected".to_string(),
-                        )),
+                        loaded: Err(Error::Other("Environment loader disconnected".to_string())),
                     });
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
@@ -868,10 +857,7 @@ impl SceneService {
                     loaded.settings,
                 )?;
                 *self.environment_background.lock().map_err(|e| {
-                    Error::Other(format!(
-                        "Environment background cache lock poisoned: {}",
-                        e
-                    ))
+                    Error::Other(format!("Environment background cache lock poisoned: {}", e))
                 })? = Some(CachedEnvironmentBackground {
                     source_key: result.source_key,
                     background,
@@ -884,11 +870,9 @@ impl SceneService {
                 });
             }
             Err(error) => {
-                *self
-                    .blocked_environment_source_key
-                    .lock()
-                    .map_err(|e| Error::Other(format!("Environment retry lock poisoned: {}", e)))? =
-                    Some(result.source_key);
+                *self.blocked_environment_source_key.lock().map_err(|e| {
+                    Error::Other(format!("Environment retry lock poisoned: {}", e))
+                })? = Some(result.source_key);
                 self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
                     code: "environment.loadFailed".to_string(),
                     severity: "error".to_string(),
@@ -908,14 +892,13 @@ impl SceneService {
     ) -> std::sync::mpsc::Sender<EnvironmentLoadResult> {
         let (sender, receiver) = std::sync::mpsc::channel();
         let generation = self.environment_generation.load(Ordering::Relaxed) as u64;
-        *self.pending_environment_background.lock().unwrap() =
-            Some(PendingEnvironmentBackground {
-                source_key: source_key.to_string(),
-                generation,
-                started_at: Instant::now() - started_ago,
-                pending_reported: false,
-                receiver,
-            });
+        *self.pending_environment_background.lock().unwrap() = Some(PendingEnvironmentBackground {
+            source_key: source_key.to_string(),
+            generation,
+            started_at: Instant::now() - started_ago,
+            pending_reported: false,
+            receiver,
+        });
         sender
     }
 
@@ -1118,6 +1101,7 @@ impl SceneService {
                 queue_depth: pool_snapshot
                     .map(|snapshot| snapshot.active_leases as u32)
                     .unwrap_or_default(),
+                ..RenderFrameDiagnostics::default()
             }),
             meta: None,
         })
@@ -2226,16 +2210,18 @@ mod tests {
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].code, "environment.loadTimeout");
         assert!(diagnostics[0].retryable);
-        assert!(service.pending_environment_background.lock().unwrap().is_none());
+        assert!(service
+            .pending_environment_background
+            .lock()
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn environment_replacement_cancels_pending_loader() {
         let service = SceneService::new();
-        let _sender = service.install_pending_environment_for_test(
-            "environment://old",
-            Duration::from_millis(1),
-        );
+        let _sender = service
+            .install_pending_environment_for_test("environment://old", Duration::from_millis(1));
         let next_environment = EnvironmentPatch {
             environment_id: "scene-environment".to_string(),
             source: None,
@@ -2254,7 +2240,11 @@ mod tests {
         let diagnostics = service.take_environment_load_diagnostics();
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].code, "environment.loadCancelled");
-        assert!(service.pending_environment_background.lock().unwrap().is_none());
+        assert!(service
+            .pending_environment_background
+            .lock()
+            .unwrap()
+            .is_none());
     }
 
     #[test]

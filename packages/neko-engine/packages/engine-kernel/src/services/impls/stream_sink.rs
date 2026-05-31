@@ -131,6 +131,7 @@ impl StreamSink {
     }
 
     fn submit_gpu_frame(&self, frame: VideoGpuFrame) -> Result<()> {
+        let submit_started = Instant::now();
         let mut state = self
             .state
             .lock()
@@ -164,6 +165,7 @@ impl StreamSink {
             let mut diagnostics = frame.diagnostics.clone();
             if let Some(diagnostics) = diagnostics.as_mut() {
                 diagnostics.encode_time_ms = encode_time_ms;
+                diagnostics.stream_submit_time_ms = submit_started.elapsed().as_secs_f32() * 1000.0;
                 diagnostics.render_path = if encoder.is_zero_copy_active() {
                     GpuRenderPath::GpuZeroCopy
                 } else {
@@ -267,7 +269,7 @@ fn preview_encoder_config(config: &PreviewPipelineConfig) -> EncoderConfig {
     encoder_config.gop_size = Some(config.gop_size);
     encoder_config.use_zero_copy_gpu = true;
     encoder_config.max_b_frames = Some(0);
-    encoder_config.profile = Some("baseline".to_string());
+    encoder_config.profile = Some("constrained_baseline".to_string());
     encoder_config.preset = EncoderPreset::Ultrafast;
     encoder_config.hw_encoder = HwEncoderType::Auto;
     encoder_config

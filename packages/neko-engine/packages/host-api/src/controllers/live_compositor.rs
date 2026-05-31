@@ -10,12 +10,11 @@ use neko_engine_kernel::live_compositor::{
 use neko_engine_types::registry;
 use neko_engine_types::{
     ActionResponse, FrameFormat, LiveCompositorLayer, LiveCompositorLayerPatch,
-    LiveCompositorReorderLayerPayload, LiveCompositorScene,
-    LiveCompositorSetOutputRoutePayload, LiveCompositorSetPresetPayload,
-    LiveCompositorSetTrackingOverlayPayload, LiveCompositorUpdateLayerPayload,
-    LiveOutputRoute, LiveOutputRouteStatus, RenderFrameDiagnostics, RenderFrameMeta, StreamId,
-    ViewportCommand, ViewportDomain, ViewportEvent, ViewportEventStatus, ViewportProtocolError,
-    LIVE_COMPOSITOR_CONTRACT_VERSION,
+    LiveCompositorReorderLayerPayload, LiveCompositorScene, LiveCompositorSetOutputRoutePayload,
+    LiveCompositorSetPresetPayload, LiveCompositorSetTrackingOverlayPayload,
+    LiveCompositorUpdateLayerPayload, LiveOutputRoute, LiveOutputRouteStatus,
+    RenderFrameDiagnostics, RenderFrameMeta, StreamId, ViewportCommand, ViewportDomain,
+    ViewportEvent, ViewportEventStatus, ViewportProtocolError, LIVE_COMPOSITOR_CONTRACT_VERSION,
     VIEWPORT_PROTOCOL_VERSION,
 };
 use serde::Deserialize;
@@ -226,8 +225,8 @@ impl LiveCompositorController {
 
     fn handle_command_response(&self, body: Option<Value>) -> ApiResult<ActionResponse> {
         let body = body.ok_or_else(|| ApiError::InvalidRequest("body required".to_string()))?;
-        let command: ViewportCommand =
-            serde_json::from_value(body).map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
+        let command: ViewportCommand = serde_json::from_value(body)
+            .map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
         let event = self.handle_viewport_command(command)?;
         Ok(ActionResponse::ok("", serde_json::to_value(event)?))
     }
@@ -241,8 +240,10 @@ impl LiveCompositorController {
         let request = parse_stream_request(resource_id, options, body)?;
         let stream_registry = self.stream_registry()?;
         let (scene, applied_seq) = self.snapshot_scene_for_stream(&request.scene_id)?;
-        let width = normalize_stream_dimension(request.width.unwrap_or(scene.canvas.width as u32), 1280);
-        let height = normalize_stream_dimension(request.height.unwrap_or(scene.canvas.height as u32), 720);
+        let width =
+            normalize_stream_dimension(request.width.unwrap_or(scene.canvas.width as u32), 1280);
+        let height =
+            normalize_stream_dimension(request.height.unwrap_or(scene.canvas.height as u32), 720);
         let fps = normalize_stream_fps(request.fps.unwrap_or(scene.canvas.fps));
         let session_id = request
             .session_id
@@ -259,24 +260,23 @@ impl LiveCompositorController {
         let (stream_id, _rx) = stream_registry
             .create_stream(&session_id, &resource_id, stream_config)
             .await;
-        stream_registry.activate(&stream_id).await.map_err(|error| {
-            ApiError::ServiceError(format!(
-                "Failed to activate live compositor stream {}: {}",
-                stream_id.as_str(),
-                error
-            ))
-        })?;
+        stream_registry
+            .activate(&stream_id)
+            .await
+            .map_err(|error| {
+                ApiError::ServiceError(format!(
+                    "Failed to activate live compositor stream {}: {}",
+                    stream_id.as_str(),
+                    error
+                ))
+            })?;
 
         let cancel_token = CancellationToken::new();
         stream_registry
             .set_cancel_token(&stream_id, cancel_token.clone())
             .await;
 
-        self.register_stream_entry(
-            &request.scene_id,
-            &request.viewport_id,
-            stream_id.clone(),
-        )?;
+        self.register_stream_entry(&request.scene_id, &request.viewport_id, stream_id.clone())?;
         spawn_live_compositor_stream_producer(
             stream_registry,
             Arc::clone(&self.store),
@@ -406,9 +406,9 @@ impl LiveCompositorController {
                 .values()
                 .find(|entry| entry.scene_id == scene_id),
         };
-        entry
-            .cloned()
-            .ok_or_else(|| ApiError::NotFound(format!("live compositor stream for scene {scene_id}")))
+        entry.cloned().ok_or_else(|| {
+            ApiError::NotFound(format!("live compositor stream for scene {scene_id}"))
+        })
     }
 
     fn remove_stream_entry(&self, stream_id: &StreamId) -> ApiResult<()> {
@@ -420,9 +420,7 @@ impl LiveCompositorController {
     }
 
     fn remove_scene_stream_entries(&self, store: &mut LiveCompositorStore, scene_id: &str) {
-        store
-            .streams
-            .retain(|_, entry| entry.scene_id != scene_id);
+        store.streams.retain(|_, entry| entry.scene_id != scene_id);
     }
 
     pub fn handle_viewport_command(&self, command: ViewportCommand) -> ApiResult<ViewportEvent> {
@@ -611,15 +609,15 @@ struct LiveCompositorStreamConfig {
 fn parse_scene_write(body: Option<Value>) -> ApiResult<SceneWriteEnvelope> {
     let body = body.ok_or_else(|| ApiError::InvalidRequest("body required".to_string()))?;
     if body.get("scene").is_some() {
-        let envelope: RawSceneWriteEnvelope =
-            serde_json::from_value(body).map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
+        let envelope: RawSceneWriteEnvelope = serde_json::from_value(body)
+            .map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
         return Ok(SceneWriteEnvelope {
             scene: envelope.scene,
             base_revision: envelope.base_revision,
         });
     }
-    let scene: LiveCompositorScene =
-        serde_json::from_value(body).map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
+    let scene: LiveCompositorScene = serde_json::from_value(body)
+        .map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
     Ok(SceneWriteEnvelope {
         scene,
         base_revision: None,
@@ -655,7 +653,10 @@ fn parse_stream_request(
             .get("sessionId")
             .and_then(Value::as_str)
             .map(str::to_string),
-        width: value.get("width").and_then(Value::as_u64).map(|value| value as u32),
+        width: value
+            .get("width")
+            .and_then(Value::as_u64)
+            .map(|value| value as u32),
         height: value
             .get("height")
             .and_then(Value::as_u64)
@@ -705,12 +706,13 @@ fn request_scene_id(
     resource_id
         .filter(|id| !id.is_empty())
         .or_else(|| options.get("sceneId").and_then(Value::as_str))
-        .or_else(|| body.and_then(|value| value.get("sceneId")).and_then(Value::as_str))
+        .or_else(|| {
+            body.and_then(|value| value.get("sceneId"))
+                .and_then(Value::as_str)
+        })
         .map(str::to_string)
         .ok_or_else(|| {
-            ApiError::InvalidRequest(format!(
-                "sceneId required for live-compositor:{action}"
-            ))
+            ApiError::InvalidRequest(format!("sceneId required for live-compositor:{action}"))
         })
 }
 
@@ -806,10 +808,17 @@ fn apply_set_preset(
     command: &ViewportCommand,
 ) -> Result<Value, LiveCommandRejection> {
     let payload: LiveCompositorSetPresetPayload = parse_payload(command)?;
-    if !scene.presets.iter().any(|preset| preset.id == payload.preset_id) {
+    if !scene
+        .presets
+        .iter()
+        .any(|preset| preset.id == payload.preset_id)
+    {
         return Err(LiveCommandRejection::new(
             "presetNotFound",
-            format!("live compositor preset {} does not exist", payload.preset_id),
+            format!(
+                "live compositor preset {} does not exist",
+                payload.preset_id
+            ),
         ));
     }
     scene.active_preset_id = Some(payload.preset_id.clone());
@@ -962,7 +971,11 @@ fn validate_source_ref(
     scene: &LiveCompositorScene,
     source_id: &str,
 ) -> Result<(), LiveCommandRejection> {
-    if scene.sources.iter().any(|source| source.source_id == source_id) {
+    if scene
+        .sources
+        .iter()
+        .any(|source| source.source_id == source_id)
+    {
         return Ok(());
     }
     Err(LiveCommandRejection::new(
@@ -1272,9 +1285,8 @@ fn pack_live_synthetic_h264_frame(
 fn synthetic_h264_payload(frame_id: u64) -> Vec<u8> {
     let color = (frame_id % 255) as u8;
     vec![
-        0, 0, 0, 1, 0x67, 0x42, 0x00, 0x1f, 0xe5, 0x88, 0x68, 0x54, 0x05, 0x01, 0xed,
-        0, 0, 0, 1, 0x68, 0xce, 0x06, 0xe2,
-        0, 0, 0, 1, 0x65, 0x88, 0x84, color,
+        0, 0, 0, 1, 0x67, 0x42, 0x00, 0x1f, 0xe5, 0x88, 0x68, 0x54, 0x05, 0x01, 0xed, 0, 0, 0, 1,
+        0x68, 0xce, 0x06, 0xe2, 0, 0, 0, 1, 0x65, 0x88, 0x84, color,
     ]
 }
 
@@ -1385,13 +1397,19 @@ mod tests {
     }
 
     fn fixture_scene() -> LiveCompositorScene {
-        let fixture =
-            include_str!("../../../../../neko-types/src/types/__fixtures__/live-compositor-scene-v1.json");
+        let fixture = include_str!(
+            "../../../../../neko-types/src/types/__fixtures__/live-compositor-scene-v1.json"
+        );
         let value: Value = serde_json::from_str(fixture).unwrap();
         serde_json::from_value(value["scene"].clone()).unwrap()
     }
 
-    fn command(action: &str, seq: u64, base_revision: Option<u64>, payload: Value) -> ViewportCommand {
+    fn command(
+        action: &str,
+        seq: u64,
+        base_revision: Option<u64>,
+        payload: Value,
+    ) -> ViewportCommand {
         ViewportCommand {
             protocol_version: VIEWPORT_PROTOCOL_VERSION,
             domain: ViewportDomain::Scene,
@@ -1420,9 +1438,7 @@ mod tests {
         assert!(response.is_ok());
     }
 
-    async fn receive_live_frame(
-        rx: &mut broadcast::Receiver<FrameData>,
-    ) -> FrameData {
+    async fn receive_live_frame(rx: &mut broadcast::Receiver<FrameData>) -> FrameData {
         tokio::time::timeout(Duration::from_millis(600), async {
             loop {
                 match rx.recv().await {
@@ -1459,24 +1475,14 @@ mod tests {
         create_fixture_scene(&controller).await;
 
         let get = controller
-            .handle(
-                ACTION_GET,
-                Some("live-scene-main"),
-                Value::Null,
-                None,
-            )
+            .handle(ACTION_GET, Some("live-scene-main"), Value::Null, None)
             .await
             .unwrap();
         assert!(get.is_ok());
         assert_eq!(get.data.as_ref().unwrap()["scene"]["contractVersion"], 1);
 
         let reset = controller
-            .handle(
-                ACTION_RESET,
-                Some("live-scene-main"),
-                Value::Null,
-                None,
-            )
+            .handle(ACTION_RESET, Some("live-scene-main"), Value::Null, None)
             .await
             .unwrap();
         assert_eq!(reset.data.as_ref().unwrap()["removed"], true);
@@ -1494,7 +1500,12 @@ mod tests {
         );
 
         let response = controller
-            .handle(ACTION_COMMAND, None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                ACTION_COMMAND,
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -1521,7 +1532,12 @@ mod tests {
         );
 
         let response = controller
-            .handle(ACTION_COMMAND, None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                ACTION_COMMAND,
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -1547,7 +1563,12 @@ mod tests {
         command.protocol_version = 2;
 
         let response = controller
-            .handle(ACTION_COMMAND, None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                ACTION_COMMAND,
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -1580,7 +1601,12 @@ mod tests {
         );
 
         let response = controller
-            .handle(ACTION_COMMAND, None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                ACTION_COMMAND,
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -1607,7 +1633,12 @@ mod tests {
         );
 
         let response = controller
-            .handle(ACTION_COMMAND, None, Value::Null, Some(serde_json::to_value(command).unwrap()))
+            .handle(
+                ACTION_COMMAND,
+                None,
+                Value::Null,
+                Some(serde_json::to_value(command).unwrap()),
+            )
             .await
             .unwrap();
         let event: ViewportEvent = serde_json::from_value(response.data.unwrap()).unwrap();
@@ -1698,8 +1729,7 @@ mod tests {
             .await
             .unwrap();
         let descriptor = response.data.unwrap();
-        let stream_id =
-            StreamId::from_string(descriptor["streamId"].as_str().unwrap().to_string());
+        let stream_id = StreamId::from_string(descriptor["streamId"].as_str().unwrap().to_string());
         let mut rx = stream_registry.subscribe(&stream_id).await.unwrap();
 
         let initial = receive_live_frame(&mut rx).await;
@@ -1742,6 +1772,9 @@ mod tests {
 
     #[test]
     fn validates_fixture_contract_version() {
-        assert_eq!(fixture_scene().contract_version, LIVE_COMPOSITOR_CONTRACT_VERSION);
+        assert_eq!(
+            fixture_scene().contract_version,
+            LIVE_COMPOSITOR_CONTRACT_VERSION
+        );
     }
 }

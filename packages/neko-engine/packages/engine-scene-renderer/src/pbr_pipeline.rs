@@ -9,8 +9,8 @@ use crate::{
     PostProcessChain, PostProcessSettings, RenderGraphError, RenderGraphExecutor, RenderLightKind,
     RenderSystemLabel, RenderTargetLease, RenderTargetPool, RenderTargetPoolSnapshot, RenderWorld,
     SceneColorSpace, SceneRenderGraphExecution, SceneRenderOutput, SceneToneMapping, ToneMapping,
-    ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput, ViewportRenderGraphVariant,
-    ViewportMaterialOverrideKind, ViewportRenderMode, ViewportWorkMode,
+    ViewportDescriptor, ViewportMaterialOverrideKind, ViewportPostProcess,
+    ViewportRenderGraphOutput, ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
 };
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
@@ -1458,7 +1458,10 @@ impl PbrRenderer {
                 asset_cache.create_override_material_bind_group(
                     buffer,
                     gpu_material.normal_texture.as_ref().map(|(_, view)| view),
-                    gpu_material.occlusion_texture.as_ref().map(|(_, view)| view),
+                    gpu_material
+                        .occlusion_texture
+                        .as_ref()
+                        .map(|(_, view)| view),
                 )
             });
 
@@ -2047,7 +2050,9 @@ fn post_process_settings_for_descriptor(descriptor: &ViewportDescriptor) -> Post
     }
 }
 
-fn clay_material_uniforms_for_descriptor(descriptor: &ViewportDescriptor) -> Option<MaterialUniforms> {
+fn clay_material_uniforms_for_descriptor(
+    descriptor: &ViewportDescriptor,
+) -> Option<MaterialUniforms> {
     if descriptor.render_mode != ViewportRenderMode::Clay
         && !matches!(
             descriptor.lookdev.as_ref().and_then(|settings| settings.material_override.as_ref()),

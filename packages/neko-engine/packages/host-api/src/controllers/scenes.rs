@@ -99,6 +99,10 @@ struct SceneStreamOptions {
     #[serde(default = "default_helper_passes_enabled")]
     helper_passes_enabled: bool,
     lookdev: Option<SceneStreamLookDevOptions>,
+    #[serde(default = "default_allow_fps_degrade")]
+    allow_fps_degrade: bool,
+    #[serde(default = "default_allow_quality_degrade")]
+    allow_quality_degrade: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -169,6 +173,14 @@ fn default_helper_passes_enabled() -> bool {
     true
 }
 
+fn default_allow_fps_degrade() -> bool {
+    true
+}
+
+fn default_allow_quality_degrade() -> bool {
+    true
+}
+
 const SCENE_STREAM_MIN_BITRATE_BPS: u64 = 6_000_000;
 const SCENE_STREAM_MAX_BITRATE_BPS: u64 = 36_000_000;
 const SCENE_STREAM_TARGET_BITS_PER_PIXEL: u64 = 8;
@@ -177,6 +189,9 @@ const SCENE_STREAM_MAIN_DEGRADED_FPS: f64 = 30.0;
 const SCENE_STREAM_AUXILIARY_DEGRADED_FPS: f64 = 15.0;
 const SCENE_STREAM_DEGRADE_STABLE_FRAMES: u32 = 3;
 const SCENE_STREAM_ENCODER_RECONFIGURE_COOLDOWN_MS: u64 = 5_000;
+const H264_REALTIME_PROFILE: &str = "constrained_baseline";
+const H264_CONSTRAINED_BASELINE_PROFILE_IDC: u8 = 66;
+const H264_CONSTRAINED_BASELINE_FLAGS: u8 = 0xE0;
 
 fn parse_scene_stream_options(options: Value) -> ApiResult<SceneStreamOptions> {
     let value = options
@@ -211,6 +226,8 @@ struct SceneStreamProducerConfig {
     width: u32,
     height: u32,
     fps: f64,
+    allow_fps_degrade: bool,
+    allow_quality_degrade: bool,
     initial_revision: u64,
     initial_applied_seq: u64,
 }
@@ -275,6 +292,8 @@ struct SceneStreamRuntimeScheduler {
     base_width: u32,
     base_height: u32,
     base_fps: f64,
+    allow_fps_degrade: bool,
+    allow_quality_degrade: bool,
     is_auxiliary: bool,
 }
 
@@ -289,6 +308,8 @@ impl SceneStreamRuntimeScheduler {
             base_width: config.width,
             base_height: config.height,
             base_fps: config.fps.max(1.0),
+            allow_fps_degrade: config.allow_fps_degrade,
+            allow_quality_degrade: config.allow_quality_degrade,
             is_auxiliary: config.viewport.viewport_id != "main",
         }
     }
@@ -299,12 +320,12 @@ impl SceneStreamRuntimeScheduler {
         load: FrameLoadSample,
         control_ack: ControlAckHealthSample,
     ) -> SceneStreamRuntimeSettings {
-        let decision = self.scheduler.degradation_plan(
+        let decision = self.apply_stream_policy(self.scheduler.degradation_plan(
             &self.base_decision,
             auxiliary_viewport_count,
             load,
             control_ack,
-        );
+        ));
         self.apply_decision(&decision)
     }
 
@@ -315,14 +336,34 @@ impl SceneStreamRuntimeScheduler {
         control_ack: ControlAckHealthSample,
         hysteresis: &mut DegradationHysteresis,
     ) -> SceneStreamRuntimeSettings {
-        let raw_decision = self.scheduler.degradation_plan(
+        let raw_decision = self.apply_stream_policy(self.scheduler.degradation_plan(
             &self.base_decision,
             auxiliary_viewport_count,
             load,
             control_ack,
-        );
+        ));
         let decision = hysteresis.stabilize(raw_decision);
         self.apply_decision(&decision)
+    }
+
+    fn apply_stream_policy(&self, decision: DegradationDecision) -> DegradationDecision {
+        if self.is_auxiliary || (self.allow_fps_degrade && self.allow_quality_degrade) {
+            return decision;
+        }
+
+        DegradationDecision {
+            steps: decision
+                .steps
+                .into_iter()
+                .filter(|step| match step {
+                    DegradationStep::MainViewportFps => self.allow_fps_degrade,
+                    DegradationStep::MainViewportPostProcessQuality
+                    | DegradationStep::MainViewportResolution => self.allow_quality_degrade,
+                    _ => true,
+                })
+                .collect(),
+            preserve_control_ack: decision.preserve_control_ack,
+        }
     }
 
     fn apply_decision(&self, decision: &DegradationDecision) -> SceneStreamRuntimeSettings {
@@ -332,7 +373,7 @@ impl SceneStreamRuntimeScheduler {
             fps: self.base_fps,
             h264_quality: 85,
             helper_passes_enabled: self.base_viewport.helper_passes,
-            post_process_enabled: self.base_decision.work_mode != ViewportWorkMode::EditFree,
+            post_process_enabled: self.base_post_process_enabled(),
             quality_tier: SceneStreamQualityTier::Full,
             preserve_control_ack: decision.preserve_control_ack,
         };
@@ -388,10 +429,15 @@ impl SceneStreamRuntimeScheduler {
             fps: self.base_fps,
             h264_quality: 85,
             helper_passes_enabled: self.base_viewport.helper_passes,
-            post_process_enabled: self.base_decision.work_mode != ViewportWorkMode::EditFree,
+            post_process_enabled: self.base_post_process_enabled(),
             quality_tier: SceneStreamQualityTier::Full,
             preserve_control_ack: true,
         }
+    }
+
+    fn base_post_process_enabled(&self) -> bool {
+        self.base_decision.work_mode != ViewportWorkMode::EditFree
+            && self.base_viewport.post_process.any_enabled()
     }
 }
 
@@ -720,6 +766,7 @@ fn spawn_scene_stream_producer(
         let mut frame_id = 0u64;
         let mut next_pts_us = 0i64;
         let mut next_frame_at = Instant::now();
+        let mut previous_skipped_intervals = 0u32;
         let mut last_sink_config: Option<PreviewPipelineConfig> = None;
         let mut stream_sink = match stream_registry.get_sender(&stream_id).await {
             Some(tx) => match scene_stream_sink_config(sink_settings) {
@@ -771,7 +818,7 @@ fn spawn_scene_stream_producer(
                             controller.camera_for_viewport(&viewport.scene_id, &viewport.viewport_id)
                         });
                     let render_camera = preview_camera.or(camera);
-                    let frame_meta = scene_stream_render_frame_meta(
+                    let mut frame_meta = scene_stream_render_frame_meta(
                         &stream_id,
                         &config,
                         &viewport,
@@ -781,6 +828,13 @@ fn spawn_scene_stream_producer(
                         load.dropped_frames,
                         model_preview_controller.as_deref(),
                     );
+                    let schedule_lag = frame_started.saturating_duration_since(next_frame_at);
+                    if let Some(diagnostics) = frame_meta.diagnostics.as_mut() {
+                        diagnostics.schedule_lag_ms = schedule_lag.as_secs_f32() * 1000.0;
+                        diagnostics.skipped_intervals = previous_skipped_intervals;
+                    }
+                    let mut current_frame_diagnostics = frame_meta.diagnostics.clone();
+                    let mut current_stream_submit_time_ms = 0.0;
                     if let Some(sink) = stream_sink.as_ref() {
                         if let Ok(sink_config) = scene_stream_sink_config(sink_settings) {
                             if last_sink_config.as_ref() != Some(&sink_config) {
@@ -825,11 +879,22 @@ fn spawn_scene_stream_producer(
                                     &viewport,
                                     load.dropped_frames,
                                 )?;
+                                let producer_frame_time_ms =
+                                    frame_started.elapsed().as_secs_f32() * 1000.0;
                                 if let neko_engine_types::PipelineOutput::Video(
                                     neko_engine_types::VideoOutput::GpuFrame(frame),
                                 ) = &mut output
                                 {
+                                    if let Some(diagnostics) = frame.diagnostics.as_mut() {
+                                        diagnostics.schedule_lag_ms =
+                                            schedule_lag.as_secs_f32() * 1000.0;
+                                        diagnostics.producer_frame_time_ms = producer_frame_time_ms;
+                                        diagnostics.skipped_intervals = previous_skipped_intervals;
+                                    }
                                     frame.meta = Some(meta);
+                                    if let Some(meta) = frame.meta.as_mut() {
+                                        meta.diagnostics = frame.diagnostics.clone();
+                                    }
                                 }
                                 Ok::<_, neko_engine_kernel::error::Error>(output)
                             }
@@ -837,8 +902,15 @@ fn spawn_scene_stream_producer(
                         .await;
 
                         match gpu_output {
-                            Ok(Ok(output)) => {
-                                match sink.submit(output) {
+                            Ok(Ok(mut output)) => {
+                                if let neko_engine_types::PipelineOutput::Video(
+                                    neko_engine_types::VideoOutput::GpuFrame(frame),
+                                ) = &mut output
+                                {
+                                    current_frame_diagnostics = frame.diagnostics.clone();
+                                }
+                                let submit_started = Instant::now();
+                                let submit_result = match sink.submit(output) {
                                     Ok(()) => true,
                                     Err(err) => {
                                         tracing::warn!(
@@ -849,7 +921,10 @@ fn spawn_scene_stream_producer(
                                         stream_sink = None;
                                         false
                                     }
-                                }
+                                };
+                                current_stream_submit_time_ms =
+                                    submit_started.elapsed().as_secs_f32() * 1000.0;
+                                submit_result
                             }
                             Ok(Err(err)) => {
                                 tracing::warn!(
@@ -870,7 +945,7 @@ fn spawn_scene_stream_producer(
                     };
 
                     if !gpu_submitted {
-                        let meta = frame_meta;
+                        let meta = frame_meta.clone();
                         let frame = tokio::task::spawn_blocking(move || {
                             let mut frame = service.capture_h264_keyframe(
                                 output_size,
@@ -910,7 +985,8 @@ fn spawn_scene_stream_producer(
                     }
 
                     let elapsed_ms = frame_started.elapsed().as_secs_f32() * 1000.0;
-                    let schedule_lag = frame_started.saturating_duration_since(next_frame_at);
+                    let mut scheduler_render_ms = elapsed_ms;
+                    let mut scheduler_encode_ms = 0.0;
                     next_frame_at = frame_started
                         .checked_add(stream_frame_duration)
                         .unwrap_or_else(Instant::now);
@@ -932,12 +1008,26 @@ fn spawn_scene_stream_producer(
                             schedule_lag.as_secs_f32() * 1000.0,
                             stream_frame_duration,
                         ));
+                    if let Some(meta_diagnostics) = current_frame_diagnostics.as_mut() {
+                        if meta_diagnostics.producer_frame_time_ms <= 0.0 {
+                            meta_diagnostics.producer_frame_time_ms = elapsed_ms;
+                        }
+                        meta_diagnostics.skipped_intervals = skipped_intervals;
+                        scheduler_render_ms = meta_diagnostics.render_time_ms
+                            + meta_diagnostics.convert_time_ms
+                            + meta_diagnostics.gpu_wait_time_ms;
+                        scheduler_encode_ms = meta_diagnostics
+                            .stream_submit_time_ms
+                            .max(current_stream_submit_time_ms)
+                            .max(meta_diagnostics.encode_time_ms);
+                    }
                     load = FrameLoadSample {
-                        gpu_frame_ms: elapsed_ms,
-                        encode_ms: 0.0,
+                        gpu_frame_ms: scheduler_render_ms,
+                        encode_ms: scheduler_encode_ms,
                         dropped_frames,
                     };
                     control_ack = scene_service.control_ack_health_sample(dropped_frames);
+                    previous_skipped_intervals = skipped_intervals;
                     let auxiliary_viewport_count = stream_registry
                         .get_session_streams(&config.session_id)
                         .await
@@ -1056,6 +1146,30 @@ fn scene_stream_gop_size(fps: f64) -> u32 {
     (normalize_stream_fps(fps) * SCENE_STREAM_LOW_LATENCY_GOP_SECONDS)
         .round()
         .clamp(1.0, 60.0) as u32
+}
+
+fn h264_level_idc(width: u32, height: u32, fps: f64) -> u8 {
+    let macroblocks_per_frame =
+        u64::from(width.div_ceil(16)).saturating_mul(u64::from(height.div_ceil(16)));
+    let macroblocks_per_second =
+        (macroblocks_per_frame as f64 * normalize_stream_fps(fps)).ceil() as u64;
+    if macroblocks_per_second <= 108_000 && macroblocks_per_frame <= 3_600 {
+        31
+    } else if macroblocks_per_second <= 245_760 && macroblocks_per_frame <= 8_192 {
+        41
+    } else if macroblocks_per_second <= 522_240 && macroblocks_per_frame <= 8_704 {
+        42
+    } else {
+        50
+    }
+}
+
+fn h264_level_string(level_idc: u8) -> String {
+    format!("{}.{}", level_idc / 10, level_idc % 10)
+}
+
+fn h264_codec_string(profile_idc: u8, constraint_flags: u8, level_idc: u8) -> String {
+    format!("avc1.{profile_idc:02x}{constraint_flags:02x}{level_idc:02x}")
 }
 
 fn dropped_frames_for_elapsed(elapsed_ms: f32, frame_duration: Duration) -> u32 {
@@ -1302,6 +1416,8 @@ impl Controller for ScenesController {
                     width,
                     height,
                     fps,
+                    allow_fps_degrade: opts.allow_fps_degrade,
+                    allow_quality_degrade: opts.allow_quality_degrade,
                     initial_revision: scene_revision,
                     initial_applied_seq: 0,
                 };
@@ -1309,6 +1425,14 @@ impl Controller for ScenesController {
                     0,
                     FrameLoadSample::default(),
                     ControlAckHealthSample::default(),
+                );
+                let initial_gop_size = scene_stream_gop_size(initial_runtime.fps);
+                let h264_level_idc = h264_level_idc(width, height, fps);
+                let h264_level = h264_level_string(h264_level_idc);
+                let h264_codec = h264_codec_string(
+                    H264_CONSTRAINED_BASELINE_PROFILE_IDC,
+                    H264_CONSTRAINED_BASELINE_FLAGS,
+                    h264_level_idc,
                 );
                 let stream_registry = self.stream_registry()?;
                 let session_id = producer_config.session_id.clone();
@@ -1357,17 +1481,20 @@ impl Controller for ScenesController {
                         "streamId": stream_id.as_str(),
                         "viewportId": opts.viewport_id,
                         "container": "h264-annexb",
-                        "codecString": "avc1.42001f",
-                        "profile": "baseline",
-                        "level": "3.1",
+                        "codecString": h264_codec,
+                        "profile": H264_REALTIME_PROFILE,
+                        "level": h264_level,
                         "frameHeader": "neko-h264-v1",
                         "width": width,
                         "height": height,
+                        "codedWidth": width,
+                        "codedHeight": height,
                         "fps": fps,
                         "colorSpace": opts.color_space,
                         "bitDepth": 8,
                         "toneMapping": opts.tone_mapping,
-                        "gopSize": 1,
+                        "gopSize": initial_gop_size,
+                        "latencyMode": "realtime",
                         "initialRevision": scene_revision,
                         "renderMode": render_mode_to_str(viewport_descriptor.render_mode),
                         "debugView": viewport_descriptor.debug_view.map(debug_view_to_str),
@@ -1376,6 +1503,8 @@ impl Controller for ScenesController {
                         "layerMask": opts.layer_mask,
                         "cameraRef": opts.camera_ref,
                         "postProcess": opts.post_process,
+                        "allowFpsDegrade": opts.allow_fps_degrade,
+                        "allowQualityDegrade": opts.allow_quality_degrade,
                         "qualityTier": initial_runtime.quality_tier.as_str(),
                         "scheduledFps": initial_runtime.fps,
                         "scheduledWidth": initial_runtime.width,
@@ -2111,11 +2240,18 @@ mod tests {
         assert!(data.get("initData").is_none());
         assert_eq!(data["width"], 1278);
         assert_eq!(data["height"], 720);
+        assert_eq!(data["codedWidth"], 1278);
+        assert_eq!(data["codedHeight"], 720);
+        assert_eq!(data["profile"], H264_REALTIME_PROFILE);
+        assert_eq!(data["level"], "3.1");
+        assert_eq!(data["codecString"], "avc1.42e01f");
+        assert_eq!(data["gopSize"], 15);
+        assert_eq!(data["latencyMode"], "realtime");
         assert_eq!(data["qualityTier"], "full");
         assert_eq!(data["scheduledWidth"], 1278);
         assert_eq!(data["scheduledHeight"], 720);
         assert_eq!(data["helperPassesEnabled"], true);
-        assert_eq!(data["postProcessEnabled"], true);
+        assert_eq!(data["postProcessEnabled"], false);
         assert_eq!(data["controlAckPreserved"], true);
         assert!(registry.exists(&StreamId::from_string(stream_id)).await);
         let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
@@ -2202,6 +2338,27 @@ mod tests {
         assert_eq!(config.fps, 30.0);
         assert_eq!(config.gop_size, 15);
         assert_eq!(config.bitrate, 7_372_800);
+    }
+
+    #[test]
+    fn scene_stream_h264_codec_string_matches_resolution_level() {
+        assert_eq!(
+            h264_codec_string(
+                H264_CONSTRAINED_BASELINE_PROFILE_IDC,
+                H264_CONSTRAINED_BASELINE_FLAGS,
+                h264_level_idc(1280, 720, 30.0),
+            ),
+            "avc1.42e01f"
+        );
+        assert_eq!(
+            h264_codec_string(
+                H264_CONSTRAINED_BASELINE_PROFILE_IDC,
+                H264_CONSTRAINED_BASELINE_FLAGS,
+                h264_level_idc(1920, 1080, 60.0),
+            ),
+            "avc1.42e02a"
+        );
+        assert_eq!(h264_level_string(h264_level_idc(1920, 1080, 60.0)), "4.2");
     }
 
     #[tokio::test]
@@ -2308,6 +2465,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
             initial_revision: 0,
             initial_applied_seq: 0,
         };
@@ -2365,6 +2524,8 @@ mod tests {
             width: 640,
             height: 480,
             fps: 30.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
             initial_revision: 0,
             initial_applied_seq: 0,
         };
@@ -2420,6 +2581,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
             initial_revision: 0,
             initial_applied_seq: 0,
         };
@@ -2440,13 +2603,112 @@ mod tests {
 
         assert_eq!(
             settings.quality_tier,
-            SceneStreamQualityTier::MainResolutionReduced
+            SceneStreamQualityTier::MainFpsReduced
         );
         assert_eq!(settings.width, 1280);
         assert_eq!(settings.height, 720);
         assert_eq!(settings.fps, 30.0);
         assert!(!settings.post_process_enabled);
         assert!(settings.preserve_control_ack);
+    }
+
+    #[test]
+    fn scene_stream_runtime_respects_locked_main_viewport_fps_policy() {
+        let config = SceneStreamProducerConfig {
+            session_id: "scene-scene-a".to_string(),
+            viewport: ViewportDescriptor {
+                viewport_id: "main".to_string(),
+                scene_id: "scene-a".to_string(),
+                render_mode: ViewportRenderMode::Pbr,
+                debug_view: None,
+                fps: 60,
+                color_space: SceneColorSpace::Srgb,
+                tone_mapping: SceneToneMapping::Aces,
+                post_process: ViewportPostProcess {
+                    bloom: true,
+                    ssao: true,
+                    taa: true,
+                },
+                layer_mask: None,
+                work_mode: ViewportWorkMode::EditParametric,
+                helper_passes: true,
+                lookdev: None,
+            },
+            width: 1280,
+            height: 720,
+            fps: 60.0,
+            allow_fps_degrade: false,
+            allow_quality_degrade: false,
+            initial_revision: 0,
+            initial_applied_seq: 0,
+        };
+        let runtime = SceneStreamRuntimeScheduler::new(&config);
+        let settings = runtime.settings(
+            0,
+            FrameLoadSample {
+                gpu_frame_ms: 6.0,
+                encode_ms: 1.0,
+                dropped_frames: 0,
+            },
+            ControlAckHealthSample {
+                ack_p95_ms: 2.0,
+                pending_command_acks: 0,
+                render_backlog_frames: 9,
+            },
+        );
+
+        assert_eq!(settings.quality_tier, SceneStreamQualityTier::Full);
+        assert_eq!(settings.fps, 60.0);
+        assert!(settings.post_process_enabled);
+
+        let viewport = runtime.viewport_descriptor_for_settings(settings);
+        assert_eq!(viewport.fps, 60);
+    }
+
+    #[test]
+    fn scene_stream_runtime_keeps_full_tier_when_post_process_was_not_requested() {
+        let config = SceneStreamProducerConfig {
+            session_id: "scene-scene-a".to_string(),
+            viewport: ViewportDescriptor {
+                viewport_id: "main".to_string(),
+                scene_id: "scene-a".to_string(),
+                render_mode: ViewportRenderMode::Pbr,
+                debug_view: None,
+                fps: 60,
+                color_space: SceneColorSpace::Srgb,
+                tone_mapping: SceneToneMapping::Aces,
+                post_process: ViewportPostProcess::default(),
+                layer_mask: None,
+                work_mode: ViewportWorkMode::EditParametric,
+                helper_passes: true,
+                lookdev: None,
+            },
+            width: 1920,
+            height: 1080,
+            fps: 60.0,
+            allow_fps_degrade: false,
+            allow_quality_degrade: false,
+            initial_revision: 0,
+            initial_applied_seq: 0,
+        };
+        let runtime = SceneStreamRuntimeScheduler::new(&config);
+        let settings = runtime.settings(
+            0,
+            FrameLoadSample {
+                gpu_frame_ms: 6.0,
+                encode_ms: 1.0,
+                dropped_frames: 0,
+            },
+            ControlAckHealthSample {
+                ack_p95_ms: 2.0,
+                pending_command_acks: 0,
+                render_backlog_frames: 12,
+            },
+        );
+
+        assert_eq!(settings.quality_tier, SceneStreamQualityTier::Full);
+        assert_eq!(settings.fps, 60.0);
+        assert!(!settings.post_process_enabled);
     }
 
     #[test]
@@ -2474,6 +2736,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
             initial_revision: 0,
             initial_applied_seq: 0,
         };
@@ -2541,6 +2805,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
             initial_revision: 0,
             initial_applied_seq: 0,
         };
@@ -2602,6 +2868,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 60.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
             initial_revision: 0,
             initial_applied_seq: 0,
         };
@@ -2692,6 +2960,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 30.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
             initial_revision: 0,
             initial_applied_seq: 120,
         };

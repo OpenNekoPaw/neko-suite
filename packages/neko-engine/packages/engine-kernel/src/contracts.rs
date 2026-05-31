@@ -89,11 +89,10 @@ pub mod services {
     pub use crate::services::gamepad::{GamepadEvent, GamepadInfo};
     pub use crate::services::midi::{MidiEvent, MidiPort};
     pub use crate::services::{
-        EffectRegistry, EnvironmentLoadDiagnostic, IAudioService, IEffectsService,
-        IExportService, IGamepadService, IImageService, IMidiService, INodeService,
-        IPuppetService, ISceneService, IStreamPlayback, ITaskService, ITimelineService,
-        IVideoService, PipelineSink, PuppetExportConfig, PuppetExportSummary,
-        PuppetRenderTiming, StreamSink,
+        EffectRegistry, EnvironmentLoadDiagnostic, IAudioService, IEffectsService, IExportService,
+        IGamepadService, IImageService, IMidiService, INodeService, IPuppetService, ISceneService,
+        IStreamPlayback, ITaskService, ITimelineService, IVideoService, PipelineSink,
+        PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming, StreamSink,
     };
 }
 

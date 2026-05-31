@@ -758,7 +758,14 @@ impl AssetCache {
         normal_view: Option<&wgpu::TextureView>,
         occlusion_view: Option<&wgpu::TextureView>,
     ) -> wgpu::BindGroup {
-        self.create_material_bind_group(uniform_buffer, None, None, normal_view, None, occlusion_view)
+        self.create_material_bind_group(
+            uniform_buffer,
+            None,
+            None,
+            normal_view,
+            None,
+            occlusion_view,
+        )
     }
 
     /// Create material bind group with optional textures
