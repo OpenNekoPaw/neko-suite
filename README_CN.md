@@ -87,7 +87,7 @@ Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 19 �
 
 | 模块            | 职能                                                                                                       | 状态      | 规模                                              |
 | --------------- | ---------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------- |
-| **neko-model**  | 3D 创作 - glTF/VRM 引擎流视口 + PBR/IBL + CSG + AI 捏脸预览场景（Face/Body/Motion/Voice）+ 粒子 + 关键帧动画 + IK 求解器 | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests      |
+| **neko-model**  | 3D 创作 - glTF/VRM Engine-streamed Route A 视口 + LookDev Clay/Debug + authored lights + Engine-owned environment + typed picking + CSG + AI 捏脸预览场景（Face/Body/Motion/Voice）+ 关键帧动画 + IK 求解器 | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests      |
 | **neko-sketch** | 2D 创作 - 压感手绘 8 笔刷 + 图层 + 选区 + AI 工具 + PSD 导入 + .nks 格式 + 2D 光照                         | Alpha 68% | 31.9K TS/TSX (178 files, 185 tests)               |
 | **neko-audio**  | 音频工作站 - DAW UI（TrackHeader/TrackLane/AudioClip）+ 12 种效果 + 频谱 + AI 降噪 + Agent 工具            | Alpha 82% | 11.1K TS/TSX (60 files, 52 tests)                 |
 | **neko-puppet** | 2D 骨骼动画 - `.nkp` v2 Native Puppet（Bone2D + BlendShape + ControlDriver）+ Live2D/MOC3 导入转换兼容 + Agent/导出首版 + 60fps 流 | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests     |
@@ -281,10 +281,10 @@ neko-suite/
 │   │       ├── extension/     # VSCode 扩展侧
 │   │       └── webview/       # React UI
 │   ├── neko-client/           # 流媒体客户端（H264/PCM/fMP4）+ EngineClient
-│   ├── neko-model/            # 3D 创作（R3F + PBR/IBL + CSG + 骨骼表情）
+│   ├── neko-model/            # 3D 创作（Engine-streamed Route A + LookDev/灯光/环境 + CSG + 骨骼表情）
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧（.gltf/.glb/.vrm/.nkm）
-│   │       └── webview/       # React Three Fiber UI
+│   │       └── webview/       # React 控制面 + Engine H.264 视口
 │   ├── neko-sketch/           # 2D 绘画（手绘 + 滤镜/粒子/场景 + 逐帧动画）
 │   │   └── packages/
 │   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nks）

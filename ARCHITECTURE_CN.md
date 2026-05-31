@@ -311,7 +311,7 @@ Extension Host
 | 跨语言架构 | [architecture/cross-language-architecture.md](./docs/architecture/cross-language-architecture.md) | Rust 引擎为数据模型权威，TS 仅负责 UI |
 | 共享包设计 | [architecture/shared-packages-design.md](./docs/architecture/shared-packages-design.md) | @neko/shared 通过子路径分层导出 |
 | 资产管理 | [architecture/asset-management-design.md](./docs/architecture/asset-management-design.md) | 统一 AssetManifest + Handler 注册表模式 |
-| 3D 能力 | *已内化* | bevy_ecs 独立 crate + runtime-scene + R3F 前端；GPU Skinning（双管线 skinned/non-skinned）；FABRIK/CCD/TwoBone IK 求解器；动画混合/Crossfade |
+| 3D 能力 | [architecture/adr-model-lookdev-scene-editing.md](./docs/architecture/adr-model-lookdev-scene-editing.md) | bevy_ecs 独立 crate + runtime-scene + Engine-streamed Route A 视口；LookDev Clay/Debug 模式、authored lights、Engine-owned environment、typed picking；Webview 不引入可见 R3F/Three.js 渲染器 |
 | 2D 能力 | *已内化* | neko-sketch（绘画）+ neko-puppet（`.nkp` v2 native Bone2D + BlendShape 骨骼动画，独立子插件）；runtime-puppet（bevy_ecs native 2D puppet runtime + MOC3/Live2D 导入转换兼容）；`.nkentity` v2 `puppet-bone` 绑定；Agent/资产/导出首版；WS 实时流供 neko-live |
 | Live Compositor | [architecture/adr-unified-viewport-protocol.md](./docs/architecture/adr-unified-viewport-protocol.md) | neko-live 通过 `ViewportShell` 消费引擎 Live Compositor H.264 合成流；设备只暴露授权 `sourceRef`，本地 R3F/Puppet/canvas 路径仅作为 non-authoritative fallback |
 | 角色编辑 | *已内化* | 2D/3D 捏脸、动作调整、绘制、建模能力评估；标准面部参数模板（3D 22 参数 / 2D 32 参数）；共享关键帧时间线；.nkm 项目格式；IK 骨骼交互编辑 |

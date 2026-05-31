@@ -87,7 +87,7 @@ Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 19 packag
 
 | Module          | Role                                                                                                                          | Status    | Scale                                         |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------- |
-| **neko-model**  | 3D creation - glTF/VRM viewport + PBR/IBL + CSG + face sculpting + particles + keyframe animation + IK solver                 | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests  |
+| **neko-model**  | 3D creation - glTF/VRM Engine-streamed Route A viewport + LookDev Clay/Debug + authored lights + Engine-owned environment + typed picking + CSG + face sculpting + keyframe animation + IK solver | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests  |
 | **neko-sketch** | 2D creation - pressure-sensitive drawing (8 brushes) + layers + selection + AI tools + PSD import + .nks format + 2D lighting | Alpha 68% | 31.9K TS/TSX (178 files, 185 tests)           |
 | **neko-audio**  | Audio workstation - DAW UI (TrackHeader/TrackLane/AudioClip) + 12 effect types + spectrum + AI denoising + Agent tools        | Alpha 82% | 11.1K TS/TSX (60 files, 52 tests)             |
 | **neko-puppet** | 2D skeletal animation - `.nkp` v2 Native Puppet (Bone2D + BlendShape + ControlDriver) + Live2D/MOC3 import compatibility + first Agent/export paths + 60fps streaming | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests |
@@ -287,10 +287,10 @@ neko-suite/
 │   │       ├── extension/     # VSCode extension side
 │   │       └── webview/       # React UI
 │   ├── neko-client/           # Streaming client (H264/PCM/fMP4) + EngineClient
-│   ├── neko-model/            # 3D creation (R3F + PBR/IBL + CSG + skeletal expressions)
+│   ├── neko-model/            # 3D creation (Engine-streamed Route A + LookDev/lights/environment + CSG + skeletal expressions)
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (.gltf/.glb/.vrm/.nkm)
-│   │       └── webview/       # React Three Fiber UI
+│   │       └── webview/       # React control surface + Engine H.264 viewport
 │   ├── neko-sketch/           # 2D drawing (painting + filters/particles/scene + frame animation)
 │   │   └── packages/
 │   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nks)
