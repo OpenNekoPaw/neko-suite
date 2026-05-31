@@ -1,6 +1,7 @@
 import type { SceneCapturePreview } from '@neko/neko-client';
 import type {
   EditorKeyframeTrack,
+  EnvironmentPatch,
   EnvironmentPlacement,
   SceneDelta,
   SceneSnapshot,
@@ -33,6 +34,7 @@ export type ExtensionMessage =
   | { type: 'projectLoaded'; snapshot: SceneSnapshot; editorState: unknown }
   | { type: 'liveExpressions'; expressions: Partial<Record<VRMExpressionPreset, number>> }
   | { type: 'environmentPlacement'; placement: EnvironmentPlacement }
+  | { type: 'environmentCommand'; patch: EnvironmentPatch; legacyPlacement?: EnvironmentPlacement }
   | { type: 'keyframeTracks'; tracks: EditorKeyframeTrack[] }
   | { type: 'keyframeAdded'; trackProperty: string; keyframeId: string }
   | { type: 'keyframeRemoved'; trackProperty: string; keyframeId: string };
@@ -69,6 +71,7 @@ export type WebviewMessage =
   | { type: 'model:import' }
   | { type: 'model:template'; templateId: string }
   | { type: 'model:dropFile'; name: string; data: string }
+  | { type: 'environment:pickPanorama' }
   | { type: 'createTextMesh'; text: string; fontSize: number; extrusionDepth: number }
   | {
       type: 'csgBoolean';

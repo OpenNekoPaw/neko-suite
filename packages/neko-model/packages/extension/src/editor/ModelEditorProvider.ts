@@ -5,7 +5,9 @@ import type {
   EngineSceneNodeSnapshot,
   EngineSceneSnapshot,
   EngineVec3,
+  EnvironmentPatch,
   EnvironmentPlacement,
+  LightPatch,
   ModelMaterialPatch,
   ModelNodeTransformPatch,
   ModelOperationResult,
@@ -206,10 +208,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
   useEnvironment(placement: EnvironmentPlacement): boolean {
     const panel = this.activeWebviewPanel;
     if (!panel) return false;
-    void this.postToPanel(panel, this.panelGeneration, {
-      type: 'environmentPlacement',
-      placement,
-    });
+    void this.postEnvironmentCommand(panel, this.panelGeneration, placement);
     return true;
   }
 
@@ -767,6 +766,28 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
         break;
       }
 
+      case 'environment:pickPanorama': {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          filters: { 'Environment Images': ['png', 'jpg', 'jpeg', 'webp', 'hdr', 'exr'] },
+        });
+        if (uris?.[0]) {
+          const uri = uris[0];
+          await this.postEnvironmentCommand(webviewPanel, generation, {
+            sourceAssetId: uri.fsPath,
+            sourceUri: uri.toString(),
+            mode: 'background-and-ibl',
+            rotationDeg: 0,
+            intensity: 1,
+            exposure: 0,
+            visibleAsBackground: true,
+          });
+        }
+        break;
+      }
+
       case 'model:template': {
         const templateId = message.templateId as string;
         const name = path.basename(document.uri.fsPath, '.nkm');
@@ -1198,6 +1219,77 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider 
     }
   }
 
+  private async postEnvironmentCommand(
+    panel: vscode.WebviewPanel,
+    generation: number,
+    placement: EnvironmentPlacement,
+  ): Promise<void> {
+    const patch = await this.environmentPatchFromPlacement(placement);
+    if (!this.isPanelCurrent(panel, generation)) return;
+    void this.postToPanel(panel, generation, {
+      type: 'environmentCommand',
+      patch,
+      legacyPlacement: placement,
+    });
+  }
+
+  private async environmentPatchFromPlacement(
+    placement: EnvironmentPlacement,
+  ): Promise<EnvironmentPatch> {
+    const source =
+      placement.sourceUri !== undefined
+        ? await this.registerEnvironmentSource(placement)
+        : {
+            id: placement.sourceAssetId,
+            uri: placement.sourceUri,
+            kind: 'asset-handle',
+          };
+
+    return {
+      environmentId: 'scene-environment',
+      source,
+      mode: placement.mode,
+      rotationDeg: placement.rotationDeg,
+      intensity: placement.intensity,
+      exposure: placement.exposure,
+      visibleAsBackground: placement.visibleAsBackground,
+    };
+  }
+
+  private async registerEnvironmentSource(
+    placement: EnvironmentPlacement,
+  ): Promise<NonNullable<EnvironmentPatch['source']>> {
+    const client = await this.ensureEngineClient();
+    const uri = vscode.Uri.parse(placement.sourceUri ?? placement.sourceAssetId);
+    if (!client || uri.scheme !== 'file') {
+      return {
+        id: placement.sourceAssetId,
+        uri: placement.sourceUri,
+        kind: 'asset-handle',
+      };
+    }
+
+    try {
+      const registered = await client.registerFile({
+        filePath: uri.fsPath,
+        purpose: 'preview',
+        mimeHint: 'image/*',
+      });
+      return {
+        id: registered.token,
+        uri: registered.rangeUrl,
+        kind: 'file-token',
+      };
+    } catch (error) {
+      this.logError('useEnvironment.registerFile', error);
+      return {
+        id: placement.sourceAssetId,
+        uri: placement.sourceUri,
+        kind: 'asset-handle',
+      };
+    }
+  }
+
   private rememberSceneSnapshot(
     snapshot: unknown,
     source: string,
@@ -1386,7 +1478,8 @@ function isEngineSceneNodeSnapshot(value: unknown): value is EngineSceneNodeSnap
   if (!isOptionalAssetHandle(value['mesh'])) return false;
   if (!isOptionalAssetHandle(value['material'])) return false;
   if (!isOptionalBounds3(value['bounds'])) return false;
-  return isOptionalBounds3(value['worldBounds']);
+  if (!isOptionalBounds3(value['worldBounds'])) return false;
+  return isOptionalLightPatch(value['light']);
 }
 
 function isEngineAnimationClipInfo(value: unknown): boolean {
@@ -1435,6 +1528,24 @@ function isOptionalBounds3(value: unknown): boolean {
 function isOptionalAssetHandle(value: unknown): boolean {
   if (value === undefined) return true;
   return isRecord(value) && isNonEmptyString(value['id']);
+}
+
+function isOptionalLightPatch(value: unknown): value is LightPatch | undefined {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  if (!isNonEmptyString(value['nodeId'])) return false;
+  if (!isNonEmptyString(value['kind'])) return false;
+  if (!isOptionalVec3(value['color'])) return false;
+  if (!isFiniteNumber(value['intensity'])) return false;
+  if (!isOptionalFiniteNumber(value['range'])) return false;
+  if (!isOptionalFiniteNumber(value['innerConeAngle'])) return false;
+  if (!isOptionalFiniteNumber(value['outerConeAngle'])) return false;
+  const shadow = value['shadow'];
+  if (shadow === undefined) return true;
+  if (!isRecord(shadow)) return false;
+  if (typeof shadow['enabled'] !== 'boolean') return false;
+  if (!isOptionalFiniteNumber(shadow['resolution'])) return false;
+  return isOptionalFiniteNumber(shadow['bias']);
 }
 
 function isOptionalVec3(value: unknown): boolean {

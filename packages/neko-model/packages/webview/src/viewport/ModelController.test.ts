@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ViewportEvent } from '@neko/shared';
 import {
   ModelController,
@@ -8,6 +8,9 @@ import {
 import { useModelStore } from '../stores/modelStore';
 import { LocalPredictionLayer } from '../scene/LocalPredictionLayer';
 import { AuthoringPerformanceMetrics } from '../scene/AuthoringPerformanceMetrics';
+
+let animationFrameId = 0;
+let animationFrameCallbacks = new Map<number, FrameRequestCallback>();
 
 describe('ModelController', () => {
   beforeEach(() => {
@@ -24,6 +27,20 @@ describe('ModelController', () => {
       authoringMetrics: new AuthoringPerformanceMetrics(),
       authoringMetricsSnapshot: new AuthoringPerformanceMetrics().snapshot(),
     });
+    animationFrameId = 0;
+    animationFrameCallbacks = new Map();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      animationFrameId += 1;
+      animationFrameCallbacks.set(animationFrameId, callback);
+      return animationFrameId;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      animationFrameCallbacks.delete(id);
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('sends selection as a ViewportProtocol command and applies compatible ack payload', async () => {
@@ -123,11 +140,70 @@ describe('ModelController', () => {
     });
 
     expect(socket.query).toHaveBeenCalledWith(
-      'hitTest',
-      expect.objectContaining({ sceneId: 'scene-a', viewportId: 'main', x: 0.5, y: 0.5 }),
+      'selectionQuery',
+      expect.objectContaining({
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        x: 0.5,
+        y: 0.5,
+        mask: ['node', 'submesh', 'materialSlot', 'primitive'],
+        mode: 'replace',
+      }),
     );
     expect(client.dispatchViewportCommand).not.toHaveBeenCalled();
     expect(onSelectNode).toHaveBeenCalledWith('node-1');
+  });
+
+  it('discards stale scene-control selection query results', async () => {
+    const onSelectNode = vi.fn();
+    const socket = {
+      query: vi.fn(async () => ({
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        revision: 2,
+        nodeId: 'node-1',
+      })),
+    };
+    const client = {
+      dispatchViewportCommand: vi.fn(),
+    };
+    const controller = new ModelController(
+      {
+        enginePort: 1234,
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        sceneRevision: 3,
+        sceneControlSocket: socket as never,
+        onSelectNode,
+        getViewportRect: () => ({ width: 200, height: 100 }),
+      },
+      client as never,
+    );
+
+    await controller.onPointerDown({
+      kind: 'pointer',
+      sceneId: 'scene-a',
+      viewportId: 'main',
+      timestamp: 100,
+      modifiers: { alt: false, ctrl: false, meta: false, shift: false },
+      phase: 'down',
+      pointerId: 1,
+      pointerType: 'mouse',
+      position: [100, 50],
+      buttons: 1,
+      button: 0,
+    });
+
+    expect(socket.query).toHaveBeenCalledWith(
+      'selectionQuery',
+      expect.objectContaining({
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        sceneRevision: 3,
+        mask: ['node', 'submesh', 'materialSlot', 'primitive'],
+      }),
+    );
+    expect(onSelectNode).not.toHaveBeenCalled();
   });
 
   it('creates transform prediction overlays and reconciles transform command ack', async () => {
@@ -272,6 +348,7 @@ describe('ModelController', () => {
 
     await controller.onPointerDown(pointerInput([100, 50]));
     controller.onPointerMove(pointerInput([130, 40]));
+    flushAnimationFrames();
     expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(1);
     expect(useModelStore.getState().localPredictions).toHaveLength(1);
     await controller.onPointerUp(pointerInput([130, 40]));
@@ -347,11 +424,83 @@ describe('ModelController', () => {
 
     await controller.onPointerDown(pointerInput([100, 50]));
     controller.onPointerMove(pointerInput([120, 60]));
+    flushAnimationFrames();
     await controller.onPointerUp(pointerInput([120, 60]));
 
     expect(socket.sendCommand).toHaveBeenCalledOnce();
     expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(0);
     expect(useModelStore.getState().localPredictions).toHaveLength(0);
+  });
+
+  it('coalesces viewport gizmo drag predictions to one animation-frame update', async () => {
+    useModelStore.setState({
+      selectedNodeId: 'node-1',
+      sceneNodes: [
+        {
+          nodeId: 'node-1',
+          name: 'Node 1',
+          children: [],
+          visible: true,
+          transform: {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 1, y: 1, z: 1 },
+          },
+        },
+      ],
+      viewportOverlay: {
+        viewportId: 'main',
+        revision: 3,
+        selectedNodeIds: ['node-1'],
+        gizmoAnchors: [
+          {
+            nodeId: 'node-1',
+            screenPosition: { x: 0.5, y: 0.5 },
+          },
+        ],
+      },
+    });
+    const controller = new ModelController(
+      {
+        enginePort: 1234,
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        sceneRevision: 3,
+        sceneControlSocket: {
+          sendCommand: vi.fn(async (envelope) => ({
+            seq: envelope.seq,
+            appliedSeq: envelope.seq,
+            baseRevision: envelope.baseRevision,
+            revision: 4,
+            status: 'applied',
+          })),
+        } as never,
+        getViewportRect: () => ({ width: 200, height: 100 }),
+      },
+      { dispatchViewportCommand: vi.fn() } as never,
+    );
+
+    await controller.onPointerDown(pointerInput([100, 50]));
+    controller.onPointerMove(pointerInput([110, 50]));
+    controller.onPointerMove(pointerInput([120, 40]));
+    controller.onPointerMove(pointerInput([150, 20]));
+
+    expect(animationFrameCallbacks.size).toBe(1);
+    expect(useModelStore.getState().pendingTransformPredictions[0]?.position).toEqual({
+      x: 0,
+      y: 0,
+      z: 0,
+    });
+
+    flushAnimationFrames();
+
+    expect(useModelStore.getState().pendingTransformPredictions).toHaveLength(1);
+    expect(useModelStore.getState().pendingTransformPredictions[0]?.position).toEqual({
+      x: 0.5,
+      y: 0.3,
+      z: 0,
+    });
+    expect(useModelStore.getState().localPredictions).toHaveLength(1);
   });
 
   it('routes camera commands through scene-control websocket when a socket is provided', async () => {
@@ -624,4 +773,10 @@ function pointerInput(position: readonly [number, number]) {
     buttons: 1,
     button: 0,
   };
+}
+
+function flushAnimationFrames(): void {
+  const callbacks = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+  callbacks.forEach((callback) => callback(performance.now()));
 }

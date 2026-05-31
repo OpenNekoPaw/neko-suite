@@ -1,4 +1,18 @@
-import type { SceneCommand, SceneCommandAck, SceneCommandEnvelope } from '@neko/shared';
+import {
+  createEnvironmentPayload,
+  createLightUpdatePayload,
+  createNodeRemovePayload,
+} from '@neko/neko-client';
+import type {
+  EnvironmentPatch,
+  LightPatch,
+  SceneCommand,
+  SceneCommandAck,
+  SceneCommandEnvelope,
+  SelectionQuery,
+  SelectionQueryResult,
+  ViewportLookDevSettings,
+} from '@neko/shared';
 import type { SceneControlSocket } from '@neko/neko-client';
 import type { EditableNodeTransform } from './SceneEditingTypes';
 
@@ -39,6 +53,10 @@ export class SceneDocument {
     return new LightHandle(this.context, nodeId, this.context.getRevision());
   }
 
+  environment(environmentId = 'scene-environment'): EnvironmentHandle {
+    return new EnvironmentHandle(this.context, environmentId, this.context.getRevision());
+  }
+
   camera(cameraId: string): CameraHandle {
     return new CameraHandle(this.context, cameraId, this.context.getRevision());
   }
@@ -49,6 +67,29 @@ export class SceneDocument {
 
   query<T>(query: string, payload: Record<string, unknown>): Promise<T> {
     return this.context.socket.query(query, payload) as Promise<T>;
+  }
+
+  select(query: SelectionQuery): Promise<SelectionQueryResult> {
+    return this.query<SelectionQueryResult>('selectionQuery', {
+      viewportId: query.viewportId,
+      x: query.x,
+      y: query.y,
+      mask: query.mask,
+      mode: query.mode,
+    });
+  }
+
+  updateViewportSettings(
+    viewportId: string,
+    settings: ViewportLookDevSettings,
+  ): Promise<SceneCommandAck> {
+    return sendEnvelope(
+      this.context,
+      createEnvelope(this.context, 'viewport-settings-update', {
+        viewportId,
+        settings,
+      }),
+    );
   }
 }
 
@@ -80,6 +121,18 @@ export class SceneNodeHandle {
         nodeId: this.nodeId,
         visible,
       }),
+    );
+  }
+
+  remove(cascade = false): Promise<SceneCommandAck> {
+    assertHandleFresh(this.context, this.revision);
+    return sendEnvelope(
+      this.context,
+      createEnvelope(
+        this.context,
+        'node-remove',
+        createNodeRemovePayload({ nodeId: this.nodeId, cascade }),
+      ),
     );
   }
 
@@ -126,6 +179,60 @@ export class LightHandle {
       createEnvelope(this.context, 'light-update', {
         nodeId: this.nodeId,
         params,
+      }),
+    );
+  }
+
+  update(patch: Omit<LightPatch, 'nodeId'>): Promise<SceneCommandAck> {
+    assertHandleFresh(this.context, this.revision);
+    return sendEnvelope(
+      this.context,
+      createEnvelope(
+        this.context,
+        'light-update',
+        createLightUpdatePayload({ nodeId: this.nodeId, ...patch }),
+      ),
+    );
+  }
+}
+
+export class EnvironmentHandle {
+  constructor(
+    private readonly context: SceneDocumentContext,
+    readonly environmentId: string,
+    readonly revision: number = context.getRevision(),
+  ) {}
+
+  set(patch: Omit<EnvironmentPatch, 'environmentId'>): Promise<SceneCommandAck> {
+    assertHandleFresh(this.context, this.revision);
+    return sendEnvelope(
+      this.context,
+      createEnvelope(
+        this.context,
+        'environment-set',
+        createEnvironmentPayload({ environmentId: this.environmentId, ...patch }),
+      ),
+    );
+  }
+
+  update(patch: Omit<EnvironmentPatch, 'environmentId'>): Promise<SceneCommandAck> {
+    assertHandleFresh(this.context, this.revision);
+    return sendEnvelope(
+      this.context,
+      createEnvelope(
+        this.context,
+        'environment-update',
+        createEnvironmentPayload({ environmentId: this.environmentId, ...patch }),
+      ),
+    );
+  }
+
+  clear(): Promise<SceneCommandAck> {
+    assertHandleFresh(this.context, this.revision);
+    return sendEnvelope(
+      this.context,
+      createEnvelope(this.context, 'environment-clear', {
+        environmentId: this.environmentId,
       }),
     );
   }

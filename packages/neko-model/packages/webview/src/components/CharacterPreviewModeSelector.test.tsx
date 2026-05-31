@@ -8,6 +8,35 @@ import { CharacterPreviewModeSelector } from './CharacterPreviewModeSelector';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
+vi.mock('../i18n/I18nContext', () => ({
+  useTranslation: () => ({
+    t: (key: string) => {
+      const messages: Record<string, string> = {
+        'characterPreview.aria.modes': '角色预览模式',
+        'characterPreview.aria.playback': '预览播放控制',
+        'characterPreview.mode.face': '面部',
+        'characterPreview.mode.full-body': '全身',
+        'characterPreview.mode.motion': '动作',
+        'characterPreview.mode.voice-pack': '语音',
+        'characterPreview.modeTitle.face': '面部近景预览',
+        'characterPreview.modeTitle.full-body': '全身预览',
+        'characterPreview.modeTitle.motion': '动作检查预览',
+        'characterPreview.modeTitle.voice-pack': '语音表演预览',
+        'characterPreview.status.pending': '处理中',
+        'characterPreview.playbackStatus.playing': '播放中',
+        'characterPreview.play': '播放',
+        'characterPreview.pause': '暂停',
+        'characterPreview.stop': '停止',
+        'characterPreview.reset': '重置',
+        'characterPreview.resetTitle': '重置预览相机',
+        'characterPreview.playbackTitle.pause': '暂停预览',
+        'characterPreview.playbackTitle.stop': '停止预览',
+      };
+      return messages[key] ?? key;
+    },
+  }),
+}));
+
 let host: HTMLDivElement;
 let root: Root;
 
@@ -28,11 +57,12 @@ describe('CharacterPreviewModeSelector', () => {
   it('renders the four AI character preview modes as a compact selector', () => {
     renderSelector({ state: appliedState('face') });
 
-    expect(tabLabels()).toEqual(['Face', 'Body', 'Motion', 'Voice']);
-    expect(host.querySelector('[aria-label="AI character preview modes"]')).not.toBeNull();
+    expect(tabLabels()).toEqual(['面部', '全身', '动作', '语音']);
+    expect(host.querySelector('[aria-label="角色预览模式"]')).not.toBeNull();
     expect(host.querySelector<HTMLButtonElement>('button[aria-selected="true"]')?.textContent).toBe(
-      'Face',
+      '面部',
     );
+    expect(buttonByText('面部').title).toBe('面部近景预览');
   });
 
   it('dispatches mode changes and camera reset from the selector', () => {
@@ -45,8 +75,8 @@ describe('CharacterPreviewModeSelector', () => {
     });
 
     act(() => {
-      buttonByText('Motion').click();
-      buttonByText('Reset').click();
+      buttonByText('动作').click();
+      buttonByText('重置').click();
     });
 
     expect(onModeChange).toHaveBeenCalledWith('motion');
@@ -72,10 +102,10 @@ describe('CharacterPreviewModeSelector', () => {
       disabled: true,
     });
 
-    expect(host.textContent).toContain('Pending');
+    expect(host.textContent).toContain('处理中');
     expect(host.textContent).toContain('No compatible voice pack is bound to this character.');
-    expect(buttonByText('Reset').disabled).toBe(true);
-    expect(host.querySelector('[aria-label="Preview playback controls"]')).toBeNull();
+    expect(buttonByText('重置').disabled).toBe(true);
+    expect(host.querySelector('[aria-label="预览播放控制"]')).toBeNull();
   });
 
   it('shows playback controls only when engine reports compatible playback', () => {
@@ -92,8 +122,8 @@ describe('CharacterPreviewModeSelector', () => {
     });
 
     act(() => {
-      buttonByText('Pause').click();
-      buttonByText('Stop').click();
+      buttonByText('暂停').click();
+      buttonByText('停止').click();
     });
 
     expect(onPlaybackControl).toHaveBeenNthCalledWith(1, 'pause');
@@ -127,7 +157,9 @@ function renderSelector({
   });
 }
 
-function appliedState(modeId: NonNullable<CharacterPreviewUiState['appliedMode']>): CharacterPreviewUiState {
+function appliedState(
+  modeId: NonNullable<CharacterPreviewUiState['appliedMode']>,
+): CharacterPreviewUiState {
   const cameraPreset =
     modeId === 'face'
       ? 'face-closeup'

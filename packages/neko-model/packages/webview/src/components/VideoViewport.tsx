@@ -1,5 +1,11 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { RenderFrameMeta, SceneDelta, ViewportDescriptor } from '@neko/shared';
+import type {
+  RenderFrameMeta,
+  RenderStreamDescriptor,
+  SceneDelta,
+  ViewportDescriptor,
+  ViewportRenderMode,
+} from '@neko/shared';
 import type { ViewportMenuItem, ViewportFrameMeta, ViewportSerializableRecord } from '@neko/shared';
 import { OverlayRenderer, ViewportShell } from '@neko/ui';
 import {
@@ -43,6 +49,8 @@ const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 1.5;
 const VIEWPORT_DIMENSION_BUCKET = 16;
 const MIN_VISIBLE_VIEWPORT_DIMENSION = 64;
 const VIEWPORT_STREAM_FPS = 60;
+const LOOKDEV_PENDING_DELAY_MS = 250;
+const LOOKDEV_RETRY_DELAY_MS = 1500;
 
 type ViewportStreamSize = SceneViewportResolution;
 
@@ -114,6 +122,7 @@ function isViewportStreamSizeReady(size: ViewportStreamSize | null): size is Vie
 
 function createViewportDescriptor(
   sceneId: string,
+  renderMode: ViewportRenderMode,
   cameraPosition: [number, number, number],
   cameraTarget: [number, number, number],
   streamSize: ViewportStreamSize,
@@ -122,7 +131,7 @@ function createViewportDescriptor(
   return {
     viewportId: MAIN_VIEWPORT_ID,
     sceneId,
-    renderMode: 'pbr',
+    renderMode,
     resolution: {
       width: streamSize.width,
       height: streamSize.height,
@@ -137,6 +146,11 @@ function createViewportDescriptor(
       taa: false,
     },
     helperPassesEnabled,
+    lookdev: {
+      renderMode,
+      helperPassesEnabled,
+      showGrid: helperPassesEnabled,
+    },
     workMode: 'edit-parametric',
     cameraRef: {
       kind: 'editorCamera',
@@ -183,6 +197,17 @@ export function VideoViewport({
   const [retryToken, setRetryToken] = useState(0);
   const [viewportSize, setViewportSize] = useState<ViewportStreamSize | null>(null);
   const helperPassesEnabled = useModelStore((state) => state.showViewportGrid);
+  const sceneNodes = useModelStore((state) => state.sceneNodes);
+  const lightNodeIds = useMemo(
+    () =>
+      sceneNodes
+        .filter((node) => node.visible !== false && (node.kind === 'light' || node.light))
+        .map((node) => node.nodeId),
+    [sceneNodes],
+  );
+  const requestedLookDevMode = useModelStore((state) => state.lookDev.requestedMode);
+  const appliedLookDevMode = useModelStore((state) => state.lookDev.appliedMode);
+  const selectedRenderMode = requestedLookDevMode ?? appliedLookDevMode;
   const modelController = useMemo(
     () =>
       new ModelController({
@@ -266,11 +291,23 @@ export function VideoViewport({
 
   useEffect(() => {
     let disposed = false;
+    let pendingTimer: number | null = null;
+    let retryTimer: number | null = null;
     const engineClient = new EngineClient(enginePort);
-    setHasEngineFrame(false);
     setRouteAUnavailable(false);
     setRouteAUnavailableReason(null);
     frameMetaRef.current = null;
+
+    const clearLookDevTimers = () => {
+      if (pendingTimer !== null) {
+        window.clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    };
 
     const closePendingPresentation = () => {
       const pending = pendingPresentationRef.current;
@@ -290,6 +327,7 @@ export function VideoViewport({
       if (typeof VideoDecoder === 'undefined') {
         setRouteAUnavailable(true);
         setRouteAUnavailableReason(modelErrorMessage('error.webCodecsUnavailable'));
+        useModelStore.getState().rejectLookDevMode(modelErrorMessage('error.webCodecsUnavailable'));
         return;
       }
       if (!visible || !isViewportStreamSizeReady(viewportSize)) {
@@ -310,9 +348,28 @@ export function VideoViewport({
 
       try {
         const store = useModelStore.getState();
+        const requestedMode = store.lookDev.requestedMode;
+        const shouldReconcileLookDev = requestedMode === selectedRenderMode;
+        if (shouldReconcileLookDev) {
+          pendingTimer = window.setTimeout(() => {
+            const current = useModelStore.getState().lookDev;
+            if (current.requestedMode === selectedRenderMode) {
+              useModelStore.getState().markLookDevPending(selectedRenderMode);
+            }
+          }, LOOKDEV_PENDING_DELAY_MS);
+          retryTimer = window.setTimeout(() => {
+            const current = useModelStore.getState().lookDev;
+            if (current.requestedMode === selectedRenderMode && current.status !== 'applied') {
+              useModelStore
+                .getState()
+                .timeoutLookDevMode(modelErrorMessage('error.engineStreamUnavailable'));
+            }
+          }, LOOKDEV_RETRY_DELAY_MS);
+        }
         const stream = await engineClient.startSceneRenderStream(
           createViewportDescriptor(
             sceneId,
+            selectedRenderMode,
             store.getCameraPosition(),
             store.cameraTarget,
             viewportSize,
@@ -326,6 +383,20 @@ export function VideoViewport({
 
         streamIdRef.current = stream.descriptor.streamId;
         postMessage({ type: 'streamStarted', streamId: stream.descriptor.streamId });
+        const confirmedMode = renderModeFromStreamDescriptor(stream.descriptor);
+        if (shouldReconcileLookDev && confirmedMode) {
+          if (confirmedMode === selectedRenderMode) {
+            clearLookDevTimers();
+            useModelStore.getState().applyLookDevMode(confirmedMode);
+          } else {
+            clearLookDevTimers();
+            useModelStore
+              .getState()
+              .rejectLookDevMode(
+                `Engine applied ${confirmedMode} instead of ${selectedRenderMode}`,
+              );
+          }
+        }
 
         const presentLatestFrame = () => {
           presentationFrameRef.current = null;
@@ -368,6 +439,11 @@ export function VideoViewport({
               frameMetaRef.current = drawnMeta;
               const store = useModelStore.getState();
               store.recordRenderFrameMeta(drawnMeta);
+              const frameMode = renderModeFromFrameMeta(drawnMeta);
+              if (frameMode === selectedRenderMode) {
+                clearLookDevTimers();
+                store.applyLookDevMode(frameMode);
+              }
               if (drawnMeta.appliedSeq > 0) {
                 store.commitPredictionsThrough(drawnMeta.appliedSeq);
                 store.commitLocalPredictionsThrough(drawnMeta.appliedSeq);
@@ -428,6 +504,11 @@ export function VideoViewport({
           });
           setRouteAUnavailable(true);
           setRouteAUnavailableReason(modelErrorMessage('error.engineStreamUnavailable'));
+          if (useModelStore.getState().lookDev.requestedMode === selectedRenderMode) {
+            useModelStore
+              .getState()
+              .rejectLookDevMode(modelErrorMessage('error.engineStreamUnavailable'));
+          }
         }
       }
     };
@@ -436,6 +517,7 @@ export function VideoViewport({
 
     return () => {
       disposed = true;
+      clearLookDevTimers();
       cancelPendingPresentation();
       streamClientRef.current?.dispose();
       streamClientRef.current = null;
@@ -449,7 +531,15 @@ export function VideoViewport({
         );
       }
     };
-  }, [enginePort, retryToken, sceneId, viewportSize, helperPassesEnabled, visible]);
+  }, [
+    enginePort,
+    retryToken,
+    sceneId,
+    viewportSize,
+    helperPassesEnabled,
+    visible,
+    selectedRenderMode,
+  ]);
 
   const overlayFrameMeta = React.useMemo<RenderFrameMeta | null>(() => {
     const streamId = streamIdRef.current;
@@ -518,27 +608,6 @@ export function VideoViewport({
     [modelController, sceneId, sceneRevision, viewportSize, onSceneControlError],
   );
 
-  if (routeAUnavailable) {
-    return (
-      <div
-        ref={viewportRef}
-        className="model-viewport-frame relative h-full w-full overflow-hidden"
-      >
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-[var(--model-fg-secondary)]">
-          <span>{routeAUnavailableReason ?? modelErrorMessage('error.routeAUnavailable')}</span>
-          <button
-            className="pointer-events-auto model-btn-secondary px-2 py-1"
-            onClick={() => setRetryToken((token) => token + 1)}
-          >
-            {modelErrorMessage('error.retry')}
-          </button>
-        </div>
-        <ViewportGuideOverlay visible={hudVisible} />
-        <div className="pointer-events-none absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-amber-400" />
-      </div>
-    );
-  }
-
   return (
     <div ref={viewportRef} className="model-viewport-frame relative h-full w-full overflow-hidden">
       <ViewportShell
@@ -562,6 +631,7 @@ export function VideoViewport({
               sceneRevision={sceneRevision}
               resolution={isViewportStreamSizeReady(viewportSize) ? viewportSize : null}
               selectedNodeId={selectedNodeId}
+              lightNodeIds={lightNodeIds}
               socket={sceneControlSocket}
               onSelectNode={onSelectNode}
               onQueryError={(error) => onSceneControlError(error.message)}
@@ -585,8 +655,62 @@ export function VideoViewport({
         )}
         renderToolbar={() => null}
       />
+      {routeAUnavailable ? (
+        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 bg-[rgba(0,0,0,0.24)] text-xs text-[var(--model-fg-secondary)]">
+          <span>{routeAUnavailableReason ?? modelErrorMessage('error.routeAUnavailable')}</span>
+          <button
+            className="pointer-events-auto model-btn-secondary px-2 py-1"
+            onClick={() => setRetryToken((token) => token + 1)}
+          >
+            {modelErrorMessage('error.retry')}
+          </button>
+        </div>
+      ) : null}
+      {routeAUnavailable ? (
+        <div className="pointer-events-none absolute right-3 top-3 z-40 h-2.5 w-2.5 rounded-full bg-amber-400" />
+      ) : null}
     </div>
   );
+}
+
+function renderModeFromStreamDescriptor(
+  descriptor: RenderStreamDescriptor,
+): ViewportRenderMode | null {
+  return descriptor.renderMode ?? descriptor.lookdev?.renderMode ?? null;
+}
+
+function renderModeFromFrameMeta(meta: RenderFrameMeta): ViewportRenderMode | null {
+  const value: unknown = meta;
+  if (!isRecord(value)) return null;
+  const direct = readViewportRenderMode(value['renderMode']);
+  if (direct) return direct;
+  const lookdev = value['lookdev'];
+  if (isRecord(lookdev)) {
+    const mode = readViewportRenderMode(lookdev['renderMode']);
+    if (mode) return mode;
+  }
+  const diagnostics = value['diagnostics'];
+  return isRecord(diagnostics) ? readViewportRenderMode(diagnostics['renderMode']) : null;
+}
+
+function readViewportRenderMode(value: unknown): ViewportRenderMode | null {
+  switch (value) {
+    case 'pbr':
+    case 'clay':
+    case 'wireframe':
+    case 'unlit':
+    case 'normal':
+    case 'depth':
+    case 'lightComplexity':
+    case 'shadowAtlas':
+      return value;
+    default:
+      return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function captureMaterialPreview(

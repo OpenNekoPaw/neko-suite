@@ -7,12 +7,20 @@ import {
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
 import { useTranslation } from './i18n/I18nContext';
-import type { CharacterPreviewModeId } from '@neko/shared';
+import type {
+  CharacterPreviewModeId,
+  EnvironmentPatch,
+  LightPatch,
+  SelectionTarget,
+  ViewportRenderMode,
+} from '@neko/shared';
 import { ModelSideToolbar } from './components/Toolbar';
 import { VideoViewport } from './components/VideoViewport';
 import { AnimationPlayer } from './components/AnimationPlayer';
 import { SceneTree } from './components/SceneTree';
 import { TransformPanel } from './components/panels/TransformPanel';
+import { EnvironmentPanel } from './components/panels/EnvironmentPanel';
+import { LightInspectorPanel } from './components/panels/LightInspectorPanel';
 import { FaceEditorPanel } from './components/face';
 import { LatencyTester } from './components/LatencyTester';
 import { ExpressionPresetPanel } from './components/vrm';
@@ -23,7 +31,10 @@ import { ShapeCreatorPanel } from './components/shape-creator';
 import { SculptBrushPanel } from './components/sculpt/SculptBrushPanel';
 import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
 import { CharacterPreviewModeSelector } from './components/CharacterPreviewModeSelector';
+import { LookDevControls } from './components/LookDevControls';
+import { SelectionModeControls } from './components/SelectionModeControls';
 import { useModelStore } from './stores/modelStore';
+import type { ModelSelectionWorkflow } from './stores/modelStore';
 import type {
   AnimationClipInfo,
   ExtensionMessage,
@@ -37,7 +48,11 @@ import { postMessage } from '@neko/shared/vscode';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import { usePersistedResize, useResizable } from '@neko/ui/hooks';
 import { ResizeHandle } from '@neko/ui/primitives';
-import { EngineClient, type SceneControlSocket } from '@neko/neko-client';
+import {
+  EngineClient,
+  type ModelLookDevSceneControlCapabilities,
+  type SceneControlSocket,
+} from '@neko/neko-client';
 import { ModelController } from './viewport/ModelController';
 import type { EditableNodeTransform } from './scene/SceneEditingTypes';
 import type { LocalPredictionInput } from './scene/LocalPredictionLayer';
@@ -49,13 +64,29 @@ import {
   type ModelKeyboardState,
 } from './hooks/useModelKeyboardController';
 
+const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities = {
+  renderModes: ['pbr'],
+  liveViewportSettings: false,
+  clay: false,
+  authoredLights: false,
+  environment: false,
+  typedPicking: false,
+  characterRegions: false,
+};
+
+type SceneCommandType = NonNullable<SceneCommandEnvelope['command']>['type'];
+
 /**
  * Root application component for the 3D Model Editor webview.
  * Uses Zustand store for all state management.
  */
 export function App(): React.JSX.Element {
   const sceneControlRef = useRef<SceneControlSocket | null>(null);
+  const sendSceneCommandRef = useRef<
+    ((type: SceneCommandType, payload: Record<string, unknown>) => void) | null
+  >(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
   const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
     rootRef,
     false,
@@ -100,6 +131,14 @@ export function App(): React.JSX.Element {
   const isSculptBrushOpen = useModelStore((s) => s.isSculptBrushOpen);
   const isKeyframeEditorOpen = useModelStore((s) => s.isKeyframeEditorOpen);
   const characterPreview = useModelStore((s) => s.characterPreview);
+  const lookDev = useModelStore((s) => s.lookDev);
+  const lookDevCapabilities = useModelStore((s) => s.lookDevCapabilities);
+  const helperPassesEnabled = useModelStore((s) => s.showViewportGrid);
+  const environmentState = useModelStore((s) => s.environmentState);
+  const environmentDiagnostics = useModelStore((s) => s.environmentDiagnostics);
+  const selectedTargets = useModelStore((s) => s.selectedTargets);
+  const selectionWorkflow = useModelStore((s) => s.selectionWorkflow);
+  const setSelectionWorkflow = useModelStore((s) => s.setSelectionWorkflow);
 
   const setQualityPreview = useModelStore((s) => s.setQualityPreview);
   const setEnvironmentPlacement = useModelStore((s) => s.setEnvironmentPlacement);
@@ -195,6 +234,18 @@ export function App(): React.JSX.Element {
     [setSceneControlStatus],
   );
 
+  const sendSceneCommandFromStore = useCallback(
+    (type: SceneCommandType, payload: Record<string, unknown>) => {
+      const sender = sendSceneCommandRef.current;
+      if (!sender) {
+        setSceneControlStatus('error', modelErrorMessage('error.sceneControlDisconnected'));
+        return;
+      }
+      sender(type, payload);
+    },
+    [setSceneControlStatus],
+  );
+
   const applyWebviewVisibility = useCallback(
     (visible: boolean) => {
       webviewVisibleRef.current = visible;
@@ -269,6 +320,18 @@ export function App(): React.JSX.Element {
           setSceneControlSocket(null);
           setSceneControlStatus('connecting');
           const client = new EngineClient(message.port);
+          void client
+            .getModelLookDevSceneControlCapabilities()
+            .then((capabilities) => {
+              useModelStore.getState().setLookDevCapabilities(capabilities);
+            })
+            .catch((error: unknown) => {
+              useModelStore.getState().setLookDevCapabilities(FALLBACK_MODEL_LOOKDEV_CAPABILITIES);
+              void webviewErrorHandler.handleError(toError(error), {
+                showToUser: false,
+                severity: 'warning',
+              });
+            });
           const socket = client.openSceneControlSocket({
             sceneId: useModelStore.getState().sceneId,
             onReady: (ready) => {
@@ -411,6 +474,28 @@ export function App(): React.JSX.Element {
           break;
         case 'environmentPlacement':
           setEnvironmentPlacement(message.placement);
+          if (message.placement.sourceAssetId) {
+            sendSceneCommandFromStore('environment-set', {
+              environmentId: 'scene-environment',
+              source: {
+                id: message.placement.sourceAssetId,
+                uri: message.placement.sourceUri,
+                kind: 'asset-handle',
+              },
+              mode: message.placement.mode,
+              rotationDeg: message.placement.rotationDeg,
+              intensity: message.placement.intensity,
+              exposure: message.placement.exposure,
+              visibleAsBackground: message.placement.visibleAsBackground,
+            });
+          }
+          break;
+        case 'environmentCommand':
+          setEnvironmentPlacement(message.legacyPlacement ?? null);
+          sendSceneCommandFromStore(
+            'environment-set',
+            message.patch as unknown as Record<string, unknown>,
+          );
           break;
         default:
           break;
@@ -428,7 +513,9 @@ export function App(): React.JSX.Element {
     applyWebviewVisibility,
     handleKeyboardAction,
     sendEditorCameraToEngine,
+    sendSceneCommandFromStore,
     setAnimationClips,
+    setEnvironmentPlacement,
     setQualityPreview,
     setSceneControlStatus,
   ]);
@@ -718,6 +805,15 @@ export function App(): React.JSX.Element {
     [createLocalPrediction, selectedTopologyVersion, sendRouteACommand],
   );
 
+  useEffect(() => {
+    sendSceneCommandRef.current = sendSceneCommand;
+    return () => {
+      if (sendSceneCommandRef.current === sendSceneCommand) {
+        sendSceneCommandRef.current = null;
+      }
+    };
+  }, [sendSceneCommand]);
+
   const handleCreateShape = useCallback(
     (shapeType: ShapeType, params: Record<string, number>) => {
       sendSceneCommand('node-add', { kind: 'primitive', shapeType, params });
@@ -745,6 +841,75 @@ export function App(): React.JSX.Element {
     },
     [sendSceneCommand],
   );
+
+  const handleAddLight = useCallback(
+    (kind: LightPatch['kind']) => {
+      const id = `light_${kind}_${Date.now().toString(36)}`;
+      sendSceneCommand('node-add', {
+        kind: 'light',
+        nodeId: id,
+        name: `${kind[0]?.toUpperCase() ?? 'L'}${kind.slice(1)} Light`,
+        transform: {
+          position: { x: 0, y: 2, z: 2 },
+          rotation: { x: 0, y: 0, z: 0, w: 1 },
+          scale: { x: 1, y: 1, z: 1 },
+        },
+        light: {
+          nodeId: id,
+          kind,
+          color: { x: 1, y: 1, z: 1 },
+          intensity: kind === 'directional' ? 2 : 4,
+          range: kind === 'directional' ? undefined : 12,
+          ...(kind === 'spot' ? { innerConeAngle: 0.2, outerConeAngle: 0.75 } : {}),
+          shadow: { enabled: false },
+        },
+      });
+    },
+    [sendSceneCommand],
+  );
+
+  const handleDeleteLight = useCallback(
+    (nodeId: string) => {
+      sendSceneCommand('node-remove', { nodeId, cascade: false });
+    },
+    [sendSceneCommand],
+  );
+
+  const handleLightUpdate = useCallback(
+    (nodeId: string, patch: Omit<LightPatch, 'nodeId'>) => {
+      sendSceneCommand('light-update', { nodeId, ...patch });
+    },
+    [sendSceneCommand],
+  );
+
+  const handleEnvironmentSet = useCallback(
+    (patch: Omit<EnvironmentPatch, 'environmentId'>) => {
+      sendSceneCommand('environment-set', { environmentId: 'scene-environment', ...patch });
+    },
+    [sendSceneCommand],
+  );
+
+  const handleEnvironmentUpdate = useCallback(
+    (patch: Omit<EnvironmentPatch, 'environmentId'>) => {
+      sendSceneCommand('environment-update', { environmentId: 'scene-environment', ...patch });
+    },
+    [sendSceneCommand],
+  );
+
+  const handleEnvironmentClear = useCallback(() => {
+    sendSceneCommand('environment-clear', { environmentId: 'scene-environment' });
+  }, [sendSceneCommand]);
+
+  const handleEnvironmentRetry = useCallback(() => {
+    const environment = useModelStore.getState().environmentState;
+    if (environment) {
+      sendSceneCommand('environment-set', environment as unknown as Record<string, unknown>);
+    }
+  }, [sendSceneCommand]);
+
+  const handleEnvironmentPickPanorama = useCallback(() => {
+    postMessage({ type: 'environment:pickPanorama' } satisfies WebviewMessage);
+  }, []);
 
   const animationPlaybackPayload = useCallback(
     (action: string, clipName: string | null) => ({
@@ -833,6 +998,17 @@ export function App(): React.JSX.Element {
       });
     },
     [enginePort, sceneId, selectedCharacterId, setSceneControlStatus],
+  );
+
+  const handleLookDevModeChange = useCallback((mode: ViewportRenderMode) => {
+    useModelStore.getState().requestLookDevMode(mode);
+  }, []);
+
+  const handleSelectionWorkflowChange = useCallback(
+    (workflow: ModelSelectionWorkflow) => {
+      setSelectionWorkflow(workflow);
+    },
+    [setSelectionWorkflow],
   );
 
   const handleCharacterPreviewCameraReset = useCallback(() => {
@@ -969,6 +1145,7 @@ export function App(): React.JSX.Element {
     routeAReady,
     status: characterPreview.status,
     target: characterPreviewTarget,
+    t,
   });
   const modelKeyboardState = useMemo<ModelKeyboardState>(
     () => ({
@@ -984,6 +1161,8 @@ export function App(): React.JSX.Element {
     onResetView: () => handleKeyboardAction('resetView'),
   });
 
+  const selectedTarget = selectedTargets[0] ?? null;
+  const inspectorRoute = resolveInspectorRoute(selectedNode, selectedTarget, environmentState);
   const propertiesPanel = isExpressionPresetOpen ? (
     <ExpressionPresetPanel
       onApplyExpression={handleApplyExpression}
@@ -1032,6 +1211,28 @@ export function App(): React.JSX.Element {
       onRecordPatchBytes={recordPatchBytes}
       onDropPrediction={rollbackLocalPrediction}
     />
+  ) : inspectorRoute.kind === 'light' ? (
+    <LightInspectorPanel
+      node={selectedNode}
+      disabled={panelCommandDisabled || !lookDevCapabilities.authoredLights}
+      onAddLight={handleAddLight}
+      onDeleteLight={handleDeleteLight}
+      onSetVisible={handleSetNodeVisible}
+      onLightUpdate={handleLightUpdate}
+    />
+  ) : inspectorRoute.kind === 'environment' ? (
+    <EnvironmentPanel
+      environment={environmentState}
+      diagnostics={environmentDiagnostics}
+      disabled={panelCommandDisabled || !lookDevCapabilities.environment}
+      onSet={handleEnvironmentSet}
+      onUpdate={handleEnvironmentUpdate}
+      onClear={handleEnvironmentClear}
+      onRetry={handleEnvironmentRetry}
+      onPickPanorama={handleEnvironmentPickPanorama}
+    />
+  ) : inspectorRoute.kind === 'target' ? (
+    <SelectionTargetInspector target={inspectorRoute.target} />
   ) : (
     <TransformPanel
       node={selectedNode}
@@ -1111,6 +1312,19 @@ export function App(): React.JSX.Element {
                 ) : null}
                 {isViewportHudVisible ? (
                   <div id="model-viewport-hud">
+                    <LookDevControls
+                      state={lookDev}
+                      capabilities={lookDevCapabilities}
+                      routeAReady={routeAReady}
+                      helperPassesEnabled={helperPassesEnabled}
+                      onModeChange={handleLookDevModeChange}
+                    />
+                    <SelectionModeControls
+                      workflow={selectionWorkflow}
+                      typedPickingAvailable={lookDevCapabilities.typedPicking}
+                      characterRegionsAvailable={lookDevCapabilities.characterRegions}
+                      onWorkflowChange={handleSelectionWorkflowChange}
+                    />
                     <CharacterPreviewModeSelector
                       state={characterPreview}
                       disabled={isCharacterPreviewDisabled}
@@ -1429,18 +1643,82 @@ function isPreviewableSceneNode(node: SceneNodeSnapshot): boolean {
   return isCharacterSceneNode(node) || node.kind === 'mesh' || node.mesh !== undefined;
 }
 
+type InspectorRoute =
+  | { readonly kind: 'transform' }
+  | { readonly kind: 'light' }
+  | { readonly kind: 'environment' }
+  | { readonly kind: 'target'; readonly target: SelectionTarget };
+
+function resolveInspectorRoute(
+  selectedNode: SceneNodeSnapshot | null,
+  selectedTarget: SelectionTarget | null,
+  environment: EnvironmentPatch | null,
+): InspectorRoute {
+  if (selectedTarget?.kind === 'environment') {
+    return { kind: 'environment' };
+  }
+  if (selectedNode?.kind === 'light' || selectedNode?.light) {
+    return { kind: 'light' };
+  }
+  if (selectedTarget && selectedTarget.kind !== 'node') {
+    return { kind: 'target', target: selectedTarget };
+  }
+  if (!selectedNode && environment) {
+    return { kind: 'environment' };
+  }
+  return { kind: 'transform' };
+}
+
+function SelectionTargetInspector({ target }: { target: SelectionTarget }): React.JSX.Element {
+  const entries = [
+    ['Kind', target.kind],
+    ['Node', target.nodeId],
+    ['Character', target.characterId],
+    ['Bone', target.boneId],
+    ['Material slot', target.materialSlotId],
+    ['Submesh', target.submeshId],
+    ['Primitive', target.primitiveId],
+    ['Region', target.regionId],
+    ['Morph', target.morphId],
+    ['Environment', target.environmentId],
+  ].filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+
+  return (
+    <div className="model-side-panel model-selection-target-panel h-full w-full overflow-y-auto text-xs">
+      <div className="model-panel-header">
+        <div className="model-title">Selection</div>
+        <div className="mt-1 text-[10px] text-[var(--model-fg-secondary)]">
+          Engine typed picking target
+        </div>
+      </div>
+      <div className="model-panel-section">
+        {entries.map(([label, value]) => (
+          <div key={label} className="model-target-readout">
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function characterPreviewStatusText({
   routeAReady,
   status,
   target,
+  t,
 }: {
   readonly routeAReady: boolean;
   readonly status: string;
   readonly target: CharacterPreviewTarget;
+  readonly t: (key: string, params?: Record<string, string | number>) => string;
 }): string | undefined {
-  if (!routeAReady) return 'Waiting for engine';
-  if (!target.characterId) return 'Select a character';
-  if (status === 'unavailable' && target.reason !== 'selected-character') return 'Ready';
+  if (!routeAReady) return t('characterPreview.status.waitingForEngine');
+  if (!target.characterId) return t('characterPreview.status.selectCharacter');
+  if (status === 'unavailable' && target.reason !== 'selected-character') {
+    return t('characterPreview.status.ready');
+  }
   return undefined;
 }
 

@@ -18,10 +18,18 @@ import type {
   CharacterPreviewModeId,
   CharacterPreviewModeStatePayload,
   EnvironmentPlacement,
+  EnvironmentDiagnostic,
+  EnvironmentPatch,
   RenderFrameMeta,
+  SelectionTarget,
   ViewportEvent,
+  ViewportRenderMode,
 } from '@neko/shared';
 import { isCharacterPreviewModeStatePayload } from '@neko/shared';
+import {
+  defaultModelLookDevSceneControlCapabilities,
+  type ModelLookDevSceneControlCapabilities,
+} from '@neko/neko-client';
 import {
   AuthoringPerformanceMetrics,
   type AuthoringMetricsSnapshot,
@@ -34,10 +42,26 @@ import {
 
 type TransformPatch = NonNullable<SceneDelta['updatedTransforms']>[number];
 type VisibilityPatch = NonNullable<SceneDelta['updatedVisibility']>[number];
+type LightPatch = NonNullable<SceneDelta['updatedLights']>[number];
+type SceneNodePatch = NonNullable<SceneDelta['addedNodes']>[number];
 type ViewportOverlayPatch = NonNullable<SceneDelta['overlay']>;
 type ModelingSessionState = NonNullable<SceneDelta['modelingSessions']>[number];
 type SceneControlStatus = 'disconnected' | 'connecting' | 'ready' | 'error';
 type CharacterPreviewUiStatus = 'unavailable' | 'pending' | 'applied' | 'rejected';
+type LookDevRequestStatus =
+  | 'unavailable'
+  | 'requested'
+  | 'pending'
+  | 'applied'
+  | 'rejected'
+  | 'timeout';
+export type ModelSelectionWorkflow =
+  | 'object'
+  | 'face-region'
+  | 'bone-pose'
+  | 'light'
+  | 'animation'
+  | 'export-inspect';
 type Vec3 = [number, number, number];
 
 const DEFAULT_CAMERA_THETA = 0;
@@ -51,6 +75,7 @@ const MAX_CAMERA_RADIUS = 8;
 const MIN_NODE_EXTENT = 0.01;
 const CAMERA_FIT_PADDING = 1.25;
 const EPSILON = 0.000001;
+const LOOKDEV_MODE_UNAVAILABLE_DIAGNOSTIC = 'lookdev.modeUnavailable';
 
 interface CameraStatePatch {
   cameraTheta: number;
@@ -75,6 +100,13 @@ export interface CharacterPreviewUiState {
   status: CharacterPreviewUiStatus;
   state: CharacterPreviewModeStatePayload | null;
   diagnostics: CharacterPreviewModeStatePayload['diagnostics'];
+}
+
+export interface LookDevUiState {
+  requestedMode: ViewportRenderMode | null;
+  appliedMode: ViewportRenderMode;
+  status: LookDevRequestStatus;
+  diagnostic: string | null;
 }
 
 export interface PendingTransformPrediction {
@@ -106,6 +138,12 @@ export interface ModelState {
   authoringMetricsSnapshot: AuthoringMetricsSnapshot;
   showViewportGrid: boolean;
   characterPreview: CharacterPreviewUiState;
+  lookDev: LookDevUiState;
+  lookDevCapabilities: ModelLookDevSceneControlCapabilities;
+  environmentState: EnvironmentPatch | null;
+  environmentDiagnostics: EnvironmentDiagnostic[];
+  selectedTargets: SelectionTarget[];
+  selectionWorkflow: ModelSelectionWorkflow;
 
   // Animation
   animationClips: AnimationClipInfo[];
@@ -181,6 +219,13 @@ export interface ModelState {
   requestCharacterPreviewMode: (modeId: CharacterPreviewModeId) => void;
   applyCharacterPreviewState: (state: CharacterPreviewModeStatePayload) => void;
   applyCharacterPreviewEvent: (event: ViewportEvent) => void;
+  requestLookDevMode: (mode: ViewportRenderMode) => void;
+  markLookDevPending: (mode: ViewportRenderMode) => void;
+  applyLookDevMode: (mode: ViewportRenderMode) => void;
+  rejectLookDevMode: (message: string) => void;
+  timeoutLookDevMode: (message: string) => void;
+  setLookDevCapabilities: (capabilities: ModelLookDevSceneControlCapabilities) => void;
+  setSelectionWorkflow: (workflow: ModelSelectionWorkflow) => void;
 
   // Actions — Animation
   setAnimationClips: (clips: AnimationClipInfo[]) => void;
@@ -278,6 +323,17 @@ export const useModelStore = create<ModelState>((set, get) => ({
     state: null,
     diagnostics: [],
   },
+  lookDev: {
+    requestedMode: null,
+    appliedMode: 'pbr',
+    status: 'applied',
+    diagnostic: null,
+  },
+  lookDevCapabilities: defaultModelLookDevSceneControlCapabilities(),
+  environmentState: null,
+  environmentDiagnostics: [],
+  selectedTargets: [],
+  selectionWorkflow: 'object',
   animationClips: [],
   activeAnimation: null,
   playbackState: 'stopped',
@@ -325,6 +381,9 @@ export const useModelStore = create<ModelState>((set, get) => ({
         animationClips: snapshot.animations,
         selectedNodeId,
         viewportOverlay: null,
+        environmentState: snapshot.environment ?? null,
+        environmentDiagnostics: [],
+        selectedTargets: [],
         topologyWarning: null,
         modelingSessions: {},
         pendingTransformPredictions: [],
@@ -335,7 +394,14 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   applySceneDelta: (delta) =>
     set((state) => {
-      if (delta.revision <= state.sceneRevision) {
+      const hasSameRevisionDiagnostics =
+        delta.revision === state.sceneRevision &&
+        Array.isArray(delta.environmentDiagnostics) &&
+        delta.environmentDiagnostics.length > 0;
+      if (
+        delta.revision < state.sceneRevision ||
+        (delta.revision === state.sceneRevision && !hasSameRevisionDiagnostics)
+      ) {
         return {};
       }
 
@@ -347,6 +413,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
       const visibilityByNodeId = new Map<string, VisibilityPatch>();
       for (const update of delta.updatedVisibility ?? []) {
         visibilityByNodeId.set(update.nodeId, update);
+      }
+      const lightByNodeId = new Map<string, LightPatch>();
+      for (const update of delta.updatedLights ?? []) {
+        lightByNodeId.set(update.nodeId, update);
       }
       const faceParams = { ...state.faceParams };
       const characterTopologyVersions = { ...state.characterTopologyVersions };
@@ -376,12 +446,13 @@ export const useModelStore = create<ModelState>((set, get) => ({
       }
 
       const removedNodeIds = collectRemovedNodeIds(state.sceneNodes, delta.removedNodes ?? []);
-      const sceneNodes = state.sceneNodes
+      const sceneNodes = [...state.sceneNodes, ...(delta.addedNodes ?? []).map(sceneNodeFromPatch)]
         .filter((node) => !removedNodeIds.has(node.nodeId))
         .map((node) => {
           const transformUpdate = transformByNodeId.get(node.nodeId);
           const visibilityUpdate = visibilityByNodeId.get(node.nodeId);
-          if (!transformUpdate && !visibilityUpdate) {
+          const lightUpdate = lightByNodeId.get(node.nodeId);
+          if (!transformUpdate && !visibilityUpdate && !lightUpdate) {
             return node;
           }
 
@@ -397,6 +468,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
               : node.transform,
             visible: visibilityUpdate?.visible ?? node.visible,
             layerMask: visibilityUpdate?.layerMask ?? node.layerMask,
+            light: lightUpdate ?? node.light,
           };
         });
 
@@ -417,6 +489,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
         characterTopologyVersions,
         modelingSessions,
         viewportOverlay: delta.overlay ?? state.viewportOverlay,
+        environmentState:
+          delta.environment === undefined ? state.environmentState : delta.environment,
+        environmentDiagnostics: delta.environmentDiagnostics ?? state.environmentDiagnostics,
+        selectedTargets:
+          delta.selectedTargets ?? delta.overlay?.selectedTargets ?? state.selectedTargets,
         topologyWarning,
         localPredictions: state.localPredictionLayer.active(),
         pendingTransformPredictions:
@@ -555,6 +632,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       return {
         lastRenderFrameMeta: meta,
         characterPreview: reconcilePreviewFrameMeta(state.characterPreview, meta),
+        lookDev: reconcileLookDevFrameMeta(state.lookDev, meta),
         authoringMetricsSnapshot: state.authoringMetrics.snapshot(),
       };
     }),
@@ -609,6 +687,107 @@ export const useModelStore = create<ModelState>((set, get) => ({
       }
       return {};
     }),
+
+  requestLookDevMode: (mode) =>
+    set((state) =>
+      isLookDevModeSupported(state.lookDevCapabilities, mode)
+        ? {
+            lookDev: {
+              requestedMode: mode,
+              appliedMode: state.lookDev.appliedMode,
+              status: 'requested',
+              diagnostic: null,
+            },
+          }
+        : {
+            lookDev: {
+              requestedMode: null,
+              appliedMode: state.lookDev.appliedMode,
+              status: 'unavailable',
+              diagnostic: LOOKDEV_MODE_UNAVAILABLE_DIAGNOSTIC,
+            },
+          },
+    ),
+
+  markLookDevPending: (mode) =>
+    set((state) =>
+      isLookDevModeSupported(state.lookDevCapabilities, mode)
+        ? {
+            lookDev: {
+              requestedMode: mode,
+              appliedMode: state.lookDev.appliedMode,
+              status: 'pending',
+              diagnostic: null,
+            },
+          }
+        : {
+            lookDev: {
+              requestedMode: null,
+              appliedMode: state.lookDev.appliedMode,
+              status: 'unavailable',
+              diagnostic: LOOKDEV_MODE_UNAVAILABLE_DIAGNOSTIC,
+            },
+          },
+    ),
+
+  applyLookDevMode: (mode) =>
+    set({
+      lookDev: {
+        requestedMode: null,
+        appliedMode: mode,
+        status: 'applied',
+        diagnostic: null,
+      },
+    }),
+
+  rejectLookDevMode: (message) =>
+    set({
+      lookDev: {
+        requestedMode: null,
+        appliedMode: get().lookDev.appliedMode,
+        status: 'rejected',
+        diagnostic: message,
+      },
+    }),
+
+  timeoutLookDevMode: (message) =>
+    set({
+      lookDev: {
+        requestedMode: get().lookDev.requestedMode,
+        appliedMode: get().lookDev.appliedMode,
+        status: 'timeout',
+        diagnostic: message,
+      },
+    }),
+
+  setLookDevCapabilities: (capabilities) =>
+    set((state) => {
+      const nextCapabilities = cloneLookDevCapabilities(capabilities);
+      const appliedMode = isLookDevModeSupported(nextCapabilities, state.lookDev.appliedMode)
+        ? state.lookDev.appliedMode
+        : firstSupportedLookDevMode(nextCapabilities);
+      const requestedMode =
+        state.lookDev.requestedMode &&
+        isLookDevModeSupported(nextCapabilities, state.lookDev.requestedMode)
+          ? state.lookDev.requestedMode
+          : null;
+      const requestWasUnsupported = state.lookDev.requestedMode !== null && requestedMode === null;
+
+      return {
+        lookDevCapabilities: nextCapabilities,
+        lookDev: {
+          ...state.lookDev,
+          requestedMode,
+          appliedMode,
+          status: requestWasUnsupported ? 'unavailable' : state.lookDev.status,
+          diagnostic: requestWasUnsupported
+            ? LOOKDEV_MODE_UNAVAILABLE_DIAGNOSTIC
+            : state.lookDev.diagnostic,
+        },
+      };
+    }),
+
+  setSelectionWorkflow: (workflow) => set({ selectionWorkflow: workflow }),
 
   // Animation actions
   setAnimationClips: (clips) => set({ animationClips: clips }),
@@ -849,6 +1028,31 @@ export const useModelStore = create<ModelState>((set, get) => ({
       showViewportGrid: (state['showViewportGrid'] as boolean | undefined) ?? true,
     }),
 }));
+
+function cloneLookDevCapabilities(
+  capabilities: ModelLookDevSceneControlCapabilities,
+): ModelLookDevSceneControlCapabilities {
+  return {
+    ...capabilities,
+    renderModes: [...capabilities.renderModes],
+  };
+}
+
+function isLookDevModeSupported(
+  capabilities: ModelLookDevSceneControlCapabilities,
+  mode: ViewportRenderMode,
+): boolean {
+  return capabilities.renderModes.includes(mode) && (mode !== 'clay' || capabilities.clay);
+}
+
+function firstSupportedLookDevMode(
+  capabilities: ModelLookDevSceneControlCapabilities,
+): ViewportRenderMode {
+  return isLookDevModeSupported(capabilities, 'pbr')
+    ? 'pbr'
+    : (capabilities.renderModes.find((mode) => isLookDevModeSupported(capabilities, mode)) ??
+        'pbr');
+}
 
 function cameraPositionFromState(
   state: Pick<ModelState, 'cameraTheta' | 'cameraPhi' | 'cameraRadius' | 'cameraTarget'>,
@@ -1178,6 +1382,49 @@ function reconcilePreviewFrameMeta(
   };
 }
 
+function reconcileLookDevFrameMeta(current: LookDevUiState, meta: RenderFrameMeta): LookDevUiState {
+  const mode = readLookDevModeFromFrameMeta(meta);
+  if (!mode) {
+    return current;
+  }
+  if (current.requestedMode !== mode && current.appliedMode !== mode) {
+    return current;
+  }
+  return {
+    requestedMode: null,
+    appliedMode: mode,
+    status: 'applied',
+    diagnostic: null,
+  };
+}
+
+function readLookDevModeFromFrameMeta(meta: RenderFrameMeta): ViewportRenderMode | null {
+  const value: unknown = meta;
+  if (!isRecord(value)) return null;
+  const mode =
+    readViewportRenderMode(value['renderMode']) ??
+    (isRecord(value['lookdev']) ? readViewportRenderMode(value['lookdev']['renderMode']) : null);
+  if (mode) return mode;
+  const diagnostics = value['diagnostics'];
+  return isRecord(diagnostics) ? readViewportRenderMode(diagnostics['renderMode']) : null;
+}
+
+function readViewportRenderMode(value: unknown): ViewportRenderMode | null {
+  switch (value) {
+    case 'pbr':
+    case 'clay':
+    case 'wireframe':
+    case 'unlit':
+    case 'normal':
+    case 'depth':
+    case 'lightComplexity':
+    case 'shadowAtlas':
+      return value;
+    default:
+      return null;
+  }
+}
+
 function collectRemovedNodeIds(
   nodes: readonly SceneNodeSnapshot[],
   removedNodeIds: readonly string[],
@@ -1196,6 +1443,22 @@ function collectRemovedNodeIds(
   }
 
   return removed;
+}
+
+function sceneNodeFromPatch(patch: SceneNodePatch): SceneNodeSnapshot {
+  return {
+    nodeId: patch.nodeId,
+    parentId: patch.parentId,
+    name: patch.name ?? patch.nodeId,
+    transform: {
+      position: patch.transform?.position ?? { x: 0, y: 0, z: 0 },
+      rotation: patch.transform?.rotation ?? { x: 0, y: 0, z: 0, w: 1 },
+      scale: patch.transform?.scale ?? { x: 1, y: 1, z: 1 },
+    },
+    children: patch.children ?? [],
+    visible: patch.visible ?? true,
+    kind: patch.kind,
+  };
 }
 
 function applyPredictedTransform(

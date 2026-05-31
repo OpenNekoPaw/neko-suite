@@ -48,6 +48,7 @@ export function OverlayCanvas({
     ctx.lineWidth = 1.5;
     drawProjectedBounds(ctx, overlay, selectedNodeId, rect.width, rect.height);
 
+    drawLightHelpers(ctx, overlay, selectedNodeId, rect.width, rect.height);
     drawGizmoAnchors(ctx, overlay, selectedNodeId, rect.width, rect.height);
     drawPredictionOverlays(ctx, predictions, rect.width, rect.height);
 
@@ -141,6 +142,45 @@ function drawGizmoAnchors(
     ctx.lineTo(point.x, point.y + 18);
     ctx.stroke();
   }
+}
+
+function drawLightHelpers(
+  ctx: CanvasRenderingContext2D,
+  overlay: ViewportOverlayPatch | null,
+  selectedNodeId: string | null,
+  width: number,
+  height: number,
+): void {
+  const anchors = overlay?.gizmoAnchors?.filter(
+    (item) => item.target?.kind === 'node' && item.nodeId !== selectedNodeId,
+  );
+  if (!anchors || anchors.length === 0) return;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(250, 204, 21, 0.92)';
+  ctx.fillStyle = 'rgba(250, 204, 21, 0.18)';
+  ctx.lineWidth = 1.25;
+  for (const anchor of anchors) {
+    const position = anchor.screenPosition;
+    if (!position) continue;
+    const x = position.x * width;
+    const y = position.y * height;
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - 12);
+    ctx.lineTo(x, y - 16);
+    ctx.moveTo(x, y + 12);
+    ctx.lineTo(x, y + 16);
+    ctx.moveTo(x - 12, y);
+    ctx.lineTo(x - 16, y);
+    ctx.moveTo(x + 12, y);
+    ctx.lineTo(x + 16, y);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawPredictionOverlays(

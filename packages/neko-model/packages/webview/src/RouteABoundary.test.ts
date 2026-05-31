@@ -158,13 +158,27 @@ describe('Route A webview boundaries', () => {
     expect(css).toMatch(/\.model-center-panel\s*\{[\s\S]*flex-direction: column;/);
     expect(css).toMatch(/\.model-viewport-area\s*\{[\s\S]*flex-direction: column;/);
     expect(css).not.toMatch(/\.model-viewport-controls\s*\{/);
+    expect(css).toMatch(/#model-viewport-hud\s*\{[\s\S]*grid-template-areas:/);
+    expect(css).toMatch(/#model-viewport-hud\s*\{[\s\S]*pointer-events: none;/);
+    expect(css).toMatch(/\.model-lookdev-controls\s*\{[\s\S]*grid-area: lookdev;/);
+    expect(css).toMatch(/\.model-selection-mode-controls\s*\{[\s\S]*grid-area: selection;/);
+    expect(css).toMatch(/\.model-character-preview-modes\s*\{[\s\S]*grid-area: preview;/);
 
     const toolbarRule = readCssRule(css, '.model-left-toolbar.neko-vtoolbar');
     expect(toolbarRule).toMatch(/border-right:/);
     expect(toolbarRule).not.toMatch(/position: absolute/);
 
+    const lookDevRule = readCssRule(css, '.model-lookdev-controls');
+    expect(lookDevRule).not.toMatch(/position: absolute/);
+    expect(lookDevRule).not.toMatch(/left:|right:|top:/);
+
+    const selectionModesRule = readCssRule(css, '.model-selection-mode-controls');
+    expect(selectionModesRule).not.toMatch(/position: absolute/);
+    expect(selectionModesRule).not.toMatch(/left:|right:|top:/);
+
     const previewModesRule = readCssRule(css, '.model-character-preview-modes');
-    expect(previewModesRule).toMatch(/left: 10px;/);
+    expect(previewModesRule).not.toMatch(/position: absolute/);
+    expect(previewModesRule).not.toMatch(/left:|right:|top:/);
     expect(previewModesRule).not.toMatch(/left: 56px;/);
   });
 
@@ -305,19 +319,20 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/sceneNodes\.filter\(isPreviewableSceneNode\)/);
     expect(app).toMatch(/node\.kind === 'mesh' \|\| node\.mesh !== undefined/);
     expect(app).toMatch(/statusLabel=\{characterPreviewStatusLabel\}/);
-    expect(app).toMatch(/return 'Ready'/);
+    expect(app).toMatch(/characterPreview\.status\.ready/);
     expect(selector).toMatch(/statusLabel\?: string/);
     expect(selector).toMatch(/const displayStatus =/);
   });
 
-  it('sends hit-test queries with the same viewport contract as the engine stream', () => {
+  it('sends typed selection queries with the same viewport contract as the engine stream', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
     const modelController = readSource('viewport/ModelController.ts');
 
     expect(videoViewport).toMatch(/const payload: ViewportSerializableRecord = viewportSize/);
     expect(videoViewport).toMatch(/sendViewportCommand\('viewport:select', payload\)/);
     expect(videoViewport).toMatch(/sceneControlSocket,\s*\n\s*getViewportRect/);
-    expect(modelController).toMatch(/socket\.query\('hitTest', \{ \.\.\.command\.payload \}\)/);
+    expect(modelController).toMatch(/socket\.query\('selectionQuery'/);
+    expect(modelController).toMatch(/mask: selectionMaskForWorkflow/);
     expect(videoViewport).toMatch(/viewportId: MAIN_VIEWPORT_ID,\s*\n\s*sceneId,/);
     expect(videoViewport).toMatch(/sceneRevision,\s*\n\s*x: normalizedX/);
     expect(videoViewport).toMatch(/resolution:\s*\{\s*\n\s*width: viewportSize\.width/);
@@ -435,6 +450,8 @@ describe('Route A webview boundaries', () => {
       'components/csg/CsgPanel.tsx',
       'components/sculpt/SculptBrushPanel.tsx',
       'components/text-editor/TextEditorPanel.tsx',
+      'components/panels/LightInspectorPanel.tsx',
+      'components/panels/EnvironmentPanel.tsx',
       'components/AnimationPlayer.tsx',
       'components/ModelKeyframeTimeline.tsx',
     ]) {
@@ -452,6 +469,39 @@ describe('Route A webview boundaries', () => {
     expect(store).toMatch(/setEnvironmentPlacement/);
     expect(store).not.toMatch(/yawDeg/);
     expect(store).not.toMatch(/pitchDeg/);
+  });
+
+  it('keeps LookDev, light, environment, and selection controls inside Route A boundaries', () => {
+    const app = readSource('App.tsx');
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
+    const lookDev = readSource('components/LookDevControls.tsx');
+    const lightPanel = readSource('components/panels/LightInspectorPanel.tsx');
+    const environmentPanel = readSource('components/panels/EnvironmentPanel.tsx');
+    const selectionControls = readSource('components/SelectionModeControls.tsx');
+    const packageJson = readFileSync(resolve(srcRoot, '../package.json'), 'utf8');
+    const combined = [
+      app,
+      videoViewport,
+      modelController,
+      lookDev,
+      lightPanel,
+      environmentPanel,
+      selectionControls,
+      packageJson,
+    ].join('\n');
+
+    expect(app).toMatch(/<LookDevControls\b/);
+    expect(app).toMatch(/<LightInspectorPanel\b/);
+    expect(app).toMatch(/<EnvironmentPanel\b/);
+    expect(app).toMatch(/<SelectionModeControls\b/);
+    expect(videoViewport).toMatch(/renderMode: ViewportRenderMode/);
+    expect(videoViewport).toMatch(/lookdev:/);
+    expect(modelController).toMatch(/selectionQuery/);
+    expect(modelController).toMatch(/selectionMaskForWorkflow/);
+    expect(combined).not.toMatch(
+      /@react-three\/fiber|@react-three\/drei|@pixiv\/three-vrm|"three"|"@types\/three"|GLTFLoader|VRMLoader|gltf-parser|parseGltf|parseVRM/,
+    );
   });
 
   it('routes webview runtime errors through shared logger and localized messages', () => {

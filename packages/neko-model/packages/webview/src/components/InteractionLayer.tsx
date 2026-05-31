@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { SceneControlSocket } from '@neko/neko-client';
-import type { SceneDelta } from '@neko/shared';
+import type { SceneDelta, SelectionTarget } from '@neko/shared';
 import type { SceneHitTestResult } from '../scene/SceneDocument';
 import { useModelStore } from '../stores/modelStore';
 
@@ -33,6 +33,7 @@ export interface InteractionLayerProps {
   sceneRevision: number;
   resolution?: ViewportQueryResolution | null;
   selectedNodeId: string | null;
+  lightNodeIds?: readonly string[];
   socket: SceneControlSocket | null;
   onSelectNode: (nodeId: string | null) => void;
   onQueryError?: (error: Error) => void;
@@ -50,13 +51,14 @@ export function InteractionLayer({
   sceneRevision,
   resolution,
   selectedNodeId,
+  lightNodeIds = [],
   socket,
   onQueryError,
 }: InteractionLayerProps): React.JSX.Element {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!socket || !selectedNodeId) return;
+    if (!socket || (!selectedNodeId && lightNodeIds.length === 0)) return;
     const applyQueryError = (error: unknown) => {
       if (error instanceof Error) {
         onQueryError?.(error);
@@ -69,27 +71,37 @@ export function InteractionLayer({
       sceneId,
       sceneRevision,
       resolution: resolution ?? undefined,
-      nodeIds: [selectedNodeId],
+      nodeIds: selectedNodeId ? [selectedNodeId] : [],
+      selectedNodeIds: selectedNodeId ? [selectedNodeId] : [],
+      lightNodeIds,
     };
-    void Promise.all([
-      socket.query('projectedBounds', queryPayload),
-      socket.query('gizmoAnchor', queryPayload),
-    ])
-      .then(([boundsResult, anchorResult]) => {
+    void socket
+      .query('overlayState', queryPayload)
+      .then((overlayResult) => {
         const overlay = viewportOverlayFromQueryResults({
           sceneId,
           viewportId,
           sceneRevision,
-          selectedNodeId,
-          boundsResult,
-          anchorResult,
+          selectedNodeId: selectedNodeId ?? '',
+          overlayResult,
+          boundsResult: overlayResult,
+          anchorResult: overlayResult,
         });
         if (overlay) {
           useModelStore.getState().setViewportOverlay(overlay);
         }
       })
       .catch(applyQueryError);
-  }, [onQueryError, sceneId, sceneRevision, resolution, selectedNodeId, socket, viewportId]);
+  }, [
+    lightNodeIds,
+    onQueryError,
+    sceneId,
+    sceneRevision,
+    resolution,
+    selectedNodeId,
+    socket,
+    viewportId,
+  ]);
 
   return (
     <div
@@ -148,6 +160,7 @@ export interface ViewportOverlayQueryResults {
   readonly viewportId: string;
   readonly sceneRevision: number;
   readonly selectedNodeId: string;
+  readonly overlayResult?: unknown;
   readonly boundsResult: unknown;
   readonly anchorResult: unknown;
 }
@@ -157,11 +170,13 @@ export function viewportOverlayFromQueryResults({
   viewportId,
   sceneRevision,
   selectedNodeId,
+  overlayResult,
   boundsResult,
   anchorResult,
 }: ViewportOverlayQueryResults): ViewportOverlayPatch | null {
   const projectedBounds = readProjectedBounds(boundsResult, selectedNodeId);
   const gizmoAnchors = readGizmoAnchors(anchorResult, selectedNodeId);
+  const selectedNodeIds = readSelectedNodeIds(overlayResult).filter(Boolean);
   const boundsRevision = readViewportQueryRevision(boundsResult);
   const anchorRevision = readViewportQueryRevision(anchorResult);
   const revision = Math.max(boundsRevision ?? sceneRevision, anchorRevision ?? sceneRevision);
@@ -177,7 +192,8 @@ export function viewportOverlayFromQueryResults({
   return {
     viewportId,
     revision,
-    selectedNodeIds: [selectedNodeId],
+    selectedNodeIds:
+      selectedNodeIds.length > 0 ? selectedNodeIds : selectedNodeId ? [selectedNodeId] : [],
     projectedBounds,
     gizmoAnchors,
   };
@@ -228,9 +244,21 @@ function readQueryItems(value: unknown, key: 'projectedBounds' | 'gizmoAnchors')
   if (!isRecord(value)) return [];
   const direct = value[key];
   if (Array.isArray(direct)) return direct;
+  const aliases =
+    key === 'projectedBounds' ? [value['bounds']] : [value['anchors'], value['lightHelpers']];
+  for (const alias of aliases) {
+    if (Array.isArray(alias)) return alias;
+  }
   const items = value['items'];
   if (Array.isArray(items)) return items;
   return [value];
+}
+
+function readSelectedNodeIds(value: unknown): string[] {
+  if (!isRecord(value)) return [];
+  const selectedNodeIds = value['selectedNodeIds'];
+  if (!Array.isArray(selectedNodeIds)) return [];
+  return selectedNodeIds.filter((item): item is string => typeof item === 'string');
 }
 
 function readProjectedBoundsItem(value: unknown, selectedNodeId: string): ProjectedBounds | null {
@@ -239,7 +267,13 @@ function readProjectedBoundsItem(value: unknown, selectedNodeId: string): Projec
   const min = readVec2(value['min']);
   const max = readVec2(value['max']);
   if (!min || !max) return null;
-  return { nodeId, min, max };
+  const target = readSelectionTarget(value['target']);
+  return {
+    nodeId,
+    min,
+    max,
+    ...(target ? { target } : {}),
+  };
 }
 
 function readGizmoAnchorItem(value: unknown, selectedNodeId: string): GizmoAnchor | null {
@@ -247,12 +281,56 @@ function readGizmoAnchorItem(value: unknown, selectedNodeId: string): GizmoAncho
   const nodeId = readString(value['nodeId']) ?? selectedNodeId;
   const screenPosition = readVec2(value['screenPosition']);
   const worldPosition = readVec3(value['worldPosition']);
+  const target = readSelectionTarget(value['target']);
   if (!screenPosition && !worldPosition) return null;
   return {
     nodeId,
     ...(screenPosition ? { screenPosition } : {}),
     ...(worldPosition ? { worldPosition } : {}),
+    ...(target ? { target } : {}),
   };
+}
+
+function readSelectionTarget(value: unknown): SelectionTarget | undefined {
+  if (!isRecord(value)) return undefined;
+  const kind = readSelectionKind(value['kind']);
+  if (!kind) return undefined;
+  const target: SelectionTarget = { kind };
+  const nodeId = readString(value['nodeId']);
+  if (nodeId !== undefined) target.nodeId = nodeId;
+  const characterId = readString(value['characterId']);
+  if (characterId !== undefined) target.characterId = characterId;
+  const boneId = readString(value['boneId']);
+  if (boneId !== undefined) target.boneId = boneId;
+  const materialSlotId = readString(value['materialSlotId']);
+  if (materialSlotId !== undefined) target.materialSlotId = materialSlotId;
+  const submeshId = readString(value['submeshId']);
+  if (submeshId !== undefined) target.submeshId = submeshId;
+  const primitiveId = readString(value['primitiveId']);
+  if (primitiveId !== undefined) target.primitiveId = primitiveId;
+  const regionId = readString(value['regionId']);
+  if (regionId !== undefined) target.regionId = regionId;
+  const morphId = readString(value['morphId']);
+  if (morphId !== undefined) target.morphId = morphId;
+  const environmentId = readString(value['environmentId']);
+  if (environmentId !== undefined) target.environmentId = environmentId;
+  return target;
+}
+
+function readSelectionKind(value: unknown): SelectionTarget['kind'] | undefined {
+  switch (value) {
+    case 'node':
+    case 'bone':
+    case 'materialSlot':
+    case 'submesh':
+    case 'primitive':
+    case 'characterRegion':
+    case 'morphControl':
+    case 'environment':
+      return value;
+    default:
+      return undefined;
+  }
 }
 
 function readVec2(value: unknown): { x: number; y: number } | undefined {

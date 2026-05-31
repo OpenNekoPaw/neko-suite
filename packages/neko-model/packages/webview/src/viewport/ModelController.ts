@@ -16,6 +16,8 @@ import type {
   ViewportSerializableRecord,
   ViewportToolbarItem,
   ViewportWheelInput,
+  SceneSelectionKind,
+  SelectionTarget,
 } from '@neko/shared';
 import {
   EngineClient,
@@ -59,6 +61,9 @@ interface ModelPreviewCommand {
   readonly payload: CharacterPreviewCommandPayload;
 }
 type ModelPredictionKind = ModelState['localPredictions'][number]['kind'];
+type DragPredictionFrame =
+  | { readonly kind: 'animationFrame'; readonly id: number }
+  | { readonly kind: 'timeout'; readonly id: ReturnType<typeof setTimeout> };
 
 interface CharacterPreviewCommandPayload {
   readonly characterId: string;
@@ -74,6 +79,7 @@ interface ModelViewportHitTestResult {
   readonly viewportId?: string;
   readonly revision?: number;
   readonly nodeId?: unknown;
+  readonly candidates?: readonly SelectionTarget[];
 }
 
 interface ModelViewportDragState {
@@ -133,6 +139,7 @@ export class ModelController implements ISceneController {
   private readonly client: EngineClient;
   private readonly options: ModelControllerOptions;
   private activeDrag: ModelViewportDragState | null = null;
+  private dragPredictionFrame: DragPredictionFrame | null = null;
 
   constructor(options: ModelControllerOptions, client = new EngineClient(options.enginePort)) {
     this.options = options;
@@ -145,7 +152,12 @@ export class ModelController implements ISceneController {
 
   async onPointerDown(input: ViewportPointerInput): Promise<ViewportControllerResult | void> {
     if (input.button !== 0) return undefined;
-    if (input.modifiers.alt || input.modifiers.shift || input.modifiers.ctrl || input.modifiers.meta) {
+    if (
+      input.modifiers.alt ||
+      input.modifiers.shift ||
+      input.modifiers.ctrl ||
+      input.modifiers.meta
+    ) {
       return undefined;
     }
 
@@ -190,7 +202,7 @@ export class ModelController implements ISceneController {
       ...this.activeDrag,
       latestPosition: input.position,
     };
-    this.updateDragPrediction(this.activeDrag);
+    this.scheduleDragPrediction();
     return undefined;
   }
 
@@ -202,6 +214,7 @@ export class ModelController implements ISceneController {
       ...this.activeDrag,
       latestPosition: input.position,
     };
+    this.cancelScheduledDragPrediction();
     this.activeDrag = null;
     const transform = this.transformForDrag(drag);
     if (!transform) {
@@ -210,11 +223,28 @@ export class ModelController implements ISceneController {
       return undefined;
     }
     try {
-      await this.dispatchTransformCommand(drag.nodeId, transform, drag.predictionSeq, drag.baseRevision);
+      await this.dispatchTransformCommand(
+        drag.nodeId,
+        transform,
+        drag.predictionSeq,
+        drag.baseRevision,
+      );
     } catch {
       // dispatchTransformCommand already rolls back and reports through the caller path.
     }
     return undefined;
+  }
+
+  onPointerCancel(_input: ViewportPointerInput): ViewportControllerResult | void {
+    if (!this.activeDrag) {
+      return undefined;
+    }
+    const seq = this.activeDrag.predictionSeq;
+    this.cancelScheduledDragPrediction();
+    this.activeDrag = null;
+    useModelStore.getState().rollbackTransformPrediction(seq);
+    useModelStore.getState().rollbackLocalPrediction(seq);
+    return { diagnostics: ['model transform drag canceled'] };
   }
 
   onWheel(_input: ViewportWheelInput): ViewportControllerResult | void {
@@ -325,7 +355,18 @@ export class ModelController implements ISceneController {
           this.options.sceneRevision,
         )
       ) {
-        this.options.onSelectNode?.(typeof result.nodeId === 'string' ? result.nodeId : null);
+        const candidates = Array.isArray(result.candidates) ? result.candidates : [];
+        const primary = candidates[0];
+        useModelStore.setState({
+          selectedTargets: candidates.length > 0 ? [...candidates] : [],
+        });
+        this.options.onSelectNode?.(
+          typeof primary?.nodeId === 'string'
+            ? primary.nodeId
+            : typeof result.nodeId === 'string'
+              ? result.nodeId
+              : null,
+        );
       }
     }
 
@@ -516,7 +557,11 @@ export class ModelController implements ISceneController {
       await this.handleViewportEvent(event);
       return event;
     } catch (error) {
-      const failed = viewportErrorEvent(command, 'scene-control-unavailable', toErrorMessage(error));
+      const failed = viewportErrorEvent(
+        command,
+        'scene-control-unavailable',
+        toErrorMessage(error),
+      );
       useModelStore.getState().applyCharacterPreviewEvent(failed);
       throw error;
     }
@@ -557,6 +602,7 @@ export class ModelController implements ISceneController {
     }
 
     const seq = state.allocateSceneCommandSeq();
+    this.cancelScheduledDragPrediction();
     this.activeDrag = {
       nodeId,
       startPosition: input.position,
@@ -569,6 +615,26 @@ export class ModelController implements ISceneController {
       this.upsertTransformPrediction(seq, nodeId, transform, this.options.sceneRevision);
     }
     return { diagnostics: ['model transform drag started'] };
+  }
+
+  private scheduleDragPrediction(): void {
+    if (this.dragPredictionFrame !== null) {
+      return;
+    }
+    this.dragPredictionFrame = requestDragPredictionFrame(() => {
+      this.dragPredictionFrame = null;
+      if (this.activeDrag) {
+        this.updateDragPrediction(this.activeDrag);
+      }
+    });
+  }
+
+  private cancelScheduledDragPrediction(): void {
+    if (this.dragPredictionFrame === null) {
+      return;
+    }
+    cancelDragPredictionFrame(this.dragPredictionFrame);
+    this.dragPredictionFrame = null;
   }
 
   private updateDragPrediction(drag: ModelViewportDragState): void {
@@ -638,10 +704,19 @@ export class ModelController implements ISceneController {
     socket: SceneControlSocket,
     command: ModelViewportCommand,
   ): Promise<ViewportEvent> {
-    const result = await socket.query('hitTest', { ...command.payload });
-    return viewportEventFromPayload(command, 'viewport:select:ack', normalizeHitTestPayload(result, command), {
-      appliedSeq: 0,
+    const result = await socket.query('selectionQuery', {
+      ...command.payload,
+      mask: selectionMaskForWorkflow(useModelStore.getState().selectionWorkflow),
+      mode: 'replace',
     });
+    return viewportEventFromPayload(
+      command,
+      'viewport:select:ack',
+      normalizeHitTestPayload(result, command),
+      {
+        appliedSeq: 0,
+      },
+    );
   }
 
   private async dispatchTransformOverSocket(
@@ -653,7 +728,11 @@ export class ModelController implements ISceneController {
     const rotation = readQuatTuple(command.payload['rotation']);
     const scale = readVec3Tuple(command.payload['scale']);
     if (!nodeId || !position || !rotation || !scale) {
-      return viewportErrorEvent(command, 'invalidTransformPayload', 'viewport transform payload is invalid');
+      return viewportErrorEvent(
+        command,
+        'invalidTransformPayload',
+        'viewport transform payload is invalid',
+      );
     }
 
     const envelope: SceneCommandEnvelope = {
@@ -680,7 +759,11 @@ export class ModelController implements ISceneController {
     const position = readVec3Tuple(command.payload['position']);
     const target = readVec3Tuple(command.payload['target']);
     if (!position || !target) {
-      return viewportErrorEvent(command, 'invalidCameraPayload', 'viewport camera payload is invalid');
+      return viewportErrorEvent(
+        command,
+        'invalidCameraPayload',
+        'viewport camera payload is invalid',
+      );
     }
 
     const ack = await socket.updateViewportCamera({
@@ -793,6 +876,27 @@ function createModelPredictionOverlays(
   return overlays;
 }
 
+function requestDragPredictionFrame(callback: () => void): DragPredictionFrame {
+  if (typeof requestAnimationFrame === 'function') {
+    return {
+      kind: 'animationFrame',
+      id: requestAnimationFrame(callback),
+    };
+  }
+  return {
+    kind: 'timeout',
+    id: setTimeout(callback, 16),
+  };
+}
+
+function cancelDragPredictionFrame(frame: DragPredictionFrame): void {
+  if (frame.kind === 'animationFrame') {
+    cancelAnimationFrame(frame.id);
+    return;
+  }
+  clearTimeout(frame.id);
+}
+
 function isPointerNearSelectedGizmo(
   position: readonly [number, number],
   overlay: NonNullable<ModelState['viewportOverlay']>,
@@ -832,7 +936,9 @@ function isVec3Tuple(
   return Array.isArray(value);
 }
 
-function viewportResolutionPayload(resolution: ViewportQueryResolution): ViewportSerializableRecord {
+function viewportResolutionPayload(
+  resolution: ViewportQueryResolution,
+): ViewportSerializableRecord {
   return {
     width: resolution.width,
     height: resolution.height,
@@ -840,7 +946,9 @@ function viewportResolutionPayload(resolution: ViewportQueryResolution): Viewpor
   };
 }
 
-function stripUndefinedPayload(payload: CharacterPreviewCommandPayload): CharacterPreviewCommandPayload {
+function stripUndefinedPayload(
+  payload: CharacterPreviewCommandPayload,
+): CharacterPreviewCommandPayload {
   return {
     characterId: payload.characterId,
     modeId: payload.modeId,
@@ -915,11 +1023,7 @@ function viewportEventFromSceneAck(
   payload: ViewportSerializableRecord,
 ): ViewportEvent {
   if (ack.status !== 'applied') {
-    return viewportErrorEvent(
-      command,
-      ack.status,
-      ack.error ?? `scene command ${ack.status}`,
-    );
+    return viewportErrorEvent(command, ack.status, ack.error ?? `scene command ${ack.status}`);
   }
   return viewportEventFromPayload(command, event, payload, {
     revision: ack.revision,
@@ -927,7 +1031,9 @@ function viewportEventFromSceneAck(
   });
 }
 
-function createUnavailablePreviewState(command: ModelPreviewCommand): CharacterPreviewModeStatePayload {
+function createUnavailablePreviewState(
+  command: ModelPreviewCommand,
+): CharacterPreviewModeStatePayload {
   return {
     characterId: command.payload.characterId,
     modeId: command.payload.modeId,
@@ -950,7 +1056,9 @@ function createUnavailablePreviewState(command: ModelPreviewCommand): CharacterP
   };
 }
 
-function previewCameraPreset(modeId: CharacterPreviewModeId): CharacterPreviewModeStatePayload['cameraPreset'] {
+function previewCameraPreset(
+  modeId: CharacterPreviewModeId,
+): CharacterPreviewModeStatePayload['cameraPreset'] {
   switch (modeId) {
     case 'face':
       return 'face-closeup';
@@ -963,7 +1071,9 @@ function previewCameraPreset(modeId: CharacterPreviewModeId): CharacterPreviewMo
   }
 }
 
-function previewRenderPreset(modeId: CharacterPreviewModeId): CharacterPreviewModeStatePayload['renderPreset'] {
+function previewRenderPreset(
+  modeId: CharacterPreviewModeId,
+): CharacterPreviewModeStatePayload['renderPreset'] {
   switch (modeId) {
     case 'face':
       return 'face-detail';
@@ -994,6 +1104,7 @@ function normalizeHitTestPayload(
   }
 
   const payload: Record<string, string | number | boolean | null> = {};
+  const candidates = readSelectionTargets(result['candidates']);
   for (const [key, value] of Object.entries(result)) {
     if (
       value === null ||
@@ -1010,8 +1121,78 @@ function normalizeHitTestPayload(
     sceneId: readString(result['sceneId']) ?? command.sceneId,
     viewportId: readString(result['viewportId']) ?? command.viewportId,
     revision: readFiniteNumber(result['revision']) ?? command.baseRevision,
-    nodeId: readString(result['nodeId']) ?? null,
+    nodeId: readString(result['nodeId']) ?? candidates[0]?.nodeId ?? null,
+    candidates: candidates.map(selectionTargetToPayload),
   };
+}
+
+function selectionMaskForWorkflow(
+  workflow: ModelState['selectionWorkflow'],
+): readonly SceneSelectionKind[] {
+  switch (workflow) {
+    case 'face-region':
+      return ['characterRegion', 'morphControl', 'materialSlot', 'node'];
+    case 'bone-pose':
+      return ['bone', 'node'];
+    case 'light':
+      return ['node'];
+    case 'animation':
+      return ['bone', 'node'];
+    case 'export-inspect':
+      return ['node', 'materialSlot', 'submesh', 'primitive', 'environment'];
+    case 'object':
+      return ['node', 'submesh', 'materialSlot', 'primitive'];
+  }
+}
+
+function readSelectionTargets(value: unknown): SelectionTarget[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isSelectionTarget);
+}
+
+function selectionTargetToPayload(
+  target: SelectionTarget,
+): Record<string, string | number | boolean | null> {
+  const payload: Record<string, string | number | boolean | null> = {
+    kind: target.kind,
+  };
+  for (const key of [
+    'nodeId',
+    'characterId',
+    'boneId',
+    'materialSlotId',
+    'submeshId',
+    'primitiveId',
+    'regionId',
+    'morphId',
+    'environmentId',
+  ] as const) {
+    const value = target[key];
+    if (typeof value === 'string') {
+      payload[key] = value;
+    }
+  }
+  if (target.hit?.depth !== undefined) {
+    payload.depth = target.hit.depth;
+  }
+  return payload;
+}
+
+function isSelectionTarget(value: unknown): value is SelectionTarget {
+  if (!isRecord(value)) return false;
+  switch (value['kind']) {
+    case 'node':
+    case 'bone':
+    case 'materialSlot':
+    case 'submesh':
+    case 'primitive':
+    case 'characterRegion':
+    case 'morphControl':
+    case 'environment':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function readVec3Tuple(value: unknown): [number, number, number] | null {

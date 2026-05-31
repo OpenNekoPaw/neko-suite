@@ -491,7 +491,9 @@ function isJointCandidate(node: SceneNodeSnapshot): boolean {
   if (node.mesh || node.material) return false;
 
   const key = normalizeJointKey(`${node.name} ${node.nodeId}`);
-  return HUMANOID_JOINT_TERMS.some((term) => key.includes(term)) || node.children.length > 0;
+  return (
+    HUMANOID_JOINT_TERMS.some((term) => key.includes(term)) || (node.children?.length ?? 0) > 0
+  );
 }
 
 function chooseInitialJointId(

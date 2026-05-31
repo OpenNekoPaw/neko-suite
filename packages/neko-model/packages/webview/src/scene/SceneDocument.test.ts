@@ -121,6 +121,78 @@ describe('SceneDocument object model', () => {
     );
   });
 
+  it('compiles lookdev, environment, light patch, safe remove, and typed selection helpers', async () => {
+    const { document, sendCommand, query } = createDocument();
+
+    await document.updateViewportSettings('main', {
+      renderMode: 'clay',
+      materialOverride: { kind: 'clay', roughness: 0.9 },
+    });
+    await document.light('light_1').update({
+      kind: 'point',
+      color: { x: 1, y: 0.95, z: 0.9 },
+      intensity: 3,
+      shadow: { enabled: true, resolution: 2048 },
+    });
+    await document.environment('env-studio').set({
+      mode: 'background-and-ibl',
+      rotationDeg: 15,
+      intensity: 1,
+      exposure: 0,
+      visibleAsBackground: true,
+      backgroundColor: { x: 0, y: 0, z: 0, w: 1 },
+    });
+    await document.node('light_1').remove();
+    await document.select({
+      viewportId: 'main',
+      x: 0.5,
+      y: 0.4,
+      mask: ['node', 'materialSlot', 'characterRegion'],
+      mode: 'replace',
+    });
+
+    expect(sendCommand).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        command: expect.objectContaining({ type: 'viewport-settings-update' }),
+      }),
+    );
+    expect(sendCommand).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        command: expect.objectContaining({
+          type: 'light-update',
+          payloadJson: expect.stringContaining('"shadow"'),
+        }),
+      }),
+    );
+    expect(sendCommand).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        command: expect.objectContaining({
+          type: 'environment-set',
+          payloadJson: expect.stringContaining('"background-and-ibl"'),
+        }),
+      }),
+    );
+    expect(sendCommand).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        command: expect.objectContaining({
+          type: 'node-remove',
+          payloadJson: JSON.stringify({ nodeId: 'light_1', cascade: false }),
+        }),
+      }),
+    );
+    expect(query).toHaveBeenCalledWith('selectionQuery', {
+      viewportId: 'main',
+      x: 0.5,
+      y: 0.4,
+      mask: ['node', 'materialSlot', 'characterRegion'],
+      mode: 'replace',
+    });
+  });
+
   it('compiles inspector numeric edits from schema and rolls back rejected ack', async () => {
     const { document } = createDocument(() => 2, 'rejected');
     const onRollback = vi.fn();

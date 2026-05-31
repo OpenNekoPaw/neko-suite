@@ -23,12 +23,7 @@ describe('InteractionLayer query helpers', () => {
       y: 0.5,
     });
     expect(
-      buildViewportPointerQueryFromPosition(
-        'main',
-        7,
-        { width: 200, height: 100 },
-        [100, 50],
-      ),
+      buildViewportPointerQueryFromPosition('main', 7, { width: 200, height: 100 }, [100, 50]),
     ).toEqual({
       viewportId: 'main',
       sceneRevision: 7,
@@ -129,6 +124,126 @@ describe('InteractionLayer query helpers', () => {
         {
           nodeId: 'node-1',
           screenPosition: { x: 0.25, y: 0.35 },
+        },
+      ],
+    });
+  });
+
+  it('preserves non-node target identity on projected bounds and gizmo anchors', () => {
+    expect(
+      viewportOverlayFromQueryResults({
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        sceneRevision: 7,
+        selectedNodeId: 'node-1',
+        boundsResult: {
+          sceneId: 'scene-a',
+          viewportId: 'main',
+          revision: 8,
+          projectedBounds: [
+            {
+              nodeId: 'node-1',
+              min: { x: 0.1, y: 0.2 },
+              max: { x: 0.4, y: 0.6 },
+              target: {
+                kind: 'materialSlot',
+                nodeId: 'node-1',
+                materialSlotId: 'skin',
+              },
+            },
+          ],
+        },
+        anchorResult: {
+          sceneId: 'scene-a',
+          viewportId: 'main',
+          revision: 8,
+          gizmoAnchors: [
+            {
+              nodeId: 'node-1',
+              screenPosition: { x: 0.25, y: 0.35 },
+              target: {
+                kind: 'submesh',
+                nodeId: 'node-1',
+                submeshId: 'body',
+              },
+            },
+          ],
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        projectedBounds: [
+          expect.objectContaining({
+            target: {
+              kind: 'materialSlot',
+              nodeId: 'node-1',
+              materialSlotId: 'skin',
+            },
+          }),
+        ],
+        gizmoAnchors: [
+          expect.objectContaining({
+            target: {
+              kind: 'submesh',
+              nodeId: 'node-1',
+              submeshId: 'body',
+            },
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('reads overlayState aliases and light helper anchors without a selected node', () => {
+    expect(
+      viewportOverlayFromQueryResults({
+        sceneId: 'scene-a',
+        viewportId: 'main',
+        sceneRevision: 7,
+        selectedNodeId: '',
+        overlayResult: {
+          sceneId: 'scene-a',
+          viewportId: 'main',
+          revision: 8,
+          selectedNodeIds: [],
+          bounds: [],
+          anchors: [
+            {
+              nodeId: 'key_light',
+              screenPosition: { x: 0.6, y: 0.4 },
+              target: { kind: 'node', nodeId: 'key_light' },
+            },
+          ],
+        },
+        boundsResult: {
+          sceneId: 'scene-a',
+          viewportId: 'main',
+          revision: 8,
+          bounds: [],
+        },
+        anchorResult: {
+          sceneId: 'scene-a',
+          viewportId: 'main',
+          revision: 8,
+          anchors: [
+            {
+              nodeId: 'key_light',
+              screenPosition: { x: 0.6, y: 0.4 },
+              target: { kind: 'node', nodeId: 'key_light' },
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      viewportId: 'main',
+      revision: 8,
+      selectedNodeIds: [],
+      projectedBounds: [],
+      gizmoAnchors: [
+        {
+          nodeId: 'key_light',
+          screenPosition: { x: 0.6, y: 0.4 },
+          target: { kind: 'node', nodeId: 'key_light' },
         },
       ],
     });

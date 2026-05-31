@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useModelStore } from './modelStore';
 import { LocalPredictionLayer } from '../scene/LocalPredictionLayer';
 import { AuthoringPerformanceMetrics } from '../scene/AuthoringPerformanceMetrics';
+import { defaultModelLookDevSceneControlCapabilities } from '@neko/neko-client';
 
 const node = {
   nodeId: 'node_1',
@@ -35,6 +36,16 @@ describe('modelStore transform prediction layer', () => {
       cameraRadius: 5,
       cameraTarget: [0, 0.9, 0],
       showViewportGrid: true,
+      lookDev: {
+        requestedMode: null,
+        appliedMode: 'pbr',
+        status: 'applied',
+        diagnostic: null,
+      },
+      lookDevCapabilities: defaultModelLookDevSceneControlCapabilities(),
+      environmentState: null,
+      environmentDiagnostics: [],
+      selectedTargets: [],
       lastAutoFramedSceneSignature: null,
     });
   });
@@ -222,6 +233,43 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().selectedNodeId).toBeNull();
   });
 
+  it('adds authored light nodes only after authoritative SceneDelta arrives', () => {
+    useModelStore.getState().applySceneDelta({
+      revision: 3,
+      appliedSeq: 80,
+      addedNodes: [
+        {
+          nodeId: 'key_light',
+          name: 'Key Light',
+          kind: 'light',
+          visible: true,
+          transform: {
+            position: { x: 1, y: 2, z: 3 },
+            rotation: { x: 0, y: 0, z: 0, w: 1 },
+            scale: { x: 1, y: 1, z: 1 },
+          },
+        },
+      ],
+      updatedLights: [
+        {
+          nodeId: 'key_light',
+          kind: 'point',
+          color: { x: 1, y: 0.8, z: 0.6 },
+          intensity: 4,
+          range: 12,
+        },
+      ],
+    });
+
+    const lightNode = useModelStore
+      .getState()
+      .sceneNodes.find((item) => item.nodeId === 'key_light');
+
+    expect(lightNode?.kind).toBe('light');
+    expect(lightNode?.transform?.position?.y).toBe(2);
+    expect(lightNode?.light?.intensity).toBe(4);
+  });
+
   it('aligns character morph command prediction with SceneDelta and RenderFrameMeta sequence', () => {
     const prediction = useModelStore.getState().createLocalPrediction({
       kind: 'morph',
@@ -293,6 +341,118 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().lastRenderFrameMeta?.diagnostics?.qualityTier).toBe(
       'main-fps-reduced',
     );
+  });
+
+  it('tracks LookDev, environment, and typed selection from authoritative scene state', () => {
+    useModelStore.getState().requestLookDevMode('clay');
+    useModelStore.getState().markLookDevPending('clay');
+    expect(useModelStore.getState().lookDev.status).toBe('pending');
+
+    useModelStore.getState().applyLookDevMode('clay');
+    expect(useModelStore.getState().lookDev).toMatchObject({
+      appliedMode: 'clay',
+      status: 'applied',
+    });
+
+    useModelStore.getState().applySceneSnapshot({
+      sceneId: 'scene-a',
+      revision: 8,
+      nodes: [node],
+      animations: [],
+      environment: {
+        environmentId: 'env-studio',
+        mode: 'background-and-ibl',
+        rotationDeg: 15,
+        intensity: 1,
+        exposure: 0,
+        visibleAsBackground: true,
+      },
+    });
+    expect(useModelStore.getState().environmentState?.environmentId).toBe('env-studio');
+
+    useModelStore.getState().applySceneDelta({
+      revision: 9,
+      environment: null,
+    });
+    expect(useModelStore.getState().environmentState).toBeNull();
+
+    useModelStore.getState().applySceneDelta({
+      revision: 10,
+      selectedTargets: [
+        {
+          kind: 'materialSlot',
+          nodeId: 'node_1',
+          materialSlotId: 'skin',
+        },
+      ],
+    });
+
+    expect(useModelStore.getState().selectedTargets[0]?.kind).toBe('materialSlot');
+    useModelStore.getState().applySceneDelta({
+      revision: 10,
+      environmentDiagnostics: [
+        {
+          code: 'environment.pending',
+          severity: 'warning',
+          message: 'Environment is still loading.',
+          retryable: true,
+        },
+      ],
+    });
+    expect(useModelStore.getState().environmentDiagnostics[0]?.code).toBe('environment.pending');
+    useModelStore.getState().rejectLookDevMode('unsupported');
+    expect(useModelStore.getState().lookDev.status).toBe('rejected');
+    useModelStore.getState().timeoutLookDevMode('restart timed out');
+    expect(useModelStore.getState().lookDev.diagnostic).toBe('restart timed out');
+  });
+
+  it('gates LookDev requests with discovered Engine capabilities', () => {
+    useModelStore.getState().setLookDevCapabilities({
+      renderModes: ['pbr', 'wireframe'],
+      liveViewportSettings: false,
+      clay: false,
+      authoredLights: false,
+      environment: false,
+      typedPicking: false,
+      characterRegions: false,
+    });
+
+    useModelStore.getState().requestLookDevMode('clay');
+
+    expect(useModelStore.getState().lookDev).toMatchObject({
+      appliedMode: 'pbr',
+      requestedMode: null,
+      status: 'unavailable',
+      diagnostic: 'lookdev.modeUnavailable',
+    });
+
+    useModelStore.getState().requestLookDevMode('wireframe');
+    expect(useModelStore.getState().lookDev).toMatchObject({
+      appliedMode: 'pbr',
+      requestedMode: 'wireframe',
+      status: 'requested',
+      diagnostic: null,
+    });
+
+    useModelStore.getState().markLookDevPending('wireframe');
+    expect(useModelStore.getState().lookDev.status).toBe('pending');
+
+    useModelStore.getState().setLookDevCapabilities({
+      renderModes: ['pbr'],
+      liveViewportSettings: false,
+      clay: false,
+      authoredLights: false,
+      environment: false,
+      typedPicking: false,
+      characterRegions: false,
+    });
+
+    expect(useModelStore.getState().lookDev).toMatchObject({
+      appliedMode: 'pbr',
+      requestedMode: null,
+      status: 'unavailable',
+      diagnostic: 'lookdev.modeUnavailable',
+    });
   });
 
   it('auto-frames tiny imported mesh snapshots for the Engine viewport', () => {

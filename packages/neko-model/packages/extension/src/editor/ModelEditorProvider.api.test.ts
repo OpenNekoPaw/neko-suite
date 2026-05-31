@@ -77,6 +77,28 @@ describe('ModelEditorProvider model API mapping', () => {
 
   it('rejects malformed engine scene snapshots at the extension boundary', () => {
     expect(isEngineSceneSnapshot(createSceneSnapshot())).toBe(true);
+    expect(
+      isEngineSceneSnapshot({
+        ...createSceneSnapshot(),
+        nodes: [
+          {
+            nodeId: 'light-key',
+            name: 'Key Light',
+            children: [],
+            visible: true,
+            kind: 'light',
+            light: {
+              nodeId: 'light-key',
+              kind: 'point',
+              color: { x: 1, y: 0.9, z: 0.7 },
+              intensity: 4,
+              range: 12,
+              shadow: { enabled: true, resolution: 1024, bias: 0.001 },
+            },
+          },
+        ],
+      }),
+    ).toBe(true);
     expect(isEngineSceneSnapshot({ sceneId: 'scene-main', revision: 7 })).toBe(false);
     expect(
       isEngineSceneSnapshot({
@@ -88,6 +110,25 @@ describe('ModelEditorProvider model API mapping', () => {
       isEngineSceneSnapshot({
         ...createSceneSnapshot(),
         animations: [{ name: 'Broken', duration: Number.NaN }],
+      }),
+    ).toBe(false);
+    expect(
+      isEngineSceneSnapshot({
+        ...createSceneSnapshot(),
+        nodes: [
+          {
+            nodeId: 'light-key',
+            name: 'Key Light',
+            children: [],
+            visible: true,
+            kind: 'light',
+            light: {
+              nodeId: 'light-key',
+              kind: 'point',
+              intensity: Number.NaN,
+            },
+          },
+        ],
       }),
     ).toBe(false);
   });
