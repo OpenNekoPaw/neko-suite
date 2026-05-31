@@ -1,10 +1,14 @@
 import type {
   CharacterPreviewModeStatePayload,
+  EnvironmentPatch,
+  LightPatch,
   RenderFrameMeta,
   SceneCommandAck,
   SceneCommandEnvelope,
   SceneDelta,
   SceneSnapshot,
+  SelectionQuery,
+  SelectionQueryResult,
   ViewportControlFlowDiagnostic,
   ViewportControlConnectionState,
   ViewportCommand,
@@ -26,12 +30,18 @@ import {
   readString,
   readStringArray,
 } from './utils/wireReaders';
+import {
+  normalizeSelectionQueryResult,
+  readCharacterRegionDescriptorSet,
+} from './utils/sceneWireNormalizers';
 
 type SceneControlMessageHandler<T> = (message: T) => void;
 type SceneControlErrorHandler = (error: Error) => void;
 type SceneNodeSnapshot = SceneSnapshot['nodes'][number];
 type SceneAnimationClipInfo = SceneSnapshot['animations'][number];
 type SceneCameraState = NonNullable<SceneSnapshot['activeCamera']>;
+type SceneMeshPrimitiveSnapshot = NonNullable<SceneNodeSnapshot['primitives']>[number];
+type SceneAssetHandle = NonNullable<SceneNodeSnapshot['mesh']>;
 type SceneBounds3 = NonNullable<SceneNodeSnapshot['worldBounds']>;
 type SceneVec3 = NonNullable<NonNullable<SceneNodeSnapshot['transform']>['position']>;
 type SceneQuat = NonNullable<NonNullable<SceneNodeSnapshot['transform']>['rotation']>;
@@ -373,6 +383,20 @@ export class SceneControlSocket {
     });
   }
 
+  querySelection(query: SelectionQuery, requestId?: string): Promise<SelectionQueryResult> {
+    return this.query(
+      'selectionQuery',
+      {
+        viewportId: query.viewportId,
+        x: query.x,
+        y: query.y,
+        mask: query.mask,
+        mode: query.mode,
+      },
+      requestId,
+    ).then(normalizeSelectionQueryResult);
+  }
+
   updateViewportCamera(
     update: SceneViewportCameraUpdate,
     requestId?: string,
@@ -647,7 +671,7 @@ export class SceneControlSocket {
       this.reportError(new Error('Invalid scene delta'));
       return;
     }
-    if (!this.shouldApplyDelta(delta.revision)) {
+    if (!this.shouldApplyDelta(delta)) {
       this.reportControlFlowDiagnostic({
         kind: 'snapshot',
         severity: 'warning',
@@ -825,7 +849,8 @@ export class SceneControlSocket {
     this.config.onCharacterPreviewState?.(value);
   }
 
-  private shouldApplyDelta(value: unknown): boolean {
+  private shouldApplyDelta(delta: SceneDelta): boolean {
+    const value = delta.revision;
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       this.reportError(new Error('Scene delta revision must be a finite number'));
       this.resync();
@@ -837,6 +862,9 @@ export class SceneControlSocket {
     }
 
     if (value <= this.lastKnownRevision) {
+      if (hasDeltaOnlyEnvironmentDiagnostics(delta) && value === this.lastKnownRevision) {
+        return true;
+      }
       return false;
     }
 
@@ -1226,6 +1254,10 @@ function readSceneSnapshot(value: unknown): SceneSnapshot | null {
   if (activeCamera !== undefined) {
     snapshot.activeCamera = activeCamera;
   }
+  const environment = readEnvironmentPatch(value.environment);
+  if (environment !== undefined) {
+    snapshot.environment = environment;
+  }
 
   return snapshot;
 }
@@ -1266,8 +1298,78 @@ function isSceneDelta(value: unknown): value is SceneDelta {
     isOptionalRecordArray(value.updatedCharacterMorphWeights) &&
     isOptionalRecordArray(value.updatedCharacterMaterials) &&
     isOptionalRecordArray(value.updatedSkeletonPose) &&
-    isOptionalRecordArray(value.characterOverrides)
+    isOptionalRecordArray(value.characterOverrides) &&
+    (value.environment === null || isOptionalRecord(value.environment)) &&
+    isOptionalRecordArray(value.selectedTargets) &&
+    isOptionalRecordArray(value.environmentDiagnostics)
   );
+}
+
+function hasDeltaOnlyEnvironmentDiagnostics(delta: SceneDelta): boolean {
+  return (
+    Array.isArray(delta.environmentDiagnostics) &&
+    delta.environmentDiagnostics.length > 0 &&
+    delta.appliedSeq === undefined &&
+    delta.updatedTransforms === undefined &&
+    delta.updatedMorphWeights === undefined &&
+    delta.animationState === undefined &&
+    delta.addedNodes === undefined &&
+    delta.removedNodes === undefined &&
+    delta.updatedHierarchy === undefined &&
+    delta.updatedVisibility === undefined &&
+    delta.updatedLayers === undefined &&
+    delta.updatedMaterials === undefined &&
+    delta.updatedAssetReferences === undefined &&
+    delta.updatedLights === undefined &&
+    delta.activeCamera === undefined &&
+    delta.updatedCameras === undefined &&
+    delta.topologyChanges === undefined &&
+    delta.modelingSessions === undefined &&
+    delta.overlay === undefined &&
+    delta.updatedCharacterMorphWeights === undefined &&
+    delta.updatedCharacterMaterials === undefined &&
+    delta.updatedSkeletonPose === undefined &&
+    delta.characterOverrides === undefined &&
+    delta.environment === undefined &&
+    delta.selectedTargets === undefined
+  );
+}
+
+function readEnvironmentPatch(value: unknown): EnvironmentPatch | undefined {
+  if (!isRecord(value)) return undefined;
+  const environmentId = readString(value.environmentId);
+  const mode =
+    value.mode === 'skybox' || value.mode === 'ibl' || value.mode === 'background-and-ibl'
+      ? value.mode
+      : undefined;
+  if (!environmentId || !mode) return undefined;
+  const patch: EnvironmentPatch = {
+    environmentId,
+    mode,
+    rotationDeg: readFiniteNumber(value.rotationDeg) ?? 0,
+    intensity: readFiniteNumber(value.intensity) ?? 1,
+    exposure: readFiniteNumber(value.exposure) ?? 0,
+    visibleAsBackground: readBoolean(value.visibleAsBackground) ?? true,
+  };
+  if (isRecord(value.source)) {
+    const id = readString(value.source.id);
+    if (id) {
+      patch.source = {
+        id,
+        uri: readString(value.source.uri),
+        kind: readString(value.source.kind),
+      };
+    }
+  }
+  if (isRecord(value.backgroundColor)) {
+    patch.backgroundColor = {
+      x: readFiniteNumber(value.backgroundColor.x) ?? 0,
+      y: readFiniteNumber(value.backgroundColor.y) ?? 0,
+      z: readFiniteNumber(value.backgroundColor.z) ?? 0,
+      w: readFiniteNumber(value.backgroundColor.w) ?? 1,
+    };
+  }
+  return patch;
 }
 
 function readSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
@@ -1320,7 +1422,85 @@ function readSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
     node.worldBounds = worldBounds;
   }
 
+  if (Array.isArray(value.primitives)) {
+    const primitives = value.primitives
+      .map(readMeshPrimitiveSnapshot)
+      .filter((primitive): primitive is SceneMeshPrimitiveSnapshot => primitive !== null);
+    if (primitives.length > 0) {
+      node.primitives = primitives;
+    }
+  }
+  const characterId = readString(value.characterId) ?? readString(value.character_id);
+  if (characterId !== undefined) {
+    node.characterId = characterId;
+  }
+  const regionDescriptors = readCharacterRegionDescriptorSet(
+    value.regionDescriptors ?? value.region_descriptors,
+  );
+  if (regionDescriptors !== undefined) {
+    node.regionDescriptors = regionDescriptors;
+  }
+  const light = readLightPatch(value.light);
+  if (light !== undefined) {
+    node.light = light;
+  }
+
   return node;
+}
+
+function readLightPatch(value: unknown): LightPatch | undefined {
+  if (!isRecord(value)) return undefined;
+  const nodeId = readString(value.nodeId);
+  const kind = readString(value.kind);
+  if (!nodeId || !kind) return undefined;
+  const light: LightPatch = {
+    nodeId,
+    kind,
+    color: readVec3(value.color, { x: 1, y: 1, z: 1 }),
+    intensity: readFiniteNumber(value.intensity) ?? 1,
+  };
+  const range = readFiniteNumber(value.range);
+  if (range !== undefined) light.range = range;
+  const innerConeAngle = readFiniteNumber(value.innerConeAngle);
+  if (innerConeAngle !== undefined) light.innerConeAngle = innerConeAngle;
+  const outerConeAngle = readFiniteNumber(value.outerConeAngle);
+  if (outerConeAngle !== undefined) light.outerConeAngle = outerConeAngle;
+  if (isRecord(value.shadow)) {
+    light.shadow = {
+      enabled: readBoolean(value.shadow.enabled) ?? false,
+      resolution: readFiniteNumber(value.shadow.resolution),
+      bias: readFiniteNumber(value.shadow.bias),
+    };
+  }
+  return light;
+}
+
+function readMeshPrimitiveSnapshot(value: unknown): SceneMeshPrimitiveSnapshot | null {
+  if (!isRecord(value)) return null;
+  const submeshId = readString(value.submeshId) ?? readString(value.submesh_id);
+  const primitiveId = readString(value.primitiveId) ?? readString(value.primitive_id);
+  if (!submeshId || !primitiveId) return null;
+
+  const primitive: SceneMeshPrimitiveSnapshot = {
+    submeshId,
+    primitiveId,
+  };
+  const mesh = readAssetHandle(value.mesh, 'mesh');
+  if (mesh !== undefined) {
+    primitive.mesh = mesh;
+  }
+  const material = readAssetHandle(value.material, 'material');
+  if (material !== undefined) {
+    primitive.material = material;
+  }
+  const materialSlotId =
+    readString(value.materialSlotId) ??
+    readString(value.material_slot_id) ??
+    readString(value.materialSlot);
+  if (materialSlotId !== undefined) {
+    primitive.materialSlotId = materialSlotId;
+  }
+  return primitive;
 }
 
 function readAnimationClipInfo(value: unknown): SceneAnimationClipInfo | null {
@@ -1368,7 +1548,7 @@ function readBounds3(value: unknown): SceneBounds3 | undefined {
 function readAssetHandle(
   value: unknown,
   fallbackKind: 'mesh' | 'material',
-): SceneNodeSnapshot['mesh'] | SceneNodeSnapshot['material'] | undefined {
+): SceneAssetHandle | undefined {
   if (!isRecord(value)) return undefined;
   const id = readString(value.id);
   if (!id) return undefined;

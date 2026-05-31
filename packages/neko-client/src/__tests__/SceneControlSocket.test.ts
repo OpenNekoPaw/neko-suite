@@ -251,6 +251,52 @@ describe('SceneControlSocket', () => {
     expect(diagnostics).not.toContain('scene-command-rejected:error');
   });
 
+  it('applies environment diagnostic deltas at the current revision', () => {
+    const fake = new FakeWebSocket();
+    const onDelta = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      sceneId: 'scene-a',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onDelta,
+    });
+    socket.connect();
+    fake.open();
+
+    fake.emit({
+      type: 'snapshot',
+      snapshot: {
+        sceneId: 'scene-a',
+        revision: 4,
+        nodes: [],
+        animations: [],
+      },
+    });
+    fake.emit({
+      type: 'delta',
+      delta: {
+        revision: 4,
+        environmentDiagnostics: [
+          {
+            code: 'environment.loadPending',
+            severity: 'info',
+            message: 'Environment loading is still pending.',
+            retryable: false,
+          },
+        ],
+      },
+    });
+
+    expect(onDelta).toHaveBeenCalledTimes(1);
+    expect(onDelta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revision: 4,
+        environmentDiagnostics: [expect.objectContaining({ code: 'environment.loadPending' })],
+      }),
+    );
+  });
+
   it('resyncs after reconnect with last known revision', async () => {
     vi.useFakeTimers();
     const sockets: FakeWebSocket[] = [];
@@ -349,6 +395,95 @@ describe('SceneControlSocket', () => {
     expect(onSnapshot).toHaveBeenCalledWith(snapshot);
   });
 
+  it('normalizes environment snapshots and accepts typed selection deltas', () => {
+    const fake = new FakeWebSocket();
+    const onSnapshot = vi.fn();
+    const onDelta = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onSnapshot,
+      onDelta,
+    });
+    socket.connect();
+    fake.open();
+
+    fake.emit({
+      type: 'snapshot',
+      snapshot: {
+        sceneId: 'scene-a',
+        revision: 5,
+        nodes: [],
+        animations: [],
+        environment: {
+          environmentId: 'env-studio',
+          mode: 'background-and-ibl',
+          rotationDeg: 15,
+          intensity: 1,
+          exposure: 0,
+          visibleAsBackground: true,
+          backgroundColor: { x: 0, y: 0, z: 0, w: 1 },
+        },
+      },
+    });
+    fake.emit({
+      type: 'delta',
+      delta: {
+        revision: 6,
+        environment: {
+          environmentId: 'env-studio',
+          mode: 'background-and-ibl',
+          rotationDeg: 20,
+          intensity: 1.2,
+          exposure: 0,
+          visibleAsBackground: true,
+        },
+        selectedTargets: [
+          {
+            kind: 'materialSlot',
+            nodeId: 'mesh-1',
+            materialSlotId: 'skin',
+          },
+        ],
+      },
+    });
+
+    expect(onSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environment: expect.objectContaining({
+          environmentId: 'env-studio',
+          backgroundColor: { x: 0, y: 0, z: 0, w: 1 },
+        }),
+      }),
+    );
+    expect(onDelta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedTargets: [
+          {
+            kind: 'materialSlot',
+            nodeId: 'mesh-1',
+            materialSlotId: 'skin',
+          },
+        ],
+      }),
+    );
+
+    fake.emit({
+      type: 'delta',
+      delta: {
+        revision: 7,
+        environment: null,
+      },
+    });
+
+    expect(onDelta).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        environment: null,
+      }),
+    );
+  });
+
   it('normalizes minimal legacy snapshots before notifying listeners', () => {
     const fake = new FakeWebSocket();
     const onSnapshot = vi.fn();
@@ -395,6 +530,136 @@ describe('SceneControlSocket', () => {
       ],
       animations: [],
     });
+  });
+
+  it('normalizes mesh primitive snapshots for typed selection routing', () => {
+    const fake = new FakeWebSocket();
+    const onSnapshot = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onSnapshot,
+    });
+    socket.connect();
+    fake.open();
+
+    fake.emit({
+      type: 'snapshot',
+      snapshot: {
+        sceneId: 'scene-a',
+        revision: 9,
+        nodes: [
+          {
+            nodeId: 'mesh-1',
+            name: 'Mesh',
+            visible: true,
+            primitives: [
+              {
+                mesh: { id: 'mesh:model.glb#primitive:0', uri: 'model.glb' },
+                material: { id: 'material:model.glb#index:2', uri: 'model.glb' },
+                submeshId: 'submesh:0',
+                primitiveId: 'primitive:0',
+                material_slot_id: 'material:2',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(onSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({
+            nodeId: 'mesh-1',
+            primitives: [
+              {
+                mesh: { id: 'mesh:model.glb#primitive:0', uri: 'model.glb', kind: 'mesh' },
+                material: {
+                  id: 'material:model.glb#index:2',
+                  uri: 'model.glb',
+                  kind: 'material',
+                },
+                submeshId: 'submesh:0',
+                primitiveId: 'primitive:0',
+                materialSlotId: 'material:2',
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('preserves explicit character region descriptors from snapshots', () => {
+    const fake = new FakeWebSocket();
+    const onSnapshot = vi.fn();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+      onSnapshot,
+    });
+    socket.connect();
+    fake.open();
+
+    fake.emit({
+      type: 'snapshot',
+      snapshot: {
+        sceneId: 'scene-a',
+        revision: 10,
+        nodes: [
+          {
+            nodeId: 'face-mesh',
+            name: 'Face',
+            visible: true,
+            character_id: 'character-a',
+            regionDescriptors: {
+              schemaVersion: 1,
+              regions: [
+                {
+                  regionId: 'face.mouth',
+                  displayName: 'Mouth',
+                  schemaVersion: 1,
+                  bindings: [{ kind: 'morphControl', targetId: 'Smile' }],
+                  tags: ['face'],
+                },
+                {
+                  regionId: 'face.invalid',
+                  displayName: 'Invalid',
+                  schemaVersion: 1,
+                  bindings: [{ kind: 'futureBinding', targetId: 'Future' }],
+                  tags: ['face'],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(onSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodes: [
+          expect.objectContaining({
+            characterId: 'character-a',
+            regionDescriptors: expect.objectContaining({
+              regions: [
+                expect.objectContaining({
+                  regionId: 'face.mouth',
+                  bindings: [{ kind: 'morphControl', targetId: 'Smile' }],
+                }),
+                expect.objectContaining({
+                  regionId: 'face.invalid',
+                  bindings: [],
+                }),
+              ],
+            }),
+          }),
+        ],
+      }),
+    );
   });
 
   it('accepts flattened and string-encoded snapshot messages', () => {
@@ -473,6 +738,76 @@ describe('SceneControlSocket', () => {
     fake.emit({ type: 'queryResult', requestId: 'hit-1', query: 'hitTest', result });
 
     await expect(promise).resolves.toEqual(result);
+  });
+
+  it('sends typed selection queries through helper', async () => {
+    const fake = new FakeWebSocket();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+    });
+    socket.connect();
+    fake.open();
+
+    const promise = socket.querySelection(
+      {
+        viewportId: 'main',
+        x: 0.5,
+        y: 0.4,
+        mask: ['node', 'materialSlot'],
+        mode: 'replace',
+      },
+      'selection-1',
+    );
+    expect(parseSent(fake, 1)).toEqual({
+      type: 'query',
+      query: 'selectionQuery',
+      requestId: 'selection-1',
+      payload: {
+        viewportId: 'main',
+        x: 0.5,
+        y: 0.4,
+        mask: ['node', 'materialSlot'],
+        mode: 'replace',
+      },
+    });
+
+    const result = {
+      viewportId: 'main',
+      revision: 7,
+      candidates: [
+        {
+          kind: 'materialSlot',
+          nodeId: 'mesh-1',
+          materialSlotId: 'skin',
+          hit: {
+            world_position: [1, 2, 3],
+            world_normal: { x: 0, y: 1, z: 0 },
+            depth: 0.4,
+          },
+        },
+        { kind: 'unknownSelectionKind', nodeId: 'mesh-2' },
+      ],
+    };
+    fake.emit({ type: 'queryResult', requestId: 'selection-1', result });
+
+    await expect(promise).resolves.toEqual({
+      viewportId: 'main',
+      revision: 7,
+      candidates: [
+        {
+          kind: 'materialSlot',
+          nodeId: 'mesh-1',
+          materialSlotId: 'skin',
+          hit: {
+            worldPosition: { x: 1, y: 2, z: 3 },
+            worldNormal: { x: 0, y: 1, z: 0 },
+            depth: 0.4,
+          },
+        },
+      ],
+    });
   });
 
   it('sends viewport camera updates and resolves ack by request id', async () => {

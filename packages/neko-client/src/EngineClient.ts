@@ -17,6 +17,9 @@
 import { PathResolver, isLiveCompositorScene, isPuppetCommandAck } from '@neko/shared';
 import type {
   AudioStreamDescriptor,
+  EnvironmentPatch,
+  LightPatch,
+  NodeRemoveCommand,
   NkpProjectData,
   PreviewManifest,
   PreviewVariant,
@@ -24,10 +27,16 @@ import type {
   RegisterPreviewAssetRequest,
   UpdatePreviewAssetMetadataRequest,
   RenderStreamDescriptor,
+  SceneCommand,
+  SceneCommandEnvelope,
   SceneSnapshot,
+  SelectionQuery,
+  SelectionQueryResult,
   ViewportCommand,
   ViewportEvent,
   ViewportDescriptor,
+  ViewportLookDevSettings,
+  ViewportMaterialOverride,
   LiveCompositorScene,
   PuppetCommand,
   PuppetCommandAck,
@@ -35,6 +44,7 @@ import type {
 } from '@neko/shared';
 import { SceneControlSocket, type SceneControlSocketConfig } from './SceneControlSocket';
 import { getLogger } from './utils/logger';
+import { normalizeSelectionQueryResult } from './utils/sceneWireNormalizers';
 import { isRecord } from './utils/wireReaders';
 import type {
   ActionRequest,
@@ -71,6 +81,16 @@ import { transformDiffResponse } from './engine/responseTransform';
 export interface EngineClientConfig {
   /** Request timeout in milliseconds (default: 120_000 for long diff operations) */
   timeout?: number;
+}
+
+export interface ModelLookDevSceneControlCapabilities {
+  readonly renderModes: readonly ViewportDescriptor['renderMode'][];
+  readonly liveViewportSettings: boolean;
+  readonly clay: boolean;
+  readonly authoredLights: boolean;
+  readonly environment: boolean;
+  readonly typedPicking: boolean;
+  readonly characterRegions: boolean;
 }
 
 /** A timestamped segment from Whisper transcription. */
@@ -242,6 +262,25 @@ type SceneAnimationClipInfo = SceneSnapshot['animations'][number];
 type SceneCameraState = NonNullable<SceneSnapshot['activeCamera']>;
 type SceneBounds3 = NonNullable<SceneNodeSnapshot['worldBounds']>;
 
+const DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES: ModelLookDevSceneControlCapabilities = {
+  renderModes: [
+    'pbr',
+    'clay',
+    'wireframe',
+    'unlit',
+    'normal',
+    'depth',
+    'lightComplexity',
+    'shadowAtlas',
+  ],
+  liveViewportSettings: false,
+  clay: true,
+  authoredLights: false,
+  environment: false,
+  typedPicking: false,
+  characterRegions: false,
+};
+
 function getString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
@@ -273,6 +312,26 @@ function toVec3(value: unknown, fallback: { x: number; y: number; z: number }) {
       x: getNumber(value.x, fallback.x),
       y: getNumber(value.y, fallback.y),
       z: getNumber(value.z, fallback.z),
+    };
+  }
+  return fallback;
+}
+
+function toVec4(value: unknown, fallback: { x: number; y: number; z: number; w: number }) {
+  if (Array.isArray(value)) {
+    return {
+      x: getNumber(value[0], fallback.x),
+      y: getNumber(value[1], fallback.y),
+      z: getNumber(value[2], fallback.z),
+      w: getNumber(value[3], fallback.w),
+    };
+  }
+  if (isRecord(value)) {
+    return {
+      x: getNumber(value.x, fallback.x),
+      y: getNumber(value.y, fallback.y),
+      z: getNumber(value.z, fallback.z),
+      w: getNumber(value.w, fallback.w),
     };
   }
   return fallback;
@@ -328,7 +387,7 @@ function normalizeSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
   const parentId =
     typeof parentValue === 'string' && parentValue.length > 0 ? parentValue : undefined;
 
-  return {
+  const node: SceneNodeSnapshot = {
     nodeId,
     parentId,
     name: getString(value.name, nodeId),
@@ -350,6 +409,11 @@ function normalizeSceneNodeSnapshot(value: unknown): SceneNodeSnapshot | null {
     bounds: normalizeBounds3(value.bounds),
     worldBounds: normalizeBounds3(value.worldBounds ?? value.world_bounds),
   };
+  const light = normalizeLightPatch(value.light);
+  if (light !== undefined) {
+    node.light = light;
+  }
+  return node;
 }
 
 function normalizeAnimationClip(value: unknown): SceneAnimationClipInfo | null {
@@ -391,13 +455,20 @@ function normalizeSceneSnapshot(value: unknown): SceneSnapshot {
         .filter((clip): clip is SceneAnimationClipInfo => clip !== null)
     : [];
 
-  return {
+  const snapshot: SceneSnapshot = {
     sceneId: getString(value.sceneId, getString(value.scene_id, 'default')),
     revision: getNumber(value.revision),
     nodes,
     animations,
     activeCamera: normalizeCameraState(value.activeCamera ?? value.active_camera),
   };
+
+  const environment = normalizeEnvironmentPatch(value.environment);
+  if (environment) {
+    snapshot.environment = environment;
+  }
+
+  return snapshot;
 }
 
 function normalizeSceneCapturePreview(value: unknown): SceneCapturePreview {
@@ -483,6 +554,133 @@ function normalizeAudioStreamDescriptor(value: unknown): AudioStreamDescriptor |
   };
 }
 
+function normalizeRenderMode(value: unknown): ViewportDescriptor['renderMode'] | undefined {
+  switch (value) {
+    case 'pbr':
+    case 'clay':
+    case 'wireframe':
+    case 'unlit':
+    case 'normal':
+    case 'depth':
+    case 'lightComplexity':
+    case 'shadowAtlas':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeDebugView(value: unknown): ViewportDescriptor['debugView'] | undefined {
+  switch (value) {
+    case 'albedo':
+    case 'roughness':
+    case 'metallic':
+    case 'ao':
+    case 'uv':
+    case 'overdraw':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeMaterialOverride(value: unknown): ViewportMaterialOverride | undefined {
+  if (!isRecord(value)) return undefined;
+  const kind =
+    value.kind === 'clay' || value.kind === 'matcap' || value.kind === 'none'
+      ? value.kind
+      : undefined;
+  if (!kind) return undefined;
+  const override: ViewportMaterialOverride = { kind };
+  if (value.color !== undefined) {
+    override.color = toVec3(value.color, { x: 0.78, y: 0.76, z: 0.72 });
+  }
+  if (typeof value.roughness === 'number') {
+    override.roughness = value.roughness;
+  }
+  if (typeof value.metallic === 'number') {
+    override.metallic = value.metallic;
+  }
+  if (typeof value.preserveAlpha === 'boolean') {
+    override.preserveAlpha = value.preserveAlpha;
+  }
+  return override;
+}
+
+function normalizeLookDevSettings(value: unknown): ViewportLookDevSettings | undefined {
+  if (!isRecord(value)) return undefined;
+  const renderMode = normalizeRenderMode(value.renderMode);
+  if (!renderMode) return undefined;
+  const lookdev: ViewportLookDevSettings = { renderMode };
+  const debugView = normalizeDebugView(value.debugView);
+  if (debugView) lookdev.debugView = debugView;
+  const materialOverride = normalizeMaterialOverride(value.materialOverride);
+  if (materialOverride) lookdev.materialOverride = materialOverride;
+  if (typeof value.helperPassesEnabled === 'boolean') {
+    lookdev.helperPassesEnabled = value.helperPassesEnabled;
+  }
+  if (typeof value.showGrid === 'boolean') lookdev.showGrid = value.showGrid;
+  if (typeof value.showSkeleton === 'boolean') lookdev.showSkeleton = value.showSkeleton;
+  if (typeof value.showNormals === 'boolean') lookdev.showNormals = value.showNormals;
+  return lookdev;
+}
+
+function normalizeEnvironmentPatch(value: unknown): EnvironmentPatch | undefined {
+  if (!isRecord(value)) return undefined;
+  const environmentId = getString(value.environmentId);
+  const mode =
+    value.mode === 'skybox' || value.mode === 'ibl' || value.mode === 'background-and-ibl'
+      ? value.mode
+      : undefined;
+  if (!environmentId || !mode) return undefined;
+  const environment: EnvironmentPatch = {
+    environmentId,
+    mode,
+    rotationDeg: getNumber(value.rotationDeg),
+    intensity: getNumber(value.intensity, 1),
+    exposure: getNumber(value.exposure),
+    visibleAsBackground: getBoolean(value.visibleAsBackground, true),
+  };
+  if (isRecord(value.source)) {
+    const id = getString(value.source.id);
+    if (id) {
+      environment.source = {
+        id,
+        uri: getString(value.source.uri) || undefined,
+        kind: getString(value.source.kind) || undefined,
+      };
+    }
+  }
+  if (value.backgroundColor !== undefined) {
+    environment.backgroundColor = toVec4(value.backgroundColor, { x: 0, y: 0, z: 0, w: 1 });
+  }
+  return environment;
+}
+
+function normalizeLightPatch(value: unknown): LightPatch | undefined {
+  if (!isRecord(value)) return undefined;
+  const nodeId = getString(value.nodeId);
+  const kind = getString(value.kind);
+  if (!nodeId || !kind) return undefined;
+  const light: LightPatch = {
+    nodeId,
+    kind,
+    color: toVec3(value.color, { x: 1, y: 1, z: 1 }),
+    intensity: getNumber(value.intensity, 1),
+  };
+  if (typeof value.range === 'number') light.range = value.range;
+  if (typeof value.innerConeAngle === 'number') light.innerConeAngle = value.innerConeAngle;
+  if (typeof value.outerConeAngle === 'number') light.outerConeAngle = value.outerConeAngle;
+  if (isRecord(value.shadow)) {
+    light.shadow = {
+      enabled: getBoolean(value.shadow.enabled, false),
+      resolution: typeof value.shadow.resolution === 'number' ? value.shadow.resolution : undefined,
+      bias: typeof value.shadow.bias === 'number' ? value.shadow.bias : undefined,
+    };
+  }
+  return light;
+}
+
 function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescriptor {
   if (!isRecord(value)) {
     throw new Error('scenes:stream returned invalid stream descriptor');
@@ -494,7 +692,7 @@ function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescr
     throw new Error('scenes:stream returned descriptor without streamId or viewportId');
   }
 
-  return {
+  const descriptor: RenderStreamDescriptor = {
     streamId,
     viewportId,
     container: value.container === 'h264-avcc' ? 'h264-avcc' : 'h264-annexb',
@@ -525,6 +723,15 @@ function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescr
     postProcessEnabled:
       typeof value.postProcessEnabled === 'boolean' ? value.postProcessEnabled : undefined,
   };
+
+  const renderMode = normalizeRenderMode(value.renderMode);
+  if (renderMode) descriptor.renderMode = renderMode;
+  const debugView = normalizeDebugView(value.debugView);
+  if (debugView) descriptor.debugView = debugView;
+  const lookdev = normalizeLookDevSettings(value.lookdev);
+  if (lookdev) descriptor.lookdev = lookdev;
+
+  return descriptor;
 }
 
 function normalizeLiveCompositorSceneResponse(value: unknown): LiveCompositorScene {
@@ -550,6 +757,82 @@ function viewportDescriptorToOptions(viewport: ViewportDescriptor): Record<strin
     layerMask: viewport.layerMask,
     workMode: viewport.workMode,
     helperPassesEnabled: viewport.helperPassesEnabled,
+    lookdev: viewport.lookdev,
+  };
+}
+
+export function createSceneCommandEnvelope(input: {
+  seq: number;
+  baseRevision: number;
+  type: SceneCommand['type'];
+  payload?: Record<string, unknown>;
+  transactionId?: string;
+  coalesceKey?: string;
+  characterCommand?: SceneCommand['characterCommand'];
+}): SceneCommandEnvelope {
+  const command: SceneCommand = {
+    type: input.type,
+    payloadJson: JSON.stringify(input.payload ?? {}),
+  };
+  if (input.characterCommand) {
+    command.characterCommand = input.characterCommand;
+  }
+  const envelope: SceneCommandEnvelope = {
+    seq: input.seq,
+    baseRevision: input.baseRevision,
+    command,
+  };
+  if (input.transactionId) envelope.transactionId = input.transactionId;
+  if (input.coalesceKey) envelope.coalesceKey = input.coalesceKey;
+  return envelope;
+}
+
+/**
+ * Build a safe node-remove payload. Omitted cascade is serialized as `false`
+ * so callers must opt into destructive cascade removal explicitly.
+ */
+export function createNodeRemovePayload(command: NodeRemoveCommand): Record<string, unknown> {
+  return {
+    nodeId: command.nodeId,
+    cascade: command.cascade ?? false,
+  };
+}
+
+export function createLightUpdatePayload(patch: LightPatch): Record<string, unknown> {
+  return { ...patch };
+}
+
+export function createEnvironmentPayload(patch: EnvironmentPatch): Record<string, unknown> {
+  return { ...patch };
+}
+
+export function defaultModelLookDevSceneControlCapabilities(): ModelLookDevSceneControlCapabilities {
+  return {
+    ...DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES,
+    renderModes: [...DEFAULT_MODEL_LOOKDEV_SCENE_CONTROL_CAPABILITIES.renderModes],
+  };
+}
+
+function normalizeModelLookDevSceneControlCapabilities(
+  value: unknown,
+): ModelLookDevSceneControlCapabilities {
+  if (!isRecord(value)) {
+    return defaultModelLookDevSceneControlCapabilities();
+  }
+  const defaults = defaultModelLookDevSceneControlCapabilities();
+  const renderModes = Array.isArray(value.renderModes)
+    ? value.renderModes.filter(
+        (mode): mode is ViewportDescriptor['renderMode'] => normalizeRenderMode(mode) !== undefined,
+      )
+    : defaults.renderModes;
+  return {
+    renderModes,
+    liveViewportSettings: getBoolean(value.liveViewportSettings, defaults.liveViewportSettings),
+    clay: getBoolean(value.clay, defaults.clay),
+    authoredLights: getBoolean(value.authoredLights, defaults.authoredLights),
+    environment: getBoolean(value.environment, defaults.environment),
+    typedPicking: getBoolean(value.typedPicking, defaults.typedPicking),
+    characterRegions: getBoolean(value.characterRegions, defaults.characterRegions),
   };
 }
 
@@ -1183,6 +1466,16 @@ export class EngineClient {
     return normalizeSceneCapturePreview(resp.data);
   }
 
+  async getModelLookDevSceneControlCapabilities(): Promise<ModelLookDevSceneControlCapabilities> {
+    const resp = await this.dispatch({
+      group: 'scenes',
+      action: 'capabilities',
+      options: {},
+    });
+    this.assertOk(resp, 'scenes:capabilities');
+    return normalizeModelLookDevSceneControlCapabilities(resp.data);
+  }
+
   /**
    * Start an Engine-rendered 3D viewport stream.
    * Dispatches `scenes:stream` with a shared ViewportDescriptor.
@@ -1202,6 +1495,21 @@ export class EngineClient {
         ? this.getAudioWsUrl(descriptor.audioStream.streamId)
         : undefined,
     };
+  }
+
+  querySceneSelection(
+    socket: SceneControlSocket,
+    query: SelectionQuery,
+  ): Promise<SelectionQueryResult> {
+    return socket
+      .query('selectionQuery', {
+        viewportId: query.viewportId,
+        x: query.x,
+        y: query.y,
+        mask: query.mask,
+        mode: query.mode,
+      })
+      .then(normalizeSelectionQueryResult);
   }
 
   /**
@@ -1313,7 +1621,9 @@ export class EngineClient {
     return resp.data;
   }
 
-  async createOrUpdateLiveCompositorScene(scene: LiveCompositorScene): Promise<LiveCompositorScene> {
+  async createOrUpdateLiveCompositorScene(
+    scene: LiveCompositorScene,
+  ): Promise<LiveCompositorScene> {
     const create = await this.dispatch({
       group: 'live-compositor',
       action: 'create',

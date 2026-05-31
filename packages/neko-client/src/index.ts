@@ -106,12 +106,18 @@ export { formatTime, formatTimePrecise } from './formatTime';
 // Engine HTTP/WS dispatch client
 export {
   EngineClient,
+  createEnvironmentPayload,
+  createLightUpdatePayload,
+  createNodeRemovePayload,
+  createSceneCommandEnvelope,
+  defaultModelLookDevSceneControlCapabilities,
   type EngineClientConfig,
   type FileAccessPurpose,
   type FileSourceRef,
   type EnginePerceptionFacade,
   type LiveCompositorStreamHandle,
   type LiveCompositorStreamOptions,
+  type ModelLookDevSceneControlCapabilities,
   type PerceptionSimilarityRequest,
   type PerceptionTranscribeRequest,
   type PuppetExportH264Options,
