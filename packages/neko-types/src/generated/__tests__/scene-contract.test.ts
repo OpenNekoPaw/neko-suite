@@ -123,6 +123,10 @@ describe('scene contract fixtures', () => {
     expect(roundtripped.previewPlaybackClockMs).toBe(1234);
     expect(roundtripped.diagnostics?.qualityTier).toBe('high');
     expect(roundtripped.diagnostics?.gpuUploadTimeMs).toBe(1.4);
+    expect(roundtripped.diagnostics?.webcodecsDecodeQueueSize).toBe(1);
+    expect(roundtripped.diagnostics?.pendingDecodeFrames).toBe(4);
+    expect(roundtripped.diagnostics?.decodeOutputIntervalMs).toBe(16.7);
+    expect(roundtripped.diagnostics?.decodeOutputBurst).toBe(2);
   });
 
   it('roundtrips LookDev descriptors and typed selection contracts', () => {
@@ -137,12 +141,16 @@ describe('scene contract fixtures', () => {
     expect(viewport.renderMode).toBe('clay');
     expect(viewport.allowFpsDegrade).toBe(false);
     expect(viewport.allowQualityDegrade).toBe(false);
+    expect(viewport.h264?.gopSize).toBe(6);
+    expect(viewport.h264?.decoderPreference).toBe('prefer-software');
     expect(viewport.lookdev?.materialOverride?.kind).toBe('clay');
     expect(stream.profile).toBe('main');
     expect(stream.codecString).toBe('avc1.4d001f');
     expect(stream.codedWidth).toBe(1280);
     expect(stream.codedHeight).toBe(720);
     expect(stream.gopSize).toBe(30);
+    expect(stream.h264?.gopSize).toBe(6);
+    expect(stream.h264?.decoderPreference).toBe('prefer-software');
     expect(stream.latencyMode).toBe('realtime');
     expect(stream.renderMode).toBe('clay');
     expect(stream.lookdev?.materialOverride?.kind).toBe('clay');

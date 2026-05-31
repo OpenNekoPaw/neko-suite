@@ -302,7 +302,11 @@
       "encodeTimeMs": 3.1,
       "qualityTier": "high",
       "droppedFramesSinceLast": 0,
-      "gpuUploadTimeMs": 1.4
+      "gpuUploadTimeMs": 1.4,
+      "webcodecsDecodeQueueSize": 1,
+      "pendingDecodeFrames": 4,
+      "decodeOutputIntervalMs": 16.7,
+      "decodeOutputBurst": 2
     }
   },
   "character": {
@@ -493,6 +497,10 @@
     "helperPassesEnabled": true,
     "allowFpsDegrade": false,
     "allowQualityDegrade": false,
+    "h264": {
+      "gopSize": 6,
+      "decoderPreference": "prefer-software"
+    },
     "lookdev": {
       "renderMode": "clay",
       "debugView": "albedo",
@@ -526,6 +534,10 @@
     "bitDepth": 8,
     "toneMapping": "aces",
     "gopSize": 30,
+    "h264": {
+      "gopSize": 6,
+      "decoderPreference": "prefer-software"
+    },
     "initialRevision": 41,
     "latencyMode": "realtime",
     "qualityTier": "high",

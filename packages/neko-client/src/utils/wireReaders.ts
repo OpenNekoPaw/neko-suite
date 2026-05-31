@@ -193,6 +193,18 @@ export function readRenderFrameDiagnostics(
   if (typeof value.presentationHostLimited === 'boolean') {
     diagnostics.presentationHostLimited = value.presentationHostLimited;
   }
+  const webcodecsDecodeQueueSize = readFiniteNumber(value.webcodecsDecodeQueueSize);
+  if (webcodecsDecodeQueueSize !== undefined) {
+    diagnostics.webcodecsDecodeQueueSize = webcodecsDecodeQueueSize;
+  }
+  const pendingDecodeFrames = readFiniteNumber(value.pendingDecodeFrames);
+  if (pendingDecodeFrames !== undefined) diagnostics.pendingDecodeFrames = pendingDecodeFrames;
+  const decodeOutputIntervalMs = readFiniteNumber(value.decodeOutputIntervalMs);
+  if (decodeOutputIntervalMs !== undefined) {
+    diagnostics.decodeOutputIntervalMs = decodeOutputIntervalMs;
+  }
+  const decodeOutputBurst = readFiniteNumber(value.decodeOutputBurst);
+  if (decodeOutputBurst !== undefined) diagnostics.decodeOutputBurst = decodeOutputBurst;
 
   return Object.keys(diagnostics).length > 0 ? diagnostics : undefined;
 }
