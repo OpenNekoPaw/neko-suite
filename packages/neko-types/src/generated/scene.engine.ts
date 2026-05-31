@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/scene.proto
-// Source hash: 6c350c9a5ea1d1ba
+// Source hash: a12fa65e37911d66
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -28,6 +28,14 @@ export type EngineCharacterCommandType =
   | 'override-apply'
   | 'override-reset';
 
+export type EngineCharacterRegionBindingKind =
+  | 'morphControl'
+  | 'materialSlot'
+  | 'bone'
+  | 'submesh'
+  | 'primitive'
+  | 'mask';
+
 export type EngineSceneCommandType =
   | 'transform'
   | 'camera-set'
@@ -48,11 +56,29 @@ export type EngineSceneCommandType =
   | 'modeling-topology-op'
   | 'modeling-uv-unwrap'
   | 'light-update'
-  | 'character';
+  | 'character'
+  | 'environment-set'
+  | 'environment-update'
+  | 'environment-clear'
+  | 'viewport-settings-update';
 
 export type EngineSceneCommandPhase = 'begin' | 'update' | 'end' | 'cancel';
 
 export type EngineSceneCommandStatus = 'applied' | 'rejected' | 'superseded';
+
+export type EngineEnvironmentMode = 'skybox' | 'ibl' | 'background-and-ibl';
+
+export type EngineSelectionKind =
+  | 'node'
+  | 'bone'
+  | 'materialSlot'
+  | 'submesh'
+  | 'primitive'
+  | 'characterRegion'
+  | 'morphControl'
+  | 'environment';
+
+export type EngineSelectionMode = 'replace' | 'add' | 'toggle';
 
 export type EngineTopologyOperation =
   | 'subdivide'
@@ -80,7 +106,8 @@ export type EngineViewportRenderMode =
   | 'normal'
   | 'depth'
   | 'lightComplexity'
-  | 'shadowAtlas';
+  | 'shadowAtlas'
+  | 'clay';
 
 export type EngineViewportDebugView =
   | 'albedo'
@@ -93,6 +120,8 @@ export type EngineViewportDebugView =
 export type EngineSceneColorSpace = 'srgb' | 'rec709' | 'p3';
 
 export type EngineToneMapping = 'aces' | 'reinhard' | 'none';
+
+export type EngineViewportMaterialOverrideKind = 'none' | 'clay' | 'matcap';
 
 export type EngineViewportWorkMode =
   | 'edit-parametric'
@@ -129,6 +158,13 @@ export interface EngineVec3 {
 export interface EngineBounds3 {
   min?: EngineVec3;
   max?: EngineVec3;
+}
+
+export interface EngineVec4 {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
 }
 
 export interface EngineQuat {
@@ -180,6 +216,25 @@ export interface EngineMaterialSlot {
   material?: EngineAssetHandle;
   role?: string;
   index?: number;
+}
+
+export interface EngineCharacterRegionBinding {
+  kind: EngineCharacterRegionBindingKind;
+  targetId: string;
+  weight?: number;
+}
+
+export interface EngineCharacterRegionDescriptor {
+  regionId: string;
+  displayName: string;
+  schemaVersion: number;
+  bindings: EngineCharacterRegionBinding[];
+  tags: string[];
+}
+
+export interface EngineCharacterRegionDescriptorSet {
+  schemaVersion: number;
+  regions: EngineCharacterRegionDescriptor[];
 }
 
 export interface EngineMorphDescriptor {
@@ -244,6 +299,7 @@ export interface EngineCharacterDefinition {
   controls: EngineMorphDescriptor[];
   expressionPresets: EngineExpressionPreset[];
   behaviorDrivers: EngineBehaviorDriver[];
+  regionDescriptors?: EngineCharacterRegionDescriptorSet;
 }
 
 export interface EngineCharacterGeometry {
@@ -419,12 +475,20 @@ export interface EngineMorphWeightsPatch {
   weights: EngineMorphWeightEntry[];
 }
 
+export interface EngineMeshPrimitiveSnapshot {
+  mesh?: EngineAssetHandle;
+  material?: EngineAssetHandle;
+  submeshId: string;
+  primitiveId: string;
+  materialSlotId?: string;
+}
+
 export interface EngineSceneNodeSnapshot {
   nodeId: string;
   parentId?: string;
   name: string;
   transform?: EngineTransform3d;
-  children: string[];
+  children?: string[];
   visible: boolean;
   layerMask?: number;
   mesh?: EngineAssetHandle;
@@ -432,6 +496,10 @@ export interface EngineSceneNodeSnapshot {
   kind?: string;
   bounds?: EngineBounds3;
   worldBounds?: EngineBounds3;
+  primitives?: EngineMeshPrimitiveSnapshot[];
+  characterId?: string;
+  regionDescriptors?: EngineCharacterRegionDescriptorSet;
+  light?: EngineLightPatch;
 }
 
 export interface EngineSceneSnapshot {
@@ -440,6 +508,7 @@ export interface EngineSceneSnapshot {
   nodes: EngineSceneNodeSnapshot[];
   animations: EngineAnimationClipInfo[];
   activeCamera?: EngineCameraState;
+  environment?: EngineEnvironmentPatch;
 }
 
 export interface EngineSceneNodePatch {
@@ -520,6 +589,70 @@ export interface EngineLightPatch {
   range?: number;
   innerConeAngle?: number;
   outerConeAngle?: number;
+  shadow?: EngineLightShadowPatch;
+}
+
+export interface EngineLightShadowPatch {
+  enabled: boolean;
+  resolution?: number;
+  bias?: number;
+}
+
+export interface EngineEnvironmentPatch {
+  environmentId: string;
+  source?: EngineAssetHandle;
+  mode: EngineEnvironmentMode;
+  rotationDeg: number;
+  intensity: number;
+  exposure: number;
+  visibleAsBackground: boolean;
+  backgroundColor?: EngineVec4;
+}
+
+export interface EngineEnvironmentDiagnostic {
+  code: string;
+  severity: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface EngineNodeRemoveCommand {
+  nodeId: string;
+  cascade?: boolean;
+}
+
+export interface EngineSelectionHit {
+  worldPosition?: EngineVec3;
+  worldNormal?: EngineVec3;
+  depth?: number;
+}
+
+export interface EngineSelectionTarget {
+  kind: EngineSelectionKind;
+  nodeId?: string;
+  characterId?: string;
+  boneId?: string;
+  materialSlotId?: string;
+  submeshId?: string;
+  primitiveId?: string;
+  regionId?: string;
+  morphId?: string;
+  environmentId?: string;
+  hit?: EngineSelectionHit;
+}
+
+export interface EngineSelectionQuery {
+  viewportId: string;
+  x: number;
+  y: number;
+  mask: EngineSelectionKind[];
+  mode?: EngineSelectionMode;
+}
+
+export interface EngineSelectionQueryResult {
+  viewportId: string;
+  revision: number;
+  candidates: EngineSelectionTarget[];
 }
 
 export interface EngineCameraPatch {
@@ -546,12 +679,14 @@ export interface EngineProjectedBounds {
   nodeId: string;
   min?: EngineVec2;
   max?: EngineVec2;
+  target?: EngineSelectionTarget;
 }
 
 export interface EngineGizmoAnchor {
   nodeId: string;
   worldPosition?: EngineVec3;
   screenPosition?: EngineVec2;
+  target?: EngineSelectionTarget;
 }
 
 export interface EngineViewportOverlayPatch {
@@ -561,6 +696,8 @@ export interface EngineViewportOverlayPatch {
   projectedBounds?: EngineProjectedBounds[];
   gizmoAnchors?: EngineGizmoAnchor[];
   hoveredNodeId?: string;
+  selectedTargets?: EngineSelectionTarget[];
+  hoveredTarget?: EngineSelectionTarget;
 }
 
 export interface EngineTopologyMigrationResult {
@@ -653,6 +790,9 @@ export interface EngineSceneDelta {
   updatedCharacterMaterials?: EngineCharacterMaterialPatch[];
   updatedSkeletonPose?: EngineCharacterSkeletonPosePatch[];
   characterOverrides?: EngineCharacterOverridePatch[];
+  environment?: EngineEnvironmentPatch | null;
+  selectedTargets?: EngineSelectionTarget[];
+  environmentDiagnostics?: EngineEnvironmentDiagnostic[];
 }
 
 export interface EngineEditorCameraRig {
@@ -675,6 +815,24 @@ export interface EngineViewportPostProcess {
   taa?: boolean;
 }
 
+export interface EngineViewportMaterialOverride {
+  kind: EngineViewportMaterialOverrideKind;
+  color?: EngineVec3;
+  roughness?: number;
+  metallic?: number;
+  preserveAlpha?: boolean;
+}
+
+export interface EngineViewportLookDevSettings {
+  renderMode: EngineViewportRenderMode;
+  debugView?: EngineViewportDebugView;
+  materialOverride?: EngineViewportMaterialOverride;
+  helperPassesEnabled?: boolean;
+  showGrid?: boolean;
+  showSkeleton?: boolean;
+  showNormals?: boolean;
+}
+
 export interface EngineViewportDescriptor {
   viewportId: string;
   sceneId: string;
@@ -689,6 +847,7 @@ export interface EngineViewportDescriptor {
   layerMask?: number;
   workMode: EngineViewportWorkMode;
   helperPassesEnabled?: boolean;
+  lookdev?: EngineViewportLookDevSettings;
 }
 
 export interface EngineH264InitData {
@@ -726,6 +885,9 @@ export interface EngineRenderStreamDescriptor {
   qualityTier?: string;
   helperPassesEnabled?: boolean;
   postProcessEnabled?: boolean;
+  renderMode?: EngineViewportRenderMode;
+  debugView?: EngineViewportDebugView;
+  lookdev?: EngineViewportLookDevSettings;
 }
 
 export interface EngineRenderFrameDiagnostics {
@@ -757,6 +919,7 @@ export interface EngineRenderFrameMeta {
   diagnostics?: EngineRenderFrameDiagnostics;
   sceneId?: string;
   frameTimestamp: number;
+  /** 2D affine [a,b,c,d,tx,ty] */
   viewTransform: number[];
   projectionJson?: string;
   activePreviewMode?: string;

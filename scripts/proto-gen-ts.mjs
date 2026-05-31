@@ -33,7 +33,7 @@ const OUT_DIR = resolve(ROOT, 'packages/neko-types/src/generated');
 // Per-proto overrides — only non-default config needs to be specified
 // =============================================================================
 
-/** @type {Record<string, { enumStyleOverrides?: Record<string, string>, keyConstants?: Array<[string, string]>, optionalRepeatedMessages?: string[] }>} */
+/** @type {Record<string, { enumStyleOverrides?: Record<string, string>, keyConstants?: Array<[string, string]>, optionalRepeatedMessages?: string[], nullableFields?: Record<string, string[]> }>} */
 const PROTO_CONFIG = {
   'timeline.proto': {
     enumStyleOverrides: {
@@ -61,9 +61,14 @@ const PROTO_CONFIG = {
   'scene.proto': {
     enumStyleOverrides: {
       SceneCommandType: 'kebab-case',
+      EnvironmentMode: 'kebab-case',
       CameraRefKind: 'camelCase',
+      CharacterRegionBindingKind: 'camelCase',
+      SelectionKind: 'camelCase',
+      SelectionMode: 'lowerCase',
       ViewportRenderMode: 'camelCase',
       ViewportDebugView: 'camelCase',
+      ViewportMaterialOverrideKind: 'lowerCase',
       ViewportWorkMode: 'kebab-case',
       H264Container: 'kebab-case',
       H264FrameHeader: 'kebab-case',
@@ -82,10 +87,14 @@ const PROTO_CONFIG = {
       'AssetReferencePatch',
       'HierarchyPatch',
       'SceneDelta',
+      'SceneNodeSnapshot',
       'SceneNodePatch',
       'TopologyChangeEvent',
       'ViewportOverlayPatch',
     ],
+    nullableFields: {
+      SceneDelta: ['environment'],
+    },
     keyConstants: [],
   },
 };
@@ -96,7 +105,7 @@ const PROTO_CONFIG = {
 
 /**
  * Discover .proto files and extract package declarations.
- * @returns {Array<{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]>, optionalRepeatedMessages: Set<string> }>}
+ * @returns {Array<{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]>, optionalRepeatedMessages: Set<string>, nullableFields: Map<string, Set<string>> }>}
  */
 function discoverProtoFiles() {
   const files = readdirSync(PROTO_DIR).filter(f => f.endsWith('.proto')).sort();
@@ -116,6 +125,12 @@ function discoverProtoFiles() {
       enumStyleOverrides: overrides.enumStyleOverrides || {},
       keyConstants: overrides.keyConstants || [],
       optionalRepeatedMessages: new Set(overrides.optionalRepeatedMessages || []),
+      nullableFields: new Map(
+        Object.entries(overrides.nullableFields || {}).map(([message, fields]) => [
+          message,
+          new Set(fields),
+        ]),
+      ),
     };
   });
 }
@@ -338,9 +353,10 @@ function isFieldOptional(field, knownEnums, optionalRepeated = false) {
  * @param {Set<string>} knownEnums
  * @param {Map<string, string>} commentMap
  * @param {Set<string>} optionalRepeatedMessages
+ * @param {Map<string, Set<string>>} nullableFields
  * @returns {{ interfaceDef: string, name: string, keys: string[], oneofKeys: Set<string> }}
  */
-function generateMessage(msgType, knownEnums, commentMap, optionalRepeatedMessages) {
+function generateMessage(msgType, knownEnums, commentMap, optionalRepeatedMessages, nullableFields) {
   const tsName = `Engine${msgType.name}`;
   const lines = [];
   const keys = [];
@@ -379,6 +395,9 @@ function generateMessage(msgType, knownEnums, commentMap, optionalRepeatedMessag
       tsType = mapType(field.type);
       suffix = field.repeated ? '[]' : '';
     }
+    if (nullableFields.get(msgType.name)?.has(field.name)) {
+      tsType = `${tsType} | null`;
+    }
 
     const opt = optional ? '?' : '';
 
@@ -399,7 +418,10 @@ function generateMessage(msgType, knownEnums, commentMap, optionalRepeatedMessag
       const oneof = msgType.oneofs[oneofName];
       for (const field of oneof.fieldsArray) {
         const camelName = snakeToCamel(field.name);
-        const tsType = mapType(field.type);
+        let tsType = mapType(field.type);
+        if (nullableFields.get(msgType.name)?.has(field.name)) {
+          tsType = `${tsType} | null`;
+        }
 
         const comment = commentMap.get(`${msgType.name}.${field.name}`);
         if (comment) {
@@ -440,7 +462,7 @@ function generateKeyConst(constName, keys) {
 // =============================================================================
 
 /**
- * @param {{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]>, optionalRepeatedMessages: Set<string> }} config
+ * @param {{ proto: string, package: string, output: string, enumStyleOverrides: Record<string, string>, keyConstants: Array<[string, string]>, optionalRepeatedMessages: Set<string>, nullableFields: Map<string, Set<string>> }} config
  */
 function processProto(config) {
   const protoPath = resolve(PROTO_DIR, config.proto);
@@ -504,7 +526,13 @@ function processProto(config) {
 
   for (const child of pkg.nestedArray) {
     if (child instanceof protobuf.Type) {
-      const result = generateMessage(child, knownEnums, commentMap, config.optionalRepeatedMessages);
+      const result = generateMessage(
+        child,
+        knownEnums,
+        commentMap,
+        config.optionalRepeatedMessages,
+        config.nullableFields,
+      );
       output.push(result.interfaceDef);
       messageInfo.set(child.name, { keys: result.keys, oneofKeys: result.oneofKeys });
       console.log(`  ✓ Message: ${result.name} (${result.keys.length} fields, ${result.oneofKeys.size} oneof)`);

@@ -9,10 +9,14 @@ import type {
   ModelingSession,
   NkcCharacterFile,
   RenderFrameMeta,
+  RenderStreamDescriptor,
   SceneCommandEnvelope,
   SceneDelta,
   SceneSnapshot,
+  SelectionQuery,
+  SelectionQueryResult,
   VertexBrushPatch,
+  ViewportDescriptor,
 } from '../../types/scene';
 
 interface SceneContractFixture {
@@ -22,6 +26,11 @@ interface SceneContractFixture {
   renderFrameMeta: RenderFrameMeta;
   character: LayeredCharacterDescription;
   characterCommandEnvelope: SceneCommandEnvelope;
+  nodeRemoveEnvelope: SceneCommandEnvelope;
+  viewportDescriptor: ViewportDescriptor;
+  renderStreamDescriptor: RenderStreamDescriptor;
+  selectionQuery: SelectionQuery;
+  selectionQueryResult: SelectionQueryResult;
   modelingSession: ModelingSession;
   vertexBrushPatch: VertexBrushPatch;
 }
@@ -48,6 +57,8 @@ describe('scene contract fixtures', () => {
     expect(roundtripped.nodes[1]?.mesh?.id).toBe('mesh-main');
     expect(roundtripped.nodes[1]?.worldBounds?.min).toEqual({ x: 2, y: 4, z: 4.5 });
     expect(roundtripped.nodes[1]?.worldBounds?.max).toEqual({ x: 4, y: 6, z: 5.5 });
+    expect(roundtripped.environment?.mode).toBe('background-and-ibl');
+    expect(roundtripped.environment?.backgroundColor?.w).toBe(1);
   });
 
   it('preserves SceneDelta patch fields through JSON roundtrip', () => {
@@ -73,6 +84,14 @@ describe('scene contract fixtures', () => {
     expect(roundtripped.updatedSkeletonPose?.[0]?.boneId).toBe('head');
     expect(roundtripped.characterOverrides?.[0]?.overrides?.[0]?.operation).toBe('set');
     expect(roundtripped.overlay?.viewportId).toBe('viewport-main');
+    expect(roundtripped.updatedLights?.[0]?.shadow?.resolution).toBe(2048);
+    expect(roundtripped.overlay?.selectedTargets?.[0]?.kind).toBe('materialSlot');
+    expect(roundtripped.overlay?.projectedBounds?.[0]?.target?.materialSlotId).toBe('skin');
+    expect(roundtripped.overlay?.gizmoAnchors?.[0]?.target?.submeshId).toBe('mesh-main:0');
+    expect(roundtripped.overlay?.hoveredTarget?.kind).toBe('submesh');
+    expect(roundtripped.environment?.mode).toBe('background-and-ibl');
+    expect(roundtripped.selectedTargets?.[0]?.kind).toBe('characterRegion');
+    expect(roundtripped.environmentDiagnostics?.[0]?.code).toBe('environment.loadPending');
   });
 
   it('treats omitted SceneDelta fields as unchanged patch fields', () => {
@@ -100,8 +119,32 @@ describe('scene contract fixtures', () => {
     expect(roundtripped.frameTimestamp).toBe(1770000000048);
     expect(roundtripped.viewTransform).toEqual([1, 0, 0, 1, 0, 0]);
     expect(roundtripped.projectionJson).toContain('perspective');
+    expect(roundtripped.activePreviewMode).toBe('motion');
+    expect(roundtripped.previewPlaybackClockMs).toBe(1234);
     expect(roundtripped.diagnostics?.qualityTier).toBe('high');
     expect(roundtripped.diagnostics?.gpuUploadTimeMs).toBe(1.4);
+  });
+
+  it('roundtrips LookDev descriptors and typed selection contracts', () => {
+    const fixture = loadFixture();
+    const viewport = JSON.parse(JSON.stringify(fixture.viewportDescriptor)) as ViewportDescriptor;
+    const stream = JSON.parse(
+      JSON.stringify(fixture.renderStreamDescriptor),
+    ) as RenderStreamDescriptor;
+    const query = JSON.parse(JSON.stringify(fixture.selectionQuery)) as SelectionQuery;
+    const result = JSON.parse(JSON.stringify(fixture.selectionQueryResult)) as SelectionQueryResult;
+
+    expect(viewport.renderMode).toBe('clay');
+    expect(viewport.lookdev?.materialOverride?.kind).toBe('clay');
+    expect(stream.renderMode).toBe('clay');
+    expect(stream.lookdev?.materialOverride?.kind).toBe('clay');
+    expect(query.mask).toContain('characterRegion');
+    expect(query.mode).toBe('replace');
+    expect(result.revision).toBe(41);
+    expect(result.candidates.map((candidate) => candidate.kind)).toEqual([
+      'materialSlot',
+      'characterRegion',
+    ]);
   });
 
   it('roundtrips LayeredCharacterDescription and CharacterCommand contracts', () => {
@@ -116,9 +159,21 @@ describe('scene contract fixtures', () => {
     expect(character.geometry?.dataBlocks[0]?.uri).toBe('characters/ava.nkcdata');
     expect(character.materialSlots[0]?.slotId).toBe('skin');
     expect(character.overrideLayer?.overrides[0]?.path).toContain('Smile');
+    expect(character.definition?.regionDescriptors?.regions[0]?.regionId).toBe('face.mouth');
+    expect(character.definition?.regionDescriptors?.regions[0]?.bindings[0]?.kind).toBe(
+      'morphControl',
+    );
     expect(commandEnvelope.command?.type).toBe('character');
     expect(characterCommand.type).toBe('morph-set');
     expect(characterCommand.morphSet?.weight).toBe(0.6);
+  });
+
+  it('roundtrips safe node removal command payload', () => {
+    const fixture = loadFixture();
+    const envelope = JSON.parse(JSON.stringify(fixture.nodeRemoveEnvelope)) as SceneCommandEnvelope;
+
+    expect(envelope.command?.type).toBe('node-remove');
+    expect(envelope.command?.payloadJson).toContain('"cascade":false');
   });
 
   it('roundtrips ModelingSession and VertexBrushPatch contracts', () => {
