@@ -171,7 +171,12 @@ impl StreamSink {
                 };
             }
             let mut output = pack_encoded_packet(&packet, width, height, fps, diagnostics);
-            output.meta = frame.meta.clone();
+            output.meta = frame.meta.clone().map(|mut meta| {
+                if output.diagnostics.is_some() {
+                    meta.diagnostics = output.diagnostics.clone();
+                }
+                meta
+            });
             let _ = self.tx.send(output);
         }
 

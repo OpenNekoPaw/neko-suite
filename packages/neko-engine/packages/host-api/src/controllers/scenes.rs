@@ -173,6 +173,10 @@ const SCENE_STREAM_MIN_BITRATE_BPS: u64 = 6_000_000;
 const SCENE_STREAM_MAX_BITRATE_BPS: u64 = 36_000_000;
 const SCENE_STREAM_TARGET_BITS_PER_PIXEL: u64 = 8;
 const SCENE_STREAM_LOW_LATENCY_GOP_SECONDS: f64 = 0.5;
+const SCENE_STREAM_MAIN_DEGRADED_FPS: f64 = 30.0;
+const SCENE_STREAM_AUXILIARY_DEGRADED_FPS: f64 = 15.0;
+const SCENE_STREAM_DEGRADE_STABLE_FRAMES: u32 = 3;
+const SCENE_STREAM_ENCODER_RECONFIGURE_COOLDOWN_MS: u64 = 5_000;
 
 fn parse_scene_stream_options(options: Value) -> ApiResult<SceneStreamOptions> {
     let value = options
@@ -228,6 +232,15 @@ impl SceneStreamQualityTier {
             Self::MainPostProcessReduced => "main-post-process-reduced",
             Self::MainFpsReduced => "main-fps-reduced",
             Self::MainResolutionReduced => "main-resolution-reduced",
+        }
+    }
+
+    fn severity(self) -> u8 {
+        match self {
+            Self::Full => 0,
+            Self::AuxiliaryReduced | Self::MainPostProcessReduced => 1,
+            Self::MainFpsReduced => 2,
+            Self::MainResolutionReduced => 3,
         }
     }
 }
@@ -331,6 +344,8 @@ impl SceneStreamRuntimeScheduler {
                     settings.quality_tier = SceneStreamQualityTier::AuxiliaryReduced;
                 }
                 DegradationStep::AuxiliaryViewportFpsResolution if self.is_auxiliary => {
+                    settings.fps =
+                        scaled_stream_fps(settings.fps, SCENE_STREAM_AUXILIARY_DEGRADED_FPS);
                     settings.quality_tier = SceneStreamQualityTier::AuxiliaryReduced;
                 }
                 DegradationStep::MainViewportPostProcessQuality if !self.is_auxiliary => {
@@ -338,9 +353,11 @@ impl SceneStreamRuntimeScheduler {
                     settings.quality_tier = SceneStreamQualityTier::MainPostProcessReduced;
                 }
                 DegradationStep::MainViewportFps if !self.is_auxiliary => {
+                    settings.fps = scaled_stream_fps(settings.fps, SCENE_STREAM_MAIN_DEGRADED_FPS);
                     settings.quality_tier = SceneStreamQualityTier::MainFpsReduced;
                 }
                 DegradationStep::MainViewportResolution if !self.is_auxiliary => {
+                    settings.h264_quality = settings.h264_quality.min(72);
                     settings.quality_tier = SceneStreamQualityTier::MainResolutionReduced;
                 }
                 _ => {}
@@ -363,6 +380,87 @@ impl SceneStreamRuntimeScheduler {
         }
         viewport
     }
+
+    fn base_sink_settings(&self) -> SceneStreamRuntimeSettings {
+        SceneStreamRuntimeSettings {
+            width: self.base_width,
+            height: self.base_height,
+            fps: self.base_fps,
+            h264_quality: 85,
+            helper_passes_enabled: self.base_viewport.helper_passes,
+            post_process_enabled: self.base_decision.work_mode != ViewportWorkMode::EditFree,
+            quality_tier: SceneStreamQualityTier::Full,
+            preserve_control_ack: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SceneStreamSettingsStabilizer {
+    current: SceneStreamRuntimeSettings,
+    pending: Option<SceneStreamRuntimeSettings>,
+    pending_frames: u32,
+    last_encoder_config_change_at: Instant,
+}
+
+impl SceneStreamSettingsStabilizer {
+    fn new(initial: SceneStreamRuntimeSettings, now: Instant) -> Self {
+        Self {
+            current: initial,
+            pending: None,
+            pending_frames: 0,
+            last_encoder_config_change_at: now
+                .checked_sub(Duration::from_millis(
+                    SCENE_STREAM_ENCODER_RECONFIGURE_COOLDOWN_MS,
+                ))
+                .unwrap_or(now),
+        }
+    }
+
+    fn stabilize(
+        &mut self,
+        proposed: SceneStreamRuntimeSettings,
+        now: Instant,
+    ) -> SceneStreamRuntimeSettings {
+        if proposed == self.current {
+            self.pending = None;
+            self.pending_frames = 0;
+            return self.current;
+        }
+
+        if self.pending != Some(proposed) {
+            self.pending = Some(proposed);
+            self.pending_frames = 1;
+        } else {
+            self.pending_frames = self.pending_frames.saturating_add(1);
+        }
+
+        let requires_stable_frames =
+            proposed.quality_tier.severity() > self.current.quality_tier.severity();
+        if requires_stable_frames && self.pending_frames < SCENE_STREAM_DEGRADE_STABLE_FRAMES {
+            return self.current;
+        }
+
+        let changes_encoder_config = scene_stream_encoder_config_changes(self.current, proposed);
+        if changes_encoder_config
+            && now.duration_since(self.last_encoder_config_change_at)
+                < Duration::from_millis(SCENE_STREAM_ENCODER_RECONFIGURE_COOLDOWN_MS)
+        {
+            return self.current;
+        }
+
+        if changes_encoder_config {
+            self.last_encoder_config_change_at = now;
+        }
+        self.current = proposed;
+        self.pending = None;
+        self.pending_frames = 0;
+        self.current
+    }
+}
+
+fn scaled_stream_fps(current: f64, target: f64) -> f64 {
+    normalize_stream_fps(current.min(target))
 }
 
 fn stream_options_to_viewport_descriptor(
@@ -405,7 +503,9 @@ fn parse_render_mode(value: &str) -> ApiResult<ViewportRenderMode> {
     }
 }
 
-fn parse_lookdev_settings(options: &SceneStreamLookDevOptions) -> ApiResult<ViewportLookDevSettings> {
+fn parse_lookdev_settings(
+    options: &SceneStreamLookDevOptions,
+) -> ApiResult<ViewportLookDevSettings> {
     Ok(ViewportLookDevSettings {
         render_mode: parse_render_mode(&options.render_mode)?,
         debug_view: options.debug_view.as_deref().and_then(parse_debug_view),
@@ -615,14 +715,14 @@ fn spawn_scene_stream_producer(
         let mut load = FrameLoadSample::default();
         let mut control_ack = ControlAckHealthSample::default();
         let mut settings = runtime_scheduler.settings(0, load, control_ack);
+        let sink_settings = runtime_scheduler.base_sink_settings();
+        let mut settings_stabilizer = SceneStreamSettingsStabilizer::new(settings, Instant::now());
         let mut frame_id = 0u64;
         let mut next_pts_us = 0i64;
-        let stream_frame_duration = settings.frame_duration();
-        let stream_duration_us = settings.duration_us();
         let mut next_frame_at = Instant::now();
         let mut last_sink_config: Option<PreviewPipelineConfig> = None;
         let mut stream_sink = match stream_registry.get_sender(&stream_id).await {
-            Some(tx) => match scene_stream_sink_config(settings) {
+            Some(tx) => match scene_stream_sink_config(sink_settings) {
                 Ok(sink_config) => match StreamSink::new(sink_config.clone(), tx) {
                     Ok(sink) => {
                         last_sink_config = Some(sink_config);
@@ -656,6 +756,8 @@ fn spawn_scene_stream_producer(
                 _ = cancel_token.cancelled() => break,
                 _ = tokio::time::sleep(delay) => {
                     let frame_started = Instant::now();
+                    let stream_frame_duration = settings.frame_duration();
+                    let stream_duration_us = settings.duration_us();
                     let service = Arc::clone(&scene_service);
                     let camera = service.get_editor_camera();
                     let pts_us = next_pts_us;
@@ -680,7 +782,7 @@ fn spawn_scene_stream_producer(
                         model_preview_controller.as_deref(),
                     );
                     if let Some(sink) = stream_sink.as_ref() {
-                        if let Ok(sink_config) = scene_stream_sink_config(settings) {
+                        if let Ok(sink_config) = scene_stream_sink_config(sink_settings) {
                             if last_sink_config.as_ref() != Some(&sink_config) {
                                 tracing::info!(
                                     "Scene stream {} GPU sink reconfigure ({}x{} @ {:.1}fps, {}bps, gop={})",
@@ -809,7 +911,7 @@ fn spawn_scene_stream_producer(
 
                     let elapsed_ms = frame_started.elapsed().as_secs_f32() * 1000.0;
                     let schedule_lag = frame_started.saturating_duration_since(next_frame_at);
-                    next_frame_at = next_frame_at
+                    next_frame_at = frame_started
                         .checked_add(stream_frame_duration)
                         .unwrap_or_else(Instant::now);
                     let post_frame_lag = Instant::now().saturating_duration_since(next_frame_at);
@@ -841,8 +943,10 @@ fn spawn_scene_stream_producer(
                         .await
                         .len()
                         .saturating_sub(1);
-                    let next_settings =
+                    let proposed_settings =
                         runtime_scheduler.settings_stabilized(auxiliary_viewport_count, load, control_ack, &mut hysteresis);
+                    let next_settings =
+                        settings_stabilizer.stabilize(proposed_settings, Instant::now());
                     if next_settings.quality_tier != settings.quality_tier {
                         tracing::info!(
                             "Scene stream {} quality tier changed to {} ({}x{} @ {:.1}fps, control_ack_preserved={})",
@@ -879,6 +983,19 @@ fn scene_stream_sink_config(
         bitrate: scene_stream_bitrate(settings),
         gop_size: scene_stream_gop_size(settings.fps),
     })
+}
+
+fn scene_stream_encoder_config_changes(
+    left: SceneStreamRuntimeSettings,
+    right: SceneStreamRuntimeSettings,
+) -> bool {
+    match (
+        scene_stream_sink_config(left),
+        scene_stream_sink_config(right),
+    ) {
+        (Ok(left_config), Ok(right_config)) => left_config != right_config,
+        _ => true,
+    }
 }
 
 fn scene_stream_render_frame_meta(
@@ -1913,7 +2030,12 @@ mod tests {
         let nodes = data["nodes"].as_array().unwrap();
         let shape = nodes
             .iter()
-            .find(|node| node["name"].as_str().unwrap_or_default().starts_with("Shape"))
+            .find(|node| {
+                node["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("Shape")
+            })
             .expect("created shape node should be present in scene snapshot");
         assert_eq!(shape["has_mesh"], true);
     }
@@ -2210,13 +2332,13 @@ mod tests {
         );
         assert_eq!(settings.width, 1280);
         assert_eq!(settings.height, 720);
-        assert_eq!(settings.fps, 60.0);
-        assert_eq!(settings.h264_quality, 85);
+        assert_eq!(settings.fps, 30.0);
+        assert_eq!(settings.h264_quality, 72);
         assert!(!settings.post_process_enabled);
         assert!(!settings.preserve_control_ack);
 
         let viewport = runtime.viewport_descriptor_for_settings(settings);
-        assert_eq!(viewport.fps, 60);
+        assert_eq!(viewport.fps, 30);
         assert_eq!(viewport.tone_mapping, SceneToneMapping::None);
         assert_eq!(viewport.post_process, ViewportPostProcess::default());
         assert!(viewport.helper_passes);
@@ -2263,13 +2385,13 @@ mod tests {
         );
         assert_eq!(settings.width, 640);
         assert_eq!(settings.height, 480);
-        assert_eq!(settings.fps, 30.0);
+        assert_eq!(settings.fps, 15.0);
         assert!(!settings.helper_passes_enabled);
         assert!(settings.preserve_control_ack);
 
         let viewport = runtime.viewport_descriptor_for_settings(settings);
         assert_eq!(viewport.viewport_id, "side");
-        assert_eq!(viewport.fps, 30);
+        assert_eq!(viewport.fps, 15);
         assert!(!viewport.helper_passes);
     }
 
@@ -2322,13 +2444,13 @@ mod tests {
         );
         assert_eq!(settings.width, 1280);
         assert_eq!(settings.height, 720);
-        assert_eq!(settings.fps, 60.0);
+        assert_eq!(settings.fps, 30.0);
         assert!(!settings.post_process_enabled);
         assert!(settings.preserve_control_ack);
     }
 
     #[test]
-    fn scene_stream_runtime_keeps_active_stream_output_contract_stable() {
+    fn scene_stream_runtime_degrades_without_changing_active_sink_contract() {
         let config = SceneStreamProducerConfig {
             session_id: "scene-scene-a".to_string(),
             viewport: ViewportDescriptor {
@@ -2381,11 +2503,150 @@ mod tests {
         );
         assert_eq!(degraded.width, full.width);
         assert_eq!(degraded.height, full.height);
-        assert_eq!(degraded.fps, full.fps);
-        assert_eq!(degraded.h264_quality, full.h264_quality);
+        assert_ne!(degraded.fps, full.fps);
         assert_eq!(
-            scene_stream_sink_config(degraded).unwrap(),
+            scene_stream_sink_config(runtime.base_sink_settings()).unwrap(),
             scene_stream_sink_config(full).unwrap()
+        );
+        assert_eq!(
+            scene_stream_sink_config(runtime.base_sink_settings())
+                .unwrap()
+                .gop_size,
+            30
+        );
+    }
+
+    #[test]
+    fn scene_stream_settings_stabilizer_ignores_transient_degrade_spikes() {
+        let config = SceneStreamProducerConfig {
+            session_id: "scene-scene-a".to_string(),
+            viewport: ViewportDescriptor {
+                viewport_id: "main".to_string(),
+                scene_id: "scene-a".to_string(),
+                render_mode: ViewportRenderMode::Pbr,
+                debug_view: None,
+                fps: 60,
+                color_space: SceneColorSpace::Srgb,
+                tone_mapping: SceneToneMapping::Aces,
+                post_process: ViewportPostProcess {
+                    bloom: true,
+                    ssao: true,
+                    taa: true,
+                },
+                layer_mask: None,
+                work_mode: ViewportWorkMode::EditParametric,
+                helper_passes: true,
+                lookdev: None,
+            },
+            width: 1280,
+            height: 720,
+            fps: 60.0,
+            initial_revision: 0,
+            initial_applied_seq: 0,
+        };
+        let runtime = SceneStreamRuntimeScheduler::new(&config);
+        let full = runtime.settings(
+            0,
+            FrameLoadSample::default(),
+            ControlAckHealthSample::default(),
+        );
+        let degraded = runtime.settings(
+            0,
+            FrameLoadSample {
+                gpu_frame_ms: 50.0,
+                encode_ms: 12.0,
+                dropped_frames: 12,
+            },
+            ControlAckHealthSample {
+                ack_p95_ms: 30.0,
+                pending_command_acks: 20,
+                render_backlog_frames: 12,
+            },
+        );
+        let now = Instant::now();
+        let mut stabilizer = SceneStreamSettingsStabilizer::new(full, now);
+
+        assert_eq!(stabilizer.stabilize(degraded, now), full);
+        assert_eq!(
+            stabilizer.stabilize(degraded, now + Duration::from_millis(16)),
+            full
+        );
+        assert_eq!(
+            stabilizer.stabilize(degraded, now + Duration::from_millis(32)),
+            degraded
+        );
+    }
+
+    #[test]
+    fn scene_stream_settings_stabilizer_cools_down_encoder_reconfigure() {
+        let config = SceneStreamProducerConfig {
+            session_id: "scene-scene-a".to_string(),
+            viewport: ViewportDescriptor {
+                viewport_id: "main".to_string(),
+                scene_id: "scene-a".to_string(),
+                render_mode: ViewportRenderMode::Pbr,
+                debug_view: None,
+                fps: 60,
+                color_space: SceneColorSpace::Srgb,
+                tone_mapping: SceneToneMapping::Aces,
+                post_process: ViewportPostProcess {
+                    bloom: true,
+                    ssao: true,
+                    taa: true,
+                },
+                layer_mask: None,
+                work_mode: ViewportWorkMode::EditParametric,
+                helper_passes: true,
+                lookdev: None,
+            },
+            width: 1280,
+            height: 720,
+            fps: 60.0,
+            initial_revision: 0,
+            initial_applied_seq: 0,
+        };
+        let runtime = SceneStreamRuntimeScheduler::new(&config);
+        let full = runtime.settings(
+            0,
+            FrameLoadSample::default(),
+            ControlAckHealthSample::default(),
+        );
+        let degraded = runtime.settings(
+            0,
+            FrameLoadSample {
+                gpu_frame_ms: 50.0,
+                encode_ms: 12.0,
+                dropped_frames: 12,
+            },
+            ControlAckHealthSample {
+                ack_p95_ms: 30.0,
+                pending_command_acks: 20,
+                render_backlog_frames: 12,
+            },
+        );
+        let now = Instant::now();
+        let mut stabilizer = SceneStreamSettingsStabilizer::new(full, now);
+        assert_eq!(stabilizer.stabilize(degraded, now), full);
+        assert_eq!(
+            stabilizer.stabilize(degraded, now + Duration::from_millis(16)),
+            full
+        );
+        assert_eq!(
+            stabilizer.stabilize(degraded, now + Duration::from_millis(32)),
+            degraded
+        );
+
+        assert_eq!(
+            stabilizer.stabilize(full, now + Duration::from_millis(500)),
+            degraded
+        );
+        assert_eq!(
+            stabilizer.stabilize(full, now + Duration::from_millis(4_900)),
+            degraded
+        );
+        assert_eq!(
+            stabilizer.stabilize(full, now + Duration::from_millis(5_100)),
+            full
         );
     }
 
@@ -2452,10 +2713,7 @@ mod tests {
         assert_eq!(meta.scene_revision, 0);
         assert_eq!(meta.applied_seq, 120);
         assert_eq!(meta.active_preview_mode.as_deref(), Some("voice-pack"));
-        assert_eq!(
-            meta.diagnostics.unwrap().dropped_frames_since_last,
-            2
-        );
+        assert_eq!(meta.diagnostics.unwrap().dropped_frames_since_last, 2);
     }
 
     #[tokio::test]
