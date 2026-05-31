@@ -785,7 +785,8 @@ export class SceneControlSocket {
       this.reportError(new Error('Invalid render frame metadata'));
       return;
     }
-    const diagnostics = isRecord(meta.diagnostics) ? meta.diagnostics : undefined;
+    const diagnostics =
+      isRecord(value) && isRecord(value.diagnostics) ? value.diagnostics : undefined;
     const metadataState = readString(diagnostics?.metadataState);
     const metadataDelayMs = readFiniteNumber(diagnostics?.metadataDelayMs);
     if (metadataState === 'delayed' || metadataDelayMs !== undefined) {

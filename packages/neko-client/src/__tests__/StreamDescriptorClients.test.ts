@@ -173,6 +173,7 @@ class FakeAudioContext {
 
 describe('stream descriptor clients', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     supportDecoderConfigs.length = 0;
     configuredDecoderConfigs.length = 0;
     fakeWebSockets.length = 0;
@@ -185,6 +186,7 @@ describe('stream descriptor clients', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -232,7 +234,10 @@ describe('stream descriptor clients', () => {
     });
     expect(configuredDecoderConfigs[0]).toMatchObject({
       avc: { format: 'annexb' },
+      codedWidth: 1280,
+      codedHeight: 720,
       optimizeForLatency: true,
+      latencyMode: 'realtime',
     });
 
     client.dispose();
@@ -257,7 +262,10 @@ describe('stream descriptor clients', () => {
     });
     expect(configuredDecoderConfigs[0]).toMatchObject({
       avc: { format: 'avc' },
+      codedWidth: 1280,
+      codedHeight: 720,
       optimizeForLatency: true,
+      latencyMode: 'realtime',
     });
 
     client.dispose();
@@ -439,8 +447,47 @@ describe('stream descriptor clients', () => {
       queueDepth: 0,
     });
     expect(metas[0]?.diagnostics?.decodeTimeMs).toBeTypeOf('number');
+    expect(metas[0]?.diagnostics?.packetToDecodeOutputMs).toBeTypeOf('number');
+    expect(metas[0]?.diagnostics?.decodeOutputLagFrames).toBeTypeOf('number');
     expect(frameMetas[0]).toEqual(metas[0]);
 
+    client.dispose();
+  });
+
+  it('uses the decoded frame own timing sample when outputs arrive out of order', async () => {
+    fakeDecoderAutoOutput = false;
+    const metas: RenderFrameMeta[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      onFrameMeta: (meta) => metas.push(meta),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    const now = vi.spyOn(performance, 'now');
+    let time = 100;
+    now.mockImplementation(() => time);
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    time = 140;
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    time = 150;
+    pendingFakeDecoderOutputs[1]?.();
+    time = 260;
+    pendingFakeDecoderOutputs[0]?.();
+
+    expect(metas.map((meta) => meta.ptsUs)).toEqual([83_332, 66_666]);
+    expect(metas[0]?.diagnostics?.decodeSubmitToOutputMs).toBeCloseTo(10);
+    expect(metas[1]?.diagnostics?.decodeSubmitToOutputMs).toBeCloseTo(160);
+    expect(metas[0]?.diagnostics?.decodeOutputLagFrames).toBeCloseTo(10 / 16.666, 2);
+    expect(metas[1]?.diagnostics?.decodeOutputLagFrames).toBeCloseTo(160 / 16.666, 2);
+
+    now.mockRestore();
     client.dispose();
   });
 
@@ -480,6 +527,40 @@ describe('stream descriptor clients', () => {
       droppedBeforeDecode: 2,
     });
     expect(diagnostics).toContain('decode-backpressure');
+
+    client.dispose();
+  });
+
+  it('waits for a keyframe after dropping realtime delta frames before decode', async () => {
+    fakeDecoderAutoOutput = false;
+    const frames: number[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 1,
+        dropDeltaFramesWhenBacklogged: true,
+        preserveKeyframes: true,
+      },
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, false) });
+    socket?.onmessage?.({ data: createH264Packet(116_664, 16_666, false) });
+    socket?.onmessage?.({ data: createH264Packet(133_330, 16_666, true) });
+    pendingFakeDecoderOutputs.splice(0).forEach((output) => output());
+
+    expect(frames).toEqual([66_666, 83_332, 133_330]);
+    expect(client.getStats().framesDroppedBeforeDecode).toBe(2);
+    expect(client.getStats().decodeQueueDepth).toBe(2);
 
     client.dispose();
   });

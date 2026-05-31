@@ -127,11 +127,15 @@ describe('EngineClient scene operations', () => {
       frameHeader: 'neko-h264-v1',
       width: 1280,
       height: 720,
+      codedWidth: 1280,
+      codedHeight: 720,
       fps: 60,
       colorSpace: 'srgb',
       bitDepth: 8,
       toneMapping: 'aces',
+      gopSize: 30,
       initialRevision: 4,
+      latencyMode: 'realtime',
       renderMode: 'clay',
       debugView: 'albedo',
       lookdev: {
@@ -159,6 +163,9 @@ describe('EngineClient scene operations', () => {
     expect(stream.descriptor.renderMode).toBe('clay');
     expect(stream.descriptor.debugView).toBe('albedo');
     expect(stream.descriptor.lookdev?.materialOverride?.kind).toBe('clay');
+    expect(stream.descriptor.codedWidth).toBe(1280);
+    expect(stream.descriptor.codedHeight).toBe(720);
+    expect(stream.descriptor.latencyMode).toBe('realtime');
     expect(lastDispatchBody()).toEqual(
       expect.objectContaining({
         options: expect.objectContaining({

@@ -53,8 +53,9 @@ export function readRenderFrameMeta(value: unknown): RenderFrameMeta | null {
     viewTransform: readViewTransform(value.viewTransform) ?? [1, 0, 0, 1, 0, 0],
   };
 
-  if (isRenderFrameDiagnostics(value.diagnostics)) {
-    meta.diagnostics = value.diagnostics;
+  const diagnostics = readRenderFrameDiagnostics(value.diagnostics);
+  if (diagnostics !== undefined) {
+    meta.diagnostics = diagnostics;
   }
 
   const sceneId = readString(value.sceneId);
@@ -115,6 +116,87 @@ export function readFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+export function readRenderFrameDiagnostics(
+  value: unknown,
+): EngineRenderFrameDiagnostics | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const diagnostics: EngineRenderFrameDiagnostics = {};
+  const gpuFrameTimeMs = readFiniteNumber(value.gpuFrameTimeMs);
+  if (gpuFrameTimeMs !== undefined) diagnostics.gpuFrameTimeMs = gpuFrameTimeMs;
+  const encodeTimeMs = readFiniteNumber(value.encodeTimeMs);
+  if (encodeTimeMs !== undefined) diagnostics.encodeTimeMs = encodeTimeMs;
+  if (typeof value.qualityTier === 'string') diagnostics.qualityTier = value.qualityTier;
+  const droppedFramesSinceLast = readFiniteNumber(value.droppedFramesSinceLast);
+  if (droppedFramesSinceLast !== undefined)
+    diagnostics.droppedFramesSinceLast = droppedFramesSinceLast;
+  const gpuUploadTimeMs = readFiniteNumber(value.gpuUploadTimeMs);
+  if (gpuUploadTimeMs !== undefined) diagnostics.gpuUploadTimeMs = gpuUploadTimeMs;
+  if (typeof value.renderPath === 'string') diagnostics.renderPath = value.renderPath;
+  const iosurfaceCreations = readFiniteNumber(value.iosurfaceCreations);
+  if (iosurfaceCreations !== undefined) diagnostics.iosurfaceCreations = iosurfaceCreations;
+  const textureAllocations = readFiniteNumber(value.textureAllocations);
+  if (textureAllocations !== undefined) diagnostics.textureAllocations = textureAllocations;
+  const renderTimeMs = readFiniteNumber(value.renderTimeMs);
+  if (renderTimeMs !== undefined) diagnostics.renderTimeMs = renderTimeMs;
+  const convertTimeMs = readFiniteNumber(value.convertTimeMs);
+  if (convertTimeMs !== undefined) diagnostics.convertTimeMs = convertTimeMs;
+  const decodeTimeMs = readFiniteNumber(value.decodeTimeMs);
+  if (decodeTimeMs !== undefined) diagnostics.decodeTimeMs = decodeTimeMs;
+  const drawTimeMs = readFiniteNumber(value.drawTimeMs);
+  if (drawTimeMs !== undefined) diagnostics.drawTimeMs = drawTimeMs;
+  const queueDepth = readFiniteNumber(value.queueDepth);
+  if (queueDepth !== undefined) diagnostics.queueDepth = queueDepth;
+  const gpuWaitTimeMs = readFiniteNumber(value.gpuWaitTimeMs);
+  if (gpuWaitTimeMs !== undefined) diagnostics.gpuWaitTimeMs = gpuWaitTimeMs;
+  const decodeSubmitToOutputMs = readFiniteNumber(value.decodeSubmitToOutputMs);
+  if (decodeSubmitToOutputMs !== undefined) {
+    diagnostics.decodeSubmitToOutputMs = decodeSubmitToOutputMs;
+  }
+  const droppedBeforeDecode = readFiniteNumber(value.droppedBeforeDecode);
+  if (droppedBeforeDecode !== undefined) diagnostics.droppedBeforeDecode = droppedBeforeDecode;
+  const decodedDroppedBeforePresent = readFiniteNumber(value.decodedDroppedBeforePresent);
+  if (decodedDroppedBeforePresent !== undefined) {
+    diagnostics.decodedDroppedBeforePresent = decodedDroppedBeforePresent;
+  }
+  const packetToPresentedMs = readFiniteNumber(value.packetToPresentedMs);
+  if (packetToPresentedMs !== undefined) diagnostics.packetToPresentedMs = packetToPresentedMs;
+  const presentIntervalMs = readFiniteNumber(value.presentIntervalMs);
+  if (presentIntervalMs !== undefined) diagnostics.presentIntervalMs = presentIntervalMs;
+  const presentFps = readFiniteNumber(value.presentFps);
+  if (presentFps !== undefined) diagnostics.presentFps = presentFps;
+  const packetToDecodeSubmitMs = readFiniteNumber(value.packetToDecodeSubmitMs);
+  if (packetToDecodeSubmitMs !== undefined) {
+    diagnostics.packetToDecodeSubmitMs = packetToDecodeSubmitMs;
+  }
+  const packetToDecodeOutputMs = readFiniteNumber(value.packetToDecodeOutputMs);
+  if (packetToDecodeOutputMs !== undefined) {
+    diagnostics.packetToDecodeOutputMs = packetToDecodeOutputMs;
+  }
+  const decodeOutputToPresentedMs = readFiniteNumber(value.decodeOutputToPresentedMs);
+  if (decodeOutputToPresentedMs !== undefined) {
+    diagnostics.decodeOutputToPresentedMs = decodeOutputToPresentedMs;
+  }
+  const decodeOutputLagFrames = readFiniteNumber(value.decodeOutputLagFrames);
+  if (decodeOutputLagFrames !== undefined)
+    diagnostics.decodeOutputLagFrames = decodeOutputLagFrames;
+  const producerFrameTimeMs = readFiniteNumber(value.producerFrameTimeMs);
+  if (producerFrameTimeMs !== undefined) diagnostics.producerFrameTimeMs = producerFrameTimeMs;
+  const streamSubmitTimeMs = readFiniteNumber(value.streamSubmitTimeMs);
+  if (streamSubmitTimeMs !== undefined) diagnostics.streamSubmitTimeMs = streamSubmitTimeMs;
+  const scheduleLagMs = readFiniteNumber(value.scheduleLagMs);
+  if (scheduleLagMs !== undefined) diagnostics.scheduleLagMs = scheduleLagMs;
+  const skippedIntervals = readFiniteNumber(value.skippedIntervals);
+  if (skippedIntervals !== undefined) diagnostics.skippedIntervals = skippedIntervals;
+  if (typeof value.presentationHostLimited === 'boolean') {
+    diagnostics.presentationHostLimited = value.presentationHostLimited;
+  }
+
+  return Object.keys(diagnostics).length > 0 ? diagnostics : undefined;
+}
+
 export function readViewTransform(value: unknown): number[] | undefined {
   if (
     !Array.isArray(value) ||
@@ -128,8 +210,4 @@ export function readViewTransform(value: unknown): number[] | undefined {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isRenderFrameDiagnostics(value: unknown): value is EngineRenderFrameDiagnostics {
-  return isRecord(value);
 }

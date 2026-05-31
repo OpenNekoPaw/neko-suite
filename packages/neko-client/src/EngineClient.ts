@@ -722,6 +722,9 @@ function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescr
       typeof value.helperPassesEnabled === 'boolean' ? value.helperPassesEnabled : undefined,
     postProcessEnabled:
       typeof value.postProcessEnabled === 'boolean' ? value.postProcessEnabled : undefined,
+    codedWidth: typeof value.codedWidth === 'number' ? value.codedWidth : undefined,
+    codedHeight: typeof value.codedHeight === 'number' ? value.codedHeight : undefined,
+    latencyMode: typeof value.latencyMode === 'string' ? value.latencyMode : undefined,
   };
 
   const renderMode = normalizeRenderMode(value.renderMode);
@@ -758,6 +761,8 @@ function viewportDescriptorToOptions(viewport: ViewportDescriptor): Record<strin
     workMode: viewport.workMode,
     helperPassesEnabled: viewport.helperPassesEnabled,
     lookdev: viewport.lookdev,
+    allowFpsDegrade: viewport.allowFpsDegrade,
+    allowQualityDegrade: viewport.allowQualityDegrade,
   };
 }
 
