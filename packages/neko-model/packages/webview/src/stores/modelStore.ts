@@ -137,6 +137,7 @@ export interface ModelState {
   authoringMetrics: AuthoringPerformanceMetrics;
   authoringMetricsSnapshot: AuthoringMetricsSnapshot;
   showViewportGrid: boolean;
+  isPerformanceMetricsVisible: boolean;
   characterPreview: CharacterPreviewUiState;
   lookDev: LookDevUiState;
   lookDevCapabilities: ModelLookDevSceneControlCapabilities;
@@ -287,6 +288,8 @@ export interface ModelState {
   resetCamera: () => void;
   setViewportGridVisible: (visible: boolean) => void;
   toggleViewportGrid: () => void;
+  setPerformanceMetricsVisible: (visible: boolean) => void;
+  togglePerformanceMetrics: () => void;
   frameSceneCamera: (snapshot: SceneSnapshot) => boolean;
   markSceneCameraFramed: (snapshot: SceneSnapshot) => void;
   getCameraPosition: () => Vec3;
@@ -316,6 +319,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   authoringMetrics: new AuthoringPerformanceMetrics(),
   authoringMetricsSnapshot: new AuthoringPerformanceMetrics().snapshot(),
   showViewportGrid: true,
+  isPerformanceMetricsVisible: false,
   characterPreview: {
     requestedMode: null,
     appliedMode: null,
@@ -940,6 +944,11 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   toggleViewportGrid: () => set((state) => ({ showViewportGrid: !state.showViewportGrid })),
 
+  setPerformanceMetricsVisible: (visible) => set({ isPerformanceMetricsVisible: visible }),
+
+  togglePerformanceMetrics: () =>
+    set((state) => ({ isPerformanceMetricsVisible: !state.isPerformanceMetricsVisible })),
+
   frameSceneCamera: (snapshot) => {
     const signature = sceneFrameSignature(snapshot);
     if (!signature || signature === get().lastAutoFramedSceneSignature) {
@@ -996,6 +1005,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
       cameraRadius: s.cameraRadius,
       cameraTarget: s.cameraTarget,
       showViewportGrid: s.showViewportGrid,
+      isPerformanceMetricsVisible: s.isPerformanceMetricsVisible,
     };
   },
 
@@ -1026,6 +1036,10 @@ export const useModelStore = create<ModelState>((set, get) => ({
       ),
       cameraTarget: vec3FromValue(state['cameraTarget']) ?? defaultCameraTarget(),
       showViewportGrid: (state['showViewportGrid'] as boolean | undefined) ?? true,
+      isPerformanceMetricsVisible:
+        typeof state['isPerformanceMetricsVisible'] === 'boolean'
+          ? state['isPerformanceMetricsVisible']
+          : false,
     }),
 }));
 

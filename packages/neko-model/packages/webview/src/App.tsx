@@ -33,6 +33,7 @@ import { ModelKeyframeTimeline } from './components/ModelKeyframeTimeline';
 import { CharacterPreviewModeSelector } from './components/CharacterPreviewModeSelector';
 import { LookDevControls } from './components/LookDevControls';
 import { SelectionModeControls } from './components/SelectionModeControls';
+import { ViewportPerformanceOverlay } from './components/ViewportPerformanceOverlay';
 import { useModelStore } from './stores/modelStore';
 import type { ModelSelectionWorkflow } from './stores/modelStore';
 import type {
@@ -134,6 +135,7 @@ export function App(): React.JSX.Element {
   const lookDev = useModelStore((s) => s.lookDev);
   const lookDevCapabilities = useModelStore((s) => s.lookDevCapabilities);
   const helperPassesEnabled = useModelStore((s) => s.showViewportGrid);
+  const isPerformanceMetricsVisible = useModelStore((s) => s.isPerformanceMetricsVisible);
   const environmentState = useModelStore((s) => s.environmentState);
   const environmentDiagnostics = useModelStore((s) => s.environmentDiagnostics);
   const selectedTargets = useModelStore((s) => s.selectedTargets);
@@ -1335,6 +1337,7 @@ export function App(): React.JSX.Element {
                     />
                   </div>
                 ) : null}
+                {isPerformanceMetricsVisible ? <ViewportPerformanceOverlay /> : null}
               </div>
             </section>
             {isBottomPanelVisible ? (

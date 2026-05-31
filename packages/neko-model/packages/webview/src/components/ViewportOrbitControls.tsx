@@ -5,14 +5,14 @@ import { useModelStore } from '../stores/modelStore';
 export interface ViewportOrbitControlsProps {
   viewportId?: string;
   onClickSelect?: (normalizedX: number, normalizedY: number) => void;
-  onCameraChange?: () => void;
+  onCameraChange?: (options?: { readonly immediate?: boolean }) => void;
   onCameraMutated?: () => void;
 }
 
 const ORBIT_SENSITIVITY = 0.005;
 const PAN_SENSITIVITY = 0.01;
 const ZOOM_SENSITIVITY = 0.002;
-const SEND_INTERVAL_MS = 16;
+const SEND_INTERVAL_MS = 33;
 const CLICK_THRESHOLD_PX = 4;
 const KEYBOARD_PAN_STEP = 0.08;
 const KEYBOARD_ZOOM_STEP = 0.12;
@@ -39,9 +39,12 @@ export function ViewportOrbitControls({
     };
   }, []);
 
-  const sendCamera = useCallback(() => {
-    onCameraChange?.();
-  }, [onCameraChange]);
+  const sendCamera = useCallback(
+    (immediate = false) => {
+      onCameraChange?.({ immediate });
+    },
+    [onCameraChange],
+  );
 
   const throttledSendCamera = useCallback(() => {
     const now = Date.now();
@@ -107,7 +110,7 @@ export function ViewportOrbitControls({
         document.removeEventListener('pointerup', onUp);
 
         if (dragged) {
-          sendCamera();
+          sendCamera(true);
         } else if (mode === 'select' && onClickSelect) {
           const rect = rootRef.current?.getBoundingClientRect();
           if (rect) {

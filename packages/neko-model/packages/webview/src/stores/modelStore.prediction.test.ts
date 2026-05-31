@@ -36,6 +36,7 @@ describe('modelStore transform prediction layer', () => {
       cameraRadius: 5,
       cameraTarget: [0, 0.9, 0],
       showViewportGrid: true,
+      isPerformanceMetricsVisible: false,
       lookDev: {
         requestedMode: null,
         appliedMode: 'pbr',
@@ -341,6 +342,19 @@ describe('modelStore transform prediction layer', () => {
     expect(useModelStore.getState().lastRenderFrameMeta?.diagnostics?.qualityTier).toBe(
       'main-fps-reduced',
     );
+  });
+
+  it('toggles and restores the viewport performance metrics overlay as editor UI state', () => {
+    expect(useModelStore.getState().isPerformanceMetricsVisible).toBe(false);
+
+    useModelStore.getState().togglePerformanceMetrics();
+
+    expect(useModelStore.getState().isPerformanceMetricsVisible).toBe(true);
+    expect(useModelStore.getState().getEditorState()['isPerformanceMetricsVisible']).toBe(true);
+
+    useModelStore.getState().restoreEditorState({ isPerformanceMetricsVisible: false });
+
+    expect(useModelStore.getState().isPerformanceMetricsVisible).toBe(false);
   });
 
   it('tracks LookDev, environment, and typed selection from authoritative scene state', () => {

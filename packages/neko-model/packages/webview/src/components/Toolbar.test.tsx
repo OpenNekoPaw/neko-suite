@@ -47,6 +47,10 @@ describe('Model Toolbar', () => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
+    useModelStore.setState({
+      showViewportGrid: true,
+      isPerformanceMetricsVisible: false,
+    });
   });
 
   afterEach(() => {
@@ -156,6 +160,7 @@ describe('Model Toolbar', () => {
     expect(buttonByLabel(host, 'toolbar.faceEditor')).not.toBeNull();
     expect(buttonByLabel(host, 'toolbar.boneExpression')).not.toBeNull();
     expect(buttonByLabel(host, 'viewport.grid')).not.toBeNull();
+    expect(buttonByLabel(host, 'toolbar.showPerformanceMetrics')).not.toBeNull();
     expect(buttonByLabel(host, 'viewport.resetCamera')).not.toBeNull();
     expect(
       buttonByLabel(host, 'toolbar.faceEditor')?.getAttribute('data-model-toolbar-action'),
@@ -163,6 +168,11 @@ describe('Model Toolbar', () => {
     expect(buttonByLabel(host, 'viewport.grid')?.getAttribute('data-creative-left-rail-kind')).toBe(
       'common-action',
     );
+    expect(
+      buttonByLabel(host, 'toolbar.showPerformanceMetrics')?.getAttribute(
+        'data-model-toolbar-action',
+      ),
+    ).toBe('toggle-performance-metrics');
     expect(hudToggle).not.toBeNull();
     expect(hudToggle?.getAttribute('aria-controls')).toBe('model-viewport-hud');
     expect(hudToggle?.getAttribute('aria-expanded')).toBe('false');
@@ -224,6 +234,26 @@ describe('Model Toolbar', () => {
     act(() => {
       useModelStore.setState(previousCameraState);
     });
+  });
+
+  it('toggles viewport performance metrics from the left toolbar', () => {
+    act(() => {
+      root.render(<ModelSideToolbar width={48} />);
+    });
+
+    const toggle = buttonByLabel(host, 'toolbar.showPerformanceMetrics');
+
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-controls')).toBe('model-performance-metrics');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(useModelStore.getState().isPerformanceMetricsVisible).toBe(true);
+    expect(buttonByLabel(host, 'toolbar.hidePerformanceMetrics')).not.toBeNull();
   });
 });
 

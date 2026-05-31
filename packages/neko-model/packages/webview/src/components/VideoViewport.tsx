@@ -11,6 +11,7 @@ import { OverlayRenderer, ViewportShell } from '@neko/ui';
 import {
   EngineClient,
   H264StreamClient,
+  type H264BackpressurePolicy,
   type SceneControlSocket,
   type SceneViewportResolution,
 } from '@neko/neko-client';
@@ -43,14 +44,23 @@ export interface VideoViewportProps {
 }
 
 const MAIN_VIEWPORT_ID = 'main';
-const DEFAULT_VIEWPORT_STREAM_SIZE = { width: 1280, height: 720, pixelRatio: 1 };
+const DEFAULT_VIEWPORT_STREAM_SIZE = { width: 1920, height: 1080, pixelRatio: 1 };
 const MAX_VIEWPORT_STREAM_PIXELS = 1920 * 1080;
-const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 1.5;
+const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT_DIMENSION_BUCKET = 16;
 const MIN_VISIBLE_VIEWPORT_DIMENSION = 64;
 const VIEWPORT_STREAM_FPS = 60;
+const VIEWPORT_RESIZE_COMMIT_DELAY_MS = 160;
+const VIEWPORT_CAMERA_SEND_INTERVAL_MS = 33;
+const VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS = 250;
 const LOOKDEV_PENDING_DELAY_MS = 250;
 const LOOKDEV_RETRY_DELAY_MS = 1500;
+const REALTIME_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
+  maxDecodeQueueDepth: 2,
+  dropDeltaFramesWhenBacklogged: true,
+  preserveKeyframes: true,
+  keyframeRequestDropThreshold: 30,
+};
 
 type ViewportStreamSize = SceneViewportResolution;
 
@@ -186,6 +196,13 @@ export function VideoViewport({
   const frameMetaRef = useRef<RenderFrameMeta | null>(null);
   const pendingPresentationRef = useRef<PendingPresentationFrame | null>(null);
   const presentationFrameRef = useRef<number | null>(null);
+  const pendingResizeCommitRef = useRef<number | null>(null);
+  const latestResizeSizeRef = useRef<ViewportStreamSize | null>(null);
+  const cameraUpdateInFlightRef = useRef(false);
+  const pendingCameraUpdateRef = useRef(false);
+  const pendingCameraFlushTimerRef = useRef<number | null>(null);
+  const lastCameraSendAtRef = useRef(0);
+  const lastCameraKeyframeRequestRef = useRef(0);
   // Serialise stream lifecycle across rerenders. Without this, a rapid
   // sceneId change would dispose stream A and start stream B in parallel,
   // letting two RenderGraph submissions race for the same wgpu device queue
@@ -240,44 +257,89 @@ export function VideoViewport({
       return;
     }
 
-    const updateSize = (rect: DOMRectReadOnly) => {
-      const next = createViewportStreamSize(rect);
+    const commitSize = (next: ViewportStreamSize) => {
+      latestResizeSizeRef.current = next;
       setViewportSize((current) => (areViewportStreamSizesEqual(current, next) ? current : next));
     };
 
-    updateSize(element.getBoundingClientRect());
+    const scheduleSizeCommit = (next: ViewportStreamSize) => {
+      latestResizeSizeRef.current = next;
+      if (pendingResizeCommitRef.current !== null) {
+        window.clearTimeout(pendingResizeCommitRef.current);
+      }
+      pendingResizeCommitRef.current = window.setTimeout(() => {
+        pendingResizeCommitRef.current = null;
+        const pending = latestResizeSizeRef.current;
+        if (pending) {
+          commitSize(pending);
+        }
+      }, VIEWPORT_RESIZE_COMMIT_DELAY_MS);
+    };
+
+    const updateSize = (rect: DOMRectReadOnly, commitImmediately: boolean) => {
+      const next = createViewportStreamSize(rect);
+      if (commitImmediately) {
+        commitSize(next);
+      } else {
+        scheduleSizeCommit(next);
+      }
+    };
+
+    updateSize(element.getBoundingClientRect(), true);
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        updateSize(entry.contentRect);
+        updateSize(entry.contentRect, false);
       }
     });
     observer.observe(element);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (pendingResizeCommitRef.current !== null) {
+        window.clearTimeout(pendingResizeCommitRef.current);
+        pendingResizeCommitRef.current = null;
+      }
+    };
   }, []);
 
   const sendViewportCamera = React.useCallback(() => {
-    const store = useModelStore.getState();
-    const position = store.getCameraPosition();
-    const target = store.cameraTarget;
-
-    const sendSceneControlCamera = async () => {
+    const sendSceneControlCamera = async (): Promise<void> => {
+      if (cameraUpdateInFlightRef.current) {
+        pendingCameraUpdateRef.current = true;
+        return;
+      }
       if (!sceneControlSocket?.isOpen()) {
         return;
       }
-      await sceneControlSocket.updateViewportCamera({
-        sceneId,
-        sceneRevision,
-        viewportId: MAIN_VIEWPORT_ID,
-        position,
-        target,
-        resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
-      });
-      sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
+      cameraUpdateInFlightRef.current = true;
+      try {
+        do {
+          pendingCameraUpdateRef.current = false;
+          const store = useModelStore.getState();
+          const position = store.getCameraPosition();
+          const target = store.cameraTarget;
+          await sceneControlSocket.updateViewportCamera({
+            sceneId,
+            sceneRevision,
+            viewportId: MAIN_VIEWPORT_ID,
+            position,
+            target,
+            resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
+          });
+        } while (pendingCameraUpdateRef.current);
+
+        const now = performance.now();
+        if (now - lastCameraKeyframeRequestRef.current >= VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS) {
+          sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
+          lastCameraKeyframeRequestRef.current = now;
+        }
+      } finally {
+        cameraUpdateInFlightRef.current = false;
+      }
     };
 
     void sendSceneControlCamera().catch((error: unknown) => {
@@ -288,6 +350,49 @@ export function VideoViewport({
       onSceneControlError(modelErrorMessage('error.cameraUpdateFailed'));
     });
   }, [sceneControlSocket, sceneId, sceneRevision, viewportSize, onSceneControlError]);
+
+  const flushViewportCamera = React.useCallback(() => {
+    if (pendingCameraFlushTimerRef.current !== null) {
+      window.clearTimeout(pendingCameraFlushTimerRef.current);
+      pendingCameraFlushTimerRef.current = null;
+    }
+    lastCameraSendAtRef.current = performance.now();
+    sendViewportCamera();
+  }, [sendViewportCamera]);
+
+  const scheduleViewportCamera = React.useCallback(
+    (options?: { readonly immediate?: boolean }) => {
+      if (options?.immediate === true) {
+        flushViewportCamera();
+        return;
+      }
+
+      const now = performance.now();
+      const elapsed = now - lastCameraSendAtRef.current;
+      if (elapsed >= VIEWPORT_CAMERA_SEND_INTERVAL_MS) {
+        flushViewportCamera();
+        return;
+      }
+
+      if (pendingCameraFlushTimerRef.current === null) {
+        pendingCameraFlushTimerRef.current = window.setTimeout(() => {
+          pendingCameraFlushTimerRef.current = null;
+          lastCameraSendAtRef.current = performance.now();
+          sendViewportCamera();
+        }, VIEWPORT_CAMERA_SEND_INTERVAL_MS - elapsed);
+      }
+    },
+    [flushViewportCamera, sendViewportCamera],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (pendingCameraFlushTimerRef.current !== null) {
+        window.clearTimeout(pendingCameraFlushTimerRef.current);
+        pendingCameraFlushTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -470,6 +575,7 @@ export function VideoViewport({
           descriptor: stream.descriptor,
           width: stream.descriptor.width,
           height: stream.descriptor.height,
+          backpressure: REALTIME_VIEWPORT_BACKPRESSURE,
           onFrameMeta: (meta) => {
             // After dispose, callbacks from in-flight WS messages may still
             // fire; ignore them so we don't pollute the store with frames
@@ -648,7 +754,7 @@ export function VideoViewport({
             <ViewportOrbitControls
               viewportId={MAIN_VIEWPORT_ID}
               onClickSelect={handleClickSelect}
-              onCameraChange={sendViewportCamera}
+              onCameraChange={scheduleViewportCamera}
               onCameraMutated={onCameraMutated}
             />
           </>

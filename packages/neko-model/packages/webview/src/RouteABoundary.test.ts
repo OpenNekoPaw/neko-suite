@@ -142,6 +142,7 @@ describe('Route A webview boundaries', () => {
     expect(app).toMatch(/<section className="model-viewport-area">/);
     expect(app).not.toMatch(/<ModelViewportControls/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-grid"/);
+    expect(toolbar).toMatch(/data-model-toolbar-action="toggle-performance-metrics"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="reset-camera"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-viewport-hud"/);
     expect(toolbar).toMatch(/data-model-toolbar-action="toggle-bottom-panel"/);
@@ -150,6 +151,7 @@ describe('Route A webview boundaries', () => {
     expect(toolbar).toMatch(/data-model-toolbar-action=\{`toggle-\$\{item.key\}`\}/);
     expect(app).toMatch(/<div id="model-viewport-hud">/);
     expect(app).toMatch(/hudVisible=\{isViewportHudVisible\}/);
+    expect(app).toMatch(/<ViewportPerformanceOverlay \/>/);
     expect(app).toMatch(/\{isBottomPanelVisible \? \(\s*<TimelineDock/);
     expect(app).toMatch(/id="model-timeline-controls"/);
     expect(app).toMatch(/id="model-timeline-dock"/);
@@ -180,6 +182,35 @@ describe('Route A webview boundaries', () => {
     expect(previewModesRule).not.toMatch(/position: absolute/);
     expect(previewModesRule).not.toMatch(/left:|right:|top:/);
     expect(previewModesRule).not.toMatch(/left: 56px;/);
+  });
+
+  it('keeps viewport performance metrics as a toggleable read-only Route A overlay', () => {
+    const app = readSource('App.tsx');
+    const toolbar = readSource('components/Toolbar.tsx');
+    const overlay = readSource('components/ViewportPerformanceOverlay.tsx');
+    const store = readSource('stores/modelStore.ts');
+    const css = readSource('index.css');
+
+    expect(app).toMatch(/isPerformanceMetricsVisible/);
+    expect(app).toMatch(
+      /\{isPerformanceMetricsVisible \? <ViewportPerformanceOverlay \/> : null\}/,
+    );
+    expect(toolbar).toMatch(/togglePerformanceMetrics/);
+    expect(toolbar).toMatch(/aria-controls="model-performance-metrics"/);
+    expect(toolbar).toMatch(/toolbar\.showPerformanceMetrics/);
+    expect(store).toMatch(/isPerformanceMetricsVisible: false/);
+    expect(store).toMatch(/togglePerformanceMetrics/);
+    expect(overlay).toMatch(/authoringMetricsSnapshot/);
+    expect(overlay).toMatch(/lastRenderFrameMeta/);
+    expect(overlay).toMatch(/diagnostics\?\.gpuFrameTimeMs/);
+    expect(overlay).toMatch(/diagnostics\?\.decodeSubmitToOutputMs/);
+    expect(overlay).toMatch(/diagnostics\?\.droppedBeforeDecode/);
+    expect(overlay).not.toMatch(/new EngineClient|postMessage\(|SceneControlSocket|WebSocket/);
+    expect(overlay).not.toMatch(
+      /@react-three\/fiber|@react-three\/drei|@pixiv\/three-vrm|"three"|"@types\/three"|GLTFLoader|VRMLoader|gltf-parser|parseGltf|parseVRM/,
+    );
+    expect(css).toMatch(/\.model-performance-overlay\s*\{/);
+    expect(css).toMatch(/#model-viewport-hud\s*\{/);
   });
 
   it('defaults the right dock to hidden while keeping the toolbar toggle wired', () => {
@@ -249,8 +280,10 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/createViewportStreamSize/);
     expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_PIXELS/);
     expect(videoViewport).toMatch(/1920 \* 1080/);
-    expect(videoViewport).toMatch(/MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 1\.5/);
+    expect(videoViewport).toMatch(/MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2/);
     expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
+    expect(videoViewport).toMatch(/VIEWPORT_RESIZE_COMMIT_DELAY_MS/);
+    expect(videoViewport).toMatch(/window\.setTimeout/);
     expect(videoViewport).toMatch(/bucketed % 2 === 0/);
     expect(videoViewport).toMatch(/resolution:\s*\{\s*width: streamSize\.width/);
     expect(videoViewport).not.toMatch(
@@ -284,6 +317,12 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/!sceneControlSocket\?\.isOpen\(\)/);
     expect(videoViewport).toMatch(/sceneControlSocket\.updateViewportCamera/);
     expect(videoViewport).toMatch(/sceneControlSocket\.requestKeyframe\(MAIN_VIEWPORT_ID\)/);
+    expect(videoViewport).toMatch(/cameraUpdateInFlightRef/);
+    expect(videoViewport).toMatch(/pendingCameraUpdateRef/);
+    expect(videoViewport).toMatch(/VIEWPORT_CAMERA_SEND_INTERVAL_MS = 33/);
+    expect(videoViewport).toMatch(/scheduleViewportCamera/);
+    expect(videoViewport).toMatch(/pendingCameraFlushTimerRef/);
+    expect(videoViewport).toMatch(/VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS/);
     expect(videoViewport).not.toMatch(/sendHttpFallback|updateEditorCamera/);
     expect(app).toMatch(/!socket\?\.isOpen\(\)/);
     expect(app).toMatch(/socket\s*\n\s*\.updateViewportCamera/);
@@ -293,7 +332,11 @@ describe('Route A webview boundaries', () => {
     expect(modelController).toMatch(/position: vec3ToTuple\(store\.getCameraPosition\(\)\)/);
     expect(modelController).toMatch(/target: vec3ToTuple\(store\.cameraTarget\)/);
     expect(modelController).toMatch(/kind: 'camera'/);
-    expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 16/);
+    expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 33/);
+    expect(orbitControls).toMatch(
+      /onCameraChange\?: \(options\?: \{ readonly immediate\?: boolean \}\) => void/,
+    );
+    expect(orbitControls).toMatch(/sendCamera\(true\)/);
     expect(toolbar).toMatch(/onCameraChange\?\.\(\)/);
     expect(toolbar).toMatch(/onCameraMutated\?\.\(\)/);
     expect(orbitControls).toMatch(/zoomCamera\(-zoomStep\)/);

@@ -36,6 +36,7 @@ type ToggleToolKey = 'face' | 'bone' | 'shape' | 'text' | 'csg' | 'sculpt' | 'ke
 
 interface ViewportToolbarStoreState {
   readonly showViewportGrid: boolean;
+  readonly isPerformanceMetricsVisible: boolean;
   readonly isFaceEditorOpen: boolean;
   readonly isBoneExpressionOpen: boolean;
   readonly isShapeCreatorOpen: boolean;
@@ -44,6 +45,7 @@ interface ViewportToolbarStoreState {
   readonly isSculptBrushOpen: boolean;
   readonly isKeyframeEditorOpen: boolean;
   readonly toggleViewportGrid: () => void;
+  readonly togglePerformanceMetrics: () => void;
   readonly resetCamera: () => void;
   readonly toggleFaceEditor: () => void;
   readonly toggleBoneExpression: () => void;
@@ -201,6 +203,21 @@ export const ModelSideToolbar = memo(function ModelSideToolbar({
           onClick={toolbarState.toggleViewportGrid}
         />
         <ToolbarButton
+          aria-controls="model-performance-metrics"
+          aria-expanded={toolbarState.isPerformanceMetricsVisible}
+          data-creative-left-rail-action="toggle-performance-metrics"
+          data-creative-left-rail-kind="common-action"
+          data-model-toolbar-action="toggle-performance-metrics"
+          icon={<PerformanceIcon />}
+          title={
+            toolbarState.isPerformanceMetricsVisible
+              ? t('toolbar.hidePerformanceMetrics')
+              : t('toolbar.showPerformanceMetrics')
+          }
+          active={toolbarState.isPerformanceMetricsVisible}
+          onClick={toolbarState.togglePerformanceMetrics}
+        />
+        <ToolbarButton
           data-creative-left-rail-action="reset-camera"
           data-creative-left-rail-kind="common-action"
           data-model-toolbar-action="reset-camera"
@@ -274,6 +291,7 @@ export const ModelSideToolbar = memo(function ModelSideToolbar({
 function selectViewportToolbarStoreState(state: ModelState): ViewportToolbarStoreState {
   return {
     showViewportGrid: state.showViewportGrid,
+    isPerformanceMetricsVisible: state.isPerformanceMetricsVisible,
     isFaceEditorOpen: state.isFaceEditorOpen,
     isBoneExpressionOpen: state.isBoneExpressionOpen,
     isShapeCreatorOpen: state.isShapeCreatorOpen,
@@ -282,6 +300,7 @@ function selectViewportToolbarStoreState(state: ModelState): ViewportToolbarStor
     isSculptBrushOpen: state.isSculptBrushOpen,
     isKeyframeEditorOpen: state.isKeyframeEditorOpen,
     toggleViewportGrid: state.toggleViewportGrid,
+    togglePerformanceMetrics: state.togglePerformanceMetrics,
     resetCamera: state.resetCamera,
     toggleFaceEditor: state.toggleFaceEditor,
     toggleBoneExpression: state.toggleBoneExpression,
@@ -299,6 +318,7 @@ function areToolbarStatesEqual(
 ): boolean {
   return (
     left.showViewportGrid === right.showViewportGrid &&
+    left.isPerformanceMetricsVisible === right.isPerformanceMetricsVisible &&
     left.isFaceEditorOpen === right.isFaceEditorOpen &&
     left.isBoneExpressionOpen === right.isBoneExpressionOpen &&
     left.isShapeCreatorOpen === right.isShapeCreatorOpen &&
@@ -307,6 +327,7 @@ function areToolbarStatesEqual(
     left.isSculptBrushOpen === right.isSculptBrushOpen &&
     left.isKeyframeEditorOpen === right.isKeyframeEditorOpen &&
     left.toggleViewportGrid === right.toggleViewportGrid &&
+    left.togglePerformanceMetrics === right.togglePerformanceMetrics &&
     left.resetCamera === right.resetCamera &&
     left.toggleFaceEditor === right.toggleFaceEditor &&
     left.toggleBoneExpression === right.toggleBoneExpression &&
@@ -504,6 +525,27 @@ function GridIcon(): React.ReactElement {
       strokeWidth="1.2"
     >
       <path d="M3 3h10v10H3zM3 6h10M3 10h10M6 3v10M10 3v10" />
+    </svg>
+  );
+}
+
+function PerformanceIcon(): React.ReactElement {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 12V7" />
+      <path d="M6.3 12V4" />
+      <path d="M9.7 12V8" />
+      <path d="M13 12V5.5" />
+      <path d="M2.5 13.5h11" />
     </svg>
   );
 }
