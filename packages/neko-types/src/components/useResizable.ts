@@ -76,6 +76,7 @@ export interface ResizeState {
 
 export interface PersistedResizeOptions extends ResizeBounds {
   api?: Pick<VSCodeAPI, 'getState' | 'setState'> | null;
+  persistDebounceMs?: number;
 }
 
 export interface PersistedResizeReturn {
@@ -90,6 +91,7 @@ export interface PersistedResizeReturn {
 type WebviewPersistedState = Record<string, unknown>;
 
 const RESIZE_STATE_KEY = 'neko.resizeState';
+const RESIZE_PERSIST_DEBOUNCE_MS = 180;
 
 // ── Pure Helpers ─────────────────────────────────────────────────────────────
 
@@ -178,9 +180,8 @@ export function normalizeResizeState(
   bounds: ResizeBounds = {},
 ): ResizeState {
   const record = isRecord(value) ? value : {};
-  const rawSize = typeof record.size === 'number' && Number.isFinite(record.size)
-    ? record.size
-    : defaultSize;
+  const rawSize =
+    typeof record.size === 'number' && Number.isFinite(record.size) ? record.size : defaultSize;
 
   return {
     size: clampResizeSize(rawSize, bounds.minSize, bounds.maxSize),
@@ -228,19 +229,13 @@ export function useResizable<TElement extends HTMLElement = HTMLElement>(
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<TElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
+  const pendingSizeRef = useRef<number | null>(null);
+  const frameRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
   const currentSize = isControlled ? options.size : internalSize;
-
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-      activePointerIdRef.current = null;
-    },
-    [],
-  );
 
   const commitSize = useCallback((nextSize: number) => {
     const latestOptions = optionsRef.current;
@@ -249,6 +244,50 @@ export function useResizable<TElement extends HTMLElement = HTMLElement>(
     }
     latestOptions.onSizeChange?.(nextSize);
   }, []);
+
+  const cancelScheduledSize = useCallback(() => {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+  }, []);
+
+  const commitPendingSize = useCallback(() => {
+    const nextSize = pendingSizeRef.current;
+    pendingSizeRef.current = null;
+    if (nextSize !== null) {
+      commitSize(nextSize);
+    }
+  }, [commitSize]);
+
+  const flushPendingSize = useCallback(() => {
+    cancelScheduledSize();
+    commitPendingSize();
+  }, [cancelScheduledSize, commitPendingSize]);
+
+  const scheduleSizeCommit = useCallback(
+    (nextSize: number) => {
+      pendingSizeRef.current = nextSize;
+      if (frameRef.current !== null) {
+        return;
+      }
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null;
+        commitPendingSize();
+      });
+    },
+    [commitPendingSize],
+  );
+
+  useEffect(
+    () => () => {
+      cancelScheduledSize();
+      pendingSizeRef.current = null;
+      mountedRef.current = false;
+      activePointerIdRef.current = null;
+    },
+    [cancelScheduledSize],
+  );
 
   const finishResize = useCallback(
     (event: React.PointerEvent<HTMLElement>, releaseCapture: boolean) => {
@@ -261,12 +300,13 @@ export function useResizable<TElement extends HTMLElement = HTMLElement>(
         releasePointerCaptureSafely(event.currentTarget, activePointerId);
       }
 
+      flushPendingSize();
       activePointerIdRef.current = null;
       if (mountedRef.current) {
         setIsResizing(false);
       }
     },
-    [],
+    [flushPendingSize],
   );
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
@@ -299,9 +339,9 @@ export function useResizable<TElement extends HTMLElement = HTMLElement>(
         event,
         container.getBoundingClientRect(),
       );
-      commitSize(nextSize);
+      scheduleSizeCommit(nextSize);
     },
-    [commitSize],
+    [scheduleSizeCommit],
   );
 
   const handleProps = useMemo<ResizeHandleBindings>(
@@ -336,12 +376,15 @@ export function usePersistedResize(
   options: PersistedResizeOptions = {},
 ): PersistedResizeReturn {
   const api = options.api === undefined ? getVSCodeAPI() : options.api;
+  const persistDebounceMs = options.persistDebounceMs ?? RESIZE_PERSIST_DEBOUNCE_MS;
   const effectiveBounds = {
     minSize: options.minSize ?? bounds.minSize,
     maxSize: options.maxSize ?? bounds.maxSize,
   };
   const defaultSizeRef = useRef(defaultSize);
   const boundsRef = useRef(effectiveBounds);
+  const pendingPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPersistStateRef = useRef<ResizeState | null>(null);
   boundsRef.current = effectiveBounds;
 
   const [state, setState] = useState<ResizeState>(() =>
@@ -350,12 +393,43 @@ export function usePersistedResize(
       : normalizeResizeState(undefined, defaultSizeRef.current, boundsRef.current),
   );
 
+  const flushPendingPersist = useCallback(() => {
+    if (pendingPersistTimerRef.current !== null) {
+      clearTimeout(pendingPersistTimerRef.current);
+      pendingPersistTimerRef.current = null;
+    }
+    const nextState = pendingPersistStateRef.current;
+    pendingPersistStateRef.current = null;
+    if (!api || nextState === null) {
+      return;
+    }
+    api.setState(writePersistedResizeState(api.getState(), panelId, nextState));
+  }, [api, panelId]);
+
   const persist = useCallback(
-    (nextState: ResizeState) => {
+    (nextState: ResizeState, immediate = false) => {
       if (!api) return;
-      api.setState(writePersistedResizeState(api.getState(), panelId, nextState));
+      pendingPersistStateRef.current = nextState;
+      if (pendingPersistTimerRef.current !== null) {
+        clearTimeout(pendingPersistTimerRef.current);
+        pendingPersistTimerRef.current = null;
+      }
+      if (immediate || persistDebounceMs <= 0) {
+        flushPendingPersist();
+        return;
+      }
+      pendingPersistTimerRef.current = setTimeout(() => {
+        flushPendingPersist();
+      }, persistDebounceMs);
     },
-    [api, panelId],
+    [api, flushPendingPersist, persistDebounceMs],
+  );
+
+  useEffect(
+    () => () => {
+      flushPendingPersist();
+    },
+    [flushPendingPersist],
   );
 
   const updateState = useCallback(
@@ -369,7 +443,7 @@ export function usePersistedResize(
           defaultSizeRef.current,
           boundsRef.current,
         );
-        persist(next);
+        persist(next, patch.collapsed !== undefined);
         return next;
       });
     },

@@ -10,12 +10,24 @@ describe('useResizable hook lifecycle', () => {
   let host: HTMLDivElement;
   let root: Root;
   let latest: UseResizableReturn | null;
+  let animationFrameId: number;
+  let animationFrameCallbacks: Map<number, FrameRequestCallback>;
 
   beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
     latest = null;
+    animationFrameId = 0;
+    animationFrameCallbacks = new Map();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      animationFrameId += 1;
+      animationFrameCallbacks.set(animationFrameId, callback);
+      return animationFrameId;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      animationFrameCallbacks.delete(id);
+    });
   });
 
   afterEach(() => {
@@ -23,6 +35,7 @@ describe('useResizable hook lifecycle', () => {
       root.unmount();
     });
     host.remove();
+    vi.unstubAllGlobals();
   });
 
   it('updates controlled size and ignores stale pointer IDs', () => {
@@ -50,7 +63,67 @@ describe('useResizable hook lifecycle', () => {
     act(() => {
       latest?.handleProps.onPointerMove(createPointerEvent(handle, 1, 650, 0));
     });
+
+    expect(onSizeChange).not.toHaveBeenCalled();
+
+    act(() => {
+      flushAnimationFrames();
+    });
+
     expect(onSizeChange).toHaveBeenLastCalledWith(250);
+  });
+
+  it('coalesces resize pointer movement to one animation-frame update', () => {
+    const onSizeChange = vi.fn();
+
+    renderHarness({
+      size: 240,
+      onSizeChange,
+      captureWidth: 800,
+      captureHeight: 400,
+    });
+
+    const handle = getHandle();
+
+    act(() => {
+      latest?.handleProps.onPointerDown(createPointerEvent(handle, 1, 0, 0));
+      latest?.handleProps.onPointerMove(createPointerEvent(handle, 1, 650, 0));
+      latest?.handleProps.onPointerMove(createPointerEvent(handle, 1, 620, 0));
+      latest?.handleProps.onPointerMove(createPointerEvent(handle, 1, 590, 0));
+    });
+
+    expect(onSizeChange).not.toHaveBeenCalled();
+    expect(animationFrameCallbacks.size).toBe(1);
+
+    act(() => {
+      flushAnimationFrames();
+    });
+
+    expect(onSizeChange).toHaveBeenCalledTimes(1);
+    expect(onSizeChange).toHaveBeenLastCalledWith(310);
+  });
+
+  it('flushes the latest resize value when pointer capture ends before animation frame', () => {
+    const onSizeChange = vi.fn();
+
+    renderHarness({
+      size: 240,
+      onSizeChange,
+      captureWidth: 800,
+      captureHeight: 400,
+    });
+
+    const handle = getHandle();
+
+    act(() => {
+      latest?.handleProps.onPointerDown(createPointerEvent(handle, 1, 0, 0));
+      latest?.handleProps.onPointerMove(createPointerEvent(handle, 1, 590, 0));
+      latest?.handleProps.onPointerUp(createPointerEvent(handle, 1, 590, 0));
+    });
+
+    expect(onSizeChange).toHaveBeenCalledTimes(1);
+    expect(onSizeChange).toHaveBeenLastCalledWith(310);
+    expect(animationFrameCallbacks.size).toBe(0);
   });
 
   it('stops resizing on pointercancel and ignores later pointer movement', () => {
@@ -117,6 +190,10 @@ describe('useResizable hook lifecycle', () => {
     act(() => {
       latest?.handleProps.onPointerDown(createPointerEvent(handle, 1, 0, 0));
       latest?.handleProps.onPointerMove(createPointerEvent(handle, 1, 0, 250));
+    });
+
+    act(() => {
+      flushAnimationFrames();
     });
 
     expect(latest?.size).toBe(0.5);
@@ -202,6 +279,12 @@ describe('useResizable hook lifecycle', () => {
     handle.setPointerCapture = vi.fn();
     handle.releasePointerCapture = vi.fn();
     return handle;
+  }
+
+  function flushAnimationFrames(): void {
+    const callbacks = Array.from(animationFrameCallbacks.values());
+    animationFrameCallbacks.clear();
+    callbacks.forEach((callback) => callback(performance.now()));
   }
 });
 
