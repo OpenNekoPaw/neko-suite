@@ -37,6 +37,8 @@ pub struct PreviewPipelineConfig {
     pub bitrate: u64,
     /// GOP size (keyframe interval)
     pub gop_size: u32,
+    /// WebCodecs decoder preference hint echoed by scene streams.
+    pub decoder_preference: Option<String>,
 }
 
 impl Default for PreviewPipelineConfig {
@@ -47,6 +49,7 @@ impl Default for PreviewPipelineConfig {
             fps: 30.0,
             bitrate: 2_000_000, // 2 Mbps for preview
             gop_size: 30,       // 1 second GOP
+            decoder_preference: None,
         }
     }
 }

@@ -70,6 +70,10 @@ describe('ViewportPerformanceOverlay', () => {
           presentationHostLimited: false,
           drawTimeMs: 2.1,
           queueDepth: 3,
+          webcodecsDecodeQueueSize: 1,
+          pendingDecodeFrames: 4,
+          decodeOutputIntervalMs: 16.7,
+          decodeOutputBurst: 2,
           droppedBeforeDecode: 4,
           droppedFramesSinceLast: 2,
           skippedIntervals: 1,
@@ -114,6 +118,10 @@ describe('ViewportPerformanceOverlay', () => {
     expect(host.textContent).toContain('performance.metric.preDecodeDrops');
     expect(host.textContent).toContain('performance.metric.prePresentDrops');
     expect(host.textContent).toContain('performance.metric.decodeLag');
+    expect(host.textContent).toContain('performance.metric.webcodecsQueue');
+    expect(host.textContent).toContain('performance.metric.pendingDecode');
+    expect(host.textContent).toContain('performance.metric.decodeOutputInterval');
+    expect(host.textContent).toContain('performance.metric.decodeOutputBurst');
     expect(host.textContent).toContain('performance.metric.skippedIntervals');
     expect(host.textContent).toContain('performance.value.frameRevision');
   });

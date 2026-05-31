@@ -201,6 +201,7 @@ impl TimelineService {
             fps,
             bitrate,
             gop_size,
+            decoder_preference: None,
         };
 
         tracing::info!(
@@ -831,6 +832,7 @@ impl ITimelineService for TimelineService {
                 fps,
                 bitrate: 4_000_000,            // 4 Mbps for timeline preview
                 gop_size: (fps as u32).max(1), // 1 second GOP
+                decoder_preference: None,
             };
 
             let mut pipeline = match preview_render_factory

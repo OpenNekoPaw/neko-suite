@@ -95,7 +95,7 @@ describe('Route A webview boundaries', () => {
     expect(viteConfig).toMatch(/entryFileNames:\s*'assets\/\[name\]-\[hash\]\.js'/);
     expect(viteConfig).toMatch(/assetFileNames:\s*'assets\/\[name\]-\[hash\]\[extname\]'/);
     expect(provider).toMatch(/parseViteWebviewAssets/);
-    expect(provider).toMatch(/dist', 'webview', 'index\.html'/);
+    expect(provider).toMatch(/'dist'[\s\S]*'webview'[\s\S]*'index\.html'/);
     expect(provider).toMatch(/asWebviewUri/);
     expect(provider).not.toMatch(/assets\/index\.js/);
     expect(provider).not.toMatch(/assets\/index\.css/);
@@ -249,6 +249,10 @@ describe('Route A webview boundaries', () => {
     expect(overlay).toMatch(/diagnostics\?\.presentFps/);
     expect(overlay).toMatch(/diagnostics\?\.droppedBeforeDecode/);
     expect(overlay).toMatch(/diagnostics\?\.decodedDroppedBeforePresent/);
+    expect(overlay).toMatch(/diagnostics\?\.webcodecsDecodeQueueSize/);
+    expect(overlay).toMatch(/diagnostics\?\.pendingDecodeFrames/);
+    expect(overlay).toMatch(/diagnostics\?\.decodeOutputIntervalMs/);
+    expect(overlay).toMatch(/diagnostics\?\.decodeOutputBurst/);
     expect(overlay).not.toMatch(/new EngineClient|postMessage\(|SceneControlSocket|WebSocket/);
     expect(overlay).not.toMatch(
       /@react-three\/fiber|@react-three\/drei|@pixiv\/three-vrm|"three"|"@types\/three"|GLTFLoader|VRMLoader|gltf-parser|parseGltf|parseVRM/,
@@ -327,6 +331,7 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_HEIGHT = 1080/);
     expect(videoViewport).toMatch(/MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2/);
     expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
+    expect(videoViewport).toMatch(/H264_DEBUG_SETTINGS_STORAGE_KEY = 'neko\.model\.h264'/);
     expect(videoViewport).toMatch(/allowFpsDegrade: false/);
     expect(videoViewport).toMatch(/allowQualityDegrade: false/);
     expect(videoViewport).toMatch(/VIEWPORT_RESIZE_COMMIT_DELAY_MS/);
@@ -354,6 +359,10 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/RENDER_FRAME_META_STORE_INTERVAL_MS = 250/);
     expect(videoViewport).toMatch(/maxDecodeQueueDepth: 4/);
     expect(videoViewport).toMatch(/dropDeltaFramesWhenBacklogged: false/);
+    expect(h264Client).toMatch(/webcodecsDecodeQueueSize/);
+    expect(h264Client).toMatch(/pendingDecodeFrames/);
+    expect(h264Client).toMatch(/decodeOutputBurst/);
+    expect(h264Client).toMatch(/hardwareAcceleration: normalizeHardwareAccelerationPreference/);
     expect(h264Client).toMatch(/latencyMode: this\.descriptor\?\.latencyMode/);
     expect(h264Client).toMatch(/codedWidth: this\.descriptor\?\.codedWidth/);
     expect(videoViewport).not.toMatch(/onFrame:\s*\(frame, meta\) => \{[\s\S]*ctx\.drawImage/);

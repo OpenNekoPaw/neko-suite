@@ -134,6 +134,10 @@ describe('EngineClient scene operations', () => {
       bitDepth: 8,
       toneMapping: 'aces',
       gopSize: 30,
+      h264: {
+        gopSize: 6,
+        decoderPreference: 'prefer-software',
+      },
       initialRevision: 4,
       latencyMode: 'realtime',
       renderMode: 'clay',
@@ -158,6 +162,10 @@ describe('EngineClient scene operations', () => {
         renderMode: 'clay',
         materialOverride: { kind: 'clay', roughness: 0.9 },
       },
+      h264: {
+        gopSize: 6,
+        decoderPreference: 'prefer-software',
+      },
     });
 
     expect(stream.descriptor.renderMode).toBe('clay');
@@ -166,6 +174,10 @@ describe('EngineClient scene operations', () => {
     expect(stream.descriptor.codedWidth).toBe(1280);
     expect(stream.descriptor.codedHeight).toBe(720);
     expect(stream.descriptor.latencyMode).toBe('realtime');
+    expect(stream.descriptor.h264).toEqual({
+      gopSize: 6,
+      decoderPreference: 'prefer-software',
+    });
     expect(lastDispatchBody()).toEqual(
       expect.objectContaining({
         options: expect.objectContaining({
@@ -173,6 +185,10 @@ describe('EngineClient scene operations', () => {
           lookdev: expect.objectContaining({
             renderMode: 'clay',
           }),
+          h264: {
+            gopSize: 6,
+            decoderPreference: 'prefer-software',
+          },
         }),
       }),
     );

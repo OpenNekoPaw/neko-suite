@@ -59,6 +59,7 @@ const LOOKDEV_RETRY_DELAY_MS = 1500;
 const RENDER_FRAME_META_STORE_INTERVAL_MS = 250;
 const RAF_LIMITED_FPS_THRESHOLD = 50;
 const RAF_LIMITED_STREAM_FPS_THRESHOLD = 55;
+const H264_DEBUG_SETTINGS_STORAGE_KEY = 'neko.model.h264';
 const REALTIME_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
   maxDecodeQueueDepth: 4,
   dropDeltaFramesWhenBacklogged: false,
@@ -73,6 +74,8 @@ interface PendingPresentationFrame {
   decodedAt: number;
   droppedBeforePresent: number;
 }
+
+type ViewportH264Settings = NonNullable<ViewportDescriptor['h264']>;
 
 function bucketStreamDimension(value: number, maxValue?: number): number {
   if (!Number.isFinite(value) || value <= 0) {
@@ -114,6 +117,30 @@ function createViewportStreamSize(rect: DOMRectReadOnly): ViewportStreamSize {
     height: bucketStreamDimension(height, MAX_VIEWPORT_STREAM_HEIGHT),
     pixelRatio,
   };
+}
+
+function readViewportH264DebugSettings(): ViewportH264Settings | undefined {
+  try {
+    const raw = window.localStorage?.getItem(H264_DEBUG_SETTINGS_STORAGE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    const record = parsed as Record<string, unknown>;
+    const h264: ViewportH264Settings = {};
+    if (typeof record.gopSize === 'number' && Number.isFinite(record.gopSize)) {
+      h264.gopSize = Math.max(1, Math.floor(record.gopSize));
+    }
+    if (
+      record.decoderPreference === 'prefer-hardware' ||
+      record.decoderPreference === 'prefer-software' ||
+      record.decoderPreference === 'no-preference'
+    ) {
+      h264.decoderPreference = record.decoderPreference;
+    }
+    return h264.gopSize !== undefined || h264.decoderPreference !== undefined ? h264 : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isPresentationHostLimited(
@@ -184,6 +211,7 @@ function createViewportDescriptor(
       helperPassesEnabled,
       showGrid: helperPassesEnabled,
     },
+    h264: readViewportH264DebugSettings(),
     workMode: 'edit-parametric',
     cameraRef: {
       kind: 'editorCamera',

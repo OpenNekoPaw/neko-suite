@@ -99,6 +99,12 @@ pub struct ViewportLookDevSettings {
     pub show_normals: Option<bool>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewportH264Settings {
+    pub gop_size: Option<u32>,
+    pub decoder_preference: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ViewportDescriptor {
     pub viewport_id: String,
@@ -113,6 +119,7 @@ pub struct ViewportDescriptor {
     pub work_mode: ViewportWorkMode,
     pub helper_passes: bool,
     pub lookdev: Option<ViewportLookDevSettings>,
+    pub h264: Option<ViewportH264Settings>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,6 +232,7 @@ mod tests {
             work_mode: ViewportWorkMode::EditParametric,
             helper_passes: true,
             lookdev: None,
+            h264: None,
         }
     }
 

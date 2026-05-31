@@ -282,6 +282,7 @@ mod tests {
             work_mode,
             helper_passes: true,
             lookdev: None,
+            h264: None,
         }
     }
 

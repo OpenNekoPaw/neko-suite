@@ -143,6 +143,37 @@ function buildPerformanceRows(
       tone: diagnostics?.queueDepth && diagnostics.queueDepth > 2 ? 'warning' : undefined,
     },
     {
+      id: 'webcodecs-queue',
+      label: t('performance.metric.webcodecsQueue'),
+      value: formatCount(diagnostics?.webcodecsDecodeQueueSize),
+      tone:
+        diagnostics?.webcodecsDecodeQueueSize && diagnostics.webcodecsDecodeQueueSize > 2
+          ? 'warning'
+          : undefined,
+    },
+    {
+      id: 'pending-decode',
+      label: t('performance.metric.pendingDecode'),
+      value: formatCount(diagnostics?.pendingDecodeFrames),
+      tone:
+        diagnostics?.pendingDecodeFrames && diagnostics.pendingDecodeFrames > 2
+          ? 'warning'
+          : undefined,
+    },
+    {
+      id: 'decode-output-interval',
+      label: t('performance.metric.decodeOutputInterval'),
+      value: formatMs(diagnostics?.decodeOutputIntervalMs),
+      tone: toneForFrameBudget(diagnostics?.decodeOutputIntervalMs),
+    },
+    {
+      id: 'decode-output-burst',
+      label: t('performance.metric.decodeOutputBurst'),
+      value: formatCount(diagnostics?.decodeOutputBurst),
+      tone:
+        diagnostics?.decodeOutputBurst && diagnostics.decodeOutputBurst > 1 ? 'warning' : undefined,
+    },
+    {
       id: 'pre-decode-drops',
       label: t('performance.metric.preDecodeDrops'),
       value: formatCount(diagnostics?.droppedBeforeDecode),

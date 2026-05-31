@@ -2031,6 +2031,7 @@ fn default_pbr_viewport_descriptor() -> ViewportDescriptor {
         work_mode: ViewportWorkMode::EditParametric,
         helper_passes: true,
         lookdev: None,
+        h264: None,
     }
 }
 

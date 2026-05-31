@@ -62,7 +62,7 @@ pub use render_world::{
 pub use vertex::PbrVertex;
 pub use viewport::{
     build_viewport_render_graph, SceneColorSpace, SceneToneMapping, ViewportDebugView,
-    ViewportDescriptor, ViewportLookDevSettings, ViewportMaterialOverride,
+    ViewportDescriptor, ViewportH264Settings, ViewportLookDevSettings, ViewportMaterialOverride,
     ViewportMaterialOverrideKind, ViewportPostProcess, ViewportRenderGraphOutput,
     ViewportRenderGraphPlan, ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
 };

@@ -625,6 +625,30 @@ function normalizeLookDevSettings(value: unknown): ViewportLookDevSettings | und
   return lookdev;
 }
 
+function normalizeH264DecoderPreference(value: unknown): string | undefined {
+  switch (value) {
+    case 'prefer-hardware':
+    case 'prefer-software':
+    case 'no-preference':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeViewportH264Settings(value: unknown): ViewportDescriptor['h264'] | undefined {
+  if (!isRecord(value)) return undefined;
+  const h264: NonNullable<ViewportDescriptor['h264']> = {};
+  if (typeof value.gopSize === 'number' && Number.isFinite(value.gopSize)) {
+    h264.gopSize = Math.max(1, Math.floor(value.gopSize));
+  }
+  const decoderPreference = normalizeH264DecoderPreference(value.decoderPreference);
+  if (decoderPreference) {
+    h264.decoderPreference = decoderPreference;
+  }
+  return h264.gopSize !== undefined || h264.decoderPreference !== undefined ? h264 : undefined;
+}
+
 function normalizeEnvironmentPatch(value: unknown): EnvironmentPatch | undefined {
   if (!isRecord(value)) return undefined;
   const environmentId = getString(value.environmentId);
@@ -733,6 +757,8 @@ function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescr
   if (debugView) descriptor.debugView = debugView;
   const lookdev = normalizeLookDevSettings(value.lookdev);
   if (lookdev) descriptor.lookdev = lookdev;
+  const h264 = normalizeViewportH264Settings(value.h264);
+  if (h264) descriptor.h264 = h264;
 
   return descriptor;
 }
@@ -761,6 +787,7 @@ function viewportDescriptorToOptions(viewport: ViewportDescriptor): Record<strin
     workMode: viewport.workMode,
     helperPassesEnabled: viewport.helperPassesEnabled,
     lookdev: viewport.lookdev,
+    h264: viewport.h264,
     allowFpsDegrade: viewport.allowFpsDegrade,
     allowQualityDegrade: viewport.allowQualityDegrade,
   };

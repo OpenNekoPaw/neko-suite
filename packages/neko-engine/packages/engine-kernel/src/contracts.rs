@@ -53,9 +53,9 @@ pub mod gpu {
     pub use neko_engine_scene_renderer::{
         CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
         DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
-        SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportLookDevSettings,
-        ViewportMaterialOverride, ViewportMaterialOverrideKind, ViewportPostProcess,
-        ViewportRenderMode, ViewportWorkMode,
+        SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportH264Settings,
+        ViewportLookDevSettings, ViewportMaterialOverride, ViewportMaterialOverrideKind,
+        ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
     };
 }
 

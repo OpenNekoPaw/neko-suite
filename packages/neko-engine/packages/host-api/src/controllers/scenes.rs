@@ -9,9 +9,9 @@ use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig};
 use neko_engine_kernel::contracts::gpu::{
     CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
     DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
-    SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportLookDevSettings,
-    ViewportMaterialOverride, ViewportMaterialOverrideKind, ViewportPostProcess,
-    ViewportRenderMode, ViewportWorkMode,
+    SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportH264Settings,
+    ViewportLookDevSettings, ViewportMaterialOverride, ViewportMaterialOverrideKind,
+    ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
 };
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
 use neko_engine_kernel::contracts::services::{ISceneService, PipelineSink, StreamSink};
@@ -99,10 +99,18 @@ struct SceneStreamOptions {
     #[serde(default = "default_helper_passes_enabled")]
     helper_passes_enabled: bool,
     lookdev: Option<SceneStreamLookDevOptions>,
+    h264: Option<SceneStreamH264Options>,
     #[serde(default = "default_allow_fps_degrade")]
     allow_fps_degrade: bool,
     #[serde(default = "default_allow_quality_degrade")]
     allow_quality_degrade: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SceneStreamH264Options {
+    gop_size: Option<u32>,
+    decoder_preference: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -215,6 +223,53 @@ fn normalize_stream_fps(fps: f64) -> f64 {
     }
 }
 
+fn normalize_stream_gop_size(gop_size: Option<u32>, fps: f64) -> u32 {
+    gop_size
+        .unwrap_or_else(|| scene_stream_gop_size(fps))
+        .clamp(
+            1,
+            normalize_stream_fps(fps).round().clamp(1.0, 240.0) as u32,
+        )
+}
+
+fn normalize_decoder_preference(value: Option<&str>) -> Option<&'static str> {
+    match value {
+        Some("prefer-hardware") => Some("prefer-hardware"),
+        Some("prefer-software") => Some("prefer-software"),
+        Some("no-preference") => Some("no-preference"),
+        _ => None,
+    }
+}
+
+fn parse_h264_settings(
+    options: Option<&SceneStreamH264Options>,
+    fps: f64,
+) -> Option<ViewportH264Settings> {
+    let options = options?;
+    let gop_size = options
+        .gop_size
+        .map(|gop_size| normalize_stream_gop_size(Some(gop_size), fps));
+    let decoder_preference =
+        normalize_decoder_preference(options.decoder_preference.as_deref()).map(str::to_string);
+    if gop_size.is_none() && decoder_preference.is_none() {
+        return None;
+    }
+    Some(ViewportH264Settings {
+        gop_size,
+        decoder_preference,
+    })
+}
+
+fn h264_settings_to_json(gop_size: u32, decoder_preference: Option<&str>) -> Value {
+    let mut value = serde_json::json!({
+        "gopSize": gop_size,
+    });
+    if let Some(preference) = decoder_preference {
+        value["decoderPreference"] = serde_json::json!(preference);
+    }
+    value
+}
+
 fn scene_stream_resource_id(scene_id: &str, viewport_id: &str) -> String {
     format!("scene:{scene_id}:viewport:{viewport_id}")
 }
@@ -226,6 +281,7 @@ struct SceneStreamProducerConfig {
     width: u32,
     height: u32,
     fps: f64,
+    h264: Option<ViewportH264Settings>,
     allow_fps_degrade: bool,
     allow_quality_degrade: bool,
     initial_revision: u64,
@@ -267,6 +323,8 @@ struct SceneStreamRuntimeSettings {
     width: u32,
     height: u32,
     fps: f64,
+    h264_gop_size: u32,
+    h264_decoder_preference: Option<&'static str>,
     h264_quality: u32,
     helper_passes_enabled: bool,
     post_process_enabled: bool,
@@ -292,6 +350,7 @@ struct SceneStreamRuntimeScheduler {
     base_width: u32,
     base_height: u32,
     base_fps: f64,
+    base_h264: Option<ViewportH264Settings>,
     allow_fps_degrade: bool,
     allow_quality_degrade: bool,
     is_auxiliary: bool,
@@ -308,6 +367,7 @@ impl SceneStreamRuntimeScheduler {
             base_width: config.width,
             base_height: config.height,
             base_fps: config.fps.max(1.0),
+            base_h264: config.h264.clone(),
             allow_fps_degrade: config.allow_fps_degrade,
             allow_quality_degrade: config.allow_quality_degrade,
             is_auxiliary: config.viewport.viewport_id != "main",
@@ -371,6 +431,15 @@ impl SceneStreamRuntimeScheduler {
             width: self.base_width,
             height: self.base_height,
             fps: self.base_fps,
+            h264_gop_size: normalize_stream_gop_size(
+                self.base_h264
+                    .as_ref()
+                    .and_then(|settings| settings.gop_size),
+                self.base_fps,
+            ),
+            h264_decoder_preference: self.base_h264.as_ref().and_then(|settings| {
+                normalize_decoder_preference(settings.decoder_preference.as_deref())
+            }),
             h264_quality: 85,
             helper_passes_enabled: self.base_viewport.helper_passes,
             post_process_enabled: self.base_post_process_enabled(),
@@ -415,6 +484,10 @@ impl SceneStreamRuntimeScheduler {
         let mut viewport = self.base_viewport.clone();
         viewport.fps = settings.fps.round().clamp(1.0, 240.0) as u32;
         viewport.helper_passes = settings.helper_passes_enabled;
+        viewport.h264 = Some(ViewportH264Settings {
+            gop_size: Some(settings.h264_gop_size),
+            decoder_preference: settings.h264_decoder_preference.map(str::to_string),
+        });
         if !settings.post_process_enabled {
             viewport.tone_mapping = SceneToneMapping::None;
             viewport.post_process = ViewportPostProcess::default();
@@ -427,6 +500,15 @@ impl SceneStreamRuntimeScheduler {
             width: self.base_width,
             height: self.base_height,
             fps: self.base_fps,
+            h264_gop_size: normalize_stream_gop_size(
+                self.base_h264
+                    .as_ref()
+                    .and_then(|settings| settings.gop_size),
+                self.base_fps,
+            ),
+            h264_decoder_preference: self.base_h264.as_ref().and_then(|settings| {
+                normalize_decoder_preference(settings.decoder_preference.as_deref())
+            }),
             h264_quality: 85,
             helper_passes_enabled: self.base_viewport.helper_passes,
             post_process_enabled: self.base_post_process_enabled(),
@@ -530,6 +612,7 @@ fn stream_options_to_viewport_descriptor(
             .as_ref()
             .map(parse_lookdev_settings)
             .transpose()?,
+        h264: parse_h264_settings(opts.h264.as_ref(), fps),
     })
 }
 
@@ -1071,7 +1154,8 @@ fn scene_stream_sink_config(
         height: settings.height,
         fps: settings.fps,
         bitrate: scene_stream_bitrate(settings),
-        gop_size: scene_stream_gop_size(settings.fps),
+        gop_size: settings.h264_gop_size,
+        decoder_preference: settings.h264_decoder_preference.map(str::to_string),
     })
 }
 
@@ -1416,6 +1500,7 @@ impl Controller for ScenesController {
                     width,
                     height,
                     fps,
+                    h264: viewport_descriptor.h264.clone(),
                     allow_fps_degrade: opts.allow_fps_degrade,
                     allow_quality_degrade: opts.allow_quality_degrade,
                     initial_revision: scene_revision,
@@ -1426,7 +1511,11 @@ impl Controller for ScenesController {
                     FrameLoadSample::default(),
                     ControlAckHealthSample::default(),
                 );
-                let initial_gop_size = scene_stream_gop_size(initial_runtime.fps);
+                let initial_gop_size = initial_runtime.h264_gop_size;
+                let initial_h264_json = h264_settings_to_json(
+                    initial_runtime.h264_gop_size,
+                    initial_runtime.h264_decoder_preference,
+                );
                 let h264_level_idc = h264_level_idc(width, height, fps);
                 let h264_level = h264_level_string(h264_level_idc);
                 let h264_codec = h264_codec_string(
@@ -1494,6 +1583,7 @@ impl Controller for ScenesController {
                         "bitDepth": 8,
                         "toneMapping": opts.tone_mapping,
                         "gopSize": initial_gop_size,
+                        "h264": initial_h264_json,
                         "latencyMode": "realtime",
                         "initialRevision": scene_revision,
                         "renderMode": render_mode_to_str(viewport_descriptor.render_mode),
@@ -2246,6 +2336,8 @@ mod tests {
         assert_eq!(data["level"], "3.1");
         assert_eq!(data["codecString"], "avc1.42e01f");
         assert_eq!(data["gopSize"], 15);
+        assert_eq!(data["h264"]["gopSize"], 15);
+        assert!(data["h264"].get("decoderPreference").is_none());
         assert_eq!(data["latencyMode"], "realtime");
         assert_eq!(data["qualityTier"], "full");
         assert_eq!(data["scheduledWidth"], 1278);
@@ -2254,6 +2346,41 @@ mod tests {
         assert_eq!(data["postProcessEnabled"], false);
         assert_eq!(data["controlAckPreserved"], true);
         assert!(registry.exists(&StreamId::from_string(stream_id)).await);
+        let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
+    }
+
+    #[tokio::test]
+    async fn scene_stream_descriptor_reflects_h264_experiment_settings() {
+        let (controller, registry) = create_stream_test_controller();
+        let response = controller
+            .handle(
+                "stream",
+                None,
+                serde_json::json!({
+                    "viewportId": "main",
+                    "sceneId": "scene-a",
+                    "renderMode": "pbr",
+                    "resolution": { "width": 1920, "height": 1080, "pixelRatio": 1.0 },
+                    "fps": 60,
+                    "h264": {
+                        "gopSize": 6,
+                        "decoderPreference": "prefer-software"
+                    }
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let data = response.data.as_ref().unwrap().as_object().unwrap();
+        assert_eq!(data["gopSize"], 6);
+        assert_eq!(data["h264"]["gopSize"], 6);
+        assert_eq!(data["h264"]["decoderPreference"], "prefer-software");
+        assert_eq!(data["scheduledFps"], 60.0);
+        assert_eq!(data["scheduledWidth"], 1920);
+        assert_eq!(data["scheduledHeight"], 1080);
+
+        let stream_id = data["streamId"].as_str().unwrap();
         let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
     }
 
@@ -2325,6 +2452,8 @@ mod tests {
             width: 1280,
             height: 720,
             fps: 30.0,
+            h264_gop_size: 15,
+            h264_decoder_preference: None,
             h264_quality: 85,
             helper_passes_enabled: true,
             post_process_enabled: true,
@@ -2461,7 +2590,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1280,
             height: 720,
             fps: 60.0,
@@ -2520,7 +2651,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 640,
             height: 480,
             fps: 30.0,
@@ -2577,7 +2710,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1280,
             height: 720,
             fps: 60.0,
@@ -2633,7 +2768,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1280,
             height: 720,
             fps: 60.0,
@@ -2682,7 +2819,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1920,
             height: 1080,
             fps: 60.0,
@@ -2732,7 +2871,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1280,
             height: 720,
             fps: 60.0,
@@ -2801,7 +2942,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1280,
             height: 720,
             fps: 60.0,
@@ -2864,7 +3007,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1280,
             height: 720,
             fps: 60.0,
@@ -2956,7 +3101,9 @@ mod tests {
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
                 lookdev: None,
+                h264: None,
             },
+            h264: None,
             width: 1280,
             height: 720,
             fps: 30.0,

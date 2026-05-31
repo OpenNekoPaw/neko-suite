@@ -279,6 +279,7 @@ impl PuppetH264StreamConfig {
             fps: self.fps,
             bitrate: self.bitrate,
             gop_size: self.fps.round().max(1.0) as u32,
+            decoder_preference: None,
         }
     }
 }

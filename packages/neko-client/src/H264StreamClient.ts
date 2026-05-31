@@ -227,6 +227,7 @@ type NormalizedH264StreamClientConfig = H264StreamClientConfig & {
 };
 
 type H264AvcBitstreamFormat = 'annexb' | 'avc';
+type H264HardwareAcceleration = 'no-preference' | 'prefer-hardware' | 'prefer-software';
 
 type H264VideoDecoderConfig = VideoDecoderConfig & {
   avc?: {
@@ -234,6 +235,17 @@ type H264VideoDecoderConfig = VideoDecoderConfig & {
   };
   latencyMode?: 'quality' | 'realtime';
 };
+
+function normalizeHardwareAccelerationPreference(value: unknown): H264HardwareAcceleration {
+  switch (value) {
+    case 'no-preference':
+    case 'prefer-hardware':
+    case 'prefer-software':
+      return value;
+    default:
+      return 'prefer-hardware';
+  }
+}
 
 // =============================================================================
 // H264StreamClient
@@ -279,6 +291,9 @@ export class H264StreamClient {
   private pendingFrameDiagnostics: Map<number, EngineRenderFrameDiagnostics> = new Map();
   private pendingPacketReceivedAt: Map<number, number> = new Map();
   private decodedFrameTimestamps: Map<number, number> = new Map();
+  private lastDecodeOutputAt: number | undefined;
+  private currentDecodeOutputBurstStartedAt: number | undefined;
+  private currentDecodeOutputBurstCount = 0;
   private latestFrameMeta: RenderFrameMeta | undefined;
   private readonly pendingFrameMetaExpectations = new Map<string, PendingFrameMetaExpectation>();
   private nextFrameMetaExpectationId = 1;
@@ -629,10 +644,16 @@ export class H264StreamClient {
 
     this.stats.framesDecoded++;
     const frameDecodedAt = performance.now();
+    const previousDecodeOutputAt = this.lastDecodeOutputAt;
+    const decodeOutputIntervalMs =
+      previousDecodeOutputAt !== undefined ? frameDecodedAt - previousDecodeOutputAt : undefined;
+    this.lastDecodeOutputAt = frameDecodedAt;
+    const decodeOutputBurst = this.recordDecodeOutputBurst(frameDecodedAt);
     this.decodedFrameTimestamps.set(frame.timestamp, frameDecodedAt);
     trimOldestMapEntry(this.decodedFrameTimestamps, 100);
 
     const decodeTiming = this.consumeDecodeFrameTiming(frame.timestamp, frameDecodedAt);
+    this.updateDecodeQueueDepth();
 
     const meta = this.pendingFrameMeta.get(frame.timestamp);
     if (meta) {
@@ -679,6 +700,10 @@ export class H264StreamClient {
           meta.durationUs,
         ),
         queueDepth: this.stats.decodeQueueDepth,
+        webcodecsDecodeQueueSize: this.decoder?.decodeQueueSize ?? 0,
+        pendingDecodeFrames: this.decodeStartTimes.size,
+        decodeOutputIntervalMs,
+        decodeOutputBurst,
         droppedBeforeDecode: this.consumeDroppedBeforeDecodeSinceLastFrame(),
       });
       this.latestFrameMeta = enrichedMeta;
@@ -774,7 +799,9 @@ export class H264StreamClient {
       codec: this.codecString,
       codedWidth: this.descriptor?.codedWidth ?? this.config.width,
       codedHeight: this.descriptor?.codedHeight ?? this.config.height,
-      hardwareAcceleration: 'prefer-hardware',
+      hardwareAcceleration: normalizeHardwareAccelerationPreference(
+        this.descriptor?.h264?.decoderPreference,
+      ),
       description: this.decoderDescription,
       latencyMode: this.descriptor?.latencyMode === 'quality' ? 'quality' : 'realtime',
     };
@@ -801,6 +828,20 @@ export class H264StreamClient {
   private updateDecodeQueueDepth(): void {
     if (!this.decoder) return;
     this.stats.decodeQueueDepth = this.effectiveDecodeQueueDepth();
+  }
+
+  private recordDecodeOutputBurst(frameDecodedAt: number): number {
+    if (
+      this.currentDecodeOutputBurstStartedAt === undefined ||
+      frameDecodedAt - this.currentDecodeOutputBurstStartedAt > 1
+    ) {
+      this.currentDecodeOutputBurstStartedAt = frameDecodedAt;
+      this.currentDecodeOutputBurstCount = 1;
+      return this.currentDecodeOutputBurstCount;
+    }
+
+    this.currentDecodeOutputBurstCount++;
+    return this.currentDecodeOutputBurstCount;
   }
 
   private shouldDropPacketBeforeDecode(packet: ParsedH264Packet): boolean {

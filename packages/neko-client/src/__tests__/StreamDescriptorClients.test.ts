@@ -271,6 +271,33 @@ describe('stream descriptor clients', () => {
     client.dispose();
   });
 
+  it('passes descriptor decoder preference to WebCodecs hardware acceleration config', async () => {
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: {
+        ...renderDescriptor,
+        h264: {
+          gopSize: 6,
+          decoderPreference: 'prefer-software',
+        },
+      },
+      width: 1,
+      height: 1,
+    });
+
+    await client.connect();
+
+    expect(supportDecoderConfigs[0]).toMatchObject({
+      hardwareAcceleration: 'prefer-software',
+    });
+    expect(configuredDecoderConfigs[0]).toMatchObject({
+      hardwareAcceleration: 'prefer-software',
+      latencyMode: 'realtime',
+    });
+
+    client.dispose();
+  });
+
   it('accepts PCM f32le audio descriptors', () => {
     expect(() => AudioStreamClient.validateDescriptor(audioDescriptor)).not.toThrow();
   });
@@ -449,8 +476,65 @@ describe('stream descriptor clients', () => {
     expect(metas[0]?.diagnostics?.decodeTimeMs).toBeTypeOf('number');
     expect(metas[0]?.diagnostics?.packetToDecodeOutputMs).toBeTypeOf('number');
     expect(metas[0]?.diagnostics?.decodeOutputLagFrames).toBeTypeOf('number');
+    expect(metas[0]?.diagnostics?.webcodecsDecodeQueueSize).toBe(0);
+    expect(metas[0]?.diagnostics?.pendingDecodeFrames).toBe(0);
+    expect(metas[0]?.diagnostics?.decodeOutputBurst).toBe(1);
     expect(frameMetas[0]).toEqual(metas[0]);
 
+    client.dispose();
+  });
+
+  it('reports pending decode frames and output bursts for delayed WebCodecs output', async () => {
+    fakeDecoderAutoOutput = false;
+    const metas: RenderFrameMeta[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      onFrameMeta: (meta) => metas.push(meta),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    const now = vi.spyOn(performance, 'now');
+    let time = 100;
+    now.mockImplementation(() => time);
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    time = 116;
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    time = 132;
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, false) });
+    fakeDecodeQueueSize = 1;
+
+    time = 200;
+    pendingFakeDecoderOutputs[0]?.();
+    pendingFakeDecoderOutputs[1]?.();
+    pendingFakeDecoderOutputs[2]?.();
+
+    expect(metas).toHaveLength(3);
+    expect(metas[0]?.diagnostics).toMatchObject({
+      webcodecsDecodeQueueSize: 1,
+      pendingDecodeFrames: 2,
+      decodeOutputBurst: 1,
+    });
+    expect(metas[1]?.diagnostics).toMatchObject({
+      webcodecsDecodeQueueSize: 1,
+      pendingDecodeFrames: 1,
+      decodeOutputIntervalMs: 0,
+      decodeOutputBurst: 2,
+    });
+    expect(metas[2]?.diagnostics).toMatchObject({
+      webcodecsDecodeQueueSize: 1,
+      pendingDecodeFrames: 0,
+      decodeOutputIntervalMs: 0,
+      decodeOutputBurst: 3,
+    });
+
+    now.mockRestore();
     client.dispose();
   });
 
@@ -560,7 +644,7 @@ describe('stream descriptor clients', () => {
 
     expect(frames).toEqual([66_666, 83_332, 133_330]);
     expect(client.getStats().framesDroppedBeforeDecode).toBe(2);
-    expect(client.getStats().decodeQueueDepth).toBe(2);
+    expect(client.getStats().decodeQueueDepth).toBe(0);
 
     client.dispose();
   });
