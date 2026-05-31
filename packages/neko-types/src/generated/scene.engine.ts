@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/scene.proto
-// Source hash: 7426e0345440d687
+// Source hash: 6d8794dc5ba4ae45
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -848,6 +848,8 @@ export interface EngineViewportDescriptor {
   workMode: EngineViewportWorkMode;
   helperPassesEnabled?: boolean;
   lookdev?: EngineViewportLookDevSettings;
+  allowFpsDegrade?: boolean;
+  allowQualityDegrade?: boolean;
 }
 
 export interface EngineH264InitData {
@@ -888,6 +890,9 @@ export interface EngineRenderStreamDescriptor {
   renderMode?: EngineViewportRenderMode;
   debugView?: EngineViewportDebugView;
   lookdev?: EngineViewportLookDevSettings;
+  codedWidth?: number;
+  codedHeight?: number;
+  latencyMode?: string;
 }
 
 export interface EngineRenderFrameDiagnostics {
@@ -911,6 +916,15 @@ export interface EngineRenderFrameDiagnostics {
   packetToPresentedMs?: number;
   presentIntervalMs?: number;
   presentFps?: number;
+  packetToDecodeSubmitMs?: number;
+  packetToDecodeOutputMs?: number;
+  decodeOutputToPresentedMs?: number;
+  decodeOutputLagFrames?: number;
+  producerFrameTimeMs?: number;
+  streamSubmitTimeMs?: number;
+  scheduleLagMs?: number;
+  skippedIntervals?: number;
+  presentationHostLimited?: boolean;
 }
 
 export interface EngineRenderFrameMeta {

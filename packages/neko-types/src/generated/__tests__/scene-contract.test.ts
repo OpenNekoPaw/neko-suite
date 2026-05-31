@@ -135,7 +135,15 @@ describe('scene contract fixtures', () => {
     const result = JSON.parse(JSON.stringify(fixture.selectionQueryResult)) as SelectionQueryResult;
 
     expect(viewport.renderMode).toBe('clay');
+    expect(viewport.allowFpsDegrade).toBe(false);
+    expect(viewport.allowQualityDegrade).toBe(false);
     expect(viewport.lookdev?.materialOverride?.kind).toBe('clay');
+    expect(stream.profile).toBe('main');
+    expect(stream.codecString).toBe('avc1.4d001f');
+    expect(stream.codedWidth).toBe(1280);
+    expect(stream.codedHeight).toBe(720);
+    expect(stream.gopSize).toBe(30);
+    expect(stream.latencyMode).toBe('realtime');
     expect(stream.renderMode).toBe('clay');
     expect(stream.lookdev?.materialOverride?.kind).toBe('clay');
     expect(query.mask).toContain('characterRegion');

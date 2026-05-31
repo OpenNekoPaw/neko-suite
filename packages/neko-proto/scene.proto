@@ -946,6 +946,8 @@ message ViewportDescriptor {
   ViewportWorkMode work_mode = 12;
   optional bool helper_passes_enabled = 13;
   optional ViewportLookDevSettings lookdev = 14;
+  optional bool allow_fps_degrade = 15;
+  optional bool allow_quality_degrade = 16;
 }
 
 enum H264Container {
@@ -1012,6 +1014,9 @@ message RenderStreamDescriptor {
   optional ViewportRenderMode render_mode = 21;
   optional ViewportDebugView debug_view = 22;
   optional ViewportLookDevSettings lookdev = 23;
+  optional uint32 coded_width = 24;
+  optional uint32 coded_height = 25;
+  optional string latency_mode = 26;
 }
 
 message RenderFrameDiagnostics {
@@ -1035,6 +1040,15 @@ message RenderFrameDiagnostics {
   optional float packet_to_presented_ms = 18;
   optional float present_interval_ms = 19;
   optional float present_fps = 20;
+  optional float packet_to_decode_submit_ms = 21;
+  optional float packet_to_decode_output_ms = 22;
+  optional float decode_output_to_presented_ms = 23;
+  optional float decode_output_lag_frames = 24;
+  optional float producer_frame_time_ms = 25;
+  optional float stream_submit_time_ms = 26;
+  optional float schedule_lag_ms = 27;
+  optional uint32 skipped_intervals = 28;
+  optional bool presentation_host_limited = 29;
 }
 
 message RenderFrameMeta {
