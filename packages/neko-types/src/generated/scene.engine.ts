@@ -2,7 +2,7 @@
 // AUTO-GENERATED — DO NOT EDIT
 //
 // Source: packages/neko-proto/scene.proto
-// Source hash: a12fa65e37911d66
+// Source hash: 7426e0345440d687
 // Command: node scripts/proto-gen-ts.mjs
 // =============================================================================
 
@@ -905,6 +905,12 @@ export interface EngineRenderFrameDiagnostics {
   drawTimeMs?: number;
   queueDepth?: number;
   gpuWaitTimeMs?: number;
+  decodeSubmitToOutputMs?: number;
+  droppedBeforeDecode?: number;
+  decodedDroppedBeforePresent?: number;
+  packetToPresentedMs?: number;
+  presentIntervalMs?: number;
+  presentFps?: number;
 }
 
 export interface EngineRenderFrameMeta {

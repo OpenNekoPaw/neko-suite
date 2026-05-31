@@ -306,6 +306,34 @@ function formatJSDoc(comment, indent = '') {
 // AST Processing
 // =============================================================================
 
+const MAX_INLINE_GENERATED_LINE_LENGTH = 100;
+
+/**
+ * @param {string} tsName
+ * @param {string[]} values
+ * @returns {string}
+ */
+function formatUnionType(tsName, values) {
+  const inlineValues = values.join(' | ');
+  const inline = `export type ${tsName} = ${inlineValues};`;
+  return inline.length <= MAX_INLINE_GENERATED_LINE_LENGTH
+    ? `${inline}\n`
+    : `export type ${tsName} =\n  | ${values.join('\n  | ')};\n`;
+}
+
+/**
+ * @param {string} constName
+ * @param {string[]} values
+ * @returns {string}
+ */
+function formatReadonlyArray(constName, values) {
+  const inline = `[${values.join(', ')}]`;
+  const fullInline = `export const ${constName} = ${inline} as const;`;
+  return fullInline.length <= MAX_INLINE_GENERATED_LINE_LENGTH
+    ? `${fullInline}\n`
+    : `export const ${constName} = [\n${values.map(value => `  ${value},`).join('\n')}\n] as const;\n`;
+}
+
 /**
  * Generate TS enum type union from a protobuf Enum.
  * @param {protobuf.Enum} enumObj
@@ -327,7 +355,7 @@ function generateEnum(enumObj, styleOverrides, knownEnums, commentMap) {
       return `'${convertEnumValue(stripped, style)}'`;
     });
 
-  const typeDef = `export type ${tsName} =\n  | ${values.join('\n  | ')};\n`;
+  const typeDef = formatUnionType(tsName, values);
   return { typeDef, name: tsName };
 }
 
@@ -453,8 +481,17 @@ function generateMessage(msgType, knownEnums, commentMap, optionalRepeatedMessag
  * @returns {string}
  */
 function generateKeyConst(constName, keys) {
-  const formatted = keys.map(k => `  '${k}',`).join('\n');
-  return `export const ${constName} = [\n${formatted}\n] as const;\n`;
+  const values = keys.map(k => `'${k}'`);
+  return formatReadonlyArray(constName, values);
+}
+
+/**
+ * Join generated sections while preserving exactly one trailing newline.
+ * @param {string[]} sections
+ * @returns {string}
+ */
+function formatGeneratedOutput(sections) {
+  return sections.join('\n').replace(/\n+$/u, '') + '\n';
 }
 
 // =============================================================================
@@ -557,7 +594,7 @@ function processProto(config) {
 
   // --- Write ---
   mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, output.join('\n') + '\n', 'utf-8');
+  writeFileSync(outPath, formatGeneratedOutput(output), 'utf-8');
   console.log(`  ✓ Generated ${outPath}`);
 }
 

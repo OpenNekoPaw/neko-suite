@@ -1029,6 +1029,12 @@ message RenderFrameDiagnostics {
   optional float draw_time_ms = 12;
   optional uint32 queue_depth = 13;
   optional float gpu_wait_time_ms = 14;
+  optional float decode_submit_to_output_ms = 15;
+  optional uint32 dropped_before_decode = 16;
+  optional uint32 decoded_dropped_before_present = 17;
+  optional float packet_to_presented_ms = 18;
+  optional float present_interval_ms = 19;
+  optional float present_fps = 20;
 }
 
 message RenderFrameMeta {
