@@ -35,6 +35,12 @@ import {
 const logger = getLogger('H264');
 
 const H264_HEADER_SIZE = 8 + 8 + 1 + 8; // pts(8) + dts(8) + is_keyframe(1) + duration(8) = 25 bytes
+const DEFAULT_H264_BACKPRESSURE_POLICY: H264BackpressurePolicy = {
+  maxDecodeQueueDepth: 2,
+  dropDeltaFramesWhenBacklogged: false,
+  preserveKeyframes: true,
+  keyframeRequestDropThreshold: 30,
+};
 
 interface ParsedH264Packet {
   pts: number;
@@ -159,12 +165,15 @@ export interface H264StreamClientConfig {
   onPacketReceived?: (sizeBytes: number) => void;
   /** Callback when the stream ends normally (EOF, close code 1000) */
   onStreamEnd?: () => void;
+  /** Decode-stage backpressure. Callers opt in to lossy delta-frame drops for realtime streams. */
+  backpressure?: H264BackpressurePolicy;
 }
 
 export interface H264StreamClientStats {
   packetsReceived: number;
   framesDecoded: number;
   framesDropped: number;
+  framesDroppedBeforeDecode: number;
   isConnected: boolean;
   isDecoderReady: boolean;
   avgDecodeTimeMs: number;
@@ -184,6 +193,13 @@ export interface H264FrameMetaExpectation {
   readonly timestamp?: number;
 }
 
+export interface H264BackpressurePolicy {
+  readonly maxDecodeQueueDepth: number;
+  readonly dropDeltaFramesWhenBacklogged: boolean;
+  readonly preserveKeyframes: boolean;
+  readonly keyframeRequestDropThreshold?: number;
+}
+
 interface PendingFrameMetaExpectation extends H264FrameMetaExpectation {
   readonly id: string;
   readonly createdAt: number;
@@ -201,6 +217,7 @@ type NormalizedH264StreamClientConfig = H264StreamClientConfig & {
   onError: (error: Error) => void;
   onPacketReceived: (sizeBytes: number) => void;
   onStreamEnd: () => void;
+  backpressure: H264BackpressurePolicy;
 };
 
 type H264AvcBitstreamFormat = 'annexb' | 'avc';
@@ -229,6 +246,7 @@ export class H264StreamClient {
     packetsReceived: 0,
     framesDecoded: 0,
     framesDropped: 0,
+    framesDroppedBeforeDecode: 0,
     isConnected: false,
     isDecoderReady: false,
     avgDecodeTimeMs: 0,
@@ -245,6 +263,8 @@ export class H264StreamClient {
   private decodeStartTimes: Map<number, number> = new Map(); // pts -> submitTime
   private decodeTimeSamples: number[] = [];
   private latencySamples: number[] = [];
+  private droppedBeforeDecodeSinceLastFrame = 0;
+  private consecutiveDroppedDeltaFrames = 0;
   private pendingFrames: Map<number, number> = new Map(); // pts -> receiveTime
   private pendingFrameMeta: Map<number, RenderFrameMeta> = new Map();
   private pendingSidebandFrameMeta: Map<number, RenderFrameMeta> = new Map();
@@ -291,6 +311,7 @@ export class H264StreamClient {
       onError: config.onError ?? (() => {}),
       onPacketReceived: config.onPacketReceived ?? (() => {}),
       onStreamEnd: config.onStreamEnd ?? (() => {}),
+      backpressure: normalizeBackpressurePolicy(config.backpressure),
     };
     this.descriptor = config.descriptor;
     this.codecString = this.config.codecString;
@@ -347,6 +368,8 @@ export class H264StreamClient {
     this.pendingFrameMetaExpectations.clear();
     this.decodeTimeSamples = [];
     this.latencySamples = [];
+    this.droppedBeforeDecodeSinceLastFrame = 0;
+    this.consecutiveDroppedDeltaFrames = 0;
     this.stats.isConnected = false;
     this.stats.isDecoderReady = false;
   }
@@ -568,6 +591,10 @@ export class H264StreamClient {
     }
 
     this.updateDecodeQueueDepth();
+    if (this.shouldDropPacketBeforeDecode(packet)) {
+      this.dropPacketBeforeDecode(packet);
+      return;
+    }
 
     // Track timing for performance stats
     this.pendingFrames.set(packet.pts, receiveTime);
@@ -648,10 +675,7 @@ export class H264StreamClient {
         sidebandReceivedAt !== undefined && packetReceivedAt !== undefined
           ? sidebandReceivedAt - packetReceivedAt
           : undefined;
-      if (
-        metadataDelayMs !== undefined &&
-        metadataDelayMs > this.config.metadataDelayBudgetMs
-      ) {
+      if (metadataDelayMs !== undefined && metadataDelayMs > this.config.metadataDelayBudgetMs) {
         this.reportControlFlowDiagnostic({
           kind: 'metadata',
           severity: 'warning',
@@ -674,8 +698,10 @@ export class H264StreamClient {
       }
       const enrichedMeta = mergeRenderFrameDiagnostics(meta, {
         ...(diagnostics ?? {}),
+        decodeSubmitToOutputMs: this.latestDecodeTimeMs(),
         decodeTimeMs: this.latestDecodeTimeMs(),
         queueDepth: this.stats.decodeQueueDepth,
+        droppedBeforeDecode: this.consumeDroppedBeforeDecodeSinceLastFrame(),
       });
       this.latestFrameMeta = enrichedMeta;
       this.reconcileFrameMetaExpectations(enrichedMeta, framePresentedAt);
@@ -742,6 +768,65 @@ export class H264StreamClient {
   private updateDecodeQueueDepth(): void {
     if (!this.decoder) return;
     this.stats.decodeQueueDepth = this.decoder.decodeQueueSize;
+  }
+
+  private shouldDropPacketBeforeDecode(packet: ParsedH264Packet): boolean {
+    const policy = this.config.backpressure;
+    if (!policy.dropDeltaFramesWhenBacklogged) {
+      return false;
+    }
+    if (packet.isKeyframe && policy.preserveKeyframes) {
+      return false;
+    }
+    if (!this.decoder) {
+      return false;
+    }
+    return this.decoder.decodeQueueSize > policy.maxDecodeQueueDepth;
+  }
+
+  private dropPacketBeforeDecode(packet: ParsedH264Packet): void {
+    this.stats.framesDropped++;
+    this.stats.framesDroppedBeforeDecode++;
+    this.droppedBeforeDecodeSinceLastFrame++;
+    this.pendingFrameMeta.delete(packet.pts);
+    this.pendingFrameDiagnostics.delete(packet.pts);
+    this.pendingPacketReceivedAt.delete(packet.pts);
+    this.pendingSidebandFrameMeta.delete(packet.pts);
+    this.pendingSidebandFrameMetaReceivedAt.delete(packet.pts);
+
+    if (packet.isKeyframe) {
+      this.consecutiveDroppedDeltaFrames = 0;
+      return;
+    }
+
+    this.consecutiveDroppedDeltaFrames++;
+    const threshold = this.config.backpressure.keyframeRequestDropThreshold;
+    if (threshold !== undefined && this.consecutiveDroppedDeltaFrames >= threshold) {
+      this.reportControlFlowDiagnostic({
+        kind: 'metadata',
+        severity: 'warning',
+        code: 'decode-backpressure',
+        message: 'Decoded stream is backlogged; dropped delta frames before WebCodecs.',
+        streamId: this.descriptor?.streamId,
+        viewportId: this.descriptor?.viewportId,
+        metadataState: 'delayed',
+        degradedReason: 'video-backpressure',
+        timestamp: performance.now(),
+        details: finiteDetails({
+          decodeQueueDepth: this.stats.decodeQueueDepth,
+          droppedDeltaFrames: this.consecutiveDroppedDeltaFrames,
+          threshold,
+        }),
+      });
+      this.consecutiveDroppedDeltaFrames = 0;
+    }
+  }
+
+  private consumeDroppedBeforeDecodeSinceLastFrame(): number {
+    const dropped = this.droppedBeforeDecodeSinceLastFrame;
+    this.droppedBeforeDecodeSinceLastFrame = 0;
+    this.consecutiveDroppedDeltaFrames = 0;
+    return dropped;
   }
 
   private handleTextMessage(data: string): void {
@@ -909,12 +994,28 @@ function isRenderFrameDiagnostics(value: unknown): value is EngineRenderFrameDia
   return isRecord(value);
 }
 
+function normalizeBackpressurePolicy(
+  policy: H264BackpressurePolicy | undefined,
+): H264BackpressurePolicy {
+  if (!policy) {
+    return DEFAULT_H264_BACKPRESSURE_POLICY;
+  }
+  return {
+    maxDecodeQueueDepth: Math.max(0, Math.floor(policy.maxDecodeQueueDepth)),
+    dropDeltaFramesWhenBacklogged: policy.dropDeltaFramesWhenBacklogged,
+    preserveKeyframes: policy.preserveKeyframes,
+    keyframeRequestDropThreshold:
+      typeof policy.keyframeRequestDropThreshold === 'number'
+        ? Math.max(1, Math.floor(policy.keyframeRequestDropThreshold))
+        : undefined,
+  };
+}
+
 function finiteDetails(
   value: Record<string, number | undefined>,
 ): ViewportSerializableRecord | undefined {
   const entries = Object.entries(value).filter(
-    (entry): entry is [string, number] =>
-      typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+    (entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]),
   );
   return entries.length === 0 ? undefined : Object.fromEntries(entries);
 }
@@ -942,6 +1043,8 @@ function isRenderFrameMetaRelevantToExpectation(
   return (
     (expectation.streamId === undefined || meta.streamId === expectation.streamId) &&
     (expectation.viewportId === undefined || meta.viewportId === expectation.viewportId) &&
-    (expectation.sceneId === undefined || meta.sceneId === undefined || meta.sceneId === expectation.sceneId)
+    (expectation.sceneId === undefined ||
+      meta.sceneId === undefined ||
+      meta.sceneId === expectation.sceneId)
   );
 }

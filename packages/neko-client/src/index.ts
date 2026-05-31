@@ -18,6 +18,7 @@
 export {
   H264StreamClient,
   type H264FrameMetaExpectation,
+  type H264BackpressurePolicy,
   type H264StreamClientConfig,
   type H264StreamClientStats,
 } from './H264StreamClient';

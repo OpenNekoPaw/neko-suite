@@ -39,6 +39,7 @@ const configuredDecoderConfigs: CapturedVideoDecoderConfig[] = [];
 const fakeWebSockets: FakeWebSocket[] = [];
 const pendingFakeDecoderOutputs: Array<() => void> = [];
 let fakeDecoderAutoOutput = true;
+let fakeDecodeQueueSize = 0;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -58,7 +59,9 @@ function captureDecoderConfig(config: VideoDecoderConfig): CapturedVideoDecoderC
 }
 
 class FakeVideoDecoder {
-  readonly decodeQueueSize = 0;
+  get decodeQueueSize(): number {
+    return fakeDecodeQueueSize;
+  }
   ondequeue: ((this: VideoDecoder, ev: Event) => unknown) | null = null;
   state: CodecState = 'unconfigured';
 
@@ -175,6 +178,7 @@ describe('stream descriptor clients', () => {
     fakeWebSockets.length = 0;
     pendingFakeDecoderOutputs.length = 0;
     fakeDecoderAutoOutput = true;
+    fakeDecodeQueueSize = 0;
     vi.stubGlobal('VideoDecoder', FakeVideoDecoder);
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.stubGlobal('EncodedVideoChunk', FakeEncodedVideoChunk);
@@ -436,6 +440,74 @@ describe('stream descriptor clients', () => {
     });
     expect(metas[0]?.diagnostics?.decodeTimeMs).toBeTypeOf('number');
     expect(frameMetas[0]).toEqual(metas[0]);
+
+    client.dispose();
+  });
+
+  it('drops delta frames before decode when WebCodecs is backlogged', async () => {
+    const metas: RenderFrameMeta[] = [];
+    const frames: number[] = [];
+    const diagnostics: string[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 1,
+        dropDeltaFramesWhenBacklogged: true,
+        preserveKeyframes: true,
+        keyframeRequestDropThreshold: 2,
+      },
+      onFrameMeta: (meta) => metas.push(meta),
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    fakeDecodeQueueSize = 2;
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, false) });
+    socket?.onmessage?.({ data: createH264Packet(116_664, 16_666, true) });
+
+    expect(frames).toEqual([66_666, 116_664]);
+    expect(client.getStats().framesDroppedBeforeDecode).toBe(2);
+    expect(metas.at(-1)?.diagnostics).toMatchObject({
+      droppedBeforeDecode: 2,
+    });
+    expect(diagnostics).toContain('decode-backpressure');
+
+    client.dispose();
+  });
+
+  it('preserves delta frames by default when WebCodecs is backlogged', async () => {
+    const frames: number[] = [];
+    const diagnostics: string[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    fakeDecodeQueueSize = 4;
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, false) });
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, false) });
+
+    expect(frames).toEqual([66_666, 83_332, 99_998]);
+    expect(client.getStats().framesDroppedBeforeDecode).toBe(0);
+    expect(diagnostics).not.toContain('decode-backpressure');
 
     client.dispose();
   });
