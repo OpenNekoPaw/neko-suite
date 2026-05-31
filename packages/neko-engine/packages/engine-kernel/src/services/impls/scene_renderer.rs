@@ -10,8 +10,9 @@ use tokio::sync::{mpsc, watch};
 use crate::error::{Error, Result};
 use neko_engine_gpu::GpuContext;
 use neko_engine_scene_renderer::{
-    AssetCache, CameraParams, PbrRenderer, RenderTargetPoolSnapshot, RenderWorld,
-    SceneRenderOutput, ViewportDescriptor, ViewportRenderGraphOutput,
+    AssetCache, CameraParams, EnvironmentBackground, EnvironmentBackgroundSettings, PbrRenderer,
+    RenderTargetPoolSnapshot, RenderWorld, SceneRenderOutput, ViewportDescriptor,
+    ViewportRenderGraphOutput,
 };
 
 pub const SCENE_EXPORT_QUEUE_CAPACITY: usize = 1;
@@ -99,12 +100,12 @@ impl SceneExportFrameQueue {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct SceneRenderRequest<'a> {
     pub snapshot: &'a RenderWorld,
     pub camera: &'a CameraParams,
     pub output_size: (u32, u32),
     pub background_color: Option<[f32; 4]>,
+    pub environment_background: Option<&'a EnvironmentBackground>,
     pub viewport_graph: Option<(&'a ViewportDescriptor, ViewportRenderGraphOutput)>,
 }
 
@@ -213,6 +214,22 @@ impl SceneRenderer {
             .map_err(Error::Other)
     }
 
+    pub fn create_environment_background(
+        &self,
+        width: u32,
+        height: u32,
+        rgba_data: &[u8],
+        settings: EnvironmentBackgroundSettings,
+    ) -> Result<EnvironmentBackground> {
+        let renderer = self
+            .renderer
+            .lock()
+            .map_err(|e| Error::Other(format!("Renderer lock poisoned: {}", e)))?;
+        renderer
+            .create_environment_background(width, height, rgba_data, settings)
+            .map_err(|e| Error::Other(format!("Environment background upload failed: {}", e)))
+    }
+
     pub fn render(
         &self,
         generation: u64,
@@ -233,15 +250,17 @@ impl SceneRenderer {
                 request.camera,
                 request.output_size,
                 request.background_color,
+                request.environment_background,
                 descriptor,
                 graph_output,
             ),
-            None => renderer.render_from_render_world(
+            None => renderer.render_from_render_world_with_environment(
                 request.snapshot,
                 &cache,
                 request.camera,
                 request.output_size,
                 request.background_color,
+                request.environment_background,
             ),
         }
         .map_err(|e| Error::Other(format!("PBR render failed: {}", e)))?;

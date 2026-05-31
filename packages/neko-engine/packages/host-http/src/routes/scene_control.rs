@@ -7,12 +7,14 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use neko_engine_kernel::contracts::gpu::CameraParams;
 use neko_engine_kernel::contracts::scene::{
-    AnimationPlaybackAction, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
-    SceneCommandEvent, SceneCommandPhase, SceneDelta, TopologyOperation,
+    AnimationPlaybackAction, AssetHandleRef, EnvironmentDiagnostic, EnvironmentMode,
+    EnvironmentPatch, LightPatch, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
+    SceneCommandEvent, SceneCommandPhase, SceneDelta, SceneNodePatch, TopologyOperation,
 };
+use neko_engine_kernel::contracts::services::EnvironmentLoadDiagnostic;
 use neko_engine_types::{
-    ViewportCommand, ViewportDomain, ViewportEvent, ViewportFrameMeta,
-    ViewportMetadataCadence, ViewportMetadataEvent, ViewportMetadataTransport,
+    ViewportCommand, ViewportDomain, ViewportEvent, ViewportFrameMeta, ViewportMetadataCadence,
+    ViewportMetadataEvent, ViewportMetadataTransport,
 };
 use neko_host_api::EngineApi;
 use serde::Deserialize;
@@ -21,6 +23,9 @@ use std::sync::Arc;
 
 const PROTOCOL: &str = "neko-scene-control-v1";
 const VIEWPORT_PROTOCOL_VERSION: u64 = 1;
+const ENVIRONMENT_FILE_TOKEN_KIND: &str = "file-token";
+const ENVIRONMENT_ASSET_HANDLE_KIND: &str = "asset-handle";
+const ENVIRONMENT_SOFT_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
 
 pub async fn handle_scene_control(
     State(engine): State<Arc<EngineApi>>,
@@ -85,9 +90,11 @@ async fn handle_client_message(
                 }),
             )
             .await
+                && send_environment_load_diagnostics(socket, engine).await
         }
         SceneControlClientMessage::Subscribe { scene_id } => {
             send_snapshot(socket, engine, scene_id, "snapshot").await
+                && send_environment_load_diagnostics(socket, engine).await
         }
         SceneControlClientMessage::Command { envelope } => {
             let seq = envelope.seq;
@@ -105,6 +112,16 @@ async fn handle_client_message(
                     .await
                 }
             };
+            if let Err(error) = validate_scene_command_event_sources(engine, &envelope.event) {
+                return send_rejected_ack(
+                    socket,
+                    seq,
+                    base_revision,
+                    current_revision(engine),
+                    &error,
+                )
+                .await;
+            }
             let service = match engine.scene_service() {
                 Some(service) => service,
                 None => return send_error(socket, "scene service is not available").await,
@@ -121,13 +138,17 @@ async fn handle_client_message(
             }
 
             if let Some(delta) = delta {
-                send_json(
+                if !send_json(
                     socket,
                     json!({ "type": "delta", "delta": delta_to_json(&delta) }),
                 )
                 .await
+                {
+                    return false;
+                }
+                send_environment_load_diagnostics(socket, engine).await
             } else {
-                true
+                send_environment_load_diagnostics(socket, engine).await
             }
         }
         SceneControlClientMessage::Query {
@@ -137,10 +158,11 @@ async fn handle_client_message(
         } => {
             if query == "snapshot" {
                 send_snapshot(socket, engine, None, "queryResult").await
+                    && send_environment_load_diagnostics(socket, engine).await
             } else {
                 match scene_query_result(engine, &query, payload.as_ref()) {
                     Ok(result) => {
-                        send_json(
+                        if !send_json(
                             socket,
                             json!({
                                 "type": "queryResult",
@@ -150,6 +172,10 @@ async fn handle_client_message(
                             }),
                         )
                         .await
+                        {
+                            return false;
+                        }
+                        send_environment_load_diagnostics(socket, engine).await
                     }
                     Err(error) => {
                         send_json(
@@ -171,6 +197,7 @@ async fn handle_client_message(
         } => handle_viewport_command(socket, engine, request_id, command).await,
         SceneControlClientMessage::Resync { scene_id } => {
             send_snapshot(socket, engine, scene_id, "snapshot").await
+                && send_environment_load_diagnostics(socket, engine).await
         }
         SceneControlClientMessage::ViewportCamera {
             request_id,
@@ -247,10 +274,11 @@ async fn handle_client_message(
                 }
             };
             service.set_editor_camera(camera.clone());
-            if let Err(error) = engine
-                .model_preview_controller()
-                .record_camera_override(&scene_id, &viewport_id, camera)
-            {
+            if let Err(error) = engine.model_preview_controller().record_camera_override(
+                &scene_id,
+                &viewport_id,
+                camera,
+            ) {
                 tracing::warn!(
                     "Failed to record model preview camera override for {scene_id}/{viewport_id}: {error}"
                 );
@@ -301,6 +329,7 @@ async fn handle_client_message(
                 }),
             )
             .await
+                && send_environment_load_diagnostics(socket, engine).await
         }
     }
 }
@@ -396,6 +425,13 @@ fn scene_query_result(
 
     match query {
         "hit-test" | "hitTest" => Ok(hit_test_result(
+            &snapshot,
+            payload,
+            &scene_id,
+            &viewport_id,
+            revision,
+        )),
+        "selection-query" | "selectionQuery" => Ok(selection_query_result(
             &snapshot,
             payload,
             &scene_id,
@@ -519,24 +555,7 @@ fn hit_test_result(
     viewport_id: &str,
     revision: u64,
 ) -> Value {
-    let camera = camera_basis(snapshot, payload);
-    let (origin, direction) = camera.ray_for_screen(
-        payload_number(payload, "x").unwrap_or(0.5),
-        payload_number(payload, "y").unwrap_or(0.5),
-    );
-    let requested = payload_string_array(payload, "nodeIds");
-
-    let picked = scene_nodes(snapshot)
-        .into_iter()
-        .filter(is_pickable_node)
-        .filter(|node| node_matches_request(node, &requested))
-        .filter_map(|node| {
-            let bounds = node_world_bounds(node);
-            intersect_ray_aabb(origin, direction, bounds).map(|hit| (node, bounds, hit))
-        })
-        .min_by(|(_, _, left), (_, _, right)| left.depth.total_cmp(&right.depth));
-
-    match picked {
+    match picked_node_hit(snapshot, payload) {
         Some((node, bounds, hit)) => json!({
             "sceneId": scene_id,
             "viewportId": viewport_id,
@@ -558,6 +577,197 @@ fn hit_test_result(
     }
 }
 
+fn selection_query_result(
+    snapshot: &Value,
+    payload: Option<&Value>,
+    scene_id: &str,
+    viewport_id: &str,
+    revision: u64,
+) -> Value {
+    let hit = picked_node_hit(snapshot, payload);
+    let candidates = hit
+        .as_ref()
+        .map(|(node, bounds, hit)| {
+            selection_candidates_for_node(node, bounds, hit, &selection_mask(payload))
+        })
+        .unwrap_or_default();
+
+    json!({
+        "sceneId": scene_id,
+        "viewportId": viewport_id,
+        "revision": revision,
+        "candidates": candidates
+    })
+}
+
+fn picked_node_hit<'a>(
+    snapshot: &'a Value,
+    payload: Option<&Value>,
+) -> Option<(&'a Value, NodeBounds, RayHit)> {
+    let camera = camera_basis(snapshot, payload);
+    let (origin, direction) = camera.ray_for_screen(
+        payload_number(payload, "x").unwrap_or(0.5),
+        payload_number(payload, "y").unwrap_or(0.5),
+    );
+    let requested = payload_string_array(payload, "nodeIds");
+
+    scene_nodes(snapshot)
+        .into_iter()
+        .filter(is_pickable_node)
+        .filter(|node| node_matches_request(node, &requested))
+        .filter_map(|node| {
+            let bounds = node_world_bounds(node);
+            intersect_ray_aabb(origin, direction, bounds).map(|hit| (node, bounds, hit))
+        })
+        .min_by(|(_, _, left), (_, _, right)| left.depth.total_cmp(&right.depth))
+}
+
+fn selection_candidates_for_node(
+    node: &Value,
+    bounds: &NodeBounds,
+    hit: &RayHit,
+    mask: &[String],
+) -> Vec<Value> {
+    let Some(node_id) = node.get("nodeId").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    let accepts = |kind: &str| mask.is_empty() || mask.iter().any(|value| value == kind);
+    let hit_json = || {
+        json!({
+            "worldPosition": vec3_to_value(hit.position),
+            "worldNormal": vec3_to_value(surface_normal(*bounds, hit.position)),
+            "depth": hit.depth
+        })
+    };
+    let mut candidates = Vec::new();
+
+    append_character_region_candidates(node, &hit_json(), &accepts, &mut candidates);
+
+    if let Some(primitive) = node
+        .get("primitives")
+        .and_then(Value::as_array)
+        .and_then(|values| values.first())
+    {
+        if accepts("materialSlot") {
+            if let Some(material_slot_id) = primitive
+                .get("materialSlotId")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    primitive
+                        .get("material")
+                        .and_then(|material| material.get("id"))
+                        .and_then(Value::as_str)
+                })
+            {
+                candidates.push(json!({
+                    "kind": "materialSlot",
+                    "nodeId": node_id,
+                    "materialSlotId": material_slot_id,
+                    "hit": hit_json()
+                }));
+            }
+        }
+        if accepts("submesh") {
+            if let Some(submesh_id) = primitive.get("submeshId").and_then(Value::as_str) {
+                candidates.push(json!({
+                    "kind": "submesh",
+                    "nodeId": node_id,
+                    "submeshId": submesh_id,
+                    "hit": hit_json()
+                }));
+            }
+        }
+        if accepts("primitive") {
+            if let Some(primitive_id) = primitive.get("primitiveId").and_then(Value::as_str) {
+                candidates.push(json!({
+                    "kind": "primitive",
+                    "nodeId": node_id,
+                    "primitiveId": primitive_id,
+                    "hit": hit_json()
+                }));
+            }
+        }
+    }
+
+    if accepts("node") {
+        candidates.push(json!({
+            "kind": "node",
+            "nodeId": node_id,
+            "hit": hit_json()
+        }));
+    }
+
+    candidates
+}
+
+fn append_character_region_candidates(
+    node: &Value,
+    hit: &Value,
+    accepts: &impl Fn(&str) -> bool,
+    candidates: &mut Vec<Value>,
+) {
+    if !accepts("characterRegion") && !accepts("morphControl") {
+        return;
+    }
+    let Some(node_id) = node.get("nodeId").and_then(Value::as_str) else {
+        return;
+    };
+    let Some(character_id) = node.get("characterId").and_then(Value::as_str) else {
+        return;
+    };
+    let Some(regions) = node
+        .get("regionDescriptors")
+        .and_then(|descriptors| descriptors.get("regions"))
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+
+    for region in regions {
+        let Some(region_id) = region.get("regionId").and_then(Value::as_str) else {
+            continue;
+        };
+        let bindings = region
+            .get("bindings")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let has_compatible_binding = bindings.iter().any(|binding| {
+            let kind = binding.get("kind").and_then(Value::as_str);
+            matches!(
+                kind,
+                Some("morphControl" | "materialSlot" | "bone" | "submesh" | "primitive" | "mask")
+            )
+        });
+        if has_compatible_binding && accepts("characterRegion") {
+            candidates.push(json!({
+                "kind": "characterRegion",
+                "nodeId": node_id,
+                "characterId": character_id,
+                "regionId": region_id,
+                "hit": hit
+            }));
+        }
+        if accepts("morphControl") {
+            for binding in bindings.iter().filter(|binding| {
+                binding.get("kind").and_then(Value::as_str) == Some("morphControl")
+            }) {
+                let Some(morph_id) = binding.get("targetId").and_then(Value::as_str) else {
+                    continue;
+                };
+                candidates.push(json!({
+                    "kind": "morphControl",
+                    "nodeId": node_id,
+                    "characterId": character_id,
+                    "regionId": region_id,
+                    "morphId": morph_id,
+                    "hit": hit
+                }));
+            }
+        }
+    }
+}
+
 fn projected_bounds_result(
     snapshot: &Value,
     payload: Option<&Value>,
@@ -565,13 +775,10 @@ fn projected_bounds_result(
     viewport_id: &str,
     revision: u64,
 ) -> Value {
-    let requested = payload_string_array(payload, "nodeIds");
     let camera = camera_basis(snapshot, payload);
-    let bounds: Vec<Value> = scene_nodes(snapshot)
-        .into_iter()
-        .filter(|node| node_matches_request(node, &requested))
-        .filter_map(|node| projected_bounds_for_node(node, camera))
-        .collect();
+    let bounds = overlay_items_for_targets(snapshot, payload, |node, target| {
+        projected_bounds_for_node(node, camera, target)
+    });
 
     json!({
         "sceneId": scene_id,
@@ -588,13 +795,10 @@ fn gizmo_anchor_result(
     viewport_id: &str,
     revision: u64,
 ) -> Value {
-    let requested = payload_string_array(payload, "nodeIds");
     let camera = camera_basis(snapshot, payload);
-    let anchors: Vec<Value> = scene_nodes(snapshot)
-        .into_iter()
-        .filter(|node| node_matches_request(node, &requested))
-        .filter_map(|node| gizmo_anchor_for_node(node, camera))
-        .collect();
+    let anchors = overlay_items_for_targets(snapshot, payload, |node, target| {
+        gizmo_anchor_for_node(node, camera, target)
+    });
 
     json!({
         "sceneId": scene_id,
@@ -629,15 +833,25 @@ fn overlay_state_result(
     revision: u64,
 ) -> Value {
     let selected_node_ids = payload_string_array(payload, "selectedNodeIds");
-    let projected_bounds =
+    let has_overlay_targets = has_explicit_overlay_targets(payload);
+    let projected_bounds = if has_overlay_targets {
         projected_bounds_result(snapshot, payload, scene_id, viewport_id, revision)
             .get("bounds")
             .cloned()
-            .unwrap_or_else(|| Value::Array(Vec::new()));
-    let gizmo_anchors = gizmo_anchor_result(snapshot, payload, scene_id, viewport_id, revision)
-        .get("anchors")
-        .cloned()
-        .unwrap_or_else(|| Value::Array(Vec::new()));
+            .unwrap_or_else(|| Value::Array(Vec::new()))
+    } else {
+        Value::Array(Vec::new())
+    };
+    let gizmo_anchors = if has_overlay_targets {
+        gizmo_anchor_result(snapshot, payload, scene_id, viewport_id, revision)
+            .get("anchors")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(Vec::new()))
+    } else {
+        Value::Array(Vec::new())
+    };
+    let light_helpers = light_helper_anchors(snapshot, payload);
+    let gizmo_anchors = merge_overlay_arrays(gizmo_anchors, light_helpers);
 
     json!({
         "sceneId": scene_id,
@@ -651,6 +865,18 @@ fn overlay_state_result(
             .cloned()
             .unwrap_or_else(default_camera_state)
     })
+}
+
+fn merge_overlay_arrays(base: Value, extra: Vec<Value>) -> Value {
+    let mut values = base.as_array().cloned().unwrap_or_default();
+    values.extend(extra);
+    Value::Array(values)
+}
+
+fn has_explicit_overlay_targets(payload: Option<&Value>) -> bool {
+    !payload_selection_targets(payload).is_empty()
+        || !payload_string_array(payload, "nodeIds").is_empty()
+        || !payload_string_array(payload, "selectedNodeIds").is_empty()
 }
 
 fn scene_nodes(snapshot: &Value) -> Vec<&Value> {
@@ -679,7 +905,82 @@ fn node_matches_request(node: &&Value, requested: &[String]) -> bool {
         .unwrap_or(false)
 }
 
-fn projected_bounds_for_node(node: &Value, camera: CameraBasis) -> Option<Value> {
+fn overlay_items_for_targets<F>(
+    snapshot: &Value,
+    payload: Option<&Value>,
+    mut project: F,
+) -> Vec<Value>
+where
+    F: FnMut(&Value, Option<Value>) -> Option<Value>,
+{
+    let targets = payload_selection_targets(payload);
+    if !targets.is_empty() {
+        return targets
+            .into_iter()
+            .filter_map(|target| {
+                let node_id = target.get("nodeId").and_then(Value::as_str)?;
+                scene_nodes(snapshot)
+                    .into_iter()
+                    .find(|node| {
+                        node.get("nodeId")
+                            .and_then(Value::as_str)
+                            .map(|candidate| candidate == node_id)
+                            .unwrap_or(false)
+                    })
+                    .and_then(|node| project(node, Some(target)))
+            })
+            .collect();
+    }
+
+    let requested = payload_string_array(payload, "nodeIds");
+    let requested = if requested.is_empty() {
+        payload_string_array(payload, "selectedNodeIds")
+    } else {
+        requested
+    };
+    scene_nodes(snapshot)
+        .into_iter()
+        .filter(|node| node_matches_request(node, &requested))
+        .filter_map(|node| project(node, None))
+        .collect()
+}
+
+fn light_helper_anchors(snapshot: &Value, payload: Option<&Value>) -> Vec<Value> {
+    let camera = camera_basis(snapshot, payload);
+    let requested = payload_string_array(payload, "lightNodeIds");
+    scene_nodes(snapshot)
+        .into_iter()
+        .filter(|node| node.get("visible").and_then(Value::as_bool).unwrap_or(true))
+        .filter(|node| {
+            node.get("kind").and_then(Value::as_str) == Some("light") || node.get("light").is_some()
+        })
+        .filter(|node| node_matches_request(node, &requested))
+        .filter_map(|node| light_helper_anchor_for_node(node, camera))
+        .collect()
+}
+
+fn payload_selection_targets(payload: Option<&Value>) -> Vec<Value> {
+    for key in ["selectedTargets", "targets"] {
+        let Some(values) = payload
+            .and_then(|payload| payload.get(key))
+            .and_then(Value::as_array)
+        else {
+            continue;
+        };
+        return values
+            .iter()
+            .filter(|value| value.get("nodeId").and_then(Value::as_str).is_some())
+            .cloned()
+            .collect();
+    }
+    Vec::new()
+}
+
+fn projected_bounds_for_node(
+    node: &Value,
+    camera: CameraBasis,
+    target: Option<Value>,
+) -> Option<Value> {
     let node_id = node
         .get("nodeId")
         .and_then(Value::as_str)
@@ -697,7 +998,7 @@ fn projected_bounds_for_node(node: &Value, camera: CameraBasis) -> Option<Value>
         max_y = max_y.max(y);
     }
 
-    Some(json!({
+    let mut result = json!({
         "nodeId": node_id,
         "min": {
             "x": min_x.clamp(0.0, 1.0),
@@ -707,10 +1008,36 @@ fn projected_bounds_for_node(node: &Value, camera: CameraBasis) -> Option<Value>
             "x": max_x.clamp(0.0, 1.0),
             "y": max_y.clamp(0.0, 1.0)
         }
-    }))
+    });
+    if let Some(target) = target {
+        result["target"] = target;
+    }
+    Some(result)
 }
 
-fn gizmo_anchor_for_node(node: &Value, camera: CameraBasis) -> Option<Value> {
+fn gizmo_anchor_for_node(
+    node: &Value,
+    camera: CameraBasis,
+    target: Option<Value>,
+) -> Option<Value> {
+    let node_id = node
+        .get("nodeId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let world_position = node_world_position_vec(node);
+    let screen = camera.project_world(world_position)?;
+    let mut result = json!({
+        "nodeId": node_id,
+        "worldPosition": vec3_to_value(world_position),
+        "screenPosition": { "x": screen.0.clamp(0.0, 1.0), "y": screen.1.clamp(0.0, 1.0) }
+    });
+    if let Some(target) = target {
+        result["target"] = target;
+    }
+    Some(result)
+}
+
+fn light_helper_anchor_for_node(node: &Value, camera: CameraBasis) -> Option<Value> {
     let node_id = node
         .get("nodeId")
         .and_then(Value::as_str)
@@ -720,7 +1047,11 @@ fn gizmo_anchor_for_node(node: &Value, camera: CameraBasis) -> Option<Value> {
     Some(json!({
         "nodeId": node_id,
         "worldPosition": vec3_to_value(world_position),
-        "screenPosition": { "x": screen.0.clamp(0.0, 1.0), "y": screen.1.clamp(0.0, 1.0) }
+        "screenPosition": { "x": screen.0.clamp(0.0, 1.0), "y": screen.1.clamp(0.0, 1.0) },
+        "target": {
+            "kind": "node",
+            "nodeId": node_id
+        }
     }))
 }
 
@@ -1029,6 +1360,18 @@ fn payload_string_array(payload: Option<&Value>, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn selection_mask(payload: Option<&Value>) -> Vec<String> {
+    payload_string_array(payload, "mask")
+        .into_iter()
+        .map(|value| match value.as_str() {
+            "material-slot" => "materialSlot".to_string(),
+            "character-region" => "characterRegion".to_string(),
+            "morph-control" => "morphControl".to_string(),
+            other => other.to_string(),
+        })
+        .collect()
+}
+
 fn unsupported_viewport_command_event(command: &ViewportCommand, revision: u64) -> ViewportEvent {
     ViewportEvent {
         protocol_version: neko_engine_types::VIEWPORT_PROTOCOL_VERSION,
@@ -1150,6 +1493,30 @@ async fn send_rejected_ack(
     .await
 }
 
+async fn send_environment_load_diagnostics(socket: &mut WebSocket, engine: &EngineApi) -> bool {
+    let Some(service) = engine.scene_service() else {
+        return true;
+    };
+    let diagnostics = service.take_environment_load_diagnostics();
+    if diagnostics.is_empty() {
+        return true;
+    }
+    send_json(
+        socket,
+        json!({
+            "type": "delta",
+            "delta": {
+                "revision": current_revision(engine),
+                "environmentDiagnostics": diagnostics
+                    .iter()
+                    .map(environment_load_diagnostic_to_json)
+                    .collect::<Vec<_>>()
+            }
+        }),
+    )
+    .await
+}
+
 fn ack_to_json(ack: &SceneCommandAck) -> Value {
     json!({
         "seq": ack.seq,
@@ -1174,6 +1541,18 @@ fn delta_to_json(delta: &SceneDelta) -> Value {
     object.insert("revision".to_string(), json!(delta.revision));
     if let Some(applied_seq) = delta.applied_seq {
         object.insert("appliedSeq".to_string(), json!(applied_seq));
+    }
+    if !delta.added_nodes.is_empty() {
+        object.insert(
+            "addedNodes".to_string(),
+            Value::Array(
+                delta
+                    .added_nodes
+                    .iter()
+                    .map(scene_node_patch_to_json)
+                    .collect(),
+            ),
+        );
     }
     if !delta.updated_transforms.is_empty() {
         object.insert(
@@ -1224,6 +1603,18 @@ fn delta_to_json(delta: &SceneDelta) -> Value {
                             "visible": update.visible
                         })
                     })
+                    .collect(),
+            ),
+        );
+    }
+    if !delta.updated_lights.is_empty() {
+        object.insert(
+            "updatedLights".to_string(),
+            Value::Array(
+                delta
+                    .updated_lights
+                    .iter()
+                    .map(light_patch_to_json)
                     .collect(),
             ),
         );
@@ -1326,6 +1717,27 @@ fn delta_to_json(delta: &SceneDelta) -> Value {
     if !delta.topology_changes.is_empty() {
         object.insert("topologyChanges".to_string(), json!(delta.topology_changes));
     }
+    if let Some(environment) = &delta.environment {
+        object.insert(
+            "environment".to_string(),
+            environment
+                .as_ref()
+                .map(environment_patch_to_json)
+                .unwrap_or(Value::Null),
+        );
+    }
+    if !delta.environment_diagnostics.is_empty() {
+        object.insert(
+            "environmentDiagnostics".to_string(),
+            Value::Array(
+                delta
+                    .environment_diagnostics
+                    .iter()
+                    .map(environment_diagnostic_to_json)
+                    .collect(),
+            ),
+        );
+    }
     Value::Object(object)
 }
 
@@ -1369,20 +1781,52 @@ fn snapshot_to_contract(snapshot: Value, revision: u64) -> Value {
         .map(|animations| animations.iter().map(animation_to_contract).collect())
         .unwrap_or_default();
 
-    json!({
-        "sceneId": snapshot_object
-            .get("sceneId")
-            .or_else(|| snapshot_object.get("scene_id"))
-            .and_then(Value::as_str)
-            .unwrap_or("default"),
-        "revision": snapshot_object
-            .get("revision")
-            .and_then(Value::as_u64)
-            .unwrap_or(revision),
-        "nodes": nodes,
-        "animations": animations,
-        "activeCamera": snapshot_object.get("activeCamera").or_else(|| snapshot_object.get("active_camera")).cloned()
-    })
+    let mut result = Map::new();
+    result.insert(
+        "sceneId".to_string(),
+        Value::String(
+            snapshot_object
+                .get("sceneId")
+                .or_else(|| snapshot_object.get("scene_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("default")
+                .to_string(),
+        ),
+    );
+    result.insert(
+        "revision".to_string(),
+        Value::from(
+            snapshot_object
+                .get("revision")
+                .and_then(Value::as_u64)
+                .unwrap_or(revision),
+        ),
+    );
+    result.insert("nodes".to_string(), Value::Array(nodes));
+    result.insert("animations".to_string(), Value::Array(animations));
+    if let Some(active_camera) = snapshot_object
+        .get("activeCamera")
+        .or_else(|| snapshot_object.get("active_camera"))
+        .cloned()
+    {
+        result.insert("activeCamera".to_string(), active_camera);
+    }
+    if let Some(environment) = snapshot_object
+        .get("environment")
+        .and_then(environment_value_to_contract)
+    {
+        result.insert("environment".to_string(), environment);
+    }
+
+    Value::Object(result)
+}
+
+fn environment_value_to_contract(value: &Value) -> Option<Value> {
+    if value.is_null() {
+        return None;
+    }
+    let patch: EnvironmentPatch = serde_json::from_value(value.clone()).ok()?;
+    Some(environment_patch_to_json(&patch))
 }
 
 fn node_to_contract(node: &Value, children_by_parent: &Map<String, Value>) -> Option<Value> {
@@ -1454,6 +1898,27 @@ fn node_to_contract(node: &Value, children_by_parent: &Map<String, Value>) -> Op
     if let Some(material) = object.get("material") {
         result.insert("material".to_string(), material.clone());
     }
+    if let Some(primitives) = object.get("primitives").and_then(Value::as_array) {
+        result.insert(
+            "primitives".to_string(),
+            Value::Array(primitives.iter().map(mesh_primitive_to_contract).collect()),
+        );
+    }
+    if let Some(character_id) = object
+        .get("characterId")
+        .or_else(|| object.get("character_id"))
+    {
+        result.insert("characterId".to_string(), character_id.clone());
+    }
+    if let Some(region_descriptors) = object
+        .get("regionDescriptors")
+        .or_else(|| object.get("region_descriptors"))
+    {
+        result.insert("regionDescriptors".to_string(), region_descriptors.clone());
+    }
+    if let Some(light) = object.get("light") {
+        result.insert("light".to_string(), light.clone());
+    }
     result.insert(
         "kind".to_string(),
         Value::String(
@@ -1466,6 +1931,35 @@ fn node_to_contract(node: &Value, children_by_parent: &Map<String, Value>) -> Op
     );
 
     Some(Value::Object(result))
+}
+
+fn mesh_primitive_to_contract(value: &Value) -> Value {
+    let mut object = Map::new();
+    if let Some(mesh) = value.get("mesh") {
+        object.insert("mesh".to_string(), mesh.clone());
+    }
+    if let Some(material) = value.get("material") {
+        object.insert("material".to_string(), material.clone());
+    }
+    if let Some(submesh_id) = value.get("submeshId").and_then(Value::as_str) {
+        object.insert(
+            "submeshId".to_string(),
+            Value::String(submesh_id.to_string()),
+        );
+    }
+    if let Some(primitive_id) = value.get("primitiveId").and_then(Value::as_str) {
+        object.insert(
+            "primitiveId".to_string(),
+            Value::String(primitive_id.to_string()),
+        );
+    }
+    if let Some(material_slot_id) = value.get("materialSlotId").and_then(Value::as_str) {
+        object.insert(
+            "materialSlotId".to_string(),
+            Value::String(material_slot_id.to_string()),
+        );
+    }
+    Value::Object(object)
 }
 
 fn animation_to_contract(animation: &Value) -> Value {
@@ -1531,6 +2025,132 @@ fn vec3_to_json(value: [f32; 3]) -> Value {
 
 fn quat_to_json(value: [f32; 4]) -> Value {
     json!({ "x": value[0], "y": value[1], "z": value[2], "w": value[3] })
+}
+
+fn scene_node_patch_to_json(patch: &SceneNodePatch) -> Value {
+    let mut object = Map::new();
+    object.insert("nodeId".to_string(), Value::String(patch.node_id.clone()));
+    if let Some(parent_id) = &patch.parent_id {
+        object.insert("parentId".to_string(), Value::String(parent_id.clone()));
+    }
+    if let Some(name) = &patch.name {
+        object.insert("name".to_string(), Value::String(name.clone()));
+    }
+    if let Some(transform) = &patch.transform {
+        object.insert(
+            "transform".to_string(),
+            json!({
+                "position": vec3_to_json(transform.position),
+                "rotation": quat_to_json(transform.rotation),
+                "scale": vec3_to_json(transform.scale)
+            }),
+        );
+    }
+    if let Some(visible) = patch.visible {
+        object.insert("visible".to_string(), Value::Bool(visible));
+    }
+    if !patch.children.is_empty() {
+        object.insert("children".to_string(), json!(patch.children));
+    }
+    if let Some(kind) = &patch.kind {
+        object.insert("kind".to_string(), Value::String(kind.clone()));
+    }
+    Value::Object(object)
+}
+
+fn light_patch_to_json(patch: &LightPatch) -> Value {
+    let mut object = Map::new();
+    object.insert("nodeId".to_string(), Value::String(patch.node_id.clone()));
+    object.insert("kind".to_string(), Value::String(patch.kind.clone()));
+    object.insert("color".to_string(), vec3_to_json(patch.color));
+    object.insert("intensity".to_string(), json!(patch.intensity));
+    if let Some(range) = patch.range {
+        object.insert("range".to_string(), json!(range));
+    }
+    if let Some(inner) = patch.inner_cone_angle {
+        object.insert("innerConeAngle".to_string(), json!(inner));
+    }
+    if let Some(outer) = patch.outer_cone_angle {
+        object.insert("outerConeAngle".to_string(), json!(outer));
+    }
+    if let Some(shadow) = &patch.shadow {
+        object.insert(
+            "shadow".to_string(),
+            json!({
+                "enabled": shadow.enabled,
+                "resolution": shadow.resolution,
+                "bias": shadow.bias
+            }),
+        );
+    }
+    Value::Object(object)
+}
+
+fn environment_patch_to_json(patch: &EnvironmentPatch) -> Value {
+    let mut object = Map::new();
+    object.insert(
+        "environmentId".to_string(),
+        Value::String(patch.environment_id.clone()),
+    );
+    if let Some(source) = &patch.source {
+        object.insert(
+            "source".to_string(),
+            json!({
+                "id": source.id,
+                "uri": source.uri,
+                "kind": source.kind
+            }),
+        );
+    }
+    object.insert(
+        "mode".to_string(),
+        Value::String(environment_mode_to_str(patch.mode).to_string()),
+    );
+    object.insert("rotationDeg".to_string(), json!(patch.rotation_deg));
+    object.insert("intensity".to_string(), json!(patch.intensity));
+    object.insert("exposure".to_string(), json!(patch.exposure));
+    object.insert(
+        "visibleAsBackground".to_string(),
+        Value::Bool(patch.visible_as_background),
+    );
+    if let Some(color) = patch.background_color {
+        object.insert(
+            "backgroundColor".to_string(),
+            json!({
+                "x": color[0],
+                "y": color[1],
+                "z": color[2],
+                "w": color[3]
+            }),
+        );
+    }
+    Value::Object(object)
+}
+
+fn environment_diagnostic_to_json(diagnostic: &EnvironmentDiagnostic) -> Value {
+    json!({
+        "code": diagnostic.code,
+        "severity": diagnostic.severity,
+        "message": diagnostic.message,
+        "retryable": diagnostic.retryable
+    })
+}
+
+fn environment_load_diagnostic_to_json(diagnostic: &EnvironmentLoadDiagnostic) -> Value {
+    json!({
+        "code": diagnostic.code,
+        "severity": diagnostic.severity,
+        "message": diagnostic.message,
+        "retryable": diagnostic.retryable
+    })
+}
+
+fn environment_mode_to_str(mode: EnvironmentMode) -> &'static str {
+    match mode {
+        EnvironmentMode::Skybox => "skybox",
+        EnvironmentMode::Ibl => "ibl",
+        EnvironmentMode::BackgroundAndIbl => "background-and-ibl",
+    }
 }
 
 fn vec3_value_to_json(value: &Value) -> Value {
@@ -1779,6 +2399,59 @@ impl ControlSceneCommand {
                     visible: payload.visible,
                 })
             }
+            "node-add" => {
+                let payload: NodeAddCommandPayload = serde_json::from_str(&self.payload_json)
+                    .map_err(|error| format!("invalid node-add command payload: {error}"))?;
+                let kind = payload.kind;
+                let payload = normalize_node_add_payload(kind.as_str(), payload.payload)?;
+                Ok(SceneCommandEvent::AddNode {
+                    kind,
+                    payload_json: serde_json::to_string(&payload)
+                        .map_err(|error| format!("invalid node-add command payload: {error}"))?,
+                })
+            }
+            "node-remove" => {
+                let payload: NodeRemoveCommandPayload = serde_json::from_str(&self.payload_json)
+                    .map_err(|error| format!("invalid node-remove command payload: {error}"))?;
+                Ok(SceneCommandEvent::RemoveNode(
+                    neko_engine_kernel::contracts::scene::NodeRemoveCommand {
+                        node_id: payload.node_id,
+                        cascade: payload.cascade,
+                    },
+                ))
+            }
+            "light-update" => {
+                let patch: LightCommandPayload = serde_json::from_str(&self.payload_json)
+                    .map_err(|error| format!("invalid light-update command payload: {error}"))?;
+                Ok(SceneCommandEvent::UpdateLight {
+                    patch: patch.into_patch()?,
+                })
+            }
+            "environment-set" => {
+                let patch: EnvironmentCommandPayload = serde_json::from_str(&self.payload_json)
+                    .map_err(|error| format!("invalid environment-set command payload: {error}"))?;
+                Ok(SceneCommandEvent::SetEnvironment {
+                    patch: patch.into_patch()?,
+                })
+            }
+            "environment-update" => {
+                let patch: EnvironmentCommandPayload = serde_json::from_str(&self.payload_json)
+                    .map_err(|error| {
+                        format!("invalid environment-update command payload: {error}")
+                    })?;
+                Ok(SceneCommandEvent::UpdateEnvironment {
+                    patch: patch.into_patch()?,
+                })
+            }
+            "environment-clear" => {
+                let payload: EnvironmentClearCommandPayload =
+                    serde_json::from_str(&self.payload_json).map_err(|error| {
+                        format!("invalid environment-clear command payload: {error}")
+                    })?;
+                Ok(SceneCommandEvent::ClearEnvironment {
+                    environment_id: payload.environment_id,
+                })
+            }
             "animation-play" => {
                 let payload: AnimationPlaybackPayload = serde_json::from_str(&self.payload_json)
                     .map_err(|error| format!("invalid animation play command payload: {error}"))?;
@@ -1866,6 +2539,266 @@ struct VisibilityCommandPayload {
     #[serde(alias = "node_id")]
     node_id: String,
     visible: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeAddCommandPayload {
+    kind: String,
+    #[serde(flatten)]
+    payload: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeRemoveCommandPayload {
+    #[serde(alias = "node_id")]
+    node_id: String,
+    #[serde(default)]
+    cascade: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LightCommandPayload {
+    #[serde(alias = "node_id")]
+    node_id: String,
+    kind: String,
+    color: Vec3Payload,
+    intensity: f32,
+    #[serde(default)]
+    range: Option<f32>,
+    #[serde(default)]
+    inner_cone_angle: Option<f32>,
+    #[serde(default)]
+    outer_cone_angle: Option<f32>,
+    #[serde(default)]
+    shadow: Option<LightShadowCommandPayload>,
+}
+
+impl LightCommandPayload {
+    fn into_patch(self) -> Result<LightPatch, String> {
+        Ok(LightPatch {
+            node_id: self.node_id,
+            kind: self.kind,
+            color: self.color.into_array(),
+            intensity: self.intensity,
+            range: self.range,
+            inner_cone_angle: self.inner_cone_angle,
+            outer_cone_angle: self.outer_cone_angle,
+            shadow: self.shadow.map(|shadow| shadow.into_patch()),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LightShadowCommandPayload {
+    enabled: bool,
+    #[serde(default)]
+    resolution: Option<u32>,
+    #[serde(default)]
+    bias: Option<f32>,
+}
+
+impl LightShadowCommandPayload {
+    fn into_patch(self) -> neko_engine_kernel::contracts::scene::LightShadowPatch {
+        neko_engine_kernel::contracts::scene::LightShadowPatch {
+            enabled: self.enabled,
+            resolution: self.resolution,
+            bias: self.bias,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EnvironmentCommandPayload {
+    #[serde(alias = "environment_id")]
+    environment_id: String,
+    #[serde(default)]
+    source: Option<AssetHandleCommandPayload>,
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default, alias = "rotation_deg")]
+    rotation_deg: Option<f32>,
+    #[serde(default)]
+    intensity: Option<f32>,
+    #[serde(default)]
+    exposure: Option<f32>,
+    #[serde(default, alias = "visible_as_background")]
+    visible_as_background: Option<bool>,
+    #[serde(default)]
+    background_color: Option<Vec4Payload>,
+}
+
+impl EnvironmentCommandPayload {
+    fn into_patch(self) -> Result<EnvironmentPatch, String> {
+        Ok(EnvironmentPatch {
+            environment_id: self.environment_id,
+            source: self.source.map(AssetHandleCommandPayload::into_ref),
+            mode: parse_environment_mode(self.mode.as_deref())?,
+            rotation_deg: self.rotation_deg.unwrap_or_default(),
+            intensity: self.intensity.unwrap_or(1.0),
+            exposure: self.exposure.unwrap_or_default(),
+            visible_as_background: self.visible_as_background.unwrap_or(true),
+            background_color: self.background_color.map(Vec4Payload::into_array),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EnvironmentClearCommandPayload {
+    #[serde(default, alias = "environment_id")]
+    environment_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AssetHandleCommandPayload {
+    id: String,
+    #[serde(default)]
+    uri: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+}
+
+impl AssetHandleCommandPayload {
+    fn into_ref(self) -> AssetHandleRef {
+        AssetHandleRef {
+            id: self.id,
+            uri: self.uri,
+            kind: self.kind,
+        }
+    }
+}
+
+fn validate_scene_command_event_sources(
+    engine: &EngineApi,
+    event: &SceneCommandEvent,
+) -> Result<(), String> {
+    match event {
+        SceneCommandEvent::SetEnvironment { patch }
+        | SceneCommandEvent::UpdateEnvironment { patch } => {
+            validate_environment_patch_source(engine, patch)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_environment_patch_source(
+    engine: &EngineApi,
+    patch: &EnvironmentPatch,
+) -> Result<(), String> {
+    let Some(source) = &patch.source else {
+        return Ok(());
+    };
+    match source.kind.as_deref() {
+        Some(ENVIRONMENT_FILE_TOKEN_KIND) => {
+            let record = engine
+                .file_access_registry()
+                .lookup_record(&source.id)
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| "environment.fileTokenNotFound".to_string())?;
+            if record.file_size_bytes > ENVIRONMENT_SOFT_LIMIT_BYTES {
+                return Err(format!(
+                    "environment.resourceTooLarge: {} bytes exceeds {} byte soft limit",
+                    record.file_size_bytes, ENVIRONMENT_SOFT_LIMIT_BYTES
+                ));
+            }
+            let service = engine
+                .scene_service()
+                .ok_or_else(|| "scene service is not available".to_string())?;
+            service
+                .register_environment_file_token(&source.id, &record.path)
+                .map_err(|error| error.to_string())?;
+            Ok(())
+        }
+        Some(ENVIRONMENT_ASSET_HANDLE_KIND) => Ok(()),
+        Some(other) => Err(format!("unsupported environment source kind: {other}")),
+        None => Err("environment source kind is required".to_string()),
+    }
+}
+
+fn parse_environment_mode(value: Option<&str>) -> Result<EnvironmentMode, String> {
+    match value.unwrap_or("background-and-ibl") {
+        "skybox" => Ok(EnvironmentMode::Skybox),
+        "ibl" => Ok(EnvironmentMode::Ibl),
+        "background-and-ibl" | "backgroundAndIbl" => Ok(EnvironmentMode::BackgroundAndIbl),
+        other => Err(format!("unsupported environment mode: {other}")),
+    }
+}
+
+fn normalize_node_add_payload(
+    kind: &str,
+    mut payload: Map<String, Value>,
+) -> Result<Map<String, Value>, String> {
+    if kind != "light" {
+        return Ok(payload);
+    }
+
+    if let Some(color) = payload.remove("color") {
+        payload.insert("color".to_string(), vec3_value_to_array(color)?);
+    }
+
+    if let Some(transform) = payload.get_mut("transform").and_then(Value::as_object_mut) {
+        normalize_transform_object(transform)?;
+    }
+
+    if let Some(light) = payload.get_mut("light").and_then(Value::as_object_mut) {
+        if let Some(color) = light.remove("color") {
+            light.insert("color".to_string(), vec3_value_to_array(color)?);
+        }
+    }
+
+    Ok(payload)
+}
+
+fn normalize_transform_object(transform: &mut Map<String, Value>) -> Result<(), String> {
+    if let Some(position) = transform.remove("position") {
+        transform.insert("position".to_string(), vec3_value_to_array(position)?);
+    }
+    if let Some(rotation) = transform.remove("rotation") {
+        transform.insert("rotation".to_string(), quat_value_to_array(rotation)?);
+    }
+    if let Some(scale) = transform.remove("scale") {
+        transform.insert("scale".to_string(), vec3_value_to_array(scale)?);
+    }
+    Ok(())
+}
+
+fn vec3_value_to_array(value: Value) -> Result<Value, String> {
+    if let Some(array) = value.as_array() {
+        if array.len() >= 3 {
+            return Ok(Value::Array(array.iter().take(3).cloned().collect()));
+        }
+    }
+    if let Some(object) = value.as_object() {
+        return Ok(json!([
+            object.get("x").and_then(Value::as_f64).unwrap_or_default(),
+            object.get("y").and_then(Value::as_f64).unwrap_or_default(),
+            object.get("z").and_then(Value::as_f64).unwrap_or_default()
+        ]));
+    }
+    Err("expected vec3 array or object".to_string())
+}
+
+fn quat_value_to_array(value: Value) -> Result<Value, String> {
+    if let Some(array) = value.as_array() {
+        if array.len() >= 4 {
+            return Ok(Value::Array(array.iter().take(4).cloned().collect()));
+        }
+    }
+    if let Some(object) = value.as_object() {
+        return Ok(json!([
+            object.get("x").and_then(Value::as_f64).unwrap_or_default(),
+            object.get("y").and_then(Value::as_f64).unwrap_or_default(),
+            object.get("z").and_then(Value::as_f64).unwrap_or_default(),
+            object.get("w").and_then(Value::as_f64).unwrap_or(1.0)
+        ]));
+    }
+    Err("expected quaternion array or object".to_string())
 }
 
 #[derive(Debug, Deserialize)]
@@ -2216,6 +3149,22 @@ impl Vec3Payload {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum Vec4Payload {
+    Array([f32; 4]),
+    Object { x: f32, y: f32, z: f32, w: f32 },
+}
+
+impl Vec4Payload {
+    fn into_array(self) -> [f32; 4] {
+        match self {
+            Vec4Payload::Array(value) => value,
+            Vec4Payload::Object { x, y, z, w } => [x, y, z, w],
+        }
+    }
+}
+
 fn vec3_payload_to_glam(field: &str, payload: Vec3Payload) -> Result<glam::Vec3, String> {
     let value = payload.into_array();
     if !value.iter().all(|component| component.is_finite()) {
@@ -2256,7 +3205,11 @@ impl QuatPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use neko_engine_kernel::contracts::scene::TransformUpdate;
+    use neko_engine_kernel::contracts::scene::{
+        SceneNodePatch, SceneNodeTransformPatch, TransformUpdate,
+    };
+    use neko_engine_types::FileAccessPurpose;
+    use tempfile::tempdir;
 
     #[test]
     fn parses_hello_message() {
@@ -2322,6 +3275,194 @@ mod tests {
             }
             _ => panic!("expected command message"),
         }
+    }
+
+    #[test]
+    fn parses_light_authoring_commands() {
+        let add_message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":12,"baseRevision":3,"command":{"type":"node-add","payloadJson":"{\"kind\":\"light\",\"nodeId\":\"key_light\",\"name\":\"Key Light\",\"transform\":{\"position\":{\"x\":1,\"y\":2,\"z\":3},\"rotation\":{\"x\":0,\"y\":0,\"z\":0,\"w\":1},\"scale\":{\"x\":1,\"y\":1,\"z\":1}},\"color\":{\"x\":1,\"y\":0.8,\"z\":0.6},\"intensity\":4,\"range\":12}"}}}"#,
+        )
+        .unwrap();
+        match add_message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::AddNode { kind, payload_json } => {
+                        assert_eq!(kind, "light");
+                        let payload: Value = serde_json::from_str(&payload_json).unwrap();
+                        assert_eq!(payload["nodeId"], "key_light");
+                        assert_eq!(payload["color"][1], 0.8);
+                        assert_eq!(payload["transform"]["position"][2], 3.0);
+                    }
+                    _ => panic!("expected add light event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+
+        let update_message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":13,"baseRevision":4,"command":{"type":"light-update","payloadJson":"{\"nodeId\":\"key_light\",\"kind\":\"spot\",\"color\":{\"x\":0.2,\"y\":0.4,\"z\":1},\"intensity\":6,\"range\":20,\"innerConeAngle\":0.2,\"outerConeAngle\":0.8,\"shadow\":{\"enabled\":true,\"resolution\":2048,\"bias\":0.01}}"}}}"#,
+        )
+        .unwrap();
+        match update_message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::UpdateLight { patch } => {
+                        assert_eq!(patch.node_id, "key_light");
+                        assert_eq!(patch.kind, "spot");
+                        assert_eq!(patch.color, [0.2, 0.4, 1.0]);
+                        assert_eq!(patch.range, Some(20.0));
+                        assert_eq!(patch.shadow.unwrap().resolution, Some(2048));
+                    }
+                    _ => panic!("expected update light event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+
+        let remove_message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":14,"baseRevision":5,"command":{"type":"node-remove","payloadJson":"{\"nodeId\":\"key_light\"}"}}}"#,
+        )
+        .unwrap();
+        match remove_message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::RemoveNode(command) => {
+                        assert_eq!(command.node_id, "key_light");
+                        assert_eq!(command.cascade, None);
+                    }
+                    _ => panic!("expected remove node event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+    }
+
+    #[test]
+    fn parses_environment_commands() {
+        let set_message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":15,"baseRevision":6,"command":{"type":"environment-set","payloadJson":"{\"environmentId\":\"scene-environment\",\"mode\":\"background-and-ibl\",\"rotationDeg\":45,\"intensity\":1.5,\"exposure\":0.25,\"visibleAsBackground\":true,\"backgroundColor\":{\"x\":0.1,\"y\":0.2,\"z\":0.3,\"w\":1},\"source\":{\"id\":\"token-1\",\"kind\":\"file-token\"}}"}}}"#,
+        )
+        .unwrap();
+        match set_message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::SetEnvironment { patch } => {
+                        assert_eq!(patch.environment_id, "scene-environment");
+                        assert_eq!(patch.mode, EnvironmentMode::BackgroundAndIbl);
+                        assert_eq!(patch.background_color, Some([0.1, 0.2, 0.3, 1.0]));
+                        assert_eq!(patch.source.unwrap().id, "token-1");
+                    }
+                    _ => panic!("expected environment set event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+
+        let clear_message: SceneControlClientMessage = serde_json::from_str(
+            r#"{"type":"command","envelope":{"seq":16,"baseRevision":7,"command":{"type":"environment-clear","payloadJson":"{\"environmentId\":\"scene-environment\"}"}}}"#,
+        )
+        .unwrap();
+        match clear_message {
+            SceneControlClientMessage::Command { envelope } => {
+                match envelope.into_runtime().unwrap().event {
+                    SceneCommandEvent::ClearEnvironment { environment_id } => {
+                        assert_eq!(environment_id.as_deref(), Some("scene-environment"));
+                    }
+                    _ => panic!("expected environment clear event"),
+                }
+            }
+            _ => panic!("expected command message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn environment_source_validation_requires_registered_file_token() {
+        let engine = EngineApi::without_gpu().unwrap();
+        let patch = EnvironmentPatch {
+            environment_id: "scene-environment".to_string(),
+            source: Some(AssetHandleRef {
+                id: "missing-token".to_string(),
+                uri: None,
+                kind: Some(ENVIRONMENT_FILE_TOKEN_KIND.to_string()),
+            }),
+            mode: EnvironmentMode::BackgroundAndIbl,
+            rotation_deg: 0.0,
+            intensity: 1.0,
+            exposure: 0.0,
+            visible_as_background: true,
+            background_color: None,
+        };
+
+        let error = validate_environment_patch_source(&engine, &patch)
+            .expect_err("missing file token rejected");
+        assert!(error.contains("environment.fileTokenNotFound"));
+    }
+
+    #[tokio::test]
+    async fn environment_source_validation_rejects_oversized_file_token() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("oversized.png");
+        let file = std::fs::File::create(&path).expect("create environment file");
+        file.set_len(ENVIRONMENT_SOFT_LIMIT_BYTES + 1)
+            .expect("grow environment file");
+        let engine = EngineApi::without_gpu().unwrap();
+        engine
+            .set_file_access_allowed_roots(vec![dir.path().to_path_buf()])
+            .unwrap();
+        let registered = engine
+            .file_access_registry()
+            .register(path, FileAccessPurpose::Preview)
+            .expect("register file token");
+        let patch = EnvironmentPatch {
+            environment_id: "scene-environment".to_string(),
+            source: Some(AssetHandleRef {
+                id: registered.token,
+                uri: None,
+                kind: Some(ENVIRONMENT_FILE_TOKEN_KIND.to_string()),
+            }),
+            mode: EnvironmentMode::BackgroundAndIbl,
+            rotation_deg: 0.0,
+            intensity: 1.0,
+            exposure: 0.0,
+            visible_as_background: true,
+            background_color: None,
+        };
+
+        let error = validate_environment_patch_source(&engine, &patch)
+            .expect_err("oversized environment token rejected");
+        assert!(error.contains("environment.resourceTooLarge"));
+    }
+
+    #[tokio::test]
+    async fn environment_source_validation_accepts_registered_file_token() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("environment.png");
+        std::fs::write(&path, [0x89, b'P', b'N', b'G']).expect("write environment file");
+        let engine = EngineApi::without_gpu().unwrap();
+        engine
+            .set_file_access_allowed_roots(vec![dir.path().to_path_buf()])
+            .unwrap();
+        let registered = engine
+            .file_access_registry()
+            .register(path, FileAccessPurpose::Preview)
+            .expect("register file token");
+        let patch = EnvironmentPatch {
+            environment_id: "scene-environment".to_string(),
+            source: Some(AssetHandleRef {
+                id: registered.token,
+                uri: None,
+                kind: Some(ENVIRONMENT_FILE_TOKEN_KIND.to_string()),
+            }),
+            mode: EnvironmentMode::BackgroundAndIbl,
+            rotation_deg: 0.0,
+            intensity: 1.0,
+            exposure: 0.0,
+            visible_as_background: true,
+            background_color: None,
+        };
+
+        validate_environment_patch_source(&engine, &patch)
+            .expect("registered environment file token accepted");
     }
 
     #[test]
@@ -2491,7 +3632,9 @@ mod tests {
             }),
         };
         let command = command.into_runtime().unwrap();
-        assert!(neko_host_api::controllers::is_model_preview_action(&command.action));
+        assert!(neko_host_api::controllers::is_model_preview_action(
+            &command.action
+        ));
         assert_eq!(command.base_revision, Some(3));
         assert_eq!(command.payload["modeId"], "motion");
     }
@@ -2541,9 +3684,15 @@ mod tests {
         assert_eq!(value["meta"]["appliedSeq"], 21);
 
         let round_tripped: ViewportMetadataEvent = serde_json::from_value(value).unwrap();
-        assert_eq!(round_tripped.transport, ViewportMetadataTransport::SceneControl);
+        assert_eq!(
+            round_tripped.transport,
+            ViewportMetadataTransport::SceneControl
+        );
         assert_eq!(round_tripped.cadence, ViewportMetadataCadence::OnDemand);
-        assert_eq!(round_tripped.meta.view_transform, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(
+            round_tripped.meta.view_transform,
+            [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        );
     }
 
     #[test]
@@ -2659,10 +3808,27 @@ mod tests {
                         "rotation": [0.0, 0.0, 0.0, 1.0],
                         "scale": [1.0, 1.0, 1.0],
                         "visible": true,
-                        "has_mesh": true
+                        "has_mesh": true,
+                        "primitives": [{
+                            "mesh": { "id": "mesh:model.glb#primitive:0", "uri": "model.glb", "kind": "mesh" },
+                            "material": { "id": "material:model.glb#index:2", "uri": "model.glb", "kind": "material" },
+                            "submeshId": "submesh:0",
+                            "primitiveId": "primitive:0",
+                            "materialSlotId": "material:2"
+                        }]
                     }
                 ],
                 "animations": [{ "name": "Idle", "duration": 1.5 }]
+                ,
+                "environment": {
+                    "environmentId": "scene-environment",
+                    "mode": "background-and-ibl",
+                    "rotationDeg": 45.0,
+                    "intensity": 1.0,
+                    "exposure": 0.0,
+                    "visibleAsBackground": true,
+                    "backgroundColor": [0.1, 0.2, 0.3, 1.0]
+                }
             }),
             12,
         );
@@ -2672,7 +3838,218 @@ mod tests {
         assert_eq!(snapshot["nodes"][0]["children"][0], "child");
         assert_eq!(snapshot["nodes"][1]["parentId"], "root");
         assert_eq!(snapshot["nodes"][1]["kind"], "mesh");
+        assert_eq!(
+            snapshot["nodes"][1]["primitives"][0]["materialSlotId"],
+            "material:2"
+        );
         assert_eq!(snapshot["animations"][0]["name"], "Idle");
+        assert_eq!(
+            snapshot["environment"]["environmentId"],
+            "scene-environment"
+        );
+        let background_z = snapshot["environment"]["backgroundColor"]["z"]
+            .as_f64()
+            .unwrap();
+        assert!((background_z - 0.3).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn selection_query_returns_mesh_structure_candidates_without_fabricated_regions() {
+        let snapshot = snapshot_to_contract(
+            json!({
+                "nodes": [{
+                    "id": "mesh_1",
+                    "name": "Mesh",
+                    "position": [0.0, 0.0, 0.0],
+                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                    "scale": [1.0, 1.0, 1.0],
+                    "visible": true,
+                    "has_mesh": true,
+                    "primitives": [{
+                        "mesh": { "id": "mesh:model.glb#primitive:0", "uri": "model.glb", "kind": "mesh" },
+                        "material": { "id": "material:model.glb#index:0", "uri": "model.glb", "kind": "material" },
+                        "submeshId": "submesh:0",
+                        "primitiveId": "primitive:0",
+                        "materialSlotId": "material:0"
+                    }]
+                }]
+            }),
+            21,
+        );
+
+        let result = selection_query_result(
+            &snapshot,
+            Some(&json!({
+                "x": 0.5,
+                "y": 0.5,
+                "mask": ["characterRegion", "materialSlot", "submesh", "primitive", "node"]
+            })),
+            "scene-a",
+            "main",
+            21,
+        );
+        let kinds: Vec<&str> = result["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|candidate| candidate["kind"].as_str())
+            .collect();
+
+        assert_eq!(kinds, vec!["materialSlot", "submesh", "primitive", "node"]);
+        assert_eq!(result["candidates"][0]["materialSlotId"], "material:0");
+        assert_eq!(result["candidates"][1]["submeshId"], "submesh:0");
+        assert_eq!(result["candidates"][2]["primitiveId"], "primitive:0");
+        assert!(!kinds.contains(&"characterRegion"));
+    }
+
+    #[test]
+    fn selection_query_returns_character_regions_only_for_explicit_nkc_descriptors() {
+        let snapshot = snapshot_to_contract(
+            json!({
+                "nodes": [{
+                    "id": "face_mesh",
+                    "name": "Face Mesh",
+                    "position": [0.0, 0.0, 0.0],
+                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                    "scale": [1.0, 1.0, 1.0],
+                    "visible": true,
+                    "has_mesh": true,
+                    "characterId": "character-a",
+                    "regionDescriptors": {
+                        "schemaVersion": 1,
+                        "regions": [{
+                            "regionId": "face.mouth",
+                            "displayName": "Mouth",
+                            "schemaVersion": 1,
+                            "bindings": [
+                                { "kind": "morphControl", "targetId": "Smile" },
+                                { "kind": "materialSlot", "targetId": "skin" }
+                            ],
+                            "tags": ["face"]
+                        }]
+                    },
+                    "primitives": [{
+                        "mesh": { "id": "mesh:ava.glb#primitive:0", "uri": "ava.glb", "kind": "mesh" },
+                        "material": { "id": "material:ava.glb#index:0", "uri": "ava.glb", "kind": "material" },
+                        "submeshId": "submesh:0",
+                        "primitiveId": "primitive:0",
+                        "materialSlotId": "skin"
+                    }]
+                }]
+            }),
+            23,
+        );
+
+        let result = selection_query_result(
+            &snapshot,
+            Some(&json!({
+                "x": 0.5,
+                "y": 0.5,
+                "mask": ["characterRegion", "morphControl", "materialSlot", "node"]
+            })),
+            "scene-a",
+            "main",
+            23,
+        );
+        let candidates = result["candidates"].as_array().unwrap();
+
+        assert_eq!(candidates[0]["kind"], "characterRegion");
+        assert_eq!(candidates[0]["characterId"], "character-a");
+        assert_eq!(candidates[0]["regionId"], "face.mouth");
+        assert_eq!(candidates[1]["kind"], "morphControl");
+        assert_eq!(candidates[1]["morphId"], "Smile");
+        assert_eq!(candidates[2]["kind"], "materialSlot");
+    }
+
+    #[test]
+    fn projected_bounds_and_gizmo_anchors_preserve_non_node_targets_when_available() {
+        let snapshot = snapshot_to_contract(
+            json!({
+                "nodes": [{
+                    "id": "mesh_1",
+                    "name": "Mesh",
+                    "position": [0.0, 0.0, 0.0],
+                    "rotation": [0.0, 0.0, 0.0, 1.0],
+                    "scale": [1.0, 1.0, 1.0],
+                    "visible": true,
+                    "has_mesh": true
+                }]
+            }),
+            22,
+        );
+        let payload = json!({
+            "selectedTargets": [{
+                "kind": "materialSlot",
+                "nodeId": "mesh_1",
+                "materialSlotId": "material:0"
+            }]
+        });
+
+        let bounds = projected_bounds_result(&snapshot, Some(&payload), "scene-a", "main", 22);
+        let anchors = gizmo_anchor_result(&snapshot, Some(&payload), "scene-a", "main", 22);
+
+        assert_eq!(bounds["bounds"][0]["nodeId"], "mesh_1");
+        assert_eq!(
+            bounds["bounds"][0]["target"]["materialSlotId"],
+            "material:0"
+        );
+        assert_eq!(anchors["anchors"][0]["nodeId"], "mesh_1");
+        assert_eq!(anchors["anchors"][0]["target"]["kind"], "materialSlot");
+    }
+
+    #[test]
+    fn overlay_state_includes_light_helpers_without_mesh_bounds() {
+        let snapshot = snapshot_to_contract(
+            json!({
+                "activeCamera": {
+                    "position": { "x": 0.0, "y": 1.0, "z": 5.0 },
+                    "target": { "x": 0.0, "y": 1.0, "z": 0.0 },
+                    "up": { "x": 0.0, "y": 1.0, "z": 0.0 },
+                    "fov": 45.0,
+                    "aspect": 1.0
+                },
+                "nodes": [
+                    {
+                        "id": "mesh_1",
+                        "name": "Mesh",
+                        "position": [0.0, 0.0, 0.0],
+                        "rotation": [0.0, 0.0, 0.0, 1.0],
+                        "scale": [1.0, 1.0, 1.0],
+                        "visible": true,
+                        "has_mesh": true
+                    },
+                    {
+                        "id": "key_light",
+                        "name": "Key Light",
+                        "kind": "light",
+                        "position": [0.0, 1.0, 0.0],
+                        "rotation": [0.0, 0.0, 0.0, 1.0],
+                        "scale": [1.0, 1.0, 1.0],
+                        "visible": true,
+                        "light": {
+                            "nodeId": "key_light",
+                            "kind": "point",
+                            "color": [1.0, 1.0, 1.0],
+                            "intensity": 3.0
+                        }
+                    }
+                ]
+            }),
+            23,
+        );
+
+        let overlay = overlay_state_result(
+            &snapshot,
+            Some(&json!({ "viewportId": "main", "lightNodeIds": ["key_light"] })),
+            "scene-a",
+            "main",
+            23,
+        );
+
+        assert_eq!(overlay["projectedBounds"].as_array().unwrap().len(), 0);
+        assert_eq!(overlay["gizmoAnchors"].as_array().unwrap().len(), 1);
+        assert_eq!(overlay["gizmoAnchors"][0]["nodeId"], "key_light");
+        assert_eq!(overlay["gizmoAnchors"][0]["target"]["kind"], "node");
     }
 
     #[test]
@@ -2692,6 +4069,19 @@ mod tests {
         let delta = SceneDelta {
             revision: 3,
             applied_seq: Some(9),
+            added_nodes: vec![SceneNodePatch {
+                node_id: "key_light".to_string(),
+                parent_id: None,
+                name: Some("Key Light".to_string()),
+                transform: Some(SceneNodeTransformPatch {
+                    position: [0.0, 2.0, 0.0],
+                    rotation: [0.0, 0.0, 0.0, 1.0],
+                    scale: [1.0, 1.0, 1.0],
+                }),
+                visible: Some(true),
+                children: Vec::new(),
+                kind: Some("light".to_string()),
+            }],
             updated_transforms: vec![TransformUpdate {
                 node_id: "node_1".to_string(),
                 position: [1.0, 0.0, 0.0],
@@ -2700,6 +4090,16 @@ mod tests {
             }],
             updated_morph_weights: Vec::new(),
             updated_visibility: Vec::new(),
+            updated_lights: vec![LightPatch {
+                node_id: "key_light".to_string(),
+                kind: "point".to_string(),
+                color: [1.0, 0.8, 0.6],
+                intensity: 4.0,
+                range: Some(12.0),
+                inner_cone_angle: None,
+                outer_cone_angle: None,
+                shadow: None,
+            }],
             removed_nodes: Vec::new(),
             updated_character_morph_weights: Vec::new(),
             updated_character_materials: Vec::new(),
@@ -2707,11 +4107,62 @@ mod tests {
             character_overrides: Vec::new(),
             modeling_sessions: Vec::new(),
             topology_changes: Vec::new(),
+            environment: Some(Some(EnvironmentPatch {
+                environment_id: "scene-environment".to_string(),
+                source: None,
+                mode: EnvironmentMode::BackgroundAndIbl,
+                rotation_deg: 45.0,
+                intensity: 1.0,
+                exposure: 0.0,
+                visible_as_background: true,
+                background_color: Some([0.1, 0.2, 0.3, 1.0]),
+            })),
+            selected_targets: Vec::new(),
+            environment_diagnostics: vec![EnvironmentDiagnostic {
+                code: "environment.loadPending".to_string(),
+                severity: "info".to_string(),
+                message: "Environment loading is pending".to_string(),
+                retryable: true,
+            }],
         };
         let value = delta_to_json(&delta);
         assert_eq!(value["appliedSeq"], 9);
+        assert_eq!(value["addedNodes"][0]["nodeId"], "key_light");
+        assert_eq!(value["addedNodes"][0]["kind"], "light");
         assert_eq!(value["updatedTransforms"][0]["nodeId"], "node_1");
         assert_eq!(value["updatedTransforms"][0]["position"]["x"], 1.0);
+        assert_eq!(value["updatedLights"][0]["nodeId"], "key_light");
+        assert_eq!(value["updatedLights"][0]["range"], 12.0);
+        assert_eq!(value["environment"]["environmentId"], "scene-environment");
+        let background_z = value["environment"]["backgroundColor"]["z"]
+            .as_f64()
+            .unwrap();
+        assert!((background_z - 0.3).abs() < 0.000_001);
+        assert_eq!(
+            value["environmentDiagnostics"][0]["code"],
+            "environment.loadPending"
+        );
+
+        let cleared = SceneDelta {
+            revision: 4,
+            applied_seq: Some(10),
+            added_nodes: Vec::new(),
+            updated_transforms: Vec::new(),
+            updated_morph_weights: Vec::new(),
+            updated_visibility: Vec::new(),
+            updated_lights: Vec::new(),
+            removed_nodes: Vec::new(),
+            updated_character_morph_weights: Vec::new(),
+            updated_character_materials: Vec::new(),
+            updated_skeleton_pose: Vec::new(),
+            character_overrides: Vec::new(),
+            modeling_sessions: Vec::new(),
+            topology_changes: Vec::new(),
+            environment: Some(None),
+            selected_targets: Vec::new(),
+            environment_diagnostics: Vec::new(),
+        };
+        assert!(delta_to_json(&cleared)["environment"].is_null());
     }
 
     #[test]

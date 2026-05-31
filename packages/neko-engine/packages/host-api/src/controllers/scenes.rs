@@ -9,7 +9,8 @@ use neko_engine_kernel::contracts::domain::{StreamCodec, StreamConfig};
 use neko_engine_kernel::contracts::gpu::{
     CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
     DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
-    SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportPostProcess,
+    SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportLookDevSettings,
+    ViewportMaterialOverride, ViewportMaterialOverrideKind, ViewportPostProcess,
     ViewportRenderMode, ViewportWorkMode,
 };
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
@@ -19,7 +20,7 @@ use neko_engine_types::{
     ActionResponse, FileSourceRef, GpuRenderPath, RenderFrameDiagnostics, RenderFrameMeta,
     Resolution, StreamId,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -97,6 +98,38 @@ struct SceneStreamOptions {
     work_mode: String,
     #[serde(default = "default_helper_passes_enabled")]
     helper_passes_enabled: bool,
+    lookdev: Option<SceneStreamLookDevOptions>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SceneStreamLookDevOptions {
+    #[serde(default = "default_render_mode")]
+    render_mode: String,
+    debug_view: Option<String>,
+    material_override: Option<SceneStreamMaterialOverrideOptions>,
+    helper_passes_enabled: Option<bool>,
+    show_grid: Option<bool>,
+    show_skeleton: Option<bool>,
+    show_normals: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SceneStreamMaterialOverrideOptions {
+    kind: String,
+    color: Option<SceneVec3Options>,
+    roughness: Option<f32>,
+    metallic: Option<f32>,
+    preserve_alpha: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SceneVec3Options {
+    x: f32,
+    y: f32,
+    z: f32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -335,11 +368,11 @@ impl SceneStreamRuntimeScheduler {
 fn stream_options_to_viewport_descriptor(
     opts: &SceneStreamOptions,
     fps: f64,
-) -> ViewportDescriptor {
-    ViewportDescriptor {
+) -> ApiResult<ViewportDescriptor> {
+    Ok(ViewportDescriptor {
         viewport_id: opts.viewport_id.clone(),
         scene_id: opts.scene_id.clone(),
-        render_mode: parse_render_mode(&opts.render_mode),
+        render_mode: parse_render_mode(&opts.render_mode)?,
         debug_view: opts.debug_view.as_deref().and_then(parse_debug_view),
         fps: fps.round().clamp(1.0, 240.0) as u32,
         color_space: parse_color_space(&opts.color_space),
@@ -348,19 +381,136 @@ fn stream_options_to_viewport_descriptor(
         layer_mask: opts.layer_mask,
         work_mode: parse_work_mode(&opts.work_mode),
         helper_passes: opts.helper_passes_enabled,
+        lookdev: opts
+            .lookdev
+            .as_ref()
+            .map(parse_lookdev_settings)
+            .transpose()?,
+    })
+}
+
+fn parse_render_mode(value: &str) -> ApiResult<ViewportRenderMode> {
+    match value {
+        "pbr" => Ok(ViewportRenderMode::Pbr),
+        "clay" => Ok(ViewportRenderMode::Clay),
+        "wireframe" => Ok(ViewportRenderMode::Wireframe),
+        "unlit" => Ok(ViewportRenderMode::Unlit),
+        "normal" => Ok(ViewportRenderMode::Normal),
+        "depth" => Ok(ViewportRenderMode::Depth),
+        "light-complexity" | "lightComplexity" => Ok(ViewportRenderMode::LightComplexity),
+        "shadow-atlas" | "shadowAtlas" => Ok(ViewportRenderMode::ShadowAtlas),
+        other => Err(ApiError::InvalidRequest(format!(
+            "unsupported renderMode for scenes:stream: {other}"
+        ))),
     }
 }
 
-fn parse_render_mode(value: &str) -> ViewportRenderMode {
-    match value {
-        "wireframe" => ViewportRenderMode::Wireframe,
-        "unlit" => ViewportRenderMode::Unlit,
-        "normal" => ViewportRenderMode::Normal,
-        "depth" => ViewportRenderMode::Depth,
-        "light-complexity" | "lightComplexity" => ViewportRenderMode::LightComplexity,
-        "shadow-atlas" | "shadowAtlas" => ViewportRenderMode::ShadowAtlas,
-        _ => ViewportRenderMode::Pbr,
+fn parse_lookdev_settings(options: &SceneStreamLookDevOptions) -> ApiResult<ViewportLookDevSettings> {
+    Ok(ViewportLookDevSettings {
+        render_mode: parse_render_mode(&options.render_mode)?,
+        debug_view: options.debug_view.as_deref().and_then(parse_debug_view),
+        material_override: options
+            .material_override
+            .as_ref()
+            .map(parse_material_override),
+        helper_passes_enabled: options.helper_passes_enabled,
+        show_grid: options.show_grid,
+        show_skeleton: options.show_skeleton,
+        show_normals: options.show_normals,
+    })
+}
+
+fn parse_material_override(
+    options: &SceneStreamMaterialOverrideOptions,
+) -> ViewportMaterialOverride {
+    ViewportMaterialOverride {
+        kind: match options.kind.as_str() {
+            "clay" => ViewportMaterialOverrideKind::Clay,
+            "matcap" => ViewportMaterialOverrideKind::Matcap,
+            _ => ViewportMaterialOverrideKind::None,
+        },
+        color: options
+            .color
+            .map(|color| glam::Vec3::new(color.x, color.y, color.z)),
+        roughness: options.roughness,
+        metallic: options.metallic,
+        preserve_alpha: options.preserve_alpha,
     }
+}
+
+fn render_mode_to_str(mode: ViewportRenderMode) -> &'static str {
+    match mode {
+        ViewportRenderMode::Pbr => "pbr",
+        ViewportRenderMode::Clay => "clay",
+        ViewportRenderMode::Wireframe => "wireframe",
+        ViewportRenderMode::Unlit => "unlit",
+        ViewportRenderMode::Normal => "normal",
+        ViewportRenderMode::Depth => "depth",
+        ViewportRenderMode::LightComplexity => "lightComplexity",
+        ViewportRenderMode::ShadowAtlas => "shadowAtlas",
+    }
+}
+
+fn debug_view_to_str(debug_view: ViewportDebugView) -> &'static str {
+    match debug_view {
+        ViewportDebugView::Albedo => "albedo",
+        ViewportDebugView::Roughness => "roughness",
+        ViewportDebugView::Metallic => "metallic",
+        ViewportDebugView::Ao => "ao",
+        ViewportDebugView::Uv => "uv",
+        ViewportDebugView::Overdraw => "overdraw",
+    }
+}
+
+fn lookdev_to_json(settings: &ViewportLookDevSettings) -> Value {
+    let mut value = serde_json::json!({
+        "renderMode": render_mode_to_str(settings.render_mode),
+    });
+    if let Some(debug_view) = settings.debug_view {
+        value["debugView"] = serde_json::json!(debug_view_to_str(debug_view));
+    }
+    if let Some(material_override) = &settings.material_override {
+        value["materialOverride"] = material_override_to_json(material_override);
+    }
+    if let Some(helper_passes_enabled) = settings.helper_passes_enabled {
+        value["helperPassesEnabled"] = serde_json::json!(helper_passes_enabled);
+    }
+    if let Some(show_grid) = settings.show_grid {
+        value["showGrid"] = serde_json::json!(show_grid);
+    }
+    if let Some(show_skeleton) = settings.show_skeleton {
+        value["showSkeleton"] = serde_json::json!(show_skeleton);
+    }
+    if let Some(show_normals) = settings.show_normals {
+        value["showNormals"] = serde_json::json!(show_normals);
+    }
+    value
+}
+
+fn material_override_to_json(material_override: &ViewportMaterialOverride) -> Value {
+    let kind = match material_override.kind {
+        ViewportMaterialOverrideKind::None => "none",
+        ViewportMaterialOverrideKind::Clay => "clay",
+        ViewportMaterialOverrideKind::Matcap => "matcap",
+    };
+    let mut value = serde_json::json!({ "kind": kind });
+    if let Some(color) = material_override.color {
+        value["color"] = serde_json::json!({
+            "x": color.x,
+            "y": color.y,
+            "z": color.z
+        });
+    }
+    if let Some(roughness) = material_override.roughness {
+        value["roughness"] = serde_json::json!(roughness);
+    }
+    if let Some(metallic) = material_override.metallic {
+        value["metallic"] = serde_json::json!(metallic);
+    }
+    if let Some(preserve_alpha) = material_override.preserve_alpha {
+        value["preserveAlpha"] = serde_json::json!(preserve_alpha);
+    }
+    value
 }
 
 fn parse_debug_view(value: &str) -> Option<ViewportDebugView> {
@@ -1027,11 +1177,11 @@ impl Controller for ScenesController {
                     720,
                 );
                 let fps = normalize_stream_fps(opts.fps);
-                let viewport_descriptor = stream_options_to_viewport_descriptor(&opts, fps);
+                let viewport_descriptor = stream_options_to_viewport_descriptor(&opts, fps)?;
                 let scene_revision = self.service()?.current_revision()?;
                 let producer_config = SceneStreamProducerConfig {
                     session_id: format!("scene-{}", opts.scene_id),
-                    viewport: viewport_descriptor,
+                    viewport: viewport_descriptor.clone(),
                     width,
                     height,
                     fps,
@@ -1102,8 +1252,9 @@ impl Controller for ScenesController {
                         "toneMapping": opts.tone_mapping,
                         "gopSize": 1,
                         "initialRevision": scene_revision,
-                        "renderMode": opts.render_mode,
-                        "debugView": opts.debug_view,
+                        "renderMode": render_mode_to_str(viewport_descriptor.render_mode),
+                        "debugView": viewport_descriptor.debug_view.map(debug_view_to_str),
+                        "lookdev": viewport_descriptor.lookdev.as_ref().map(lookdev_to_json),
                         "workMode": opts.work_mode,
                         "layerMask": opts.layer_mask,
                         "cameraRef": opts.camera_ref,
@@ -1613,6 +1764,28 @@ impl Controller for ScenesController {
                 Ok(ActionResponse::ok("", Value::Null))
             }
 
+            "capabilities" => Ok(ActionResponse::ok(
+                "",
+                serde_json::json!({
+                    "renderModes": [
+                        "pbr",
+                        "clay",
+                        "wireframe",
+                        "unlit",
+                        "normal",
+                        "depth",
+                        "lightComplexity",
+                        "shadowAtlas"
+                    ],
+                    "liveViewportSettings": false,
+                    "clay": true,
+                    "authoredLights": false,
+                    "environment": false,
+                    "typedPicking": false,
+                    "characterRegions": false
+                }),
+            )),
+
             _ => Err(ApiError::UnknownAction {
                 group: self.group().to_string(),
                 action: action.to_string(),
@@ -1698,6 +1871,7 @@ mod tests {
         assert!(actions.contains(&"export_gltf"));
         assert!(actions.contains(&"save_project"));
         assert!(actions.contains(&"load_project"));
+        assert!(actions.contains(&"capabilities"));
     }
 
     #[tokio::test]
@@ -1737,9 +1911,11 @@ mod tests {
         assert!(response.is_ok());
         let data = response.data.as_ref().unwrap();
         let nodes = data["nodes"].as_array().unwrap();
-        assert_eq!(nodes.len(), 1);
-        assert!(nodes[0]["name"].as_str().unwrap().starts_with("Shape"));
-        assert_eq!(nodes[0]["has_mesh"], true);
+        let shape = nodes
+            .iter()
+            .find(|node| node["name"].as_str().unwrap_or_default().starts_with("Shape"))
+            .expect("created shape node should be present in scene snapshot");
+        assert_eq!(shape["has_mesh"], true);
     }
 
     #[tokio::test]
@@ -1762,6 +1938,23 @@ mod tests {
         let controller = create_test_controller();
         let result = controller.handle("capture", None, Value::Null, None).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_scene_capabilities_advertise_lookdev_flags() {
+        let controller = create_test_controller();
+        let response = controller
+            .handle("capabilities", None, Value::Null, None)
+            .await
+            .unwrap();
+        let data = response.data.as_ref().unwrap();
+
+        assert_eq!(data["clay"], true);
+        assert_eq!(data["liveViewportSettings"], false);
+        assert!(data["renderModes"]
+            .as_array()
+            .unwrap()
+            .contains(&Value::String("clay".to_string())));
     }
 
     #[tokio::test]
@@ -1804,6 +1997,68 @@ mod tests {
         assert_eq!(data["controlAckPreserved"], true);
         assert!(registry.exists(&StreamId::from_string(stream_id)).await);
         let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
+    }
+
+    #[tokio::test]
+    async fn scene_stream_descriptor_reflects_effective_lookdev_mode() {
+        let (controller, registry) = create_stream_test_controller();
+        let response = controller
+            .handle(
+                "stream",
+                None,
+                serde_json::json!({
+                    "viewportId": "main",
+                    "sceneId": "scene-a",
+                    "renderMode": "clay",
+                    "debugView": "albedo",
+                    "lookdev": {
+                        "renderMode": "clay",
+                        "materialOverride": {
+                            "kind": "clay",
+                            "roughness": 0.9,
+                            "metallic": 0.0
+                        }
+                    },
+                    "resolution": { "width": 640, "height": 480, "pixelRatio": 1.0 }
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let data = response.data.as_ref().unwrap().as_object().unwrap();
+        assert_eq!(data["renderMode"], "clay");
+        assert_eq!(data["debugView"], "albedo");
+        assert_eq!(data["lookdev"]["renderMode"], "clay");
+        assert_eq!(data["lookdev"]["materialOverride"]["kind"], "clay");
+        let stream_id = data["streamId"].as_str().unwrap();
+        let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
+    }
+
+    #[tokio::test]
+    async fn scene_stream_rejects_unsupported_render_mode() {
+        let (controller, _registry) = create_stream_test_controller();
+        let result = controller
+            .handle(
+                "stream",
+                None,
+                serde_json::json!({
+                    "viewportId": "main",
+                    "sceneId": "scene-a",
+                    "renderMode": "pathTrace",
+                    "resolution": { "width": 640, "height": 480, "pixelRatio": 1.0 }
+                }),
+                None,
+            )
+            .await;
+
+        match result.unwrap_err() {
+            ApiError::InvalidRequest(message) => {
+                assert!(message.contains("unsupported renderMode"));
+                assert!(message.contains("pathTrace"));
+            }
+            other => panic!("Expected InvalidRequest, got: {other}"),
+        }
     }
 
     #[test]
@@ -1926,6 +2181,7 @@ mod tests {
                 layer_mask: None,
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
+                lookdev: None,
             },
             width: 1280,
             height: 720,
@@ -1982,6 +2238,7 @@ mod tests {
                 layer_mask: None,
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
+                lookdev: None,
             },
             width: 640,
             height: 480,
@@ -2036,6 +2293,7 @@ mod tests {
                 layer_mask: None,
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
+                lookdev: None,
             },
             width: 1280,
             height: 720,
@@ -2089,6 +2347,7 @@ mod tests {
                 layer_mask: None,
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
+                lookdev: None,
             },
             width: 1280,
             height: 720,
@@ -2167,6 +2426,7 @@ mod tests {
                 layer_mask: None,
                 work_mode: ViewportWorkMode::EditParametric,
                 helper_passes: true,
+                lookdev: None,
             },
             width: 1280,
             height: 720,

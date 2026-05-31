@@ -483,6 +483,8 @@ fn spawn_node(
             kind,
             color: glam::Vec3::new(color[0], color[1], color[2]),
             intensity: light.intensity(),
+            range: light.range(),
+            shadow: None,
         });
     }
 
@@ -664,6 +666,7 @@ fn load_animations(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::world::SceneWorld;
 
     #[test]
     fn test_decompose_identity_transform() {
@@ -910,6 +913,30 @@ mod tests {
                 .as_ref()
                 .map(|material| material.material_index),
             Some(1)
+        );
+
+        let mut scene = crate::world::BevySceneWorld::new();
+        scene.load_model(&model_path).unwrap();
+        let snapshot = scene.get_snapshot();
+        let node = snapshot
+            .nodes
+            .iter()
+            .find(|node| node.id == "node_0")
+            .unwrap();
+        assert_eq!(node.primitives.len(), 2);
+        assert_eq!(node.primitives[0].primitive_id, "primitive:0");
+        assert_eq!(node.primitives[0].submesh_id, "submesh:0");
+        assert_eq!(
+            node.primitives[0].material_slot_id.as_deref(),
+            Some("material:0")
+        );
+        assert_eq!(
+            node.primitives[1].primitive_id,
+            format!("primitive:{}", composite_primitive_id(0, 1))
+        );
+        assert_eq!(
+            node.primitives[1].material_slot_id.as_deref(),
+            Some("material:1")
         );
     }
 

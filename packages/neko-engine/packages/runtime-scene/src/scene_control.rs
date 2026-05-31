@@ -9,15 +9,17 @@ use crate::character_authoring::{
     CharacterAuthoringStore, LayeredCharacterDescription,
 };
 use crate::components::{
-    AnimationProperty, AnimationTarget, CharacterInstanceId, CharacterMaterialLayers,
-    CharacterMorphWeights, CharacterOverrides, SceneNodeId, SkeletonPose, Transform, Visible,
+    AnimationProperty, AnimationTarget, Camera, CharacterInstanceId, CharacterMaterialLayers,
+    CharacterMorphWeights, CharacterOverrides, GlobalTransform, Light, LightKind, LightShadow,
+    MeshRef, NodeName, SceneNodeId, Skeleton, SkeletonPose, Transform, Visible,
 };
-use crate::hierarchy::Parent;
+use crate::hierarchy::{self, Children, Parent};
 use crate::modeling_session::{ModelingSessionManager, TopologyOperation};
 use crate::systems;
 use crate::world::{
     CharacterMaterialUpdate, CharacterMorphWeightsUpdate, CharacterOverrideUpdate,
-    CharacterSkeletonPoseUpdate, MorphWeightsUpdate, SceneDelta, TransformUpdate, VisibilityUpdate,
+    CharacterSkeletonPoseUpdate, EnvironmentPatch, MorphWeightsUpdate, NodeRemoveCommand,
+    SceneDelta, SceneNodePatch, SceneNodeTransformPatch, TransformUpdate, VisibilityUpdate,
 };
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -66,48 +68,78 @@ impl NodeIndex {
 
 #[derive(Debug, Clone, Default, Resource, Serialize, Deserialize)]
 pub struct DirtyTracker {
+    pub added_nodes: HashSet<String>,
     pub transforms: HashSet<String>,
     pub morph_weights: HashSet<String>,
     pub hierarchy: HashSet<String>,
     pub visibility: HashSet<String>,
     pub materials: HashSet<String>,
+    pub lights: HashSet<String>,
     pub removed_nodes: HashSet<String>,
     pub character_morph_weights: HashSet<String>,
     pub character_materials: HashSet<String>,
     pub character_skeleton_pose: HashSet<String>,
     pub character_overrides: HashSet<String>,
+    pub environment: bool,
 }
 
 impl DirtyTracker {
     pub fn clear(&mut self) {
+        self.added_nodes.clear();
         self.transforms.clear();
         self.morph_weights.clear();
         self.hierarchy.clear();
         self.visibility.clear();
         self.materials.clear();
+        self.lights.clear();
         self.removed_nodes.clear();
         self.character_morph_weights.clear();
         self.character_materials.clear();
         self.character_skeleton_pose.clear();
         self.character_overrides.clear();
+        self.environment = false;
     }
 
     pub fn is_empty(&self) -> bool {
-        self.transforms.is_empty()
+        self.added_nodes.is_empty()
+            && self.transforms.is_empty()
             && self.morph_weights.is_empty()
             && self.hierarchy.is_empty()
             && self.visibility.is_empty()
             && self.materials.is_empty()
+            && self.lights.is_empty()
             && self.removed_nodes.is_empty()
             && self.character_morph_weights.is_empty()
             && self.character_materials.is_empty()
             && self.character_skeleton_pose.is_empty()
             && self.character_overrides.is_empty()
+            && !self.environment
     }
+}
+
+#[derive(Debug, Clone, Default, Resource, Serialize, Deserialize)]
+pub struct SceneEnvironmentState {
+    pub current: Option<EnvironmentPatch>,
+    pub diagnostics: Vec<EnvironmentDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvironmentDiagnostic {
+    pub code: String,
+    pub severity: String,
+    pub message: String,
+    #[serde(default)]
+    pub retryable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SceneCommandEvent {
+    AddNode {
+        kind: String,
+        payload_json: String,
+    },
+    RemoveNode(NodeRemoveCommand),
     SetTransform {
         node_id: String,
         position: [f32; 3],
@@ -117,6 +149,22 @@ pub enum SceneCommandEvent {
     SetVisibility {
         node_id: String,
         visible: bool,
+    },
+    UpdateLight {
+        patch: LightPatch,
+    },
+    SetEnvironment {
+        patch: EnvironmentPatch,
+    },
+    UpdateEnvironment {
+        patch: EnvironmentPatch,
+    },
+    ClearEnvironment {
+        environment_id: Option<String>,
+    },
+    UpdateViewportSettings {
+        viewport_id: String,
+        settings_json: String,
     },
     SetAnimationPlayback {
         action: AnimationPlaybackAction,
@@ -176,6 +224,75 @@ pub enum SceneCommandEvent {
     CancelModelingSession {
         session_id: String,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LightPatch {
+    pub node_id: String,
+    pub kind: String,
+    pub color: [f32; 3],
+    pub intensity: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inner_cone_angle: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outer_cone_angle: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<LightShadowPatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LightShadowPatch {
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bias: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct LightNodeAddPayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_id: Option<String>,
+    #[serde(default)]
+    visible: Option<bool>,
+    #[serde(default)]
+    transform: Option<LightNodeTransformPayload>,
+    #[serde(default)]
+    light: Option<LightPatch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<[f32; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    intensity: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    range: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    inner_cone_angle: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    outer_cone_angle: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shadow: Option<LightShadowPatch>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct LightNodeTransformPayload {
+    #[serde(default)]
+    position: Option<[f32; 3]>,
+    #[serde(default)]
+    rotation: Option<[f32; 4]>,
+    #[serde(default)]
+    scale: Option<[f32; 3]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,6 +462,14 @@ pub struct CommandApplyOutcome {
 pub enum CommandApplyError {
     #[error("Node not found: {0}")]
     NodeNotFound(String),
+    #[error("Node already exists: {0}")]
+    NodeAlreadyExists(String),
+    #[error("Node remove rejected: {0}")]
+    NodeRemoveRejected(String),
+    #[error("Invalid light command: {0}")]
+    InvalidLightCommand(String),
+    #[error("Light component not found: {0}")]
+    LightNotFound(String),
     #[error("Character not found: {0}")]
     CharacterNotFound(String),
     #[error("Character command rejected: {0}")]
@@ -353,6 +478,8 @@ pub enum CommandApplyError {
     ModelingCommandRejected(String),
     #[error("Animation command rejected: {0}")]
     AnimationCommandRejected(String),
+    #[error("Scene command is not implemented yet: {0}")]
+    UnsupportedCommand(String),
 }
 
 pub struct CommandApplySystem;
@@ -366,6 +493,18 @@ impl CommandApplySystem {
         rebuild_node_index(world);
 
         match event {
+            SceneCommandEvent::AddNode { kind, payload_json } => {
+                if kind == "light" {
+                    apply_add_light_node(world, &payload_json)?;
+                } else {
+                    return Err(CommandApplyError::UnsupportedCommand(format!(
+                        "node-add/{kind}"
+                    )));
+                }
+            }
+            SceneCommandEvent::RemoveNode(command) => {
+                apply_remove_node(world, command)?;
+            }
             SceneCommandEvent::SetTransform {
                 node_id,
                 position,
@@ -389,6 +528,23 @@ impl CommandApplySystem {
                     world.entity_mut(entity).insert(Visible(visible));
                 }
                 mark_visibility_dirty(world, &node_id);
+            }
+            SceneCommandEvent::UpdateLight { patch } => {
+                apply_light_update(world, patch)?;
+            }
+            SceneCommandEvent::SetEnvironment { patch } => {
+                apply_environment_set(world, patch)?;
+            }
+            SceneCommandEvent::UpdateEnvironment { patch } => {
+                apply_environment_update(world, patch)?;
+            }
+            SceneCommandEvent::ClearEnvironment { environment_id } => {
+                apply_environment_clear(world, environment_id)?;
+            }
+            SceneCommandEvent::UpdateViewportSettings { viewport_id, .. } => {
+                return Err(CommandApplyError::UnsupportedCommand(format!(
+                    "viewport-settings-update/{viewport_id}"
+                )));
             }
             SceneCommandEvent::SetAnimationPlayback {
                 action,
@@ -552,6 +708,9 @@ pub fn ensure_scene_control_resources(world: &mut World) {
     if !world.contains_resource::<DirtyTracker>() {
         world.insert_resource(DirtyTracker::default());
     }
+    if !world.contains_resource::<SceneEnvironmentState>() {
+        world.insert_resource(SceneEnvironmentState::default());
+    }
 }
 
 pub fn rebuild_node_index(world: &mut World) {
@@ -581,6 +740,14 @@ pub fn mark_transform_dirty(world: &mut World, node_id: &str) {
     world
         .resource_mut::<DirtyTracker>()
         .transforms
+        .insert(node_id.to_string());
+}
+
+pub fn mark_node_added(world: &mut World, node_id: &str) {
+    ensure_scene_control_resources(world);
+    world
+        .resource_mut::<DirtyTracker>()
+        .added_nodes
         .insert(node_id.to_string());
 }
 
@@ -614,6 +781,14 @@ pub fn mark_material_dirty(world: &mut World, material_id: &str) {
         .resource_mut::<DirtyTracker>()
         .materials
         .insert(material_id.to_string());
+}
+
+pub fn mark_light_dirty(world: &mut World, node_id: &str) {
+    ensure_scene_control_resources(world);
+    world
+        .resource_mut::<DirtyTracker>()
+        .lights
+        .insert(node_id.to_string());
 }
 
 pub fn mark_node_removed(world: &mut World, node_id: &str) {
@@ -656,12 +831,38 @@ pub fn mark_character_overrides_dirty(world: &mut World, character_id: &str) {
         .insert(character_id.to_string());
 }
 
+pub fn mark_environment_dirty(world: &mut World) {
+    ensure_scene_control_resources(world);
+    world.resource_mut::<DirtyTracker>().environment = true;
+}
+
+pub fn set_environment_diagnostics(world: &mut World, diagnostics: Vec<EnvironmentDiagnostic>) {
+    ensure_scene_control_resources(world);
+    world.resource_mut::<SceneEnvironmentState>().diagnostics = diagnostics;
+    mark_environment_dirty(world);
+}
+
+pub fn current_environment(world: &mut World) -> Option<EnvironmentPatch> {
+    ensure_scene_control_resources(world);
+    world.resource::<SceneEnvironmentState>().current.clone()
+}
+
 pub fn extract_scene_delta(world: &mut World, applied_seq: Option<u64>) -> SceneDelta {
     ensure_scene_control_resources(world);
     rebuild_node_index(world);
 
     let revision = world.resource::<SceneRevision>().current();
     let dirty = world.resource::<DirtyTracker>().clone();
+
+    let added_nodes = dirty
+        .added_nodes
+        .iter()
+        .filter_map(|node_id| {
+            find_indexed_node(world, node_id)
+                .ok()
+                .and_then(|entity| scene_node_patch(world, entity))
+        })
+        .collect();
 
     let updated_transforms = dirty
         .transforms
@@ -705,6 +906,18 @@ pub fn extract_scene_delta(world: &mut World, applied_seq: Option<u64>) -> Scene
                     node_id: node_id.clone(),
                     visible: world.get::<Visible>(entity).is_none_or(|visible| visible.0),
                 })
+        })
+        .collect();
+
+    let updated_lights = dirty
+        .lights
+        .iter()
+        .filter_map(|node_id| {
+            find_indexed_node(world, node_id).ok().and_then(|entity| {
+                world
+                    .get::<Light>(entity)
+                    .map(|light| light_patch_from_component(node_id, light))
+            })
         })
         .collect();
 
@@ -778,6 +991,14 @@ pub fn extract_scene_delta(world: &mut World, applied_seq: Option<u64>) -> Scene
         .collect();
 
     let removed_nodes = dirty.removed_nodes.iter().cloned().collect();
+    let environment = dirty
+        .environment
+        .then(|| world.resource::<SceneEnvironmentState>().current.clone());
+    let environment_diagnostics = if dirty.environment {
+        world.resource::<SceneEnvironmentState>().diagnostics.clone()
+    } else {
+        Vec::new()
+    };
     let modeling_delta = world
         .get_resource_mut::<ModelingSessionManager>()
         .map(|mut manager| manager.take_delta())
@@ -787,9 +1008,11 @@ pub fn extract_scene_delta(world: &mut World, applied_seq: Option<u64>) -> Scene
     SceneDelta {
         revision,
         applied_seq,
+        added_nodes,
         updated_transforms,
         updated_morph_weights,
         updated_visibility,
+        updated_lights,
         removed_nodes,
         updated_character_morph_weights,
         updated_character_materials,
@@ -797,6 +1020,9 @@ pub fn extract_scene_delta(world: &mut World, applied_seq: Option<u64>) -> Scene
         character_overrides,
         modeling_sessions: modeling_delta.sessions,
         topology_changes: modeling_delta.topology_changes,
+        environment,
+        selected_targets: Vec::new(),
+        environment_diagnostics,
     }
 }
 
@@ -816,6 +1042,380 @@ fn find_character_entity(
         .iter(world)
         .find_map(|(entity, id)| (id.0 == character_id).then_some(entity))
         .ok_or_else(|| CommandApplyError::CharacterNotFound(character_id.to_string()))
+}
+
+fn apply_add_light_node(world: &mut World, payload_json: &str) -> Result<(), CommandApplyError> {
+    let payload: LightNodeAddPayload = serde_json::from_str(payload_json)
+        .map_err(|error| CommandApplyError::InvalidLightCommand(error.to_string()))?;
+    let mut patch = light_patch_from_add_payload(&payload)?;
+    let node_id = payload
+        .node_id
+        .filter(|value| !value.is_empty())
+        .or_else(|| (!patch.node_id.is_empty()).then_some(patch.node_id.clone()))
+        .unwrap_or_else(|| generate_light_node_id(world));
+    patch.node_id = node_id.clone();
+
+    if world.resource::<NodeIndex>().get(&node_id).is_some() {
+        return Err(CommandApplyError::NodeAlreadyExists(node_id));
+    }
+
+    let transform = transform_from_payload(payload.transform);
+    let name = payload
+        .name
+        .unwrap_or_else(|| default_light_name(&patch.kind));
+    let visible = payload.visible.unwrap_or(true);
+    let light = light_from_patch(&patch)?;
+    let entity = world
+        .spawn((
+            SceneNodeId(node_id.clone()),
+            NodeName(name),
+            transform,
+            GlobalTransform::identity(),
+            Visible(visible),
+            light,
+        ))
+        .id();
+
+    if let Some(parent_id) = payload.parent_id.filter(|value| !value.is_empty()) {
+        let parent = find_indexed_node(world, &parent_id)?;
+        hierarchy::set_parent(world, entity, parent);
+    }
+
+    systems::transform_propagation(world);
+    rebuild_node_index(world);
+    mark_node_added(world, &node_id);
+    mark_light_dirty(world, &node_id);
+    mark_transform_dirty(world, &node_id);
+    mark_visibility_dirty(world, &node_id);
+    Ok(())
+}
+
+fn light_patch_from_add_payload(
+    payload: &LightNodeAddPayload,
+) -> Result<LightPatch, CommandApplyError> {
+    if let Some(light) = payload.light.clone() {
+        return Ok(light);
+    }
+
+    Ok(LightPatch {
+        node_id: payload.node_id.clone().unwrap_or_default(),
+        kind: payload.kind.clone().unwrap_or_else(|| "point".to_string()),
+        color: payload.color.unwrap_or([1.0, 1.0, 1.0]),
+        intensity: payload.intensity.unwrap_or(1.0),
+        range: payload.range,
+        inner_cone_angle: payload.inner_cone_angle,
+        outer_cone_angle: payload.outer_cone_angle,
+        shadow: payload.shadow.clone(),
+    })
+}
+
+fn apply_light_update(world: &mut World, patch: LightPatch) -> Result<(), CommandApplyError> {
+    let entity = find_indexed_node(world, &patch.node_id)?;
+    if world.get::<Light>(entity).is_none() {
+        return Err(CommandApplyError::LightNotFound(patch.node_id));
+    }
+    let light = light_from_patch(&patch)?;
+    world.entity_mut(entity).insert(light);
+    mark_light_dirty(world, &patch.node_id);
+    Ok(())
+}
+
+fn apply_remove_node(
+    world: &mut World,
+    command: NodeRemoveCommand,
+) -> Result<(), CommandApplyError> {
+    let entity = find_indexed_node(world, &command.node_id)?;
+    let cascade = command.cascade.unwrap_or(false);
+    let descendants = hierarchy::get_descendants(world, entity);
+
+    if !cascade && !descendants.is_empty() {
+        return Err(CommandApplyError::NodeRemoveRejected(format!(
+            "node '{}' has {} dependent child node(s); cascade=false",
+            command.node_id,
+            descendants.len()
+        )));
+    }
+
+    let mut to_remove = Vec::with_capacity(descendants.len() + 1);
+    to_remove.push(entity);
+    to_remove.extend(descendants);
+
+    if let Some(parent) = world.get::<Parent>(entity).map(|parent| parent.0) {
+        if let Some(mut children) = world.get_mut::<Children>(parent) {
+            children.remove(entity);
+        }
+    }
+
+    let removed_node_ids: Vec<String> = to_remove
+        .iter()
+        .filter_map(|entity| world.get::<SceneNodeId>(*entity).map(|id| id.0.clone()))
+        .collect();
+
+    for entity in to_remove.into_iter().rev() {
+        world.despawn(entity);
+    }
+
+    for node_id in removed_node_ids {
+        mark_node_removed(world, &node_id);
+    }
+    rebuild_node_index(world);
+    systems::transform_propagation(world);
+    Ok(())
+}
+
+fn apply_environment_set(
+    world: &mut World,
+    patch: EnvironmentPatch,
+) -> Result<(), CommandApplyError> {
+    let patch = normalize_environment_patch(patch);
+    world.resource_mut::<SceneEnvironmentState>().current = Some(patch);
+    world
+        .resource_mut::<SceneEnvironmentState>()
+        .diagnostics
+        .clear();
+    mark_environment_dirty(world);
+    Ok(())
+}
+
+fn apply_environment_update(
+    world: &mut World,
+    patch: EnvironmentPatch,
+) -> Result<(), CommandApplyError> {
+    let patch = normalize_environment_patch(patch);
+    let state = world.resource_mut::<SceneEnvironmentState>();
+    let mut next = state
+        .current
+        .clone()
+        .filter(|current| current.environment_id == patch.environment_id)
+        .unwrap_or_else(|| patch.clone());
+
+    next.source = patch.source.or(next.source);
+    next.mode = patch.mode;
+    next.rotation_deg = patch.rotation_deg;
+    next.intensity = patch.intensity;
+    next.exposure = patch.exposure;
+    next.visible_as_background = patch.visible_as_background;
+    next.background_color = patch.background_color.or(next.background_color);
+
+    world.resource_mut::<SceneEnvironmentState>().current = Some(next);
+    world
+        .resource_mut::<SceneEnvironmentState>()
+        .diagnostics
+        .clear();
+    mark_environment_dirty(world);
+    Ok(())
+}
+
+fn apply_environment_clear(
+    world: &mut World,
+    environment_id: Option<String>,
+) -> Result<(), CommandApplyError> {
+    let should_clear = {
+        let state = world.resource::<SceneEnvironmentState>();
+        match (&environment_id, &state.current) {
+            (None, _) => true,
+            (Some(_), None) => false,
+            (Some(expected), Some(current)) => current.environment_id == *expected,
+        }
+    };
+
+    if should_clear {
+        world.resource_mut::<SceneEnvironmentState>().current = None;
+        world
+            .resource_mut::<SceneEnvironmentState>()
+            .diagnostics
+            .clear();
+        mark_environment_dirty(world);
+    }
+    Ok(())
+}
+
+fn normalize_environment_patch(mut patch: EnvironmentPatch) -> EnvironmentPatch {
+    patch.rotation_deg = normalize_degrees(patch.rotation_deg);
+    patch.intensity = patch.intensity.max(0.0);
+    patch.exposure = patch.exposure.clamp(-16.0, 16.0);
+    if let Some(color) = patch.background_color {
+        patch.background_color = Some([
+            color[0].clamp(0.0, 1.0),
+            color[1].clamp(0.0, 1.0),
+            color[2].clamp(0.0, 1.0),
+            color[3].clamp(0.0, 1.0),
+        ]);
+    }
+    patch
+}
+
+fn normalize_degrees(value: f32) -> f32 {
+    if !value.is_finite() {
+        return 0.0;
+    }
+    let normalized = value % 360.0;
+    if normalized < 0.0 {
+        normalized + 360.0
+    } else {
+        normalized
+    }
+}
+
+fn transform_from_payload(payload: Option<LightNodeTransformPayload>) -> Transform {
+    let payload = payload.unwrap_or(LightNodeTransformPayload {
+        position: None,
+        rotation: None,
+        scale: None,
+    });
+    Transform {
+        position: glam::Vec3::from(payload.position.unwrap_or([0.0, 0.0, 0.0])),
+        rotation: glam::Quat::from_array(payload.rotation.unwrap_or([0.0, 0.0, 0.0, 1.0])),
+        scale: glam::Vec3::from(payload.scale.unwrap_or([1.0, 1.0, 1.0])),
+    }
+}
+
+pub fn light_from_patch(patch: &LightPatch) -> Result<Light, CommandApplyError> {
+    validate_positive("intensity", patch.intensity)?;
+    if let Some(range) = patch.range {
+        validate_positive("range", range)?;
+    }
+
+    let kind = match patch.kind.as_str() {
+        "directional" => LightKind::Directional,
+        "point" => LightKind::Point,
+        "spot" => {
+            let inner = patch.inner_cone_angle.unwrap_or(0.0);
+            let outer = patch
+                .outer_cone_angle
+                .unwrap_or(std::f32::consts::FRAC_PI_4);
+            if inner < 0.0 || outer < 0.0 || inner > outer {
+                return Err(CommandApplyError::InvalidLightCommand(
+                    "spot cone angles must satisfy 0 <= inner <= outer".to_string(),
+                ));
+            }
+            LightKind::Spot {
+                inner_cone: inner,
+                outer_cone: outer,
+            }
+        }
+        other => {
+            return Err(CommandApplyError::InvalidLightCommand(format!(
+                "unsupported light kind: {other}"
+            )))
+        }
+    };
+
+    Ok(Light {
+        kind,
+        color: glam::Vec3::from(patch.color),
+        intensity: patch.intensity,
+        range: patch.range,
+        shadow: patch.shadow.as_ref().map(|shadow| LightShadow {
+            enabled: shadow.enabled,
+            resolution: shadow.resolution,
+            bias: shadow.bias,
+        }),
+    })
+}
+
+fn validate_positive(label: &str, value: f32) -> Result<(), CommandApplyError> {
+    if value.is_finite() && value >= 0.0 {
+        Ok(())
+    } else {
+        Err(CommandApplyError::InvalidLightCommand(format!(
+            "{label} must be a finite non-negative number"
+        )))
+    }
+}
+
+pub fn light_patch_from_component(node_id: &str, light: &Light) -> LightPatch {
+    let (kind, inner_cone_angle, outer_cone_angle) = match light.kind {
+        LightKind::Directional => ("directional".to_string(), None, None),
+        LightKind::Point => ("point".to_string(), None, None),
+        LightKind::Spot {
+            inner_cone,
+            outer_cone,
+        } => ("spot".to_string(), Some(inner_cone), Some(outer_cone)),
+    };
+
+    LightPatch {
+        node_id: node_id.to_string(),
+        kind,
+        color: light.color.to_array(),
+        intensity: light.intensity,
+        range: light.range,
+        inner_cone_angle,
+        outer_cone_angle,
+        shadow: light.shadow.as_ref().map(|shadow| LightShadowPatch {
+            enabled: shadow.enabled,
+            resolution: shadow.resolution,
+            bias: shadow.bias,
+        }),
+    }
+}
+
+fn scene_node_patch(world: &mut World, entity: Entity) -> Option<SceneNodePatch> {
+    let node_id = world.get::<SceneNodeId>(entity)?.0.clone();
+    let transform = world
+        .get::<Transform>(entity)
+        .map(|transform| SceneNodeTransformPatch {
+            position: transform.position.to_array(),
+            rotation: transform.rotation.to_array(),
+            scale: transform.scale.to_array(),
+        });
+    let parent_id = world
+        .get::<Parent>(entity)
+        .and_then(|parent| world.get::<SceneNodeId>(parent.0))
+        .map(|parent_id| parent_id.0.clone());
+    let children = world
+        .get::<Children>(entity)
+        .map(|children| {
+            children
+                .0
+                .iter()
+                .filter_map(|child| world.get::<SceneNodeId>(*child).map(|id| id.0.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Some(SceneNodePatch {
+        node_id,
+        parent_id,
+        name: world.get::<NodeName>(entity).map(|name| name.0.clone()),
+        transform,
+        visible: Some(world.get::<Visible>(entity).is_none_or(|visible| visible.0)),
+        children,
+        kind: Some(node_kind(world, entity).to_string()),
+    })
+}
+
+fn node_kind(world: &World, entity: Entity) -> &'static str {
+    if world.get::<Light>(entity).is_some() {
+        "light"
+    } else if world.get::<Camera>(entity).is_some() {
+        "camera"
+    } else if world.get::<Skeleton>(entity).is_some() {
+        "skeleton"
+    } else if world.get::<MeshRef>(entity).is_some() {
+        "mesh"
+    } else {
+        "node"
+    }
+}
+
+fn generate_light_node_id(world: &mut World) -> String {
+    let mut index = world.resource::<NodeIndex>().len().saturating_add(1);
+    loop {
+        let candidate = format!("light_{index}");
+        if world.resource::<NodeIndex>().get(&candidate).is_none() {
+            return candidate;
+        }
+        index = index.saturating_add(1);
+    }
+}
+
+fn default_light_name(kind: &str) -> String {
+    match kind {
+        "directional" => "Directional Light".to_string(),
+        "spot" => "Spot Light".to_string(),
+        _ => "Point Light".to_string(),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1633,5 +2233,192 @@ mod tests {
             error,
             CommandApplyError::CharacterCommandRejected(_)
         ));
+    }
+
+    #[test]
+    fn command_apply_adds_updates_hides_and_removes_light_nodes() {
+        let mut world = World::new();
+
+        let add = CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::AddNode {
+                kind: "light".to_string(),
+                payload_json: r#"{"nodeId":"key_light","name":"Key Light","transform":{"position":[1,2,3],"rotation":[0,0,0,1],"scale":[1,1,1]},"light":{"nodeId":"key_light","kind":"point","color":[1,0.8,0.6],"intensity":4,"range":12}}"#.to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(add.revision, 1);
+        assert!(add.dirty.added_nodes.contains("key_light"));
+        assert!(add.dirty.lights.contains("key_light"));
+
+        let entity = world.resource::<NodeIndex>().get("key_light").unwrap();
+        let light = world.get::<Light>(entity).unwrap();
+        assert!(matches!(light.kind, LightKind::Point));
+        assert_eq!(light.range, Some(12.0));
+        assert_eq!(
+            world.get::<Transform>(entity).unwrap().position,
+            glam::Vec3::new(1.0, 2.0, 3.0)
+        );
+
+        let delta = extract_scene_delta(&mut world, Some(1));
+        assert_eq!(delta.added_nodes.len(), 1);
+        assert_eq!(delta.added_nodes[0].node_id, "key_light");
+        assert_eq!(delta.added_nodes[0].kind.as_deref(), Some("light"));
+        assert_eq!(delta.updated_lights.len(), 1);
+        assert_eq!(delta.updated_lights[0].range, Some(12.0));
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::UpdateLight {
+                patch: LightPatch {
+                    node_id: "key_light".to_string(),
+                    kind: "spot".to_string(),
+                    color: [0.3, 0.4, 1.0],
+                    intensity: 6.0,
+                    range: Some(20.0),
+                    inner_cone_angle: Some(0.2),
+                    outer_cone_angle: Some(0.8),
+                    shadow: Some(LightShadowPatch {
+                        enabled: true,
+                        resolution: Some(2048),
+                        bias: Some(0.01),
+                    }),
+                },
+            },
+        )
+        .unwrap();
+        let delta = extract_scene_delta(&mut world, Some(2));
+        assert_eq!(delta.updated_lights.len(), 1);
+        assert_eq!(delta.updated_lights[0].kind, "spot");
+        assert_eq!(
+            delta.updated_lights[0].shadow.as_ref().unwrap().resolution,
+            Some(2048)
+        );
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::SetVisibility {
+                node_id: "key_light".to_string(),
+                visible: false,
+            },
+        )
+        .unwrap();
+        let delta = extract_scene_delta(&mut world, Some(3));
+        assert_eq!(delta.updated_visibility[0].node_id, "key_light");
+        assert!(!delta.updated_visibility[0].visible);
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::RemoveNode(NodeRemoveCommand {
+                node_id: "key_light".to_string(),
+                cascade: None,
+            }),
+        )
+        .unwrap();
+        let delta = extract_scene_delta(&mut world, Some(4));
+        assert_eq!(delta.removed_nodes, vec!["key_light".to_string()]);
+        assert!(world.resource::<NodeIndex>().get("key_light").is_none());
+    }
+
+    #[test]
+    fn command_apply_rejects_non_cascade_remove_when_node_has_children() {
+        let mut world = World::new();
+        let parent = world
+            .spawn((
+                SceneNodeId("parent".to_string()),
+                NodeName("Parent".to_string()),
+                Transform::default(),
+                GlobalTransform::identity(),
+            ))
+            .id();
+        let child = world
+            .spawn((
+                SceneNodeId("child".to_string()),
+                NodeName("Child".to_string()),
+                Transform::default(),
+                GlobalTransform::identity(),
+            ))
+            .id();
+        hierarchy::set_parent(&mut world, child, parent);
+
+        let error = CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::RemoveNode(NodeRemoveCommand {
+                node_id: "parent".to_string(),
+                cascade: Some(false),
+            }),
+        )
+        .unwrap_err();
+        assert!(matches!(error, CommandApplyError::NodeRemoveRejected(_)));
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::RemoveNode(NodeRemoveCommand {
+                node_id: "parent".to_string(),
+                cascade: Some(true),
+            }),
+        )
+        .unwrap();
+        let delta = extract_scene_delta(&mut world, Some(5));
+        assert!(delta.removed_nodes.contains(&"parent".to_string()));
+        assert!(delta.removed_nodes.contains(&"child".to_string()));
+    }
+
+    #[test]
+    fn command_apply_sets_updates_and_clears_environment_state() {
+        let mut world = World::new();
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::SetEnvironment {
+                patch: EnvironmentPatch {
+                    environment_id: "scene-environment".to_string(),
+                    source: None,
+                    mode: crate::world::EnvironmentMode::BackgroundAndIbl,
+                    rotation_deg: 725.0,
+                    intensity: 2.0,
+                    exposure: 0.5,
+                    visible_as_background: true,
+                    background_color: Some([1.2, 0.4, -0.2, 1.0]),
+                },
+            },
+        )
+        .unwrap();
+        let delta = extract_scene_delta(&mut world, Some(10));
+        let environment = delta.environment.as_ref().unwrap().as_ref().unwrap();
+        assert_eq!(environment.rotation_deg, 5.0);
+        assert_eq!(environment.background_color, Some([1.0, 0.4, 0.0, 1.0]));
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::UpdateEnvironment {
+                patch: EnvironmentPatch {
+                    environment_id: "scene-environment".to_string(),
+                    source: None,
+                    mode: crate::world::EnvironmentMode::Skybox,
+                    rotation_deg: 45.0,
+                    intensity: 0.8,
+                    exposure: -1.0,
+                    visible_as_background: false,
+                    background_color: None,
+                },
+            },
+        )
+        .unwrap();
+        let delta = extract_scene_delta(&mut world, Some(11));
+        let environment = delta.environment.as_ref().unwrap().as_ref().unwrap();
+        assert_eq!(environment.mode, crate::world::EnvironmentMode::Skybox);
+        assert_eq!(environment.background_color, Some([1.0, 0.4, 0.0, 1.0]));
+        assert!(!environment.visible_as_background);
+
+        CommandApplySystem::apply(
+            &mut world,
+            SceneCommandEvent::ClearEnvironment {
+                environment_id: Some("scene-environment".to_string()),
+            },
+        )
+        .unwrap();
+        let delta = extract_scene_delta(&mut world, Some(12));
+        assert_eq!(delta.environment, Some(None));
     }
 }

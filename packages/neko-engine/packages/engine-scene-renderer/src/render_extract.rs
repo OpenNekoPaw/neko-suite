@@ -243,7 +243,7 @@ fn extract_lights(world: &mut World, render_world: &mut RenderWorld) {
             world_transform: global_transform.0,
             color: light.color,
             intensity: light.intensity,
-            range: None,
+            range: light.range,
             inner_cone,
             outer_cone,
         });
@@ -345,6 +345,8 @@ mod tests {
                 kind: LightKind::Directional,
                 color: Vec3::ONE,
                 intensity: 2.0,
+                range: None,
+                shadow: None,
             },
         ));
 

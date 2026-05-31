@@ -39,7 +39,9 @@ pub use frame_scheduler::{
     FrameBudget, FrameLoadSample, FrameScheduleDecision, FrameScheduler,
 };
 pub use particles::{GpuParticleSystem, ParticleEmitterConfig};
-pub use pbr_pipeline::{PbrRenderError, PbrRenderer};
+pub use pbr_pipeline::{
+    EnvironmentBackground, EnvironmentBackgroundSettings, PbrRenderError, PbrRenderer,
+};
 pub use post_process::{PostProcessChain, PostProcessSettings, ToneMapping};
 pub use render_extract::{extract_render_world, RenderExtractStats};
 pub use render_graph::{
@@ -60,8 +62,9 @@ pub use render_world::{
 pub use vertex::PbrVertex;
 pub use viewport::{
     build_viewport_render_graph, SceneColorSpace, SceneToneMapping, ViewportDebugView,
-    ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput, ViewportRenderGraphPlan,
-    ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
+    ViewportDescriptor, ViewportLookDevSettings, ViewportMaterialOverride,
+    ViewportMaterialOverrideKind, ViewportPostProcess, ViewportRenderGraphOutput,
+    ViewportRenderGraphPlan, ViewportRenderGraphVariant, ViewportRenderMode, ViewportWorkMode,
 };
 
 use neko_engine_gpu::{GpuLayer, Transform2D};

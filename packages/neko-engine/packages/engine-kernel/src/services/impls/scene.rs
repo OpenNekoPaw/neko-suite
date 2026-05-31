@@ -10,13 +10,15 @@ use super::scene_renderer::{
 use crate::domain::FrameData;
 use crate::encoder::encode_nv12_to_h264_iframe;
 use crate::error::{Error, Result};
-use crate::services::scene::ISceneService;
+use crate::services::scene::{EnvironmentLoadDiagnostic, ISceneService};
+use half::f16;
 use neko_engine_gpu::GpuContext;
 #[cfg(target_os = "macos")]
 use neko_engine_gpu::RgbaToNv12TextureConverter;
 use neko_engine_scene_renderer::{
-    extract_render_world, CameraParams, ControlAckHealthSample, RenderExtractStats, RenderWorld,
-    SceneRenderOutput, ViewportDescriptor, ViewportRenderGraphOutput,
+    extract_render_world, CameraParams, ControlAckHealthSample, EnvironmentBackground,
+    EnvironmentBackgroundSettings, RenderExtractStats, RenderWorld, SceneRenderOutput,
+    ViewportDescriptor, ViewportRenderGraphOutput,
 };
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
@@ -36,23 +38,29 @@ use neko_runtime_scene::exporter::{self, ExportNode};
 use neko_runtime_scene::ik::IkChainInfo;
 use neko_runtime_scene::procedural_mesh::ProceduralMesh;
 use neko_runtime_scene::project::NkmProject;
-use neko_runtime_scene::world::{AnimationClipInfo, SceneDelta, SceneSnapshot, SceneWorld};
+use neko_runtime_scene::world::{
+    AnimationClipInfo, EnvironmentPatch, SceneDelta, SceneSnapshot, SceneWorld,
+};
 use neko_runtime_scene::{
     BrushPatchApplyOutcome, ModelingSession, ModelingSessionStateDelta, TopologyChangeEvent,
     TopologyOperation, VertexBrushPatchMetadata,
 };
 use neko_runtime_scene::{SceneCommandAck, SceneCommandEnvelope};
 use std::collections::{HashMap, VecDeque};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU32, Ordering},
     Arc, Mutex, RwLock,
 };
+use std::thread;
 use std::time::{Duration, Instant};
 
 const CONTROL_ACK_SAMPLE_CAPACITY: usize = 128;
 #[cfg(target_os = "macos")]
 const SCENE_STREAM_ENCODER_BRIDGE_CACHE_LIMIT: usize = 4;
+const ENVIRONMENT_SOURCE_FILE_TOKEN_KIND: &str = "file-token";
+const ENVIRONMENT_PENDING_DIAGNOSTIC_AFTER: Duration = Duration::from_secs(5);
+const ENVIRONMENT_LOAD_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Default)]
 struct ControlAckMetrics {
@@ -127,6 +135,35 @@ struct SharedRenderExtract {
     render_world: RenderWorld,
     stats: RenderExtractStats,
     extracted: bool,
+}
+
+struct CachedEnvironmentBackground {
+    source_key: String,
+    background: EnvironmentBackground,
+}
+
+#[derive(Debug)]
+struct PendingEnvironmentBackground {
+    source_key: String,
+    generation: u64,
+    started_at: Instant,
+    pending_reported: bool,
+    receiver: std::sync::mpsc::Receiver<EnvironmentLoadResult>,
+}
+
+#[derive(Debug)]
+struct EnvironmentLoadResult {
+    source_key: String,
+    generation: u64,
+    loaded: Result<LoadedEnvironmentBackground>,
+}
+
+#[derive(Debug)]
+struct LoadedEnvironmentBackground {
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+    settings: EnvironmentBackgroundSettings,
 }
 
 impl SharedRenderExtractCache {
@@ -213,6 +250,21 @@ pub struct SceneService {
     /// Editor camera override for viewport orbit controls.
     /// Read by the scene stream producer on each frame.
     editor_camera: RwLock<Option<CameraParams>>,
+    /// Latest Engine-owned environment state used by stream/capture defaults.
+    environment: RwLock<Option<EnvironmentPatch>>,
+    /// Resolved Engine file tokens for environment sources. Runtime scene state
+    /// keeps the opaque token; kernel owns the authorized local path mapping.
+    environment_file_tokens: RwLock<HashMap<String, PathBuf>>,
+    /// GPU background texture derived from the current Engine-owned environment source.
+    environment_background: Mutex<Option<CachedEnvironmentBackground>>,
+    /// Background image decode/upload state for async environment transitions.
+    pending_environment_background: Mutex<Option<PendingEnvironmentBackground>>,
+    /// Source keys that failed or timed out until a user-issued environment command retries.
+    blocked_environment_source_key: Mutex<Option<String>>,
+    /// Monotonic generation used to cancel stale environment load tasks.
+    environment_generation: AtomicU32,
+    /// Diagnostics emitted outside command apply and drained by scene-control.
+    environment_load_diagnostics: Mutex<Vec<EnvironmentLoadDiagnostic>>,
     /// Persistent macOS encoder bridge for realtime scene streams.
     #[cfg(target_os = "macos")]
     stream_encoder_bridges: Mutex<HashMap<String, RgbaToNv12TextureConverter>>,
@@ -239,6 +291,13 @@ impl SceneService {
             procedural_meshes: Mutex::new(default_meshes),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
+            environment: RwLock::new(None),
+            environment_file_tokens: RwLock::new(HashMap::new()),
+            environment_background: Mutex::new(None),
+            pending_environment_background: Mutex::new(None),
+            blocked_environment_source_key: Mutex::new(None),
+            environment_generation: AtomicU32::new(0),
+            environment_load_diagnostics: Mutex::new(Vec::new()),
             #[cfg(target_os = "macos")]
             stream_encoder_bridges: Mutex::new(HashMap::new()),
         }
@@ -274,6 +333,13 @@ impl SceneService {
             procedural_meshes: Mutex::new(default_meshes),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
+            environment: RwLock::new(None),
+            environment_file_tokens: RwLock::new(HashMap::new()),
+            environment_background: Mutex::new(None),
+            pending_environment_background: Mutex::new(None),
+            blocked_environment_source_key: Mutex::new(None),
+            environment_generation: AtomicU32::new(0),
+            environment_load_diagnostics: Mutex::new(Vec::new()),
             #[cfg(target_os = "macos")]
             stream_encoder_bridges: Mutex::new(HashMap::new()),
         }
@@ -293,6 +359,21 @@ impl SceneService {
 
     pub fn current_revision(&self) -> Result<u64> {
         self.computation.current_revision()
+    }
+
+    pub fn register_environment_file_token(&self, token: &str, path: &Path) -> Result<()> {
+        let mut guard = self.environment_file_tokens.write().map_err(|e| {
+            Error::Other(format!("Environment file token lock poisoned: {}", e))
+        })?;
+        guard.insert(token.to_string(), path.to_path_buf());
+        Ok(())
+    }
+
+    pub fn take_environment_load_diagnostics(&self) -> Vec<EnvironmentLoadDiagnostic> {
+        self.environment_load_diagnostics
+            .lock()
+            .map(|mut diagnostics| std::mem::take(&mut *diagnostics))
+            .unwrap_or_default()
     }
 
     #[cfg(test)]
@@ -321,7 +402,73 @@ impl SceneService {
         envelope: SceneCommandEnvelope,
     ) -> Result<(Vec<SceneCommandAck>, Option<SceneDelta>)> {
         let _ack_sample = self.control_ack_metrics.start_sample();
-        self.computation.apply_scene_command_with_delta(envelope)
+        let (acks, delta) = self.computation.apply_scene_command_with_delta(envelope)?;
+        if let Some(delta) = &delta {
+            if delta.environment.is_some() {
+                self.update_environment_from_delta(delta)?;
+            }
+        }
+        Ok((acks, delta))
+    }
+
+    fn update_environment_from_delta(&self, delta: &SceneDelta) -> Result<()> {
+        if let Some(environment) = &delta.environment {
+            *self
+                .environment
+                .write()
+                .map_err(|e| Error::Other(format!("Environment state lock poisoned: {}", e)))? =
+                environment.clone();
+            self.cancel_pending_environment_background(environment.as_ref())?;
+        }
+        Ok(())
+    }
+
+    fn update_environment_from_snapshot(&self, snapshot: &SceneSnapshot) -> Result<()> {
+        *self
+            .environment
+            .write()
+            .map_err(|e| Error::Other(format!("Environment state lock poisoned: {}", e)))? =
+            snapshot.environment.clone();
+        self.cancel_pending_environment_background(snapshot.environment.as_ref())?;
+        Ok(())
+    }
+
+    fn cancel_pending_environment_background(
+        &self,
+        next_environment: Option<&EnvironmentPatch>,
+    ) -> Result<()> {
+        self.environment_generation.fetch_add(1, Ordering::Relaxed);
+        *self
+            .blocked_environment_source_key
+            .lock()
+            .map_err(|e| Error::Other(format!("Environment retry lock poisoned: {}", e)))? =
+            None;
+        let cancelled = self
+            .pending_environment_background
+            .lock()
+            .map_err(|e| Error::Other(format!("Pending environment lock poisoned: {}", e)))?
+            .take()
+            .map(|pending| pending.source_key);
+        if let Some(source_key) = cancelled {
+            self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+                code: "environment.loadCancelled".to_string(),
+                severity: "info".to_string(),
+                message: format!("Environment load was cancelled: {source_key}"),
+                retryable: false,
+            });
+        }
+        let should_clear_background = next_environment
+            .and_then(|environment| environment.source.as_ref())
+            .is_none();
+        if should_clear_background {
+            *self.environment_background.lock().map_err(|e| {
+                Error::Other(format!(
+                    "Environment background cache lock poisoned: {}",
+                    e
+                ))
+            })? = None;
+        }
+        Ok(())
     }
 
     pub fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample {
@@ -454,6 +601,25 @@ impl SceneService {
             .unwrap_or(&default_camera);
 
         let shared_extract = self.prepare_shared_extract(camera)?;
+        let effective_background = background_color.or_else(|| self.environment_background_color());
+        let environment = self.current_environment_patch();
+        self.prepare_environment_background_if_needed(scene_renderer, environment.as_ref())?;
+        let environment_background = self.environment_background.lock().map_err(|e| {
+            Error::Other(format!(
+                "Environment background cache lock poisoned: {}",
+                e
+            ))
+        })?;
+        let active_environment_background = environment
+            .as_ref()
+            .filter(|environment| {
+                environment.visible_as_background && environment.source.as_ref().is_some()
+            })
+            .and_then(|_| {
+                environment_background
+                    .as_ref()
+                    .map(|cached| &cached.background)
+            });
         tracing::trace!(
             scene_revision = shared_extract.revision,
             extracted = shared_extract.extracted,
@@ -469,10 +635,301 @@ impl SceneService {
                 snapshot: &shared_extract.render_world,
                 camera,
                 output_size,
-                background_color,
+                background_color: effective_background,
+                environment_background: active_environment_background,
                 viewport_graph,
             },
         )
+    }
+
+    fn environment_background_color(&self) -> Option<[f32; 4]> {
+        self.environment.read().ok().and_then(|environment| {
+            environment
+                .as_ref()
+                .and_then(|patch| patch.background_color)
+        })
+    }
+
+    fn current_environment_patch(&self) -> Option<EnvironmentPatch> {
+        self.environment
+            .read()
+            .ok()
+            .and_then(|environment| environment.clone())
+    }
+
+    fn prepare_environment_background_if_needed(
+        &self,
+        scene_renderer: &SceneRenderer,
+        environment: Option<&EnvironmentPatch>,
+    ) -> Result<()> {
+        self.poll_pending_environment_background(scene_renderer)?;
+        let Some(environment) = environment.filter(|environment| environment.visible_as_background)
+        else {
+            return Ok(());
+        };
+        let Some(source) = environment.source.as_ref() else {
+            return Ok(());
+        };
+        if source.kind.as_deref() != Some(ENVIRONMENT_SOURCE_FILE_TOKEN_KIND) {
+            return Ok(());
+        }
+        let Some(path) = self.environment_file_path(&source.id)? else {
+            return Ok(());
+        };
+        let source_key = environment_background_source_key(environment, &path);
+        if self
+            .blocked_environment_source_key
+            .lock()
+            .map_err(|e| Error::Other(format!("Environment retry lock poisoned: {}", e)))?
+            .as_ref()
+            .is_some_and(|blocked| blocked == &source_key)
+        {
+            return Ok(());
+        }
+        {
+            let guard = self.environment_background.lock().map_err(|e| {
+                Error::Other(format!(
+                    "Environment background cache lock poisoned: {}",
+                    e
+                ))
+            })?;
+            if guard
+                .as_ref()
+                .is_some_and(|cached| cached.source_key == source_key)
+            {
+                return Ok(());
+            }
+        }
+        self.ensure_environment_background_task(source_key, path, environment)?;
+        Ok(())
+    }
+
+    fn environment_file_path(&self, token: &str) -> Result<Option<PathBuf>> {
+        Ok(self
+            .environment_file_tokens
+            .read()
+            .map_err(|e| Error::Other(format!("Environment file token lock poisoned: {}", e)))?
+            .get(token)
+            .cloned())
+    }
+
+    fn ensure_environment_background_task(
+        &self,
+        source_key: String,
+        path: PathBuf,
+        environment: &EnvironmentPatch,
+    ) -> Result<()> {
+        let mut pending = self
+            .pending_environment_background
+            .lock()
+            .map_err(|e| Error::Other(format!("Pending environment lock poisoned: {}", e)))?;
+        if pending
+            .as_ref()
+            .is_some_and(|pending| pending.source_key == source_key)
+        {
+            return Ok(());
+        }
+
+        let generation = self.environment_generation.load(Ordering::Relaxed) as u64;
+        let settings = EnvironmentBackgroundSettings {
+            rotation_deg: environment.rotation_deg,
+            intensity: environment.intensity,
+            exposure: environment.exposure,
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let task_source_key = source_key.clone();
+        thread::spawn(move || {
+            let loaded = load_environment_rgba8(&path).map(|(width, height, rgba)| {
+                LoadedEnvironmentBackground {
+                    width,
+                    height,
+                    rgba,
+                    settings,
+                }
+            });
+            let _ = sender.send(EnvironmentLoadResult {
+                source_key: task_source_key,
+                generation,
+                loaded,
+            });
+        });
+        *pending = Some(PendingEnvironmentBackground {
+            source_key: source_key.clone(),
+            generation,
+            started_at: Instant::now(),
+            pending_reported: false,
+            receiver,
+        });
+        self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+            code: "environment.loadStarted".to_string(),
+            severity: "info".to_string(),
+            message: "Environment loading started".to_string(),
+            retryable: false,
+        });
+        Ok(())
+    }
+
+    fn poll_pending_environment_background(&self, scene_renderer: &SceneRenderer) -> Result<()> {
+        if let Some(result) = self.poll_pending_environment_background_status()? {
+            self.apply_environment_load_result(scene_renderer, result)?;
+        }
+        Ok(())
+    }
+
+    fn poll_pending_environment_background_status(&self) -> Result<Option<EnvironmentLoadResult>> {
+        let mut completed = None;
+        let mut timeout = None;
+        let mut pending_diagnostic = None;
+        {
+            let mut guard = self
+                .pending_environment_background
+                .lock()
+                .map_err(|e| Error::Other(format!("Pending environment lock poisoned: {}", e)))?;
+            let Some(pending) = guard.as_mut() else {
+                return Ok(None);
+            };
+            match pending.receiver.try_recv() {
+                Ok(result) => {
+                    completed = Some(result);
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    completed = Some(EnvironmentLoadResult {
+                        source_key: pending.source_key.clone(),
+                        generation: pending.generation,
+                        loaded: Err(Error::Other(
+                            "Environment loader disconnected".to_string(),
+                        )),
+                    });
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    let elapsed = pending.started_at.elapsed();
+                    if elapsed >= ENVIRONMENT_LOAD_TIMEOUT {
+                        timeout = Some(pending.source_key.clone());
+                    } else if elapsed >= ENVIRONMENT_PENDING_DIAGNOSTIC_AFTER
+                        && !pending.pending_reported
+                    {
+                        pending.pending_reported = true;
+                        pending_diagnostic = Some(pending.source_key.clone());
+                    }
+                }
+            }
+            if completed.is_some() || timeout.is_some() {
+                *guard = None;
+            }
+        }
+
+        if let Some(source_key) = pending_diagnostic {
+            self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+                code: "environment.loadPending".to_string(),
+                severity: "info".to_string(),
+                message: format!("Environment loading is still pending: {source_key}"),
+                retryable: false,
+            });
+        }
+
+        if let Some(source_key) = timeout {
+            self.environment_generation.fetch_add(1, Ordering::Relaxed);
+            *self
+                .blocked_environment_source_key
+                .lock()
+                .map_err(|e| Error::Other(format!("Environment retry lock poisoned: {}", e)))? =
+                Some(source_key.clone());
+            self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+                code: "environment.loadTimeout".to_string(),
+                severity: "warning".to_string(),
+                message: format!("Environment loading timed out: {source_key}"),
+                retryable: true,
+            });
+        }
+
+        Ok(completed)
+    }
+
+    fn apply_environment_load_result(
+        &self,
+        scene_renderer: &SceneRenderer,
+        result: EnvironmentLoadResult,
+    ) -> Result<()> {
+        if result.generation != self.environment_generation.load(Ordering::Relaxed) as u64 {
+            self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+                code: "environment.loadCancelled".to_string(),
+                severity: "info".to_string(),
+                message: format!("Environment load was cancelled: {}", result.source_key),
+                retryable: false,
+            });
+            return Ok(());
+        }
+        match result.loaded {
+            Ok(loaded) => {
+                let background = scene_renderer.create_environment_background(
+                    loaded.width,
+                    loaded.height,
+                    &loaded.rgba,
+                    loaded.settings,
+                )?;
+                *self.environment_background.lock().map_err(|e| {
+                    Error::Other(format!(
+                        "Environment background cache lock poisoned: {}",
+                        e
+                    ))
+                })? = Some(CachedEnvironmentBackground {
+                    source_key: result.source_key,
+                    background,
+                });
+                self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+                    code: "environment.loadApplied".to_string(),
+                    severity: "info".to_string(),
+                    message: "Environment loading completed".to_string(),
+                    retryable: false,
+                });
+            }
+            Err(error) => {
+                *self
+                    .blocked_environment_source_key
+                    .lock()
+                    .map_err(|e| Error::Other(format!("Environment retry lock poisoned: {}", e)))? =
+                    Some(result.source_key);
+                self.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+                    code: "environment.loadFailed".to_string(),
+                    severity: "error".to_string(),
+                    message: error.to_string(),
+                    retryable: true,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn install_pending_environment_for_test(
+        &self,
+        source_key: &str,
+        started_ago: Duration,
+    ) -> std::sync::mpsc::Sender<EnvironmentLoadResult> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let generation = self.environment_generation.load(Ordering::Relaxed) as u64;
+        *self.pending_environment_background.lock().unwrap() =
+            Some(PendingEnvironmentBackground {
+                source_key: source_key.to_string(),
+                generation,
+                started_at: Instant::now() - started_ago,
+                pending_reported: false,
+                receiver,
+            });
+        sender
+    }
+
+    #[cfg(test)]
+    fn poll_pending_environment_background_status_for_test(
+        &self,
+    ) -> Result<Option<EnvironmentLoadResult>> {
+        self.poll_pending_environment_background_status()
+    }
+
+    fn push_environment_load_diagnostic(&self, diagnostic: EnvironmentLoadDiagnostic) {
+        if let Ok(mut diagnostics) = self.environment_load_diagnostics.lock() {
+            diagnostics.push(diagnostic);
+        }
     }
 
     pub fn capture_display_frame(
@@ -495,7 +952,8 @@ impl SceneService {
             .gpu_ctx
             .as_ref()
             .ok_or_else(|| Error::Other("GPU not available for scene capture".to_string()))?;
-        let rgba = ctx.read_texture_sync(&output.color_texture, output.width, output.height)?;
+        let rgba =
+            read_scene_texture_as_rgba8(ctx, &output.color_texture, output.width, output.height)?;
         let jpeg = encode_rgba_to_jpeg(&rgba, output.width, output.height, u32::from(quality))?;
 
         Ok(FrameData::new(
@@ -535,7 +993,8 @@ impl SceneService {
             .gpu_ctx
             .as_ref()
             .ok_or_else(|| Error::Other("GPU not available for scene stream".to_string()))?;
-        let rgba = ctx.read_texture_sync(&output.color_texture, output.width, output.height)?;
+        let rgba =
+            read_scene_texture_as_rgba8(ctx, &output.color_texture, output.width, output.height)?;
         let nv12 = rgba_to_nv12_bt709(&rgba, output.width, output.height)?;
         let h264 = encode_nv12_to_h264_iframe(&nv12, output.width, output.height, quality)?;
 
@@ -736,6 +1195,93 @@ fn prune_scene_stream_encoder_bridges(
     }
 }
 
+fn environment_background_source_key(environment: &EnvironmentPatch, path: &Path) -> String {
+    format!(
+        "{}:{}:{:.6}:{:.6}:{:.6}",
+        environment.environment_id,
+        path.display(),
+        environment.rotation_deg,
+        environment.intensity,
+        environment.exposure
+    )
+}
+
+fn load_environment_rgba8(path: &Path) -> Result<(u32, u32, Vec<u8>)> {
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !matches!(extension.as_str(), "jpg" | "jpeg" | "png") {
+        return Err(Error::UnsupportedCapability(format!(
+            "unsupported LDR environment image format: {}",
+            path.display()
+        )));
+    }
+
+    let image = image::open(path)
+        .map_err(|error| Error::Other(format!("Failed to load environment image: {}", error)))?;
+    let rgba = image.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    Ok((width, height, rgba.into_raw()))
+}
+
+fn read_scene_texture_as_rgba8(
+    ctx: &GpuContext,
+    texture: &wgpu::Texture,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>> {
+    let raw = ctx.read_texture_sync(texture, width, height)?;
+    match texture.format() {
+        wgpu::TextureFormat::Rgba16Float => rgba16float_to_rgba8(&raw, width, height),
+        wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => {
+            validate_rgba8_len(raw, width, height)
+        }
+        other => Err(Error::UnsupportedCapability(format!(
+            "scene readback does not support texture format {other:?}"
+        ))),
+    }
+}
+
+fn validate_rgba8_len(data: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>> {
+    let expected = (width as usize)
+        .saturating_mul(height as usize)
+        .saturating_mul(4);
+    if data.len() != expected {
+        return Err(Error::InvalidParameter(format!(
+            "RGBA8 scene readback size mismatch: expected {expected} bytes, got {}",
+            data.len()
+        )));
+    }
+    Ok(data)
+}
+
+fn rgba16float_to_rgba8(data: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
+    let expected = (width as usize)
+        .saturating_mul(height as usize)
+        .saturating_mul(8);
+    if data.len() != expected {
+        return Err(Error::InvalidParameter(format!(
+            "Rgba16Float scene readback size mismatch: expected {expected} bytes, got {}",
+            data.len()
+        )));
+    }
+
+    let mut output = Vec::with_capacity((width as usize) * (height as usize) * 4);
+    for chunk in data.chunks_exact(8) {
+        let r = f16::from_bits(u16::from_le_bytes([chunk[0], chunk[1]])).to_f32();
+        let g = f16::from_bits(u16::from_le_bytes([chunk[2], chunk[3]])).to_f32();
+        let b = f16::from_bits(u16::from_le_bytes([chunk[4], chunk[5]])).to_f32();
+        let a = f16::from_bits(u16::from_le_bytes([chunk[6], chunk[7]])).to_f32();
+        output.push((r.clamp(0.0, 1.0) * 255.0).round() as u8);
+        output.push((g.clamp(0.0, 1.0) * 255.0).round() as u8);
+        output.push((b.clamp(0.0, 1.0) * 255.0).round() as u8);
+        output.push((a.clamp(0.0, 1.0) * 255.0).round() as u8);
+    }
+    Ok(output)
+}
+
 fn rgba_to_nv12_bt709(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
     if width % 2 != 0 || height % 2 != 0 {
         return Err(Error::InvalidParameter(
@@ -846,6 +1392,7 @@ impl ISceneService for SceneService {
             }
         }
 
+        self.update_environment_from_snapshot(&snapshot)?;
         Ok(snapshot)
     }
 
@@ -1126,6 +1673,14 @@ impl ISceneService for SceneService {
         SceneService::current_revision(self)
     }
 
+    fn register_environment_file_token(&self, token: &str, path: &Path) -> Result<()> {
+        SceneService::register_environment_file_token(self, token, path)
+    }
+
+    fn take_environment_load_diagnostics(&self) -> Vec<EnvironmentLoadDiagnostic> {
+        SceneService::take_environment_load_diagnostics(self)
+    }
+
     fn apply_scene_command_with_delta(
         &self,
         envelope: SceneCommandEnvelope,
@@ -1315,6 +1870,7 @@ impl ISceneService for SceneService {
         }
 
         let final_snapshot = self.computation.creative(|world| world.get_snapshot())?;
+        self.update_environment_from_snapshot(&final_snapshot)?;
         Ok((final_snapshot, project.editor_state))
     }
 
@@ -1520,6 +2076,7 @@ impl ISceneService for SceneService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neko_runtime_scene::world::EnvironmentMode;
     use neko_runtime_scene::SceneCommandEvent;
 
     #[test]
@@ -1558,6 +2115,173 @@ mod tests {
         assert!(health.ack_p95_ms <= ControlAckHealthSample::ACK_P95_BUDGET_MS);
         assert!(health.ack_path_is_healthy());
         assert!(health.render_backlog_is_healthy());
+    }
+
+    #[test]
+    fn service_environment_cache_tracks_delta_and_snapshot_reload() {
+        let service = SceneService::new();
+        let envelope = SceneCommandEnvelope {
+            seq: 1,
+            base_revision: service.current_revision().unwrap(),
+            transaction_id: None,
+            phase: None,
+            coalesce_key: None,
+            event: SceneCommandEvent::SetEnvironment {
+                patch: EnvironmentPatch {
+                    environment_id: "scene-environment".to_string(),
+                    source: None,
+                    mode: EnvironmentMode::BackgroundAndIbl,
+                    rotation_deg: 15.0,
+                    intensity: 1.0,
+                    exposure: 0.0,
+                    visible_as_background: true,
+                    background_color: Some([0.1, 0.2, 0.3, 1.0]),
+                },
+            },
+        };
+
+        let (_, delta) = service.apply_scene_command_with_delta(envelope).unwrap();
+        assert!(delta.unwrap().environment.is_some());
+        assert_eq!(
+            service
+                .environment
+                .read()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .background_color,
+            Some([0.1, 0.2, 0.3, 1.0])
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let model_path = dir.path().join("loaded.gltf");
+        std::fs::write(
+            &model_path,
+            r#"{
+                "asset": { "version": "2.0" },
+                "scenes": [{ "nodes": [0] }],
+                "scene": 0,
+                "nodes": [{ "name": "Loaded" }]
+            }"#,
+        )
+        .unwrap();
+        let snapshot = service.load_model(&model_path).unwrap();
+
+        assert!(snapshot.environment.is_none());
+        assert!(service.environment.read().unwrap().is_none());
+    }
+
+    #[test]
+    fn environment_load_diagnostics_are_drained_once() {
+        let service = SceneService::new();
+        service.push_environment_load_diagnostic(EnvironmentLoadDiagnostic {
+            code: "environment.loadStarted".to_string(),
+            severity: "info".to_string(),
+            message: "Environment loading started".to_string(),
+            retryable: false,
+        });
+
+        let diagnostics = service.take_environment_load_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "environment.loadStarted");
+        assert!(service.take_environment_load_diagnostics().is_empty());
+    }
+
+    #[test]
+    fn environment_pending_diagnostic_reports_once_before_timeout() {
+        let service = SceneService::new();
+        let _sender = service.install_pending_environment_for_test(
+            "environment://slow",
+            ENVIRONMENT_PENDING_DIAGNOSTIC_AFTER + Duration::from_millis(1),
+        );
+
+        assert!(service
+            .poll_pending_environment_background_status_for_test()
+            .unwrap()
+            .is_none());
+        let diagnostics = service.take_environment_load_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "environment.loadPending");
+
+        assert!(service
+            .poll_pending_environment_background_status_for_test()
+            .unwrap()
+            .is_none());
+        assert!(service.take_environment_load_diagnostics().is_empty());
+    }
+
+    #[test]
+    fn environment_timeout_clears_pending_and_reports_retryable_diagnostic() {
+        let service = SceneService::new();
+        let _sender = service.install_pending_environment_for_test(
+            "environment://timeout",
+            ENVIRONMENT_LOAD_TIMEOUT + Duration::from_millis(1),
+        );
+
+        assert!(service
+            .poll_pending_environment_background_status_for_test()
+            .unwrap()
+            .is_none());
+        let diagnostics = service.take_environment_load_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "environment.loadTimeout");
+        assert!(diagnostics[0].retryable);
+        assert!(service.pending_environment_background.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn environment_replacement_cancels_pending_loader() {
+        let service = SceneService::new();
+        let _sender = service.install_pending_environment_for_test(
+            "environment://old",
+            Duration::from_millis(1),
+        );
+        let next_environment = EnvironmentPatch {
+            environment_id: "scene-environment".to_string(),
+            source: None,
+            mode: EnvironmentMode::BackgroundAndIbl,
+            rotation_deg: 0.0,
+            intensity: 1.0,
+            exposure: 0.0,
+            visible_as_background: true,
+            background_color: Some([0.2, 0.3, 0.4, 1.0]),
+        };
+
+        service
+            .cancel_pending_environment_background(Some(&next_environment))
+            .unwrap();
+
+        let diagnostics = service.take_environment_load_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "environment.loadCancelled");
+        assert!(service.pending_environment_background.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn environment_loader_rejects_unsupported_ldr_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("studio.hdr");
+        std::fs::write(&path, b"not an ldr image").unwrap();
+
+        let error = load_environment_rgba8(&path).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("unsupported LDR environment image format"));
+    }
+
+    #[test]
+    fn scene_rgba16float_readback_conversion_returns_compact_rgba8() {
+        let zero = 0x0000u16.to_le_bytes();
+        let half = 0x3800u16.to_le_bytes();
+        let one = 0x3c00u16.to_le_bytes();
+        let data = [
+            one[0], one[1], half[0], half[1], zero[0], zero[1], one[0], one[1],
+        ];
+
+        assert_eq!(
+            rgba16float_to_rgba8(&data, 1, 1).unwrap(),
+            vec![255, 128, 0, 255]
+        );
     }
 
     #[test]

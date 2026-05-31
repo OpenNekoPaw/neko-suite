@@ -168,6 +168,48 @@ pub struct CharacterDefinition {
     pub expression_presets: Vec<ExpressionPreset>,
     #[serde(default)]
     pub behavior_drivers: Vec<BehaviorDriver>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region_descriptors: Option<CharacterRegionDescriptorSet>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterRegionDescriptorSet {
+    pub schema_version: u32,
+    #[serde(default)]
+    pub regions: Vec<CharacterRegionDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterRegionDescriptor {
+    pub region_id: String,
+    pub display_name: String,
+    pub schema_version: u32,
+    #[serde(default)]
+    pub bindings: Vec<CharacterRegionBinding>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterRegionBinding {
+    pub kind: CharacterRegionBindingKind,
+    pub target_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight: Option<f32>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CharacterRegionBindingKind {
+    MorphControl,
+    MaterialSlot,
+    Bone,
+    Submesh,
+    Primitive,
+    Mask,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -628,6 +670,7 @@ impl CharacterAuthoringModule {
                 message: "character id is required".to_string(),
             });
         }
+        validate_region_descriptors(&file.character, &mut issues);
         Ok(issues)
     }
 
@@ -1111,6 +1154,103 @@ pub fn evaluate_schema_version(schema_version: u32) -> CharacterSchemaCompatibil
     }
 }
 
+fn validate_region_descriptors(
+    character: &LayeredCharacterDescription,
+    issues: &mut Vec<CharacterValidationIssue>,
+) {
+    let Some(regions) = character.definition.region_descriptors.as_ref() else {
+        return;
+    };
+    if regions.schema_version != CURRENT_CHARACTER_SCHEMA_VERSION {
+        issues.push(CharacterValidationIssue {
+            field: "character.definition.regionDescriptors.schemaVersion".to_string(),
+            message: format!(
+                "region descriptor schema {} is not supported",
+                regions.schema_version
+            ),
+        });
+    }
+
+    let mut region_ids = std::collections::HashSet::new();
+    let morph_ids: std::collections::HashSet<&str> = character
+        .geometry
+        .morph_library
+        .iter()
+        .map(|morph| morph.morph_id.as_str())
+        .collect();
+    let material_slot_ids: std::collections::HashSet<&str> = character
+        .material_slots
+        .iter()
+        .map(|slot| slot.slot_id.as_str())
+        .collect();
+    let bone_ids: std::collections::HashSet<&str> = character
+        .geometry
+        .skeleton
+        .as_ref()
+        .map(|skeleton| skeleton.bind_joints.iter().map(String::as_str).collect())
+        .unwrap_or_default();
+
+    for region in &regions.regions {
+        let field_prefix = format!(
+            "character.definition.regionDescriptors.regions.{}",
+            region.region_id
+        );
+        if region.region_id.trim().is_empty() {
+            issues.push(CharacterValidationIssue {
+                field: format!("{field_prefix}.regionId"),
+                message: "region id is required".to_string(),
+            });
+        } else if !region_ids.insert(region.region_id.as_str()) {
+            issues.push(CharacterValidationIssue {
+                field: format!("{field_prefix}.regionId"),
+                message: "region id must be unique".to_string(),
+            });
+        }
+        if region.schema_version != regions.schema_version {
+            issues.push(CharacterValidationIssue {
+                field: format!("{field_prefix}.schemaVersion"),
+                message: "region schema version must match descriptor set".to_string(),
+            });
+        }
+        if region.bindings.is_empty() {
+            issues.push(CharacterValidationIssue {
+                field: format!("{field_prefix}.bindings"),
+                message: "region descriptor must declare at least one binding".to_string(),
+            });
+        }
+        for binding in &region.bindings {
+            if binding.target_id.trim().is_empty() {
+                issues.push(CharacterValidationIssue {
+                    field: format!("{field_prefix}.bindings.targetId"),
+                    message: "region binding target id is required".to_string(),
+                });
+                continue;
+            }
+            let target_exists = match binding.kind {
+                CharacterRegionBindingKind::MorphControl => {
+                    morph_ids.contains(binding.target_id.as_str())
+                }
+                CharacterRegionBindingKind::MaterialSlot => {
+                    material_slot_ids.contains(binding.target_id.as_str())
+                }
+                CharacterRegionBindingKind::Bone => bone_ids.contains(binding.target_id.as_str()),
+                CharacterRegionBindingKind::Submesh
+                | CharacterRegionBindingKind::Primitive
+                | CharacterRegionBindingKind::Mask => true,
+            };
+            if !target_exists {
+                issues.push(CharacterValidationIssue {
+                    field: format!("{field_prefix}.bindings.{}", binding.target_id),
+                    message: format!(
+                        "region binding target '{}' is not available for {:?}",
+                        binding.target_id, binding.kind
+                    ),
+                });
+            }
+        }
+    }
+}
+
 fn validate_asset_ref_uri(
     field: &str,
     asset_ref: &AssetRef,
@@ -1331,6 +1471,80 @@ mod tests {
             error,
             CharacterAuthoringError::UnsupportedFutureSchema { .. }
         ));
+    }
+
+    #[test]
+    fn character_authoring_validates_region_descriptor_bindings() {
+        let module = CharacterAuthoringModule;
+        let mut file = character_file();
+        file.character.definition.region_descriptors = Some(CharacterRegionDescriptorSet {
+            schema_version: CURRENT_CHARACTER_SCHEMA_VERSION,
+            regions: vec![CharacterRegionDescriptor {
+                region_id: "face.mouth".to_string(),
+                display_name: "Mouth".to_string(),
+                schema_version: CURRENT_CHARACTER_SCHEMA_VERSION,
+                bindings: vec![
+                    CharacterRegionBinding {
+                        kind: CharacterRegionBindingKind::MorphControl,
+                        target_id: "Smile".to_string(),
+                        weight: Some(1.0),
+                    },
+                    CharacterRegionBinding {
+                        kind: CharacterRegionBindingKind::MaterialSlot,
+                        target_id: "skin".to_string(),
+                        weight: None,
+                    },
+                ],
+                tags: vec!["face".to_string()],
+            }],
+        });
+
+        let issues = module.validate_file(&file).unwrap();
+
+        assert!(issues
+            .iter()
+            .all(|issue| !issue.field.contains("regionDescriptors")));
+    }
+
+    #[test]
+    fn character_authoring_reports_invalid_region_descriptor_targets() {
+        let module = CharacterAuthoringModule;
+        let mut file = character_file();
+        file.character.definition.region_descriptors = Some(CharacterRegionDescriptorSet {
+            schema_version: CURRENT_CHARACTER_SCHEMA_VERSION + 1,
+            regions: vec![
+                CharacterRegionDescriptor {
+                    region_id: "face.mouth".to_string(),
+                    display_name: "Mouth".to_string(),
+                    schema_version: CURRENT_CHARACTER_SCHEMA_VERSION,
+                    bindings: vec![CharacterRegionBinding {
+                        kind: CharacterRegionBindingKind::MorphControl,
+                        target_id: "MissingMorph".to_string(),
+                        weight: None,
+                    }],
+                    tags: Vec::new(),
+                },
+                CharacterRegionDescriptor {
+                    region_id: "face.mouth".to_string(),
+                    display_name: "Duplicate Mouth".to_string(),
+                    schema_version: CURRENT_CHARACTER_SCHEMA_VERSION + 1,
+                    bindings: Vec::new(),
+                    tags: Vec::new(),
+                },
+            ],
+        });
+
+        let issues = module.validate_file(&file).unwrap();
+        let messages = issues
+            .iter()
+            .map(|issue| format!("{}:{}", issue.field, issue.message))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(messages.contains("region descriptor schema"));
+        assert!(messages.contains("region id must be unique"));
+        assert!(messages.contains("MissingMorph"));
+        assert!(messages.contains("must declare at least one binding"));
     }
 
     #[test]

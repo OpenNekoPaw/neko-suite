@@ -752,6 +752,16 @@ impl AssetCache {
     }
 
     /// Create material bind group with optional textures
+    pub fn create_override_material_bind_group(
+        &self,
+        uniform_buffer: &wgpu::Buffer,
+        normal_view: Option<&wgpu::TextureView>,
+        occlusion_view: Option<&wgpu::TextureView>,
+    ) -> wgpu::BindGroup {
+        self.create_material_bind_group(uniform_buffer, None, None, normal_view, None, occlusion_view)
+    }
+
+    /// Create material bind group with optional textures
     fn create_material_bind_group(
         &self,
         uniform_buffer: &wgpu::Buffer,

@@ -4,10 +4,12 @@ use crate::{
     build_standard_scene_render_graph, RenderGraph, RenderGraphError, RenderResourceId,
     StandardSceneRenderGraphOptions,
 };
+use glam::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewportRenderMode {
     Pbr,
+    Clay,
     Wireframe,
     Unlit,
     Normal,
@@ -70,7 +72,34 @@ impl ViewportPostProcess {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewportMaterialOverrideKind {
+    None,
+    Clay,
+    Matcap,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ViewportMaterialOverride {
+    pub kind: ViewportMaterialOverrideKind,
+    pub color: Option<Vec3>,
+    pub roughness: Option<f32>,
+    pub metallic: Option<f32>,
+    pub preserve_alpha: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ViewportLookDevSettings {
+    pub render_mode: ViewportRenderMode,
+    pub debug_view: Option<ViewportDebugView>,
+    pub material_override: Option<ViewportMaterialOverride>,
+    pub helper_passes_enabled: Option<bool>,
+    pub show_grid: Option<bool>,
+    pub show_skeleton: Option<bool>,
+    pub show_normals: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ViewportDescriptor {
     pub viewport_id: String,
     pub scene_id: String,
@@ -83,6 +112,7 @@ pub struct ViewportDescriptor {
     pub layer_mask: Option<u32>,
     pub work_mode: ViewportWorkMode,
     pub helper_passes: bool,
+    pub lookdev: Option<ViewportLookDevSettings>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +124,7 @@ pub enum ViewportRenderGraphOutput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewportRenderGraphVariant {
     StandardPbr,
+    Clay,
     Debug,
     Wireframe,
     Unlit,
@@ -118,7 +149,10 @@ pub fn build_viewport_render_graph(
     let variant = select_variant(descriptor);
     let helper_passes =
         descriptor.helper_passes && output == ViewportRenderGraphOutput::RealtimeStream;
-    let post_process = variant == ViewportRenderGraphVariant::StandardPbr
+    let post_process = matches!(
+        variant,
+        ViewportRenderGraphVariant::StandardPbr | ViewportRenderGraphVariant::Clay
+    )
         && (descriptor.tone_mapping != SceneToneMapping::None
             || descriptor.post_process.any_enabled());
     // Realtime stream frames now hand the final RenderGraph color target
@@ -164,6 +198,7 @@ fn select_variant(descriptor: &ViewportDescriptor) -> ViewportRenderGraphVariant
 
     match descriptor.render_mode {
         ViewportRenderMode::Pbr => ViewportRenderGraphVariant::StandardPbr,
+        ViewportRenderMode::Clay => ViewportRenderGraphVariant::Clay,
         ViewportRenderMode::Wireframe => ViewportRenderGraphVariant::Wireframe,
         ViewportRenderMode::Unlit => ViewportRenderGraphVariant::Unlit,
         ViewportRenderMode::Normal
@@ -190,6 +225,7 @@ mod tests {
             layer_mask: None,
             work_mode: ViewportWorkMode::EditParametric,
             helper_passes: true,
+            lookdev: None,
         }
     }
 
@@ -247,6 +283,27 @@ mod tests {
     }
 
     #[test]
+    fn viewport_render_modes_report_debug_variant_for_helper_passes() {
+        for mode in [
+            ViewportRenderMode::Normal,
+            ViewportRenderMode::Depth,
+            ViewportRenderMode::LightComplexity,
+            ViewportRenderMode::ShadowAtlas,
+        ] {
+            let mut descriptor = descriptor();
+            descriptor.render_mode = mode;
+            descriptor.tone_mapping = SceneToneMapping::None;
+
+            let plan =
+                build_viewport_render_graph(&descriptor, ViewportRenderGraphOutput::QualityCapture)
+                    .unwrap();
+
+            assert_eq!(plan.variant, ViewportRenderGraphVariant::Debug);
+            assert!(!plan.post_process);
+        }
+    }
+
+    #[test]
     fn viewport_descriptor_recompiles_variants_for_modes_and_output_kind() {
         let mut wireframe = descriptor();
         wireframe.render_mode = ViewportRenderMode::Wireframe;
@@ -285,6 +342,34 @@ mod tests {
         assert!(!unlit_plan.color_convert);
         assert!(!unlit_plan.encoder_copy);
         assert_eq!(ids, vec!["render.pbr_forward", "render.viewport_helpers"]);
+    }
+
+    #[test]
+    fn viewport_descriptor_selects_clay_as_distinct_lookdev_variant() {
+        let mut clay = descriptor();
+        clay.render_mode = ViewportRenderMode::Clay;
+        clay.lookdev = Some(ViewportLookDevSettings {
+            render_mode: ViewportRenderMode::Clay,
+            debug_view: None,
+            material_override: Some(ViewportMaterialOverride {
+                kind: ViewportMaterialOverrideKind::Clay,
+                color: Some(Vec3::new(0.78, 0.76, 0.72)),
+                roughness: Some(0.9),
+                metallic: Some(0.0),
+                preserve_alpha: Some(true),
+            }),
+            helper_passes_enabled: Some(true),
+            show_grid: Some(false),
+            show_skeleton: Some(false),
+            show_normals: Some(false),
+        });
+
+        let plan =
+            build_viewport_render_graph(&clay, ViewportRenderGraphOutput::RealtimeStream)
+                .unwrap();
+
+        assert_eq!(plan.variant, ViewportRenderGraphVariant::Clay);
+        assert!(plan.post_process);
     }
 
     #[test]

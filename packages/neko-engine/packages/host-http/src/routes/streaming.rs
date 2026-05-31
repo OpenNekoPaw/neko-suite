@@ -234,7 +234,10 @@ mod tests {
 
         assert_eq!(message.message_type, "renderFrameMeta");
         assert_eq!(message.meta.frame_id, 1);
-        assert_eq!(message.meta.diagnostics.as_ref().unwrap().encode_time_ms, 3.0);
+        assert_eq!(
+            message.meta.diagnostics.as_ref().unwrap().encode_time_ms,
+            3.0
+        );
     }
 
     #[test]

@@ -53,7 +53,8 @@ pub mod gpu {
     pub use neko_engine_scene_renderer::{
         CameraParams, ControlAckHealthSample, DegradationDecision, DegradationHysteresis,
         DegradationStep, FrameLoadSample, FrameScheduleDecision, FrameScheduler, SceneColorSpace,
-        SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportPostProcess,
+        SceneToneMapping, ViewportDebugView, ViewportDescriptor, ViewportLookDevSettings,
+        ViewportMaterialOverride, ViewportMaterialOverrideKind, ViewportPostProcess,
         ViewportRenderMode, ViewportWorkMode,
     };
 }
@@ -88,10 +89,11 @@ pub mod services {
     pub use crate::services::gamepad::{GamepadEvent, GamepadInfo};
     pub use crate::services::midi::{MidiEvent, MidiPort};
     pub use crate::services::{
-        EffectRegistry, IAudioService, IEffectsService, IExportService, IGamepadService,
-        IImageService, IMidiService, INodeService, IPuppetService, ISceneService, IStreamPlayback,
-        ITaskService, ITimelineService, IVideoService, PipelineSink, PuppetExportConfig,
-        PuppetExportSummary, PuppetRenderTiming, StreamSink,
+        EffectRegistry, EnvironmentLoadDiagnostic, IAudioService, IEffectsService,
+        IExportService, IGamepadService, IImageService, IMidiService, INodeService,
+        IPuppetService, ISceneService, IStreamPlayback, ITaskService, ITimelineService,
+        IVideoService, PipelineSink, PuppetExportConfig, PuppetExportSummary,
+        PuppetRenderTiming, StreamSink,
     };
 }
 
@@ -102,9 +104,14 @@ pub mod puppet {
 
 /// Runtime scene contracts re-exported for host scene transport endpoints.
 pub mod scene {
-    pub use neko_runtime_scene::world::{SceneDelta, TransformUpdate};
+    pub use neko_runtime_scene::world::{
+        AssetHandleRef, EnvironmentMode, EnvironmentPatch, NodeRemoveCommand, SceneDelta,
+        SceneNodePatch, SceneNodeTransformPatch, SelectionHit, SelectionKind, SelectionMode,
+        SelectionQuery, SelectionQueryResult, SelectionTarget, TransformUpdate,
+    };
     pub use neko_runtime_scene::{
-        AnimationPlaybackAction, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
-        SceneCommandEvent, SceneCommandPhase, TopologyOperation, VertexBrushPatchMetadata,
+        AnimationPlaybackAction, EnvironmentDiagnostic, LightPatch, LightShadowPatch,
+        SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope, SceneCommandEvent,
+        SceneCommandPhase, TopologyOperation, VertexBrushPatchMetadata,
     };
 }

@@ -13,6 +13,7 @@ use crate::animation_blend::{
     SceneCrossfadeRequest,
 };
 use crate::bounds::SceneBounds3;
+use crate::character_authoring::CharacterRegionDescriptorSet;
 use crate::components::*;
 use crate::hierarchy;
 use crate::ik::{self, IkChain, IkChainInfo, IkSolverType};
@@ -23,9 +24,11 @@ use crate::modeling_session::{
 use crate::procedural::{generate_shape, ShapeParams};
 use crate::procedural_mesh::ProceduralMesh;
 use crate::scene_control::{
-    advance_scene_revision, ensure_scene_control_resources, extract_scene_delta,
-    mark_morph_weights_dirty, mark_node_removed, mark_transform_dirty, mark_visibility_dirty,
-    rebuild_node_index, SceneCommandAck, SceneCommandEnvelope, SceneRevision,
+    advance_scene_revision, current_environment, ensure_scene_control_resources,
+    extract_scene_delta, light_from_patch, light_patch_from_component, mark_morph_weights_dirty,
+    mark_node_removed, mark_transform_dirty, mark_visibility_dirty, rebuild_node_index,
+    EnvironmentDiagnostic, LightPatch, SceneCommandAck, SceneCommandEnvelope,
+    SceneEnvironmentState, SceneRevision,
 };
 use crate::systems;
 use bevy_ecs::prelude::*;
@@ -38,8 +41,14 @@ use std::path::Path;
 /// Snapshot of the scene graph for serialization to the frontend
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SceneSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_id: Option<String>,
+    #[serde(default)]
+    pub revision: u64,
     pub nodes: Vec<SceneNodeSnapshot>,
     pub animations: Vec<AnimationClipInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<EnvironmentPatch>,
 }
 
 /// Snapshot of a single scene node
@@ -64,6 +73,26 @@ pub struct SceneNodeSnapshot {
         skip_serializing_if = "Option::is_none"
     )]
     pub world_bounds: Option<SceneBounds3>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub primitives: Vec<MeshPrimitiveSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region_descriptors: Option<CharacterRegionDescriptorSet>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub light: Option<LightPatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshPrimitiveSnapshot {
+    pub mesh: AssetHandleRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<AssetHandleRef>,
+    pub submesh_id: String,
+    pub primitive_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material_slot_id: Option<String>,
 }
 
 /// Info about an animation clip
@@ -80,9 +109,13 @@ pub struct SceneDelta {
     pub revision: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub applied_seq: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added_nodes: Vec<SceneNodePatch>,
     pub updated_transforms: Vec<TransformUpdate>,
     pub updated_morph_weights: Vec<MorphWeightsUpdate>,
     pub updated_visibility: Vec<VisibilityUpdate>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub updated_lights: Vec<LightPatch>,
     pub removed_nodes: Vec<String>,
     pub updated_character_morph_weights: Vec<CharacterMorphWeightsUpdate>,
     pub updated_character_materials: Vec<CharacterMaterialUpdate>,
@@ -90,6 +123,156 @@ pub struct SceneDelta {
     pub character_overrides: Vec<CharacterOverrideUpdate>,
     pub modeling_sessions: Vec<ModelingSessionStateDelta>,
     pub topology_changes: Vec<TopologyChangeEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<Option<EnvironmentPatch>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_targets: Vec<SelectionTarget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub environment_diagnostics: Vec<EnvironmentDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetHandleRef {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum EnvironmentMode {
+    Skybox,
+    Ibl,
+    BackgroundAndIbl,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvironmentPatch {
+    pub environment_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<AssetHandleRef>,
+    pub mode: EnvironmentMode,
+    pub rotation_deg: f32,
+    pub intensity: f32,
+    pub exposure: f32,
+    pub visible_as_background: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<[f32; 4]>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeRemoveCommand {
+    pub node_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cascade: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneNodePatch {
+    pub node_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<SceneNodeTransformPatch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SceneNodeTransformPatch {
+    pub position: [f32; 3],
+    pub rotation: [f32; 4],
+    pub scale: [f32; 3],
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SelectionKind {
+    Node,
+    Bone,
+    MaterialSlot,
+    Submesh,
+    Primitive,
+    CharacterRegion,
+    MorphControl,
+    Environment,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionHit {
+    pub world_position: [f32; 3],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_normal: Option<[f32; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionTarget {
+    pub kind: SelectionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bone_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material_slot_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submesh_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primitive_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub morph_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hit: Option<SelectionHit>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SelectionMode {
+    Replace,
+    Add,
+    Toggle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionQuery {
+    pub viewport_id: String,
+    pub x: f32,
+    pub y: f32,
+    #[serde(default)]
+    pub mask: Vec<SelectionKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<SelectionMode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionQueryResult {
+    pub viewport_id: String,
+    pub revision: u64,
+    #[serde(default)]
+    pub candidates: Vec<SelectionTarget>,
 }
 
 /// A single transform update
@@ -460,6 +643,7 @@ impl DataAccess for BevySceneWorld {
             NodeName(name.clone()),
             Transform::default(),
             GlobalTransform::identity(),
+            Visible::default(),
             MeshRef {
                 asset: crate::asset_database::AssetHandle::for_mesh(&spec.uri, 0),
                 uri: spec.uri,
@@ -633,6 +817,7 @@ impl SceneWorld for BevySceneWorld {
             Option<&Skeleton>,
             Option<&MeshBounds>,
             Option<&GlobalTransform>,
+            Option<&MeshPrimitiveRefs>,
         )>();
 
         for (
@@ -648,6 +833,7 @@ impl SceneWorld for BevySceneWorld {
             skeleton,
             mesh_bounds,
             global_transform,
+            primitive_refs,
         ) in query.iter(&self.world)
         {
             let parent_id =
@@ -671,12 +857,28 @@ impl SceneWorld for BevySceneWorld {
                 has_skeleton: skeleton.is_some(),
                 bounds,
                 world_bounds,
+                primitives: primitive_refs
+                    .map(|refs| mesh_primitive_snapshots(refs))
+                    .unwrap_or_default(),
+                character_id: None,
+                region_descriptors: None,
+                light: light.map(|light| light_patch_from_component(&node_id.0, light)),
             });
         }
 
         let animations = self.get_animation_clips();
 
-        SceneSnapshot { nodes, animations }
+        SceneSnapshot {
+            scene_id: None,
+            revision: self
+                .world
+                .get_resource::<SceneRevision>()
+                .map(|revision| revision.current())
+                .unwrap_or_default(),
+            nodes,
+            animations,
+            environment: current_environment(&mut self.world),
+        }
     }
 
     fn update_transform(
@@ -776,6 +978,9 @@ impl SceneWorld for BevySceneWorld {
         ensure_scene_control_resources(&mut self.world);
 
         if snapshot.nodes.is_empty() {
+            if let Some(environment) = snapshot.environment.clone() {
+                self.world.resource_mut::<SceneEnvironmentState>().current = Some(environment);
+            }
             self.default_procedural_meshes = spawn_default_cube(&mut self.world);
             advance_scene_revision(&mut self.world);
             return;
@@ -803,6 +1008,12 @@ impl SceneWorld for BevySceneWorld {
                 .id();
 
             id_to_entity.insert(node.id.clone(), entity);
+
+            if let Some(light_patch) = &node.light {
+                if let Ok(light) = light_from_patch(light_patch) {
+                    self.world.entity_mut(entity).insert(light);
+                }
+            }
         }
 
         // Restore parent-child relationships
@@ -821,6 +1032,7 @@ impl SceneWorld for BevySceneWorld {
         // Propagate transforms
         systems::transform_propagation(&mut self.world);
         rebuild_node_index(&mut self.world);
+        self.world.resource_mut::<SceneEnvironmentState>().current = snapshot.environment.clone();
         advance_scene_revision(&mut self.world);
     }
 
@@ -1251,6 +1463,41 @@ impl SceneWorld for BevySceneWorld {
     }
 }
 
+fn mesh_primitive_snapshots(refs: &MeshPrimitiveRefs) -> Vec<MeshPrimitiveSnapshot> {
+    refs.primitives
+        .iter()
+        .map(|primitive| {
+            let primitive_id = format!("primitive:{}", primitive.mesh.primitive_index);
+            MeshPrimitiveSnapshot {
+                mesh: mesh_asset_handle_ref(&primitive.mesh),
+                material: primitive.material.as_ref().map(material_asset_handle_ref),
+                submesh_id: format!("submesh:{}", primitive.mesh.primitive_index),
+                material_slot_id: primitive
+                    .material
+                    .as_ref()
+                    .map(|material| format!("material:{}", material.material_index)),
+                primitive_id,
+            }
+        })
+        .collect()
+}
+
+fn mesh_asset_handle_ref(mesh: &MeshRef) -> AssetHandleRef {
+    AssetHandleRef {
+        id: mesh.asset.guid.clone(),
+        uri: Some(mesh.uri.clone()),
+        kind: Some("mesh".to_string()),
+    }
+}
+
+fn material_asset_handle_ref(material: &MaterialRef) -> AssetHandleRef {
+    AssetHandleRef {
+        id: material.asset.guid.clone(),
+        uri: Some(material.uri.clone()),
+        kind: Some("material".to_string()),
+    }
+}
+
 impl BevySceneWorld {
     /// Find a node entity by SceneNodeId
     fn find_node_entity(&mut self, node_id: &str) -> Result<Entity, String> {
@@ -1383,6 +1630,66 @@ mod tests {
         assert!(snapshot.nodes.iter().all(|node| node.id != "default_cube"));
         assert!(snapshot.nodes.iter().any(|node| node.name == "Scene"));
         assert!(snapshot.nodes.iter().any(|node| node.name == "Loaded"));
+    }
+
+    #[test]
+    fn restore_snapshot_clears_prior_environment_when_snapshot_has_none() {
+        let mut scene = BevySceneWorld::new();
+        let mut snapshot = scene.get_snapshot();
+        snapshot.environment = Some(EnvironmentPatch {
+            environment_id: "scene-environment".to_string(),
+            source: None,
+            mode: EnvironmentMode::BackgroundAndIbl,
+            rotation_deg: 15.0,
+            intensity: 1.0,
+            exposure: 0.0,
+            visible_as_background: true,
+            background_color: Some([0.1, 0.2, 0.3, 1.0]),
+        });
+        scene.restore_snapshot(&snapshot);
+        assert!(scene.get_snapshot().environment.is_some());
+
+        let mut cleared = snapshot;
+        cleared.environment = None;
+        scene.restore_snapshot(&cleared);
+
+        assert!(scene.get_snapshot().environment.is_none());
+    }
+
+    #[test]
+    fn restore_snapshot_preserves_authored_lights() {
+        let mut scene = BevySceneWorld::new();
+        let mut snapshot = scene.get_snapshot();
+        snapshot.nodes[0].id = "key_light".to_string();
+        snapshot.nodes[0].name = "Key Light".to_string();
+        snapshot.nodes[0].has_mesh = false;
+        snapshot.nodes[0].has_light = true;
+        snapshot.nodes[0].light = Some(LightPatch {
+            node_id: "key_light".to_string(),
+            kind: "spot".to_string(),
+            color: [1.0, 0.8, 0.6],
+            intensity: 4.0,
+            range: Some(12.0),
+            inner_cone_angle: Some(0.1),
+            outer_cone_angle: Some(0.7),
+            shadow: Some(crate::scene_control::LightShadowPatch {
+                enabled: true,
+                resolution: Some(1024),
+                bias: Some(0.001),
+            }),
+        });
+
+        scene.restore_snapshot(&snapshot);
+        let restored = scene.get_snapshot();
+        let node = restored
+            .nodes
+            .iter()
+            .find(|node| node.id == "key_light")
+            .expect("restored light node");
+
+        assert!(node.has_light);
+        assert_eq!(node.light.as_ref().unwrap().kind, "spot");
+        assert_eq!(node.light.as_ref().unwrap().range, Some(12.0));
     }
 
     #[test]

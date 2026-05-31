@@ -19,6 +19,14 @@ use neko_runtime_scene::{
 use std::collections::HashMap;
 use std::path::Path;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnvironmentLoadDiagnostic {
+    pub code: String,
+    pub severity: String,
+    pub message: String,
+    pub retryable: bool,
+}
+
 /// Service interface for 3D scene management
 #[allow(async_fn_in_trait)]
 pub trait ISceneService: Send + Sync {
@@ -123,6 +131,16 @@ pub trait ISceneService: Send + Sync {
 
     /// Current scene command revision for stream descriptors and conflict detection.
     fn current_revision(&self) -> crate::error::Result<u64>;
+
+    /// Resolve a validated Engine file token for environment loading.
+    fn register_environment_file_token(
+        &self,
+        token: &str,
+        path: &Path,
+    ) -> crate::error::Result<()>;
+
+    /// Drain environment loading diagnostics emitted outside command apply.
+    fn take_environment_load_diagnostics(&self) -> Vec<EnvironmentLoadDiagnostic>;
 
     /// Apply a realtime scene command and return command acknowledgements plus optional delta.
     fn apply_scene_command_with_delta(

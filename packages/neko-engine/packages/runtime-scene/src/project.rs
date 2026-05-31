@@ -103,9 +103,8 @@ impl NkmProject {
 mod tests {
     use super::*;
     use crate::procedural_mesh::ProceduralVertex;
-    use crate::world::{AnimationClipInfo, SceneNodeSnapshot};
-    use std::io::Write;
-    use tempfile::NamedTempFile;
+    use crate::scene_control::LightPatch;
+    use crate::world::{AssetHandleRef, EnvironmentMode, EnvironmentPatch, SceneNodeSnapshot};
 
     fn sample_project() -> NkmProject {
         let mut meshes = HashMap::new();
@@ -125,6 +124,8 @@ mod tests {
             vec!["model.glb".into()],
             meshes,
             SceneSnapshot {
+                scene_id: None,
+                revision: 0,
                 nodes: vec![SceneNodeSnapshot {
                     id: "node_0".into(),
                     name: "Cube".into(),
@@ -139,8 +140,13 @@ mod tests {
                     has_skeleton: false,
                     bounds: None,
                     world_bounds: None,
+                    primitives: Vec::new(),
+                    character_id: None,
+                    region_descriptors: None,
+                    light: None,
                 }],
                 animations: vec![],
+                environment: None,
             },
             {
                 let mut map = HashMap::new();
@@ -166,6 +172,59 @@ mod tests {
         assert_eq!(loaded.scene_snapshot.nodes.len(), 1);
         assert_eq!(loaded.scene_snapshot.nodes[0].name, "Cube");
         assert!(loaded.procedural_meshes.contains_key("procedural://cube_1"));
+    }
+
+    #[test]
+    fn round_trip_preserves_authored_light_and_environment() {
+        let mut project = sample_project();
+        project.scene_snapshot.nodes[0].has_light = true;
+        project.scene_snapshot.nodes[0].light = Some(LightPatch {
+            node_id: "node_0".to_string(),
+            kind: "point".to_string(),
+            color: [1.0, 0.8, 0.6],
+            intensity: 4.0,
+            range: Some(12.0),
+            inner_cone_angle: None,
+            outer_cone_angle: None,
+            shadow: None,
+        });
+        project.scene_snapshot.environment = Some(EnvironmentPatch {
+            environment_id: "scene-environment".to_string(),
+            source: Some(AssetHandleRef {
+                id: "env-token".to_string(),
+                uri: Some("engine://files/env-token".to_string()),
+                kind: Some("file-token".to_string()),
+            }),
+            mode: EnvironmentMode::BackgroundAndIbl,
+            rotation_deg: 45.0,
+            intensity: 1.25,
+            exposure: 0.5,
+            visible_as_background: true,
+            background_color: Some([0.1, 0.2, 0.3, 1.0]),
+        });
+
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("lookdev.nkm");
+        project.save(&path).unwrap();
+        let loaded = NkmProject::load(&path).unwrap();
+
+        assert_eq!(
+            loaded.scene_snapshot.nodes[0].light.as_ref().unwrap().kind,
+            "point"
+        );
+        assert_eq!(
+            loaded
+                .scene_snapshot
+                .environment
+                .as_ref()
+                .unwrap()
+                .source
+                .as_ref()
+                .unwrap()
+                .kind
+                .as_deref(),
+            Some("file-token")
+        );
     }
 
     #[test]

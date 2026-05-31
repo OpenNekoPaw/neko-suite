@@ -106,6 +106,16 @@ pub struct Light {
     pub kind: LightKind,
     pub color: Vec3,
     pub intensity: f32,
+    pub range: Option<f32>,
+    pub shadow: Option<LightShadow>,
+}
+
+/// Optional authored shadow settings for a light.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LightShadow {
+    pub enabled: bool,
+    pub resolution: Option<u32>,
+    pub bias: Option<f32>,
 }
 
 /// Camera projection mode

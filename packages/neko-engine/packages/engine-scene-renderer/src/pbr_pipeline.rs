@@ -3,14 +3,14 @@
 //! Renders a bevy_ecs World's visible meshes using metallic-roughness PBR.
 //! Outputs to Rgba16Float texture (matching TextureCompositor format).
 
-use crate::asset_cache::{AssetCache, GpuAlphaMode};
+use crate::asset_cache::{AssetCache, GpuAlphaMode, MaterialUniforms};
 use crate::{
     build_viewport_render_graph, extract_render_world, CameraParams, CompiledRenderPass,
     PostProcessChain, PostProcessSettings, RenderGraphError, RenderGraphExecutor, RenderLightKind,
     RenderSystemLabel, RenderTargetLease, RenderTargetPool, RenderTargetPoolSnapshot, RenderWorld,
     SceneColorSpace, SceneRenderGraphExecution, SceneRenderOutput, SceneToneMapping, ToneMapping,
     ViewportDescriptor, ViewportPostProcess, ViewportRenderGraphOutput, ViewportRenderGraphVariant,
-    ViewportRenderMode, ViewportWorkMode,
+    ViewportMaterialOverrideKind, ViewportRenderMode, ViewportWorkMode,
 };
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
@@ -32,6 +32,82 @@ const VIEWPORT_GRID_VERTEX_COUNT: u32 = VIEWPORT_GRID_COORD_COUNT * 2 * 2 * 3;
 const DEFAULT_KEY_LIGHT_INTENSITY: f32 = 3.5;
 const DEFAULT_FILL_LIGHT_INTENSITY: f32 = 1.0;
 const DEFAULT_RIM_LIGHT_INTENSITY: f32 = 1.4;
+const CLAY_BASE_COLOR: [f32; 4] = [0.78, 0.76, 0.72, 1.0];
+const CLAY_ROUGHNESS: f32 = 0.86;
+const CLAY_METALLIC: f32 = 0.0;
+
+const ENVIRONMENT_BACKGROUND_SHADER: &str = r#"
+struct EnvironmentBackgroundUniforms {
+    inv_view_projection: mat4x4<f32>,
+    camera_position: vec3<f32>,
+    rotation_rad: f32,
+    intensity: f32,
+    exposure: f32,
+    _padding: vec2<f32>,
+}
+
+@group(0) @binding(0) var<uniform> environment: EnvironmentBackgroundUniforms;
+@group(0) @binding(1) var environment_texture: texture_2d<f32>;
+@group(0) @binding(2) var environment_sampler: sampler;
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var out: VertexOutput;
+    var pos: vec2<f32>;
+    var uv: vec2<f32>;
+    switch vertex_index {
+        case 0u: {
+            pos = vec2<f32>(-1.0, -1.0);
+            uv = vec2<f32>(0.0, 1.0);
+        }
+        case 1u: {
+            pos = vec2<f32>(3.0, -1.0);
+            uv = vec2<f32>(2.0, 1.0);
+        }
+        default: {
+            pos = vec2<f32>(-1.0, 3.0);
+            uv = vec2<f32>(0.0, -1.0);
+        }
+    }
+    out.position = vec4<f32>(pos, 0.0, 1.0);
+    out.uv = uv;
+    return out;
+}
+
+fn rotate_y(v: vec3<f32>, angle: f32) -> vec3<f32> {
+    let c = cos(angle);
+    let s = sin(angle);
+    return vec3<f32>(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
+}
+
+fn equirect_uv(dir: vec3<f32>) -> vec2<f32> {
+    let d = normalize(dir);
+    let lon = atan2(d.x, -d.z);
+    let lat = asin(clamp(d.y, -1.0, 1.0));
+    let u = lon / (2.0 * 3.14159265359) + 0.5;
+    let v = 0.5 - lat / 3.14159265359;
+    return vec2<f32>(fract(u), clamp(v, 0.0, 1.0));
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let ndc = vec2<f32>(in.uv.x * 2.0 - 1.0, 1.0 - in.uv.y * 2.0);
+    let world = environment.inv_view_projection * vec4<f32>(ndc, 1.0, 1.0);
+    let world_position = world.xyz / world.w;
+    let sample_dir = rotate_y(
+        normalize(world_position - environment.camera_position),
+        environment.rotation_rad,
+    );
+    let color = textureSample(environment_texture, environment_sampler, equirect_uv(sample_dir));
+    let exposure_scale = exp2(environment.exposure);
+    return vec4<f32>(color.rgb * environment.intensity * exposure_scale, 1.0);
+}
+"#;
 
 const SCENE_COLOR_CONVERT_SHADER: &str = r#"
 struct VertexOutput {
@@ -210,12 +286,54 @@ pub struct PbrRenderer {
     model_bind_group_layout: wgpu::BindGroupLayout,
     light_bind_group_layout: wgpu::BindGroupLayout,
     joint_bind_group_layout: wgpu::BindGroupLayout,
+    environment_background_bind_group_layout: wgpu::BindGroupLayout,
+    environment_background_pipeline: wgpu::RenderPipeline,
     color_convert_bind_group_layout: wgpu::BindGroupLayout,
     color_convert_pipeline: wgpu::RenderPipeline,
     viewport_grid_pipeline: wgpu::RenderPipeline,
     post_process_chain: PostProcessChain,
     render_target_pool: RenderTargetPool,
     ctx: Arc<GpuContext>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EnvironmentBackgroundSettings {
+    pub rotation_deg: f32,
+    pub intensity: f32,
+    pub exposure: f32,
+}
+
+impl Default for EnvironmentBackgroundSettings {
+    fn default() -> Self {
+        Self {
+            rotation_deg: 0.0,
+            intensity: 1.0,
+            exposure: 0.0,
+        }
+    }
+}
+
+pub struct EnvironmentBackground {
+    _texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    sampler: wgpu::Sampler,
+    width: u32,
+    height: u32,
+    settings: EnvironmentBackgroundSettings,
+}
+
+impl EnvironmentBackground {
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn settings(&self) -> EnvironmentBackgroundSettings {
+        self.settings
+    }
 }
 
 // ── GPU uniform structs (16-byte aligned) ───────────────────
@@ -239,6 +357,17 @@ struct ViewportGridUniformsGpu {
     viewport_size: [f32; 2],
     step: f32,
     _padding: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct EnvironmentBackgroundUniformsGpu {
+    inv_view_projection: [[f32; 4]; 4],
+    camera_position: [f32; 3],
+    rotation_rad: f32,
+    intensity: f32,
+    exposure: f32,
+    _padding: [f32; 2],
 }
 
 #[repr(C)]
@@ -290,6 +419,8 @@ const _: () = {
     assert!(std::mem::size_of::<CameraUniformsGpu>() == 144);
     // Viewport grid: 2 mat4 (128) + vec3+f32 (16) + vec2+f32+f32 (16) = 160
     assert!(std::mem::size_of::<ViewportGridUniformsGpu>() == 160);
+    // Environment background: mat4 (64) + vec3+f32 (16) + 4 scalars (16) = 96
+    assert!(std::mem::size_of::<EnvironmentBackgroundUniformsGpu>() == 96);
     // Model: mat4 (64) + 3 vec4 (48) = 112
     assert!(std::mem::size_of::<ModelUniformsGpu>() == 112);
     // Light: vec3+u32 + vec3+f32 + vec3+f32 + 3*f32 + vec2 = 4*16 = 64
@@ -519,6 +650,73 @@ impl PbrRenderer {
             "pbr_skinned",
         );
 
+        let environment_background_bgl =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("environment_background_bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let environment_background_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("environment_background_pipeline_layout"),
+                bind_group_layouts: &[&environment_background_bgl],
+                push_constant_ranges: &[],
+            });
+        let environment_background_shader =
+            device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("environment_background_shader"),
+                source: wgpu::ShaderSource::Wgsl(ENVIRONMENT_BACKGROUND_SHADER.into()),
+            });
+        let environment_background_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("environment_background_pipeline"),
+                layout: Some(&environment_background_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &environment_background_shader,
+                    entry_point: "vs_main",
+                    buffers: &[],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &environment_background_shader,
+                    entry_point: "fs_main",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba16Float,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            });
+
         let color_convert_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene_color_convert_bgl"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -626,6 +824,8 @@ impl PbrRenderer {
                 model_bind_group_layout: model_bgl,
                 light_bind_group_layout: light_bgl,
                 joint_bind_group_layout: joint_bgl,
+                environment_background_bind_group_layout: environment_background_bgl,
+                environment_background_pipeline,
                 color_convert_bind_group_layout: color_convert_bgl,
                 color_convert_pipeline,
                 viewport_grid_pipeline,
@@ -639,6 +839,80 @@ impl PbrRenderer {
 
     pub fn render_target_pool_snapshot(&self) -> RenderTargetPoolSnapshot {
         self.render_target_pool.snapshot()
+    }
+
+    pub fn create_environment_background(
+        &self,
+        width: u32,
+        height: u32,
+        rgba_data: &[u8],
+        settings: EnvironmentBackgroundSettings,
+    ) -> Result<EnvironmentBackground, PbrRenderError> {
+        if width == 0 || height == 0 {
+            return Err(PbrRenderError::RenderFailed(
+                "environment background dimensions must be non-zero".to_string(),
+            ));
+        }
+        let expected_len = (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(4);
+        if rgba_data.len() != expected_len {
+            return Err(PbrRenderError::RenderFailed(format!(
+                "environment background RGBA data length mismatch: expected {expected_len}, got {}",
+                rgba_data.len()
+            )));
+        }
+
+        let device = self.ctx.device();
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("environment_background_texture"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.ctx.queue().write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            rgba_data,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * width),
+                rows_per_image: Some(height),
+            },
+            size,
+        );
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("environment_background_sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        Ok(EnvironmentBackground {
+            _texture: texture,
+            view,
+            sampler,
+            width,
+            height,
+            settings,
+        })
     }
 
     /// Render a scene to a texture.
@@ -674,6 +948,26 @@ impl PbrRenderer {
         output_size: (u32, u32),
         background_color: Option<[f32; 4]>,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
+        self.render_from_render_world_with_environment(
+            render_world,
+            asset_cache,
+            camera_params,
+            output_size,
+            background_color,
+            None,
+        )
+    }
+
+    /// Render an already-extracted Render World with optional environment background.
+    pub fn render_from_render_world_with_environment(
+        &self,
+        render_world: &RenderWorld,
+        asset_cache: &AssetCache,
+        camera_params: &CameraParams,
+        output_size: (u32, u32),
+        background_color: Option<[f32; 4]>,
+        environment_background: Option<&EnvironmentBackground>,
+    ) -> Result<SceneRenderOutput, PbrRenderError> {
         let descriptor = default_pbr_viewport_descriptor();
         self.render_viewport_from_render_world(
             render_world,
@@ -681,6 +975,7 @@ impl PbrRenderer {
             camera_params,
             output_size,
             background_color,
+            environment_background,
             &descriptor,
             ViewportRenderGraphOutput::QualityCapture,
         )
@@ -706,6 +1001,7 @@ impl PbrRenderer {
             camera_params,
             output_size,
             background_color,
+            None,
             descriptor,
             graph_output,
         )
@@ -719,6 +1015,7 @@ impl PbrRenderer {
         camera_params: &CameraParams,
         output_size: (u32, u32),
         background_color: Option<[f32; 4]>,
+        environment_background: Option<&EnvironmentBackground>,
         descriptor: &ViewportDescriptor,
         graph_output: ViewportRenderGraphOutput,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
@@ -751,8 +1048,10 @@ impl PbrRenderer {
             render_world,
             asset_cache,
             camera_params,
+            viewport: descriptor,
             output_size,
             background_color,
+            environment_background,
             post_process_settings: post_process_settings_for_descriptor(descriptor),
             output: None,
             intermediate_textures: Vec::new(),
@@ -776,7 +1075,9 @@ impl PbrRenderer {
         camera_params: &CameraParams,
         output_size: (u32, u32),
         background_color: Option<[f32; 4]>,
+        descriptor: &ViewportDescriptor,
         encoder: &mut wgpu::CommandEncoder,
+        environment_background: Option<&EnvironmentBackground>,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
         let (width, height) = output_size;
         let device = self.ctx.device();
@@ -796,7 +1097,7 @@ impl PbrRenderer {
         // Pre-collect draw data (buffers + bind groups must outlive render pass).
         // We do this before allocating camera/light buffers so the empty case
         // can skip those uploads entirely.
-        let draw_calls = self.collect_draw_calls(render_world, asset_cache, device);
+        let draw_calls = self.collect_draw_calls(render_world, asset_cache, device, descriptor);
 
         // Camera + light uniforms only matter when at least one draw call will
         // actually consume them. The clear-only fast path below skips this work.
@@ -846,6 +1147,13 @@ impl PbrRenderer {
                 light_bind_group,
             ))
         };
+        let environment_background_binding = environment_background.map(|environment_background| {
+            self.create_environment_background_binding(
+                camera_params,
+                output_size,
+                environment_background,
+            )
+        });
 
         // Begin render pass
         let bg = background_color.unwrap_or([0.0, 0.0, 0.0, 0.0]);
@@ -877,6 +1185,12 @@ impl PbrRenderer {
                 occlusion_query_set: None,
             });
 
+            if let Some(environment_background_binding) = &environment_background_binding {
+                render_pass.set_pipeline(&self.environment_background_pipeline);
+                render_pass.set_bind_group(0, &environment_background_binding.bind_group, &[]);
+                render_pass.draw(0..3, 0..1);
+            }
+
             // Clear-only fast path. When there is nothing to draw (empty scene,
             // or a scene whose meshes have not finished uploading to the asset
             // cache yet), do NOT bind a pipeline or any bind groups: wgpu
@@ -905,7 +1219,7 @@ impl PbrRenderer {
                     }
 
                     render_pass.set_bind_group(1, &call.model_bind_group, &[]);
-                    render_pass.set_bind_group(2, call.material_bind_group, &[]);
+                    render_pass.set_bind_group(2, call.material_binding.bind_group(), &[]);
 
                     if call.pipeline_key.skinned {
                         if let Some(ref jbg) = call.joint_bind_group {
@@ -928,6 +1242,58 @@ impl PbrRenderer {
             height,
             graph_execution: empty_graph_execution(),
         })
+    }
+
+    fn create_environment_background_binding(
+        &self,
+        camera_params: &CameraParams,
+        output_size: (u32, u32),
+        environment_background: &EnvironmentBackground,
+    ) -> EnvironmentBackgroundBinding {
+        let (width, height) = output_size;
+        let aspect = width as f32 / height.max(1) as f32;
+        let view_projection = camera_params.projection_matrix(aspect) * camera_params.view_matrix();
+        let uniforms = EnvironmentBackgroundUniformsGpu {
+            inv_view_projection: view_projection.inverse().to_cols_array_2d(),
+            camera_position: camera_params.position.to_array(),
+            rotation_rad: environment_background.settings.rotation_deg.to_radians(),
+            intensity: environment_background.settings.intensity.max(0.0),
+            exposure: environment_background.settings.exposure.clamp(-16.0, 16.0),
+            _padding: [0.0; 2],
+        };
+        let uniform_buffer =
+            self.ctx
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("environment_background_uniforms"),
+                    contents: bytemuck::bytes_of(&uniforms),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                });
+        let bind_group = self
+            .ctx
+            .device()
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("environment_background_bg"),
+                layout: &self.environment_background_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&environment_background.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&environment_background.sampler),
+                    },
+                ],
+            });
+        EnvironmentBackgroundBinding {
+            _uniform_buffer: uniform_buffer,
+            bind_group,
+        }
     }
 
     fn acquire_color_target(
@@ -1047,10 +1413,12 @@ impl PbrRenderer {
         render_world: &RenderWorld,
         asset_cache: &'a AssetCache,
         device: &wgpu::Device,
+        descriptor: &ViewportDescriptor,
     ) -> Vec<DrawCall<'a>> {
         let mut calls = Vec::new();
         let mut draw_items = render_world.draw_list.clone();
         draw_items.sort_by_key(|item| item.sort_key);
+        let clay_material_override = clay_material_uniforms_for_descriptor(descriptor);
 
         for item in draw_items {
             let Some(instance) = render_world.instances.get(item.instance_index) else {
@@ -1078,6 +1446,21 @@ impl PbrRenderer {
                 Some(m) => m,
                 None => continue,
             };
+            let material_uniforms = clay_material_override.unwrap_or(gpu_material.uniforms);
+            let material_buffer = clay_material_override.map(|uniforms| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("pbr_clay_material_uniforms"),
+                    contents: bytemuck::bytes_of(&uniforms),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                })
+            });
+            let material_bind_group = material_buffer.as_ref().map(|buffer| {
+                asset_cache.create_override_material_bind_group(
+                    buffer,
+                    gpu_material.normal_texture.as_ref().map(|(_, view)| view),
+                    gpu_material.occlusion_texture.as_ref().map(|(_, view)| view),
+                )
+            });
 
             // Model uniforms
             let normal_matrix = instance.world_transform.inverse().transpose();
@@ -1145,16 +1528,20 @@ impl PbrRenderer {
             calls.push(DrawCall {
                 model_buffer,
                 model_bind_group,
-                material_bind_group: &gpu_material.bind_group,
+                material_binding: match material_bind_group {
+                    Some(bind_group) => DrawMaterialBinding::Owned(bind_group),
+                    None => DrawMaterialBinding::Borrowed(&gpu_material.bind_group),
+                },
                 vertex_buffer: &gpu_mesh.vertex_buffer,
                 index_buffer: &gpu_mesh.index_buffer,
                 index_count: gpu_mesh.index_count,
                 index_format: gpu_mesh.index_format,
                 pipeline_key: DrawPipelineKey {
                     skinned: gpu_mesh.is_skinned && joint_bind_group.is_some(),
-                    alpha_mode: gpu_material.pipeline_state.alpha_mode,
+                    alpha_mode: material_alpha_mode(material_uniforms),
                     double_sided: gpu_material.pipeline_state.double_sided,
                 },
+                _material_buffer: material_buffer,
                 joint_bind_group,
                 _joint_buffer: joint_buffer,
             });
@@ -1359,8 +1746,10 @@ struct PbrRenderGraphPassExecutor<'a> {
     render_world: &'a RenderWorld,
     asset_cache: &'a AssetCache,
     camera_params: &'a CameraParams,
+    viewport: &'a ViewportDescriptor,
     output_size: (u32, u32),
     background_color: Option<[f32; 4]>,
+    environment_background: Option<&'a EnvironmentBackground>,
     post_process_settings: PostProcessSettings,
     output: Option<SceneRenderOutput>,
     intermediate_textures: Vec<RenderTargetLease>,
@@ -1383,7 +1772,9 @@ impl RenderGraphExecutor for PbrRenderGraphPassExecutor<'_> {
                     self.camera_params,
                     self.output_size,
                     self.background_color,
+                    self.viewport,
                     encoder,
+                    self.environment_background,
                 )
                 .map_err(|error| RenderGraphError::Execution {
                     pass: pass.id.0.clone(),
@@ -1636,6 +2027,7 @@ fn default_pbr_viewport_descriptor() -> ViewportDescriptor {
         layer_mask: None,
         work_mode: ViewportWorkMode::EditParametric,
         helper_passes: true,
+        lookdev: None,
     }
 }
 
@@ -1655,6 +2047,60 @@ fn post_process_settings_for_descriptor(descriptor: &ViewportDescriptor) -> Post
     }
 }
 
+fn clay_material_uniforms_for_descriptor(descriptor: &ViewportDescriptor) -> Option<MaterialUniforms> {
+    if descriptor.render_mode != ViewportRenderMode::Clay
+        && !matches!(
+            descriptor.lookdev.as_ref().and_then(|settings| settings.material_override.as_ref()),
+            Some(material_override) if material_override.kind == ViewportMaterialOverrideKind::Clay
+        )
+    {
+        return None;
+    }
+
+    let material_override = descriptor
+        .lookdev
+        .as_ref()
+        .and_then(|settings| settings.material_override.as_ref())
+        .filter(|material_override| material_override.kind == ViewportMaterialOverrideKind::Clay);
+    let color = material_override
+        .and_then(|material_override| material_override.color)
+        .map(|color| [color.x, color.y, color.z, 1.0])
+        .unwrap_or(CLAY_BASE_COLOR);
+    let roughness = material_override
+        .and_then(|material_override| material_override.roughness)
+        .unwrap_or(CLAY_ROUGHNESS)
+        .clamp(0.04, 1.0);
+    let metallic = material_override
+        .and_then(|material_override| material_override.metallic)
+        .unwrap_or(CLAY_METALLIC)
+        .clamp(0.0, 1.0);
+    let alpha = if material_override.and_then(|override_| override_.preserve_alpha) == Some(true) {
+        color[3]
+    } else {
+        1.0
+    };
+
+    Some(MaterialUniforms {
+        base_color_factor: [color[0], color[1], color[2], alpha],
+        metallic_factor: metallic,
+        roughness_factor: roughness,
+        occlusion_strength: 1.0,
+        alpha_cutoff: 0.0,
+        alpha_mode: 0,
+        _pad0: [0; 3],
+        emissive_factor: [0.0, 0.0, 0.0],
+        _pad1: 0.0,
+    })
+}
+
+fn material_alpha_mode(uniforms: MaterialUniforms) -> GpuAlphaMode {
+    match uniforms.alpha_mode {
+        1 => GpuAlphaMode::Mask,
+        2 => GpuAlphaMode::Blend,
+        _ => GpuAlphaMode::Opaque,
+    }
+}
+
 fn empty_graph_execution() -> SceneRenderGraphExecution {
     SceneRenderGraphExecution {
         variant: ViewportRenderGraphVariant::StandardPbr,
@@ -1671,15 +2117,35 @@ struct DrawCall<'a> {
     #[allow(dead_code)]
     model_buffer: wgpu::Buffer,
     model_bind_group: wgpu::BindGroup,
-    material_bind_group: &'a wgpu::BindGroup,
+    material_binding: DrawMaterialBinding<'a>,
     vertex_buffer: &'a wgpu::Buffer,
     index_buffer: &'a wgpu::Buffer,
     index_count: u32,
     index_format: wgpu::IndexFormat,
     pipeline_key: DrawPipelineKey,
+    _material_buffer: Option<wgpu::Buffer>,
     joint_bind_group: Option<wgpu::BindGroup>,
     /// Owned buffer for joint matrices (must outlive render pass)
     _joint_buffer: Option<wgpu::Buffer>,
+}
+
+struct EnvironmentBackgroundBinding {
+    _uniform_buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+}
+
+enum DrawMaterialBinding<'a> {
+    Borrowed(&'a wgpu::BindGroup),
+    Owned(wgpu::BindGroup),
+}
+
+impl DrawMaterialBinding<'_> {
+    fn bind_group(&self) -> &wgpu::BindGroup {
+        match self {
+            Self::Borrowed(bind_group) => bind_group,
+            Self::Owned(bind_group) => bind_group,
+        }
+    }
 }
 
 impl DrawCall<'_> {
@@ -1722,6 +2188,28 @@ mod tests {
     }
 
     #[test]
+    fn authored_lights_replace_editor_light_rig() {
+        let mut render_world = RenderWorld::default();
+        render_world.lights.push(crate::RenderLightData {
+            node_id: "key_light".to_string(),
+            kind: RenderLightKind::Point,
+            world_transform: Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0)),
+            color: Vec3::new(1.0, 0.8, 0.6),
+            intensity: 4.0,
+            range: Some(12.0),
+            inner_cone: None,
+            outer_cone: None,
+        });
+
+        let uniforms = PbrRenderer::collect_lights(&render_world);
+
+        assert_eq!(uniforms.count, 1);
+        assert_eq!(uniforms.lights[0].kind, 1);
+        assert_eq!(uniforms.lights[0].intensity, 4.0);
+        assert_eq!(uniforms.lights[0].range, 12.0);
+    }
+
+    #[test]
     fn viewport_helper_grid_is_three_dimensional() {
         assert_eq!(VIEWPORT_GRID_STEP, 0.1);
         assert_eq!(VIEWPORT_GRID_EXTENT, 5.0);
@@ -1733,5 +2221,42 @@ mod tests {
         assert!(VIEWPORT_GRID_SHADER.contains("plane == 1u"));
         assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(0.0, offset, span)"));
         assert!(VIEWPORT_GRID_SHADER.contains("return vec3<f32>(0.0, span, offset)"));
+    }
+
+    #[test]
+    fn clay_material_override_is_render_only_and_keeps_shape_cues() {
+        let mut descriptor = default_pbr_viewport_descriptor();
+        descriptor.render_mode = ViewportRenderMode::Clay;
+        descriptor.lookdev = Some(crate::ViewportLookDevSettings {
+            render_mode: ViewportRenderMode::Clay,
+            debug_view: None,
+            material_override: Some(crate::ViewportMaterialOverride {
+                kind: ViewportMaterialOverrideKind::Clay,
+                color: Some(Vec3::new(0.7, 0.72, 0.74)),
+                roughness: Some(0.92),
+                metallic: Some(0.15),
+                preserve_alpha: Some(false),
+            }),
+            helper_passes_enabled: None,
+            show_grid: None,
+            show_skeleton: None,
+            show_normals: None,
+        });
+
+        let uniforms = clay_material_uniforms_for_descriptor(&descriptor).unwrap();
+
+        assert_eq!(uniforms.base_color_factor, [0.7, 0.72, 0.74, 1.0]);
+        assert_eq!(uniforms.roughness_factor, 0.92);
+        assert_eq!(uniforms.metallic_factor, 0.15);
+        assert_eq!(uniforms.occlusion_strength, 1.0);
+        assert_eq!(uniforms.emissive_factor, [0.0, 0.0, 0.0]);
+        assert_eq!(material_alpha_mode(uniforms), GpuAlphaMode::Opaque);
+    }
+
+    #[test]
+    fn pbr_descriptor_does_not_create_material_override() {
+        let descriptor = default_pbr_viewport_descriptor();
+
+        assert!(clay_material_uniforms_for_descriptor(&descriptor).is_none());
     }
 }

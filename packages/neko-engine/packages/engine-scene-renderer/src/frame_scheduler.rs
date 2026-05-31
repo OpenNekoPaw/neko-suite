@@ -280,6 +280,7 @@ mod tests {
             layer_mask: None,
             work_mode,
             helper_passes: true,
+            lookdev: None,
         }
     }
 
