@@ -50,6 +50,7 @@ export const creativeEntities = {
   'creativeEntities.action.show-representation-package': 'Package',
   'creativeEntities.action.apply-sync-suggestion': 'Apply sync',
   'creativeEntities.action.ignore-sync-suggestion': 'Ignore sync',
+  'creativeEntities.action.test-npc': 'Test NPC',
   'creativeEntities.action.refresh': 'Refresh',
   'creativeEntities.kind.character': 'Character',
   'creativeEntities.kind.scene': 'Scene',

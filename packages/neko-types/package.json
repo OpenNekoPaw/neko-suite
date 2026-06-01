@@ -17,10 +17,12 @@
     "./nka": "./src/nka/index.ts",
     "./nkplan": "./src/nkplan/index.ts",
     "./nkproj": "./src/nkproj/index.ts",
+    "./components": "./src/components/index.ts",
     "./config/config-reader": "./src/config/config-reader.ts",
     "./types/dashboard-task": "./src/types/dashboard-task.ts",
     "./types/dashboard-project": "./src/types/dashboard-project.ts",
     "./types/dashboard-creative-entity": "./src/types/dashboard-creative-entity.ts",
+    "./types/npc-test-bench": "./src/types/npc-test-bench.ts",
     "./vscode/extension/command-args": "./src/vscode/extension/command-args.ts",
     "./vscode/extension": "./src/vscode/extension/index.ts",
     "./*": "./src/*"

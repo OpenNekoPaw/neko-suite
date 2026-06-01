@@ -114,6 +114,7 @@ const detail: DashboardCreativeEntityDetail = {
   ],
   freshness: 'fresh',
   actions: [
+    { id: 'test-npc', label: 'Test NPC' },
     { id: 'bind-existing', label: 'Bind asset' },
     { id: 'review-drafts', label: 'Review drafts', disabled: false },
     { id: 'confirm-candidate', label: 'Confirm candidate', disabled: true },
@@ -140,6 +141,7 @@ describe('CreativeEntitiesSection', () => {
     expect(html).toContain('刷新');
     expect(html).toContain('小橘');
     expect(html).toContain('Live2D');
+    expect(html).toContain('测试 NPC');
     expect(html).toContain('绑定素材');
     expect(html).not.toContain('Bind asset');
     expect(html).toContain('project://assets/xiaoju');

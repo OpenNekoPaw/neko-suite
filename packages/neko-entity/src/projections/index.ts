@@ -8,6 +8,14 @@ import type {
 } from '@neko/shared';
 import type { CreativeEntityService } from '../core/CreativeEntityService';
 
+export {
+  NpcProfileAssembler,
+  type AssembleNpcProfileInput,
+  type NpcProfileAssemblerReaders,
+  type NpcProfileAssetMetadata,
+  type NpcProfileAssemblyResult,
+} from './npcProfileAssembler';
+
 export interface EntitySearchAdapterOptions {
   readonly projectRoot: string;
   readonly service: Pick<CreativeEntityService, 'list' | 'listCandidates'>;

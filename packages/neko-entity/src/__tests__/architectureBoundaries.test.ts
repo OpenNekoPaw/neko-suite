@@ -34,6 +34,32 @@ describe('neko-entity architecture boundaries', () => {
     }
   });
 
+  it('keeps projection modules independent from Agent, feature implementations, and UI APIs', () => {
+    const files = listTypeScriptFiles(resolve(packageRoot, 'src/projections'));
+
+    const forbidden = [
+      /from ['"]vscode['"]/,
+      /from ['"]@neko\/agent/,
+      /from ['"]@neko-agent\//,
+      /from ['"]@neko-story\//,
+      /from ['"]neko-story/,
+      /from ['"]@neko-assets/,
+      /from ['"]neko-assets/,
+      /from ['"]@neko-dashboard/,
+      /from ['"]neko-dashboard/,
+      /from ['"]react/,
+      /from ['"][^'"]*webview[^'"]*['"]/i,
+      /from ['"][^'"]*extension[^'"]*['"]/i,
+    ];
+
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      for (const pattern of forbidden) {
+        expect(source, `${relative(packageRoot, file)} matches ${pattern}`).not.toMatch(pattern);
+      }
+    }
+  });
+
   it('keeps direct file mutation out of Dashboard Webview code', () => {
     const webviewRoot = resolve(packageRoot, '../neko-dashboard/packages/webview/src');
     if (!exists(webviewRoot)) return;

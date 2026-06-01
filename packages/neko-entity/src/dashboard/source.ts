@@ -13,6 +13,11 @@ import type {
   EntityAssetRequirement,
   VisualIdentityDraft,
 } from '@neko/shared';
+import {
+  isNpcTestMode,
+  NEKO_AGENT_TEST_NPC_COMMAND,
+  type NpcTestBenchLaunchRequest,
+} from '@neko/shared/types/npc-test-bench';
 import { DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION } from '@neko/shared/types/dashboard-creative-entity';
 import type { CreativeEntityService } from '../core/CreativeEntityService';
 import type { EntityDisposable } from '../core/ports';
@@ -40,6 +45,7 @@ export interface EntityDashboardSourceOptions {
   readonly subscribe?: (
     listener: (event: DashboardCreativeEntityEvent) => void,
   ) => EntityDisposable;
+  readonly executeCommand?: (command: string, ...args: unknown[]) => Promise<unknown>;
   readonly now?: () => string;
 }
 
@@ -60,6 +66,7 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
       'generate-material',
       'import-material',
       'dismiss-requirement',
+      'test-npc',
       'refresh',
     ],
   } satisfies DashboardCreativeEntitySource['capabilities'];
@@ -134,6 +141,8 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
         case 'refresh':
         case 'show-detail':
           return { ok: true, refresh: true, ref: request.ref };
+        case 'test-npc':
+          return this.executeNpcTestAction(entityId, request);
         case 'confirm-candidate':
           if (!candidateId) return { ok: false, message: 'No candidate ref is available.' };
           await this.options.service.confirmCandidate({ candidateId });
@@ -158,6 +167,45 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
         ref: request.ref,
       };
     }
+  }
+
+  private async executeNpcTestAction(
+    entityId: string | undefined,
+    request: DashboardCreativeEntityActionRequest,
+  ): Promise<DashboardCreativeEntityActionResult> {
+    if (!request.ref) {
+      return { ok: false, message: 'No creative entity ref is available.' };
+    }
+    if (request.ref.entityKind !== 'character') {
+      return {
+        ok: false,
+        message: 'Only character entities can be tested as NPCs.',
+        ref: request.ref,
+      };
+    }
+    if (!entityId) {
+      return { ok: false, message: 'No character entity ref is available.', ref: request.ref };
+    }
+    if (!this.options.executeCommand) {
+      return { ok: false, message: 'No command executor is available.', ref: request.ref };
+    }
+
+    const mode = readNpcMode(request.payload);
+    const launchRequest: NpcTestBenchLaunchRequest = {
+      entityRef: {
+        entityId,
+        entityKind: 'character',
+        projectRoot: this.options.projectRoot,
+        source: this.source,
+      },
+      dashboardRef: request.ref,
+      source: 'dashboard',
+      projectRoot: this.options.projectRoot,
+      ...(mode ? { mode } : {}),
+    };
+
+    await this.options.executeCommand(NEKO_AGENT_TEST_NPC_COMMAND, launchRequest);
+    return { ok: true, refresh: false, ref: request.ref };
   }
 
   onDidChangeEntity(listener: (event: DashboardCreativeEntityEvent) => void): EntityDisposable {
@@ -223,7 +271,7 @@ function projectEntityRow(
     ).sort(),
     visualDraftCount: entityDrafts.length,
     freshness: 'fresh',
-    actions: entityActions(),
+    actions: entityActions(entity.kind),
     searchText: [label, entity.canonicalName, ...entity.aliases, entity.kind, entity.status].join(
       ' ',
     ),
@@ -241,7 +289,7 @@ function projectCandidateRow(candidate: CreativeEntityCandidate): DashboardCreat
     summary: 'Creative entity candidate',
     occurrenceCount: candidate.sourceRefs.length,
     freshness: 'fresh',
-    actions: candidateActions(),
+    actions: candidateActions(candidate.kind),
     searchText: [candidate.name, ...(candidate.aliases ?? []), candidate.kind, 'candidate'].join(
       ' ',
     ),
@@ -311,7 +359,7 @@ function projectEntityDetail(
         : [],
     syncSuggestions: [],
     freshness: 'fresh',
-    actions: entityActions(),
+    actions: entityActions(entity.kind),
   };
 }
 
@@ -347,7 +395,7 @@ function projectCandidateDetail(candidate: CreativeEntityCandidate): DashboardCr
     visualDrafts: [],
     syncSuggestions: [],
     freshness: 'fresh',
-    actions: candidateActions(),
+    actions: candidateActions(candidate.kind),
   };
 }
 
@@ -369,21 +417,41 @@ function candidateRef(candidate: CreativeEntityCandidate): DashboardCreativeEnti
   };
 }
 
-function entityActions(): DashboardCreativeEntityRow['actions'] {
-  return [
+function entityActions(kind: CreativeEntity['kind']): DashboardCreativeEntityRow['actions'] {
+  const actions: DashboardCreativeEntityRow['actions'] = [
     { id: 'show-detail', label: 'Show detail' },
     { id: 'edit-aliases', label: 'Edit aliases' },
     { id: 'bind-existing', label: 'Bind asset' },
     { id: 'refresh', label: 'Refresh' },
   ];
+  return kind === 'character'
+    ? [actions[0], { id: 'test-npc', label: 'Test NPC' }, ...actions.slice(1)].filter(
+        (action): action is DashboardCreativeEntityRow['actions'][number] => action !== undefined,
+      )
+    : actions;
 }
 
-function candidateActions(): DashboardCreativeEntityRow['actions'] {
+function candidateActions(
+  kind: CreativeEntityCandidate['kind'],
+): DashboardCreativeEntityRow['actions'] {
   return [
     { id: 'show-detail', label: 'Show detail' },
+    {
+      id: 'test-npc',
+      label: 'Test NPC',
+      disabled: kind !== 'character',
+      ...(kind !== 'character'
+        ? { reason: 'Only character candidates can be tested as NPCs.' }
+        : {}),
+    },
     { id: 'confirm-candidate', label: 'Confirm candidate' },
     { id: 'dismiss-requirement', label: 'Dismiss' },
   ];
+}
+
+function readNpcMode(payload: DashboardCreativeEntityActionRequest['payload']) {
+  const mode = payload?.['mode'];
+  return isNpcTestMode(mode) ? mode : undefined;
 }
 
 function compareRows(a: DashboardCreativeEntityRow, b: DashboardCreativeEntityRow): number {

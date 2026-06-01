@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
+  DASHBOARD_CREATIVE_ENTITY_ACTIONS,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
   DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
+  isDashboardCreativeEntityAction,
   isDashboardCreativeEntityActionRequest,
   isDashboardCreativeEntityBindingSummary,
   isDashboardCreativeEntityDetail,
@@ -193,6 +195,8 @@ describe('dashboard creative entity contracts', () => {
   });
 
   it('validates action requests', () => {
+    expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('test-npc');
+    expect(isDashboardCreativeEntityAction('test-npc')).toBe(true);
     expect(
       isDashboardCreativeEntitySourceRequest({
         projectRoot: '/workspace/neko-test',
@@ -204,8 +208,8 @@ describe('dashboard creative entity contracts', () => {
       isDashboardCreativeEntityActionRequest({
         source: 'neko-story',
         ref,
-        action: 'bind-existing',
-        role: 'portrait',
+        action: 'test-npc',
+        payload: { mode: 'roleplay' },
       }),
     ).toBe(true);
     expect(

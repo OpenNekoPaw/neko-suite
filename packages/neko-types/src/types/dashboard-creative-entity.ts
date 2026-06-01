@@ -59,6 +59,7 @@ export type DashboardCreativeEntityAction =
   | 'show-representation-package'
   | 'apply-sync-suggestion'
   | 'ignore-sync-suggestion'
+  | 'test-npc'
   | 'refresh';
 
 export type DashboardCreativeEntityEventType = 'added' | 'updated' | 'removed' | 'refreshed';
@@ -310,6 +311,7 @@ export const DASHBOARD_CREATIVE_ENTITY_ACTIONS: readonly DashboardCreativeEntity
   'show-representation-package',
   'apply-sync-suggestion',
   'ignore-sync-suggestion',
+  'test-npc',
   'refresh',
 ] as const;
 

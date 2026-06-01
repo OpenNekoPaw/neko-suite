@@ -11,8 +11,14 @@ import type {
   RepresentationKind,
   VisualIdentityDraft,
 } from '@neko/shared';
+import {
+  isNpcTestMode,
+  NEKO_AGENT_TEST_NPC_COMMAND,
+  type NpcTestBenchLaunchRequest,
+} from '@neko/shared';
 import type {
   DashboardCreativeEntityAction,
+  DashboardCreativeEntityActionDescriptor,
   DashboardCreativeEntityActionRequest,
   DashboardCreativeEntityActionResult,
   DashboardCreativeEntityBindingSummary,
@@ -108,6 +114,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       'show-representation-package',
       'apply-sync-suggestion',
       'ignore-sync-suggestion',
+      'test-npc',
       'refresh',
     ],
   } satisfies DashboardCreativeEntitySource['capabilities'];
@@ -178,6 +185,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     const action = request.action;
 
     if (action === 'open-source') return this.executeOpenSourceAction(request);
+    if (action === 'test-npc') return this.executeNpcTestAction(request);
     if (action === 'refresh') return { ok: true, refresh: true, ref: request.ref };
     if (action === 'ignore-sync-suggestion') {
       return { ok: true, message: 'Sync suggestion ignored.', refresh: true, ref: request.ref };
@@ -267,6 +275,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       syncSuggestionCount: syncSuggestions.length,
       freshness: 'fresh',
       actions: entityActions(
+        entity.kind,
         detail?.missingRequirements.length ?? 0,
         detail?.visualDrafts.length ?? 0,
       ),
@@ -399,7 +408,11 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       visualDrafts: detail.visualDrafts.map(projectVisualDraft),
       syncSuggestions: this.buildSyncSuggestions(entity, detail),
       freshness: 'fresh',
-      actions: entityActions(detail.missingRequirements.length, detail.visualDrafts.length),
+      actions: entityActions(
+        entity.kind,
+        detail.missingRequirements.length,
+        detail.visualDrafts.length,
+      ),
     };
   }
 
@@ -493,6 +506,51 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
 
     await executeCommand(command, args);
     return { ok: true, refresh: true, ref: request.ref };
+  }
+
+  private async executeNpcTestAction(
+    request: DashboardCreativeEntityActionRequest,
+  ): Promise<DashboardCreativeEntityActionResult> {
+    if (!request.ref) {
+      return { ok: false, message: 'No creative entity ref is available.' };
+    }
+    if (request.ref.entityKind !== 'character') {
+      return {
+        ok: false,
+        message: 'Only character entities can be tested as NPCs.',
+        ref: request.ref,
+      };
+    }
+
+    const executeCommand = this.options.executeCommand;
+    if (!executeCommand) {
+      return { ok: false, message: 'No command executor is available.', ref: request.ref };
+    }
+
+    const entityId =
+      request.ref.entityId ??
+      readPrefixedId(request.ref.sourceEntityId, 'entity:') ??
+      readPrefixedId(request.ref.sourceEntityId, 'candidate:character:');
+    if (!entityId) {
+      return { ok: false, message: 'No character entity ref is available.', ref: request.ref };
+    }
+
+    const mode = readNpcMode(request.payload);
+    const launchRequest: NpcTestBenchLaunchRequest = {
+      entityRef: {
+        entityId,
+        entityKind: 'character',
+        projectRoot: this.options.workspaceRoot,
+        source: this.source,
+      },
+      dashboardRef: request.ref,
+      source: 'dashboard',
+      projectRoot: this.options.workspaceRoot,
+      ...(mode ? { mode } : {}),
+    };
+
+    await executeCommand(NEKO_AGENT_TEST_NPC_COMMAND, launchRequest);
+    return { ok: true, refresh: false, ref: request.ref };
   }
 
   private async executeOpenSourceAction(
@@ -687,10 +745,11 @@ function projectVisualDraft(draft: VisualIdentityDraft): DashboardCreativeEntity
 }
 
 function entityActions(
+  kind: CreativeEntityKind,
   requirementCount: number,
   draftCount: number,
 ): DashboardCreativeEntityRow['actions'] {
-  return [
+  const actions: DashboardCreativeEntityRow['actions'] = [
     { id: 'show-detail', label: 'Show detail' },
     { id: 'bind-existing', label: 'Bind asset' },
     { id: 'review-drafts', label: 'Review drafts', disabled: draftCount === 0 },
@@ -701,11 +760,17 @@ function entityActions(
     },
     { id: 'refresh', label: 'Refresh' },
   ];
+  return kind === 'character'
+    ? [actions[0], { id: 'test-npc', label: 'Test NPC' }, ...actions.slice(1)].filter(
+        (action): action is DashboardCreativeEntityActionDescriptor => action !== undefined,
+      )
+    : actions;
 }
 
 function candidateActions(): DashboardCreativeEntityRow['actions'] {
   return [
     { id: 'show-detail', label: 'Show detail' },
+    { id: 'test-npc', label: 'Test NPC' },
     {
       id: 'confirm-candidate',
       label: 'Confirm candidate',
@@ -737,6 +802,11 @@ function commandForAction(action: DashboardCreativeEntityAction): string | undef
   }
 }
 
+function readNpcMode(payload: DashboardCreativeEntityActionRequest['payload']) {
+  const mode = payload?.['mode'];
+  return isNpcTestMode(mode) ? mode : undefined;
+}
+
 function collectMissingKinds(
   requirements: readonly Pick<EntityAssetRequirement, 'requiredKinds'>[],
 ): RepresentationKind[] {
@@ -748,6 +818,8 @@ function collectMissingKinds(
 function representationKindToBindingRoleName(kind: RepresentationKind): EntityAssetBindingRole {
   switch (kind) {
     case 'portrait':
+    case 'puppet-bone':
+      return 'motion';
     case 'reference':
     case 'live2d':
     case 'live3d':

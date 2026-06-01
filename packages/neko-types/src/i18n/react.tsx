@@ -10,7 +10,7 @@
  * requiring React/DOM types in Node.js consumers.
  */
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createElement, createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import type { II18nService, SupportedLocale } from './types';
 
@@ -87,7 +87,7 @@ export function I18nProvider({ children, service }: I18nProviderProps) {
     [service, locale],
   );
 
-  return <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>;
+  return createElement(I18nContext.Provider, { value: { locale, setLocale, t } }, children);
 }
 
 /**

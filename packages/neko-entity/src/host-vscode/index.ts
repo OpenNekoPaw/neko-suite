@@ -212,6 +212,7 @@ export function createVSCodeDashboardEntitySource(options: VSCodeEntityRuntimeOp
     source: new EntityDashboardCreativeEntitySource({
       projectRoot: options.projectRoot,
       service: runtime.service,
+      executeCommand: async (command, ...args) => vscode.commands.executeCommand(command, ...args),
       subscribe(listener) {
         const disposable = runtime.onDidChangeEntity((event) => {
           listener(entityEventToDashboardEvent(event));

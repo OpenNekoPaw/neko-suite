@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { NEKO_AGENT_TEST_NPC_COMMAND } from '@neko/shared';
 import type {
   CreativeEntity,
   CreativeEntityRegistry,
@@ -109,6 +110,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
         missingRepresentationKinds: ['live2d'],
         visualDraftCount: 1,
         syncSuggestionCount: 4,
+        actions: expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
       }),
     );
     expect(snapshot.rows.find((row) => row.label === '阿灰')).toEqual(
@@ -116,6 +118,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
         status: 'candidate',
         sourceKind: 'script',
         missingRepresentationKinds: ['portrait', 'reference'],
+        actions: expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
       }),
     );
 
@@ -161,6 +164,71 @@ describe('StoryDashboardCreativeEntitySource', () => {
       entityId: 'char_xiaoju',
       role: 'portrait',
     });
+  });
+
+  it('delegates Dashboard NPC tests to the Agent-owned launch command', async () => {
+    const executeCommand = vi.fn(async () => undefined);
+    const source = createSource({
+      executeCommand,
+      characterNames: ['小橘', '阿灰'],
+    });
+    const detail = await source.getDetail({
+      source: 'neko-story',
+      sourceEntityId: 'entity:char_xiaoju',
+      entityId: 'char_xiaoju',
+      entityKind: 'character',
+      workspaceFolder: 'neko-test',
+    });
+
+    await expect(
+      source.executeAction({
+        source: 'neko-story',
+        ref: detail?.ref,
+        action: 'test-npc',
+        payload: { mode: 'consult' },
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref: detail?.ref }));
+
+    expect(executeCommand).toHaveBeenCalledWith(
+      NEKO_AGENT_TEST_NPC_COMMAND,
+      expect.objectContaining({
+        entityRef: {
+          entityId: 'char_xiaoju',
+          entityKind: 'character',
+          projectRoot: workspaceRoot,
+          source: 'neko-story',
+        },
+        dashboardRef: detail?.ref,
+        source: 'dashboard',
+        projectRoot: workspaceRoot,
+        mode: 'consult',
+      }),
+    );
+
+    const candidateRef = {
+      source: 'neko-story',
+      sourceEntityId: 'candidate:character:阿灰',
+      entityId: '阿灰',
+      entityKind: 'character' as const,
+      workspaceFolder: 'neko-test',
+    };
+    await expect(
+      source.executeAction({
+        source: 'neko-story',
+        ref: candidateRef,
+        action: 'test-npc',
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref: candidateRef }));
+
+    expect(executeCommand).toHaveBeenLastCalledWith(
+      NEKO_AGENT_TEST_NPC_COMMAND,
+      expect.objectContaining({
+        entityRef: expect.objectContaining({ entityId: '阿灰', entityKind: 'character' }),
+        dashboardRef: candidateRef,
+        source: 'dashboard',
+        projectRoot: workspaceRoot,
+      }),
+    );
   });
 
   it('keeps entities without assets visible and sanitizes unsafe requirement refs', async () => {

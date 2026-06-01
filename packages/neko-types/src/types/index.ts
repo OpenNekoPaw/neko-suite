@@ -86,6 +86,7 @@ export * from './task-view';
 export * from './dashboard-task';
 export * from './dashboard-project';
 export * from './dashboard-creative-entity';
+export * from './npc-test-bench';
 
 // SubAgent UI Types
 export * from './subagent';

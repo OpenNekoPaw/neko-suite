@@ -50,6 +50,7 @@ export const creativeEntities = {
   'creativeEntities.action.show-representation-package': '表现包',
   'creativeEntities.action.apply-sync-suggestion': '应用同步',
   'creativeEntities.action.ignore-sync-suggestion': '忽略同步',
+  'creativeEntities.action.test-npc': '测试 NPC',
   'creativeEntities.action.refresh': '刷新',
   'creativeEntities.kind.character': '角色',
   'creativeEntities.kind.scene': '场景',
