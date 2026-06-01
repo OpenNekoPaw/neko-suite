@@ -6,6 +6,7 @@ export interface ViewportOrbitControlsProps {
   viewportId?: string;
   onClickSelect?: (normalizedX: number, normalizedY: number) => void;
   onCameraChange?: (options?: { readonly immediate?: boolean }) => void;
+  onInteractionActivity?: () => void;
   onCameraMutated?: () => void;
 }
 
@@ -24,6 +25,7 @@ type DragMode = 'select' | 'orbit' | 'pan' | 'zoom';
 export function ViewportOrbitControls({
   onClickSelect,
   onCameraChange,
+  onInteractionActivity,
   onCameraMutated,
 }: ViewportOrbitControlsProps): React.JSX.Element {
   const lastSendRef = useRef(0);
@@ -68,6 +70,7 @@ export function ViewportOrbitControls({
       const mode = resolveDragMode(e.button, e.altKey, e.shiftKey, e.ctrlKey || e.metaKey);
       if (!mode) return;
 
+      onInteractionActivity?.();
       rootRef.current?.focus();
       e.currentTarget.setPointerCapture(e.pointerId);
       e.preventDefault();
@@ -91,6 +94,7 @@ export function ViewportOrbitControls({
         const dy = moveEvent.clientY - lastY;
         lastX = moveEvent.clientX;
         lastY = moveEvent.clientY;
+        onInteractionActivity?.();
 
         if (mode === 'pan') {
           panByPixels(dx, dy);
@@ -110,6 +114,7 @@ export function ViewportOrbitControls({
         document.removeEventListener('pointerup', onUp);
 
         if (dragged) {
+          onInteractionActivity?.();
           sendCamera(true);
         } else if (mode === 'select' && onClickSelect) {
           const rect = rootRef.current?.getBoundingClientRect();
@@ -124,7 +129,7 @@ export function ViewportOrbitControls({
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
     },
-    [throttledSendCamera, sendCamera, onClickSelect, onCameraMutated],
+    [throttledSendCamera, sendCamera, onClickSelect, onInteractionActivity, onCameraMutated],
   );
 
   useEffect(() => {
@@ -134,6 +139,7 @@ export function ViewportOrbitControls({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       zoomByPixels(event.deltaY);
+      onInteractionActivity?.();
       onCameraMutated?.();
       throttledSendCamera();
     };
@@ -142,7 +148,7 @@ export function ViewportOrbitControls({
     return () => {
       element.removeEventListener('wheel', handleWheel);
     };
-  }, [throttledSendCamera, onCameraMutated]);
+  }, [throttledSendCamera, onInteractionActivity, onCameraMutated]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -178,11 +184,12 @@ export function ViewportOrbitControls({
       }
 
       if (!handled) return;
+      onInteractionActivity?.();
       onCameraMutated?.();
       e.preventDefault();
       throttledSendCamera();
     },
-    [throttledSendCamera, onCameraMutated],
+    [throttledSendCamera, onInteractionActivity, onCameraMutated],
   );
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {

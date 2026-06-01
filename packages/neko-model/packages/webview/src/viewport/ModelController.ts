@@ -129,6 +129,7 @@ export interface ModelControllerOptions {
   readonly onSelectNode?: (nodeId: string | null) => void;
   readonly onError?: (message: string) => void;
   readonly onMaterialPreview?: () => void | Promise<void>;
+  readonly onInteractiveStreamActivity?: () => void;
   readonly getViewportRect?: () => Pick<DOMRect, 'width' | 'height'>;
   readonly sceneControlSocket?: SceneControlSocket | null;
 }
@@ -163,6 +164,7 @@ export class ModelController implements ISceneController {
 
     const maybeDrag = this.tryBeginTransformDrag(input);
     if (maybeDrag) {
+      this.options.onInteractiveStreamActivity?.();
       return maybeDrag;
     }
 
@@ -202,6 +204,7 @@ export class ModelController implements ISceneController {
       ...this.activeDrag,
       latestPosition: input.position,
     };
+    this.options.onInteractiveStreamActivity?.();
     this.scheduleDragPrediction();
     return undefined;
   }
@@ -214,6 +217,7 @@ export class ModelController implements ISceneController {
       ...this.activeDrag,
       latestPosition: input.position,
     };
+    this.options.onInteractiveStreamActivity?.();
     this.cancelScheduledDragPrediction();
     this.activeDrag = null;
     const transform = this.transformForDrag(drag);
@@ -240,6 +244,7 @@ export class ModelController implements ISceneController {
       return undefined;
     }
     const seq = this.activeDrag.predictionSeq;
+    this.options.onInteractiveStreamActivity?.();
     this.cancelScheduledDragPrediction();
     this.activeDrag = null;
     useModelStore.getState().rollbackTransformPrediction(seq);

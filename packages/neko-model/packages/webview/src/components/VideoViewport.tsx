@@ -38,6 +38,7 @@ export interface VideoViewportProps {
   predictions?: LocalPredictionSnapshot[];
   topologyWarning?: string | null;
   hudVisible?: boolean;
+  interactionSignal?: number;
   onSelectNode: (nodeId: string | null) => void;
   onSceneControlError: (message: string) => void;
   onCameraMutated?: () => void;
@@ -54,6 +55,7 @@ const VIEWPORT_STREAM_FPS = 60;
 const VIEWPORT_RESIZE_COMMIT_DELAY_MS = 160;
 const VIEWPORT_CAMERA_SEND_INTERVAL_MS = 33;
 const VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS = 250;
+const VIEWPORT_STREAM_IDLE_RESTORE_DELAY_MS = 700;
 const LOOKDEV_PENDING_DELAY_MS = 250;
 const LOOKDEV_RETRY_DELAY_MS = 1500;
 const RENDER_FRAME_META_STORE_INTERVAL_MS = 250;
@@ -65,8 +67,15 @@ const REALTIME_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
   dropDeltaFramesWhenBacklogged: false,
   preserveKeyframes: true,
 };
+const INTERACTIVE_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
+  maxDecodeQueueDepth: 1,
+  dropDeltaFramesWhenBacklogged: false,
+  preserveKeyframes: true,
+  latestOnly: true,
+};
 
 type ViewportStreamSize = SceneViewportResolution;
+type ViewportStreamProfile = 'default' | 'interactive';
 
 interface PendingPresentationFrame {
   frame: VideoFrame;
@@ -143,6 +152,26 @@ function readViewportH264DebugSettings(): ViewportH264Settings | undefined {
   }
 }
 
+function h264SettingsForStreamProfile(
+  profile: ViewportStreamProfile,
+): ViewportH264Settings | undefined {
+  const debugSettings = readViewportH264DebugSettings();
+  if (profile === 'interactive') {
+    return {
+      ...debugSettings,
+      gopSize: 1,
+      decoderPreference: 'prefer-hardware',
+    };
+  }
+  return debugSettings;
+}
+
+function backpressureForStreamProfile(profile: ViewportStreamProfile): H264BackpressurePolicy {
+  return profile === 'interactive'
+    ? INTERACTIVE_VIEWPORT_BACKPRESSURE
+    : REALTIME_VIEWPORT_BACKPRESSURE;
+}
+
 function isPresentationHostLimited(
   presentFps: number | undefined,
   streamDurationUs: number,
@@ -185,6 +214,7 @@ function createViewportDescriptor(
   cameraTarget: [number, number, number],
   streamSize: ViewportStreamSize,
   helperPassesEnabled: boolean,
+  streamProfile: ViewportStreamProfile,
 ): ViewportDescriptor {
   return {
     viewportId: MAIN_VIEWPORT_ID,
@@ -211,7 +241,7 @@ function createViewportDescriptor(
       helperPassesEnabled,
       showGrid: helperPassesEnabled,
     },
-    h264: readViewportH264DebugSettings(),
+    h264: h264SettingsForStreamProfile(streamProfile),
     workMode: 'edit-parametric',
     cameraRef: {
       kind: 'editorCamera',
@@ -236,6 +266,7 @@ export function VideoViewport({
   predictions = [],
   topologyWarning = null,
   hudVisible = true,
+  interactionSignal = 0,
   onSelectNode,
   onSceneControlError,
   onCameraMutated,
@@ -255,6 +286,8 @@ export function VideoViewport({
   const cameraUpdateInFlightRef = useRef(false);
   const pendingCameraUpdateRef = useRef(false);
   const pendingCameraFlushTimerRef = useRef<number | null>(null);
+  const pendingStreamProfileRestoreRef = useRef<number | null>(null);
+  const lastInteractionSignalRef = useRef(interactionSignal);
   const lastCameraSendAtRef = useRef(0);
   const lastCameraKeyframeRequestRef = useRef(0);
   // Serialise stream lifecycle across rerenders. Without this, a rapid
@@ -267,6 +300,7 @@ export function VideoViewport({
   const [routeAUnavailableReason, setRouteAUnavailableReason] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [viewportSize, setViewportSize] = useState<ViewportStreamSize | null>(null);
+  const [streamProfile, setStreamProfile] = useState<ViewportStreamProfile>('default');
   const helperPassesEnabled = useModelStore((state) => state.showViewportGrid);
   const sceneNodes = useModelStore((state) => state.sceneNodes);
   const lightNodeIds = useMemo(
@@ -279,6 +313,17 @@ export function VideoViewport({
   const requestedLookDevMode = useModelStore((state) => state.lookDev.requestedMode);
   const appliedLookDevMode = useModelStore((state) => state.lookDev.appliedMode);
   const selectedRenderMode = requestedLookDevMode ?? appliedLookDevMode;
+  const markInteractiveStreamActivity = React.useCallback(() => {
+    if (pendingStreamProfileRestoreRef.current !== null) {
+      window.clearTimeout(pendingStreamProfileRestoreRef.current);
+      pendingStreamProfileRestoreRef.current = null;
+    }
+    setStreamProfile((current) => (current === 'interactive' ? current : 'interactive'));
+    pendingStreamProfileRestoreRef.current = window.setTimeout(() => {
+      pendingStreamProfileRestoreRef.current = null;
+      setStreamProfile('default');
+    }, VIEWPORT_STREAM_IDLE_RESTORE_DELAY_MS);
+  }, []);
   const modelController = useMemo(
     () =>
       new ModelController({
@@ -290,6 +335,7 @@ export function VideoViewport({
         onSelectNode,
         onError: onSceneControlError,
         onMaterialPreview: () => captureMaterialPreview(enginePort, onSceneControlError),
+        onInteractiveStreamActivity: markInteractiveStreamActivity,
         sceneControlSocket,
         getViewportRect: () =>
           viewportRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, 1, 1),
@@ -301,9 +347,18 @@ export function VideoViewport({
       viewportSize,
       onSelectNode,
       onSceneControlError,
+      markInteractiveStreamActivity,
       sceneControlSocket,
     ],
   );
+
+  useEffect(() => {
+    if (interactionSignal === lastInteractionSignalRef.current) {
+      return;
+    }
+    lastInteractionSignalRef.current = interactionSignal;
+    markInteractiveStreamActivity();
+  }, [interactionSignal, markInteractiveStreamActivity]);
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -445,6 +500,10 @@ export function VideoViewport({
         window.clearTimeout(pendingCameraFlushTimerRef.current);
         pendingCameraFlushTimerRef.current = null;
       }
+      if (pendingStreamProfileRestoreRef.current !== null) {
+        window.clearTimeout(pendingStreamProfileRestoreRef.current);
+        pendingStreamProfileRestoreRef.current = null;
+      }
     };
   }, []);
 
@@ -536,6 +595,7 @@ export function VideoViewport({
             store.cameraTarget,
             viewportSize,
             helperPassesEnabled,
+            streamProfile,
           ),
         );
         if (disposed) {
@@ -665,7 +725,7 @@ export function VideoViewport({
           descriptor: stream.descriptor,
           width: stream.descriptor.width,
           height: stream.descriptor.height,
-          backpressure: REALTIME_VIEWPORT_BACKPRESSURE,
+          backpressure: backpressureForStreamProfile(streamProfile),
           onFrameMeta: (meta) => {
             // After dispose, callbacks from in-flight WS messages may still
             // fire; ignore them so we don't pollute the store with frames
@@ -735,6 +795,7 @@ export function VideoViewport({
     helperPassesEnabled,
     visible,
     selectedRenderMode,
+    streamProfile,
   ]);
 
   const overlayFrameMeta = React.useMemo<RenderFrameMeta | null>(() => {
@@ -844,7 +905,11 @@ export function VideoViewport({
             <ViewportOrbitControls
               viewportId={MAIN_VIEWPORT_ID}
               onClickSelect={handleClickSelect}
-              onCameraChange={scheduleViewportCamera}
+              onCameraChange={(options) => {
+                markInteractiveStreamActivity();
+                scheduleViewportCamera(options);
+              }}
+              onInteractionActivity={markInteractiveStreamActivity}
               onCameraMutated={onCameraMutated}
             />
           </>

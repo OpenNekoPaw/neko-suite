@@ -649,6 +649,38 @@ describe('stream descriptor clients', () => {
     client.dispose();
   });
 
+  it('suppresses superseded decoded frames for latest-only realtime streams', async () => {
+    fakeDecoderAutoOutput = false;
+    const frames: number[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 1,
+        dropDeltaFramesWhenBacklogged: false,
+        preserveKeyframes: true,
+        latestOnly: true,
+      },
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, true) });
+    pendingFakeDecoderOutputs.splice(0).forEach((output) => output());
+
+    expect(frames).toEqual([83_332]);
+    expect(client.getStats().framesDecoded).toBe(1);
+    expect(client.getStats().framesDroppedBeforeDecode).toBe(1);
+
+    client.dispose();
+  });
+
   it('preserves delta frames by default when WebCodecs is backlogged', async () => {
     const frames: number[] = [];
     const diagnostics: string[] = [];

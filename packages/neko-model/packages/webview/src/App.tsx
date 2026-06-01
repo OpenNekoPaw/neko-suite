@@ -104,6 +104,7 @@ export function App(): React.JSX.Element {
   const [isViewportHudVisible, setIsViewportHudVisible] = useState(true);
   const [isBottomPanelVisible, setIsBottomPanelVisible] = useState(true);
   const [isRightDockVisible, setIsRightDockVisible] = useState(false);
+  const [viewportInteractionSignal, setViewportInteractionSignal] = useState(0);
   const sceneId = useModelStore((s) => s.sceneId);
   const qualityPreviewDataUrl = useModelStore((s) => s.qualityPreviewDataUrl);
   const sceneNodes = useModelStore((s) => s.sceneNodes);
@@ -213,6 +214,10 @@ export function App(): React.JSX.Element {
   const handleViewportCameraMutated = useCallback(() => {
     setQualityPreview(null);
   }, [setQualityPreview]);
+
+  const markViewportInteraction = useCallback(() => {
+    setViewportInteractionSignal((signal) => signal + 1);
+  }, []);
 
   const toggleViewportHud = useCallback(() => {
     setIsViewportHudVisible((visible) => !visible);
@@ -627,6 +632,7 @@ export function App(): React.JSX.Element {
         setSceneControlStatus('error', modelErrorMessage('error.sceneControlDisconnected'));
         return;
       }
+      markViewportInteraction();
       const seq = useModelStore.getState().allocateSceneCommandSeq();
       addTransformPrediction({
         seq,
@@ -672,6 +678,7 @@ export function App(): React.JSX.Element {
       addTransformPrediction,
       commitPredictionsThrough,
       createLocalPrediction,
+      markViewportInteraction,
       rollbackTransformPrediction,
       sendRouteACommand,
       setQualityPreview,
@@ -839,13 +846,15 @@ export function App(): React.JSX.Element {
 
   const handleSetNodeVisible = useCallback(
     (nodeId: string, visible: boolean) => {
+      markViewportInteraction();
       sendSceneCommand('visibility-set', { nodeId, visible });
     },
-    [sendSceneCommand],
+    [markViewportInteraction, sendSceneCommand],
   );
 
   const handleAddLight = useCallback(
     (kind: LightPatch['kind']) => {
+      markViewportInteraction();
       const id = `light_${kind}_${Date.now().toString(36)}`;
       sendSceneCommand('node-add', {
         kind: 'light',
@@ -867,21 +876,23 @@ export function App(): React.JSX.Element {
         },
       });
     },
-    [sendSceneCommand],
+    [markViewportInteraction, sendSceneCommand],
   );
 
   const handleDeleteLight = useCallback(
     (nodeId: string) => {
+      markViewportInteraction();
       sendSceneCommand('node-remove', { nodeId, cascade: false });
     },
-    [sendSceneCommand],
+    [markViewportInteraction, sendSceneCommand],
   );
 
   const handleLightUpdate = useCallback(
     (nodeId: string, patch: Omit<LightPatch, 'nodeId'>) => {
+      markViewportInteraction();
       sendSceneCommand('light-update', { nodeId, ...patch });
     },
-    [sendSceneCommand],
+    [markViewportInteraction, sendSceneCommand],
   );
 
   const handleEnvironmentSet = useCallback(
@@ -990,6 +1001,7 @@ export function App(): React.JSX.Element {
         viewportId: 'main',
         sceneRevision: latestRevisionRef.current,
         sceneControlSocket: socket,
+        onInteractiveStreamActivity: markViewportInteraction,
         onError: (message) => setSceneControlStatus('error', message),
       });
       void controller.setCharacterPreviewMode(selectedCharacterId, modeId).catch((error) => {
@@ -999,7 +1011,7 @@ export function App(): React.JSX.Element {
         });
       });
     },
-    [enginePort, sceneId, selectedCharacterId, setSceneControlStatus],
+    [enginePort, markViewportInteraction, sceneId, selectedCharacterId, setSceneControlStatus],
   );
 
   const handleLookDevModeChange = useCallback((mode: ViewportRenderMode) => {
@@ -1022,6 +1034,7 @@ export function App(): React.JSX.Element {
       viewportId: 'main',
       sceneRevision: latestRevisionRef.current,
       sceneControlSocket: sceneControlRef.current,
+      onInteractiveStreamActivity: markViewportInteraction,
       onError: (message) => setSceneControlStatus('error', message),
     });
     void controller.resetCharacterPreviewCamera(selectedCharacterId, modeId).catch((error) => {
@@ -1034,6 +1047,7 @@ export function App(): React.JSX.Element {
     characterPreview.appliedMode,
     characterPreview.requestedMode,
     enginePort,
+    markViewportInteraction,
     sceneId,
     selectedCharacterId,
     setSceneControlStatus,
@@ -1050,6 +1064,7 @@ export function App(): React.JSX.Element {
         viewportId: 'main',
         sceneRevision: latestRevisionRef.current,
         sceneControlSocket: sceneControlRef.current,
+        onInteractiveStreamActivity: markViewportInteraction,
         onError: (message) => setSceneControlStatus('error', message),
       });
       void controller
@@ -1061,7 +1076,14 @@ export function App(): React.JSX.Element {
           });
         });
     },
-    [characterPreview.appliedMode, enginePort, sceneId, selectedCharacterId, setSceneControlStatus],
+    [
+      characterPreview.appliedMode,
+      enginePort,
+      markViewportInteraction,
+      sceneId,
+      selectedCharacterId,
+      setSceneControlStatus,
+    ],
   );
 
   const handleCrossfadeAnimation = useCallback(
@@ -1297,6 +1319,7 @@ export function App(): React.JSX.Element {
                     predictions={localPredictions}
                     topologyWarning={topologyWarning}
                     hudVisible={isViewportHudVisible}
+                    interactionSignal={viewportInteractionSignal}
                     onSelectNode={selectNode}
                     onSceneControlError={(message) => setSceneControlStatus('error', message)}
                     onCameraMutated={handleViewportCameraMutated}
