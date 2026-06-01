@@ -146,7 +146,27 @@ Intent → SkillRegistry → activate(skill)
                          execute → deactivate → atomic rollback
 ```
 
-### 4. Unified Asset Library
+### 4. NPC Character Test Bench
+
+NPC testing and creative authoring are separate scenarios. `/as @character` opens an isolated NPC test session in the Agent panel, assembling the NPC profile from current project character facts, asset bindings, visual drafts, relationships, and occurrences. The NPC session uses `toolPolicy: { kind: 'none' }`, so it receives no file, media-generation, timeline-editing, shell, or creative authoring tools.
+
+Common entry points:
+
+```text
+/as @XiaoMing
+/as @XiaoMing --consult
+/exit-role
+```
+
+- `/as @XiaoMing`: enter an NPC roleplay test session for the character.
+- `/as @XiaoMing --consult`: answer in the character voice while allowing AI-consultant framing.
+- `/as`: open the current project character picker.
+- `/exit-role`: exit NPC testing, generate an evaluation report, and choose whether to save evidence.
+- Dashboard character rows expose `Test NPC`; Dashboard only sends the delegated `test-npc` creative entity action, while the Agent extension owns profile assembly, session creation, and evaluation.
+
+NPC context follows the current project by default. Active dialogue stays in NPC session memory and is not written to main Agent history, `.neko/memory.md`, global memory, or standard conversation records. If the user chooses to save evidence, transcripts and evaluation are written under `.neko/npc-tests/{entityId}-{timestamp}.json` in the current project. Evaluation suggestions stay suggested until the user confirms applying them through entity metadata or relationship update commands.
+
+### 5. Unified Asset Library
 
 A single **asset registry** (neko-assets) feeds every surface: video clips, audio, images, 3D models, 2D puppets, generated AI outputs, and project files. Persistent search index, thumbnails, external media library mounting, and path variable resolution (`${VAR}/path` via `PathResolver` in `@neko/shared`) make the library portable across machines and collaborators. Generated assets from the Agent land on disk as `GeneratedAsset` with JSON references — no base64 bloat, no lost provenance.
 
@@ -162,7 +182,7 @@ Local files / External libraries / Agent-generated
  canvas      cut       model     sketch     puppet      audio
 ```
 
-### 5. WebGPU Rendering Pipeline
+### 6. WebGPU Rendering Pipeline
 
 Uses the wgpu compositor to directly composite video frames, effects, transitions, and color correction in GPU memory. Supports blend modes, custom shaders, and keyframe animation.
 

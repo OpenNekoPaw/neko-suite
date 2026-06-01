@@ -146,7 +146,27 @@ VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
                        执行 → deactivate → 原子回滚
 ```
 
-### 4. 统一素材库
+### 4. NPC 角色测试台
+
+角色测试和创作执行是两种场景。`/as @角色` 会在 Agent 面板中打开独立的 NPC 测试会话，用当前项目里的角色事实、资产绑定、视觉草稿、关系和出场信息组装 NPC Profile；NPC 会话使用 `toolPolicy: { kind: 'none' }`，不会获得读写文件、生成媒体、编辑时间线或其他创作工具。
+
+常用入口：
+
+```text
+/as @小明
+/as @小明 --consult
+/exit-role
+```
+
+- `/as @小明`：进入小明的 NPC 角色扮演测试会话。
+- `/as @小明 --consult`：以角色口吻提供咨询，但允许承认这是 AI 咨询模式。
+- `/as`：打开当前项目角色选择器。
+- `/exit-role`：退出 NPC 测试，生成评估报告，并按提示决定是否保存证据。
+- Dashboard 的角色行会显示 `测试 NPC` / `Test NPC` 操作；Dashboard 只发送 `test-npc` 创意实体动作，实际 Profile 组装、会话创建和评估由 Agent 扩展负责。
+
+NPC 上下文默认跟随当前项目。活跃对话只保存在 NPC 会话内存中，不写入主 Agent 历史、`.neko/memory.md`、全局记忆或标准会话记录；用户选择保存时，转录和评估会落到当前项目的 `.neko/npc-tests/{entityId}-{timestamp}.json`，作为测试证据而不是角色事实源。评估产生的性格、台词、关系等建议必须由用户确认后，才会通过实体元数据更新或关系更新命令写回项目。
+
+### 5. 统一素材库
 
 一个**统一的素材注册表**（neko-assets）为所有创作界面供料：视频片段、音频、图片、3D 模型、2D 木偶、Agent 生成的内容、项目文件。持久化搜索索引、缩略图、外部媒体库挂载、路径变量解析（`${VAR}/path`,通过 `@neko/shared` 的 `PathResolver`）让素材库可在多机器、多协作者间移植。Agent 生成的资产以 `GeneratedAsset` 形式落盘并通过 JSON 引用 —— 零 base64 膨胀,完整溯源。
 
@@ -162,7 +182,7 @@ VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
  canvas      cut       model     sketch     puppet      audio
 ```
 
-### 5. WebGPU 渲染闭环
+### 6. WebGPU 渲染闭环
 
 利用 wgpu compositor 将视频帧、特效、转场、色彩校正在 GPU 显存中直接合成。支持 blend modes、custom shaders、keyframe animation。
 
