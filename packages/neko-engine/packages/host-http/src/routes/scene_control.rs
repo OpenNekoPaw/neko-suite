@@ -11,7 +11,9 @@ use neko_engine_kernel::contracts::scene::{
     EnvironmentPatch, LightPatch, SceneCommandAck, SceneCommandAckStatus, SceneCommandEnvelope,
     SceneCommandEvent, SceneCommandPhase, SceneDelta, SceneNodePatch, TopologyOperation,
 };
-use neko_engine_kernel::contracts::services::EnvironmentLoadDiagnostic;
+use neko_engine_kernel::contracts::services::{
+    EnvironmentLoadDiagnostic, ViewportStreamInteractionProfile,
+};
 use neko_engine_types::{
     ViewportCommand, ViewportDomain, ViewportEvent, ViewportFrameMeta, ViewportMetadataCadence,
     ViewportMetadataEvent, ViewportMetadataTransport,
@@ -20,6 +22,7 @@ use neko_host_api::EngineApi;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
+use std::time::Duration;
 
 const PROTOCOL: &str = "neko-scene-control-v1";
 const VIEWPORT_PROTOCOL_VERSION: u64 = 1;
@@ -209,6 +212,8 @@ async fn handle_client_message(
             up,
             fov_y,
             resolution,
+            stream_profile,
+            profile_ttl_ms,
         } => {
             let camera = ViewportCameraPayload {
                 request_id,
@@ -220,6 +225,8 @@ async fn handle_client_message(
                 up,
                 fov_y,
                 resolution,
+                stream_profile,
+                profile_ttl_ms,
             };
             let engine_revision = current_revision(engine);
             let scene_id = camera
@@ -231,6 +238,8 @@ async fn handle_client_message(
                 .clone()
                 .unwrap_or_else(|| "main".to_string());
             let request_id = camera.request_id.clone();
+            let stream_profile = camera.stream_profile.clone();
+            let profile_ttl_ms = camera.profile_ttl_ms;
             if matches!(camera.scene_revision, Some(revision) if revision > engine_revision) {
                 return send_viewport_camera_ack(
                     socket,
@@ -274,6 +283,17 @@ async fn handle_client_message(
                 }
             };
             service.set_editor_camera(camera.clone());
+            if let Some(profile) =
+                parse_viewport_stream_interaction_profile(stream_profile.as_deref())
+            {
+                let ttl = Duration::from_millis(profile_ttl_ms.unwrap_or(0));
+                service.set_viewport_stream_interaction_profile(
+                    &scene_id,
+                    &viewport_id,
+                    profile,
+                    ttl,
+                );
+            }
             if let Err(error) = engine.model_preview_controller().record_camera_override(
                 &scene_id,
                 &viewport_id,
@@ -283,16 +303,20 @@ async fn handle_client_message(
                     "Failed to record model preview camera override for {scene_id}/{viewport_id}: {error}"
                 );
             }
-            send_viewport_camera_ack(
-                socket,
-                request_id,
-                &scene_id,
-                &viewport_id,
-                "applied",
-                engine_revision,
-                None,
-            )
-            .await
+            if request_id.is_some() {
+                send_viewport_camera_ack(
+                    socket,
+                    request_id,
+                    &scene_id,
+                    &viewport_id,
+                    "applied",
+                    engine_revision,
+                    None,
+                )
+                .await
+            } else {
+                true
+            }
         }
         SceneControlClientMessage::RequestKeyframe { viewport_id } => {
             let scene_id = "default".to_string();
@@ -403,6 +427,16 @@ fn current_revision(engine: &EngineApi) -> u64 {
         .scene_service()
         .and_then(|service| service.current_revision().ok())
         .unwrap_or(0)
+}
+
+fn parse_viewport_stream_interaction_profile(
+    value: Option<&str>,
+) -> Option<ViewportStreamInteractionProfile> {
+    match value {
+        Some("interactive") => Some(ViewportStreamInteractionProfile::Interactive),
+        Some("default") => Some(ViewportStreamInteractionProfile::Default),
+        _ => None,
+    }
 }
 
 fn scene_query_result(
@@ -2283,6 +2317,10 @@ enum SceneControlClientMessage {
         fov_y: Option<f32>,
         #[serde(default)]
         resolution: Option<ViewportResolutionPayload>,
+        #[serde(default, rename = "streamProfile")]
+        stream_profile: Option<String>,
+        #[serde(default, rename = "profileTtlMs")]
+        profile_ttl_ms: Option<u64>,
     },
     RequestKeyframe {
         #[serde(default, rename = "viewportId")]
@@ -3076,6 +3114,8 @@ struct ViewportCameraPayload {
     up: Option<Vec3Payload>,
     fov_y: Option<f32>,
     resolution: Option<ViewportResolutionPayload>,
+    stream_profile: Option<String>,
+    profile_ttl_ms: Option<u64>,
 }
 
 impl ViewportCameraPayload {
@@ -3547,7 +3587,7 @@ mod tests {
     #[test]
     fn parses_viewport_camera_message_to_camera_params() {
         let message: SceneControlClientMessage = serde_json::from_str(
-            r#"{"type":"viewportCamera","sceneId":"scene-a","sceneRevision":8,"viewportId":"main","position":[0,1,5],"target":{"x":0,"y":0,"z":0},"up":[0,1,0],"fovY":45,"resolution":{"width":960,"height":540,"pixelRatio":1.25}}"#,
+            r#"{"type":"viewportCamera","sceneId":"scene-a","sceneRevision":8,"viewportId":"main","position":[0,1,5],"target":{"x":0,"y":0,"z":0},"up":[0,1,0],"fovY":45,"resolution":{"width":960,"height":540,"pixelRatio":1.25},"streamProfile":"interactive","profileTtlMs":700}"#,
         )
         .unwrap();
 
@@ -3561,12 +3601,19 @@ mod tests {
                 up,
                 fov_y,
                 resolution,
+                stream_profile,
+                profile_ttl_ms,
                 ..
             } => {
                 assert_eq!(scene_id.as_deref(), Some("scene-a"));
                 assert_eq!(scene_revision, Some(8));
                 assert_eq!(viewport_id.as_deref(), Some("main"));
                 assert_eq!(resolution.as_ref().map(|value| value.width), Some(960.0));
+                assert_eq!(
+                    parse_viewport_stream_interaction_profile(stream_profile.as_deref()),
+                    Some(ViewportStreamInteractionProfile::Interactive)
+                );
+                assert_eq!(profile_ttl_ms, Some(700));
                 let params = ViewportCameraPayload {
                     request_id: None,
                     scene_id,
@@ -3577,6 +3624,8 @@ mod tests {
                     up,
                     fov_y,
                     resolution,
+                    stream_profile,
+                    profile_ttl_ms,
                 }
                 .into_camera_params()
                 .unwrap();
@@ -3724,6 +3773,8 @@ mod tests {
                     up,
                     fov_y,
                     resolution,
+                    stream_profile: None,
+                    profile_ttl_ms: None,
                 }
                 .into_camera_params()
                 .unwrap_err();
@@ -3762,6 +3813,8 @@ mod tests {
                     up,
                     fov_y,
                     resolution,
+                    stream_profile: None,
+                    profile_ttl_ms: None,
                 }
                 .into_camera_params()
                 .unwrap_err();

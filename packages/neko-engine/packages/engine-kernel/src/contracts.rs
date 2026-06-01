@@ -93,6 +93,7 @@ pub mod services {
         IGamepadService, IImageService, IMidiService, INodeService, IPuppetService, ISceneService,
         IStreamPlayback, ITaskService, ITimelineService, IVideoService, PipelineSink,
         PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming, StreamSink,
+        ViewportStreamInteractionProfile,
     };
 }
 

@@ -48,7 +48,7 @@ pub use pipeline_sink::{
 };
 pub use playback::IStreamPlayback;
 pub use puppet::{IPuppetService, PuppetExportConfig, PuppetExportSummary, PuppetRenderTiming};
-pub use scene::{EnvironmentLoadDiagnostic, ISceneService};
+pub use scene::{EnvironmentLoadDiagnostic, ISceneService, ViewportStreamInteractionProfile};
 pub use task::ITaskService;
 pub use timeline::{ITimelineService, StreamStats, TimelineStreamResult};
 pub use video::IVideoService;

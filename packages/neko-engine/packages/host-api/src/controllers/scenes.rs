@@ -14,7 +14,9 @@ use neko_engine_kernel::contracts::gpu::{
     ViewportPostProcess, ViewportRenderMode, ViewportWorkMode,
 };
 use neko_engine_kernel::contracts::preview::PreviewPipelineConfig;
-use neko_engine_kernel::contracts::services::{ISceneService, PipelineSink, StreamSink};
+use neko_engine_kernel::contracts::services::{
+    ISceneService, PipelineSink, StreamSink, ViewportStreamInteractionProfile,
+};
 use neko_engine_types::registry;
 use neko_engine_types::{
     ActionResponse, FileSourceRef, GpuRenderPath, RenderFrameDiagnostics, RenderFrameMeta,
@@ -197,6 +199,7 @@ const SCENE_STREAM_MAIN_DEGRADED_FPS: f64 = 30.0;
 const SCENE_STREAM_AUXILIARY_DEGRADED_FPS: f64 = 15.0;
 const SCENE_STREAM_DEGRADE_STABLE_FRAMES: u32 = 3;
 const SCENE_STREAM_ENCODER_RECONFIGURE_COOLDOWN_MS: u64 = 5_000;
+const SCENE_STREAM_INTERACTIVE_RECONFIGURE_COOLDOWN_MS: u64 = 250;
 const H264_REALTIME_PROFILE: &str = "constrained_baseline";
 const H264_CONSTRAINED_BASELINE_PROFILE_IDC: u8 = 66;
 const H264_CONSTRAINED_BASELINE_FLAGS: u8 = 0xE0;
@@ -570,9 +573,14 @@ impl SceneStreamSettingsStabilizer {
         }
 
         let changes_encoder_config = scene_stream_encoder_config_changes(self.current, proposed);
+        let cooldown_ms = if scene_stream_interactive_reconfigure_allowed(self.current, proposed) {
+            SCENE_STREAM_INTERACTIVE_RECONFIGURE_COOLDOWN_MS
+        } else {
+            SCENE_STREAM_ENCODER_RECONFIGURE_COOLDOWN_MS
+        };
         if changes_encoder_config
             && now.duration_since(self.last_encoder_config_change_at)
-                < Duration::from_millis(SCENE_STREAM_ENCODER_RECONFIGURE_COOLDOWN_MS)
+                < Duration::from_millis(cooldown_ms)
         {
             return self.current;
         }
@@ -844,7 +852,6 @@ fn spawn_scene_stream_producer(
         let mut load = FrameLoadSample::default();
         let mut control_ack = ControlAckHealthSample::default();
         let mut settings = runtime_scheduler.settings(0, load, control_ack);
-        let sink_settings = runtime_scheduler.base_sink_settings();
         let mut settings_stabilizer = SceneStreamSettingsStabilizer::new(settings, Instant::now());
         let mut frame_id = 0u64;
         let mut next_pts_us = 0i64;
@@ -852,7 +859,7 @@ fn spawn_scene_stream_producer(
         let mut previous_skipped_intervals = 0u32;
         let mut last_sink_config: Option<PreviewPipelineConfig> = None;
         let mut stream_sink = match stream_registry.get_sender(&stream_id).await {
-            Some(tx) => match scene_stream_sink_config(sink_settings) {
+            Some(tx) => match scene_stream_sink_config(settings) {
                 Ok(sink_config) => match StreamSink::new(sink_config.clone(), tx) {
                     Ok(sink) => {
                         last_sink_config = Some(sink_config);
@@ -919,7 +926,7 @@ fn spawn_scene_stream_producer(
                     let mut current_frame_diagnostics = frame_meta.diagnostics.clone();
                     let mut current_stream_submit_time_ms = 0.0;
                     if let Some(sink) = stream_sink.as_ref() {
-                        if let Ok(sink_config) = scene_stream_sink_config(sink_settings) {
+                        if let Ok(sink_config) = scene_stream_sink_config(settings) {
                             if last_sink_config.as_ref() != Some(&sink_config) {
                                 tracing::info!(
                                     "Scene stream {} GPU sink reconfigure ({}x{} @ {:.1}fps, {}bps, gop={})",
@@ -1116,8 +1123,21 @@ fn spawn_scene_stream_producer(
                         .await
                         .len()
                         .saturating_sub(1);
-                    let proposed_settings =
-                        runtime_scheduler.settings_stabilized(auxiliary_viewport_count, load, control_ack, &mut hysteresis);
+                    let proposed_settings = runtime_scheduler.settings_stabilized(
+                        auxiliary_viewport_count,
+                        load,
+                        control_ack,
+                        &mut hysteresis,
+                    );
+                    let interaction_profile =
+                        scene_service.viewport_stream_interaction_profile(
+                            &config.viewport.scene_id,
+                            &config.viewport.viewport_id,
+                        );
+                    let proposed_settings = apply_viewport_stream_interaction_profile(
+                        proposed_settings,
+                        interaction_profile,
+                    );
                     let next_settings =
                         settings_stabilizer.stabilize(proposed_settings, Instant::now());
                     if next_settings.quality_tier != settings.quality_tier {
@@ -1299,6 +1319,32 @@ fn scene_stream_encoder_config_changes(
         (Ok(left_config), Ok(right_config)) => left_config != right_config,
         _ => true,
     }
+}
+
+fn apply_viewport_stream_interaction_profile(
+    mut settings: SceneStreamRuntimeSettings,
+    profile: ViewportStreamInteractionProfile,
+) -> SceneStreamRuntimeSettings {
+    if profile == ViewportStreamInteractionProfile::Interactive {
+        settings.h264_gop_size = 1;
+    }
+    settings
+}
+
+fn scene_stream_interactive_reconfigure_allowed(
+    current: SceneStreamRuntimeSettings,
+    proposed: SceneStreamRuntimeSettings,
+) -> bool {
+    current.width == proposed.width
+        && current.height == proposed.height
+        && (current.fps - proposed.fps).abs() < f64::EPSILON
+        && current.h264_decoder_preference == proposed.h264_decoder_preference
+        && current.h264_quality == proposed.h264_quality
+        && current.helper_passes_enabled == proposed.helper_passes_enabled
+        && current.post_process_enabled == proposed.post_process_enabled
+        && current.quality_tier == proposed.quality_tier
+        && current.preserve_control_ack == proposed.preserve_control_ack
+        && (current.h264_gop_size == 1 || proposed.h264_gop_size == 1)
 }
 
 fn scene_stream_render_frame_meta(
@@ -3339,6 +3385,62 @@ mod tests {
         );
         assert_eq!(
             stabilizer.stabilize(full, now + Duration::from_millis(5_100)),
+            full
+        );
+    }
+
+    #[test]
+    fn scene_stream_interactive_profile_switches_to_all_intra_without_full_cooldown() {
+        let config = SceneStreamProducerConfig {
+            session_id: "scene-scene-a".to_string(),
+            viewport: ViewportDescriptor {
+                viewport_id: "main".to_string(),
+                scene_id: "scene-a".to_string(),
+                render_mode: ViewportRenderMode::Pbr,
+                debug_view: None,
+                fps: 60,
+                color_space: SceneColorSpace::Srgb,
+                tone_mapping: SceneToneMapping::Aces,
+                post_process: ViewportPostProcess::default(),
+                layer_mask: None,
+                work_mode: ViewportWorkMode::EditParametric,
+                helper_passes: true,
+                lookdev: None,
+                h264: None,
+            },
+            h264: None,
+            width: 1920,
+            height: 1080,
+            fps: 60.0,
+            allow_fps_degrade: true,
+            allow_quality_degrade: true,
+            initial_revision: 0,
+            initial_applied_seq: 0,
+        };
+        let runtime = SceneStreamRuntimeScheduler::new(&config);
+        let full = runtime.settings(
+            0,
+            FrameLoadSample::default(),
+            ControlAckHealthSample::default(),
+        );
+        let interactive = apply_viewport_stream_interaction_profile(
+            full,
+            ViewportStreamInteractionProfile::Interactive,
+        );
+        assert_eq!(interactive.h264_gop_size, 1);
+
+        let now = Instant::now();
+        let mut stabilizer = SceneStreamSettingsStabilizer::new(full, now);
+        assert_eq!(
+            stabilizer.stabilize(interactive, now + Duration::from_millis(1)),
+            interactive
+        );
+        assert_eq!(
+            stabilizer.stabilize(full, now + Duration::from_millis(100)),
+            interactive
+        );
+        assert_eq!(
+            stabilizer.stabilize(full, now + Duration::from_millis(260)),
             full
         );
     }

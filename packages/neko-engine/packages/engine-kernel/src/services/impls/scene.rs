@@ -10,7 +10,9 @@ use super::scene_renderer::{
 use crate::domain::FrameData;
 use crate::encoder::encode_nv12_to_h264_iframe;
 use crate::error::{Error, Result};
-use crate::services::scene::{EnvironmentLoadDiagnostic, ISceneService};
+use crate::services::scene::{
+    EnvironmentLoadDiagnostic, ISceneService, ViewportStreamInteractionProfile,
+};
 use half::f16;
 use neko_engine_gpu::GpuContext;
 #[cfg(target_os = "macos")]
@@ -119,6 +121,12 @@ impl Drop for ControlAckSampleGuard<'_> {
     fn drop(&mut self) {
         self.metrics.record_sample(self.started_at.elapsed());
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ViewportStreamProfileState {
+    profile: ViewportStreamInteractionProfile,
+    expires_at: Instant,
 }
 
 #[derive(Debug, Default)]
@@ -250,6 +258,8 @@ pub struct SceneService {
     /// Editor camera override for viewport orbit controls.
     /// Read by the scene stream producer on each frame.
     editor_camera: RwLock<Option<CameraParams>>,
+    /// Short-lived latency profile for viewport streams during direct manipulation.
+    viewport_stream_profiles: Mutex<HashMap<(String, String), ViewportStreamProfileState>>,
     /// Latest Engine-owned environment state used by stream/capture defaults.
     environment: RwLock<Option<EnvironmentPatch>>,
     /// Resolved Engine file tokens for environment sources. Runtime scene state
@@ -291,6 +301,7 @@ impl SceneService {
             procedural_meshes: Mutex::new(default_meshes),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
+            viewport_stream_profiles: Mutex::new(HashMap::new()),
             environment: RwLock::new(None),
             environment_file_tokens: RwLock::new(HashMap::new()),
             environment_background: Mutex::new(None),
@@ -333,6 +344,7 @@ impl SceneService {
             procedural_meshes: Mutex::new(default_meshes),
             face_params: Mutex::new(HashMap::new()),
             editor_camera: RwLock::new(None),
+            viewport_stream_profiles: Mutex::new(HashMap::new()),
             environment: RwLock::new(None),
             environment_file_tokens: RwLock::new(HashMap::new()),
             environment_background: Mutex::new(None),
@@ -355,6 +367,51 @@ impl SceneService {
 
     pub fn get_editor_camera(&self) -> Option<CameraParams> {
         self.editor_camera.read().ok().and_then(|g| g.clone())
+    }
+
+    pub fn set_viewport_stream_interaction_profile(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+        profile: ViewportStreamInteractionProfile,
+        ttl: Duration,
+    ) {
+        let Ok(mut guard) = self.viewport_stream_profiles.lock() else {
+            return;
+        };
+        let key = (scene_id.to_string(), viewport_id.to_string());
+        if profile == ViewportStreamInteractionProfile::Default || ttl.is_zero() {
+            guard.remove(&key);
+            return;
+        }
+        let expires_at = Instant::now().checked_add(ttl).unwrap_or_else(Instant::now);
+        guard.insert(
+            key,
+            ViewportStreamProfileState {
+                profile,
+                expires_at,
+            },
+        );
+    }
+
+    pub fn viewport_stream_interaction_profile(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+    ) -> ViewportStreamInteractionProfile {
+        let Ok(mut guard) = self.viewport_stream_profiles.lock() else {
+            return ViewportStreamInteractionProfile::Default;
+        };
+        let key = (scene_id.to_string(), viewport_id.to_string());
+        let now = Instant::now();
+        match guard.get(&key).copied() {
+            Some(state) if state.expires_at > now => state.profile,
+            Some(_) => {
+                guard.remove(&key);
+                ViewportStreamInteractionProfile::Default
+            }
+            None => ViewportStreamInteractionProfile::Default,
+        }
     }
 
     pub fn current_revision(&self) -> Result<u64> {
@@ -1746,6 +1803,30 @@ impl ISceneService for SceneService {
         SceneService::get_editor_camera(self)
     }
 
+    fn set_viewport_stream_interaction_profile(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+        profile: ViewportStreamInteractionProfile,
+        ttl: Duration,
+    ) {
+        SceneService::set_viewport_stream_interaction_profile(
+            self,
+            scene_id,
+            viewport_id,
+            profile,
+            ttl,
+        );
+    }
+
+    fn viewport_stream_interaction_profile(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+    ) -> ViewportStreamInteractionProfile {
+        SceneService::viewport_stream_interaction_profile(self, scene_id, viewport_id)
+    }
+
     fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample {
         SceneService::control_ack_health_sample(self, render_backlog_frames)
     }
@@ -2196,6 +2277,32 @@ mod tests {
         assert!(health.ack_p95_ms <= ControlAckHealthSample::ACK_P95_BUDGET_MS);
         assert!(health.ack_path_is_healthy());
         assert!(health.render_backlog_is_healthy());
+    }
+
+    #[test]
+    fn viewport_stream_interaction_profile_expires_to_default() {
+        let service = SceneService::new();
+        assert_eq!(
+            service.viewport_stream_interaction_profile("scene-a", "main"),
+            ViewportStreamInteractionProfile::Default
+        );
+
+        service.set_viewport_stream_interaction_profile(
+            "scene-a",
+            "main",
+            ViewportStreamInteractionProfile::Interactive,
+            Duration::from_millis(10),
+        );
+        assert_eq!(
+            service.viewport_stream_interaction_profile("scene-a", "main"),
+            ViewportStreamInteractionProfile::Interactive
+        );
+
+        std::thread::sleep(Duration::from_millis(20));
+        assert_eq!(
+            service.viewport_stream_interaction_profile("scene-a", "main"),
+            ViewportStreamInteractionProfile::Default
+        );
     }
 
     #[test]

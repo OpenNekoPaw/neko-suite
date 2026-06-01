@@ -18,6 +18,7 @@ use neko_runtime_scene::{
 };
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvironmentLoadDiagnostic {
@@ -25,6 +26,12 @@ pub struct EnvironmentLoadDiagnostic {
     pub severity: String,
     pub message: String,
     pub retryable: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewportStreamInteractionProfile {
+    Default,
+    Interactive,
 }
 
 /// Service interface for 3D scene management
@@ -136,6 +143,22 @@ pub trait ISceneService: Send + Sync {
 
     /// Get the current editor camera used by realtime scene stream rendering.
     fn get_editor_camera(&self) -> Option<CameraParams>;
+
+    /// Set a short-lived stream profile for latency-sensitive viewport interaction.
+    fn set_viewport_stream_interaction_profile(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+        profile: ViewportStreamInteractionProfile,
+        ttl: Duration,
+    );
+
+    /// Get the active stream profile for a viewport, expiring stale interaction state.
+    fn viewport_stream_interaction_profile(
+        &self,
+        scene_id: &str,
+        viewport_id: &str,
+    ) -> ViewportStreamInteractionProfile;
 
     /// Report control acknowledgement health for adaptive scene streaming.
     fn control_ack_health_sample(&self, render_backlog_frames: u32) -> ControlAckHealthSample;
