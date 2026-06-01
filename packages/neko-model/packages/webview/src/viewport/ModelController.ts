@@ -771,21 +771,24 @@ export class ModelController implements ISceneController {
       );
     }
 
-    const ack = await socket.updateViewportCamera({
+    socket.sendViewportCameraLatest({
       sceneId: command.sceneId,
       sceneRevision: command.baseRevision,
       viewportId: command.viewportId,
       position,
       target,
       resolution: readViewportResolution(command.payload['resolution']),
+      streamProfile: 'interactive',
+      profileTtlMs: 700,
     });
-    const revision = ack.acceptedRevision ?? ack.revision ?? command.baseRevision;
+    socket.requestKeyframe(command.viewportId);
+    const revision = command.baseRevision;
     return viewportEventFromPayload(
       command,
       'viewport:camera:ack',
       {
-        sceneId: ack.sceneId ?? command.sceneId,
-        viewportId: ack.viewportId ?? command.viewportId,
+        sceneId: command.sceneId,
+        viewportId: command.viewportId,
         revision,
         camera: 'editor',
       },

@@ -362,11 +362,26 @@ describe('Route A webview boundaries', () => {
     expect(h264Client).toMatch(/webcodecsDecodeQueueSize/);
     expect(h264Client).toMatch(/pendingDecodeFrames/);
     expect(h264Client).toMatch(/decodeOutputBurst/);
+    expect(h264Client).toMatch(/updateBackpressurePolicy/);
     expect(h264Client).toMatch(/hardwareAcceleration: normalizeHardwareAccelerationPreference/);
     expect(h264Client).toMatch(/latencyMode: this\.descriptor\?\.latencyMode/);
     expect(h264Client).toMatch(/codedWidth: this\.descriptor\?\.codedWidth/);
     expect(videoViewport).not.toMatch(/onFrame:\s*\(frame, meta\) => \{[\s\S]*ctx\.drawImage/);
     expect(h264Client).not.toMatch(/shouldDropQueuedRouteAFrame/);
+  });
+
+  it('keeps high-frequency viewport interactions off the H.264 stream lifecycle', () => {
+    const videoViewport = readSource('components/VideoViewport.tsx');
+
+    expect(videoViewport).toMatch(
+      /updateBackpressurePolicy\(backpressureForStreamProfile\(profile\)\)/,
+    );
+    expect(videoViewport).toMatch(/streamProfileRef/);
+    expect(videoViewport).not.toMatch(/useState<ViewportStreamProfile>/);
+    expect(videoViewport).not.toMatch(/h264SettingsForStreamProfile/);
+    expect(videoViewport).not.toMatch(/gopSize: 1/);
+    expect(videoViewport).not.toMatch(/startSceneRenderStream\([\s\S]*streamProfile,/);
+    expect(videoViewport).not.toMatch(/streamProfile,\s*\n\s*\]\);/);
   });
 
   it('routes viewport camera controls through scene-control websocket only', () => {
@@ -377,23 +392,29 @@ describe('Route A webview boundaries', () => {
     const modelController = readSource('viewport/ModelController.ts');
 
     expect(videoViewport).toMatch(/!sceneControlSocket\?\.isOpen\(\)/);
-    expect(videoViewport).toMatch(/sceneControlSocket\.updateViewportCamera/);
+    expect(videoViewport).toMatch(/sceneControlSocket\.sendViewportCameraLatest/);
     expect(videoViewport).toMatch(/sceneControlSocket\.requestKeyframe\(MAIN_VIEWPORT_ID\)/);
-    expect(videoViewport).toMatch(/cameraUpdateInFlightRef/);
-    expect(videoViewport).toMatch(/pendingCameraUpdateRef/);
+    expect(videoViewport).not.toMatch(/await sceneControlSocket\.updateViewportCamera/);
+    expect(videoViewport).not.toMatch(/cameraUpdateInFlightRef/);
+    expect(videoViewport).not.toMatch(/pendingCameraUpdateRef/);
     expect(videoViewport).toMatch(/VIEWPORT_CAMERA_SEND_INTERVAL_MS = 33/);
     expect(videoViewport).toMatch(/scheduleViewportCamera/);
     expect(videoViewport).toMatch(/pendingCameraFlushTimerRef/);
     expect(videoViewport).toMatch(/VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS/);
     expect(videoViewport).not.toMatch(/sendHttpFallback|updateEditorCamera/);
     expect(app).toMatch(/!socket\?\.isOpen\(\)/);
-    expect(app).toMatch(/socket\s*\n\s*\.updateViewportCamera/);
+    expect(app).toMatch(/socket\.sendViewportCameraLatest/);
+    expect(app).toMatch(/streamProfile: 'interactive'/);
+    expect(app).toMatch(/profileTtlMs: EDITOR_CAMERA_INTERACTION_PROFILE_TTL_MS/);
+    expect(app).not.toMatch(/socket\s*\n\s*\.updateViewportCamera/);
     expect(app).not.toMatch(/updateEditorCamera/);
     expect(videoViewport).not.toMatch(/modelController\s*\n\s*\.updateCamera\(\)/);
     expect(modelController).toMatch(/'viewport:camera'/);
     expect(modelController).toMatch(/position: vec3ToTuple\(store\.getCameraPosition\(\)\)/);
     expect(modelController).toMatch(/target: vec3ToTuple\(store\.cameraTarget\)/);
     expect(modelController).toMatch(/kind: 'camera'/);
+    expect(modelController).toMatch(/socket\.sendViewportCameraLatest/);
+    expect(modelController).toMatch(/streamProfile: 'interactive'/);
     expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 33/);
     expect(orbitControls).toMatch(
       /onCameraChange\?: \(options\?: \{ readonly immediate\?: boolean \}\) => void/,
@@ -410,6 +431,18 @@ describe('Route A webview boundaries', () => {
     expect(toolbar).toMatch(/areToolbarStatesEqual/);
     expect(orbitControls).not.toMatch(/new EngineClient|updateEditorCamera/);
     expect(toolbar).not.toMatch(/new EngineClient|updateEditorCamera/);
+  });
+
+  it('keeps neko-model camera hot paths fire-and-forget', () => {
+    const app = readSource('App.tsx');
+    const videoViewport = readSource('components/VideoViewport.tsx');
+    const modelController = readSource('viewport/ModelController.ts');
+
+    for (const source of [app, videoViewport, modelController]) {
+      expect(source).not.toMatch(/await\s+\w+\.updateViewportCamera/);
+      expect(source).not.toMatch(/\.updateViewportCamera\([\s\S]*\.then\(/);
+    }
+    expect(`${app}\n${videoViewport}\n${modelController}`).toMatch(/sendViewportCameraLatest/);
   });
 
   it('enables character preview controls for a selected or single previewable scene node', () => {

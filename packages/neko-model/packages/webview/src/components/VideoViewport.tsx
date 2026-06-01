@@ -152,20 +152,6 @@ function readViewportH264DebugSettings(): ViewportH264Settings | undefined {
   }
 }
 
-function h264SettingsForStreamProfile(
-  profile: ViewportStreamProfile,
-): ViewportH264Settings | undefined {
-  const debugSettings = readViewportH264DebugSettings();
-  if (profile === 'interactive') {
-    return {
-      ...debugSettings,
-      gopSize: 1,
-      decoderPreference: 'prefer-hardware',
-    };
-  }
-  return debugSettings;
-}
-
 function backpressureForStreamProfile(profile: ViewportStreamProfile): H264BackpressurePolicy {
   return profile === 'interactive'
     ? INTERACTIVE_VIEWPORT_BACKPRESSURE
@@ -214,7 +200,6 @@ function createViewportDescriptor(
   cameraTarget: [number, number, number],
   streamSize: ViewportStreamSize,
   helperPassesEnabled: boolean,
-  streamProfile: ViewportStreamProfile,
 ): ViewportDescriptor {
   return {
     viewportId: MAIN_VIEWPORT_ID,
@@ -241,7 +226,7 @@ function createViewportDescriptor(
       helperPassesEnabled,
       showGrid: helperPassesEnabled,
     },
-    h264: h264SettingsForStreamProfile(streamProfile),
+    h264: readViewportH264DebugSettings(),
     workMode: 'edit-parametric',
     cameraRef: {
       kind: 'editorCamera',
@@ -283,10 +268,9 @@ export function VideoViewport({
   const decodedDroppedBeforePresentRef = useRef(0);
   const pendingResizeCommitRef = useRef<number | null>(null);
   const latestResizeSizeRef = useRef<ViewportStreamSize | null>(null);
-  const cameraUpdateInFlightRef = useRef(false);
-  const pendingCameraUpdateRef = useRef(false);
   const pendingCameraFlushTimerRef = useRef<number | null>(null);
   const pendingStreamProfileRestoreRef = useRef<number | null>(null);
+  const streamProfileRef = useRef<ViewportStreamProfile>('default');
   const lastInteractionSignalRef = useRef(interactionSignal);
   const lastCameraSendAtRef = useRef(0);
   const lastCameraKeyframeRequestRef = useRef(0);
@@ -300,7 +284,6 @@ export function VideoViewport({
   const [routeAUnavailableReason, setRouteAUnavailableReason] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [viewportSize, setViewportSize] = useState<ViewportStreamSize | null>(null);
-  const [streamProfile, setStreamProfile] = useState<ViewportStreamProfile>('default');
   const helperPassesEnabled = useModelStore((state) => state.showViewportGrid);
   const sceneNodes = useModelStore((state) => state.sceneNodes);
   const lightNodeIds = useMemo(
@@ -313,17 +296,24 @@ export function VideoViewport({
   const requestedLookDevMode = useModelStore((state) => state.lookDev.requestedMode);
   const appliedLookDevMode = useModelStore((state) => state.lookDev.appliedMode);
   const selectedRenderMode = requestedLookDevMode ?? appliedLookDevMode;
+  const setStreamProfile = React.useCallback((profile: ViewportStreamProfile) => {
+    if (streamProfileRef.current === profile) {
+      return;
+    }
+    streamProfileRef.current = profile;
+    streamClientRef.current?.updateBackpressurePolicy(backpressureForStreamProfile(profile));
+  }, []);
   const markInteractiveStreamActivity = React.useCallback(() => {
     if (pendingStreamProfileRestoreRef.current !== null) {
       window.clearTimeout(pendingStreamProfileRestoreRef.current);
       pendingStreamProfileRestoreRef.current = null;
     }
-    setStreamProfile((current) => (current === 'interactive' ? current : 'interactive'));
+    setStreamProfile('interactive');
     pendingStreamProfileRestoreRef.current = window.setTimeout(() => {
       pendingStreamProfileRestoreRef.current = null;
       setStreamProfile('default');
     }, VIEWPORT_STREAM_IDLE_RESTORE_DELAY_MS);
-  }, []);
+  }, [setStreamProfile]);
   const modelController = useMemo(
     () =>
       new ModelController({
@@ -416,48 +406,36 @@ export function VideoViewport({
   }, []);
 
   const sendViewportCamera = React.useCallback(() => {
-    const sendSceneControlCamera = async (): Promise<void> => {
-      if (cameraUpdateInFlightRef.current) {
-        pendingCameraUpdateRef.current = true;
-        return;
-      }
-      if (!sceneControlSocket?.isOpen()) {
-        return;
-      }
-      cameraUpdateInFlightRef.current = true;
-      try {
-        do {
-          pendingCameraUpdateRef.current = false;
-          const store = useModelStore.getState();
-          const position = store.getCameraPosition();
-          const target = store.cameraTarget;
-          await sceneControlSocket.updateViewportCamera({
-            sceneId,
-            sceneRevision,
-            viewportId: MAIN_VIEWPORT_ID,
-            position,
-            target,
-            resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
-          });
-        } while (pendingCameraUpdateRef.current);
+    if (!sceneControlSocket?.isOpen()) {
+      return;
+    }
 
-        const now = performance.now();
-        if (now - lastCameraKeyframeRequestRef.current >= VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS) {
-          sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
-          lastCameraKeyframeRequestRef.current = now;
-        }
-      } finally {
-        cameraUpdateInFlightRef.current = false;
+    try {
+      const store = useModelStore.getState();
+      const position = store.getCameraPosition();
+      const target = store.cameraTarget;
+      sceneControlSocket.sendViewportCameraLatest({
+        sceneId,
+        sceneRevision,
+        viewportId: MAIN_VIEWPORT_ID,
+        position,
+        target,
+        resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
+        streamProfile: streamProfileRef.current,
+        profileTtlMs: VIEWPORT_STREAM_IDLE_RESTORE_DELAY_MS,
+      });
+      const now = performance.now();
+      if (now - lastCameraKeyframeRequestRef.current >= VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS) {
+        sceneControlSocket.requestKeyframe(MAIN_VIEWPORT_ID);
+        lastCameraKeyframeRequestRef.current = now;
       }
-    };
-
-    void sendSceneControlCamera().catch((error: unknown) => {
+    } catch (error) {
       void webviewErrorHandler.handleError(toError(error), {
         showToUser: false,
         severity: 'error',
       });
       onSceneControlError(modelErrorMessage('error.cameraUpdateFailed'));
-    });
+    }
   }, [sceneControlSocket, sceneId, sceneRevision, viewportSize, onSceneControlError]);
 
   const flushViewportCamera = React.useCallback(() => {
@@ -595,7 +573,6 @@ export function VideoViewport({
             store.cameraTarget,
             viewportSize,
             helperPassesEnabled,
-            streamProfile,
           ),
         );
         if (disposed) {
@@ -725,7 +702,7 @@ export function VideoViewport({
           descriptor: stream.descriptor,
           width: stream.descriptor.width,
           height: stream.descriptor.height,
-          backpressure: backpressureForStreamProfile(streamProfile),
+          backpressure: backpressureForStreamProfile(streamProfileRef.current),
           onFrameMeta: (meta) => {
             // After dispose, callbacks from in-flight WS messages may still
             // fire; ignore them so we don't pollute the store with frames
@@ -795,7 +772,6 @@ export function VideoViewport({
     helperPassesEnabled,
     visible,
     selectedRenderMode,
-    streamProfile,
   ]);
 
   const overlayFrameMeta = React.useMemo<RenderFrameMeta | null>(() => {

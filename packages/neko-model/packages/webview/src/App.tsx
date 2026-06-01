@@ -74,6 +74,7 @@ const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities 
   typedPicking: false,
   characterRegions: false,
 };
+const EDITOR_CAMERA_INTERACTION_PROFILE_TTL_MS = 700;
 
 type SceneCommandType = NonNullable<SceneCommandEnvelope['command']>['type'];
 
@@ -185,30 +186,29 @@ export function App(): React.JSX.Element {
     const position = store.getCameraPosition();
     const target = store.cameraTarget;
     const socket = sceneControlRef.current;
-    const handleCameraError = (error: unknown) => {
-      void webviewErrorHandler.handleError(toError(error), {
-        showToUser: false,
-        severity: 'error',
-      });
-      setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
-    };
 
     if (!socket?.isOpen()) {
       return;
     }
 
-    void socket
-      .updateViewportCamera({
+    try {
+      socket.sendViewportCameraLatest({
         sceneId: store.sceneId,
         sceneRevision: store.sceneRevision,
         viewportId: 'main',
         position,
         target,
-      })
-      .then(() => {
-        socket.requestKeyframe('main');
-      })
-      .catch(handleCameraError);
+        streamProfile: 'interactive',
+        profileTtlMs: EDITOR_CAMERA_INTERACTION_PROFILE_TTL_MS,
+      });
+      socket.requestKeyframe('main');
+    } catch (error) {
+      void webviewErrorHandler.handleError(toError(error), {
+        showToUser: false,
+        severity: 'error',
+      });
+      setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
+    }
   }, [setSceneControlStatus]);
 
   const handleViewportCameraMutated = useCallback(() => {

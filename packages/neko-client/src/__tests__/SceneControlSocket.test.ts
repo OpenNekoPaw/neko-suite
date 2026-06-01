@@ -857,6 +857,38 @@ describe('SceneControlSocket', () => {
     await expect(promise).resolves.toEqual(ack);
   });
 
+  it('can send latest viewport camera updates without waiting for ack', () => {
+    const fake = new FakeWebSocket();
+    const socket = new SceneControlSocket({
+      url: 'ws://scene-control',
+      reconnect: false,
+      webSocketFactory: () => fake,
+    });
+    socket.connect();
+    fake.open();
+
+    socket.sendViewportCameraLatest({
+      sceneId: 'scene-a',
+      sceneRevision: 8,
+      viewportId: 'main',
+      position: [0, 1, 5],
+      target: [0, 0, 0],
+      streamProfile: 'interactive',
+      profileTtlMs: 700,
+    });
+
+    expect(parseSent(fake, 1)).toEqual({
+      type: 'viewportCamera',
+      sceneId: 'scene-a',
+      sceneRevision: 8,
+      viewportId: 'main',
+      position: [0, 1, 5],
+      target: [0, 0, 0],
+      streamProfile: 'interactive',
+      profileTtlMs: 700,
+    });
+  });
+
   it('rejects viewport camera updates when engine reports rejection', async () => {
     const fake = new FakeWebSocket();
     const socket = new SceneControlSocket({

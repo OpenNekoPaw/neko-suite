@@ -503,16 +503,10 @@ describe('ModelController', () => {
     expect(useModelStore.getState().localPredictions).toHaveLength(1);
   });
 
-  it('routes camera commands through scene-control websocket when a socket is provided', async () => {
+  it('routes camera commands through latest-only scene-control websocket when a socket is provided', async () => {
     const socket = {
-      updateViewportCamera: vi.fn(async () => ({
-        type: 'viewportCameraAck',
-        sceneId: 'scene-a',
-        viewportId: 'main',
-        status: 'applied',
-        revision: 4,
-        acceptedRevision: 4,
-      })),
+      sendViewportCameraLatest: vi.fn(),
+      requestKeyframe: vi.fn(),
     };
     const client = {
       dispatchViewportCommand: vi.fn(),
@@ -530,15 +524,18 @@ describe('ModelController', () => {
 
     await controller.updateCamera();
 
-    expect(socket.updateViewportCamera).toHaveBeenCalledWith(
+    expect(socket.sendViewportCameraLatest).toHaveBeenCalledWith(
       expect.objectContaining({
         sceneId: 'scene-a',
         sceneRevision: 3,
         viewportId: 'main',
         position: expect.any(Array),
         target: expect.any(Array),
+        streamProfile: 'interactive',
+        profileTtlMs: 700,
       }),
     );
+    expect(socket.requestKeyframe).toHaveBeenCalledWith('main');
     expect(client.dispatchViewportCommand).not.toHaveBeenCalled();
     expect(useModelStore.getState().localPredictions).toHaveLength(0);
   });

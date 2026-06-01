@@ -76,7 +76,7 @@ describe('Model resize layout contract', () => {
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{dockHandleProps\}/);
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{splitHandleProps\}/);
     expect(app).toMatch(/<ResizeHandle\s+handleProps=\{handleProps\}/);
-    expect(app).toMatch(/\.updateViewportCamera\(/);
+    expect(app).toMatch(/\.sendViewportCameraLatest\(/);
     expect(app).not.toMatch(/updateEditorCamera|sendHttpFallback/);
   });
 });

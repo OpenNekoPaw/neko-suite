@@ -292,7 +292,6 @@ export class H264StreamClient {
   private pendingFrameDiagnostics: Map<number, EngineRenderFrameDiagnostics> = new Map();
   private pendingPacketReceivedAt: Map<number, number> = new Map();
   private decodedFrameTimestamps: Map<number, number> = new Map();
-  private suppressedDecodedFramePts = new Set<number>();
   private lastDecodeOutputAt: number | undefined;
   private currentDecodeOutputBurstStartedAt: number | undefined;
   private currentDecodeOutputBurstCount = 0;
@@ -388,7 +387,6 @@ export class H264StreamClient {
     this.pendingFrameDiagnostics.clear();
     this.pendingPacketReceivedAt.clear();
     this.decodedFrameTimestamps.clear();
-    this.suppressedDecodedFramePts.clear();
     this.latestFrameMeta = undefined;
     this.pendingFrameMetaExpectations.clear();
     this.decodeTimeSamples = [];
@@ -401,6 +399,10 @@ export class H264StreamClient {
 
   getStats(): H264StreamClientStats {
     return { ...this.stats };
+  }
+
+  updateBackpressurePolicy(policy: H264BackpressurePolicy): void {
+    this.config.backpressure = normalizeBackpressurePolicy(policy);
   }
 
   expectCompatibleFrameMeta(expectation: H264FrameMetaExpectation): string {
@@ -605,10 +607,6 @@ export class H264StreamClient {
       return;
     }
 
-    if (this.config.backpressure.latestOnly) {
-      this.dropSupersededPacketsBeforeDecode(packet);
-    }
-
     // After seek/reset, wait for a keyframe before feeding delta frames
     if (this.waitingForKeyframe) {
       if (!packet.isKeyframe) {
@@ -648,12 +646,6 @@ export class H264StreamClient {
       frame.close();
       return;
     }
-    if (this.suppressedDecodedFramePts.delete(frame.timestamp)) {
-      frame.close();
-      this.updateDecodeQueueDepth();
-      return;
-    }
-
     this.stats.framesDecoded++;
     const frameDecodedAt = performance.now();
     const previousDecodeOutputAt = this.lastDecodeOutputAt;
@@ -916,34 +908,6 @@ export class H264StreamClient {
       });
       this.consecutiveDroppedDeltaFrames = 0;
     }
-  }
-
-  private dropSupersededPacketsBeforeDecode(packet: ParsedH264Packet): void {
-    for (const pts of [...this.decodeStartTimes.keys()]) {
-      if (pts >= packet.pts) continue;
-      this.dropPendingPacketByPts(pts);
-    }
-  }
-
-  private dropPendingPacketByPts(pts: number): void {
-    if (!this.decodeStartTimes.has(pts) && !this.pendingFrames.has(pts)) {
-      return;
-    }
-    this.decodeStartTimes.delete(pts);
-    this.pendingFrames.delete(pts);
-    this.pendingFrameMeta.delete(pts);
-    this.pendingFrameDiagnostics.delete(pts);
-    this.pendingPacketReceivedAt.delete(pts);
-    this.pendingSidebandFrameMeta.delete(pts);
-    this.pendingSidebandFrameMetaReceivedAt.delete(pts);
-    this.suppressedDecodedFramePts.add(pts);
-    if (this.suppressedDecodedFramePts.size > 100) {
-      const oldest = Math.min(...this.suppressedDecodedFramePts);
-      this.suppressedDecodedFramePts.delete(oldest);
-    }
-    this.stats.framesDropped++;
-    this.stats.framesDroppedBeforeDecode++;
-    this.droppedBeforeDecodeSinceLastFrame++;
   }
 
   private consumeDroppedBeforeDecodeSinceLastFrame(): number {

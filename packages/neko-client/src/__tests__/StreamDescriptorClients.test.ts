@@ -649,7 +649,7 @@ describe('stream descriptor clients', () => {
     client.dispose();
   });
 
-  it('suppresses superseded decoded frames for latest-only realtime streams', async () => {
+  it('keeps hardware decoder output flowing for latest-only realtime streams', async () => {
     fakeDecoderAutoOutput = false;
     const frames: number[] = [];
     const client = new H264StreamClient({
@@ -674,9 +674,45 @@ describe('stream descriptor clients', () => {
     socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, true) });
     pendingFakeDecoderOutputs.splice(0).forEach((output) => output());
 
-    expect(frames).toEqual([83_332]);
-    expect(client.getStats().framesDecoded).toBe(1);
-    expect(client.getStats().framesDroppedBeforeDecode).toBe(1);
+    expect(frames).toEqual([66_666, 83_332]);
+    expect(client.getStats().framesDecoded).toBe(2);
+    expect(client.getStats().framesDroppedBeforeDecode).toBe(0);
+
+    client.dispose();
+  });
+
+  it('can switch realtime streams to latest-only backpressure without reconnecting', async () => {
+    fakeDecoderAutoOutput = false;
+    const frames: number[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 4,
+        dropDeltaFramesWhenBacklogged: false,
+        preserveKeyframes: true,
+      },
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    client.updateBackpressurePolicy({
+      maxDecodeQueueDepth: 1,
+      dropDeltaFramesWhenBacklogged: false,
+      preserveKeyframes: true,
+      latestOnly: true,
+    });
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, true) });
+    pendingFakeDecoderOutputs.splice(0).forEach((output) => output());
+
+    expect(fakeWebSockets).toHaveLength(1);
+    expect(frames).toEqual([66_666, 83_332]);
 
     client.dispose();
   });

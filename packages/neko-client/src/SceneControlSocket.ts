@@ -99,6 +99,8 @@ export interface SceneViewportCameraUpdate {
   up?: [number, number, number];
   fovY?: number;
   resolution?: SceneViewportResolution;
+  streamProfile?: 'default' | 'interactive';
+  profileTtlMs?: number;
 }
 
 export interface SceneViewportCameraAck {
@@ -430,6 +432,14 @@ export class SceneControlSocket {
         this.clearPendingViewportCamera(id);
         reject(toError(error));
       }
+    });
+  }
+
+  sendViewportCameraLatest(update: SceneViewportCameraUpdate, requestId?: string): void {
+    this.send({
+      type: 'viewportCamera',
+      ...(requestId ? { requestId } : {}),
+      ...cameraUpdateToMessage(update),
     });
   }
 
@@ -1159,6 +1169,8 @@ function cameraUpdateToMessage(update: SceneViewportCameraUpdate): Record<string
     up: update.up,
     fovY: update.fovY,
     resolution: update.resolution,
+    streamProfile: update.streamProfile,
+    profileTtlMs: update.profileTtlMs,
   });
 }
 
