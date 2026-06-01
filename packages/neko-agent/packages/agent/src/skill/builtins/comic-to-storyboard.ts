@@ -67,30 +67,86 @@ Panel 2: ...
    - Always output a real storyboard structure, not only a prose document.
      Put concise readable notes first, then append one \`neko-composite\`
      fenced JSON block. Use \`template: "storyboard-table"\`.
-   - Each storyboard row maps to one \`sections[]\` item with a shot heading
-     and production-ready content. If the row should carry original,
-     colorized, or generated images, add \`sections[].mediaRefs[]\` entries
-     that reference earlier tool calls:
+   - Output a \`StoryboardTableV1\` semantic plan: \`schemaVersion: 1\`,
+     \`kind: "storyboard-table"\`, \`profile: "manga-to-video"\`,
+     \`title\`, \`scenes[]\`, and \`shots[]\`.
+   - Every shot must include the stable core: \`shotNumber\`, \`duration\`,
+     \`visualDescription\`, \`characterAction\`, and \`imageStrategy\`.
+   - Choose \`imageStrategy\` explicitly:
+     \`reuse-original\` for original panel reuse, \`use-as-reference\` when
+     the panel guides a new image, \`generate-new\` for text-only creation,
+     or \`transform-original\` for colorize/upscale/inpaint/style edits.
+   - Only write plan fields. Do not claim images have already been generated
+     until a runtime/tool result exists. Put existing source images in
+     \`sourceMediaRefs\`; leave \`generatedMediaRefs\` empty unless they
+     reference completed tool results.
+   - If a shot should carry original, reference, transformed, or generated
+     images, use stable refs with \`locator.type: "tool-result"\` and the
+     exact tool call id and asset index from ReadDocument / ReadDocumentImage /
+     ReadImage / generation tools:
      \`\`\`neko-composite
      {
        "template": "storyboard-table",
+       "schemaVersion": 1,
+       "kind": "storyboard-table",
+       "profile": "manga-to-video",
        "title": "Storyboard",
-       "sections": [
+       "scenes": [
          {
-           "heading": "Shot 1",
-           "content": "Scene/action/prompt notes",
-           "layout": "table-row",
-           "mediaRefs": [
-             { "toolCallId": "read-doc-call-id", "assetIndex": 0, "caption": "Original", "role": "original" },
-             { "toolCallId": "colorized-call-id", "assetIndex": 0, "caption": "Color", "role": "colorized" },
-             { "toolCallId": "generated-call-id", "assetIndex": 0, "caption": "Generated", "role": "generated" }
+           "sceneId": "scene-1",
+           "sceneTitle": "Page 1",
+           "shots": [
+             {
+               "shotId": "scene-1-shot-1",
+               "shotNumber": 1,
+               "duration": 3,
+               "visualDescription": "Panel action and composition",
+               "characterAction": "Character action",
+               "dialogue": "OCR dialogue if present",
+               "soundCue": "SFX if present",
+               "generationPrompt": "Prompt for runtime generation if needed",
+               "imageStrategy": "use-as-reference",
+               "sourceMediaRefs": [
+                 {
+                   "refId": "source-panel-1",
+                   "role": "source",
+                   "locator": {
+                     "type": "tool-result",
+                     "toolCallId": "read-doc-call-id",
+                     "assetIndex": 0
+                   },
+                   "label": "Original panel",
+                   "mimeType": "image/jpeg"
+                 }
+               ],
+               "generatedMediaRefs": [],
+               "decisionReason": "Use the panel for composition but create a video-ready keyframe."
+             }
            ]
          }
        ]
      }
      \`\`\`
-   - Use the exact tool call ids from ReadDocument / ReadDocumentImage /
-     ReadImage / generation tools. Do not embed base64 image data in the table.
+   - Do not embed base64 image data, blob URLs, localhost URLs, absolute
+     local paths, or invented tool call ids in the table.
+   - Profile field templates:
+     - \`script-breakdown\`: emphasize \`dialogue\`, \`shotScale\`,
+       \`cameraMovement\`, \`cameraAngle\`, \`duration\`, and scene continuity.
+     - \`manga-to-video\`: emphasize \`sourceMediaRefs\`, \`imageStrategy\`,
+       OCR \`dialogue\`, \`soundCue\`, \`motionHint\` under
+       \`extensions["neko.mangaToVideo"]\`, and panel source refs.
+     - \`image-sequence\`: emphasize ordered \`sourceMediaRefs\`,
+       \`generatedMediaRefs\`, \`duration\`, \`visualDescription\`, and
+       per-image transition notes.
+     - \`ad-storyboard\`: emphasize \`visualStyle\`, product moment,
+       call-to-action, brand-safety notes, and CTA metadata under
+       \`extensions["neko.adStoryboard"]\`.
+     - \`short-video\`: emphasize hook/beat/caption structure, \`voiceOver\`,
+       \`soundCue\`, and retention moments under
+       \`extensions["neko.shortVideo"]\`.
+     - \`character-design\`: emphasize \`characters[]\`, role, expression,
+       costume/continuity notes, reference refs, and sheet metadata under
+       \`extensions["neko.characterDesign"]\`.
 
 ### Phase 3: Video Generation (direct atomic-tool composition)
 

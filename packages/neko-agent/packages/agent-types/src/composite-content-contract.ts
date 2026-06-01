@@ -1,4 +1,10 @@
 import type { CompositeBlockData, CompositeSection, MediaRef } from './message';
+import {
+  hasBlockingStoryboardDiagnostics,
+  normalizeStoryboardTableV1,
+  type StoryboardTableV1,
+  type StoryboardValidationDiagnosticV1,
+} from '@neko/shared';
 
 export const COMPOSITE_CONTENT_FENCE_LANGUAGES = ['neko-composite', 'neko-composite-json'] as const;
 
@@ -15,6 +21,7 @@ interface CompositeContentEnvelope {
 
 const MAX_COMPOSITE_SECTIONS = 200;
 const MAX_SECTION_MEDIA_REFS = 12;
+const MAX_STORYBOARD_DIAGNOSTIC_SECTIONS = 8;
 
 const COMPOSITE_CONTENT_FENCE_PATTERN =
   /```(?:neko-composite|neko-composite-json)\s*\n([\s\S]*?)```/g;
@@ -74,19 +81,85 @@ function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
     return null;
   }
 
-  const sectionsValue = value.sections;
-  if (!Array.isArray(sectionsValue) || sectionsValue.length === 0) return null;
-  const sections = sectionsValue.slice(0, MAX_COMPOSITE_SECTIONS).flatMap((section) => {
-    const normalized = normalizeCompositeSection(section);
-    return normalized ? [normalized] : [];
-  });
-  if (sections.length === 0) return null;
+  const semanticStoryboard =
+    template === 'storyboard-table' && (value.schemaVersion === 1 || value.scenes !== undefined)
+      ? normalizeStoryboardTableV1({ value })
+      : undefined;
+  const title = readString(value, 'title') ?? semanticStoryboard?.table?.title;
+  const sections = normalizeCompositeSections(value.sections);
+  const fallbackSections =
+    template === 'storyboard-table'
+      ? createStoryboardFallbackSections(semanticStoryboard?.table, semanticStoryboard?.diagnostics)
+      : [];
+  const normalizedSections = sections.length > 0 ? sections : fallbackSections;
+  if (normalizedSections.length === 0) return null;
 
   return {
     template,
-    ...(readString(value, 'title') ? { title: readString(value, 'title') } : {}),
-    sections,
+    ...(title ? { title } : {}),
+    ...(semanticStoryboard?.table ? { storyboardTable: semanticStoryboard.table } : {}),
+    ...(semanticStoryboard?.diagnostics && semanticStoryboard.diagnostics.length > 0
+      ? { storyboardDiagnostics: semanticStoryboard.diagnostics }
+      : {}),
+    sections: normalizedSections,
   };
+}
+
+function normalizeCompositeSections(value: unknown): readonly CompositeSection[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+  return value.slice(0, MAX_COMPOSITE_SECTIONS).flatMap((section) => {
+    const normalized = normalizeCompositeSection(section);
+    return normalized ? [normalized] : [];
+  });
+}
+
+function createStoryboardFallbackSections(
+  table: StoryboardTableV1 | undefined,
+  diagnostics: readonly StoryboardValidationDiagnosticV1[] | undefined,
+): readonly CompositeSection[] {
+  if (table) {
+    return table.scenes.flatMap((scene) =>
+      scene.shots.map((shot) => ({
+        heading: `${scene.sceneTitle} / Shot ${shot.shotNumber}`,
+        content: shot.visualDescription,
+        layout: 'table-row' as const,
+        mediaRefs: projectStoryboardMediaRefsToLegacy(shot.mediaRefs),
+      })),
+    );
+  }
+
+  if (!diagnostics || diagnostics.length === 0) return [];
+  const blocking = hasBlockingStoryboardDiagnostics(diagnostics);
+  return [
+    {
+      heading: blocking ? 'Storyboard validation failed' : 'Storyboard diagnostics',
+      content: diagnostics
+        .slice(0, MAX_STORYBOARD_DIAGNOSTIC_SECTIONS)
+        .map((diagnostic) => {
+          const path = diagnostic.path.length > 0 ? ` at ${diagnostic.path.join('.')}` : '';
+          return `[${diagnostic.severity}] ${diagnostic.code}${path}: ${diagnostic.message}`;
+        })
+        .join('\n'),
+      layout: 'table-row',
+    },
+  ];
+}
+
+function projectStoryboardMediaRefsToLegacy(
+  mediaRefs: StoryboardTableV1['scenes'][number]['shots'][number]['mediaRefs'],
+): readonly MediaRef[] | undefined {
+  const refs = (mediaRefs ?? []).flatMap((mediaRef) => {
+    if (mediaRef.locator.type !== 'tool-result') return [];
+    return [
+      {
+        toolCallId: mediaRef.locator.toolCallId,
+        assetIndex: mediaRef.locator.assetIndex,
+        ...(mediaRef.label ? { caption: mediaRef.label } : {}),
+        role: mediaRef.role,
+      },
+    ];
+  });
+  return refs.length > 0 ? refs : undefined;
 }
 
 function normalizeCompositeSection(value: unknown): CompositeSection | null {

@@ -1,4 +1,11 @@
-import type { CanvasStoryboardPayload, ShotScale, StoryboardImportMode } from '@neko/shared';
+import {
+  hasBlockingStoryboardDiagnostics,
+  projectStoryboardTableV1ToCanvasPayload,
+  projectStoryboardTableV1ToCutPayload,
+  type CanvasStoryboardPayload,
+  type ShotScale,
+  type StoryboardImportMode,
+} from '@neko/shared';
 import type {
   PluginTransferAssetRef,
   PluginTransferCutStoryboardPayload,
@@ -138,6 +145,15 @@ export function projectMarkdownStoryboardTransferPayload(
 export function projectStoryboardTableTransferPayload(
   data: StoryboardTableRichData,
 ): PluginTransferPayload | null {
+  if (data.storyboardTable && !hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) {
+    return {
+      kind: 'canvasStoryboard',
+      storyboard: projectStoryboardTableV1ToCanvasPayload(data.storyboardTable, {
+        sourceScriptUri: 'agent://rich-content/storyboard-table',
+      }),
+    };
+  }
+  if (hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) return null;
   const storyboard = projectStoryboardTableToCanvasPayload(data);
   if (!storyboard) return null;
   return { kind: 'canvasStoryboard', storyboard };
@@ -158,8 +174,29 @@ export function projectStoryboardTableAssetBatch(
 export function projectStoryboardTableCutTimelinePayload(
   data: StoryboardTableRichData,
 ): PluginTransferPayload | null {
+  if (data.storyboardTable && !hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) {
+    const storyboard = projectStoryboardTableV1ToCutPayload(data.storyboardTable, {
+      resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaLocalPath(data, mediaRef.refId),
+    });
+    return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
+  }
+  if (hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) return null;
   const storyboard = projectStoryboardTableToCutPayload(data);
   return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
+}
+
+function resolveStoryboardMediaLocalPath(
+  data: StoryboardTableRichData,
+  refId: string,
+): string | undefined {
+  for (const section of data.sections) {
+    for (const media of section.media) {
+      if (media.id.includes(refId) || media.assetId === refId || media.stableUri === refId) {
+        return media.localPath ?? media.stableUri;
+      }
+    }
+  }
+  return undefined;
 }
 
 function projectStoryboardScenesToCanvasPayload(

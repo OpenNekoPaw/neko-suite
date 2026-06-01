@@ -42,6 +42,37 @@ describe('composite content presenter', () => {
     ]);
   });
 
+  it('preserves semantic storyboard diagnostics for rich rendering and transfer gating', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Broken',
+        storyboardDiagnostics: [
+          {
+            severity: 'error',
+            code: 'missing-required-field',
+            path: ['scenes', 0, 'shots', 0, 'visualDescription'],
+            message: 'Missing required storyboard field visualDescription.',
+          },
+        ],
+        sections: [
+          {
+            heading: 'Storyboard validation failed',
+            content: '[error] missing-required-field',
+          },
+        ],
+      },
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    expect(projection.data.storyboardDiagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'missing-required-field',
+      }),
+    ]);
+  });
+
   it('projects comparison variants from ordered media refs', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {

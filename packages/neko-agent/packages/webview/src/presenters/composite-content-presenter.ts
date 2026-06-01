@@ -5,7 +5,11 @@ import type {
   MediaRef,
   ToolCall,
 } from '@/components/types';
-import type { ToolResultAttachment } from '@neko/shared';
+import type {
+  StoryboardTableV1,
+  StoryboardValidationDiagnosticV1,
+  ToolResultAttachment,
+} from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 'asset-gallery';
@@ -21,6 +25,8 @@ export interface CompositeMediaDiagnostic {
   readonly assetId?: string;
   readonly message: string;
 }
+
+export type CompositeStoryboardDiagnostic = StoryboardValidationDiagnosticV1;
 
 export interface ResolvedCompositeMedia {
   readonly id: string;
@@ -51,6 +57,8 @@ export interface CompositeRichContentData {
   readonly template: CompositeBlockData['template'];
   readonly title?: string;
   readonly plugins?: PluginsAvailable;
+  readonly storyboardTable?: StoryboardTableV1;
+  readonly storyboardDiagnostics?: readonly CompositeStoryboardDiagnostic[];
   readonly sections: readonly ResolvedCompositeSection[];
   readonly diagnostics: readonly CompositeMediaDiagnostic[];
 }
@@ -118,6 +126,12 @@ export function projectCompositeBlockRichContent(
   const base = {
     ...(input.composite.title ? { title: input.composite.title } : {}),
     ...(input.plugins ? { plugins: input.plugins } : {}),
+    ...(input.composite.storyboardTable
+      ? { storyboardTable: input.composite.storyboardTable }
+      : {}),
+    ...(input.composite.storyboardDiagnostics
+      ? { storyboardDiagnostics: input.composite.storyboardDiagnostics }
+      : {}),
     sections,
     diagnostics,
   };

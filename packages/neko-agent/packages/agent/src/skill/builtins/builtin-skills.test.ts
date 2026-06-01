@@ -65,6 +65,24 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('OCR');
     });
 
+    it('should request StoryboardTableV1 semantic output without fake media claims', () => {
+      expect(comicToStoryboardSkill.content).toContain('StoryboardTableV1');
+      expect(comicToStoryboardSkill.content).toContain('"schemaVersion": 1');
+      expect(comicToStoryboardSkill.content).toContain('"kind": "storyboard-table"');
+      expect(comicToStoryboardSkill.content).toContain('imageStrategy');
+      expect(comicToStoryboardSkill.content).toContain('generatedMediaRefs');
+      expect(comicToStoryboardSkill.content).toContain(
+        'Do not claim images have already been generated',
+      );
+      expect(comicToStoryboardSkill.content).toContain('Do not embed base64 image data');
+      expect(comicToStoryboardSkill.content).toContain('script-breakdown');
+      expect(comicToStoryboardSkill.content).toContain('manga-to-video');
+      expect(comicToStoryboardSkill.content).toContain('image-sequence');
+      expect(comicToStoryboardSkill.content).toContain('ad-storyboard');
+      expect(comicToStoryboardSkill.content).toContain('short-video');
+      expect(comicToStoryboardSkill.content).toContain('character-design');
+    });
+
     it('should have required tools', () => {
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);

@@ -445,6 +445,24 @@ export {
 } from './tool-result-backfill';
 
 export {
+  backfillStoryboardGeneratedMediaRefs,
+  createStoryboardImageToolCapabilities,
+  executeStoryboardImageStrategyRuntime,
+  planStoryboardImageStrategyRuntime,
+  storyboardRuntimeCanExecute,
+  type BackfillStoryboardGeneratedMediaRefsInput,
+  type BackfillStoryboardGeneratedMediaRefsResult,
+  type ExecuteStoryboardImageRuntimeInput,
+  type ExecuteStoryboardImageRuntimeResult,
+  type StoryboardGeneratedMediaBackfillCompletion,
+  type StoryboardGeneratedMediaBackfillOutput,
+  type StoryboardImageRuntimeExecution,
+  type StoryboardImageRuntimePlan,
+  type StoryboardImageRuntimePlanInput,
+  type StoryboardImageRuntimeToolPort,
+} from './storyboard-image-runtime';
+
+export {
   AgentEventStreamRuntimeProcessor,
   type AgentEventStreamRuntimeBackgroundTasks,
   type AgentEventStreamRuntimeMessage,

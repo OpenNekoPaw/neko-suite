@@ -8,6 +8,8 @@ import type {
   AgentContextType,
   MessageAttachment,
   PerceptionCard,
+  StoryboardTableV1,
+  StoryboardValidationDiagnosticV1,
   ToolResultAttachment,
   ToolResultBackfillDiagnostic,
 } from '@neko/shared';
@@ -75,6 +77,8 @@ export interface CompositeSection {
 export interface CompositeBlockData {
   readonly template: CompositeTemplate;
   readonly title?: string;
+  readonly storyboardTable?: StoryboardTableV1;
+  readonly storyboardDiagnostics?: readonly StoryboardValidationDiagnosticV1[];
   readonly sections: readonly CompositeSection[];
 }
 

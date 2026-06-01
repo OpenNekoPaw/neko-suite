@@ -185,6 +185,107 @@ describe('storyboard transfer presenter', () => {
     });
   });
 
+  it('prefers semantic storyboard table projection over legacy section inference', () => {
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Semantic Opening',
+        scenes: [
+          {
+            sceneId: 'scene-semantic',
+            sceneTitle: 'Semantic Scene',
+            shots: [
+              {
+                shotNumber: 7,
+                duration: 5,
+                visualDescription: 'Semantic visual description.',
+                characterAction: 'Rin follows the signal.',
+                shotScale: 'CU',
+                emotion: ['focused'],
+                sceneTags: ['signal'],
+                dialogue: 'There it is.',
+                imageStrategy: 'generate-new',
+                generationPrompt: 'semantic prompt',
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Legacy Shot',
+          content: 'Legacy content should not drive projection.',
+          media: [],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    expect(projectStoryboardTableTransferPayload(data)).toEqual({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        mode: 'semantic',
+        sourceScriptUri: 'agent://rich-content/storyboard-table',
+        scenes: [
+          {
+            sceneId: 'scene-semantic',
+            sceneTitle: 'Semantic Scene',
+            sceneNumber: 1,
+            shotPlans: [
+              {
+                shotNumber: 7,
+                duration: 5,
+                visualDescription: 'Semantic visual description.',
+                characters: [],
+                shotScale: 'CU',
+                characterAction: 'Rin follows the signal.',
+                emotion: ['focused'],
+                sceneTags: ['signal'],
+                dialogue: 'There it is.',
+                generationPrompt: 'semantic prompt',
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('disables storyboard semantic transfer payloads when validation has errors', () => {
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Broken',
+      storyboardDiagnostics: [
+        {
+          severity: 'error',
+          code: 'missing-required-field',
+          path: ['scenes', 0, 'shots', 0, 'visualDescription'],
+          message: 'Missing required storyboard field visualDescription.',
+        },
+      ],
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Storyboard validation failed',
+          content: '[error] missing-required-field',
+          media: [],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    expect(projectStoryboardTableTransferPayload(data)).toBeNull();
+    expect(projectStoryboardTableCutTimelinePayload(data)).toBeNull();
+  });
+
   it('projects markdown storyboard tables to canvas storyboard payloads', () => {
     const payload = projectMarkdownStoryboardTransferPayload(`
 ## 瑞德发现神灯
