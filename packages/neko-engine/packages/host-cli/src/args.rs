@@ -408,6 +408,8 @@ define_actions!(SceneAction {
     Capture => "capture",
     /// Stream scene rendering
     Stream => "stream",
+    /// Stream raw NV12 scene frames for local diagnostics
+    StreamRawNv12 => "stream_raw_nv12",
     /// Latency test (echo)
     LatencyTest => "latency_test",
     /// Create a parametric shape (cube, sphere, cylinder, etc.)
@@ -456,6 +458,8 @@ define_actions!(SceneAction {
     UpdateMaterial => "update_material",
     /// Delete a scene node
     DeleteNode => "delete_node",
+    /// Query scene editing capabilities
+    Capabilities => "capabilities",
     /// Update VRM face parameter presets
     SetFaceParams => "set_face_params",
     /// Get VRM face parameter presets

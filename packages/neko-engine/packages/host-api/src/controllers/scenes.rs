@@ -1146,6 +1146,135 @@ fn spawn_scene_stream_producer(
     });
 }
 
+fn spawn_scene_raw_nv12_stream_producer(
+    stream_registry: Arc<StreamRegistry>,
+    scene_service: Arc<dyn ISceneService>,
+    model_preview_controller: Option<Arc<ModelPreviewController>>,
+    stream_id: StreamId,
+    config: SceneStreamProducerConfig,
+    cancel_token: CancellationToken,
+) {
+    tokio::spawn(async move {
+        let runtime_scheduler = SceneStreamRuntimeScheduler::new(&config);
+        let settings = runtime_scheduler.base_sink_settings();
+        let frame_duration = settings.frame_duration();
+        let duration_us = settings.duration_us();
+        let mut frame_id = 0u64;
+        let mut next_pts_us = 0i64;
+        let mut next_frame_at = Instant::now();
+        let mut previous_skipped_intervals = 0u32;
+
+        loop {
+            let now = Instant::now();
+            let delay = next_frame_at.saturating_duration_since(now);
+            tokio::select! {
+                _ = cancel_token.cancelled() => break,
+                _ = tokio::time::sleep(delay) => {
+                    let frame_started = Instant::now();
+                    let service = Arc::clone(&scene_service);
+                    let camera = service.get_editor_camera();
+                    let viewport = runtime_scheduler.viewport_descriptor_for_settings(settings);
+                    let preview_camera = model_preview_controller
+                        .as_ref()
+                        .and_then(|controller| {
+                            controller.camera_for_viewport(&viewport.scene_id, &viewport.viewport_id)
+                        });
+                    let render_camera = preview_camera.or(camera);
+                    let pts_us = next_pts_us;
+                    let output_size = (settings.width, settings.height);
+                    let schedule_lag = frame_started.saturating_duration_since(next_frame_at);
+                    let mut frame_meta = scene_stream_render_frame_meta(
+                        &stream_id,
+                        &config,
+                        &viewport,
+                        frame_id,
+                        pts_us,
+                        duration_us,
+                        0,
+                        model_preview_controller.as_deref(),
+                    );
+                    let frame = tokio::task::spawn_blocking(move || {
+                        let mut frame = service.capture_nv12_frame(
+                            output_size,
+                            render_camera.as_ref(),
+                            None,
+                            pts_us,
+                            duration_us,
+                            &viewport,
+                        )?;
+                        if let Some(diagnostics) = frame.diagnostics.as_mut() {
+                            diagnostics.schedule_lag_ms =
+                                schedule_lag.as_secs_f32() * 1000.0;
+                            diagnostics.skipped_intervals = previous_skipped_intervals;
+                        }
+                        frame_meta.diagnostics = frame.diagnostics.clone();
+                        frame.meta = Some(frame_meta);
+                        Ok::<_, neko_engine_kernel::error::Error>(frame)
+                    })
+                    .await;
+
+                    match frame {
+                        Ok(Ok(frame)) => {
+                            match stream_registry.send_frame(&stream_id, frame).await {
+                                Ok(_) => {}
+                                Err(crate::registry::StreamStateError::NoReceivers(_)) => {}
+                                Err(crate::registry::StreamStateError::NotFound(_)) => break,
+                                Err(err) => {
+                                    tracing::warn!("Raw NV12 scene stream {} send failed: {}", stream_id.as_str(), err);
+                                    break;
+                                }
+                            }
+                        }
+                        Ok(Err(err)) => {
+                            tracing::warn!("Raw NV12 scene stream {} frame production stopped: {}", stream_id.as_str(), err);
+                            break;
+                        }
+                        Err(err) => {
+                            tracing::warn!("Raw NV12 scene stream {} task failed: {}", stream_id.as_str(), err);
+                            break;
+                        }
+                    }
+
+                    let elapsed_ms = frame_started.elapsed().as_secs_f32() * 1000.0;
+                    next_frame_at = frame_started
+                        .checked_add(frame_duration)
+                        .unwrap_or_else(Instant::now);
+                    let post_frame_lag = Instant::now().saturating_duration_since(next_frame_at);
+                    let mut skipped_intervals = 0u32;
+                    if post_frame_lag >= frame_duration {
+                        skipped_intervals = (post_frame_lag.as_nanos()
+                            / frame_duration.as_nanos().max(1))
+                        .min(u32::MAX as u128) as u32;
+                        let skip_duration = frame_duration
+                            .checked_mul(skipped_intervals)
+                            .unwrap_or_default();
+                        next_frame_at = next_frame_at
+                            .checked_add(skip_duration)
+                            .unwrap_or_else(Instant::now);
+                    }
+                    previous_skipped_intervals = skipped_intervals;
+                    frame_id = frame_id.saturating_add(1);
+                    let pts_intervals = i64::from(skipped_intervals).saturating_add(1);
+                    next_pts_us =
+                        next_pts_us.saturating_add(duration_us.saturating_mul(pts_intervals));
+                    if elapsed_ms > frame_duration.as_secs_f32() * 1000.0 * 2.0 {
+                        tracing::debug!(
+                            "Raw NV12 scene stream {} slow frame {:.1}ms (budget {:.1}ms)",
+                            stream_id.as_str(),
+                            elapsed_ms,
+                            frame_duration.as_secs_f32() * 1000.0
+                        );
+                    }
+                    let now = Instant::now();
+                    if next_frame_at < now {
+                        next_frame_at = now;
+                    }
+                }
+            }
+        }
+    });
+}
+
 fn scene_stream_sink_config(
     settings: SceneStreamRuntimeSettings,
 ) -> neko_engine_kernel::error::Result<PreviewPipelineConfig> {
@@ -1602,6 +1731,120 @@ impl Controller for ScenesController {
                         "helperPassesEnabled": initial_runtime.helper_passes_enabled,
                         "postProcessEnabled": initial_runtime.post_process_enabled,
                         "controlAckPreserved": initial_runtime.preserve_control_ack
+                    }),
+                ))
+            }
+
+            "stream_raw_nv12" => {
+                let opts = parse_scene_stream_options(options)?;
+                if opts.viewport_id.trim().is_empty() {
+                    return Err(ApiError::InvalidRequest(
+                        "viewportId required for scenes:stream_raw_nv12".to_string(),
+                    ));
+                }
+
+                let width = normalize_stream_dimension(
+                    opts.resolution.as_ref().map(|r| r.width).unwrap_or(1280),
+                    1280,
+                );
+                let height = normalize_stream_dimension(
+                    opts.resolution.as_ref().map(|r| r.height).unwrap_or(720),
+                    720,
+                );
+                let fps = normalize_stream_fps(opts.fps);
+                let viewport_descriptor = stream_options_to_viewport_descriptor(&opts, fps)?;
+                let scene_revision = self.service()?.current_revision()?;
+                let producer_config = SceneStreamProducerConfig {
+                    session_id: format!("scene-raw-nv12-{}", opts.scene_id),
+                    viewport: viewport_descriptor.clone(),
+                    width,
+                    height,
+                    fps,
+                    h264: viewport_descriptor.h264.clone(),
+                    allow_fps_degrade: false,
+                    allow_quality_degrade: false,
+                    initial_revision: scene_revision,
+                    initial_applied_seq: 0,
+                };
+                let runtime =
+                    SceneStreamRuntimeScheduler::new(&producer_config).base_sink_settings();
+                let stream_registry = self.stream_registry()?;
+                let session_id = producer_config.session_id.clone();
+                let resource_id = format!(
+                    "{}:raw-nv12",
+                    scene_stream_resource_id(&opts.scene_id, &opts.viewport_id)
+                );
+                let stream_config = StreamConfig {
+                    resolution: Resolution::new(width, height),
+                    fps,
+                    start_time: 0.0,
+                    codec: StreamCodec::Raw,
+                    initial_paused: false,
+                };
+
+                let (stream_id, _rx) = stream_registry
+                    .create_stream(&session_id, &resource_id, stream_config)
+                    .await;
+                stream_registry.activate(&stream_id).await.map_err(|e| {
+                    ApiError::ServiceError(format!(
+                        "Failed to activate raw NV12 scene stream {}: {}",
+                        stream_id.as_str(),
+                        e
+                    ))
+                })?;
+
+                let cancel_token = CancellationToken::new();
+                stream_registry
+                    .set_cancel_token(&stream_id, cancel_token.clone())
+                    .await;
+
+                if let Some(scene_service) = self.scene_service.clone() {
+                    if let Some(camera) = parse_camera_ref_to_params(opts.camera_ref.as_ref()) {
+                        scene_service.set_editor_camera(camera);
+                    }
+                    spawn_scene_raw_nv12_stream_producer(
+                        stream_registry,
+                        scene_service,
+                        self.model_preview_controller.clone(),
+                        stream_id.clone(),
+                        producer_config,
+                        cancel_token,
+                    );
+                }
+
+                Ok(ActionResponse::ok(
+                    "",
+                    serde_json::json!({
+                        "streamId": stream_id.as_str(),
+                        "viewportId": opts.viewport_id,
+                        "container": "raw-nv12",
+                        "frameHeader": "neko-raw-nv12-v1",
+                        "width": width,
+                        "height": height,
+                        "codedWidth": width,
+                        "codedHeight": height,
+                        "fps": fps,
+                        "colorSpace": opts.color_space,
+                        "bitDepth": 8,
+                        "toneMapping": opts.tone_mapping,
+                        "latencyMode": "realtime",
+                        "initialRevision": scene_revision,
+                        "renderMode": render_mode_to_str(viewport_descriptor.render_mode),
+                        "debugView": viewport_descriptor.debug_view.map(debug_view_to_str),
+                        "lookdev": viewport_descriptor.lookdev.as_ref().map(lookdev_to_json),
+                        "workMode": opts.work_mode,
+                        "layerMask": opts.layer_mask,
+                        "cameraRef": opts.camera_ref,
+                        "postProcess": opts.post_process,
+                        "allowFpsDegrade": false,
+                        "allowQualityDegrade": false,
+                        "qualityTier": runtime.quality_tier.as_str(),
+                        "scheduledFps": runtime.fps,
+                        "scheduledWidth": runtime.width,
+                        "scheduledHeight": runtime.height,
+                        "bytesPerFrame": (width as u64) * (height as u64) * 3 / 2,
+                        "headerBytes": 24,
+                        "diagnostic": true
                     }),
                 ))
             }
@@ -2381,6 +2624,43 @@ mod tests {
         assert_eq!(data["scheduledHeight"], 1080);
 
         let stream_id = data["streamId"].as_str().unwrap();
+        let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
+    }
+
+    #[tokio::test]
+    async fn scene_raw_nv12_stream_returns_diagnostic_descriptor() {
+        let (controller, registry) = create_stream_test_controller();
+        let response = controller
+            .handle(
+                "stream_raw_nv12",
+                None,
+                serde_json::json!({
+                    "viewportId": "main",
+                    "sceneId": "scene-a",
+                    "renderMode": "pbr",
+                    "resolution": { "width": 1920, "height": 1080, "pixelRatio": 1.0 },
+                    "fps": 60
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let data = response.data.as_ref().unwrap().as_object().unwrap();
+        assert_eq!(data["viewportId"], "main");
+        assert_eq!(data["container"], "raw-nv12");
+        assert_eq!(data["frameHeader"], "neko-raw-nv12-v1");
+        assert_eq!(data["width"], 1920);
+        assert_eq!(data["height"], 1080);
+        assert_eq!(data["fps"], 60.0);
+        assert_eq!(data["bytesPerFrame"], 1920 * 1080 * 3 / 2);
+        assert_eq!(data["headerBytes"], 24);
+        assert_eq!(data["diagnostic"], true);
+        assert_eq!(data["allowFpsDegrade"], false);
+        assert_eq!(data["allowQualityDegrade"], false);
+
+        let stream_id = data["streamId"].as_str().unwrap();
+        assert!(registry.exists(&StreamId::from_string(stream_id)).await);
         let _ = registry.destroy(&StreamId::from_string(stream_id)).await;
     }
 

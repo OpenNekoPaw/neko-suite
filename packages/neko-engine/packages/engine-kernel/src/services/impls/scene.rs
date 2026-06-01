@@ -990,6 +990,57 @@ impl SceneService {
         ))
     }
 
+    pub fn capture_nv12_frame(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        pts_us: i64,
+        duration_us: i64,
+        viewport: &ViewportDescriptor,
+    ) -> Result<FrameData> {
+        let (width, height) = output_size;
+        if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
+            return Err(Error::InvalidParameter(
+                "Raw NV12 scene stream requires non-zero even dimensions".to_string(),
+            ));
+        }
+
+        let render_started = Instant::now();
+        let output = self.render_frame_internal(
+            None,
+            0.0,
+            output_size,
+            camera_override,
+            background_color,
+            Some((viewport, ViewportRenderGraphOutput::RealtimeStream)),
+        )?;
+        let render_time_ms = render_started.elapsed().as_secs_f32() * 1000.0;
+        let ctx = self
+            .gpu_ctx
+            .as_ref()
+            .ok_or_else(|| Error::Other("GPU not available for scene stream".to_string()))?;
+        let readback_started = Instant::now();
+        let rgba =
+            read_scene_texture_as_rgba8(ctx, &output.color_texture, output.width, output.height)?;
+        let readback_time_ms = readback_started.elapsed().as_secs_f32() * 1000.0;
+        let convert_started = Instant::now();
+        let nv12 = rgba_to_nv12_bt709(&rgba, output.width, output.height)?;
+        let convert_time_ms = convert_started.elapsed().as_secs_f32() * 1000.0;
+
+        let mut frame =
+            pack_scene_nv12_frame(nv12, output.width, output.height, pts_us, duration_us);
+        frame.diagnostics = Some(RenderFrameDiagnostics {
+            render_path: GpuRenderPath::LegacyCpu,
+            render_time_ms,
+            convert_time_ms,
+            gpu_wait_time_ms: readback_time_ms,
+            producer_frame_time_ms: render_time_ms + readback_time_ms + convert_time_ms,
+            ..RenderFrameDiagnostics::default()
+        });
+        Ok(frame)
+    }
+
     pub fn render_scene_stream_gpu_output(
         &self,
         output_size: (u32, u32),
@@ -1145,6 +1196,32 @@ fn pack_scene_h264_frame(
         width,
         height,
         format: FrameFormat::H264,
+        timestamp: pts_us as f64 / 1_000_000.0,
+        diagnostics: None,
+        meta: None,
+    }
+}
+
+fn pack_scene_nv12_frame(
+    nv12: Vec<u8>,
+    width: u32,
+    height: u32,
+    pts_us: i64,
+    duration_us: i64,
+) -> FrameData {
+    let header_size = 8 + 8 + 4 + 4;
+    let mut data = Vec::with_capacity(header_size + nv12.len());
+    data.extend_from_slice(&pts_us.to_le_bytes());
+    data.extend_from_slice(&duration_us.to_le_bytes());
+    data.extend_from_slice(&width.to_le_bytes());
+    data.extend_from_slice(&height.to_le_bytes());
+    data.extend_from_slice(&nv12);
+
+    FrameData {
+        data,
+        width,
+        height,
+        format: FrameFormat::Nv12,
         timestamp: pts_us as f64 / 1_000_000.0,
         diagnostics: None,
         meta: None,
@@ -1611,6 +1688,26 @@ impl ISceneService for SceneService {
             camera_override,
             background_color,
             quality,
+            pts_us,
+            duration_us,
+            viewport,
+        )
+    }
+
+    fn capture_nv12_frame(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        pts_us: i64,
+        duration_us: i64,
+        viewport: &ViewportDescriptor,
+    ) -> Result<FrameData> {
+        SceneService::capture_nv12_frame(
+            self,
+            output_size,
+            camera_override,
+            background_color,
             pts_us,
             duration_us,
             viewport,

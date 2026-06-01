@@ -107,6 +107,17 @@ pub trait ISceneService: Send + Sync {
         viewport: &ViewportDescriptor,
     ) -> crate::error::Result<FrameData>;
 
+    /// Capture one raw NV12 frame for local latency and transfer diagnostics.
+    fn capture_nv12_frame(
+        &self,
+        output_size: (u32, u32),
+        camera_override: Option<&CameraParams>,
+        background_color: Option<[f32; 4]>,
+        pts_us: i64,
+        duration_us: i64,
+        viewport: &ViewportDescriptor,
+    ) -> crate::error::Result<FrameData>;
+
     /// Render one GPU-resident scene stream output frame.
     fn render_scene_stream_gpu_output(
         &self,

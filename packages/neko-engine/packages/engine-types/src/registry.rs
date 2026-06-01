@@ -170,6 +170,7 @@ pub mod actions {
         "composite",
         "capture",
         "stream",
+        "stream_raw_nv12",
         "latency_test",
         "create_shape",
         "create_text",
