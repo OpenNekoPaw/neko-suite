@@ -5,6 +5,7 @@
 import type { ChatModelOption } from '@neko/shared';
 import type { ConfiguredProvider } from './provider';
 import type { ShellExecutionMode } from './settings';
+import type { NpcProfileSource } from '@neko/shared';
 
 // ---------------------------------------------------------------------------
 // Tabs & Conversations
@@ -21,6 +22,8 @@ export interface OpenTab {
   id: string;
   title: string;
   conversationId: string;
+  kind?: ConversationKind;
+  npcSession?: NpcSessionProjection;
 }
 
 export interface TabState {
@@ -29,6 +32,19 @@ export interface TabState {
 }
 
 export type TabType = 'chat';
+export type ConversationKind = 'chat' | 'npc-test';
+
+export interface NpcSessionProjection {
+  readonly sessionId: string;
+  readonly entityId: string;
+  readonly displayName: string;
+  readonly mode: 'roleplay' | 'consult';
+  readonly profile: NpcProfileSource;
+  readonly summary: string;
+  readonly startedAt: string;
+  readonly projectRoot?: string;
+  readonly status: 'active' | 'exited';
+}
 
 // ---------------------------------------------------------------------------
 // Session & Prompt Mode

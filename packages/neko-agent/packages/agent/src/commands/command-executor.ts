@@ -33,6 +33,14 @@ import {
   handleMcp,
 } from './handlers';
 
+const HOST_ONLY_COMMAND_OUTPUT = 'This command is handled by the VSCode extension host.';
+
+const handleHostOnlyCommand: CommandHandler = async () => ({
+  handled: true,
+  continueExecution: true,
+  output: HOST_ONLY_COMMAND_OUTPUT,
+});
+
 /**
  * Command handler registry
  */
@@ -43,6 +51,8 @@ const COMMAND_HANDLERS: Record<BuiltinCommandName, CommandHandler> = {
   clear: handleClear,
   exit: handleExit,
   // Session
+  as: handleHostOnlyCommand,
+  'exit-role': handleHostOnlyCommand,
   new: handleNew,
   resume: handleResume,
   // Configuration

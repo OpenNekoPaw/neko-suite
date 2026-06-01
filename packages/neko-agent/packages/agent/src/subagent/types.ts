@@ -44,6 +44,7 @@ export type SpecializedAgentType =
   | 'test-runner' // Run and analyze tests
   | 'document-writer' // Write documentation
   | 'general' // General purpose agent
+  | 'npc-character' // Isolated NPC character validation
   // Creative domain experts (C.5)
   | 'creative-director' // Scene planning, visual storytelling, direction
   | 'cinematographer' // Composition, lighting, camera work
@@ -56,6 +57,17 @@ export type SpecializedAgentType =
  * Model tier for SubAgent
  */
 export type ModelTier = 'fast' | 'balanced' | 'powerful';
+
+/**
+ * Explicit runtime tool access policy for SubAgents.
+ *
+ * Legacy `allowedTools: []` keeps its historical meaning of "no filter".
+ * Use `toolPolicy: { kind: 'none' }` when a session must receive zero tools.
+ */
+export type AgentToolPolicy =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'all' }
+  | { readonly kind: 'allow-list'; readonly tools: readonly string[] };
 
 /**
  * Resolves a ModelTier to a concrete model ID.
@@ -91,8 +103,15 @@ export interface SubAgentConfig {
   prompt: string;
   /** Run mode */
   runMode: SubAgentRunMode;
-  /** Allowed tools (restrict agent capabilities) */
+  /**
+   * Legacy allow-list compatibility field.
+   *
+   * Empty arrays are preserved as historical allow-all behavior. New
+   * isolation-sensitive flows should use `toolPolicy` instead.
+   */
   allowedTools?: string[];
+  /** Explicit runtime tool policy. Takes precedence over `allowedTools`. */
+  toolPolicy?: AgentToolPolicy;
   /** System prompt override */
   systemPrompt?: string;
   /** Model ID or tier */
@@ -163,6 +182,8 @@ export interface SpecializedAgentPreset {
   systemPrompt: string;
   /** Allowed tools for this preset */
   allowedTools: string[];
+  /** Explicit runtime tool policy for presets that need unambiguous behavior */
+  toolPolicy?: AgentToolPolicy;
   /** Default model tier */
   defaultModelTier: ModelTier;
   /** Default max iterations */

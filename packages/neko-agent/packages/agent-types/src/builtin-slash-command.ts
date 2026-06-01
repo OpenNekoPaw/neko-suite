@@ -12,6 +12,8 @@ export type BuiltinSlashCommandName =
   | 'status'
   | 'clear'
   | 'exit'
+  | 'as'
+  | 'exit-role'
   | 'new'
   | 'resume'
   | 'config'
@@ -78,6 +80,21 @@ export const BUILTIN_SLASH_COMMANDS: readonly BuiltinSlashCommandDefinition[] = 
     description: 'Exit interactive mode / close current session',
     category: 'core',
     availableInCli: true,
+    availableInExtension: true,
+  },
+  {
+    name: 'as',
+    description: 'Start an isolated NPC character test session',
+    usage: '@character [--consult] [--enrichment=ask|skip|auto|manual]',
+    category: 'session',
+    availableInCli: false,
+    availableInExtension: true,
+  },
+  {
+    name: 'exit-role',
+    description: 'Exit the active NPC character test session',
+    category: 'session',
+    availableInCli: false,
     availableInExtension: true,
   },
   {

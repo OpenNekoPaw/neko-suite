@@ -27,6 +27,8 @@ export type {
   MessageCancelledMessage,
   MessageQueuedMessage,
   MessageOfType,
+  NpcSessionExitedMessage,
+  NpcSessionStartedMessage,
   PluginCommandsMessage,
   PluginsAvailableMessage,
   PlanStatusUpdateMessage,

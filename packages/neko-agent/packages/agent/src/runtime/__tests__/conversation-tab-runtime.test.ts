@@ -76,6 +76,33 @@ describe('conversation-tab-runtime', () => {
     expect(effects.switchConversation).not.toHaveBeenCalled();
   });
 
+  it('recognizes active NPC tabs without switching ordinary conversations', () => {
+    const effects = createEffects({
+      hasConversation: () => false,
+      hasNpcSession: (sessionId) => sessionId === 'npc-session-1',
+    });
+
+    expect(
+      syncActiveConversationFromTabState(
+        {
+          tabState: {
+            openTabs: [
+              {
+                id: 'tab-npc',
+                title: 'NPC: Xiaoju',
+                conversationId: 'npc-session-1',
+                kind: 'npc-test',
+              },
+            ],
+            activeTabId: 'tab-npc',
+          },
+        },
+        effects,
+      ),
+    ).toEqual({ kind: 'npc-active', sessionId: 'npc-session-1' });
+    expect(effects.switchConversation).not.toHaveBeenCalled();
+  });
+
   it('projects tab state updates and then runs active conversation sync', () => {
     const tab = { id: 'tab-1', title: 'Chat', conversationId: 'conv-1' };
     const effects = createEffects();

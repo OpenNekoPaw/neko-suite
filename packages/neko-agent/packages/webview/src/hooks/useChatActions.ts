@@ -15,7 +15,11 @@ import {
 import { Message, type SessionMode, type TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import type { MessageAttachment } from '@/components/ChatView/InputArea';
-import type { AgentMediaModelSelections } from '@neko-agent/types';
+import {
+  getBuiltinSlashCommand,
+  normalizeSlashCommandName,
+  type AgentMediaModelSelections,
+} from '@neko-agent/types';
 import { projectMessageModelSelection } from '../presenters/config-message-presenter';
 import { projectContextReferencesFromPayloads } from '../presenters/context-reference-presenter';
 import type { AgentContextPayload } from '@neko/shared';
@@ -108,6 +112,14 @@ export function useChatActions({
 
       const conversationId = activeConversationId;
       if (!conversationId) return;
+
+      const slashCommand = parseDirectBuiltinSlashCommand(trimmed);
+      if (slashCommand) {
+        clearInput();
+        setAttachedFiles([]);
+        VSCodeMessages.invokeSlashCommand(slashCommand.command, slashCommand.args, conversationId);
+        return;
+      }
 
       // Dedup guard: prevent accidental double-click
       if (isDuplicate(`${trimmed}:${attachments?.length ?? 0}:${contextPayloads?.length ?? 0}`)) {
@@ -236,4 +248,29 @@ export function useChatActions({
   }, [isThinking, isConversationSwitching, activeConversationIdRef, setIsThinking]);
 
   return { handleSend, triggerSend, handleCancelMessage, copyLastResponse };
+}
+
+function parseDirectBuiltinSlashCommand(
+  input: string,
+): { readonly command: string; readonly args?: string } | null {
+  if (!input.startsWith('/')) {
+    return null;
+  }
+
+  const withoutPrefix = input.slice(1);
+  const separatorIndex = withoutPrefix.search(/\s/);
+  const commandToken =
+    separatorIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, Math.max(separatorIndex, 0));
+  const command = normalizeSlashCommandName(commandToken);
+  const definition = command ? getBuiltinSlashCommand(command) : undefined;
+  if (!definition?.availableInExtension) {
+    return null;
+  }
+
+  if (separatorIndex === -1) {
+    return { command };
+  }
+
+  const args = withoutPrefix.slice(separatorIndex + 1).trim();
+  return { command, ...(args ? { args } : {}) };
 }

@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = process.cwd();
@@ -36,6 +36,33 @@ describe('agent architecture boundary guards', () => {
     expect(source).not.toMatch(/from\s+['"]react['"]/);
     expect(source).not.toMatch(/from\s+['"][^'"]*webview[^'"]*['"]/i);
     expect(source).not.toMatch(/from\s+['"][^'"]*extension[^'"]*['"]/i);
+  });
+
+  it('keeps NPC runtime modules host-agnostic and projection-only', () => {
+    const npcRuntimeFiles = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .filter((file) => /(?:^|[/-])npc/i.test(relative(agentSrc, file)));
+
+    const violations = npcRuntimeFiles.flatMap((file) => {
+      const source = readFileSync(file, 'utf-8');
+      const imports = [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map(
+        (match) => match[1] ?? '',
+      );
+      const forbiddenImports = imports.filter((specifier) =>
+        /^(vscode|react|@neko\/platform|@neko-agent\/platform|@neko-dashboard|neko-dashboard|@neko-story|neko-story|@neko\/entity(?:\/(?!types\b|contracts\b)[^'"]*)?)$/.test(
+          specifier,
+        ),
+      );
+      const requiresVscode = /require\(['"]vscode['"]\)/.test(source);
+
+      return [
+        ...forbiddenImports.map((specifier) => `${relative(repoRoot, file)} -> ${specifier}`),
+        ...(requiresVscode ? [`${relative(repoRoot, file)} -> require(vscode)`] : []),
+      ];
+    });
+
+    expect(violations).toEqual([]);
   });
 
   it('keeps Extension as host adapter rather than runtime collaborator implementation', () => {

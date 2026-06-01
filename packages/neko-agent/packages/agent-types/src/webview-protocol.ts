@@ -14,6 +14,7 @@ import type {
   DocumentSourceRef,
   MessageAttachment,
   ModelType,
+  NpcTranscriptArtifact,
   SkillSummary,
 } from '@neko/shared';
 import {
@@ -27,6 +28,7 @@ import type { Plan } from './plan';
 import type { ConfiguredProvider } from './provider';
 import type {
   ConversationSummary,
+  NpcSessionProjection,
   OpenTab,
   PromptMode,
   SessionMode,
@@ -244,6 +246,11 @@ export interface InvokePluginSlashCommandWebviewMessage {
   args?: string;
 }
 
+export interface ExitNpcSessionWebviewMessage {
+  type: 'exitNpcSession';
+  sessionId: string;
+}
+
 export interface SsoLoginWebviewMessage {
   type: 'ssoLogin';
   force?: boolean;
@@ -289,6 +296,7 @@ export type WebviewToExtensionMessage =
   | DownloadSvgWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
+  | ExitNpcSessionWebviewMessage
   | SsoLoginWebviewMessage
   | RevealContextSourceWebviewMessage
   | WebviewKeyboardFocusWebviewMessage
@@ -626,6 +634,19 @@ export interface SlashCommandResultMessage {
   data?: Record<string, unknown>;
 }
 
+export interface NpcSessionStartedMessage {
+  type: 'npcSessionStarted';
+  tab: OpenTab;
+  session: NpcSessionProjection;
+}
+
+export interface NpcSessionExitedMessage {
+  type: 'npcSessionExited';
+  sessionId: string;
+  artifact?: NpcTranscriptArtifact;
+  savedPath?: string;
+}
+
 export interface SkillsListMessage {
   type: 'skillsList';
   skills?: SkillSummary[];
@@ -740,6 +761,8 @@ export type ExtensionToWebviewMessage =
   | SubAgentEventMessage
   | TabStateMessage
   | SlashCommandResultMessage
+  | NpcSessionStartedMessage
+  | NpcSessionExitedMessage
   | SkillsListMessage
   | SkillInjectionMessage
   | ContextTokenCountMessage
@@ -830,6 +853,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'downloadSvg',
   'invokeSlashCommand',
   'invokePluginSlashCommand',
+  'exitNpcSession',
   'ssoLogin',
   'revealContextSource',
   'webviewKeyboardFocus',
@@ -852,6 +876,30 @@ export function buildGlobalErrorMessage(message: string): GlobalErrorMessage {
 
 export function buildThinkingMessage(conversationId: string): ThinkingMessage {
   return { type: 'thinking', conversationId };
+}
+
+export function buildStreamTextMessage(input: {
+  readonly conversationId: string;
+  readonly content?: string;
+  readonly messageId?: string;
+}): StreamTextMessage {
+  return {
+    type: 'streamText',
+    conversationId: input.conversationId,
+    ...(input.content !== undefined ? { content: input.content } : {}),
+    ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
+  };
+}
+
+export function buildStreamCompleteMessage(input: {
+  readonly conversationId: string;
+  readonly messageId?: string;
+}): StreamCompleteMessage {
+  return {
+    type: 'streamComplete',
+    conversationId: input.conversationId,
+    ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
+  };
 }
 
 export function buildErrorMessage(input: {
@@ -1137,6 +1185,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokeSlashCommandMessage(raw);
     case 'invokePluginSlashCommand':
       return parseInvokePluginSlashCommandMessage(raw);
+    case 'exitNpcSession':
+      return parseExitNpcSessionMessage(raw);
     case 'ssoLogin':
       return parseSsoLoginMessage(raw);
     case 'revealContextSource':
@@ -1902,6 +1952,14 @@ function parseInvokePluginSlashCommandMessage(
   };
 }
 
+function parseExitNpcSessionMessage(
+  raw: Record<string, unknown>,
+): ExitNpcSessionWebviewMessage | null {
+  const sessionId = requiredString(raw.sessionId);
+  if (!sessionId) return null;
+  return { type: 'exitNpcSession', sessionId };
+}
+
 export function buildPluginSlashCommandInvocation(
   message: InvokePluginSlashCommandWebviewMessage,
 ): PluginSlashCommandInvocation {
@@ -1910,6 +1968,26 @@ export function buildPluginSlashCommandInvocation(
     commandId: message.commandId,
     conversationId: message.conversationId,
     ...(message.args !== undefined ? { args: message.args } : {}),
+  };
+}
+
+export function buildNpcSessionStartedMessage(input: {
+  readonly tab: OpenTab;
+  readonly session: NpcSessionProjection;
+}): NpcSessionStartedMessage {
+  return { type: 'npcSessionStarted', tab: input.tab, session: input.session };
+}
+
+export function buildNpcSessionExitedMessage(input: {
+  readonly sessionId: string;
+  readonly artifact?: NpcTranscriptArtifact;
+  readonly savedPath?: string;
+}): NpcSessionExitedMessage {
+  return {
+    type: 'npcSessionExited',
+    sessionId: input.sessionId,
+    ...(input.artifact ? { artifact: input.artifact } : {}),
+    ...(input.savedPath ? { savedPath: input.savedPath } : {}),
   };
 }
 
@@ -2004,7 +2082,16 @@ function parseOpenTabs(value: unknown): OpenTab[] | null {
     const title = typeof item.title === 'string' ? item.title : null;
     const conversationId = requiredString(item.conversationId);
     if (!id || title === null || !conversationId) return null;
-    tabs.push({ id, title, conversationId });
+    const kind = item.kind === 'npc-test' ? 'npc-test' : item.kind === 'chat' ? 'chat' : undefined;
+    if (item.kind !== undefined && kind === undefined) return null;
+    const npcSession = item.npcSession;
+    tabs.push({
+      id,
+      title,
+      conversationId,
+      ...(kind ? { kind } : {}),
+      ...(kind === 'npc-test' && isNpcSessionProjection(npcSession) ? { npcSession } : {}),
+    });
   }
   return tabs;
 }
@@ -2055,6 +2142,22 @@ function isPromptMode(value: unknown): value is SetPromptModeWebviewMessage['mod
 
 function isDragMediaType(value: unknown): value is DragStartWebviewMessage['asset']['mediaType'] {
   return typeof value === 'string' && includesString(DRAG_MEDIA_TYPES, value);
+}
+
+function isNpcSessionProjection(value: unknown): value is NpcSessionProjection {
+  const record = isRecord(value) ? value : null;
+  if (!record) return false;
+  return (
+    isNonEmptyString(record.sessionId) &&
+    isNonEmptyString(record.entityId) &&
+    isNonEmptyString(record.displayName) &&
+    (record.mode === 'roleplay' || record.mode === 'consult') &&
+    isRecord(record.profile) &&
+    isNonEmptyString(record.summary) &&
+    isNonEmptyString(record.startedAt) &&
+    (record.projectRoot === undefined || isNonEmptyString(record.projectRoot)) &&
+    (record.status === 'active' || record.status === 'exited')
+  );
 }
 
 function isModelCategory(value: unknown): value is ProtocolModelCategory {

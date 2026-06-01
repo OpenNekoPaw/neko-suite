@@ -35,6 +35,8 @@ export type {
   ShellExecutionMode,
   // UI
   ConversationSummary,
+  ConversationKind,
+  NpcSessionProjection,
   OpenTab,
   TabType,
   PromptMode,

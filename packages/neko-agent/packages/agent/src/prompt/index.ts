@@ -7,6 +7,13 @@
  */
 
 export { PromptManager, createPromptManager } from './prompt-manager';
+export { projectNpcSystemPrompt, type NpcProfilePromptOptions } from './npc-profile-projector';
+export {
+  parseNpcEvaluationReportOutput,
+  projectNpcEvaluationPrompt,
+  type NpcEvaluationReportParseResult,
+  type NpcEvaluationPromptProjection,
+} from './npc-evaluator-projector';
 
 // System Prompt Builder
 export {

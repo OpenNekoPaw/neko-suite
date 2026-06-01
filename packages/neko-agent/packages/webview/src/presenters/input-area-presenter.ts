@@ -1,4 +1,4 @@
-import type { SessionMode } from '@/components/types';
+import type { ConversationKind, SessionMode } from '@/components/types';
 
 export interface InputAreaUiProjectionInput {
   inputValue: string;
@@ -9,6 +9,7 @@ export interface InputAreaUiProjectionInput {
   isThinking: boolean;
   disabled: boolean;
   sessionMode: SessionMode;
+  conversationKind?: ConversationKind;
 }
 
 export interface InputAreaUiProjection {
@@ -25,6 +26,8 @@ export interface InputAreaUiProjection {
   showExecutionModeSelector: boolean;
   showChatModelSelector: boolean;
   showSessionMediaModelSelector: boolean;
+  showSessionModeSelector: boolean;
+  showGenerationParams: boolean;
   inputPlaceholderKey: 'chat.input.placeholder' | 'chat.input.thinkingPlaceholder';
 }
 
@@ -33,6 +36,7 @@ export function projectInputAreaUi(input: InputAreaUiProjectionInput): InputArea
   const hasAttachments = input.attachedFileCount > 0;
   const hasContextChips = input.contextChipCount > 0;
   const hasAmbientNodes = input.ambientNodeCount > 0;
+  const isNpcTest = input.conversationKind === 'npc-test';
   const isAgentMode = input.sessionMode === 'agent';
 
   return {
@@ -45,10 +49,12 @@ export function projectInputAreaUi(input: InputAreaUiProjectionInput): InputArea
     showSuggestionChips: hasContextChips,
     showContextChips: hasContextChips,
     showAmbientNodes: hasAmbientNodes,
-    showMediaCallCount: input.mediaModelCallCount > 0,
-    showExecutionModeSelector: isAgentMode,
-    showChatModelSelector: isAgentMode,
-    showSessionMediaModelSelector: !isAgentMode,
+    showMediaCallCount: !isNpcTest && input.mediaModelCallCount > 0,
+    showExecutionModeSelector: !isNpcTest && isAgentMode,
+    showChatModelSelector: !isNpcTest && isAgentMode,
+    showSessionMediaModelSelector: !isNpcTest && !isAgentMode,
+    showSessionModeSelector: !isNpcTest,
+    showGenerationParams: !isNpcTest,
     inputPlaceholderKey: input.isThinking
       ? 'chat.input.thinkingPlaceholder'
       : 'chat.input.placeholder',

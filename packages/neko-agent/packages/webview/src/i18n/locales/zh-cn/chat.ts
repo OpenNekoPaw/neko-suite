@@ -163,6 +163,8 @@ export const chat = {
 
   'chat.commands.clear': '清除对话历史',
   'chat.commands.exit': '退出当前会话',
+  'chat.commands.as': '以项目角色启动 NPC 测试',
+  'chat.commands.exit-role': '退出当前 NPC 测试会话',
   'chat.commands.help': '显示帮助信息',
   'chat.commands.new': '开始新对话',
   'chat.commands.resume': '恢复之前的对话',

@@ -3,6 +3,7 @@ import type { OpenTab, TabState } from './ui';
 export interface ResolveActiveTabConversationIdInput {
   readonly tabState: TabState;
   readonly hasConversation: (conversationId: string) => boolean;
+  readonly hasNpcSession?: (sessionId: string) => boolean;
 }
 
 export interface ProjectTabStateUpdateInput {
@@ -43,6 +44,9 @@ export function resolveActiveTabConversationId(
     : undefined;
 
   if (!activeTab) return null;
+  if (activeTab.kind === 'npc-test') {
+    return input.hasNpcSession?.(activeTab.conversationId) ? activeTab.conversationId : null;
+  }
   return input.hasConversation(activeTab.conversationId) ? activeTab.conversationId : null;
 }
 
@@ -52,7 +56,8 @@ function isOpenTab(value: unknown): value is OpenTab {
     !!record &&
     typeof record.id === 'string' &&
     typeof record.title === 'string' &&
-    typeof record.conversationId === 'string'
+    typeof record.conversationId === 'string' &&
+    (record.kind === undefined || record.kind === 'chat' || record.kind === 'npc-test')
   );
 }
 
@@ -61,6 +66,8 @@ function cloneOpenTab(tab: OpenTab): OpenTab {
     id: tab.id,
     title: tab.title,
     conversationId: tab.conversationId,
+    ...(tab.kind ? { kind: tab.kind } : {}),
+    ...(tab.npcSession ? { npcSession: tab.npcSession } : {}),
   };
 }
 

@@ -327,6 +327,8 @@ export function ConversationController({
   const activeTabConversationId = activeTabId
     ? (openTabs.find((tab) => tab.id === activeTabId)?.conversationId ?? null)
     : null;
+  const activeOpenTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
+  const conversationKind = activeOpenTab?.kind ?? 'chat';
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
 
@@ -388,12 +390,12 @@ export function ConversationController({
 
   // ---- Context token count on conversation change ----
   useEffect(() => {
-    if (activeConversationId) {
+    if (activeConversationId && conversationKind !== 'npc-test') {
       VSCodeMessages.getContextTokenCount(activeConversationId);
       VSCodeMessages.getTasks(activeConversationId);
       VSCodeMessages.getPromptMode(activeConversationId);
     }
-  }, [activeConversationId]);
+  }, [activeConversationId, conversationKind]);
 
   // ---- Sync agent state on conversation change ----
   useEffect(() => {
@@ -483,6 +485,8 @@ export function ConversationController({
           activeConversationId={activeConversationId}
           activeConversationIdRef={activeConversationIdRef}
           activeTabConversationId={activeTabConversationId}
+          conversationKind={conversationKind}
+          npcSession={activeOpenTab?.npcSession}
           clearMessages={clearMessages}
           // Config
           settings={activeSettings}

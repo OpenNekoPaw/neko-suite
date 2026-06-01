@@ -166,6 +166,8 @@ export const chat = {
 
   'chat.commands.clear': 'Clear conversation history',
   'chat.commands.exit': 'Exit current session',
+  'chat.commands.as': 'Test a project character as an NPC',
+  'chat.commands.exit-role': 'Exit the active NPC test session',
   'chat.commands.help': 'Show help message',
   'chat.commands.new': 'Start a new conversation',
   'chat.commands.resume': 'Resume a previous conversation',

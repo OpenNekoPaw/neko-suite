@@ -51,6 +51,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'sendToPlugin',
   'dnd:start',
   'invokePluginSlashCommand',
+  'exitNpcSession',
   'getSkills',
   'clearActiveSkill',
   'invokeSlashCommand',

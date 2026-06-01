@@ -142,6 +142,16 @@ describe('executeBuiltinCommand', () => {
     expect(handleConfig).toHaveBeenCalledWith(['get', 'key'], context);
   });
 
+  it('keeps extension-host NPC commands registered without executing NPC orchestration here', async () => {
+    const result = await executeBuiltinCommand('as', ['@小橘'], context);
+
+    expect(result).toEqual({
+      handled: true,
+      continueExecution: true,
+      output: 'This command is handled by the VSCode extension host.',
+    });
+  });
+
   it('should catch and wrap handler errors', async () => {
     const { handleHelp } = await import('../handlers');
     vi.mocked(handleHelp).mockRejectedValueOnce(new Error('Handler failed'));

@@ -271,10 +271,14 @@ export const VSCodeMessages = {
    * @param activeTabId - Currently active tab ID
    */
   updateTabState: (
-    openTabs: Array<{ id: string; title: string; conversationId: string }>,
+    openTabs: Array<import('@neko-agent/types').OpenTab>,
     activeTabId: string | null,
   ) => {
     postWebviewMessage({ type: 'updateTabState', openTabs, activeTabId });
+  },
+
+  exitNpcSession: (sessionId: string) => {
+    postWebviewMessage({ type: 'exitNpcSession', sessionId });
   },
 
   // ==========================================================================

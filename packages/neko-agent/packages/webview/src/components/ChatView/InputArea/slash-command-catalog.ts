@@ -35,6 +35,8 @@ const BUILTIN_COMMAND_ICONS: Record<BuiltinSlashCommandName, string> = {
   status: '📊',
   clear: '🗑️',
   exit: '🚪',
+  as: '🎭',
+  'exit-role': '🚪',
   new: '✨',
   resume: '▶️',
   config: '⚙️',

@@ -296,6 +296,19 @@ export {
 } from './agent-execution-context';
 
 export {
+  NPC_CONVERSATION_DEFAULT_CONFIG,
+  NpcConversationSession,
+  projectNpcTranscriptToChatMessages,
+  type NpcConversationResponder,
+  type NpcConversationResponderInput,
+  type NpcConversationResponderResult,
+  type NpcConversationSessionConfig,
+  type NpcConversationSessionOptions,
+  type NpcConversationSessionSnapshot,
+  type NpcConversationTurn,
+} from './npc-conversation-session';
+
+export {
   buildAgentExecutionMetadata,
   buildAgentAssistantMessageFromStream,
   buildAgentErrorAssistantMessage,

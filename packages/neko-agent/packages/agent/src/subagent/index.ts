@@ -18,6 +18,7 @@ export type {
   SubAgentStatus,
   SpecializedAgentType,
   ModelTier,
+  AgentToolPolicy,
   ModelTierResolver,
   // Configuration
   SubAgentConfig,

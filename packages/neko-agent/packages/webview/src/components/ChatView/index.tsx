@@ -1,5 +1,10 @@
 import { useState, useCallback } from 'react';
-import { Message, AgentState } from '@/components/types';
+import {
+  Message,
+  AgentState,
+  type ConversationKind,
+  type NpcSessionProjection,
+} from '@/components/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';
@@ -11,12 +16,15 @@ import type { AgentContextPayload } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import { SkillIndicator, type ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import { AgentStateIndicatorCompact } from '@/components/ChatView/AgentStateIndicator';
+import { NpcSessionHeader } from '@/components/ChatView/NpcSessionHeader';
 interface ChatViewProps {
   messages: Message[];
   inputValue: string;
   isThinking: boolean;
   streamingMessageId: string | null;
   activeConversationId: string | null;
+  conversationKind?: ConversationKind;
+  npcSession?: NpcSessionProjection;
   isConversationSwitching?: boolean;
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
@@ -60,6 +68,8 @@ export function ChatView({
   isThinking,
   streamingMessageId,
   activeConversationId,
+  conversationKind = 'chat',
+  npcSession,
   isConversationSwitching = false,
   activeSkill,
   onClearActiveSkill,
@@ -111,6 +121,8 @@ export function ChatView({
             <AgentStateIndicatorCompact agentState={agentState} />
           </div>
         )}
+
+        {conversationKind === 'npc-test' && npcSession && <NpcSessionHeader session={npcSession} />}
 
         {/* Messages Container */}
         {isEmpty ? (

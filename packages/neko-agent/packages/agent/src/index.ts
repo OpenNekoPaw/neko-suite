@@ -517,6 +517,9 @@ export {
   buildAgentsFilePlan,
   buildPromptConfigFilePlan,
   buildPromptFileContent,
+  parseNpcEvaluationReportOutput,
+  projectNpcEvaluationPrompt,
+  projectNpcSystemPrompt,
   createPromptFileRuntime,
   ensurePromptFileExtension,
   extractPromptNameFromContent,
@@ -527,6 +530,9 @@ export {
   shouldScanPromptFile,
   syncPromptFilesWithConfig,
   type AgentsFileLoadCandidate,
+  type NpcEvaluationPromptProjection,
+  type NpcEvaluationReportParseResult,
+  type NpcProfilePromptOptions,
   type PromptFileInfo,
   type PromptFileScanResult,
   type PromptFileScanResult as AgentPromptFileScanResult,
@@ -834,6 +840,7 @@ export {
   type SubAgentStatus,
   type SpecializedAgentType,
   type ModelTier,
+  type AgentToolPolicy,
   type SubAgentConfig,
   type SpecializedAgentPreset,
   type SubAgentResult,
@@ -967,6 +974,19 @@ export {
   type ValidationError as SessionValidationError,
   type ValidationWarning as SessionValidationWarning,
 } from './session';
+
+export {
+  NPC_CONVERSATION_DEFAULT_CONFIG,
+  NpcConversationSession,
+  projectNpcTranscriptToChatMessages,
+  type NpcConversationResponder,
+  type NpcConversationResponderInput,
+  type NpcConversationResponderResult,
+  type NpcConversationSessionConfig,
+  type NpcConversationSessionOptions,
+  type NpcConversationSessionSnapshot,
+  type NpcConversationTurn,
+} from './runtime/npc-conversation-session';
 
 // Export task management
 export {

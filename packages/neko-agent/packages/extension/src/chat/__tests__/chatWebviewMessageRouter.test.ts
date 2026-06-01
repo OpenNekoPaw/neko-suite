@@ -40,6 +40,12 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleUserMessage: vi.fn(),
       searchProjectFiles: vi.fn(),
     } as any,
+    npcTestBench: {
+      hasSession: vi.fn(() => false),
+      routeUserMessage: vi.fn(),
+      cancel: vi.fn(() => false),
+      exit: vi.fn(),
+    } as any,
     taskHandler: {
       sendTasks: vi.fn(),
       handleCancelTask: vi.fn(),
@@ -158,6 +164,32 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.taskHandler.sendTasks).not.toHaveBeenCalled();
   });
 
+  it('routes NPC sendMessage to the NPC controller without ordinary conversation persistence', () => {
+    const deps = createDeps();
+    vi.mocked(deps.npcTestBench!.hasSession).mockReturnValue(true);
+
+    handleChatWebviewMessage(
+      {
+        type: 'sendMessage',
+        conversationId: 'npc-session-1',
+        message: 'hello',
+        sessionMode: 'agent',
+      },
+      deps,
+    );
+
+    expect(deps.npcTestBench?.routeUserMessage).toHaveBeenCalledWith('npc-session-1', 'hello');
+    expect(deps.messages?.handleUserMessage).not.toHaveBeenCalled();
+  });
+
+  it('routes NPC exit events to the NPC controller', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage({ type: 'exitNpcSession', sessionId: 'npc-session-1' }, deps);
+
+    expect(deps.npcTestBench?.exit).toHaveBeenCalledWith('npc-session-1');
+  });
+
   it('rejects task actions without an explicit conversationId', () => {
     const deps = createDeps();
 
@@ -203,6 +235,27 @@ describe('handleChatWebviewMessage', () => {
       conversationId: 'conv-1',
       args: 'scene 1',
     });
+  });
+
+  it('routes builtin slash commands with explicit conversation context', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeSlashCommand',
+        command: 'as',
+        args: '@小橘 --consult',
+        conversationId: 'conv-1',
+      },
+      deps,
+    );
+
+    expect(deps.slashCommandHandler.handleCommand).toHaveBeenCalledWith(
+      deps.webview,
+      'as',
+      '@小橘 --consult',
+      'conv-1',
+    );
   });
 
   it('routes sendToPlugin with the media type hint intact', () => {

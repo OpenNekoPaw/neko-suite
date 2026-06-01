@@ -14,7 +14,14 @@
 
 import { type MutableRefObject, useEffect, useCallback, useState } from 'react';
 import type { AgentContextPayload } from '@neko/shared';
-import { ShellExecutionMode, PromptMode, SessionMode, AgentState } from '@/components/types';
+import {
+  ShellExecutionMode,
+  PromptMode,
+  SessionMode,
+  AgentState,
+  type ConversationKind,
+  type NpcSessionProjection,
+} from '@/components/types';
 import type { SettingsState, Message, TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { ChatView } from '@/components/ChatView';
@@ -57,6 +64,8 @@ export interface ChatWorkspaceProps {
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
   activeTabConversationId: string | null;
+  conversationKind: ConversationKind;
+  npcSession?: NpcSessionProjection;
   clearMessages: () => void;
   // Config
   settings: SettingsState;
@@ -125,6 +134,8 @@ export function ChatWorkspace({
   activeConversationId,
   activeConversationIdRef,
   activeTabConversationId,
+  conversationKind,
+  npcSession,
   clearMessages,
   settings,
   updateSettings,
@@ -189,6 +200,7 @@ export function ChatWorkspace({
 
   // ---- Session mode ----
   const [sessionMode, setSessionMode] = useState<SessionMode>('agent');
+  const isNpcTest = conversationKind === 'npc-test';
   const isConversationSwitching = Boolean(
     activeTabConversationId && activeTabConversationId !== activeConversationId,
   );
@@ -331,11 +343,11 @@ export function ChatWorkspace({
   const [, forceRender] = useState(0);
 
   const handleCompressContext = useCallback(async () => {
-    if (isCompressing || !activeConversationId) return;
+    if (isNpcTest || isCompressing || !activeConversationId) return;
     conversationCompressingRef.current.set(activeConversationId, true);
     forceRender((n) => n + 1);
     VSCodeMessages.compressContext(activeConversationId);
-  }, [isCompressing, activeConversationId, conversationCompressingRef]);
+  }, [isNpcTest, isCompressing, activeConversationId, conversationCompressingRef]);
 
   const handleExecutionModeChange = (mode: ShellExecutionMode) => {
     updateSettings({ executionMode: mode });
@@ -373,6 +385,7 @@ export function ChatWorkspace({
   return (
     <InputAreaProvider
       sessionMode={sessionMode}
+      conversationKind={conversationKind}
       onSessionModeChange={handleSessionModeChange}
       selectedModel={selectedModel}
       availableModels={availableModels}
@@ -392,7 +405,7 @@ export function ChatWorkspace({
       pluginCommands={pluginCommands}
       onSlashCommand={handleSlashCommand}
       onRequestFiles={(filter) => {
-        if (activeConversationId) {
+        if (!isNpcTest && activeConversationId) {
           VSCodeMessages.searchProjectFiles(filter, activeConversationId);
         }
       }}
@@ -412,25 +425,29 @@ export function ChatWorkspace({
         isThinking={isThinking}
         streamingMessageId={streamingMessageId}
         activeConversationId={activeConversationId}
+        conversationKind={conversationKind}
+        npcSession={npcSession}
         isConversationSwitching={isConversationSwitching}
-        activeSkill={activeSkill?.conversationId === activeConversationId ? activeSkill : null}
+        activeSkill={
+          !isNpcTest && activeSkill?.conversationId === activeConversationId ? activeSkill : null
+        }
         onClearActiveSkill={skillActions.handleClearActiveSkill}
         workItems={workItems}
         pluginsAvailable={pluginsAvailable}
         contextChips={contextChips}
         ambientNodes={ambientNodes}
         onCancelTask={(taskId) => {
-          if (activeConversationId) {
+          if (!isNpcTest && activeConversationId) {
             VSCodeMessages.cancelTask(taskId, activeConversationId);
           }
         }}
         onRetryTask={(taskId) => {
-          if (activeConversationId) {
+          if (!isNpcTest && activeConversationId) {
             VSCodeMessages.retryTask(taskId, activeConversationId);
           }
         }}
         onViewTaskResult={(taskId) => {
-          if (activeConversationId) {
+          if (!isNpcTest && activeConversationId) {
             VSCodeMessages.viewTaskResult(taskId, activeConversationId);
           }
         }}

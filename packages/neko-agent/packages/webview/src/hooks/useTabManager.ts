@@ -59,7 +59,10 @@ export function useTabManager({
         setOpenTabs((prev) => [...prev, newTab]);
         setActiveTabId(newTab.id);
       }
-      VSCodeMessages.switchConversation(conversationId);
+      const activeTab = openTabs.find((t) => t.conversationId === conversationId);
+      if (activeTab?.kind !== 'npc-test') {
+        VSCodeMessages.switchConversation(conversationId);
+      }
       setActiveTab('chat');
     },
     [openTabs, setOpenTabs, setActiveTabId, setActiveTab],
@@ -75,7 +78,9 @@ export function useTabManager({
       const conversation = conversations.find((c) => c.id === tab.conversationId);
       const hasMessages = conversation && conversation.messageCount > 0;
 
-      if (!hasMessages) {
+      if (tab.kind === 'npc-test') {
+        VSCodeMessages.exitNpcSession(tab.conversationId);
+      } else if (!hasMessages) {
         VSCodeMessages.deleteConversation(tab.conversationId);
       }
 
@@ -87,7 +92,9 @@ export function useTabManager({
         const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
         const newActiveTab = newTabs[newActiveIndex];
         setActiveTabId(newActiveTab.id);
-        VSCodeMessages.switchConversation(newActiveTab.conversationId);
+        if (newActiveTab.kind !== 'npc-test') {
+          VSCodeMessages.switchConversation(newActiveTab.conversationId);
+        }
       } else if (newTabs.length === 0) {
         setActiveTabId(null);
         onNewChat();
@@ -101,7 +108,9 @@ export function useTabManager({
       const tab = openTabs.find((t) => t.id === tabId);
       if (tab) {
         setActiveTabId(tabId);
-        VSCodeMessages.switchConversation(tab.conversationId);
+        if (tab.kind !== 'npc-test') {
+          VSCodeMessages.switchConversation(tab.conversationId);
+        }
         setActiveTab('chat');
       }
     },

@@ -59,6 +59,7 @@ import { getSkillFileService } from '../services/SkillFileService';
 import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
 import { postPluginsAvailable } from '../services/pluginTransferBridge';
 import { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
+import { NpcTestBenchController } from './npcTestBenchController';
 import {
   createAgentLocalResourceAccess,
   type AgentLocalResourceAccess,
@@ -123,6 +124,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
   private readonly _conversationMessageHandler: ConversationMessageHandler;
+  private readonly _npcTestBench: NpcTestBenchController;
 
   // Lifecycle
   private readonly _disposables: vscode.Disposable[] = [];
@@ -202,6 +204,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       promptModeCleanup: this._systemPrompt,
       getWebview: () => this._view?.webview,
     });
+    this._npcTestBench = new NpcTestBenchController({
+      getWebview: () => this._view?.webview,
+      getProjectRoot: () => getCurrentWorkspaceRoot(),
+      getPlatform: () => this._platform,
+      getSelectedChatModel: () => this._getSelectedChatModelRef(),
+      getTabState: () => this._tabState,
+      getActiveConversationId: () => this._conversations.getActiveId(),
+      updateTabState: (openTabs, activeTabId) => this._updateTabState(openTabs, activeTabId),
+      sendTabState: () => this._sendTabState(),
+    });
     this._context.subscriptions.push(
       this._dashboardWorkItems,
       vscode.commands.registerCommand(
@@ -217,6 +229,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       taskHandler: this._taskHandler,
       contextHandler: this._contextHandler,
       planModeHandler: this._planModeHandler,
+      npcTestBench: this._npcTestBench,
       sendConversationList: () => this._conversationMessageHandler.sendConversationList(),
       sendActiveConversation: () => this._conversationMessageHandler.sendActiveConversation(),
     });
@@ -565,6 +578,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         handleChatWebviewMessage(message, {
           webview,
           messages: this._messages,
+          npcTestBench: this._npcTestBench,
           taskHandler: this._taskHandler,
           skillHandler: this._skillHandler,
           fileOperationHandler: this._fileOperationHandler,
@@ -673,6 +687,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       { tabState: this._tabState },
       {
         hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
+        hasNpcSession: (sessionId) => this._npcTestBench.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
       },
@@ -737,6 +752,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       { openTabs, activeTabId },
       {
         hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
+        hasNpcSession: (sessionId) => this._npcTestBench.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
         onConversationSwitched: () => this._syncCanvasAmbientScopeFromActiveConversation(),
@@ -744,6 +760,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     );
     this._tabState = result.tabState;
     this._saveTabState();
+  }
+
+  public async startNpcTestBench(
+    request: import('@neko/shared').NpcTestBenchLaunchRequest,
+  ): Promise<import('./npcTestBenchController').NpcSessionLaunchResult | null> {
+    await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+    return this._npcTestBench.launch(request);
+  }
+
+  public async startNpcTestBenchFromSlash(args?: string): Promise<void> {
+    await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+    await this._npcTestBench.launchFromSlash({
+      args,
+      conversationId: this._conversations.getActiveId() ?? undefined,
+    });
+  }
+
+  public exitNpcTestBench(
+    sessionId?: string,
+  ): Promise<import('./npcTestBenchController').NpcSessionExitResult | null> {
+    return sessionId ? this._npcTestBench.exit(sessionId) : this._npcTestBench.exitActive();
+  }
+
+  private _getSelectedChatModelRef(): import('@neko-agent/types').ModelRef<'llm'> | undefined {
+    const modelId = this._settings.selectedModelId;
+    if (!modelId || modelId === 'auto') return undefined;
+    const providerId =
+      this._settings.selectedProviderId ?? this._providers?.getDefaultProvider()?.id;
+    if (!providerId) return undefined;
+    return { providerId, modelId, category: 'llm' };
   }
 
   // ============================================================================
@@ -780,6 +826,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   dispose(): void {
     this._disposeWebviewBindings();
     this._messages?.dispose();
+    this._npcTestBench.dispose();
     this._conversations.dispose();
     this._localResourceAccess.dispose();
     this._configBridge?.dispose();

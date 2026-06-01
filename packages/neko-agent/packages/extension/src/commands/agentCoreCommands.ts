@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isNpcTestBenchLaunchRequest, NEKO_AGENT_TEST_NPC_COMMAND } from '@neko/shared';
 import type { AgentContextPayload } from '@neko/shared';
 import type { ChatMessage, ServiceOptions } from '@neko/platform';
 import { refreshOllamaModels, runInternalChatRuntime } from '@neko/platform';
@@ -68,6 +69,17 @@ export function registerAgentCoreCommands(
         await chatViewProvider.sendContextPayload(payload);
       },
     ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(NEKO_AGENT_TEST_NPC_COMMAND, async (request: unknown) => {
+      await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+      if (!isNpcTestBenchLaunchRequest(request)) {
+        await vscode.window.showErrorMessage('Cannot start NPC test: invalid launch request.');
+        return null;
+      }
+      return chatViewProvider.startNpcTestBench(request);
+    }),
   );
 
   context.subscriptions.push(

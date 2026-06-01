@@ -57,6 +57,8 @@ describe('slash-command-catalog', () => {
     const names = commands.map((command) => command.name);
 
     expect(names).toContain('/help');
+    expect(names).toContain('/as');
+    expect(names).toContain('/exit-role');
     expect(names).toContain('/model');
     expect(names).not.toContain('/config');
     expect(names).not.toContain('/commands');

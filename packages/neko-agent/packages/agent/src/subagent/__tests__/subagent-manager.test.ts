@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SubAgentManager, SPECIALIZED_PRESETS } from '../subagent-manager';
 import type { SubAgentConfig, SubAgentManagerDeps, SubAgentEvent } from '../types';
+import type { ToolDefinition } from '@neko/shared';
 
 // =============================================================================
 // Mocks
@@ -82,6 +83,14 @@ function createTestConfig(overrides: Partial<SubAgentConfig> = {}): SubAgentConf
     runMode: 'foreground',
     ...overrides,
   };
+}
+
+function getCreatedAgentToolNames(deps: SubAgentManagerDeps): string[] {
+  const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0] as {
+    tools: ToolDefinition[];
+  };
+
+  return agentConfig.tools.map((tool) => tool.function.name);
 }
 
 // =============================================================================
@@ -184,6 +193,66 @@ describe('SubAgentManager', () => {
       expect(result.status).toBe('failed');
       expect(result.error).toContain('SubAgent model tier "balanced" could not be resolved');
       expect(depsWithoutResolver.createAgent).not.toHaveBeenCalled();
+    });
+
+    it('should create an empty tool registry when toolPolicy is none', async () => {
+      const config = createTestConfig({
+        id: 'tool-policy-none-agent',
+        toolPolicy: { kind: 'none' },
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.getResult('tool-policy-none-agent', 5000);
+
+      expect(getCreatedAgentToolNames(deps)).toEqual([]);
+    });
+
+    it('should keep the full tool registry when toolPolicy is all', async () => {
+      const config = createTestConfig({
+        id: 'tool-policy-all-agent',
+        toolPolicy: { kind: 'all' },
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.getResult('tool-policy-all-agent', 5000);
+
+      expect(getCreatedAgentToolNames(deps)).toEqual(['read_file', 'write_file', 'grep']);
+    });
+
+    it('should filter the tool registry when toolPolicy is allow-list', async () => {
+      const config = createTestConfig({
+        id: 'tool-policy-allow-list-agent',
+        toolPolicy: { kind: 'allow-list', tools: ['read_file'] },
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.getResult('tool-policy-allow-list-agent', 5000);
+
+      expect(getCreatedAgentToolNames(deps)).toEqual(['read_file']);
+    });
+
+    it('should preserve legacy allowedTools filtering behavior', async () => {
+      const config = createTestConfig({
+        id: 'legacy-allowed-tools-agent',
+        allowedTools: ['grep'],
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.getResult('legacy-allowed-tools-agent', 5000);
+
+      expect(getCreatedAgentToolNames(deps)).toEqual(['grep']);
+    });
+
+    it('should preserve legacy empty allowedTools as allow-all behavior', async () => {
+      const config = createTestConfig({
+        id: 'legacy-empty-allowed-tools-agent',
+        allowedTools: [],
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.getResult('legacy-empty-allowed-tools-agent', 5000);
+
+      expect(getCreatedAgentToolNames(deps)).toEqual(['read_file', 'write_file', 'grep']);
     });
   });
 
@@ -352,6 +421,7 @@ describe('SPECIALIZED_PRESETS', () => {
     expect(SPECIALIZED_PRESETS['test-runner']).toBeDefined();
     expect(SPECIALIZED_PRESETS['document-writer']).toBeDefined();
     expect(SPECIALIZED_PRESETS.general).toBeDefined();
+    expect(SPECIALIZED_PRESETS['npc-character']).toBeDefined();
   });
 
   it('should have valid configurations', () => {
@@ -362,6 +432,16 @@ describe('SPECIALIZED_PRESETS', () => {
       expect(['fast', 'balanced', 'powerful']).toContain(preset.defaultModelTier);
       expect(preset.defaultMaxIterations).toBeGreaterThan(0);
     }
+  });
+
+  it('should configure npc-character as an isolated no-tool preset', () => {
+    expect(SPECIALIZED_PRESETS['npc-character']).toEqual(
+      expect.objectContaining({
+        defaultModelTier: 'balanced',
+        defaultMaxIterations: 12,
+        toolPolicy: { kind: 'none' },
+      }),
+    );
   });
 });
 
@@ -618,6 +698,23 @@ describe('SubAgentManager - ToolSkill Injection', () => {
     await manager.spawn('parent-1', 'conv-1', config);
     await manager.getResult('multi-toolskill-test', 5000);
 
+    expect(deps.toolSkillRegistry!.getActiveTools).toHaveBeenCalledWith([
+      'git-operations',
+      'file-editing',
+    ]);
+  });
+
+  it('should keep an explicit none toolPolicy isolated from ToolSkills', async () => {
+    const config = createTestConfig({
+      id: 'tool-policy-none-with-toolskill-test',
+      toolPolicy: { kind: 'none' },
+      toolSkills: ['git-operations', 'file-editing'],
+    });
+
+    await manager.spawn('parent-1', 'conv-1', config);
+    await manager.getResult('tool-policy-none-with-toolskill-test', 5000);
+
+    expect(getCreatedAgentToolNames(deps)).toEqual([]);
     expect(deps.toolSkillRegistry!.getActiveTools).toHaveBeenCalledWith([
       'git-operations',
       'file-editing',

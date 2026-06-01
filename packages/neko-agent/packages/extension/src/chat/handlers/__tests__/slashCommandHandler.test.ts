@@ -69,6 +69,13 @@ function createMockAgentTurnHandler() {
   return { handleUserMessage: vi.fn().mockResolvedValue(undefined) };
 }
 
+function createMockNpcTestBench() {
+  return {
+    launchFromSlash: vi.fn().mockResolvedValue({ sessionId: 'npc-session-1' }),
+    exitActive: vi.fn(),
+  };
+}
+
 describe('SlashCommandHandler', () => {
   let handler: SlashCommandHandler;
   let webview: ReturnType<typeof createMockWebview>;
@@ -80,6 +87,7 @@ describe('SlashCommandHandler', () => {
   let contextHandler: ReturnType<typeof createMockContextHandler>;
   let planModeHandler: ReturnType<typeof createMockPlanModeHandler>;
   let agentTurnHandler: ReturnType<typeof createMockAgentTurnHandler>;
+  let npcTestBench: ReturnType<typeof createMockNpcTestBench>;
   let sendConversationList: ReturnType<typeof vi.fn>;
   let sendActiveConversation: ReturnType<typeof vi.fn>;
 
@@ -94,6 +102,7 @@ describe('SlashCommandHandler', () => {
     contextHandler = createMockContextHandler();
     planModeHandler = createMockPlanModeHandler();
     agentTurnHandler = createMockAgentTurnHandler();
+    npcTestBench = createMockNpcTestBench();
     sendConversationList = vi.fn();
     sendActiveConversation = vi.fn();
 
@@ -106,6 +115,7 @@ describe('SlashCommandHandler', () => {
       taskHandler: taskHandler as any,
       contextHandler: contextHandler as any,
       planModeHandler: planModeHandler as any,
+      npcTestBench: npcTestBench as any,
       sendConversationList,
       sendActiveConversation,
     });
@@ -396,6 +406,26 @@ describe('SlashCommandHandler', () => {
           error: expect.stringContaining('Unknown command'),
         }),
       );
+    });
+
+    it('routes /as into the NPC test controller instead of ordinary slash runtime', async () => {
+      await handler.handleCommand(webview as any, 'as', '@小橘 --consult hello', 'conv-1');
+
+      expect(npcTestBench.launchFromSlash).toHaveBeenCalledWith({
+        args: '@小橘 --consult hello',
+        conversationId: 'conv-1',
+      });
+      expect(skillHandler.handleSlashCommand).not.toHaveBeenCalled();
+      expect(agentTurnHandler.handleUserMessage).not.toHaveBeenCalled();
+      expect(webview.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('routes /exit-role into the NPC test controller', async () => {
+      await handler.handleCommand(webview as any, 'exit-role', undefined, 'npc-session-1');
+
+      expect(npcTestBench.exitActive).toHaveBeenCalledWith('npc-session-1');
+      expect(skillHandler.handleSlashCommand).not.toHaveBeenCalled();
+      expect(agentTurnHandler.handleUserMessage).not.toHaveBeenCalled();
     });
   });
 

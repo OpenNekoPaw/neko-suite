@@ -83,6 +83,7 @@ export function InputArea({
     contextChips,
     onRemoveContextChip,
     ambientNodes = [],
+    conversationKind,
   } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -473,6 +474,7 @@ export function InputArea({
     isThinking,
     disabled,
     sessionMode,
+    conversationKind,
   });
   const sessionMediaPicker = projectSessionMediaModelPickerState({
     sessionMode,
@@ -493,7 +495,9 @@ export function InputArea({
         {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
         <div className="flex items-center px-2 py-1 gap-0.5">
           {/* Left: session mode */}
-          <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
+          {inputAreaProjection.showSessionModeSelector && (
+            <SessionModeSelector mode={sessionMode} onChange={onSessionModeChange} />
+          )}
 
           {/* Model selector — contextual based on session mode */}
           {inputAreaProjection.showChatModelSelector ? (
@@ -524,7 +528,7 @@ export function InputArea({
           />
 
           {/* Right: generation params (media model integrated in agent mode) */}
-          <GenerationParamsBar />
+          {inputAreaProjection.showGenerationParams && <GenerationParamsBar />}
         </div>
 
         {/* ── Input container ── */}

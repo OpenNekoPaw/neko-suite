@@ -69,6 +69,7 @@ export const workspace = {
   })),
   workspaceFolders: [{ uri: { fsPath: '/mock/workspace' }, name: 'mock', index: 0 }],
   fs: {
+    createDirectory: vi.fn().mockResolvedValue(undefined),
     writeFile: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn().mockResolvedValue(new Uint8Array()),
     stat: vi.fn().mockResolvedValue({ type: 1 }),

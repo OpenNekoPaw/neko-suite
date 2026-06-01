@@ -13,6 +13,7 @@ import { EventEmitter } from 'events';
 import type { AgentConfig } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 import type {
+  AgentToolPolicy,
   SubAgentConfig,
   SubAgentResult,
   SubAgentStatus,
@@ -100,6 +101,21 @@ Guidelines:
     allowedTools: [], // Empty means all tools allowed
     defaultModelTier: 'balanced',
     defaultMaxIterations: 20,
+  },
+  'npc-character': {
+    description: 'NPC character validation session',
+    systemPrompt: `You are an isolated NPC character test agent.
+
+Guidelines:
+- Stay in the provided character profile and conversation mode.
+- Treat confirmed profile facts as authoritative.
+- Treat suggested profile facts as uncertain and avoid inventing certainty.
+- Do not claim access to project files, tools, global memory, or hidden story context.
+- If the profile lacks an answer, respond within the character's uncertainty.`,
+    allowedTools: [],
+    toolPolicy: { kind: 'none' },
+    defaultModelTier: 'balanced',
+    defaultMaxIterations: 12,
   },
 };
 
@@ -374,17 +390,11 @@ export class SubAgentManager implements ISubAgentManager {
       const toolSkillTools = this.collectToolSkillTools(config);
 
       // =======================================================================
-      // Step 2: Determine allowed tools (merge preset + config + toolskills)
+      // Step 2: Determine runtime tool access
       // =======================================================================
-      const baseAllowedTools = config.allowedTools || preset.allowedTools;
-      const allowedTools = this.mergeAllowedTools(baseAllowedTools, toolSkillTools);
-
-      // Filter tools from registry
       const allTools = this.deps.toolRegistry.toToolDefinitions();
-      const filteredTools =
-        allowedTools.length > 0
-          ? allTools.filter((t) => allowedTools.includes(t.function.name))
-          : allTools;
+      const toolPolicy = this.resolveToolPolicy(config, preset, toolSkillTools);
+      const filteredTools = this.filterToolsByPolicy(allTools, toolPolicy);
 
       // =======================================================================
       // Step 3: Build system prompt with skill injections
@@ -544,10 +554,70 @@ Focus on completing this specific task efficiently and report your findings clea
   }
 
   /**
-   * Merge allowed tools from different sources
-   * Priority: config.allowedTools > toolSkillTools > preset.allowedTools
+   * Resolve explicit tool policy while preserving legacy allowedTools behavior.
    */
-  private mergeAllowedTools(baseTools: string[], toolSkillTools: string[]): string[] {
+  private resolveToolPolicy(
+    config: SubAgentConfig,
+    preset: SpecializedAgentPreset,
+    toolSkillTools: string[],
+  ): AgentToolPolicy {
+    const policy = config.toolPolicy ?? preset.toolPolicy;
+
+    if (policy) {
+      return this.mergeToolPolicyWithToolSkills(policy, toolSkillTools);
+    }
+
+    const baseAllowedTools = config.allowedTools ?? preset.allowedTools;
+    const allowedTools = this.mergeAllowedTools(baseAllowedTools, toolSkillTools);
+
+    return allowedTools.length > 0 ? { kind: 'allow-list', tools: allowedTools } : { kind: 'all' };
+  }
+
+  /**
+   * Apply ToolSkill additions to explicit policies where they are meaningful.
+   */
+  private mergeToolPolicyWithToolSkills(
+    policy: AgentToolPolicy,
+    toolSkillTools: string[],
+  ): AgentToolPolicy {
+    if (policy.kind !== 'allow-list' || toolSkillTools.length === 0) {
+      return policy;
+    }
+
+    return {
+      kind: 'allow-list',
+      tools: this.mergeAllowedTools([...policy.tools], toolSkillTools),
+    };
+  }
+
+  /**
+   * Filter registered tools according to a resolved runtime policy.
+   */
+  private filterToolsByPolicy(
+    allTools: AgentConfig['tools'],
+    policy: AgentToolPolicy,
+  ): AgentConfig['tools'] {
+    if (policy.kind === 'none') {
+      return [];
+    }
+
+    if (policy.kind === 'all') {
+      return allTools;
+    }
+
+    const allowedTools = new Set(policy.tools);
+    return allTools.filter((tool) => allowedTools.has(tool.function.name));
+  }
+
+  /**
+   * Merge allowed tools from different sources.
+   *
+   * Legacy empty allowedTools means all tools allowed.
+   */
+  private mergeAllowedTools(
+    baseTools: readonly string[],
+    toolSkillTools: readonly string[],
+  ): string[] {
     // If no base tools specified (empty array means all tools allowed for 'general' type)
     // and no toolskill tools, return empty (all tools allowed)
     if (baseTools.length === 0 && toolSkillTools.length === 0) {

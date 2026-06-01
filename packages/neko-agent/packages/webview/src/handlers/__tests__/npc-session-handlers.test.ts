@@ -1,0 +1,226 @@
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { describe, expect, it } from 'vitest';
+import type { ExtensionToWebviewMessage, NpcSessionProjection, OpenTab } from '@neko-agent/types';
+import type { Message } from '@/components/types';
+import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import { npcSessionHandlers } from '../npc-session-handlers';
+import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
+
+describe('NPC session handlers', () => {
+  it('activates NPC session tabs as current chat projections', () => {
+    const harness = createContextHarness({ activeConversationId: 'conv-a' });
+    const session = createNpcSessionProjection();
+    const tab: OpenTab = {
+      id: 'tab-npc',
+      title: 'NPC: 小橘',
+      conversationId: session.sessionId,
+      kind: 'npc-test',
+      npcSession: session,
+    };
+
+    dispatch(npcSessionHandlers, { type: 'npcSessionStarted', tab, session }, harness.context);
+
+    expect(harness.activeConversationId()).toBe('npc-session-1');
+    expect(harness.context.activeConversationIdRef.current).toBe('npc-session-1');
+    expect(harness.messages()).toEqual([]);
+    expect(harness.streaming()).toEqual({ isThinking: false, streamingMessageId: null });
+    expect(harness.openTabs()).toEqual([tab]);
+    expect(harness.activeTabId()).toBe('tab-npc');
+  });
+
+  it('marks exited NPC tabs without removing transcript cache', () => {
+    const session = createNpcSessionProjection();
+    const harness = createContextHarness({
+      activeConversationId: session.sessionId,
+      openTabs: [
+        {
+          id: 'tab-npc',
+          title: 'NPC: 小橘',
+          conversationId: session.sessionId,
+          kind: 'npc-test',
+          npcSession: session,
+        },
+      ],
+    });
+
+    dispatch(
+      npcSessionHandlers,
+      { type: 'npcSessionExited', sessionId: session.sessionId },
+      harness.context,
+    );
+
+    expect(harness.openTabs()[0]?.npcSession?.status).toBe('exited');
+  });
+});
+
+function dispatch(
+  handlers: readonly HandlerRegistration[],
+  message: ExtensionToWebviewMessage,
+  context: MessageHandlerContext,
+): void {
+  const registration = handlers.find((handler) => handler.type === message.type);
+  expect(registration).toBeDefined();
+  registration?.handler(message, context);
+}
+
+function createNpcSessionProjection(): NpcSessionProjection {
+  return {
+    sessionId: 'npc-session-1',
+    entityId: 'char-xiaoju',
+    displayName: '小橘',
+    mode: 'roleplay',
+    profile: {
+      entityRef: { entityId: 'char-xiaoju', entityKind: 'character' },
+      displayName: '小橘',
+      aliases: ['Xiaoju'],
+      facts: [
+        {
+          key: 'identity.name',
+          value: '小橘',
+          source: 'registry',
+          authority: 'confirmed',
+        },
+      ],
+      sparsity: 'thin',
+    },
+    summary: 'protagonist',
+    startedAt: '2026-06-01T00:00:00.000Z',
+    projectRoot: '/workspace/project-a',
+    status: 'active',
+  };
+}
+
+interface ContextHarnessOptions {
+  activeConversationId: string;
+  openTabs?: OpenTab[];
+}
+
+interface ContextHarness {
+  context: MessageHandlerContext;
+  activeConversationId(): string | null;
+  activeTabId(): string | null;
+  messages(): Message[];
+  openTabs(): OpenTab[];
+  streaming(): StreamingState;
+}
+
+function createContextHarness(options: ContextHarnessOptions): ContextHarness {
+  let activeConversationId: string | null = options.activeConversationId;
+  let activeTabId: string | null = options.openTabs?.[0]?.id ?? null;
+  let messages: Message[] = [{ id: 'old', role: 'assistant', content: 'old', timestamp: 1 }];
+  let openTabs: OpenTab[] = options.openTabs ?? [];
+  let streaming: StreamingState = { isThinking: true, streamingMessageId: 'old-stream' };
+  const activeConversationIdRef = ref<string | null>(options.activeConversationId);
+  const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
+  const conversationMessagesRef = ref(new Map<string, Message[]>());
+  const conversationStreamingRef = ref(new Map<string, StreamingState>());
+  let workItems: AgentWorkItemStore = new Map();
+  let pluginsAvailable: PluginsAvailable = {};
+
+  const context = {
+    setMessages: createSetter(
+      () => messages,
+      (next) => {
+        messages = next;
+      },
+    ),
+    setIsThinking: createSetter(
+      () => streaming.isThinking,
+      (next) => {
+        streaming = { ...streaming, isThinking: next };
+      },
+    ),
+    setStreamingMessageId: createSetter(
+      () => streaming.streamingMessageId,
+      (next) => {
+        streaming = { ...streaming, streamingMessageId: next };
+        streamingMessageIdRef.current = next;
+      },
+    ),
+    streamingMessageId: streaming.streamingMessageId,
+    streamingMessageIdRef,
+    activeConversationId,
+    activeConversationIdRef,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    openTabs,
+    setOpenTabs: createSetter(
+      () => openTabs,
+      (next) => {
+        openTabs = next;
+        context.openTabs = next;
+      },
+    ),
+    setActiveTabId: createSetter(
+      () => activeTabId,
+      (next) => {
+        activeTabId = next;
+      },
+    ),
+    setActiveTab: noopDispatch(),
+    setSettings: noopDispatch(),
+    setSelectedModel: noopDispatch(),
+    setMediaModelSelection: noopDispatch(),
+    updateSettings: () => undefined,
+    setPromptModeForConversation: () => undefined,
+    setAgentState: noopDispatch(),
+    conversationAgentStateRef: ref(new Map()),
+    forceAgentStateUpdate: () => undefined,
+    setSkills: noopDispatch(),
+    setActiveSkill: noopDispatch(),
+    setGlobalError: noopDispatch(),
+    conversationTokenCountRef: ref(new Map()),
+    conversationCompressingRef: ref(new Map()),
+    forceUpdate: () => undefined,
+    isCurrentConversation: (conversationId?: string) =>
+      conversationId === activeConversationIdRef.current,
+    updateNonCurrentConversation: () => undefined,
+    setConversations: noopDispatch(),
+    setActiveConversationId: createSetter(
+      () => activeConversationId,
+      (next) => {
+        activeConversationId = next;
+      },
+    ),
+    setWorkItemsByConversation: createSetter(
+      () => workItems,
+      (next) => {
+        workItems = next;
+      },
+    ),
+    setProjectFiles: noopDispatch(),
+    setMentionItems: noopDispatch(),
+    setPluginCommands: noopDispatch(),
+    setPluginsAvailable: createSetter(
+      () => pluginsAvailable,
+      (next) => {
+        pluginsAvailable = next;
+      },
+    ),
+    setShowOnboarding: noopDispatch(),
+  } satisfies MessageHandlerContext;
+
+  return {
+    context,
+    activeConversationId: () => activeConversationId,
+    activeTabId: () => activeTabId,
+    messages: () => messages,
+    openTabs: () => openTabs,
+    streaming: () => streaming,
+  };
+}
+
+function createSetter<T>(read: () => T, write: (next: T) => void): Dispatch<SetStateAction<T>> {
+  return (action) => {
+    write(typeof action === 'function' ? (action as (previous: T) => T)(read()) : action);
+  };
+}
+
+function noopDispatch<T>(): Dispatch<SetStateAction<T>> {
+  return () => undefined;
+}
+
+function ref<T>(current: T): MutableRefObject<T> {
+  return { current };
+}
