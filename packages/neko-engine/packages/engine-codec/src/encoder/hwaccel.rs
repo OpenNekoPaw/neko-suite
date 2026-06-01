@@ -475,7 +475,6 @@ fn build_hw_encoder_options(config: &EncoderConfig, hw_type: HwEncoderType) -> D
                     opts.set("power_efficient", "0");
                     if config.codec == VideoCodec::H264 {
                         opts.set("coder", "vlc");
-                        opts.set("max_ref_frames", "1");
                     }
                 }
                 _ => {
@@ -1023,7 +1022,7 @@ mod tests {
         assert_eq!(opts.get("prio_speed"), Some("1"));
         assert_eq!(opts.get("power_efficient"), Some("0"));
         assert_eq!(opts.get("coder"), Some("vlc"));
-        assert_eq!(opts.get("max_ref_frames"), Some("1"));
+        assert_eq!(opts.get("max_ref_frames"), None);
         assert_eq!(opts.get("profile"), Some("constrained_baseline"));
     }
 
