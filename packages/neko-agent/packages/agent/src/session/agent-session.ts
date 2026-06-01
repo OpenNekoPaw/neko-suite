@@ -1196,8 +1196,15 @@ export class AgentSession implements IAgentSession {
         type: 'error',
         error: normalizedError,
       };
+      const errorEventId = await this._appendTerminalJournalEvent(errorEvent);
+      this.addMessage(
+        { role: 'assistant', content: normalizedError.message },
+        errorEventId ? [errorEventId] : undefined,
+      );
+      if (errorEventId) {
+        await this._persistTerminalJournalSnapshot(errorEvent.type);
+      }
       yield errorEvent;
-      await this._persistTerminalJournalEvent(errorEvent);
     } finally {
       this._closeActiveRun(runCompletionStatus, runCompletionError);
       this._currentTurnPlanningContext = null;
@@ -1607,13 +1614,37 @@ export class AgentSession implements IAgentSession {
     this._idcRunLifecycle.closeActiveRun(status, error);
   }
 
-  private async _persistTerminalJournalEvent(event: AgentEvent): Promise<void> {
+  private async _persistTerminalJournalEvent(event: AgentEvent): Promise<string | undefined> {
+    const eventId = await this._appendTerminalJournalEvent(event);
+    if (eventId) {
+      await this._persistTerminalJournalSnapshot(event.type);
+    }
+    return eventId;
+  }
+
+  private async _appendTerminalJournalEvent(event: AgentEvent): Promise<string | undefined> {
+    if (!this._journalWriter) {
+      return undefined;
+    }
+
+    try {
+      const eventId = await this._journalWriter.appendEvent(++this._journalSeq, event);
+      return eventId;
+    } catch (error) {
+      logger.warn('Failed to persist terminal session journal event', {
+        eventType: event.type,
+        error,
+      });
+      return undefined;
+    }
+  }
+
+  private async _persistTerminalJournalSnapshot(eventType: AgentEvent['type']): Promise<void> {
     if (!this._journalWriter) {
       return;
     }
 
     try {
-      await this._journalWriter.appendEvent(++this._journalSeq, event);
       await this._journalWriter.appendSnapshot(++this._journalSeq, {
         historyLength: this._history.length,
         executionMode: this._executionMode,
@@ -1621,8 +1652,8 @@ export class AgentSession implements IAgentSession {
       });
       await this._journalWriter.flush();
     } catch (error) {
-      logger.warn('Failed to persist terminal session journal event', {
-        eventType: event.type,
+      logger.warn('Failed to persist terminal session journal snapshot', {
+        eventType,
         error,
       });
     }

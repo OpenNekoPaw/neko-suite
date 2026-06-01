@@ -118,6 +118,14 @@ describe('AISdkAdapter reasoning model handling', () => {
     );
   });
 
+  it('chat() requests ten total model-call attempts', async () => {
+    const { generateText } = await import('ai');
+
+    await adapter.chat(messages, {}, makeModel(), makeProvider());
+
+    expect(vi.mocked(generateText).mock.calls[0]![0].maxRetries).toBe(9);
+  });
+
   it('chat() skips temperature/topP for reasoning model', async () => {
     const { generateText } = await import('ai');
     const model = makeModel({ capabilities: ['chat', 'reasoning'] });
@@ -165,6 +173,17 @@ describe('AISdkAdapter reasoning model handling', () => {
     );
   });
 
+  it('chatStream() requests ten total model-call attempts', async () => {
+    const { streamText } = await import('ai');
+
+    const stream = adapter.chatStream(messages, {}, makeModel(), makeProvider());
+    for await (const _ of stream) {
+      /* consume */
+    }
+
+    expect(vi.mocked(streamText).mock.calls[0]![0].maxRetries).toBe(9);
+  });
+
   it('chatStream() skips temperature/topP/frequencyPenalty/presencePenalty for reasoning model', async () => {
     const { streamText } = await import('ai');
     const model = makeModel({ capabilities: ['chat', 'reasoning'] });
@@ -185,7 +204,7 @@ describe('AISdkAdapter reasoning model handling', () => {
           usage: { promptTokens: 10, completionTokens: 5 },
         };
       })(),
-    } as ReturnType<typeof streamText>);
+    } as unknown as ReturnType<typeof streamText>);
 
     const stream = adapter.chatStream(messages, options, model, makeProvider());
     for await (const _ of stream) {
@@ -213,7 +232,7 @@ describe('AISdkAdapter reasoning model handling', () => {
           usage: { promptTokens: 10, completionTokens: 5 },
         };
       })(),
-    } as ReturnType<typeof streamText>);
+    } as unknown as ReturnType<typeof streamText>);
 
     const stream = adapter.chatStream(messages, options, model, makeProvider());
     for await (const _ of stream) {

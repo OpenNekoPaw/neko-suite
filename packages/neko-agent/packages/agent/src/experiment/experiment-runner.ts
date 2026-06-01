@@ -216,7 +216,7 @@ export class ExperimentRunner {
           response: '',
           steps: [],
           iterations: 0,
-          error: lastEvent.error,
+          error: toAgentResultError(lastEvent.error),
           timing: {
             startTime: 0,
             endTime: 0,
@@ -341,6 +341,16 @@ export class ExperimentRunner {
     }
     return this._config.evaluator.evaluate(agentResult, descriptor);
   }
+}
+
+function toAgentResultError(error: AgentEvent['error']): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  const result = new Error(error?.message ?? 'Agent execution failed');
+  result.name = error?.name ?? 'Error';
+  return result;
 }
 
 // =============================================================================

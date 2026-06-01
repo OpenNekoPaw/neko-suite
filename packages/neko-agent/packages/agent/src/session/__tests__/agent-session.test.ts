@@ -534,6 +534,10 @@ describe('AgentSession', () => {
           error: expect.objectContaining({ message: 'executor blew up' }),
         }),
       ]);
+      expect(session.getHistory().at(-1)).toEqual({
+        role: 'assistant',
+        content: 'executor blew up',
+      });
       expect(session.getActiveIdcRun()).toBeNull();
       expect(getCompletedRuns(session)).toEqual([
         expect.objectContaining({

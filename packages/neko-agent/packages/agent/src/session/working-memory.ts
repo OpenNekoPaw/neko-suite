@@ -139,9 +139,18 @@ export function projectPersistedEventsToWorkingMemory(
       case 'coordinator_event':
       case 'iteration':
       case 'done':
-      case 'error':
       case 'messageQueued':
         break;
+
+      case 'error': {
+        pendingAssistant = flushPendingAssistant(history, pendingAssistant);
+        const message = event.error?.message || 'An error occurred';
+        history.push({
+          message: { role: 'assistant', content: message },
+          sourceEventIds: toSourceEventIds(entry.eventId),
+        });
+        break;
+      }
     }
   }
 

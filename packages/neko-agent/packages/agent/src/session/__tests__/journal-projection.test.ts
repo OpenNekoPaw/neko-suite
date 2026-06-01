@@ -251,7 +251,7 @@ describe('JournalProjection', () => {
         seq: 2,
         ts: 1500,
         type: 'event',
-        event: { type: 'error', error: new Error('Provider timed out') },
+        event: { type: 'error', error: { name: 'Error', message: 'Provider timed out' } },
       },
     ];
     const projection = new JournalProjection(
@@ -260,15 +260,18 @@ describe('JournalProjection', () => {
     );
 
     await expect(projection.projectToHistoryWithEventIds('conv-error')).resolves.toEqual({
-      messages: [{ role: 'user', content: 'Generate a scene outline' }],
-      messageEventIds: [['evt-user']],
+      messages: [
+        { role: 'user', content: 'Generate a scene outline' },
+        { role: 'assistant', content: 'Provider timed out' },
+      ],
+      messageEventIds: [['evt-user'], ['evt-error']],
     });
     await expect(projection.projectToSummary('conv-error')).resolves.toEqual({
       conversationId: 'conv-error',
       title: 'Generate a scene outline',
       createdAt: 1000,
       updatedAt: 1500,
-      messageCount: 1,
+      messageCount: 2,
       source: 'journal-projection',
     });
   });

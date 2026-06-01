@@ -29,6 +29,8 @@ import type { Model, Provider } from '../../types/provider';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('AISdkAdapter');
+const MODEL_CALL_TOTAL_ATTEMPTS = 10;
+const MODEL_CALL_MAX_RETRIES = MODEL_CALL_TOTAL_ATTEMPTS - 1;
 
 /**
  * Abstract base adapter using AI SDK
@@ -81,6 +83,7 @@ export abstract class AISdkAdapter implements Adapter {
       messages: coreMessages,
       tools,
       abortSignal: options.signal,
+      maxRetries: MODEL_CALL_MAX_RETRIES,
       ...this.getProviderOptions(options, provider, model),
     };
 
@@ -159,6 +162,7 @@ export abstract class AISdkAdapter implements Adapter {
         stopSequences: options.stop,
         tools,
         abortSignal: options.signal,
+        maxRetries: MODEL_CALL_MAX_RETRIES,
         ...this.getProviderOptions(options, provider, model),
       });
 

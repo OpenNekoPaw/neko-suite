@@ -61,6 +61,11 @@ export interface IJournalWriter {
  */
 export type ExecutionMode = 'plan' | 'ask' | 'auto';
 
+export interface AgentEventErrorRecord {
+  message: string;
+  name?: string;
+}
+
 // =============================================================================
 // Session Configuration
 // =============================================================================
@@ -529,8 +534,8 @@ export interface AgentEvent {
     totalTokens: number;
   };
 
-  /** Error (on error) */
-  error?: Error;
+  /** Error (on error). Journal replay receives the serialized record form. */
+  error?: Error | AgentEventErrorRecord;
 }
 
 // =============================================================================
