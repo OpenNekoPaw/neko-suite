@@ -290,6 +290,26 @@ All packages share vitest coverage settings via `vitest.shared.ts` (reporters, e
 pnpm check               # Runs both Knip + dependency-cruiser
 ```
 
+### Local CI Checks
+
+Before opening a PR, run the local CI-equivalent checks that match the impact area:
+
+```bash
+pnpm ci:local            # General TS/Webview/Extension quality gate
+pnpm ci:local:rust       # Rust engine changes
+pnpm ci:local:proto      # Proto contract and generated type sync
+```
+
+For integration smoke checks:
+
+```bash
+pnpm smoke:engine        # Engine CLI + serve /health + dispatch smoke
+pnpm smoke:webview       # Builds all webview packages; limit with NEKO_WEBVIEW_SMOKE_PACKAGES
+node scripts/smoke-webview-builds.mjs --list  # Lists selected webview packages without building
+```
+
+For the code review process, risk levels, functional/UX/performance checks, professional software comparison, and merge rules, see [Code Review and Quality Gates ADR](./docs/architecture/adr-code-review-quality-gates.md).
+
 ### CI/CD
 
 PRs and pushes to the main branch automatically trigger GitHub Actions CI (`.github/workflows/ci.yml`), with path-based filtering to run only relevant jobs:

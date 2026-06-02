@@ -321,6 +321,7 @@ Extension Host
 | Engine Runtime 分层 | [architecture/engine-runtime-layering.md](./docs/architecture/engine-runtime-layering.md) | runtime 按包拆分、默认共用一个 Host 应用；Video/2D/3D/Docs/Device/ML 维持单宿主；Game/Sim/XR 未来按需要升格独立 sidecar |
 | 创作上下文压缩 | [architecture/creative-context-compression.md](./docs/architecture/creative-context-compression.md) | 7 级优先级语义分类压缩：用户消息永久保留，创作决策/版本锚点/迭代链/资产状态/审美偏好分层摘要 |
 | 消融实验框架 | [architecture/ablation-experiment-framework.md](./docs/architecture/ablation-experiment-framework.md) | AblationToggles → AgentSessionConfig 映射 + MetricsHooks 指标采集，零侵入现有子系统 |
+| 代码审查与质量门禁 | [architecture/adr-code-review-quality-gates.md](./docs/architecture/adr-code-review-quality-gates.md) | 统一 Review 基线 + 风险分级 + 子包专项清单；覆盖功能、UX、性能、专业软件对标、本地检查与 CI 门禁 |
 | Agent 媒体架构 | [architecture/agent-media-architecture.md](./docs/architecture/agent-media-architecture.md) | Story 分镜职责边界；Agent 自足性；GeneratedAsset 磁盘存储 + JSON 引用；DragDropBroker 跨插件传递；Send-to-Agent 统一协议（文件级+内容级，零 base64）；MediaPreprocessor 自动缩放/抽帧 |
 | Story-Agent-Canvas 职责 | [architecture/story-agent-canvas-boundary.md](./docs/architecture/story-agent-canvas-boundary.md) | Agent-first 架构下的职责收敛：story 负责剧本事实与审阅入口，agent 负责编排，canvas 负责正式分镜工作台；定义轻量分镜表的目标、字段和非目标 |
 | 统一文件访问 | [architecture/engine-file-access.md](./docs/architecture/engine-file-access.md) | FileAccessRegistry + `/v1/files/*` + `sourceRef`，二进制源文件由 Engine 读取，Extension 仅保留项目 JSON/设置/sidecar 等文本语义 |

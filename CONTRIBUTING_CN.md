@@ -288,6 +288,26 @@ pnpm check:deps          # 检查架构规则违反
 pnpm check               # 同时运行 Knip + dependency-cruiser
 ```
 
+### 本地 CI 检查
+
+提交 PR 前按影响范围运行本地 CI 等价检查：
+
+```bash
+pnpm ci:local            # TS/Webview/Extension 通用质量门禁
+pnpm ci:local:rust       # Rust engine 相关改动
+pnpm ci:local:proto      # Proto 契约与生成类型同步
+```
+
+需要做集成 smoke 时运行：
+
+```bash
+pnpm smoke:engine        # engine CLI + serve /health + dispatch smoke
+pnpm smoke:webview       # 构建所有 webview 包；可用 NEKO_WEBVIEW_SMOKE_PACKAGES 限定范围
+node scripts/smoke-webview-builds.mjs --list  # 仅列出将被构建的 webview 包
+```
+
+代码审查流程、风险分级、功能/UX/性能检查、专业软件对标和合并规则见 [代码审查与质量门禁 ADR](./docs/architecture/adr-code-review-quality-gates.md)。
+
 ### CI/CD
 
 PR 和主分支推送会自动触发 GitHub Actions CI（`.github/workflows/ci.yml`），通过路径过滤按需运行：

@@ -35,6 +35,14 @@
     "check:agent-boundaries": "node scripts/check-neko-agent-boundaries.mjs",
     "check:deps": "depcruise packages/neko-types/src packages/neko-client/src packages/neko-cut/packages/extension/src packages/neko-cut/packages/webview/src packages/neko-agent/packages/extension/src packages/neko-agent/packages/platform/src packages/neko-agent/packages/agent/src packages/neko-canvas/packages/webview/src packages/neko-story/packages/extension/src packages/neko-story/packages/parser/src packages/neko-preview/packages/extension/src --config",
     "check": "pnpm check:unused && pnpm check:deps",
+    "ci:local": "pnpm format:check && pnpm lint && pnpm build && pnpm test -- --run && pnpm check",
+    "ci:local:rust": "cd packages/neko-engine && cargo fmt --all -- --check && cargo clippy --workspace -- -D warnings && cargo test --workspace",
+    "ci:local:proto": "pnpm generate:types && git diff --exit-code packages/neko-types/src/generated/",
+    "smoke:engine:cli": "pnpm --filter @neko-engine/host-cli run build:debug && node scripts/smoke-engine-cli.mjs",
+    "smoke:engine:serve": "pnpm --filter @neko-engine/host-cli run build:debug && node scripts/smoke-engine-serve.mjs",
+    "smoke:engine": "pnpm smoke:engine:cli && pnpm smoke:engine:serve",
+    "smoke:webview": "node scripts/smoke-webview-builds.mjs",
+    "smoke": "pnpm smoke:engine && pnpm smoke:webview",
     "prepare": "husky"
   },
   "lint-staged": {

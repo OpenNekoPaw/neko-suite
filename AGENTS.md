@@ -15,6 +15,7 @@
   3. 是否易于扩展与测试？
 - 遇到多模块改动或新功能，先做五层分析：职责、依赖、接口、扩展、测试。
 - 简单改动可直接实现，但仍需保持与现有架构一致。
+- 新增功能或非平凡代码修改后，按 `docs/architecture/adr-code-review-quality-gates.md` 做自审；可使用项目 skill `.codex/skills/neko-quality-review/SKILL.md`，并在交付说明中列出验证命令与剩余风险。
 
 ## 语言与沟通
 
@@ -58,6 +59,7 @@
   - Agent 统一工作流（IDC 三阶段 + 六平面约束）：`docs/architecture/agent-unified-workflow.md`
   - Agent 能力提供者协议：`docs/architecture/neko-agent-media-requirements-fit.md`
   - 3D 编辑器渲染架构（活跃议题，Proposed 2026-04-27）：`docs/architecture/adr-3d-editor-rendering-architecture.md`
+  - 代码审查与质量门禁：`docs/architecture/adr-code-review-quality-gates.md`
 - ADR 全集见 `docs/architecture/`，更多条目请直接浏览该目录。
 
 ## 架构硬约束
