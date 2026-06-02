@@ -25,7 +25,7 @@ This is fundamentally different from the creative assistant using a character's 
 
 ### 2.1 Core Positioning
 
-`/as @character` opens an **isolated Agent-owned NPC conversation session** for interactive testing. The NPC session:
+Dashboard character entity actions open **isolated Agent-owned NPC conversation sessions** for interactive testing. The NPC session:
 
 - Runs under **runtime tool policy: none** — this is a session isolation policy, not an NPC capability
 - Has a **profile-bound behavior boundary** — responds from the assembled profile and is evaluated for knowledge leakage
@@ -89,23 +89,28 @@ semantics, but the controller does not expose a one-shot worker task to the UI:
 it owns multi-turn routing, tab projection, transcript extraction, evaluation,
 save policy, and disposal.
 
-### 2.4 `/as @entity` Syntax
+### 2.4 Dashboard-First Launch And `/as` Compatibility
 
 ```
-/as @小明          → Assemble profile → Start NPC session → Enter NPC conversation
-/as @小明 --consult → NPC provides advice in character but acknowledges being AI
-/as                → Show character picker (MentionMenu filtered to character/entity kind)
-/exit-role         → Evaluate/save if requested → Dispose NPC session → Return to main agent conversation
+Dashboard character detail / Test NPC
+  → Assemble profile → Start NPC session → Enter NPC conversation
+
+Dashboard character detail / Perspective | Validate | Improve
+  → Run ordinary Agent analysis workflow with project-scoped evidence
+  → Produce report or pending suggestions without starting roleplay
+
+/exit-role
+  → Evaluate/save if requested → Dispose NPC session → Return to main agent conversation
 ```
 
-The `@` trigger reuses the existing `MentionMenu` infrastructure. When `/as ` is the current prefix, the mention menu filters to `character` and `entity` kinds only.
+The `/as @entity` parser may remain during migration as a hidden compatibility or debug route, but it is no longer a visible Agent Webview slash command or help item. Manual `/as` input, when supported, must delegate to the same `neko.agent.testNpc` controller path and must not convert the current Agent chat into a roleplay persona.
 
 ## 3. Architecture
 
 ### 3.1 Data Flow
 
 ```
-/as @小明
+Dashboard Test NPC action for 小明
   │
   ├─ Phase 1: Deterministic Assembly (NpcProfileAssembler, entity projection)
   │   ├─ CreativeEntityRegistry.resolveByName('小明')
@@ -165,7 +170,7 @@ The `@` trigger reuses the existing `MentionMenu` infrastructure. When `/as ` is
 
 @neko-agent/extension (orchestration)
   └─ NpcTestBenchController
-       ├─ handles /as and neko.agent.testNpc
+       ├─ handles neko.agent.testNpc and hidden /as compatibility
        ├─ calls NpcProfileAssembler
        ├─ creates/disposes NpcConversationSession instances
        ├─ extracts transcript before disposal
@@ -211,7 +216,7 @@ Cycle prevention rules:
 1. Put `NpcProfileSource`, transcript, evaluation, launch request, and command constants in `@neko/shared`.
 2. Put deterministic profile assembly in `@neko/entity/projections`.
 3. Put prompt/evaluator projection and `npc-character` preset in `@neko/agent`.
-4. Put `/as`, `neko.agent.testNpc`, NPC session lifecycle, transcript extraction, and `.neko/npc-tests` persistence in `@neko-agent/extension`.
+4. Put `neko.agent.testNpc`, hidden `/as` compatibility, NPC session lifecycle, transcript extraction, and `.neko/npc-tests` persistence in `@neko-agent/extension`.
 5. Other feature packages only emit `NpcTestBenchLaunchRequest` or `DashboardCreativeEntityAction: 'test-npc'`.
 
 ### 3.4 Shared Contract Sketch
@@ -369,7 +374,10 @@ export type DashboardCreativeEntityAction =
   | 'open-source'
   | 'show-detail'
   // ... existing
-  | 'test-npc';       // ← new
+  | 'test-npc'
+  | 'character-perspective'
+  | 'validate-character'
+  | 'improve-character';
 ```
 
 ### 4.2 Dashboard UI
@@ -379,6 +387,12 @@ Entity row in Dashboard:
 ┌──────────────────────────────────────────────────┐
 │  🎭 小明  protagonist  confirmed  [3 occurrences]│
 │  └─ [Details] [Generate Material] [💬 Test NPC]  │
+└──────────────────────────────────────────────────┘
+
+Entity detail in Dashboard:
+┌──────────────────────────────────────────────────┐
+│ 小明                                             │
+│ [Test NPC] [Perspective] [Validate] [Improve]    │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -395,13 +409,25 @@ Dashboard [💬 Test NPC] click
   → NpcProfileAssembler.assembleProfile(entityRef)
   → NpcConversationSession starts with no-tool responder config
   → Open NPC conversation tab
+
+Dashboard [Perspective / Validate / Improve] click
+  → Webview sends DashboardCreativeEntityActionRequest(action: workflow)
+  → Owning source validates entity ref and optional scope refs
+  → vscode.commands.executeCommand('neko.agent.characterPerspective' | ...)
+  → Focus Agent panel
+  → Send an ordinary Agent analysis message
+  → Agent may read project-scoped evidence under normal Agent policy
+  → Report findings or pending suggestions without mutating entity facts
 ```
 
 Both the Story-backed source and the neutral `@neko/entity` source may expose
-`test-npc`. The Dashboard Webview never imports Agent internals and never
-assembles profiles; it only emits a typed creative entity action request. This
-matters because the aggregator can dedupe confirmed rows in favor of the neutral
-entity source, so the neutral source must also know how to delegate the action.
+the NPC operation actions. Rows stay compact with `test-npc`; detail view
+exposes `test-npc`, `character-perspective`, `validate-character`, and
+`improve-character`. The Dashboard Webview never imports Agent internals and
+never assembles profiles; it only emits a typed creative entity action request.
+This matters because the aggregator can dedupe confirmed rows in favor of the
+neutral entity source, so the neutral source must also know how to delegate the
+action.
 
 ### 4.4 VSCode Command
 
@@ -556,12 +582,11 @@ after user confirmation.
 ### 7.1 Operator System
 
 ```
-/  = Directive   — /as triggers NPC test mode
-@  = Reference   — @小明 selects the character entity
-                    (combined: /as @小明)
+/  = Directive   — hidden compatibility only for /as during migration
+@  = Reference   — @小明 selects the character entity for manual compatibility
 ```
 
-No new operator needed. `/as` is a builtin slash command; `@` mention provides entity selection.
+No new operator is needed. Product UX starts from Dashboard character actions; `/as` remains a builtin parser compatibility route only while migration requires it.
 
 ### 7.2 SubAgent System
 
@@ -579,15 +604,15 @@ NPC test is **orthogonal** to the IDC stage persona system:
 
 ### 7.4 Skill System
 
-`/as` is a **builtin command**, not a Skill:
+`/as` compatibility is a **builtin command**, not a Skill:
 - Skills inject prompts into the main session — NPC needs a separate session
 - Skills support `$ARGUMENTS` interpolation — NPC needs full profile assembly, not text substitution
 - Skills use authoring-tool policy — NPC testing needs runtime isolation plus a character profile, not a skill allow-list
 
-The `/as` command handler lives in `SlashCommandHandler` and delegates to
-`NpcTestBenchController`. The controller calls `NpcProfileAssembler` through the
-entity projection boundary, then owns NPC session lifecycle and transcript
-persistence.
+The hidden `/as` command handler lives in `SlashCommandHandler` and delegates to
+`NpcTestBenchController` when compatibility is enabled. The controller calls
+`NpcProfileAssembler` through the entity projection boundary, then owns NPC
+session lifecycle and transcript persistence.
 
 ### 7.5 Entity Dashboard
 
@@ -641,6 +666,17 @@ original five integration gaps have been closed and covered by targeted tests:
 | Webview NPC session UI | Closed. NPC tabs render `NpcSessionHeader`, route NPC `sendMessage` to the controller, route NPC exit events, and hide creative controls. |
 | Relationship / occurrence readers | Closed at the NPC boundary. `createDashboardNpcProfileEvidenceReader()` reads all available Dashboard source details, merges relationship and occurrence evidence, and dedupes projections. Remaining sparsity depends on upstream entity graph / occurrence-index providers. |
 | InputArea NPC mode awareness | Closed. `input-area-presenter` uses the NPC conversation kind to hide model, execution mode, and media generation controls. |
+
+The follow-up OpenSpec change `refine-npc-dashboard-agent-workflows` moves the
+product entry point from Agent slash UX to Dashboard entity operations:
+
+| Refinement | Current status |
+|------------|----------------|
+| Dashboard-first NPC operations | Closed. Character detail exposes `test-npc`, `character-perspective`, `validate-character`, and `improve-character`; row actions remain compact. |
+| Visible `/as` slash command | Deprecated from product UX. Agent Webview slash catalog, autocomplete, and help omit `/as`; typed `/as @character` remains hidden compatibility while migration needs it. |
+| Tool-enabled NPC analysis | Closed at routing level. Perspective, validation, and improvement commands send ordinary Agent workflow messages and do not start `npc-test` sessions. |
+| Roleplay no-tool isolation | Preserved. `npc-test` still creates `ConversationKind: 'npc-test'` with `toolPolicy: { kind: 'none' }`, and SubAgent `toolPolicy:none` still yields an empty tool registry. |
+| Entity mutation | Suggestion-only. Validation and improvement output must route through explicit entity-source apply actions before project facts change. |
 
 Default project enrichment is also implemented. When a thin profile chooses
 `Extract project evidence`, `NpcTestBenchController` first uses an injected

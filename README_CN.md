@@ -148,21 +148,24 @@ VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
 
 ### 4. NPC 角色测试台
 
-角色测试和创作执行是两种场景。`/as @角色` 会在 Agent 面板中打开独立的 NPC 测试会话，用当前项目里的角色事实、资产绑定、视觉草稿、关系和出场信息组装 NPC Profile；NPC 会话使用 `toolPolicy: { kind: 'none' }`，不会获得读写文件、生成媒体、编辑时间线或其他创作工具。
+角色测试和创作执行是两种场景。Dashboard 角色实体详情是 NPC 操作的主入口：`测试 NPC` 会在 Agent 面板中打开独立的 NPC 测试会话，用当前项目里的角色事实、资产绑定、视觉草稿、关系和出场信息组装 NPC Profile；NPC 会话使用 `toolPolicy: { kind: 'none' }`，不会获得读写文件、生成媒体、编辑时间线或其他创作工具。
 
-常用入口：
+Dashboard 角色详情操作：
 
 ```text
-/as @小明
-/as @小明 --consult
-/exit-role
+测试 NPC
+角色视角
+验证角色
+完善设定
 ```
 
-- `/as @小明`：进入小明的 NPC 角色扮演测试会话。
-- `/as @小明 --consult`：以角色口吻提供咨询，但允许承认这是 AI 咨询模式。
-- `/as`：打开当前项目角色选择器。
-- `/exit-role`：退出 NPC 测试，生成评估报告，并按提示决定是否保存证据。
-- Dashboard 的角色行会显示 `测试 NPC` / `Test NPC` 操作；Dashboard 只发送 `test-npc` 创意实体动作，实际 Profile 组装、会话创建和评估由 Agent 扩展负责。
+- `测试 NPC`：进入该角色的独立 NPC 角色扮演测试会话。
+- `角色视角`：让普通 Agent 分析该角色在当前项目/作用域中知道、误解、未知和不应知道的内容。
+- `验证角色`：检查角色完整度、知识边界、语气、关系和交互路径风险。
+- `完善设定`：生成待确认的角色设定补充建议，不自动写回项目事实。
+- `/exit-role`：在 NPC 测试会话中退出测试，生成评估报告，并按提示决定是否保存证据。
+
+`/as @角色` 不再作为 Agent Webview 可见 slash 命令展示；如迁移期仍支持手动输入，它只是隐藏兼容/调试入口，并继续委托到同一个 `neko.agent.testNpc` 隔离会话路径。Dashboard 只发送创意实体动作，实际 Profile 组装、会话创建、Agent 验证工作流和评估由 Agent 扩展负责。
 
 NPC 上下文默认跟随当前项目。活跃对话只保存在 NPC 会话内存中，不写入主 Agent 历史、`.neko/memory.md`、全局记忆或标准会话记录；用户选择保存时，转录和评估会落到当前项目的 `.neko/npc-tests/{entityId}-{timestamp}.json`，作为测试证据而不是角色事实源。评估产生的性格、台词、关系等建议必须由用户确认后，才会通过实体元数据更新或关系更新命令写回项目。
 

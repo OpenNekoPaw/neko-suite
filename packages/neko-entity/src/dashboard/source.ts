@@ -9,16 +9,24 @@ import type {
   DashboardCreativeEntityRow,
   DashboardCreativeEntitySnapshot,
   DashboardCreativeEntitySource,
+  DashboardCharacterNpcWorkflowAction,
   EntityAssetBinding,
   EntityAssetRequirement,
   VisualIdentityDraft,
 } from '@neko/shared';
 import {
   isNpcTestMode,
+  NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
+  NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
   NEKO_AGENT_TEST_NPC_COMMAND,
+  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+  type NpcAgentWorkflowRequest,
   type NpcTestBenchLaunchRequest,
 } from '@neko/shared/types/npc-test-bench';
-import { DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION } from '@neko/shared/types/dashboard-creative-entity';
+import {
+  DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
+  isDashboardCharacterNpcWorkflowScopeRef,
+} from '@neko/shared/types/dashboard-creative-entity';
 import type { CreativeEntityService } from '../core/CreativeEntityService';
 import type { EntityDisposable } from '../core/ports';
 
@@ -67,6 +75,9 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
       'import-material',
       'dismiss-requirement',
       'test-npc',
+      'character-perspective',
+      'validate-character',
+      'improve-character',
       'refresh',
     ],
   } satisfies DashboardCreativeEntitySource['capabilities'];
@@ -143,6 +154,10 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
           return { ok: true, refresh: true, ref: request.ref };
         case 'test-npc':
           return this.executeNpcTestAction(entityId, request);
+        case 'character-perspective':
+        case 'validate-character':
+        case 'improve-character':
+          return this.executeNpcWorkflowAction(request.action, entityId, request);
         case 'confirm-candidate':
           if (!candidateId) return { ok: false, message: 'No candidate ref is available.' };
           await this.options.service.confirmCandidate({ candidateId });
@@ -208,6 +223,56 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     return { ok: true, refresh: false, ref: request.ref };
   }
 
+  private async executeNpcWorkflowAction(
+    action: DashboardCharacterNpcWorkflowAction,
+    entityId: string | undefined,
+    request: DashboardCreativeEntityActionRequest,
+  ): Promise<DashboardCreativeEntityActionResult> {
+    if (!request.ref) {
+      return { ok: false, message: 'No creative entity ref is available.' };
+    }
+    if (request.ref.entityKind !== 'character') {
+      return {
+        ok: false,
+        message: 'Only character entities support NPC Agent workflows.',
+        ref: request.ref,
+      };
+    }
+    if (!entityId || request.ref.sourceEntityId.startsWith('candidate:')) {
+      return {
+        ok: false,
+        message: 'Confirm the character before running NPC Agent workflows.',
+        ref: request.ref,
+      };
+    }
+    if (!this.options.executeCommand) {
+      return { ok: false, message: 'No command executor is available.', ref: request.ref };
+    }
+
+    const workflowRequest: NpcAgentWorkflowRequest = {
+      workflow: action,
+      entityRef: {
+        entityId,
+        entityKind: 'character',
+        projectRoot: this.options.projectRoot,
+        source: this.source,
+      },
+      dashboardRef: request.ref,
+      scopes: readNpcWorkflowScopes(request.payload),
+      prompt: readNpcWorkflowPrompt(request.payload),
+      source: 'dashboard',
+      projectRoot: this.options.projectRoot,
+    };
+    const command = commandForNpcWorkflow(action);
+    await this.options.executeCommand(command, workflowRequest);
+    return {
+      ok: true,
+      refresh: false,
+      ref: request.ref,
+      npcWorkflow: { kind: 'delegated-command', command },
+    };
+  }
+
   onDidChangeEntity(listener: (event: DashboardCreativeEntityEvent) => void): EntityDisposable {
     return this.options.subscribe?.(listener) ?? { dispose: () => undefined };
   }
@@ -271,7 +336,7 @@ function projectEntityRow(
     ).sort(),
     visualDraftCount: entityDrafts.length,
     freshness: 'fresh',
-    actions: entityActions(entity.kind),
+    actions: entityActions(entity.kind, 'row'),
     searchText: [label, entity.canonicalName, ...entity.aliases, entity.kind, entity.status].join(
       ' ',
     ),
@@ -359,7 +424,7 @@ function projectEntityDetail(
         : [],
     syncSuggestions: [],
     freshness: 'fresh',
-    actions: entityActions(entity.kind),
+    actions: entityActions(entity.kind, 'detail'),
   };
 }
 
@@ -417,7 +482,10 @@ function candidateRef(candidate: CreativeEntityCandidate): DashboardCreativeEnti
   };
 }
 
-function entityActions(kind: CreativeEntity['kind']): DashboardCreativeEntityRow['actions'] {
+function entityActions(
+  kind: CreativeEntity['kind'],
+  surface: 'row' | 'detail',
+): DashboardCreativeEntityRow['actions'] {
   const actions: DashboardCreativeEntityRow['actions'] = [
     { id: 'show-detail', label: 'Show detail' },
     { id: 'edit-aliases', label: 'Edit aliases' },
@@ -425,7 +493,12 @@ function entityActions(kind: CreativeEntity['kind']): DashboardCreativeEntityRow
     { id: 'refresh', label: 'Refresh' },
   ];
   return kind === 'character'
-    ? [actions[0], { id: 'test-npc', label: 'Test NPC' }, ...actions.slice(1)].filter(
+    ? [
+        actions[0],
+        { id: 'test-npc', label: 'Test NPC' },
+        ...(surface === 'detail' ? npcWorkflowActions() : []),
+        ...actions.slice(1),
+      ].filter(
         (action): action is DashboardCreativeEntityRow['actions'][number] => action !== undefined,
       )
     : actions;
@@ -444,14 +517,57 @@ function candidateActions(
         ? { reason: 'Only character candidates can be tested as NPCs.' }
         : {}),
     },
+    ...npcWorkflowActions('Confirm the character before running NPC Agent workflows.'),
     { id: 'confirm-candidate', label: 'Confirm candidate' },
     { id: 'dismiss-requirement', label: 'Dismiss' },
+  ];
+}
+
+function npcWorkflowActions(disabledReason?: string): DashboardCreativeEntityRow['actions'] {
+  const disabled = disabledReason !== undefined;
+  return [
+    {
+      id: 'character-perspective',
+      label: 'Character perspective',
+      ...(disabled ? { disabled, reason: disabledReason } : {}),
+    },
+    {
+      id: 'validate-character',
+      label: 'Validate character',
+      ...(disabled ? { disabled, reason: disabledReason } : {}),
+    },
+    {
+      id: 'improve-character',
+      label: 'Improve character',
+      ...(disabled ? { disabled, reason: disabledReason } : {}),
+    },
   ];
 }
 
 function readNpcMode(payload: DashboardCreativeEntityActionRequest['payload']) {
   const mode = payload?.['mode'];
   return isNpcTestMode(mode) ? mode : undefined;
+}
+
+function readNpcWorkflowScopes(payload: DashboardCreativeEntityActionRequest['payload']) {
+  const scopes = payload?.['scopes'];
+  return Array.isArray(scopes) ? scopes.filter(isDashboardCharacterNpcWorkflowScopeRef) : undefined;
+}
+
+function readNpcWorkflowPrompt(payload: DashboardCreativeEntityActionRequest['payload']) {
+  const prompt = payload?.['prompt'];
+  return typeof prompt === 'string' ? prompt : undefined;
+}
+
+function commandForNpcWorkflow(action: DashboardCharacterNpcWorkflowAction): string {
+  switch (action) {
+    case 'character-perspective':
+      return NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND;
+    case 'validate-character':
+      return NEKO_AGENT_VALIDATE_CHARACTER_COMMAND;
+    case 'improve-character':
+      return NEKO_AGENT_IMPROVE_CHARACTER_COMMAND;
+  }
 }
 
 function compareRows(a: DashboardCreativeEntityRow, b: DashboardCreativeEntityRow): number {

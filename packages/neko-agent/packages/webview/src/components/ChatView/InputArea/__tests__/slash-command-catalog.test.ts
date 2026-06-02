@@ -57,11 +57,34 @@ describe('slash-command-catalog', () => {
     const names = commands.map((command) => command.name);
 
     expect(names).toContain('/help');
-    expect(names).toContain('/as');
+    expect(names).not.toContain('/as');
     expect(names).toContain('/exit-role');
     expect(names).toContain('/model');
     expect(names).not.toContain('/config');
     expect(names).not.toContain('/commands');
+  });
+
+  it('hides only the builtin /as command and leaves plugin slash commands visible', () => {
+    const commands = createSlashCommandCatalog(
+      [],
+      [
+        {
+          id: 'as-plugin',
+          name: '/as-plugin',
+          description: 'Plugin command with similar prefix',
+          extensionId: 'neko.test',
+        },
+      ],
+    );
+
+    expect(commands.map((command) => command.name)).not.toContain('/as');
+    expect(commands).toContainEqual(
+      expect.objectContaining({
+        id: 'plugin:neko.test:as-plugin',
+        name: '/as-plugin',
+        source: 'plugin',
+      }),
+    );
   });
 
   it('keeps builtin commands canonical when skill or plugin names collide', () => {
@@ -215,6 +238,7 @@ describe('slash-command-catalog', () => {
         key === 'chat.commands.help' ? 'Show help message' : key,
       ),
     ).toContain('- `/help` - Show help message');
+    expect(formatSlashCommandHelpCatalog(commands, (key) => key)).not.toContain('`/as`');
     expect(
       resolveSlashCommandSourceLabel(commands.find((command) => command.name === '/help')!),
     ).toBeNull();

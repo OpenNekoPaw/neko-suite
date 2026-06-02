@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_CREATIVE_ENTITY_CONTRACT_VERSION,
+  DASHBOARD_CHARACTER_NPC_WORKFLOW_ACTIONS,
   DASHBOARD_CREATIVE_ENTITY_ACTIONS,
   DASHBOARD_CREATIVE_ENTITY_SOURCE_COMMAND,
   DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
+  isDashboardCharacterNpcWorkflowAction,
+  isDashboardCharacterNpcWorkflowActionPayload,
+  isDashboardCharacterNpcWorkflowActionResult,
   isDashboardCreativeEntityAction,
   isDashboardCreativeEntityActionRequest,
   isDashboardCreativeEntityBindingSummary,
@@ -196,7 +200,14 @@ describe('dashboard creative entity contracts', () => {
 
   it('validates action requests', () => {
     expect(DASHBOARD_CREATIVE_ENTITY_ACTIONS).toContain('test-npc');
+    expect(DASHBOARD_CHARACTER_NPC_WORKFLOW_ACTIONS).toEqual([
+      'character-perspective',
+      'validate-character',
+      'improve-character',
+    ]);
     expect(isDashboardCreativeEntityAction('test-npc')).toBe(true);
+    expect(isDashboardCreativeEntityAction('character-perspective')).toBe(true);
+    expect(isDashboardCharacterNpcWorkflowAction('validate-character')).toBe(true);
     expect(
       isDashboardCreativeEntitySourceRequest({
         projectRoot: '/workspace/neko-test',
@@ -212,6 +223,47 @@ describe('dashboard creative entity contracts', () => {
         payload: { mode: 'roleplay' },
       }),
     ).toBe(true);
+    expect(
+      isDashboardCreativeEntityActionRequest({
+        source: 'neko-story',
+        ref,
+        action: 'validate-character',
+        payload: {
+          entityRef: ref,
+          scopes: [
+            {
+              kind: 'occurrence',
+              source: 'neko-story',
+              ref: 'cases/test.fountain:8',
+              label: 'Scene 1',
+            },
+          ],
+          prompt: 'Check future knowledge leakage.',
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isDashboardCharacterNpcWorkflowActionPayload({
+        entityRef: ref,
+        scopes: [{ kind: 'story-document', source: 'neko-story', ref: 'cases/test.fountain' }],
+      }),
+    ).toBe(true);
+    expect(
+      isDashboardCharacterNpcWorkflowActionResult({
+        kind: 'delegated-command',
+        command: 'neko.agent.validateCharacter',
+      }),
+    ).toBe(true);
+    expect(
+      isDashboardCreativeEntityActionRequest({
+        source: 'neko-story',
+        ref,
+        action: 'validate-character',
+        payload: {
+          scopes: [{ kind: 'occurrence', source: 'neko-story', ref: '/tmp/test.fountain' }],
+        },
+      }),
+    ).toBe(false);
     expect(
       isDashboardCreativeEntityActionRequest({
         source: 'neko-story',

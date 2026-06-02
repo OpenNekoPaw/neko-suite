@@ -53,9 +53,13 @@ const BUILTIN_COMMAND_ICONS: Record<BuiltinSlashCommandName, string> = {
   mcp: '🔌',
 };
 
+const HIDDEN_WEBVIEW_BUILTIN_COMMANDS: ReadonlySet<BuiltinSlashCommandName> = new Set(['as']);
+
 const BUILTIN_SLASH_COMMANDS: readonly SlashCommandCatalogItem[] = listBuiltinSlashCommands(
   'extension',
-).map(projectBuiltinSlashCommand);
+)
+  .filter((command) => !HIDDEN_WEBVIEW_BUILTIN_COMMANDS.has(command.name))
+  .map(projectBuiltinSlashCommand);
 
 const SLASH_COMMAND_SECTION_ORDER: readonly SlashCommandSource[] = ['builtin', 'skill', 'plugin'];
 

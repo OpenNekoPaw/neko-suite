@@ -60,7 +60,29 @@ export type DashboardCreativeEntityAction =
   | 'apply-sync-suggestion'
   | 'ignore-sync-suggestion'
   | 'test-npc'
+  | 'character-perspective'
+  | 'validate-character'
+  | 'improve-character'
   | 'refresh';
+
+export type DashboardCharacterNpcWorkflowAction =
+  | 'character-perspective'
+  | 'validate-character'
+  | 'improve-character';
+
+export type DashboardCharacterNpcWorkflowScopeKind =
+  | 'project'
+  | 'story-scene'
+  | 'story-document'
+  | 'occurrence'
+  | 'interaction-path'
+  | 'validation-artifact';
+
+export type DashboardCharacterNpcWorkflowResultKind =
+  | 'agent-conversation'
+  | 'structured-report'
+  | 'suggestions'
+  | 'delegated-command';
 
 export type DashboardCreativeEntityEventType = 'added' | 'updated' | 'removed' | 'refreshed';
 
@@ -117,6 +139,27 @@ export interface DashboardCreativeEntityActionDescriptor {
   readonly label: string;
   readonly disabled?: boolean;
   readonly reason?: string;
+}
+
+export interface DashboardCharacterNpcWorkflowScopeRef {
+  readonly kind: DashboardCharacterNpcWorkflowScopeKind;
+  readonly source: string;
+  readonly ref: string;
+  readonly label?: string;
+}
+
+export interface DashboardCharacterNpcWorkflowActionPayload {
+  readonly entityRef?: DashboardCreativeEntityRef;
+  readonly scopes?: readonly DashboardCharacterNpcWorkflowScopeRef[];
+  readonly prompt?: string;
+}
+
+export interface DashboardCharacterNpcWorkflowActionResult {
+  readonly kind: DashboardCharacterNpcWorkflowResultKind;
+  readonly command?: string;
+  readonly conversationId?: string;
+  readonly reportId?: string;
+  readonly artifactRef?: string;
 }
 
 export interface DashboardCreativeEntityRow {
@@ -252,6 +295,7 @@ export interface DashboardCreativeEntityActionResult {
   readonly message?: string;
   readonly refresh?: boolean;
   readonly ref?: DashboardCreativeEntityRef;
+  readonly npcWorkflow?: DashboardCharacterNpcWorkflowActionResult;
 }
 
 export interface DashboardCreativeEntitySourceCapabilities {
@@ -312,8 +356,27 @@ export const DASHBOARD_CREATIVE_ENTITY_ACTIONS: readonly DashboardCreativeEntity
   'apply-sync-suggestion',
   'ignore-sync-suggestion',
   'test-npc',
+  'character-perspective',
+  'validate-character',
+  'improve-character',
   'refresh',
 ] as const;
+
+export const DASHBOARD_CHARACTER_NPC_WORKFLOW_ACTIONS: readonly DashboardCharacterNpcWorkflowAction[] =
+  ['character-perspective', 'validate-character', 'improve-character'] as const;
+
+export const DASHBOARD_CHARACTER_NPC_WORKFLOW_SCOPE_KINDS: readonly DashboardCharacterNpcWorkflowScopeKind[] =
+  [
+    'project',
+    'story-scene',
+    'story-document',
+    'occurrence',
+    'interaction-path',
+    'validation-artifact',
+  ] as const;
+
+export const DASHBOARD_CHARACTER_NPC_WORKFLOW_RESULT_KINDS: readonly DashboardCharacterNpcWorkflowResultKind[] =
+  ['agent-conversation', 'structured-report', 'suggestions', 'delegated-command'] as const;
 
 export const DASHBOARD_CREATIVE_ENTITY_EVENT_TYPES: readonly DashboardCreativeEntityEventType[] = [
   'added',
@@ -350,6 +413,24 @@ export function isDashboardCreativeEntityAction(
   value: unknown,
 ): value is DashboardCreativeEntityAction {
   return includesString(DASHBOARD_CREATIVE_ENTITY_ACTIONS, value);
+}
+
+export function isDashboardCharacterNpcWorkflowAction(
+  value: unknown,
+): value is DashboardCharacterNpcWorkflowAction {
+  return includesString(DASHBOARD_CHARACTER_NPC_WORKFLOW_ACTIONS, value);
+}
+
+export function isDashboardCharacterNpcWorkflowScopeKind(
+  value: unknown,
+): value is DashboardCharacterNpcWorkflowScopeKind {
+  return includesString(DASHBOARD_CHARACTER_NPC_WORKFLOW_SCOPE_KINDS, value);
+}
+
+export function isDashboardCharacterNpcWorkflowResultKind(
+  value: unknown,
+): value is DashboardCharacterNpcWorkflowResultKind {
+  return includesString(DASHBOARD_CHARACTER_NPC_WORKFLOW_RESULT_KINDS, value);
 }
 
 export function isDashboardCreativeEntityEventType(
@@ -426,6 +507,44 @@ export function isDashboardCreativeEntityActionDescriptor(
     isNonEmptyString(value['label']) &&
     (value['disabled'] === undefined || typeof value['disabled'] === 'boolean') &&
     (value['reason'] === undefined || typeof value['reason'] === 'string')
+  );
+}
+
+export function isDashboardCharacterNpcWorkflowScopeRef(
+  value: unknown,
+): value is DashboardCharacterNpcWorkflowScopeRef {
+  if (!isRecord(value)) return false;
+  return (
+    isDashboardCharacterNpcWorkflowScopeKind(value['kind']) &&
+    isNonEmptyString(value['source']) &&
+    isSafeDashboardEntityRef(value['ref']) &&
+    (value['label'] === undefined || typeof value['label'] === 'string')
+  );
+}
+
+export function isDashboardCharacterNpcWorkflowActionPayload(
+  value: unknown,
+): value is DashboardCharacterNpcWorkflowActionPayload {
+  if (!isRecord(value)) return false;
+  return (
+    (value['entityRef'] === undefined || isDashboardCreativeEntityRef(value['entityRef'])) &&
+    (value['scopes'] === undefined ||
+      (Array.isArray(value['scopes']) &&
+        value['scopes'].every(isDashboardCharacterNpcWorkflowScopeRef))) &&
+    (value['prompt'] === undefined || typeof value['prompt'] === 'string')
+  );
+}
+
+export function isDashboardCharacterNpcWorkflowActionResult(
+  value: unknown,
+): value is DashboardCharacterNpcWorkflowActionResult {
+  if (!isRecord(value)) return false;
+  return (
+    isDashboardCharacterNpcWorkflowResultKind(value['kind']) &&
+    (value['command'] === undefined || isNonEmptyString(value['command'])) &&
+    (value['conversationId'] === undefined || isNonEmptyString(value['conversationId'])) &&
+    (value['reportId'] === undefined || isNonEmptyString(value['reportId'])) &&
+    (value['artifactRef'] === undefined || isSafeDashboardEntityRef(value['artifactRef']))
   );
 }
 
@@ -601,14 +720,19 @@ export function isDashboardCreativeEntityActionRequest(
   value: unknown,
 ): value is DashboardCreativeEntityActionRequest {
   if (!isRecord(value)) return false;
+  const action = value['action'];
+  const payload = value['payload'];
   return (
     isNonEmptyString(value['source']) &&
     (value['ref'] === undefined || isDashboardCreativeEntityRef(value['ref'])) &&
-    isDashboardCreativeEntityAction(value['action']) &&
+    isDashboardCreativeEntityAction(action) &&
     (value['suggestionId'] === undefined || isNonEmptyString(value['suggestionId'])) &&
     (value['requirementId'] === undefined || isNonEmptyString(value['requirementId'])) &&
     (value['role'] === undefined || isEntityAssetBindingRole(value['role'])) &&
-    (value['payload'] === undefined || isRecord(value['payload']))
+    (payload === undefined ||
+      (isDashboardCharacterNpcWorkflowAction(action)
+        ? isDashboardCharacterNpcWorkflowActionPayload(payload)
+        : isRecord(payload)))
   );
 }
 
@@ -620,7 +744,9 @@ export function isDashboardCreativeEntityActionResult(
     typeof value['ok'] === 'boolean' &&
     (value['message'] === undefined || typeof value['message'] === 'string') &&
     (value['refresh'] === undefined || typeof value['refresh'] === 'boolean') &&
-    (value['ref'] === undefined || isDashboardCreativeEntityRef(value['ref']))
+    (value['ref'] === undefined || isDashboardCreativeEntityRef(value['ref'])) &&
+    (value['npcWorkflow'] === undefined ||
+      isDashboardCharacterNpcWorkflowActionResult(value['npcWorkflow']))
   );
 }
 

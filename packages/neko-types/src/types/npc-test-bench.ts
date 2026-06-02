@@ -5,7 +5,11 @@ import {
   type CreativeEntityRef,
 } from './creative-entity-asset-composition';
 import {
+  isDashboardCharacterNpcWorkflowAction,
+  isDashboardCharacterNpcWorkflowScopeRef,
   isDashboardCreativeEntityRef,
+  type DashboardCharacterNpcWorkflowAction,
+  type DashboardCharacterNpcWorkflowScopeRef,
   type DashboardCreativeEntityRef,
 } from './dashboard-creative-entity';
 
@@ -14,6 +18,9 @@ export const NPC_TEST_BENCH_AS_SLASH_COMMAND = '/as';
 export const NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND_NAME = 'exit-role';
 export const NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND = '/exit-role';
 export const NEKO_AGENT_TEST_NPC_COMMAND = 'neko.agent.testNpc';
+export const NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND = 'neko.agent.characterPerspective';
+export const NEKO_AGENT_VALIDATE_CHARACTER_COMMAND = 'neko.agent.validateCharacter';
+export const NEKO_AGENT_IMPROVE_CHARACTER_COMMAND = 'neko.agent.improveCharacter';
 export const NPC_TRANSCRIPT_ARTIFACT_VERSION = 1;
 
 export type NpcTestMode = 'roleplay' | 'consult';
@@ -30,6 +37,7 @@ export type NpcProfileFactSource =
   | 'user-supplement';
 export type NpcProfileEnrichmentMode = 'ask' | 'skip' | 'auto' | 'manual';
 export type NpcTestBenchLaunchSource = 'slash-command' | 'dashboard' | 'story' | 'canvas' | 'asset';
+export type NpcAgentWorkflowLaunchSource = 'dashboard' | 'agent' | 'story' | 'canvas' | 'asset';
 
 export type NpcTranscriptMessageRole = 'user' | 'npc' | 'system' | 'evaluator';
 export type NpcEvaluationDimension =
@@ -116,6 +124,16 @@ export interface NpcTestBenchLaunchRequest {
   readonly projectRoot?: string;
   readonly initialUserMessage?: string;
   readonly userSupplements?: string;
+}
+
+export interface NpcAgentWorkflowRequest {
+  readonly workflow: DashboardCharacterNpcWorkflowAction;
+  readonly entityRef: CreativeEntityRef;
+  readonly dashboardRef?: DashboardCreativeEntityRef;
+  readonly scopes?: readonly DashboardCharacterNpcWorkflowScopeRef[];
+  readonly prompt?: string;
+  readonly source?: NpcAgentWorkflowLaunchSource;
+  readonly projectRoot?: string;
 }
 
 export interface NpcTranscriptMessage {
@@ -232,6 +250,13 @@ export const NPC_TEST_BENCH_LAUNCH_SOURCES: readonly NpcTestBenchLaunchSource[] 
   'canvas',
   'asset',
 ] as const;
+export const NPC_AGENT_WORKFLOW_LAUNCH_SOURCES: readonly NpcAgentWorkflowLaunchSource[] = [
+  'dashboard',
+  'agent',
+  'story',
+  'canvas',
+  'asset',
+] as const;
 export const NPC_TRANSCRIPT_MESSAGE_ROLES: readonly NpcTranscriptMessageRole[] = [
   'user',
   'npc',
@@ -286,6 +311,12 @@ export function isNpcProfileEnrichmentMode(value: unknown): value is NpcProfileE
 
 export function isNpcTestBenchLaunchSource(value: unknown): value is NpcTestBenchLaunchSource {
   return includesString(NPC_TEST_BENCH_LAUNCH_SOURCES, value);
+}
+
+export function isNpcAgentWorkflowLaunchSource(
+  value: unknown,
+): value is NpcAgentWorkflowLaunchSource {
+  return includesString(NPC_AGENT_WORKFLOW_LAUNCH_SOURCES, value);
 }
 
 export function isNpcSerializableValue(value: unknown): value is NpcSerializableValue {
@@ -401,6 +432,21 @@ export function isNpcTestBenchLaunchRequest(value: unknown): value is NpcTestBen
     (value['initialUserMessage'] === undefined ||
       typeof value['initialUserMessage'] === 'string') &&
     (value['userSupplements'] === undefined || typeof value['userSupplements'] === 'string')
+  );
+}
+
+export function isNpcAgentWorkflowRequest(value: unknown): value is NpcAgentWorkflowRequest {
+  if (!isRecord(value)) return false;
+  return (
+    isDashboardCharacterNpcWorkflowAction(value['workflow']) &&
+    isCreativeEntityRef(value['entityRef']) &&
+    (value['dashboardRef'] === undefined || isDashboardCreativeEntityRef(value['dashboardRef'])) &&
+    (value['scopes'] === undefined ||
+      (Array.isArray(value['scopes']) &&
+        value['scopes'].every(isDashboardCharacterNpcWorkflowScopeRef))) &&
+    (value['prompt'] === undefined || typeof value['prompt'] === 'string') &&
+    (value['source'] === undefined || isNpcAgentWorkflowLaunchSource(value['source'])) &&
+    (value['projectRoot'] === undefined || isNonEmptyString(value['projectRoot']))
   );
 }
 

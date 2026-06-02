@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import type {
   CreativeEntityRef,
   DashboardCreativeEntityDetail,
+  DashboardCreativeEntityRow,
   DashboardCreativeEntitySource,
   NpcEvaluationReport,
   NpcEvaluationSuggestion,
@@ -31,6 +32,8 @@ beforeEach(() => {
   vi.mocked(vscode.commands.executeCommand).mockResolvedValue(undefined);
   vi.mocked(vscode.window.showInformationMessage).mockReset();
   vi.mocked(vscode.window.showInformationMessage).mockResolvedValue(undefined);
+  vi.mocked(vscode.window.showQuickPick).mockReset();
+  vi.mocked(vscode.window.showQuickPick).mockResolvedValue(undefined);
 });
 
 const entityRef: CreativeEntityRef = {
@@ -149,6 +152,7 @@ function createHarness(
 function createDashboardSource(
   source: string,
   detail: DashboardCreativeEntityDetail,
+  rows: readonly DashboardCreativeEntityRow[] = [],
 ): DashboardCreativeEntitySource {
   return {
     contractVersion: 1,
@@ -165,7 +169,7 @@ function createDashboardSource(
         freshness: 'fresh',
         entityCount: 1,
       },
-      rows: [],
+      rows,
       freshness: 'fresh',
       updatedAt: '2026-06-01T00:00:00.000Z',
     })),
@@ -610,6 +614,130 @@ describe('NpcTestBenchController', () => {
     expect(harness.controller.hasSession('npc-session-1')).toBe(true);
   });
 
+  it('resolves /as mentions from Dashboard creative entity sources', async () => {
+    const storyDetail: DashboardCreativeEntityDetail = {
+      ref: {
+        source: 'neko-story',
+        sourceEntityId: 'candidate:character:小橘',
+        entityId: '小橘',
+        entityKind: 'character',
+        workspaceFolder: 'project-a',
+      },
+      label: '小橘',
+      kind: 'character',
+      status: 'candidate',
+      sourceKind: 'script',
+      aliases: ['Xiaoju'],
+      relationships: [],
+      occurrences: [],
+      bindings: [],
+      defaults: [],
+      requirements: [],
+      visualDrafts: [],
+      syncSuggestions: [],
+      freshness: 'fresh',
+      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+    };
+    const storyRow: DashboardCreativeEntityRow = {
+      ref: storyDetail.ref,
+      label: '小橘',
+      kind: 'character',
+      status: 'candidate',
+      sourceKind: 'script',
+      aliases: ['Xiaoju'],
+      summary: 'Script character candidate',
+      occurrenceCount: 1,
+      freshness: 'fresh',
+      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      searchText: '小橘 Xiaoju character candidate',
+    };
+    const storySource = createDashboardSource('neko-story', storyDetail, [storyRow]);
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command) =>
+      command === 'neko.story.getDashboardCreativeEntitySource' ? storySource : undefined,
+    );
+    const harness = createHarness();
+
+    await harness.controller.launchFromSlash({ args: '@小橘 --skip-enrich' });
+
+    expect(harness.assembler.assembleProfile).toHaveBeenCalledWith({
+      entityRef: {
+        entityId: '小橘',
+        entityKind: 'character',
+        projectRoot: '/workspace/project-a',
+        source: 'neko-story',
+      },
+    });
+    expect(harness.controller.hasSession('npc-session-1')).toBe(true);
+  });
+
+  it('offers Dashboard creative entity rows in the default /as picker', async () => {
+    const storyDetail: DashboardCreativeEntityDetail = {
+      ref: {
+        source: 'neko-story',
+        sourceEntityId: 'candidate:character:小橘',
+        entityId: '小橘',
+        entityKind: 'character',
+        workspaceFolder: 'project-a',
+      },
+      label: '小橘',
+      kind: 'character',
+      status: 'candidate',
+      sourceKind: 'script',
+      aliases: [],
+      relationships: [],
+      occurrences: [],
+      bindings: [],
+      defaults: [],
+      requirements: [],
+      visualDrafts: [],
+      syncSuggestions: [],
+      freshness: 'fresh',
+      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+    };
+    const storyRow: DashboardCreativeEntityRow = {
+      ref: storyDetail.ref,
+      label: '小橘',
+      kind: 'character',
+      status: 'candidate',
+      sourceKind: 'script',
+      summary: 'Script character candidate',
+      freshness: 'fresh',
+      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+      searchText: '小橘 character candidate',
+    };
+    const storySource = createDashboardSource('neko-story', storyDetail, [storyRow]);
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command) =>
+      command === 'neko.story.getDashboardCreativeEntitySource' ? storySource : undefined,
+    );
+    vi.mocked(vscode.window.showQuickPick).mockImplementation(async (items) => {
+      const options = Array.isArray(items) ? items : [];
+      return options.find((item) => item.label === '小橘');
+    });
+    const harness = createHarness();
+
+    await harness.controller.launchFromSlash({ args: '--skip-enrich' });
+
+    expect(vscode.window.showQuickPick).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: '小橘',
+          ref: expect.objectContaining({ source: 'neko-story' }),
+        }),
+      ]),
+      expect.objectContaining({
+        placeHolder: 'Choose a project character to test as an NPC',
+      }),
+    );
+    expect(harness.assembler.assembleProfile).toHaveBeenCalledWith({
+      entityRef: {
+        entityId: '小橘',
+        entityKind: 'character',
+        projectRoot: '/workspace/project-a',
+        source: 'neko-story',
+      },
+    });
+  });
+
   it('feeds project evidence from Dashboard sources into the default NPC profile assembler', async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'neko-npc-profile-'));
     const storyDetail: DashboardCreativeEntityDetail = {
@@ -728,6 +856,156 @@ describe('NpcTestBenchController', () => {
             sceneAppearances: ['cases/test.fountain:8'],
           }),
         }),
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('assembles a default NPC profile from Dashboard detail when registry is missing', async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'neko-npc-dashboard-profile-'));
+    const storyDetail: DashboardCreativeEntityDetail = {
+      ref: {
+        source: 'neko-story',
+        sourceEntityId: 'candidate:character:小橘',
+        entityId: '小橘',
+        entityKind: 'character',
+        workspaceFolder: 'project-a',
+      },
+      label: '小橘',
+      kind: 'character',
+      status: 'candidate',
+      sourceKind: 'script',
+      aliases: ['Xiaoju'],
+      description: 'Script-derived character candidate without confirmed registry identity.',
+      relationships: [],
+      occurrences: [
+        {
+          source: 'script',
+          role: 'reference',
+          label: '小橘',
+          location: 'cases/test.fountain:8',
+          detail: '小橘：我先看看。',
+        },
+      ],
+      bindings: [],
+      defaults: [],
+      requirements: [],
+      visualDrafts: [],
+      syncSuggestions: [],
+      freshness: 'fresh',
+      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+    };
+    const storySource = createDashboardSource('neko-story', storyDetail);
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command) =>
+      command === 'neko.story.getDashboardCreativeEntitySource' ? storySource : undefined,
+    );
+
+    try {
+      const assembler = createDefaultNpcProfileAssembler(projectRoot);
+      const result = await assembler.assembleProfile({
+        entityRef: {
+          entityId: '小橘',
+          entityKind: 'character',
+          projectRoot,
+          source: 'neko-story',
+        },
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'assembled',
+          profile: expect.objectContaining({
+            displayName: '小橘',
+            aliases: ['Xiaoju'],
+            dialogueSamples: ['小橘：我先看看。'],
+            sceneAppearances: ['cases/test.fountain:8'],
+          }),
+        }),
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('adds script context snippets to the default NPC profile before conversation starts', async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'neko-npc-script-context-'));
+    const storyDetail: DashboardCreativeEntityDetail = {
+      ref: {
+        source: 'neko-story',
+        sourceEntityId: 'candidate:character:小橘',
+        entityId: '小橘',
+        entityKind: 'character',
+        workspaceFolder: 'project-a',
+      },
+      label: '小橘',
+      kind: 'character',
+      status: 'candidate',
+      sourceKind: 'script',
+      aliases: [],
+      relationships: [],
+      occurrences: [
+        {
+          source: 'script',
+          role: 'reference',
+          label: '小橘',
+          location: 'cases/test.fountain:8',
+          detail: '小橘：我今天去上学了。',
+        },
+      ],
+      bindings: [],
+      defaults: [],
+      requirements: [],
+      visualDrafts: [],
+      syncSuggestions: [],
+      freshness: 'fresh',
+      actions: [{ id: 'test-npc', label: 'Test NPC' }],
+    };
+    const storySource = createDashboardSource('neko-story', storyDetail);
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command) =>
+      command === 'neko.story.getDashboardCreativeEntitySource' ? storySource : undefined,
+    );
+    vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async () =>
+      Buffer.from(
+        [
+          'INT. 教室 - DAY',
+          '老师正在点名。',
+          '阿灰看向窗外。',
+          '小橘坐在第二排。',
+          '她把书包放好。',
+          '老师',
+          '今天谁迟到了？',
+          '小橘',
+          '我今天去上学了，还交了作业。',
+          '同学们笑了起来。',
+        ].join('\n'),
+        'utf8',
+      ),
+    );
+
+    try {
+      const assembler = createDefaultNpcProfileAssembler(projectRoot);
+      const result = await assembler.assembleProfile({
+        entityRef: {
+          entityId: '小橘',
+          entityKind: 'character',
+          projectRoot,
+          source: 'neko-story',
+        },
+      });
+
+      expect(result).toEqual(expect.objectContaining({ status: 'assembled' }));
+      if (result.status !== 'assembled') return;
+      expect(result.profile.facts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            key: 'script.context.1',
+            value: expect.stringContaining('我今天去上学了'),
+            source: 'script-extraction',
+            authority: 'confirmed',
+            sourceRef: 'cases/test.fountain:8',
+          }),
+        ]),
       );
     } finally {
       await rm(projectRoot, { recursive: true, force: true });

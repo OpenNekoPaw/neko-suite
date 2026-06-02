@@ -148,21 +148,24 @@ Intent → SkillRegistry → activate(skill)
 
 ### 4. NPC Character Test Bench
 
-NPC testing and creative authoring are separate scenarios. `/as @character` opens an isolated NPC test session in the Agent panel, assembling the NPC profile from current project character facts, asset bindings, visual drafts, relationships, and occurrences. The NPC session uses `toolPolicy: { kind: 'none' }`, so it receives no file, media-generation, timeline-editing, shell, or creative authoring tools.
+NPC testing and creative authoring are separate scenarios. The Dashboard character detail view is the primary NPC operation surface: `Test NPC` opens an isolated NPC test session in the Agent panel, assembling the NPC profile from current project character facts, asset bindings, visual drafts, relationships, and occurrences. The NPC session uses `toolPolicy: { kind: 'none' }`, so it receives no file, media-generation, timeline-editing, shell, or creative authoring tools.
 
-Common entry points:
+Dashboard character detail actions:
 
 ```text
-/as @XiaoMing
-/as @XiaoMing --consult
-/exit-role
+Test NPC
+Perspective
+Validate
+Improve
 ```
 
-- `/as @XiaoMing`: enter an NPC roleplay test session for the character.
-- `/as @XiaoMing --consult`: answer in the character voice while allowing AI-consultant framing.
-- `/as`: open the current project character picker.
+- `Test NPC`: enter an isolated NPC roleplay test session for the character.
+- `Perspective`: ask the ordinary Agent to analyze what the character knows, misunderstands, does not know, and should not know in the selected project scope.
+- `Validate`: check character completeness, knowledge boundaries, voice, relationships, and interaction-flow risks.
+- `Improve`: produce pending character-design suggestions without automatically writing project facts.
 - `/exit-role`: exit NPC testing, generate an evaluation report, and choose whether to save evidence.
-- Dashboard character rows expose `Test NPC`; Dashboard only sends the delegated `test-npc` creative entity action, while the Agent extension owns profile assembly, session creation, and evaluation.
+
+`/as @character` is no longer exposed as a visible Agent Webview slash command. If manual typed compatibility remains during migration, it is a hidden/debug entry that still delegates to the same `neko.agent.testNpc` isolated session path. Dashboard only sends creative entity action requests, while the Agent extension owns profile assembly, NPC session creation, Agent validation workflows, and evaluation.
 
 NPC context follows the current project by default. Active dialogue stays in NPC session memory and is not written to main Agent history, `.neko/memory.md`, global memory, or standard conversation records. If the user chooses to save evidence, transcripts and evaluation are written under `.neko/npc-tests/{entityId}-{timestamp}.json` in the current project. Evaluation suggestions stay suggested until the user confirms applying them through entity metadata or relationship update commands.
 

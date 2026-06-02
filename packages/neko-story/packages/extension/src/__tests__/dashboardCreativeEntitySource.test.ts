@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
-import { NEKO_AGENT_TEST_NPC_COMMAND } from '@neko/shared';
+import { NEKO_AGENT_TEST_NPC_COMMAND, NEKO_AGENT_VALIDATE_CHARACTER_COMMAND } from '@neko/shared';
 import type {
   CreativeEntity,
   CreativeEntityRegistry,
@@ -113,12 +113,18 @@ describe('StoryDashboardCreativeEntitySource', () => {
         actions: expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
       }),
     );
+    expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'validate-character' })]),
+    );
     expect(snapshot.rows.find((row) => row.label === '阿灰')).toEqual(
       expect.objectContaining({
         status: 'candidate',
         sourceKind: 'script',
         missingRepresentationKinds: ['portrait', 'reference'],
-        actions: expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
+        actions: expect.arrayContaining([
+          expect.objectContaining({ id: 'test-npc' }),
+          expect.objectContaining({ id: 'validate-character', disabled: true }),
+        ]),
       }),
     );
 
@@ -148,6 +154,11 @@ describe('StoryDashboardCreativeEntitySource', () => {
           expect.objectContaining({ targetRef: 'project://assets/xiaoju-portrait' }),
           expect.objectContaining({ targetRef: 'market://pack/xiaoju-ref', readonlyTarget: true }),
         ]),
+        actions: expect.arrayContaining([
+          expect.objectContaining({ id: 'character-perspective' }),
+          expect.objectContaining({ id: 'validate-character' }),
+          expect.objectContaining({ id: 'improve-character' }),
+        ]),
       }),
     );
     expect(isDashboardCreativeEntityDetail(detail)).toBe(true);
@@ -164,6 +175,57 @@ describe('StoryDashboardCreativeEntitySource', () => {
       entityId: 'char_xiaoju',
       role: 'portrait',
     });
+  });
+
+  it('delegates Dashboard NPC Agent workflows to Agent-owned commands', async () => {
+    const executeCommand = vi.fn(async () => undefined);
+    const source = createSource({
+      executeCommand,
+      characterNames: ['小橘'],
+    });
+    const detail = await source.getDetail({
+      source: 'neko-story',
+      sourceEntityId: 'entity:char_xiaoju',
+      entityId: 'char_xiaoju',
+      entityKind: 'character',
+      workspaceFolder: 'neko-test',
+    });
+
+    await expect(
+      source.executeAction({
+        source: 'neko-story',
+        ref: detail?.ref,
+        action: 'validate-character',
+        payload: {
+          scopes: [{ kind: 'occurrence', source: 'neko-story', ref: 'cases/test.fountain:8' }],
+          prompt: 'Check branching dialogue.',
+        },
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        refresh: false,
+        npcWorkflow: { kind: 'delegated-command', command: NEKO_AGENT_VALIDATE_CHARACTER_COMMAND },
+      }),
+    );
+
+    expect(executeCommand).toHaveBeenCalledWith(
+      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      expect.objectContaining({
+        workflow: 'validate-character',
+        entityRef: {
+          entityId: 'char_xiaoju',
+          entityKind: 'character',
+          projectRoot: workspaceRoot,
+          source: 'neko-story',
+        },
+        dashboardRef: detail?.ref,
+        scopes: [{ kind: 'occurrence', source: 'neko-story', ref: 'cases/test.fountain:8' }],
+        prompt: 'Check branching dialogue.',
+        source: 'dashboard',
+        projectRoot: workspaceRoot,
+      }),
+    );
   });
 
   it('delegates Dashboard NPC tests to the Agent-owned launch command', async () => {

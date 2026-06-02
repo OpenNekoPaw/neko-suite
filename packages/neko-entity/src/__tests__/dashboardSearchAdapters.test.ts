@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
-import { NEKO_AGENT_TEST_NPC_COMMAND } from '@neko/shared/types/npc-test-bench';
+import {
+  NEKO_AGENT_TEST_NPC_COMMAND,
+  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+} from '@neko/shared/types/npc-test-bench';
 import { CreativeEntityService } from '../core/CreativeEntityService';
 import { EntityDashboardCreativeEntitySource } from '../dashboard/source';
 import { createEntitySearchAdapter } from '../projections';
@@ -32,8 +35,24 @@ describe('neko-entity dashboard and search adapters', () => {
     expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
     );
+    expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'validate-character' })]),
+    );
     expect(snapshot.rows.find((row) => row.label === '天台')?.actions).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'test-npc', disabled: true })]),
+    );
+    const detail = await source.getDetail({
+      source: 'neko-entity',
+      sourceEntityId: 'entity:char_xiaoju',
+      entityId: 'char_xiaoju',
+      entityKind: 'character',
+    });
+    expect(detail?.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'character-perspective' }),
+        expect.objectContaining({ id: 'validate-character' }),
+        expect.objectContaining({ id: 'improve-character' }),
+      ]),
     );
     await expect(
       source.executeAction({
@@ -88,6 +107,60 @@ describe('neko-entity dashboard and search adapters', () => {
         source: 'dashboard',
         projectRoot,
         mode: 'consult',
+      }),
+    );
+  });
+
+  it('delegates neutral Dashboard NPC Agent workflows with stable character refs', async () => {
+    const service = createService();
+    await service.createEntity({ kind: 'character', canonicalName: '小橘', id: 'char_xiaoju' });
+    const executeCommand = vi.fn(async () => undefined);
+    const source = new EntityDashboardCreativeEntitySource({
+      projectRoot,
+      service,
+      executeCommand,
+      now: () => now,
+    });
+    const ref = {
+      source: 'neko-entity',
+      sourceEntityId: 'entity:char_xiaoju',
+      entityId: 'char_xiaoju',
+      entityKind: 'character' as const,
+    };
+
+    await expect(
+      source.executeAction({
+        source: 'neko-entity',
+        ref,
+        action: 'validate-character',
+        payload: {
+          scopes: [{ kind: 'project', source: 'neko-entity', ref: 'project://current' }],
+          prompt: 'Check if the role knows too much.',
+        },
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        refresh: false,
+        npcWorkflow: { kind: 'delegated-command', command: NEKO_AGENT_VALIDATE_CHARACTER_COMMAND },
+      }),
+    );
+
+    expect(executeCommand).toHaveBeenCalledWith(
+      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      expect.objectContaining({
+        workflow: 'validate-character',
+        entityRef: {
+          entityId: 'char_xiaoju',
+          entityKind: 'character',
+          projectRoot,
+          source: 'neko-entity',
+        },
+        dashboardRef: ref,
+        scopes: [{ kind: 'project', source: 'neko-entity', ref: 'project://current' }],
+        prompt: 'Check if the role knows too much.',
+        source: 'dashboard',
+        projectRoot,
       }),
     );
   });

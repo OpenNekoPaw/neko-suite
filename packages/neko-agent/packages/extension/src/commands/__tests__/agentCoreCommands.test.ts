@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { buildAgentPromptCommandMessage } from '@neko/agent/runtime';
-import { NEKO_AGENT_TEST_NPC_COMMAND } from '@neko/shared';
+import {
+  NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
+  NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
+  NEKO_AGENT_TEST_NPC_COMMAND,
+  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+} from '@neko/shared';
 import { registerAgentCoreCommands } from '../agentCoreCommands';
 
 vi.mock('@neko/agent/runtime', async (importOriginal) => {
@@ -106,5 +111,83 @@ describe('agentCoreCommands bridge', () => {
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
       'Cannot start NPC test: invalid launch request.',
     );
+  });
+
+  it('registers NPC Agent workflow commands as ordinary Agent messages', async () => {
+    const context = { subscriptions: [] as Array<{ dispose(): void }> };
+    const chatViewProvider = {
+      sendMessageToAssistant: vi.fn(),
+      sendContextPayload: vi.fn(),
+      startNpcTestBench: vi.fn(),
+      dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
+      setPluginCommandsGetter: vi.fn(),
+      sendPluginSlashCommands: vi.fn(),
+    };
+
+    registerAgentCoreCommands(
+      context as never,
+      chatViewProvider as never,
+      { get: vi.fn() } as never,
+    );
+
+    const workflows = [
+      {
+        command: NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
+        workflow: 'character-perspective',
+        label: '角色视角',
+      },
+      {
+        command: NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+        workflow: 'validate-character',
+        label: '验证角色',
+      },
+      {
+        command: NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
+        workflow: 'improve-character',
+        label: '完善设定',
+      },
+    ] as const;
+
+    for (const { command, workflow } of workflows) {
+      const callback = vi
+        .mocked(vscode.commands.registerCommand)
+        .mock.calls.find(([registeredCommand]) => registeredCommand === command)?.[1];
+      expect(callback, command).toBeDefined();
+
+      await callback?.({
+        workflow,
+        entityRef: {
+          entityId: 'char-xiaoju',
+          entityKind: 'character',
+          source: 'neko-entity',
+          projectRoot: '/workspace',
+        },
+        dashboardRef: {
+          source: 'neko-entity',
+          sourceEntityId: 'entity:char-xiaoju',
+          entityId: 'char-xiaoju',
+          entityKind: 'character',
+        },
+        scopes: [{ kind: 'occurrence', source: 'neko-story', ref: 'cases/test.fountain:8' }],
+        prompt: 'Check future knowledge leakage.',
+        source: 'dashboard',
+        projectRoot: '/workspace',
+      });
+    }
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('neko.aiAssistant.focus');
+    expect(chatViewProvider.startNpcTestBench).not.toHaveBeenCalled();
+    for (const { label } of workflows) {
+      expect(chatViewProvider.sendMessageToAssistant).toHaveBeenCalledWith(
+        expect.stringContaining(`请执行 NPC 角色工作流：${label}`),
+        true,
+      );
+    }
+    for (const [message] of chatViewProvider.sendMessageToAssistant.mock.calls) {
+      expect(message).toContain('这是普通 Agent 分析工作流');
+      expect(message).toContain('不要启动或模拟 /as 角色扮演会话');
+      expect(message).toContain('可以读取项目内实体、剧本出现位置和关系上下文来形成证据');
+      expect(message).toContain('不要自动修改角色设定');
+    }
   });
 });

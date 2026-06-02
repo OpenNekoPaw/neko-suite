@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND,
+  NEKO_AGENT_IMPROVE_CHARACTER_COMMAND,
   NEKO_AGENT_TEST_NPC_COMMAND,
+  NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
   NPC_TEST_BENCH_AS_SLASH_COMMAND,
   NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND,
   NPC_TRANSCRIPT_ARTIFACT_VERSION,
+  isNpcAgentWorkflowRequest,
   isNpcEvaluationReport,
   isNpcEvaluationSuggestion,
   isNpcProfileFact,
@@ -11,6 +15,7 @@ import {
   isNpcTestBenchLaunchRequest,
   isNpcTranscriptArtifact,
   type NpcEvaluationReport,
+  type NpcAgentWorkflowRequest,
   type NpcProfileSource,
   type NpcTestBenchLaunchRequest,
   type NpcTranscriptArtifact,
@@ -153,6 +158,9 @@ describe('npc test bench contracts', () => {
     expect(NPC_TEST_BENCH_AS_SLASH_COMMAND).toBe('/as');
     expect(NPC_TEST_BENCH_EXIT_ROLE_SLASH_COMMAND).toBe('/exit-role');
     expect(NEKO_AGENT_TEST_NPC_COMMAND).toBe('neko.agent.testNpc');
+    expect(NEKO_AGENT_CHARACTER_PERSPECTIVE_COMMAND).toBe('neko.agent.characterPerspective');
+    expect(NEKO_AGENT_VALIDATE_CHARACTER_COMMAND).toBe('neko.agent.validateCharacter');
+    expect(NEKO_AGENT_IMPROVE_CHARACTER_COMMAND).toBe('neko.agent.improveCharacter');
   });
 
   it('validates launch requests from slash command and Dashboard sources', () => {
@@ -174,6 +182,40 @@ describe('npc test bench contracts', () => {
     expect(isNpcTestBenchLaunchRequest(launch)).toBe(true);
     expect(isNpcTestBenchLaunchRequest({ ...launch, mode: 'authoring' })).toBe(false);
     expect(isNpcTestBenchLaunchRequest({ ...launch, projectRoot: '' })).toBe(false);
+  });
+
+  it('validates Agent NPC workflow requests from Dashboard actions', () => {
+    const request: NpcAgentWorkflowRequest = {
+      workflow: 'validate-character',
+      entityRef,
+      dashboardRef: {
+        source: 'neko-entity',
+        sourceEntityId: 'entity:char-xiaoju',
+        entityId: 'char-xiaoju',
+        entityKind: 'character',
+      },
+      scopes: [
+        {
+          kind: 'occurrence',
+          source: 'neko-story',
+          ref: 'cases/test.fountain:8',
+          label: 'Scene 1',
+        },
+      ],
+      prompt: 'Check knowledge leakage.',
+      source: 'dashboard',
+      projectRoot: '${workspaceFolder}',
+    };
+
+    expect(isNpcAgentWorkflowRequest(request)).toBe(true);
+    expect(isNpcAgentWorkflowRequest({ ...request, workflow: 'test-npc' })).toBe(false);
+    expect(isNpcAgentWorkflowRequest({ ...request, source: 'slash-command' })).toBe(false);
+    expect(
+      isNpcAgentWorkflowRequest({
+        ...request,
+        scopes: [{ kind: 'occurrence', source: 'neko-story', ref: '/tmp/test.fountain' }],
+      }),
+    ).toBe(false);
   });
 
   it('validates project-scoped profile facts and sparse profile metadata', () => {

@@ -1,5 +1,8 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   DashboardCreativeEntityDetail,
   DashboardCreativeEntityRow,
@@ -7,6 +10,8 @@ import type {
 import { CreativeEntitiesSection } from './CreativeEntitiesSection';
 import { I18nProvider } from '../i18n/I18nContext';
 import { i18nService } from '../i18n';
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const row: DashboardCreativeEntityRow = {
   ref: {
@@ -115,6 +120,9 @@ const detail: DashboardCreativeEntityDetail = {
   freshness: 'fresh',
   actions: [
     { id: 'test-npc', label: 'Test NPC' },
+    { id: 'character-perspective', label: 'Character perspective' },
+    { id: 'validate-character', label: 'Validate character' },
+    { id: 'improve-character', label: 'Improve character' },
     { id: 'bind-existing', label: 'Bind asset' },
     { id: 'review-drafts', label: 'Review drafts', disabled: false },
     { id: 'confirm-candidate', label: 'Confirm candidate', disabled: true },
@@ -122,6 +130,17 @@ const detail: DashboardCreativeEntityDetail = {
 };
 
 describe('CreativeEntitiesSection', () => {
+  const mountedRoots: Array<{ root: Root; host: HTMLDivElement }> = [];
+
+  afterEach(() => {
+    for (const mounted of mountedRoots.splice(0)) {
+      act(() => {
+        mounted.root.unmount();
+      });
+      mounted.host.remove();
+    }
+  });
+
   it('renders table rows, detail content, disabled actions, and sync suggestions', () => {
     const html = renderSection(
       <CreativeEntitiesSection
@@ -142,6 +161,9 @@ describe('CreativeEntitiesSection', () => {
     expect(html).toContain('小橘');
     expect(html).toContain('Live2D');
     expect(html).toContain('测试 NPC');
+    expect(html).toContain('角色视角');
+    expect(html).toContain('验证角色');
+    expect(html).toContain('完善设定');
     expect(html).toContain('绑定素材');
     expect(html).not.toContain('Bind asset');
     expect(html).toContain('project://assets/xiaoju');
@@ -179,9 +201,76 @@ describe('CreativeEntitiesSection', () => {
     expect(html).not.toContain('/tmp/leak');
     expect(html).not.toContain('.neko/.cache');
   });
+
+  it('delegates Dashboard-first NPC operations through shared action requests', () => {
+    const onAction = vi.fn();
+    const { host } = renderInteractive(
+      <CreativeEntitiesSection
+        state={{
+          statuses: [{ source: 'neko-story', available: true, freshness: 'fresh' }],
+          rows: [row],
+          selectedRef: row.ref,
+          detail,
+        }}
+        onSelect={vi.fn()}
+        onAction={onAction}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    for (const label of ['测试 NPC', '角色视角', '验证角色', '完善设定']) {
+      const button = findButtonByText(host, label);
+      expect(button, label).not.toBeNull();
+      act(() => {
+        button?.click();
+      });
+    }
+
+    expect(onAction).toHaveBeenCalledTimes(4);
+    expect(onAction).toHaveBeenNthCalledWith(1, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'test-npc',
+    });
+    expect(onAction).toHaveBeenNthCalledWith(2, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'character-perspective',
+    });
+    expect(onAction).toHaveBeenNthCalledWith(3, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'validate-character',
+    });
+    expect(onAction).toHaveBeenNthCalledWith(4, {
+      source: row.ref.source,
+      ref: row.ref,
+      action: 'improve-character',
+    });
+  });
+
+  function renderInteractive(element: React.ReactElement): { host: HTMLDivElement } {
+    i18nService.setLocale('zh-cn');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    mountedRoots.push({ root, host });
+    act(() => {
+      root.render(<I18nProvider service={i18nService}>{element}</I18nProvider>);
+    });
+    return { host };
+  }
 });
 
 function renderSection(element: React.ReactElement): string {
   i18nService.setLocale('zh-cn');
   return renderToStaticMarkup(<I18nProvider service={i18nService}>{element}</I18nProvider>);
+}
+
+function findButtonByText(host: HTMLElement, label: string): HTMLButtonElement | null {
+  return (
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.trim() === label,
+    ) ?? null
+  );
 }
