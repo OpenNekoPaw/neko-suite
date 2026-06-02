@@ -4,6 +4,10 @@
 
 Accepted (2026-05-23)
 
+实施备注：2026-06-02，`neko-model` 相机/拖拽卡顿复盘补充。性能指标显示 GPU render/encode 正常，但 Webview 交互仍有 2-3s 可见延迟。根因是高频 camera hot path 被错误耦合到 SceneControl ACK、H.264 stream profile restart 和 WebCodecs latest-only 丢帧逻辑：控制流已发送，视频流仍在输出旧帧，前端又 suppress 已提交给硬解的帧，导致用户感知为“控制流和视频输出流割裂”。修复后，高频相机更新走 no-ack latest-only scene-control message，Engine 用短 TTL interaction profile 将当前 stream 切到 `GOP=1`，Webview 只切换现有 decoder backpressure，不重启 stream，也不取消硬解已接管帧。
+
+追加测试结论：Chrome DevTools 实测显示，交互时强制 `VideoDecoder.reset()` 或清空 WebCodecs/VideoToolbox 已提交队列会把“旧帧拖尾”变成“等待新 keyframe 的输出空窗”，对硬解低延迟是负优化。因此最终策略是保留硬解输出链路连续性，在 pointerdown、wheel、keyboard camera 起点立即发送当前 camera + `streamProfile: 'interactive'` 作为预热，并用 2000ms shared `profileTtlMs` 延迟恢复默认 GOP，减少连续微调时的 `GOP=1`/`GOP=30` 往返重配。
+
 ## 背景
 
 neko-model、neko-puppet 和 neko-live 正在统一到 engine-rendered viewport：引擎负责渲染画面，Webview 负责显示、输入捕获、工具栏和叠加层。近期调试 3D 模型输出与控制按钮失效时，暴露出一个容易混淆的问题：如果 viewport 被理解成“纯视频流”，那么选中对象、拖拽调整、角色捏脸、视角切换、动作展示和语音包展示都没有可靠的语义通道。
@@ -45,6 +49,7 @@ Viewport 不采用纯视频流架构，而采用 **H.264 视频流 + 帧元数�
 - `projectedBounds` / `gizmoAnchor` 等查询已定义首版，但查询结果需要进入 controller/store 状态，并驱动 overlay 渲染与命中测试。
 - `InteractionLayer` 类 overlay 不能长期停留在 non-interactive 显示层；默认实现路线是把交互职责收敛到 `ViewportShell` + `ISceneController`。只有当某类领域编辑确实需要独立 DOM 命中树时，才能把 `InteractionLayer` 升级为唯一交互层，并且必须禁止同一事件同时被 shell 与 layer 双重消费。
 - 视频 WebSocket 上的 frame meta 与二进制帧复用同一连接；控制命令已经拆到独立 scene-control WebSocket，但 frame meta 仍可能受视频背压影响。高频编辑反馈应优先依赖 scene-control ack/delta 与本地 overlay prediction，不应等待下一帧视频。首版不立即拆分 frame meta 通道，但必须持续度量 meta 延迟；若视频降帧或 GPU/encoder 繁忙导致 overlay 对齐元数据超过交互预算，则将 frame meta 拆到 scene-control 或独立低带宽 metadata WebSocket。
+- 高频相机/拖拽反馈不能以 scene-control ACK 作为用户可见反馈闸门。ACK 适合低频语义命令和最终一致确认；pointer move、orbit camera、灯光位置拖拽、连续 slider 等必须先更新本地意图，并发送 latest-only hot update。Engine 可在不回逐帧 ACK 的情况下应用最新状态，后续通过 SceneDelta、snapshot 或兼容 frame metadata 对齐最终状态。
 
 ### 各编辑器差异
 
@@ -105,6 +110,34 @@ Puppet 与 model 都需要“画面内编辑”闭环；live 需要“场景控�
 
 该选择与统一 Viewport ADR 的方向一致，可避免 model、puppet、live 各自发明独立事件系统。
 
+### 3. 高频交互热路径
+
+高频交互必须与低频 authoring command 区分：
+
+| 路径 | 示例 | 前端反馈 | Engine 反馈 | 视频流生命周期 |
+|------|------|----------|-------------|----------------|
+| Hot update | camera orbit、viewport drag、灯光位置拖拽、连续 slider | 本地即时意图 / overlay prediction | latest-only 应用；默认不逐帧 ACK | 不 destroy/start；只允许运行时 profile/backpressure 更新 |
+| Authoring command | node-add、node-remove、transform commit、light-update、environment-set | pending/optimistic UI | ack/reject + SceneDelta/snapshot | 可等待最终一致，但不应阻塞热路径 |
+| Viewport descriptor change | 低频 LookDev render mode、分辨率 bucket、debug stream setup | 保留最后一帧 + pending badge | descriptor / 首帧 metadata | 可重启 stream，但必须有占位和回滚 |
+
+热路径不变量：
+
+1. Webview 必须先更新本地意图，再发送 Engine hot update；不得等待 ACK 才改变用户可见反馈。
+2. 高频相机类 hot update 应支持 `requestId` 省略；服务端无 `requestId` 时应用最新状态但不回 `viewportCameraAck`。
+3. `streamProfile` / `profileTtlMs` 是 Engine runtime stream policy 输入，不是 React stream lifecycle state；不得作为 `startSceneRenderStream()` effect 依赖。
+4. 交互期编码策略可切 `GOP=1` / All-Intra 与 latest-only backpressure，但默认 H.264 stream 连接保持不变。
+5. 交互起点必须预热 runtime profile：pointerdown、wheel 和 keyboard camera action 在真实 camera delta 前也要发送 latest-only hot update，避免等待第一批 move 事件后才进入低延迟链路。
+6. 恢复默认 GOP/码率由 idle timer 或 Engine TTL 完成；恢复可以延迟，进入交互必须尽快。当前 `neko-model` 使用 2000ms shared TTL，降低连续操作期间的 encoder reconfigure 抖动。
+7. WebCodecs/硬解已有输出队列不可由 JS 假定可取消。latest-only 不得 suppress 已提交硬解的旧帧，也不得用 decoder reset 作为交互低延迟策略；只能限制后续入队或在呈现层保留最新帧。
+8. 控制流 ACK 健康、GPU 帧时间、encode 时间、decode output lag、pending decode frames 必须分开计量；不能把宿主呈现节奏或硬解固定 output latency 误判为 GPU 性能不足。
+
+画质链路补充：
+
+1. 模糊、锯齿和 Retina/Webview 物理像素不匹配属于视频质量链路问题，不属于 scene-control 语义问题；不得通过 Webview mesh fallback 或重启控制流来修复。
+2. Webview 负责按 viewport CSS 尺寸和 `devicePixelRatio` 请求足够的 stream 分辨率，并在性能面板暴露 decoded frame、canvas CSS size、canvas physical size 与 presentation scale。
+3. Engine 负责可见 3D 内容的抗锯齿和下采样策略；当前 realtime PBR/Clay 在 1080p 级输出启用受控 SSAA + post-process downsample，高 DPR/接近 4K 输出不叠加 SSAA，优先保住 60fps 预算。
+4. H.264/NV12 4:2:0 会天然软化高频纹理和红/白边缘；若视觉验收仍不达标，下一步应评估编码 profile、码率、颜色采样或局部 sharpness，而不是让 Webview 重新承担 3D 渲染职责。
+
 ## 不变量
 
 1. H.264 视频帧不是交互语义的事实来源。
@@ -113,6 +146,8 @@ Puppet 与 model 都需要“画面内编辑”闭环；live 需要“场景控�
 4. Engine-mediated 写操作必须通过 scene-control 命令进入引擎，并返回 ack/error/delta。
 5. 前端 overlay 可以做 prediction，但 prediction 必须能被 ack commit、error rollback 或 revision conflict invalidation。
 6. Webview 不直接访问 Node.js、VSCode API 或引擎内部状态；所有跨层操作走既有协议和 Extension Host 授权通道。
+7. 高频交互反馈不得等待 scene-control ACK 或 H.264 stream restart；必须走本地即时反馈 + latest-only Engine hot update + 后续最终一致对齐。
+8. 高频交互不得通过 WebCodecs reset、decoder close/recreate 或 JS suppress 硬解已提交帧来追求低延迟。
 
 ## 后续闭环要求
 
@@ -122,6 +157,7 @@ Puppet 与 model 都需要“画面内编辑”闭环；live 需要“场景控�
 4. pointer drag 期间先更新本地 prediction，再通过 scene-control 发送 `viewport:transform` 或领域命令；ack 后 commit，error 或 revision conflict 后 rollback。
 5. preview mode 拆分为 camera preset、framing target、playback state、asset slot selection，不以“按钮直接改视频画面”为接口。
 6. 控制按钮的验收应检查 scene-control connect、command ack、delta/snapshot 回流和 UI store 更新，而不是只检查视频帧变化。
+7. camera orbit、viewport drag、灯光位置拖拽和连续 slider 的验收必须证明：无 stream restart、无 ACK gating、无 Extension Host 中转、无 WebCodecs suppress/reset 已提交帧。
 
 ## 验收标准
 
@@ -135,6 +171,7 @@ Puppet 与 model 都需要“画面内编辑”闭环；live 需要“场景控�
 4. ack/delta/snapshot 回流会更新 controller/store 状态。
 5. overlay、toolbar、inspector 或 timeline 反映新的权威状态。
 6. 测试不能只断言视频帧发生变化；必须断言控制语义状态发生变化。
+7. 高频交互测试必须断言 hot path 使用 latest-only/fire-and-forget 发送，且不会把 stream profile 写入 stream lifecycle effect。
 
 评审清单见 [viewport-semantic-control-review-checklist.md](./viewport-semantic-control-review-checklist.md)。
 

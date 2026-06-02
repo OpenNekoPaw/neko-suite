@@ -35,6 +35,8 @@ const DEFAULT_RIM_LIGHT_INTENSITY: f32 = 1.4;
 const CLAY_BASE_COLOR: [f32; 4] = [0.78, 0.76, 0.72, 1.0];
 const CLAY_ROUGHNESS: f32 = 0.86;
 const CLAY_METALLIC: f32 = 0.0;
+const REALTIME_STREAM_SSAA_SCALE: f32 = 1.5;
+const REALTIME_STREAM_SSAA_MAX_OUTPUT_PIXELS: u64 = 1_920 * 1_080;
 
 const ENVIRONMENT_BACKGROUND_SHADER: &str = r#"
 struct EnvironmentBackgroundUniforms {
@@ -1020,6 +1022,9 @@ impl PbrRenderer {
         graph_output: ViewportRenderGraphOutput,
     ) -> Result<SceneRenderOutput, PbrRenderError> {
         let plan = build_viewport_render_graph(descriptor, graph_output)?;
+        let render_scale =
+            render_scale_for_viewport(descriptor, graph_output, plan.post_process, output_size);
+        let scaled_output_size = scaled_render_output_size(output_size, render_scale);
         let compiled = plan
             .graph
             .compile(std::slice::from_ref(&plan.live_output))?;
@@ -1050,6 +1055,7 @@ impl PbrRenderer {
             camera_params,
             viewport: descriptor,
             output_size,
+            scaled_output_size,
             background_color,
             environment_background,
             post_process_settings: post_process_settings_for_descriptor(descriptor),
@@ -1751,6 +1757,7 @@ struct PbrRenderGraphPassExecutor<'a> {
     camera_params: &'a CameraParams,
     viewport: &'a ViewportDescriptor,
     output_size: (u32, u32),
+    scaled_output_size: (u32, u32),
     background_color: Option<[f32; 4]>,
     environment_background: Option<&'a EnvironmentBackground>,
     post_process_settings: PostProcessSettings,
@@ -1773,7 +1780,7 @@ impl RenderGraphExecutor for PbrRenderGraphPassExecutor<'_> {
                     self.render_world,
                     self.asset_cache,
                     self.camera_params,
-                    self.output_size,
+                    self.scaled_output_size,
                     self.background_color,
                     self.viewport,
                     encoder,
@@ -1865,9 +1872,9 @@ impl PbrRenderGraphPassExecutor<'_> {
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<(), RenderGraphError> {
         let current = self.take_output(pass)?;
-        let processed_texture = self.create_graph_color_texture(
+        let processed_texture = self.create_graph_color_texture_with_size(
             "pbr_post_process_target",
-            &current,
+            self.output_size,
             wgpu::TextureFormat::Rgba16Float,
         );
         let processed_view = processed_texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -1875,8 +1882,8 @@ impl PbrRenderGraphPassExecutor<'_> {
         self.renderer.post_process_chain.record_process(
             &current.color_view,
             &processed_view,
-            current.width,
-            current.height,
+            self.output_size.0,
+            self.output_size.1,
             &self.post_process_settings,
             encoder,
         );
@@ -1887,8 +1894,8 @@ impl PbrRenderGraphPassExecutor<'_> {
             color_texture: processed_texture,
             color_view: processed_view,
             depth_texture: current.depth_texture,
-            width: current.width,
-            height: current.height,
+            width: self.output_size.0,
+            height: self.output_size.1,
             graph_execution: empty_graph_execution(),
         });
         Ok(())
@@ -2012,8 +2019,17 @@ impl PbrRenderGraphPassExecutor<'_> {
         current: &SceneRenderOutput,
         format: wgpu::TextureFormat,
     ) -> RenderTargetLease {
+        self.create_graph_color_texture_with_size(label, (current.width, current.height), format)
+    }
+
+    fn create_graph_color_texture_with_size(
+        &self,
+        label: &str,
+        size: (u32, u32),
+        format: wgpu::TextureFormat,
+    ) -> RenderTargetLease {
         self.renderer
-            .acquire_color_target(label, current.width, current.height, format)
+            .acquire_color_target(label, size.0, size.1, format)
     }
 }
 
@@ -2047,7 +2063,56 @@ fn post_process_settings_for_descriptor(descriptor: &ViewportDescriptor) -> Post
         } else {
             0.0
         },
+        anti_aliasing_strength: if descriptor.post_process.taa {
+            0.65
+        } else {
+            0.0
+        },
         ..PostProcessSettings::default()
+    }
+}
+
+fn render_scale_for_viewport(
+    descriptor: &ViewportDescriptor,
+    graph_output: ViewportRenderGraphOutput,
+    post_process_enabled: bool,
+    output_size: (u32, u32),
+) -> f32 {
+    if graph_output != ViewportRenderGraphOutput::RealtimeStream || !post_process_enabled {
+        return 1.0;
+    }
+    if u64::from(output_size.0) * u64::from(output_size.1) > REALTIME_STREAM_SSAA_MAX_OUTPUT_PIXELS
+    {
+        return 1.0;
+    }
+    if descriptor.post_process.taa
+        && matches!(
+            descriptor.render_mode,
+            ViewportRenderMode::Pbr | ViewportRenderMode::Clay
+        )
+    {
+        REALTIME_STREAM_SSAA_SCALE
+    } else {
+        1.0
+    }
+}
+
+fn scaled_render_output_size(output_size: (u32, u32), scale: f32) -> (u32, u32) {
+    if scale <= 1.0 {
+        return output_size;
+    }
+    (
+        scaled_even_dimension(output_size.0, scale),
+        scaled_even_dimension(output_size.1, scale),
+    )
+}
+
+fn scaled_even_dimension(value: u32, scale: f32) -> u32 {
+    let scaled = ((value as f32) * scale).round().max(value as f32) as u32;
+    if scaled % 2 == 0 {
+        scaled
+    } else {
+        scaled + 1
     }
 }
 
@@ -2264,5 +2329,91 @@ mod tests {
         let descriptor = default_pbr_viewport_descriptor();
 
         assert!(clay_material_uniforms_for_descriptor(&descriptor).is_none());
+    }
+
+    #[test]
+    fn realtime_stream_uses_ssaa_for_pbr_and_clay_taa_post_process() {
+        let mut descriptor = default_pbr_viewport_descriptor();
+        descriptor.post_process.taa = true;
+
+        assert_eq!(
+            render_scale_for_viewport(
+                &descriptor,
+                ViewportRenderGraphOutput::RealtimeStream,
+                true,
+                (1_920, 1_080)
+            ),
+            REALTIME_STREAM_SSAA_SCALE
+        );
+
+        descriptor.render_mode = ViewportRenderMode::Clay;
+        assert_eq!(
+            render_scale_for_viewport(
+                &descriptor,
+                ViewportRenderGraphOutput::RealtimeStream,
+                true,
+                (1_920, 1_080)
+            ),
+            REALTIME_STREAM_SSAA_SCALE
+        );
+    }
+
+    #[test]
+    fn ssaa_policy_keeps_non_realtime_or_non_post_process_paths_at_native_size() {
+        let mut descriptor = default_pbr_viewport_descriptor();
+        descriptor.post_process.taa = true;
+
+        assert_eq!(
+            render_scale_for_viewport(
+                &descriptor,
+                ViewportRenderGraphOutput::QualityCapture,
+                true,
+                (1_920, 1_080)
+            ),
+            1.0
+        );
+        assert_eq!(
+            render_scale_for_viewport(
+                &descriptor,
+                ViewportRenderGraphOutput::RealtimeStream,
+                false,
+                (1_920, 1_080)
+            ),
+            1.0
+        );
+
+        descriptor.render_mode = ViewportRenderMode::Wireframe;
+        assert_eq!(
+            render_scale_for_viewport(
+                &descriptor,
+                ViewportRenderGraphOutput::RealtimeStream,
+                true,
+                (1_920, 1_080)
+            ),
+            1.0
+        );
+    }
+
+    #[test]
+    fn ssaa_policy_skips_high_dpr_output_sizes() {
+        let mut descriptor = default_pbr_viewport_descriptor();
+        descriptor.post_process.taa = true;
+
+        assert_eq!(
+            render_scale_for_viewport(
+                &descriptor,
+                ViewportRenderGraphOutput::RealtimeStream,
+                true,
+                (2_976, 2_160)
+            ),
+            1.0
+        );
+    }
+
+    #[test]
+    fn scaled_render_output_size_keeps_even_dimensions() {
+        assert_eq!(scaled_render_output_size((1488, 1080), 1.0), (1488, 1080));
+        assert_eq!(scaled_render_output_size((1488, 1080), 1.5), (2232, 1620));
+        assert_eq!(scaled_render_output_size((101, 99), 1.5), (152, 150));
     }
 }

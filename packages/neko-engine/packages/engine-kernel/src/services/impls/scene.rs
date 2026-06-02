@@ -611,18 +611,20 @@ impl SceneService {
         let shared_extract = self
             .computation
             .data(|world| cache.prepare(world, &asset_database, camera))?;
-        let render_snapshot = SceneRenderSnapshot {
-            generation: shared_extract.revision,
-            render_world: shared_extract.render_world.clone(),
-        };
-        self.realtime_snapshot_watch
-            .publish(render_snapshot.clone())?;
-        if self.export_frame_queue.try_push(render_snapshot).is_err() {
-            let _ = self.export_frame_queue.try_pop()?;
-            self.export_frame_queue.try_push(SceneRenderSnapshot {
+        if shared_extract.extracted {
+            let render_snapshot = SceneRenderSnapshot {
                 generation: shared_extract.revision,
                 render_world: shared_extract.render_world.clone(),
-            })?;
+            };
+            self.realtime_snapshot_watch
+                .publish(render_snapshot.clone())?;
+            if self.export_frame_queue.try_push(render_snapshot).is_err() {
+                let _ = self.export_frame_queue.try_pop()?;
+                self.export_frame_queue.try_push(SceneRenderSnapshot {
+                    generation: shared_extract.revision,
+                    render_world: shared_extract.render_world.clone(),
+                })?;
+            }
         }
         drop(asset_database);
         Ok(shared_extract)
@@ -2508,16 +2510,13 @@ mod tests {
             None
         );
 
-        let _ = service.prepare_shared_extract_for_test().unwrap();
-        let _ = service.prepare_shared_extract_for_test().unwrap();
-        assert_eq!(
-            service.pop_export_render_snapshot_generation().unwrap(),
-            Some(first.0)
-        );
         assert_eq!(
             service.pop_export_render_snapshot_generation().unwrap(),
             None
         );
+        let _ = service.prepare_shared_extract_for_test().unwrap();
+        assert_eq!(service.latest_render_snapshot_generation(), first.0);
+        assert_eq!(service.pop_export_render_snapshot_generation().unwrap(), None);
     }
 
     #[test]

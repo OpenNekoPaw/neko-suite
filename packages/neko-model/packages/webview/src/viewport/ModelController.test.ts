@@ -532,7 +532,7 @@ describe('ModelController', () => {
         position: expect.any(Array),
         target: expect.any(Array),
         streamProfile: 'interactive',
-        profileTtlMs: 700,
+        profileTtlMs: 2000,
       }),
     );
     expect(socket.requestKeyframe).toHaveBeenCalledWith('main');

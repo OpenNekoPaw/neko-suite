@@ -308,7 +308,7 @@ pub struct RgbaToNv12TextureConverter {
     output_backings: VecDeque<Arc<IOSurfaceBackingStore>>,
 }
 
-const ENCODER_BACKING_RING_SIZE: usize = 3;
+const ENCODER_BACKING_RING_SIZE: usize = 6;
 
 #[cfg(target_os = "macos")]
 impl RgbaToNv12TextureConverter {

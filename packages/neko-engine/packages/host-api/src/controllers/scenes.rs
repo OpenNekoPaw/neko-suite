@@ -192,8 +192,8 @@ fn default_allow_quality_degrade() -> bool {
 }
 
 const SCENE_STREAM_MIN_BITRATE_BPS: u64 = 6_000_000;
-const SCENE_STREAM_MAX_BITRATE_BPS: u64 = 36_000_000;
-const SCENE_STREAM_TARGET_BITS_PER_PIXEL: u64 = 8;
+const SCENE_STREAM_MAX_BITRATE_BPS: u64 = 96_000_000;
+const SCENE_STREAM_TARGET_BITS_PER_PIXEL: u64 = 10;
 const SCENE_STREAM_LOW_LATENCY_GOP_SECONDS: f64 = 0.5;
 const SCENE_STREAM_MAIN_DEGRADED_FPS: f64 = 30.0;
 const SCENE_STREAM_AUXILIARY_DEGRADED_FPS: f64 = 15.0;
@@ -271,6 +271,30 @@ fn h264_settings_to_json(gop_size: u32, decoder_preference: Option<&str>) -> Val
         value["decoderPreference"] = serde_json::json!(preference);
     }
     value
+}
+
+fn attach_scene_stream_runtime_diagnostics(
+    diagnostics: &mut RenderFrameDiagnostics,
+    settings: SceneStreamRuntimeSettings,
+    codec_string: Option<&str>,
+    codec_profile: Option<&str>,
+    codec_level: Option<&str>,
+) {
+    diagnostics.stream_width = Some(settings.width);
+    diagnostics.stream_height = Some(settings.height);
+    diagnostics.coded_width = Some(settings.width);
+    diagnostics.coded_height = Some(settings.height);
+    diagnostics.scheduled_width = Some(settings.width);
+    diagnostics.scheduled_height = Some(settings.height);
+    diagnostics.scheduled_fps = Some(normalize_stream_fps(settings.fps) as f32);
+    diagnostics.gop_size = Some(settings.h264_gop_size);
+    diagnostics.codec_string = codec_string.map(str::to_string);
+    diagnostics.codec_profile = codec_profile.map(str::to_string);
+    diagnostics.codec_level = codec_level.map(str::to_string);
+    diagnostics.latency_mode = Some("realtime".to_string());
+    diagnostics.post_process_enabled = Some(settings.post_process_enabled);
+    diagnostics.helper_passes_enabled = Some(settings.helper_passes_enabled);
+    diagnostics.quality_tier = Some(settings.quality_tier.as_str().to_string());
 }
 
 fn scene_stream_resource_id(scene_id: &str, viewport_id: &str) -> String {
@@ -902,6 +926,14 @@ fn spawn_scene_stream_producer(
                     let duration_us = stream_duration_us;
                     let quality = settings.h264_quality;
                     let viewport = runtime_scheduler.viewport_descriptor_for_settings(settings);
+                    let codec_level_idc =
+                        h264_level_idc(settings.width, settings.height, settings.fps);
+                    let codec_level = h264_level_string(codec_level_idc);
+                    let codec_string = h264_codec_string(
+                        H264_CONSTRAINED_BASELINE_PROFILE_IDC,
+                        H264_CONSTRAINED_BASELINE_FLAGS,
+                        codec_level_idc,
+                    );
                     let preview_camera = model_preview_controller
                         .as_ref()
                         .and_then(|controller| {
@@ -922,6 +954,13 @@ fn spawn_scene_stream_producer(
                     if let Some(diagnostics) = frame_meta.diagnostics.as_mut() {
                         diagnostics.schedule_lag_ms = schedule_lag.as_secs_f32() * 1000.0;
                         diagnostics.skipped_intervals = previous_skipped_intervals;
+                        attach_scene_stream_runtime_diagnostics(
+                            diagnostics,
+                            settings,
+                            Some(codec_string.as_str()),
+                            Some(H264_REALTIME_PROFILE),
+                            Some(codec_level.as_str()),
+                        );
                     }
                     let mut current_frame_diagnostics = frame_meta.diagnostics.clone();
                     let mut current_stream_submit_time_ms = 0.0;
@@ -957,6 +996,8 @@ fn spawn_scene_stream_producer(
                             let service = Arc::clone(&service);
                             let camera = render_camera.clone();
                             let viewport = viewport.clone();
+                            let codec_string = codec_string.clone();
+                            let codec_level = codec_level.clone();
                             let meta = frame_meta.clone();
                             move || {
                                 let mut output = service.render_scene_stream_gpu_output(
@@ -980,6 +1021,13 @@ fn spawn_scene_stream_producer(
                                             schedule_lag.as_secs_f32() * 1000.0;
                                         diagnostics.producer_frame_time_ms = producer_frame_time_ms;
                                         diagnostics.skipped_intervals = previous_skipped_intervals;
+                                        attach_scene_stream_runtime_diagnostics(
+                                            diagnostics,
+                                            settings,
+                                            Some(codec_string.as_str()),
+                                            Some(H264_REALTIME_PROFILE),
+                                            Some(codec_level.as_str()),
+                                        );
                                     }
                                     frame.meta = Some(meta);
                                     if let Some(meta) = frame.meta.as_mut() {
@@ -1116,6 +1164,30 @@ fn spawn_scene_stream_producer(
                         encode_ms: scheduler_encode_ms,
                         dropped_frames,
                     };
+                    if elapsed_ms > stream_frame_duration.as_secs_f32() * 1000.0 * 2.0 {
+                        if let Some(diagnostics) = current_frame_diagnostics.as_ref() {
+                            tracing::debug!(
+                                "Scene stream {} slow frame {:.1}ms (budget {:.1}ms, render={:.1}ms, convert={:.1}ms, gpu_wait={:.1}ms, submit={:.1}ms, encode={:.1}ms, schedule_lag={:.1}ms, skipped={})",
+                                stream_id.as_str(),
+                                elapsed_ms,
+                                stream_frame_duration.as_secs_f32() * 1000.0,
+                                diagnostics.render_time_ms,
+                                diagnostics.convert_time_ms,
+                                diagnostics.gpu_wait_time_ms,
+                                diagnostics.stream_submit_time_ms.max(current_stream_submit_time_ms),
+                                diagnostics.encode_time_ms,
+                                diagnostics.schedule_lag_ms,
+                                skipped_intervals
+                            );
+                        } else {
+                            tracing::debug!(
+                                "Scene stream {} slow frame {:.1}ms (budget {:.1}ms)",
+                                stream_id.as_str(),
+                                elapsed_ms,
+                                stream_frame_duration.as_secs_f32() * 1000.0
+                            );
+                        }
+                    }
                     control_ack = scene_service.control_ack_health_sample(dropped_frames);
                     previous_skipped_intervals = skipped_intervals;
                     let auxiliary_viewport_count = stream_registry
@@ -1226,6 +1298,13 @@ fn spawn_scene_raw_nv12_stream_producer(
                             diagnostics.schedule_lag_ms =
                                 schedule_lag.as_secs_f32() * 1000.0;
                             diagnostics.skipped_intervals = previous_skipped_intervals;
+                            attach_scene_stream_runtime_diagnostics(
+                                diagnostics,
+                                settings,
+                                None,
+                                None,
+                                None,
+                            );
                         }
                         frame_meta.diagnostics = frame.diagnostics.clone();
                         frame.meta = Some(frame_meta);
@@ -1418,8 +1497,10 @@ fn h264_level_idc(width: u32, height: u32, fps: f64) -> u8 {
         41
     } else if macroblocks_per_second <= 522_240 && macroblocks_per_frame <= 8_704 {
         42
-    } else {
+    } else if macroblocks_per_second <= 589_824 && macroblocks_per_frame <= 22_080 {
         50
+    } else {
+        52
     }
 }
 
@@ -2792,7 +2873,7 @@ mod tests {
         assert_eq!(config.height, 720);
         assert_eq!(config.fps, 30.0);
         assert_eq!(config.gop_size, 15);
-        assert_eq!(config.bitrate, 7_372_800);
+        assert_eq!(config.bitrate, 9_216_000);
     }
 
     #[test]
@@ -2814,6 +2895,7 @@ mod tests {
             "avc1.42e02a"
         );
         assert_eq!(h264_level_string(h264_level_idc(1920, 1080, 60.0)), "4.2");
+        assert_eq!(h264_level_string(h264_level_idc(3840, 2160, 60.0)), "5.2");
     }
 
     #[tokio::test]
@@ -3443,6 +3525,50 @@ mod tests {
             stabilizer.stabilize(full, now + Duration::from_millis(260)),
             full
         );
+    }
+
+    #[test]
+    fn scene_stream_runtime_diagnostics_follow_active_settings() {
+        let settings = SceneStreamRuntimeSettings {
+            width: 1488,
+            height: 1080,
+            fps: 60.0,
+            h264_gop_size: 1,
+            h264_decoder_preference: Some("prefer-hardware"),
+            h264_quality: 85,
+            helper_passes_enabled: false,
+            post_process_enabled: true,
+            quality_tier: SceneStreamQualityTier::Full,
+            preserve_control_ack: true,
+        };
+        let mut diagnostics = RenderFrameDiagnostics::default();
+
+        attach_scene_stream_runtime_diagnostics(
+            &mut diagnostics,
+            settings,
+            Some("avc1.42e02a"),
+            Some(H264_REALTIME_PROFILE),
+            Some("4.2"),
+        );
+
+        assert_eq!(diagnostics.stream_width, Some(1488));
+        assert_eq!(diagnostics.stream_height, Some(1080));
+        assert_eq!(diagnostics.coded_width, Some(1488));
+        assert_eq!(diagnostics.coded_height, Some(1080));
+        assert_eq!(diagnostics.scheduled_width, Some(1488));
+        assert_eq!(diagnostics.scheduled_height, Some(1080));
+        assert_eq!(diagnostics.scheduled_fps, Some(60.0));
+        assert_eq!(diagnostics.gop_size, Some(1));
+        assert_eq!(diagnostics.codec_string.as_deref(), Some("avc1.42e02a"));
+        assert_eq!(
+            diagnostics.codec_profile.as_deref(),
+            Some(H264_REALTIME_PROFILE)
+        );
+        assert_eq!(diagnostics.codec_level.as_deref(), Some("4.2"));
+        assert_eq!(diagnostics.latency_mode.as_deref(), Some("realtime"));
+        assert_eq!(diagnostics.post_process_enabled, Some(true));
+        assert_eq!(diagnostics.helper_passes_enabled, Some(false));
+        assert_eq!(diagnostics.quality_tier.as_deref(), Some("full"));
     }
 
     #[test]

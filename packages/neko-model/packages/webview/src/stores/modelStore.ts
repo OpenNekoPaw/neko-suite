@@ -33,6 +33,7 @@ import {
 import {
   AuthoringPerformanceMetrics,
   type AuthoringMetricsSnapshot,
+  type ViewportMemorySample,
 } from '../scene/AuthoringPerformanceMetrics';
 import {
   LocalPredictionLayer,
@@ -215,6 +216,8 @@ export interface ModelState {
   recordAckLatency: (ms: number) => void;
   recordPatchBytes: (bytes: number, atMs?: number) => void;
   recordGpuUpload: (ms: number) => void;
+  recordViewportMemorySample: (sample: ViewportMemorySample, atMs?: number) => void;
+  recordRenderFrameMetricsSample: (meta: RenderFrameMeta, atMs?: number) => void;
   recordRenderFrameMeta: (meta: RenderFrameMeta) => void;
   updateRenderFrameMeta: (meta: RenderFrameMeta) => void;
   updateLastRenderFrameMeta: (meta: RenderFrameMeta) => void;
@@ -627,6 +630,16 @@ export const useModelStore = create<ModelState>((set, get) => ({
       state.authoringMetrics.recordGpuUpload(ms);
       return { authoringMetricsSnapshot: state.authoringMetrics.snapshot() };
     }),
+
+  recordViewportMemorySample: (sample, atMs) => {
+    const state = get();
+    state.authoringMetrics.recordMemorySample(sample, atMs);
+  },
+
+  recordRenderFrameMetricsSample: (meta, atMs) => {
+    const state = get();
+    recordFrameMetricsSample(state, meta, atMs);
+  },
 
   recordRenderFrameMeta: (meta) =>
     set((state) => {
@@ -1457,12 +1470,17 @@ function readViewportRenderMode(value: unknown): ViewportRenderMode | null {
   }
 }
 
-function recordFrameMetricsSample(state: ModelState, meta: RenderFrameMeta): void {
+function recordFrameMetricsSample(
+  state: ModelState,
+  meta: RenderFrameMeta,
+  atMs = Date.now(),
+): void {
   const latencyMs = meta.durationUs > 0 ? meta.durationUs / 1000 : 0;
-  state.authoringMetrics.recordFrameLatency(latencyMs);
+  state.authoringMetrics.recordFrameLatency(latencyMs, atMs);
   if (typeof meta.diagnostics?.gpuUploadTimeMs === 'number') {
-    state.authoringMetrics.recordGpuUpload(meta.diagnostics.gpuUploadTimeMs);
+    state.authoringMetrics.recordGpuUpload(meta.diagnostics.gpuUploadTimeMs, atMs);
   }
+  state.authoringMetrics.recordRenderDiagnostics(meta.diagnostics, atMs);
 }
 
 function collectRemovedNodeIds(

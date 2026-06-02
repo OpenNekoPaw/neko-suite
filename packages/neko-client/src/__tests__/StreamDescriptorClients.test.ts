@@ -681,6 +681,40 @@ describe('stream descriptor clients', () => {
     client.dispose();
   });
 
+  it('can drop stale keyframes for all-intra latest-only interaction streams', async () => {
+    const frames: number[] = [];
+    const diagnostics: string[] = [];
+    const client = new H264StreamClient({
+      websocketUrl: 'ws://127.0.0.1:3000/v1/streams/scene-video',
+      descriptor: renderDescriptor,
+      width: 1,
+      height: 1,
+      backpressure: {
+        maxDecodeQueueDepth: 1,
+        dropDeltaFramesWhenBacklogged: true,
+        preserveKeyframes: false,
+        latestOnly: true,
+      },
+      onControlFlowDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+      onFrame: (frame) => frames.push(frame.timestamp),
+    });
+
+    await client.connect();
+    const socket = fakeWebSockets[0];
+    expect(socket).toBeDefined();
+
+    socket?.onmessage?.({ data: createH264Packet(66_666, 16_666, true) });
+    fakeDecodeQueueSize = 2;
+    socket?.onmessage?.({ data: createH264Packet(83_332, 16_666, true) });
+    socket?.onmessage?.({ data: createH264Packet(99_998, 16_666, true) });
+
+    expect(frames).toEqual([66_666]);
+    expect(client.getStats().framesDroppedBeforeDecode).toBe(2);
+    expect(diagnostics).toContain('decode-backpressure');
+
+    client.dispose();
+  });
+
   it('can switch realtime streams to latest-only backpressure without reconnecting', async () => {
     fakeDecoderAutoOutput = false;
     const frames: number[] = [];

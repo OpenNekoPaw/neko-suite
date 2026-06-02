@@ -212,6 +212,11 @@ interface DecodeFrameTiming {
   readonly decodeSubmitToOutputMs?: number;
 }
 
+interface PacketByteSample {
+  readonly bytes: number;
+  readonly atMs: number;
+}
+
 type NormalizedH264StreamClientConfig = H264StreamClientConfig & {
   width: number;
   height: number;
@@ -291,6 +296,7 @@ export class H264StreamClient {
   private pendingSidebandFrameMetaReceivedAt: Map<number, number> = new Map();
   private pendingFrameDiagnostics: Map<number, EngineRenderFrameDiagnostics> = new Map();
   private pendingPacketReceivedAt: Map<number, number> = new Map();
+  private packetByteSamples: PacketByteSample[] = [];
   private decodedFrameTimestamps: Map<number, number> = new Map();
   private lastDecodeOutputAt: number | undefined;
   private currentDecodeOutputBurstStartedAt: number | undefined;
@@ -386,6 +392,7 @@ export class H264StreamClient {
     this.pendingSidebandFrameMetaReceivedAt.clear();
     this.pendingFrameDiagnostics.clear();
     this.pendingPacketReceivedAt.clear();
+    this.packetByteSamples = [];
     this.decodedFrameTimestamps.clear();
     this.latestFrameMeta = undefined;
     this.pendingFrameMetaExpectations.clear();
@@ -593,6 +600,7 @@ export class H264StreamClient {
 
     // Notify packet size for bitrate monitoring
     this.config.onPacketReceived(data.byteLength);
+    this.recordPacketBytes(data.byteLength, receiveTime);
 
     const packet = parseH264Packet(data);
     if (!packet) return;
@@ -694,6 +702,7 @@ export class H264StreamClient {
         });
       }
       const enrichedMeta = mergeRenderFrameDiagnostics(meta, {
+        ...this.streamDiagnostics(),
         ...(diagnostics ?? {}),
         decodeSubmitToOutputMs: decodeTiming.decodeSubmitToOutputMs,
         decodeTimeMs: decodeTiming.decodeSubmitToOutputMs,
@@ -798,6 +807,48 @@ export class H264StreamClient {
     };
   }
 
+  private recordPacketBytes(bytes: number, atMs: number): void {
+    this.packetByteSamples.push({ bytes, atMs });
+    const windowStart = atMs - 1000;
+    while (
+      this.packetByteSamples.length > 0 &&
+      this.packetByteSamples[0] !== undefined &&
+      this.packetByteSamples[0].atMs < windowStart
+    ) {
+      this.packetByteSamples.shift();
+    }
+  }
+
+  private transportBitrateBps(nowMs = performance.now()): number {
+    const windowStart = nowMs - 1000;
+    const bytes = this.packetByteSamples
+      .filter((sample) => sample.atMs >= windowStart)
+      .reduce((total, sample) => total + sample.bytes, 0);
+    return Math.round(bytes * 8);
+  }
+
+  private streamDiagnostics(): EngineRenderFrameDiagnostics {
+    const descriptor = this.descriptor;
+    return {
+      streamWidth: descriptor?.width ?? this.config.width,
+      streamHeight: descriptor?.height ?? this.config.height,
+      codedWidth: descriptor?.codedWidth ?? descriptor?.width ?? this.config.width,
+      codedHeight: descriptor?.codedHeight ?? descriptor?.height ?? this.config.height,
+      scheduledWidth: descriptor?.scheduledWidth,
+      scheduledHeight: descriptor?.scheduledHeight,
+      scheduledFps: descriptor?.scheduledFps,
+      gopSize: descriptor?.gopSize ?? descriptor?.h264?.gopSize,
+      transportBitrateBps: this.transportBitrateBps(),
+      codecString: this.codecString,
+      codecProfile: descriptor?.profile,
+      codecLevel: descriptor?.level,
+      latencyMode: descriptor?.latencyMode,
+      postProcessEnabled: descriptor?.postProcessEnabled,
+      helperPassesEnabled: descriptor?.helperPassesEnabled,
+      qualityTier: descriptor?.qualityTier,
+    };
+  }
+
   private decoderConfig(): H264VideoDecoderConfig {
     const config: H264VideoDecoderConfig = {
       codec: this.codecString,
@@ -850,7 +901,7 @@ export class H264StreamClient {
 
   private shouldDropPacketBeforeDecode(packet: ParsedH264Packet): boolean {
     const policy = this.config.backpressure;
-    if (!policy.dropDeltaFramesWhenBacklogged) {
+    if (!policy.dropDeltaFramesWhenBacklogged && policy.latestOnly !== true) {
       return false;
     }
     if (packet.isKeyframe && policy.preserveKeyframes) {
@@ -881,6 +932,7 @@ export class H264StreamClient {
 
     if (packet.isKeyframe) {
       this.consecutiveDroppedDeltaFrames = 0;
+      this.reportDecodeBackpressureDiagnostic('keyframe', 1, undefined);
       return;
     }
 
@@ -890,24 +942,37 @@ export class H264StreamClient {
     }
     const threshold = this.config.backpressure.keyframeRequestDropThreshold;
     if (threshold !== undefined && this.consecutiveDroppedDeltaFrames >= threshold) {
-      this.reportControlFlowDiagnostic({
-        kind: 'metadata',
-        severity: 'warning',
-        code: 'decode-backpressure',
-        message: 'Decoded stream is backlogged; dropped delta frames before WebCodecs.',
-        streamId: this.descriptor?.streamId,
-        viewportId: this.descriptor?.viewportId,
-        metadataState: 'delayed',
-        degradedReason: 'video-backpressure',
-        timestamp: performance.now(),
-        details: finiteDetails({
-          decodeQueueDepth: this.stats.decodeQueueDepth,
-          droppedDeltaFrames: this.consecutiveDroppedDeltaFrames,
-          threshold,
-        }),
-      });
+      this.reportDecodeBackpressureDiagnostic(
+        'delta',
+        this.consecutiveDroppedDeltaFrames,
+        threshold,
+      );
       this.consecutiveDroppedDeltaFrames = 0;
     }
+  }
+
+  private reportDecodeBackpressureDiagnostic(
+    frameKind: 'delta' | 'keyframe',
+    droppedFrames: number,
+    threshold: number | undefined,
+  ): void {
+    this.reportControlFlowDiagnostic({
+      kind: 'metadata',
+      severity: 'warning',
+      code: 'decode-backpressure',
+      message: 'Decoded stream is backlogged; dropped stale frames before WebCodecs.',
+      streamId: this.descriptor?.streamId,
+      viewportId: this.descriptor?.viewportId,
+      metadataState: 'delayed',
+      degradedReason: 'video-backpressure',
+      timestamp: performance.now(),
+      details: finiteDetails({
+        decodeQueueDepth: this.stats.decodeQueueDepth,
+        droppedDeltaFrames: frameKind === 'delta' ? droppedFrames : undefined,
+        droppedKeyframes: frameKind === 'keyframe' ? droppedFrames : undefined,
+        threshold,
+      }),
+    });
   }
 
   private consumeDroppedBeforeDecodeSinceLastFrame(): number {

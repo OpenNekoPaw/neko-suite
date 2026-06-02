@@ -92,6 +92,8 @@ pub struct RenderFrameDiagnostics {
     pub render_time_ms: f32,
     pub convert_time_ms: f32,
     pub encode_time_ms: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality_tier: Option<String>,
     pub gpu_wait_time_ms: f32,
     pub dropped_frames_since_last: u32,
     pub queue_depth: u32,
@@ -99,6 +101,34 @@ pub struct RenderFrameDiagnostics {
     pub stream_submit_time_ms: f32,
     pub schedule_lag_ms: f32,
     pub skipped_intervals: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream_width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream_height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coded_width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coded_height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_fps: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gop_size: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codec_string: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codec_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codec_level: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_process_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helper_passes_enabled: Option<bool>,
 }
 
 /// Sideband metadata for realtime render frames.

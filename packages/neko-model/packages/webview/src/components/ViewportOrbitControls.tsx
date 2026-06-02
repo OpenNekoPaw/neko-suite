@@ -6,7 +6,7 @@ export interface ViewportOrbitControlsProps {
   viewportId?: string;
   onClickSelect?: (normalizedX: number, normalizedY: number) => void;
   onCameraChange?: (options?: { readonly immediate?: boolean }) => void;
-  onInteractionActivity?: () => void;
+  onInteractionActivity?: (options?: { readonly immediate?: boolean }) => void;
   onCameraMutated?: () => void;
 }
 
@@ -70,7 +70,7 @@ export function ViewportOrbitControls({
       const mode = resolveDragMode(e.button, e.altKey, e.shiftKey, e.ctrlKey || e.metaKey);
       if (!mode) return;
 
-      onInteractionActivity?.();
+      onInteractionActivity?.({ immediate: true });
       rootRef.current?.focus();
       e.currentTarget.setPointerCapture(e.pointerId);
       e.preventDefault();
@@ -139,7 +139,7 @@ export function ViewportOrbitControls({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       zoomByPixels(event.deltaY);
-      onInteractionActivity?.();
+      onInteractionActivity?.({ immediate: true });
       onCameraMutated?.();
       throttledSendCamera();
     };
@@ -184,7 +184,7 @@ export function ViewportOrbitControls({
       }
 
       if (!handled) return;
-      onInteractionActivity?.();
+      onInteractionActivity?.({ immediate: true });
       onCameraMutated?.();
       e.preventDefault();
       throttledSendCamera();

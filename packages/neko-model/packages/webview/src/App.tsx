@@ -53,6 +53,7 @@ import {
   EngineClient,
   type ModelLookDevSceneControlCapabilities,
   type SceneControlSocket,
+  type SceneViewportCameraUpdate,
 } from '@neko/neko-client';
 import { ModelController } from './viewport/ModelController';
 import type { EditableNodeTransform } from './scene/SceneEditingTypes';
@@ -64,6 +65,7 @@ import {
   useModelKeyboardController,
   type ModelKeyboardState,
 } from './hooks/useModelKeyboardController';
+import { VIEWPORT_INTERACTION_PROFILE_TTL_MS } from './viewport/streamInteractionPolicy';
 
 const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities = {
   renderModes: ['pbr'],
@@ -74,8 +76,6 @@ const FALLBACK_MODEL_LOOKDEV_CAPABILITIES: ModelLookDevSceneControlCapabilities 
   typedPicking: false,
   characterRegions: false,
 };
-const EDITOR_CAMERA_INTERACTION_PROFILE_TTL_MS = 700;
-
 type SceneCommandType = NonNullable<SceneCommandEnvelope['command']>['type'];
 
 /**
@@ -181,35 +181,47 @@ export function App(): React.JSX.Element {
     [],
   );
 
-  const sendEditorCameraToEngine = useCallback(() => {
-    const store = useModelStore.getState();
-    const position = store.getCameraPosition();
-    const target = store.cameraTarget;
-    const socket = sceneControlRef.current;
+  const sendEditorCameraToEngine = useCallback(
+    (options?: { interactive?: boolean }) => {
+      const store = useModelStore.getState();
+      const position = store.getCameraPosition();
+      const target = store.cameraTarget;
+      const socket = sceneControlRef.current;
 
-    if (!socket?.isOpen()) {
-      return;
-    }
+      if (!socket?.isOpen()) {
+        return;
+      }
 
-    try {
-      socket.sendViewportCameraLatest({
-        sceneId: store.sceneId,
-        sceneRevision: store.sceneRevision,
-        viewportId: 'main',
-        position,
-        target,
-        streamProfile: 'interactive',
-        profileTtlMs: EDITOR_CAMERA_INTERACTION_PROFILE_TTL_MS,
-      });
-      socket.requestKeyframe('main');
-    } catch (error) {
-      void webviewErrorHandler.handleError(toError(error), {
-        showToUser: false,
-        severity: 'error',
-      });
-      setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
-    }
-  }, [setSceneControlStatus]);
+      try {
+        const update: SceneViewportCameraUpdate = {
+          sceneId: store.sceneId,
+          sceneRevision: store.sceneRevision,
+          viewportId: 'main',
+          position,
+          target,
+          ...(options?.interactive === true
+            ? {
+                streamProfile: 'interactive',
+                profileTtlMs: VIEWPORT_INTERACTION_PROFILE_TTL_MS,
+              }
+            : {}),
+        };
+        socket.sendViewportCameraLatest({
+          ...update,
+        });
+        if (options?.interactive === true) {
+          socket.requestKeyframe('main');
+        }
+      } catch (error) {
+        void webviewErrorHandler.handleError(toError(error), {
+          showToUser: false,
+          severity: 'error',
+        });
+        setSceneControlStatus('error', modelErrorMessage('error.cameraUpdateFailed'));
+      }
+    },
+    [setSceneControlStatus],
+  );
 
   const handleViewportCameraMutated = useCallback(() => {
     setQualityPreview(null);
@@ -1292,7 +1304,7 @@ export function App(): React.JSX.Element {
             onToggleBottomPanel={toggleBottomPanel}
             isRightDockVisible={isRightDockVisible}
             onToggleRightDock={toggleRightDock}
-            onCameraChange={sendEditorCameraToEngine}
+            onCameraChange={() => sendEditorCameraToEngine({ interactive: true })}
             onCameraMutated={handleViewportCameraMutated}
           />
         }

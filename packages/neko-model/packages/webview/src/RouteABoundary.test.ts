@@ -229,6 +229,7 @@ describe('Route A webview boundaries', () => {
     const toolbar = readSource('components/Toolbar.tsx');
     const overlay = readSource('components/ViewportPerformanceOverlay.tsx');
     const store = readSource('stores/modelStore.ts');
+    const memoryProbe = readSource('viewport/viewportMemoryProbe.ts');
     const css = readSource('index.css');
 
     expect(app).toMatch(/isPerformanceMetricsVisible/);
@@ -242,22 +243,54 @@ describe('Route A webview boundaries', () => {
     expect(store).toMatch(/togglePerformanceMetrics/);
     expect(overlay).toMatch(/authoringMetricsSnapshot/);
     expect(overlay).toMatch(/lastRenderFrameMeta/);
-    expect(overlay).toMatch(/diagnostics\?\.gpuFrameTimeMs/);
-    expect(overlay).toMatch(/diagnostics\?\.decodeSubmitToOutputMs/);
-    expect(overlay).toMatch(/diagnostics\?\.packetToDecodeOutputMs/);
-    expect(overlay).toMatch(/diagnostics\?\.decodeOutputToPresentedMs/);
+    expect(overlay).toMatch(/metrics\.renderWindow/);
+    expect(overlay).toMatch(/window\.gpuFrameTimeMs/);
+    expect(overlay).toMatch(/window\.decodeSubmitToOutputMs/);
+    expect(overlay).toMatch(/window\.packetToDecodeOutputMs/);
+    expect(overlay).toMatch(/window\.decodeOutputToPresentedMs/);
     expect(overlay).toMatch(/diagnostics\?\.presentFps/);
-    expect(overlay).toMatch(/diagnostics\?\.droppedBeforeDecode/);
-    expect(overlay).toMatch(/diagnostics\?\.decodedDroppedBeforePresent/);
-    expect(overlay).toMatch(/diagnostics\?\.webcodecsDecodeQueueSize/);
-    expect(overlay).toMatch(/diagnostics\?\.pendingDecodeFrames/);
-    expect(overlay).toMatch(/diagnostics\?\.decodeOutputIntervalMs/);
-    expect(overlay).toMatch(/diagnostics\?\.decodeOutputBurst/);
+    expect(overlay).toMatch(/window\.droppedBeforeDecode/);
+    expect(overlay).toMatch(/window\.decodedDroppedBeforePresent/);
+    expect(overlay).toMatch(/window\.webcodecsDecodeQueueSize/);
+    expect(overlay).toMatch(/window\.pendingDecodeFrames/);
+    expect(overlay).toMatch(/window\.decodeOutputIntervalMs/);
+    expect(overlay).toMatch(/window\.decodeOutputBurst/);
+    expect(overlay).toMatch(/window\.jsHeapUsedBytes/);
+    expect(overlay).toMatch(/window\.jsHeapLimitBytes/);
+    expect(overlay).toMatch(/window\.streamWidth/);
+    expect(overlay).toMatch(/window\.codedWidth/);
+    expect(overlay).toMatch(/window\.scheduledWidth/);
+    expect(overlay).toMatch(/window\.scheduledFps/);
+    expect(overlay).toMatch(/window\.gopSize/);
+    expect(overlay).toMatch(/window\.transportBitrateBps/);
+    expect(overlay).toMatch(/window\.iosurfaceCreations/);
+    expect(overlay).toMatch(/window\.textureAllocations/);
+    expect(overlay).toMatch(/performance\.metric\.decodedFrameSize/);
+    expect(overlay).toMatch(/performance\.metric\.streamSize/);
+    expect(overlay).toMatch(/performance\.metric\.codedSize/);
+    expect(overlay).toMatch(/performance\.metric\.scheduledSize/);
+    expect(overlay).toMatch(/performance\.metric\.transportBitrate/);
+    expect(overlay).toMatch(/performance\.metric\.canvasCssSize/);
+    expect(overlay).toMatch(/performance\.metric\.presentationScale/);
+    expect(overlay).toMatch(/formatViewportFootprint/);
+    expect(memoryProbe).toMatch(/performance as BrowserPerformanceWithMemory/);
+    expect(memoryProbe).toMatch(/estimatedDecodedFrameBytes/);
+    expect(memoryProbe).toMatch(/canvasPhysicalWidth/);
+    expect(memoryProbe).toMatch(/devicePixelRatio/);
+    expect(memoryProbe).toMatch(/presentationScaleX/);
+    expect(memoryProbe).not.toMatch(/fetch\(|new EngineClient|WebSocket|postMessage\(/);
     expect(overlay).not.toMatch(/new EngineClient|postMessage\(|SceneControlSocket|WebSocket/);
     expect(overlay).not.toMatch(
       /@react-three\/fiber|@react-three\/drei|@pixiv\/three-vrm|"three"|"@types\/three"|GLTFLoader|VRMLoader|gltf-parser|parseGltf|parseVRM/,
     );
     expect(css).toMatch(/\.model-performance-overlay\s*\{/);
+    const performanceRule = readCssRule(css, '.model-performance-overlay');
+    const performanceGridRule = readCssRule(css, '.model-performance-grid');
+    expect(performanceRule).toMatch(/pointer-events:\s*auto/);
+    expect(performanceRule).toMatch(/user-select:\s*text/);
+    expect(performanceRule).not.toMatch(/backdrop-filter/);
+    expect(performanceRule).toMatch(/contain:\s*layout paint/);
+    expect(performanceGridRule).toMatch(/overscroll-behavior:\s*contain/);
     expect(css).toMatch(/#model-viewport-hud\s*\{/);
   });
 
@@ -323,28 +356,37 @@ describe('Route A webview boundaries', () => {
 
   it('sizes Route A stream from the actual webview viewport instead of a fixed canvas', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
+    const css = readSource('index.css');
 
     expect(videoViewport).toMatch(/new ResizeObserver/);
     expect(videoViewport).toMatch(/createViewportStreamSize/);
     expect(videoViewport).toMatch(/TARGET_VIEWPORT_STREAM_HEIGHT = 1080/);
-    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_WIDTH = 1920/);
-    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_HEIGHT = 1080/);
+    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_WIDTH = 3840/);
+    expect(videoViewport).toMatch(/MAX_VIEWPORT_STREAM_HEIGHT = 2160/);
     expect(videoViewport).toMatch(/MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2/);
+    expect(videoViewport).toMatch(/targetPhysicalWidth = cssWidth \* pixelRatio/);
+    expect(videoViewport).toMatch(/targetPhysicalHeight = Math\.max\(cssHeight \* pixelRatio/);
     expect(videoViewport).toMatch(/VIEWPORT_STREAM_FPS = 60/);
     expect(videoViewport).toMatch(/H264_DEBUG_SETTINGS_STORAGE_KEY = 'neko\.model\.h264'/);
     expect(videoViewport).toMatch(/allowFpsDegrade: false/);
     expect(videoViewport).toMatch(/allowQualityDegrade: false/);
     expect(videoViewport).toMatch(/VIEWPORT_RESIZE_COMMIT_DELAY_MS/);
+    expect(videoViewport).toMatch(/pendingInitialSizeFrameRef/);
+    expect(videoViewport).toMatch(/window\.requestAnimationFrame/);
     expect(videoViewport).toMatch(/window\.setTimeout/);
     expect(videoViewport).toMatch(/clamped % 2 === 0/);
     expect(videoViewport).toMatch(/ctx\.imageSmoothingQuality = 'high'/);
+    expect(videoViewport).toMatch(/model-viewport-video-canvas/);
+    expect(videoViewport).toMatch(/canvas\.getBoundingClientRect\(\)/);
     expect(videoViewport).toMatch(/resolution:\s*\{\s*width: streamSize\.width/);
+    expect(css).toMatch(/\.model-viewport-video-canvas\s*\{/);
+    expect(css).toMatch(/object-fit:\s*contain/);
     expect(videoViewport).not.toMatch(
       /width:\s*1280,\s*\n\s*height:\s*720,\s*\n\s*pixelRatio:\s*window\.devicePixelRatio/,
     );
   });
 
-  it('presents Route A decoded frames through requestAnimationFrame backpressure', () => {
+  it('presents Route A decoded frames without per-frame store backpressure', () => {
     const videoViewport = readSource('components/VideoViewport.tsx');
     const h264Client = readFileSync(
       resolve(srcRoot, '../../../../neko-client/src/H264StreamClient.ts'),
@@ -353,12 +395,19 @@ describe('Route A webview boundaries', () => {
 
     expect(videoViewport).toMatch(/pendingPresentationRef/);
     expect(videoViewport).toMatch(/requestAnimationFrame\(presentLatestFrame\)/);
+    expect(videoViewport).toMatch(/presentationSchedulerModeRef/);
+    expect(videoViewport).toMatch(/RAF_PRESENTATION_LIMIT_STRIKES/);
+    expect(videoViewport).toMatch(/window\.setTimeout\(\(\) => presentLatestFrame\(\), 0\)/);
     expect(videoViewport).toMatch(/cancelAnimationFrame/);
     expect(videoViewport).toMatch(/previous\.frame\.close\(\)/);
     expect(videoViewport).toMatch(/updateRenderFrameMeta\(drawnMeta\)/);
     expect(videoViewport).toMatch(/RENDER_FRAME_META_STORE_INTERVAL_MS = 250/);
-    expect(videoViewport).toMatch(/maxDecodeQueueDepth: 4/);
-    expect(videoViewport).toMatch(/dropDeltaFramesWhenBacklogged: false/);
+    expect(videoViewport).toMatch(/lastAppliedSeqCommittedRef/);
+    expect(videoViewport).toMatch(/drawnMeta\.appliedSeq > lastAppliedSeqCommittedRef\.current/);
+    expect(videoViewport).toMatch(/maxDecodeQueueDepth: 2/);
+    expect(videoViewport).toMatch(/dropDeltaFramesWhenBacklogged: true/);
+    expect(videoViewport).toMatch(/latestOnly: true/);
+    expect(videoViewport).toMatch(/preserveKeyframes: false/);
     expect(h264Client).toMatch(/webcodecsDecodeQueueSize/);
     expect(h264Client).toMatch(/pendingDecodeFrames/);
     expect(h264Client).toMatch(/decodeOutputBurst/);
@@ -401,11 +450,17 @@ describe('Route A webview boundaries', () => {
     expect(videoViewport).toMatch(/scheduleViewportCamera/);
     expect(videoViewport).toMatch(/pendingCameraFlushTimerRef/);
     expect(videoViewport).toMatch(/VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS/);
+    expect(videoViewport).toMatch(/streamProfile === 'interactive'/);
     expect(videoViewport).not.toMatch(/sendHttpFallback|updateEditorCamera/);
     expect(app).toMatch(/!socket\?\.isOpen\(\)/);
     expect(app).toMatch(/socket\.sendViewportCameraLatest/);
+    expect(app).toMatch(/options\?: \{ interactive\?: boolean \}/);
+    expect(app).toMatch(/options\?\.interactive === true/);
+    expect(app).toMatch(/sendEditorCameraToEngine\(\{ interactive: true \}\)/);
     expect(app).toMatch(/streamProfile: 'interactive'/);
-    expect(app).toMatch(/profileTtlMs: EDITOR_CAMERA_INTERACTION_PROFILE_TTL_MS/);
+    expect(app).toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
+    expect(videoViewport).toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
+    expect(modelController).toMatch(/VIEWPORT_INTERACTION_PROFILE_TTL_MS/);
     expect(app).not.toMatch(/socket\s*\n\s*\.updateViewportCamera/);
     expect(app).not.toMatch(/updateEditorCamera/);
     expect(videoViewport).not.toMatch(/modelController\s*\n\s*\.updateCamera\(\)/);
@@ -417,8 +472,10 @@ describe('Route A webview boundaries', () => {
     expect(modelController).toMatch(/streamProfile: 'interactive'/);
     expect(orbitControls).toMatch(/SEND_INTERVAL_MS = 33/);
     expect(orbitControls).toMatch(
-      /onCameraChange\?: \(options\?: \{ readonly immediate\?: boolean \}\) => void/,
+      /onInteractionActivity\?: \(options\?: \{ readonly immediate\?: boolean \}\) => void/,
     );
+    expect(orbitControls).toMatch(/onInteractionActivity\?\.\(\{ immediate: true \}\)/);
+    expect(videoViewport).toMatch(/scheduleViewportCamera\(\{ immediate: true \}\)/);
     expect(orbitControls).toMatch(/sendCamera\(true\)/);
     expect(toolbar).toMatch(/onCameraChange\?\.\(\)/);
     expect(toolbar).toMatch(/onCameraMutated\?\.\(\)/);

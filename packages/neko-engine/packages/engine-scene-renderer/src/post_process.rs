@@ -46,6 +46,9 @@ pub struct PostProcessSettings {
     pub saturation: f32,
     /// Gamma correction (default: 2.2)
     pub gamma: f32,
+    /// Single-frame edge anti-aliasing strength. This is currently driven by
+    /// the viewport TAA flag until the renderer grows temporal history.
+    pub anti_aliasing_strength: f32,
 }
 
 impl Default for PostProcessSettings {
@@ -59,6 +62,7 @@ impl Default for PostProcessSettings {
             contrast: 0.0,
             saturation: 0.0,
             gamma: 2.2,
+            anti_aliasing_strength: 0.0,
         }
     }
 }
@@ -223,7 +227,8 @@ impl PostProcessChain {
                 ToneMapping::Uncharted2 => 3,
             },
             resolution: [_width as f32, height as f32],
-            _padding: [0.0; 2],
+            anti_aliasing_strength: settings.anti_aliasing_strength.clamp(0.0, 1.0),
+            _padding: 0.0,
         };
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -294,5 +299,6 @@ struct PostProcessUniformsGpu {
     gamma: f32,
     tone_mapping_mode: u32,
     resolution: [f32; 2],
-    _padding: [f32; 2],
+    anti_aliasing_strength: f32,
+    _padding: f32,
 }

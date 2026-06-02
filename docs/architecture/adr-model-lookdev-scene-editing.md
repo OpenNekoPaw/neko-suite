@@ -6,6 +6,12 @@ Accepted (2026-05-30)
 
 实施备注：2026-05-30 已落地 E0-E4 / P0-P4 主要切片，包括 Engine render mode 合同、Clay/Debug LookDev 控制、authored light CRUD、Engine-owned environment、typed selection query、Webview Route A 控制面、Extension `neko.model.useEnvironment` Engine-backed 路由，以及 `.nkm` authored light/environment 持久化闭环。P3.5 HDRI prefilter/cubemap cache 与 P4.5 更完整的 `.nkc` semantic region authoring 仍按本文后续阶段演进。
 
+实施复盘：2026-06-02 修复 `neko-model` 相机/拖拽交互反馈卡顿。问题不是 GPU 渲染吞吐不足，而是 LookDev/场景控制实现曾把高频相机控制、H.264 stream profile、SceneControl ack 和 WebCodecs backpressure 混在同一慢路径里，导致用户拖拽后需要 2-3s 才看到最终画面。已通过 `0545643c fix(engine): apply viewport interaction stream profile` 和 `ae7027b4 fix(model): keep camera interaction on latest-only hot path` 修复：高频相机交互 fire-and-forget 发送 latest-only scene-control 更新，不等待 `viewportCameraAck`，不重启 H.264 stream；Engine 侧用短生命周期 `ViewportStreamInteractionProfile::Interactive` 将当前 stream runtime settings 切到 `GOP=1`，TTL 过期后恢复默认 GOP/码率；前端只在现有 `H264StreamClient` 上切换 backpressure 策略，并保留 WebCodecs 已接管的输出帧，避免硬解输出链路被“旧帧丢弃”饿死。
+
+追加实测结论：强制 reset WebCodecs/VideoToolbox 队列会造成等待新 keyframe 的输出空窗，不作为优化方向。最终采用交互起点预热：pointerdown、wheel、keyboard camera action 立即发送当前 camera + `streamProfile: 'interactive'`，并将共享 `profileTtlMs` 调整为 2000ms，减少连续相机/灯光/slider 微调期间 `GOP=1` 与默认 GOP 往返重配。
+
+画质复盘：2026-06-02 修复 `neko-model` 1080p 下人物边缘锯齿与 Retina/Webview 画面发糊问题。根因分为两类：Webview 过去按 CSS 尺寸请求 stream，DPR>1 时会把低于物理像素的 H.264 帧拉伸显示；Engine PBR forward 仍是 single-sample render target，人物外轮廓和高对比纹理边缘会产生几何锯齿。修复原则保持 Route A：Webview 只按物理像素请求/诊断 stream，不解析或重绘 mesh；Engine RenderGraph 在 realtime PBR/Clay 且 post-process 开启时对 1080p 级输出启用受控 1.5x SSAA，再在 post-process pass 下采样回最终 stream 尺寸。高 DPR/接近 4K 的输出只使用真实物理分辨率，不再叠加 SSAA，避免为清晰度牺牲 60fps 预算。
+
 ## 背景
 
 `neko-model` 当前已经收敛到 Engine-only Route A：Webview 只播放 Engine H.264 实时视口，并提供控制面板、overlay、hit-test、gizmo 与本地预测。这个方向与 UE MetaHuman Creator 的核心模式一致：浏览器端不是第二套 3D 渲染器，而是 Engine 运行时视口的交互外壳。
@@ -142,6 +148,25 @@ P0 重启体验约束：
 2. 切换命令发出后 250ms 内显示 pending badge，超过 1500ms 未拿到首帧显示可取消/重试状态。
 3. Engine stream descriptor 必须回传实际生效的 `renderMode`，UI 只在首帧或 descriptor ack 后更新为目标模式。
 4. 若重连失败，Webview 回滚到上一个已确认 render mode，并保留 selection/overlay 状态。
+
+P0 的 stream restart 只适用于低频 LookDev 模式切换，不适用于相机 orbit、viewport drag、transform gizmo drag、灯光位置拖拽或连续 slider。高频交互必须走热路径：
+
+1. Webview 先更新本地意图、overlay 或预测状态，并调用 `SceneControlSocket.sendViewportCameraLatest()` 或等价 latest-only hot update。
+2. 高频相机更新默认不携带 `requestId`，Engine 应应用最新 camera，但不回发逐帧 `viewportCameraAck`。
+3. 交互开始时 Webview 只调用 `H264StreamClient.updateBackpressurePolicy()` 切换前端 backpressure/latest-only 策略，不把 `streamProfile` 写入 React state，也不让 `startSceneRenderStream()` effect 重新执行。
+4. Engine scene-control 可接收 `streamProfile: 'interactive'` 与 `profileTtlMs`，将当前 viewport stream profile 记入 Engine scene service；producer 每帧读取该 profile，并把 `interactive` 映射为 `h264_gop_size = 1`。
+5. `GOP=1` 是交互期编码策略，不是 stream descriptor 生命周期策略；切换 GOP 允许短冷却，但不得等待常规 5s encoder reconfigure cooldown 才进入交互态。
+6. 交互起点必须预热 Engine runtime profile：pointerdown、wheel 与 keyboard camera action 在真实 camera delta 前也要发送当前 camera + `streamProfile: 'interactive'`，避免等待第一批 move 后才切低延迟。
+7. WebCodecs/VideoToolbox 已接收的旧帧不得在 JS 侧强行 suppress，也不得用 decoder reset/close/recreate 作为交互低延迟策略。latest-only 只影响后续 backpressure 和呈现层选择，避免固定硬解 output latency 被误判为可取消队列而造成输出饥饿。
+8. 静止后由 TTL/idle timer 恢复默认 GOP/码率策略；恢复可以被短冷却平滑处理，但不能阻塞下一次交互进入 `interactive`。当前 `neko-model` 使用 2000ms shared TTL，减少连续微调期间的 encoder reconfigure 抖动。
+
+此次问题的禁止回归项：
+
+- `VideoViewport` 不得重新引入 `useState<ViewportStreamProfile>`、`h264SettingsForStreamProfile()` 或交互期 `gopSize: 1` descriptor 依赖。
+- 相机/拖拽热路径不得 `await sceneControlSocket.updateViewportCamera()`，不得用 `cameraUpdateInFlightRef` / `pendingCameraUpdateRef` 串行等待 ACK。
+- 高频交互不得触发 `destroy/startSceneRenderStream`。
+- `H264StreamClient` 的 latest-only 模式不得删除已送入 WebCodecs 的 `decodeStartTimes` 并 suppress 后续 decoded frame，也不得在交互切入时 reset/close decoder。
+- `ViewportOrbitControls` 的 pointerdown、wheel、keyboard camera action 必须触发 immediate interaction activity，用于预热 Engine runtime profile。
 
 ### 2. Light 合同
 
@@ -505,18 +530,25 @@ Viewport overlay：
 ### TypeScript / Webview
 
 - `RouteABoundary.test.ts`：禁止 `three`、`@react-three/*`、Webview glTF 解析回归；新增 LookDev/Light/Environment UI 不破坏 Route A。
+- `RouteABoundary.test.ts`：禁止高频相机/拖拽路径等待 `updateViewportCamera` ack、触发 stream lifecycle、或把 interaction profile 放进 React state。
 - `SceneDocument.test.ts`：覆盖 `node-add` light、`node-remove`、`light-update`、`environment-*` command envelope。
 - `modelStore.test.ts`：LookDev transient state、selection target、pending ack/reject 生命周期。
 - `LookDevControls.test.tsx`：render mode 切换、pending/reconnect 状态、badge。
 - `LightInspectorPanel.test.tsx`：颜色/强度/range/cone 输入归一化与命令生成。
 - `EnvironmentPanel.test.tsx`：asset placement、mode/intensity/exposure、clear。
 - `InteractionLayer.test.tsx`：selection candidates、mask、disambiguation menu。
+- `StreamDescriptorClients.test.ts`：覆盖 `updateBackpressurePolicy()` 不重连，latest-only 不 suppress 已进入 WebCodecs 的硬解输出帧。
+- `RouteABoundary.test.ts`：覆盖 interaction activity 在 pointerdown/wheel/key 起点使用 immediate hot path，并共享 `VIEWPORT_INTERACTION_PROFILE_TTL_MS`。
+- `SceneControlSocket.test.ts`：覆盖 latest-only viewport camera message 默认无 `requestId`，但可显式携带 requestId 做调试。
 
 ### Engine / Rust
 
 - `host-http` parser tests：`node-add(kind=light)`、`light-update`、`node-remove`、`environment-set/update/clear`。
+- `host-http` parser tests：`viewportCamera` 可解析 `streamProfile` / `profileTtlMs`，无 `requestId` 时应用相机但不发送 ACK。
 - `host-api` stream tests：`clay` render mode parse、descriptor response、quality scheduler 保留 render mode。
+- `host-api` stream tests：`ViewportStreamInteractionProfile::Interactive` 将 runtime settings 映射到 `h264_gop_size = 1`，并绕过常规 5s reconfigure cooldown 进入交互态。
 - `runtime-scene` tests：light CRUD、environment state、revision、SceneDelta。
+- `engine-kernel` service tests：viewport interaction profile TTL 过期后恢复 `Default`。
 - `engine-scene-renderer` tests：render graph variant selection、clay material override、debug view fallback。
 - serde parity fixtures：Proto/TS/Rust 对 light/environment/selection/lookdev 合同一致。
 
@@ -546,6 +578,9 @@ Viewport overlay：
 |---|---|
 | Clay 被误认为真实材质 | UI badge 与合同命名为 LookDev render mode，不写入 material slot。 |
 | Stream 重启导致闪烁 | P0 接受；P1 用 `viewport-settings-update` 避免重连。 |
+| 高频交互误走 LookDev/stream restart 慢路径 | 相机/拖拽/连续 slider 必须走 latest-only hot update；`streamProfile` 不进入 React effect 依赖；Route A 边界测试禁止回归。 |
+| SceneControl ACK 堵塞视频反馈 | 高频相机更新默认无 `requestId`，Engine 应用但不逐帧 ACK；低频命令仍保留 ack/reject 语义。 |
+| WebCodecs 硬解输出存在固定滞后 | 不再 suppress 已提交硬解的旧帧；latest-only 在呈现层保留最新帧，并用性能指标暴露 `decodeOutputLagFrames`。 |
 | Environment 资源过大或加载过慢 | 异步加载、64 MiB 软限制、5s pending、15s timeout 与可取消任务。 |
 | 灯光默认 rig 与 authored lights 混淆 | 明确区分 editor helper light 与 scene authored light，只有后者持久化。 |
 | 语义区域选择依赖角色描述 | P4 先做 materialSlot/submesh/primitive；`.nkc` region 放到 P4.5。 |

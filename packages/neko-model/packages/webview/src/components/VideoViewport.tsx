@@ -24,6 +24,8 @@ import { bridgeRenderFrameMetaToViewportFrameMeta } from '@neko/ui';
 import { postMessage } from '@neko/shared/vscode';
 import { useModelStore } from '../stores/modelStore';
 import { handleModelMenuAction, ModelController } from '../viewport/ModelController';
+import { sampleViewportMemory } from '../viewport/viewportMemoryProbe';
+import { VIEWPORT_INTERACTION_PROFILE_TTL_MS } from '../viewport/streamInteractionPolicy';
 import { modelErrorMessage, toError, webviewErrorHandler } from '../platform/errors';
 
 export interface VideoViewportProps {
@@ -46,8 +48,8 @@ export interface VideoViewportProps {
 
 const MAIN_VIEWPORT_ID = 'main';
 const TARGET_VIEWPORT_STREAM_HEIGHT = 1080;
-const MAX_VIEWPORT_STREAM_WIDTH = 1920;
-const MAX_VIEWPORT_STREAM_HEIGHT = 1080;
+const MAX_VIEWPORT_STREAM_WIDTH = 3840;
+const MAX_VIEWPORT_STREAM_HEIGHT = 2160;
 const MAX_VIEWPORT_DEVICE_PIXEL_RATIO = 2;
 const VIEWPORT_DIMENSION_BUCKET = 16;
 const MIN_VISIBLE_VIEWPORT_DIMENSION = 64;
@@ -55,27 +57,33 @@ const VIEWPORT_STREAM_FPS = 60;
 const VIEWPORT_RESIZE_COMMIT_DELAY_MS = 160;
 const VIEWPORT_CAMERA_SEND_INTERVAL_MS = 33;
 const VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS = 250;
-const VIEWPORT_STREAM_IDLE_RESTORE_DELAY_MS = 700;
 const LOOKDEV_PENDING_DELAY_MS = 250;
 const LOOKDEV_RETRY_DELAY_MS = 1500;
 const RENDER_FRAME_META_STORE_INTERVAL_MS = 250;
+const VIEWPORT_MEMORY_SAMPLE_INTERVAL_MS = 1000;
+const RAF_PRESENTATION_LIMIT_INTERVAL_MS = 40;
+const RAF_PRESENTATION_LIMIT_STRIKES = 3;
 const RAF_LIMITED_FPS_THRESHOLD = 50;
 const RAF_LIMITED_STREAM_FPS_THRESHOLD = 55;
 const H264_DEBUG_SETTINGS_STORAGE_KEY = 'neko.model.h264';
 const REALTIME_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
-  maxDecodeQueueDepth: 4,
-  dropDeltaFramesWhenBacklogged: false,
+  maxDecodeQueueDepth: 2,
+  dropDeltaFramesWhenBacklogged: true,
   preserveKeyframes: true,
+  latestOnly: true,
+  keyframeRequestDropThreshold: 12,
 };
 const INTERACTIVE_VIEWPORT_BACKPRESSURE: H264BackpressurePolicy = {
   maxDecodeQueueDepth: 1,
-  dropDeltaFramesWhenBacklogged: false,
-  preserveKeyframes: true,
+  dropDeltaFramesWhenBacklogged: true,
+  preserveKeyframes: false,
   latestOnly: true,
+  keyframeRequestDropThreshold: 6,
 };
 
 type ViewportStreamSize = SceneViewportResolution;
 type ViewportStreamProfile = 'default' | 'interactive';
+type PresentationSchedulerMode = 'raf' | 'timer';
 
 interface PendingPresentationFrame {
   frame: VideoFrame;
@@ -113,8 +121,10 @@ function createViewportStreamSize(rect: DOMRectReadOnly): ViewportStreamSize {
     MAX_VIEWPORT_DEVICE_PIXEL_RATIO,
   );
 
-  const aspectRatio = cssWidth / cssHeight;
-  let height = Math.min(TARGET_VIEWPORT_STREAM_HEIGHT, MAX_VIEWPORT_STREAM_HEIGHT);
+  const targetPhysicalWidth = cssWidth * pixelRatio;
+  const targetPhysicalHeight = Math.max(cssHeight * pixelRatio, TARGET_VIEWPORT_STREAM_HEIGHT);
+  const aspectRatio = targetPhysicalWidth / targetPhysicalHeight;
+  let height = Math.min(targetPhysicalHeight, MAX_VIEWPORT_STREAM_HEIGHT);
   let width = height * aspectRatio;
   if (width > MAX_VIEWPORT_STREAM_WIDTH) {
     width = MAX_VIEWPORT_STREAM_WIDTH;
@@ -218,7 +228,7 @@ function createViewportDescriptor(
     postProcess: {
       bloom: false,
       ssao: false,
-      taa: false,
+      taa: true,
     },
     helperPassesEnabled,
     lookdev: {
@@ -263,10 +273,16 @@ export function VideoViewport({
   const frameMetaRef = useRef<RenderFrameMeta | null>(null);
   const pendingPresentationRef = useRef<PendingPresentationFrame | null>(null);
   const presentationFrameRef = useRef<number | null>(null);
+  const presentationTimerRef = useRef<number | null>(null);
+  const presentationSchedulerModeRef = useRef<PresentationSchedulerMode>('raf');
+  const rafPresentationLimitStrikeRef = useRef(0);
   const lastPresentedAtRef = useRef<number | null>(null);
   const lastFrameMetaStoreAtRef = useRef(0);
+  const lastAppliedSeqCommittedRef = useRef(0);
+  const lastMemorySampleAtRef = useRef(0);
   const decodedDroppedBeforePresentRef = useRef(0);
   const pendingResizeCommitRef = useRef<number | null>(null);
+  const pendingInitialSizeFrameRef = useRef<number | null>(null);
   const latestResizeSizeRef = useRef<ViewportStreamSize | null>(null);
   const pendingCameraFlushTimerRef = useRef<number | null>(null);
   const pendingStreamProfileRestoreRef = useRef<number | null>(null);
@@ -312,7 +328,7 @@ export function VideoViewport({
     pendingStreamProfileRestoreRef.current = window.setTimeout(() => {
       pendingStreamProfileRestoreRef.current = null;
       setStreamProfile('default');
-    }, VIEWPORT_STREAM_IDLE_RESTORE_DELAY_MS);
+    }, VIEWPORT_INTERACTION_PROFILE_TTL_MS);
   }, [setStreamProfile]);
   const modelController = useMemo(
     () =>
@@ -384,9 +400,22 @@ export function VideoViewport({
       }
     };
 
-    updateSize(element.getBoundingClientRect(), true);
+    const firstRect = element.getBoundingClientRect();
+    latestResizeSizeRef.current = createViewportStreamSize(firstRect);
+    pendingInitialSizeFrameRef.current = window.requestAnimationFrame(() => {
+      pendingInitialSizeFrameRef.current = null;
+      const next = createViewportStreamSize(element.getBoundingClientRect());
+      const pending = latestResizeSizeRef.current;
+      latestResizeSizeRef.current = next;
+      commitSize(pending && areViewportStreamSizesEqual(pending, next) ? pending : next);
+    });
     if (typeof ResizeObserver === 'undefined') {
-      return;
+      return () => {
+        if (pendingInitialSizeFrameRef.current !== null) {
+          window.cancelAnimationFrame(pendingInitialSizeFrameRef.current);
+          pendingInitialSizeFrameRef.current = null;
+        }
+      };
     }
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -398,6 +427,10 @@ export function VideoViewport({
 
     return () => {
       observer.disconnect();
+      if (pendingInitialSizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingInitialSizeFrameRef.current);
+        pendingInitialSizeFrameRef.current = null;
+      }
       if (pendingResizeCommitRef.current !== null) {
         window.clearTimeout(pendingResizeCommitRef.current);
         pendingResizeCommitRef.current = null;
@@ -414,6 +447,7 @@ export function VideoViewport({
       const store = useModelStore.getState();
       const position = store.getCameraPosition();
       const target = store.cameraTarget;
+      const streamProfile = streamProfileRef.current;
       sceneControlSocket.sendViewportCameraLatest({
         sceneId,
         sceneRevision,
@@ -421,8 +455,12 @@ export function VideoViewport({
         position,
         target,
         resolution: isViewportStreamSizeReady(viewportSize) ? viewportSize : undefined,
-        streamProfile: streamProfileRef.current,
-        profileTtlMs: VIEWPORT_STREAM_IDLE_RESTORE_DELAY_MS,
+        ...(streamProfile === 'interactive'
+          ? {
+              streamProfile,
+              profileTtlMs: VIEWPORT_INTERACTION_PROFILE_TTL_MS,
+            }
+          : {}),
       });
       const now = performance.now();
       if (now - lastCameraKeyframeRequestRef.current >= VIEWPORT_CAMERA_KEYFRAME_INTERVAL_MS) {
@@ -495,6 +533,9 @@ export function VideoViewport({
     frameMetaRef.current = null;
     lastPresentedAtRef.current = null;
     lastFrameMetaStoreAtRef.current = 0;
+    lastAppliedSeqCommittedRef.current = 0;
+    presentationSchedulerModeRef.current = 'raf';
+    rafPresentationLimitStrikeRef.current = 0;
     decodedDroppedBeforePresentRef.current = 0;
 
     const clearLookDevTimers = () => {
@@ -518,6 +559,10 @@ export function VideoViewport({
       if (presentationFrameRef.current !== null) {
         window.cancelAnimationFrame(presentationFrameRef.current);
         presentationFrameRef.current = null;
+      }
+      if (presentationTimerRef.current !== null) {
+        window.clearTimeout(presentationTimerRef.current);
+        presentationTimerRef.current = null;
       }
       closePendingPresentation();
     };
@@ -597,8 +642,9 @@ export function VideoViewport({
           }
         }
 
-        const presentLatestFrame = () => {
+        const presentLatestFrame = (schedulerTimestamp?: number) => {
           presentationFrameRef.current = null;
+          presentationTimerRef.current = null;
           const pending = pendingPresentationRef.current;
           pendingPresentationRef.current = null;
           if (!pending) return;
@@ -631,6 +677,22 @@ export function VideoViewport({
             lastPresentedAtRef.current = presentedAt;
             const presentIntervalMs =
               previousPresentedAt !== null ? presentedAt - previousPresentedAt : undefined;
+            if (
+              presentationSchedulerModeRef.current === 'raf' &&
+              schedulerTimestamp !== undefined &&
+              presentIntervalMs !== undefined &&
+              presentIntervalMs > RAF_PRESENTATION_LIMIT_INTERVAL_MS
+            ) {
+              rafPresentationLimitStrikeRef.current += 1;
+              if (rafPresentationLimitStrikeRef.current >= RAF_PRESENTATION_LIMIT_STRIKES) {
+                presentationSchedulerModeRef.current = 'timer';
+              }
+            } else if (
+              presentationSchedulerModeRef.current === 'raf' &&
+              presentIntervalMs !== undefined
+            ) {
+              rafPresentationLimitStrikeRef.current = 0;
+            }
             const presentFps =
               presentIntervalMs !== undefined && presentIntervalMs > 0
                 ? 1000 / presentIntervalMs
@@ -658,20 +720,40 @@ export function VideoViewport({
               };
               frameMetaRef.current = drawnMeta;
               const store = useModelStore.getState();
+              if (
+                presentedAt - lastMemorySampleAtRef.current >=
+                VIEWPORT_MEMORY_SAMPLE_INTERVAL_MS
+              ) {
+                lastMemorySampleAtRef.current = presentedAt;
+                const canvasRect = canvas.getBoundingClientRect();
+                store.recordViewportMemorySample(
+                  sampleViewportMemory({
+                    decodedFrameWidth: width,
+                    decodedFrameHeight: height,
+                    canvasCssWidth: canvasRect.width,
+                    canvasCssHeight: canvasRect.height,
+                    devicePixelRatio: window.devicePixelRatio || 1,
+                  }),
+                );
+              }
+              const hasNewAppliedSeq = drawnMeta.appliedSeq > lastAppliedSeqCommittedRef.current;
               const shouldUpdateFrameMeta =
-                drawnMeta.appliedSeq > 0 ||
+                hasNewAppliedSeq ||
                 presentedAt - lastFrameMetaStoreAtRef.current >=
                   RENDER_FRAME_META_STORE_INTERVAL_MS;
               if (shouldUpdateFrameMeta) {
                 lastFrameMetaStoreAtRef.current = presentedAt;
                 store.updateRenderFrameMeta(drawnMeta);
+              } else {
+                store.recordRenderFrameMetricsSample(drawnMeta);
               }
               const frameMode = renderModeFromFrameMeta(drawnMeta);
               if (frameMode === selectedRenderMode) {
                 clearLookDevTimers();
                 store.applyLookDevMode(frameMode);
               }
-              if (drawnMeta.appliedSeq > 0) {
+              if (hasNewAppliedSeq) {
+                lastAppliedSeqCommittedRef.current = drawnMeta.appliedSeq;
                 store.commitPredictionsThrough(drawnMeta.appliedSeq);
                 store.commitLocalPredictionsThrough(drawnMeta.appliedSeq);
               }
@@ -692,7 +774,15 @@ export function VideoViewport({
           pendingPresentationRef.current = meta
             ? { frame, meta, decodedAt: performance.now(), droppedBeforePresent }
             : { frame, decodedAt: performance.now(), droppedBeforePresent };
-          if (presentationFrameRef.current === null) {
+          if (
+            presentationSchedulerModeRef.current === 'timer' &&
+            presentationTimerRef.current === null
+          ) {
+            presentationTimerRef.current = window.setTimeout(() => presentLatestFrame(), 0);
+          } else if (
+            presentationSchedulerModeRef.current === 'raf' &&
+            presentationFrameRef.current === null
+          ) {
             presentationFrameRef.current = window.requestAnimationFrame(presentLatestFrame);
           }
         };
@@ -851,7 +941,13 @@ export function VideoViewport({
         className="relative h-full w-full overflow-hidden"
         surface={{
           kind: 'custom',
-          node: <canvas ref={canvasRef} className="h-full w-full" aria-hidden={!hasEngineFrame} />,
+          node: (
+            <canvas
+              ref={canvasRef}
+              className="model-viewport-video-canvas h-full w-full"
+              aria-hidden={!hasEngineFrame}
+            />
+          ),
         }}
         onContextMenuAction={handleViewportContextMenuAction}
         renderOverlayLayer={({ frameMeta, overlays }) => (
@@ -885,7 +981,12 @@ export function VideoViewport({
                 markInteractiveStreamActivity();
                 scheduleViewportCamera(options);
               }}
-              onInteractionActivity={markInteractiveStreamActivity}
+              onInteractionActivity={(options) => {
+                markInteractiveStreamActivity();
+                if (options?.immediate === true) {
+                  scheduleViewportCamera({ immediate: true });
+                }
+              }}
               onCameraMutated={onCameraMutated}
             />
           </>

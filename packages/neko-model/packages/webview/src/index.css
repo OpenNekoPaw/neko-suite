@@ -63,6 +63,7 @@
     --model-left-toolbar-bg: color-mix(in srgb, var(--model-surface) 92%, transparent);
     --model-left-toolbar-border: color-mix(in srgb, var(--model-fg) 12%, transparent);
     --model-left-toolbar-shadow: var(--neko-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.24));
+    --model-performance-overlay-bg: var(--model-surface);
     --model-viewport-control-bg: color-mix(in srgb, var(--model-surface) 70%, transparent);
     --model-viewport-control-hover-bg: color-mix(in srgb, var(--model-elevated) 84%, transparent);
     --model-viewport-control-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
@@ -136,6 +137,7 @@
     --model-viewport-bg: color-mix(in srgb, var(--model-bg) 92%, var(--model-fg) 8%);
     --model-left-toolbar-bg: color-mix(in srgb, var(--model-elevated) 94%, transparent);
     --model-left-toolbar-border: color-mix(in srgb, var(--model-fg) 14%, transparent);
+    --model-performance-overlay-bg: var(--model-elevated);
     --model-viewport-control-bg: color-mix(in srgb, var(--model-elevated) 78%, transparent);
     --model-viewport-control-hover-bg: color-mix(
       in srgb,
@@ -184,6 +186,7 @@
     --model-left-toolbar-bg: var(--vscode-editor-background);
     --model-left-toolbar-border: var(--model-border);
     --model-left-toolbar-shadow: none;
+    --model-performance-overlay-bg: var(--vscode-editor-background);
     --model-viewport-control-bg: var(--vscode-editor-background);
     --model-viewport-control-hover-bg: var(--model-hover);
     --model-viewport-control-border: var(--model-border);
@@ -597,6 +600,11 @@
     height: 100%;
   }
 
+  .model-viewport-video-canvas {
+    display: block;
+    object-fit: contain;
+  }
+
   .model-viewport-frame .neko-viewport-overlay {
     pointer-events: none;
     position: absolute;
@@ -930,23 +938,25 @@
   }
 
   .model-performance-overlay {
-    pointer-events: none;
+    pointer-events: auto;
+    user-select: text;
     position: absolute;
     right: 10px;
     bottom: 10px;
     z-index: 32;
     display: flex;
-    width: min(520px, calc(100% - 20px));
+    width: min(620px, calc(100% - 20px));
     max-height: min(280px, calc(100% - 20px));
     flex-direction: column;
     gap: 6px;
     overflow: hidden;
     border: 1px solid var(--model-left-toolbar-border);
     border-radius: 6px;
-    background: var(--model-left-toolbar-bg);
-    box-shadow: var(--model-left-toolbar-shadow);
+    background: var(--model-performance-overlay-bg, var(--model-surface));
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
     padding: 7px;
-    backdrop-filter: blur(10px);
+    cursor: text;
+    contain: layout paint;
   }
 
   .model-performance-header {
@@ -977,6 +987,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 3px 10px;
     overflow: auto;
+    overscroll-behavior: contain;
     scrollbar-width: thin;
   }
 

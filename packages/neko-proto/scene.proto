@@ -1024,6 +1024,9 @@ message RenderStreamDescriptor {
   optional uint32 coded_height = 25;
   optional string latency_mode = 26;
   optional ViewportH264Settings h264 = 27;
+  optional uint32 scheduled_width = 28;
+  optional uint32 scheduled_height = 29;
+  optional float scheduled_fps = 30;
 }
 
 message RenderFrameDiagnostics {
@@ -1060,6 +1063,21 @@ message RenderFrameDiagnostics {
   optional uint32 pending_decode_frames = 31;
   optional float decode_output_interval_ms = 32;
   optional uint32 decode_output_burst = 33;
+  optional uint32 stream_width = 34;
+  optional uint32 stream_height = 35;
+  optional uint32 coded_width = 36;
+  optional uint32 coded_height = 37;
+  optional uint32 scheduled_width = 38;
+  optional uint32 scheduled_height = 39;
+  optional float scheduled_fps = 40;
+  optional uint32 gop_size = 41;
+  optional uint64 transport_bitrate_bps = 42;
+  optional string codec_string = 43;
+  optional string codec_profile = 44;
+  optional string codec_level = 45;
+  optional string latency_mode = 46;
+  optional bool post_process_enabled = 47;
+  optional bool helper_passes_enabled = 48;
 }
 
 message RenderFrameMeta {

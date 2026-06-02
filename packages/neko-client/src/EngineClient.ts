@@ -749,6 +749,9 @@ function normalizeSceneRenderStreamDescriptor(value: unknown): RenderStreamDescr
     codedWidth: typeof value.codedWidth === 'number' ? value.codedWidth : undefined,
     codedHeight: typeof value.codedHeight === 'number' ? value.codedHeight : undefined,
     latencyMode: typeof value.latencyMode === 'string' ? value.latencyMode : undefined,
+    scheduledWidth: typeof value.scheduledWidth === 'number' ? value.scheduledWidth : undefined,
+    scheduledHeight: typeof value.scheduledHeight === 'number' ? value.scheduledHeight : undefined,
+    scheduledFps: typeof value.scheduledFps === 'number' ? value.scheduledFps : undefined,
   };
 
   const renderMode = normalizeRenderMode(value.renderMode);

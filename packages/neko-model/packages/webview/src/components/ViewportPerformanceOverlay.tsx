@@ -2,7 +2,11 @@ import React, { useMemo } from 'react';
 import type { RenderFrameMeta } from '@neko/shared';
 import { useTranslation } from '../i18n/I18nContext';
 import { useModelStore } from '../stores/modelStore';
-import type { AuthoringMetricsSnapshot } from '../scene/AuthoringPerformanceMetrics';
+import type {
+  AuthoringMetricsSnapshot,
+  RenderDiagnosticsWindowSnapshot,
+  PerformanceWindowStats,
+} from '../scene/AuthoringPerformanceMetrics';
 
 const HOST_LIMITED_PRESENT_FPS_THRESHOLD = 50;
 const HOST_LIMITED_STREAM_FPS_THRESHOLD = 55;
@@ -56,7 +60,8 @@ function buildPerformanceRows(
   t: Translate,
 ): PerformanceMetricRow[] {
   const diagnostics = frameMeta?.diagnostics;
-  const droppedFrames = diagnostics?.droppedFramesSinceLast ?? 0;
+  const window = metrics.renderWindow;
+  const droppedFrames = window.droppedFramesSinceLast;
   const presentFps = diagnostics?.presentFps;
   const presentationHostLimited =
     diagnostics?.presentationHostLimited === true ||
@@ -73,8 +78,8 @@ function buildPerformanceRows(
       label: t('performance.metric.presentFps'),
       value: presentationHostLimited
         ? t('performance.value.hostLimited', { fps: formatFpsNumber(presentFps) })
-        : formatFpsValue(presentFps),
-      tone: toneForPresentFps(presentFps),
+        : formatFpsStat(window.presentFps, 'avg'),
+      tone: toneForPresentFps(window.presentFps.avg || presentFps),
     },
     {
       id: 'frame-p95',
@@ -85,120 +90,122 @@ function buildPerformanceRows(
     {
       id: 'gpu-frame',
       label: t('performance.metric.gpuFrame'),
-      value: formatMs(diagnostics?.gpuFrameTimeMs ?? diagnostics?.renderTimeMs),
-      tone: toneForFrameBudget(diagnostics?.gpuFrameTimeMs ?? diagnostics?.renderTimeMs),
+      value: formatMsStat(window.gpuFrameTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.gpuFrameTimeMs.p95),
+    },
+    {
+      id: 'render',
+      label: t('performance.metric.render'),
+      value: formatMsStat(window.renderTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.renderTimeMs.p95),
+    },
+    {
+      id: 'convert',
+      label: t('performance.metric.convert'),
+      value: formatMsStat(window.convertTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.convertTimeMs.p95),
+    },
+    {
+      id: 'gpu-wait',
+      label: t('performance.metric.gpuWait'),
+      value: formatMsStat(window.gpuWaitTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.gpuWaitTimeMs.p95),
     },
     {
       id: 'producer-frame',
       label: t('performance.metric.producerFrame'),
-      value: formatMs(diagnostics?.producerFrameTimeMs),
-      tone: toneForFrameBudget(diagnostics?.producerFrameTimeMs),
+      value: formatMsStat(window.producerFrameTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.producerFrameTimeMs.p95),
     },
     {
       id: 'encode',
       label: t('performance.metric.encode'),
-      value: formatMs(diagnostics?.encodeTimeMs),
-      tone: toneForFrameBudget(diagnostics?.encodeTimeMs),
+      value: formatMsStat(window.encodeTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.encodeTimeMs.p95),
     },
     {
       id: 'stream-submit',
       label: t('performance.metric.streamSubmit'),
-      value: formatMs(diagnostics?.streamSubmitTimeMs),
-      tone: toneForFrameBudget(diagnostics?.streamSubmitTimeMs),
+      value: formatMsStat(window.streamSubmitTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.streamSubmitTimeMs.p95),
     },
     {
       id: 'schedule-lag',
       label: t('performance.metric.scheduleLag'),
-      value: formatMs(diagnostics?.scheduleLagMs),
-      tone: toneForFrameBudget(diagnostics?.scheduleLagMs),
+      value: formatMsStat(window.scheduleLagMs, 'p95'),
+      tone: toneForFrameBudget(window.scheduleLagMs.p95),
     },
     {
       id: 'decode',
       label: t('performance.metric.decode'),
-      value: formatMs(diagnostics?.decodeSubmitToOutputMs ?? diagnostics?.decodeTimeMs),
-      tone: toneForFrameBudget(diagnostics?.decodeSubmitToOutputMs ?? diagnostics?.decodeTimeMs),
+      value: formatMsStat(window.decodeSubmitToOutputMs, 'p95'),
+      tone: toneForFrameBudget(window.decodeSubmitToOutputMs.p95),
     },
     {
       id: 'packet-output',
       label: t('performance.metric.packetOutput'),
-      value: formatMs(diagnostics?.packetToDecodeOutputMs),
-      tone: toneForFrameBudget(diagnostics?.packetToDecodeOutputMs),
+      value: formatMsStat(window.packetToDecodeOutputMs, 'p95'),
+      tone: toneForFrameBudget(window.packetToDecodeOutputMs.p95),
     },
     {
       id: 'output-present',
       label: t('performance.metric.outputPresent'),
-      value: formatMs(diagnostics?.decodeOutputToPresentedMs),
-      tone: toneForFrameBudget(diagnostics?.decodeOutputToPresentedMs),
+      value: formatMsStat(window.decodeOutputToPresentedMs, 'p95'),
+      tone: toneForFrameBudget(window.decodeOutputToPresentedMs.p95),
     },
     {
       id: 'draw',
       label: t('performance.metric.draw'),
-      value: formatMs(diagnostics?.drawTimeMs),
-      tone: toneForFrameBudget(diagnostics?.drawTimeMs),
+      value: formatMsStat(window.drawTimeMs, 'p95'),
+      tone: toneForFrameBudget(window.drawTimeMs.p95),
     },
     {
       id: 'queue',
       label: t('performance.metric.queue'),
-      value: formatCount(diagnostics?.queueDepth),
-      tone: diagnostics?.queueDepth && diagnostics.queueDepth > 2 ? 'warning' : undefined,
+      value: formatCountStat(window.queueDepth, 'max'),
+      tone: window.queueDepth.max > 2 ? 'warning' : undefined,
     },
     {
       id: 'webcodecs-queue',
       label: t('performance.metric.webcodecsQueue'),
-      value: formatCount(diagnostics?.webcodecsDecodeQueueSize),
-      tone:
-        diagnostics?.webcodecsDecodeQueueSize && diagnostics.webcodecsDecodeQueueSize > 2
-          ? 'warning'
-          : undefined,
+      value: formatCountStat(window.webcodecsDecodeQueueSize, 'max'),
+      tone: window.webcodecsDecodeQueueSize.max > 2 ? 'warning' : undefined,
     },
     {
       id: 'pending-decode',
       label: t('performance.metric.pendingDecode'),
-      value: formatCount(diagnostics?.pendingDecodeFrames),
-      tone:
-        diagnostics?.pendingDecodeFrames && diagnostics.pendingDecodeFrames > 2
-          ? 'warning'
-          : undefined,
+      value: formatCountStat(window.pendingDecodeFrames, 'max'),
+      tone: window.pendingDecodeFrames.max > 2 ? 'warning' : undefined,
     },
     {
       id: 'decode-output-interval',
       label: t('performance.metric.decodeOutputInterval'),
-      value: formatMs(diagnostics?.decodeOutputIntervalMs),
-      tone: toneForFrameBudget(diagnostics?.decodeOutputIntervalMs),
+      value: formatMsStat(window.decodeOutputIntervalMs, 'p95'),
+      tone: toneForFrameBudget(window.decodeOutputIntervalMs.p95),
     },
     {
       id: 'decode-output-burst',
       label: t('performance.metric.decodeOutputBurst'),
-      value: formatCount(diagnostics?.decodeOutputBurst),
-      tone:
-        diagnostics?.decodeOutputBurst && diagnostics.decodeOutputBurst > 1 ? 'warning' : undefined,
+      value: formatCountStat(window.decodeOutputBurst, 'max'),
+      tone: window.decodeOutputBurst.max > 1 ? 'warning' : undefined,
     },
     {
       id: 'pre-decode-drops',
       label: t('performance.metric.preDecodeDrops'),
-      value: formatCount(diagnostics?.droppedBeforeDecode),
-      tone:
-        diagnostics?.droppedBeforeDecode && diagnostics.droppedBeforeDecode > 0
-          ? 'warning'
-          : undefined,
+      value: formatCountStat(window.droppedBeforeDecode, 'max'),
+      tone: window.droppedBeforeDecode.max > 0 ? 'warning' : undefined,
     },
     {
       id: 'pre-present-drops',
       label: t('performance.metric.prePresentDrops'),
-      value: formatCount(diagnostics?.decodedDroppedBeforePresent),
-      tone:
-        diagnostics?.decodedDroppedBeforePresent && diagnostics.decodedDroppedBeforePresent > 0
-          ? 'warning'
-          : undefined,
+      value: formatCountStat(window.decodedDroppedBeforePresent, 'max'),
+      tone: window.decodedDroppedBeforePresent.max > 0 ? 'warning' : undefined,
     },
     {
       id: 'decode-lag',
       label: t('performance.metric.decodeLag'),
-      value: formatCount(diagnostics?.decodeOutputLagFrames),
-      tone:
-        diagnostics?.decodeOutputLagFrames && diagnostics.decodeOutputLagFrames > 2
-          ? 'warning'
-          : undefined,
+      value: formatCountStat(window.decodeOutputLagFrames, 'max'),
+      tone: window.decodeOutputLagFrames.max > 2 ? 'warning' : undefined,
     },
     {
       id: 'ack-p95',
@@ -218,17 +225,142 @@ function buildPerformanceRows(
       tone: toneForFrameBudget(metrics.gpuUploadMs),
     },
     {
+      id: 'js-heap',
+      label: t('performance.metric.jsHeap'),
+      value: formatBytesStat(window.jsHeapUsedBytes, 'max'),
+    },
+    {
+      id: 'js-heap-total',
+      label: t('performance.metric.jsHeapTotal'),
+      value: formatBytesStat(window.jsHeapTotalBytes, 'max'),
+    },
+    {
+      id: 'js-heap-limit',
+      label: t('performance.metric.jsHeapLimit'),
+      value: formatBytesStat(window.jsHeapLimitBytes, 'max'),
+      tone: window.jsHeapLimitBytes.samples > 0 ? undefined : 'muted',
+    },
+    {
+      id: 'decoded-frame-memory',
+      label: t('performance.metric.decodedFrameMemory'),
+      value: formatBytesStat(window.estimatedDecodedFrameBytes, 'max'),
+    },
+    {
+      id: 'decoded-frame-size',
+      label: t('performance.metric.decodedFrameSize'),
+      value: formatSizeStat(window.decodedFrameWidth, window.decodedFrameHeight),
+    },
+    {
+      id: 'stream-size',
+      label: t('performance.metric.streamSize'),
+      value: formatSizeStat(window.streamWidth, window.streamHeight),
+    },
+    {
+      id: 'coded-size',
+      label: t('performance.metric.codedSize'),
+      value: formatSizeStat(window.codedWidth, window.codedHeight),
+    },
+    {
+      id: 'scheduled-size',
+      label: t('performance.metric.scheduledSize'),
+      value: formatSizeStat(window.scheduledWidth, window.scheduledHeight),
+    },
+    {
+      id: 'scheduled-fps',
+      label: t('performance.metric.scheduledFps'),
+      value: formatFpsStat(window.scheduledFps, 'max'),
+    },
+    {
+      id: 'gop-size',
+      label: t('performance.metric.gopSize'),
+      value: formatCountStat(window.gopSize, 'max'),
+      tone: window.gopSize.max === 1 ? 'warning' : undefined,
+    },
+    {
+      id: 'transport-bitrate',
+      label: t('performance.metric.transportBitrate'),
+      value: formatBitsPerSecondStat(window.transportBitrateBps, 'avg'),
+    },
+    {
+      id: 'codec',
+      label: t('performance.metric.codec'),
+      value: diagnostics?.codecString ?? t('performance.value.none'),
+      tone: diagnostics?.codecString ? undefined : 'muted',
+    },
+    {
+      id: 'codec-profile',
+      label: t('performance.metric.codecProfile'),
+      value: formatCodecProfile(diagnostics?.codecProfile, diagnostics?.codecLevel, t),
+      tone: diagnostics?.codecProfile || diagnostics?.codecLevel ? undefined : 'muted',
+    },
+    {
+      id: 'latency-mode',
+      label: t('performance.metric.latencyMode'),
+      value: diagnostics?.latencyMode ?? t('performance.value.none'),
+      tone: diagnostics?.latencyMode ? undefined : 'muted',
+    },
+    {
+      id: 'post-process',
+      label: t('performance.metric.postProcess'),
+      value: formatBooleanDiagnostic(diagnostics?.postProcessEnabled, t),
+      tone: diagnostics?.postProcessEnabled === undefined ? 'muted' : undefined,
+    },
+    {
+      id: 'helper-passes',
+      label: t('performance.metric.helperPasses'),
+      value: formatBooleanDiagnostic(diagnostics?.helperPassesEnabled, t),
+      tone: diagnostics?.helperPassesEnabled === undefined ? 'muted' : undefined,
+    },
+    {
+      id: 'canvas-css-size',
+      label: t('performance.metric.canvasCssSize'),
+      value: formatSizeStat(window.canvasCssWidth, window.canvasCssHeight),
+    },
+    {
+      id: 'canvas-physical-size',
+      label: t('performance.metric.canvasPhysicalSize'),
+      value: formatSizeStat(window.canvasPhysicalWidth, window.canvasPhysicalHeight),
+    },
+    {
+      id: 'device-pixel-ratio',
+      label: t('performance.metric.devicePixelRatio'),
+      value: formatNumberStat(window.devicePixelRatio, 'max'),
+    },
+    {
+      id: 'presentation-scale',
+      label: t('performance.metric.presentationScale'),
+      value: formatScaleStat(window.presentationScaleX, window.presentationScaleY),
+      tone: toneForPresentationScale(window.presentationScaleX.max, window.presentationScaleY.max),
+    },
+    {
+      id: 'iosurface-creations',
+      label: t('performance.metric.iosurfaceCreations'),
+      value: formatCountStat(window.iosurfaceCreations, 'max'),
+      tone: window.iosurfaceCreations.max > 3 ? 'warning' : undefined,
+    },
+    {
+      id: 'texture-allocations',
+      label: t('performance.metric.textureAllocations'),
+      value: formatCountStat(window.textureAllocations, 'max'),
+      tone: window.textureAllocations.max > 4 ? 'warning' : undefined,
+    },
+    {
+      id: 'vram-usage',
+      label: t('performance.metric.vramUsage'),
+      value: formatViewportFootprint(window),
+      tone: window.estimatedDecodedFrameBytes.samples > 0 ? undefined : 'muted',
+    },
+    {
       id: 'frame-drops',
       label: t('performance.metric.frameDrops'),
-      value: formatCount(droppedFrames),
-      tone: droppedFrames > 0 ? 'warning' : undefined,
+      value: formatCountStat(droppedFrames, 'max'),
+      tone: droppedFrames.max > 0 ? 'warning' : undefined,
     },
     {
       id: 'skipped-intervals',
       label: t('performance.metric.skippedIntervals'),
-      value: formatCount(diagnostics?.skippedIntervals),
-      tone:
-        diagnostics?.skippedIntervals && diagnostics.skippedIntervals > 0 ? 'warning' : undefined,
+      value: formatCountStat(window.skippedIntervals, 'max'),
+      tone: window.skippedIntervals.max > 0 ? 'warning' : undefined,
     },
     {
       id: 'prediction-drops',
@@ -286,6 +418,20 @@ function formatMs(value: number | undefined): string {
   return `${value.toFixed(1)} ms`;
 }
 
+function formatMsStat(stats: PerformanceWindowStats, field: keyof PerformanceWindowStats): string {
+  if (stats.samples <= 0 || field === 'samples') {
+    return '-';
+  }
+  return formatMs(stats[field]);
+}
+
+function formatFpsStat(stats: PerformanceWindowStats, field: keyof PerformanceWindowStats): string {
+  if (stats.samples <= 0 || field === 'samples') {
+    return '-';
+  }
+  return formatFpsValue(stats[field]);
+}
+
 function formatCount(value: number | undefined): string {
   if (!isFinitePositiveOrZeroNumber(value)) {
     return '-';
@@ -293,17 +439,119 @@ function formatCount(value: number | undefined): string {
   return String(Math.round(value));
 }
 
+function formatCountStat(
+  stats: PerformanceWindowStats,
+  field: keyof PerformanceWindowStats,
+): string {
+  if (stats.samples <= 0 || field === 'samples') {
+    return '-';
+  }
+  return formatCount(stats[field]);
+}
+
+function formatBytesStat(
+  stats: PerformanceWindowStats,
+  field: keyof PerformanceWindowStats,
+): string {
+  if (stats.samples <= 0 || field === 'samples') {
+    return '-';
+  }
+  return formatBytes(stats[field]);
+}
+
+function formatBitsPerSecondStat(
+  stats: PerformanceWindowStats,
+  field: keyof PerformanceWindowStats,
+): string {
+  if (stats.samples <= 0 || field === 'samples') {
+    return '-';
+  }
+  return formatBitsPerSecond(stats[field]);
+}
+
+function formatSizeStat(width: PerformanceWindowStats, height: PerformanceWindowStats): string {
+  if (width.samples <= 0 || height.samples <= 0) {
+    return '-';
+  }
+  return `${Math.round(width.max)}x${Math.round(height.max)}`;
+}
+
+function formatScaleStat(scaleX: PerformanceWindowStats, scaleY: PerformanceWindowStats): string {
+  if (scaleX.samples <= 0 || scaleY.samples <= 0) {
+    return '-';
+  }
+  return `${scaleX.max.toFixed(2)}x / ${scaleY.max.toFixed(2)}x`;
+}
+
+function formatNumberStat(
+  stats: PerformanceWindowStats,
+  field: keyof PerformanceWindowStats,
+): string {
+  if (stats.samples <= 0 || field === 'samples') {
+    return '-';
+  }
+  return stats[field].toFixed(2);
+}
+
 function formatBytesPerSecond(value: number): string {
   if (!isFinitePositiveOrZeroNumber(value)) {
     return '-';
   }
+  return `${formatBytes(value)}/s`;
+}
+
+function formatBitsPerSecond(value: number | undefined): string {
+  if (!isFinitePositiveOrZeroNumber(value)) {
+    return '-';
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)} Mbps`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)} Kbps`;
+  }
+  return `${Math.round(value)} bps`;
+}
+
+function formatBytes(value: number | undefined): string {
+  if (!isFinitePositiveOrZeroNumber(value)) {
+    return '-';
+  }
   if (value >= 1024 * 1024) {
-    return `${(value / (1024 * 1024)).toFixed(1)} MB/s`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
   }
   if (value >= 1024) {
-    return `${(value / 1024).toFixed(1)} KB/s`;
+    return `${(value / 1024).toFixed(1)} KB`;
   }
-  return `${Math.round(value)} B/s`;
+  return `${Math.round(value)} B`;
+}
+
+function formatCodecProfile(
+  profile: string | undefined,
+  level: string | undefined,
+  t: Translate,
+): string {
+  if (profile && level) {
+    return `${profile} / ${level}`;
+  }
+  return profile ?? level ?? t('performance.value.none');
+}
+
+function formatBooleanDiagnostic(value: boolean | undefined, t: Translate): string {
+  if (value === undefined) {
+    return t('performance.value.none');
+  }
+  return value ? t('performance.value.enabled') : t('performance.value.disabled');
+}
+
+function formatViewportFootprint(window: RenderDiagnosticsWindowSnapshot): string {
+  if (window.estimatedDecodedFrameBytes.samples <= 0) {
+    return '-';
+  }
+  const decodedFrameBytes = window.estimatedDecodedFrameBytes.max;
+  const canvasBytes = window.canvasPhysicalWidth.max * window.canvasPhysicalHeight.max * 4;
+  const footprintBytes = Math.max(decodedFrameBytes, canvasBytes);
+  return formatBytes(footprintBytes);
 }
 
 function toneForFrameBudget(value: number | undefined): PerformanceMetricRow['tone'] {
@@ -330,6 +578,16 @@ function toneForPresentFps(value: number | undefined): PerformanceMetricRow['ton
     return 'warning';
   }
   return undefined;
+}
+
+function toneForPresentationScale(
+  scaleX: number | undefined,
+  scaleY: number | undefined,
+): PerformanceMetricRow['tone'] {
+  if (!isFinitePositiveNumber(scaleX) || !isFinitePositiveNumber(scaleY)) {
+    return undefined;
+  }
+  return scaleX > 1.02 || scaleY > 1.02 ? 'warning' : undefined;
 }
 
 function isPresentationHostLimited(

@@ -205,6 +205,34 @@ export function readRenderFrameDiagnostics(
   }
   const decodeOutputBurst = readFiniteNumber(value.decodeOutputBurst);
   if (decodeOutputBurst !== undefined) diagnostics.decodeOutputBurst = decodeOutputBurst;
+  const streamWidth = readFiniteNumber(value.streamWidth);
+  if (streamWidth !== undefined) diagnostics.streamWidth = streamWidth;
+  const streamHeight = readFiniteNumber(value.streamHeight);
+  if (streamHeight !== undefined) diagnostics.streamHeight = streamHeight;
+  const codedWidth = readFiniteNumber(value.codedWidth);
+  if (codedWidth !== undefined) diagnostics.codedWidth = codedWidth;
+  const codedHeight = readFiniteNumber(value.codedHeight);
+  if (codedHeight !== undefined) diagnostics.codedHeight = codedHeight;
+  const scheduledWidth = readFiniteNumber(value.scheduledWidth);
+  if (scheduledWidth !== undefined) diagnostics.scheduledWidth = scheduledWidth;
+  const scheduledHeight = readFiniteNumber(value.scheduledHeight);
+  if (scheduledHeight !== undefined) diagnostics.scheduledHeight = scheduledHeight;
+  const scheduledFps = readFiniteNumber(value.scheduledFps);
+  if (scheduledFps !== undefined) diagnostics.scheduledFps = scheduledFps;
+  const gopSize = readFiniteNumber(value.gopSize);
+  if (gopSize !== undefined) diagnostics.gopSize = gopSize;
+  const transportBitrateBps = readFiniteNumber(value.transportBitrateBps);
+  if (transportBitrateBps !== undefined) diagnostics.transportBitrateBps = transportBitrateBps;
+  if (typeof value.codecString === 'string') diagnostics.codecString = value.codecString;
+  if (typeof value.codecProfile === 'string') diagnostics.codecProfile = value.codecProfile;
+  if (typeof value.codecLevel === 'string') diagnostics.codecLevel = value.codecLevel;
+  if (typeof value.latencyMode === 'string') diagnostics.latencyMode = value.latencyMode;
+  if (typeof value.postProcessEnabled === 'boolean') {
+    diagnostics.postProcessEnabled = value.postProcessEnabled;
+  }
+  if (typeof value.helperPassesEnabled === 'boolean') {
+    diagnostics.helperPassesEnabled = value.helperPassesEnabled;
+  }
 
   return Object.keys(diagnostics).length > 0 ? diagnostics : undefined;
 }

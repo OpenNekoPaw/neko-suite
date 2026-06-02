@@ -13,7 +13,8 @@ struct PostProcessUniforms {
     gamma: f32,
     tone_mapping_mode: u32,  // 0=none, 1=reinhard, 2=aces, 3=uncharted2
     resolution: vec2<f32>,
-    _padding: vec2<f32>,
+    anti_aliasing_strength: f32,
+    _padding: f32,
 }
 
 @group(0) @binding(0) var input_texture: texture_2d<f32>;
@@ -97,13 +98,64 @@ fn apply_vignette(color: vec3<f32>, uv: vec2<f32>, intensity: f32) -> vec3<f32> 
     return color * vignette;
 }
 
+fn sample_input_raw(uv: vec2<f32>) -> vec3<f32> {
+    return textureSample(input_texture, input_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0))).rgb;
+}
+
+fn sample_input(uv: vec2<f32>) -> vec3<f32> {
+    let input_dimensions = textureDimensions(input_texture);
+    let input_resolution = vec2<f32>(f32(input_dimensions.x), f32(input_dimensions.y));
+    let output_resolution = max(params.resolution, vec2<f32>(1.0));
+    let scale = input_resolution / output_resolution;
+    if max(scale.x, scale.y) <= 1.05 {
+        return sample_input_raw(uv);
+    }
+
+    let radius = min(scale, vec2<f32>(2.0)) * 0.28 / max(input_resolution, vec2<f32>(1.0));
+    let center = sample_input_raw(uv);
+    let north = sample_input_raw(uv + vec2<f32>(0.0, -radius.y));
+    let south = sample_input_raw(uv + vec2<f32>(0.0, radius.y));
+    let east = sample_input_raw(uv + vec2<f32>(radius.x, 0.0));
+    let west = sample_input_raw(uv + vec2<f32>(-radius.x, 0.0));
+
+    return center * 0.5 + (north + south + east + west) * 0.125;
+}
+
+fn apply_edge_antialias(color: vec3<f32>, uv: vec2<f32>, strength: f32) -> vec3<f32> {
+    if strength <= 0.0 {
+        return color;
+    }
+
+    let input_dimensions = textureDimensions(input_texture);
+    let input_resolution = vec2<f32>(f32(input_dimensions.x), f32(input_dimensions.y));
+    let texel = vec2<f32>(1.0) / max(input_resolution, vec2<f32>(1.0));
+    let north = sample_input_raw(uv + vec2<f32>(0.0, -texel.y));
+    let south = sample_input_raw(uv + vec2<f32>(0.0, texel.y));
+    let east = sample_input_raw(uv + vec2<f32>(texel.x, 0.0));
+    let west = sample_input_raw(uv + vec2<f32>(-texel.x, 0.0));
+
+    let center_luma = luminance(color);
+    let north_luma = luminance(north);
+    let south_luma = luminance(south);
+    let east_luma = luminance(east);
+    let west_luma = luminance(west);
+    let min_luma = min(center_luma, min(min(north_luma, south_luma), min(east_luma, west_luma)));
+    let max_luma = max(center_luma, max(max(north_luma, south_luma), max(east_luma, west_luma)));
+    let range = max_luma - min_luma;
+    let local_luma_scale = max(1.0, max_luma);
+    let edge = smoothstep(0.035 * local_luma_scale, 0.16 * local_luma_scale, range);
+    let neighborhood = (north + south + east + west) * 0.25;
+
+    return mix(color, neighborhood, edge * clamp(strength, 0.0, 1.0) * 0.42);
+}
+
 // ============================================================
 // Fragment shader
 // ============================================================
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var color = textureSample(input_texture, input_sampler, in.uv).rgb;
+    var color = sample_input(in.uv);
 
     // Exposure adjustment
     color = color * params.exposure;
@@ -124,6 +176,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if params.vignette_intensity > 0.0 {
         color = apply_vignette(color, in.uv, params.vignette_intensity);
     }
+
+    color = apply_edge_antialias(color, in.uv, params.anti_aliasing_strength);
 
     // Gamma correction
     color = pow(max(color, vec3<f32>(0.0)), vec3<f32>(1.0 / params.gamma));
