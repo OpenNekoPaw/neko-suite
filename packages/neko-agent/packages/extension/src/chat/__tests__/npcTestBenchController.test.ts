@@ -418,6 +418,59 @@ describe('NpcTestBenchController', () => {
     );
   });
 
+  it('skips thin profile prompts for Dashboard NPC tests by default', async () => {
+    const chooseThinProfileAction = vi.fn(async () => 'manual-supplement' as const);
+    const promptUserSupplement = vi.fn(async () => 'should not be used');
+    const harness = createHarness({
+      createAssembler: () => ({
+        assembleProfile: vi.fn(async () => ({
+          status: 'assembled' as const,
+          profile: thinProfile,
+        })),
+      }),
+      chooseThinProfileAction,
+      promptUserSupplement,
+    });
+
+    const result = await harness.controller.launch({
+      entityRef,
+      source: 'dashboard',
+    });
+
+    expect(result?.session.profile).toEqual(thinProfile);
+    expect(chooseThinProfileAction).not.toHaveBeenCalled();
+    expect(promptUserSupplement).not.toHaveBeenCalled();
+    expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
+  });
+
+  it('shows localized thin profile choices for explicit ask launches', async () => {
+    const harness = createHarness({
+      createAssembler: () => ({
+        assembleProfile: vi.fn(async () => ({
+          status: 'assembled' as const,
+          profile: thinProfile,
+        })),
+      }),
+    });
+
+    await harness.controller.launch({
+      entityRef,
+      enrichment: 'ask',
+      source: 'slash-command',
+    });
+
+    expect(vscode.window.showQuickPick).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ label: '直接开始' }),
+        expect.objectContaining({ label: '提取项目证据' }),
+        expect.objectContaining({ label: '手动补充' }),
+      ]),
+      expect.objectContaining({
+        placeHolder: '小橘 的 NPC 资料较少。',
+      }),
+    );
+  });
+
   it('uses default project evidence enrichment when no enrichment dependency is injected', async () => {
     const harness = createHarness({
       createAssembler: () => ({
@@ -725,7 +778,7 @@ describe('NpcTestBenchController', () => {
         }),
       ]),
       expect.objectContaining({
-        placeHolder: 'Choose a project character to test as an NPC',
+        placeHolder: '选择要测试的项目角色',
       }),
     );
     expect(harness.assembler.assembleProfile).toHaveBeenCalledWith({

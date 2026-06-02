@@ -17,6 +17,11 @@ describe('neko-entity dashboard and search adapters', () => {
   it('projects confirmed entities and candidates through a neutral Dashboard source', async () => {
     const service = createService();
     await service.createEntity({ kind: 'character', canonicalName: '小橘', id: 'char_xiaoju' });
+    await service.proposeCandidate({
+      kind: 'character',
+      name: '阿灰',
+      provenance: [{ providerId: 'neko-story', sourceKind: 'story', sourceRef: 'test.fountain:7' }],
+    });
     const candidate = await service.proposeCandidate({
       kind: 'location',
       name: '天台',
@@ -31,7 +36,7 @@ describe('neko-entity dashboard and search adapters', () => {
     const snapshot = await source.getSnapshot();
 
     expect(snapshot.source).toBe('neko-entity');
-    expect(snapshot.rows.map((row) => row.label)).toEqual(['天台', '小橘']);
+    expect(snapshot.rows.map((row) => row.label)).toEqual(['阿灰', '天台', '小橘']);
     expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'test-npc' })]),
     );
@@ -40,6 +45,12 @@ describe('neko-entity dashboard and search adapters', () => {
     );
     expect(snapshot.rows.find((row) => row.label === '天台')?.actions).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'test-npc', disabled: true })]),
+    );
+    expect(snapshot.rows.find((row) => row.label === '阿灰')?.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'test-npc' }),
+        expect.objectContaining({ id: 'validate-character' }),
+      ]),
     );
     const detail = await source.getDetail({
       source: 'neko-entity',
@@ -106,6 +117,7 @@ describe('neko-entity dashboard and search adapters', () => {
         dashboardRef: ref,
         source: 'dashboard',
         projectRoot,
+        enrichment: 'skip',
         mode: 'consult',
       }),
     );
@@ -159,6 +171,52 @@ describe('neko-entity dashboard and search adapters', () => {
         dashboardRef: ref,
         scopes: [{ kind: 'project', source: 'neko-entity', ref: 'project://current' }],
         prompt: 'Check if the role knows too much.',
+        source: 'dashboard',
+        projectRoot,
+      }),
+    );
+  });
+
+  it('delegates neutral Dashboard NPC Agent workflows for character candidates', async () => {
+    const service = createService();
+    const candidate = await service.proposeCandidate({
+      kind: 'character',
+      name: '阿灰',
+      provenance: [{ providerId: 'neko-story', sourceKind: 'story', sourceRef: 'test.fountain:7' }],
+    });
+    const executeCommand = vi.fn(async () => undefined);
+    const source = new EntityDashboardCreativeEntitySource({
+      projectRoot,
+      service,
+      executeCommand,
+      now: () => now,
+    });
+    const ref = {
+      source: 'neko-entity',
+      sourceEntityId: candidate.id,
+      entityId: candidate.id,
+      entityKind: 'character' as const,
+    };
+
+    await expect(
+      source.executeAction({
+        source: 'neko-entity',
+        ref,
+        action: 'validate-character',
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref }));
+
+    expect(executeCommand).toHaveBeenCalledWith(
+      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      expect.objectContaining({
+        workflow: 'validate-character',
+        entityRef: {
+          entityId: candidate.id,
+          entityKind: 'character',
+          projectRoot,
+          source: 'neko-entity',
+        },
+        dashboardRef: ref,
         source: 'dashboard',
         projectRoot,
       }),

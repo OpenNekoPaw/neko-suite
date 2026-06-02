@@ -37,9 +37,13 @@ Dashboard SHALL show NPC operation disabled states and failure reasons in a user
 - **WHEN** the Agent NPC command or validation workflow command is unavailable
 - **THEN** Dashboard disables the affected NPC operation and shows a localized reason rather than sending a request that will fail silently
 
-#### Scenario: Candidate lacks stable entity ref
-- **WHEN** a script-derived character candidate has not been confirmed and cannot provide a stable entity ref
-- **THEN** Dashboard disables NPC operations that require stable entity identity and may offer confirmation before testing or validation
+#### Scenario: Candidate provides source-owned character ref
+- **WHEN** a script-derived character candidate can provide a source-owned character ref
+- **THEN** Dashboard may enable NPC roleplay testing and suggestion-only Agent analysis workflows without requiring candidate confirmation first
+
+#### Scenario: Candidate lacks usable character ref
+- **WHEN** a candidate cannot provide a usable character ref or the requested operation would mutate entity facts
+- **THEN** Dashboard disables that operation with a localized reason and may offer confirmation before write-back actions
 
 #### Scenario: Action failure refreshes state
 - **WHEN** an NPC operation request fails in the owning source or Agent host adapter

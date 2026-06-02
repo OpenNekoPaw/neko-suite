@@ -189,20 +189,20 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
     if (!request.ref) {
-      return { ok: false, message: 'No creative entity ref is available.' };
+      return { ok: false, message: '缺少创作实体引用。' };
     }
     if (request.ref.entityKind !== 'character') {
       return {
         ok: false,
-        message: 'Only character entities can be tested as NPCs.',
+        message: '只有角色实体支持 NPC 测试。',
         ref: request.ref,
       };
     }
     if (!entityId) {
-      return { ok: false, message: 'No character entity ref is available.', ref: request.ref };
+      return { ok: false, message: '缺少可用的角色实体引用。', ref: request.ref };
     }
     if (!this.options.executeCommand) {
-      return { ok: false, message: 'No command executor is available.', ref: request.ref };
+      return { ok: false, message: '没有可用的 Agent 命令执行器。', ref: request.ref };
     }
 
     const mode = readNpcMode(request.payload);
@@ -216,6 +216,7 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
       dashboardRef: request.ref,
       source: 'dashboard',
       projectRoot: this.options.projectRoot,
+      enrichment: 'skip',
       ...(mode ? { mode } : {}),
     };
 
@@ -229,24 +230,24 @@ export class EntityDashboardCreativeEntitySource implements DashboardCreativeEnt
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
     if (!request.ref) {
-      return { ok: false, message: 'No creative entity ref is available.' };
+      return { ok: false, message: '缺少创作实体引用。' };
     }
     if (request.ref.entityKind !== 'character') {
       return {
         ok: false,
-        message: 'Only character entities support NPC Agent workflows.',
+        message: '只有角色实体支持 NPC Agent 工作流。',
         ref: request.ref,
       };
     }
-    if (!entityId || request.ref.sourceEntityId.startsWith('candidate:')) {
+    if (!entityId) {
       return {
         ok: false,
-        message: 'Confirm the character before running NPC Agent workflows.',
+        message: '缺少可用的角色实体引用。',
         ref: request.ref,
       };
     }
     if (!this.options.executeCommand) {
-      return { ok: false, message: 'No command executor is available.', ref: request.ref };
+      return { ok: false, message: '没有可用的 Agent 命令执行器。', ref: request.ref };
     }
 
     const workflowRequest: NpcAgentWorkflowRequest = {
@@ -507,17 +508,16 @@ function entityActions(
 function candidateActions(
   kind: CreativeEntityCandidate['kind'],
 ): DashboardCreativeEntityRow['actions'] {
+  const characterActions = kind === 'character' ? npcWorkflowActions() : [];
   return [
     { id: 'show-detail', label: 'Show detail' },
     {
       id: 'test-npc',
       label: 'Test NPC',
       disabled: kind !== 'character',
-      ...(kind !== 'character'
-        ? { reason: 'Only character candidates can be tested as NPCs.' }
-        : {}),
+      ...(kind !== 'character' ? { reason: '只有角色候选项支持 NPC 测试。' } : {}),
     },
-    ...npcWorkflowActions('Confirm the character before running NPC Agent workflows.'),
+    ...characterActions,
     { id: 'confirm-candidate', label: 'Confirm candidate' },
     { id: 'dismiss-requirement', label: 'Dismiss' },
   ];

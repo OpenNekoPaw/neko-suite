@@ -424,7 +424,7 @@ export class NpcTestBenchController implements vscode.Disposable {
   }): Promise<NpcSessionLaunchResult | null> {
     const projectRoot = this.deps.getProjectRoot();
     if (!projectRoot) {
-      this.postGlobalError('Open a workspace before starting an NPC test session.');
+      this.postGlobalError('请先打开工作区，再开始 NPC 测试。');
       return null;
     }
 
@@ -435,7 +435,7 @@ export class NpcTestBenchController implements vscode.Disposable {
         ? await this.resolveEntityRef(parsed.entityToken, projectRoot)
         : await this.pickEntityRef(projectRoot));
     if (!entityRef) {
-      this.postGlobalError('Choose a project character before starting an NPC test.');
+      this.postGlobalError('请先选择一个项目角色，再开始 NPC 测试。');
       return null;
     }
 
@@ -475,7 +475,7 @@ export class NpcTestBenchController implements vscode.Disposable {
       profile: input.profile,
     });
     if (supplement === undefined) {
-      this.postGlobalError('NPC test launch cancelled before manual profile supplement.');
+      this.postGlobalError('NPC 测试已取消：未补充角色资料。');
       return null;
     }
     return appendUserSupplement(input.profile, supplement);
@@ -486,7 +486,8 @@ export class NpcTestBenchController implements vscode.Disposable {
     readonly projectRoot: string;
     readonly request: NpcTestBenchLaunchRequest;
   }): Promise<NpcThinProfileAction> {
-    switch (input.request.enrichment) {
+    const enrichment = input.request.enrichment ?? defaultEnrichmentForSource(input.request.source);
+    switch (enrichment) {
       case 'skip':
         return 'start-now';
       case 'auto':
@@ -689,7 +690,7 @@ export class NpcTestBenchController implements vscode.Disposable {
     const dashboardItems = await loadDashboardNpcEntityPickerItems(projectRoot);
     const items = dedupeNpcEntityPickerItems([...localItems, ...dashboardItems]);
     const picked = await vscode.window.showQuickPick(items, {
-      placeHolder: 'Choose a project character to test as an NPC',
+      placeHolder: '选择要测试的项目角色',
       matchOnDescription: true,
     });
     return picked?.ref ?? null;
@@ -1673,23 +1674,29 @@ async function defaultChooseThinProfileAction(
   const picked = await vscode.window.showQuickPick(
     [
       {
-        label: 'Start now',
+        label: '直接开始',
         action: 'start-now' as const,
       },
       {
-        label: 'Extract project evidence',
+        label: '提取项目证据',
         action: 'enrich-project' as const,
       },
       {
-        label: 'Add manual supplement',
+        label: '手动补充',
         action: 'manual-supplement' as const,
       },
     ],
     {
-      placeHolder: `NPC profile for ${profile.displayName} is thin.`,
+      placeHolder: `${profile.displayName} 的 NPC 资料较少。`,
     },
   );
   return picked?.action ?? 'start-now';
+}
+
+function defaultEnrichmentForSource(
+  source: NpcTestBenchLaunchRequest['source'],
+): NpcTestBenchLaunchRequest['enrichment'] | undefined {
+  return source === 'dashboard' ? 'skip' : undefined;
 }
 
 function appendUserSupplement(profile: NpcProfileSource, supplement: string): NpcProfileSource {

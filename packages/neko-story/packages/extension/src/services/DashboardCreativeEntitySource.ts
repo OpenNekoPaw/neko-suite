@@ -217,7 +217,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     if (action === 'confirm-candidate') {
       return {
         ok: false,
-        message: 'Candidate confirmation is not implemented in the Story source yet.',
+        message: '当前 Story 来源暂不支持确认候选角色。',
         refresh: false,
         ref: request.ref,
       };
@@ -530,19 +530,19 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
     if (!request.ref) {
-      return { ok: false, message: 'No creative entity ref is available.' };
+      return { ok: false, message: '缺少创作实体引用。' };
     }
     if (request.ref.entityKind !== 'character') {
       return {
         ok: false,
-        message: 'Only character entities can be tested as NPCs.',
+        message: '只有角色实体支持 NPC 测试。',
         ref: request.ref,
       };
     }
 
     const executeCommand = this.options.executeCommand;
     if (!executeCommand) {
-      return { ok: false, message: 'No command executor is available.', ref: request.ref };
+      return { ok: false, message: '没有可用的 Agent 命令执行器。', ref: request.ref };
     }
 
     const entityId =
@@ -550,7 +550,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       readPrefixedId(request.ref.sourceEntityId, 'entity:') ??
       readPrefixedId(request.ref.sourceEntityId, 'candidate:character:');
     if (!entityId) {
-      return { ok: false, message: 'No character entity ref is available.', ref: request.ref };
+      return { ok: false, message: '缺少可用的角色实体引用。', ref: request.ref };
     }
 
     const mode = readNpcMode(request.payload);
@@ -564,6 +564,7 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
       dashboardRef: request.ref,
       source: 'dashboard',
       projectRoot: this.options.workspaceRoot,
+      enrichment: 'skip',
       ...(mode ? { mode } : {}),
     };
 
@@ -577,32 +578,34 @@ export class StoryDashboardCreativeEntitySource implements DashboardCreativeEnti
     request: DashboardCreativeEntityActionRequest,
   ): Promise<DashboardCreativeEntityActionResult> {
     if (!request.ref) {
-      return { ok: false, message: 'No creative entity ref is available.' };
+      return { ok: false, message: '缺少创作实体引用。' };
     }
     if (request.ref.entityKind !== 'character') {
       return {
         ok: false,
-        message: 'Only character entities support NPC Agent workflows.',
+        message: '只有角色实体支持 NPC Agent 工作流。',
         ref: request.ref,
       };
     }
-    if (!entityId || request.ref.sourceEntityId.startsWith('candidate:')) {
+    const workflowEntityId =
+      entityId ?? readPrefixedId(request.ref.sourceEntityId, 'candidate:character:');
+    if (!workflowEntityId) {
       return {
         ok: false,
-        message: 'Confirm the character before running NPC Agent workflows.',
+        message: '缺少可用的角色实体引用。',
         ref: request.ref,
       };
     }
 
     const executeCommand = this.options.executeCommand;
     if (!executeCommand) {
-      return { ok: false, message: 'No command executor is available.', ref: request.ref };
+      return { ok: false, message: '没有可用的 Agent 命令执行器。', ref: request.ref };
     }
 
     const workflowRequest: NpcAgentWorkflowRequest = {
       workflow: action,
       entityRef: {
-        entityId,
+        entityId: workflowEntityId,
         entityKind: 'character',
         projectRoot: this.options.workspaceRoot,
         source: this.source,
@@ -845,12 +848,12 @@ function candidateActions(): DashboardCreativeEntityRow['actions'] {
   return [
     { id: 'show-detail', label: 'Show detail' },
     { id: 'test-npc', label: 'Test NPC' },
-    ...npcWorkflowActions('Confirm the character before running NPC Agent workflows.'),
+    ...npcWorkflowActions(),
     {
       id: 'confirm-candidate',
       label: 'Confirm candidate',
       disabled: true,
-      reason: 'Candidate confirmation is not implemented yet.',
+      reason: '当前 Story 来源暂不支持确认候选角色。',
     },
     { id: 'generate-material', label: 'Generate material' },
     { id: 'bind-existing', label: 'Bind asset' },

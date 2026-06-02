@@ -116,17 +116,21 @@ describe('StoryDashboardCreativeEntitySource', () => {
     expect(snapshot.rows.find((row) => row.label === '小橘')?.actions).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'validate-character' })]),
     );
-    expect(snapshot.rows.find((row) => row.label === '阿灰')).toEqual(
+    const candidateRow = snapshot.rows.find((row) => row.label === '阿灰');
+    expect(candidateRow).toEqual(
       expect.objectContaining({
         status: 'candidate',
         sourceKind: 'script',
         missingRepresentationKinds: ['portrait', 'reference'],
         actions: expect.arrayContaining([
           expect.objectContaining({ id: 'test-npc' }),
-          expect.objectContaining({ id: 'validate-character', disabled: true }),
+          expect.objectContaining({ id: 'validate-character' }),
         ]),
       }),
     );
+    expect(
+      candidateRow?.actions.find((action) => action.id === 'validate-character')?.disabled,
+    ).not.toBe(true);
 
     const detail = await source.getDetail({
       source: 'neko-story',
@@ -226,6 +230,39 @@ describe('StoryDashboardCreativeEntitySource', () => {
         projectRoot: workspaceRoot,
       }),
     );
+
+    executeCommand.mockClear();
+    const candidateRef = {
+      source: 'neko-story',
+      sourceEntityId: 'candidate:character:阿灰',
+      entityId: '阿灰',
+      entityKind: 'character' as const,
+      workspaceFolder: 'neko-test',
+    };
+
+    await expect(
+      source.executeAction({
+        source: 'neko-story',
+        ref: candidateRef,
+        action: 'validate-character',
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true, refresh: false, ref: candidateRef }));
+
+    expect(executeCommand).toHaveBeenCalledWith(
+      NEKO_AGENT_VALIDATE_CHARACTER_COMMAND,
+      expect.objectContaining({
+        workflow: 'validate-character',
+        entityRef: {
+          entityId: '阿灰',
+          entityKind: 'character',
+          projectRoot: workspaceRoot,
+          source: 'neko-story',
+        },
+        dashboardRef: candidateRef,
+        source: 'dashboard',
+        projectRoot: workspaceRoot,
+      }),
+    );
   });
 
   it('delegates Dashboard NPC tests to the Agent-owned launch command', async () => {
@@ -263,6 +300,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
         dashboardRef: detail?.ref,
         source: 'dashboard',
         projectRoot: workspaceRoot,
+        enrichment: 'skip',
         mode: 'consult',
       }),
     );
@@ -289,6 +327,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
         dashboardRef: candidateRef,
         source: 'dashboard',
         projectRoot: workspaceRoot,
+        enrichment: 'skip',
       }),
     );
   });

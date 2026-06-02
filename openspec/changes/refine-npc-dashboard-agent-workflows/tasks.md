@@ -3,7 +3,7 @@
 - [x] 1.1 Extend shared Dashboard creative entity action ids and type guards for `character-perspective`, `validate-character`, and `improve-character`.
 - [x] 1.2 Define minimal payload/result DTOs for character-scoped NPC Agent workflows using entity refs and source-owned scope refs.
 - [x] 1.3 Update neutral entity and Story Dashboard sources to expose NPC operation actions only for eligible character entities.
-- [x] 1.4 Add disabled reasons for unavailable Agent commands, unresolved candidates, and unsupported entity kinds.
+- [x] 1.4 Add disabled reasons for unavailable Agent commands, unusable character refs, and unsupported entity kinds.
 - [x] 1.5 Add contract/source tests for action visibility, payload validation, and non-character omission.
 
 ## 2. Dashboard UX Delegation

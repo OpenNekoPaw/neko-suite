@@ -109,7 +109,7 @@ describe('agentCoreCommands bridge', () => {
 
     expect(chatViewProvider.startNpcTestBench).not.toHaveBeenCalled();
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-      'Cannot start NPC test: invalid launch request.',
+      '无法启动 NPC 测试：启动请求无效。',
     );
   });
 

@@ -83,7 +83,7 @@ export function registerAgentCoreCommands(
     vscode.commands.registerCommand(NEKO_AGENT_TEST_NPC_COMMAND, async (request: unknown) => {
       await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
       if (!isNpcTestBenchLaunchRequest(request)) {
-        await vscode.window.showErrorMessage('Cannot start NPC test: invalid launch request.');
+        await vscode.window.showErrorMessage('无法启动 NPC 测试：启动请求无效。');
         return null;
       }
       return chatViewProvider.startNpcTestBench(request);
@@ -212,7 +212,7 @@ function registerNpcAgentWorkflowCommand(
     vscode.commands.registerCommand(command, async (request: unknown) => {
       await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
       if (!isNpcAgentWorkflowRequest(request) || request.workflow !== workflow) {
-        await vscode.window.showErrorMessage('Cannot start NPC Agent workflow: invalid request.');
+        await vscode.window.showErrorMessage('无法启动 NPC Agent 工作流：请求无效。');
         return null;
       }
       await chatViewProvider.sendMessageToAssistant(buildNpcAgentWorkflowMessage(request), true);
