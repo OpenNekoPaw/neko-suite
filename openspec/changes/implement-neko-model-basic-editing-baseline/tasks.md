@@ -1,13 +1,15 @@
 ## Rollback Status
 
-- 2026-06-01: Implementation code for this change was rolled back after runtime testing showed the added control-flow path could delay visible camera/drag feedback by seconds. The proposal/design artifacts remain as requirements input, but the implementation status below is reset to unfinished unless explicitly marked as audit/fixture work.
+- 2026-06-01: Implementation code for this change was rolled back after runtime testing showed the added control-flow path could delay visible camera/drag feedback by seconds. The implementation status below is reset to unfinished unless explicitly marked as audit/fixture work.
 - Next implementation must enforce an immediate interaction hot path: local UI state updates first, Engine receives latest-only hot updates without SceneControl ack gating, and video/frame metadata reconciles final state asynchronously.
+- 2026-06-02: Proposal/design/spec artifacts were restored after rollback cleanup left only `tasks.md`. They now include the hot-path constraints from `adr-neko-model-basic-editing-baseline.md`, `adr-viewport-stream-control-boundary.md`, and `viewport-semantic-control-review-checklist.md`.
+- The repository fixture generator/binary is not restored in this documentation-only update. Fixture implementation remains open; only fixture requirements/documentation are restored.
 
 ## 1. Baseline Audit And Fixture
 
 - [x] 1.1 Audit current B0-B2 behavior against `adr-neko-model-basic-editing-baseline.md`, including stream visibility, Object/Inspect selection, Transform, LookDev, light CRUD, and background/environment controls.
 - [x] 1.2 Record which `implement-model-lookdev-scene-controls` paths already satisfy B2 product behavior and which only satisfy contract-level tests.
-- [x] 1.3 Add or generate a redistributable minimal GLB fixture for CI with at least one mesh node, one material slot, non-empty bounds, and stable identifiers.
+- [ ] 1.3 Add or generate a redistributable minimal GLB fixture for CI with at least one mesh node, one material slot, non-empty bounds, and stable identifiers.
 - [x] 1.4 Add fixture documentation that distinguishes the repository fixture from local-only `../neko-test/test.glb`.
 
 ## 2. Disabled And Degraded Diagnostics
@@ -64,3 +66,12 @@
 - [ ] 8.4 Run focused `@neko/neko-client` tests for capability and scene-control diagnostic normalization.
 - [ ] 8.5 Run targeted Rust tests for render viewport descriptor/capability, scene command diagnostics, light/background state, and hit-test if changed.
 - [ ] 8.6 Update documentation or ADR notes with final implemented phase boundaries and any remaining manual-only validation.
+
+## 9. Immediate Interaction Hot Path Regression Guards
+
+- [ ] 9.1 Add Webview boundary/unit tests proving camera orbit, wheel, keyboard camera action, transform drag, light drag, and continuous slider paths update local intent before Engine acknowledgement.
+- [ ] 9.2 Add tests proving high-frequency interactions do not call `startSceneRenderStream()`, do not write `streamProfile` into stream lifecycle state, and do not destroy/recreate the H.264 stream.
+- [ ] 9.3 Add tests proving interaction profile changes use `H264StreamClient.updateBackpressurePolicy()` or equivalent existing-client policy update, without WebCodecs reset/close/recreate.
+- [ ] 9.4 Add tests or instrumentation proving latest-only mode does not suppress frames already submitted to WebCodecs/VideoToolbox.
+- [ ] 9.5 Add Engine/client tests proving `streamProfile: 'interactive'` and TTL update active stream runtime policy, then return to default without requiring a new stream descriptor.
+- [ ] 9.6 Run VSCode extension debugger smoke for local `../neko-test/test.glb` and repository fixture, verifying camera/drag visible feedback remains immediate under frequent operations.

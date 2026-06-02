@@ -14,6 +14,22 @@ Webview 不再内置 R3F/Three.js 可见模型 fallback。`R3FDevelopmentFallbac
 
 Extension Host 只处理 VSCode API、资源 URI、Engine discovery、导入导出对话框和文件操作。高频 transform、character slider、brush patch、SceneDelta、视频帧和 PCM 帧不得经 Extension 转发。
 
+## 性能与交互硬约束
+
+neko-model 的默认实时视口目标是 1080p / 60fps 级别的即时交互反馈。这里的 1080p 指按 Webview CSS 尺寸乘以 `devicePixelRatio` 后请求足够的 Engine stream 物理像素；720p 只能作为明确的降级档，并且 UI 必须暴露降级原因。VSCode/Electron Webview 或显示器刷新率可能限制最终 presentation FPS，这类限制要作为宿主呈现诊断暴露，不能误判为 Engine GPU 性能不足。
+
+高频交互必须走热路径：camera orbit、pan、wheel、keyboard camera action、transform gizmo drag、灯光位置拖拽和连续 slider 先更新本地意图或 overlay prediction，再发送 latest-only scene-control hot update。它们不得等待 `viewportCameraAck` 或普通 command ACK 才改变用户可见反馈，不得经 Extension Host 中转，不得触发 `destroy/startSceneRenderStream()`，也不得把 `streamProfile` 写入 React stream lifecycle state 或 `startSceneRenderStream()` effect 依赖。
+
+交互期低延迟策略只能更新现有链路：Webview 调用 `H264StreamClient.updateBackpressurePolicy()` 切换 latest-only/backpressure 策略；Engine 通过 scene-control 收到 `streamProfile: 'interactive'` 和 TTL 后，在当前 stream runtime settings 上切到交互 profile，例如 `GOP=1`。静止后由 idle timer 或 Engine TTL 恢复默认 GOP/码率。`GOP=1` 是运行时编码策略，不是重新创建 stream descriptor 的理由。
+
+WebCodecs/VideoToolbox 已接管的输出队列不能被 JS 当作可取消队列。高频交互不得通过 `VideoDecoder.reset()`、decoder close/recreate、清空 `decodeStartTimes` 或 suppress 已提交硬解帧来追求低延迟；这些做法会造成等待新 keyframe 的输出空窗。latest-only 只限制后续入队和呈现策略。
+
+低频 authoring 命令可以等待最终一致闭环：LookDev render mode 切换、分辨率 bucket、node-add/node-remove、environment-set/update/clear、transform commit、light-update commit 等必须通过 Engine ack/reject、SceneDelta 或 snapshot 对齐。重启 stream 只允许出现在低频 descriptor change，且必须保留最后一帧、显示 pending/timeout/rollback 状态。
+
+性能指标必须分层展示，不得把问题混成一个 FPS 数字：至少区分 Engine render/frame time、encode time、stream coded size、canvas CSS/physical size、DPR、presentation scale、decode FPS、pending decode frames、decode output lag、presentation FPS、scene-control ACK 健康、metadata stale/delay、内存指标可用性。无法可靠读取的内存/显存字段必须标注 unavailable 或 estimated，不能伪造精确值。
+
+诊断 overlay 不能影响热路径。性能面板本身可以 `pointer-events: auto` 且允许文本选择，非面板 overlay 区域不得阻塞 viewport pointer capture；诊断层不得使用会增加 Webview 合成压力的重型效果，例如持续 `backdrop-filter` 模糊。画质问题必须沿 Engine stream 和 render graph 解决：Webview 不得重新引入 mesh renderer、glTF parser 或 Three.js fallback 来修复锯齿/模糊。
+
 ## 角色 Authoring 真值
 
 可编辑角色以 `.nkc` + `.nkcdata` 表达：

@@ -52,6 +52,8 @@ Headshot/AI 能力不是 neko-model 当前 P0。当前 P0 是 [neko-model 基础
 
 本文只讨论 Headshot 3 对标、素材转换和角色资产合同。若基础编辑闭环未完成，任何照片转 3D 或 AI provider 输出都只能成为导入文件，无法成为用户可操作的创作资产。
 
+实施状态（2026-06-02）：`implement-neko-model-basic-editing-baseline` 的首轮实现代码已回滚，因为运行测试发现新增控制流路径会让 camera/drag 可见反馈延迟数秒。该结论不改变本文优先级，反而强化前置条件：Headshot/AI、Character Asset Contract、Processing Adapter 和纹理投射不得绕过 B0-B2。下一轮基础编辑实现必须遵守本地即时反馈 + Engine latest-only hot update + 视频/frame metadata 最终一致的热路径约束，禁止 ACK gating、交互期 stream restart、WebCodecs decoder reset 或 suppress 已提交硬解帧。
+
 ---
 
 ## Headshot 3 功能清单
@@ -198,7 +200,7 @@ Webview 只提供控制 UI 和遮罩编辑交互，不能绕过 Route A 成为 3
 
 ### P0：完成 Basic Editing Baseline 前置 ADR
 
-按 [adr-neko-model-basic-editing-baseline.md](./adr-neko-model-basic-editing-baseline.md) 完成 B0-B2。没有这一步，Headshot/AI 生成出的资产也无法被用户可视化编辑。
+按 [adr-neko-model-basic-editing-baseline.md](./adr-neko-model-basic-editing-baseline.md) 与 OpenSpec change `implement-neko-model-basic-editing-baseline` 完成 B0-B2。没有这一步，Headshot/AI 生成出的资产也无法被用户可视化编辑。验收不仅要证明合同存在，还要证明普通 GLB/VRM 在 VSCode Webview 中具备即时 camera/drag 反馈、可解释灰态、对象/检查 fallback、Transform、LookDev、灯光和背景可见闭环。
 
 ### P1：定义 Character Asset Contract（创作转换合同）
 
@@ -233,7 +235,7 @@ Webview 只提供控制 UI 和遮罩编辑交互，不能绕过 Route A 成为 3
 
 ### A0: 基础编辑前置完成
 
-本 ADR 进入 Headshot/AI 实施前，[adr-neko-model-basic-editing-baseline.md](./adr-neko-model-basic-editing-baseline.md) 的 A0-A4 必须通过。
+本 ADR 进入 Headshot/AI 实施前，[adr-neko-model-basic-editing-baseline.md](./adr-neko-model-basic-editing-baseline.md) 的 A0-A5 必须通过，且 `implement-neko-model-basic-editing-baseline` 任务中 B0-B2 smoke、Route A 边界、性能/热路径回归检查必须完成。若基础编辑仍处于降级或回滚状态，Headshot/AI 只能继续做 provider 调研与合同设计，不能进入会让生成资产依赖不可用编辑面的产品实现。
 
 ### A1: 参考图到可编辑角色
 
