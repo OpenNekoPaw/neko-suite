@@ -84,6 +84,35 @@ describe('message resource projector', () => {
     });
   });
 
+  it('adds webview URI siblings for snake_case image path arguments', () => {
+    expect(
+      projectResourceValue(
+        {
+          image_paths: ['/tmp/page-1.jpg'],
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      image_paths: ['/tmp/page-1.jpg'],
+      imagePathWebviewUris: ['webview:///tmp/page-1.jpg'],
+    });
+  });
+
+  it('projects structured image argument paths without replacing local paths', () => {
+    expect(
+      projectResourceValue(
+        {
+          images: [{ label: 'Page 1', path: '/tmp/page-1.jpg' }],
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      images: [
+        { label: 'Page 1', path: '/tmp/page-1.jpg', webviewUri: 'webview:///tmp/page-1.jpg' },
+      ],
+    });
+  });
+
   it('projects tool result payloads in legacy toolCalls and content blocks', () => {
     const messages: Message[] = [
       {
@@ -145,6 +174,76 @@ describe('message resource projector', () => {
               result: {
                 success: true,
                 data: { urls: ['webview:///tmp/video.mp4'], localPaths: ['/tmp/video.mp4'] },
+              },
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('projects tool argument payloads in legacy toolCalls and content blocks', () => {
+    const messages: Message[] = [
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1,
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'ReadImage',
+            arguments: { image_paths: ['/tmp/legacy-page.jpg'] },
+          },
+        ],
+        contentBlocks: [
+          {
+            id: 'block-1',
+            type: 'tool_call',
+            timestamp: 1,
+            toolCall: {
+              id: 'tool-2',
+              name: 'ReadImage',
+              arguments: { images: [{ label: 'Page 1', path: '/tmp/block-page.jpg' }] },
+            },
+          },
+        ],
+      },
+    ];
+
+    expect(
+      projectMessagesForResourceDisplay(messages, {
+        resolveLocalMediaPath: (path) => `webview://${path}`,
+      }),
+    ).toEqual([
+      {
+        ...messages[0],
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'ReadImage',
+            arguments: {
+              image_paths: ['/tmp/legacy-page.jpg'],
+              imagePathWebviewUris: ['webview:///tmp/legacy-page.jpg'],
+            },
+          },
+        ],
+        contentBlocks: [
+          {
+            id: 'block-1',
+            type: 'tool_call',
+            timestamp: 1,
+            toolCall: {
+              id: 'tool-2',
+              name: 'ReadImage',
+              arguments: {
+                images: [
+                  {
+                    label: 'Page 1',
+                    path: '/tmp/block-page.jpg',
+                    webviewUri: 'webview:///tmp/block-page.jpg',
+                  },
+                ],
               },
             },
           },

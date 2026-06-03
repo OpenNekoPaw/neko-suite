@@ -23,7 +23,10 @@ const MEDIA_FILE_EXTENSIONS = [
 
 const SINGLE_URL_KEYS = new Set(['url', 'thumbnailUrl', 'imageUrl', 'videoUrl', 'audioUrl']);
 const LOCAL_MEDIA_PATH_KEYS = new Set(['path']);
-const LOCAL_MEDIA_PATH_ARRAY_KEYS = new Set(['imagePaths']);
+const LOCAL_MEDIA_PATH_ARRAY_WEBVIEW_URI_KEYS: ReadonlyMap<string, string> = new Map([
+  ['imagePaths', 'imagePathWebviewUris'],
+  ['image_paths', 'imagePathWebviewUris'],
+]);
 
 export interface MessageResourceProjectionOptions {
   resolveLocalMediaPath?: (path: string) => string | undefined;
@@ -56,14 +59,22 @@ export function projectMessageForResourceDisplay(
 
   if (message.toolCalls && message.toolCalls.length > 0) {
     projectedMessage.toolCalls = message.toolCalls.map((toolCall) => {
-      if (!toolCall.result?.data) return toolCall;
+      const projectedArguments = projectResourceValue(toolCall.arguments, options);
+      const projectedResultData = toolCall.result?.data
+        ? projectResourceValue(toolCall.result.data, options)
+        : undefined;
 
       return {
         ...toolCall,
-        result: {
-          ...toolCall.result,
-          data: projectResourceValue(toolCall.result.data, options),
-        },
+        arguments: isRecord(projectedArguments) ? projectedArguments : toolCall.arguments,
+        ...(projectedResultData !== undefined && toolCall.result
+          ? {
+              result: {
+                ...toolCall.result,
+                data: projectedResultData,
+              },
+            }
+          : {}),
       };
     });
   }
@@ -71,18 +82,28 @@ export function projectMessageForResourceDisplay(
   if (message.contentBlocks && message.contentBlocks.length > 0) {
     projectedMessage.contentBlocks = message.contentBlocks.map((block) => {
       const toolCall = block.type === 'tool_call' ? block.toolCall : undefined;
-      if (!toolCall?.result?.data) {
+      if (!toolCall) {
         return block;
       }
+
+      const projectedArguments = projectResourceValue(toolCall.arguments, options);
+      const projectedResultData = toolCall.result?.data
+        ? projectResourceValue(toolCall.result.data, options)
+        : undefined;
 
       return {
         ...block,
         toolCall: {
           ...toolCall,
-          result: {
-            ...toolCall.result,
-            data: projectResourceValue(toolCall.result.data, options),
-          },
+          arguments: isRecord(projectedArguments) ? projectedArguments : toolCall.arguments,
+          ...(projectedResultData !== undefined && toolCall.result
+            ? {
+                result: {
+                  ...toolCall.result,
+                  data: projectedResultData,
+                },
+              }
+            : {}),
         },
       };
     });
@@ -194,7 +215,8 @@ function projectResourceValueInternal(
       continue;
     }
 
-    if (LOCAL_MEDIA_PATH_ARRAY_KEYS.has(key) && Array.isArray(item)) {
+    const webviewUriArrayKey = LOCAL_MEDIA_PATH_ARRAY_WEBVIEW_URI_KEYS.get(key);
+    if (webviewUriArrayKey && Array.isArray(item)) {
       let hasLocalMediaPath = false;
       let hasResolvedWebviewUri = false;
       const webviewUris = item.map((path) => {
@@ -212,9 +234,10 @@ function projectResourceValueInternal(
       if (
         hasLocalMediaPath &&
         hasResolvedWebviewUri &&
-        !projected[`${key.slice(0, -1)}WebviewUris`]
+        !Object.prototype.hasOwnProperty.call(value, webviewUriArrayKey) &&
+        !projected[webviewUriArrayKey]
       ) {
-        projected[`${key.slice(0, -1)}WebviewUris`] = webviewUris;
+        projected[webviewUriArrayKey] = webviewUris;
       }
       continue;
     }

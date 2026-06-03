@@ -2,6 +2,7 @@ import type { CompositeBlockData, CompositeSection, MediaRef } from './message';
 import {
   hasBlockingStoryboardDiagnostics,
   normalizeStoryboardTableV1,
+  type StoryboardMediaRefV1,
   type StoryboardTableV1,
   type StoryboardValidationDiagnosticV1,
 } from '@neko/shared';
@@ -123,7 +124,7 @@ function createStoryboardFallbackSections(
         heading: `${scene.sceneTitle} / Shot ${shot.shotNumber}`,
         content: shot.visualDescription,
         layout: 'table-row' as const,
-        mediaRefs: projectStoryboardMediaRefsToLegacy(shot.mediaRefs),
+        mediaRefs: projectStoryboardMediaRefsToLegacy(collectStoryboardShotMediaRefs(shot)),
       })),
     );
   }
@@ -143,6 +144,31 @@ function createStoryboardFallbackSections(
       layout: 'table-row',
     },
   ];
+}
+
+function collectStoryboardShotMediaRefs(
+  shot: StoryboardTableV1['scenes'][number]['shots'][number],
+): readonly StoryboardMediaRefV1[] | undefined {
+  const refs = dedupeStoryboardMediaRefs([
+    ...(shot.sourceMediaRefs ?? []),
+    ...(shot.generatedMediaRefs ?? []),
+    ...(shot.mediaRefs ?? []),
+  ]);
+  return refs.length > 0 ? refs : undefined;
+}
+
+function dedupeStoryboardMediaRefs(
+  mediaRefs: readonly StoryboardMediaRefV1[],
+): readonly StoryboardMediaRefV1[] {
+  const seen = new Set<string>();
+  const refs: StoryboardMediaRefV1[] = [];
+  for (const mediaRef of mediaRefs) {
+    const key = `${mediaRef.refId}:${JSON.stringify(mediaRef.locator)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push(mediaRef);
+  }
+  return refs;
 }
 
 function projectStoryboardMediaRefsToLegacy(

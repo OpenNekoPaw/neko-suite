@@ -42,6 +42,8 @@ export interface MessageModelProjection {
 
 export interface ChatWorkspaceModelStateInput {
   chatModelOptions: readonly ChatModelOption[];
+  selectedModel: string;
+  fallbackContextWindow: number;
   sessionMode: AgentSessionMode;
   mediaModelSelection: Readonly<MediaModelSelectionState>;
 }
@@ -52,6 +54,7 @@ export interface ChatWorkspaceModelStateProjection {
   availableMediaModels: ChatModelOption[];
   activeMediaModel?: ChatModelOption;
   agentMediaModels?: AgentMediaModelSelections;
+  selectedContextWindow: number;
 }
 
 export interface SessionModeMediaSelectionProjection {

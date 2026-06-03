@@ -297,10 +297,7 @@ describe('agent stream state reducer', () => {
         messageId: 'msg-1',
         event: { type: 'done', usage: { inputTokens: 20, outputTokens: 22, totalTokens: 42 } },
       }),
-    ).toEqual([
-      { type: 'streamComplete', conversationId: 'conv-1', messageId: 'msg-1' },
-      { type: 'contextTokenCount', conversationId: 'conv-1', tokenCount: 42 },
-    ]);
+    ).toEqual([{ type: 'streamComplete', conversationId: 'conv-1', messageId: 'msg-1' }]);
 
     expect(
       projectAgentStreamEventToWebviewMessages({

@@ -241,21 +241,13 @@ export function projectAgentStreamEventToWebviewMessages(
         },
       ];
     case 'done': {
-      const messages: AgentStreamWebviewMessage[] = [
+      return [
         {
           type: 'streamComplete',
           conversationId,
           messageId,
         },
       ];
-      if (event.usage) {
-        messages.push({
-          type: 'contextTokenCount',
-          conversationId,
-          tokenCount: event.usage.totalTokens,
-        });
-      }
-      return messages;
     }
     default:
       return [];

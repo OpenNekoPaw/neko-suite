@@ -83,11 +83,11 @@ describe('agent event stream runtime processor', () => {
       conversationId: 'conv-1',
       messageId: 'msg-stream',
     });
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'contextTokenCount',
-      conversationId: 'conv-1',
-      tokenCount: 42,
-    });
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'contextTokenCount',
+      }),
+    );
     expect(onPhaseChange).toHaveBeenCalledWith('thinking', undefined);
     expect(onPhaseChange).toHaveBeenCalledWith('streaming', undefined);
     expect(onPhaseChange).toHaveBeenCalledWith('acting', 'read_file');

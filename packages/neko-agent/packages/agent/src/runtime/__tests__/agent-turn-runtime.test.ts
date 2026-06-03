@@ -24,13 +24,31 @@ function createAgentRunner(
   overrides: {
     readonly history?: readonly unknown[];
     readonly events?: AsyncIterable<AgentEvent>;
+    readonly activeSkillName?: string;
   } = {},
 ): AgentTurnRunner<TestPlatform, TestContext> {
+  let activeSkillName = overrides.activeSkillName;
   return {
     getHistory: vi.fn(() => overrides.history ?? []),
     configure: vi.fn(async () => undefined),
     execute: vi.fn(() => overrides.events ?? emptyEvents()),
-    applySkillInjection: vi.fn(),
+    applySkillInjection: vi.fn((_injection, skill) => {
+      activeSkillName = skill?.name;
+    }),
+    getActiveSkill: vi.fn(() =>
+      activeSkillName
+        ? {
+            name: activeSkillName,
+            description: `${activeSkillName} description`,
+            content: '',
+            source: 'builtin',
+            enabled: true,
+          }
+        : undefined,
+    ),
+    clearActiveSkill: vi.fn(() => {
+      activeSkillName = undefined;
+    }),
     onDidRequestConfirmation: vi.fn(() => ({ dispose: vi.fn() })),
   };
 }
@@ -186,6 +204,68 @@ describe('executeAgentTurn', () => {
     expect(vi.mocked(applySkillInjection!).mock.invocationCallOrder[0] ?? 0).toBeGreaterThan(
       vi.mocked(agentRunner.configure).mock.invocationCallOrder[0] ?? 0,
     );
+  });
+
+  it('clears stale turn-managed skill injection when the current conversation has no active skill', async () => {
+    const activeSkill = {
+      skill: {
+        name: 'character-workflow',
+        description: 'Character workflow',
+        content: 'Character instructions',
+        source: 'builtin' as const,
+        enabled: true,
+      },
+      injection: {
+        name: 'character-workflow',
+        systemPrompt: 'Character instructions',
+        type: 'skill' as const,
+        allowedTools: ['read'],
+      },
+    };
+    const { input, agentRunner } = createBaseInput({ activeSkill });
+
+    await executeAgentTurn(input);
+    await executeAgentTurn({ ...input, activeSkill: null });
+
+    expect(agentRunner.clearActiveSkill).toHaveBeenCalledOnce();
+    expect(agentRunner.applySkillInjection).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(agentRunner.clearActiveSkill!).mock.invocationCallOrder[0] ?? 0,
+    ).toBeGreaterThan(vi.mocked(agentRunner.configure).mock.invocationCallOrder[1] ?? 0);
+    expect(vi.mocked(agentRunner.execute).mock.invocationCallOrder[1] ?? 0).toBeGreaterThan(
+      vi.mocked(agentRunner.clearActiveSkill!).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('does not clear a runner skill that was replaced outside the turn-managed skill state', async () => {
+    const activeSkill = {
+      skill: {
+        name: 'character-workflow',
+        description: 'Character workflow',
+        content: 'Character instructions',
+        source: 'builtin' as const,
+        enabled: true,
+      },
+      injection: {
+        name: 'character-workflow',
+        systemPrompt: 'Character instructions',
+        type: 'skill' as const,
+        allowedTools: ['read'],
+      },
+    };
+    const { input, agentRunner } = createBaseInput({ activeSkill });
+
+    await executeAgentTurn(input);
+    vi.mocked(agentRunner.getActiveSkill!).mockReturnValue({
+      name: 'creation-persona',
+      description: 'IDC persona',
+      content: '',
+      source: 'builtin',
+      enabled: true,
+    });
+    await executeAgentTurn({ ...input, activeSkill: null });
+
+    expect(agentRunner.clearActiveSkill).not.toHaveBeenCalled();
   });
 
   it('persists assistant message generated from the stream snapshot', async () => {

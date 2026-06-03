@@ -78,6 +78,8 @@ export interface AgentTurnRunner<TPlatform, TContext extends object> {
   configure(config: AgentTurnRunnerConfigureInput<TPlatform>): Promise<void>;
   execute(input: string, context: TContext): AsyncIterable<AgentEvent>;
   applySkillInjection?(injection: SkillInjection, skill?: Skill): void;
+  getActiveSkill?(): Skill | undefined;
+  clearActiveSkill?(): void;
   onDidRequestConfirmation(
     listener: (request: AgentTurnConfirmationRequest) => void,
   ): AgentTurnDisposable;
@@ -247,6 +249,8 @@ export type RunAgentTurnForWebviewRuntimeResult =
       readonly status: 'failed';
       readonly error: unknown;
     };
+
+const turnManagedSkillNames = new WeakMap<object, string>();
 
 export async function runAgentTurnForWebviewRuntime<
   TPlatform,
@@ -438,9 +442,7 @@ export async function executeAgentTurn<
     ...(input.taskManager ? { taskManager: input.taskManager } : {}),
   });
 
-  if (input.activeSkill) {
-    agentRunner.applySkillInjection?.(input.activeSkill.injection, input.activeSkill.skill);
-  }
+  synchronizeAgentTurnSkillState(agentRunner, input.activeSkill ?? null);
 
   const context = await input.createContext({
     conversationId: input.conversationId,
@@ -610,6 +612,30 @@ function hydrateAgentHistoryIfNeeded<
   if (hydrationPlan.kind === 'load-history') {
     input.agentManager.loadHistoryWithContext(input.conversationId, hydrationPlan.historyToLoad);
   }
+}
+
+function synchronizeAgentTurnSkillState<TPlatform, TContext extends object>(
+  agentRunner: AgentTurnRunner<TPlatform, TContext>,
+  activeSkill: AgentTurnActiveSkillState | null,
+): void {
+  const runnerKey = agentRunner as object;
+  const previousTurnSkillName = turnManagedSkillNames.get(runnerKey);
+
+  if (activeSkill) {
+    agentRunner.applySkillInjection?.(activeSkill.injection, activeSkill.skill);
+    turnManagedSkillNames.set(runnerKey, activeSkill.skill.name);
+    return;
+  }
+
+  if (!previousTurnSkillName) {
+    return;
+  }
+
+  const currentSkillName = agentRunner.getActiveSkill?.()?.name;
+  if (!currentSkillName || currentSkillName === previousTurnSkillName) {
+    agentRunner.clearActiveSkill?.();
+  }
+  turnManagedSkillNames.delete(runnerKey);
 }
 
 function summarizeTurnImages(

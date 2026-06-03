@@ -94,8 +94,26 @@ Done.`);
                 duration: 4,
                 visualDescription: 'A wide establishing frame.',
                 characterAction: 'Rin enters the cafe.',
-                imageStrategy: 'generate-new',
+                imageStrategy: 'use-as-reference',
                 generationPrompt: 'wide anime cafe frame',
+                sourceMediaRefs: [
+                  {
+                    refId: 'source-page-1',
+                    role: 'source',
+                    locator: { type: 'tool-result', toolCallId: 'read-doc', assetIndex: 0 },
+                    label: '原始页',
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+                generatedMediaRefs: [
+                  {
+                    refId: 'generated-shot-1',
+                    role: 'generated',
+                    locator: { type: 'tool-result', toolCallId: 'generate-image', assetIndex: 0 },
+                    label: '生成镜头',
+                    mimeType: 'image/png',
+                  },
+                ],
               },
             ],
           },
@@ -126,6 +144,20 @@ Done.`);
           heading: 'INT. CAFE - DAY / Shot 1',
           content: 'A wide establishing frame.',
           layout: 'table-row',
+          mediaRefs: [
+            {
+              toolCallId: 'read-doc',
+              assetIndex: 0,
+              caption: '原始页',
+              role: 'source',
+            },
+            {
+              toolCallId: 'generate-image',
+              assetIndex: 0,
+              caption: '生成镜头',
+              role: 'generated',
+            },
+          ],
         },
       ],
     });
