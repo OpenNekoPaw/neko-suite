@@ -28,9 +28,22 @@ import type {
 import type { Model, Provider } from '../../types/provider';
 import { getLogger } from '../../utils/logger';
 
-const logger = getLogger('AISdkAdapter');
 const MODEL_CALL_TOTAL_ATTEMPTS = 10;
 const MODEL_CALL_MAX_RETRIES = MODEL_CALL_TOTAL_ATTEMPTS - 1;
+const ERROR_LOG_FIELD_MAX_LENGTH = 2000;
+const ERROR_LOG_CAUSE_MAX_DEPTH = 2;
+
+interface AISdkErrorSummary {
+  readonly name?: string;
+  readonly message: string;
+  readonly statusCode?: number;
+  readonly code?: string;
+  readonly url?: string;
+  readonly responseBody?: string;
+  readonly responseBodyLength?: number;
+  readonly isRetryable?: boolean;
+  readonly cause?: AISdkErrorSummary;
+}
 
 /**
  * Abstract base adapter using AI SDK
@@ -98,7 +111,7 @@ export abstract class AISdkAdapter implements Adapter {
     if (options.stop !== undefined) requestOptions.stopSequences = options.stop;
 
     // Debug logging
-    logger.debug('generateText request', {
+    getAdapterLogger().debug('generateText request', {
       model: model.name,
       provider: provider.id,
       providerSupportsBeta: provider.supportsBeta,
@@ -114,20 +127,7 @@ export abstract class AISdkAdapter implements Adapter {
       const result = await generateText(requestOptions);
       return this.transformGenerateTextResult(result, model.name);
     } catch (error) {
-      // Log detailed AI SDK error info
-      logger.error('generateText error', { error });
-      if (error && typeof error === 'object') {
-        const err = error as Record<string, unknown>;
-        logger.error('Error details', {
-          name: err.name,
-          message: err.message,
-          statusCode: err.statusCode,
-          url: err.url,
-          cause: err.cause,
-          responseBody: err.responseBody,
-          isRetryable: err.isRetryable,
-        });
-      }
+      getAdapterLogger().error('generateText error', { error: summarizeAISdkError(error) });
       throw error;
     }
   }
@@ -225,20 +225,7 @@ export abstract class AISdkAdapter implements Adapter {
         }
       }
     } catch (error) {
-      // Log detailed AI SDK error info (consistent with chat() method)
-      logger.error('streamText error', { error });
-      if (error && typeof error === 'object') {
-        const err = error as Record<string, unknown>;
-        logger.error('Stream error details', {
-          name: err.name,
-          message: err.message,
-          statusCode: err.statusCode,
-          url: err.url,
-          cause: err.cause,
-          responseBody: err.responseBody,
-          isRetryable: err.isRetryable,
-        });
-      }
+      getAdapterLogger().error('streamText error', { error: summarizeAISdkError(error) });
       throw error;
     }
   }
@@ -282,8 +269,9 @@ export abstract class AISdkAdapter implements Adapter {
       if (!modelName && this.listModels) {
         try {
           const models = await this.listModels(provider);
-          if (models.length > 0) {
-            testModelName = models[0]!;
+          const firstModel = models[0];
+          if (firstModel) {
+            testModelName = firstModel;
           }
         } catch {
           // If listModels fails, try with default model
@@ -579,4 +567,227 @@ function toUrlIfPossible(value: string): string | URL {
   } catch {
     return value;
   }
+}
+
+function getAdapterLogger() {
+  return getLogger('AISdkAdapter');
+}
+
+function summarizeAISdkError(error: unknown, depth = 0): AISdkErrorSummary {
+  const message = getErrorMessage(error);
+  if (!isObjectLike(error)) {
+    return {
+      name: typeof error,
+      message,
+    };
+  }
+
+  const response = readObjectField(error, 'response');
+  const responseBody = firstLogString(
+    readObjectField(error, 'responseBody'),
+    readObjectField(response, 'body'),
+    readObjectField(error, 'body'),
+    readObjectField(error, 'data'),
+  );
+  const cause = readObjectField(error, 'cause');
+  const causeSummary =
+    depth < ERROR_LOG_CAUSE_MAX_DEPTH && cause !== undefined && cause !== null
+      ? summarizeAISdkError(cause, depth + 1)
+      : undefined;
+  const name = firstString(readObjectField(error, 'name'));
+  const statusCode = firstStatusCode(
+    readObjectField(error, 'statusCode'),
+    readObjectField(error, 'status'),
+    readObjectField(error, 'responseStatus'),
+    readObjectField(response, 'status'),
+  );
+  const code = firstString(
+    readObjectField(error, 'code'),
+    readObjectField(error, 'errorCode'),
+    readObjectField(error, 'type'),
+  );
+  const url = firstString(
+    readObjectField(error, 'url'),
+    readObjectField(error, 'requestUrl'),
+    readObjectField(response, 'url'),
+  );
+  const isRetryable = firstBoolean(readObjectField(error, 'isRetryable'));
+
+  return {
+    ...(name !== undefined ? { name } : {}),
+    message,
+    ...(statusCode !== undefined ? { statusCode } : {}),
+    ...(code !== undefined ? { code } : {}),
+    ...(url !== undefined ? { url } : {}),
+    ...(responseBody
+      ? { responseBody: responseBody.value, responseBodyLength: responseBody.length }
+      : {}),
+    ...(isRetryable !== undefined ? { isRetryable } : {}),
+    ...(causeSummary ? { cause: causeSummary } : {}),
+  };
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return truncateLogField(error.message);
+  }
+
+  const message = firstString(readObjectField(error, 'message'));
+  if (message) {
+    return message;
+  }
+
+  const serialized = stringifyForLog(error);
+  if (serialized) {
+    return serialized.value;
+  }
+
+  return 'Unknown AI SDK error';
+}
+
+function readObjectField(value: unknown, key: string): unknown {
+  if (!isObjectLike(value)) {
+    return undefined;
+  }
+
+  try {
+    return Reflect.get(value, key);
+  } catch {
+    return undefined;
+  }
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) {
+      return truncateLogField(value);
+    }
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+function firstBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function firstStatusCode(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isInteger(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && /^\d{3}$/.test(value)) {
+      return Number.parseInt(value, 10);
+    }
+  }
+  return undefined;
+}
+
+function firstLogString(
+  ...values: unknown[]
+): { readonly value: string; readonly length: number } | undefined {
+  for (const value of values) {
+    const serialized = stringifyForLog(value);
+    if (serialized) {
+      return serialized;
+    }
+  }
+  return undefined;
+}
+
+function stringifyForLog(
+  value: unknown,
+): { readonly value: string; readonly length: number } | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return {
+      value: truncateLogField(value),
+      length: value.length,
+    };
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    const stringValue = String(value);
+    return {
+      value: stringValue,
+      length: stringValue.length,
+    };
+  }
+
+  try {
+    const serialized = JSON.stringify(value, createLogReplacer());
+    if (serialized === undefined) {
+      return undefined;
+    }
+    return {
+      value: truncateLogField(serialized),
+      length: serialized.length,
+    };
+  } catch {
+    try {
+      const stringValue = String(value);
+      return {
+        value: truncateLogField(stringValue),
+        length: stringValue.length,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+function createLogReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+
+  return (_key, value) => {
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: truncateLogField(value.message),
+      };
+    }
+
+    if (typeof value === 'string') {
+      return truncateLogField(value);
+    }
+
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+
+    if (typeof value === 'function') {
+      return `[Function ${value.name || 'anonymous'}]`;
+    }
+
+    if (isObjectLike(value)) {
+      if (seen.has(value)) {
+        return '[Circular]';
+      }
+      seen.add(value);
+    }
+
+    return value;
+  };
+}
+
+function truncateLogField(value: string): string {
+  if (value.length <= ERROR_LOG_FIELD_MAX_LENGTH) {
+    return value;
+  }
+
+  return `${value.slice(0, ERROR_LOG_FIELD_MAX_LENGTH)}...`;
+}
+
+function isObjectLike(value: unknown): value is object {
+  return (typeof value === 'object' || typeof value === 'function') && value !== null;
 }

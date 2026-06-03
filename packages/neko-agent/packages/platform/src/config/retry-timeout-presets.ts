@@ -13,7 +13,7 @@ export const RETRY_TIMEOUT_PRESETS: Record<BuiltinPresetName, RetryTimeoutPreset
   modelCall: {
     name: 'Model Call',
     retry: {
-      maxRetries: 3,
+      maxRetries: 10,
       backoffStrategy: {
         type: 'exponential',
         initialDelayMs: 1000,
@@ -23,9 +23,9 @@ export const RETRY_TIMEOUT_PRESETS: Record<BuiltinPresetName, RetryTimeoutPreset
       retryableCategories: ['rate_limit', 'timeout', 'network', 'server'],
     },
     timeout: {
-      requestTimeout: 60000,
-      totalTimeout: 180000,
-      streamTimeout: 30000,
+      requestTimeout: 360000,
+      totalTimeout: 600000,
+      streamTimeout: 360000,
     },
   },
   toolExecution: {

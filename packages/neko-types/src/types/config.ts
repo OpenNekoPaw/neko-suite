@@ -387,4 +387,6 @@ export interface ChatModelOption {
   capabilities?: ModelCapability[];
   /** Model type for UI grouping */
   category?: ModelType;
+  /** Context window size in tokens, when known */
+  contextWindow?: number;
 }

@@ -59,6 +59,7 @@ export class ChatModelService implements IChatModelService {
         modelId: model.id,
         capabilities: capabilities as ModelCapability[],
         category,
+        ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
       });
     }
 

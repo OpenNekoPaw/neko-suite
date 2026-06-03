@@ -12,6 +12,13 @@ import type { LanguageModel } from 'ai';
 import type { Model, Provider } from '../../../types/provider';
 import type { ChatMessage, ChatOptions } from '../../../types/adapter';
 
+const loggerMock = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock the `ai` module
 // ---------------------------------------------------------------------------
@@ -39,12 +46,7 @@ vi.mock('ai', () => ({
 // Mock logger so adapter doesn't throw on import
 // ---------------------------------------------------------------------------
 vi.mock('../../../utils/logger', () => ({
-  getLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  getLogger: () => loggerMock,
 }));
 
 // ---------------------------------------------------------------------------
@@ -319,3 +321,112 @@ describe('AISdkAdapter multimodal image handling', () => {
     ]);
   });
 });
+
+describe('AISdkAdapter error logging', () => {
+  let adapter: TestAdapter;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    adapter = new TestAdapter();
+  });
+
+  it('chat() logs a bounded AI SDK error summary instead of the raw large object', async () => {
+    const { generateText } = await import('ai');
+    const responseBody = `<html>${'x'.repeat(5000)}</html>`;
+    const cause = Object.assign(new SyntaxError('Unexpected token < in JSON'), {
+      responseBody: 'y'.repeat(5000),
+    });
+    const error = Object.assign(new Error('Invalid JSON response'), {
+      name: 'AI_APICallError',
+      statusCode: 200,
+      url: 'https://www.nekoapi.com/v1/chat/completions',
+      cause,
+      responseBody,
+      isRetryable: false,
+    });
+
+    vi.mocked(generateText).mockRejectedValueOnce(error);
+
+    await expect(adapter.chat(messages, {}, makeModel(), makeProvider())).rejects.toBe(error);
+
+    expect(loggerMock.error).toHaveBeenCalledTimes(1);
+    expect(loggerMock.error).toHaveBeenCalledWith('generateText error', {
+      error: expect.objectContaining({
+        name: 'AI_APICallError',
+        message: 'Invalid JSON response',
+        statusCode: 200,
+        url: 'https://www.nekoapi.com/v1/chat/completions',
+        responseBody: expect.stringMatching(/^<html>x+/),
+        responseBodyLength: responseBody.length,
+        isRetryable: false,
+        cause: expect.objectContaining({
+          name: 'SyntaxError',
+          message: 'Unexpected token < in JSON',
+          responseBody: expect.stringMatching(/^y+/),
+        }),
+      }),
+    });
+
+    const loggedPayload = findLoggedPayload('generateText error');
+    expect(extractNestedString(loggedPayload, ['error', 'responseBody'])?.length).toBeLessThan(
+      responseBody.length,
+    );
+    expect(
+      extractNestedString(loggedPayload, ['error', 'cause', 'responseBody'])?.length,
+    ).toBeLessThan(cause.responseBody.length);
+  });
+
+  it('chatStream() logs a bounded summary for stream error parts', async () => {
+    const { streamText } = await import('ai');
+    const responseBody = `not-json:${'z'.repeat(5000)}`;
+    const error = Object.assign(new Error('Invalid JSON response'), {
+      name: 'AI_APICallError',
+      statusCode: 200,
+      responseBody,
+    });
+
+    vi.mocked(streamText).mockReturnValue({
+      fullStream: (async function* () {
+        yield { type: 'error', error };
+      })(),
+    } as unknown as ReturnType<typeof streamText>);
+
+    await expect(
+      (async () => {
+        for await (const _ of adapter.chatStream(messages, {}, makeModel(), makeProvider())) {
+          /* consume */
+        }
+      })(),
+    ).rejects.toBe(error);
+
+    expect(loggerMock.error).toHaveBeenCalledTimes(1);
+    expect(loggerMock.error).toHaveBeenCalledWith('streamText error', {
+      error: expect.objectContaining({
+        name: 'AI_APICallError',
+        message: 'Invalid JSON response',
+        statusCode: 200,
+        responseBody: expect.stringMatching(/^not-json:z+/),
+        responseBodyLength: responseBody.length,
+      }),
+    });
+  });
+});
+
+function findLoggedPayload(message: string): unknown {
+  return loggerMock.error.mock.calls.find((call) => call[0] === message)?.[1];
+}
+
+function extractNestedString(value: unknown, path: readonly string[]): string | undefined {
+  let current = value;
+  for (const segment of path) {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+    current = current[segment];
+  }
+  return typeof current === 'string' ? current : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
