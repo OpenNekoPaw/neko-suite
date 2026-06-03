@@ -1,5 +1,7 @@
 ## ADDED Requirements
 
+> Superseded by `migrate-character-role-workflows` (2026-06-02). Historical requirements below are replaced by `character-dialogue` and `embody-character` as the only core Dashboard role actions.
+
 ### Requirement: Dashboard exposes NPC operation actions for character entities
 Dashboard SHALL expose character-scoped NPC operation actions for eligible character entity rows or details. The action surface MUST include `test-npc`, `character-perspective`, `validate-character`, and `improve-character` when the owning source and Agent integration can handle those operations.
 

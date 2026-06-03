@@ -1,8 +1,53 @@
 # ADR: NPC Character Test Bench
 
-- **Status**: Accepted / Implemented by OpenSpec change `implement-npc-character-test-bench`
+- **Status**: Accepted / Implemented by OpenSpec change `implement-npc-character-test-bench`; terminology and public contracts superseded by `migrate-character-role-workflows`
 - **Date**: 2026-05-29
 - **Author**: NekoMi + Claude
+
+## 0. Superseding Migration (2026-06-02)
+
+OpenSpec change `migrate-character-role-workflows` performs a breaking terminology and contract migration over this ADR's original NPC wording:
+
+| Historical term / contract | Current term / contract |
+|----------------------------|-------------------------|
+| `test-npc` Dashboard action | `character-dialogue` / 角色对话 |
+| `character-perspective` Dashboard action | `embody-character` / 代入角色 |
+| `validate-character` core Dashboard action | `character-validation` Skill |
+| `improve-character` core Dashboard action | `character-improvement` Skill |
+| `neko.agent.testNpc` | `neko.agent.characterDialogue` |
+| `neko.agent.characterPerspective` | `neko.agent.embodyCharacter` |
+| `ConversationKind: 'npc-test'` | `ConversationKind: 'character-dialogue'` |
+| `/exit-role` | `/exit-as` |
+| `.neko/npc-tests/` active save path | `.neko/character-tests/` active save path |
+
+The actor relationship is now the source of truth:
+
+- **角色对话 / Character Dialogue**: Agent plays the character, user tests the character.
+- **代入角色 / Embody Character**: user plays the character, Agent provides project-scoped character knowledge feedback.
+- **角色验证 / Character Validation Skill**: one Agent plays the character while another Agent probes knowledge boundaries, voice, and stability.
+- **完善角色 / Character Improvement Skill**: Agent proposes evidence-backed improvements as user-confirmed suggestions.
+
+Current role-session architecture:
+
+- Character Dialogue and Embody Character both use Agent-owned isolated role-session tabs with explicit launch, turn routing, exit lifecycle, transcript ownership, and Webview session projection.
+- Character Dialogue uses no-tool roleplay semantics: the Agent speaks as the character and the user tests it.
+- Embody Character uses read-only feedback semantics: the user speaks as the character, the Agent remains out-of-character, receives projected project evidence through narrow host-side reader ports, and runs with no LLM-facing tools or Skill activation surface.
+- Embody Character is not an ordinary Agent conversation with hidden context. It must not activate creative Skills, write files, mutate entities, create tasks, generate media, or append hidden prompts to standard Agent chat history.
+
+Dynamic character evidence loading is Agent-owned:
+
+- `@neko/agent/runtime` owns the host-agnostic `CharacterEvidenceLoader` contract, request/bundle/source-ref/omission DTOs, and pure ranking, dedupe, and budget helpers.
+- `@neko-agent/extension` owns concrete VSCode, Dashboard, Story API, project search, and workspace file-reading adapters.
+- `neko-entity`, Dashboard detail, Story `ScriptIndex`, and project search provide locators only. They do not own prompt-ready turn evidence and do not decide character prompt budgets.
+- Character Dialogue, Embody Character, and character validation/improvement Skills request bounded `CharacterEvidenceBundle` records before a role-session turn. The bundle is rendered into a turn-local evidence section and is not appended to ordinary Agent history, global memory, `.neko/memory.md`, or standard creative chat records.
+- Role responders remain `toolPolicy: { kind: 'none' }`. Evidence loading happens through host-side controller or Skill primitive ports; the live character-playing responder never receives file, search, Skill activation, authoring, or mutation tools.
+- Source reads are project-scoped and allowlisted. Absolute paths, parent-directory escapes, unsupported file types, missing files, stale sources, duplicate ranges, and budget omissions are recorded as explicit bundle omissions.
+
+New artifacts are saved under `.neko/character-tests/{entityId}-{timestamp}.json`. Historical `.neko/npc-tests/*.json` evidence is not rewritten by this migration and remains historical test evidence only.
+
+Internal DTO names such as `NpcProfileSource`, `NpcTranscriptArtifact`, and `NpcEvaluationReport` are intentionally deferred as schema-history names for this migration. Public action ids, command ids, slash commands, Webview conversation kind, Webview session projection fields, controller/runtime facade names, and artifact paths use character role terminology.
+
+The rest of this ADR records the original NPC test-bench design and implementation history. When the original wording conflicts with this superseding section, the current character role workflow contracts above take precedence.
 
 ## 1. Context & Motivation
 
@@ -654,34 +699,26 @@ The dashboard's `DashboardCreativeEntityAction` system supports the `test-npc` a
 
 Total: ~9d, 11 PRs.
 
-## 9. Implementation Status
+## 9. Current Implementation Status
 
-The OpenSpec change `implement-npc-character-test-bench` is implemented. The
-original five integration gaps have been closed and covered by targeted tests:
+The original OpenSpec changes `implement-npc-character-test-bench` and
+`refine-npc-dashboard-agent-workflows` are implemented as historical milestones.
+The current public contract is superseded by `migrate-character-role-workflows`
+and `isolate-embody-character-runtime`:
 
-| Gap | Current status |
-|-----|----------------|
-| `/as` / `/exit-role` builtin registration and dispatch | Closed. Builtin slash command routing delegates both commands to `NpcTestBenchController`. |
-| Dashboard `test-npc` action | Closed. Dashboard delegates `test-npc` to `neko.agent.testNpc` through source/host action handling. |
-| Webview NPC session UI | Closed. NPC tabs render `NpcSessionHeader`, route NPC `sendMessage` to the controller, route NPC exit events, and hide creative controls. |
-| Relationship / occurrence readers | Closed at the NPC boundary. `createDashboardNpcProfileEvidenceReader()` reads all available Dashboard source details, merges relationship and occurrence evidence, and dedupes projections. Remaining sparsity depends on upstream entity graph / occurrence-index providers. |
-| InputArea NPC mode awareness | Closed. `input-area-presenter` uses the NPC conversation kind to hide model, execution mode, and media generation controls. |
+| Current area | Status |
+|--------------|--------|
+| Character Dialogue | Closed. `/as` and Dashboard `character-dialogue` delegate to `neko.agent.characterDialogue`, open an isolated role-session tab, and keep `toolPolicy: { kind: 'none' }`. |
+| Embody Character | Closed. Dashboard `embody-character` delegates to `neko.agent.embodyCharacter`, opens an isolated read-only feedback session, injects projected project evidence through reader ports, and exposes no creative Skill/tool surface. |
+| Dashboard actions | Closed. Character detail exposes only `character-dialogue` and `embody-character` as core role actions. Validation and improvement are Skills, not core Dashboard actions. |
+| Webview session UI | Closed. Character role tabs render dedicated headers, route role-session `sendMessage` and exit events to the owning controller, and hide model, execution, Skill, task, and media-generation controls. |
+| Relationship / occurrence readers | Closed at the role-session boundary. Dashboard detail readers aggregate available relationship, occurrence, representation, and script context evidence. Remaining sparsity depends on upstream entity graph / occurrence-index providers. |
+| Entity mutation | Suggestion-only. Evaluation, validation, and improvement suggestions must route through explicit entity-owned apply actions and user confirmation before project facts change. |
 
-The follow-up OpenSpec change `refine-npc-dashboard-agent-workflows` moves the
-product entry point from Agent slash UX to Dashboard entity operations:
-
-| Refinement | Current status |
-|------------|----------------|
-| Dashboard-first NPC operations | Closed. Character detail exposes `test-npc`, `character-perspective`, `validate-character`, and `improve-character`; row actions remain compact. |
-| Visible `/as` slash command | Deprecated from product UX. Agent Webview slash catalog, autocomplete, and help omit `/as`; typed `/as @character` remains hidden compatibility while migration needs it. |
-| Tool-enabled NPC analysis | Closed at routing level. Perspective, validation, and improvement commands send ordinary Agent workflow messages and do not start `npc-test` sessions. |
-| Roleplay no-tool isolation | Preserved. `npc-test` still creates `ConversationKind: 'npc-test'` with `toolPolicy: { kind: 'none' }`, and SubAgent `toolPolicy:none` still yields an empty tool registry. |
-| Entity mutation | Suggestion-only. Validation and improvement output must route through explicit entity-source apply actions before project facts change. |
-
-Default project enrichment is also implemented. When a thin profile chooses
-`Extract project evidence`, `NpcTestBenchController` first uses an injected
-`enrichProfile` dependency when present; otherwise it falls back to
-`defaultEnrichNpcProfile()`. The default path:
+Default project enrichment is implemented for Character Dialogue sparse profiles.
+When a thin profile chooses `Extract project evidence`, the controller first
+uses an injected `enrichProfile` dependency when present; otherwise it falls
+back to `defaultEnrichCharacterProfile()`. The default path:
 
 - converts project-scoped dialogue samples, scene appearances, and relationships into `suggested` profile facts;
 - optionally asks the selected chat model to infer supported profile facts with `tools: []` and `toolChoice: 'none'`;

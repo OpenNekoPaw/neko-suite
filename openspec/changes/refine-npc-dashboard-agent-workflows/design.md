@@ -1,5 +1,7 @@
 ## Context
 
+> Superseded by `migrate-character-role-workflows` (2026-06-02). This design is historical. Current Dashboard core character actions are `character-dialogue` and `embody-character`; automated validation and improvement compose Skill primitive ports instead of first-level Dashboard actions.
+
 The accepted NPC test bench architecture introduced isolated `npc-test` conversations and `toolPolicy: { kind: 'none' }` for roleplay validation. Early launch UX included `/as @character`, but the current Dashboard creative entity surface can now show character rows, details, occurrences, and source-owned actions. Character operations are therefore better initiated from the entity surface instead of the Agent input slash menu.
 
 The Agent still needs NPC-related work, but those jobs are not roleplay context switches. For interactive films, branching stories, and games, Agent should analyze a character's knowledge boundary, simulate interaction paths, and suggest character design improvements while using project-read tools. That is a normal Agent workflow, not an `npc-test` conversation.

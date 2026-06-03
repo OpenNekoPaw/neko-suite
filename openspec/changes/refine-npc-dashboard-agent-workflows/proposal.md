@@ -1,5 +1,7 @@
 ## Why
 
+> Superseded by `migrate-character-role-workflows` (2026-06-02). Dashboard no longer exposes `test-npc`, `character-perspective`, `validate-character`, or `improve-character` as peer core actions. Current core actions are `character-dialogue` and `embody-character`; validation and improvement are Skill workflows.
+
 Dashboard creative entity rows now provide a natural place to operate on characters, while `/as` in the Agent Webview behaves like a context switch into a separate NPC session rather than a command inside the current Agent conversation. Keeping `/as` as a visible slash command makes the Agent input surface carry a workflow that cannot be cleanly embedded in chat history or tool execution.
 
 At the same time, Agent still needs NPC-related capabilities for interactive story and game validation: building a character knowledge snapshot, checking whether a character leaks future facts, stress-testing dialogue flows, and helping authors complete sparse character design.
