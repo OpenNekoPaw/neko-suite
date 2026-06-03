@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  TOOL_NAMES_CANVAS,
   TOOL_NAMES_TIMELINE,
   TOOL_NAMES_MEDIA,
   TOOL_NAMES_QUALITY,
@@ -67,14 +68,25 @@ describe('Builtin Skills', () => {
 
     it('should request StoryboardTableV1 semantic output without fake media claims', () => {
       expect(comicToStoryboardSkill.content).toContain('StoryboardTableV1');
+      expect(comicToStoryboardSkill.content).toContain('internal structured');
       expect(comicToStoryboardSkill.content).toContain('"schemaVersion": 1');
       expect(comicToStoryboardSkill.content).toContain('"kind": "storyboard-table"');
       expect(comicToStoryboardSkill.content).toContain('imageStrategy');
       expect(comicToStoryboardSkill.content).toContain('generatedMediaRefs');
       expect(comicToStoryboardSkill.content).toContain(
+        'only reference images that came from actual',
+      );
+      expect(comicToStoryboardSkill.content).toContain('Do not invent');
+      expect(comicToStoryboardSkill.content).toContain(
+        'do not ask the user to copy or edit the JSON',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
         'Do not claim images have already been generated',
       );
       expect(comicToStoryboardSkill.content).toContain('Do not embed base64 image data');
+      expect(comicToStoryboardSkill.content).toContain(
+        'only report Canvas success after the tool result succeeds',
+      );
       expect(comicToStoryboardSkill.content).toContain('script-breakdown');
       expect(comicToStoryboardSkill.content).toContain('manga-to-video');
       expect(comicToStoryboardSkill.content).toContain('image-sequence');
@@ -83,9 +95,47 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('character-design');
     });
 
+    it('should group storyboard shots into coarser scenes', () => {
+      expect(comicToStoryboardSkill.content).toContain('Scene/shot granularity is important');
+      expect(comicToStoryboardSkill.content).toContain('Do not create one scene per shot');
+      expect(comicToStoryboardSkill.content).toContain('group multiple panels');
+      expect(comicToStoryboardSkill.content).toContain('from the same page');
+      expect(comicToStoryboardSkill.content).toContain('shotNumber');
+    });
+
+    it('should avoid duplicate vision reads for the same comic image batch', () => {
+      expect(comicToStoryboardSkill.content).toContain(
+        'Choose exactly one vision analysis tool for the same page/batch',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'use ReadImage with mode="vision" when ReadDocument already returned',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'Do not call ReadDocumentImage after ReadImage',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'do not call ReadDocumentImage just because',
+      );
+    });
+
     it('should have required tools', () => {
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_VIDEO);
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_MEDIA.GENERATE_TTS);
+    });
+
+    it('should allow Canvas tools for storyboard delivery', () => {
+      expect(comicToStoryboardSkill.allowedTools).toContain(
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+      );
+      expect(comicToStoryboardSkill.allowedTools).toContain(
+        TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+      );
+      expect(comicToStoryboardSkill.allowedTools).toContain(
+        TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
+      );
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_CANVAS.CANVAS_GET_NODE);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE);
+      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_CANVAS.CANVAS_UPDATE_NODE);
     });
 
     it('should have comic icon', () => {

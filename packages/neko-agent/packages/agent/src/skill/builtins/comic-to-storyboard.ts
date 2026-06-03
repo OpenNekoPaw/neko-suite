@@ -6,7 +6,12 @@
  */
 
 import type { Skill } from '@neko/shared';
-import { TOOL_NAMES_SYSTEM, TOOL_NAMES_MEDIA, TOOL_NAMES_TIMELINE } from '@neko/shared';
+import {
+  TOOL_NAMES_CANVAS,
+  TOOL_NAMES_SYSTEM,
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_TIMELINE,
+} from '@neko/shared';
 
 /**
  * Comic to Storyboard skill content
@@ -26,8 +31,15 @@ You are a comic-to-animation specialist. Help users convert manga/comic pages in
    - Use ReadDocument.imageInfo for page width, height, mimeType, byteSize,
      and page aspect ratio. Do not run Python/PIL, file, sips, identify,
      unzip, unrar, 7z, or other external commands just to probe image metadata.
-   - Use ReadDocumentImage or ReadImage with mode="vision" before making
-     claims about characters, dialogue/OCR, panel count, actions, or camera.
+   - Choose exactly one vision analysis tool for the same page/batch:
+     use ReadImage with mode="vision" when ReadDocument already returned
+     imagePaths/images; use ReadDocumentImage with mode="vision" only when
+     you still have document locators/page indexes and need the tool to
+     resolve them to images. Do not call ReadDocumentImage after ReadImage
+     for the same image, and do not call ReadDocumentImage just because
+     ReadDocument already returned imagePaths.
+   - Use that single vision call before making claims about characters,
+     dialogue/OCR, panel count, actions, or camera.
 2. **Analyze panel layout** using vision capabilities:
    - Identify reading order (left-to-right or right-to-left for manga)
    - Detect panel boundaries and composition
@@ -65,21 +77,41 @@ Panel 2: ...
 
 7. **Present storyboard plan** to user for review
    - Always output a real storyboard structure, not only a prose document.
-     Put concise readable notes first, then append one \`neko-composite\`
-     fenced JSON block. Use \`template: "storyboard-table"\`.
+     Put concise readable notes first, then append one internal structured
+     payload in a \`neko-composite\` fenced JSON block. Use
+     \`template: "storyboard-table"\`. The UI consumes this payload to render
+     the rich storyboard table; do not ask the user to copy or edit the JSON.
    - Output a \`StoryboardTableV1\` semantic plan: \`schemaVersion: 1\`,
      \`kind: "storyboard-table"\`, \`profile: "manga-to-video"\`,
      \`title\`, \`scenes[]\`, and \`shots[]\`.
+   - Scene/shot granularity is important: a \`scene\` is a container for a
+     continuous page, location/time block, or narrative beat; a \`shot\` is
+     an individual panel, camera setup, or video clip inside that scene.
+     Do not create one scene per shot. For manga/comics, group multiple panels from the same page
+     or continuous action beat into one scene unless the page, location, time,
+     or dramatic beat clearly changes. Use \`shotNumber\` for the
+     reading/video order across the whole storyboard.
    - Every shot must include the stable core: \`shotNumber\`, \`duration\`,
      \`visualDescription\`, \`characterAction\`, and \`imageStrategy\`.
    - Choose \`imageStrategy\` explicitly:
      \`reuse-original\` for original panel reuse, \`use-as-reference\` when
      the panel guides a new image, \`generate-new\` for text-only creation,
      or \`transform-original\` for colorize/upscale/inpaint/style edits.
+   - Do not colorize source images by default. If black-and-white source art
+     should become colored animation, keep the original in \`sourceMediaRefs\`
+     and use \`imageStrategy: "transform-original"\` plus a
+     \`generationPrompt\` / \`extensions["neko.mangaToVideo"].colorization\`
+     note. Only put a colored image in \`generatedMediaRefs\` after a tool has
+     actually produced it.
    - Only write plan fields. Do not claim images have already been generated
      until a runtime/tool result exists. Put existing source images in
      \`sourceMediaRefs\`; leave \`generatedMediaRefs\` empty unless they
      reference completed tool results.
+   - For image embedding, you may only reference images that came from actual
+     tool results in the current conversation. Use \`locator.type:
+     "tool-result"\` with the exact tool call id and asset index. Do not invent
+     image ids, do not copy local cache paths into \`referenceImagePath\`, and
+     do not convert images to base64 yourself.
    - If a shot should carry original, reference, transformed, or generated
      images, use stable refs with \`locator.type: "tool-result"\` and the
      exact tool call id and asset index from ReadDocument / ReadDocumentImage /
@@ -129,6 +161,10 @@ Panel 2: ...
      \`\`\`
    - Do not embed base64 image data, blob URLs, localhost URLs, absolute
      local paths, or invented tool call ids in the table.
+   - If the user asks to send the storyboard to Canvas, or the task clearly
+     includes Canvas delivery, call the Canvas tools after the structured plan
+     is ready. Use Canvas context/query tools first when a target is needed,
+     and only report Canvas success after the tool result succeeds.
    - Profile field templates:
      - \`script-breakdown\`: emphasize \`dialogue\`, \`shotScale\`,
        \`cameraMovement\`, \`cameraAngle\`, \`duration\`, and scene continuity.
@@ -271,6 +307,13 @@ export const comicToStoryboardSkill: Skill = {
     TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
+    // Canvas delivery
+    TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+    TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+    TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
+    TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+    TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
+    TOOL_NAMES_CANVAS.CANVAS_UPDATE_NODE,
     // Media generation
     TOOL_NAMES_MEDIA.GENERATE_IMAGE,
     TOOL_NAMES_MEDIA.GENERATE_VIDEO,

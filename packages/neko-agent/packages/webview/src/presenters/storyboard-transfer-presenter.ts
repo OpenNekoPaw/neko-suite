@@ -3,7 +3,9 @@ import {
   projectStoryboardTableV1ToCanvasPayload,
   projectStoryboardTableV1ToCutPayload,
   type CanvasStoryboardPayload,
+  type DocumentArchiveResourceRef,
   type ShotScale,
+  type StoryboardMediaRefV1,
   type StoryboardImportMode,
 } from '@neko/shared';
 import type {
@@ -150,6 +152,12 @@ export function projectStoryboardTableTransferPayload(
       kind: 'canvasStoryboard',
       storyboard: projectStoryboardTableV1ToCanvasPayload(data.storyboardTable, {
         sourceScriptUri: 'agent://rich-content/storyboard-table',
+        resolveImagePath: ({ shot, mediaRef }) =>
+          resolveStoryboardMediaPath(data, mediaRef) ??
+          resolveStoryboardShotImagePathByOrder(data, shot),
+        resolveImageResourceRef: ({ shot, mediaRef }) =>
+          resolveStoryboardMediaResourceRef(data, mediaRef) ??
+          resolveStoryboardShotImageResourceRefByOrder(data, shot),
       }),
     };
   }
@@ -176,7 +184,7 @@ export function projectStoryboardTableCutTimelinePayload(
 ): PluginTransferPayload | null {
   if (data.storyboardTable && !hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) {
     const storyboard = projectStoryboardTableV1ToCutPayload(data.storyboardTable, {
-      resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaLocalPath(data, mediaRef.refId),
+      resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
     });
     return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
   }
@@ -185,18 +193,103 @@ export function projectStoryboardTableCutTimelinePayload(
   return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
 }
 
-function resolveStoryboardMediaLocalPath(
+function resolveStoryboardMediaPath(
   data: StoryboardTableRichData,
-  refId: string,
+  mediaRef: StoryboardMediaRefV1,
 ): string | undefined {
+  const media = resolveStoryboardMedia(data, mediaRef);
+  return getCanvasImageMediaPath(media);
+}
+
+function resolveStoryboardMediaResourceRef(
+  data: StoryboardTableRichData,
+  mediaRef: StoryboardMediaRefV1,
+): DocumentArchiveResourceRef | undefined {
+  return resolveStoryboardMedia(data, mediaRef)?.resourceRef;
+}
+
+function resolveStoryboardMedia(
+  data: StoryboardTableRichData,
+  mediaRef: StoryboardMediaRefV1,
+): ResolvedCompositeMedia | undefined {
+  if (mediaRef.locator.type === 'tool-result') {
+    const locator = mediaRef.locator;
+    const exact = findStoryboardMedia(data, (media) => {
+      return media.toolCallId === locator.toolCallId && media.assetIndex === locator.assetIndex;
+    });
+    if (exact) return exact;
+  }
+
+  return findStoryboardMedia(data, (media) => doesStoryboardMediaMatchRef(media, mediaRef));
+}
+
+function findStoryboardMedia(
+  data: StoryboardTableRichData,
+  predicate: (media: ResolvedCompositeMedia) => boolean,
+): ResolvedCompositeMedia | undefined {
   for (const section of data.sections) {
     for (const media of section.media) {
-      if (media.id.includes(refId) || media.assetId === refId || media.stableUri === refId) {
-        return media.localPath ?? media.stableUri;
-      }
+      if (predicate(media)) return media;
     }
   }
   return undefined;
+}
+
+function doesStoryboardMediaMatchRef(
+  media: ResolvedCompositeMedia,
+  mediaRef: StoryboardMediaRefV1,
+): boolean {
+  const locator = mediaRef.locator;
+  return (
+    media.id.includes(mediaRef.refId) ||
+    media.assetId === mediaRef.refId ||
+    media.stableUri === mediaRef.refId ||
+    (locator.type === 'asset' &&
+      (media.assetId === locator.assetId || media.stableUri === locator.uri)) ||
+    (locator.type === 'workspace-path' && media.localPath === locator.path)
+  );
+}
+
+function resolveStoryboardShotImagePathByOrder(
+  data: StoryboardTableRichData,
+  shot: { readonly shotNumber: number },
+): string | undefined {
+  const shotIndex = Math.max(0, shot.shotNumber - 1);
+  return getCanvasImageMediaPath(flattenStoryboardImageMedia(data)[shotIndex]);
+}
+
+function resolveStoryboardShotImageResourceRefByOrder(
+  data: StoryboardTableRichData,
+  shot: { readonly shotNumber: number },
+): DocumentArchiveResourceRef | undefined {
+  const shotIndex = Math.max(0, shot.shotNumber - 1);
+  return flattenStoryboardImageMedia(data)[shotIndex]?.resourceRef;
+}
+
+function flattenStoryboardImageMedia(data: StoryboardTableRichData): ResolvedCompositeMedia[] {
+  return data.sections.flatMap((section) =>
+    section.media.filter((media) => media.type === 'image'),
+  );
+}
+
+function getCanvasImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
+  if (media?.src && isCanvasPreviewUrl(media.src)) {
+    return media.src;
+  }
+  return media?.localPath ?? media?.stableUri ?? media?.src;
+}
+
+function getLocalImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
+  return media?.localPath ?? media?.stableUri ?? media?.src;
+}
+
+function isCanvasPreviewUrl(value: string): boolean {
+  return (
+    value.startsWith('data:') ||
+    value.startsWith('blob:') ||
+    value.startsWith('http://') ||
+    value.startsWith('https://')
+  );
 }
 
 function projectStoryboardScenesToCanvasPayload(
@@ -239,6 +332,7 @@ function projectStoryboardTableToCanvasPayload(
     const imageMedia = section.media.filter((media) => media.type === 'image');
     const shotPlans = (imageMedia.length > 0 ? imageMedia : [undefined]).map((media) => {
       const description = section.content ?? section.heading ?? `Storyboard row ${index + 1}`;
+      const referenceImagePath = getCanvasImageMediaPath(media);
       return {
         shotNumber: nextShotNumber++,
         duration: DEFAULT_SHOT_DURATION_SECONDS,
@@ -248,6 +342,8 @@ function projectStoryboardTableToCanvasPayload(
         characterAction: description,
         emotion: [],
         sceneTags: compactStrings([media?.caption, media?.role]),
+        ...(referenceImagePath ? { referenceImagePath } : {}),
+        ...(media?.resourceRef ? { referenceImageResourceRef: media.resourceRef } : {}),
       };
     });
 
@@ -291,7 +387,8 @@ function projectStoryboardTableToCutPayload(
   let nextShotNumber = 1;
   const shots = data.sections.flatMap((section) =>
     section.media.flatMap((media, mediaIndex) => {
-      if (media.type !== 'image' || !media.localPath) return [];
+      const imagePath = getLocalImageMediaPath(media);
+      if (media.type !== 'image' || !imagePath) return [];
       const shotNumber = nextShotNumber++;
       const label = media.caption ?? section.heading ?? `#${String(shotNumber).padStart(3, '0')}`;
       return [
@@ -299,7 +396,7 @@ function projectStoryboardTableToCutPayload(
           id: media.assetId ?? media.id,
           shotNumber,
           duration: DEFAULT_SHOT_DURATION_SECONDS,
-          imagePath: media.localPath,
+          imagePath,
           ...(section.content ? { dialogue: section.content } : {}),
           label: mediaIndex === 0 ? label : `${label} ${mediaIndex + 1}`,
         } satisfies PluginTransferCutStoryboardShot,

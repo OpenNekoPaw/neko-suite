@@ -8,8 +8,10 @@ import type {
 import type {
   StoryboardTableV1,
   StoryboardValidationDiagnosticV1,
+  DocumentArchiveResourceRef,
   ToolResultAttachment,
 } from '@neko/shared';
+import { parseDocumentArchiveResourceRef } from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 'asset-gallery';
@@ -37,6 +39,7 @@ export interface ResolvedCompositeMedia {
   readonly assetId?: string;
   readonly stableUri?: string;
   readonly localPath?: string;
+  readonly resourceRef?: DocumentArchiveResourceRef;
   readonly mimeType?: string;
   readonly caption?: string;
   readonly role?: string;
@@ -103,6 +106,7 @@ interface MediaCandidate {
   readonly assetId?: string;
   readonly stableUri?: string;
   readonly localPath?: string;
+  readonly resourceRef?: DocumentArchiveResourceRef;
   readonly mimeType?: string;
   readonly label?: string;
 }
@@ -114,13 +118,19 @@ export function projectCompositeBlockRichContent(
 ): CompositeRichContentProjection {
   const toolCalls = collectToolCalls(input.siblingBlocks, input.toolCalls);
   const diagnostics: CompositeMediaDiagnostic[] = [];
-  const sections = input.composite.sections.map((section, sectionIndex) =>
+  const projectedSections = input.composite.sections.map((section, sectionIndex) =>
     projectCompositeSection({
       section,
       sectionIndex,
       toolCalls,
       diagnostics,
     }),
+  );
+  const sections = maybeBackfillStoryboardSectionMedia(
+    projectedSections,
+    input.composite.storyboardTable,
+    toolCalls,
+    diagnostics,
   );
 
   const base = {
@@ -145,6 +155,68 @@ export function projectCompositeBlockRichContent(
     case 'report':
       return { kind: 'asset-gallery', data: { ...base, template: input.composite.template } };
   }
+}
+
+function maybeBackfillStoryboardSectionMedia(
+  sections: readonly ResolvedCompositeSection[],
+  storyboardTable: StoryboardTableV1 | undefined,
+  toolCalls: ReadonlyMap<string, ToolCall>,
+  diagnostics: CompositeMediaDiagnostic[],
+): readonly ResolvedCompositeSection[] {
+  if (!storyboardTable || sections.every((section) => section.media.length > 0)) {
+    return sections;
+  }
+
+  const inferredRefs = collectSequentialStoryboardImageRefs(toolCalls);
+  if (inferredRefs.length === 0) return sections;
+
+  return sections.map((section) => {
+    if (section.media.length > 0) return section;
+    const inferredRef = inferredRefs[section.index];
+    if (!inferredRef) return section;
+
+    const resolved = resolveCompositeMediaRef(inferredRef, toolCalls);
+    if ('media' in resolved) {
+      return {
+        ...section,
+        media: [resolved.media],
+      };
+    }
+
+    pushDiagnostic(diagnostics, resolved.diagnostic);
+    return {
+      ...section,
+      diagnostics: [...section.diagnostics, resolved.diagnostic],
+    };
+  });
+}
+
+function collectSequentialStoryboardImageRefs(
+  toolCalls: ReadonlyMap<string, ToolCall>,
+): readonly MediaRef[] {
+  const refs: MediaRef[] = [];
+  for (const toolCall of toolCalls.values()) {
+    if (!isStoryboardImageSourceTool(toolCall.name) || toolCall.result?.success !== true) {
+      continue;
+    }
+
+    collectMediaCandidates(toolCall).forEach((candidate, candidateIndex) => {
+      if (candidate.type !== 'image' || !candidate.src) return;
+      refs.push({
+        toolCallId: toolCall.id,
+        assetIndex: candidateIndex,
+        ...(candidate.label ? { caption: candidate.label } : {}),
+        role: 'source',
+      });
+    });
+  }
+  return refs;
+}
+
+function isStoryboardImageSourceTool(toolName: string): boolean {
+  return (
+    toolName === 'ReadImage' || toolName === 'ReadDocumentImage' || toolName === 'ReadDocument'
+  );
 }
 
 function projectCompositeSection(input: {
@@ -246,6 +318,7 @@ function resolveCompositeMediaRef(
       ...(candidate.assetId ? { assetId: candidate.assetId } : {}),
       ...(candidate.stableUri ? { stableUri: candidate.stableUri } : {}),
       ...(candidate.localPath ? { localPath: candidate.localPath } : {}),
+      ...(candidate.resourceRef ? { resourceRef: candidate.resourceRef } : {}),
       ...(candidate.mimeType ? { mimeType: candidate.mimeType } : {}),
       ...(mediaRef.caption || candidate.label
         ? { caption: mediaRef.caption ?? candidate.label }
@@ -381,11 +454,13 @@ function projectDocumentImageCandidate(input: {
   if (!input.path && !input.webviewUri) return null;
   const mimeType = readString(input.info, 'mimeType') ?? inferImageMimeType(input.path);
   const src = input.webviewUri && isRenderableUri(input.webviewUri) ? input.webviewUri : undefined;
+  const resourceRef = parseDocumentArchiveResourceRef(input.info?.['resourceRef']);
   return {
     assetIndex: input.index,
     type: 'image',
     ...(src ? { src } : {}),
     ...(readAbsolutePath(input.path) ? { localPath: readAbsolutePath(input.path) } : {}),
+    ...(resourceRef ? { resourceRef } : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(input.label ? { label: input.label } : {}),
   };

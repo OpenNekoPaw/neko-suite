@@ -155,6 +155,7 @@ describe('storyboard transfer presenter', () => {
                 characterAction: 'Wide establishing frame',
                 emotion: [],
                 sceneTags: ['Wide'],
+                referenceImagePath: '/repo/asset.png',
               },
             ],
           },
@@ -249,6 +250,193 @@ describe('storyboard transfer presenter', () => {
                 sceneTags: ['signal'],
                 dialogue: 'There it is.',
                 generationPrompt: 'semantic prompt',
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('resolves semantic storyboard source media refs to canvas reference images', () => {
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Semantic Opening',
+        profile: 'manga-to-video',
+        scenes: [
+          {
+            sceneId: 'scene-page-1',
+            sceneTitle: 'Page 1',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 4,
+                visualDescription: 'Panel composition.',
+                characterAction: 'Rin reacts.',
+                imageStrategy: 'use-as-reference',
+                sourceMediaRefs: [
+                  {
+                    refId: 'panel-1',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-image-call',
+                      assetIndex: 0,
+                    },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Shot 1',
+          content: 'Panel composition.',
+          media: [
+            {
+              id: 'read-image-call:0:panel-1',
+              toolCallId: 'read-image-call',
+              assetIndex: 0,
+              type: 'image',
+              src: 'webview://panel-1.jpg',
+              localPath: '/cache/panel-1.jpg',
+              stableUri: 'asset://panel-1',
+              resourceRef: {
+                kind: 'document-entry',
+                source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+                entryPath: 'image/panel-1.jpg',
+                cachePath: '/cache/panel-1.jpg',
+                versionPolicy: 'versioned-export',
+              },
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    expect(projectStoryboardTableTransferPayload(data)).toMatchObject({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        scenes: [
+          {
+            shotPlans: [
+              {
+                referenceImagePath: '/cache/panel-1.jpg',
+                referenceImageResourceRef: {
+                  kind: 'document-entry',
+                  source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+                  entryPath: 'image/panel-1.jpg',
+                  cachePath: '/cache/panel-1.jpg',
+                  versionPolicy: 'versioned-export',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('resolves semantic storyboard source media refs for Canvas image previews', () => {
+    const resourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-1.jpg',
+      cachePath: '/tmp/neko-cache/page-1.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Semantic Opening',
+        profile: 'manga-to-video',
+        scenes: [
+          {
+            sceneId: 'scene-page-1',
+            sceneTitle: 'Page 1',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'A panel from the page.',
+                characterAction: 'The character turns.',
+                imageStrategy: 'use-as-reference',
+                sourceMediaRefs: [
+                  {
+                    refId: 'page-1-panel',
+                    role: 'source',
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-image-1',
+                      assetIndex: 0,
+                    },
+                    mimeType: 'image/jpeg',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Shot 1',
+          media: [
+            {
+              id: 'read-image-1:0:/tmp/neko-cache/page-1.jpg',
+              toolCallId: 'read-image-1',
+              assetIndex: 0,
+              type: 'image',
+              src: 'webview://page-1.jpg',
+              localPath: '/tmp/neko-cache/page-1.jpg',
+              resourceRef,
+              mimeType: 'image/jpeg',
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+    expect(projectStoryboardTableTransferPayload(data)).toEqual({
+      kind: 'canvasStoryboard',
+      storyboard: {
+        mode: 'semantic',
+        sourceScriptUri: 'agent://rich-content/storyboard-table',
+        scenes: [
+          {
+            sceneId: 'scene-page-1',
+            sceneTitle: 'Page 1',
+            sceneNumber: 1,
+            shotPlans: [
+              {
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'A panel from the page.',
+                characters: [],
+                shotScale: 'MS',
+                characterAction: 'The character turns.',
+                emotion: [],
+                sceneTags: [],
+                referenceImagePath: '/tmp/neko-cache/page-1.jpg',
+                referenceImageResourceRef: resourceRef,
               },
             ],
           },
