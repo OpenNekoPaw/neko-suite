@@ -3,8 +3,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const APPROVED_KERNEL_PUBLIC_MODULES: &[&str] =
-    &["contracts", "error", "facade", "telemetry", "prelude"];
+const APPROVED_KERNEL_PUBLIC_MODULES: &[&str] = &[
+    "contracts",
+    "error",
+    "facade",
+    "live_compositor",
+    "telemetry",
+    "prelude",
+];
 
 fn rust_files(root: &Path) -> Vec<PathBuf> {
     if root.is_file() {

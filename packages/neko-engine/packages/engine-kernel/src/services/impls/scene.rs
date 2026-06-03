@@ -2433,7 +2433,18 @@ mod tests {
     fn test_scene_service_new() {
         let service = SceneService::new();
         let snapshot = service.get_snapshot().unwrap();
-        assert!(snapshot.nodes.is_empty());
+        assert!(
+            snapshot.nodes.iter().any(|node| node.id == "default_cube"),
+            "SceneService::new should expose the default editable cube"
+        );
+        assert!(
+            service
+                .procedural_meshes
+                .lock()
+                .unwrap()
+                .contains_key("procedural://default_cube"),
+            "SceneService::new should retain CPU mesh data for the default cube"
+        );
     }
 
     #[test]
