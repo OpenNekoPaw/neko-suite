@@ -40,18 +40,32 @@ export interface CanvasCompositeChildSpec extends CanvasNodeCreateSpec {
   id?: string;
 }
 
+export interface CanvasCompositeConnectionSpec {
+  id?: string;
+  sourceChildIndex: number;
+  targetChildIndex: number;
+  sourceAnchor?: CanvasConnection['sourceAnchor'];
+  targetAnchor?: CanvasConnection['targetAnchor'];
+  type?: CanvasConnection['type'];
+  label?: string;
+  priority?: number;
+  extension?: CanvasConnection['extension'];
+}
+
 export interface CanvasCreateCompositeRequest {
   containerPreset?: string;
   containerType?: CanvasNodeType;
   position?: CanvasPoint;
   data?: Record<string, unknown>;
   children: readonly CanvasCompositeChildSpec[];
+  connections?: readonly CanvasCompositeConnectionSpec[];
   autoLayout?: boolean;
 }
 
 export interface CanvasCreateCompositeResult {
   containerId: string;
   childIds: string[];
+  connectionIds?: string[];
   nodes?: CanvasNode[];
 }
 

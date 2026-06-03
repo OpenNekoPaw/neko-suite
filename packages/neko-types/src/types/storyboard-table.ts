@@ -1,4 +1,5 @@
 import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
+import type { DocumentArchiveResourceRef } from './document-reading';
 import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
 
 export const STORYBOARD_TABLE_V1_SCHEMA_VERSION = 1 as const;
@@ -261,6 +262,10 @@ export interface ProjectStoryboardTableV1ToCanvasOptions {
   readonly mode?: StoryboardImportMode;
   readonly sourceScriptUri?: string;
   readonly defaultShotScale?: ShotScale;
+  readonly resolveImagePath?: (context: StoryboardMediaResolverContextV1) => string | undefined;
+  readonly resolveImageResourceRef?: (
+    context: StoryboardMediaResolverContextV1,
+  ) => DocumentArchiveResourceRef | undefined;
 }
 
 export interface StoryboardCutStoryboardShotBaseV1 {
@@ -516,10 +521,45 @@ export function projectStoryboardTableV1ToCanvasPayload(
         ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
         ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
         ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
-        ...(shot.referenceImagePath ? { referenceImagePath: shot.referenceImagePath } : {}),
+        ...resolveCanvasStoryboardReferenceImagePath(table, scene, shot, options),
         ...(shot.vfx ? { vfx: shot.vfx } : {}),
       })),
     })),
+  };
+}
+
+function resolveCanvasStoryboardReferenceImagePath(
+  table: StoryboardTableV1,
+  scene: StoryboardSceneRowV1,
+  shot: StoryboardShotRowV1,
+  options: ProjectStoryboardTableV1ToCanvasOptions,
+): {
+  readonly referenceImagePath?: string;
+  readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
+} {
+  const mediaRef = selectStoryboardShotImageRef(shot);
+  const context = mediaRef ? { table, scene, shot, mediaRef } : undefined;
+  const referenceImageResourceRef = context
+    ? options.resolveImageResourceRef?.(context)
+    : undefined;
+
+  if (shot.referenceImagePath) {
+    return {
+      referenceImagePath: shot.referenceImagePath,
+      ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
+    };
+  }
+
+  if (!mediaRef) {
+    return {};
+  }
+
+  const imagePath =
+    (context ? options.resolveImagePath?.(context) : undefined) ??
+    resolveStoryboardWorkspacePath(mediaRef);
+  return {
+    ...(imagePath ? { referenceImagePath: imagePath } : {}),
+    ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
   };
 }
 

@@ -117,6 +117,17 @@ describe('storyboardPlanner', () => {
       position: { x: 100, y: 100 },
       data: expect.objectContaining({ sceneTitle: 'INT. OFFICE - DAY' }),
       autoLayout: false,
+      connections: [
+        {
+          sourceChildIndex: 0,
+          sourceAnchor: 'right',
+          targetChildIndex: 1,
+          targetAnchor: 'left',
+          type: 'sequence',
+          label: 'next',
+          priority: 0,
+        },
+      ],
     });
     expect(request?.children).toHaveLength(2);
     expect(request?.children.every((child) => child.type === 'shot')).toBe(true);

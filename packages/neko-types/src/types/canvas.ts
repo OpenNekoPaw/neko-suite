@@ -163,9 +163,7 @@ export const CANVAS_CONNECTION_TYPES = [
 export type ConnectionType = CoreConnectionType | RegisteredConnectionType;
 
 export function isCanvasConnectionType(value: unknown): value is ConnectionType {
-  return (
-    typeof value === 'string' && CANVAS_CONNECTION_TYPES.includes(value as ConnectionType)
-  );
+  return typeof value === 'string' && CANVAS_CONNECTION_TYPES.includes(value as ConnectionType);
 }
 
 /**
@@ -463,6 +461,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     visualStyle?: string;
     /** Reference image asset path from [[REF: path]] */
     referenceImagePath?: string;
+    /** Runtime-safe document resource backing the reference image, when imported from a document. */
+    referenceImageResourceRef?: DocumentArchiveResourceRef;
     /** Visual effects cues */
     vfx?: string[];
     /** Last successful storyboard import into neko-cut timeline */

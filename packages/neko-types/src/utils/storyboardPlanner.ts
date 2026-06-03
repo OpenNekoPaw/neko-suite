@@ -10,6 +10,7 @@ import type {
   StoryShotPlan,
 } from '../types/storyboard-planner';
 import type { ShotCharacter } from '../types/canvas';
+import type { CanvasCompositeConnectionSpec } from '../types/canvas-agent-operations';
 
 const DEFAULT_START_X = 100;
 const DEFAULT_START_Y = 100;
@@ -18,6 +19,7 @@ const SCENE_GAP = 80;
 const SHOT_WIDTH = 200;
 const SHOT_GAP = 20;
 const DEFAULT_SHOT_DURATION = 3;
+const STORYBOARD_SEQUENCE_CONNECTION_LABEL = 'next';
 
 export function createStoryboardPayload(
   scriptIndex: NekoStoryScriptIndex,
@@ -112,6 +114,7 @@ export async function applyStoryboardPayloadToCanvas(
               generationPrompt: shot.generationPrompt,
               visualStyle: shot.visualStyle,
               referenceImagePath: shot.referenceImagePath,
+              referenceImageResourceRef: shot.referenceImageResourceRef,
               vfx: shot.vfx ? [...shot.vfx] : undefined,
               // Phase 6.3 — stamp plan provenance when orchestrated
               ...(options.workflowPlanId !== undefined && {
@@ -121,6 +124,7 @@ export async function applyStoryboardPayloadToCanvas(
           },
         ];
       }),
+      connections: createStoryboardSequenceConnections(scene.shotPlans.length),
       autoLayout: false,
     });
 
@@ -137,6 +141,22 @@ export async function applyStoryboardPayloadToCanvas(
     totalShots: createdScenes.reduce((total, scene) => total + scene.shotIds.length, 0),
     scenes: createdScenes,
   };
+}
+
+function createStoryboardSequenceConnections(shotCount: number): CanvasCompositeConnectionSpec[] {
+  const connections: CanvasCompositeConnectionSpec[] = [];
+  for (let index = 0; index < shotCount - 1; index++) {
+    connections.push({
+      sourceChildIndex: index,
+      sourceAnchor: 'right',
+      targetChildIndex: index + 1,
+      targetAnchor: 'left',
+      type: 'sequence',
+      label: STORYBOARD_SEQUENCE_CONNECTION_LABEL,
+      priority: index,
+    });
+  }
+  return connections;
 }
 
 function buildMechanicalShotPlans(
@@ -205,6 +225,7 @@ function normalizeShotPlan(
     generationPrompt: shotPlan.generationPrompt,
     visualStyle: shotPlan.visualStyle,
     referenceImagePath: shotPlan.referenceImagePath,
+    referenceImageResourceRef: shotPlan.referenceImageResourceRef,
     vfx: shotPlan.vfx ? [...shotPlan.vfx] : undefined,
   };
 }

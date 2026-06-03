@@ -547,6 +547,7 @@ describe('storyboard table contract', () => {
               voiceOver: 'The signal returns.',
               soundCue: 'Radio static.',
               generationPrompt: 'close-up anime frame',
+              referenceImagePath: '${WORKSPACE}/.neko/generated/image/shot-1.png',
             },
           ],
         },
