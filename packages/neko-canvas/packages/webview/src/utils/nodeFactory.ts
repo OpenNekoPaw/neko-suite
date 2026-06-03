@@ -309,6 +309,10 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             emotion: asStringArray(data.emotion),
             sceneTags: asStringArray(data.sceneTags),
             referenceNodeId: asString(data.referenceNodeId) || undefined,
+            referenceImagePath: asString(data.referenceImagePath) || undefined,
+            referenceImageResourceRef: isDocumentArchiveResourceRef(data.referenceImageResourceRef)
+              ? data.referenceImageResourceRef
+              : undefined,
             generatedImage: asString(data.generatedImage) || undefined,
             generatedVideo: asString(data.generatedVideo) || undefined,
             generationStatus:

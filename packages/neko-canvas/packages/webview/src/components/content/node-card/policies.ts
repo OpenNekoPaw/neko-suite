@@ -11,10 +11,12 @@ import {
   createSubtitle,
   createTextExcerpt,
   extractFileBasename,
+  isSafeWebviewUrl,
   readDocumentResourceEntryPath,
   readDocumentResourceRef,
   readDocumentResourceStatus,
   readPersistentAssetPath,
+  readReferenceImageResourceRef,
   readNumber,
   readRecord,
   readString,
@@ -64,11 +66,16 @@ export const mediaCardPolicy: NodeCardPolicy = {
     const title = resolveMediaTitle(node);
     const role: CanvasPreviewRole = mediaType === 'video' ? 'video-poster' : 'image';
     const documentResourceRef = readDocumentResourceRef(node);
+    const stableRuntimePath =
+      mediaType === 'image' && documentResourceRef && sourcePath && isSafeWebviewUrl(sourcePath)
+        ? sourcePath
+        : undefined;
     const source = createAssetPreviewDescriptor({
       id: `node-card:${node.id}:media`,
       role,
-      path: sourcePath,
-      stablePath: readString(data, 'thumbnailPath') ?? readPersistentAssetPath(node),
+      path: stableRuntimePath ? undefined : sourcePath,
+      stablePath:
+        stableRuntimePath ?? readString(data, 'thumbnailPath') ?? readPersistentAssetPath(node),
       mediaType,
       title,
       metadata: documentResourceRef ? { documentResourceRef } : undefined,
@@ -104,13 +111,22 @@ export const shotCardPolicy: NodeCardPolicy = {
   resolvePreviewSource: (node) => {
     const selected = findSelectedGenerationCandidate(node);
     const generatedImage = readString(node.data, 'generatedImage');
-    const sourcePath = selected?.dataUrl ?? generatedImage;
-    const variants = sourcePath
+    const referenceImagePath = readString(node.data, 'referenceImagePath');
+    const sourcePath = selected?.dataUrl ?? generatedImage ?? referenceImagePath;
+    const sourceRole: CanvasPreviewRole =
+      selected || generatedImage ? 'generation-candidate' : 'image';
+    const referenceImageResourceRef =
+      selected || generatedImage ? undefined : readReferenceImageResourceRef(node);
+    const directVariantPath =
+      sourcePath && (selected || generatedImage || isSafeWebviewUrl(sourcePath))
+        ? sourcePath
+        : undefined;
+    const variants = directVariantPath
       ? [
           {
-            id: selected?.id ?? 'generated-image',
-            role: 'generation-candidate' as const,
-            sourcePath,
+            id: selected?.id ?? (generatedImage ? 'generated-image' : 'reference-image'),
+            role: sourceRole,
+            sourcePath: directVariantPath,
             selected: true,
           },
         ]
@@ -121,8 +137,13 @@ export const shotCardPolicy: NodeCardPolicy = {
       aspectRatio: '3/2',
       source: createAssetPreviewDescriptor({
         id: `node-card:${node.id}:shot`,
-        role: 'generation-candidate',
+        role: sourceRole,
+        path: directVariantPath ? undefined : sourcePath,
+        mediaType: referenceImageResourceRef ? 'image' : undefined,
         title: resolveShotTitle(node),
+        metadata: referenceImageResourceRef
+          ? { documentResourceRef: referenceImageResourceRef }
+          : undefined,
         variants,
       }),
     };

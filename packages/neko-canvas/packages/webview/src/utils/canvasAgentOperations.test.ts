@@ -163,6 +163,45 @@ describe('canvasAgentOperations', () => {
     expect(shot?.parentId).toBe(scene?.id);
   });
 
+  it('creates requested composite child sequence connections', () => {
+    const result = createCanvasComposite(
+      { nodes: [], connections: [], generateId: ids() },
+      {
+        containerType: 'scene',
+        position: { x: 100, y: 100 },
+        children: [
+          { type: 'shot', data: { visualDescription: 'First beat' } },
+          { type: 'shot', data: { visualDescription: 'Second beat' } },
+        ],
+        connections: [
+          {
+            sourceChildIndex: 0,
+            targetChildIndex: 1,
+            type: 'sequence',
+            label: 'next',
+            priority: 0,
+          },
+        ],
+      },
+    );
+
+    expect(result.result.connectionIds).toEqual(['generated-4']);
+    expect(result.connections).toEqual([
+      expect.objectContaining({
+        id: 'generated-4',
+        sourceId: 'generated-2',
+        targetId: 'generated-3',
+        sourceAnchor: 'right',
+        targetAnchor: 'left',
+        type: 'sequence',
+        label: 'next',
+        priority: 0,
+        sourceEndpoint: { nodeId: 'generated-2', scope: 'node' },
+        targetEndpoint: { nodeId: 'generated-3', scope: 'node' },
+      }),
+    ]);
+  });
+
   it('rejects non-shot children when creating Scene composites', () => {
     expect(() =>
       createCanvasComposite(

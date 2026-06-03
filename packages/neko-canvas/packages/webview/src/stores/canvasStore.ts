@@ -1240,6 +1240,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     for (const node of addedNodes) {
       useCanvasOperationStore.getState().recordNodeAdd(node);
     }
+    const previousConnectionIds = new Set(
+      canvasData.connections.map((connection) => connection.id),
+    );
+    const addedConnections = mutation.connections.filter(
+      (connection) => !previousConnectionIds.has(connection.id),
+    );
+    for (const connection of addedConnections) {
+      useCanvasOperationStore.getState().recordConnectionAdd(connection);
+    }
 
     return mutation.result;
   },

@@ -349,6 +349,7 @@ export const zhCN = {
   'preset.shot.cameraMovement': '运镜',
   'preset.shot.cameraAngle': '角度',
   'preset.shot.duration': '时长',
+  'preset.shot.image': '图像',
   'preset.shot.generatedImage': '生成图像',
   'preset.shot.visual': '画面',
   'preset.shot.action': '动作',

@@ -350,6 +350,7 @@ export const en = {
   'preset.shot.cameraMovement': 'Move',
   'preset.shot.cameraAngle': 'Angle',
   'preset.shot.duration': 'Duration',
+  'preset.shot.image': 'Image',
   'preset.shot.generatedImage': 'Generated Image',
   'preset.shot.visual': 'Visual',
   'preset.shot.action': 'Action',

@@ -648,6 +648,8 @@ export function createCanvasComposite(
   if (!composite.changed) {
     throw new Error(composite.error ?? 'Composite creation failed');
   }
+  const childIds = children.map((child) => child.id);
+  const compositeConnections = createCompositeConnections(context, request, childIds);
 
   const layoutMode =
     containerPreset.containerPolicy === 'scene'
@@ -669,14 +671,51 @@ export function createCanvasComposite(
   return {
     result: {
       containerId,
-      childIds: children.map((child) => child.id),
+      childIds,
+      connectionIds:
+        compositeConnections.length > 0
+          ? compositeConnections.map((connection) => connection.id)
+          : undefined,
       nodes: nextNodes.filter(
         (node) => node.id === containerId || children.some((child) => child.id === node.id),
       ),
     },
     nodes: nextNodes,
-    connections: context.connections,
+    connections:
+      compositeConnections.length > 0
+        ? [...context.connections, ...compositeConnections]
+        : context.connections,
   };
+}
+
+function createCompositeConnections(
+  context: CanvasAgentOperationContext,
+  request: CanvasCreateCompositeRequest,
+  childIds: readonly string[],
+): CanvasConnection[] {
+  return (request.connections ?? []).flatMap((connection) => {
+    const sourceId = childIds[connection.sourceChildIndex];
+    const targetId = childIds[connection.targetChildIndex];
+    if (!sourceId || !targetId) {
+      return [];
+    }
+
+    return [
+      {
+        id: connection.id ?? context.generateId(),
+        sourceId,
+        sourceAnchor: connection.sourceAnchor ?? 'right',
+        targetId,
+        targetAnchor: connection.targetAnchor ?? 'left',
+        ...(connection.type ? { type: connection.type } : {}),
+        ...(connection.label ? { label: connection.label } : {}),
+        ...(connection.priority !== undefined ? { priority: connection.priority } : {}),
+        ...(connection.extension ? { extension: connection.extension } : {}),
+        sourceEndpoint: { nodeId: sourceId, scope: 'node' },
+        targetEndpoint: { nodeId: targetId, scope: 'node' },
+      },
+    ];
+  });
 }
 
 export function updateCanvasBlock(

@@ -103,8 +103,12 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
             {
               id: 'shot-generated-preview',
               kind: 'asset-preview',
-              label: 'preset.shot.generatedImage',
+              label: 'preset.shot.image',
               binding: { path: '/generatedImage', valueType: 'asset' },
+              metadata: {
+                fallbackAssetPaths: ['/referenceImagePath'],
+                fallbackResourceRefPaths: ['/referenceImageResourceRef'],
+              },
               capabilities: [
                 {
                   kind: 'preview',

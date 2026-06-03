@@ -1422,6 +1422,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'preview:resolveVariant': {
         const requestId = message.requestId as string | undefined;
+        await this.authorizeDocumentResourceRoot(webviewPanel.webview, {
+          documentResourceRef: isDocumentArchiveResourceRef(message.documentResourceRef)
+            ? message.documentResourceRef
+            : undefined,
+        });
         const assetPath = this.resolveDocumentResourceAssetPath(
           message.assetPath as string | undefined,
           message.documentResourceRef,

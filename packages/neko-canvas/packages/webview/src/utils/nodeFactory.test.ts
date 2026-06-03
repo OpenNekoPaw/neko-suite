@@ -125,6 +125,7 @@ describe('nodeFactory composable presets', () => {
       data: {
         shotNumber: 7,
         visualDescription: 'A bright doorway',
+        referenceImagePath: 'assets/reference.png',
         generatedImage: 'assets/shot-7.png',
         generationHistory: [
           {
@@ -157,6 +158,7 @@ describe('nodeFactory composable presets', () => {
       throw new Error('Expected shot node');
     }
     expect(node.data.visualDescription).toBe('A bright doorway');
+    expect(node.data.referenceImagePath).toBe('assets/reference.png');
   });
 
   it('applies the migrated scene preset with container capability and child slot content', () => {

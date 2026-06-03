@@ -16,6 +16,8 @@ import type {
 const TEXT_PREVIEW_MAX_LENGTH = 60;
 const SUBTITLE_MAX_LENGTH = 40;
 
+export { isSafeWebviewUrl };
+
 export function evaluateActionCondition(
   condition: ActionCondition | undefined,
   ctx: ActionConditionContext,
@@ -182,6 +184,13 @@ export function readDocumentResourceEntryPath(node: CanvasNode): string | undefi
 export function readDocumentResourceRef(node: CanvasNode): DocumentArchiveResourceRef | undefined {
   const data = readRecord(node.data);
   return parseDocumentArchiveResourceRef(data['documentResourceRef']);
+}
+
+export function readReferenceImageResourceRef(
+  node: CanvasNode,
+): DocumentArchiveResourceRef | undefined {
+  const data = readRecord(node.data);
+  return parseDocumentArchiveResourceRef(data['referenceImageResourceRef']);
 }
 
 export function readDocumentResourceStatus(node: CanvasNode): DocumentResourceStatus | undefined {

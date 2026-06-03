@@ -1,5 +1,10 @@
 import React from 'react';
-import { type CanvasBlock, type FieldBinding } from '@neko/shared';
+import {
+  parseDocumentArchiveResourceRef,
+  type CanvasBlock,
+  type FieldBinding,
+  type JsonPointerPath,
+} from '@neko/shared';
 import { readNodeBinding } from './fieldBinding';
 import type { BlockRendererContext, BlockRendererRegistry } from './types';
 import { PreviewSurface, isSafeWebviewUrl, type PreviewSourceDescriptor } from '../../preview';
@@ -316,7 +321,31 @@ function getAssetPreviewValue(context: BlockRendererContext): unknown {
     }
   }
 
-  return getBlockValue(context);
+  const value = getBlockValue(context);
+  if (isPresentAssetValue(value)) {
+    return value;
+  }
+
+  for (const path of getStringArrayMetadata(context.block, 'fallbackAssetPaths')) {
+    if (!isJsonPointerPath(path)) continue;
+    const { value: fallbackValue } = readNodeBinding(context.node, {
+      path,
+      valueType: 'asset',
+    });
+    if (isPresentAssetValue(fallbackValue)) {
+      return fallbackValue;
+    }
+  }
+
+  return value;
+}
+
+function isPresentAssetValue(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isJsonPointerPath(value: string): value is JsonPointerPath {
+  return value === '' || value.startsWith('/');
 }
 
 function createPreviewSource(
@@ -367,6 +396,21 @@ function resolvePreviewSourceMetadata(
 ): Record<string, unknown> | undefined {
   if (context.node.type === 'project') {
     return { projectType: context.node.data.projectType };
+  }
+
+  const fallbackResourceRefPath = getStringArrayMetadata(
+    context.block,
+    'fallbackResourceRefPaths',
+  )[0];
+  if (fallbackResourceRefPath && isJsonPointerPath(fallbackResourceRefPath)) {
+    const { value } = readNodeBinding(context.node, {
+      path: fallbackResourceRefPath,
+      valueType: 'object',
+    });
+    const documentResourceRef = parseDocumentArchiveResourceRef(value);
+    if (documentResourceRef) {
+      return { documentResourceRef };
+    }
   }
 
   return undefined;

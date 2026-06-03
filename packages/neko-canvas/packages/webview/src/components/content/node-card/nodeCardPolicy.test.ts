@@ -58,11 +58,15 @@ describe('node card policies', () => {
     expect(source).toMatchObject({
       renderForm: 'asset-thumbnail',
       source: {
-        asset: {
-          kind: 'asset-identity',
-          path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
-          mediaType: 'image',
-        },
+        asset: undefined,
+        variants: [
+          {
+            id: 'stable-source',
+            role: 'image',
+            sourcePath:
+              'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+          },
+        ],
         metadata: { documentResourceRef: expect.objectContaining({ kind: 'document-entry' }) },
       },
     });
@@ -106,6 +110,35 @@ describe('node card policies', () => {
       label: 'Cache',
       tone: 'warning',
     });
+  });
+
+  it('does not use document cache paths as preview descriptors without runtime authorization', () => {
+    const node = createMediaNode('media-doc-entry-no-runtime', {
+      assetPath: '',
+      documentResourceRef: {
+        kind: 'document-entry',
+        source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+        entryPath: 'image/page-1.jpg',
+        cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
+        versionPolicy: 'versioned-export',
+      },
+      mediaType: 'image',
+    });
+
+    const source = mediaCardPolicy.resolvePreviewSource(node);
+
+    expect(source).toMatchObject({
+      renderForm: 'asset-thumbnail',
+      source: {
+        asset: undefined,
+        variants: undefined,
+      },
+    });
+    if (source.renderForm !== 'asset-thumbnail') {
+      throw new Error('Expected asset thumbnail preview');
+    }
+    expect(JSON.stringify(source.source.asset) ?? '').not.toContain('/tmp/neko_epub_1');
+    expect(JSON.stringify(source.source.variants) ?? '').not.toContain('/tmp/neko_epub_1');
   });
 
   it('maps video media to media-poster and audio to waveform', () => {
@@ -154,6 +187,64 @@ describe('node card policies', () => {
       },
     ]);
     expect(getStableSafeVariantUrl(source.source)).toBe('data:image/png;base64,shot');
+  });
+
+  it('uses a shot reference image as the inline preview before generation', () => {
+    const node = createShotNode({
+      id: 'shot-reference',
+      data: {
+        shotNumber: 8,
+        visualDescription: 'Imported panel',
+        referenceImagePath: 'data:image/png;base64,reference',
+      },
+    });
+
+    const source = shotCardPolicy.resolvePreviewSource(node);
+
+    expect(source.renderForm).toBe('asset-thumbnail');
+    if (source.renderForm !== 'asset-thumbnail') {
+      throw new Error('expected asset preview');
+    }
+    expect(source.source.role).toBe('image');
+    expect(source.source.variants).toEqual([
+      {
+        id: 'reference-image',
+        role: 'image',
+        sourcePath: 'data:image/png;base64,reference',
+        selected: true,
+      },
+    ]);
+    expect(getStableSafeVariantUrl(source.source)).toBe('data:image/png;base64,reference');
+  });
+
+  it('resolves imported document reference images through preview metadata', () => {
+    const resourceRef = {
+      kind: 'document-entry' as const,
+      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
+      entryPath: 'OPS/page-1.jpg',
+      cachePath: '/Users/feng/Library/Application Support/Code/User/globalStorage/page-1.jpg',
+      versionPolicy: 'read-only-source' as const,
+    };
+    const node = createShotNode({
+      id: 'shot-document-reference',
+      data: {
+        shotNumber: 9,
+        visualDescription: 'Imported document panel',
+        referenceImagePath: resourceRef.cachePath,
+        referenceImageResourceRef: resourceRef,
+      },
+    });
+
+    const source = shotCardPolicy.resolvePreviewSource(node);
+
+    expect(source.renderForm).toBe('asset-thumbnail');
+    if (source.renderForm !== 'asset-thumbnail') {
+      throw new Error('expected asset preview');
+    }
+    expect(source.source.role).toBe('image');
+    expect(source.source.asset?.path).toBe(resourceRef.cachePath);
+    expect(source.source.metadata).toEqual({ documentResourceRef: resourceRef });
+    expect(source.source.variants).toBeUndefined();
   });
 
   it('builds text card previews from bounded excerpts', () => {

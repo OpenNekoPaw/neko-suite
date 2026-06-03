@@ -184,6 +184,34 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('Legacy path');
   });
 
+  it('renders migrated shot preview from a reference image before generation', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 4,
+          visualDescription: 'Imported comic panel',
+          referenceImagePath: 'data:image/png;base64,reference',
+        },
+      }),
+      id: 'shot-reference',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderLegacy: () => React.createElement('div', null, 'Legacy path'),
+      }),
+    );
+
+    expect(markup).toContain('data:image/png;base64,reference');
+    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).not.toContain('Legacy path');
+  });
+
   it('keeps composable node content visible when the node is not selected', () => {
     const node = {
       ...buildCanvasNode({
