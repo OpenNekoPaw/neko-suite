@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest';
+import type { ContentBlock } from '@neko-agent/types';
+import { projectContentBlocksUi } from '../content-block-presenter';
+
+describe('content block presenter', () => {
+  it('aggregates consecutive successful tool calls with the same tool and target', () => {
+    const projections = projectContentBlocksUi([
+      toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+      toolBlock('tool-2', 'ReadDocument', '/books/a.epub', 14),
+      toolBlock('tool-3', 'ReadDocument', '/books/a.epub', 18),
+    ]);
+
+    expect(projections).toHaveLength(1);
+    expect(projections[0]).toMatchObject({
+      renderKind: 'toolGroup',
+      toolName: 'ReadDocument',
+      count: 3,
+      successCount: 3,
+      failureCount: 0,
+      pendingCount: 0,
+      targetLabel: '/books/a.epub',
+      durationLabel: '10-18ms',
+    });
+  });
+
+  it('keeps different targets and failures as individual tool rows', () => {
+    const projections = projectContentBlocksUi([
+      toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+      toolBlock('tool-2', 'ReadDocument', '/books/b.epub', 12),
+      toolBlock('tool-3', 'ReadDocument', '/books/b.epub', 14, false),
+    ]);
+
+    expect(projections.map((projection) => projection.renderKind)).toEqual([
+      'tool',
+      'tool',
+      'tool',
+    ]);
+  });
+
+  it('keeps image analysis tools visible as individual rows', () => {
+    const projections = projectContentBlocksUi([
+      toolBlock('tool-1', 'ReadImage', '/tmp/page-1.jpg', 10),
+      toolBlock('tool-2', 'ReadImage', '/tmp/page-1.jpg', 12),
+    ]);
+
+    expect(projections.map((projection) => projection.renderKind)).toEqual(['tool', 'tool']);
+  });
+});
+
+function toolBlock(
+  id: string,
+  name: string,
+  filePath: string,
+  duration: number,
+  success = true,
+): ContentBlock {
+  return {
+    id: `block-${id}`,
+    type: 'tool_call',
+    timestamp: duration,
+    toolCall: {
+      id,
+      name,
+      arguments: { file_path: filePath },
+      result: {
+        success,
+        data: { file_path: filePath },
+        duration,
+      },
+    },
+  };
+}

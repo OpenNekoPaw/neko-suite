@@ -1,16 +1,22 @@
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message } from '@/components/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { MessageList } from './MessageList';
+import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
+import { I18nProvider } from '@/i18n/I18nContext';
+import { chat as enChat } from '@/i18n/locales/en/chat';
+import { chat as zhCnChat } from '@/i18n/locales/zh-cn/chat';
+import { I18nService } from '@neko/shared';
 
 const scrollToMock = vi.fn();
 const requestAnimationFrameMock = vi.fn<(callback: FrameRequestCallback) => number>();
 const cancelAnimationFrameMock = vi.fn<(handle: number) => void>();
+let virtualItems: Array<{ index: number; key: string; start: number }> = [];
 
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: () => ({
-    getVirtualItems: () => [],
+    getVirtualItems: () => virtualItems,
     getTotalSize: () => 120,
     getOffsetForIndex: () => [120, 'end'] as const,
     measureElement: vi.fn(),
@@ -22,6 +28,7 @@ describe('MessageList auto-scroll lifecycle', () => {
     scrollToMock.mockClear();
     requestAnimationFrameMock.mockClear();
     cancelAnimationFrameMock.mockClear();
+    virtualItems = [];
 
     requestAnimationFrameMock.mockReturnValue(1);
     Object.defineProperty(window, 'requestAnimationFrame', {
@@ -61,7 +68,50 @@ describe('MessageList auto-scroll lifecycle', () => {
     expect(cancelAnimationFrameMock).toHaveBeenCalledWith(1);
     expect(scrollToMock).not.toHaveBeenCalled();
   });
+
+  it('renders repeated tool blocks as a collapsed group in the virtualized list', () => {
+    virtualItems = [{ index: 0, key: 'tool-group', start: 0 }];
+
+    render(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createToolMessage()]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+        />
+      </MessageActionsProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: /ReadDocument x3/ })).toBeTruthy();
+    expect(screen.getByText('/books/a.epub')).toBeTruthy();
+  });
+
+  it('passes plugin availability into composite block projections for Canvas transfer actions', () => {
+    virtualItems = [{ index: 0, key: 'storyboard', start: 0 }];
+    registerDefaultRenderers();
+
+    renderWithI18n(
+      <MessageActionsProvider pluginsAvailable={{ canvas: true, cut: false, sketch: false }}>
+        <MessageList
+          messages={[createCompositeStoryboardMessage()]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+        />
+      </MessageActionsProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+  });
 });
+
+function renderWithI18n(node: React.ReactElement) {
+  const service = new I18nService('en');
+  service.registerBundle('chat', 'en', enChat);
+  service.registerBundle('chat', 'zh-cn', zhCnChat);
+  return render(<I18nProvider service={service}>{node}</I18nProvider>);
+}
 
 function createMessage(id: string): Message {
   return {
@@ -69,5 +119,83 @@ function createMessage(id: string): Message {
     role: 'assistant',
     content: 'Hello',
     timestamp: 1_717_200_000_000,
+  };
+}
+
+function createToolMessage(): Message {
+  return {
+    id: 'message-tools',
+    role: 'assistant',
+    content: '',
+    timestamp: 1_717_200_000_000,
+    contentBlocks: [
+      toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+      toolBlock('tool-2', 'ReadDocument', '/books/a.epub', 14),
+      toolBlock('tool-3', 'ReadDocument', '/books/a.epub', 18),
+    ],
+  };
+}
+
+function createCompositeStoryboardMessage(): Message {
+  return {
+    id: 'message-storyboard',
+    role: 'assistant',
+    content: '',
+    timestamp: 1_717_200_000_000,
+    contentBlocks: [
+      {
+        id: 'block-composite',
+        type: 'composite',
+        timestamp: 1_717_200_000_000,
+        composite: {
+          template: 'storyboard-table',
+          title: 'Storyboard',
+          storyboardTable: {
+            schemaVersion: 1,
+            kind: 'storyboard-table',
+            title: 'Storyboard',
+            scenes: [
+              {
+                sceneId: 'scene-1',
+                sceneTitle: 'Scene 1',
+                shots: [
+                  {
+                    shotNumber: 1,
+                    duration: 2,
+                    visualDescription: 'Title page.',
+                    characterAction: 'Static title card.',
+                    imageStrategy: 'generate-new',
+                  },
+                ],
+              },
+            ],
+          },
+          sections: [
+            {
+              heading: 'Scene 1 / Shot 1',
+              content: 'Title page.',
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+function toolBlock(id: string, name: string, filePath: string, duration: number) {
+  return {
+    id: `block-${id}`,
+    type: 'tool_call' as const,
+    timestamp: duration,
+    toolCall: {
+      id,
+      name,
+      arguments: { file_path: filePath },
+      result: {
+        success: true,
+        data: { file_path: filePath },
+        duration,
+      },
+    },
   };
 }

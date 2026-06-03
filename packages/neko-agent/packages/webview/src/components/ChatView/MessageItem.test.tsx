@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Message } from '@/components/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
@@ -12,6 +12,12 @@ vi.mock('@neko/shared/vscode', () => ({
     setState: vi.fn(),
   }),
   postMessage: vi.fn(),
+}));
+
+vi.mock('@/i18n/I18nContext', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
 }));
 
 describe('MessageItem identity rendering', () => {
@@ -54,6 +60,35 @@ describe('MessageItem identity rendering', () => {
   });
 });
 
+describe('MessageItem tool aggregation', () => {
+  it('renders consecutive repeated tool calls as a collapsed group', () => {
+    renderMessageItem({
+      message: createMessage({
+        role: 'assistant',
+        content: '',
+        contentBlocks: [
+          toolBlock('tool-1', 'ReadDocument', '/books/a.epub', 10),
+          toolBlock('tool-2', 'ReadDocument', '/books/a.epub', 14),
+          toolBlock('tool-3', 'ReadDocument', '/books/a.epub', 18),
+        ],
+      }),
+      identities: {
+        user: { displayName: 'You', avatarLabel: 'You', title: 'You' },
+        assistant: { displayName: 'Assistant', avatarLabel: 'AI', title: 'Assistant' },
+      },
+    });
+
+    expect(screen.getByRole('button', { name: /ReadDocument x3/ })).toBeTruthy();
+    expect(screen.getByText('/books/a.epub')).toBeTruthy();
+    expect(screen.getByText('3 succeeded')).toBeTruthy();
+    expect(screen.queryAllByText('ReadDocument')).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /ReadDocument x3/ }));
+
+    expect(screen.getAllByText('ReadDocument')).toHaveLength(3);
+  });
+});
+
 function renderMessageItem(input: { message: Message; identities: MessageIdentityMap }) {
   render(
     <MessageActionsProvider>
@@ -62,11 +97,32 @@ function renderMessageItem(input: { message: Message; identities: MessageIdentit
   );
 }
 
-function createMessage(overrides: Pick<Message, 'role' | 'content'>): Message {
+function createMessage(
+  overrides: Pick<Message, 'role' | 'content'> & Partial<Pick<Message, 'contentBlocks'>>,
+): Message {
   return {
     id: `${overrides.role}-message-1`,
     role: overrides.role,
     content: overrides.content,
     timestamp: 1_717_200_000_000,
+    ...(overrides.contentBlocks ? { contentBlocks: overrides.contentBlocks } : {}),
+  };
+}
+
+function toolBlock(id: string, name: string, filePath: string, duration: number) {
+  return {
+    id: `block-${id}`,
+    type: 'tool_call' as const,
+    timestamp: duration,
+    toolCall: {
+      id,
+      name,
+      arguments: { file_path: filePath },
+      result: {
+        success: true,
+        data: { file_path: filePath },
+        duration,
+      },
+    },
   };
 }

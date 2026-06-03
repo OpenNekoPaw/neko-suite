@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { Message } from '@/components/types';
-import { ToolCallDisplay } from '@/components/ChatView/ToolCallDisplay';
+import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
@@ -163,6 +163,17 @@ function ContentBlockRenderer({
         <div className="w-full">
           <ToolCallDisplay
             toolCall={projection.toolCall}
+            conversationId={conversationId}
+            workItemIds={workItemIds}
+          />
+        </div>
+      );
+
+    case 'toolGroup':
+      return (
+        <div className="w-full">
+          <ToolCallGroupDisplay
+            projection={projection}
             conversationId={conversationId}
             workItemIds={workItemIds}
           />

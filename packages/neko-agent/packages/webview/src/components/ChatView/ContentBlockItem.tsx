@@ -7,7 +7,7 @@
 
 import { memo } from 'react';
 import type { ContentBlock } from '@/components/types';
-import { ToolCallDisplay } from '@/components/ChatView/ToolCallDisplay';
+import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
@@ -27,7 +27,9 @@ import type { MessageSpeakerIdentity } from '@/components/ChatView/message-ident
 
 interface ContentBlockItemProps {
   /** The content block to render */
-  block: ContentBlock;
+  block?: ContentBlock;
+  /** Projected content block display model, used by message-level aggregation. */
+  projection?: ContentBlockUiProjection;
   /** Whether this is the first block in the message */
   isFirst: boolean;
   /** Whether this is the last block in the message */
@@ -63,6 +65,7 @@ const blockHeaderToneClassByTone: Record<ContentBlockHeaderTone, string> = {
 
 export const ContentBlockItem = memo(function ContentBlockItem({
   block,
+  projection: projectedBlock,
   isFirst,
   isStreaming,
   conversationId,
@@ -71,11 +74,17 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   assistantIdentity,
 }: ContentBlockItemProps) {
   const actions = useMessageActions();
-  const projection = projectContentBlockUi({
-    block,
-    siblingBlocks,
-    parentIsStreaming: isStreaming,
-  });
+  const projection =
+    projectedBlock ??
+    (block
+      ? projectContentBlockUi({
+          block,
+          siblingBlocks,
+          parentIsStreaming: isStreaming,
+        })
+      : null);
+
+  if (!projection) return null;
 
   return (
     <div className="agent-message-row group">
@@ -189,6 +198,17 @@ function renderBlockContent(
         </div>
       );
 
+    case 'toolGroup':
+      return (
+        <div className="w-full">
+          <ToolCallGroupDisplay
+            projection={projection}
+            conversationId={conversationId}
+            workItemIds={workItemIds}
+          />
+        </div>
+      );
+
     case 'diff':
       return (
         <div className="w-full">
@@ -200,39 +220,43 @@ function renderBlockContent(
         </div>
       );
 
-    case 'plan':
+    case 'plan': {
+      const {
+        onApprovePlanStep,
+        onRejectPlanStep,
+        onModifyPlanStep,
+        onApproveAllPlanSteps,
+        onRejectAllPlanSteps,
+      } = callbacks;
       return (
         <div className="w-full">
           <PlanReview
             plan={projection.plan}
             onApproveStep={
-              callbacks.onApprovePlanStep
-                ? (stepId) => callbacks.onApprovePlanStep!(projection.plan.id, stepId)
+              onApprovePlanStep
+                ? (stepId) => onApprovePlanStep(projection.plan.id, stepId)
                 : undefined
             }
             onRejectStep={
-              callbacks.onRejectPlanStep
-                ? (stepId) => callbacks.onRejectPlanStep!(projection.plan.id, stepId)
+              onRejectPlanStep
+                ? (stepId) => onRejectPlanStep(projection.plan.id, stepId)
                 : undefined
             }
             onModifyStep={
-              callbacks.onModifyPlanStep
-                ? (stepId, desc) => callbacks.onModifyPlanStep!(projection.plan.id, stepId, desc)
+              onModifyPlanStep
+                ? (stepId, desc) => onModifyPlanStep(projection.plan.id, stepId, desc)
                 : undefined
             }
             onApproveAll={
-              callbacks.onApproveAllPlanSteps
-                ? () => callbacks.onApproveAllPlanSteps!(projection.plan.id)
-                : undefined
+              onApproveAllPlanSteps ? () => onApproveAllPlanSteps(projection.plan.id) : undefined
             }
             onRejectAll={
-              callbacks.onRejectAllPlanSteps
-                ? () => callbacks.onRejectAllPlanSteps!(projection.plan.id)
-                : undefined
+              onRejectAllPlanSteps ? () => onRejectAllPlanSteps(projection.plan.id) : undefined
             }
           />
         </div>
       );
+    }
 
     case 'composite':
       return (

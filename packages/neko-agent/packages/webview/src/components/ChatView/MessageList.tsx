@@ -15,6 +15,7 @@ import {
   DEFAULT_MESSAGE_IDENTITIES,
   type MessageIdentityMap,
 } from '@/components/ChatView/message-identity';
+import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import {
   estimateMessageListItemHeight,
   projectMessageList,
@@ -35,14 +36,16 @@ export function MessageList({
   activeConversationId,
   identities = DEFAULT_MESSAGE_IDENTITIES,
 }: MessageListProps) {
+  const { pluginsAvailable } = useMessageActions();
   const parentRef = useRef<HTMLDivElement>(null);
   const prevItemCountRef = useRef(0);
   const autoScrollRafRef = useRef<number | null>(null);
   const autoScrollWindowRef = useRef<Window | null>(null);
 
   const projection = useMemo(
-    () => projectMessageList({ messages, isThinking, streamingMessageId }),
-    [messages, isThinking, streamingMessageId],
+    () =>
+      projectMessageList({ messages, isThinking, streamingMessageId, plugins: pluginsAvailable }),
+    [messages, isThinking, streamingMessageId, pluginsAvailable],
   );
 
   const flattenedItems = projection.items;
@@ -147,7 +150,7 @@ export function MessageList({
                   <ThinkingIndicator identity={identities.assistant} />
                 ) : item.kind === 'content_block' ? (
                   <ContentBlockItem
-                    block={item.block}
+                    projection={item.projection}
                     isFirst={item.isFirst}
                     isLast={item.isLast}
                     isStreaming={item.isStreaming}

@@ -1,4 +1,9 @@
 import type { ContentBlock, Message } from '@/components/types';
+import {
+  projectContentBlocksUi,
+  type ContentBlockUiProjection,
+} from '@/presenters/content-block-presenter';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type MessageListItemKind = 'message' | 'content_block' | 'thinking_indicator';
 
@@ -19,7 +24,7 @@ export interface MessageListContentBlockItemProjection {
   kind: 'content_block';
   messageId: string;
   workItemIds?: string[];
-  block: ContentBlock;
+  projection: ContentBlockUiProjection;
   siblingBlocks: ContentBlock[];
   isFirst: boolean;
   isLast: boolean;
@@ -38,6 +43,7 @@ export interface MessageListProjectionInput {
   messages: readonly Message[];
   isThinking: boolean;
   streamingMessageId: string | null;
+  plugins?: PluginsAvailable;
 }
 
 export interface MessageListProjection {
@@ -53,7 +59,9 @@ export const MESSAGE_LIST_THINKING_INDICATOR_HEIGHT = 50;
 
 export function projectMessageList(input: MessageListProjectionInput): MessageListProjection {
   const showThinkingIndicator = input.isThinking && !input.streamingMessageId;
-  const items = projectMessageListItems(input.messages, showThinkingIndicator);
+  const items = projectMessageListItems(input.messages, showThinkingIndicator, {
+    plugins: input.plugins,
+  });
 
   return {
     items,
@@ -66,6 +74,7 @@ export function projectMessageList(input: MessageListProjectionInput): MessageLi
 export function projectMessageListItems(
   messages: readonly Message[],
   showThinkingIndicator: boolean,
+  options: Pick<MessageListProjectionInput, 'plugins'> = {},
 ): MessageListProjectionItem[] {
   const items: MessageListProjectionItem[] = [];
   let prevRole: Message['role'] | null = null;
@@ -76,18 +85,27 @@ export function projectMessageListItems(
     const isGrouped = prevRole === message.role && timeDiff < 2 * 60 * 1000;
 
     if (message.role === 'assistant' && message.contentBlocks && message.contentBlocks.length > 0) {
-      message.contentBlocks.forEach((block, blockIndex) => {
+      const contentBlockProjections = projectContentBlocksUi(
+        message.contentBlocks,
+        message.isStreaming ?? false,
+        undefined,
+        message.contentBlocks,
+        message.toolCalls,
+        options.plugins,
+      );
+
+      contentBlockProjections.forEach((projection, blockIndex) => {
         items.push({
           kind: 'content_block',
           messageId: message.id,
           workItemIds: message.workItemIds,
-          block,
+          projection,
           siblingBlocks: message.contentBlocks ?? [],
           isFirst: blockIndex === 0,
-          isLast: blockIndex === message.contentBlocks!.length - 1,
+          isLast: blockIndex === contentBlockProjections.length - 1,
           isStreaming: message.isStreaming ?? false,
           ownerMessageId: message.id,
-          estimatedHeight: estimateContentBlockHeight(block),
+          estimatedHeight: estimateContentBlockProjectionHeight(projection),
         });
       });
     } else {
@@ -127,6 +145,13 @@ export function estimateMessageListItemHeight(item: MessageListProjectionItem | 
   return item?.estimatedHeight ?? MESSAGE_LIST_ESTIMATED_MESSAGE_HEIGHT;
 }
 
+function estimateContentBlockProjectionHeight(projection: ContentBlockUiProjection): number {
+  if (projection.renderKind === 'toolGroup') {
+    return 72;
+  }
+  return estimateContentBlockHeight(projection.block);
+}
+
 function estimateContentBlockHeight(block: ContentBlock): number {
   switch (block.type) {
     case 'thinking':
@@ -161,7 +186,8 @@ function estimateMessageHeight(message: Message): number {
 
 function findLastIndex<T>(items: readonly T[], predicate: (item: T) => boolean): number {
   for (let index = items.length - 1; index >= 0; index -= 1) {
-    if (predicate(items[index]!)) return index;
+    const item = items[index];
+    if (item !== undefined && predicate(item)) return index;
   }
   return -1;
 }
