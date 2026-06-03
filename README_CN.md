@@ -1,29 +1,144 @@
 # Neko Suite
 
-> AIGC IDE + AIGC Agent — Agent 驱动的多模态创作工作站，深度集成于 VS Code
+> AIGC 内容创作 IDE + AIGC 内容创作 Agent + AIGC 互动引擎，深度集成于 VS Code
 
 [English](./README.md) | [猫娘版](./README_NYA.md)
 
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
-[![License](https://img.shields.io/badge/License-MIT-blue)]()
+[![License](https://img.shields.io/badge/License-Mixed-blue)]()
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-blue)]()
 
-**Neko Suite** 是一款 AIGC 原生的创作 IDE，深度集成于 VS Code。它以 **AIGC Agent** 为核心驱动，通过自然语言打通剧本、视频、3D、2D、音频的全多模态创作闭环；**Skill** 负责编排可复用的工作流；**统一素材库** 为所有创作界面供料;**Rust Sidecar 引擎** 保证编辑器全程流畅。
+**Neko Suite** 的目标不是把聊天机器人塞进编辑器，而是做一个 AIGC 原生的内容创作 IDE、内容创作 Agent 和互动引擎：IDE 提供剧本、画布、时间线、3D、2D、音频和素材等专业创作面板；Agent 理解意图、规划任务、激活 Skill、调用工具、生成资产、检查结果并推动下一轮迭代；Rust 引擎负责实时预览、媒体处理、3D/2D 运行时、流媒体与互动控制。
 
-📋 **[查看开发路线图 →](./ROADMAP.md)**
+当前仓库是 Alpha 阶段 monorepo，实际包含 **23 个顶层 workspace 包**。最成熟的方向是内容创作 Agent 运行时、Rust 媒体引擎、视频剪辑、Story/Canvas 语义工作流、预览/流媒体客户端和共享契约层。主要待推进的是跨包产品化：统一项目图谱、统一 Agent 能力注册、统一互动运行时，以及端到端 smoke 验证。
+
+📋 **[查看开发路线图 →](./ROADMAP_CN.md)**
 
 ---
 
-## 特性亮点
+## 目标定位
 
-- **AIGC Agent 为核心** - 自然语言驱动跨视频/3D/2D/音频/剧本的多模态创作；多 LLM（Claude / OpenAI / Google）+ MCP 协议 + 多模态感知 + 富内容投递
-- **Skill 编排工作流** - 可组合的 Skill 绑定提示词、工具集、权限与上下文预算;分级延迟加载将基线控制在 ~8K tokens,按需增长
-- **多模态创作面板** - 剧本（Fountain LSP）→ 无限画布分镜 → 时间线剪辑 → 3D 建模 / 2D 手绘 / 2D 骨骼动画 → 音频工作站
-- **统一素材库** - 跨模块的素材注册表，缩略图 + 持久化搜索索引 + 外部媒体库挂载 + 路径变量解析（`${VAR}/path`）
-- **资产市场** - Skills/着色器/模型/预设的搜索、安装、版本管理;支持本地模型部署（ONNX / GGUF）+ 上游代理（HF / Civitai）
-- **Rust GPU 引擎** - wgpu PBR + IBL + 后处理 + 粒子（20+ WGSL shader）+ 3D 场景 & 2D 骨骼 ECS + ONNX ML 推理,4K 实时预览
-- **Git 原生支持** - `.nkv` / `.nkc` / `.nka` / `.nkm` / `.nks` 项目文件为文本格式，支持版本控制与协作
-- **模块化架构** - 19 个包按需组合，独立升级
+### 1. AIGC 内容创作 IDE
+
+创作路径不是线性流水线，而是 Agent 驱动的闭环：
+
+```text
+用户意图
+  -> 剧本/场景规划
+  -> Canvas 分镜与引用整理
+  -> 素材/角色/实体接地
+  -> 图像/视频/音频/模型生成
+  -> 时间线/音频/3D/2D 编辑
+  -> 预览/导出
+  -> 感知反馈与质量审查
+  -> 下一轮意图
+```
+
+### 2. AIGC 内容创作 Agent
+
+Agent 是创作执行者。它把用户意图转成计划，激活 Skill，发现各包能力，通过 MCP/native bridge 调用工具，投递富媒体结果，并用真实项目状态重新接地。
+
+```text
+用户意图
+  -> 上下文、记忆、选中素材、AGENTS.md overlay
+  -> Skill 激活与权限守卫
+  -> capability discovery 与工具规划
+  -> Draft / Plan / Apply 执行
+  -> 富内容投递与任务跟踪
+  -> 感知反馈、评估器和下一轮对话
+```
+
+### 3. AIGC 互动引擎
+
+互动引擎把创作资产变成可预览、可流式传输、可被 Agent 观察和控制的运行时状态：
+
+```text
+项目资产
+  -> engine scene / puppet / audio / media runtimes
+  -> H.264 + PCM + fMP4/WebSocket 流
+  -> model / puppet / live / preview 互动界面
+  -> Agent 反馈与实时控制
+```
+
+---
+
+## 当前总体进度
+
+更新时间：**2026-06-03**。下方百分比是“距离目标定位的定性进度估计”，不是发布承诺；依据包括包规模、测试、README/ARCHITECTURE、VS Code 入口、Webview 面板、Rust runtime 和跨包集成成熟度。
+
+| 维度       | 当前判断                                                                                                       |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| IDE 基础   | 较强。Story -> Agent -> Canvas -> Cut 已有真实契约和界面，但完整主路径还需要 smoke 验证。                      |
+| 创作 Agent | 先进。多 LLM、MCP、Skills、权限、上下文、富内容、角色工作流、capability bootstrap 已实现。                     |
+| 互动引擎   | Rust 基础较强。Scene、Puppet、Audio、Codec、GPU、Media、ML、Device runtime 已存在；Live/互动编排仍偏早期。     |
+| 项目图谱   | 正在形成。`neko-entity`、`neko-search`、`neko-assets`、Dashboard 正在把角色/资产/任务/搜索收敛到共享项目语义。 |
+| 产品成熟度 | Alpha。许多包可以构建和单测，但统一发行、端到端 smoke、性能基线、UX 打磨仍是最大缺口。                         |
+
+---
+
+## 子包进度分析
+
+### 基础平台与契约层
+
+| 包                                    | 目标职责                      | 进度 | 已具备                                                                                                                                 | 下一步                                              |
+| ------------------------------------- | ----------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **neko-engine**                       | Rust 媒体与互动运行时权威来源 | 88%  | 357 个 Rust 文件；engine GPU/codec/audio/kernel/types；host HTTP/NAPI/CLI；scene/puppet/device/media/ML runtimes；VS Code sidecar 管理 | 运行时编排、性能基线、Live/设备稳定性、发布级 smoke |
+| **neko-types** (`@neko/shared`)       | L0 共享契约与横切基础设施     | 84%  | 374 个 TS/TSX 文件；Logger/i18n/Theme/Errors；timeline/canvas/audio/sketch/agent 类型；EditOperation；Proto 生成类型                   | 继续收敛 legacy surface，守住 L0/L1/L2 边界         |
+| **neko-client** (`@neko/neko-client`) | EngineClient 与流媒体客户端   | 76%  | HTTP dispatch、H.264/PCM/fMP4 streaming client、MediaPlaybackService、单测                                                             | 补齐跨 runtime 的取消、重试、错误传播与 smoke       |
+| **neko-proto** (`@neko/proto`)        | Protobuf IDL 单一事实来源     | 78%  | timeline/diff IDL 与生成链路                                                                                                           | 扩展互动引擎、实体图谱、实时 session 的契约         |
+| **neko-auth**                         | Provider/扩展统一认证         | 60%  | core + extension；OAuth 2.0、PKCE、SecretStorage/文件存储                                                                              | Provider onboarding、市场信任边界和账号 UX          |
+| **neko-suite**                        | Extension Pack 门户           | 55%  | 主创作扩展包的 extensionPack 声明                                                                                                      | 更新 dashboard/entity/search/ui 等支撑包的打包策略  |
+
+### 内容创作 Agent、IDE 编排与项目接地
+
+| 包                               | 目标职责                    | 进度 | 已具备                                                                                                                                   | 下一步                                              |
+| -------------------------------- | --------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **neko-agent**                   | AIGC 内容创作 Agent runtime | 87%  | 1,265 个 TS/TSX 文件；392 个测试；多 LLM platform；MCP；Skills；context/memory；permission；CLI；VS Code Webview；富媒体卡片；角色工作流 | 所有创作包的 capability contract 与端到端验证       |
+| **neko-dashboard**               | 项目控制台、任务/实体总览   | 66%  | Extension + Webview；启动/显示命令；任务聚合；创意实体 source 聚合；测试                                                                 | 工作流 launcher、跨包实时状态、Live/Agent 任务接入  |
+| **neko-entity** (`@neko/entity`) | 创意实体运行时与投影        | 58%  | entity/candidate/fact store；asset ref；Dashboard source；NPC profile assembler；边界测试                                                | 被各创作界面采用，并迁移到统一项目图谱              |
+| **neko-search** (`@neko/search`) | 项目搜索与索引编排          | 56%  | ProjectIndexCoordinator、provider registry、VS Code adapters、global search、测试                                                        | 首屏 UI、更多 package provider、缓存/增量策略产品化 |
+| **neko-ui** (`@neko/ui`)         | 共享 Webview UI 与创作控件  | 55%  | primitives、viewport shell、creative controls、keyboard/focus、workbench shell、36 个测试                                                | 逐步替换各包本地重复 UI，同时保持领域逻辑归属       |
+
+### AIGC 内容创作 IDE 面板
+
+| 包               | 目标职责                             | 进度 | 已具备                                                                                                            | 下一步                                                                  |
+| ---------------- | ------------------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **neko-story**   | 文本驱动制片入口                     | 78%  | Fountain parser/types/webview/extension；SceneIndex；准备度表；story -> agent -> canvas 命令                      | flow-F 从剧本到生成时间线的完整 smoke                                   |
+| **neko-canvas**  | 无限画布、分镜和视觉编排             | 80%  | 197 个 TS/TSX 文件；45 个测试；13+ 节点；storyboard import；GenerationPromptPanel；batch generation；inline media | 大画布性能、entity/search 接地、候选审阅到时间线闭环                    |
+| **neko-cut**     | 视频时间线与最终装配                 | 82%  | 309 个 TS/TSX 文件；时间线、EditOperation、预览/导出服务、命令、测试                                              | AI 分镜导入、QC、导出的一体化 smoke                                     |
+| **neko-preview** | 引擎优先的媒体/文档预览              | 76%  | Video/Audio/Panoramic/Document provider；WebCodecs 播放；波形和 stream clients                                    | 统一 file-access、跨 surface handoff、预览状态共享                      |
+| **neko-assets**  | 统一素材注册表与媒体库               | 72%  | asset core；registry/entity/variant/file service；ImportDispatcher；媒体库搜索；角色资产导出                      | 与 `neko-entity`、generated asset provenance、market install state 收敛 |
+| **neko-market**  | Skill/模型/着色器/预设/Provider 市场 | 70%  | core + extension + webview；install target contributions；安装校验路径                                            | 签名/信任、依赖解析、Provider/模型 onboarding                           |
+| **neko-tools**   | 跨媒体检查、Diff 与 QC 工具          | 68%  | Diff UI、媒体信息、设备视图、JVI/媒体工具、测试                                                                   | Engine-first 二进制访问、与 Agent QC 工作流联动                         |
+
+### AIGC 互动引擎与实时创作模块
+
+| 包              | 目标职责             | 进度 | 已具备                                                                                              | 下一步                                                      |
+| --------------- | -------------------- | ---- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **neko-model**  | 3D 创作与场景编辑    | 66%  | Engine-streamed viewport；glTF/GLB/VRM/.nkm editor；LookDev；灯光/环境；Inspector；typed scene docs | 更完整的建模/动画工作流、Agent 工具、互动 runtime 控制      |
+| **neko-sketch** | 2D 绘画与逐帧动画    | 62%  | 190 个 TS/TSX 文件；WebGL2 绘画引擎；笔刷/图层/选区/滤镜/粒子/逐帧时间线/i18n                       | 共享 UI 迁移、资产/实体接地、生产级导出                     |
+| **neko-puppet** | 2D 骨骼角色动画      | 74%  | `.nkp`/MOC3 custom editor；EngineClient UI；Live2D 兼容；Native Puppet 路径；测试                   | 表情/动作市场、创作 UX、Live runtime 控制                   |
+| **neko-audio**  | 音频工作站与声音创作 | 64%  | `.nka` editor；DAW UI；波形、Mixer、效果、录音、导出面板；EngineClient service                      | engine mix/export smoke、Agent audio tools、Live monitoring |
+| **neko-live**   | 虚拟制片与实时互动   | 45%  | Extension + Webview；LiveSession/Device/Tracking service；fallback preview/recording；测试          | 最早期主界面：需要 compositor、设备授权 UX、实时可靠性      |
+
+---
+
+## 集成优先级
+
+1. **统一能力注册**
+   每个创作包通过稳定 `AgentCapabilityProvider` 声明工具能力，让 Agent 动态发现，而不是硬编码包行为。
+
+2. **统一项目图谱**
+   `neko-entity`、`neko-assets`、`neko-search`、generated assets、角色事实和 Dashboard 需要收敛成一个可移植的项目语义图。
+
+3. **统一互动运行时**
+   `neko-engine`、`neko-client`、`neko-model`、`neko-puppet`、`neko-audio`、`neko-live`、`neko-preview` 需要共享 session、stream、file-access 和 authority 契约。
+
+4. **端到端 smoke**
+   发布门禁应覆盖 Story -> Agent -> Canvas -> 生成 -> Cut -> Preview/Export，以及 Character/Entity -> Model/Puppet -> Live/Agent feedback。
+
+5. **共享 UI 迁移**
+   `@neko/ui` 逐步替换重复控件，但领域状态、媒体 authority 和业务逻辑仍留在各功能包。
 
 ---
 
@@ -38,8 +153,18 @@ pnpm install
 ### 构建
 
 ```bash
-./build.sh            # 构建 neko-cut（默认）
-./build.sh --all      # 构建全部扩展
+pnpm build
+```
+
+常用定向构建：
+
+```bash
+pnpm build:neko-engine
+pnpm build:neko-agent
+pnpm build:neko-cut
+pnpm build:pack-video
+pnpm build:pack-2d
+pnpm build:pack-audio
 ```
 
 ### 开发模式
@@ -50,308 +175,124 @@ pnpm run dev
 
 ---
 
-## 模块架构
-
-Neko Suite 采用 **Monorepo（pnpm workspace + turbo）** 模式，包含 19 个包：
-
-### 核心三角（开发重心）
-
-| 模块            | 职能                                                                                              | 状态      | 规模                                                           |
-| --------------- | ------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------- |
-| **neko-engine** | Rust GPU 媒体引擎 - wgpu PBR 渲染 + 编解码 + DSP 效果 + 导出 + 3D 场景/2D 骨骼 ECS + ONNX ML 推理 | Alpha 99% | ~108K Rust (293 files, 980 tests) + 4.6K TS (22 files)         |
-| **neko-cut**    | 视频剪辑器 - 时间线 + 预览 + 色彩校正 + 特效 + 56 EditOperation                                   | Alpha 95% | 63K TS/TSX (292 files, 658 tests), 52 命令                     |
-| **neko-agent**  | AI Agent - 多 LLM + MCP + Skills + IDC 统一工作流 + 多模态感知 + 富内容投递 + 创意实体组合        | Alpha 99% | 228K TS (1166 files, 3463 tests)                               |
-
-### 基础设施
-
-| 模块            | 职能                                                                                | 状态        | 规模                              |
-| --------------- | ----------------------------------------------------------------------------------- | ----------- | --------------------------------- |
-| **neko-types**  | 共享类型 + 横切关注点（Logger/i18n/Theme/Errors）+ Operations 类型安全 + entity-uri | Alpha 94%   | 55.7K TS (296 files, 519 tests)   |
-| **neko-client** | 流媒体客户端 - H264/fMP4/PCM + EngineClient HTTP dispatch + MediaPlaybackService    | Alpha 85%   | 10K TS (39 files, 95 tests)       |
-| **neko-proto**  | 协议定义（timeline.proto + diff.proto 完整 IDL）                                    | Stable 100% | 2 proto                           |
-| **neko-auth**   | 统一认证 - OAuth 2.0 + PKCE SSO + token 刷新 + VSCode SecretStorage / 文件存储      | Alpha 90%   | 1.7K TS (15 files, 54 tests)      |
-| **neko-suite**  | Extension Pack 门户                                                                 | Stable 90%  | 配置包                            |
-
-### 功能模块
-
-| 模块             | 职能                                                                                | 状态      | 规模                                |
-| ---------------- | ----------------------------------------------------------------------------------- | --------- | ----------------------------------- |
-| **neko-preview** | 媒体预览 - Video/Audio/全景 Provider + WebCodecs 播放器 + 引擎优先 HDR 路由         | Alpha 91% | 15.4K TS/TSX (86 files, 152 tests)  |
-| **neko-story**   | 剧本编辑器 - Fountain LSP + 5 列分镜表 + 视频就绪评估 + story→agent→canvas 语义管线 | Alpha 97% | 18.7K TS/TSX (75 files, 217 tests)  |
-| **neko-market**  | 资产市场 - Skills/着色器/模型/预设搜索 + 安装 + 版本管理 + 本地模型部署             | Alpha 90% | 13.7K TS/TSX (64 files, 198 tests)  |
-| **neko-assets**  | 资产管理 - 注册表 + 缩略图 + 持久化搜索索引 + 外部媒体库                            | Alpha 88% | 11.3K TS (56 files, 167 tests)      |
-| **neko-tools**   | 媒体工具 - Diff 比较 + JVI LSP + 静音检测 + 元数据查看                              | Alpha 72% | 17.5K TS (120 files, 112 tests)     |
-| **neko-canvas**  | 无限画布 - 15 种节点 + Block 容器 + 组合预设 + 批量生成 + MCP Tools                 | Alpha 95% | 30.8K TS/TSX (145 files, 204 tests) |
-
-### 创作模块
-
-| 模块            | 职能                                                                                                       | 状态      | 规模                                              |
-| --------------- | ---------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------- |
-| **neko-model**  | 3D 创作 - glTF/VRM Engine-streamed Route A 视口 + LookDev Clay/Debug + authored lights + Engine-owned environment + typed picking + CSG + AI 捏脸预览场景（Face/Body/Motion/Voice）+ 关键帧动画 + IK 求解器 | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests      |
-| **neko-sketch** | 2D 创作 - 压感手绘 8 笔刷 + 图层 + 选区 + AI 工具 + PSD 导入 + .nks 格式 + 2D 光照                         | Alpha 68% | 31.9K TS/TSX (178 files, 185 tests)               |
-| **neko-audio**  | 音频工作站 - DAW UI（TrackHeader/TrackLane/AudioClip）+ 12 种效果 + 频谱 + AI 降噪 + Agent 工具            | Alpha 82% | 11.1K TS/TSX (60 files, 52 tests)                 |
-| **neko-puppet** | 2D 骨骼动画 - `.nkp` v2 Native Puppet（Bone2D + BlendShape + ControlDriver）+ Live2D/MOC3 导入转换兼容 + Agent/导出首版 + 60fps 流 | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests     |
-| **neko-live**   | 虚拟制片 - 引擎 Live Compositor 合成流 + ViewportShell + 设备授权 source refs + 非权威本地 fallback 录制       | Alpha 58% | 4.4K TS (34 files, 37 tests)                      |
-
----
-
-## 核心技术
-
-### 1. Rust Sidecar 引擎
-
-核心计算逻辑驻留在 **neko-engine** Rust 独立进程中（11 个 crate），通过统一 HTTP/WS + NAPI 与 VS Code 通讯，彻底解决编辑器卡顿问题。
-
-```
-VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
-                                                │
-                                                ├─ wgpu GPU 渲染（20+ WGSL shaders, PBR + IBL + 粒子 + 后处理）
-                                                ├─ FFmpeg 编解码（硬件加速 VideoToolbox/NVENC/VAAPI）
-                                                ├─ DSP 效果库（混音管线 solo/pan）
-                                                ├─ 导出管线（GPU export + audio mixer + 响度标准化）
-                                                ├─ runtime-scene 3D 场景（bevy_ecs + glTF/VRM + IK + 动画混合）
-                                                ├─ runtime-puppet 2D Native Puppet（Bone2D + BlendShape + MOC3 导入兼容 + 60fps WS 流）
-                                                ├─ runtime-device 设备 I/O（cpal + midir + gilrs）
-                                                ├─ runtime-media 媒体逻辑（probe/diff/subtitle）
-                                                └─ runtime-ml ONNX 推理（macOS CoreML 加速）
-```
-
-### 2. AIGC Agent 作为创作驱动
-
-**neko-agent** 是整个 IDE 的中枢大脑。它通过多 LLM（Claude / OpenAI / Google）、MCP 工具协议、多模态感知与富内容投递，把自然语言转化为跨时间线、画布、3D 视口、2D 手绘、音频工作站的多模态创作动作。每个子包通过 `AgentCapabilityProvider` 声明自己的工具能力,Agent 动态发现而非硬编码。
-
-```
-用户意图
-   │
-   ▼
-┌────────────────────────────────────────────────────────────────┐
-│  neko-agent  (LLM + MCP + 多模态感知 + Skills + Capability     │
-│               Discovery + Context/Memory)                      │
-└────────────────────────────────────────────────────────────────┘
-   │          │          │          │          │          │
-   ▼          ▼          ▼          ▼          ▼          ▼
- story     canvas       cut       model     sketch      audio
-(剧本)    (分镜)      (时间线)    (3D)     (2D 手绘)   (DAW)
-```
-
-### 3. Skill 编排工作流
-
-**Skill** 是可组合、可复用的工作流单元 —— 每个 Skill 打包提示词片段、允许的工具集、权限规则与上下文预算。Agent 根据意图激活 Skill（通过 `ActivateSkill` / `DeactivateSkill` 元工具）,`SkillInjectionCoordinator` 原子化地注入或撤销四条 track：Prompt → Permission → Guard → ToolSet。分级延迟加载（`resident` / `eager` / `lazy`）将基线控制在 ~8K tokens,按需增长。
-
-```
-意图 → SkillRegistry → activate(skill)
-                         ├─ 提示词片段（system prompt section）
-                         ├─ ToolSet（always / dynamic 层）
-                         ├─ 权限规则
-                         └─ 上下文预算
-                       执行 → deactivate → 原子回滚
-```
-
-### 4. 角色工作流
-
-角色测试、代入反馈和创作执行是三种场景。Dashboard 角色实体详情只保留两个核心角色工作流：`角色对话` 和 `代入角色`。`角色对话` 会在 Agent 面板中打开独立的 Character Dialogue 会话，由 Agent 扮演该角色、用户进行测试；会话用当前项目里的角色事实、资产绑定、视觉草稿、关系和出场信息组装 Profile，并使用 `toolPolicy: { kind: 'none' }`，不会获得读写文件、生成媒体、编辑时间线或其他创作工具。`代入角色` 也会打开独立角色会话，但演员关系相反：用户扮演该角色，Agent 不扮演角色，只作为只读的项目知识反馈助手指出该角色知道、未知、不应知道或可能误解的内容。它不能激活 Skill、写文件、修改实体、创建任务或生成媒体。
-
-Dashboard 角色详情操作：
+## 核心架构
 
 ```text
-角色对话
-代入角色
+VS Code Extension Host
+  | postMessage
+  v
+Webview Surfaces (React + Zustand + Vite)
+  | 必要时直连 WebSocket streams
+  v
+neko-engine Rust Sidecar
+  | HTTP / WebSocket / N-API
+  v
+GPU、编解码、音频、场景、木偶、媒体、设备、ML runtimes
 ```
 
-- `角色对话`：进入该角色的独立 Character Dialogue 测试会话，Agent 扮演角色，用户测试角色表现。
-- `代入角色`：进入独立反馈会话，用户扮演该角色，Agent 评估角色知识、未知内容、越界认知和模式边界请求。
-- `character-validation` Skill：后台自动化角色验证，一个 Agent 扮演角色，另一个 Agent 测试知识边界、语气和稳定性。
-- `character-improvement` Skill：基于项目证据生成待确认的角色完善建议，不自动写回项目事实。
-- `/exit-as`：退出当前角色对话，生成评估报告，并按提示决定是否保存证据。
+关键边界：
 
-`/as @角色` 是启动角色对话的官方快捷命令，并委托到 `neko.agent.characterDialogue` 隔离会话路径。Dashboard 只发送创意实体动作，实际 Profile 组装、只读证据注入、会话创建、Skill 原语端口、评估和证据保存由 Agent 扩展负责。
-
-角色工作流上下文默认跟随当前项目。活跃的角色对话和代入角色轮次只保存在各自会话内存中，不写入主 Agent 历史、`.neko/memory.md`、全局记忆或标准会话记录；用户选择保存对话证据时，转录和评估会落到当前项目的 `.neko/character-tests/{entityId}-{timestamp}.json`，作为测试证据而不是角色事实源。历史 `.neko/npc-tests/*.json` 证据不会被自动改写。评估产生的性格、台词、关系等建议必须由用户确认后，才会通过实体元数据更新或关系更新命令写回项目。
-
-### 5. 统一素材库
-
-一个**统一的素材注册表**（neko-assets）为所有创作界面供料：视频片段、音频、图片、3D 模型、2D 木偶、Agent 生成的内容、项目文件。持久化搜索索引、缩略图、外部媒体库挂载、路径变量解析（`${VAR}/path`,通过 `@neko/shared` 的 `PathResolver`）让素材库可在多机器、多协作者间移植。Agent 生成的资产以 `GeneratedAsset` 形式落盘并通过 JSON 引用 —— 零 base64 膨胀,完整溯源。
-
-```
-本地文件 / 外部素材库 / Agent 生成
-   │
-   ▼
-┌────────────────────────────────────────────────────────────────┐
-│  neko-assets  (Registry + 缩略图 + 搜索索引 + PathResolver)    │
-└────────────────────────────────────────────────────────────────┘
-   │           │          │          │          │          │
-   ▼           ▼          ▼          ▼          ▼          ▼
- canvas      cut       model     sketch     puppet      audio
-```
-
-### 6. WebGPU 渲染闭环
-
-利用 wgpu compositor 将视频帧、特效、转场、色彩校正在 GPU 显存中直接合成。支持 blend modes、custom shaders、keyframe animation。
-
-```
-视频帧 + 特效 + 转场 → wgpu Compositor → 实时预览
-```
-
----
-
-## 工作流
-
-不是线性流水线 —— 而是 **Agent 驱动的创作闭环**,每一轮都经过五个平面并反哺下一次迭代:
-
-```
-           ┌──────────────────────────────────────────────────┐
-           │                                                  │
-           ▼                                                  │
-  ① 意图创作                  提示词 + 选中素材 + 引用约束     │
-     (user / AGENTS.md /                                      │
-      常驻 skill)                                             │
-           │                                                  │
-           ▼                                                  │
-  ② 动态编排                  SkillRegistry 激活 Prompt /      │
-     (neko-agent)             Tools / Permissions / Context; │
-                              IDC 三阶段 Draft→Plan→Apply    │
-           │                                                  │
-           ▼                                                  │
-  ③ 内容生成                  story / canvas / cut / model /  │
-     (多模态创作面板)          sketch / puppet / audio 通过   │
-                              MCP + AgentCapabilityProvider  │
-                              执行                            │
-           │                                                  │
-           ▼                                                  │
-  ④ 质量审查                  Pipeline QC: LUFS 响度、多帧视觉│
-     (自动化评审)              对比、格式校验、schema lint、  │
-                              置信度门控                      │
-           │                                                  │
-           ▼                                                  │
-  ⑤ 感知反馈                  PerceptionCard (Structural /   │
-     (重新接地)                Semantic / Perceptual) 反哺下  │
-                              一次意图; Evaluator 写入 memory│
-                              / project cards                 │
-           │                                                  │
-           └──────────────► 回到 ① (闭环)
-```
-
-- **意图创作** —— 用户提示词、对话上下文、常驻 Skill、AGENTS.md overlay、项目级 memory
-- **动态编排** —— Skill 激活原子注入 Prompt / ToolSet / Permission / Guard; 非平凡任务走 IDC 三阶段 (Draft → Plan → Apply)
-- **内容生成** —— 跨界面执行(时间线 / 画布 / 3D / 2D / 音频), 通过 MCP 与 `AgentCapabilityProvider`
-- **质量审查** —— Pipeline 适配器验证音频响度、多帧视觉一致性、schema 合法性、置信度阈值; 失败触发重试或人工审核
-- **感知反馈** —— `PerceptionCard` 用实际产物状态(而非假设状态)重新接地 Agent; 结果闭环到下一次意图
+- Webview 不直接调用 Node.js 或 VS Code API。
+- Extension Host 负责 VS Code API、文件选择、workspace state、Webview resource URI。
+- Rust 负责重计算、媒体编解码、GPU 渲染、scene/puppet/audio/device runtime 和二进制文件访问。
+- Protobuf 与 `@neko/shared` 保持跨层契约显式。
+- `@neko/neko-client` 是零 VSCode 依赖的 HTTP/WS dispatch 与 streaming client 层。
 
 ---
 
 ## 项目结构
 
-```
+```text
 neko-suite/
 ├── packages/
-│   ├── neko-suite/            # Extension Pack 门户
-│   ├── neko-engine/           # Rust Sidecar 媒体引擎
-│   │   └── packages/
-│   │       ├── engine-kernel/   # Rust 核心（wgpu/编解码/导出/ONNX ML）
-│   │       ├── host-api/    # HTTP API 路由层
-│   │       ├── host-http/   # Axum HTTP 服务
-│   │       ├── host-napi/   # Node.js NAPI 绑定
-│   │       ├── host-cli/    # CLI 入口
-│   │       ├── runtime-scene/  # Rust 3D 场景 ECS（bevy_ecs + glTF）
-│   │       ├── runtime-puppet/ # Rust 2D Native Puppet ECS（Bone2D + BlendShape + MOC3 导入兼容）
-│   │       ├── types/         # Rust 共享类型
-│   │       └── extension/     # TS VSCode 扩展侧
-│   ├── neko-cut/              # 视频剪辑器
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       └── webview/       # React UI（13 store slices）
-│   ├── neko-agent/            # AI Agent
-│   │   └── packages/
-│   │       ├── agent/         # 核心引擎（executor/session/skills/mcp）
-│   │       ├── platform/      # LLM 平台层（Claude/OpenAI/Google adapter）
-│   │       ├── webview/       # React UI
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       └── cli-tui/       # 交互式 CLI
-│   ├── neko-canvas/           # 无限画布
-│   │   └── packages/
-│   │       ├── canvas/        # 画布核心逻辑
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       └── webview/       # React UI
-│   ├── neko-story/            # 剧本编辑器（Fountain LSP）
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       ├── parser/        # Fountain 解析器
-│   │       ├── types/         # 类型定义
-│   │       └── webview/       # React UI
-│   ├── neko-preview/          # 媒体预览
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       └── webview/       # React UI
-│   ├── neko-tools/            # 媒体工具
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       └── webview/       # React UI
-│   ├── neko-assets/           # 资产管理
-│   │   └── packages/
-│   │       └── asset/         # 资产核心逻辑
-│   ├── neko-market/           # 资产市场
-│   │   └── packages/
-│   │       ├── core/          # 市场客户端 + 安装管理（Layer 0）
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       └── webview/       # React UI
-│   ├── neko-auth/             # 统一认证（OAuth 2.0 + PKCE SSO）
-│   │   └── packages/
-│   │       ├── core/          # @neko/auth-core（Layer 0）
-│   │       └── extension/     # neko.neko-auth VSCode 扩展
-│   ├── neko-audio/            # 音频工作站
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧
-│   │       └── webview/       # React UI
-│   ├── neko-client/           # 流媒体客户端（H264/PCM/fMP4）+ EngineClient
-│   ├── neko-model/            # 3D 创作（Engine-streamed Route A + LookDev/灯光/环境 + CSG + 骨骼表情）
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧（.gltf/.glb/.vrm/.nkm）
-│   │       └── webview/       # React 控制面 + Engine H.264 视口
-│   ├── neko-sketch/           # 2D 绘画（手绘 + 滤镜/粒子/场景 + 逐帧动画）
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nks）
-│   │       └── webview/       # React 18 + WebGL2 UI
-│   ├── neko-puppet/           # 2D 骨骼动画（.nkp v2 native 编辑器 + Live2D/MOC3 导入转换）
-│   │   └── packages/
-│   │       ├── extension/     # VSCode 扩展侧（CustomEditorProvider .nkp）
-│   │       └── webview/       # React 18 + EngineClient UI
-│   ├── neko-live/             # 虚拟直播（Live Compositor 合成流 + fallback 预览）
-│   ├── neko-types/            # 共享类型 + Logger + i18n + Theme
-│   └── neko-proto/            # 协议定义（Protobuf IDL）
-├── docs/                      # 架构文档
-├── package.json               # 根 package.json (pnpm workspaces)
-├── ROADMAP.md                 # 开发路线图
-├── CLAUDE.md                  # 开发规范
-└── turbo.json                 # Turbo 构建配置
+│   ├── neko-engine/       # Rust sidecar 引擎与 VS Code engine 扩展
+│   ├── neko-agent/        # Agent runtime、AI platform、Webview、Extension、CLI
+│   ├── neko-cut/          # 视频编辑器
+│   ├── neko-canvas/       # 无限画布与分镜编排
+│   ├── neko-story/        # 剧本编辑与 story planning
+│   ├── neko-preview/      # 媒体/文档预览
+│   ├── neko-assets/       # 素材注册表与媒体库
+│   ├── neko-market/       # 市场与安装目标
+│   ├── neko-tools/        # Diff、检查与媒体工具
+│   ├── neko-model/        # 3D 创作
+│   ├── neko-sketch/       # 2D 绘画
+│   ├── neko-puppet/       # 2D 骨骼动画
+│   ├── neko-audio/        # 音频工作站
+│   ├── neko-live/         # 虚拟制片与实时互动
+│   ├── neko-dashboard/    # 工作区 Dashboard
+│   ├── neko-entity/       # 创意实体 runtime
+│   ├── neko-search/       # 项目搜索 runtime
+│   ├── neko-ui/           # 共享 Webview UI
+│   ├── neko-types/        # @neko/shared
+│   ├── neko-client/       # EngineClient 与 stream clients
+│   ├── neko-proto/        # Protobuf IDL
+│   ├── neko-auth/         # 认证 core 与 extension
+│   └── neko-suite/        # Extension Pack
+├── docs/
+├── README.md
+├── README_CN.md
+├── README_NYA.md
+├── ROADMAP.md
+├── ARCHITECTURE.md
+├── ARCHITECTURE_CN.md
+└── turbo.json
 ```
 
 ---
 
 ## 技术栈
 
-| 层级             | 技术                                                   |
-| ---------------- | ------------------------------------------------------ |
-| **Frontend**     | React 18 + Zustand + Tailwind CSS + Vite               |
-| **Extension**    | VS Code Extension API + TypeScript + esbuild           |
-| **Engine**       | Rust + wgpu + FFmpeg + axum + tokio + bevy_ecs         |
-| **AI**           | Vercel AI SDK (Claude/OpenAI/Google) + MCP Protocol    |
-| **ML**           | ONNX Runtime（macOS CoreML 加速）+ Whisper             |
-| **Streaming**    | H.264 + PCM + fMP4 over WebSocket                      |
-| **Testing**      | Vitest v4 + cargo test                                 |
-| **Code Quality** | ESLint + TypeScript strict + Knip + dependency-cruiser |
-| **Build**        | pnpm workspaces + Turbo (Monorepo)                     |
+| 层级    | 技术                                                             |
+| ------- | ---------------------------------------------------------------- |
+| 前端    | React 18、Zustand、Tailwind CSS、Vite                            |
+| VS Code | VS Code Extension API、TypeScript、esbuild                       |
+| 引擎    | Rust、wgpu、FFmpeg、axum、tokio、bevy_ecs、napi-rs               |
+| 流媒体  | H.264、PCM、fMP4、WebSocket、WebCodecs                           |
+| AI      | Vercel AI SDK、Claude/OpenAI/Google/Ollama/Generic adapters、MCP |
+| ML      | ONNX Runtime，可用时使用 CoreML 加速                             |
+| 契约    | Protobuf、`@neko/shared`、JSON nk\* 项目格式                     |
+| 构建    | pnpm 10、Turborepo 2                                             |
+| 测试    | Vitest v4、cargo test、dependency-cruiser、Knip                  |
 
 ---
 
-## 支持的媒体格式
+## 支持的媒体与项目格式
 
-| 类型        | 格式                                |
-| ----------- | ----------------------------------- |
-| **视频**    | MP4, MOV, AVI, MKV, WebM, M4V       |
-| **音频**    | MP3, WAV, OGG, FLAC, AAC, M4A       |
-| **图片**    | PNG, JPG, JPEG, GIF, WebP, BMP, SVG |
-| **3D 模型** | glTF, GLB, VRM, .nkm                |
-| **2D 动画** | .nkp v2 (Neko Native Puppet), MOC3/Live2D 导入兼容, .nks (Neko Sketch) |
-| **项目**    | .nkv (视频项目), .nkc (画布项目)    |
+| 类型      | 格式                                                 |
+| --------- | ---------------------------------------------------- |
+| 视频      | MP4, MOV, AVI, MKV, WebM, M4V                        |
+| 音频      | MP3, WAV, OGG, FLAC, AAC, M4A                        |
+| 图片      | PNG, JPG, JPEG, GIF, WebP, BMP, SVG                  |
+| 3D        | glTF, GLB, VRM, `.nkm`                               |
+| 2D / 角色 | `.nks`, `.nkp` v2, MOC3/Live2D 导入兼容, `.nkentity` |
+| 项目      | `.nkv`, `.nkc`, `.nka`, `.nkm`, `.nks`, `.nkp`       |
+
+---
+
+## 验证命令
+
+按影响范围执行最小必要验证，再逐步扩大：
+
+```bash
+pnpm build
+pnpm test
+pnpm check
+```
+
+Rust 引擎相关改动：
+
+```bash
+cd packages/neko-engine
+cargo test --workspace
+```
+
+本地 CI 等价入口：
+
+```bash
+pnpm ci:local
+pnpm ci:local:rust
+pnpm ci:local:proto
+```
 
 ---
 
@@ -359,33 +300,21 @@ neko-suite/
 
 - [ROADMAP_CN.md](./ROADMAP_CN.md) - 开发路线图和功能规划
 - [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md) - 系统架构总览
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - 英文系统架构总览
 - [CLAUDE_CN.md](./CLAUDE_CN.md) - 开发规范和架构指南
-- [docs/engine.md](./docs/engine.md) - 媒体引擎文档
-- [docs/shaders.md](./docs/shaders.md) - GPU Shader 文档
-- [docs/timeline-alignment.md](./docs/timeline-alignment.md) - 时间线对齐文档
-- [docs/editoperation.md](./docs/editoperation.md) - 编辑操作设计
-- [docs/architecture/](./docs/architecture/) - 架构设计文档
-  - [面板放置策略](./docs/architecture/panel-placement.md) - 编辑器面板架构
-  - [设备访问策略](./docs/architecture/device-access.md) - 硬件设备代理方案
-  - [Engine 插件化 RFC](./docs/architecture/engine-plugin-rfc.md) - 能力插件化与市场/宿主分工
-  - [Engine Runtime 分层](./docs/architecture/engine-runtime-layering.md) - runtime 按包拆分与单宿主策略
-  - [Story-Agent-Canvas 职责 ADR](./docs/architecture/story-agent-canvas-boundary.md) - Agent-first 视频创作中 story / agent / canvas 的边界，以及轻量分镜表的定位
-  - [格式策略](./docs/architecture/format-strategy.md) - nk\* 文件格式设计
-  - [市场平台](./docs/architecture/marketplace.md) - 资产市场架构
-  - [本地模型部署](./docs/architecture/model-runtime.md) - ONNX/GGUF 运行时
-  - [Registry Server](./docs/architecture/registry-server.md) - 注册中心设计
+- [docs/architecture/](./docs/architecture/) - ADR 与子系统架构文档
+- [docs/architecture/adr-code-review-quality-gates.md](./docs/architecture/adr-code-review-quality-gates.md) - 代码审查与质量门禁
 
 ---
 
 ## 贡献
 
-欢迎参与 Neko Suite 的开发！
+欢迎参与 Neko Suite 的开发。提交前请先守住架构边界：
 
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+1. Webview、Extension Host、Rust engine、共享契约分层清晰。
+2. 跨包改动优先契约先行。
+3. 新接口、状态机、失败路径补充聚焦测试。
+4. 运行相关验证命令，并说明剩余风险。
 
 详细开发规范请参考 [CLAUDE_CN.md](./CLAUDE_CN.md)。
 
@@ -395,59 +324,11 @@ neko-suite/
 
 Mixed License (MIT / Apache 2.0 / LGPL v3) — see [LICENSE](./LICENSE) for details.
 
-- [Ethical Use Guidelines](./ETHICS.md) — community expectations for derivative works
-- [Trademark Policy](./TRADEMARK.md) — brand usage guidelines
+- [Ethical Use Guidelines](./ETHICS.md)
+- [Trademark Policy](./TRADEMARK.md)
 
 ---
 
 ## 致谢
 
-Neko Suite 站在众多优秀开源项目的肩膀上：
-
-### 平台与运行时
-
-- [VS Code](https://code.visualstudio.com/) - 强大的编辑器平台
-- [Node.js](https://nodejs.org/) - JavaScript 运行时
-- [Tokio](https://tokio.rs/) - Rust 异步运行时
-
-### GPU 与渲染
-
-- [wgpu](https://wgpu.rs/) - 跨平台 GPU 抽象层（Metal/Vulkan/DX12）
-- [Three.js](https://threejs.org/) + [React Three Fiber](https://r3f.docs.pmnd.rs/) - 3D 渲染
-- [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API) - 浏览器原生编解码
-
-### 媒体处理
-
-- [FFmpeg](https://ffmpeg.org/) ([ffmpeg-next](https://github.com/zmwangx/rust-ffmpeg)) - 视频编解码基础设施
-- [cpal](https://github.com/RustAudio/cpal) - 跨平台音频 I/O
-- [sharp](https://sharp.pixelplumbing.com/) - 高性能图像处理
-
-### AI 与 ML
-
-- [Vercel AI SDK](https://sdk.vercel.ai/) - 多模型 AI 集成框架
-- [ONNX Runtime](https://ort.pyke.io/) ([ort](https://github.com/pykeio/ort)) - ML 推理引擎
-
-### 3D/2D 引擎
-
-- [Bevy ECS](https://bevyengine.org/) - 实体-组件-系统框架
-- [glTF-rs](https://github.com/gltf-rs/gltf) - glTF/GLB 模型解析
-- [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) - VRM 角色模型支持
-
-### 前端
-
-- [React](https://react.dev/) - UI 框架
-- [Zustand](https://zustand-demo.pmnd.rs/) - 状态管理
-- [Tailwind CSS](https://tailwindcss.com/) - 原子化样式
-
-### 网络与通信
-
-- [Axum](https://github.com/tokio-rs/axum) - HTTP/WebSocket 服务
-- [napi-rs](https://napi.rs/) - Rust ↔ Node.js 绑定
-- [Protocol Buffers](https://protobuf.dev/) - 类型契约协议
-
-### 构建与质量
-
-- [Turborepo](https://turbo.build/) - Monorepo 构建编排
-- [Vite](https://vitejs.dev/) - 前端打包
-- [Vitest](https://vitest.dev/) - 测试框架
-- [ESLint](https://eslint.org/) + [Knip](https://knip.dev/) + [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) - 代码质量
+Neko Suite 基于许多优秀开源项目构建，包括 VS Code、Rust、Tokio、Axum、wgpu、FFmpeg、Bevy ECS、WebCodecs、React、Zustand、Tailwind CSS、Vite、Vitest、Turborepo、napi-rs、Protocol Buffers、ONNX Runtime 与 Vercel AI SDK。

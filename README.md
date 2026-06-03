@@ -1,29 +1,146 @@
 # Neko Suite
 
-> AIGC IDE + AIGC Agent — An Agent-Driven Multimodal Creation Workspace in VS Code
+> AIGC Content Creation IDE + AIGC Content Creation Agent + AIGC Interactive Engine, deeply integrated into VS Code
 
 [中文](./README_CN.md) | [Nya~](./README_NYA.md)
 
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
-[![License](https://img.shields.io/badge/License-MIT-blue)]()
+[![License](https://img.shields.io/badge/License-Mixed-blue)]()
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-blue)]()
 
-**Neko Suite** is an AIGC-native IDE deeply integrated into VS Code. A first-class **AIGC Agent** sits at the core and drives the full multimodal creation loop — screenplay, video, 3D, 2D, audio — through natural language. **Skills** orchestrate reusable workflows, a **unified asset library** feeds every surface, and a **Rust Sidecar engine** keeps the editor responsive.
+**Neko Suite** is an AIGC-native creative IDE, content creation Agent, and interactive media engine. The product goal is not only "AI chat inside an editor"; it is a closed creative workspace where an Agent can understand intent, plan work, call tools, generate assets, inspect results, edit, preview, and iterate across screenplay, storyboard canvas, video timeline, 3D, 2D drawing, 2D puppet animation, audio, assets, and live interaction.
+
+The repo is currently an Alpha-stage monorepo with **23 top-level workspace packages**. The strongest areas are the content creation Agent runtime, Rust media engine, video timeline, story/canvas workflow, preview/streaming stack, and shared contract layers. The main remaining work is cross-package product hardening: one project graph, one Agent capability registry, one interactive runtime surface, and end-to-end smoke coverage for full AIGC creation loops.
 
 📋 **[View Roadmap →](./ROADMAP.md)**
 
 ---
 
-## Highlights
+## Target Architecture
 
-- **AIGC Agent at the Core** - Natural-language driven creation across video / 3D / 2D / audio / screenplay; multi-LLM (Claude / OpenAI / Google) + MCP protocol + multimodal perception + rich content delivery
-- **Skills Orchestrate Workflows** - Composable Skills bundle prompts, tools, permissions, and context-item budgets; tiered lazy loading keeps the baseline at ~8K tokens and grows on demand
-- **Multimodal Creation Surfaces** - Screenplay (Fountain LSP) → infinite canvas storyboarding → timeline editing → 3D modeling / 2D painting / 2D skeletal animation → audio workstation
-- **Unified Asset Library** - Cross-module registry with thumbnails, persistent search index, external media libraries, and path variable resolution (`${VAR}/path`)
-- **Asset Marketplace** - Install and version Skills, shaders, models, and presets; local model deployment (ONNX / GGUF) with upstream proxy (HF / Civitai)
-- **Rust GPU Engine** - wgpu PBR + IBL + post-processing + particles (20+ WGSL shaders), 3D scene & 2D skeletal ECS, ONNX ML inference, 4K real-time preview
-- **Git-Native Projects** - `.nkv` / `.nkc` / `.nka` / `.nkm` / `.nks` files are text-based, versionable, and collaboration-friendly
-- **Modular Architecture** - 19 packages, mix and match as needed, independently upgradable
+Neko Suite is built around three connected product layers.
+
+### 1. AIGC Content Creation IDE
+
+Natural language and project context drive a multi-surface authoring flow:
+
+```text
+Intent
+  -> story/script planning
+  -> canvas storyboard and references
+  -> asset/entity grounding
+  -> media generation
+  -> timeline/audio/3D/2D editing
+  -> preview/export
+  -> perception and quality feedback
+  -> next intent
+```
+
+### 2. AIGC Content Creation Agent
+
+The Agent is the creative operator. It turns intent into plans, activates Skills, discovers package capabilities, calls tools through MCP/native bridges, delivers rich media results, and re-grounds itself from actual project state.
+
+```text
+User intent
+  -> context, memory, selected assets, AGENTS.md overlays
+  -> Skill activation and permission guard
+  -> capability discovery and tool planning
+  -> Draft / Plan / Apply execution
+  -> rich content delivery and task tracking
+  -> perception, evaluator feedback, and next turn
+```
+
+### 3. AIGC Interactive Engine
+
+The Rust sidecar and realtime clients turn authored assets into inspectable, streamable, interactive runtime states:
+
+```text
+Project assets
+  -> engine scene / puppet / audio / media runtimes
+  -> H.264 + PCM + fMP4/WebSocket streams
+  -> model / puppet / live / preview surfaces
+  -> Agent feedback and interactive control
+```
+
+---
+
+## Current Progress Snapshot
+
+Updated on **2026-06-03**. Percentages below are qualitative target-fit estimates, not release promises. They combine package footprint, tests, package README/architecture docs, VS Code extension entry points, webview surfaces, Rust runtime coverage, and integration maturity.
+
+| Area               | Current read                                                                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IDE foundation     | Strong. Story -> Agent -> Canvas -> Cut has concrete contracts and UI surfaces, but needs full-path smoke validation.                              |
+| Creation Agent     | Advanced. Multi-LLM, MCP, Skills, permission/context systems, rich content, role workflows, and capability bootstrap are implemented.              |
+| Interactive engine | Strong Rust foundation. Scene, puppet, audio, codec, GPU, media, ML, and device runtimes exist; live/interactive orchestration is still early.     |
+| Project graph      | Emerging. `neko-entity`, `neko-search`, `neko-assets`, and Dashboard are moving the repo toward shared entity/search/task grounding.               |
+| Product readiness  | Alpha. Many packages compile and test locally, but unified release packs, e2e smoke, performance baselines, and UX polish remain the largest gaps. |
+
+---
+
+## Package Progress
+
+### Core Platform And Contracts
+
+| Package                               | Target role                                          | Progress | What is in place                                                                                                                              | Main gap                                                                          |
+| ------------------------------------- | ---------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **neko-engine**                       | Authoritative Rust media and interactive runtime     | 88%      | 357 Rust files; engine GPU/codec/audio/kernel/types; host HTTP/NAPI/CLI; scene, puppet, device, media, ML runtimes; extension sidecar manager | Release-grade runtime orchestration, performance baselines, live/device hardening |
+| **neko-types** (`@neko/shared`)       | L0 shared contracts and cross-cutting infrastructure | 84%      | 374 TS/TSX files; Logger/i18n/Theme/Errors; timeline/canvas/audio/sketch/agent types; EditOperation system; generated Proto types             | Continue trimming legacy surface and protecting layer boundaries                  |
+| **neko-client** (`@neko/neko-client`) | EngineClient and streaming clients                   | 76%      | HTTP dispatch, H.264/PCM/fMP4 clients, playback service, tests                                                                                | More cross-runtime cancellation/retry/error smoke coverage                        |
+| **neko-proto** (`@neko/proto`)        | Protobuf IDL source of truth                         | 78%      | Timeline and diff IDL are present and generated into shared types                                                                             | More contracts for interactive engine, entity graph, and realtime session state   |
+| **neko-auth**                         | Shared auth for providers and extensions             | 60%      | OAuth 2.0 / PKCE / token storage split into core + extension                                                                                  | Provider onboarding UX and marketplace/provider trust integration                 |
+| **neko-suite**                        | Extension Pack portal                                | 55%      | Extension pack metadata for the main creative extensions                                                                                      | Needs updated pack strategy for dashboard/entity/search/ui support packages       |
+
+### Content Creation Agent, IDE Orchestration, And Project Grounding
+
+| Package                          | Target role                               | Progress | What is in place                                                                                                                                    | Main gap                                                                               |
+| -------------------------------- | ----------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **neko-agent**                   | AIGC content creation Agent runtime       | 87%      | 1,265 TS/TSX files; 392 tests; multi-LLM platform; MCP; Skills; context/memory; permissions; CLI; VS Code webview; rich media cards; role workflows | Cross-surface capability contracts need full e2e validation with all creative packages |
+| **neko-dashboard**               | Project control panel and task/entity hub | 66%      | Extension + webview; startup/show commands; task aggregation; creative entity source aggregation; tests                                             | Needs deeper workflow launch and live status integration across all packages           |
+| **neko-entity** (`@neko/entity`) | Creative entity runtime and projections   | 58%      | Entity stores, candidates, asset refs, dashboard source, NPC profile assembler, architecture-boundary tests                                         | Needs adoption by all authoring surfaces and canonical project graph migrations        |
+| **neko-search** (`@neko/search`) | Project search and index orchestration    | 56%      | Project index coordinator, provider registry, VS Code adapters, global search, tests                                                                | Needs first-class UI integration and more package providers                            |
+| **neko-ui** (`@neko/ui`)         | Shared webview UI system                  | 55%      | Primitives, viewport shell, creative controls, keyboard/focus helpers, workbench shell, 36 tests                                                    | Migration is in progress; feature packages still carry local UI patterns               |
+
+### Content Creation IDE Surfaces
+
+| Package          | Target role                                                 | Progress | What is in place                                                                                                            | Main gap                                                                                    |
+| ---------------- | ----------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **neko-story**   | Script-first planning and story-to-video entry              | 78%      | Fountain parser/types/webview/extension; scene index; readiness table; story -> agent -> canvas commands                    | Full flow-F smoke from script to generated timeline                                         |
+| **neko-canvas**  | Infinite canvas, storyboard, and visual orchestration       | 80%      | 197 TS/TSX files; 45 tests; 13+ node types; storyboard import; generation prompt panel; batch generation; inline media      | Stronger entity/search integration and large-canvas performance baselines                   |
+| **neko-cut**     | Video timeline editor and final assembly surface            | 82%      | 309 TS/TSX files; timeline editor, edit operations, preview/export services, commands, tests                                | End-to-end AI-generated storyboard import, QC, export smoke                                 |
+| **neko-preview** | Engine-first media preview                                  | 76%      | Video/audio/panoramic/document preview routes; WebCodecs playback; waveform and stream clients                              | Unified document/media file-access hardening and multi-surface preview handoff              |
+| **neko-assets**  | Unified asset registry and media library                    | 72%      | Asset core package, registry, entity/variant/file services, import dispatcher, media library search, character asset export | One project graph with `neko-entity`, generated asset provenance, marketplace install state |
+| **neko-market**  | Marketplace for Skills, models, shaders, presets, providers | 70%      | Core + extension + webview; install target contributions; package verification paths                                        | Trust, signatures, dependency resolution, and provider/model onboarding polish              |
+| **neko-tools**   | Cross-media inspection and diff tools                       | 68%      | Diff UI, media info, device views, JVI/media utilities, tests                                                               | More engine-first binary access and tighter integration with QC workflows                   |
+
+### Interactive Engine And Realtime Creative Modules
+
+| Package         | Target role                                            | Progress | What is in place                                                                                                      | Main gap                                                                                |
+| --------------- | ------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **neko-model**  | 3D creation and scene authoring                        | 66%      | Engine-streamed viewport, glTF/GLB/VRM/.nkm editor, LookDev controls, lights/environment, inspector, typed scene docs | More complete authoring workflow, runtime interaction, and Agent tool coverage          |
+| **neko-sketch** | 2D drawing and frame animation                         | 62%      | 190 TS/TSX files; WebGL2 drawing engine; brushes, layers, selection, filters, particles, frame timeline, i18n         | Better shared UI migration, asset/entity grounding, and production export path          |
+| **neko-puppet** | 2D skeletal character animation                        | 74%      | `.nkp`/MOC3 custom editor, EngineClient UI, Live2D compatibility, native puppet paths, tests                          | Production authoring polish, expression/motion marketplace, live runtime control        |
+| **neko-audio**  | Audio workstation and sound generation/editing surface | 64%      | `.nka` editor, DAW UI, waveform, mixer/effects, recording/export panels, EngineClient service                         | More engine mix/export smoke, Agent audio tools, live monitoring                        |
+| **neko-live**   | Virtual production and realtime interaction            | 45%      | Extension + webview, live session/device/tracking services, fallback preview/recording, tests                         | Earliest major surface: needs compositor, device authorization UX, realtime reliability |
+
+---
+
+## Integration Priorities
+
+1. **One capability registry**
+   Every creative package should expose stable `AgentCapabilityProvider` contracts so `neko-agent` discovers tools dynamically instead of hard-coding package behavior.
+
+2. **One project graph**
+   `neko-entity`, `neko-assets`, `neko-search`, generated assets, character facts, and Dashboard views should converge on one portable project graph.
+
+3. **One interactive runtime**
+   `neko-engine`, `neko-client`, `neko-model`, `neko-puppet`, `neko-audio`, `neko-live`, and `neko-preview` should share session, stream, file-access, and authority contracts.
+
+4. **End-to-end smoke paths**
+   The release gate should include Story -> Agent -> Canvas -> generation -> Cut -> Preview/Export and Character/Entity -> Model/Puppet -> Live/Agent feedback.
+
+5. **Shared UI migration**
+   `@neko/ui` should gradually replace local duplicated controls while preserving package ownership of domain logic.
 
 ---
 
@@ -38,7 +155,18 @@ pnpm install
 ### Build
 
 ```bash
-./build.sh
+pnpm build
+```
+
+Focused package builds:
+
+```bash
+pnpm build:neko-engine
+pnpm build:neko-agent
+pnpm build:neko-cut
+pnpm build:pack-video
+pnpm build:pack-2d
+pnpm build:pack-audio
 ```
 
 ### Development Mode
@@ -49,348 +177,146 @@ pnpm run dev
 
 ---
 
-## Module Architecture
-
-Neko Suite uses a **Monorepo (pnpm workspace + turbo)** structure with 19 packages:
-
-### Core Triangle (Development Focus)
-
-| Module          | Role                                                                                                                            | Status    | Scale                             |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------- |
-| **neko-engine** | Rust GPU media engine - wgpu PBR rendering + codec + export + DSP effects + 3D scene/2D skeletal ECS + ONNX ML inference        | Alpha 99% | ~108K Rust (293 files, 980 tests) + 4.6K TS (22 files) |
-| **neko-cut**    | Video editor - timeline + preview + color correction + effects + 56 EditOperations                                              | Alpha 95% | 63K TS/TSX (292 files, 658 tests), 52 commands        |
-| **neko-agent**  | AI Agent - multi-LLM + MCP + Skills + IDC unified workflow + multimodal perception + rich content delivery                      | Alpha 99% | 228K TS (1166 files, 3463 tests)  |
-
-### Infrastructure
-
-| Module          | Role                                                                                      | Status      | Scale                            |
-| --------------- | ----------------------------------------------------------------------------------------- | ----------- | -------------------------------- |
-| **neko-types**  | Shared types + cross-cutting concerns (Logger/i18n/Theme/Errors) + Operations type safety | Alpha 94%   | 55.7K TS (296 files, 519 tests)  |
-| **neko-client** | Streaming client - H264/fMP4/PCM + EngineClient HTTP dispatch + MediaPlaybackService      | Alpha 85%   | 10K TS (39 files, 95 tests)      |
-| **neko-proto**  | Protocol definitions (timeline.proto + diff.proto full IDL)                               | Stable 100% | 2 proto                          |
-| **neko-auth**   | Unified auth - OAuth 2.0 + PKCE SSO + token refresh + VSCode SecretStorage / file storage | Alpha 90%   | 1.7K TS (15 files, 54 tests)     |
-| **neko-dashboard** | Creative workspace hub - runtime status + workflow launcher + skill browser + task monitor | Alpha 90%   | 3.5K TS/TSX (30 files, 29 tests) |
-| **neko-suite**  | Extension Pack portal                                                                     | Stable 90%  | Config package                   |
-
-### Feature Modules
-
-| Module           | Role                                                                                                         | Status    | Scale                              |
-| ---------------- | ------------------------------------------------------------------------------------------------------------ | --------- | ---------------------------------- |
-| **neko-preview** | Media preview - Video/Audio/Panoramic Provider + WebCodecs player + engine-first HDR routing                 | Alpha 91% | 15.4K TS/TSX (86 files, 152 tests) |
-| **neko-story**   | Screenplay editor - Fountain LSP + 5-column storyboard table + video readiness + story→agent→canvas pipeline | Alpha 97% | 18.7K TS/TSX (75 files, 217 tests) |
-| **neko-market**  | Asset marketplace - Skills/shaders/models/presets search + install + versioning + local model deployment     | Alpha 90% | 13.7K TS/TSX (64 files, 198 tests) |
-| **neko-assets**  | Asset management - registry + thumbnails + persistent search index + external media libraries                | Alpha 88% | 11.3K TS (56 files, 167 tests)     |
-| **neko-tools**   | Media tools - Diff comparison + JVI LSP + silence detection + metadata viewer                                | Alpha 72% | 17.5K TS (120 files, 112 tests)    |
-| **neko-canvas**  | Infinite canvas - 15 node types + block containers + composable presets + batch generation + MCP Tools       | Alpha 95% | 30.8K TS/TSX (145 files, 204 tests)|
-
-### Creative Modules
-
-| Module          | Role                                                                                                                          | Status    | Scale                                         |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------- |
-| **neko-model**  | 3D creation - glTF/VRM Engine-streamed Route A viewport + LookDev Clay/Debug + authored lights + Engine-owned environment + typed picking + CSG + face sculpting + keyframe animation + IK solver | Alpha 87% | 9.7K TS (75 files, 45 tests) + 98 Rust tests  |
-| **neko-sketch** | 2D creation - pressure-sensitive drawing (8 brushes) + layers + selection + AI tools + PSD import + .nks format + 2D lighting | Alpha 68% | 31.9K TS/TSX (178 files, 185 tests)           |
-| **neko-audio**  | Audio workstation - DAW UI (TrackHeader/TrackLane/AudioClip) + 12 effect types + spectrum + AI denoising + Agent tools        | Alpha 82% | 11.1K TS/TSX (60 files, 52 tests)             |
-| **neko-puppet** | 2D skeletal animation - `.nkp` v2 Native Puppet (Bone2D + BlendShape + ControlDriver) + Live2D/MOC3 import compatibility + first Agent/export paths + 60fps streaming | Alpha 92% | 4.2K TS (38 files, 37 tests) + 116 Rust tests |
-| **neko-live**   | Virtual production - engine Live Compositor stream + ViewportShell + authorized device source refs + non-authoritative local fallback recording | Alpha 58% | 4.4K TS (34 files, 37 tests)                  |
-
----
-
-## Core Technology
-
-### 1. Rust Sidecar Engine
-
-Core computation resides in the **neko-engine** Rust standalone process (11 crates), communicating with VS Code via unified HTTP/WS + NAPI, completely solving editor lag issues.
-
-```
-VS Code Extension Host ←─ HTTP/WS/NAPI ─→ neko-engine (Rust Sidecar)
-                                                │
-                                                ├─ wgpu GPU Rendering (20+ WGSL shaders, PBR + IBL + particles + post-processing)
-                                                ├─ FFmpeg Codec (hardware-accelerated VideoToolbox/NVENC/VAAPI)
-                                                ├─ DSP Effect Library (mix pipeline with solo/pan)
-                                                ├─ Export Pipeline (GPU export + audio mixer + loudness normalization)
-                                                ├─ runtime-scene 3D Scene (bevy_ecs + glTF/VRM + PBR + IK + animation blend)
-                                                ├─ runtime-puppet 2D Native Puppet (Bone2D + BlendShape + MOC3 import compatibility + 60fps WS stream)
-                                                ├─ runtime-device Device I/O (cpal + midir + gilrs)
-                                                ├─ runtime-media Media Logic (probe + diff + subtitle)
-                                                └─ runtime-ml ONNX Inference (macOS CoreML acceleration)
-```
-
-### 2. AIGC Agent as the Creation Driver
-
-The **neko-agent** is the central nervous system of the IDE. It turns natural language into multimodal creation actions across every surface — timeline, canvas, 3D viewport, 2D sketch, audio workstation — through multi-LLM providers (Claude / OpenAI / Google), MCP tool protocol, multimodal perception, and rich content delivery. Every sub-package exposes its tools via `AgentCapabilityProvider`, so the Agent discovers capabilities dynamically instead of hard-coding them.
-
-```
-User Intent
-   │
-   ▼
-┌────────────────────────────────────────────────────────────────┐
-│  neko-agent  (LLM + MCP + Perception + Skills + Capability     │
-│               Discovery + Context/Memory)                      │
-└────────────────────────────────────────────────────────────────┘
-   │          │          │          │          │          │
-   ▼          ▼          ▼          ▼          ▼          ▼
- story     canvas       cut       model     sketch      audio
-(script) (storyboard) (timeline)  (3D)     (2D paint) (DAW)
-```
-
-### 3. Skills Orchestrate Workflows
-
-**Skills** are composable, reusable workflow units — each one bundles a prompt fragment, a set of allowed tools, permission rules, and context budgets. The Agent activates Skills based on intent (via `ActivateSkill` / `DeactivateSkill` meta-tools), and `SkillInjectionCoordinator` atomically injects or removes all four tracks: Prompt → Permission → Guard → ToolSet. Tiered lazy loading (`resident` / `eager` / `lazy`) keeps the baseline at ~8K tokens and grows on demand.
-
-```
-Intent → SkillRegistry → activate(skill)
-                           ├─ Prompt fragment (system prompt section)
-                           ├─ ToolSet (always / dynamic layer)
-                           ├─ Permission rules
-                           └─ Context budget
-                         execute → deactivate → atomic rollback
-```
-
-### 4. Character Role Workflows
-
-Character testing, embodiment feedback, and creative authoring are separate scenarios. The Dashboard character detail view keeps only two core role workflows: `Character Dialogue` and `Embody Character`. `Character Dialogue` opens an isolated session in the Agent panel where the Agent plays the character and the user tests it. The profile is assembled from current project character facts, asset bindings, visual drafts, relationships, and occurrences, and the session uses `toolPolicy: { kind: 'none' }`, so it receives no file, media-generation, timeline-editing, shell, or creative authoring tools. `Embody Character` also opens an isolated role session, but with the actor relationship reversed: the user plays the character, while the Agent stays out-of-character and provides read-only project knowledge feedback. It does not activate Skills, write files, mutate entities, create tasks, or generate media.
-
-Dashboard character detail actions:
+## Core Architecture
 
 ```text
-Character Dialogue
-Embody Character
+VS Code Extension Host
+  | postMessage
+  v
+Webview Surfaces (React + Zustand + Vite)
+  | direct WebSocket streams where needed
+  v
+neko-engine Rust Sidecar
+  | HTTP / WebSocket / N-API
+  v
+GPU, codec, audio, scene, puppet, media, device, ML runtimes
 ```
 
-- `Character Dialogue`: enter an isolated roleplay test session where the Agent plays the character and the user tests it.
-- `Embody Character`: enter an isolated feedback session where the user plays the character and the Agent evaluates role knowledge, unknowns, out-of-scope claims, and mode-boundary requests.
-- `character-validation` Skill: automated validation where one Agent plays the character and another probes knowledge boundaries, voice, and stability.
-- `character-improvement` Skill: evidence-backed improvement suggestions that do not automatically write project facts.
-- `/exit-as`: exit the active Character Dialogue session, generate an evaluation report, and choose whether to save evidence.
+Key boundaries:
 
-`/as @character` is the official shortcut for starting Character Dialogue and delegates to the `neko.agent.characterDialogue` isolated session path. Dashboard only sends creative entity action requests, while the Agent extension owns profile assembly, read-only evidence hydration, Skill primitive ports, session creation, evaluation, and evidence persistence.
-
-Character role context follows the current project by default. Active Character Dialogue and Embody Character turns stay in their own session memory and are not written to main Agent history, `.neko/memory.md`, global memory, or standard conversation records. If the user chooses to save dialogue evidence, transcripts and evaluation are written under `.neko/character-tests/{entityId}-{timestamp}.json` in the current project. Historical `.neko/npc-tests/*.json` evidence is not rewritten by this migration. Evaluation suggestions stay suggested until the user confirms applying them through entity metadata or relationship update commands.
-
-### 5. Unified Asset Library
-
-A single **asset registry** (neko-assets) feeds every surface: video clips, audio, images, 3D models, 2D puppets, generated AI outputs, and project files. Persistent search index, thumbnails, external media library mounting, and path variable resolution (`${VAR}/path` via `PathResolver` in `@neko/shared`) make the library portable across machines and collaborators. Generated assets from the Agent land on disk as `GeneratedAsset` with JSON references — no base64 bloat, no lost provenance.
-
-```
-Local files / External libraries / Agent-generated
-   │
-   ▼
-┌────────────────────────────────────────────────────────────────┐
-│  neko-assets  (Registry + Thumbnails + Search Index + PathResolver)│
-└────────────────────────────────────────────────────────────────┘
-   │           │          │          │          │          │
-   ▼           ▼          ▼          ▼          ▼          ▼
- canvas      cut       model     sketch     puppet      audio
-```
-
-### 6. WebGPU Rendering Pipeline
-
-Uses the wgpu compositor to directly composite video frames, effects, transitions, and color correction in GPU memory. Supports blend modes, custom shaders, and keyframe animation.
-
-```
-Video Frames + Effects + Transitions → wgpu Compositor → Real-time Preview
-```
-
----
-
-## Workflow
-
-Not a linear pipeline — an **Agent-driven closed creation loop** where every turn flows through five planes and feeds the next iteration:
-
-```
-           ┌──────────────────────────────────────────────────┐
-           │                                                  │
-           ▼                                                  │
-  ① Intent Authoring          Prompt + selected asset + ref  │
-     (user / AGENTS.md /      constraints                    │
-      resident skill)                                        │
-           │                                                  │
-           ▼                                                  │
-  ② Dynamic Orchestration     SkillRegistry activates        │
-     (neko-agent)             Prompt / Tools / Permissions / │
-                              Context; IDC Draft→Plan→Apply  │
-           │                                                  │
-           ▼                                                  │
-  ③ Content Generation        story / canvas / cut / model / │
-     (multimodal surfaces)    sketch / puppet / audio execute│
-                              via MCP + AgentCapabilityProvider
-           │                                                  │
-           ▼                                                  │
-  ④ Quality Check             Pipeline QC: LUFS, multi-frame │
-     (automated review)       visual eval, format validation,│
-                              schema lint, confidence gate   │
-           │                                                  │
-           ▼                                                  │
-  ⑤ Perception Feedback       PerceptionCard (structural /   │
-     (re-grounding)           semantic / perceptual) feeds   │
-                              next intent; evaluator writes  │
-                              to memory / project cards      │
-           │                                                  │
-           └──────────────► back to ① (closed loop)
-```
-
-- **Intent Authoring** — user prompt, conversation context, resident skills, AGENTS.md overlay, project-level memory
-- **Dynamic Orchestration** — Skill activation atomically injects Prompt / ToolSet / Permission / Guard; IDC 3-stage (Draft → Plan → Apply) for non-trivial work
-- **Content Generation** — cross-surface execution (timeline / canvas / 3D / 2D / audio) via MCP and `AgentCapabilityProvider`
-- **Quality Check** — Pipeline adapters verify audio loudness, visual consistency across frames, schema validity, and confidence thresholds; failures trigger retry or human review
-- **Perception Feedback** — `PerceptionCard` re-grounds the Agent on actual artifact state (not assumed state); results close the loop into the next Intent
+- Webviews never call Node.js or VS Code APIs directly.
+- Extension Host owns VS Code APIs, file dialogs, workspace state, and webview resource URIs.
+- Rust owns heavy compute, media decoding/encoding, GPU rendering, runtime scene/puppet/audio/device logic, and binary file access.
+- Protobuf and `@neko/shared` keep cross-layer contracts explicit.
+- `@neko/neko-client` is the zero-VSCode client layer for HTTP/WS dispatch and streaming.
 
 ---
 
 ## Project Structure
 
-```
+```text
 neko-suite/
 ├── packages/
-│   ├── neko-suite/            # Extension Pack portal
-│   ├── neko-engine/           # Rust Sidecar media engine
-│   │   └── packages/
-│   │       ├── engine-kernel/   # Rust core (wgpu/codec/DSP/export)
-│   │       ├── engine-types/    # Shared Rust DTO types
-│   │       ├── host-api/        # HTTP API routing layer
-│   │       ├── host-http/       # Axum HTTP service
-│   │       ├── host-napi/       # Node.js NAPI bindings
-│   │       ├── host-cli/        # CLI entry point
-│   │       ├── runtime-scene/   # 3D scene ECS (bevy_ecs + glTF + IK)
-│   │       ├── runtime-puppet/  # 2D Native Puppet ECS (Bone2D + BlendShape + MOC3 import compatibility)
-│   │       ├── runtime-device/  # Device I/O (cpal/midir/gilrs)
-│   │       ├── runtime-media/   # Media logic (probe/diff/subtitle)
-│   │       ├── runtime-ml/      # ML inference (ONNX Runtime)
-│   │       └── extension/       # TS VSCode extension side
-│   ├── neko-cut/              # Video editor
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side
-│   │       └── webview/       # React UI (13 store slices)
-│   ├── neko-agent/            # AI Agent
-│   │   └── packages/
-│   │       ├── agent/         # Core engine (executor/session/skills/mcp)
-│   │       ├── platform/      # LLM platform layer (Claude/OpenAI/Google adapter)
-│   │       ├── webview/       # React UI
-│   │       ├── extension/     # VSCode extension side
-│   │       └── cli-tui/       # Interactive CLI
-│   ├── neko-canvas/           # Infinite canvas
-│   │   └── packages/
-│   │       ├── canvas/        # Canvas core logic
-│   │       ├── extension/     # VSCode extension side
-│   │       └── webview/       # React UI
-│   ├── neko-story/            # Screenplay editor (Fountain LSP)
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side
-│   │       ├── parser/        # Fountain parser
-│   │       ├── types/         # Type definitions
-│   │       └── webview/       # React UI
-│   ├── neko-preview/          # Media preview
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side
-│   │       └── webview/       # React UI
-│   ├── neko-tools/            # Media tools
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side
-│   │       └── webview/       # React UI
-│   ├── neko-assets/           # Asset management
-│   │   └── packages/
-│   │       └── asset/         # Asset core logic
-│   ├── neko-market/           # Asset marketplace
-│   │   └── packages/
-│   │       ├── core/          # Market client + install manager (Layer 0)
-│   │       ├── extension/     # VSCode extension side
-│   │       └── webview/       # React UI
-│   ├── neko-auth/             # Unified auth (OAuth 2.0 + PKCE SSO)
-│   │   └── packages/
-│   │       ├── core/          # @neko/auth-core (Layer 0)
-│   │       └── extension/     # neko.neko-auth VSCode extension
-│   ├── neko-dashboard/         # Creative workspace hub (dashboard)
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side
-│   │       └── webview/       # React UI
-│   ├── neko-audio/            # Audio workstation
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side
-│   │       └── webview/       # React UI
-│   ├── neko-client/           # Streaming client (H264/PCM/fMP4) + EngineClient
-│   ├── neko-model/            # 3D creation (Engine-streamed Route A + LookDev/lights/environment + CSG + skeletal expressions)
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side (.gltf/.glb/.vrm/.nkm)
-│   │       └── webview/       # React control surface + Engine H.264 viewport
-│   ├── neko-sketch/           # 2D drawing (painting + filters/particles/scene + frame animation)
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nks)
-│   │       └── webview/       # React 18 + WebGL2 UI
-│   ├── neko-puppet/           # 2D skeletal animation (.nkp v2 native editor + Live2D/MOC3 import conversion)
-│   │   └── packages/
-│   │       ├── extension/     # VSCode extension side (CustomEditorProvider .nkp/.moc3)
-│   │       └── webview/       # React 18 + EngineClient UI
-│   ├── neko-live/             # Virtual production (Live Compositor stream + fallback preview)
-│   ├── neko-types/            # Shared types + Logger + i18n + Theme + entity-uri
-│   └── neko-proto/            # Protocol definitions (Protobuf IDL)
-├── docs/                      # Architecture documentation
-├── package.json               # Root package.json (pnpm workspaces)
-├── ROADMAP.md                 # Development roadmap
-├── CLAUDE.md                  # Development guidelines
-└── turbo.json                 # Turbo build configuration
+│   ├── neko-engine/       # Rust sidecar engine and VS Code engine extension
+│   ├── neko-agent/        # Agent runtime, AI platform, webview, extension, CLI
+│   ├── neko-cut/          # Video editor
+│   ├── neko-canvas/       # Infinite canvas and storyboard orchestration
+│   ├── neko-story/        # Script editor and story planning
+│   ├── neko-preview/      # Media/document preview
+│   ├── neko-assets/       # Asset registry and media libraries
+│   ├── neko-market/       # Marketplace and install targets
+│   ├── neko-tools/        # Diff, inspection, and media utilities
+│   ├── neko-model/        # 3D authoring
+│   ├── neko-sketch/       # 2D drawing
+│   ├── neko-puppet/       # 2D skeletal animation
+│   ├── neko-audio/        # Audio workstation
+│   ├── neko-live/         # Virtual production and realtime interaction
+│   ├── neko-dashboard/    # Workspace dashboard
+│   ├── neko-entity/       # Creative entity runtime
+│   ├── neko-search/       # Project search runtime
+│   ├── neko-ui/           # Shared webview UI
+│   ├── neko-types/        # @neko/shared
+│   ├── neko-client/       # EngineClient and stream clients
+│   ├── neko-proto/        # Protobuf IDL
+│   ├── neko-auth/         # Auth core and extension
+│   └── neko-suite/        # Extension Pack
+├── docs/
+├── README.md
+├── README_CN.md
+├── README_NYA.md
+├── ROADMAP.md
+├── ARCHITECTURE.md
+├── ARCHITECTURE_CN.md
+└── turbo.json
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer            | Technology                                             |
-| ---------------- | ------------------------------------------------------ |
-| **Frontend**     | React 18 + Zustand + Tailwind CSS + Vite               |
-| **Extension**    | VS Code Extension API + TypeScript + esbuild           |
-| **Engine**       | Rust + wgpu + FFmpeg + axum + tokio + bevy_ecs         |
-| **AI**           | Vercel AI SDK (Claude/OpenAI/Google) + MCP Protocol    |
-| **ML**           | ONNX Runtime (macOS CoreML acceleration) + Whisper     |
-| **Streaming**    | H.264 + PCM + fMP4 over WebSocket                      |
-| **Testing**      | Vitest v4 + cargo test                                 |
-| **Code Quality** | ESLint + TypeScript strict + Knip + dependency-cruiser |
-| **Build**        | pnpm workspaces + Turbo (Monorepo)                     |
+| Layer     | Technology                                                       |
+| --------- | ---------------------------------------------------------------- |
+| Frontend  | React 18, Zustand, Tailwind CSS, Vite                            |
+| VS Code   | VS Code Extension API, TypeScript, esbuild                       |
+| Engine    | Rust, wgpu, FFmpeg, axum, tokio, bevy_ecs, napi-rs               |
+| Streaming | H.264, PCM, fMP4, WebSocket, WebCodecs                           |
+| AI        | Vercel AI SDK, Claude/OpenAI/Google/Ollama/Generic adapters, MCP |
+| ML        | ONNX Runtime, CoreML acceleration where available                |
+| Contracts | Protobuf, `@neko/shared`, JSON nk\* project formats              |
+| Build     | pnpm 10, Turborepo 2                                             |
+| Testing   | Vitest v4, cargo test, dependency-cruiser, Knip                  |
 
 ---
 
-## Supported Media Formats
+## Supported Media And Project Formats
 
-| Type             | Formats                                                                   |
-| ---------------- | ------------------------------------------------------------------------- |
-| **Video**        | MP4, MOV, AVI, MKV, WebM, M4V                                             |
-| **Audio**        | MP3, WAV, OGG, FLAC, AAC, M4A                                             |
-| **Image**        | PNG, JPG, JPEG, GIF, WebP, BMP, SVG                                       |
-| **3D Model**     | glTF, GLB, VRM, .nkm                                                      |
-| **2D Animation** | .nkp v2 (Neko Native Puppet), MOC3/Live2D import compatibility, .nks (Neko Sketch) |
-| **Project**      | .nkv (Video), .nkc (Canvas), .nka (Audio), .nkm (3D Model), .nks (Sketch) |
+| Type           | Formats                                                          |
+| -------------- | ---------------------------------------------------------------- |
+| Video          | MP4, MOV, AVI, MKV, WebM, M4V                                    |
+| Audio          | MP3, WAV, OGG, FLAC, AAC, M4A                                    |
+| Image          | PNG, JPG, JPEG, GIF, WebP, BMP, SVG                              |
+| 3D             | glTF, GLB, VRM, `.nkm`                                           |
+| 2D / Character | `.nks`, `.nkp` v2, MOC3/Live2D import compatibility, `.nkentity` |
+| Project        | `.nkv`, `.nkc`, `.nka`, `.nkm`, `.nks`, `.nkp`                   |
+
+---
+
+## Validation Commands
+
+Use the smallest command that covers the changed area, then expand as risk increases:
+
+```bash
+pnpm build
+pnpm test
+pnpm check
+```
+
+Rust engine changes:
+
+```bash
+cd packages/neko-engine
+cargo test --workspace
+```
+
+Local CI equivalents:
+
+```bash
+pnpm ci:local
+pnpm ci:local:rust
+pnpm ci:local:proto
+```
 
 ---
 
 ## Documentation
 
-- [ROADMAP.md](./ROADMAP.md) - Development roadmap and feature planning
+- [ROADMAP.md](./ROADMAP.md) - Roadmap and feature planning
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture overview
-- [CLAUDE.md](./CLAUDE.md) - Development guidelines and architecture guide
-- [docs/engine.md](./docs/engine.md) - Media engine documentation
-- [docs/shaders.md](./docs/shaders.md) - GPU Shader documentation
-- [docs/timeline-alignment.md](./docs/timeline-alignment.md) - Timeline alignment documentation
-- [docs/editoperation.md](./docs/editoperation.md) - Edit operation design
-- [docs/architecture/](./docs/architecture/) - Architecture design documents
-  - [Panel Placement Strategy](./docs/architecture/panel-placement.md) - Editor panel architecture
-  - [Device Access Strategy](./docs/architecture/device-access.md) - Hardware device proxy solution
-  - [Engine Pluginization RFC](./docs/architecture/engine-plugin-rfc.md) - Capability pluginization and marketplace/host responsibilities
-  - [Engine Runtime Layering](./docs/architecture/engine-runtime-layering.md) - Package-level runtimes with a single-host default
-  - [Format Strategy](./docs/architecture/format-strategy.md) - nk\* file format design
-  - [Marketplace](./docs/architecture/marketplace.md) - Asset marketplace architecture
-  - [Local Model Deployment](./docs/architecture/model-runtime.md) - ONNX/GGUF runtime
-  - [Registry Server](./docs/architecture/registry-server.md) - Registry center design
+- [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md) - Chinese architecture overview
+- [CLAUDE.md](./CLAUDE.md) - Development guidelines
+- [docs/architecture/](./docs/architecture/) - ADRs and subsystem architecture notes
+- [docs/architecture/adr-code-review-quality-gates.md](./docs/architecture/adr-code-review-quality-gates.md) - Review and quality gates
 
 ---
 
 ## Contributing
 
-We welcome contributions to Neko Suite!
+We welcome contributions to Neko Suite. Please follow the architecture boundaries before opening a pull request:
 
-1. Fork this repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Create a Pull Request
+1. Keep Webview, Extension Host, Rust engine, and shared contracts separate.
+2. Prefer contract-first changes for cross-package work.
+3. Add focused tests for new interfaces, state machines, and failure paths.
+4. Run the relevant validation commands and include the residual risk.
 
 For detailed development guidelines, see [CLAUDE.md](./CLAUDE.md).
 
@@ -398,58 +324,13 @@ For detailed development guidelines, see [CLAUDE.md](./CLAUDE.md).
 
 ## License
 
-MIT
+Mixed License (MIT / Apache 2.0 / LGPL v3). See [LICENSE](./LICENSE) for details.
+
+- [Ethical Use Guidelines](./ETHICS.md)
+- [Trademark Policy](./TRADEMARK.md)
 
 ---
 
 ## Acknowledgements
 
-Neko Suite is built on the shoulders of many excellent open-source projects:
-
-### Platform & Runtime
-
-- [VS Code](https://code.visualstudio.com/) - Powerful editor platform
-- [Node.js](https://nodejs.org/) - JavaScript runtime
-- [Tokio](https://tokio.rs/) - Rust async runtime
-
-### GPU & Rendering
-
-- [wgpu](https://wgpu.rs/) - Cross-platform GPU abstraction (Metal/Vulkan/DX12)
-- [Three.js](https://threejs.org/) + [React Three Fiber](https://r3f.docs.pmnd.rs/) - 3D rendering
-- [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API) - Browser-native codec API
-
-### Media Processing
-
-- [FFmpeg](https://ffmpeg.org/) ([ffmpeg-next](https://github.com/zmwangx/rust-ffmpeg)) - Video codec infrastructure
-- [cpal](https://github.com/RustAudio/cpal) - Cross-platform audio I/O
-- [sharp](https://sharp.pixelplumbing.com/) - High-performance image processing
-
-### AI & ML
-
-- [Vercel AI SDK](https://sdk.vercel.ai/) - Multi-model AI integration framework
-- [ONNX Runtime](https://ort.pyke.io/) ([ort](https://github.com/pykeio/ort)) - ML inference engine
-
-### 3D/2D Engine
-
-- [Bevy ECS](https://bevyengine.org/) - Entity-Component-System framework
-- [glTF-rs](https://github.com/gltf-rs/gltf) - glTF/GLB model parsing
-- [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) - VRM character model support
-
-### Frontend
-
-- [React](https://react.dev/) - UI framework
-- [Zustand](https://zustand-demo.pmnd.rs/) - State management
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS
-
-### Networking & Communication
-
-- [Axum](https://github.com/tokio-rs/axum) - HTTP/WebSocket server
-- [napi-rs](https://napi.rs/) - Rust ↔ Node.js bindings
-- [Protocol Buffers](https://protobuf.dev/) - Type contract protocol
-
-### Build & Quality
-
-- [Turborepo](https://turbo.build/) - Monorepo build orchestration
-- [Vite](https://vitejs.dev/) - Frontend bundler
-- [Vitest](https://vitest.dev/) - Testing framework
-- [ESLint](https://eslint.org/) + [Knip](https://knip.dev/) + [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) - Code quality
+Neko Suite is built on excellent open-source projects including VS Code, Rust, Tokio, Axum, wgpu, FFmpeg, Bevy ECS, WebCodecs, React, Zustand, Tailwind CSS, Vite, Vitest, Turborepo, napi-rs, Protocol Buffers, ONNX Runtime, and the Vercel AI SDK.
