@@ -523,12 +523,14 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     () => messages,
     (next) => {
       messages = next;
+      context.messages = next;
     },
   );
   const setIsThinking = createSetter(
     () => streaming.isThinking,
     (next) => {
       streaming = { ...streaming, isThinking: next };
+      context.isThinking = next;
     },
   );
   const setStreamingMessageId = createSetter(
@@ -552,7 +554,9 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   );
 
   const context = {
+    messages,
     setMessages,
+    isThinking: streaming.isThinking,
     setIsThinking,
     setStreamingMessageId,
     streamingMessageId: streaming.streamingMessageId,
@@ -562,6 +566,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationMessagesRef,
     conversationStreamingRef,
     openTabs: [],
+    activeTabId: null,
     setOpenTabs: noopDispatch(),
     setActiveTabId: noopDispatch(),
     setActiveTab: noopDispatch(),

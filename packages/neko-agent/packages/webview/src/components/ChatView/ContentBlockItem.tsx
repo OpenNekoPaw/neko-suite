@@ -23,6 +23,7 @@ import {
   type ContentBlockHeaderTone,
   type ContentBlockUiProjection,
 } from '@/presenters/content-block-presenter';
+import type { MessageSpeakerIdentity } from '@/components/ChatView/message-identity';
 
 interface ContentBlockItemProps {
   /** The content block to render */
@@ -39,6 +40,8 @@ interface ContentBlockItemProps {
   workItemIds?: string[];
   /** Sibling blocks from the owner message, used for composite media resolution */
   siblingBlocks?: ContentBlock[];
+  /** Speaker identity for assistant-owned content blocks. */
+  assistantIdentity?: MessageSpeakerIdentity;
 }
 
 const blockHeaderIconByKind: Record<ContentBlockHeaderIconKind, string> = {
@@ -65,6 +68,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   conversationId,
   workItemIds,
   siblingBlocks,
+  assistantIdentity,
 }: ContentBlockItemProps) {
   const actions = useMessageActions();
   const projection = projectContentBlockUi({
@@ -78,7 +82,16 @@ export const ContentBlockItem = memo(function ContentBlockItem({
       <div className="flex gap-2 px-2 py-1">
         {/* Avatar - only show on first block */}
         <div className="flex-shrink-0 w-5 pt-0.5">
-          {isFirst ? <MessageAvatar role="assistant" title="AI" /> : <div className="w-5" />}
+          {isFirst ? (
+            <MessageAvatar
+              role="assistant"
+              label={assistantIdentity?.avatarLabel}
+              imageUri={assistantIdentity?.avatarUri}
+              title={assistantIdentity?.title}
+            />
+          ) : (
+            <div className="w-5" />
+          )}
         </div>
 
         {/* Content */}

@@ -14,79 +14,37 @@ export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-4 select-none">
-      {/* Icon */}
-      <div className="mb-5 relative">
-        {/* Outer glow */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[var(--vscode-charts-purple)] to-[var(--vscode-charts-blue)] opacity-20 blur-xl scale-110" />
-        {/* Icon container */}
-        <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--vscode-charts-purple)] to-[var(--vscode-charts-blue)] flex items-center justify-center shadow-lg">
-          <NekoIcon className="w-9 h-9" />
-        </div>
-      </div>
-
-      {/* Title */}
-      <h2 className="text-[15px] font-semibold mb-1.5 tracking-tight">
-        {t('chat.emptyState.title')}
-      </h2>
-      <p className="text-[12px] text-[var(--vscode-descriptionForeground)] text-center mb-5 max-w-[260px] leading-relaxed">
-        {t('chat.emptyState.description')}
-      </p>
-
-      {/* Suggestion chips */}
-      <div className="flex flex-col items-stretch gap-1.5 w-full max-w-[260px] mb-6">
-        {suggestions.map((s) => (
-          <button
-            key={s}
-            onClick={() => onSuggestionClick?.(s)}
-            className="px-3 py-1.5 text-[11px] text-left text-[var(--vscode-descriptionForeground)] border border-[var(--vscode-panel-border)] rounded-lg hover:border-[var(--vscode-focusBorder)] hover:text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] transition-colors"
+    <div className="agent-empty-state flex h-full min-h-[220px] select-none items-start justify-center px-4 py-8 sm:py-10">
+      <section className="w-full max-w-[360px]" aria-labelledby="neko-agent-empty-title">
+        <div className="min-w-0">
+          <h2
+            id="neko-agent-empty-title"
+            className="text-[13px] font-semibold leading-5 text-[var(--agent-fg)]"
           >
-            {s}
-          </button>
-        ))}
-      </div>
+            {t('chat.emptyState.title')}
+          </h2>
+          <p className="mt-1 text-[12px] leading-5 text-[var(--agent-empty-copy)]">
+            {t('chat.emptyState.description')}
+          </p>
+        </div>
 
-      {/* Disclaimer */}
-      <p className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-50 text-center">
-        {t('chat.emptyState.disclaimer')}
-      </p>
+        <div className="mt-5 grid gap-1.5">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onClick={() => onSuggestionClick?.(suggestion)}
+              className="flex min-h-9 w-full items-center rounded-md border border-[var(--agent-empty-action-border)] bg-[var(--agent-empty-action-bg)] px-3 py-2 text-left text-[12px] leading-5 text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-empty-action-hover-border)] hover:bg-[var(--agent-empty-action-hover-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--agent-accent)]"
+            >
+              <span className="min-w-0 flex-1 break-words">{suggestion}</span>
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-4 text-[10px] leading-4 text-[var(--agent-empty-muted)]">
+          {t('chat.emptyState.disclaimer')}
+        </p>
+      </section>
     </div>
-  );
-}
-
-/** Neko (cat) icon — white silhouette with mask-cut eyes and nose */
-function NekoIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none">
-      <defs>
-        <mask id="neko-mask">
-          <rect width="24" height="24" fill="white" />
-          {/* Left eye */}
-          <ellipse cx="9" cy="14" rx="1.6" ry="1.9" fill="black" />
-          {/* Right eye */}
-          <ellipse cx="15" cy="14" rx="1.6" ry="1.9" fill="black" />
-          {/* Nose */}
-          <path d="M11.3 17 L12 17.9 L12.7 17 Z" fill="black" />
-        </mask>
-      </defs>
-
-      {/* Cat silhouette: head + ears, masked */}
-      <g fill="white" mask="url(#neko-mask)">
-        {/* Left ear */}
-        <path d="M8 11.5 L4.5 4 L11 9.5 Z" />
-        {/* Right ear */}
-        <path d="M16 11.5 L19.5 4 L13 9.5 Z" />
-        {/* Head */}
-        <circle cx="12" cy="14.5" r="8.5" />
-      </g>
-
-      {/* Inner ear highlights (softer white fill) */}
-      <path d="M8 10.5 L5.8 5.5 L10.2 9.5 Z" fill="white" opacity="0.35" />
-      <path d="M16 10.5 L18.2 5.5 L13.8 9.5 Z" fill="white" opacity="0.35" />
-
-      {/* Eye shine dots */}
-      <circle cx="9.7" cy="13.2" r="0.55" fill="white" opacity="0.7" />
-      <circle cx="15.7" cy="13.2" r="0.55" fill="white" opacity="0.7" />
-    </svg>
   );
 }

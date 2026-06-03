@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { projectInputAreaUi } from '../input-area-presenter';
 
 describe('input area presenter', () => {
-  it('hides creative authoring controls for NPC test conversations', () => {
+  it('hides creative authoring controls for Character Dialogue conversations', () => {
     expect(
       projectInputAreaUi({
         inputValue: 'hello',
@@ -13,7 +13,7 @@ describe('input area presenter', () => {
         isThinking: false,
         disabled: false,
         sessionMode: 'agent',
-        conversationKind: 'npc-test',
+        conversationKind: 'character-dialogue',
       }),
     ).toEqual(
       expect.objectContaining({
@@ -48,6 +48,30 @@ describe('input area presenter', () => {
         showGenerationParams: true,
         showExecutionModeSelector: true,
         showMediaCallCount: true,
+      }),
+    );
+  });
+
+  it('hides creative authoring controls for Embody Character conversations', () => {
+    expect(
+      projectInputAreaUi({
+        inputValue: '',
+        attachedFileCount: 0,
+        contextChipCount: 0,
+        ambientNodeCount: 0,
+        mediaModelCallCount: 1,
+        isThinking: false,
+        disabled: false,
+        sessionMode: 'agent',
+        conversationKind: 'embody-character',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        showSessionModeSelector: false,
+        showChatModelSelector: false,
+        showGenerationParams: false,
+        showExecutionModeSelector: false,
+        showMediaCallCount: false,
       }),
     );
   });

@@ -1,0 +1,90 @@
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import type { CharacterDialogueSessionProjection } from '@/components/types';
+import { ChatView } from './index';
+
+const translations: Record<string, string> = {
+  'chat.emptyState.title': 'Neko Suite AI Assistant',
+  'chat.emptyState.description': 'Organize projects, characters, assets, and generation tasks.',
+  'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
+  'chat.emptyState.suggestion1': 'Analyze current project structure',
+  'chat.emptyState.suggestion2': 'Help me optimize the timeline',
+  'chat.emptyState.suggestion3': 'Write a narration script',
+};
+
+vi.mock('@/i18n/I18nContext', () => ({
+  useTranslation: () => ({
+    t: (key: string) => translations[key] ?? key,
+  }),
+}));
+
+vi.mock('@/components/ChatView/DropZone', () => ({
+  DropZone: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/ChatView/InputArea', () => ({
+  InputArea: () => <div data-testid="input-area" />,
+}));
+
+vi.mock('@/components/ChatView/CharacterDialogueHeader', () => ({
+  CharacterDialogueHeader: () => <div data-testid="character-dialogue-header" />,
+}));
+
+vi.mock('@/components/ChatView/EmbodyCharacterHeader', () => ({
+  EmbodyCharacterHeader: () => <div data-testid="embody-character-header" />,
+}));
+
+describe('ChatView empty state', () => {
+  it('renders ordinary assistant suggestions for empty normal chat', () => {
+    renderChatView();
+
+    expect(screen.getByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Analyze current project structure/ })).toBeTruthy();
+  });
+
+  it('does not render ordinary assistant suggestions in empty Character Dialogue sessions', () => {
+    renderChatView({
+      conversationKind: 'character-dialogue',
+      characterDialogueSession: createCharacterDialogueSession(),
+    });
+
+    expect(screen.getByTestId('character-dialogue-header')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Analyze current project structure/ })).toBeNull();
+    expect(screen.queryByText('AI responses may be inaccurate.')).toBeNull();
+  });
+});
+
+function renderChatView(overrides: Partial<React.ComponentProps<typeof ChatView>> = {}) {
+  render(
+    <ChatView
+      messages={[]}
+      inputValue=""
+      isThinking={false}
+      streamingMessageId={null}
+      activeConversationId="conv-1"
+      onInputChange={vi.fn()}
+      onSend={vi.fn()}
+      {...overrides}
+    />,
+  );
+}
+
+function createCharacterDialogueSession(): CharacterDialogueSessionProjection {
+  return {
+    sessionId: 'dialogue-session-1',
+    entityId: 'char-xiaoju',
+    displayName: '小橘',
+    mode: 'roleplay',
+    profile: {
+      entityRef: { entityId: 'char-xiaoju', entityKind: 'character' },
+      displayName: '小橘',
+      aliases: [],
+      facts: [],
+      sparsity: 'partial',
+    },
+    summary: 'protagonist',
+    startedAt: '2026-06-01T00:00:00.000Z',
+    status: 'active',
+  };
+}

@@ -58,7 +58,7 @@ describe('slash-command-catalog', () => {
 
     expect(names).toContain('/help');
     expect(names).not.toContain('/as');
-    expect(names).toContain('/exit-role');
+    expect(names).toContain('/exit-as');
     expect(names).toContain('/model');
     expect(names).not.toContain('/config');
     expect(names).not.toContain('/commands');

@@ -20,7 +20,8 @@ import {
   SessionMode,
   AgentState,
   type ConversationKind,
-  type NpcSessionProjection,
+  type CharacterDialogueSessionProjection,
+  type EmbodyCharacterSessionProjection,
 } from '@/components/types';
 import type { SettingsState, Message, TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
@@ -47,6 +48,7 @@ import {
   projectChatWorkspaceModelState,
   projectMediaModelSelectionForSessionModeChange,
 } from '@/presenters/config-message-presenter';
+import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
 
 // =============================================================================
 // Props
@@ -65,7 +67,8 @@ export interface ChatWorkspaceProps {
   activeConversationIdRef: MutableRefObject<string | null>;
   activeTabConversationId: string | null;
   conversationKind: ConversationKind;
-  npcSession?: NpcSessionProjection;
+  characterDialogueSession?: CharacterDialogueSessionProjection;
+  embodyCharacterSession?: EmbodyCharacterSessionProjection;
   clearMessages: () => void;
   // Config
   settings: SettingsState;
@@ -135,7 +138,8 @@ export function ChatWorkspace({
   activeConversationIdRef,
   activeTabConversationId,
   conversationKind,
-  npcSession,
+  characterDialogueSession,
+  embodyCharacterSession,
   clearMessages,
   settings,
   updateSettings,
@@ -200,7 +204,7 @@ export function ChatWorkspace({
 
   // ---- Session mode ----
   const [sessionMode, setSessionMode] = useState<SessionMode>('agent');
-  const isNpcTest = conversationKind === 'npc-test';
+  const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
   const isConversationSwitching = Boolean(
     activeTabConversationId && activeTabConversationId !== activeConversationId,
   );
@@ -217,6 +221,7 @@ export function ChatWorkspace({
   const { handleSend, triggerSend, handleCancelMessage, copyLastResponse } = useChatActions({
     inputValue,
     isThinking,
+    isCharacterRoleSession,
     selectedModel,
     sessionMode,
     mediaProviderId: activeMediaModel?.providerId,
@@ -248,30 +253,42 @@ export function ChatWorkspace({
       if (!msg?.type) return handleMessage(event);
       switch (msg.type) {
         case 'externalMessage':
+          if (isCharacterRoleSession) {
+            break;
+          }
           if (typeof msg.message === 'string') {
             setActiveTab('chat');
             triggerSend(msg.message);
           }
           break;
         case 'prefillInput':
+          if (isCharacterRoleSession) {
+            break;
+          }
           if (typeof msg.message === 'string') {
             setActiveTab('chat');
             setInputValue(msg.message);
           }
           break;
         case 'injectContext':
+          if (isCharacterRoleSession) {
+            break;
+          }
           if (msg.payload) {
             setActiveTab('chat');
-            const targetConversationId = msg.conversationId ?? activeConversationIdRef.current;
-            onInjectContextChip(msg.payload, targetConversationId);
+            const injectConversationId = msg.conversationId ?? activeConversationIdRef.current;
+            onInjectContextChip(msg.payload, injectConversationId);
             const shouldPrefillActiveInput =
-              !targetConversationId || targetConversationId === activeConversationIdRef.current;
+              !injectConversationId || injectConversationId === activeConversationIdRef.current;
             if (shouldPrefillActiveInput && msg.payload.intent) {
               setInputValue(msg.payload.intent);
             }
           }
           break;
         case 'ambientCanvasUpdate':
+          if (isCharacterRoleSession) {
+            break;
+          }
           if (msg.conversationId && msg.conversationId !== activeConversationIdRef.current) {
             break;
           }
@@ -289,6 +306,7 @@ export function ChatWorkspace({
       onInjectContextChip,
       setAmbientNodes,
       activeConversationIdRef,
+      isCharacterRoleSession,
     ],
   );
 
@@ -315,6 +333,11 @@ export function ChatWorkspace({
       }),
       COMMON_SHORTCUTS.clearConversation(() => {
         if (!activeConversationId) return;
+        if (isCharacterRoleSession) {
+          clearMessages();
+          clearInput();
+          return;
+        }
         VSCodeMessages.clearHistory(activeConversationId);
         clearMessages();
         clearInput();
@@ -343,11 +366,11 @@ export function ChatWorkspace({
   const [, forceRender] = useState(0);
 
   const handleCompressContext = useCallback(async () => {
-    if (isNpcTest || isCompressing || !activeConversationId) return;
+    if (isCharacterRoleSession || isCompressing || !activeConversationId) return;
     conversationCompressingRef.current.set(activeConversationId, true);
     forceRender((n) => n + 1);
     VSCodeMessages.compressContext(activeConversationId);
-  }, [isNpcTest, isCompressing, activeConversationId, conversationCompressingRef]);
+  }, [isCharacterRoleSession, isCompressing, activeConversationId, conversationCompressingRef]);
 
   const handleExecutionModeChange = (mode: ShellExecutionMode) => {
     updateSettings({ executionMode: mode });
@@ -405,7 +428,7 @@ export function ChatWorkspace({
       pluginCommands={pluginCommands}
       onSlashCommand={handleSlashCommand}
       onRequestFiles={(filter) => {
-        if (!isNpcTest && activeConversationId) {
+        if (!isCharacterRoleSession && activeConversationId) {
           VSCodeMessages.searchProjectFiles(filter, activeConversationId);
         }
       }}
@@ -426,10 +449,13 @@ export function ChatWorkspace({
         streamingMessageId={streamingMessageId}
         activeConversationId={activeConversationId}
         conversationKind={conversationKind}
-        npcSession={npcSession}
+        characterDialogueSession={characterDialogueSession}
+        embodyCharacterSession={embodyCharacterSession}
         isConversationSwitching={isConversationSwitching}
         activeSkill={
-          !isNpcTest && activeSkill?.conversationId === activeConversationId ? activeSkill : null
+          !isCharacterRoleSession && activeSkill?.conversationId === activeConversationId
+            ? activeSkill
+            : null
         }
         onClearActiveSkill={skillActions.handleClearActiveSkill}
         workItems={workItems}
@@ -437,17 +463,17 @@ export function ChatWorkspace({
         contextChips={contextChips}
         ambientNodes={ambientNodes}
         onCancelTask={(taskId) => {
-          if (!isNpcTest && activeConversationId) {
+          if (!isCharacterRoleSession && activeConversationId) {
             VSCodeMessages.cancelTask(taskId, activeConversationId);
           }
         }}
         onRetryTask={(taskId) => {
-          if (!isNpcTest && activeConversationId) {
+          if (!isCharacterRoleSession && activeConversationId) {
             VSCodeMessages.retryTask(taskId, activeConversationId);
           }
         }}
         onViewTaskResult={(taskId) => {
-          if (!isNpcTest && activeConversationId) {
+          if (!isCharacterRoleSession && activeConversationId) {
             VSCodeMessages.viewTaskResult(taskId, activeConversationId);
           }
         }}

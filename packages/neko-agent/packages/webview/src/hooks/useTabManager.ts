@@ -8,6 +8,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { OpenTab, ConversationSummary, TabType } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
+import { isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 
 export interface UseTabManagerProps {
   openTabs: OpenTab[];
@@ -17,6 +18,8 @@ export interface UseTabManagerProps {
   conversations: ConversationSummary[];
   setActiveTab: (tab: TabType) => void;
   onNewChat: () => void;
+  onBeforeTabActivation?: () => void;
+  onActivateCharacterRoleTab?: (tab: OpenTab) => void;
 }
 
 export interface UseTabManagerReturn {
@@ -33,6 +36,8 @@ export function useTabManager({
   conversations,
   setActiveTab,
   onNewChat,
+  onBeforeTabActivation,
+  onActivateCharacterRoleTab,
 }: UseTabManagerProps): UseTabManagerReturn {
   // Sync tab state to extension for persistence across panel close/reopen
   const isInitialTabStateRef = useRef(true);
@@ -48,8 +53,14 @@ export function useTabManager({
   const handleOpenTab = useCallback(
     (conversationId: string, title: string) => {
       const existingTab = openTabs.find((t) => t.conversationId === conversationId);
+      onBeforeTabActivation?.();
       if (existingTab) {
         setActiveTabId(existingTab.id);
+        if (isCharacterRoleTab(existingTab)) {
+          onActivateCharacterRoleTab?.(existingTab);
+        } else {
+          VSCodeMessages.switchConversation(conversationId);
+        }
       } else {
         const newTab: OpenTab = {
           id: `tab-${Date.now()}`,
@@ -58,14 +69,18 @@ export function useTabManager({
         };
         setOpenTabs((prev) => [...prev, newTab]);
         setActiveTabId(newTab.id);
-      }
-      const activeTab = openTabs.find((t) => t.conversationId === conversationId);
-      if (activeTab?.kind !== 'npc-test') {
         VSCodeMessages.switchConversation(conversationId);
       }
       setActiveTab('chat');
     },
-    [openTabs, setOpenTabs, setActiveTabId, setActiveTab],
+    [
+      openTabs,
+      setOpenTabs,
+      setActiveTabId,
+      setActiveTab,
+      onBeforeTabActivation,
+      onActivateCharacterRoleTab,
+    ],
   );
 
   const handleCloseTab = useCallback(
@@ -78,21 +93,29 @@ export function useTabManager({
       const conversation = conversations.find((c) => c.id === tab.conversationId);
       const hasMessages = conversation && conversation.messageCount > 0;
 
-      if (tab.kind === 'npc-test') {
-        VSCodeMessages.exitNpcSession(tab.conversationId);
+      if (tab.kind === 'character-dialogue') {
+        VSCodeMessages.exitCharacterDialogueSession(tab.conversationId);
+      } else if (tab.kind === 'embody-character') {
+        VSCodeMessages.exitEmbodyCharacterSession(tab.conversationId);
       } else if (!hasMessages) {
         VSCodeMessages.deleteConversation(tab.conversationId);
       }
 
       const tabIndex = openTabs.findIndex((t) => t.id === tabId);
       const newTabs = openTabs.filter((t) => t.id !== tabId);
+      const isClosingActiveTab = activeTabId === tabId;
+      if (isClosingActiveTab) {
+        onBeforeTabActivation?.();
+      }
       setOpenTabs(newTabs);
 
-      if (activeTabId === tabId && newTabs.length > 0) {
+      if (isClosingActiveTab && newTabs.length > 0) {
         const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
         const newActiveTab = newTabs[newActiveIndex];
         setActiveTabId(newActiveTab.id);
-        if (newActiveTab.kind !== 'npc-test') {
+        if (isCharacterRoleTab(newActiveTab)) {
+          onActivateCharacterRoleTab?.(newActiveTab);
+        } else {
           VSCodeMessages.switchConversation(newActiveTab.conversationId);
         }
       } else if (newTabs.length === 0) {
@@ -100,21 +123,33 @@ export function useTabManager({
         onNewChat();
       }
     },
-    [openTabs, activeTabId, conversations, setOpenTabs, setActiveTabId, onNewChat],
+    [
+      openTabs,
+      activeTabId,
+      conversations,
+      setOpenTabs,
+      setActiveTabId,
+      onNewChat,
+      onBeforeTabActivation,
+      onActivateCharacterRoleTab,
+    ],
   );
 
   const handleSwitchTab = useCallback(
     (tabId: string) => {
       const tab = openTabs.find((t) => t.id === tabId);
       if (tab) {
+        onBeforeTabActivation?.();
         setActiveTabId(tabId);
-        if (tab.kind !== 'npc-test') {
+        if (isCharacterRoleTab(tab)) {
+          onActivateCharacterRoleTab?.(tab);
+        } else {
           VSCodeMessages.switchConversation(tab.conversationId);
         }
         setActiveTab('chat');
       }
     },
-    [openTabs, setActiveTabId, setActiveTab],
+    [openTabs, setActiveTabId, setActiveTab, onBeforeTabActivation, onActivateCharacterRoleTab],
   );
 
   return {

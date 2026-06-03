@@ -100,6 +100,12 @@
   --agent-input-bg: color-mix(in srgb, var(--agent-elevated) 84%, var(--agent-bg) 16%);
   --agent-input-border: color-mix(in srgb, var(--agent-fg) 12%, transparent);
   --agent-chat-row-hover: color-mix(in srgb, var(--agent-fg) 3%, transparent);
+  --agent-empty-copy: var(--agent-fg-secondary);
+  --agent-empty-muted: var(--agent-fg-muted);
+  --agent-empty-action-bg: color-mix(in srgb, var(--agent-elevated) 58%, transparent);
+  --agent-empty-action-border: color-mix(in srgb, var(--agent-fg) 9%, transparent);
+  --agent-empty-action-hover-bg: color-mix(in srgb, var(--agent-fg) 5%, transparent);
+  --agent-empty-action-hover-border: color-mix(in srgb, var(--agent-accent) 38%, transparent);
   --agent-bubble-assistant-bg: color-mix(in srgb, var(--agent-elevated) 58%, var(--agent-bg) 42%);
   --agent-bubble-assistant-border: color-mix(in srgb, var(--agent-fg) 10%, transparent);
   --agent-bubble-user-bg: color-mix(in srgb, var(--agent-accent) 12%, var(--agent-elevated) 88%);
@@ -169,6 +175,22 @@ body[data-vscode-theme-kind='vscode-high-contrast'] {
   --agent-control-muted-bg: var(--agent-elevated);
   --agent-composer-send-bg: var(--vscode-button-background, var(--agent-accent));
   --agent-composer-send-border: var(--agent-border);
+  --agent-empty-copy: var(--agent-fg);
+  --agent-empty-muted: var(--agent-fg-secondary);
+  --agent-empty-action-bg: var(--agent-elevated);
+  --agent-empty-action-border: var(--agent-border);
+  --agent-empty-action-hover-bg: var(--vscode-list-hoverBackground, var(--agent-elevated));
+  --agent-empty-action-hover-border: var(--vscode-focusBorder, var(--agent-border));
+}
+
+body.vscode-light,
+body[data-vscode-theme-kind='vscode-light'] {
+  --agent-empty-copy: color-mix(in srgb, var(--agent-fg) 66%, transparent);
+  --agent-empty-muted: color-mix(in srgb, var(--agent-fg) 32%, transparent);
+  --agent-empty-action-bg: color-mix(in srgb, var(--agent-bg) 72%, #ffffff 28%);
+  --agent-empty-action-border: color-mix(in srgb, var(--agent-fg) 13%, transparent);
+  --agent-empty-action-hover-bg: color-mix(in srgb, var(--agent-accent) 6%, #ffffff 94%);
+  --agent-empty-action-hover-border: color-mix(in srgb, var(--agent-accent) 42%, transparent);
 }
 
 * {

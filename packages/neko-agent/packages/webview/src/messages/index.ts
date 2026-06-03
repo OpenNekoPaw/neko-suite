@@ -123,6 +123,11 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'cancelMessage', conversationId });
   },
 
+  /** Exit an active Embody Character feedback session */
+  exitEmbodyCharacterSession: (sessionId: string) => {
+    postWebviewMessage({ type: 'exitEmbodyCharacterSession', sessionId });
+  },
+
   /** Request the list of background tasks */
   getTasks: (conversationId: string) => {
     postWebviewMessage({ type: 'getTasks', conversationId });
@@ -277,8 +282,8 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'updateTabState', openTabs, activeTabId });
   },
 
-  exitNpcSession: (sessionId: string) => {
-    postWebviewMessage({ type: 'exitNpcSession', sessionId });
+  exitCharacterDialogueSession: (sessionId: string) => {
+    postWebviewMessage({ type: 'exitCharacterDialogueSession', sessionId });
   },
 
   // ==========================================================================

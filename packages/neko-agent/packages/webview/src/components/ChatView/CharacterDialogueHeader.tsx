@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import type { NpcProfileFact } from '@neko/shared';
-import type { NpcSessionProjection } from '@/components/types';
+import type { CharacterDialogueSessionProjection } from '@/components/types';
 import { VSCodeMessages } from '@/components/hooks/useVSCode';
 
-interface NpcSessionHeaderProps {
-  session: NpcSessionProjection;
+interface CharacterDialogueHeaderProps {
+  session: CharacterDialogueSessionProjection;
 }
 
-export function NpcSessionHeader({ session }: NpcSessionHeaderProps) {
+export function CharacterDialogueHeader({ session }: CharacterDialogueHeaderProps) {
   const [expanded, setExpanded] = useState(false);
   const confirmedFacts = useMemo(
     () => session.profile.facts.filter((fact) => fact.authority === 'confirmed').slice(0, 8),
@@ -48,7 +48,7 @@ export function NpcSessionHeader({ session }: NpcSessionHeaderProps) {
         </button>
         <button
           type="button"
-          onClick={() => VSCodeMessages.exitNpcSession(session.sessionId)}
+          onClick={() => VSCodeMessages.exitCharacterDialogueSession(session.sessionId)}
           className="rounded px-2 py-1 text-[11px] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)]"
         >
           Exit
@@ -57,8 +57,8 @@ export function NpcSessionHeader({ session }: NpcSessionHeaderProps) {
 
       {expanded && (
         <div className="grid gap-3 border-t border-[var(--vscode-panel-border)] px-3 py-2 text-[11px] md:grid-cols-2">
-          <NpcFactList title="Confirmed" facts={confirmedFacts} />
-          <NpcFactList title="Suggested" facts={suggestedFacts} />
+          <CharacterFactList title="Confirmed" facts={confirmedFacts} />
+          <CharacterFactList title="Suggested" facts={suggestedFacts} />
           {session.profile.dialogueSamples?.length ? (
             <div className="md:col-span-2">
               <div className="mb-1 text-[var(--vscode-descriptionForeground)]">Dialogue</div>
@@ -80,7 +80,7 @@ export function NpcSessionHeader({ session }: NpcSessionHeaderProps) {
   );
 }
 
-function NpcFactList({ title, facts }: { title: string; facts: readonly NpcProfileFact[] }) {
+function CharacterFactList({ title, facts }: { title: string; facts: readonly NpcProfileFact[] }) {
   return (
     <div>
       <div className="mb-1 text-[var(--vscode-descriptionForeground)]">{title}</div>

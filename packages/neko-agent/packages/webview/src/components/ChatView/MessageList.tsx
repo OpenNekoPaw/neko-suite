@@ -12,6 +12,10 @@ import { MessageItem } from '@/components/ChatView/MessageItem';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import {
+  DEFAULT_MESSAGE_IDENTITIES,
+  type MessageIdentityMap,
+} from '@/components/ChatView/message-identity';
+import {
   estimateMessageListItemHeight,
   projectMessageList,
 } from '@/presenters/message-list-presenter';
@@ -21,6 +25,7 @@ interface MessageListProps {
   isThinking: boolean;
   streamingMessageId: string | null;
   activeConversationId: string | null;
+  identities?: MessageIdentityMap;
 }
 
 export function MessageList({
@@ -28,9 +33,12 @@ export function MessageList({
   isThinking,
   streamingMessageId,
   activeConversationId,
+  identities = DEFAULT_MESSAGE_IDENTITIES,
 }: MessageListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const prevItemCountRef = useRef(0);
+  const autoScrollRafRef = useRef<number | null>(null);
+  const autoScrollWindowRef = useRef<Window | null>(null);
 
   const projection = useMemo(
     () => projectMessageList({ messages, isThinking, streamingMessageId }),
@@ -50,6 +58,35 @@ export function MessageList({
     overscan: 5,
   });
 
+  const cancelScheduledAutoScroll = useCallback(() => {
+    const scrollWindow = autoScrollWindowRef.current ?? getElementWindow(parentRef.current);
+    if (autoScrollRafRef.current !== null && scrollWindow) {
+      scrollWindow.cancelAnimationFrame(autoScrollRafRef.current);
+    }
+    autoScrollRafRef.current = null;
+    autoScrollWindowRef.current = null;
+  }, []);
+
+  const scheduleScrollToOffset = useCallback(
+    (offset: number, behavior: ScrollBehavior = 'smooth') => {
+      const scrollElement = parentRef.current;
+      const scrollWindow = getElementWindow(scrollElement);
+      if (!scrollElement || !scrollWindow) return;
+
+      cancelScheduledAutoScroll();
+      autoScrollWindowRef.current = scrollWindow;
+      autoScrollRafRef.current = scrollWindow.requestAnimationFrame(() => {
+        autoScrollRafRef.current = null;
+        autoScrollWindowRef.current = null;
+        if (!isScrollableElementConnected(scrollElement)) return;
+        scrollElement.scrollTo({ top: Math.max(0, offset), behavior });
+      });
+    },
+    [cancelScheduledAutoScroll],
+  );
+
+  useEffect(() => cancelScheduledAutoScroll, [cancelScheduledAutoScroll]);
+
   // Auto-scroll to bottom when new items arrive or streaming
   useEffect(() => {
     const itemCountChanged = itemCount !== prevItemCountRef.current;
@@ -57,24 +94,21 @@ export function MessageList({
 
     // Scroll to bottom on new item or when thinking starts
     if (itemCountChanged || isThinking) {
-      // Use requestAnimationFrame to ensure DOM is updated
-      requestAnimationFrame(() => {
-        virtualizer.scrollToIndex(itemCount - 1, { align: 'end', behavior: 'smooth' });
-      });
+      scheduleScrollToOffset(virtualizer.getTotalSize());
     }
-  }, [itemCount, isThinking, virtualizer]);
+  }, [itemCount, isThinking, scheduleScrollToOffset, virtualizer]);
 
   // Also scroll when streaming content updates
   useEffect(() => {
     if (streamingMessageId) {
       if (projection.streamingItemIndex !== -1) {
-        virtualizer.scrollToIndex(projection.streamingItemIndex, {
-          align: 'end',
-          behavior: 'smooth',
-        });
+        const offsetInfo = virtualizer.getOffsetForIndex(projection.streamingItemIndex, 'end');
+        if (offsetInfo) {
+          scheduleScrollToOffset(offsetInfo[0]);
+        }
       }
     }
-  }, [streamingMessageId, projection.streamingItemIndex, virtualizer]);
+  }, [streamingMessageId, projection.streamingItemIndex, scheduleScrollToOffset, virtualizer]);
 
   const virtualItems = virtualizer.getVirtualItems();
 
@@ -110,7 +144,7 @@ export function MessageList({
             >
               <div className="py-0.5">
                 {item.kind === 'thinking_indicator' ? (
-                  <ThinkingIndicator />
+                  <ThinkingIndicator identity={identities.assistant} />
                 ) : item.kind === 'content_block' ? (
                   <ContentBlockItem
                     block={item.block}
@@ -120,12 +154,14 @@ export function MessageList({
                     conversationId={activeConversationId}
                     workItemIds={item.workItemIds}
                     siblingBlocks={item.siblingBlocks}
+                    assistantIdentity={identities.assistant}
                   />
                 ) : (
                   <MessageItem
                     message={item.message}
                     isGrouped={item.isGrouped}
                     conversationId={activeConversationId}
+                    identities={identities}
                   />
                 )}
               </div>
@@ -137,20 +173,34 @@ export function MessageList({
   );
 }
 
+function getElementWindow(element: HTMLElement | null): Window | null {
+  return element?.ownerDocument.defaultView ?? null;
+}
+
+function isScrollableElementConnected(element: HTMLElement): boolean {
+  return Boolean(element.isConnected && element.ownerDocument.defaultView);
+}
+
 // Thinking indicator component (matches new message layout)
-function ThinkingIndicator() {
+function ThinkingIndicator({ identity }: { identity: MessageIdentityMap['assistant'] }) {
   return (
     <div className="py-0.5">
       <div className="flex gap-2.5 px-3 py-1.5">
         {/* Avatar */}
         <div className="flex-shrink-0 w-7 pt-0.5">
-          <MessageAvatar role="assistant" size="md" title="AI" />
+          <MessageAvatar
+            role="assistant"
+            label={identity.avatarLabel}
+            imageUri={identity.avatarUri}
+            size="md"
+            title={identity.title}
+          />
         </div>
         {/* Content */}
         <div className="flex-1 min-w-0 max-w-[85%]">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-[11px] font-medium text-[var(--vscode-textLink-foreground)]">
-              Assistant
+              {identity.displayName}
             </span>
           </div>
           {/* Bubble with dots */}

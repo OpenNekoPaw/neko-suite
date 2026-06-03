@@ -1,24 +1,24 @@
 import { act } from 'react';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NpcSessionProjection } from '@/components/types';
-import { NpcSessionHeader } from './NpcSessionHeader';
+import type { CharacterDialogueSessionProjection } from '@/components/types';
+import { CharacterDialogueHeader } from './CharacterDialogueHeader';
 
-const exitNpcSession = vi.fn();
+const exitCharacterDialogueSession = vi.fn();
 
 vi.mock('@/components/hooks/useVSCode', () => ({
   VSCodeMessages: {
-    exitNpcSession: (...args: unknown[]) => exitNpcSession(...args),
+    exitCharacterDialogueSession: (...args: unknown[]) => exitCharacterDialogueSession(...args),
   },
 }));
 
-describe('NpcSessionHeader', () => {
+describe('CharacterDialogueHeader', () => {
   beforeEach(() => {
-    exitNpcSession.mockClear();
+    exitCharacterDialogueSession.mockClear();
   });
 
-  it('renders NPC identity, profile facts, and dispatches exit', async () => {
-    render(<NpcSessionHeader session={createSession()} />);
+  it('renders Character Dialogue identity, profile facts, and dispatches exit', async () => {
+    render(<CharacterDialogueHeader session={createSession()} />);
 
     expect(screen.getByText('小橘')).toBeTruthy();
     expect(screen.getByText('roleplay')).toBeTruthy();
@@ -34,11 +34,11 @@ describe('NpcSessionHeader', () => {
     await act(async () => {
       screen.getByRole('button', { name: 'Exit' }).click();
     });
-    expect(exitNpcSession).toHaveBeenCalledWith('npc-session-1');
+    expect(exitCharacterDialogueSession).toHaveBeenCalledWith('npc-session-1');
   });
 });
 
-function createSession(): NpcSessionProjection {
+function createSession(): CharacterDialogueSessionProjection {
   return {
     sessionId: 'npc-session-1',
     entityId: 'char-xiaoju',

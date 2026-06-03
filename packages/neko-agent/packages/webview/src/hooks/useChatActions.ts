@@ -30,6 +30,7 @@ export type AgentMediaModels = AgentMediaModelSelections;
 export interface UseChatActionsProps {
   inputValue: string;
   isThinking: boolean;
+  isCharacterRoleSession?: boolean;
   selectedModel: string;
   sessionMode?: SessionMode;
   mediaProviderId?: string;
@@ -64,6 +65,7 @@ export interface UseChatActionsReturn {
 export function useChatActions({
   inputValue,
   isThinking,
+  isCharacterRoleSession = false,
   selectedModel,
   sessionMode,
   mediaProviderId,
@@ -105,6 +107,7 @@ export function useChatActions({
       const messageText = input?.messageText ?? inputValue;
       const attachments = input?.attachments;
       const contextPayloads = input?.contextPayloads;
+      const outboundContextPayloads = contextPayloads ?? [];
       const trimmed = messageText.trim();
       const hasAttachments = (attachments?.length ?? 0) > 0;
       const hasContextPayloads = (contextPayloads?.length ?? 0) > 0;
@@ -113,7 +116,7 @@ export function useChatActions({
       const conversationId = activeConversationId;
       if (!conversationId) return;
 
-      const slashCommand = parseDirectBuiltinSlashCommand(trimmed);
+      const slashCommand = isCharacterRoleSession ? null : parseDirectBuiltinSlashCommand(trimmed);
       if (slashCommand) {
         clearInput();
         setAttachedFiles([]);
@@ -159,11 +162,12 @@ export function useChatActions({
         sessionMode: effectiveSessionMode,
         ...modelProjection,
         ...(attachments ? { attachments } : {}),
-        ...(contextPayloads ? { contextPayloads } : {}),
+        ...(outboundContextPayloads.length > 0 ? { contextPayloads: outboundContextPayloads } : {}),
       });
     },
     [
       inputValue,
+      isCharacterRoleSession,
       selectedModel,
       sessionMode,
       mediaProviderId,

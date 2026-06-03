@@ -21,7 +21,8 @@ import { skillHandlers } from './skill-handlers';
 import { contextHandlers } from './context-handlers';
 import { mediaHandlers } from './media-handlers';
 import { subAgentHandlers } from './subagent-handlers';
-import { npcSessionHandlers } from './npc-session-handlers';
+import { characterDialogueSessionHandlers } from './character-dialogue-session-handlers';
+import { embodyCharacterSessionHandlers } from './embody-character-session-handlers';
 
 /**
  * Create a fully configured message handler registry
@@ -41,7 +42,8 @@ export function createConfiguredRegistry(): MessageHandlerRegistry {
   registry.registerAll(contextHandlers);
   registry.registerAll(mediaHandlers);
   registry.registerAll(subAgentHandlers);
-  registry.registerAll(npcSessionHandlers);
+  registry.registerAll(characterDialogueSessionHandlers);
+  registry.registerAll(embodyCharacterSessionHandlers);
 
   return registry;
 }

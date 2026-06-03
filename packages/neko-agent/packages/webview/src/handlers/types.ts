@@ -53,7 +53,9 @@ export type NonCurrentConversationUpdater = (
 
 /** Chat streaming state: message list, thinking indicator, streaming ID */
 export interface ChatStateContext {
+  messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  isThinking: boolean;
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
   streamingMessageId: string | null;
@@ -71,6 +73,7 @@ export interface ConversationRefContext {
 /** Tab management: open tabs, active tab selection */
 export interface TabContext {
   openTabs: OpenTab[];
+  activeTabId: string | null;
   setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
   setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>;
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;

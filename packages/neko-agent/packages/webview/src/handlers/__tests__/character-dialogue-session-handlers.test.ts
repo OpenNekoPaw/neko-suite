@@ -1,56 +1,71 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { describe, expect, it } from 'vitest';
-import type { ExtensionToWebviewMessage, NpcSessionProjection, OpenTab } from '@neko-agent/types';
+import type {
+  CharacterDialogueSessionProjection,
+  ExtensionToWebviewMessage,
+  OpenTab,
+} from '@neko-agent/types';
 import type { Message } from '@/components/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
-import { npcSessionHandlers } from '../npc-session-handlers';
+import { characterDialogueSessionHandlers } from '../character-dialogue-session-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 
-describe('NPC session handlers', () => {
-  it('activates NPC session tabs as current chat projections', () => {
+describe('Character Dialogue session handlers', () => {
+  it('activates Character Dialogue tabs as current chat projections', () => {
     const harness = createContextHarness({ activeConversationId: 'conv-a' });
-    const session = createNpcSessionProjection();
+    const session = createCharacterDialogueSessionProjection();
     const tab: OpenTab = {
       id: 'tab-npc',
-      title: 'NPC: 小橘',
+      title: 'Character Dialogue: 小橘',
       conversationId: session.sessionId,
-      kind: 'npc-test',
-      npcSession: session,
+      kind: 'character-dialogue',
+      characterDialogueSession: session,
     };
 
-    dispatch(npcSessionHandlers, { type: 'npcSessionStarted', tab, session }, harness.context);
+    dispatch(
+      characterDialogueSessionHandlers,
+      { type: 'characterDialogueSessionStarted', tab, session },
+      harness.context,
+    );
 
     expect(harness.activeConversationId()).toBe('npc-session-1');
     expect(harness.context.activeConversationIdRef.current).toBe('npc-session-1');
     expect(harness.messages()).toEqual([]);
     expect(harness.streaming()).toEqual({ isThinking: false, streamingMessageId: null });
+    expect(harness.context.conversationMessagesRef.current.get('conv-a')).toEqual([
+      { id: 'old', role: 'assistant', content: 'old', timestamp: 1 },
+    ]);
+    expect(harness.context.conversationStreamingRef.current.get('conv-a')).toEqual({
+      isThinking: true,
+      streamingMessageId: 'old-stream',
+    });
     expect(harness.openTabs()).toEqual([tab]);
     expect(harness.activeTabId()).toBe('tab-npc');
   });
 
-  it('marks exited NPC tabs without removing transcript cache', () => {
-    const session = createNpcSessionProjection();
+  it('marks exited Character Dialogue tabs without removing transcript cache', () => {
+    const session = createCharacterDialogueSessionProjection();
     const harness = createContextHarness({
       activeConversationId: session.sessionId,
       openTabs: [
         {
           id: 'tab-npc',
-          title: 'NPC: 小橘',
+          title: 'Character Dialogue: 小橘',
           conversationId: session.sessionId,
-          kind: 'npc-test',
-          npcSession: session,
+          kind: 'character-dialogue',
+          characterDialogueSession: session,
         },
       ],
     });
 
     dispatch(
-      npcSessionHandlers,
-      { type: 'npcSessionExited', sessionId: session.sessionId },
+      characterDialogueSessionHandlers,
+      { type: 'characterDialogueSessionExited', sessionId: session.sessionId },
       harness.context,
     );
 
-    expect(harness.openTabs()[0]?.npcSession?.status).toBe('exited');
+    expect(harness.openTabs()[0]?.characterDialogueSession?.status).toBe('exited');
   });
 });
 
@@ -64,7 +79,7 @@ function dispatch(
   registration?.handler(message, context);
 }
 
-function createNpcSessionProjection(): NpcSessionProjection {
+function createCharacterDialogueSessionProjection(): CharacterDialogueSessionProjection {
   return {
     sessionId: 'npc-session-1',
     entityId: 'char-xiaoju',
@@ -123,12 +138,16 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       () => messages,
       (next) => {
         messages = next;
+        context.messages = next;
       },
     ),
+    messages,
+    isThinking: streaming.isThinking,
     setIsThinking: createSetter(
       () => streaming.isThinking,
       (next) => {
         streaming = { ...streaming, isThinking: next };
+        context.isThinking = next;
       },
     ),
     setStreamingMessageId: createSetter(
@@ -145,6 +164,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationMessagesRef,
     conversationStreamingRef,
     openTabs,
+    activeTabId,
     setOpenTabs: createSetter(
       () => openTabs,
       (next) => {

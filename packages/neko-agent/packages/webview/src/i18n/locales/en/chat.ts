@@ -20,8 +20,7 @@ export const chat = {
   'chat.mediaModelNone': 'media:none',
   'chat.noMediaModelsConfigured': 'No media models configured',
   'chat.emptyState.title': 'Neko Suite AI Assistant',
-  'chat.emptyState.description':
-    'Ask me anything about video editing, timeline management, or project organization.',
+  'chat.emptyState.description': 'Organize projects, characters, assets, and generation tasks.',
   'chat.emptyState.disclaimer': 'AI responses may be inaccurate.',
   'chat.emptyState.suggestion1': 'Analyze current project structure',
   'chat.emptyState.suggestion2': 'Help me optimize the timeline',
@@ -166,8 +165,8 @@ export const chat = {
 
   'chat.commands.clear': 'Clear conversation history',
   'chat.commands.exit': 'Exit current session',
-  'chat.commands.as': 'Test a project character as an NPC',
-  'chat.commands.exit-role': 'Exit the active NPC test session',
+  'chat.commands.as': 'Start Character Dialogue for a project character',
+  'chat.commands.exit-as': 'Exit the active Character Dialogue session',
   'chat.commands.help': 'Show help message',
   'chat.commands.new': 'Start a new conversation',
   'chat.commands.resume': 'Resume a previous conversation',

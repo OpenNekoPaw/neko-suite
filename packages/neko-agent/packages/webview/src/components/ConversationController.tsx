@@ -40,6 +40,11 @@ import type { MediaModelSelection } from '@/hooks/useUIState';
 import { useConversationState, useTabManager } from '@/hooks';
 import { useMessageHandler, type BoundActiveSkillIndicator } from '@/handlers';
 import { ChatWorkspace } from './ChatWorkspace';
+import {
+  isCharacterRoleConversationKind,
+  isCharacterRoleTab,
+  projectCharacterRoleSessionView,
+} from '@/presenters/character-role-session-presenter';
 
 // =============================================================================
 // Props
@@ -329,14 +334,63 @@ export function ConversationController({
     : null;
   const activeOpenTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
   const conversationKind = activeOpenTab?.kind ?? 'chat';
+  const embodyCharacterSession = activeOpenTab?.embodyCharacterSession;
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
 
+  const persistCurrentVisibleConversation = useCallback(() => {
+    const conversationId = activeConversationIdRef.current;
+    if (!conversationId) return;
+    conversationMessagesRef.current.set(conversationId, messages);
+    conversationStreamingRef.current.set(conversationId, {
+      streamingMessageId: streamingMessageIdRef.current,
+      isThinking,
+    });
+  }, [
+    activeConversationIdRef,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    isThinking,
+    messages,
+    streamingMessageIdRef,
+  ]);
+
+  const activateCharacterRoleTab = useCallback(
+    (tab: OpenTab) => {
+      const projection = projectCharacterRoleSessionView({
+        sessionId: tab.conversationId,
+        cachedMessages: conversationMessagesRef.current.get(tab.conversationId),
+        cachedStreaming: conversationStreamingRef.current.get(tab.conversationId),
+      });
+
+      setMessages(projection.messages);
+      setStreamingMessageId(projection.streaming.streamingMessageId);
+      streamingMessageIdRef.current = projection.streaming.streamingMessageId;
+      setIsThinking(projection.streaming.isThinking);
+      activeConversationIdRef.current = projection.activeConversationId;
+      setActiveConversationId(projection.activeConversationId);
+      setActiveTab('chat');
+    },
+    [
+      activeConversationIdRef,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      setActiveConversationId,
+      setIsThinking,
+      setMessages,
+      setStreamingMessageId,
+      streamingMessageIdRef,
+    ],
+  );
+
   // ---- Message handler ----
   const { handleMessage } = useMessageHandler({
+    messages,
+    isThinking,
     activeConversationId,
     streamingMessageId,
     openTabs,
+    activeTabId,
     activeConversationIdRef,
     streamingMessageIdRef,
     conversationMessagesRef,
@@ -390,7 +444,7 @@ export function ConversationController({
 
   // ---- Context token count on conversation change ----
   useEffect(() => {
-    if (activeConversationId && conversationKind !== 'npc-test') {
+    if (activeConversationId && !isCharacterRoleConversationKind(conversationKind)) {
       VSCodeMessages.getContextTokenCount(activeConversationId);
       VSCodeMessages.getTasks(activeConversationId);
       VSCodeMessages.getPromptMode(activeConversationId);
@@ -426,7 +480,11 @@ export function ConversationController({
           const newActiveTab = newTabs[newActiveIndex];
           if (newActiveTab) {
             setActiveTabId(newActiveTab.id);
-            VSCodeMessages.switchConversation(newActiveTab.conversationId);
+            if (isCharacterRoleTab(newActiveTab)) {
+              activateCharacterRoleTab(newActiveTab);
+            } else {
+              VSCodeMessages.switchConversation(newActiveTab.conversationId);
+            }
           }
         } else if (newTabs.length === 0) {
           setActiveTabId(null);
@@ -434,7 +492,14 @@ export function ConversationController({
       }
       VSCodeMessages.deleteConversation(conversationId);
     },
-    [openTabs, activeTabId, cleanupConversation, setOpenTabs, setActiveTabId],
+    [
+      openTabs,
+      activeTabId,
+      cleanupConversation,
+      setOpenTabs,
+      setActiveTabId,
+      activateCharacterRoleTab,
+    ],
   );
 
   const handleClearAllConversations = useCallback(() => {
@@ -454,6 +519,8 @@ export function ConversationController({
     conversations,
     setActiveTab,
     onNewChat: handleNewChat,
+    onBeforeTabActivation: persistCurrentVisibleConversation,
+    onActivateCharacterRoleTab: activateCharacterRoleTab,
   });
 
   return (
@@ -486,7 +553,8 @@ export function ConversationController({
           activeConversationIdRef={activeConversationIdRef}
           activeTabConversationId={activeTabConversationId}
           conversationKind={conversationKind}
-          npcSession={activeOpenTab?.npcSession}
+          characterDialogueSession={activeOpenTab?.characterDialogueSession}
+          embodyCharacterSession={embodyCharacterSession}
           clearMessages={clearMessages}
           // Config
           settings={activeSettings}

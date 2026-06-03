@@ -237,10 +237,10 @@ describe('useVSCode', () => {
         });
       });
 
-      it('should post exitNpcSession with session scope', () => {
-        VSCodeMessages.exitNpcSession('npc-session-1');
+      it('should post exitCharacterDialogueSession with session scope', () => {
+        VSCodeMessages.exitCharacterDialogueSession('npc-session-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
-          type: 'exitNpcSession',
+          type: 'exitCharacterDialogueSession',
           sessionId: 'npc-session-1',
         });
       });

@@ -29,10 +29,16 @@ import { VSCodeMessages } from '@/components/hooks/useVSCode';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import { projectAssistantMarkdownCanvasTransferPayload } from '@/presenters/storyboard-transfer-presenter';
+import {
+  DEFAULT_MESSAGE_IDENTITIES,
+  selectMessageIdentity,
+  type MessageIdentityMap,
+} from '@/components/ChatView/message-identity';
 
 interface MessageItemProps {
   message: Message;
   conversationId: string | null;
+  identities?: MessageIdentityMap;
   // P2: Message operations
   onEditMessage?: (messageId: string) => void;
   onResendFrom?: (messageId: string) => void;
@@ -314,6 +320,7 @@ export const MessageItem = memo(function MessageItem({
   onEditMessage,
   onResendFrom,
   onFeedback,
+  identities = DEFAULT_MESSAGE_IDENTITIES,
   showAvatar = true,
   isGrouped = false,
 }: MessageItemProps) {
@@ -341,6 +348,7 @@ export const MessageItem = memo(function MessageItem({
   const isSystem = message.role === 'system';
   const isStreaming = message.isStreaming;
   const attachments = projectMessageAttachments(message.attachments);
+  const identity = selectMessageIdentity(identities, isUser ? 'user' : 'assistant');
 
   // System messages (e.g., queued notifications) - centered, subtle styling
   if (isSystem) {
@@ -366,7 +374,12 @@ export const MessageItem = memo(function MessageItem({
         {/* Avatar - compact 20px */}
         <div className="flex-shrink-0 w-5 pt-0.5">
           {showAvatar && !isGrouped ? (
-            <MessageAvatar role={isUser ? 'user' : 'assistant'} title={isUser ? 'You' : 'AI'} />
+            <MessageAvatar
+              role={isUser ? 'user' : 'assistant'}
+              label={identity.avatarLabel}
+              imageUri={identity.avatarUri}
+              title={identity.title}
+            />
           ) : (
             <div className="w-5" />
           )}
@@ -380,7 +393,7 @@ export const MessageItem = memo(function MessageItem({
               <span
                 className={`text-[11px] font-medium ${isUser ? 'text-[var(--vscode-foreground)]' : 'text-[var(--vscode-textLink-foreground)]'}`}
               >
-                {isUser ? 'You' : 'Assistant'}
+                {identity.displayName}
               </span>
               <span className="text-[10px] text-[var(--vscode-descriptionForeground)] opacity-0 group-hover:opacity-100 transition-opacity">
                 {formatTime(message.timestamp)}

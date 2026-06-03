@@ -19,6 +19,7 @@ import {
   projectHistoryClearedConversation,
 } from '../presenters/conversation-ui-presenter';
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
+import { findActiveTab, isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 
 /**
  * Handle 'error' message - Error occurred
@@ -103,10 +104,28 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     openTabs: context.openTabs,
   });
 
+  if (isCharacterRoleTab(findActiveTab(context.openTabs, context.activeTabId))) {
+    if (conversationId) {
+      context.conversationMessagesRef.current.set(conversationId, projection.messages);
+      context.conversationStreamingRef.current.set(conversationId, projection.streaming);
+    }
+    context.setOpenTabs(projection.openTabs);
+
+    const activeConversationId = projection.activeConversationId;
+    if (activeConversationId && projection.workItems.length > 0) {
+      context.setWorkItemsByConversation((prev) =>
+        upsertWorkItemsForConversation(prev, activeConversationId, projection.workItems),
+      );
+    }
+    return;
+  }
+
   context.setMessages(projection.messages);
   context.setStreamingMessageId(projection.streaming.streamingMessageId);
+  context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
   context.setIsThinking(projection.streaming.isThinking);
   context.setActiveConversationId(projection.activeConversationId);
+  context.activeConversationIdRef.current = projection.activeConversationId;
   context.setOpenTabs(projection.openTabs);
   context.setActiveTabId(projection.activeTabId);
   context.setActiveTab(projection.activeTab);

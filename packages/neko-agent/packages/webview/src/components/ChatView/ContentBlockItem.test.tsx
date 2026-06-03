@@ -14,6 +14,23 @@ vi.mock('@neko/shared/vscode', () => ({
 }));
 
 describe('ContentBlockItem Canvas transfer actions', () => {
+  it('renders assistant identity on the first content block avatar', () => {
+    renderContentBlock(
+      {
+        id: 'plain',
+        type: 'text',
+        timestamp: 1,
+        content: 'Hi! How can I help?',
+      },
+      {
+        avatarLabel: '小橘',
+        title: '小橘 (Character Dialogue)',
+      },
+    );
+
+    expect(screen.getByLabelText('小橘 (Character Dialogue)')).toBeTruthy();
+  });
+
   it('does not render Canvas transfer for plain assistant prose', () => {
     renderContentBlock({
       id: 'plain',
@@ -41,10 +58,28 @@ describe('ContentBlockItem Canvas transfer actions', () => {
   });
 });
 
-function renderContentBlock(block: ContentBlock) {
+function renderContentBlock(
+  block: ContentBlock,
+  assistantIdentity?: { avatarLabel: string; title: string },
+) {
   render(
     <MessageActionsProvider pluginsAvailable={{ canvas: true }}>
-      <ContentBlockItem block={block} isFirst isLast isStreaming={false} conversationId="conv-1" />
+      <ContentBlockItem
+        block={block}
+        isFirst
+        isLast
+        isStreaming={false}
+        conversationId="conv-1"
+        assistantIdentity={
+          assistantIdentity
+            ? {
+                displayName: assistantIdentity.avatarLabel,
+                avatarLabel: assistantIdentity.avatarLabel,
+                title: assistantIdentity.title,
+              }
+            : undefined
+        }
+      />
     </MessageActionsProvider>,
   );
 }

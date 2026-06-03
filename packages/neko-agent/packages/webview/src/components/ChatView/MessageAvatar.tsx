@@ -1,9 +1,12 @@
+import { useEffect, useState } from 'react';
+
 type MessageAvatarRole = 'user' | 'assistant';
 type MessageAvatarSize = 'sm' | 'md';
 
 interface MessageAvatarProps {
   role: MessageAvatarRole;
   label?: string;
+  imageUri?: string;
   size?: MessageAvatarSize;
   title?: string;
 }
@@ -22,16 +25,35 @@ const toneClassByRole: Record<MessageAvatarRole, string> = {
 export function MessageAvatar({
   role,
   label = role === 'user' ? 'Me' : 'AI',
+  imageUri,
   size = 'sm',
   title,
 }: MessageAvatarProps) {
+  const accessibleLabel = title ?? label;
+  const [imageFailed, setImageFailed] = useState(false);
+  const shouldRenderImage = Boolean(imageUri && !imageFailed);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageUri]);
+
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-full border font-semibold leading-none ${sizeClassBySize[size]} ${toneClassByRole[role]}`}
-      title={title ?? label}
-      aria-label={title ?? label}
+      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full border font-semibold leading-none ${sizeClassBySize[size]} ${toneClassByRole[role]}`}
+      title={accessibleLabel}
+      aria-label={accessibleLabel}
     >
-      {projectAvatarLabel(label)}
+      {shouldRenderImage && imageUri ? (
+        <img
+          src={imageUri}
+          alt=""
+          className="h-full w-full object-cover"
+          draggable={false}
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        projectAvatarLabel(label)
+      )}
     </div>
   );
 }

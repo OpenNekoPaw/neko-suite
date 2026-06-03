@@ -36,7 +36,8 @@ export type {
   // UI
   ConversationSummary,
   ConversationKind,
-  NpcSessionProjection,
+  CharacterDialogueSessionProjection,
+  EmbodyCharacterSessionProjection,
   OpenTab,
   TabType,
   PromptMode,

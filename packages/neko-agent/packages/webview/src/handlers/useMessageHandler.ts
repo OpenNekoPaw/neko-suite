@@ -40,9 +40,12 @@ const logger = getLogger('MessageHandler');
  */
 export interface UseMessageHandlerProps {
   // Current state values
+  messages: Message[];
+  isThinking: boolean;
   activeConversationId: string | null;
   streamingMessageId: string | null;
   openTabs: OpenTab[];
+  activeTabId: string | null;
 
   // Refs
   activeConversationIdRef: MutableRefObject<string | null>;
@@ -112,9 +115,12 @@ export interface UseMessageHandlerReturn {
  */
 export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHandlerReturn {
   const {
+    messages,
+    isThinking,
     activeConversationId,
     streamingMessageId,
     openTabs,
+    activeTabId,
     activeConversationIdRef,
     streamingMessageIdRef,
     conversationMessagesRef,
@@ -184,7 +190,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       activeConversationIdRef,
       conversationMessagesRef,
       conversationStreamingRef,
+      messages,
       setMessages,
+      isThinking,
       setIsThinking,
       setStreamingMessageId,
       streamingMessageId,
@@ -192,6 +200,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setConversations,
       setActiveConversationId,
       openTabs,
+      activeTabId,
       setOpenTabs,
       setActiveTabId,
       setActiveTab,
@@ -224,7 +233,9 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       activeConversationIdRef,
       conversationMessagesRef,
       conversationStreamingRef,
+      messages,
       setMessages,
+      isThinking,
       setIsThinking,
       setStreamingMessageId,
       streamingMessageId,
@@ -232,6 +243,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setConversations,
       setActiveConversationId,
       openTabs,
+      activeTabId,
       setOpenTabs,
       setActiveTabId,
       setActiveTab,

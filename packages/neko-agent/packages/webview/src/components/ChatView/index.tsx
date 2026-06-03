@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   Message,
   AgentState,
   type ConversationKind,
-  type NpcSessionProjection,
+  type CharacterDialogueSessionProjection,
+  type EmbodyCharacterSessionProjection,
 } from '@/components/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
@@ -16,7 +17,9 @@ import type { AgentContextPayload } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import { SkillIndicator, type ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import { AgentStateIndicatorCompact } from '@/components/ChatView/AgentStateIndicator';
-import { NpcSessionHeader } from '@/components/ChatView/NpcSessionHeader';
+import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
+import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
+import { projectMessageIdentities } from '@/components/ChatView/message-identity';
 interface ChatViewProps {
   messages: Message[];
   inputValue: string;
@@ -24,7 +27,8 @@ interface ChatViewProps {
   streamingMessageId: string | null;
   activeConversationId: string | null;
   conversationKind?: ConversationKind;
-  npcSession?: NpcSessionProjection;
+  characterDialogueSession?: CharacterDialogueSessionProjection;
+  embodyCharacterSession?: EmbodyCharacterSessionProjection;
   isConversationSwitching?: boolean;
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
@@ -69,7 +73,8 @@ export function ChatView({
   streamingMessageId,
   activeConversationId,
   conversationKind = 'chat',
-  npcSession,
+  characterDialogueSession,
+  embodyCharacterSession,
   isConversationSwitching = false,
   activeSkill,
   onClearActiveSkill,
@@ -95,6 +100,15 @@ export function ChatView({
   agentState,
 }: ChatViewProps) {
   const isEmpty = messages.length === 0 && !isThinking;
+  const messageIdentities = useMemo(
+    () =>
+      projectMessageIdentities({
+        conversationKind,
+        characterDialogueSession,
+        embodyCharacterSession,
+      }),
+    [characterDialogueSession, conversationKind, embodyCharacterSession],
+  );
 
   // P2: Dropped files state for DropZone integration
   const [droppedFiles, setDroppedFiles] = useState<MessageAttachment[]>([]);
@@ -122,12 +136,18 @@ export function ChatView({
           </div>
         )}
 
-        {conversationKind === 'npc-test' && npcSession && <NpcSessionHeader session={npcSession} />}
+        {conversationKind === 'character-dialogue' && characterDialogueSession && (
+          <CharacterDialogueHeader session={characterDialogueSession} />
+        )}
+
+        {conversationKind === 'embody-character' && embodyCharacterSession && (
+          <EmbodyCharacterHeader session={embodyCharacterSession} />
+        )}
 
         {/* Messages Container */}
         {isEmpty ? (
           <div className="flex-1 overflow-y-auto">
-            <EmptyState onSuggestionClick={onInputChange} />
+            {conversationKind === 'chat' ? <EmptyState onSuggestionClick={onInputChange} /> : null}
           </div>
         ) : (
           <MessageActionsProvider
@@ -152,6 +172,7 @@ export function ChatView({
               isThinking={isThinking}
               streamingMessageId={streamingMessageId}
               activeConversationId={activeConversationId}
+              identities={messageIdentities}
             />
           </MessageActionsProvider>
         )}

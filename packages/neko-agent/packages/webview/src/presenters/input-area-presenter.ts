@@ -36,7 +36,9 @@ export function projectInputAreaUi(input: InputAreaUiProjectionInput): InputArea
   const hasAttachments = input.attachedFileCount > 0;
   const hasContextChips = input.contextChipCount > 0;
   const hasAmbientNodes = input.ambientNodeCount > 0;
-  const isNpcTest = input.conversationKind === 'npc-test';
+  const isCharacterRoleSession =
+    input.conversationKind === 'character-dialogue' ||
+    input.conversationKind === 'embody-character';
   const isAgentMode = input.sessionMode === 'agent';
 
   return {
@@ -49,12 +51,12 @@ export function projectInputAreaUi(input: InputAreaUiProjectionInput): InputArea
     showSuggestionChips: hasContextChips,
     showContextChips: hasContextChips,
     showAmbientNodes: hasAmbientNodes,
-    showMediaCallCount: !isNpcTest && input.mediaModelCallCount > 0,
-    showExecutionModeSelector: !isNpcTest && isAgentMode,
-    showChatModelSelector: !isNpcTest && isAgentMode,
-    showSessionMediaModelSelector: !isNpcTest && !isAgentMode,
-    showSessionModeSelector: !isNpcTest,
-    showGenerationParams: !isNpcTest,
+    showMediaCallCount: !isCharacterRoleSession && input.mediaModelCallCount > 0,
+    showExecutionModeSelector: !isCharacterRoleSession && isAgentMode,
+    showChatModelSelector: !isCharacterRoleSession && isAgentMode,
+    showSessionMediaModelSelector: !isCharacterRoleSession && !isAgentMode,
+    showSessionModeSelector: !isCharacterRoleSession,
+    showGenerationParams: !isCharacterRoleSession,
     inputPlaceholderKey: input.isThinking
       ? 'chat.input.thinkingPlaceholder'
       : 'chat.input.placeholder',
