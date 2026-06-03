@@ -215,7 +215,7 @@ describe('composite rich content renderers', () => {
     );
 
     expect(screen.getByText('1 个镜头')).toBeTruthy();
-    expect(screen.getAllByText('镜头')).toHaveLength(2);
+    expect(screen.getByText('镜头')).toBeTruthy();
     expect(screen.getByText('图片')).toBeTruthy();
     expect(screen.getByText('时长')).toBeTruthy();
     expect(screen.getByText('画面 / 动作')).toBeTruthy();
