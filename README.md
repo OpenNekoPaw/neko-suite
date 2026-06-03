@@ -146,28 +146,26 @@ Intent → SkillRegistry → activate(skill)
                          execute → deactivate → atomic rollback
 ```
 
-### 4. NPC Character Test Bench
+### 4. Character Role Workflows
 
-NPC testing and creative authoring are separate scenarios. The Dashboard character detail view is the primary NPC operation surface: `Test NPC` opens an isolated NPC test session in the Agent panel, assembling the NPC profile from current project character facts, asset bindings, visual drafts, relationships, and occurrences. The NPC session uses `toolPolicy: { kind: 'none' }`, so it receives no file, media-generation, timeline-editing, shell, or creative authoring tools.
+Character testing, embodiment feedback, and creative authoring are separate scenarios. The Dashboard character detail view keeps only two core role workflows: `Character Dialogue` and `Embody Character`. `Character Dialogue` opens an isolated session in the Agent panel where the Agent plays the character and the user tests it. The profile is assembled from current project character facts, asset bindings, visual drafts, relationships, and occurrences, and the session uses `toolPolicy: { kind: 'none' }`, so it receives no file, media-generation, timeline-editing, shell, or creative authoring tools. `Embody Character` also opens an isolated role session, but with the actor relationship reversed: the user plays the character, while the Agent stays out-of-character and provides read-only project knowledge feedback. It does not activate Skills, write files, mutate entities, create tasks, or generate media.
 
 Dashboard character detail actions:
 
 ```text
-Test NPC
-Perspective
-Validate
-Improve
+Character Dialogue
+Embody Character
 ```
 
-- `Test NPC`: enter an isolated NPC roleplay test session for the character.
-- `Perspective`: ask the ordinary Agent to analyze what the character knows, misunderstands, does not know, and should not know in the selected project scope.
-- `Validate`: check character completeness, knowledge boundaries, voice, relationships, and interaction-flow risks.
-- `Improve`: produce pending character-design suggestions without automatically writing project facts.
-- `/exit-role`: exit NPC testing, generate an evaluation report, and choose whether to save evidence.
+- `Character Dialogue`: enter an isolated roleplay test session where the Agent plays the character and the user tests it.
+- `Embody Character`: enter an isolated feedback session where the user plays the character and the Agent evaluates role knowledge, unknowns, out-of-scope claims, and mode-boundary requests.
+- `character-validation` Skill: automated validation where one Agent plays the character and another probes knowledge boundaries, voice, and stability.
+- `character-improvement` Skill: evidence-backed improvement suggestions that do not automatically write project facts.
+- `/exit-as`: exit the active Character Dialogue session, generate an evaluation report, and choose whether to save evidence.
 
-`/as @character` is no longer exposed as a visible Agent Webview slash command. If manual typed compatibility remains during migration, it is a hidden/debug entry that still delegates to the same `neko.agent.testNpc` isolated session path. Dashboard only sends creative entity action requests, while the Agent extension owns profile assembly, NPC session creation, Agent validation workflows, and evaluation.
+`/as @character` is the official shortcut for starting Character Dialogue and delegates to the `neko.agent.characterDialogue` isolated session path. Dashboard only sends creative entity action requests, while the Agent extension owns profile assembly, read-only evidence hydration, Skill primitive ports, session creation, evaluation, and evidence persistence.
 
-NPC context follows the current project by default. Active dialogue stays in NPC session memory and is not written to main Agent history, `.neko/memory.md`, global memory, or standard conversation records. If the user chooses to save evidence, transcripts and evaluation are written under `.neko/npc-tests/{entityId}-{timestamp}.json` in the current project. Evaluation suggestions stay suggested until the user confirms applying them through entity metadata or relationship update commands.
+Character role context follows the current project by default. Active Character Dialogue and Embody Character turns stay in their own session memory and are not written to main Agent history, `.neko/memory.md`, global memory, or standard conversation records. If the user chooses to save dialogue evidence, transcripts and evaluation are written under `.neko/character-tests/{entityId}-{timestamp}.json` in the current project. Historical `.neko/npc-tests/*.json` evidence is not rewritten by this migration. Evaluation suggestions stay suggested until the user confirms applying them through entity metadata or relationship update commands.
 
 ### 5. Unified Asset Library
 
